@@ -356,6 +356,27 @@ export function detectWorkflowFields(workflow: ComfyCustomWorkflow['workflow']):
   return { positiveNodes, negativeNode, seedPath, outputNodeId, saveImageCount }
 }
 
+/** The `image` input of every `LoadImage` node, in node-id order: where references go. */
+export function findReferenceInputs(workflow: ComfyCustomWorkflow['workflow']): string[] {
+  return Object.entries(workflow)
+    .filter(([, node]) => node.class_type === 'LoadImage')
+    .map(([nodeId]) => nodeId)
+    .toSorted((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    .map((nodeId) => `${nodeId}.inputs.image`)
+}
+
+/** Only a custom workflow with a `LoadImage` node can use references; the built-in ones cannot. */
+export function comfyTakesReferences(
+  providerOptions: Record<string, unknown> | undefined,
+): boolean {
+  const customWorkflow = providerOptions?.customWorkflow as ComfyCustomWorkflow | undefined
+  return (
+    providerOptions?.mode === ComfyMode.CustomWorkflow &&
+    !!customWorkflow &&
+    findReferenceInputs(customWorkflow.workflow).length > 0
+  )
+}
+
 const KSamplerInfo = z.object({
   KSampler: z.object({
     input: z.object({
@@ -403,7 +424,7 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
     name: 'Comfy UI',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { prompt, spec, providerOptions, signal } = options
+      const { prompt, spec, referenceImages, providerOptions, signal } = options
       // Strip the source-namespace prefix added by listModels() to deduplicate entries
       // (e.g. "checkpoint:model.safetensors" → "model.safetensors"). Handles both
       // prefixed IDs (new) and bare filenames (profiles saved before this change).
@@ -433,14 +454,17 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
             ...(customWorkflow.negativePromptPath && {
               negative: customWorkflow.negativePromptPath,
             }),
+            references: findReferenceInputs(customWorkflow.workflow),
           },
           negativePrompt: negativeTags,
+          referenceFolder: providerOptions?.inputReferences === true ? 'input' : 'temp',
         } satisfies ComfyImageOptions
 
         // No size: a custom workflow's dimensions are the user's own.
         return generateSdkImage({
           model: comfyModel(model),
           prompt: finalPositivePrompt,
+          referenceImages,
           providerOptions: { comfyui },
           signal,
         })
@@ -603,7 +627,7 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
           id: `${prefix}:${m}`,
           name: m,
           description,
-          supportsImg2Img: false,
+          supportsImg2Img: true,
           costPerImage: 0,
         })
 

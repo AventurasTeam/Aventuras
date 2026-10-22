@@ -170,20 +170,48 @@ describe('request', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('drops an aspect ratio, references and a mask with warnings', async () => {
+  it('drops an aspect ratio and a mask with warnings', async () => {
     const result = await model().doGenerate(
       callOptions({
         aspectRatio: '16:9',
-        files: [{ type: 'file', mediaType: 'image/png', data: PNG }],
         mask: { type: 'file', mediaType: 'image/png', data: PNG },
       }),
     )
     expect(result.warnings).toEqual([
       expect.objectContaining({ type: 'unsupported', feature: 'aspectRatio' }),
-      expect.objectContaining({ type: 'unsupported', feature: 'files' }),
       expect.objectContaining({ type: 'unsupported', feature: 'mask' }),
     ])
-    expect(sent().body).not.toHaveProperty('init_images')
+  })
+
+  it('sends references as extra_images on the txt2img request', async () => {
+    const result = await model().doGenerate(
+      callOptions({
+        files: [
+          { type: 'file', mediaType: 'image/png', data: PNG },
+          { type: 'file', mediaType: 'image/png', data: new Uint8Array([1, 2, 3]) },
+        ],
+      }),
+    )
+    const { url, body } = sent()
+    expect(url).toBe(`${BASE_URL}/sdapi/v1/txt2img`)
+    expect(body.extra_images).toEqual([PNG, 'AQID'])
+    expect(body).not.toHaveProperty('init_images')
+    expect(result.warnings).toEqual([])
+  })
+
+  it('leaves extra_images out without references', async () => {
+    await model().doGenerate(callOptions({ files: [] }))
+    expect(sent().body).not.toHaveProperty('extra_images')
+  })
+
+  it('refuses a reference given as a URL', async () => {
+    const error = await rejection(
+      model().doGenerate(
+        callOptions({ files: [{ type: 'url', url: 'https://example.com/a.png' }] }),
+      ),
+    )
+    expect((error as Error).message).toContain('base64')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
 

@@ -51,17 +51,15 @@ export function definedHeaders(
   )
 }
 
-/** Warnings for the inputs a text-to-image backend takes no part in. */
+/** Warnings for the inputs a local backend takes no part in. */
 export function unsupportedInputWarnings({
   aspectRatio,
-  files,
   mask,
-}: Pick<ImageModelV4CallOptions, 'aspectRatio' | 'files' | 'mask'>): SharedV4Warning[] {
+}: Pick<ImageModelV4CallOptions, 'aspectRatio' | 'mask'>): SharedV4Warning[] {
   const warnings: SharedV4Warning[] = []
   if (aspectRatio) {
     warnings.push({ type: 'unsupported', feature: 'aspectRatio', details: 'Pass size instead.' })
   }
-  if (files?.length) warnings.push({ type: 'unsupported', feature: 'files' })
   if (mask) warnings.push({ type: 'unsupported', feature: 'mask' })
   return warnings
 }

@@ -6,7 +6,7 @@ import * as z from 'zod'
 import { InvalidResponseDataError } from 'ai'
 import type { ImageModelV4 } from '@ai-sdk/provider'
 import type { Fetch } from '#lib/services/ai/sdk/providers/index.ts'
-import { parseImageSize } from '#lib/utils/image.ts'
+import { bytesToBase64, parseImageSize } from '#lib/utils/image.ts'
 import {
   definedHeaders,
   httpError,
@@ -53,7 +53,7 @@ export function createA1111Image(settings: A1111ImageSettings) {
         provider: 'a1111.image',
         modelId,
         maxImagesPerCall: 1,
-        supportsFileInputs: false,
+        supportsFileInputs: true,
         supportsMaskInputs: false,
 
         async doGenerate({
@@ -70,7 +70,13 @@ export function createA1111Image(settings: A1111ImageSettings) {
           const dimensions = parseImageSize(size)
           if (!dimensions) throw new Error('A1111 image generation needs a WxH size.')
 
-          const warnings = unsupportedInputWarnings({ aspectRatio, files, mask })
+          const warnings = unsupportedInputWarnings({ aspectRatio, mask })
+
+          // Reference images for edit models (Kontext, Qwen Image Edit); a plain checkpoint ignores them.
+          const extraImages = files?.map((file) => {
+            if (file.type === 'url') throw new Error('A1111 image references must be base64.')
+            return typeof file.data === 'string' ? file.data : bytesToBase64(file.data)
+          })
 
           // A checkpoint chosen per request is put back afterwards, so it does not stay loaded as
           // the server's default.
@@ -81,6 +87,7 @@ export function createA1111Image(settings: A1111ImageSettings) {
             seed: seed ?? -1,
             batch_size: 1,
             n_iter: 1,
+            ...(extraImages?.length && { extra_images: extraImages }),
             ...(modelId && {
               override_settings: { sd_model_checkpoint: modelId },
               override_settings_restore_afterwards: true,

@@ -611,13 +611,24 @@ API profile into image profiles, moved proxy-style `openai` profiles and every `
 (that provider is gone) to OpenAI Compatible, and pinned `zhipu` profiles with an empty base URL to
 `open.bigmodel.cn`, which they used before the default became `api.z.ai`.
 
-The registry hands references only to the providers that send them, cut to the model's
+Every provider except Z.AI takes reference images, and the registry hands them only to the ones that
+send them (`readsReferences`), cut to the model's
 `maxReferenceImages` first, and fetches `http(s)` ones to base64, so every adapter receives raw
 base64. A reference URL can come from a discovery card, so it is fetched only from a public host and
 each redirect is checked the same way (`fetchPublicImageBase64`); a name that merely resolves to a
 private address is not caught. A NanoGPT reply that carries a URL instead of base64 gets the same
 public-host check, and that download is not redirected. A reference that cannot be fetched is dropped and the image is
 generated without it. Google takes them on every image model it lists.
+
+Two local backends take them differently. A1111 (and Forge, KoboldCpp, sd.cpp) sends them as
+`extra_images` on the `txt2img` request, and the model loaded on the server decides whether they do
+anything; `init_images` is not used, because that is a canvas to denoise, not a reference. ComfyUI
+uploads each one to the server's `temp/aventuras/` folder and writes the file names (`… [temp]`) into
+a custom workflow's `LoadImage` nodes in node-id order; leftover nodes keep their saved image and extra
+references are dropped with a warning. Names are a hash of the bytes, so an image reused across scenes
+is stored once, and concurrent generations share a pending upload. ComfyUI empties `temp` on restart;
+a per-profile switch (`inputReferences`) uploads to `input/aventuras/` instead, which it never clears. The built-in basic, LoRA and UNet workflows take none, so the
+registry downloads nothing for them (`comfyTakesReferences`).
 
 Images are stored as base64 in SQLite. Export and import of a story with images (`.avt`) is
 handled natively in Rust so the payloads never enter the WebView heap — see

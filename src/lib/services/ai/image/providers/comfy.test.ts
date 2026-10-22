@@ -21,7 +21,14 @@ vi.mock('#lib/utils/async.ts', async (importOriginal) => ({
 
 import { specToPixels } from '#lib/utils/image.ts'
 import { imageGetFetch } from './fetchAdapter'
-import { ComfyMode, clearComfyCacheForUrl, createComfyProvider, fetchModelList } from './comfy'
+import {
+  ComfyMode,
+  clearComfyCacheForUrl,
+  comfyTakesReferences,
+  createComfyProvider,
+  fetchModelList,
+  findReferenceInputs,
+} from './comfy'
 import BasicWorkflow from './comfyWorkflows/basic-txt2img-workflow.json'
 import LoraWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
@@ -43,7 +50,9 @@ const options = (over: Partial<ImageGenerateOptions> = {}): ImageGenerateOptions
 })
 
 function postedGraph(): Graph {
-  const call = sdkFetch.mock.calls.find(([, init]) => init?.method === 'POST')!
+  const call = sdkFetch.mock.calls.find(
+    ([input, init]) => init?.method === 'POST' && String(input).endsWith('/prompt'),
+  )!
   return JSON.parse(call[1].body as string).prompt as Graph
 }
 
@@ -55,6 +64,9 @@ const generate = (
 function serve(outputNode: string) {
   sdkFetch.mockImplementation(async (input: string, init?: RequestInit) => {
     const { pathname } = new URL(input)
+    if (init?.method === 'POST' && pathname === '/upload/image') {
+      return json({ name: 'uploaded.png', subfolder: 'aventuras', type: 'input' })
+    }
     if (init?.method === 'POST') {
       return json({ prompt_id: JSON.parse(init.body as string).prompt_id })
     }
@@ -282,6 +294,92 @@ describe('custom workflow', () => {
       generate({ mode: ComfyMode.CustomWorkflow, customWorkflow: custom() }, { model: '' }),
     ).rejects.toThrow('older than 0.26.0')
     expect(sdkFetch).not.toHaveBeenCalled()
+  })
+
+  it('uploads references into the workflow LoadImage nodes', async () => {
+    const withLoad = {
+      ...workflow,
+      '61': { class_type: 'LoadImage', inputs: { image: 'saved.png' } },
+    }
+    await generate(
+      { mode: ComfyMode.CustomWorkflow, customWorkflow: custom({ workflow: withLoad }) },
+      { model: '', referenceImages: ['iVBORw0KGgo='] },
+    )
+    expect(postedGraph()['61'].inputs.image).toBe('aventuras/uploaded.png [temp]')
+  })
+
+  it('uploads into the input folder when the profile asks for it', async () => {
+    const withLoad = {
+      ...workflow,
+      '61': { class_type: 'LoadImage', inputs: { image: 'saved.png' } },
+    }
+    await generate(
+      {
+        mode: ComfyMode.CustomWorkflow,
+        customWorkflow: custom({ workflow: withLoad }),
+        inputReferences: true,
+      },
+      { model: '', referenceImages: ['iVBORw0KGgo='] },
+    )
+    const upload = sdkFetch.mock.calls.find(([input]) => String(input).endsWith('/upload/image'))!
+    expect((upload[1].body as FormData).get('type')).toBe('input')
+    expect(postedGraph()['61'].inputs.image).toBe('aventuras/uploaded.png')
+  })
+
+  it('sends no upload for a workflow without a LoadImage node', async () => {
+    await generate(
+      { mode: ComfyMode.CustomWorkflow, customWorkflow: custom() },
+      { model: '', referenceImages: ['iVBORw0KGgo='] },
+    )
+    expect(sdkFetch.mock.calls.some(([input]) => String(input).endsWith('/upload/image'))).toBe(
+      false,
+    )
+  })
+})
+
+describe('reference inputs', () => {
+  const node = (class_type: string, image = 'a.png') => ({ class_type, inputs: { image } })
+
+  it('lists the LoadImage image inputs in node-id order', () => {
+    const workflow = {
+      '10': node('LoadImage'),
+      '9': node('LoadImage'),
+      '57:4': node('LoadImage'),
+      '2': node('SaveImage'),
+    }
+    expect(findReferenceInputs(workflow)).toEqual([
+      '9.inputs.image',
+      '10.inputs.image',
+      '57:4.inputs.image',
+    ])
+  })
+
+  it('ignores the other image-loading nodes', () => {
+    expect(
+      findReferenceInputs({ '1': node('LoadImageMask'), '2': node('LoadImageOutput') }),
+    ).toEqual([])
+  })
+
+  describe('comfyTakesReferences', () => {
+    const customWorkflow = { workflow: { '1': node('LoadImage') } }
+
+    it('is true for a custom workflow with a LoadImage node', () => {
+      expect(comfyTakesReferences({ mode: ComfyMode.CustomWorkflow, customWorkflow })).toBe(true)
+    })
+
+    it('is false for a custom workflow without one', () => {
+      expect(
+        comfyTakesReferences({
+          mode: ComfyMode.CustomWorkflow,
+          customWorkflow: { workflow: { '1': node('SaveImage') } },
+        }),
+      ).toBe(false)
+    })
+
+    it('is false for the built-in workflows, even with a workflow saved', () => {
+      expect(comfyTakesReferences({ mode: ComfyMode.BasicTxt2Img, customWorkflow })).toBe(false)
+      expect(comfyTakesReferences(undefined)).toBe(false)
+    })
   })
 })
 

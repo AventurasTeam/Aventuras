@@ -3,6 +3,7 @@
   import { createDebouncedSave } from '#lib/utils/debounce.ts'
   import { settings } from '#lib/stores/settings.svelte.ts'
   import { Label } from '#lib/components/ui/label/index.ts'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
   import { Autocomplete } from '#lib/components/ui/autocomplete/index.ts'
@@ -24,6 +25,7 @@
   import {
     validateApiWorkflow,
     detectWorkflowFields,
+    findReferenceInputs,
     fetchModelList,
     clearComfyCacheForUrl,
   } from '#lib/services/ai/image/providers/comfy.ts'
@@ -121,11 +123,6 @@
   // Profile form model state
   let profileModel = $state('')
   let profileModels = $state<ImageModelInfo[]>([])
-  const referenceProfileImg2ImgWarning = $derived(
-    isEditingReferenceProfile &&
-      !!profileModel &&
-      profileModels.find((m) => m.id === profileModel)?.supportsImg2Img === false,
-  )
   let isLoadingProfileModels = $state(false)
   let profileModelsError = $state<string | null>(null)
 
@@ -147,6 +144,19 @@
 
   // Custom workflow state
   let profileCustomWorkflow = $state<ComfyCustomWorkflow | null>(null)
+  let profileInputReferences = $state(false)
+  const referenceInputCount = $derived(
+    profileMode === ComfyMode.CustomWorkflow && profileCustomWorkflow
+      ? findReferenceInputs(profileCustomWorkflow.workflow).length
+      : 0,
+  )
+  const referenceProfileImg2ImgWarning = $derived(
+    isEditingReferenceProfile &&
+      (profileProviderType === 'comfyui'
+        ? referenceInputCount === 0
+        : !!profileModel &&
+          profileModels.find((m) => m.id === profileModel)?.supportsImg2Img === false),
+  )
   // Holds parsed workflow data while the user resolves an ambiguous picker — not yet saved to profileCustomWorkflow
   let pendingWorkflowData = $state<{
     workflow: ComfyCustomWorkflow['workflow']
@@ -347,6 +357,7 @@
     if (profileCustomWorkflow) {
       opts.customWorkflow = profileCustomWorkflow
     }
+    if (profileInputReferences) opts.inputReferences = true
     if (profileMode === ComfyMode.UnetTxt2Img) {
       if (profileClipName) opts.clipName = profileClipName
       if (profileVaeName) opts.vaeName = profileVaeName
@@ -390,6 +401,7 @@
         profileLoraStrengthModel,
         profileLoraStrengthClip,
         profileCustomWorkflow,
+        profileInputReferences,
         profileClipName,
         profileVaeName,
         profileClipType,
@@ -431,6 +443,7 @@
     profileNegativePrompt = ''
     prevComfyBaseUrl = null
     profileCustomWorkflow = null
+    profileInputReferences = false
     pendingWorkflowData = null
     workflowAmbiguousNodes = []
     workflowPickerSelection = ''
@@ -481,6 +494,7 @@
       profilePositivePrompt = (opts.positivePrompt as string) || ''
       profileNegativePrompt = (opts.negativePrompt as string) || ''
       profileCustomWorkflow = (opts.customWorkflow as ComfyCustomWorkflow) || null
+      profileInputReferences = opts.inputReferences === true
       pendingWorkflowData = null
       workflowFileName = profileCustomWorkflow ? 'Loaded from profile' : null
       workflowAmbiguousNodes = []
@@ -1204,8 +1218,13 @@
       />
       {#if referenceProfileImg2ImgWarning}
         <p class="text-warning mt-1 text-xs">
-          This profile is used for reference image generation (img2img), but the selected model does
-          not support img2img.
+          {#if profileProviderType === 'comfyui'}
+            This profile is used for reference image generation (img2img), but only a custom
+            workflow with a LoadImage node can use reference images.
+          {:else}
+            This profile is used for reference image generation (img2img), but the selected model
+            does not support img2img.
+          {/if}
         </p>
       {:else}
         <p class="text-muted-foreground mt-1 text-xs">
@@ -1368,6 +1387,30 @@
                   <p class="text-muted-foreground italic">
                     No negative prompt node detected (ignored).
                   </p>
+                {/if}
+                <p class="text-muted-foreground {referenceInputCount === 0 ? 'italic' : ''}">
+                  {#if referenceInputCount > 0}
+                    Reference images → {referenceInputCount} LoadImage input{referenceInputCount ===
+                    1
+                      ? ''
+                      : 's'}
+                  {:else}
+                    No LoadImage node detected (reference images ignored).
+                  {/if}
+                </p>
+                {#if referenceInputCount > 0}
+                  <div class="flex items-center justify-between gap-3 pt-1">
+                    <div>
+                      <Label for="comfy-input-references"
+                        >Store references in the input folder</Label
+                      >
+                      <p class="text-muted-foreground">
+                        Use this if reference images fail to load. ComfyUI never clears this folder;
+                        the default temp folder is emptied on restart.
+                      </p>
+                    </div>
+                    <Switch id="comfy-input-references" bind:checked={profileInputReferences} />
+                  </div>
                 {/if}
               </div>
             {:else if workflowAmbiguousNodes.length > 0}

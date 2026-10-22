@@ -25,7 +25,7 @@ import { createOpenAICompatibleProvider } from './openaiCompatibleProvider'
 import { createPollinationsProvider } from './pollinations'
 import { createGoogleProvider } from './google'
 import { createZhipuProvider } from './zhipu'
-import { createComfyProvider } from './comfy'
+import { comfyTakesReferences, createComfyProvider } from './comfy'
 import { createOpenRouterProvider } from './openrouter'
 import { createA1111Provider } from './a1111'
 
@@ -106,8 +106,17 @@ const PROVIDER_READS_REFERENCES: Record<ImageProviderType, boolean> = {
   pollinations: true,
   google: true,
   zhipu: false,
-  comfyui: false,
-  a1111: false,
+  comfyui: true,
+  a1111: true,
+}
+
+/** ComfyUI sends them only through a custom workflow's `LoadImage` nodes. */
+function readsReferences(profile: {
+  providerType: ImageProviderType
+  providerOptions?: Record<string, unknown>
+}): boolean {
+  if (!PROVIDER_READS_REFERENCES[profile.providerType]) return false
+  return profile.providerType !== 'comfyui' || comfyTakesReferences(profile.providerOptions)
 }
 
 // ============================================================================
@@ -169,7 +178,7 @@ export function baseUrlMode(providerType: string): FieldMode {
  */
 export async function supportsReferenceImages(profileId: string, model: string): Promise<boolean> {
   const profile = settings.getImageProfile(profileId)
-  if (!profile || !PROVIDER_READS_REFERENCES[profile.providerType]) return false
+  if (!profile || !readsReferences(profile)) return false
   const modelInfo = (await listImageModels(profileId)).find((m) => m.id === model)
   return modelInfo?.supportsImg2Img !== false
 }
@@ -230,7 +239,7 @@ export async function generateImage(options: {
 
   // A reference that cannot be fetched is dropped; the scene is still worth drawing without it.
   const cleanRefs =
-    referenceImages && PROVIDER_READS_REFERENCES[profile.providerType]
+    referenceImages && readsReferences(profile)
       ? (
           await Promise.allSettled(
             referenceImages
