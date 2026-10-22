@@ -798,6 +798,9 @@ export const EmbedderFailure: Story = {
 
 // Composed through the helpers the host writes the entry with, so each bubble shows real copy.
 const HELD_PASS = describePassFailure({ held: true }, undefined)
+// A Send refused on a held branch always leaves its text on the entry.
+const HELD_SUBMISSION = { content: 'I study the empty frame.', composerMode: 'free' }
+const HELD_PASS_TEXT_KEPT = describePassFailure({ held: true }, HELD_SUBMISSION)
 const FAILED_PASS_ERROR = {
   kind: 'provider',
   reason: 'timeout',
@@ -831,7 +834,26 @@ export const PassFailureHeld: Story = {
   },
 }
 
-// The control for the story above: with the handler, a failed pass entry offers Retry.
+export const PassFailureHeldTextKept: Story = {
+  args: {
+    rows: passFailureRows(
+      HELD_PASS_TEXT_KEPT.content,
+      toPassFailureMeta({ held: true }, HELD_SUBMISSION),
+    ),
+    onRetrySystemEntry: undefined,
+  },
+  play: async () => {
+    const row = entryRow('e6')
+    expect(within(row).getByText(t('reader:systemEntry.failure.memoryHeld'))).toBeVisible()
+    expect(
+      within(row).queryByText(t('reader:systemEntry.failure.memoryHeldNoText')),
+    ).not.toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: /Dismiss/ })).toBeVisible()
+    expect(within(row).queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument()
+  },
+}
+
+// The control for the held stories: with the handler, a failed pass entry offers Retry.
 export const PassFailureRetry: Story = {
   args: {
     rows: passFailureRows(
