@@ -1,4 +1,4 @@
-import { expect, test, type Locator } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 
 import { queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
@@ -593,6 +593,11 @@ test.describe('periodic classifier — unassigned agent', () => {
     removeUserDataDir(userDataDir)
   })
 
+  const { classifierStatus } = passProbe(
+    () => app.window,
+    () => mock,
+  )
+
   test('records the pre-flight failure as failed, and the next Send fails on it before its turn', async () => {
     const page = app.window
     await home.openStory(page, 'The Veilstone Courier').click()
@@ -600,17 +605,7 @@ test.describe('periodic classifier — unassigned agent', () => {
     const branchId = (
       await queryApp(page, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
     )[0][0] as string
-    const status = async (): Promise<unknown[]> =>
-      (
-        await queryApp(
-          page,
-          `SELECT json_extract(classifier_status, '$.state'),
-                  json_extract(classifier_status, '$.lastError'),
-                  json_extract(classifier_status, '$.processedThrough')
-           FROM branches WHERE id = ?`,
-          [branchId],
-        )
-      )[0]
+    const status = () => classifierStatus(branchId)
     const scalar = async (sql: string, params: unknown[] = []): Promise<unknown> =>
       (await queryApp(page, sql, params))[0][0]
     const turnRuns = () => scalar(`SELECT COUNT(*) FROM pipeline_runs WHERE kind = 'per-turn'`)
@@ -711,6 +706,129 @@ function gatedPassReply(title: string) {
   }
 }
 
+// Valid JSON the pass's schema rejects, so both parse attempts fail and the pass fails.
+const UNPARSEABLE_PASS_REPLY = { happenings: 'not a list' }
+
+// The run, status and entry reads the pass describes share. Getters, since each describe's
+// beforeAll assigns its app and mock after this runs.
+function passProbe(page: () => Page, mockLlm: () => MockLlm) {
+  async function branchId(): Promise<string> {
+    return (
+      await queryApp(page(), `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
+    )[0][0] as string
+  }
+
+  // A reply streams into the DOM before its row commits, so callers poll the row; more than one
+  // row for a marker would be a duplicated write.
+  async function entryIdByContent(branch: string, marker: string): Promise<string | undefined> {
+    const rows = await queryApp(
+      page(),
+      `SELECT id FROM story_entries WHERE branch_id = ? AND content LIKE ?`,
+      [branch, `%${marker}%`],
+    )
+    expect(rows.length, `${marker} row count`).toBeLessThanOrEqual(1)
+    return rows[0]?.[0] as string | undefined
+  }
+
+  async function pollEntryId(branch: string, marker: string): Promise<string> {
+    await expect.poll(() => entryIdByContent(branch, marker), { timeout: 30_000 }).toBeDefined()
+    const id = await entryIdByContent(branch, marker)
+    if (id === undefined) throw new Error(`${marker}: present at the poll, gone on read-back`)
+    return id
+  }
+
+  async function createDelta(
+    branch: string,
+    entryId: string,
+  ): Promise<{ actionId: string; logPosition: number }> {
+    const rows = await queryApp(
+      page(),
+      `SELECT action_id, log_position FROM deltas WHERE branch_id = ? AND target_table = 'story_entries'
+         AND op = 'create' AND target_id = ?`,
+      [branch, entryId],
+    )
+    expect(rows.length, `create delta for entry ${entryId}`).toBe(1)
+    return { actionId: rows[0][0] as string, logPosition: rows[0][1] as number }
+  }
+
+  // pipeline_runs has no branch column; only this story's passes run in this app.
+  async function passOutcomes(): Promise<(string | null)[]> {
+    const rows = await queryApp(
+      page(),
+      `SELECT outcome FROM pipeline_runs WHERE kind = 'periodic-classifier' AND story_id = 'story_hero'
+       ORDER BY started_at, rowid`,
+    )
+    return rows.map((r) => r[0] as string | null)
+  }
+
+  async function runOutcome(actionId: string): Promise<string | null> {
+    const rows = await queryApp(page(), `SELECT outcome FROM pipeline_runs WHERE action_id = ?`, [
+      actionId,
+    ])
+    return rows[0][0] as string | null
+  }
+
+  async function passDeltas(actionId: string): Promise<{ count: number; last: number | null }> {
+    const rows = await queryApp(
+      page(),
+      `SELECT COUNT(*), MAX(log_position) FROM deltas WHERE action_id = ?`,
+      [actionId],
+    )
+    return { count: rows[0][0] as number, last: rows[0][1] as number | null }
+  }
+
+  async function classifierStatus(branch: string): Promise<unknown[]> {
+    return (
+      await queryApp(
+        page(),
+        `SELECT json_extract(classifier_status, '$.state'),
+                json_extract(classifier_status, '$.lastError'),
+                json_extract(classifier_status, '$.processedThrough')
+         FROM branches WHERE id = ?`,
+        [branch],
+      )
+    )[0]
+  }
+
+  const passCalls = (): number =>
+    mockLlm().requests.filter((r) => r.agent === 'periodic-classifier').length
+
+  // The held pass's action id, once its call reached the mock past `callsBefore`.
+  async function heldPass(callsBefore: number): Promise<string> {
+    await expect.poll(passCalls, { timeout: 30_000 }).toBeGreaterThan(callsBefore)
+    const rows = await queryApp(
+      page(),
+      `SELECT action_id FROM pipeline_runs
+       WHERE kind = 'periodic-classifier' AND story_id = 'story_hero' AND finished_at IS NULL`,
+    )
+    expect(rows, 'one pass in flight').toHaveLength(1)
+    return rows[0][0] as string
+  }
+
+  async function send(action: string, reply: string): Promise<void> {
+    mockLlm().setNarrative(reply)
+    await reader.composer(page()).fill(action)
+    await reader.send(page()).click()
+  }
+
+  const deferralToast = (): Locator => toast.withText(page(), t('chrome.deferredWork.pass'))
+
+  return {
+    branchId,
+    entryIdByContent,
+    pollEntryId,
+    createDelta,
+    passOutcomes,
+    runOutcome,
+    passDeltas,
+    classifierStatus,
+    passCalls,
+    heldPass,
+    send,
+    deferralToast,
+  }
+}
+
 // classifier.md → Pipeline framing. The mock holds the pass's call open, so every step acts on a
 // pass provably in flight. Serial: the tests build on one another (see reader-regenerate.spec.ts).
 test.describe('periodic classifier — the gated pass', () => {
@@ -744,44 +862,23 @@ test.describe('periodic classifier — the gated pass', () => {
     removeUserDataDir(userDataDir)
   })
 
-  async function branchId(): Promise<string> {
-    return (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
-  }
-
-  // A reply streams into the DOM before its row commits, so callers poll the row; more than one
-  // row for a marker would be a duplicated write.
-  async function entryIdByContent(branch: string, marker: string): Promise<string | undefined> {
-    const rows = await queryApp(
-      app.window,
-      `SELECT id FROM story_entries WHERE branch_id = ? AND content LIKE ?`,
-      [branch, `%${marker}%`],
-    )
-    expect(rows.length, `${marker} row count`).toBeLessThanOrEqual(1)
-    return rows[0]?.[0] as string | undefined
-  }
-
-  async function pollEntryId(branch: string, marker: string): Promise<string> {
-    await expect.poll(() => entryIdByContent(branch, marker), { timeout: 30_000 }).toBeDefined()
-    const id = await entryIdByContent(branch, marker)
-    if (id === undefined) throw new Error(`${marker}: present at the poll, gone on read-back`)
-    return id
-  }
-
-  async function createDelta(
-    branch: string,
-    entryId: string,
-  ): Promise<{ actionId: string; logPosition: number }> {
-    const rows = await queryApp(
-      app.window,
-      `SELECT action_id, log_position FROM deltas WHERE branch_id = ? AND target_table = 'story_entries'
-         AND op = 'create' AND target_id = ?`,
-      [branch, entryId],
-    )
-    expect(rows.length, `create delta for entry ${entryId}`).toBe(1)
-    return { actionId: rows[0][0] as string, logPosition: rows[0][1] as number }
-  }
+  const {
+    branchId,
+    entryIdByContent,
+    pollEntryId,
+    createDelta,
+    passOutcomes,
+    runOutcome,
+    passDeltas,
+    classifierStatus,
+    passCalls,
+    heldPass,
+    send,
+    deferralToast,
+  } = passProbe(
+    () => app.window,
+    () => mock,
+  )
 
   // The reply under the head turn: its pencil is off the head, so a pass keeps it disabled.
   async function replyBefore(branch: string, entryId: string): Promise<string> {
@@ -799,69 +896,6 @@ test.describe('periodic classifier — the gated pass', () => {
     const [line] = await reader.rollbackWorldStateLine(app.window).allTextContents()
     return line == null ? null : worldStateCountOf(line)
   }
-
-  // pipeline_runs has no branch column; only this story's passes run in this app.
-  async function passOutcomes(): Promise<(string | null)[]> {
-    const rows = await queryApp(
-      app.window,
-      `SELECT outcome FROM pipeline_runs WHERE kind = 'periodic-classifier' AND story_id = 'story_hero'
-       ORDER BY started_at, rowid`,
-    )
-    return rows.map((r) => r[0] as string | null)
-  }
-
-  async function runOutcome(actionId: string): Promise<string | null> {
-    const rows = await queryApp(
-      app.window,
-      `SELECT outcome FROM pipeline_runs WHERE action_id = ?`,
-      [actionId],
-    )
-    return rows[0][0] as string | null
-  }
-
-  async function passDeltas(actionId: string): Promise<{ count: number; last: number | null }> {
-    const rows = await queryApp(
-      app.window,
-      `SELECT COUNT(*), MAX(log_position) FROM deltas WHERE action_id = ?`,
-      [actionId],
-    )
-    return { count: rows[0][0] as number, last: rows[0][1] as number | null }
-  }
-
-  async function classifierStatus(branch: string): Promise<unknown[]> {
-    return (
-      await queryApp(
-        app.window,
-        `SELECT json_extract(classifier_status, '$.state'),
-                json_extract(classifier_status, '$.lastError'),
-                json_extract(classifier_status, '$.processedThrough')
-         FROM branches WHERE id = ?`,
-        [branch],
-      )
-    )[0]
-  }
-
-  const passCalls = () => mock.requests.filter((r) => r.agent === 'periodic-classifier').length
-
-  // The held pass's action id, once its call reached the mock past `callsBefore`.
-  async function heldPass(callsBefore: number): Promise<string> {
-    await expect.poll(passCalls, { timeout: 30_000 }).toBeGreaterThan(callsBefore)
-    const rows = await queryApp(
-      app.window,
-      `SELECT action_id FROM pipeline_runs
-       WHERE kind = 'periodic-classifier' AND story_id = 'story_hero' AND finished_at IS NULL`,
-    )
-    expect(rows, 'one pass in flight').toHaveLength(1)
-    return rows[0][0] as string
-  }
-
-  async function send(action: string, reply: string): Promise<void> {
-    mock.setNarrative(reply)
-    await reader.composer(app.window).fill(action)
-    await reader.send(app.window).click()
-  }
-
-  const deferralToast = () => toast.withText(app.window, t('chrome.deferredWork.pass'))
 
   test('a turn chains its pass, which holds the gate under the banner with an action of its own', async () => {
     test.setTimeout(120_000)
@@ -1110,5 +1144,285 @@ test.describe('periodic classifier — the gated pass', () => {
     await expect(home.openStory(page, 'The Veilstone Courier')).toBeVisible({ timeout: 20_000 })
     await expect.poll(() => runOutcome(held)).toBe('aborted')
     await expect.poll(() => classifierStatus(branch)).toEqual(settled)
+  })
+})
+
+// classifier.md → Failure policy, at the seams only a running app reaches: the chained pass's
+// run_complete reaching the toast, Send's owed pass failing the Send through the reader's entry,
+// and that entry's Retry running the pass alone. Serial: each test builds on the last.
+test.describe('periodic classifier — failure policy', () => {
+  test.describe.configure({ mode: 'serial' })
+
+  let app: LaunchedApp
+  let mock: MockLlm
+  let userDataDir: string | undefined
+  let parked: number
+
+  test.beforeAll(async () => {
+    // Retrieval blocks ahead of narrative, so a turn without an installed
+    // embedder never reaches the reply. Cold cache downloads ~24 MB.
+    test.setTimeout(180_000)
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    await installEmbedderModel(userDataDir)
+    mock = await startMockLlm()
+    mock.setStructured('periodic-classifier', UNPARSEABLE_PASS_REPLY)
+    setProviderEndpoint(seeded.dbPath, mock.url)
+    // A turn writes two entries: with the watermark at the last reply, each committed turn
+    // brings exactly one pass due.
+    setClassifierCadence(seeded.dbPath, 'story_hero', 2)
+    parked = parkClassifierWatermarkAtLastReply(seeded.dbPath, 'br_hero_main')
+    app = await launchApp({ userDataDir, cleanupUserData: true })
+  })
+
+  test.afterAll(async () => {
+    await app?.close()
+    await mock?.close()
+    removeUserDataDir(userDataDir)
+  })
+
+  const {
+    branchId,
+    entryIdByContent,
+    pollEntryId,
+    passOutcomes,
+    runOutcome,
+    passDeltas,
+    classifierStatus,
+    passCalls,
+    heldPass,
+    send,
+  } = passProbe(
+    () => app.window,
+    () => mock,
+  )
+
+  const U2 = 'E2E-POLICY-U2 I wade into the ford.'
+  const failureToast = () => toast.withText(app.window, t('chrome.memoryUpdateFailed'))
+  const streamedCalls = () => mock.requests.filter((r) => r.streamed).length
+
+  async function positionOf(entryId: string): Promise<number> {
+    return (
+      await queryApp(app.window, `SELECT position FROM story_entries WHERE id = ?`, [entryId])
+    )[0][0] as number
+  }
+
+  // The branch's system entries as the reader persisted them: Retry reads `pass` back.
+  async function systemFailures(branch: string): Promise<unknown[][]> {
+    return queryApp(
+      app.window,
+      `SELECT json_extract(metadata, '$.systemFailure.pass'),
+              json_extract(metadata, '$.systemFailure.kind'),
+              json_extract(metadata, '$.systemFailure.submission')
+       FROM story_entries WHERE branch_id = ? AND kind = 'system'`,
+      [branch],
+    )
+  }
+
+  test('a chained pass that fails records failed, leaves the watermark and warns', async () => {
+    const page = app.window
+    await home.openStory(page, 'The Veilstone Courier').click()
+    await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
+    const branch = await branchId()
+
+    await send('E2E-POLICY-U1 I ride for the ford.', 'E2E-POLICY-R1 the water runs high.')
+    await pollEntryId(branch, 'E2E-POLICY-R1')
+    await expect(failureToast()).toBeVisible({ timeout: 20_000 })
+    await expect.poll(passOutcomes, { timeout: 20_000 }).toEqual(['failed'])
+    const [state, lastError, watermark] = await classifierStatus(branch)
+    expect(state).toBe('failed')
+    expect(lastError).not.toBeNull()
+    expect(watermark).toBe(parked)
+  })
+
+  test('the next Send runs the owed pass first, and its failure fails the Send', async () => {
+    const page = app.window
+    const branch = await branchId()
+    // The first toast's 5 s must run out, so the check below sees only a toast this Send raised.
+    await expect(failureToast()).toHaveCount(0, { timeout: 10_000 })
+    const narratives = streamedCalls()
+    const calls = passCalls()
+
+    await send(U2, 'E2E-POLICY-R2 the far bank comes up out of the mist.')
+    await expect(
+      page.getByText(t('reader:systemEntry.failure.memory'), { exact: false }),
+    ).toBeVisible({ timeout: 20_000 })
+    await expect(reader.retrySystemEntry(page)).toBeVisible()
+    // Send's own pass reports through the entry: run_complete names it beforeTurn, and the root
+    // hook stays quiet. Counted once, not awaited: a toast raised with it would still be up.
+    expect(await failureToast().count()).toBe(0)
+    await expect(reader.composer(page)).toHaveValue(U2)
+    expect(await entryIdByContent(branch, 'E2E-POLICY-U2')).toBeUndefined()
+    expect(await passOutcomes()).toEqual(['failed', 'failed'])
+    expect(passCalls()).toBeGreaterThan(calls)
+    expect(streamedCalls()).toBe(narratives)
+    // The draft was empty, so the text went back to the composer and the entry carries none.
+    expect(await systemFailures(branch)).toEqual([['failed', 'provider', null]])
+    const [state, , watermark] = await classifierStatus(branch)
+    expect(state).toBe('failed')
+    expect(watermark).toBe(parked)
+  })
+
+  test('Retry runs the pass alone, and its success clears the entry', async () => {
+    const page = app.window
+    const branch = await branchId()
+    const narratives = streamedCalls()
+    mock.setStructured('periodic-classifier', gatedPassReply('E2E-POLICY-H1'))
+    mock.holdNextStructured('periodic-classifier')
+    const calls = passCalls()
+
+    await reader.retrySystemEntry(page).click()
+    const retried = await heldPass(calls)
+    // Not a Send: the plain banner, and no composer Cancel.
+    await expect(memoryBanner.updating(page)).toBeVisible()
+    await expect(reader.cancel(page)).toHaveCount(0)
+
+    mock.releaseStructured()
+    await expect.poll(() => runOutcome(retried), { timeout: 20_000 }).toBe('completed')
+    // The turn the next test sends chains a pass of its own; an inert reply lets it pass untouched.
+    mock.setStructured('periodic-classifier', EXAMPLES['periodic-classifier'])
+    expect((await passDeltas(retried)).count).toBeGreaterThan(0)
+    await expect(reader.retrySystemEntry(page)).toHaveCount(0)
+    expect(await systemFailures(branch)).toEqual([])
+    // The entry was the branch's tail when the pass ran: the watermark stops at the last prose
+    // row, so the next Send's user_action lands above it.
+    const replyAt = await positionOf(await pollEntryId(branch, 'E2E-POLICY-R1'))
+    expect(await classifierStatus(branch)).toEqual(['idle', null, replyAt])
+    expect(streamedCalls()).toBe(narratives)
+    await expect(reader.composer(page)).toHaveValue(U2)
+  })
+
+  test('Send then lands the turn above the watermark', async () => {
+    const page = app.window
+    const branch = await branchId()
+    const [, , watermark] = await classifierStatus(branch)
+    await expect(reader.composer(page)).toHaveValue(U2)
+
+    // Held at its narrative call, the turn has written its user_action and chained nothing yet.
+    mock.holdNextNarrative()
+    mock.setNarrative('E2E-POLICY-R2 the far bank comes up out of the mist.')
+    await reader.send(page).click()
+    const userEntry = await pollEntryId(branch, 'E2E-POLICY-U2')
+    expect(await positionOf(userEntry)).toBeGreaterThan(watermark as number)
+    // Nothing was owed: no pass ran ahead of this user_action.
+    expect(await passOutcomes()).toEqual(['failed', 'failed', 'completed'])
+
+    mock.releaseNarrative()
+    await pollEntryId(branch, 'E2E-POLICY-R2')
+    // The turn's commit chains the next pass, as the cadence counts it.
+    await expect
+      .poll(passOutcomes, { timeout: 20_000 })
+      .toEqual(['failed', 'failed', 'completed', 'completed'])
+  })
+})
+
+// classifier.md → Failure policy: the deferral mark lives in memory, so after a restart Send finds
+// the pass owed from the persisted watermark alone. Only a relaunch on the same userData shows it.
+test.describe('periodic classifier — an owed pass across a restart', () => {
+  test.describe.configure({ mode: 'serial' })
+
+  let app: LaunchedApp
+  let mock: MockLlm
+  // The relaunch reopens this dir, so no launch owns it: afterAll removes it once.
+  let userDataDir: string
+  let parked: number
+
+  test.beforeAll(async () => {
+    // Retrieval blocks ahead of narrative, so a turn without an installed
+    // embedder never reaches the reply. Cold cache downloads ~24 MB.
+    test.setTimeout(180_000)
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    await installEmbedderModel(userDataDir)
+    mock = await startMockLlm()
+    setProviderEndpoint(seeded.dbPath, mock.url)
+    setClassifierCadence(seeded.dbPath, 'story_hero', 2)
+    parked = parkClassifierWatermarkAtLastReply(seeded.dbPath, 'br_hero_main')
+    app = await launchApp({ userDataDir, cleanupUserData: false })
+  })
+
+  test.afterAll(async () => {
+    await app?.close()
+    await mock?.close()
+    removeUserDataDir(userDataDir)
+  })
+
+  const {
+    branchId,
+    entryIdByContent,
+    pollEntryId,
+    createDelta,
+    passOutcomes,
+    runOutcome,
+    passDeltas,
+    classifierStatus,
+    passCalls,
+    heldPass,
+    send,
+    deferralToast,
+  } = passProbe(
+    () => app.window,
+    () => mock,
+  )
+
+  test('Cancel moves the chained pass to the next turn and leaves the watermark', async () => {
+    test.setTimeout(120_000)
+    const page = app.window
+    await home.openStory(page, 'The Veilstone Courier').click()
+    await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
+    const branch = await branchId()
+
+    mock.setStructured('periodic-classifier', gatedPassReply('E2E-RESTART-H1'))
+    mock.holdNextStructured('periodic-classifier')
+    const calls = passCalls()
+    await send('E2E-RESTART-U1 I bank the fire for the night.', 'E2E-RESTART-R1 the embers settle.')
+    await pollEntryId(branch, 'E2E-RESTART-R1')
+    const cancelled = await heldPass(calls)
+    await expect(memoryBanner.updating(page)).toBeVisible()
+    await memoryBanner.cancel(page).click()
+    await expect(deferralToast()).toBeVisible()
+    await expect.poll(() => runOutcome(cancelled)).toBe('aborted')
+    expect((await passDeltas(cancelled)).count).toBe(0)
+    await expect.poll(() => classifierStatus(branch)).toEqual(['idle', null, parked])
+  })
+
+  test('after a relaunch the mark is gone, and Send still runs the owed pass first', async () => {
+    // A close, a cold launch and a story open, on top of this test's own steps.
+    test.setTimeout(150_000)
+    await app.close()
+    app = await launchApp({ userDataDir, cleanupUserData: false })
+    const page = app.window
+    await home.openStory(page, 'The Veilstone Courier').click()
+    await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
+    const branch = await branchId()
+    // Only the persisted state crossed the restart: the watermark behind the cancelled turn.
+    expect(await classifierStatus(branch)).toEqual(['idle', null, parked])
+    const outcomesBefore = (await passOutcomes()).length
+
+    mock.setStructured('periodic-classifier', gatedPassReply('E2E-RESTART-H2'))
+    mock.holdNextStructured('periodic-classifier')
+    const calls = passCalls()
+    await send('E2E-RESTART-U2 I wake before the light.', 'E2E-RESTART-R2 frost on the saddle.')
+    const owed = await heldPass(calls)
+    await expect(memoryBanner.updatingBeforeTurn(page)).toBeVisible()
+    // Send's own run: the composer offers Cancel, and the user_action waits for the pass.
+    await expect(reader.cancel(page)).toBeVisible()
+    expect(await entryIdByContent(branch, 'E2E-RESTART-U2')).toBeUndefined()
+
+    mock.releaseStructured()
+    // The turn's commit chains the next due pass; an inert reply lets it finish untouched.
+    mock.setStructured('periodic-classifier', EXAMPLES['periodic-classifier'])
+    const userAction = await createDelta(branch, await pollEntryId(branch, 'E2E-RESTART-U2'))
+    await pollEntryId(branch, 'E2E-RESTART-R2')
+    expect(await runOutcome(owed)).toBe('completed')
+    expect(owed).not.toBe(userAction.actionId)
+    const written = await passDeltas(owed)
+    expect(written.count).toBeGreaterThan(0)
+    expect(written.last).not.toBeNull()
+    expect(written.last!).toBeLessThan(userAction.logPosition)
+    // The owed pass at this Send, then the pass this turn chains.
+    await expect
+      .poll(async () => (await passOutcomes()).slice(outcomesBefore), { timeout: 20_000 })
+      .toEqual(['completed', 'completed'])
   })
 })
