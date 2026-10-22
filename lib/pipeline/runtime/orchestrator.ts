@@ -53,7 +53,7 @@ export type RunCtx = {
   // Kind-specific run parameters the starting action hands to the phases
   // (generation-pipeline.md → Run-scoped state: inputs, not intermediates).
   inputs?: unknown
-  /** Send's deferred work: shown as "before your turn", cancelled with the Send. */
+  /** Send's owed pass: shown as "before your turn", cancelled with the Send. */
   beforeTurn?: boolean
   /** Called once the run is in txState, before any await; not for a chain's successor. */
   onReserved?: () => void
@@ -293,7 +293,7 @@ async function commitRun(
       { runId: run.runId, kind: run.kind, nextKind },
       { actionId: run.actionId },
     )
-  // A chained run gets its own context: no inputs, its own actionId, never Send's deferred work
+  // A chained run gets its own context: no inputs, its own actionId, never Send's owed pass
   // (generation-pipeline.md → chainsTo on predecessor).
   const successor = nextPipeline
     ? newRunState(nextPipeline.kind, {
