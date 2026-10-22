@@ -217,8 +217,8 @@ export async function* periodicClassifierPhase(
     maxEntries: cfg.classifierWindowMaxEntries,
   })
   if (window.isEmpty) {
-    // Only a truncated window of system rows moves it: prose lies past that cut. Untruncated,
-    // coversThrough stays at the watermark, and the cadence counts no system row.
+    // Only a truncated window of system rows advances the watermark: past the cut lies prose, as
+    // writeSystemEntry keeps one system row, at the tail. Untruncated, the cadence counts none.
     if (window.coversThrough > (status.processedThrough ?? 0))
       await advanceWatermark(ctx, window.coversThrough)
     return { status: 'completed' }
@@ -294,7 +294,7 @@ export async function* periodicClassifierPhase(
     ]),
   )
 
-  const embedDescriptions = classifierEmbedder()
+  const deps = { entities, embedDescriptions: classifierEmbedder(), log: ctx.log }
   const reconcile = async (
     kind: ReconciledKind,
     // A handle a character already claimed plans nothing as a faction (plan.ts).
@@ -316,14 +316,8 @@ export async function* periodicClassifierPhase(
         await reconcileNewEntity(
           { ...stored, keywords: candidate.keywords },
           kind === 'character'
-            ? {
-                kind,
-                entities,
-                embedDescriptions,
-                log: ctx.log,
-                scene: window.sceneOf(candidate.sourceTurn),
-              }
-            : { kind, entities, embedDescriptions, log: ctx.log },
+            ? { ...deps, kind, scene: window.sceneOf(candidate.sourceTurn) }
+            : { ...deps, kind },
         ),
       )
     }
