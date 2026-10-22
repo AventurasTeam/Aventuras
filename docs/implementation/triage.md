@@ -679,3 +679,19 @@ slice-planning gate forces its resolution before that slice is planned.
   through the gap (`composerShowsCancel`, same file); the pill doesn't.
   A frame or two on desktop. Read, not probed. Raised 2026-10-21 by the
   gated classifier slice review.
+
+- **A failed-pass entry can lose the turn's text to an occupied
+  draft.** The entry carries the turn's text only when the composer
+  couldn't take it back: the user typed a new draft during Send's owed
+  pass, which can run up to ten minutes with the composer editable
+  ([`reader-composer.md → Custody of the turn's text`](../ui/screens/reader-composer/reader-composer.md#custody-of-the-turns-text)).
+  From there a committed Retry and `Dismiss` both hand it into the
+  still-occupied draft and drop it with the `failedTurnTextDropped`
+  toast, as Custody allows; a Send of the new draft drops it silently
+  in the tail clear, as a turn-failure entry's does today. Only
+  clearing the draft first, then `Dismiss`, keeps it, and nothing says
+  so. A turn-failure entry escapes the Retry half because its Retry
+  resends the stored text. Candidate fixes: keep the entry as a notice
+  when a Retry commits over an occupied draft; or carry a dropped
+  entry's submission onto the next entry. Raised 2026-10-22 in the
+  pass failure policy slice's Task 7 review.
