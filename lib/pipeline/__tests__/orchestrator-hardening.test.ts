@@ -157,6 +157,26 @@ describe('orchestrator hardening', () => {
     expect(result.outcome).toBe('failed')
   })
 
+  // observability.md → Record shape: the hook's logs must name the run, and a start that passes
+  // no actionId leaves the caller's ctx without one.
+  it("hands onPhaseException the run's own actionId", async () => {
+    const { ctx } = await makeHarness()
+    const seen: (string | undefined)[] = []
+    definePipeline({
+      kind: 'phase-exception-action-id',
+      phases: [{ name: 'p', run: updateMissing }],
+      onPhaseException: async (hookCtx) => {
+        seen.push(hookCtx.actionId)
+      },
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('phase-exception-action-id', ctx))
+
+    expect(result.outcome).toBe('failed')
+    expect(seen).toEqual([result.actionId])
+  })
+
   it('winds the run down even when onPhaseException throws', async () => {
     const { ctx } = await makeHarness()
     definePipeline({

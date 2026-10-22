@@ -251,6 +251,22 @@ describe('chained transition', () => {
     expect(seen).toEqual({ pred: true, succ: false })
   })
 
+  it("names beforeTurn on the started run's run_complete, never on its successor's", async () => {
+    const { ctx } = await makeHarness()
+    defineChain()
+    const seen: { kind: string; beforeTurn: boolean }[] = []
+    pipelineEventBus.subscribe('run_complete', (e) => {
+      seen.push({ kind: e.kind, beforeTurn: e.beforeTurn })
+    })
+
+    expectRan(await runPipeline('pred', { ...ctx, beforeTurn: true }))
+
+    expect(seen).toEqual([
+      { kind: 'pred', beforeTurn: true },
+      { kind: 'succ', beforeTurn: false },
+    ])
+  })
+
   it('awaits an async chainsTo while the committing run still holds the gate', async () => {
     const { ctx } = await makeHarness()
     const seen: { registered: boolean; blocked: boolean; markers: number }[] = []
@@ -481,6 +497,22 @@ describe('split start', () => {
     expect(generationStore.getTxState().runs.size).toBe(0)
     expect(completes).toEqual([markerUnwound('pred')])
     await expect(runPipeline('pred', { ...ctx, db })).rejects.toThrow('marker insert failed')
+  })
+
+  it('names beforeTurn on the run_complete of a start whose marker insert fails', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({ kind: 'pred', phases: [{ name: 'p', run: noop }], ...base })
+    const db = failingMarkerInsert(ctx.db, 'pred')
+    const seen: boolean[] = []
+    pipelineEventBus.subscribe('run_complete', (e) => {
+      seen.push(e.beforeTurn)
+    })
+
+    await expect(runPipeline('pred', { ...ctx, db, beforeTurn: true })).rejects.toThrow(
+      'marker insert failed',
+    )
+
+    expect(seen).toEqual([true])
   })
 
   it('unwinds a successor whose marker insert fails and ends the chain', async () => {

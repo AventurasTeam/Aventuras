@@ -127,6 +127,7 @@ async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
       runId: run.runId,
       kind: run.kind,
       actionId: run.actionId,
+      beforeTurn: run.beforeTurn,
       outcome: 'failed',
       error: {
         kind: 'orchestrator',
@@ -328,6 +329,7 @@ async function commitRun(
     runId: run.runId,
     kind: run.kind,
     actionId: run.actionId,
+    beforeTurn: run.beforeTurn,
     outcome: 'completed',
   })
   run.resolveTerminal()
@@ -361,7 +363,10 @@ async function runPhaseExceptionHook(
   if (error.kind !== 'action-layer' && error.kind !== 'orchestrator') return
   const onPhaseException = getPipeline(run.kind).onPhaseException
   if (!onPhaseException) return
-  await runHook(run, 'pipeline.phase_exception_hook_failed', () => onPhaseException(ctx, error))
+  // The run's identity, not the caller's ctx: a start that passed no actionId left that unset.
+  await runHook(run, 'pipeline.phase_exception_hook_failed', () =>
+    onPhaseException({ db: ctx.db, branchId: run.branchId, actionId: run.actionId }, error),
+  )
 }
 
 async function runInterruptHook(run: RunState, ctx: RunCtx): Promise<void> {
@@ -441,6 +446,7 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
     runId: run.runId,
     kind: run.kind,
     actionId: run.actionId,
+    beforeTurn: run.beforeTurn,
     outcome,
     ...(error ? { error } : {}),
   })
