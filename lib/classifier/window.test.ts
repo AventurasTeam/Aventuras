@@ -87,6 +87,40 @@ describe('buildClassifierWindow', () => {
     expect(w.coversThrough).toBe(3)
   })
 
+  // classifier.md → Persistence: the reader clears a trailing system entry before the next Send,
+  // whose user_action takes its position. Claimed, that turn would sit at the watermark unread.
+  it('leaves a trailing system entry above coversThrough', () => {
+    const w = buildClassifierWindow({
+      entries: [entry(1, 'e1'), entry(2, 'e2'), entry(3, 'e3', 'system')],
+      processedThrough: 0,
+      maxEntries: 20,
+    })
+    expect(w.turns.map((t) => t.entryId)).toEqual(['e1', 'e2'])
+    expect(w.coversThrough).toBe(2)
+  })
+
+  it('stays at the watermark for a window of nothing but system entries', () => {
+    const w = buildClassifierWindow({
+      entries: [entry(4, 'e4', 'system'), entry(5, 'e5', 'system')],
+      processedThrough: 3,
+      maxEntries: 20,
+    })
+    expect(w.isEmpty).toBe(true)
+    expect(w.coversThrough).toBe(3)
+  })
+
+  // Prose lies past the cut, so a system entry at the cut is interior, never the tail.
+  it('claims a truncated window up to its cut, a system entry at the cut included', () => {
+    const w = buildClassifierWindow({
+      entries: [entry(1, 'e1'), entry(2, 'e2'), entry(3, 'e3', 'system'), entry(4, 'e4')],
+      processedThrough: 0,
+      maxEntries: 3,
+    })
+    expect(w.truncated).toBe(true)
+    expect(w.turns.map((t) => t.entryId)).toEqual(['e1', 'e2'])
+    expect(w.coversThrough).toBe(3)
+  })
+
   it('is empty when the watermark is already at head', () => {
     const w = buildClassifierWindow({
       entries: [entry(1, 'e1')],

@@ -16,7 +16,7 @@ import {
   releaseBranchWriteExclusive,
 } from '@/lib/actions/delta/branch-write-lock'
 import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
-import { generateStructured } from '@/lib/ai'
+import { generateStructured, type ResolveModelConfig } from '@/lib/ai'
 import {
   classifierExtractionSchema,
   classifierExtractionWithPlacesSchema,
@@ -56,9 +56,11 @@ import {
 } from '@/lib/stores'
 
 import { __resetClassifierEmbedder, configureClassifierEmbedder } from './description-embedder'
+import { unprocessedEntryCount } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import {
   ensurePeriodicClassifierPipelineRegistered,
+  passTimeoutMs,
   PERIODIC_CLASSIFIER_KIND,
   PERIODIC_CLASSIFIER_RESOLVES,
   periodicClassifierPhase,
@@ -410,18 +412,34 @@ describe('periodicClassifierPhase', () => {
     expect(vi.mocked(generateStructured).mock.calls[0]![5]).toBeUndefined()
   })
 
-  it('advances past a window of only system entries, so the cadence cannot live-lock', async () => {
+  // classifier.md → Persistence: a system row is no prose to process, and a trailing one's
+  // position is the next user_action's.
+  it('completes a window of only system entries with no call, leaving the watermark', async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 2, entryKind: 'system' })
+    const before = h.status()
     const { events, result } = await drain(h.ctx)
     expect(events).toEqual([])
     expect(result).toEqual({ status: 'completed' })
     expect(generateStructured).not.toHaveBeenCalled()
-    // Technical rows hold positions the model must never see; leaving the
-    // watermark behind them re-fires the cadence on every run_complete forever.
-    expect(h.status()?.processedThrough).toBe(2)
-    expect(shouldCadenceFire({ status: h.status()!, unprocessedEntries: 0, cadence: 1 })).toBe(
-      false,
-    )
+    expect(h.watermarks).toEqual([])
+    expect(h.status()).toEqual(before)
+    // The cadence counts no system row, so the unmoved watermark cannot re-fire it.
+    const unprocessed = await unprocessedEntryCount('b1', 0, h.ctx)
+    expect(unprocessed).toBe(0)
+    expect(
+      shouldCadenceFire({ status: h.status()!, unprocessedEntries: unprocessed, cadence: 1 }),
+    ).toBe(false)
+  })
+
+  // Past the cap lies prose the next pass must reach, so a cut of nothing but system rows advances.
+  it('advances to the cut of a truncated window of only system entries, with no call', async () => {
+    const h = await ctxWith({ processedThrough: 0, headPosition: 25, entryKind: 'system' })
+    const { events, result } = await drain(h.ctx)
+    expect(events).toEqual([])
+    expect(result).toEqual({ status: 'completed' })
+    expect(generateStructured).not.toHaveBeenCalled()
+    // classifierWindowMaxEntries defaults to 20.
+    expect(h.watermarks).toEqual([20])
     // Nothing ran, so the lifecycle keys must not read as a successful pass.
     expect(h.status()).toMatchObject({ state: 'idle', lastSuccessAt: null })
   })
@@ -663,31 +681,103 @@ describe('periodicClassifierPhase', () => {
     expect(embedder).toHaveBeenCalledTimes(1)
   })
 
-  // A never-answering provider must expire as a failure, not an abort: an abort burns no retry,
-  // so every later turn would rediscover the same dead provider.
-  it('treats a call that outlives the timeout as a retryable failure', async () => {
-    vi.useFakeTimers()
-    try {
-      vi.mocked(generateStructured).mockImplementation(
-        (...args: unknown[]) =>
-          new Promise((resolve) => {
-            const signal = args[4] as AbortSignal
-            if (signal.aborted) resolve({ status: 'aborted' } as never)
-            signal.addEventListener('abort', () => resolve({ status: 'aborted' } as never))
-          }) as never,
-      )
-      const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
-      const pass = drain(h.ctx)
-      await vi.advanceTimersByTimeAsync(300_000)
-      const { events, result } = await pass
-
-      expect(events).toEqual([])
-      expect(result).toMatchObject({ status: 'failed', error: { reason: 'timeout' } })
-      expect(h.status()).toMatchObject({ state: 'failed', processedThrough: 0 })
-      expect(h.status()?.lastError).toMatch(/timeout/)
-    } finally {
-      vi.useRealTimers()
+  // classifier.md → Failure policy: the profile's timeout bounds the whole call, ten minutes unset.
+  // A never-answering provider must expire as a failure, not an abort, or nothing would say why.
+  describe('the bound on the call', () => {
+    // The call settles only when its signal aborts, reporting how long it was in flight on the
+    // fake clock: the bound the phase armed.
+    function callAbortedAfter(): Promise<number> {
+      return new Promise((reportElapsed) => {
+        vi.mocked(generateStructured).mockImplementation(
+          (...args: unknown[]) =>
+            new Promise((resolve) => {
+              const signal = args[4] as AbortSignal
+              const startedAt = Date.now()
+              signal.addEventListener('abort', () => {
+                reportElapsed(Date.now() - startedAt)
+                resolve({ status: 'aborted' } as never)
+              })
+            }) as never,
+        )
+      })
     }
+
+    async function runToExpiry(h: Harness) {
+      vi.useFakeTimers()
+      try {
+        const elapsed = callAbortedAfter()
+        const pass = drain(h.ctx)
+        // Past every bound under test, so a wrong one still expires and the assertion names it.
+        await vi.advanceTimersByTimeAsync(1_000_000)
+        return { elapsedMs: await elapsed, ...(await pass) }
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+
+    // After ctxWith, which resets the stores.
+    async function wireClassifier(timeout?: number): Promise<void> {
+      const [profile] = CLASSIFIER_WIRED_CONFIG.profiles
+      await hydrateAppSettings(async () => ({
+        ...CLASSIFIER_WIRED_CONFIG,
+        profiles: [{ ...profile, ...(timeout !== undefined ? { timeout } : {}) }],
+      }))
+    }
+
+    it('fails the pass at the profile timeout, and not before', async () => {
+      const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+      await wireClassifier(30)
+
+      const { elapsedMs, events, result } = await runToExpiry(h)
+
+      expect(elapsedMs).toBe(30_000)
+      expect(events).toEqual([])
+      expect(result).toEqual({
+        status: 'failed',
+        error: { kind: 'provider', reason: 'timeout', detail: 'classifier: timeout after 30000ms' },
+      })
+      expect(h.watermarks).toEqual([])
+      expect(h.status()).toMatchObject({
+        state: 'failed',
+        lastError: 'timeout after 30000ms',
+        processedThrough: 0,
+      })
+    })
+
+    it('lets a profile timeout run longer than ten minutes', async () => {
+      const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+      await wireClassifier(900)
+
+      expect((await runToExpiry(h)).elapsedMs).toBe(900_000)
+    })
+
+    it('bounds the call at ten minutes when the profile sets no timeout', async () => {
+      const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+      await wireClassifier()
+
+      const { elapsedMs, result } = await runToExpiry(h)
+
+      expect(elapsedMs).toBe(600_000)
+      expect(result).toMatchObject({ error: { detail: 'classifier: timeout after 600000ms' } })
+      expect(h.status()).toMatchObject({ state: 'failed', lastError: 'timeout after 600000ms' })
+    })
+
+    // A story override names a model, not a profile, so no profile timeout reaches it.
+    it("bounds a story override at ten minutes, whatever the agent's profile says", async () => {
+      const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+      await wireClassifier(30)
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition: {} as never,
+        settings: {
+          models: { classifier: { providerId: 'prov-1', modelId: 'other' } },
+          classifierMentionedPlaces: false,
+        } as never,
+      })
+
+      expect((await runToExpiry(h)).elapsedMs).toBe(600_000)
+    })
   })
 
   it('still treats a real cancel as an abort, recording no failure', async () => {
@@ -728,8 +818,8 @@ describe('periodicClassifierPhase', () => {
       const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
       const pass = drain({ ...h.ctx, abortSignal: controller.signal })
 
-      // Cancel just short of the cap, then run well past it while the call winds down.
-      await vi.advanceTimersByTimeAsync(299_000)
+      // Cancel just short of the ten-minute bound, then run past it while the call winds down.
+      await vi.advanceTimersByTimeAsync(599_000)
       controller.abort()
       await vi.advanceTimersByTimeAsync(60_000)
       const { result } = await pass
@@ -751,13 +841,80 @@ describe('periodicClassifierPhase', () => {
     })
     const { events, result } = await drain(h.ctx)
     expect(events).toEqual([])
-    expect(result).toMatchObject({ status: 'failed' })
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'provider', reason: 'unknown', detail: 'classifier: rate limited' },
+    })
     expect(watermarks).toEqual([])
     expect(h.status()).toMatchObject({
       state: 'failed',
       lastError: 'rate limited',
       processedThrough: 0,
     })
+  })
+
+  // generation-pipeline.md → Fatal error categories: a config fault, so the reader offers its fix.
+  it('fails a call whose model no longer resolves as a config-resolver error', async () => {
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'not-configured',
+      kind: 'profile-missing',
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+    const { events, result } = await drain(h.ctx)
+    expect(events).toEqual([])
+    expect(result).toEqual({
+      status: 'failed',
+      error: {
+        kind: 'config-resolver',
+        failure: 'profile-missing',
+        target: 'classifier',
+        phaseName: 'classify',
+        detail: 'classifier',
+      },
+    })
+    expect(h.watermarks).toEqual([])
+    expect(h.status()).toMatchObject({
+      state: 'failed',
+      lastError: 'profile-missing',
+      processedThrough: 0,
+    })
+  })
+
+  // observability.md → Record shape: inside the pass the warn carries the pass's actionId.
+  it("logs a failed description embed under the pass's actionId and still completes", async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    configureClassifierEmbedder(async () => {
+      throw new Error('embedder offline')
+    })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        newCharacters: [{ handle: 'nc1', name: 'Kael', description: 'A courier.', keywords: [] }],
+      }),
+    })
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'Kael, described.',
+      keywords: [],
+      state: null,
+      createdAt: 1,
+    } as unknown as Entity
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael] })
+
+    const { result } = await drain(h.ctx)
+
+    expect(result).toEqual({ status: 'completed' })
+    const failed = getDiagnosticsSnapshot().logEntries.filter(
+      (e) => e.kind === 'classifier.description_embed_failed',
+    )
+    expect(failed.map((e) => [e.level, e.actionId, e.fields])).toEqual([
+      ['warn', 'a1', { error: 'embedder offline' }],
+    ])
   })
 
   it.each([
@@ -1716,7 +1873,10 @@ describe('periodicClassifierPhase via runPipeline', () => {
     expect(status?.lastError).toBe('classifier: forced test rejection')
   })
 
-  it('still reaches the failed status when the first failure write fails', async () => {
+  // observability.md → Record shape: the retry is the run's, so its log names the run.
+  it('still reaches the failed status when the first failure write fails, logging the retry as the run', async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
     const { db, runInTransaction } = await seedApplyTimeHarness()
     let failNextStatusWrite = false
     rejectCreateHappening(() => {
@@ -1739,14 +1899,24 @@ describe('periodicClassifierPhase via runPipeline', () => {
 
     registerWithReply()
 
-    expect(await runOutcome({ storyId: 's1', branchId: 'b1', db: flaky, runInTransaction })).toBe(
-      'failed',
-    )
+    // No actionId passed: the hook must hand on the run's own, which only the run knows.
+    const result = await runPipeline(PERIODIC_CLASSIFIER_KIND, {
+      storyId: 's1',
+      branchId: 'b1',
+      db: flaky,
+      runInTransaction,
+    })
+    if (result.outcome === 'rejected') throw new Error('unexpected rejected start')
 
+    expect(result.outcome).toBe('failed')
     expect(await storedStatus(db)).toMatchObject({
       state: 'failed',
       lastError: 'classifier: forced test rejection',
     })
+    const retried = getDiagnosticsSnapshot().logEntries.filter(
+      (e) => e.kind === 'classifier.failure_record_retried',
+    )
+    expect(retried.map((e) => e.actionId)).toEqual([result.actionId])
   })
 
   it('counts a pass whose watermark write fails as a failure, not a success', async () => {
@@ -2262,5 +2432,31 @@ describe('periodicClassifierPhase — mentioned places', () => {
     )
     expect(log?.level).toBe('warn')
     expect(log?.fields).toEqual({ handle: 'new:inn', parent: ford.id, cause: 'retired' })
+  })
+})
+
+describe('passTimeoutMs', () => {
+  const [profile] = CLASSIFIER_WIRED_CONFIG.profiles
+  const config = (timeout?: number): ResolveModelConfig => ({
+    providers: CLASSIFIER_WIRED_CONFIG.providers,
+    profiles: [{ ...profile, ...(timeout !== undefined ? { timeout } : {}) }],
+    assignments: CLASSIFIER_WIRED_CONFIG.assignments,
+  })
+
+  // Profile timeouts are seconds, as the SDK call settings read them.
+  it("reads the classifier profile's timeout, shorter or longer than ten minutes", () => {
+    expect(passTimeoutMs(config(30))).toBe(30_000)
+    expect(passTimeoutMs(config(900))).toBe(900_000)
+  })
+
+  it('is ten minutes when the profile sets none, the chain does not resolve, or a story overrides', () => {
+    expect(passTimeoutMs(config())).toBe(600_000)
+    expect(passTimeoutMs({ ...config(30), assignments: {} })).toBe(600_000)
+    expect(
+      passTimeoutMs({
+        ...config(30),
+        storyModels: { classifier: { providerId: 'prov-1', modelId: 'other' } },
+      }),
+    ).toBe(600_000)
   })
 })

@@ -39,9 +39,7 @@ export function buildClassifierWindow(args: {
   const candidates = ascending.filter((e) => e.position > floor)
   const capped = candidates.slice(0, maxEntries)
   const truncated = capped.length < candidates.length
-  // System entries are technical rows the model must never see, but they still
-  // occupy positions, so the watermark covers them or the pass would loop on
-  // a window it cannot advance past.
+  // System entries are technical rows the model must never see.
   // Prose only: the template asks for facts "the turn whose prose produced it",
   // and a persisted <suggestions> block offers actions the story never took as
   // if they were narrated.
@@ -59,7 +57,12 @@ export function buildClassifierWindow(args: {
         currentLocationId,
       }
     })
-  const coversThrough = capped.at(-1)?.position ?? floor
+  // classifier.md → Persistence: a system row is no prose to process. A trailing one stays above
+  // the watermark: the reader clears it before the next Send, whose user_action takes its position.
+  // A truncated window claims its whole cut, since prose lies past it and nothing in it trails.
+  const coversThrough = truncated
+    ? (capped.at(-1)?.position ?? floor)
+    : (turns.at(-1)?.position ?? floor)
   const byHandle = new Map(turns.map((t) => [t.handle, t]))
   const head = turns.at(-1) ?? null
   const turnOf = (handle: string | undefined) => (handle != null ? byHandle.get(handle) : undefined)

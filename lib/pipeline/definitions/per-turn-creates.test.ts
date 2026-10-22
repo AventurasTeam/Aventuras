@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { EmbedDescriptions } from '@/lib/classifier'
 import { emptyEntityState, type Entity } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
+import { logger, type Logger } from '@/lib/diagnostics'
 import {
   normalizeCreates,
   type NewLocationReport,
@@ -80,6 +80,7 @@ function runPlanner(
     embed?: EmbedDescriptions
     source?: 'piggyback_tagged_block' | 'per_turn_classifier'
     mapCurrentLocationId?: string | null
+    log?: Logger
   } = {},
 ) {
   // Deterministic per-prefix ids, so a case can name the rows it expects.
@@ -93,7 +94,7 @@ function runPlanner(
     embed: opts.embed ?? noEmbed,
     now: () => 1000,
     newId: (prefix) => `${prefix}_new_${++counts[prefix]}`,
-    log: logger,
+    log: opts.log ?? logger,
   })
 }
 
@@ -748,6 +749,24 @@ describe('planTurnCreates — matching', () => {
     expect(embed).not.toHaveBeenCalled()
     expect(createdEntries(plan.creates)).toEqual([
       expect.objectContaining({ description: null, nameCollisionFlag: 0 }),
+    ])
+  })
+
+  // observability.md → Record shape: the warn rides the turn's logger, so it names the turn.
+  it("warns through the turn's logger when an item's embed throws, creating it unflagged", async () => {
+    const warn = vi.fn()
+    const plan = await runPlanner(keyCreate('an iron key, flaked with rust'), {
+      entities: world(oldKey()),
+      embed: async () => {
+        throw new Error('embedder offline')
+      },
+      log: { ...logger, warn },
+    })
+    expect(warn).toHaveBeenCalledWith('classifier.description_embed_failed', {
+      error: 'embedder offline',
+    })
+    expect(createdEntries(plan.creates)).toEqual([
+      expect.objectContaining({ id: 'item_new_1', nameCollisionFlag: 0 }),
     ])
   })
 

@@ -1,7 +1,12 @@
 import { and, asc, eq, gt, sql, type SQL } from 'drizzle-orm'
 
 import { boundedSignal } from '@/lib/abort'
-import { generateStructured } from '@/lib/ai'
+import {
+  generateStructured,
+  resolveModel,
+  type GenerateStructuredResult,
+  type ResolveModelConfig,
+} from '@/lib/ai'
 import {
   buildClassifierActions,
   buildClassifierWindow,
@@ -44,7 +49,13 @@ import { readClassifierStatus } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
-import type { PhaseContext, PhaseEmittedEvent, PhaseResult, ResolverInput } from '../types'
+import type {
+  PhaseContext,
+  PhaseEmittedEvent,
+  PhaseResult,
+  PipelineError,
+  ResolverInput,
+} from '../types'
 
 export { PERIODIC_CLASSIFIER_KIND }
 
@@ -72,10 +83,56 @@ async function readWindowEntries(
     .limit(maxEntries + 1)) as StoryEntry[]
 }
 
-// Bounds the structured call (retries included): a hung provider would hold the pass's user-edit
-// gate until the user cancels. Expiry is an ordinary failure the next turn retries; a shorter
-// profile `timeout` still wins (the SDK aborts first), a longer one is capped.
-const CALL_TIMEOUT_MS = 300_000
+/** classifier.md → Failure policy: the bound when the classifier profile sets no timeout. */
+export const PASS_TIMEOUT_DEFAULT_MS = 600_000
+
+const CLASSIFY_PHASE = 'classify'
+
+/** The classifier profile's `timeout` over the whole structured call, retries included. */
+export function passTimeoutMs(config: ResolveModelConfig): number {
+  const resolved = resolveModel('classifier', config)
+  // Seconds, as buildCallSettings reads them; a story override resolves to no profile params.
+  const seconds = resolved.ok ? resolved.params.timeout : undefined
+  return seconds === undefined ? PASS_TIMEOUT_DEFAULT_MS : seconds * 1000
+}
+
+type CallFailure = Exclude<GenerateStructuredResult<unknown>, { status: 'ok' }>
+
+// `lastError` keeps the bare cause for the status block; the run's error is what the reader shows.
+function passFailure(
+  result: CallFailure,
+  timeoutMs: number,
+): { lastError: string; error: PipelineError } {
+  switch (result.status) {
+    // Only an expiry reaches here: a cancel has already returned `aborted`.
+    case 'aborted':
+      return {
+        lastError: `timeout after ${timeoutMs}ms`,
+        error: {
+          kind: 'provider',
+          reason: 'timeout',
+          detail: `classifier: timeout after ${timeoutMs}ms`,
+        },
+      }
+    // A config fault, so the reader's entry can offer its fix.
+    case 'not-configured':
+      return {
+        lastError: result.kind,
+        error: {
+          kind: 'config-resolver',
+          failure: result.kind,
+          target: 'classifier',
+          phaseName: CLASSIFY_PHASE,
+          detail: 'classifier',
+        },
+      }
+    case 'failed':
+      return {
+        lastError: result.detail,
+        error: { kind: 'provider', reason: 'unknown', detail: `classifier: ${result.detail}` },
+      }
+  }
+}
 
 type StatusCtx = Pick<PhaseContext, 'db' | 'branchId'>
 
@@ -160,9 +217,8 @@ export async function* periodicClassifierPhase(
     maxEntries: cfg.classifierWindowMaxEntries,
   })
   if (window.isEmpty) {
-    // coversThrough counts the capped candidates BEFORE the system-entry filter,
-    // so a window of nothing but technical rows is empty yet still advanceable.
-    // Leaving the watermark behind them re-fires the cadence forever.
+    // Only a truncated window of system rows moves it: prose lies past that cut. Untruncated,
+    // coversThrough stays at the watermark, and the cadence counts no system row.
     if (window.coversThrough > (status.processedThrough ?? 0))
       await advanceWatermark(ctx, window.coversThrough)
     return { status: 'completed' }
@@ -190,22 +246,25 @@ export async function* periodicClassifierPhase(
     }),
   )
 
+  const modelConfig: ResolveModelConfig = {
+    providers: cfg.providers,
+    profiles: cfg.profiles,
+    assignments: cfg.assignments,
+    storyModels: open.settings.models,
+  }
+  const timeoutMs = passTimeoutMs(modelConfig)
+
   // Read by the status block; left behind by a crash, it holds the cadence until boot clears it.
   await writeStatus(ctx, nextStatusOnStart(status))
 
-  const bounded = boundedSignal(ctx.abortSignal, CALL_TIMEOUT_MS)
+  const bounded = boundedSignal(ctx.abortSignal, timeoutMs)
   let result
   try {
     result = await generateStructured(
       'classifier',
       prompt,
       classifierReplySchema(mentionedPlaces),
-      {
-        providers: cfg.providers,
-        profiles: cfg.profiles,
-        assignments: cfg.assignments,
-        storyModels: open.settings.models,
-      },
+      modelConfig,
       bounded.signal,
     )
   } finally {
@@ -214,25 +273,14 @@ export async function* periodicClassifierPhase(
   // An interrupt uses no retry and leaves the watermark; onInterrupt restores the pre-run status.
   if (result.status === 'aborted' && !bounded.expired()) return { status: 'aborted' }
   if (result.status !== 'ok') {
-    // An expiry aborts the same way a cancel does, but it is a provider fault: through the abort
-    // arm it would burn no retry, and every later turn would rediscover the same dead provider.
-    const detail =
-      result.status === 'aborted'
-        ? `timeout after ${CALL_TIMEOUT_MS}ms`
-        : result.status === 'not-configured'
-          ? result.kind
-          : result.detail
-    const timedOut = result.status === 'aborted'
-    const next = nextStatusOnFailure(status, { error: detail, at: Date.now() })
-    await writeStatus(ctx, next)
-    return {
-      status: 'failed',
-      error: {
-        kind: 'provider',
-        reason: timedOut ? 'timeout' : 'unknown',
-        detail: `classifier: ${timedOut ? 'timeout' : result.status}`,
-      },
-    }
+    // An expiry aborts the call as a cancel does, but it is a provider fault: it fails the pass,
+    // leaving the watermark, so the next Send owes the pass (classifier.md → Failure policy).
+    const failure = passFailure(result, timeoutMs)
+    await writeStatus(
+      ctx,
+      nextStatusOnFailure(status, { error: failure.lastError, at: Date.now() }),
+    )
+    return { status: 'failed', error: failure.error }
   }
 
   const extraction = result.value
@@ -272,9 +320,10 @@ export async function* periodicClassifierPhase(
                 kind,
                 entities,
                 embedDescriptions,
+                log: ctx.log,
                 scene: window.sceneOf(candidate.sourceTurn),
               }
-            : { kind, entities, embedDescriptions },
+            : { kind, entities, embedDescriptions, log: ctx.log },
         ),
       )
     }
@@ -326,7 +375,7 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
       kind: PERIODIC_CLASSIFIER_KIND,
       phases: [
         {
-          name: 'classify',
+          name: CLASSIFY_PHASE,
           run: periodicClassifierPhase,
           resolves: PERIODIC_CLASSIFIER_RESOLVES,
         },
@@ -344,10 +393,11 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
           await recordFailure(ctx, detail)
         } catch (e) {
           // A failed attempt lands nothing; unrecorded, the branch stays running until boot.
-          logger.warn('classifier.failure_record_retried', {
-            branchId: ctx.branchId,
-            error: e instanceof Error ? e.message : String(e),
-          })
+          logger.warn(
+            'classifier.failure_record_retried',
+            { branchId: ctx.branchId, error: e instanceof Error ? e.message : String(e) },
+            { actionId: ctx.actionId },
+          )
           await recordFailure(ctx, detail)
         }
       },
