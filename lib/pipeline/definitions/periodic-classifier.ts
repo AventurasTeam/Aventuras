@@ -86,6 +86,9 @@ async function readWindowEntries(
 /** classifier.md → Failure policy: the bound when the classifier profile sets no timeout. */
 export const PASS_TIMEOUT_DEFAULT_MS = 600_000
 
+// setTimeout's largest delay; a longer one fires at once.
+const MAX_TIMER_DELAY_MS = 2_147_483_647
+
 const CLASSIFY_PHASE = 'classify'
 
 /** The classifier profile's `timeout` over the whole structured call, retries included. */
@@ -93,7 +96,10 @@ export function passTimeoutMs(config: ResolveModelConfig): number {
   const resolved = resolveModel('classifier', config)
   // Seconds, as buildCallSettings reads them; a story override resolves to no profile params.
   const seconds = resolved.ok ? resolved.params.timeout : undefined
-  return seconds === undefined ? PASS_TIMEOUT_DEFAULT_MS : seconds * 1000
+  if (seconds === undefined || !Number.isFinite(seconds) || seconds <= 0) {
+    return PASS_TIMEOUT_DEFAULT_MS
+  }
+  return Math.min(seconds * 1000, MAX_TIMER_DELAY_MS)
 }
 
 type CallFailure = Exclude<GenerateStructuredResult<unknown>, { status: 'ok' }>

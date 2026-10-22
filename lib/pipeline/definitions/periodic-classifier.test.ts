@@ -60,6 +60,7 @@ import { unprocessedEntryCount } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import {
   ensurePeriodicClassifierPipelineRegistered,
+  PASS_TIMEOUT_DEFAULT_MS,
   passTimeoutMs,
   PERIODIC_CLASSIFIER_KIND,
   PERIODIC_CLASSIFIER_RESOLVES,
@@ -2489,5 +2490,16 @@ describe('passTimeoutMs', () => {
         storyModels: { classifier: { providerId: 'prov-1', modelId: 'other' } },
       }),
     ).toBe(600_000)
+  })
+
+  it.each([0, -30, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'reads an invalid profile timeout (%s) as none',
+    (timeout) => {
+      expect(passTimeoutMs(config(timeout))).toBe(PASS_TIMEOUT_DEFAULT_MS)
+    },
+  )
+
+  it("caps a huge timeout at setTimeout's largest delay", () => {
+    expect(passTimeoutMs(config(9_999_999))).toBe(2_147_483_647)
   })
 })
