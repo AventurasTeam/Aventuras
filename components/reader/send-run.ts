@@ -95,7 +95,7 @@ export function cancelPillRun(branchId: string): Promise<void> {
  * can go back where it was (reader-composer.md → Custody of the turn's text).
  */
 export function abortedBeforeTurn(result: SubmitTurnResult): boolean {
-  return result.outcome === 'aborted' && 'beforeTurn' in result
+  return result.outcome === 'aborted' && result.beforeTurn === true
 }
 
 /** A pass that refused a Send (classifier.md → Failure policy): the hold, or why it failed. */
@@ -103,7 +103,7 @@ export type PassRefusal = { held: true } | { held: false; error: PipelineError |
 
 /** Send's result only: a `failed` without `beforeTurn` is the turn's own, not a pass refusal. */
 export function passRefusalOf(result: SubmitTurnResult): PassRefusal | null {
-  if (result.outcome === 'failed' && 'beforeTurn' in result)
+  if (result.outcome === 'failed' && result.beforeTurn === true)
     return { held: false, error: result.error }
   if (result.outcome === 'rejected' && result.blockedBy === CLASSIFIER_HELD) return { held: true }
   return null

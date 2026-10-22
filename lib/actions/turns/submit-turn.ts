@@ -29,7 +29,8 @@ export type OwedPassFailed = TxResult & { outcome: 'failed'; beforeTurn: true }
 
 /** `converged: false`: the refused user_action is still in the branch; never re-offer its text. */
 export type SubmitTurnResult =
-  | TxResult
+  // The turn's own result: only Send's pass carries `beforeTurn`.
+  | (TxResult & { beforeTurn?: never })
   | OwedPassAborted
   | OwedPassFailed
   | (RejectedStart & { converged: boolean })

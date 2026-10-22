@@ -349,6 +349,7 @@ describe('abortedBeforeTurn', () => {
   // The turn wrote its user action before the cancel reversed it.
   it('holds for no cancel of the turn itself', () => {
     expect(abortedBeforeTurn({ ...ran, outcome: 'aborted' })).toBe(false)
+    expect(abortedBeforeTurn({ ...ran, outcome: 'aborted', beforeTurn: undefined })).toBe(false)
   })
 
   it('holds for no Send that ran or was refused', () => {
@@ -405,6 +406,7 @@ describe('passRefusalOf', () => {
   // The turn's own failure reversed its user action: that is the turn-failure entry's case.
   it("leaves a failed turn to the turn's failure entry", () => {
     expect(passRefusalOf({ ...ran, outcome: 'failed', error })).toBeNull()
+    expect(passRefusalOf({ ...ran, outcome: 'failed', beforeTurn: undefined, error })).toBeNull()
   })
 
   it('leaves any other refusal, a cancel and a landed turn alone', () => {
