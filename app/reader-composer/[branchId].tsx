@@ -1374,8 +1374,8 @@ export default function ReaderComposerRoute() {
     onEditScene: editScene,
     onRequestEditScene: requestEditScene,
     onRegenerate: handleRequestRegenerate,
-    // Absent for a held pass entry: its branch can't run a pass.
-    ...(retrySystemEntry != null ? { onRetrySystemEntry: handleRetrySystemEntry } : {}),
+    // Undefined for a held pass entry: its branch can't run a pass.
+    onRetrySystemEntry: retrySystemEntry != null ? handleRetrySystemEntry : undefined,
     onDismissSystemEntry: handleDismissSystemEntry,
     onFixSystemEntry: handleFixSystemEntry,
   }

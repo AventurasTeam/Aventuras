@@ -69,8 +69,8 @@ export type ReaderSurfaceProps = {
   /** Phone tier: the document requests; the host presents the native Sheet. */
   onRequestEditScene: (entryId: string) => void
   onRegenerate: (entryId: string) => Promise<void>
-  /** Absent when the system entry offers no Retry (a branch held `running`). */
-  onRetrySystemEntry?: () => Promise<void>
+  /** Undefined when the system entry offers no Retry (a branch held `running`). */
+  onRetrySystemEntry: (() => Promise<void>) | undefined
   onDismissSystemEntry: () => Promise<void>
   onFixSystemEntry: () => Promise<void>
 }
