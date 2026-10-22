@@ -100,6 +100,12 @@ export function describePassFailure(
       ),
     }
   const { error } = refusal
+  if (error?.kind === 'provider') {
+    return {
+      content: t('reader:systemEntry.failure.memory'),
+      detail: error.detail != null ? `${error.reason}: ${error.detail}` : error.reason,
+    }
+  }
   if (error?.kind === 'config-resolver') {
     const contentKey =
       error.failure === 'no-profile-assigned'
@@ -111,13 +117,7 @@ export function describePassFailure(
             : 'reader:systemEntry.failure.memoryProviderMissing'
     return { content: t(contentKey), detail: error.detail }
   }
-  const detail =
-    error?.kind === 'provider'
-      ? error.detail != null
-        ? `${error.reason}: ${error.detail}`
-        : error.reason
-      : error?.detail
-  return { content: t('reader:systemEntry.failure.memory'), detail }
+  return { content: t('reader:systemEntry.failure.memory'), detail: error?.detail }
 }
 
 export function toPassFailureMeta(

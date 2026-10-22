@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
-import { queryApp } from '../harness/db'
+import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -590,11 +590,7 @@ test.describe('periodic classifier — unassigned agent', () => {
     removeUserDataDir(userDataDir)
   })
 
-  const {
-    branchId: currentBranchId,
-    passOutcomes,
-    classifierStatus,
-  } = passProbe(
+  const { passOutcomes, classifierStatus } = passProbe(
     () => app.window,
     () => mock,
   )
@@ -603,7 +599,7 @@ test.describe('periodic classifier — unassigned agent', () => {
     const page = app.window
     await home.openStory(page, 'The Veilstone Courier').click()
     await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
-    const branchId = await currentBranchId()
+    const branchId = await currentBranchId(page, 'story_hero')
     const status = () => classifierStatus(branchId)
     const scalar = async (sql: string, params: unknown[] = []): Promise<unknown> =>
       (await queryApp(page, sql, params))[0][0]
@@ -703,10 +699,8 @@ const UNPARSEABLE_PASS_REPLY = { happenings: 'not a list' }
 // The run, status and entry reads the pass describes share. Getters, since each describe's
 // beforeAll assigns its app and mock after this runs.
 function passProbe(page: () => Page, mockLlm: () => MockLlm) {
-  async function branchId(): Promise<string> {
-    return (
-      await queryApp(page(), `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
+  function branchId(): Promise<string> {
+    return currentBranchId(page(), 'story_hero')
   }
 
   // A reply streams into the DOM before its row commits, so callers poll the row; more than one

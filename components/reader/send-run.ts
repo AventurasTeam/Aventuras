@@ -45,31 +45,31 @@ function turnPendingOn(txState: TxState, branchId: string): boolean {
 }
 
 /**
- * Send's run swaps Send for Cancel, and so does the host's own Send while its turn is pending with
- * no run: before its owed pass registers, and between that pass and the turn.
+ * The host's Send holds a pending turn with no run registered: before its owed pass registers,
+ * and between that pass and the turn.
  */
+export function sendGapOpen(txState: TxState, branchId: string, sendPending: boolean): boolean {
+  return sendPending && turnPendingOn(txState, branchId) && findSendRun(txState, branchId) == null
+}
+
+/** Send's run swaps Send for Cancel, and so does its gap. */
 export function composerShowsCancel(
   txState: TxState,
   branchId: string,
   sendPending: boolean,
 ): boolean {
-  return findSendRun(txState, branchId) != null || (sendPending && turnPendingOn(txState, branchId))
-}
-
-/** The host's Send holds a pending turn with no run registered: before its owed pass, and after. */
-export function sendGapOpen(txState: TxState, branchId: string, sendPending: boolean): boolean {
-  return sendPending && turnPendingOn(txState, branchId) && findSendRun(txState, branchId) == null
+  return findSendRun(txState, branchId) != null || sendGapOpen(txState, branchId, sendPending)
 }
 
 /**
- * Read at click time: a turn's commit can chain a pass in between. In the host's pending Send
- * with no run yet, cancels the next run to register, or resolves if the mark ends with none.
+ * Read at click time: a turn's commit can chain a pass in between. In Send's gap, cancels the
+ * next run to register, or resolves if the mark ends with none.
  */
 export function cancelComposerRun(branchId: string, sendPending: boolean): Promise<void> {
   const txState = generationStore.getTxState()
   const run = findSendRun(txState, branchId)
   if (run != null) return cancelSendRun(run)
-  if (!sendPending || !turnPendingOn(txState, branchId)) return Promise.resolve()
+  if (!sendGapOpen(txState, branchId, sendPending)) return Promise.resolve()
   return new Promise((resolve) => {
     const off = generationStore.subscribe(() => {
       const next = generationStore.getTxState()
