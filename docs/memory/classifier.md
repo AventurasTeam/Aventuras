@@ -623,9 +623,9 @@ Translation retry and chapter close wait for it.
 
 **Pill.** A pass shows on the generation indicator pill with the
 banner, as chapter close does, reading `Updating memory…`, and
-`Updating memory before your turn…` when it runs deferred. No ETA,
-since run length isn't predictable; the classifier's timeout bounds
-the whole structured call, retries included
+`Updating memory before your turn…` when it runs as Send's owed pass.
+No ETA, since run length isn't predictable; the classifier's timeout
+bounds the whole structured call, retries included
 ([Failure policy](#failure-policy)). The pill's popover carries
 Cancel.
 

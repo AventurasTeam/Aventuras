@@ -287,7 +287,8 @@ Every few turns a pass chains after the turn, and a chapter close
 after the turn that crosses the threshold. Both hold the gate while
 the user reads the reply, and the head reversals, regenerate among
 them, interrupt them
-([`principles.md → Edit restrictions during in-flight generation`](../../principles.md#edit-restrictions-during-in-flight-generation)).
+([`principles.md → Edit restrictions during in-flight generation`](../../principles.md#edit-restrictions-during-in-flight-generation)),
+except a pass a failure entry's `Retry` started (below).
 In the reader the banner shows `Updating memory… [Cancel]` or the
 close's progress, and the composer stays live while Send waits. An
 interrupt or the pill's Cancel shows an info
@@ -308,6 +309,9 @@ the text goes back to an empty composer (else onto the entry), and the
 failure shows as a
 [system entry](#transient-pipeline-failures--system-entries-in-chat)
 ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy)).
+Its `Retry` runs the pass alone, and that pass holds the reader's
+actions, head reversals included, until it ends; the pill's Cancel
+ends it.
 
 ### Save and regenerate on a content edit
 

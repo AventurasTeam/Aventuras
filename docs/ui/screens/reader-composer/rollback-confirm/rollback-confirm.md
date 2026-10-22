@@ -24,7 +24,8 @@ Cross-cutting principles:
   generation pipeline is in flight; user cancels the pipeline first
   via the status pill or composer cancel. A memory pass or a chapter
   close is the exception: rollback stays enabled, and confirming
-  interrupts it.
+  interrupts it. A pass a failure entry's `Retry` started is not: it
+  holds rollback until it ends.
 
 ## Two visible states
 

@@ -1328,8 +1328,9 @@ catch-up passes as above), then writes the user_action and starts the
 turn. Each is its own run with its own `actionId`, committing before
 the turn's first write. Cancel during them cancels the whole Send; the
 work stays deferred and the composer keeps the user's text. A deferred
-run that fails there fails the Send: the turn doesn't start, the composer
-keeps the text, and the reader shows the failure
+run that fails there fails the Send: the turn doesn't start, the text
+goes back to an empty composer (else onto the entry), and the reader
+shows the failure
 ([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)). A pass or a close that commits
 some other way, Run now or a manual close, clears its record. Send also runs a pass first
 when none is deferred but the cadence is due, as a failed chained pass

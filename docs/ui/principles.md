@@ -306,7 +306,11 @@ Implementation contract is in
 the gate, regenerate, swipe, an edit of the head turn, CTRL-Z of the
 turn and rollback stay enabled: each interrupts it, and the pass or
 close runs before the next turn instead, with a toast saying so. The
-user never waits minutes to redo the reply they just read.
+user never waits minutes to redo the reply they just read. The
+exception is a pass a system entry's `Retry` started: it holds the
+reader's actions, head reversals included, until it ends, and the
+pill's `Cancel` ends it
+([`memory/classifier.md → Failure policy`](../memory/classifier.md#failure-policy)).
 
 The turn and the close are atomic per their `action_id` (see
 [`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback))
@@ -351,7 +355,8 @@ menu, Story Settings; see
 - **Cancel** — always available, reverts the transaction via
   reverse-replay of the `action_id`'s deltas. Universal escape
   hatch. A cancelled pass or close runs before the next turn instead.
-- **Head reversals during a pass or a close** — see above.
+- **Head reversals during a pass or a close** — see above, except
+  during a pass a system entry's `Retry` started.
 - **In-story navigation** — moving between reader, World, Plot,
   Story Settings, Chapter Timeline, Branch Navigator inside the
   active story. The transaction continues; affordances follow the
