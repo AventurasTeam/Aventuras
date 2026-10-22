@@ -179,13 +179,12 @@ describe('describePassFailure', () => {
           failure,
           target: 'classifier',
           phaseName: 'classify',
-          detail: 'classifier',
         },
       },
       undefined,
     )
     expect(hasCopy(key)).toBe(true)
-    expect(out).toEqual({ content: t(key), detail: 'classifier' })
+    expect(out).toEqual({ content: t(key) })
   })
 
   it('gives a provider failure the pass copy with its reason and detail', () => {
@@ -314,7 +313,6 @@ describe('toPassFailureMeta', () => {
           failure: 'profile-missing',
           target: 'classifier',
           phaseName: 'classify',
-          detail: 'classifier',
         },
       },
       SUBMISSION,
