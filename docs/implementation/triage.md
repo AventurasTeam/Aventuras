@@ -650,3 +650,69 @@ slice-planning gate forces its resolution before that slice is planned.
   when a Retry commits over an occupied draft; or carry a dropped
   entry's submission onto the next entry. Raised 2026-10-22 in the
   pass failure policy slice's Task 7 review.
+
+- **A chained successor that throws raises no failure toast.**
+  `driveSuccessors` (`lib/pipeline/runtime/orchestrator.ts:606`) logs
+  `pipeline.chain_run_failed` and returns when `driveRun` throws for a
+  successor. `abortRun` rethrows a non-replay error from its reversal
+  (`:410`) before it emits `run_complete`, so nothing reaches the toast
+  listener and the reader never hears of that pass's failure; only the
+  log has it. Rare: the reversal has to throw something other than a
+  `DeltaReplayError`. Raised 2026-10-22 in the pass failure policy
+  slice's Task 8 review.
+
+- **Recovery copy matches the periodic classifier's kind as a
+  literal.** `formatRun` and `formatFailure` in `lib/recovery/copy.ts`
+  (`:16`, `:32`) compare against `'periodic-classifier'`, where
+  `lib/pipeline/definitions/memory-chain.ts` and `per-turn.ts` use
+  `PERIODIC_CLASSIFIER_KIND` from `@/lib/classifier`. A rename of the
+  kind would leave the recovery copy on its generic branch with no
+  type error. Raised 2026-10-22 in the pass failure policy slice's
+  Task 8 review.
+
+- **`onPreflightFailure` gets the caller's `RunCtx`, not the run's
+  identity.** The orchestrator passes `ctx` straight through
+  (`lib/pipeline/runtime/orchestrator.ts:537-541`), and a chained
+  successor shares its origin's `ctx`, so any `actionId` read off it
+  would be the origin's. `PreflightFailureHook`
+  (`lib/pipeline/types.ts:132`) takes `Pick<PhaseContext, 'db' |
+'branchId'>`, so nothing can read one today. Widening it to carry
+  `actionId` would reintroduce the bug `runPhaseExceptionHook` avoids by
+  building its context from the `RunState`; build the hook's context
+  the same way first. Raised 2026-10-22 in the pass failure policy
+  slice's Task 2 review.
+
+- **The `delta_emitted` event sketch lacks `entryId`.**
+  [`generation-pipeline.md`](../generation-pipeline.md) (the
+  `PipelineEvent` union, near the `delta_emitted` line) shows
+  `{ type: 'delta_emitted'; action: PipelineAction }`, while
+  `lib/pipeline/types.ts:49` carries `entryId?: string | null` as well.
+  Raised 2026-10-22 in the pass failure policy slice's Task 2 review.
+
+- **A refused Send destroys the earlier failure entry's text.**
+  `runSubmit` drops the system tail before it dispatches
+  (`app/reader-composer/[branchId].tsx`), and `dropSystemTail`'s own
+  comment says a dispatch that then refuses has destroyed the entry's
+  `submission` for nothing unless it puts the entry back. The
+  `aborted` arm restores it; the `rejected` arm (the blocked one,
+  around `:714`) writes a new failure entry for this Send's text
+  instead, so the earlier turn's text, which outlives a restart only
+  on that entry, is gone. Raised 2026-10-22 in the pass failure policy
+  slice's Task 7 review.
+
+- **The composer wireframe's memory-failure copy differs from the
+  shipped string.** The `memory` variant in
+  `docs/ui/screens/reader-composer/reader-composer.html:1945` reads
+  "The memory update failed, so your turn didn't start. … Your text is
+  still in the composer. Retry runs the memory update; Send runs it
+  first again.", while `reader:systemEntry.failure.memory`
+  (`locales/en/reader.json:149`) reads "Memory update failed, so your
+  turn didn't start. Retry it, or send again." Raised 2026-10-22 in the
+  pass failure policy slice's Task 7 review.
+
+- **`retries: 1` also applies to the opt-in real-provider smoke.**
+  `playwright.config.ts:20` sets it for every spec, and
+  `e2e/tests/classifier-real-provider.smoke.spec.ts` sets only a
+  timeout. A model failure there doubles the run's worst case, and one
+  that passes on the retry reports as flaky rather than failed. Raised
+  2026-10-22 in the pass failure policy slice's Task 11 review.
