@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import { idleStatus, PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   branches,
   characterRelationships,
@@ -16,6 +16,7 @@ import {
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import {
+  CLASSIFIER_HELD,
   PER_TURN_KIND,
   pipelineEventBus,
   startPipeline,
@@ -406,6 +407,55 @@ describe('regenerateTurn', () => {
     expect(entriesStore.getById('e_r2')).toBeDefined()
     expect((await ctx.db.select().from(happenings)).map((f) => f.id)).toEqual(['h_a', 'h_b'])
     expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+  })
+
+  // classifier.md → Failure policy: a branch holding an unfinished pass takes no turns.
+  it('refuses a branch held running before it sweeps, starting no run and writing nothing', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    await db
+      .update(branches)
+      .set({ classifierStatus: { ...idleStatus(), state: 'running' } })
+      .where(eq(branches.id, 'b1'))
+    const swept = vi.fn()
+
+    const regen = await withSweepHook(swept, () =>
+      regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
+    )
+
+    expect(regen).toEqual({
+      status: 'rejected',
+      code: CLASSIFIER_HELD,
+      reason: 'classifier held',
+    })
+    expect(swept).not.toHaveBeenCalled()
+    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect((await ctx.db.select().from(happenings)).map((f) => f.id)).toEqual(['h_a', 'h_b'])
+    expect(await ctx.db.select().from(pipelineRuns)).toEqual([])
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+  })
+
+  it('does not treat a branch whose pass is live as held', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const pass = registerStandInPass({ anchorEntryId: 'e_r1' })
+    const start = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    const held = await pass.nextHeld()
+    await db
+      .update(branches)
+      .set({ classifierStatus: { ...idleStatus(), state: 'running' } })
+      .where(eq(branches.id, 'b1'))
+    registerStoreOnlyRun(SUGGESTION_REFRESH_KIND, 'b1')
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+
+    expect(regen).toMatchObject({ status: 'rejected', code: 'generation-in-flight' })
+    held.finish('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'completed' })
   })
 
   it('rejects a non-AI target without destroying anything', async () => {

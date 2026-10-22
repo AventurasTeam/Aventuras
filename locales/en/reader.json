@@ -47,6 +47,7 @@
   "rollbackCountsChanged": "The counts changed while this was open. Check them before confirming.",
   "regenerateFailed": "Couldn't regenerate the reply. Please try again.",
   "regenerateUnavailable": "This reply can't be regenerated.",
+  "regenerateHeld": "An earlier memory update on this branch couldn't be undone, so it can't take turns yet.",
   "regenerateCancelledDraftKept": "Regeneration cancelled. Your draft was kept, so the discarded action wasn't restored.",
   "turnCancelledDraftKept": "Turn cancelled. Your draft was kept, so the cancelled action wasn't restored.",
   "failedTurnTextRestored": "Put the failed turn's text back in the composer.",
