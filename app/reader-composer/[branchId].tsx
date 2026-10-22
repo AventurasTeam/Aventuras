@@ -731,7 +731,7 @@ export default function ReaderComposerRoute() {
           )
         else if (result.outcome === 'aborted') {
           // Cancelled during its owed pass, the Send wrote nothing, so the entry it cleared
-          // goes back, and that entry's Retry resends its own text rather than this Send's.
+          // goes back with its own Retry: a turn entry resends its own text, not this Send's.
           const putBack = abortedBeforeTurn(result) ? dropped : null
           await restoreSystemTail(putBack)
           if (branchUnchanged(branchId)) {

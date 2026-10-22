@@ -393,7 +393,6 @@ describe('retryPassEntry', () => {
     expect(h.notify).toHaveBeenCalledWith("Memory update couldn't start (periodic-classifier).")
   })
 
-  // The deferral toast reports a cancelled pass.
   it('leaves the entry alone when the pass is cancelled', async () => {
     const h = harness({ ...ran, outcome: 'aborted' })
     await retryPassEntry(h.deps)

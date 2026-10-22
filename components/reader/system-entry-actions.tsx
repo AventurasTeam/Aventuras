@@ -138,7 +138,7 @@ export function toPassFailureMeta(
 /**
  * A pass-failure entry's Retry: runs the pass alone. A commit clears the entry through `dismiss`;
  * a failure, a throw or a hold rewrites it, a failure as held when its reversal didn't commit; a
- * cancel leaves it to the deferral toast. A throw from `held`, `dismiss` or `rewrite` propagates.
+ * cancel leaves the entry as it was. A throw from `held`, `dismiss` or `rewrite` propagates.
  */
 export async function retryPassEntry(deps: {
   runPass: () => Promise<TxResult | RejectedStart>
