@@ -56,7 +56,7 @@ export function composerShowsCancel(
   return findSendRun(txState, branchId) != null || (sendPending && turnPendingOn(txState, branchId))
 }
 
-/** The host's Send holds a pending turn with no run registered: between Send's pass and its turn. */
+/** The host's Send holds a pending turn with no run registered: before its owed pass, and after. */
 export function sendGapOpen(txState: TxState, branchId: string, sendPending: boolean): boolean {
   return sendPending && turnPendingOn(txState, branchId) && findSendRun(txState, branchId) == null
 }
