@@ -1293,10 +1293,13 @@ test.describe('periodic classifier — failure policy', () => {
     const [, , watermark] = await classifierStatus(branch)
     await expect(reader.composer(page)).toHaveValue(U2)
 
-    // Held at its narrative call, the turn has written its user_action and chained nothing yet.
     mock.holdNextNarrative()
     mock.setNarrative('E2E-POLICY-R2 the far bank comes up out of the mist.')
+    const narratives = streamedCalls()
     await reader.send(page).click()
+    // Held at its narrative call, the turn has written its user_action and chained nothing yet.
+    // A release before the call reaches the mock would leave it held for good.
+    await expect.poll(streamedCalls, { timeout: 30_000 }).toBeGreaterThan(narratives)
     const userEntry = await pollEntryId(branch, 'E2E-POLICY-U2')
     expect(await positionOf(userEntry)).toBeGreaterThan(watermark as number)
     // Nothing was owed: no pass ran ahead of this user_action.
