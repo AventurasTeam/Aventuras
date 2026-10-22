@@ -211,7 +211,7 @@ convention, and the expectation that subsystems route through
 - `classifier.*` — `delta_clamped`, `schema_repair`, `empty_output`,
   `failure_record_retried` (warn: the first attempt to record a failed
   pass threw, and the hook tried once more), `description_embed_failed`
-  (warn: a namesake's description embed threw, so the match went on
+  (warn: the description embed call threw, so every namesake went
   unscored)
 - `retrieval.*` — `row_skipped_stale`, `empty_pool`, `knn_error`
 - `provider.*` — `retry_succeeded`, `rate_limited`,
