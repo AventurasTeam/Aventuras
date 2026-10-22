@@ -2,11 +2,11 @@
 // because the unified `/images` endpoint and its `input_references` are not the OpenAI image shape.
 
 import * as z from 'zod'
-import { APICallError, InvalidResponseDataError } from 'ai'
+import { InvalidResponseDataError } from 'ai'
 import type { ImageModelV4, SharedV4Warning } from '@ai-sdk/provider'
 import { bytesToBase64 } from '#lib/utils/image.ts'
-
-type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+import type { Fetch } from '#lib/services/ai/sdk/providers/index.ts'
+import { definedHeaders, httpError, parseJson, responseExcerpt } from './imageModelUtils'
 
 interface NanoGPTImageSettings {
   apiKey: string
@@ -39,15 +39,7 @@ function errorMessage(parsed: unknown, text: string, status: number): string {
     const found = typeof error === 'string' ? error : (error?.message ?? message)
     if (found) return found
   }
-  return text.trim().slice(0, 200) || `HTTP ${status}`
-}
-
-function parseJson(text: string): unknown {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return undefined
-  }
+  return responseExcerpt(text, status)
 }
 
 // A plain Error, not an APICallError: a 429 from the host would otherwise make the 429 middleware
@@ -110,9 +102,7 @@ export function createNanoGPTImage(settings: NanoGPTImageSettings) {
           const response = await settings.fetch(url, {
             method: 'POST',
             headers: {
-              ...Object.fromEntries(
-                Object.entries(headers ?? {}).filter(([, v]) => v !== undefined),
-              ),
+              ...definedHeaders(headers),
               'Content-Type': 'application/json',
               Authorization: `Bearer ${settings.apiKey}`,
             },
@@ -125,14 +115,12 @@ export function createNanoGPTImage(settings: NanoGPTImageSettings) {
           const parsed = parseJson(text)
 
           if (!response.ok) {
-            throw new APICallError({
-              message: errorMessage(parsed, text, response.status),
+            throw httpError({
+              response,
+              text,
               url,
+              message: errorMessage(parsed, text, response.status),
               requestBodyValues: { ...body, input_references: inputReferences?.length },
-              statusCode: response.status,
-              responseHeaders,
-              responseBody: text,
-              isRetryable: false,
             })
           }
 

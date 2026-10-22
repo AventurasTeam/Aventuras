@@ -3,10 +3,17 @@
 // spec v2, has no `fetch` injection and decodes base64 with `Buffer`.
 
 import * as z from 'zod'
-import { APICallError, InvalidResponseDataError } from 'ai'
-import type { ImageModelV4, SharedV4Warning } from '@ai-sdk/provider'
-
-type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+import { InvalidResponseDataError } from 'ai'
+import type { ImageModelV4 } from '@ai-sdk/provider'
+import type { Fetch } from '#lib/services/ai/sdk/providers/index.ts'
+import { parseImageSize } from '#lib/utils/image.ts'
+import {
+  definedHeaders,
+  httpError,
+  parseJson,
+  responseExcerpt,
+  unsupportedInputWarnings,
+} from './imageModelUtils'
 
 interface A1111ImageSettings {
   baseURL: string
@@ -33,15 +40,7 @@ function errorMessage(parsed: unknown, text: string, status: number): string {
     const found = (typeof detail === 'string' ? detail : detail?.[0]?.msg) || errors
     if (found) return found
   }
-  return text.trim().slice(0, 200) || `HTTP ${status}`
-}
-
-function parseJson(text: string): unknown {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return undefined
-  }
+  return responseExcerpt(text, status)
 }
 
 export function createA1111Image(settings: A1111ImageSettings) {
@@ -68,27 +67,17 @@ export function createA1111Image(settings: A1111ImageSettings) {
           abortSignal,
           headers,
         }) {
-          const dimensions = /^(\d+)x(\d+)$/.exec(size ?? '')
+          const dimensions = parseImageSize(size)
           if (!dimensions) throw new Error('A1111 image generation needs a WxH size.')
 
-          const warnings: SharedV4Warning[] = []
-          if (aspectRatio) {
-            warnings.push({
-              type: 'unsupported',
-              feature: 'aspectRatio',
-              details: 'Pass size instead.',
-            })
-          }
-          if (files?.length) warnings.push({ type: 'unsupported', feature: 'files' })
-          if (mask) warnings.push({ type: 'unsupported', feature: 'mask' })
+          const warnings = unsupportedInputWarnings({ aspectRatio, files, mask })
 
           // A checkpoint chosen per request is put back afterwards, so it does not stay loaded as
           // the server's default.
           const body = {
             ...providerOptions?.a1111,
             prompt,
-            width: Number(dimensions[1]),
-            height: Number(dimensions[2]),
+            ...dimensions,
             seed: seed ?? -1,
             batch_size: 1,
             n_iter: 1,
@@ -101,9 +90,7 @@ export function createA1111Image(settings: A1111ImageSettings) {
           const response = await settings.fetch(url, {
             method: 'POST',
             headers: {
-              ...Object.fromEntries(
-                Object.entries(headers ?? {}).filter(([, v]) => v !== undefined),
-              ),
+              ...definedHeaders(headers),
               'Content-Type': 'application/json',
               ...(settings.apiKey && { Authorization: `Bearer ${settings.apiKey}` }),
             },
@@ -116,14 +103,12 @@ export function createA1111Image(settings: A1111ImageSettings) {
           const parsed = parseJson(text)
 
           if (!response.ok) {
-            throw new APICallError({
-              message: errorMessage(parsed, text, response.status),
+            throw httpError({
+              response,
+              text,
               url,
+              message: errorMessage(parsed, text, response.status),
               requestBodyValues: body,
-              statusCode: response.status,
-              responseHeaders,
-              responseBody: text,
-              isRetryable: false,
             })
           }
 

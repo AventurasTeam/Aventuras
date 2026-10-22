@@ -79,6 +79,12 @@ export function specToPixels(spec: ImageSpec): ImageResolution {
   return rw >= rh ? { width: long, height: short } : { width: short, height: long }
 }
 
+/** The dimensions in a `WIDTHxHEIGHT` string. */
+export function parseImageSize(size: string | undefined): ImageResolution | undefined {
+  const match = /^(\d+)x(\d+)$/.exec(size ?? '')
+  return match ? { width: Number(match[1]), height: Number(match[2]) } : undefined
+}
+
 /** `WIDTHxHEIGHT`, for the providers whose parameter is a string in that shape. */
 export function formatImageSize(res: ImageResolution): `${number}x${number}` {
   return `${res.width}x${res.height}`
