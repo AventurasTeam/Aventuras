@@ -58,7 +58,7 @@ describe('formatRecoveryReport', () => {
     )
   })
 
-  // generation-pipeline.md → Recovery modal: a pass is no longer a background job.
+  // generation-pipeline.md → Recovery modal: a pass holds its branch's turns; it isn't background.
   it('formats a named periodic-classifier recovery', () => {
     expect(
       formatRecoveryReport(report(recovered('periodic-classifier', 'story_1')), {
