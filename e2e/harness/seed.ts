@@ -328,8 +328,9 @@ export function seedClassifierBacklog(
 
 /**
  * Park the classifier watermark at the last `ai_reply` and return that position, so a pass
- * covers only the turns a spec commits after launch. Matches the seed on a branch ending on a
- * reply; on br_hero_fork (ends on a user_action) it parks a row lower. Not MAX(position): the
+ * covers only the turns a spec commits after launch. Matches the seed's own park at the last
+ * non-system entry wherever that entry is a reply, as on br_hero_main (whose tail is a `system`
+ * row); on br_hero_fork (ends on a user_action) it parks a row lower. Not MAX(position): the
  * first Send deletes a trailing `system` row and hands its position to the user_action. Runs
  * before launch.
  */

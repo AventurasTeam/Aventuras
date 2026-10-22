@@ -1027,7 +1027,7 @@ test.describe('periodic classifier — the gated pass', () => {
     await expect.poll(() => runOutcome(interrupted)).toBe('aborted')
     // Held at its call, it wrote nothing; a burst's own reversal is unit-tested.
     expect((await passDeltas(interrupted)).count).toBe(0)
-    // Its pre-run status back: no retry spent, the watermark where it stood.
+    // Its pre-run status back: no failure recorded, the watermark where it stood.
     await expect.poll(() => classifierStatus(branch)).toEqual(settled)
     await expect(memoryBanner.updating(page)).toBeHidden()
 
@@ -1409,7 +1409,7 @@ test.describe('periodic classifier — an owed pass across a restart', () => {
     await expect.poll(() => classifierStatus(branch)).toEqual(['idle', null, parked])
   })
 
-  test('after a relaunch the mark is gone, and Send still runs the owed pass first', async () => {
+  test('after a relaunch, Send runs the pass the cadence owes first', async () => {
     // A close, a cold launch and a story open, on top of this test's own steps.
     test.setTimeout(150_000)
     await app.close()
