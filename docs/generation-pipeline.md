@@ -535,7 +535,7 @@ type RunState = {
   storyId: string | null // read by chainsTo + config resolution
   branchId: string
   interruptible: 'pass' | 'close' | null // copied from the pipeline at reserve; a head reversal or Cancel ends the run and defers it in this slot
-  beforeTurn: boolean // started by Send to run deferred work before the turn
+  beforeTurn: boolean // started by Send to run its owed pass before the turn
   abortController: AbortController
   currentPhase: string // name of declared phase or parallel group
   intermediates: Record<string, unknown> // phase outputs threaded through the run
@@ -548,12 +548,12 @@ type RunState = {
 Only the orchestrator writes `deferred`, through the generation store
 and in the same update that removes the run: an `interruptible` run
 that ends `aborted` records, for its branch, the slot its declaration
-names (the pass declares `pass`, the close `close`), and a commit or
-failure of a run declaring that slot clears it. So every way a pass or a close is cancelled — the interrupt, the
-pill's or the banner's Cancel, Cancel & leave — defers it, and a
-failed one is left to the next commit's retry. A newly recorded
-deferral emits `run_deferred` on the bus naming the slot it recorded,
-which raises that slot's toast.
+names (the pass declares `pass`, the close `close`), and only a commit
+of a run declaring that slot clears it. So every way a pass or a close
+is cancelled — the interrupt, the pill's or the banner's Cancel,
+Cancel & leave — defers it, and a failed one stays owed: Send runs it
+first again. A newly recorded deferral emits `run_deferred` on the bus
+naming the slot it recorded, which raises that slot's toast.
 
 ### Gate derivation as a selector
 
@@ -631,9 +631,8 @@ pre-flight.
 
 A run cancelled before its pre-flight skips it and takes the
 user-cancel abort: a pass the interrupt reached as its predecessor's
-commit swapped it in, or Send's deferred pass cancelled as it
-reserved, is interrupted, not failed, so it uses no retry and stays
-deferred.
+commit swapped it in, or Send's owed pass cancelled as it reserved, is
+interrupted, not failed, so it is deferred.
 
 **On failure**, the run halts before phase 0 fires — no LLM call
 goes out, no tokens spent, no deltas written. The orchestrator
@@ -2181,7 +2180,7 @@ A `chainsTo` returning a kind (per-turn's pass or close, a pass's next
 pass or close) triggers a chained transition (in `commitRun`) that
 directly creates the next `RunState` without going through
 `runPipeline`'s entry check. `blockedBy` reflects external start
-requests (UI, Run now, Send's deferred work); chains aren't external.
+requests (UI, Run now, Send's owed pass); chains aren't external.
 
 ### Cadence chain
 

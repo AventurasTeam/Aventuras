@@ -223,7 +223,7 @@ companions.
   `commitRun` refuse an interruptible successor while
   `reversalInProgress`.
   Slice-authoring note: Send runs a deferred pass before the turn
-  (`submitTurn` reads only `deferred.pass`), and `nextMemoryRun`
+  (`owedPassAtSend` reads only `deferred.pass`), and `nextMemoryRun`
   returns null while the branch holds a `close` record, so a
   `{ close: true }` record would stop all memory work on the branch
   until a restart. This slice must run the deferred close after the
