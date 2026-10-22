@@ -1,5 +1,10 @@
 import type { SubmitTurnResult } from '@/lib/actions'
-import { PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
+import {
+  CLASSIFIER_HELD,
+  PER_TURN_KIND,
+  SUGGESTION_REFRESH_KIND,
+  type PipelineError,
+} from '@/lib/pipeline'
 import {
   awaitRunTerminal,
   generationStore,
@@ -9,7 +14,7 @@ import {
   type TxState,
 } from '@/lib/stores'
 
-/** The run Send's Cancel and composer describe: a turn, or Send's deferred pass, on `branchId`. */
+/** The run Send's Cancel and composer describe: a turn, or Send's owed pass, on `branchId`. */
 export function findSendRun(txState: TxState, branchId: string): RunState | undefined {
   for (const run of txState.runs.values()) {
     if (run.branchId === branchId && (run.kind === PER_TURN_KIND || run.beforeTurn)) return run
@@ -22,7 +27,7 @@ export function pillRunOf(txState: TxState, branchId: string): RunState | undefi
   return findSendRun(txState, branchId) ?? selectMemoryRun(txState, { branchId })
 }
 
-/** Only a turn streams a card; Send's deferred pass is a structured call. */
+/** Only a turn streams a card; Send's owed pass is a structured call. */
 export function sendRunStreams(txState: TxState, branchId: string): boolean {
   return findSendRun(txState, branchId)?.kind === PER_TURN_KIND
 }
@@ -41,7 +46,7 @@ function turnPendingOn(txState: TxState, branchId: string): boolean {
 
 /**
  * Send's run swaps Send for Cancel, and so does the host's own Send while its turn is pending with
- * no run: before its deferred pass registers, and between that pass and the turn.
+ * no run: before its owed pass registers, and between that pass and the turn.
  */
 export function composerShowsCancel(
   txState: TxState,
@@ -49,6 +54,11 @@ export function composerShowsCancel(
   sendPending: boolean,
 ): boolean {
   return findSendRun(txState, branchId) != null || (sendPending && turnPendingOn(txState, branchId))
+}
+
+/** The host's Send holds a pending turn with no run registered: between Send's pass and its turn. */
+export function sendGapOpen(txState: TxState, branchId: string, sendPending: boolean): boolean {
+  return sendPending && turnPendingOn(txState, branchId) && findSendRun(txState, branchId) == null
 }
 
 /**
@@ -81,9 +91,20 @@ export function cancelPillRun(branchId: string): Promise<void> {
 }
 
 /**
- * A Send cancelled during its deferred pass wrote nothing, so a failure entry cleared before it
+ * A Send cancelled during its owed pass wrote nothing, so a failure entry cleared before it
  * can go back where it was (reader-composer.md → Custody of the turn's text).
  */
 export function abortedBeforeTurn(result: SubmitTurnResult): boolean {
   return result.outcome === 'aborted' && 'beforeTurn' in result
+}
+
+/** A pass that refused a Send (classifier.md → Failure policy): the hold, or its failure's cause. */
+export type PassRefusal = { held: true } | { held: false; error: PipelineError | undefined }
+
+/** Send's result only: `failed` with `beforeTurn`, or the CLASSIFIER_HELD rejection. */
+export function passRefusalOf(result: SubmitTurnResult): PassRefusal | null {
+  if (result.outcome === 'failed' && 'beforeTurn' in result)
+    return { held: false, error: result.error }
+  if (result.outcome === 'rejected' && result.blockedBy === CLASSIFIER_HELD) return { held: true }
+  return null
 }

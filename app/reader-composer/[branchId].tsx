@@ -361,6 +361,7 @@ export default function ReaderComposerRoute() {
     turnKind: pillRunKind,
     turnPhase: pillRunPhase,
     refreshingSuggestions,
+    turnPending: false,
   })
 
   // Buffer instances live in a ref (mutable, not render state); the safe output
@@ -1186,7 +1187,7 @@ export default function ReaderComposerRoute() {
     else documentRef.current?.jumpToBottom()
   }, [])
 
-  const handleRetrySystemEntry = useCallback(async () => retrySystemEntry(), [retrySystemEntry])
+  const handleRetrySystemEntry = useCallback(async () => retrySystemEntry?.(), [retrySystemEntry])
   const handleFixSystemEntry = useCallback(async () => fixAction?.onPress(), [fixAction])
   // Editable-target exclusion keeps End moving the caret inside the composer.
   useGlobalHotkey(matchesJumpToBottomShortcut, jumpToBottom, {

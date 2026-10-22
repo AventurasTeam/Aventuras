@@ -107,6 +107,8 @@ export const entryMetadataSchema = z.object({
       failure: z.string().optional(),
       detail: z.string().optional(),
       submission: z.object({ content: z.string(), composerMode: z.string() }).optional(),
+      // A pass refused the Send: Retry runs the pass alone; 'held' has no Retry.
+      pass: z.enum(['failed', 'held']).optional(),
     })
     .optional(),
 })

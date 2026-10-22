@@ -8,6 +8,7 @@ const IDLE = {
   turnKind: null,
   turnPhase: null,
   refreshingSuggestions: false,
+  turnPending: false,
 }
 const TURN = { ...IDLE, turnKind: 'per-turn' }
 const PASS = { ...IDLE, turnKind: PERIODIC_CLASSIFIER_KIND }
@@ -81,6 +82,23 @@ describe('readerPillPhase', () => {
   it('lets a running turn win over a refresh', () => {
     expect(readerPillPhase({ ...TURN, turnPhase: 'retrieval', refreshingSuggestions: true })).toBe(
       'recalling-memory',
+    )
+  })
+
+  // Between Send's pass and its turn no run holds the pill; a blank would hand the slot to an error.
+  it("keeps the turn's label while the host's Send waits with no run registered", () => {
+    expect(readerPillPhase({ ...IDLE, turnPending: true })).toBe('generating-narrative')
+  })
+
+  it('keeps the turn label over a refresh during that gap', () => {
+    expect(readerPillPhase({ ...IDLE, turnPending: true, refreshingSuggestions: true })).toBe(
+      'generating-narrative',
+    )
+  })
+
+  it('lets a registered run name the pill over the pending mark', () => {
+    expect(readerPillPhase({ ...PASS, turnPhase: 'classify', turnPending: true })).toBe(
+      'updating-memory',
     )
   })
 

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
+import { CLASSIFIER_HELD, PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
 import {
   awaitRunTerminal,
   generationStore,
@@ -17,7 +17,9 @@ import {
   cancelSendRun,
   composerShowsCancel,
   findSendRun,
+  passRefusalOf,
   pillRunOf,
+  sendGapOpen,
   sendRunStreams,
 } from './send-run'
 
@@ -355,5 +357,61 @@ describe('abortedBeforeTurn', () => {
     expect(abortedBeforeTurn({ outcome: 'rejected', blockedBy: 'turn', converged: true })).toBe(
       false,
     )
+  })
+})
+
+describe('sendGapOpen', () => {
+  it("opens while this host's Send has a turn pending and no run registered", () => {
+    expect(sendGapOpen(pendingOn('br_1'), 'br_1', true)).toBe(true)
+  })
+
+  it("closes once Send's pass or its turn registers", () => {
+    expect(sendGapOpen(pendingOn('br_1', DEFERRED_PASS), 'br_1', true)).toBe(false)
+    expect(sendGapOpen(pendingOn('br_1', TURN), 'br_1', true)).toBe(false)
+  })
+
+  // A regenerate's mark spans its sweep; it is not Send's gap.
+  it("stays shut for a pending turn that isn't this host's Send", () => {
+    expect(sendGapOpen(pendingOn('br_1'), 'br_1', false)).toBe(false)
+  })
+
+  it("stays shut for another branch's pending turn, and with nothing pending", () => {
+    expect(sendGapOpen(pendingOn('br_2'), 'br_1', true)).toBe(false)
+    expect(sendGapOpen(txOf(), 'br_1', true)).toBe(false)
+  })
+})
+
+describe('passRefusalOf', () => {
+  const ran = { runId: 'run_1', actionId: 'act_1' }
+  const error = {
+    kind: 'provider',
+    reason: 'timeout',
+    detail: 'classifier: timeout after 600000ms',
+  } as const
+
+  it("reads a failed owed pass as the Send's refusal, with its cause", () => {
+    expect(passRefusalOf({ ...ran, outcome: 'failed', beforeTurn: true, error })).toEqual({
+      held: false,
+      error,
+    })
+  })
+
+  it('reads the held rejection as a hold', () => {
+    expect(
+      passRefusalOf({ outcome: 'rejected', blockedBy: CLASSIFIER_HELD, converged: true }),
+    ).toEqual({ held: true })
+  })
+
+  // The turn's own failure reversed its user action: that is the turn-failure entry's case.
+  it("leaves a failed turn to the turn's failure entry", () => {
+    expect(passRefusalOf({ ...ran, outcome: 'failed', error })).toBeNull()
+  })
+
+  it('leaves any other refusal, a cancel and a landed turn alone', () => {
+    expect(
+      passRefusalOf({ outcome: 'rejected', blockedBy: 'translation-retry', converged: true }),
+    ).toBeNull()
+    expect(passRefusalOf({ ...ran, outcome: 'aborted', beforeTurn: true })).toBeNull()
+    expect(passRefusalOf({ ...ran, outcome: 'completed' })).toBeNull()
   })
 })

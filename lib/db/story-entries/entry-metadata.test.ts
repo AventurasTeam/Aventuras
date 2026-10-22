@@ -250,3 +250,25 @@ describe('stateReport creates', () => {
     expect(applyUndoPayload(entryMetadataSchema, next, undo)).toEqual(current)
   })
 })
+
+describe('systemFailure', () => {
+  const base = { sceneEntities: [], currentLocationId: null, worldTime: 0 }
+
+  it.each(['failed', 'held'] as const)('keeps a pass refusal marked %s', (pass) => {
+    const systemFailure = { kind: 'provider', detail: 'timeout: classifier', pass }
+    expect(entryMetadataSchema.parse({ ...base, systemFailure })).toEqual({
+      ...base,
+      systemFailure,
+    })
+  })
+
+  it('rejects a pass marker it does not know', () => {
+    const systemFailure = { kind: 'provider', pass: 'retrying' }
+    expect(entryMetadataSchema.safeParse({ ...base, systemFailure }).success).toBe(false)
+  })
+
+  it('leaves a turn failure unmarked', () => {
+    const parsed = entryMetadataSchema.parse({ ...base, systemFailure: { kind: 'provider' } })
+    expect(parsed.systemFailure).not.toHaveProperty('pass')
+  })
+})

@@ -28,7 +28,9 @@ const UNMAPPED_TURN_PHASE: GenerationPhase = 'generating-narrative'
 /**
  * Resolves the reader's status-pill phase from live run state. `turnKind` and
  * `turnPhase` are the `kind` and `currentPhase` of the run owning the pill on this
- * branch (a turn, else a pass), both null when none runs; a refresh shows only then.
+ * branch (a turn, else a pass), both null when none runs. `turnPending` is the host's
+ * Send holding its turn with no run registered, which keeps the turn's label; a refresh
+ * shows only when neither holds.
  *
  * @returns The pill phase, or undefined when the pill should hide.
  */
@@ -36,6 +38,7 @@ export function readerPillPhase(input: {
   turnKind: string | null
   turnPhase: string | null
   refreshingSuggestions: boolean
+  turnPending: boolean
 }): GenerationPhase | undefined {
   if (input.turnPhase !== null)
     return (
@@ -43,5 +46,6 @@ export function readerPillPhase(input: {
       PILL_PHASE_BY_TURN_PHASE[input.turnPhase] ??
       UNMAPPED_TURN_PHASE
     )
+  if (input.turnPending) return UNMAPPED_TURN_PHASE
   return input.refreshingSuggestions ? 'refreshing-suggestions' : undefined
 }
