@@ -12,7 +12,7 @@ import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { isAbortError } from '#lib/services/activity/describeError.ts'
 import { RequestTimeoutError } from '#lib/utils/error.ts'
 import { describeRequestBody, logStreamResponse, scrubBase64 } from './debugLog'
-import { createSdkFetch } from './sdkFetch'
+import { createPollSdkFetch, createSdkFetch } from './sdkFetch'
 
 const mockFetch = vi.mocked(tauriHttpFetch)
 const API_URL = 'https://api.test/v1/images'
@@ -224,6 +224,16 @@ describe('debug logging', () => {
 
     await sdkFetch()(API_URL, { method: 'POST', body: '{}' })
 
+    expect(debug.addDebugRequest).not.toHaveBeenCalled()
+  })
+
+  it('keeps a request out of the debug log when log is false', async () => {
+    mockFetch.mockResolvedValueOnce(new Response('{}', { status: 200 }))
+
+    const quiet = createSdkFetch({ serviceId: 'google-image', timeoutMs: 60_000, log: false })
+    await quiet(API_URL)
+
+    expect(mockFetch).toHaveBeenCalledTimes(1)
     expect(debug.addDebugRequest).not.toHaveBeenCalled()
   })
 
@@ -452,5 +462,158 @@ describe('logStreamResponse', () => {
       }),
       0,
     )
+  })
+})
+
+describe('createPollSdkFetch', () => {
+  const POLL_URL = 'http://localhost:8188/api/jobs/abc'
+
+  const poll = () =>
+    createPollSdkFetch({
+      serviceId: 'comfyui-image',
+      timeoutMs: 60_000,
+      what: 'Image generation',
+    })
+
+  const jsonReply = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+
+  const lastResponseData = () => debug.addDebugResponse.mock.calls.at(-1)?.[2]
+
+  beforeEach(() => {
+    debug.isActive = true
+  })
+
+  it('opens one entry however many requests there are', async () => {
+    mockFetch.mockImplementation(async () => jsonReply({ status: 'in_progress' }))
+    const fetch = poll()
+
+    await fetch(`${POLL_URL}1`)
+    await fetch(`${POLL_URL}2`)
+    await fetch(`${POLL_URL}3`)
+    await flush()
+
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+    expect(debug.addDebugRequest).toHaveBeenCalledTimes(1)
+    expect(debug.addDebugRequest).toHaveBeenCalledWith(
+      'comfyui-image',
+      expect.objectContaining({ url: `${POLL_URL}1`, method: 'GET' }),
+    )
+    expect(debug.addDebugResponse).toHaveBeenCalledTimes(3)
+    expect(debug.addDebugResponse.mock.calls.every(([id]) => id === 'dbg')).toBe(true)
+  })
+
+  it('keeps the count and the latest request and response in the entry', async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonReply({ status: 'pending' }))
+      .mockResolvedValueOnce(jsonReply({ status: 'in_progress' }))
+      .mockResolvedValueOnce(jsonReply({ status: 'completed', outputs: {} }))
+    const fetch = poll()
+
+    await fetch(`${POLL_URL}1`)
+    await flush()
+    expect(lastResponseData()).toEqual({
+      requests: 1,
+      last: { method: 'GET', url: `${POLL_URL}1`, status: 200, body: { status: 'pending' } },
+    })
+
+    await fetch(`${POLL_URL}2`)
+    await fetch(`${POLL_URL}3`, { method: 'POST' })
+    await flush()
+
+    expect(debug.addDebugResponse).toHaveBeenLastCalledWith(
+      'dbg',
+      'comfyui-image',
+      {
+        requests: 3,
+        last: {
+          method: 'POST',
+          url: `${POLL_URL}3`,
+          status: 200,
+          body: { status: 'completed', outputs: {} },
+        },
+      },
+      expect.any(Number),
+    )
+  })
+
+  it('lists the requests that threw or failed, and shows the last one on its own', async () => {
+    mockFetch
+      .mockRejectedValueOnce(new Error('socket closed'))
+      .mockResolvedValueOnce(new Response('busy', { status: 503 }))
+      .mockResolvedValueOnce(jsonReply({ status: 'completed' }))
+    const fetch = poll()
+
+    await fetch(POLL_URL).catch(() => {})
+    await flush()
+    expect(lastResponseData()).toEqual({
+      requests: 1,
+      last: { method: 'GET', url: POLL_URL, error: 'socket closed' },
+      failures: [{ method: 'GET', url: POLL_URL, error: 'socket closed' }],
+    })
+
+    await fetch(POLL_URL)
+    await fetch(POLL_URL)
+    await flush()
+
+    expect(lastResponseData()).toEqual({
+      requests: 3,
+      last: { method: 'GET', url: POLL_URL, status: 200, body: { status: 'completed' } },
+      failures: [
+        { method: 'GET', url: POLL_URL, error: 'socket closed' },
+        { method: 'GET', url: POLL_URL, status: 503, body: 'busy' },
+      ],
+    })
+  })
+
+  it('keeps only the most recent failures', async () => {
+    mockFetch.mockImplementation(async () => new Response('busy', { status: 503 }))
+    const fetch = poll()
+
+    for (let i = 0; i < 25; i++) await fetch(`${POLL_URL}${i}`)
+    await flush()
+
+    const data = lastResponseData() as { requests: number; failures: { url: string }[] }
+    expect(data.requests).toBe(25)
+    expect(data.failures).toHaveLength(20)
+    expect(data.failures[0].url).toBe(`${POLL_URL}5`)
+    expect(data.failures.at(-1)?.url).toBe(`${POLL_URL}24`)
+  })
+
+  it('still returns a response whose body the caller reads', async () => {
+    mockFetch.mockResolvedValueOnce(jsonReply({ status: 'completed' }))
+
+    const response = await poll()(POLL_URL)
+
+    expect(await response.json()).toEqual({ status: 'completed' })
+    await flush()
+    expect(lastResponseData()).toMatchObject({ requests: 1 })
+  })
+
+  it('records nothing while debug logging is off', async () => {
+    debug.isActive = false
+    mockFetch.mockResolvedValue(jsonReply({ status: 'completed' }))
+
+    await poll()(POLL_URL)
+    await flush()
+
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(debug.addDebugRequest).not.toHaveBeenCalled()
+    expect(debug.addDebugResponse).not.toHaveBeenCalled()
+  })
+
+  it('opens the entry when debug logging turns on partway through', async () => {
+    debug.isActive = false
+    mockFetch.mockImplementation(async () => jsonReply({ status: 'in_progress' }))
+    const fetch = poll()
+
+    await fetch(POLL_URL)
+    debug.isActive = true
+    await fetch(POLL_URL)
+    await fetch(POLL_URL)
+    await flush()
+
+    expect(debug.addDebugRequest).toHaveBeenCalledTimes(1)
+    expect(lastResponseData()).toMatchObject({ requests: 2 })
   })
 })
