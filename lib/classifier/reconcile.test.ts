@@ -553,7 +553,6 @@ describe('scoreDescriptions', () => {
   })
 })
 
-// piggyback.md → Matching before creating: an item is never reused, only flagged.
 // observability.md → Logger contract: a degraded path is a warn. An embedder outage turns
 // matching off without failing anything, so silence would hide it entirely.
 describe('a description embed that throws', () => {
@@ -599,6 +598,7 @@ describe('a description embed that throws', () => {
   })
 })
 
+// piggyback.md → Matching before creating: an item is never reused, only flagged.
 describe('decideNewItem', () => {
   const scored = (id: string, similarity: number | null, over: Partial<Entity> = {}) => ({
     entity: row({ id, kind: 'item', name: 'rusted key', ...over }),
