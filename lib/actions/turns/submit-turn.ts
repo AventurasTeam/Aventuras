@@ -7,6 +7,7 @@ import { generateId } from '@/lib/ids'
 import {
   CLASSIFIER_HELD,
   ensurePerTurnPipelineRegistered,
+  isClassifierHeld,
   owedPassAtSend,
   runClassifierPass,
   type RejectedStart,
@@ -59,7 +60,11 @@ export async function submitTurn(
           const pass = await runClassifierPass(ids, ctx, { beforeTurn: true })
           if (pass.outcome === 'rejected') return { ...pass, converged: true }
           if (pass.outcome === 'aborted') return { ...pass, outcome: 'aborted', beforeTurn: true }
-          if (pass.outcome === 'failed') return { ...pass, outcome: 'failed', beforeTurn: true }
+          if (pass.outcome === 'failed') {
+            // A cancel or failure whose reversal didn't commit: the branch is held, not retryable.
+            if (await isClassifierHeld(ids.branchId, ctx)) return HELD_REJECTION
+            return { ...pass, outcome: 'failed', beforeTurn: true }
+          }
         }
 
         // Shared across the user_action's delta and the pipeline run it kicks off,

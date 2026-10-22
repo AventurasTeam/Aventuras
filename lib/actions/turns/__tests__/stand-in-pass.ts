@@ -1,8 +1,9 @@
 import { desc, eq } from 'drizzle-orm'
 
 import { idleStatus, PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { branches, storyEntries } from '@/lib/db'
+import { branches, storyEntries, type ClassifierStatus } from '@/lib/db'
 import {
+  configureDeltaActionPort,
   PER_TURN_KIND,
   pipelineEventBus,
   registerPipeline,
@@ -13,12 +14,26 @@ import {
 } from '@/lib/pipeline'
 import { generationStore, type RunState } from '@/lib/stores'
 
+import { applyDeltaAction, settleUserWrites } from '../../delta/apply-delta-action'
+import {
+  holdBranchWriteExclusive,
+  releaseBranchWriteExclusive,
+} from '../../delta/branch-write-lock'
+import {
+  DeltaReplayError,
+  describeDeltaReplayError,
+  reverseReplayDeltas,
+} from '../../delta/reverse-replay'
+
 /** One run of the stand-in pass, holding after its write. */
 export type HeldPass = {
   readonly actionId: string
   readonly beforeTurn: boolean
-  /** `completed` keeps the write and advances the watermark; `failed` reverses it. */
-  finish: (outcome: 'completed' | 'failed') => void
+  /**
+   * `completed` keeps the write and advances the watermark; `failed` reverses it; `threw` fails
+   * past the phase, as a rejected write does.
+   */
+  finish: (outcome: 'completed' | 'failed' | 'threw') => void
 }
 
 export type StandInPass = {
@@ -33,7 +48,14 @@ export type StandInPassOptions = {
   anchorEntryId: string | null
   /** Runs inside the phase once the abort lands, before the phase returns `aborted`. */
   onAbort?: (ctx: PhaseContext) => Promise<void>
+  /**
+   * The real pass's status lifecycle: `running` before its write; a throw records `failed` and an
+   * interrupt restores the status it found, both skipped when the reversal can't commit.
+   */
+  statusLifecycle?: true
 }
+
+const PRE_RUN_STATUS = 'standInPass.preRunStatus'
 
 export type RunDeferredEvent = Extract<PipelineEvent, { type: 'run_deferred' }>
 
@@ -52,6 +74,11 @@ export function registerStandInPass(options: StandInPassOptions): StandInPass {
 
   async function* phase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
     if (ctx.abortSignal.aborted) return { status: 'aborted' }
+    if (options.statusLifecycle) {
+      const status = await readStatus(ctx)
+      ctx.intermediates[PRE_RUN_STATUS] = status
+      await writeStatus(ctx, { ...status, state: 'running' })
+    }
     const id = standInHappeningId(ctx.actionId)
     yield {
       type: 'delta_emitted',
@@ -65,7 +92,7 @@ export function registerStandInPass(options: StandInPassOptions): StandInPass {
     const beforeTurn = [...generationStore.getTxState().runs.values()].some(
       (r) => r.actionId === ctx.actionId && r.beforeTurn,
     )
-    const outcome = await new Promise<'completed' | 'failed' | 'aborted'>((resolve) => {
+    const outcome = await new Promise<'completed' | 'failed' | 'threw' | 'aborted'>((resolve) => {
       if (ctx.abortSignal.aborted) {
         resolve('aborted')
         return
@@ -83,6 +110,7 @@ export function registerStandInPass(options: StandInPassOptions): StandInPass {
     }
     if (outcome === 'failed')
       return { status: 'failed', error: { kind: 'phase-logic', detail: 'stand-in pass failed' } }
+    if (outcome === 'threw') throw new Error('stand-in pass threw')
     await advanceWatermark(ctx)
     return { status: 'completed' }
   }
@@ -97,6 +125,15 @@ export function registerStandInPass(options: StandInPassOptions): StandInPass {
     concurrencyPolicy: {
       blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND, 'chapter-close', 'translation-retry'],
     },
+    ...(options.statusLifecycle && {
+      onPhaseException: async (ctx) => {
+        await writeStatus(ctx, { ...(await readStatus(ctx)), state: 'failed' })
+      },
+      onInterrupt: async (ctx) => {
+        const status = ctx.intermediates[PRE_RUN_STATUS] as ClassifierStatus | undefined
+        if (status) await writeStatus(ctx, status)
+      },
+    }),
   })
 
   return {
@@ -106,6 +143,23 @@ export function registerStandInPass(options: StandInPassOptions): StandInPass {
       return run ? Promise.resolve(run) : new Promise((resolve) => waiting.push(resolve))
     },
   }
+}
+
+type StatusCtx = Pick<PhaseContext, 'db' | 'branchId'>
+
+async function readStatus(ctx: StatusCtx): Promise<ClassifierStatus> {
+  const [row] = await ctx.db
+    .select({ status: branches.classifierStatus })
+    .from(branches)
+    .where(eq(branches.id, ctx.branchId))
+  return row?.status ?? idleStatus()
+}
+
+async function writeStatus(ctx: StatusCtx, status: ClassifierStatus): Promise<void> {
+  await ctx.db
+    .update(branches)
+    .set({ classifierStatus: status })
+    .where(eq(branches.id, ctx.branchId))
 }
 
 async function advanceWatermark(ctx: PhaseContext): Promise<void> {
@@ -119,6 +173,30 @@ async function advanceWatermark(ctx: PhaseContext): Promise<void> {
     .update(branches)
     .set({ classifierStatus: { ...idleStatus(), processedThrough: tail?.position ?? 0 } })
     .where(eq(branches.id, ctx.branchId))
+}
+
+/**
+ * The orchestrator's reversal of any run of `pass` fails before it commits, so a pass that was
+ * `running` leaves its branch held. `resetSingletons` restores the real port.
+ */
+export function failReversalsOf(pass: StandInPass): void {
+  configureDeltaActionPort({
+    applyDeltaAction,
+    reverseReplayDeltas: (actionId, ...rest) =>
+      pass.runs.some((run) => run.actionId === actionId)
+        ? Promise.reject(
+            new DeltaReplayError('Reverse-replay failed', {
+              cause: new Error('database is locked'),
+              actionId,
+              stage: 'transaction',
+            }),
+          )
+        : reverseReplayDeltas(actionId, ...rest),
+    describeReplayError: describeDeltaReplayError,
+    settleUserWrites,
+    holdBranchWriteExclusive,
+    releaseBranchWriteExclusive,
+  })
 }
 
 /** A gate-holding run with no pipeline behind it, for refusal tests; only `abortRun` ends it. */

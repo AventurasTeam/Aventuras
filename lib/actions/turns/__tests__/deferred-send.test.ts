@@ -5,6 +5,7 @@ import { idleStatus, PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { branches, deltas, happenings, pipelineRuns, storyEntries, type StoryEntry } from '@/lib/db'
 import {
   CLASSIFIER_HELD,
+  isClassifierHeld,
   PER_TURN_KIND,
   registerPipeline,
   type PhaseResult,
@@ -21,12 +22,14 @@ import {
 
 import { branchEntries, openStory, sseFetch, WORKING_CONFIG } from './fixtures'
 import {
+  failReversalsOf,
   recordDeferrals,
   registerStandInPass,
   registerStoreOnlyRun,
   runningPass,
   standInHappeningId,
   type StandInPass,
+  type StandInPassOptions,
 } from './stand-in-pass'
 import { expectRan, makeHarness, resetSingletons } from '../../../pipeline/__tests__/harness'
 import { undoLastAction } from '../../story-entries/undo'
@@ -93,14 +96,18 @@ function setCadence(cadence: number): void {
 }
 
 // The opening plus one turn is three entries, so a cadence of 3 makes the first turn chain a pass.
-async function setUp(cadence: number, rows: readonly StoryEntry[] = [OPENING]) {
+async function setUp(
+  cadence: number,
+  rows: readonly StoryEntry[] = [OPENING],
+  passOptions: Omit<StandInPassOptions, 'anchorEntryId'> = {},
+) {
   const { ctx, db } = await makeHarness()
   await db.insert(storyEntries).values([...rows])
   await openStory(db, 's1', 'b1')
   setCadence(cadence)
   entriesStore.hydrate('b1', [...rows])
   await hydrateAppSettings(async () => WORKING_CONFIG)
-  const pass = registerStandInPass({ anchorEntryId: null })
+  const pass = registerStandInPass({ anchorEntryId: null, ...passOptions })
   return { ctx, db, pass, deferrals: recordDeferrals() }
 }
 
@@ -463,6 +470,27 @@ describe('Send with deferred work', () => {
     expect(await userActionsReading(db, 'I wait.')).toEqual([])
     expect(generationStore.getTxState().pendingTurns.size).toBe(0)
   })
+
+  // The reader shows the held entry, not a retryable failure: a Retry would only be refused.
+  it.each(['fails', 'is cancelled'] as const)(
+    'refuses a Send as held when its owed pass %s and its reversal does not commit',
+    async (how) => {
+      const { ctx, db, pass } = await setUp(3, BACKLOG, { statusLifecycle: true })
+      failReversalsOf(pass)
+
+      const sent = send(ctx, 'I wait.')
+      const owed = await within(pass.nextHeld(), 'the owed pass')
+      if (how === 'fails') owed.finish('threw')
+      else await interruptMemoryRuns('b1')
+      const result = await within(sent, 'the refused Send')
+
+      expect(result).toEqual({ outcome: 'rejected', blockedBy: CLASSIFIER_HELD, converged: true })
+      expect(await isClassifierHeld('b1', ctx)).toBe(true)
+      expect(await userActionsReading(db, 'I wait.')).toEqual([])
+      expect(await turnMarkers(db)).toEqual([])
+      expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+    },
+  )
 
   it('runs no pass before a turn when nothing is owed', async () => {
     const { ctx, db, pass } = await setUp(50)
