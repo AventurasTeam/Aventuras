@@ -125,7 +125,6 @@ function passFailure(
           failure: result.kind,
           target: 'classifier',
           phaseName: CLASSIFY_PHASE,
-          detail: 'classifier',
         },
       }
     case 'failed':

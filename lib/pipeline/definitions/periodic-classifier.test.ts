@@ -900,7 +900,6 @@ describe('periodicClassifierPhase', () => {
         failure: 'profile-missing',
         target: 'classifier',
         phaseName: 'classify',
-        detail: 'classifier',
       },
     })
     expect(h.watermarks).toEqual([])
