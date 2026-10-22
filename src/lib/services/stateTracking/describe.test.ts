@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { WorldStateChangeRecord } from '#lib/types/index.ts'
-import { describeChange, gapMessage, loreLine } from '.'
+import {
+  deletedChaptersLine,
+  deletedSnapshotsLine,
+  describeChange,
+  gapMessage,
+  removalLines,
+  revertLines,
+} from '.'
 
 const base: WorldStateChangeRecord = {
   id: 'r',
@@ -76,54 +83,89 @@ describe('gapMessage', () => {
   })
 })
 
-describe('loreLine', () => {
-  it('says only the classifier is undone when no chapter lore is', () => {
-    expect(loreLine([])).toBe("Only the classifier's changes are undone.")
+describe('revertLines', () => {
+  it('says the classifier changes are reverted whenever there are any', () => {
+    expect(revertLines(true, [])).toEqual(['Classifier changes will be reverted.'])
+    expect(revertLines(false, [])).toEqual([])
   })
 
-  it("says nothing then when the reader's or Tidy's changes are listed", () => {
-    expect(loreLine([], true)).toBeNull()
-    expect(loreLine([{ number: 4, first: 31, last: 45 }], true)).toBe(
-      'This also undoes the lore management of chapter 4 (entries 31–45).',
-    )
-  })
-
-  it('names one chapter with its entries', () => {
-    expect(loreLine([{ number: 4, first: 31, last: 45 }])).toBe(
-      'This also undoes the lore management of chapter 4 (entries 31–45).',
-    )
+  it('stacks the classifier line and the lore lines', () => {
+    expect(revertLines(true, [{ number: 4, first: 31, last: 45 }])).toEqual([
+      'Classifier changes will be reverted.',
+      'Lore management changes of chapter 4 (entries 31–45) will be reverted.',
+    ])
   })
 
   it('spans consecutive chapters', () => {
     expect(
-      loreLine([
+      revertLines(false, [
         { number: 5, first: 46, last: 60 },
         { number: 4, first: 31, last: 45 },
       ]),
-    ).toBe('This also undoes the lore management of chapters 4–5 (entries 31–60).')
+    ).toEqual(['Lore management changes of chapters 4–5 (entries 31–60) will be reverted.'])
   })
 
   it('lists chapters with a gap between them', () => {
     expect(
-      loreLine([
+      revertLines(false, [
         { number: 2, first: 10, last: 20 },
         { number: 4, first: 31, last: 45 },
       ]),
-    ).toBe('This also undoes the lore management of chapters 2 and 4 (entries 10–45).')
+    ).toEqual(['Lore management changes of chapters 2 and 4 (entries 10–45) will be reverted.'])
   })
 
   it('places the lore of a deleted chapter by its entry', () => {
-    expect(loreLine([{ number: null, first: 13, last: 13 }])).toBe(
-      'This also undoes lore management recorded at entry 13, whose chapter was deleted.',
-    )
+    expect(revertLines(false, [{ number: null, first: 13, last: 13 }])).toEqual([
+      'Lore management changes recorded at entry 13, whose chapter was deleted, will be reverted.',
+    ])
     expect(
-      loreLine([
+      revertLines(false, [
         { number: 4, first: 31, last: 45 },
         { number: null, first: 50, last: 50 },
       ]),
-    ).toBe(
-      'This also undoes the lore management of chapter 4 (entries 31–45). ' +
-        'It also undoes lore management recorded at entry 50, whose chapter was deleted.',
+    ).toEqual([
+      'Lore management changes of chapter 4 (entries 31–45) will be reverted.',
+      'Lore management changes recorded at entry 50, whose chapter was deleted, will be reverted.',
+    ])
+  })
+})
+
+describe('deletedChaptersLine', () => {
+  it('says which chapters are deleted, or nothing', () => {
+    expect(deletedChaptersLine([])).toBeNull()
+    expect(deletedChaptersLine([{ number: 4, first: 31, last: 45 }])).toBe(
+      'Chapter 4 (entries 31–45) will be deleted.',
     )
+    expect(
+      deletedChaptersLine([
+        { number: 5, first: 46, last: 60 },
+        { number: 4, first: 31, last: 45 },
+      ]),
+    ).toBe('Chapters 4–5 (entries 31–60) will be deleted.')
+  })
+})
+
+describe('deletedSnapshotsLine', () => {
+  it('names the entries of a few snapshots and spans many', () => {
+    expect(deletedSnapshotsLine([])).toBeNull()
+    expect(deletedSnapshotsLine([40])).toBe('The world-state snapshot at entry 40 will be deleted.')
+    expect(deletedSnapshotsLine([55, 40, 40])).toBe(
+      '2 world-state snapshots at entries 40 and 55 will be deleted.',
+    )
+    expect(deletedSnapshotsLine([10, 20, 30, 40, 50])).toBe(
+      '5 world-state snapshots between entries 10 and 50 will be deleted.',
+    )
+  })
+})
+
+describe('removalLines', () => {
+  it('says what is deleted before what is reverted', () => {
+    const chapter = { number: 4, first: 31, last: 45 }
+    expect(removalLines([chapter], [40], true, [])).toEqual([
+      'Chapter 4 (entries 31–45) will be deleted.',
+      'The world-state snapshot at entry 40 will be deleted.',
+      'Classifier changes will be reverted.',
+    ])
+    expect(removalLines([], [], false, [])).toEqual([])
   })
 })

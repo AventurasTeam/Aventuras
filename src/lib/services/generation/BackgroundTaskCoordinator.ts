@@ -288,11 +288,7 @@ export class BackgroundTaskCoordinator {
       if (!card) return
       if (lore.completed) reporting?.cards.loreFinished(card.id)
       else {
-        reporting?.cards.loreIncomplete(
-          card.id,
-          lore.error ?? 'Lore management did not complete',
-          lore.changeCount,
-        )
+        reporting?.cards.loreIncomplete(card.id, lore.error ?? 'Lore management did not complete')
       }
     } finally {
       if (recordId) reporting?.closeRecord(recordId)

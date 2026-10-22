@@ -1,20 +1,24 @@
 <script lang="ts">
   import type { StoryEntry } from '#lib/types/index.ts'
-  import { loreLine, type RevertKeep } from '#lib/services/stateTracking/index.ts'
+  import { KEEP_NONE, removalLines, type LoreChapter } from '#lib/services/stateTracking/index.ts'
   import { story, type RevertPreview } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
+  import { settings } from '#lib/stores/settings.svelte.ts'
   import { entryNumber } from '#lib/utils/storyNavigation.ts'
   import { errMessage } from '#lib/utils/error.ts'
-  import { Button } from '#lib/components/ui/button/index.ts'
-  import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
-  import { RotateCcw, X } from '@lucide/svelte'
-  import ChangeList from './ChangeList.svelte'
+  import { RotateCcw } from '@lucide/svelte'
+  import ModalActions from '#lib/components/shared/ModalActions.svelte'
+  import RevertSummary from './RevertSummary.svelte'
 
   // Set only while the reader decides: a regenerate with nothing to decide runs at once.
-  let pending = $state<{ entry: StoryEntry; retry: boolean; preview: RevertPreview } | null>(null)
-  let keepManual = $state(true)
-  let keepTidy = $state(true)
+  let pending = $state<{
+    entry: StoryEntry
+    retry: boolean
+    preview: RevertPreview
+    chapters: LoreChapter[]
+    snapshots: number[]
+  } | null>(null)
 
   $effect(() => {
     const request = ui.regenerateRequest
@@ -23,9 +27,10 @@
     void start(request.entryId, request.retry)
   })
 
-  function regenerate(entryId: string, retry: boolean, keep?: RevertKeep) {
-    if (retry) void ui.triggerRetryLastMessage(keep)
-    else void ui.triggerRegenerateNarration(entryId, keep)
+  // A regenerate the reader confirms keeps none of their or Tidy's changes in its range.
+  function regenerate(entryId: string, retry: boolean) {
+    if (retry) void ui.triggerRetryLastMessage(KEEP_NONE)
+    else void ui.triggerRegenerateNarration(entryId, KEEP_NONE)
   }
 
   async function start(entryId: string, retry: boolean) {
@@ -33,27 +38,38 @@
     if (!entry) return
     const position = retry ? ui.retryBackup?.entryCountBeforeAction : entry.position
     let preview: RevertPreview | null = null
+    // Removing the entries takes their snapshots with them; worth saying, not worth asking about.
+    let snapshots: number[] = []
     try {
-      if (position !== undefined) preview = await story.previewRegenerate(position)
+      if (position !== undefined) {
+        const [revert, removed] = await Promise.all([
+          story.previewRegenerate(position),
+          story.snapshotsRemovedFrom(position),
+        ])
+        preview = revert
+        snapshots = removed.fromHere
+      }
     } catch (error) {
       console.error('[RegenerateEntryModal] Could not preview the regenerate:', error)
       ui.showToast(`Could not check what regenerating undoes: ${errMessage(error)}`, 'error')
       return
     }
-    if (!preview || preview.manual.length + preview.tidy.length + preview.lore.length === 0) {
+    // A chapter starting or ending on a removed entry goes with it, recorded or not.
+    const chapters = position !== undefined ? story.chaptersRemovedFrom(position) : []
+    const toDecide =
+      !!preview && preview.manual.length + preview.tidy.length + preview.lore.length > 0
+    if (!preview || (!toDecide && chapters.length === 0)) {
       regenerate(entryId, retry)
       return
     }
-    keepManual = true
-    keepTidy = true
-    pending = { entry, retry, preview }
+    pending = { entry, retry, preview, chapters, snapshots }
   }
 
   function confirm() {
     if (!pending) return
     const { entry, retry } = pending
     pending = null
-    regenerate(entry.id, retry, { manual: keepManual, tidy: keepTidy })
+    regenerate(entry.id, retry)
   }
 </script>
 
@@ -71,50 +87,35 @@
   >
     {#if pending}
       {@const preview = pending.preview}
-      {@const othersListed = preview.manual.length + preview.tidy.length > 0}
-      {@const line = loreLine(preview.lore, othersListed)}
       <ResponsiveModal.Header class="border-b px-6 py-4" closeButton={false}>
         <ResponsiveModal.Title>Regenerate entry {entryNumber(pending.entry)}</ResponsiveModal.Title>
         <ResponsiveModal.Description>
-          Regenerating this entry undoes the world state changes recorded for it.
+          {settings.experimentalFeatures.stateTracking
+            ? 'Regenerating this entry will undo the world state changes recorded for it.'
+            : 'Regenerating this entry will replace it.'}
         </ResponsiveModal.Description>
       </ResponsiveModal.Header>
       <!-- Buttons scroll with the content, so what they do is read before them. -->
       <div class="min-h-0 flex-1 overflow-y-auto">
         <div class="space-y-3 px-6 py-4">
-          {#if line}
-            <p class="text-muted-foreground text-sm">{line}</p>
-          {/if}
-          {#if othersListed}
-            <p class="text-muted-foreground text-sm">Regenerating would also undo these changes:</p>
-            {#if preview.manual.length > 0}
-              <p class="text-muted-foreground text-xs">Changes you made by hand:</p>
-              <ChangeList changes={preview.manual} unkeepable={preview.unkeepable} />
-              <label class="flex items-center gap-2 text-xs">
-                <Checkbox bind:checked={keepManual} />
-                Keep them
-              </label>
-            {/if}
-            {#if preview.tidy.length > 0}
-              <p class="text-muted-foreground text-xs">Changes from lore management you ran:</p>
-              <ChangeList changes={preview.tidy} unkeepable={preview.unkeepable} />
-              <label class="flex items-center gap-2 text-xs">
-                <Checkbox bind:checked={keepTidy} />
-                Keep them
-              </label>
-            {/if}
-          {/if}
+          <RevertSummary
+            lines={removalLines(
+              pending.chapters,
+              pending.snapshots,
+              preview.classifier,
+              preview.lore,
+            )}
+            heading="These changes will be reverted too:"
+            manual={preview.manual}
+            tidy={preview.tidy}
+          />
         </div>
-        <ResponsiveModal.Footer class="border-t px-6 py-4">
-          <Button variant="secondary" size="sm" onclick={() => (pending = null)} class="h-9 px-3">
-            <X class="mr-1.5 h-4 w-4" />
-            Cancel
-          </Button>
-          <Button size="sm" onclick={confirm} class="h-9 px-3">
-            <RotateCcw class="mr-1.5 h-4 w-4" />
-            Regenerate
-          </Button>
-        </ResponsiveModal.Footer>
+        <ModalActions
+          label="Regenerate"
+          icon={RotateCcw}
+          onCancel={() => (pending = null)}
+          onConfirm={confirm}
+        />
       </div>
     {/if}
   </ResponsiveModal.Content>

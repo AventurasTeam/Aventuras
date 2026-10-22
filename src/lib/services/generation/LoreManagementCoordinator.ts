@@ -30,11 +30,17 @@ const COMPLETION_LINGER_MS = 2000
 /** Why a session refused by the branch lock did not run. */
 export const LORE_SESSION_BUSY = 'Another lore management run was in progress'
 
+/** An approved session's writes, in the order they apply. */
+export interface LoreSessionWrites {
+  creates: Entry[]
+  updates: Entry[]
+  merges: { sourceIds: string[]; merged: Entry }[]
+  deletes: string[]
+}
+
 export interface LoreManagementCallbacks {
-  onCreateEntry: (entry: Entry) => Promise<void>
-  onUpdateEntry: (id: string, updates: Partial<Entry>) => Promise<void>
-  onDeleteEntry: (id: string) => Promise<void>
-  onMergeEntries: (entryIds: string[], mergedEntry: Entry) => Promise<void>
+  /** Writes every change of an approved session, with its records, or none of them. */
+  onSaveSession: (writes: LoreSessionWrites) => Promise<void>
   /** `activityParentId`: the read's own step, when the run is recorded. */
   onQueryChapter?: (
     chapterNumber: number,
@@ -62,7 +68,8 @@ export interface LoreManagementUICallbacks {
    * `onComplete` two seconds later — and this is the only record of what a run did.
    */
   onSummary?: (summary: string, changeCount: number) => void
-  onError?: (error: string) => void
+  /** `failed`: the chapter session that failed and how it read; absent for a Tidy or batch run. */
+  onError?: (error: string, failed?: { chapter: Chapter; readAfterChapter: boolean }) => void
   onComplete: () => void
 }
 
@@ -90,6 +97,8 @@ export interface LoreSessionInput {
   newChapter?: LoreNewChapterInput
   /** The story's Buffer Messages; sizes the post-chapter tail when `chapterBufferTail` is on. */
   chapterBuffer?: number
+  /** Off, a chapter session read nothing after its chapter; a retry reads the same. */
+  readAfterChapter?: boolean
 }
 
 export type LoreRunOptions = Pick<
@@ -195,11 +204,8 @@ export class LoreManagementCoordinator {
     }
     uiCallbacks?.onStart()
 
-    let changeCount = 0
-    const bumpChanges = (delta = 1) => {
-      changeCount += delta
-      return changeCount
-    }
+    // The session saves once, so nothing is saved until all of it is.
+    let saved = 0
 
     // The completion message is left up for a moment, but the lock is not: it is released
     // as soon as the writes are done, so the next run is not blocked by a UI delay.
@@ -220,21 +226,15 @@ export class LoreManagementCoordinator {
         input.recentEntries,
         input.chapters,
         {
-          onCreateEntry: async (entry) => {
-            await callbacks.onCreateEntry(entry)
-            uiCallbacks?.onProgress('Creating entries...', bumpChanges())
-          },
-          onUpdateEntry: async (id, updates) => {
-            await callbacks.onUpdateEntry(id, updates)
-            uiCallbacks?.onProgress('Updating entries...', bumpChanges())
-          },
-          onDeleteEntry: async (id) => {
-            await callbacks.onDeleteEntry(id)
-            uiCallbacks?.onProgress('Cleaning up entries...', bumpChanges())
-          },
-          onMergeEntries: async (entryIds, mergedEntry) => {
-            await callbacks.onMergeEntries(entryIds, mergedEntry)
-            uiCallbacks?.onProgress('Merging entries...', bumpChanges())
+          onSaveSession: async (writes) => {
+            uiCallbacks?.onProgress('Saving changes...', 0)
+            await callbacks.onSaveSession(writes)
+            saved =
+              writes.creates.length +
+              writes.updates.length +
+              writes.merges.length +
+              writes.deletes.length
+            uiCallbacks?.onProgress('Saved changes', saved)
           },
           onQueryChapter: callbacks.onQueryChapter,
           getKeptSeparate: callbacks.getKeptSeparate,
@@ -270,7 +270,13 @@ export class LoreManagementCoordinator {
     } catch (error) {
       log('Lore management failed', error)
       const errorMessage = error instanceof Error ? error.message : String(error)
-      uiCallbacks?.onError?.(errorMessage)
+      uiCallbacks?.onError?.(
+        errorMessage,
+        input.newChapter && {
+          chapter: input.newChapter.chapter,
+          readAfterChapter: input.readAfterChapter ?? true,
+        },
+      )
       if (reporting) failStep(reporting.activity, stepId, error)
 
       // Still clear the UI state: a failed run must not leave the lorebook read-only.
@@ -278,7 +284,7 @@ export class LoreManagementCoordinator {
 
       return {
         completed: false,
-        changeCount,
+        changeCount: saved,
         error: describeActivityError(error),
       }
     } finally {

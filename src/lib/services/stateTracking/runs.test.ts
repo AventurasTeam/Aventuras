@@ -3,12 +3,15 @@ import type {
   WorldStateBreakRecord,
   WorldStateChangeRecord,
   WorldStateHeaderRecord,
+  WorldStateMark,
 } from '#lib/types/index.ts'
 import {
   isContinuous,
   lastCompletedEntry,
   lastHeaderOnLine,
+  marksForExport,
   recordsForExport,
+  recordsHolder,
   resolveOverride,
   resolveRun,
   type AnchorCandidate,
@@ -72,7 +75,13 @@ function brk(n: number, at: number): WorldStateBreakRecord {
   }
 }
 
-const live: AnchorCandidate = { kind: 'live', id: null, position: 6, takenAt: 1000 }
+const live: AnchorCandidate = {
+  kind: 'live',
+  id: null,
+  position: 6,
+  seq: Infinity,
+  takenAt: 1000,
+}
 
 function query(overrides: Partial<RunQuery>): RunQuery {
   return {
@@ -175,7 +184,13 @@ describe('resolveRun', () => {
   })
 
   it('diagnoses the nearest full state when none passes', () => {
-    const snap: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 5, takenAt: 52 }
+    const snap: AnchorCandidate = {
+      kind: 'snapshot',
+      id: 'snap',
+      position: 5,
+      seq: 52,
+      takenAt: 52,
+    }
     const records = [1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1 && n !== 4))
     const result = resolveRun(
       query({
@@ -250,7 +265,13 @@ describe('resolveRun', () => {
   it('uses the closing snapshot of an interrupted run', () => {
     // Tracking went off at 55 (closing snapshot), back on at 58; entry 6 opened the next run.
     const records = [1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1 && n !== 6))
-    const closing: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 5, takenAt: 55 }
+    const closing: AnchorCandidate = {
+      kind: 'snapshot',
+      id: 'snap',
+      position: 5,
+      seq: 55,
+      takenAt: 55,
+    }
     const result = resolveRun(
       query({
         records,
@@ -269,7 +290,13 @@ describe('resolveRun', () => {
   it('takes a closing snapshot on an unrecorded last entry as proof', () => {
     // A stopped turn left entry 6, a player action, last; tracking went off at 70.
     const stopped = line.map((e) => (e.id === 'e6' ? { ...e, type: 'user_action' as const } : e))
-    const closing: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 6, takenAt: 70 }
+    const closing: AnchorCandidate = {
+      kind: 'snapshot',
+      id: 'snap',
+      position: 6,
+      seq: 70,
+      takenAt: 70,
+    }
     const asked = (isClosing: boolean) =>
       resolveRun(
         query({
@@ -285,13 +312,19 @@ describe('resolveRun', () => {
   })
 
   it('applies a change that belongs to the target but was written after the anchor', () => {
-    const early: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 4, takenAt: 41 }
-    const late = edit(3, 42)
+    const early: AnchorCandidate = {
+      kind: 'snapshot',
+      id: 'snap',
+      position: 4,
+      seq: 42,
+      takenAt: 42,
+    }
+    const late = edit(3, 43)
     const records = [...[1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1)), late]
     const result = resolveRun(
       query({
         records,
-        snapshots: [{ entryId: 'e4', takenAt: 41, closing: false }],
+        snapshots: [{ entryId: 'e4', takenAt: 42, closing: false }],
         candidates: [early, live],
       }),
     )
@@ -301,7 +334,13 @@ describe('resolveRun', () => {
   })
 
   it('does not undo changes written after the anchor was taken', () => {
-    const snap: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 5, takenAt: 52 }
+    const snap: AnchorCandidate = {
+      kind: 'snapshot',
+      id: 'snap',
+      position: 5,
+      seq: 52,
+      takenAt: 52,
+    }
     const records = [...[1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1)), edit(5, 53)]
     const result = resolveRun(
       query({
@@ -317,8 +356,14 @@ describe('resolveRun', () => {
 describe('resolveOverride', () => {
   // Tracking was off between entries 4 and 5, so resolveRun refuses entry 3.
   const records = [1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1 && n !== 5))
-  const before: AnchorCandidate = { kind: 'checkpoint', id: 'cp', position: 2, takenAt: 25 }
-  const after: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 5, takenAt: 52 }
+  const before: AnchorCandidate = {
+    kind: 'checkpoint',
+    id: 'cp',
+    position: 2,
+    seq: 25,
+    takenAt: 25,
+  }
+  const after: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 5, seq: 52, takenAt: 52 }
   const gapped = query({
     records,
     snapshots: [{ entryId: 'e5', takenAt: 52, closing: false }],
@@ -416,7 +461,46 @@ describe('recordsForExport', () => {
     expect(out.at(-1)?.kind).toBe('break')
   })
 
+  it('numbers a closing break after the marks exported with the records', () => {
+    const marks = [{ seq: 30 }] as WorldStateMark[]
+    const out = recordsForExport(records, { on: false, enabledSince: 5 }, 100, marks)
+    expect(out.at(-1)).toMatchObject({ kind: 'break', seq: 31 })
+  })
+
   it('exports nothing for a story that was never tracked', () => {
     expect(recordsForExport([], { on: false, enabledSince: null }, 100)).toEqual([])
+  })
+})
+
+describe('marksForExport', () => {
+  it('leaves out the marks of snapshots, which stay behind', () => {
+    const marks = [
+      { entityType: 'snapshot', entityId: 's' },
+      { entityType: 'checkpoint', entityId: 'cp' },
+      { entityType: 'chapter', entityId: 'ch' },
+    ] as WorldStateMark[]
+    expect(marksForExport(marks).map((m) => m.entityId)).toEqual(['cp', 'ch'])
+  })
+})
+
+describe('recordsHolder', () => {
+  const narration = (position: number) => ({ position, type: 'narration' as const })
+  const action = (position: number) => ({ position, type: 'user_action' as const })
+  const line = [narration(1), action(2), narration(3), action(4)]
+
+  it("gives a narration's records to the entry after it, or before it when it was the last", () => {
+    expect(recordsHolder(line, line[2])).toBe(line[3])
+    expect(recordsHolder(line, line[0])).toBe(line[1])
+    expect(recordsHolder(line.slice(0, 3), line[2])).toBe(line[1])
+  })
+
+  it("gives a user action's records to the entry before it, or after it when it was the first", () => {
+    expect(recordsHolder(line, line[1])).toBe(line[0])
+    expect(recordsHolder(line, line[3])).toBe(line[2])
+    expect(recordsHolder(line.slice(1), line[1])).toBe(line[2])
+  })
+
+  it('is none for the only entry', () => {
+    expect(recordsHolder([narration(1)], narration(1))).toBeUndefined()
   })
 })

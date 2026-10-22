@@ -11,7 +11,11 @@ The database, the native layer that moves bytes around it, and the settings blob
   directly — `backup.rs`, `avt_import.rs`, and the migration checksum patch in `lib.rs` — must use
   `app_config_dir()` for the same reason, or it silently operates on a database that does not exist.
 - **Migrations**: Sequentially numbered SQL files in `src-tauri/migrations/` (e.g. `001_initial.sql`,
-  `002_chapters_checkpoints.sql`, ...), applied in order at startup.
+  `002_chapters_checkpoints.sql`, ...), applied in order at startup, all pending ones before any
+  frontend code runs. A data conversion that must happen before a column goes is therefore SQL in
+  the same migration as the drop, as `041_retire_world_state_delta.sql` is. The list lives in
+  `migrations()` in `lib.rs`, which a `cargo test` can run against an in-memory database
+  (`world_state_delta_migration.rs`, `world_state_marks_migration.rs`).
 - **Line endings matter**: `sqlx` checksums each migration file to detect drift, so migrations must use LF
   line endings on every platform. This is enforced by `.gitattributes` (forces `eol=lf` for
   `src-tauri/migrations/*.sql`) and by the `check_migrations` pre-commit hook below.

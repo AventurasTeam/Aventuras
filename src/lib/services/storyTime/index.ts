@@ -38,7 +38,6 @@ export {
   type ReconciliationPlan,
   type PlanReconciliationInput,
   type ChapterSpanUpdate,
-  type DeltaUpdate,
   type ReconciliationWriteDeps,
 } from './reconciliation'
 export {

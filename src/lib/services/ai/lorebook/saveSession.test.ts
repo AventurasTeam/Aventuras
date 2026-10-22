@@ -14,12 +14,7 @@ const session = () => ({
   deletedEntries: [entry('d1', 'Docks'), entry('x', 'Stale Rumour')],
 })
 
-const writes = () => ({
-  onCreateEntry: vi.fn(async () => {}),
-  onUpdateEntry: vi.fn(async () => {}),
-  onDeleteEntry: vi.fn(async () => {}),
-  onMergeEntries: vi.fn(async () => {}),
-})
+const writes = () => ({ onSaveSession: vi.fn(async () => {}) })
 
 function recorded() {
   const recorder = new ActivityRecorder()
@@ -30,47 +25,53 @@ function recorded() {
 }
 
 describe('saveLoreSession', () => {
-  it('records one step per write in order, under a saving step', async () => {
+  it('hands the whole session over in one write, under one saving step', async () => {
     const { recorder, parent, steps } = recorded()
+    const callbacks = writes()
 
-    const changes = await saveLoreSession(session(), null, writes(), recorder, parent)
+    const changes = await saveLoreSession(session(), 'b1', callbacks, recorder, parent)
 
-    const [saving, ...written] = steps()
-    expect(saving).toMatchObject({
-      label: 'Saving changes',
-      parentId: parent,
-      status: 'done',
-      detail: '4 changes',
-    })
-    expect(written.map((s) => [s.label, s.parentId, s.status])).toEqual([
-      ['Created "Harbor Master Ilsa"', saving.id, 'done'],
-      ['Updated "The Ferry"', saving.id, 'done'],
-      ['Merged 2 into "Old Docks"', saving.id, 'done'],
-      ['Deleted "Stale Rumour"', saving.id, 'done'],
+    expect(callbacks.onSaveSession).toHaveBeenCalledTimes(1)
+    const [saved] = callbacks.onSaveSession.mock.calls[0] as unknown as [
+      { creates: Entry[]; updates: Entry[]; merges: { sourceIds: string[] }[]; deletes: string[] },
+    ]
+    expect(saved.creates[0]).toMatchObject({ name: 'Harbor Master Ilsa', branchId: 'b1' })
+    expect(saved.creates[0].id).not.toBe('new')
+    expect(saved.updates.map((e) => e.id)).toEqual(['e1'])
+    expect(saved.merges.map((m) => m.sourceIds)).toEqual([['d1', 'd2']])
+    // A source merged away is not deleted a second time.
+    expect(saved.deletes).toEqual(['x'])
+
+    expect(steps()).toEqual([
+      expect.objectContaining({
+        label: 'Saving changes',
+        parentId: parent,
+        status: 'done',
+        detail: '4 changes',
+      }),
     ])
     expect(changes.map((c) => c.type)).toEqual(['create', 'update', 'merge', 'delete'])
   })
 
-  it('fails the write and the saving step with the reason, and stops there', async () => {
+  it('fails the saving step with the reason when the write fails', async () => {
     const { recorder, parent, steps } = recorded()
     const callbacks = writes()
-    callbacks.onUpdateEntry.mockRejectedValueOnce(new Error('refusing to update entry e1'))
+    callbacks.onSaveSession.mockRejectedValueOnce(new Error('database is locked'))
 
     await expect(saveLoreSession(session(), null, callbacks, recorder, parent)).rejects.toThrow()
 
-    const [saving, created, updated] = steps()
-    expect(saving).toMatchObject({ status: 'failed', error: 'refusing to update entry e1' })
-    expect(created.status).toBe('done')
-    expect(updated).toMatchObject({ status: 'failed', error: 'refusing to update entry e1' })
-    expect(steps()).toHaveLength(3)
-    expect(callbacks.onMergeEntries).not.toHaveBeenCalled()
+    expect(steps()).toEqual([
+      expect.objectContaining({ status: 'failed', error: 'database is locked' }),
+    ])
   })
 
-  it('records nothing with nothing to write', async () => {
+  it('writes and records nothing with nothing to write', async () => {
     const { recorder, parent, steps } = recorded()
+    const callbacks = writes()
     const empty = { createdEntries: [], updatedEntries: [], merges: [], deletedEntries: [] }
 
-    expect(await saveLoreSession(empty, null, writes(), recorder, parent)).toEqual([])
+    expect(await saveLoreSession(empty, null, callbacks, recorder, parent)).toEqual([])
+    expect(callbacks.onSaveSession).not.toHaveBeenCalled()
     expect(steps()).toEqual([])
   })
 

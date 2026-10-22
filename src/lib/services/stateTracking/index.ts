@@ -9,6 +9,7 @@ export {
 } from './state'
 export {
   KEEP_ALL,
+  KEEP_NONE,
   clockAfter,
   planReversal,
   type RevertKeep,
@@ -16,12 +17,14 @@ export {
   type ReversalOp,
   type ReversalPlan,
 } from './reverse'
-export { fromWorldStateDelta, withLegacyRecords } from './legacy'
+export { fromWorldStateDelta } from './legacy'
 export {
   isContinuous,
   lastCompletedEntry,
   lastHeaderOnLine,
+  marksForExport,
   recordsForExport,
+  recordsHolder,
   resolveOverride,
   resolveRun,
   type AnchorCandidate,
@@ -33,15 +36,35 @@ export {
   type RunRefusal,
   type RunResult,
 } from './runs'
-export { RECORD_COLUMNS, recordToRow, rowToRecord } from './rows'
+export { RECORD_COLUMNS, markToRow, recordToRow, rowToMark, rowToRecord } from './rows'
 export {
   breakRecord,
   changeRecord,
   changedFields,
   diffStates,
   headerRecord,
+  markId,
+  markRecord,
   type RecordContext,
   type RecordScope,
 } from './record'
-export { describeChange, gapMessage, loreLine, refusalMessage, type LoreChapter } from './describe'
+export {
+  deletedChaptersLine,
+  deletedSnapshotsLine,
+  describeChange,
+  gapMessage,
+  refusalMessage,
+  removalLines,
+  revertLines,
+  type LoreChapter,
+} from './describe'
 export { anchorCandidates, pastQuery, skippedSnapshots, type PastSources } from './past'
+export {
+  chapterMark,
+  loreOwners,
+  planChapterLoreRevert,
+  marksHolding,
+  type ChapterLoreQuery,
+  type ChapterLoreRefusal,
+  type ChapterLoreRevert,
+} from './chapterLore'

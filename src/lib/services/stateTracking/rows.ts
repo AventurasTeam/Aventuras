@@ -2,6 +2,8 @@ import type {
   ChangeOp,
   ChangeOrigin,
   TrackedEntityType,
+  WorldStateMark,
+  WorldStateMarkType,
   WorldStateRecord,
 } from '#lib/types/index.ts'
 
@@ -21,6 +23,9 @@ export const RECORD_COLUMNS = [
   'created_at',
 ] as const
 
+// A header has no origin of its own, so its `origin` column marks history converted from an old delta.
+const LEGACY_HEADER_ORIGIN = 'legacy'
+
 const json = (value: unknown) => (value == null ? null : JSON.stringify(value))
 const parse = (value: unknown) => (typeof value === 'string' ? JSON.parse(value) : null)
 
@@ -34,7 +39,7 @@ export function recordToRow(record: WorldStateRecord): unknown[] {
     record.branchId,
     record.entryId,
     record.kind,
-    change?.origin ?? null,
+    change?.origin ?? (header?.coverage === 'classifier' ? LEGACY_HEADER_ORIGIN : null),
     change?.entityType ?? null,
     change?.entityId ?? null,
     change?.op ?? null,
@@ -60,11 +65,11 @@ export function rowToRecord(row: Record<string, unknown>): WorldStateRecord {
         ...base,
         kind: 'header',
         continuous: row.continuous === 1,
-        coverage: 'full',
+        coverage: row.origin === LEGACY_HEADER_ORIGIN ? 'classifier' : 'full',
       }
     case 'break':
       return { ...base, kind: 'break' }
-    default:
+    case 'change':
       return {
         ...base,
         kind: 'change',
@@ -75,5 +80,39 @@ export function rowToRecord(row: Record<string, unknown>): WorldStateRecord {
         before: parse(row.before),
         after: parse(row.after),
       }
+    default:
+      // A mark read as a record would be planned as a change.
+      throw new Error(`Not a world-state record: kind ${String(row.kind)}`)
+  }
+}
+
+export function markToRow(mark: WorldStateMark): unknown[] {
+  return [
+    mark.id,
+    mark.storyId,
+    mark.branchId,
+    mark.entryId,
+    'mark',
+    null,
+    mark.entityType,
+    mark.entityId,
+    null,
+    null,
+    null,
+    null,
+    mark.createdAt,
+  ]
+}
+
+export function rowToMark(row: Record<string, unknown>): WorldStateMark {
+  return {
+    id: row.id as string,
+    storyId: row.story_id as string,
+    branchId: (row.branch_id as string | null) ?? null,
+    entryId: row.entry_id as string,
+    seq: row.seq as number,
+    entityType: row.entity_type as WorldStateMarkType,
+    entityId: row.entity_id as string,
+    createdAt: row.created_at as number,
   }
 }

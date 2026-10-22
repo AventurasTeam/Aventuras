@@ -1,13 +1,15 @@
-import type { StoryEntry, WorldStateRecord } from '#lib/types/index.ts'
-import { withLegacyRecords } from './legacy'
+import type { StoryEntry, WorldStateMark, WorldStateRecord } from '#lib/types/index.ts'
+import { markId } from './record'
 import type { AnchorCandidate, RunQuery } from './runs'
 
 /** Everything a past state on the open branch is resolved from, loaded once. */
 export interface PastSources {
   /** The entries on the branch line, in story order. */
   entries: StoryEntry[]
-  /** The stored records on the branch line; old deltas are added from `entries`. */
+  /** The stored records on the branch line. */
   records: WorldStateRecord[]
+  /** The snapshot and checkpoint marks on the branch line. */
+  marks: WorldStateMark[]
   /** The branch's automatic and closing snapshots, without their contents. */
   snapshots: {
     id: string
@@ -44,15 +46,23 @@ export function anchorCandidates(src: PastSources): AnchorCandidate[] {
   const line = new Set(src.lineBranchIds)
   const last = src.entries[src.entries.length - 1]
   const nextAfter = (position: number) => src.entries.find((e) => e.position > position)
+  const seqs: Record<string, number> = Object.fromEntries(src.marks.map((m) => [m.id, m.seq]))
+  const markOf = (type: 'snapshot' | 'checkpoint', id: string) =>
+    seqs[markId(type, id)] as number | undefined
   return [
-    ...src.snapshots
-      .filter((s) => s.complete)
-      .map((s) => ({
-        kind: 'snapshot' as const,
-        id: s.id,
-        position: s.entryPosition,
-        takenAt: s.createdAt,
-      })),
+    ...src.snapshots.flatMap((s) => {
+      const seq = markOf('snapshot', s.id)
+      if (!s.complete || seq === undefined) return []
+      return [
+        {
+          kind: 'snapshot' as const,
+          id: s.id,
+          position: s.entryPosition,
+          seq,
+          takenAt: s.createdAt,
+        },
+      ]
+    }),
     ...src.checkpoints
       .filter(
         (cp) =>
@@ -62,14 +72,22 @@ export function anchorCandidates(src: PastSources): AnchorCandidate[] {
         const next = nextAfter(positions.get(cp.lastEntryId)!)
         return !next || cp.createdAt < next.createdAt
       })
-      .map((cp) => ({
-        kind: 'checkpoint' as const,
-        id: cp.id,
-        position: positions.get(cp.lastEntryId)!,
-        takenAt: cp.createdAt,
-      })),
+      .flatMap((cp) => {
+        const seq = markOf('checkpoint', cp.id)
+        if (seq === undefined) return []
+        const position = positions.get(cp.lastEntryId)!
+        return [{ kind: 'checkpoint' as const, id: cp.id, position, seq, takenAt: cp.createdAt }]
+      }),
     ...(last
-      ? [{ kind: 'live' as const, id: null, position: last.position, takenAt: src.now }]
+      ? [
+          {
+            kind: 'live' as const,
+            id: null,
+            position: last.position,
+            seq: Infinity,
+            takenAt: src.now,
+          },
+        ]
       : []),
   ]
 }
@@ -77,7 +95,7 @@ export function anchorCandidates(src: PastSources): AnchorCandidate[] {
 export function pastQuery(src: PastSources, target: number): RunQuery {
   return {
     line: src.entries,
-    records: withLegacyRecords(src.entries, src.records),
+    records: src.records,
     snapshots: src.snapshots.map((s) => ({
       entryId: s.entryId,
       takenAt: s.createdAt,

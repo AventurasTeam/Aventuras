@@ -209,8 +209,8 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   its text.** Say a branch was forked at entry 30, and entry 12 is then rewritten. Entries are one
   set of rows that branches point into, never copies, so the new branch shows the new wording
   immediately. What it does _not_ show is any consequence of the rewrite: the world state it was
-  given when it forked, the per-entry `worldStateDelta` a rollback would restore, and the clock
-  stored on the fork's checkpoint were all derived from the old text and are left as they were. So
+  given when it forked, the change records a rollback would undo, and the clock stored on the
+  fork's checkpoint were all derived from the old text and are left as they were. So
   the branch can be reading a passage that no longer mentions a knife while its world state still
   holds one. Nothing detects or reports this.
 
@@ -313,7 +313,7 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
 
 - **State Tracking** (Labs) records every world and lorebook change in `world_state_changes`,
   which is what makes retry, time-travel delete and regenerate reversible (`rollbackService`) and
-  lets a checkpoint be rebuilt at a past entry. Older entries keep a per-entry `worldStateDelta`.
+  lets a checkpoint be rebuilt at a past entry.
   See [state-tracking.md](state-tracking.md).
 - **Checkpoints** are full state snapshots; **retry backups** are in-memory only and do not
   survive an app restart or a story switch. With State Tracking on, a retry backup copies no world

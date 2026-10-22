@@ -7,7 +7,13 @@ mod db;
 mod db_tx;
 mod migration_patch;
 mod sync;
+#[cfg(test)]
+mod test_db;
 mod time_anchors;
+#[cfg(test)]
+mod world_state_delta_migration;
+#[cfg(test)]
+mod world_state_marks_migration;
 
 use backup::{
     backup_database, export_images_zip, export_single_image, export_story_avt, restore_database,
@@ -22,11 +28,9 @@ fn is_ios() -> bool {
     cfg!(target_os = "ios")
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
-    let migrations = vec![
+/// Every migration, in order. The plugin runs the pending ones at startup, before any frontend code.
+pub(crate) fn migrations() -> Vec<Migration> {
+    vec![
         Migration {
             version: 1,
             description: "create_initial_tables",
@@ -267,7 +271,18 @@ pub fn run() {
             sql: include_str!("../migrations/040_world_state_changes.sql"),
             kind: MigrationKind::Up,
         },
-    ];
+        Migration {
+            version: 41,
+            description: "retire_world_state_delta",
+            sql: include_str!("../migrations/041_retire_world_state_delta.sql"),
+            kind: MigrationKind::Up,
+        },
+    ]
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
 
     #[cfg_attr(not(all(debug_assertions, feature = "devtools")), allow(unused_mut))]
     let mut builder = tauri::Builder::default();
@@ -283,7 +298,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:aventura.db", migrations)
+                .add_migrations("sqlite:aventura.db", migrations())
                 .build(),
         )
         .setup(|app| {

@@ -4,10 +4,10 @@
   import { errMessage } from '#lib/utils/error.ts'
   import type { Checkpoint } from '#lib/types/index.ts'
   import { entryNumber } from '#lib/utils/storyNavigation.ts'
-  import { Button } from '#lib/components/ui/button/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
-  import { GitBranch, Loader2, X } from '@lucide/svelte'
+  import { GitBranch } from '@lucide/svelte'
+  import ModalActions from '#lib/components/shared/ModalActions.svelte'
 
   let {
     open = $bindable(false),
@@ -58,7 +58,7 @@
   dismissible={!saving}
 >
   <ResponsiveModal.Content
-    class="max-w-md gap-0 p-0"
+    class="flex max-h-[85dvh] max-w-md flex-col gap-0 p-0"
     interactOutsideBehavior="ignore"
     escapeKeydownBehavior={saving ? 'ignore' : 'close'}
   >
@@ -69,36 +69,29 @@
           at Entry {entryNumber(forkEntry)}{/if}
       </ResponsiveModal.Description>
     </ResponsiveModal.Header>
-    <div class="space-y-3 px-6 py-4">
-      <Input
-        type="text"
-        class="h-9 text-sm"
-        placeholder="Branch name..."
-        bind:value={name}
-        disabled={saving}
-        onkeydown={(e) => {
-          if (e.key === 'Enter') void create()
-        }}
+    <!-- Buttons scroll with the content, as in the other confirmation modals. -->
+    <div class="min-h-0 flex-1 overflow-y-auto">
+      <div class="space-y-3 px-6 py-4">
+        <Input
+          type="text"
+          class="h-9 text-sm"
+          placeholder="Branch name..."
+          bind:value={name}
+          disabled={saving}
+          onkeydown={(e) => {
+            if (e.key === 'Enter') void create()
+          }}
+        />
+      </div>
+      <ModalActions
+        label="Create Branch"
+        icon={GitBranch}
+        tone="branch"
+        onCancel={cancel}
+        onConfirm={() => void create()}
+        busy={saving}
+        disabled={!name.trim() || !checkpoint}
       />
     </div>
-    <ResponsiveModal.Footer class="border-t px-6 py-4">
-      <Button variant="secondary" size="sm" onclick={cancel} disabled={saving} class="h-9 px-3">
-        <X class="mr-1.5 h-4 w-4" />
-        Cancel
-      </Button>
-      <Button
-        size="sm"
-        onclick={() => void create()}
-        disabled={!name.trim() || saving || !checkpoint}
-        class="h-9 bg-amber-500 px-3 text-white hover:bg-amber-600"
-      >
-        {#if saving}
-          <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
-        {:else}
-          <GitBranch class="mr-1.5 h-4 w-4" />
-        {/if}
-        Create Branch
-      </Button>
-    </ResponsiveModal.Footer>
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>

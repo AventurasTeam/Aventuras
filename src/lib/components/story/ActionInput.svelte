@@ -831,7 +831,7 @@
           const entryId = narrationEntry.id
           const { _error, _salvaged } = event.result
           // A failed result still runs the entry's bookkeeping: its end time, and with state
-          // tracking an empty delta and maybe a snapshot.
+          // tracking its header and maybe a snapshot.
           await trackStep(
             activity,
             'Updating world',
@@ -1431,8 +1431,8 @@
         return
       }
 
-      // Entity changes are only reversible when stateTracking recorded a delta for the
-      // entry. Say so rather than leaving the user to notice a stray character later.
+      // Entity changes are only reversible when State Tracking recorded the entry's changes.
+      // Say so rather than leaving the user to notice a stray character later.
       if (!undo.entitiesUndone) {
         ui.showToast(
           'Regenerating: story time was restored, but characters, locations or items the ' +
