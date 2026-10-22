@@ -10,9 +10,9 @@ import { branches, deltas, type DbCtx } from '@/lib/db'
  * `unreversedActionIds` are the orphans whose boot reversal threw. A branch
  * still holding their deltas is NOT reconcilable, so it keeps `running`, which
  * already suspends the cadence — reconciling it would let the classifier re-read a
- * window whose partial writes are still on disk. The boot that finally reverses
- * them drops the branch from this set and reconciles it normally; `[Run classifier
- * now]` overrides in the meantime, which is the user's call to make.
+ * window whose partial writes are still on disk. Send and `[Run classifier now]`
+ * refuse it too, until the boot that finally reverses them drops the branch from
+ * this set and reconciles it normally.
  */
 export async function resetStuckClassifierRunState(
   ctx: DbCtx,

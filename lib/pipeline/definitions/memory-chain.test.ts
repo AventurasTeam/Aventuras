@@ -21,7 +21,13 @@ import {
 } from '@/lib/stores'
 
 import { __resetClassifierEmbedder } from './description-embedder'
-import { nextMemoryRun, readClassifierStatus, unprocessedEntryCount } from './memory-chain'
+import {
+  isClassifierHeld,
+  nextMemoryRun,
+  owedPassAtSend,
+  readClassifierStatus,
+  unprocessedEntryCount,
+} from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import { ensurePeriodicClassifierPipelineRegistered } from './periodic-classifier'
 import { expectRan, makeHarness, resetSingletons } from '../__tests__/harness'
@@ -75,6 +81,38 @@ function turnRun(over: Partial<RunState> = {}): RunState {
     resolveTerminal: () => {},
     ...over,
   }
+}
+
+function passRun(over: Partial<RunState> = {}): RunState {
+  return turnRun({
+    runId: 'run_pass',
+    kind: PERIODIC_CLASSIFIER_KIND,
+    interruptible: 'pass',
+    actionId: 'act_pass',
+    ...over,
+  })
+}
+
+// Records interrupted work deferred on b1, as a head reversal or the pill's Cancel does.
+function deferOnB1(kind: string, slot: 'pass' | 'close'): void {
+  const interrupted = turnRun({ runId: `run_${slot}`, kind, interruptible: slot })
+  generationStore.startRun(interrupted)
+  expect(generationStore.abortRun(interrupted.runId, 'aborted')).toBe(slot)
+}
+
+// Runs `during` as the first select is built: a run starting or ending while the status read is
+// in flight.
+function onFirstSelect<T extends object>(db: T, during: () => void): T {
+  let fired = false
+  return new Proxy(db, {
+    get(target, prop, receiver) {
+      if (prop === 'select' && !fired) {
+        fired = true
+        during()
+      }
+      return Reflect.get(target, prop, receiver) as unknown
+    },
+  })
 }
 
 async function seedEntries(db: Db, count: number): Promise<void> {
@@ -291,6 +329,146 @@ describe('nextMemoryRun', () => {
     await seedEntries(db, 2)
 
     expect(await nextMemoryRun(turnRun(), ctx)).toBeNull()
+  })
+})
+
+describe('isClassifierHeld', () => {
+  it('holds a branch persisted running with no pass of this process on it', async () => {
+    const { db, ctx } = await makeHarness()
+    await setStatus(db, { state: 'running' })
+
+    expect(await isClassifierHeld('b1', ctx)).toBe(true)
+  })
+
+  it.each(['idle', 'failed'] as const)(
+    'does not hold a branch whose status is %s',
+    async (state) => {
+      const { db, ctx } = await makeHarness()
+      await setStatus(db, { state })
+
+      expect(await isClassifierHeld('b1', ctx)).toBe(false)
+    },
+  )
+
+  it('reads running under a live pass on the branch as that pass, not a hold', async () => {
+    const { db, ctx } = await makeHarness()
+    await setStatus(db, { state: 'running' })
+    generationStore.startRun(passRun())
+
+    expect(await isClassifierHeld('b1', ctx)).toBe(false)
+  })
+
+  it.each([
+    ['a pass on another branch', () => passRun({ branchId: 'b2' })],
+    ['a turn on the branch', () => turnRun()],
+  ])('still holds the branch beside %s', async (_label, live) => {
+    const { db, ctx } = await makeHarness()
+    await setStatus(db, { state: 'running' })
+    generationStore.startRun(live())
+
+    expect(await isClassifierHeld('b1', ctx)).toBe(true)
+  })
+
+  it('counts a pass live when the check begins, though it ends before the read returns', async () => {
+    const { db, ctx } = await makeHarness()
+    await setStatus(db, { state: 'running' })
+    const pass = passRun()
+    generationStore.startRun(pass)
+    const ending = onFirstSelect(ctx.db, () => generationStore.finishRun(pass.runId))
+
+    expect(await isClassifierHeld('b1', { db: ending })).toBe(false)
+  })
+
+  it('counts a pass that starts while the status is read', async () => {
+    const { db, ctx } = await makeHarness()
+    await setStatus(db, { state: 'running' })
+    const starting = onFirstSelect(ctx.db, () => generationStore.startRun(passRun()))
+
+    expect(await isClassifierHeld('b1', { db: starting })).toBe(false)
+  })
+})
+
+// classifier.md → Failure policy: owed when deferred or the cadence is due; a held branch first.
+describe('owedPassAtSend', () => {
+  it('names a held branch held, ahead of a deferred pass and a due cadence', async () => {
+    const { db, ctx } = await makeHarness()
+    await seedEntries(db, 4)
+    await setStatus(db, { state: 'running' })
+    openStory(1)
+    deferOnB1(PERIODIC_CLASSIFIER_KIND, 'pass')
+
+    expect(await owedPassAtSend('b1', ctx)).toBe('held')
+  })
+
+  it("owes nothing while the branch's own pass is live, though it persisted running", async () => {
+    const { db, ctx } = await makeHarness()
+    await seedEntries(db, 4)
+    await setStatus(db, { state: 'running' })
+    openStory(1)
+    generationStore.startRun(passRun())
+
+    expect(await owedPassAtSend('b1', ctx)).toBeNull()
+  })
+
+  it('owes a deferred pass whatever the cadence', async () => {
+    const { db, ctx } = await makeHarness()
+    await seedEntries(db, 1)
+    openStory(8)
+    deferOnB1(PERIODIC_CLASSIFIER_KIND, 'pass')
+
+    expect(await owedPassAtSend('b1', ctx)).toBe('owed')
+  })
+
+  it('owes no pass for a deferred close alone', async () => {
+    const { db, ctx } = await makeHarness()
+    await seedEntries(db, 1)
+    openStory(8)
+    deferOnB1('chapter-close', 'close')
+
+    expect(await owedPassAtSend('b1', ctx)).toBeNull()
+  })
+
+  // The restart case: no mark survives one, so the persisted watermark alone must find the pass.
+  it('owes a pass when the cadence is due over the persisted watermark, with no mark', async () => {
+    const { db, ctx } = await makeHarness()
+    await seedEntries(db, 6)
+    await setStatus(db, { processedThrough: 2 })
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+
+    openStory(4)
+    expect(await owedPassAtSend('b1', ctx)).toBe('owed')
+    openStory(5)
+    expect(await owedPassAtSend('b1', ctx)).toBeNull()
+    expect(generationStore.getTxState().runs.size).toBe(0)
+  })
+
+  it('owes a pass for a failed status once the cadence is due', async () => {
+    const { db, ctx } = await makeHarness()
+    await seedEntries(db, 2)
+    await setStatus(db, { state: 'failed', lastError: 'invalid key' })
+    openStory(2)
+
+    expect(await owedPassAtSend('b1', ctx)).toBe('owed')
+  })
+
+  it.each([
+    ['open on another branch', () => openStory(1, { storyId: 's1', branchId: 'b2' })],
+    ['closed', () => currentStoryStore.clear()],
+  ])('owes nothing by cadence while the story is %s', async (_label, setOpen) => {
+    const { db, ctx } = await makeHarness()
+    await seedEntries(db, 4)
+    setOpen()
+
+    expect(await owedPassAtSend('b1', ctx)).toBeNull()
+  })
+
+  it('owes a deferred pass on a branch the open story is not on', async () => {
+    const { db, ctx } = await makeHarness()
+    await seedEntries(db, 4)
+    openStory(1, { storyId: 's1', branchId: 'b2' })
+    deferOnB1(PERIODIC_CLASSIFIER_KIND, 'pass')
+
+    expect(await owedPassAtSend('b1', ctx)).toBe('owed')
   })
 })
 
