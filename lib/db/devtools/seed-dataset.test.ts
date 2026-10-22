@@ -374,7 +374,7 @@ describe('seeded rollback', () => {
   })
 })
 
-// docs/testing.md → Fixture + seed contract: a lagging watermark runs a pass before the first turn.
+// docs/testing.md → Fixture + seed contract: no seeded branch owes a pass at its first Send.
 describe('seeded classifier watermarks', () => {
   type BranchRow = { id: string; classifierStatus: unknown }
   type EntryRow = { branchId: string; kind: string; position: number }

@@ -98,8 +98,8 @@ export const entryMetadataSchema = z.object({
     .optional(),
   // System-entry failure record (reader-composer.md → Error surface). kind / failure are open
   // strings so an unknown future kind degrades to generic copy, not a failed metadata parse.
-  // submission survives a restart: a turn's Retry resends it; a pass entry's Dismiss or a committed
-  // Retry hands it back.
+  // submission survives a restart: a turn entry's Retry resends it; any Dismiss, or a pass entry's
+  // committed Retry, hands it back.
   systemFailure: z
     .object({
       kind: z.string(),
