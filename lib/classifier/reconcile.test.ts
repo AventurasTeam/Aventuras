@@ -6,6 +6,7 @@ import {
   clearBuffers,
   configureDiagnosticsGate,
   getDiagnosticsSnapshot,
+  logger,
   makeLogger,
 } from '@/lib/diagnostics'
 
@@ -303,6 +304,7 @@ describe('reconcileNewEntity', () => {
       kind: 'character',
       entities: [row({ name: 'Johnson' }), row({ id: 'loc_1', kind: 'location', name: 'John' })],
       embedDescriptions: embed,
+      log: logger,
       scene: null,
     })
     expect(decision).toEqual({ kind: 'create', flag: null })
@@ -314,6 +316,7 @@ describe('reconcileNewEntity', () => {
       kind: 'character',
       entities: [row({ name: 'Eldrin' })],
       embedDescriptions: embedder({ [KEEPER]: 0.9 }),
+      log: logger,
       scene: null,
     })
     expect(spaced).toEqual({ kind: 'known', entityId: 'char_1', similarity: 0.9 })
@@ -321,6 +324,7 @@ describe('reconcileNewEntity', () => {
       kind: 'character',
       entities: [row({ name: 'Zoë' })],
       embedDescriptions: embedder({ [KEEPER]: 0.9 }),
+      log: logger,
       scene: null,
     })
     expect(decomposed).toEqual({ kind: 'known', entityId: 'char_1', similarity: 0.9 })
@@ -331,6 +335,7 @@ describe('reconcileNewEntity', () => {
       kind: 'character',
       entities: [row({ name: 'Eldrin Vane' })],
       embedDescriptions: embedder({ [KEEPER]: 0.9 }),
+      log: logger,
       scene: null,
     })
     expect(decision).toEqual(flagOf('char_1', 'alike'))
@@ -343,6 +348,7 @@ describe('reconcileNewEntity', () => {
         kind: 'character',
         entities: [row({ name: 'The Innkeeper' })],
         embedDescriptions: embedder({ [KEEPER]: 0.6 }),
+        log: logger,
         scene: null,
       },
     )
@@ -351,6 +357,7 @@ describe('reconcileNewEntity', () => {
       kind: 'character',
       entities: [row({ name: 'Aric', keywords: ['The Grey Wolf'] })],
       embedDescriptions: embedder({ [KEEPER]: 0.6 }),
+      log: logger,
       scene: null,
     })
     expect(wolf).toEqual(flagOf('char_1', 'ambiguous'))
@@ -365,6 +372,7 @@ describe('reconcileNewEntity', () => {
         row({ id: 'char_real', description: KEEPER }),
       ],
       embedDescriptions: embed,
+      log: logger,
       scene: null,
     })
     expect(decision).toMatchObject({ kind: 'known', entityId: 'char_real' })
@@ -382,6 +390,7 @@ describe('reconcileNewEntity', () => {
         row({ id: 'char_kept', description: KEEPER, createdAt: 9 }),
       ],
       embedDescriptions: embed,
+      log: logger,
       scene: null,
     })
     expect(embed).toHaveBeenCalledWith(['The keeper, ink on his hands.', KEEPER])
@@ -395,6 +404,7 @@ describe('reconcileNewEntity', () => {
       kind: 'character',
       entities: [row({ description: null })],
       embedDescriptions: embed,
+      log: logger,
       scene: null,
     })
     expect(embed).not.toHaveBeenCalled()
@@ -408,12 +418,14 @@ describe('reconcileNewEntity', () => {
       kind: 'character',
       entities: [row({ id: 'char_part', name: 'Eldrin Vane' }), row({ id: 'char_exact' })],
       embedDescriptions: embed,
+      log: logger,
       scene: null,
     })
     const partial = await reconcileNewEntity(candidate({ description: '' }), {
       kind: 'character',
       entities: [row({ id: 'char_part', name: 'Eldrin Vane' })],
       embedDescriptions: embed,
+      log: logger,
       scene: null,
     })
     expect(embed).not.toHaveBeenCalled()
@@ -427,6 +439,7 @@ describe('reconcileNewEntity', () => {
         kind: 'character',
         entities: [row()],
         embedDescriptions,
+        log: logger,
         scene: null,
       })
 
@@ -485,6 +498,7 @@ describe('reconcileNewEntity', () => {
           vectors: [new Float32Array([1, 0]), new Float32Array(components)],
           dim: 2,
         }),
+        log: logger,
         scene: null,
       })
 
@@ -503,6 +517,7 @@ describe('reconcileNewEntity', () => {
         kind: 'character',
         entities: [row({ status: 'staged' })],
         embedDescriptions: embedder({ [KEEPER]: 0.6 }),
+        log: logger,
         scene,
       })
 
@@ -538,7 +553,7 @@ describe('thresholds', () => {
 describe('scoreDescriptions', () => {
   it('scores each description index-aligned, leaving a blank one unscored and out of the call', async () => {
     const embed = embedder({ [KEEPER]: 0.8 })
-    expect(await scoreDescriptions('The keeper.', [null, KEEPER, '  '], embed)).toEqual([
+    expect(await scoreDescriptions('The keeper.', [null, KEEPER, '  '], embed, logger)).toEqual([
       null,
       0.8,
       null,
@@ -548,7 +563,7 @@ describe('scoreDescriptions', () => {
 
   it('makes no call for a blank candidate', async () => {
     const embed = embedder({ [KEEPER]: 0.8 })
-    expect(await scoreDescriptions('  ', [KEEPER], embed)).toEqual([null])
+    expect(await scoreDescriptions('  ', [KEEPER], embed, logger)).toEqual([null])
     expect(embed).not.toHaveBeenCalled()
   })
 })
@@ -571,13 +586,17 @@ describe('a description embed that throws', () => {
       .logEntries.filter((e) => e.kind === 'classifier.description_embed_failed')
       .map((e) => ({ level: e.level, actionId: e.actionId, fields: e.fields }))
 
-  it('warns with the thrown message and leaves every score null', async () => {
-    expect(await scoreDescriptions('The keeper.', [KEEPER, 'A courier.'], offline)).toEqual([
-      null,
-      null,
-    ])
+  it("warns through the caller's logger with the thrown message, leaving every score null", async () => {
+    expect(
+      await scoreDescriptions(
+        'The keeper.',
+        [KEEPER, 'A courier.'],
+        offline,
+        makeLogger('act_turn'),
+      ),
+    ).toEqual([null, null])
     expect(warned()).toEqual([
-      { level: 'warn', actionId: undefined, fields: { error: 'embedder offline' } },
+      { level: 'warn', actionId: 'act_turn', fields: { error: 'embedder offline' } },
     ])
   })
 
@@ -664,6 +683,7 @@ describe('reconcileNewEntity — a faction', () => {
       kind: 'faction',
       entities: namesakes,
       embedDescriptions: embedder(similarity === null ? {} : { [KEEPER]: similarity }),
+      log: logger,
       scene: null,
     })
 
