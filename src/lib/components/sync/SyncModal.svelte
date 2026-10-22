@@ -943,15 +943,17 @@
         </div>
       </ResponsiveModal.Footer>
     {/if}
+
+    <!-- Pack step of an in-flight transfer. Opens before anything is written or deleted. Inside
+         the content, so its sheet stacks on this one's. -->
+    {#if packMapping}
+      <PackMappingDialog
+        context={packMapping.context}
+        lockedPack={packMapping.lockedPack}
+        onlyVariables={packMapping.onlyVariables}
+        onResolve={packMapping.resolve}
+        nested
+      />
+    {/if}
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>
-
-<!-- Pack step of an in-flight transfer. Opens before anything is written or deleted. -->
-{#if packMapping}
-  <PackMappingDialog
-    context={packMapping.context}
-    lockedPack={packMapping.lockedPack}
-    onlyVariables={packMapping.onlyVariables}
-    onResolve={packMapping.resolve}
-  />
-{/if}

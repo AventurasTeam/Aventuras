@@ -1,12 +1,10 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
-  import { Button } from '#lib/components/ui/button/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
-  import * as Dialog from '#lib/components/ui/dialog/index.ts'
-  import { Trash2 } from '@lucide/svelte'
-  import { ask } from '@tauri-apps/plugin-dialog'
+  import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import {
     parseStoryTime,
     formatStoryTime,
@@ -27,6 +25,7 @@
   let timeText = $state('')
   let note = $state('')
   let saving = $state(false)
+  let seeded = $state({ number: '', time: '', note: '' })
 
   const fixedEntry = $derived(
     entryId ? (story.entries.find((e) => e.id === entryId) ?? null) : null,
@@ -44,6 +43,9 @@
   const existing = $derived(usableEntry ? story.timeAnchorFor(usableEntry.id) : undefined)
   const parsedTime = $derived(parseStoryTime(timeText))
   const canSave = $derived(!!usableEntry && parsedTime !== null && !saving)
+  const dirty = $derived(
+    numberText !== seeded.number || timeText !== seeded.time || note !== seeded.note,
+  )
 
   /**
    * Fill the fields from whichever entry is in view, once per entry.
@@ -56,6 +58,7 @@
     if (!open) {
       seededFor = null
       numberText = ''
+      seeded = { number: '', time: '', note: '' }
       return
     }
     const target = usableEntry
@@ -66,6 +69,7 @@
     if (!target) {
       if (!fixedEntry) timeText = ''
       note = ''
+      seeded = { number: untrack(() => seeded.number), time: timeText, note }
       return
     }
 
@@ -74,6 +78,11 @@
     const seed = anchor?.assertedTime ?? target.metadata?.timeEnd ?? null
     timeText = seed ? formatStoryTime(seed) : ''
     note = anchor?.note ?? ''
+    seeded = {
+      number: fixedEntry ? numberText : untrack(() => seeded.number),
+      time: timeText,
+      note,
+    }
   })
 
   function recordedSpan(entry: StoryEntry): string {
@@ -90,11 +99,6 @@
 
   async function remove() {
     if (!usableEntry) return
-    const confirmed = await ask(
-      `Delete the anchor on entry ${entryNumber(usableEntry)}? The time you asserted there is not recorded anywhere else.`,
-      { title: 'Delete Anchor', kind: 'warning' },
-    )
-    if (!confirmed) return
     saving = true
     try {
       await story.removeTimeAnchor(usableEntry.id)
@@ -126,125 +130,101 @@
   }
 </script>
 
-<Dialog.Root bind:open>
-  <Dialog.Content class="max-w-lg gap-4">
-    <Dialog.Header>
-      <Dialog.Title
-        >{existing
-          ? 'Edit a reconciliation anchor'
-          : 'Create a reconciliation anchor'}</Dialog.Title
-      >
-      <Dialog.Description>
-        A point of reference for the time reconciliation. Asserts when the entry ended. Does not
-        change the recorded time.
-      </Dialog.Description>
-    </Dialog.Header>
-
-    <div class="flex flex-col gap-3 text-sm">
-      <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <label class="flex items-center gap-2">
-          <span class="text-muted-foreground shrink-0">Entry number:</span>
-          {#if fixedEntry}
-            <span class="font-medium">{entryNumber(fixedEntry)}</span>
-          {:else}
-            <!-- Text with a numeric keypad rather than a number input: the spinners are noise
-                 at this size, and a stepper is no way to pick an entry out of hundreds. -->
-            <Input
-              inputmode="numeric"
-              placeholder="e.g. 12"
-              class="h-8 w-24 text-sm"
-              bind:value={numberText}
-            />
-          {/if}
-        </label>
-        <span class="flex items-center gap-2">
-          <span class="text-muted-foreground shrink-0">Recorded time:</span>
-          <span class="font-medium">
-            {chosenEntry ? recordedSpan(chosenEntry) : '—'}
-          </span>
-        </span>
-      </div>
-
-      <!-- Fixed height, so choosing a different entry does not resize the dialog under the cursor. -->
-      <div class="h-10 overflow-hidden text-xs">
-        {#if usableEntry}
-          <blockquote class="border-border text-foreground/80 line-clamp-2 border-l-2 pl-2 italic">
-            {usableEntry.content.trim().replace(/\s+/g, ' ')}
-          </blockquote>
-        {:else if isAction}
-          <p class="text-destructive">
-            Entry {chosenEntry ? entryNumber(chosenEntry) : ''} is a player action. An action is an instant,
-            so there is no ending to anchor.
-          </p>
-        {:else if numberText.trim() !== ''}
-          <p class="text-destructive">No entry with that number on this branch.</p>
-        {:else}
-          <p class="text-muted-foreground">Enter the number of the entry to anchor.</p>
-        {/if}
-      </div>
-
+<ActionModal
+  bind:open
+  size="lg"
+  title={existing ? 'Edit a reconciliation anchor' : 'Create a reconciliation anchor'}
+  description="A point of reference for the time reconciliation. Asserts when the entry ended. Does not change the recorded time."
+  action={{ label: 'Save', disabled: !canSave, onConfirm: () => void save() }}
+  busy={saving}
+  {dirty}
+  removal={existing && usableEntry
+    ? {
+        label: 'Delete this anchor',
+        question: {
+          title: 'Delete the anchor?',
+          description: `The time you asserted on entry ${entryNumber(usableEntry)} is not recorded anywhere else.`,
+          keepLabel: 'Keep',
+          confirmLabel: 'Delete',
+        },
+        onRemove: () => void remove(),
+      }
+    : undefined}
+>
+  <div class="flex flex-col gap-3 text-sm">
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
       <label class="flex items-center gap-2">
-        <span class="text-muted-foreground shrink-0">Anchor time point:</span>
-        <Input placeholder="e.g. Y1 D4 14:30" class="h-8 w-36 text-sm" bind:value={timeText} />
-        <span class="text-muted-foreground shrink-0 text-xs">
-          {#if parsedTime}
-            = {formatStoryTime(parsedTime)}
-          {:else}
-            year, day, clock
-          {/if}
-        </span>
-      </label>
-      {#if storyTimeIsInvalid(timeText)}
-        <p class="text-destructive -mt-2 text-xs">
-          Not a story time. Try 14:30, D4 14:30, or Y1 D4 14:30.
-        </p>
-      {/if}
-
-      <label class="flex items-start gap-2">
-        <span class="text-muted-foreground mt-2 shrink-0">Note:</span>
-        <span class="flex-1">
-          <Textarea
-            rows={2}
-            autosize={false}
-            maxlength={NOTE_LIMIT}
-            placeholder="optional"
-            class="h-14 w-full resize-none text-sm"
-            bind:value={note}
+        <span class="text-muted-foreground shrink-0">Entry number:</span>
+        {#if fixedEntry}
+          <span class="font-medium">{entryNumber(fixedEntry)}</span>
+        {:else}
+          <!-- Text with a numeric keypad rather than a number input: the spinners are noise
+                   at this size, and a stepper is no way to pick an entry out of hundreds. -->
+          <Input
+            inputmode="numeric"
+            placeholder="e.g. 12"
+            class="h-8 w-24 text-sm"
+            bind:value={numberText}
           />
-          <span class="text-muted-foreground mt-0.5 block text-right text-[10px]">
-            {note.length}/{NOTE_LIMIT}
-          </span>
-        </span>
+        {/if}
       </label>
+      <span class="flex items-center gap-2">
+        <span class="text-muted-foreground shrink-0">Recorded time:</span>
+        <span class="font-medium">
+          {chosenEntry ? recordedSpan(chosenEntry) : '—'}
+        </span>
+      </span>
     </div>
 
-    <!-- Stacked on a phone, the delete on its own row below the pair it would otherwise crowd. -->
-    <Dialog.Footer class="mt-2 gap-2 sm:justify-between">
-      <!-- Removal lives with the thing being removed: the lists that used to carry it now offer
-           editing instead, and an anchor is read here before it is discarded. -->
-      {#if existing}
-        <!-- As the story's own delete markers read: plain until hovered, red when it is. A touch
-             screen has no hover to reveal it, so there it is red from the start. -->
-        <Button
-          variant="outline"
-          class="can-hover:text-foreground w-full text-red-500 hover:text-red-500 sm:w-auto"
-          disabled={saving}
-          onclick={remove}
-        >
-          <Trash2 class="h-4 w-4" />
-          Delete anchor
-        </Button>
+    <!-- Fixed height, so choosing a different entry does not resize the dialog under the cursor. -->
+    <div class="h-10 overflow-hidden text-xs">
+      {#if usableEntry}
+        <blockquote class="border-border text-foreground/80 line-clamp-2 border-l-2 pl-2 italic">
+          {usableEntry.content.trim().replace(/\s+/g, ' ')}
+        </blockquote>
+      {:else if isAction}
+        <p class="text-destructive">
+          Entry {chosenEntry ? entryNumber(chosenEntry) : ''} is a player action. An action is an instant,
+          so there is no ending to anchor.
+        </p>
+      {:else if numberText.trim() !== ''}
+        <p class="text-destructive">No entry with that number on this branch.</p>
       {:else}
-        <span class="hidden sm:block"></span>
+        <p class="text-muted-foreground">Enter the number of the entry to anchor.</p>
       {/if}
-      <span class="flex w-full gap-2 sm:w-auto">
-        <Button variant="outline" class="flex-1 sm:flex-none" onclick={() => (open = false)}>
-          Cancel
-        </Button>
-        <Button class="flex-1 sm:flex-none" disabled={!canSave} onclick={save}>
-          {saving ? 'Saving…' : 'Save'}
-        </Button>
+    </div>
+
+    <label class="flex items-center gap-2">
+      <span class="text-muted-foreground shrink-0">Anchor time point:</span>
+      <Input placeholder="e.g. Y1 D4 14:30" class="h-8 w-36 text-sm" bind:value={timeText} />
+      <span class="text-muted-foreground shrink-0 text-xs">
+        {#if parsedTime}
+          = {formatStoryTime(parsedTime)}
+        {:else}
+          year, day, clock
+        {/if}
       </span>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
+    </label>
+    {#if storyTimeIsInvalid(timeText)}
+      <p class="text-destructive -mt-2 text-xs">
+        Not a story time. Try 14:30, D4 14:30, or Y1 D4 14:30.
+      </p>
+    {/if}
+
+    <label class="flex items-start gap-2">
+      <span class="text-muted-foreground mt-2 shrink-0">Note:</span>
+      <span class="flex-1">
+        <Textarea
+          rows={2}
+          maxlength={NOTE_LIMIT}
+          placeholder="optional"
+          class="min-h-14 w-full text-sm"
+          bind:value={note}
+        />
+        <span class="text-muted-foreground mt-0.5 block text-right text-[10px]">
+          {note.length}/{NOTE_LIMIT}
+        </span>
+      </span>
+    </label>
+  </div>
+</ActionModal>

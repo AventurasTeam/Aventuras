@@ -9,8 +9,7 @@
   it renders is owned here.
 -->
 <script lang="ts">
-  import * as Dialog from '#lib/components/ui/dialog/index.ts'
-  import { Button } from '#lib/components/ui/button/index.ts'
+  import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import StepPackSelection from '../wizard/steps/StepPackSelection.svelte'
   import { database } from '#lib/services/database.ts'
   import { DEFAULT_PACK_ID } from '#lib/services/packs/index.ts'
@@ -33,9 +32,11 @@
     onlyVariables?: string[]
     /** Resolves once, with the user's choice or `null` if they backed out. */
     onResolve: (resolution: PackBindingResolution | null) => void
+    /** Opened from inside another modal, as during a sync. */
+    nested?: boolean
   }
 
-  let { context, lockedPack, onlyVariables, onResolve }: Props = $props()
+  let { context, lockedPack, onlyVariables, onResolve, nested = false }: Props = $props()
 
   let open = $state(true)
   let availablePacks = $state<PresetPack[]>([])
@@ -120,58 +121,59 @@
   }
 </script>
 
-<Dialog.Root {open} onOpenChange={(next) => !next && cancel()}>
-  <Dialog.Content class="sm:max-w-lg">
-    <Dialog.Header>
-      <Dialog.Title>
-        {lockedPack ? 'One more thing for this story' : 'Prompt Pack for this story'}
-      </Dialog.Title>
-      <Dialog.Description>
-        {#if lockedPack}
-          This story uses your "{lockedPack.name}" pack, which needs a value the story does not
-          carry.
-        {:else if context.binding && context.match.confidence === 'none'}
-          <!-- Leads with the absence: the useful response may well be to cancel and go install
-               the pack, which a neutral "choose one" would not suggest. -->
-          The prompt pack this story was written with — "{context.binding.pack.name}"{context
-            .binding.pack.author
-            ? ` by ${context.binding.pack.author}`
-            : ''} — is not installed on this device. Choose one of your packs to use instead, or cancel
-          and install that pack first.
-        {:else if context.binding}
-          This story was written with a pack called "{context.binding.pack.name}"{context.binding
-            .pack.author
-            ? ` by ${context.binding.pack.author}`
-            : ''}. Choose which of your packs it should use.
-        {:else}
-          This story file records no prompt pack. Choose which of your packs it should use.
-        {/if}
-      </Dialog.Description>
-    </Dialog.Header>
-
-    {#if authorMismatch}
-      <p class="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-500">
-        Your pack "{authorMismatch.name}" has the same name but a different author ({authorMismatch.author ??
-          'no author'}). It may not be the same pack.
-      </p>
+<!-- An anomaly handler, not a step of the import: it asks its own question, so its action carries
+     no glyph of the trigger. -->
+<ActionModal
+  {open}
+  onCancel={cancel}
+  {nested}
+  size="lg"
+  title={lockedPack ? 'One more thing for this story' : 'Prompt Pack for this story'}
+  action={{ label: 'Import story', disabled: loading, onConfirm: confirm }}
+  cancelLabel="Cancel import"
+  dirty
+  discardQuestion={{
+    title: 'Cancel this import?',
+    description: 'Nothing has been written yet. The story will have to be imported again.',
+    keepLabel: 'Keep Importing',
+    confirmLabel: 'Cancel import',
+  }}
+>
+  {#snippet description()}
+    {#if lockedPack}
+      This story uses your "{lockedPack.name}" pack, which needs a value the story does not carry.
+    {:else if context.binding && context.match.confidence === 'none'}
+      <!-- Leads with the absence: the useful response may well be to cancel and go install
+           the pack, which a neutral "choose one" would not suggest. -->
+      The prompt pack this story was written with — "{context.binding.pack.name}"{context.binding
+        .pack.author
+        ? ` by ${context.binding.pack.author}`
+        : ''} — is not installed on this device. Choose one of your packs to use instead, or cancel and
+      install that pack first.
+    {:else if context.binding}
+      This story was written with a pack called "{context.binding.pack.name}"{context.binding.pack
+        .author
+        ? ` by ${context.binding.pack.author}`
+        : ''}. Choose which of your packs it should use.
+    {:else}
+      This story file records no prompt pack. Choose which of your packs it should use.
     {/if}
+  {/snippet}
+  {#if authorMismatch}
+    <p class="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-500">
+      Your pack "{authorMismatch.name}" has the same name but a different author ({authorMismatch.author ??
+        'no author'}). It may not be the same pack.
+    </p>
+  {/if}
 
-    {#if !loading}
-      <div class="max-h-[60vh] overflow-y-auto py-2">
-        <StepPackSelection
-          {availablePacks}
-          {selectedPackId}
-          {packVariables}
-          {variableValues}
-          onSelectPack={selectPack}
-          onVariableChange={setVariable}
-        />
-      </div>
-    {/if}
-
-    <Dialog.Footer>
-      <Button variant="outline" onclick={cancel}>Cancel import</Button>
-      <Button onclick={confirm} disabled={loading}>Import story</Button>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
+  {#if !loading}
+    <StepPackSelection
+      {availablePacks}
+      {selectedPackId}
+      {packVariables}
+      {variableValues}
+      onSelectPack={selectPack}
+      onVariableChange={setVariable}
+    />
+  {/if}
+</ActionModal>

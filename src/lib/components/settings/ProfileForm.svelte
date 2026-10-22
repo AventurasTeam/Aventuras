@@ -12,7 +12,7 @@
   import { Switch } from '#lib/components/ui/switch/index.ts'
   import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
   import { Alert, AlertDescription } from '#lib/components/ui/alert/index.ts'
-  import * as Dialog from '#lib/components/ui/dialog/index.ts'
+  import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import { isPingEligibleProvider } from '#lib/constants/modelHealth.ts'
   import {
     AlertCircle,
@@ -412,45 +412,34 @@
 </div>
 
 <!-- Custom Model Dialog -->
-<Dialog.Root
-  open={showCustomModelDialog}
-  onOpenChange={(open) => {
-    showCustomModelDialog = open
-    if (!open) {
-      customModelDialogError = ''
-      customModelDialogInput = ''
-    }
+<ActionModal
+  bind:open={showCustomModelDialog}
+  onCancel={() => {
+    showCustomModelDialog = false
+    customModelDialogError = ''
+    customModelDialogInput = ''
+  }}
+  nested
+  title="Add Custom Model"
+  description="Enter the model identifier (e.g., provider/model-name)"
+  action={{
+    label: 'Add',
+    icon: Plus,
+    disabled: !customModelDialogInput.trim(),
+    onConfirm: handleAddCustomModelFromDialog,
   }}
 >
-  <Dialog.Content class="sm:max-w-md">
-    <Dialog.Header>
-      <Dialog.Title>Add Custom Model</Dialog.Title>
-      <Dialog.Description>Enter the model identifier (e.g., provider/model-name)</Dialog.Description
-      >
-    </Dialog.Header>
-    <div class="flex flex-col gap-2 py-4">
-      <div class="flex gap-2">
-        <Input
-          placeholder="model-name or provider/model"
-          bind:value={customModelDialogInput}
-          class="flex-1"
-          onkeydown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              handleAddCustomModelFromDialog()
-            }
-          }}
-        />
-      </div>
-      {#if customModelDialogError}
-        <p class="text-destructive text-xs">{customModelDialogError}</p>
-      {/if}
-    </div>
-    <Dialog.Footer>
-      <Button variant="outline" onclick={() => (showCustomModelDialog = false)}>Cancel</Button>
-      <Button onclick={handleAddCustomModelFromDialog} disabled={!customModelDialogInput.trim()}>
-        Add
-      </Button>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
+  <Input
+    placeholder="model-name or provider/model"
+    bind:value={customModelDialogInput}
+    onkeydown={(e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        handleAddCustomModelFromDialog()
+      }
+    }}
+  />
+  {#if customModelDialogError}
+    <p class="text-destructive text-xs">{customModelDialogError}</p>
+  {/if}
+</ActionModal>

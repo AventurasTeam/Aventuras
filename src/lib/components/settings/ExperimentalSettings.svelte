@@ -34,7 +34,7 @@
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Slider } from '#lib/components/ui/slider/index.ts'
   import { Separator } from '#lib/components/ui/separator/index.ts'
-  import * as Dialog from '#lib/components/ui/dialog/index.ts'
+  import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import { database } from '#lib/services/database.ts'
   import { story } from '#lib/stores/story.svelte.ts'
   import { isIos } from '#lib/utils/platform.ts'
@@ -757,72 +757,61 @@
   {/if}
 </div>
 
-<!-- Backup Warning Dialog -->
-<Dialog.Root bind:open={showBackupConfirm}>
-  <Dialog.Content class="sm:max-w-md">
-    <Dialog.Header>
-      <Dialog.Title class="flex items-center gap-2">
-        <AlertTriangle class="h-5 w-5 text-amber-500" />
-        Backup Contains Sensitive Data
-      </Dialog.Title>
-      <Dialog.Description class="space-y-3 pt-2">
-        <p>
-          The backup includes your <strong>full settings</strong>, which contain your
-          <strong class="text-destructive">API keys</strong> and
-          <strong class="text-destructive">API provider profiles</strong>.
-        </p>
-        <p class="font-medium text-amber-500">
-          Do not share this file with others — anyone with the backup can access your API keys.
-        </p>
-      </Dialog.Description>
-    </Dialog.Header>
-    <Dialog.Footer class="gap-2 sm:gap-0">
-      <Button variant="outline" onclick={() => (showBackupConfirm = false)}>Cancel</Button>
-      <Button onclick={handleBackupConfirmed} class="gap-2">
-        <Download class="h-4 w-4" />
-        Continue
-      </Button>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
+{#snippet warning()}
+  <AlertTriangle class="h-5 w-5 text-amber-500" />
+{/snippet}
 
-<!-- Restore Confirmation Dialog -->
-<Dialog.Root bind:open={showRestoreConfirm}>
-  <Dialog.Content class="p-6 sm:max-w-md">
-    <Dialog.Header>
-      <Dialog.Title class="flex items-center gap-2">
-        <AlertTriangle class="h-5 w-5 text-amber-500" />
-        Restore from Backup
-      </Dialog.Title>
-      <Dialog.Description class="space-y-3 pt-2">
-        <p>
-          This will <strong class="text-destructive">replace your entire database</strong> with the one
-          from the backup ZIP.
-        </p>
-        <p>
-          A safety copy of your current database will be saved as
-          <span class="font-mono text-xs">aventura-pre-restore.db</span> in the app data folder.
-        </p>
-        <p class="font-medium text-amber-500">
-          {#if onIos}
-            iOS cannot close the app for you. After restoring, close Aventuras from the app
-            switcher, then reopen it.
-          {:else}
-            The application will close after restoring. You will need to reopen it manually.
-          {/if}
-        </p>
-      </Dialog.Description>
-    </Dialog.Header>
-    <Dialog.Footer class="mt-4 justify-between sm:justify-between">
-      <Button variant="outline" onclick={() => (showRestoreConfirm = false)}>Cancel</Button>
-      <Button
-        variant="outline"
-        onclick={handleRestoreConfirmed}
-        class="border-destructive text-destructive hover:bg-destructive/10 gap-2"
-      >
-        <Upload class="h-4 w-4" />
-        {onIos ? 'Restore' : 'Restore & Close App'}
-      </Button>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
+<ActionModal
+  bind:open={showBackupConfirm}
+  nested
+  title="Backup Contains Sensitive Data"
+  titleIcon={warning}
+  action={{ label: 'Continue', icon: Download, onConfirm: handleBackupConfirmed }}
+>
+  {#snippet description()}
+    <span class="block space-y-3 pt-2">
+      <span class="block">
+        The backup includes your <strong>full settings</strong>, which contain your
+        <strong class="text-destructive">API keys</strong> and
+        <strong class="text-destructive">API provider profiles</strong>.
+      </span>
+      <span class="block font-medium text-amber-500">
+        Do not share this file with others — anyone with the backup can access your API keys.
+      </span>
+    </span>
+  {/snippet}
+</ActionModal>
+
+<ActionModal
+  bind:open={showRestoreConfirm}
+  nested
+  title="Restore from Backup"
+  titleIcon={warning}
+  action={{
+    label: onIos ? 'Restore' : 'Restore & Close App',
+    icon: Upload,
+    tone: 'overwrite',
+    onConfirm: handleRestoreConfirmed,
+  }}
+>
+  {#snippet description()}
+    <span class="block space-y-3 pt-2">
+      <span class="block">
+        This will <strong class="text-destructive">replace your entire database</strong> with the one
+        from the backup ZIP.
+      </span>
+      <span class="block">
+        A safety copy of your current database will be saved as
+        <span class="font-mono text-xs">aventura-pre-restore.db</span> in the app data folder.
+      </span>
+      <span class="block font-medium text-amber-500">
+        {#if onIos}
+          iOS cannot close the app for you. After restoring, close Aventuras from the app switcher,
+          then reopen it.
+        {:else}
+          The application will close after restoring. You will need to reopen it manually.
+        {/if}
+      </span>
+    </span>
+  {/snippet}
+</ActionModal>

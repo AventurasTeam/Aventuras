@@ -19,7 +19,9 @@
   import { Button } from '#lib/components/ui/button/index.ts'
   import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
   import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
-  import * as Dialog from '#lib/components/ui/dialog/index.ts'
+  import ActionModal from '#lib/components/shared/ActionModal.svelte'
+  import { cn } from '#lib/utils/cn.ts'
+  import { FEATURE_COLORS } from '#lib/components/shared/featureColors.ts'
   import {
     DropdownMenu,
     DropdownMenuContent,
@@ -307,50 +309,27 @@
       <Upload class="h-4 w-4" />
     </Button>
     {#if story.lorebookEntries.length > 0 && !isLoreManagementActive}
-      <Dialog.Root bind:open={deleteAllDialogOpen}>
-        <Dialog.Trigger>
-          {#snippet child({ props })}
-            <Button
-              {...props}
-              variant="outline"
-              size="icon"
-              class="border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground"
-              title="Delete all entries"
-            >
-              <Trash2 class="h-4 w-4" />
-            </Button>
-          {/snippet}
-        </Dialog.Trigger>
-        <Dialog.Portal>
-          <Dialog.Overlay />
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>Delete all lorebook entries?</Dialog.Title>
-              <Dialog.Description>
-                This will permanently delete all {story.lorebookEntries.length} entr{story
-                  .lorebookEntries.length === 1
-                  ? 'y'
-                  : 'ies'} from this story's lorebook. This action cannot be undone.
-              </Dialog.Description>
-            </Dialog.Header>
-            <Dialog.Footer>
-              <Dialog.Close>
-                {#snippet child({ props })}
-                  <Button {...props} variant="outline">Cancel</Button>
-                {/snippet}
-              </Dialog.Close>
-              <Button
-                class="bg-destructive text-destructive-foreground hover:bg-destructive/80"
-                onclick={handleDeleteAll}
-                disabled={isDeleting}
-              >
-                <Trash2 class="mr-2 h-4 w-4" />
-                Delete all entries
-              </Button>
-            </Dialog.Footer>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      <Button
+        variant="outline"
+        size="icon"
+        class={cn('text-muted-foreground', FEATURE_COLORS.delete.revealText)}
+        title="Delete all entries"
+        onclick={() => (deleteAllDialogOpen = true)}
+      >
+        <Trash2 class="h-4 w-4" />
+      </Button>
+      <ActionModal
+        bind:open={deleteAllDialogOpen}
+        title="Delete all lorebook entries?"
+        description={`This will permanently delete all ${story.lorebookEntries.length} entr${story.lorebookEntries.length === 1 ? 'y' : 'ies'} from this story's lorebook. This action cannot be undone.`}
+        action={{
+          label: 'Delete all entries',
+          icon: Trash2,
+          tone: 'delete',
+          onConfirm: () => void handleDeleteAll(),
+        }}
+        busy={isDeleting}
+      />
     {/if}
   </div>
 

@@ -1,9 +1,8 @@
 <script lang="ts">
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
-  import { Button } from '#lib/components/ui/button/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
-  import * as Dialog from '#lib/components/ui/dialog/index.ts'
+  import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import { ChevronDown, ChevronRight } from '@lucide/svelte'
   import {
     parseStoryTime,
@@ -19,6 +18,8 @@
 
   let startText = $state('')
   let endText = $state('')
+  let seededStart = $state('')
+  let seededEnd = $state('')
   let saving = $state(false)
 
   const entry = $derived(story.entries.find((candidate) => candidate.id === entryId) ?? null)
@@ -27,6 +28,7 @@
   const isLastEntry = $derived(!!entry && story.entries[story.entries.length - 1]?.id === entry.id)
   const backwards = $derived(!!start && !!end && toMinutes(end) < toMinutes(start))
   const canSave = $derived(!!start && !!end && !backwards && !saving)
+  const dirty = $derived(startText !== seededStart || endText !== seededEnd)
 
   /** `setEntryTimes` carries it along: an action is the instant the narration after it answers. */
   const precedingAction = $derived.by(() => {
@@ -65,6 +67,8 @@
     const metadata = entry?.metadata
     startText = metadata?.timeStart ? formatStoryTime(metadata.timeStart) : ''
     endText = metadata?.timeEnd ? formatStoryTime(metadata.timeEnd) : ''
+    seededStart = startText
+    seededEnd = endText
     noticeOpen = true
     try {
       descriptionOpen = localStorage.getItem(DESCRIPTION_FOLD_KEY) !== 'folded'
@@ -95,97 +99,94 @@
   {/if}
 {/snippet}
 
-<Dialog.Root bind:open>
-  <Dialog.Content class="max-w-lg gap-4">
-    <Dialog.Header>
-      <Dialog.Title>Edit the recorded time</Dialog.Title>
-      <Dialog.Description>
-        <button
-          type="button"
-          class="text-muted-foreground hover:text-foreground mt-2 flex items-center gap-1 text-xs"
-          aria-expanded={descriptionOpen}
-          onclick={toggleDescription}
-        >
-          {@render foldIcon(descriptionOpen)}
-          What this changes
-        </button>
-        {#if descriptionOpen}
-          <span class="mt-1 block">
-            Rewrites what entry {entry ? entryNumber(entry) : '?'} records for itself{precedingAction
-              ? `, and moves the action before it to the same instant`
-              : ''}. Chapter spans covering it and the clock kept for rollback are updated to match
-            the new value. No other entry moves. This action may create a time gap or overlapping. A
-            reconciliation run is advised to get rid of undesired anomalies.
-          </span>
-        {/if}
-      </Dialog.Description>
-    </Dialog.Header>
-
-    {#if checkpointHere}
-      <div class="text-muted-foreground">
-        <button
-          type="button"
-          class="hover:text-foreground flex items-center gap-1 text-xs"
-          aria-expanded={noticeOpen}
-          onclick={() => (noticeOpen = !noticeOpen)}
-        >
-          {@render foldIcon(noticeOpen)}
-          {forkCount > 0 ? 'This entry is a fork point' : 'This entry carries a checkpoint'}
-        </button>
-        {#if noticeOpen}
-          <p class="text-foreground mt-1 text-sm">
-            {#if forkCount > 0}
-              {forkCount === 1 ? 'A branch was' : `${forkCount} branches were`} forked from entry {entry
-                ? entryNumber(entry)
-                : '?'}, and the checkpoint “{checkpointHere.name}” holds the clock
-              {forkCount === 1 ? 'it opens' : 'they open'} on, which this edit updates too. The edit affects
-              {forkCount + 2} intervals: the one ending at this entry, the one continuing on this branch,
-              and the one starting on {forkCount === 1
-                ? 'the branch'
-                : `each of the ${forkCount} 
-              branches`} forked here. Running a reconciliation over each of them afterwards is advised.
-            {:else}
-              The checkpoint “{checkpointHere.name}” was taken here, and its clock is updated with
-              the new ending. Nothing has been forked from it yet, so no other branch is affected.
-            {/if}
-          </p>
-        {/if}
-      </div>
+<ActionModal
+  bind:open
+  size="lg"
+  title="Edit the recorded time"
+  action={{ label: 'Save', disabled: !canSave, onConfirm: () => void save() }}
+  busy={saving}
+  {dirty}
+>
+  <!-- The header stays pinned, so the folds, which open long, sit here with the fields. -->
+  <div>
+    <button
+      type="button"
+      class="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
+      aria-expanded={descriptionOpen}
+      onclick={toggleDescription}
+    >
+      {@render foldIcon(descriptionOpen)}
+      What this changes
+    </button>
+    {#if descriptionOpen}
+      <p class="text-muted-foreground mt-1 text-sm">
+        Rewrites what entry {entry ? entryNumber(entry) : '?'} records for itself{precedingAction
+          ? `, and moves the action before it to the same instant`
+          : ''}. Chapter spans covering it and the clock kept for rollback are updated to match the
+        new value. No other entry moves. This action may create a time gap or overlapping. A
+        reconciliation run is advised to get rid of undesired anomalies.
+      </p>
     {/if}
-
-    <div class="grid gap-3 sm:grid-cols-2">
-      <label class="text-xs">
-        Begins
-        <Input
-          bind:value={startText}
-          placeholder="Y1 D4 14:30"
-          class="mt-1 h-8 text-sm {storyTimeIsInvalid(startText) ? 'border-destructive' : ''}"
-        />
-      </label>
-      <label class="text-xs">
-        Ends
-        <Input
-          bind:value={endText}
-          placeholder="Y1 D4 16:00"
-          class="mt-1 h-8 text-sm {storyTimeIsInvalid(endText) ? 'border-destructive' : ''}"
-        />
-      </label>
-      {#if storyTimeIsInvalid(startText) || storyTimeIsInvalid(endText)}
-        <p class="text-destructive text-xs sm:col-span-2">
-          Give both as Y1 D4 14:30. An unreadable time is left as it was.
-        </p>
-      {:else if backwards}
-        <p class="text-destructive text-xs sm:col-span-2">The entry cannot end before it begins.</p>
-      {:else if isLastEntry}
-        <p class="text-muted-foreground text-xs sm:col-span-2">
-          This is the last entry, so the story's current time moves to its ending.
+  </div>
+  {#if checkpointHere}
+    <div class="text-muted-foreground">
+      <button
+        type="button"
+        class="hover:text-foreground flex items-center gap-1 text-xs"
+        aria-expanded={noticeOpen}
+        onclick={() => (noticeOpen = !noticeOpen)}
+      >
+        {@render foldIcon(noticeOpen)}
+        {forkCount > 0 ? 'This entry is a fork point' : 'This entry carries a checkpoint'}
+      </button>
+      {#if noticeOpen}
+        <p class="text-foreground mt-1 text-sm">
+          {#if forkCount > 0}
+            {forkCount === 1 ? 'A branch was' : `${forkCount} branches were`} forked from entry {entry
+              ? entryNumber(entry)
+              : '?'}, and the checkpoint “{checkpointHere.name}” holds the clock
+            {forkCount === 1 ? 'it opens' : 'they open'} on, which this edit updates too. The edit affects
+            {forkCount + 2} intervals: the one ending at this entry, the one continuing on this branch,
+            and the one starting on {forkCount === 1
+              ? 'the branch'
+              : `each of the ${forkCount} 
+            branches`} forked here. Running a reconciliation over each of them afterwards is advised.
+          {:else}
+            The checkpoint “{checkpointHere.name}” was taken here, and its clock is updated with the
+            new ending. Nothing has been forked from it yet, so no other branch is affected.
+          {/if}
         </p>
       {/if}
     </div>
+  {/if}
 
-    <Dialog.Footer class="mt-2">
-      <Button variant="outline" onclick={() => (open = false)}>Cancel</Button>
-      <Button disabled={!canSave} onclick={save}>{saving ? 'Saving…' : 'Save'}</Button>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
+  <div class="grid gap-3 sm:grid-cols-2">
+    <label class="text-xs">
+      Begins
+      <Input
+        bind:value={startText}
+        placeholder="Y1 D4 14:30"
+        class="mt-1 h-8 text-sm {storyTimeIsInvalid(startText) ? 'border-destructive' : ''}"
+      />
+    </label>
+    <label class="text-xs">
+      Ends
+      <Input
+        bind:value={endText}
+        placeholder="Y1 D4 16:00"
+        class="mt-1 h-8 text-sm {storyTimeIsInvalid(endText) ? 'border-destructive' : ''}"
+      />
+    </label>
+    {#if storyTimeIsInvalid(startText) || storyTimeIsInvalid(endText)}
+      <p class="text-destructive text-xs sm:col-span-2">
+        Give both as Y1 D4 14:30. An unreadable time is left as it was.
+      </p>
+    {:else if backwards}
+      <p class="text-destructive text-xs sm:col-span-2">The entry cannot end before it begins.</p>
+    {:else if isLastEntry}
+      <p class="text-muted-foreground text-xs sm:col-span-2">
+        This is the last entry, so the story's current time moves to its ending.
+      </p>
+    {/if}
+  </div>
+</ActionModal>
