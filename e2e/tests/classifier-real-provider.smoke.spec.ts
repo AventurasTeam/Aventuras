@@ -286,7 +286,8 @@ test.describe('periodic classifier — real provider smoke', () => {
     }
 
     let attempts = 0
-    let beforeTurnPasses = 0
+    // Per Send, in order: whether it ran a pass before its turn.
+    const ranPassFirst: boolean[] = []
     let refusedSends = 0
     // classifier.md → Failure policy: an owed pass runs first, as its own run; failing it fails the
     // Send (system entry, no turn). turnRow is null then; from is the watermark the turn ran over.
@@ -325,10 +326,8 @@ test.describe('periodic classifier — real provider smoke', () => {
       const owed = runs
         .slice(0, turnAt === -1 ? runs.length : turnAt)
         .find((r) => r[1] === PERIODIC)
-      if (owed) {
-        beforeTurnPasses++
-        from = await settleOwedPass(owed[0], from)
-      }
+      ranPassFirst.push(owed !== undefined)
+      if (owed) from = await settleOwedPass(owed[0], from)
       // Settle on the run's outcome, never the reply row: the narrative phase commits prose
       // before later phases, so a reply can appear, then be reversed when a later action fails.
       await expect
@@ -385,17 +384,16 @@ test.describe('periodic classifier — real provider smoke', () => {
 
     process.stdout.write('\n### passes\n')
     let lastChain = await chainedPass(await landTurn('first'))
-    expect(beforeTurnPasses, 'the first Send ran no pass over the parked backlog').toBeGreaterThan(
-      0,
-    )
+    // That Send's own: a resend can run a pass the first Send skipped.
+    expect(ranPassFirst[0], 'the first Send ran no pass over the parked backlog').toBe(true)
     // classifier.md → Failure policy: a failed pass is owed again, and the next Send runs it first.
     if (lastChain === 'failed') {
-      const passesBefore = beforeTurnPasses
+      const next = attempts
       lastChain = await chainedPass(await landTurn('second'))
       expect(
-        beforeTurnPasses,
+        ranPassFirst[next],
         'the Send after a failed chained pass ran no pass before its turn',
-      ).toBeGreaterThan(passesBefore)
+      ).toBe(true)
     }
     const failedTurns = await count(
       `SELECT COUNT(*) FROM pipeline_runs WHERE kind = 'per-turn' AND outcome = 'failed'`,
