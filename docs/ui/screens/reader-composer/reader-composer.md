@@ -563,18 +563,23 @@ A failure entry carries the submission that produced it
 `user_action` was reverse-replayed with the run, that copy is the only
 one left. It is a convenience for `Retry`, not a vault: **every path
 that destroys the entry hands the submission back to the composer
-draft** — `Dismiss`, and the pre-dispatch tail clear on a regenerate
-that then throws. An empty draft receives the text verbatim under
-composer mode `Free`, since the stored content is already wrapped and
-must not be wrapped twice; a non-empty draft wins and the user is told
-the text was dropped rather than losing it silently.
+draft** — `Dismiss`, a pass entry's `Retry` whose pass commits (it
+clears the entry through `Dismiss`), and the pre-dispatch tail clear on
+a regenerate that then throws. An empty draft receives the text
+verbatim under composer mode `Free`, since the stored content is
+already wrapped and must not be wrapped twice; a non-empty draft wins
+and the user is told the text was dropped rather than losing it
+silently.
 
 A **Memory update failed** entry carries the submission only where
-the composer can't hold the text. On a held branch it always does,
-since the entry advises a restart and the draft would not survive
-one. On a failed pass it does only when the composer couldn't take it
-back (the draft was occupied, or the user left the branch); otherwise
-the text goes straight back to the composer.
+the composer can't hold the text. A Send refused on a held branch
+always leaves its text on the entry, since the entry advises a restart
+and the draft would not survive one. A `Retry` that finds the branch
+held keeps whatever text its entry held, and an entry without text
+doesn't claim to keep it. On a failed pass the entry carries the text
+only when the composer couldn't take it back (the draft was occupied,
+or the user left the branch); otherwise the text goes straight back to
+the composer.
 
 Restoring the _entry_ is deliberately not the mechanism. A failure
 entry re-appends at the branch tail, so on a path where a partial
