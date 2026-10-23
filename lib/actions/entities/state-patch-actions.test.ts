@@ -1762,6 +1762,27 @@ describe('raiseCollisionFlag', () => {
     expect(await flagOf(db)).toEqual([0, null, null])
   })
 
+  it('restores the three flag columns together when no user wrote them since', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    await apply(ctx, raise(), 'act_f')
+    await reverseReplayDeltas('act_f', ctx)
+    expect(await flagOf(db)).toEqual([0, null, null])
+  })
+
+  it('leaves the flag cleared when the user cleared it after the raise', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    await apply(ctx, raise(), 'act_f')
+    await apply(
+      ctx,
+      userPatch({ nameCollisionFlag: 0, nameCollisionPartnerId: null, nameCollisionReason: null }),
+      'act_u',
+    )
+    await reverseReplayDeltas('act_f', ctx)
+    expect(await flagOf(db)).toEqual([0, null, null])
+  })
+
   // generation-pipeline.md → Reverse-replay: the three flag columns are one field, as a place's
   // parent and unplaced mark are, so the CHECK that ties them survives a partial keep.
   it.each([
