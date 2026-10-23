@@ -125,14 +125,14 @@ creates ([New locations and items](#new-locations-and-items)):
   `<scene_entities>`, the fallback's its `sceneEntities`, each the
   previous scene when it names none or its list was dropped; the
   previous scene is the one the turn's user action carries, the scene
-  before this turn. A drop whose holders are all out of both lists is
-  dropped and logged (`classifier.drop_dropped`, `off_scene`). An
-  item put down somewhere else than the scene, thrown into a river,
-  stays prose. The prompt asks for a drop only for an item still lying
-  there when the turn ends. Tags apply in document order and a drop
-  takes the item off every holder, and the fallback applies its
-  drops after its item moves, so an item set down and picked up again
-  gets its `<item>` move and no drop.
+  before this turn. A held item's drop whose holders are all out of
+  both lists is dropped and logged (`classifier.drop_dropped`,
+  `off_scene`). An item put down somewhere else than the scene, thrown
+  into a river, stays prose. The prompt asks for a drop only for an
+  item still lying there when the turn ends. Tags apply in document
+  order and a drop takes the item off every holder, and the fallback
+  applies its drops after its item moves, so an item set down and
+  picked up again gets its `<item>` move and no drop.
 - `<stackable key="..." amount="..." to="..." from="..." />` moves a
   quantity (gold, arrows, supplies) between characters' `stackables`
   records. Either `to` or `from` may be omitted (gained from
