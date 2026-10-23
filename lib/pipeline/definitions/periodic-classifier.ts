@@ -267,8 +267,7 @@ export async function* periodicClassifierPhase(
   }
   const timeoutMs = passTimeoutMs(modelConfig)
 
-  // Read by the status block; left behind by a crash, it holds the branch (Send, regenerate and
-  // Run now refuse) until a boot clears it.
+  // Read by the status block; left behind by a crash, it holds the branch until a boot clears it.
   await writeStatus(ctx, nextStatusOnStart(status))
 
   const bounded = boundedSignal(ctx.abortSignal, timeoutMs)
@@ -414,8 +413,7 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
         try {
           await writeStatus(ctx, status)
         } catch (e) {
-          // Left running, the branch is held (Send, regenerate and Run now refuse) until a
-          // boot resets it.
+          // Left running, the branch is held until a boot resets it.
           logger.warn(
             'classifier.interrupt_restore_retried',
             { branchId: ctx.branchId, error: e instanceof Error ? e.message : String(e) },

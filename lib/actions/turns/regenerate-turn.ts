@@ -175,7 +175,7 @@ export async function regenerateTurn(
             | typeof HELD_REJECTION
           try {
             swept = await bracketProseReversal(ids.branchId, async () =>
-              // The interrupt can itself leave the branch held: a pass whose reversal didn't commit.
+              // This interrupt can leave the branch held: a pass whose reversal didn't commit.
               (await isClassifierHeld(ids.branchId, ctx))
                 ? HELD_REJECTION
                 : sweepFrom(ids.branchId, replyEntryId, ctx, opts?.expectedCounts),

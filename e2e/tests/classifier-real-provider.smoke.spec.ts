@@ -384,7 +384,7 @@ test.describe('periodic classifier — real provider smoke', () => {
 
     process.stdout.write('\n### passes\n')
     let lastChain = await chainedPass(await landTurn('first'))
-    // That Send's own: a resend can run a pass the first Send skipped.
+    // The first Send's flag alone: a resend can run a pass that Send skipped.
     expect(ranPassFirst[0], 'the first Send ran no pass over the parked backlog').toBe(true)
     // classifier.md → Failure policy: a failed pass is owed again, and the next Send runs it first.
     if (lastChain === 'failed') {
