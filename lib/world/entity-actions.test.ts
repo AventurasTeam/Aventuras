@@ -371,7 +371,7 @@ describe('entityActions — relationships against the stored links', () => {
 })
 
 describe('entityActions — create', () => {
-  it('creates a location with trimmed text and an empty state', () => {
+  it('creates a location with trimmed text, unplaced', () => {
     const draft = { ...locationDraftFrom(null), name: ' The Salt Wells ' }
     expect(
       entityActions({
@@ -400,7 +400,7 @@ describe('entityActions — create', () => {
             tags: [],
             keywords: [],
             priority: 0,
-            state: { parent_location_id: null },
+            state: { parent_location_id: null, unplaced: true },
             embeddingStale: 1,
             createdAt: 42,
             updatedAt: 42,
@@ -710,24 +710,23 @@ describe('collision flags a re-parent breaks', () => {
     source: 'user_edit',
     payload: { branchId: 'br_1', id, patch },
   })
+  const QUAY = { placement: { kind: 'under', parentId: 'loc_quay' } } as const
 
   it('clears the flag naming a place the save moves under another parent, in the same group', () => {
-    expect(save(MARKET, { parentLocationId: 'loc_quay' }, [MARKET, STALLS])).toStrictEqual([
+    expect(save(MARKET, QUAY, [MARKET, STALLS])).toStrictEqual([
       updateOf('loc_market', { state: { parent_location_id: 'loc_quay' } }),
       updateOf('loc_stalls', FLAG_CLEAR),
     ])
   })
 
   it('folds the clear into the update of the flagged place it moves', () => {
-    expect(save(STALLS, { parentLocationId: null }, [MARKET, STALLS])).toStrictEqual([
+    expect(save(STALLS, { placement: { kind: 'top' } }, [MARKET, STALLS])).toStrictEqual([
       updateOf('loc_stalls', { state: { parent_location_id: null }, ...FLAG_CLEAR }),
     ])
   })
 
   it('judges a save that renames and moves by the parent it saves', () => {
-    expect(
-      save(STALLS, { name: 'The Market Arcade', parentLocationId: 'loc_quay' }, [MARKET, STALLS]),
-    ).toStrictEqual([
+    expect(save(STALLS, { name: 'The Market Arcade', ...QUAY }, [MARKET, STALLS])).toStrictEqual([
       updateOf('loc_stalls', {
         name: 'The Market Arcade',
         state: { parent_location_id: 'loc_quay' },
@@ -746,8 +745,67 @@ describe('collision flags a re-parent breaks', () => {
 
   it('keeps a flag for another reason when the place moves', () => {
     const distinct: Entity = { ...STALLS, nameCollisionReason: 'distinct' }
-    expect(save(MARKET, { parentLocationId: 'loc_quay' }, [MARKET, distinct])).toStrictEqual([
+    expect(save(MARKET, QUAY, [MARKET, distinct])).toStrictEqual([
       updateOf('loc_market', { state: { parent_location_id: 'loc_quay' } }),
+    ])
+  })
+})
+
+// data-model.md → LocationState shape: placing a place clears the flag in the same write.
+describe("entityActions — a place's placement", () => {
+  const UNPLACED: Entity = {
+    id: 'loc_varn',
+    branchId: 'br_1',
+    kind: 'location',
+    name: 'Varn',
+    description: null,
+    status: 'active',
+    retiredReason: null,
+    injectionMode: 'auto',
+    nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
+    state: { parent_location_id: null, unplaced: true, condition: 'misty' },
+    tags: [],
+    keywords: [],
+    priority: 0,
+    embeddingStale: 0,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+
+  const save = (changes: Partial<LocationDraft>) =>
+    entityActions({
+      branchEntities: [UNPLACED],
+      kind: 'location',
+      row: UNPLACED,
+      draft: { ...locationDraftFrom(UNPLACED), ...changes },
+      branchId: 'br_1',
+      id: UNPLACED.id,
+      now: 42,
+    })
+
+  const stateUpdate = (state: Record<string, unknown>) => ({
+    kind: 'updateEntity',
+    source: 'user_edit',
+    payload: { branchId: 'br_1', id: 'loc_varn', patch: { state } },
+  })
+
+  it('places an unplaced place under a parent, dropping the flag', () => {
+    expect(save({ placement: { kind: 'under', parentId: 'loc_hollow' } })).toStrictEqual([
+      stateUpdate({ parent_location_id: 'loc_hollow', condition: 'misty' }),
+    ])
+  })
+
+  it('marks an unplaced place top-level, dropping the flag', () => {
+    expect(save({ placement: { kind: 'top' } })).toStrictEqual([
+      stateUpdate({ parent_location_id: null, condition: 'misty' }),
+    ])
+  })
+
+  it('keeps the flag on a save that leaves the placement', () => {
+    expect(save({ condition: 'flooded' })).toStrictEqual([
+      stateUpdate({ parent_location_id: null, unplaced: true, condition: 'flooded' }),
     ])
   })
 })

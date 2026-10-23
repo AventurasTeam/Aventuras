@@ -616,7 +616,7 @@ export const CreateLocation: Story = {
         keywords: [],
         tags: [],
         priority: 0,
-        parentLocationId: null,
+        placement: { kind: 'unplaced' },
         condition: '',
       },
     })
@@ -701,7 +701,9 @@ export const CreateBlocked: Story = {
     await expect(screen.getByRole('textbox', { name: 'Condition' })).toHaveAttribute('readonly')
     await expect(screen.queryByRole('button', { name: 'Unnamed' })).not.toBeInTheDocument()
     await userEvent.click(tab(/^Connections/))
-    await expect(await screen.findByRole('button', { name: 'Part of' }, WAIT)).toBeDisabled()
+    await expect(
+      await screen.findByRole('button', { name: 'Part of: Unknown' }, WAIT),
+    ).toBeDisabled()
   },
 }
 
@@ -812,7 +814,7 @@ export const RelationshipWithoutAViewBlocksSave: Story = {
 
 async function expectParentRefusal(onRejected: HarnessProps['onRejected'], text: string) {
   await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
-  await userEvent.click(await screen.findByRole('button', { name: 'Part of' }, WAIT))
+  await userEvent.click(await screen.findByRole('button', { name: 'Part of: Top level' }, WAIT))
   await userEvent.click(await screen.findByRole('option', { name: /The Drowned Market/ }, WAIT))
   const bar = await screen.findByTestId('save-bar', {}, WAIT)
   await userEvent.click(within(bar).getByRole('button', { name: /^Save/ }))
@@ -1561,5 +1563,79 @@ export const ParentPickerDropsRetiredPlaces: Story = {
     await userEvent.click(await screen.findByRole('button', { name: /^Part of/ }, WAIT))
     await expect(await screen.findByRole('option', { name: /Thornwood/ }, WAIT)).toBeVisible()
     await expect(screen.queryByRole('option', { name: /Saltmere/ })).toBeNull()
+  },
+}
+
+// data-model.md → LocationState shape: known to exist, not where.
+const VARN = makeEntity({
+  id: 'loc_varn',
+  kind: 'location',
+  name: 'Varn',
+  state: { parent_location_id: null, unplaced: true },
+})
+const WITH_VARN = [...ENTITIES, VARN]
+
+/** world.md → Overview: an unplaced place's picker reads Unknown, and picking a parent places it. */
+export const PlacementPickerUnknown: Story = {
+  args: { kind: 'location', row: VARN, entities: WITH_VARN },
+  play: async ({ args }) => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await userEvent.click(await screen.findByRole('button', { name: 'Part of: Unknown' }, WAIT))
+    await expect(await screen.findByRole('option', { name: 'Unknown' }, WAIT)).toBeVisible()
+    await expect(screen.getByRole('option', { name: 'Top level' })).toBeVisible()
+    await userEvent.click(screen.getByRole('option', { name: /Veil’s Hollow/ }))
+    await expect(
+      await screen.findByRole('button', { name: 'Part of: Veil’s Hollow' }, WAIT),
+    ).toBeVisible()
+    await clickSave()
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+    await expect(args.onSave).toHaveBeenCalledWith({
+      kind: 'location',
+      draft: expect.objectContaining({ placement: { kind: 'under', parentId: 'loc_hollow' } }),
+    })
+  },
+}
+
+/** Top level places it too. */
+export const PlacementPickerTopLevel: Story = {
+  args: { kind: 'location', row: VARN, entities: WITH_VARN },
+  play: async ({ args }) => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await userEvent.click(await screen.findByRole('button', { name: 'Part of: Unknown' }, WAIT))
+    await userEvent.click(await screen.findByRole('option', { name: 'Top level' }, WAIT))
+    await expect(
+      await screen.findByRole('button', { name: 'Part of: Top level' }, WAIT),
+    ).toBeVisible()
+    await clickSave()
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+    await expect(args.onSave).toHaveBeenCalledWith({
+      kind: 'location',
+      draft: expect.objectContaining({ placement: { kind: 'top' } }),
+    })
+  },
+}
+
+/** A placed place can't go back to Unknown; an unplaced one is still offered as its parent. */
+export const PlacedPickerOffersNoUnknown: Story = {
+  args: { kind: 'location', row: MARKET, entities: WITH_VARN },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Part of: Veil’s Hollow' }, WAIT),
+    )
+    await expect(await screen.findByRole('option', { name: 'Top level' }, WAIT)).toBeVisible()
+    await expect(screen.queryByRole('option', { name: 'Unknown' })).toBeNull()
+    await expect(screen.getByRole('option', { name: /Varn/ })).toBeVisible()
+  },
+}
+
+/** A top-level place's picker reads Top level. */
+export const TopLevelPickerReadsTopLevel: Story = {
+  args: { kind: 'location', row: HOLLOW },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await expect(
+      await screen.findByRole('button', { name: 'Part of: Top level' }, WAIT),
+    ).toBeVisible()
   },
 }

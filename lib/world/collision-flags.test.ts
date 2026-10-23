@@ -610,7 +610,7 @@ describe('flag clears through the entity arm', () => {
     const ctx = await setup(rows)
     const actions = entityActions({
       kind: 'location',
-      draft: { ...locationDraftFrom(market), parentLocationId: 'loc_q' },
+      draft: { ...locationDraftFrom(market), placement: { kind: 'under', parentId: 'loc_q' } },
       branchId: 'b1',
       row: market,
       branchEntities: rows,

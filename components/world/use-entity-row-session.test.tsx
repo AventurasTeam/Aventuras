@@ -11,7 +11,7 @@ import { useEntityRowSession } from './use-entity-row-session'
 const resolver = zodResolver(locationDraftSchema)
 const VALUES: LocationDraft = { ...locationDraftFrom(null), name: 'Shop' }
 const FIELD_ERRORS = {
-  'parent-cycle': { field: 'parentLocationId' as const, message: 'parentCycle' },
+  'parent-cycle': { field: 'placement' as const, message: 'parentCycle' },
 }
 
 function setup(result: EntitySaveResult) {
@@ -84,22 +84,28 @@ describe('useEntityRowSession', () => {
       code: 'parent-cycle',
     })
     act(() => {
-      hook.result.current.form.setValue('parentLocationId', 'loc_b', { shouldDirty: true })
+      hook.result.current.form.setValue(
+        'placement',
+        { kind: 'under', parentId: 'loc_b' },
+        { shouldDirty: true },
+      )
     })
     await act(async () => {
       await hook.result.current.save()
     })
-    expect(hook.result.current.form.getFieldState('parentLocationId').error?.message).toBe(
-      'parentCycle',
-    )
+    expect(hook.result.current.form.getFieldState('placement').error?.message).toBe('parentCycle')
     expect(hook.result.current.invalidReason).toBe('text:parentCycle')
     expect(onRejected).toHaveBeenCalledWith('That parent would make this location part of itself.')
 
     act(() => {
-      hook.result.current.form.setValue('parentLocationId', 'loc_c', {
-        shouldDirty: true,
-        shouldValidate: true,
-      })
+      hook.result.current.form.setValue(
+        'placement',
+        { kind: 'under', parentId: 'loc_c' },
+        {
+          shouldDirty: true,
+          shouldValidate: true,
+        },
+      )
     })
     await waitFor(() => expect(hook.result.current.invalidReason).toBeNull())
   })
@@ -125,14 +131,14 @@ describe('useEntityRowSession', () => {
     const text = 'Port Vellis is retired. Bring it back first.'
     const notice = `Settings: ${text}`
     expect(hook.result.current.form.getFieldState('status').error?.message).toBe(text)
-    expect(hook.result.current.form.getFieldState('parentLocationId').error).toBeUndefined()
+    expect(hook.result.current.form.getFieldState('placement').error).toBeUndefined()
     expect(hook.result.current.invalidReason).toBe(notice)
     expect(onRejected).toHaveBeenCalledWith(notice)
     expect(hook.result.current.saveError).toBe(notice)
   })
 
   it('names the story inside a place, or the place itself when the story is there', async () => {
-    const story = (storyId: string, field: 'injectionMode' | 'parentLocationId') =>
+    const story = (storyId: string, field: 'injectionMode' | 'placement') =>
       setup({
         status: 'rejected',
         reason: 'place rule: story-inside',
@@ -154,7 +160,7 @@ describe('useEntityRowSession', () => {
       ['loc_p', 'injectionMode', 'The story is in Port Vellis.', 'Settings'],
       [
         'loc_inn',
-        'parentLocationId',
+        'placement',
         'The story is in The Rusty Anchor, inside Port Vellis.',
         'Connections',
       ],
@@ -245,7 +251,7 @@ describe('useEntityRowSession', () => {
     await act(async () => {
       await hook.result.current.save()
     })
-    expect(hook.result.current.form.getFieldState('parentLocationId').error).toBeUndefined()
+    expect(hook.result.current.form.getFieldState('placement').error).toBeUndefined()
     expect(onRejected).toHaveBeenCalledWith(
       "Couldn't save while generation is in flight. Your changes are still here.",
     )
@@ -255,7 +261,11 @@ describe('useEntityRowSession', () => {
     const held = heldSave()
     const { hook, onRejected } = setupSwitchable(held.onSave)
     act(() => {
-      hook.result.current.form.setValue('parentLocationId', 'loc_b', { shouldDirty: true })
+      hook.result.current.form.setValue(
+        'placement',
+        { kind: 'under', parentId: 'loc_b' },
+        { shouldDirty: true },
+      )
     })
     await act(async () => {
       void hook.result.current.save()
@@ -264,7 +274,7 @@ describe('useEntityRowSession', () => {
     await act(async () => {
       held.settle({ status: 'rejected', reason: 'parent-cycle', code: 'parent-cycle' })
     })
-    expect(hook.result.current.form.getFieldState('parentLocationId').error).toBeUndefined()
+    expect(hook.result.current.form.getFieldState('placement').error).toBeUndefined()
     expect(onRejected).toHaveBeenCalledWith('That parent would make this location part of itself.')
   })
 })

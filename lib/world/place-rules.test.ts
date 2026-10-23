@@ -22,6 +22,7 @@ import {
   type PlaceSaveConfirm,
   type StoryPlace,
 } from './place-rules'
+import type { PlacePlacement } from './placement'
 
 const place = (
   id: string,
@@ -40,6 +41,7 @@ const THORNWOOD = place('loc_thorn', 'Thornwood', null)
 const WORLD = [ELDRA, VELLIS, ANCHOR, BACK_ROOM, MARKET, THORNWOOD]
 
 const named = (e: Entity) => ({ id: e.id, name: e.name })
+const under = (parentId: string): PlacePlacement => ({ kind: 'under', parentId })
 
 const storyAt = (scene: string | null, tail: string | null = scene) =>
   storyPlaceOf({
@@ -178,12 +180,12 @@ describe('placeSaveRefusal — a retired parent', () => {
     const retiredThorn = { ...THORNWOOD, status: 'retired' as const }
     const moved = locationSave({
       row: RETIRED_ANCHOR,
-      draft: { status: 'staged', parentLocationId: 'loc_thorn' },
+      draft: { status: 'staged', placement: under('loc_thorn') },
       entities: [...world.filter((e) => e !== THORNWOOD), retiredThorn],
     })
     expect(placeSaveRefusal(moved)).toMatchObject({
       code: 'retired-parent',
-      field: 'parentLocationId',
+      field: 'placement',
     })
   })
 
@@ -192,7 +194,7 @@ describe('placeSaveRefusal — a retired parent', () => {
       placeSaveRefusal(
         locationSave({
           row: RETIRED_ANCHOR,
-          draft: { status: 'active', parentLocationId: 'loc_eldra' },
+          draft: { status: 'active', placement: under('loc_eldra') },
           entities: world,
         }),
       ),
@@ -204,11 +206,11 @@ describe('placeSaveRefusal — a retired parent', () => {
       placeSaveRefusal(
         locationSave({
           row: null,
-          draft: { name: 'Cellar', parentLocationId: 'loc_vellis' },
+          draft: { name: 'Cellar', placement: under('loc_vellis') },
           entities: world,
         }),
       ),
-    ).toEqual({ code: 'retired-parent', field: 'parentLocationId', parent: named(RETIRED_VELLIS) })
+    ).toEqual({ code: 'retired-parent', field: 'placement', parent: named(RETIRED_VELLIS) })
   })
 
   it('lets a retired place be created inside a retired one', () => {
@@ -216,7 +218,7 @@ describe('placeSaveRefusal — a retired parent', () => {
       placeSaveRefusal(
         locationSave({
           row: null,
-          draft: { name: 'Cellar', status: 'retired', parentLocationId: 'loc_vellis' },
+          draft: { name: 'Cellar', status: 'retired', placement: under('loc_vellis') },
           entities: world,
         }),
       ),
@@ -228,11 +230,40 @@ describe('placeSaveRefusal — a retired parent', () => {
       placeSaveRefusal(
         locationSave({
           row: THORNWOOD,
-          draft: { parentLocationId: 'loc_vellis' },
+          draft: { placement: under('loc_vellis') },
           entities: world,
         }),
       ),
-    ).toEqual({ code: 'retired-parent', field: 'parentLocationId', parent: named(RETIRED_VELLIS) })
+    ).toEqual({ code: 'retired-parent', field: 'placement', parent: named(RETIRED_VELLIS) })
+  })
+
+  const UNPLACED_COVE = makeEntity({
+    id: 'loc_cove',
+    kind: 'location',
+    name: 'Hidden Cove',
+    state: { parent_location_id: null, unplaced: true },
+  })
+
+  it('refuses placing an unplaced place inside a retired one, on the placement field', () => {
+    expect(
+      placeSaveRefusal(
+        locationSave({
+          row: UNPLACED_COVE,
+          draft: { placement: under('loc_vellis') },
+          entities: [...world, UNPLACED_COVE],
+        }),
+      ),
+    ).toEqual({ code: 'retired-parent', field: 'placement', parent: named(RETIRED_VELLIS) })
+  })
+
+  it('lets an unplaced place be marked top-level, asking nothing', () => {
+    const save = locationSave({
+      row: UNPLACED_COVE,
+      draft: { placement: { kind: 'top' } },
+      entities: [...world, UNPLACED_COVE],
+    })
+    expect(placeSaveRefusal(save)).toBeNull()
+    expect(placeSaveConfirm(save)).toBeNull()
   })
 
   it('lets a retired place move into a retired one', () => {
@@ -241,7 +272,7 @@ describe('placeSaveRefusal — a retired parent', () => {
       placeSaveRefusal(
         locationSave({
           row: retiredThorn,
-          draft: { parentLocationId: 'loc_vellis' },
+          draft: { placement: under('loc_vellis') },
           entities: [...world, retiredThorn],
         }),
       ),
@@ -264,7 +295,7 @@ describe('placeSaveRefusal — a retired parent', () => {
       placeSaveRefusal(
         locationSave({
           row: retiredEldra,
-          draft: { status: 'active', parentLocationId: 'loc_vellis' },
+          draft: { status: 'active', placement: under('loc_vellis') },
           entities: [retiredEldra, retiredVellis],
         }),
       ),
@@ -318,14 +349,14 @@ describe('placeSaveRefusal — moving a place into a disabled region', () => {
       placeSaveRefusal(
         locationSave({
           row: ANCHOR,
-          draft: { parentLocationId: 'loc_thorn' },
+          draft: { placement: under('loc_thorn') },
           entities: world,
           story: 'loc_back',
         }),
       ),
     ).toEqual({
       code: 'story-inside',
-      field: 'parentLocationId',
+      field: 'placement',
       place: named(ANCHOR),
       story: named(BACK_ROOM),
     })
@@ -337,12 +368,12 @@ describe('placeSaveRefusal — moving a place into a disabled region', () => {
       placeSaveRefusal(
         locationSave({
           row: ANCHOR,
-          draft: { parentLocationId: 'loc_shrine' },
+          draft: { placement: under('loc_shrine') },
           entities: [...world, shrine],
           story: 'loc_anchor',
         }),
       ),
-    ).toMatchObject({ code: 'story-inside', field: 'parentLocationId' })
+    ).toMatchObject({ code: 'story-inside', field: 'placement' })
   })
 
   it('lets a place move within a region the story already walked into', () => {
@@ -351,7 +382,7 @@ describe('placeSaveRefusal — moving a place into a disabled region', () => {
       placeSaveRefusal(
         locationSave({
           row: BACK_ROOM,
-          draft: { parentLocationId: 'loc_market' },
+          draft: { placement: under('loc_market') },
           entities: [ELDRA, disabledVellis, ANCHOR, BACK_ROOM, MARKET],
           story: 'loc_back',
         }),
@@ -365,12 +396,12 @@ describe('placeSaveRefusal — moving a place into a disabled region', () => {
       placeSaveRefusal(
         locationSave({
           row: BACK_ROOM,
-          draft: { parentLocationId: 'loc_thorn' },
+          draft: { placement: under('loc_thorn') },
           entities: [ELDRA, disabledVellis, ANCHOR, BACK_ROOM, DISABLED_THORN],
           story: 'loc_back',
         }),
       ),
-    ).toMatchObject({ code: 'story-inside', field: 'parentLocationId' })
+    ).toMatchObject({ code: 'story-inside', field: 'placement' })
   })
 
   it('lets a place the story is outside move into the region', () => {
@@ -378,7 +409,7 @@ describe('placeSaveRefusal — moving a place into a disabled region', () => {
       placeSaveRefusal(
         locationSave({
           row: MARKET,
-          draft: { parentLocationId: 'loc_thorn' },
+          draft: { placement: under('loc_thorn') },
           entities: world,
           story: 'loc_back',
         }),
@@ -623,7 +654,7 @@ describe('placeSaveConfirm', () => {
       placeSaveConfirm(
         locationSave({
           row: ANCHOR,
-          draft: { parentLocationId: 'loc_thorn' },
+          draft: { placement: under('loc_thorn') },
           entities: [ELDRA, VELLIS, ANCHOR, BACK_ROOM, closet, disabledThorn],
         }),
       ),
@@ -641,7 +672,7 @@ describe('placeSaveConfirm', () => {
     const confirm = placeSaveConfirm(
       locationSave({
         row: MARKET,
-        draft: { parentLocationId: 'loc_thorn' },
+        draft: { placement: under('loc_thorn') },
         entities: [ELDRA, VELLIS, MARKET, disabledThorn, shrine],
         story: 'loc_shrine',
       }),
@@ -662,7 +693,7 @@ describe('placeSaveConfirm', () => {
       placeSaveConfirm(
         locationSave({
           row: MARKET,
-          draft: { parentLocationId: 'loc_thorn' },
+          draft: { placement: under('loc_thorn') },
           entities: [ELDRA, disabledVellis, ANCHOR, MARKET, stall, disabledThorn],
           story: 'loc_anchor',
         }),
@@ -678,7 +709,7 @@ describe('placeSaveConfirm', () => {
       placeSaveConfirm(
         locationSave({
           row: disabledMarket,
-          draft: { injectionMode: 'auto', parentLocationId: 'loc_thorn' },
+          draft: { injectionMode: 'auto', placement: under('loc_thorn') },
           entities: [ELDRA, VELLIS, disabledMarket, stall, disabledThorn],
         }),
       )?.move,
@@ -698,7 +729,7 @@ describe('placeSaveConfirm', () => {
       placeSaveConfirm(
         locationSave({
           row: ownDisabled,
-          draft: { parentLocationId: 'loc_thorn' },
+          draft: { placement: under('loc_thorn') },
           entities: [ELDRA, VELLIS, ownDisabled, disabledThorn],
         }),
       ),
@@ -707,7 +738,7 @@ describe('placeSaveConfirm', () => {
       placeSaveConfirm(
         locationSave({
           row: ANCHOR,
-          draft: { parentLocationId: 'loc_thorn' },
+          draft: { placement: under('loc_thorn') },
           entities: [ELDRA, disabledVellis, ANCHOR, disabledThorn],
         }),
       ),
@@ -720,7 +751,7 @@ describe('placeSaveConfirm', () => {
       placeSaveConfirm(
         locationSave({
           row: BACK_ROOM,
-          draft: { parentLocationId: 'loc_market' },
+          draft: { placement: under('loc_market') },
           entities: [ELDRA, disabledVellis, ANCHOR, BACK_ROOM, MARKET],
         }),
       ),
@@ -732,7 +763,7 @@ describe('placeSaveConfirm', () => {
     const confirm = placeSaveConfirm(
       locationSave({
         row: ANCHOR,
-        draft: { status: 'retired', parentLocationId: 'loc_thorn' },
+        draft: { status: 'retired', placement: under('loc_thorn') },
         entities: [ELDRA, VELLIS, ANCHOR, BACK_ROOM, disabledThorn],
       }),
     )
@@ -762,7 +793,7 @@ describe('placeSaveConfirm', () => {
       placeSaveConfirm(
         locationSave({
           row: MARKET,
-          draft: { parentLocationId: 'loc_thorn' },
+          draft: { placement: under('loc_thorn') },
           entities: [ELDRA, VELLIS, MARKET, disabledThorn, shrine],
           story: 'loc_shrine',
           tail: 'loc_eldra',
@@ -773,7 +804,7 @@ describe('placeSaveConfirm', () => {
       placeSaveConfirm(
         locationSave({
           row: MARKET,
-          draft: { parentLocationId: 'loc_thorn' },
+          draft: { placement: under('loc_thorn') },
           entities: [...entities, disabledThorn],
           story: 'loc_anchor',
           tail: 'loc_eldra',
@@ -809,7 +840,7 @@ describe('placeSaveConfirm', () => {
       placeSaveConfirm(
         locationSave({
           row: null,
-          draft: { name: 'Hut', parentLocationId: 'loc_thorn' },
+          draft: { name: 'Hut', placement: under('loc_thorn') },
           entities: [disabledThorn],
         }),
       ),

@@ -125,7 +125,20 @@ const SPARSE = makeEntity({
     lastSeenAt: null,
   }),
 })
-const ENTITIES = [HOLLOW, MARKET, KAEL, MIRA, WATCH, KEY, SPARSE]
+// Known to exist, not where (data-model.md → LocationState shape), and a place inside it.
+const VARN = makeEntity({
+  id: 'loc_varn',
+  kind: 'location',
+  name: 'Varn',
+  state: { parent_location_id: null, unplaced: true },
+})
+const VARN_DOCKS = makeEntity({
+  id: 'loc_varn_docks',
+  kind: 'location',
+  name: 'The Varn Docks',
+  state: { parent_location_id: 'loc_varn' },
+})
+const ENTITIES = [HOLLOW, MARKET, KAEL, MIRA, WATCH, KEY, SPARSE, VARN, VARN_DOCKS]
 const ROAMER = makeEntity({
   id: 'char_roamer',
   kind: 'character',
@@ -253,6 +266,32 @@ export const LocationRegionRouting: Story = {
     await expect(args.onRegionPress).toHaveBeenCalledTimes(3)
     await expect(args.onRegionPress).toHaveBeenLastCalledWith('connections')
     await expectNoLinks()
+    // The market's chain ends at a top-level place, so it ends in no `Location unknown`.
+    await expect(
+      within(screen.getByTestId('overview-part-of')).queryByText(/Location unknown/),
+    ).toBeNull()
+  },
+}
+
+/** world.md → Overview: an unplaced place reads `Location unknown` where its chain would be. */
+export const LocationUnplaced: Story = {
+  args: { entity: VARN },
+  play: async ({ args }) => {
+    const region = await screen.findByTestId('overview-part-of', {}, WAIT)
+    await expect(within(region).getByText('Location unknown')).toBeVisible()
+    await expect(within(region).queryByText('— not yet described —')).toBeNull()
+    await userEvent.click(region)
+    await expect(args.onRegionPress).toHaveBeenLastCalledWith('connections')
+  },
+}
+
+/** A place inside an unplaced one: its chain ends in `Location unknown`. */
+export const LocationChainEndsUnknown: Story = {
+  args: { entity: VARN_DOCKS },
+  play: async () => {
+    const region = await screen.findByTestId('overview-part-of', {}, WAIT)
+    await expect(within(region).getByText('Varn')).toBeVisible()
+    await expect(within(region).getByText(/Location unknown/)).toBeVisible()
   },
 }
 

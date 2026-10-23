@@ -78,7 +78,7 @@ function entityInput(payload: EntityImport): EntitySaveInput {
         kind: 'location',
         draft: {
           ...baseDraft(payload),
-          parentLocationId: null,
+          placement: { kind: 'top' },
           condition: payload.state.condition ?? '',
         },
       }

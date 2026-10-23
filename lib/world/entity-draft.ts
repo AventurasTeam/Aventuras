@@ -11,6 +11,7 @@ import {
 import { normalizeTerm } from '@/lib/keyword-terms'
 
 import { WORLD_ISSUE } from './issues'
+import { placementOf, type PlacePlacement } from './placement'
 
 /** `entities.status`, in the Settings select's order. */
 export const ENTITY_STATUSES = [
@@ -158,9 +159,15 @@ export type CharacterDraft = z.infer<typeof characterDraftSchema>
 export type StackableDraft = CharacterDraft['stackables'][number]
 export type RelationshipDraft = CharacterDraft['relationships'][number]
 
+const placementSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('under'), parentId: z.string() }),
+  z.object({ kind: z.literal('top') }),
+  z.object({ kind: z.literal('unplaced') }),
+]) satisfies z.ZodType<PlacePlacement>
+
 export const locationDraftSchema = z.object({
   ...baseShape,
-  parentLocationId: z.string().nullable(),
+  placement: placementSchema,
   condition: text(500),
 })
 export type LocationDraft = z.infer<typeof locationDraftSchema>
@@ -249,11 +256,12 @@ export function characterDraftFrom(
   }
 }
 
+/** world.md → Overview: a new place starts `Unknown`, until the user picks a parent or `Top level`. */
 export function locationDraftFrom(row: Entity | null): LocationDraft {
   const state = stateOf(row, 'location')
   return {
     ...baseDraftFrom(row),
-    parentLocationId: state.parent_location_id ?? null,
+    placement: row == null ? { kind: 'unplaced' } : placementOf({ state }),
     condition: state.condition ?? '',
   }
 }
