@@ -19,6 +19,7 @@ import BasicTxt2ImgWorkflow from './comfyWorkflows/basic-txt2img-workflow.json'
 import LoraTxt2ImgWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetTxt2ImgWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
 import { formatImageSize, specToPixels } from '#lib/utils/image.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { isNewerVersion } from '#lib/utils/version.ts'
 import { imageGetFetch } from './fetchAdapter'
 import { MIN_COMFYUI_VERSION, createComfyImage, type ComfyImageOptions } from './comfyImage'
@@ -29,8 +30,6 @@ const DEFAULT_BASE_URL = 'http://localhost:8188'
 // A server that does not answer is not worth the generation's own timeout.
 const PROBE_TIMEOUT_MS = 5_000
 const POLL_TIMEOUT_MS = 15_000
-
-const normalizeBaseUrl = (url: string) => url.trim().replace(/\/+$/, '')
 
 export enum ComfyMode {
   CustomWorkflow = 'custom-workflow',
@@ -489,7 +488,7 @@ const numberOr = (value: unknown, fallback: number): number =>
   typeof value === 'number' ? value : fallback
 
 export function createComfyProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = normalizeBaseUrl(config.baseUrl || DEFAULT_BASE_URL)
+  const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL
 
   // One per generation, so concurrent generations keep separate poll traces in the debug log.
   const comfyModel = (model: string) =>

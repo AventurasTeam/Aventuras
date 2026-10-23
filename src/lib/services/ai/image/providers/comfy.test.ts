@@ -19,7 +19,13 @@ vi.mock('#lib/utils/async.ts', async (importOriginal) => ({
   sleep: vi.fn(async () => {}),
 }))
 
+vi.mock('#lib/utils/url.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
+  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
+})
+
 import { specToPixels } from '#lib/utils/image.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { imageGetFetch } from './fetchAdapter'
 import {
   ComfyMode,
@@ -585,32 +591,35 @@ describe('base URL', () => {
     ...sdkFetch.mock.calls.map(([url]) => String(url)),
   ]
 
-  it('drops a trailing slash from every request', async () => {
+  it('sends every request to the normalized base URL', async () => {
+    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('http://normalized.test:8188')
     listing({ diffusion_models: ['flux.safetensors'] })
-    const provider = createComfyProvider({ apiKey: '', baseUrl: ' http://localhost:8188// ' })
+    const provider = createComfyProvider({ apiKey: '', baseUrl: ' http://raw.test:8188// ' })
     await provider.generate(options({ model: 'checkpoint:m.safetensors' }))
     await provider.listModels()
     await provider.getSamplerInfo?.()?.catch(() => {})
 
+    expect(normalizeBaseUrl).toHaveBeenCalledWith(' http://raw.test:8188// ')
     const urls = requestedUrls()
-    expect(urls).toContain('http://localhost:8188/system_stats')
-    expect(urls).toContain('http://localhost:8188/prompt')
-    expect(urls).toContain('http://localhost:8188/models/checkpoints')
-    expect(urls).toContain('http://localhost:8188/object_info/KSampler')
-    expect(urls.filter((url) => url.replace('http://', '').includes('//'))).toEqual([])
+    expect(urls).not.toHaveLength(0)
+    expect(urls.filter((url) => !url.startsWith('http://normalized.test:8188/'))).toEqual([])
   })
 
-  it('is dropped by fetchModelList too', async () => {
-    await fetchModelList('http://localhost:8188/ ', 'checkpoints')
+  it('has fetchModelList request the normalized base URL', async () => {
+    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('http://normalized.test:8188')
+    await fetchModelList(' http://raw.test:8188/ ', 'checkpoints')
+    expect(normalizeBaseUrl).toHaveBeenCalledWith(' http://raw.test:8188/ ')
     expect(String(vi.mocked(imageGetFetch).mock.calls[0][0])).toBe(
-      'http://localhost:8188/models/checkpoints',
+      'http://normalized.test:8188/models/checkpoints',
     )
   })
 
-  it('finds the cache entry clearComfyCacheForUrl is given with a slash', async () => {
-    const provider = createComfyProvider({ apiKey: '', baseUrl: 'http://localhost:8188/' })
+  it('keys clearComfyCacheForUrl by the normalized base URL', async () => {
+    const provider = createComfyProvider({ apiKey: '', baseUrl: 'http://localhost:8188' })
     await provider.generate(options({ providerOptions: { mode: ComfyMode.BasicTxt2Img } }))
-    clearComfyCacheForUrl('http://localhost:8188/')
+    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('http://localhost:8188')
+    clearComfyCacheForUrl('http://raw.test:8188/')
+    expect(normalizeBaseUrl).toHaveBeenCalledWith('http://raw.test:8188/')
     await provider.generate(options({ providerOptions: { mode: ComfyMode.BasicTxt2Img } }))
     expect(statsRequests()).toHaveLength(2)
   })
