@@ -57,6 +57,8 @@ type BuildResult = {
     currentLocationRejected: boolean
     /** The drops applied, in the block's order, each where it landed: null with no scene place. */
     drops: AppliedDrop[]
+    /** Positions in `block.conditions` refused, not ids: an id can repeat in one block. */
+    conditionsRejected: number[]
   }
 }
 
@@ -170,9 +172,13 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
 
   // data-model.md → Authorship contract, seen before written: a condition only for a place or an
   // item the prompt showed with its state.
-  for (const change of block.conditions ?? []) {
+  const conditionsRejected: number[] = []
+  for (const [position, change] of (block.conditions ?? []).entries()) {
     const condition = change.text.trim()
-    if (condition === '') continue
+    if (condition === '') {
+      conditionsRejected.push(position)
+      continue
+    }
     const row = byId.get(change.id)
     const shown = stateShownIds.has(change.id)
     if (!shown || (row?.kind !== 'location' && row?.kind !== 'item')) {
@@ -183,6 +189,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
         kind: row?.kind ?? null,
         shown,
       })
+      conditionsRejected.push(position)
       continue
     }
     const { text, cut } = boundStateText(condition)
@@ -362,6 +369,6 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   return {
     metadata,
     actions,
-    applied: { worldTimeDelta: appliedDelta, currentLocationRejected, drops },
+    applied: { worldTimeDelta: appliedDelta, currentLocationRejected, drops, conditionsRejected },
   }
 }

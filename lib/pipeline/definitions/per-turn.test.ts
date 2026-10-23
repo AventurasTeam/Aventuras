@@ -2332,6 +2332,10 @@ describe('narrative fold — creates', () => {
       kind: 'location',
       shown: false,
     })
+    expect(replyOf(events).metadata?.stateReport?.conditions).toEqual([
+      { id: SWORD, text: 'notched near the tip' },
+      { id: MARKET, text: 'half under water', rejected: true },
+    ])
   })
 })
 

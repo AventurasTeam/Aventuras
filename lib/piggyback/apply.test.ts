@@ -1585,6 +1585,7 @@ describe('buildPiggybackActions — conditions and drops', () => {
           payload: { branchId: 'main', id: 'item_rope', condition: 'frayed through' },
         },
       ])
+      expect(result.applied.conditionsRejected).toEqual([])
     })
 
     // data-model.md → Authorship contract: seen before written.
@@ -1600,6 +1601,7 @@ describe('buildPiggybackActions — conditions and drops', () => {
         { stateShownIds: new Set(shown), log },
       )
       expect(conditionWrites(result)).toEqual([])
+      expect(result.applied.conditionsRejected).toEqual([0])
       expect(log.warn).toHaveBeenCalledWith('classifier.condition_unseen', {
         entryId: 'entry_1',
         source: 'piggyback_tagged_block',
@@ -1639,6 +1641,29 @@ describe('buildPiggybackActions — conditions and drops', () => {
         stateShownIds: new Set(['loc_dock']),
       })
       expect(conditionWrites(result)).toEqual([])
+      expect(result.applied.conditionsRejected).toEqual([0])
+    })
+
+    // An id can repeat in one block, so a refusal is recorded by its place in the list.
+    it('records each refused condition by its position in the block', () => {
+      const result = run(
+        {
+          conditions: [
+            { id: 'loc_dock', text: '  ' },
+            { id: 'loc_dock', text: 'flooded to the knee' },
+            { id: 'char_1', text: 'scorched' },
+            { id: 'loc_far', text: 'burned out' },
+          ],
+        },
+        [place('loc_dock'), place('loc_far'), person('char_1')],
+        { stateShownIds: new Set(['loc_dock', 'char_1']) },
+      )
+      expect(conditionWrites(result)).toEqual([
+        expect.objectContaining({
+          payload: { branchId: 'main', id: 'loc_dock', condition: 'flooded to the knee' },
+        }),
+      ])
+      expect(result.applied.conditionsRejected).toEqual([0, 2, 3])
     })
   })
 

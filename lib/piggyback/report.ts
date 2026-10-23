@@ -35,6 +35,7 @@ type BuildReportArgs = {
     worldTimeDelta: number
     currentLocationRejected: boolean
     drops: readonly ReportedDrop[]
+    conditionsRejected: readonly number[]
   }
 }
 
@@ -69,7 +70,15 @@ export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateRep
       ? { currentLocationRejected: true as const }
       : {}),
     ...(block.visualChanges !== undefined ? { visualChanges: block.visualChanges } : {}),
-    ...(block.conditions !== undefined ? { conditions: block.conditions } : {}),
+    ...(block.conditions !== undefined
+      ? {
+          conditions: block.conditions.map((condition, position) =>
+            applied?.conditionsRejected.includes(position) === true
+              ? { ...condition, rejected: true as const }
+              : condition,
+          ),
+        }
+      : {}),
     ...(block.transfers !== undefined
       ? { transfers: reportedTransfers(block.transfers, applied?.drops ?? []) }
       : {}),

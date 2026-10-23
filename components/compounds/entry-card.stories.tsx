@@ -1298,6 +1298,54 @@ export const WorldStateConditionOnly: StoryT = {
   },
 }
 
+// entry-card.md → Panel anatomy: a condition apply.ts refused, for a row the prompt didn't show
+// with its state or with blank text, isn't listed; World kept the old one.
+export const WorldStateRejectedConditions: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'piggyback_tagged_block',
+      conditions: [
+        { id: LOC_B, text: 'burned to the ground', rejected: true },
+        { id: LOC_A, text: 'flooded to the knee' },
+        { id: ITEM_A, text: ' ', rejected: true },
+      ],
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText('Condition: Ashfen Marshes — flooded to the knee')).toBeVisible()
+    expect(screen.queryByText(/Condition: Eldrin Keep/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Condition: Sword of Dawn/)).not.toBeInTheDocument()
+  },
+}
+
+// A refused condition alone is no change this turn.
+export const WorldStateRejectedConditionOnly: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'piggyback_tagged_block',
+      conditions: [{ id: LOC_B, text: 'burned to the ground', rejected: true }],
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.queryByText('Changes this turn')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Condition: Eldrin Keep/)).not.toBeInTheDocument()
+  },
+}
+
 // So is a drop alone.
 export const WorldStateDropOnly: StoryT = {
   ...wrap,

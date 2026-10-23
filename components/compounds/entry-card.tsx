@@ -571,7 +571,8 @@ function WorldStatePanel({
   editTriggerRef: RefObject<View | null>
 }) {
   const visualChanges = stateReport?.visualChanges ?? []
-  const conditions = stateReport?.conditions ?? []
+  // A refused condition left World as it was; the per-turn inspector shows it.
+  const conditions = (stateReport?.conditions ?? []).filter((c) => c.rejected !== true)
   const items = stateReport?.transfers?.items ?? []
   const drops = stateReport?.transfers?.drops ?? []
   const stackables = stateReport?.transfers?.stackables ?? []

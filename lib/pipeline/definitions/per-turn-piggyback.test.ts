@@ -3362,6 +3362,30 @@ describe('per-turn-piggyback', () => {
           kind: 'location',
           shown: false,
         })
+        expect(metadataPatch(events).stateReport?.conditions).toEqual([
+          { id: OLD_KEY, text: 'bent at the bit' },
+          { id: TOWN, text: 'flooded to the knee', rejected: true },
+        ])
+      })
+
+      it('marks a blank condition refused on the report and writes nothing', async () => {
+        seedFallbackTurn([
+          keyHeld(),
+          worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }),
+          keyRow(),
+        ])
+        const { events } = await runFallback(
+          fallbackClassifierSchema.parse({
+            sceneEntities: ['c1'],
+            worldTimeDelta: 0,
+            conditions: [{ id: 'i1', text: '  ' }],
+          }),
+          { intermediates: { idMap: idMapWithKey() } },
+        )
+        expect(payloads(events, 'updateEntityCondition')).toEqual([])
+        expect(metadataPatch(events).stateReport?.conditions).toEqual([
+          { id: OLD_KEY, text: '  ', rejected: true },
+        ])
       })
 
       it("writes the current location's condition once the floor seats it", async () => {
