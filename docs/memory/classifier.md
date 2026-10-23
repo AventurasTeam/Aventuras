@@ -109,7 +109,9 @@ alias list (the keywords bullet below).
   alias, a title, a disguise, or a shortened or fuller form of its
   name, which go to its keywords. On a rename the old name joins the
   keywords, so retrieval still finds it. A name another row of the
-  kind already holds isn't written: the name joins the entity's
+  kind already holds isn't written (for a place, a place it is
+  compared with: a real sibling, or any place when either is
+  unplaced): the name joins the entity's
   keywords, as a name the turns use for it, and the pass flags the
   entity (`name-taken`) with the oldest holder as its partner, for the
   user to merge. An entity already flagged keeps its flag and gets the
