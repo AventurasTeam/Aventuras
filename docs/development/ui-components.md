@@ -37,7 +37,7 @@ rest:
 | `busy`, `cancelWhileBusy`  | the busy lock                                                                   |
 | `dirty`, `discardQuestion` | see below                                                                       |
 | `cancelLabel`              | only when Cancel ends more than the modal: "Cancel import"                      |
-| `titleIcon`                | only for a confirmation that warns, like the backup and restore ones            |
+| `titleIcon`                | only for a risk beyond the action itself; see Wording                           |
 | `removal`                  | removing the thing the modal edits; see below                                   |
 | `size`                     | `md` (the default) or `lg`                                                      |
 | `presentation`             | `sheet` for a tool; the default `dialog` for a command; see below               |
@@ -114,6 +114,11 @@ carries no glyph of that control.
 - **The discard and removal questions name both outcomes:** "Keep editing" or "Discard", "Keep
   anchor" or "Delete anchor". Their buttons are the footer's pair: Outline to stay, and the
   `feature` variant in the `delete` tone to go.
+
+- **A warning icon only where a confirmation warns of a risk beyond the action itself,** like a
+  backup that carries API keys, or a restore that replaces the database and closes the app. The
+  discard and removal questions carry none: they confirm what the user just chose, and their
+  description says what is lost.
 
 The backup and restore confirmations keep their own wording.
 

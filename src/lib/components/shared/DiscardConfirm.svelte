@@ -1,6 +1,5 @@
 <script lang="ts">
   import { Button } from '#lib/components/ui/button/index.ts'
-  import { TriangleAlert } from '@lucide/svelte'
   import { cn } from '#lib/utils/cn.ts'
   import { FEATURE_COLORS } from './featureColors'
 
@@ -51,15 +50,10 @@
       aria-labelledby="{uid}-title"
       aria-describedby="{uid}-description"
     >
-      <div class="flex items-start gap-3">
-        <TriangleAlert class="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
-        <div class="min-w-0">
-          <h2 id="{uid}-title" class="font-semibold">{title}</h2>
-          <p id="{uid}-description" class="text-muted-foreground mt-1 text-sm">
-            {description}
-          </p>
-        </div>
-      </div>
+      <h2 id="{uid}-title" class="font-semibold">{title}</h2>
+      <p id="{uid}-description" class="text-muted-foreground mt-1 text-sm">
+        {description}
+      </p>
 
       <!-- The same pair as an action modal's footer: neutral to stay, the delete tone to go. -->
       <div class="mt-5 flex gap-2 sm:justify-end">
