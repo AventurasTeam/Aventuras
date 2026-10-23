@@ -502,6 +502,14 @@ describe('matchNewLocation — the unplaced places', () => {
       )
     })
 
+    it('flags a partial name on a retired unplaced place', () => {
+      expect(
+        placed({ name: 'Varn Docks', placement: UNPLACED }, [
+          { ...VARN, status: 'retired' as const },
+        ]),
+      ).toEqual(flaggedWith('loc_varn', 'unplaced'))
+    })
+
     it('never flags a partial name elsewhere on the map', () => {
       expect(placed({ name: 'The Drowned Market Stalls', placement: UNPLACED }, [MARKET])).toEqual(
         PLAIN,

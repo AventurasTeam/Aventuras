@@ -8,10 +8,12 @@ import { samePlacement, type PlacePlacement } from './placement'
 const SAME_PARENT = 'same-parent' satisfies CollisionReason
 const UNPLACED = 'unplaced' satisfies CollisionReason
 
+type PlaceFlagReason = Extract<CollisionReason, 'same-parent' | 'unplaced'>
+
 export type PlaceMatch =
   /** `place`: the reused row is unplaced, and the writer must place it where the create sits. */
   | { kind: 'reuse'; id: string; place: boolean }
-  | { kind: 'create'; flag: { partnerId: string; reason: 'same-parent' | 'unplaced' } | null }
+  | { kind: 'create'; flag: { partnerId: string; reason: PlaceFlagReason } | null }
 
 type PlaceCandidate = { name: string; placement: PlacePlacement; keywords?: readonly string[] }
 
@@ -39,7 +41,7 @@ function partnerRank(candidate: PlaceCandidate, entity: Entity): number | null {
 function flagPartner(
   candidate: PlaceCandidate,
   among: readonly Entity[],
-  reason: 'same-parent' | 'unplaced',
+  reason: PlaceFlagReason,
 ): PlaceMatch {
   const [partner] = among
     .flatMap((entity) => {
@@ -53,7 +55,6 @@ function flagPartner(
   }
 }
 
-// Under a parent or top-level: what the map hangs there, then an unplaced namesake, then siblings.
 function matchPlaced(
   candidate: PlaceCandidate,
   parentId: string | null,
