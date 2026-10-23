@@ -815,3 +815,22 @@ slice-planning gate forces its resolution before that slice is planned.
   which does the same. Predates the pass failure policy slice; its
   slice review's simplifier pass moved only the slice's own copy.
   Raised 2026-10-23.
+
+- **The Select's segment and radio branches go uncontrolled on an
+  `undefined` value.** `components/ui/select.tsx`'s `SegmentBranch` and
+  `RadioBranch` hand `value` straight to Radix, whose
+  `useControllableState` reads `undefined` as uncontrolled, so a caller
+  passing `undefined` (legal under `value: string | undefined`) switches
+  between controlled and uncontrolled and gets React's warning. The
+  dropdown branch maps it to `EMPTY_VALUE`. Raised 2026-10-23 by the AI
+  writer map's Task 9 review, whose cast parent picker hit it.
+
+- **The wizard's pack context exposes undocumented cast fields.**
+  `components/wizard/wizard-assist.ts`'s cast projection passes
+  `unresolvedParentLocationName` and `unresolvedFactionName` to
+  user-authored pack templates, while the documented surface
+  (`lib/prompts/templateContextMap.ts`) lists only
+  `parentLocationId` / `condition` for locations; the file's own rule is
+  that anything a pack can reach can't be withdrawn later. Raised
+  2026-10-23 by the AI writer map's Task 9 review, which kept the new
+  `parentUnknown` out of the same projection.
