@@ -193,11 +193,10 @@ describe('reasoning levels on the wire', () => {
   describe.each(PROVIDERS_UNDER_TEST.filter((p) => TIER[p] === 'native'))('%s', (providerType) => {
     it('lets the reasoning setting change the request', async () => {
       const none = JSON.stringify(await bodyAt(providerType, 'none'))
-      const others = await Promise.all(
-        levelsFor(providerType)
-          .filter((l) => l !== 'none')
-          .map(async (level) => JSON.stringify(await bodyAt(providerType, level))),
-      )
+      const others: string[] = []
+      for (const level of levelsFor(providerType).filter((l) => l !== 'none')) {
+        others.push(JSON.stringify(await bodyAt(providerType, level)))
+      }
 
       expect(
         others.some((body) => body !== none),
