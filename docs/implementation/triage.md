@@ -834,3 +834,12 @@ slice-planning gate forces its resolution before that slice is planned.
   that anything a pack can reach can't be withdrawn later. Raised
   2026-10-23 by the AI writer map's Task 9 review, which kept the new
   `parentUnknown` out of the same projection.
+
+- **A cast row's unresolved faction can't be cleared with no
+  candidates.** `components/wizard/cast-editors.tsx`'s `PickFromCast`
+  renders its empty-state text when the cast holds no other row of the
+  kind, so a character whose AI-proposed faction the wizard couldn't
+  resolve keeps its warning with nothing to pick. The location picker
+  now offers `Unknown` and `Top level` there; the faction picker has no
+  equivalent "none". Raised 2026-10-23 by the AI writer map's final PR 1
+  review.
