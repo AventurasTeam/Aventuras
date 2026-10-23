@@ -1237,8 +1237,7 @@ export const WorldStateReported: StoryT = {
 
 const ITEM_LANTERN = 'item_00000000-0000-4000-8000-0000000000c9'
 
-// entry-card.md → Panel anatomy: a condition with its text, an item put down at its place, or with
-// no place when the scene had none; each beside its kin.
+// entry-card.md → Panel anatomy: a condition and a drop (placed or not) sit beside their kin.
 export const WorldStateConditionsAndDrops: StoryT = {
   ...wrap,
   args: {
@@ -1298,8 +1297,7 @@ export const WorldStateConditionOnly: StoryT = {
   },
 }
 
-// entry-card.md → Panel anatomy: a condition apply.ts refused, for a row the prompt didn't show
-// with its state or with blank text, isn't listed; World kept the old one.
+// entry-card.md → Panel anatomy: a refused condition (unshown row, blank text) isn't listed.
 export const WorldStateRejectedConditions: StoryT = {
   ...wrap,
   args: {
@@ -1346,7 +1344,7 @@ export const WorldStateRejectedConditionOnly: StoryT = {
   },
 }
 
-// So is a drop alone.
+// A drop alone is a change this turn, like a condition alone.
 export const WorldStateDropOnly: StoryT = {
   ...wrap,
   args: {

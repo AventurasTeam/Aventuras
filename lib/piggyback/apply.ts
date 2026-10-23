@@ -170,8 +170,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     }
   }
 
-  // data-model.md → Authorship contract, seen before written: a condition only for a place or an
-  // item the prompt showed with its state.
+  // data-model.md → Authorship contract (seen before written): only shown places and items.
   const conditionsRejected: number[] = []
   for (const [position, change] of (block.conditions ?? []).entries()) {
     const condition = change.text.trim()
@@ -208,8 +207,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     })
   }
 
-  // Item transfers and drops, in the block's order: an item taken and then put down lies where the
-  // scene is; one put down and then taken is held.
+  // In the block's order: taken then put down lies at the scene; put down then taken is held.
   const inventoryPatches = new Map<string, { equipped_items?: string[]; inventory?: string[] }>()
   const currentInventory = (id: string): { equipped_items: string[]; inventory: string[] } => {
     const state = byId.get(id)?.state as CharacterState | undefined
@@ -257,8 +255,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   }
 
   const drops: AppliedDrop[] = []
-  // piggyback.md → Trailing block format: a drop puts a held item down where the scene is, the
-  // turn's location or else the previous one; an item put down anywhere else stays prose.
+  // piggyback.md → Trailing block format: a drop lands where the scene is; elsewhere stays prose.
   const putDown = (drop: ItemDrop) => {
     if (byId.get(drop.id)?.kind !== 'item') return
     const holders = entities.filter((holder) => holds(holder.id, drop.id)).map((h) => h.id)

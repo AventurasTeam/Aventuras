@@ -44,8 +44,7 @@ function attr(value: string | number): string {
   return String(value).replace(/["<>]/g, '')
 }
 
-// The parser decodes the five XML entities in a create's name, condition and description, so they
-// round-trip escaped; `&` first, so an entity typed into the text survives as typed.
+// Round-trips the parser's entity decoding; `&` first, so an entity typed into the text survives.
 function escaped(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -105,8 +104,7 @@ function renderNewItems(block: AuthoredStateBlock): string[] {
   })
 }
 
-// Item moves and drops in the block's order: a parsed block's `seq`, else list order with the
-// drops after the item moves.
+// Block order: a parsed block's `seq`, else list order with the drops after the item moves.
 function renderTransfers(block: AuthoredStateBlock): string | null {
   const items = block.transfers?.items ?? []
   const drops = block.transfers?.drops ?? []
@@ -142,10 +140,9 @@ function renderRetrievalQueries(block: AuthoredStateBlock): string | null {
 }
 
 /**
- * An inner tag is emitted only when it carries content: the app's parser treats
- * "content present but nothing extractable" as a truncation failure, so an
- * empty `<visual_changes></visual_changes>` would report a parse failure rather
- * than "nothing to report". Tags follow the order the state-emission macro shows.
+ * An inner tag is emitted only with content: the parser reads "content present but nothing
+ * extractable" as truncation, so an empty `<visual_changes></visual_changes>` reports a parse
+ * failure, not "nothing to report". Tags follow the order the state-emission macro shows.
  */
 function stateLines(block: AuthoredStateBlock): string[] {
   const lines: string[] = []

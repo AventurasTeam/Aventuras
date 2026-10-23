@@ -1444,7 +1444,7 @@ describe('placeLocation', () => {
   })
 })
 
-// piggyback.md → Trailing block format: a place's or an item's condition, replaced whole.
+// piggyback.md → Trailing block format.
 describe('updateEntityCondition', () => {
   const HALL: NewEntity = {
     ...CHAR,

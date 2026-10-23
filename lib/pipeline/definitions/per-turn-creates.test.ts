@@ -320,7 +320,7 @@ describe('planTurnCreates — kept only if used', () => {
     expect(plan.report.newItems[0]?.outcome).toBe('dropped')
   })
 
-  // piggyback.md → Kept only if used: a drop is the last transfer naming the item, so it stays prose.
+  // piggyback.md → Kept only if used: an item whose last transfer is a drop stays prose.
   it('drops a new item taken and then put down with <drop>, and the drop with it, logged', async () => {
     const debugSpy = vi.spyOn(logger, 'debug')
     const plan = await runPlanner({
@@ -1598,8 +1598,7 @@ describe("planTurnCreates — a create's condition", () => {
       },
       { entities: world(market('active')) },
     )
-    // The market is reused (its exact name under the same parent), so only the docks and the key
-    // are new rows, and nothing writes the market's condition.
+    // The market is reused (same name and parent): only docks and key are new; its condition stays.
     expect(createdEntries(plan.creates).map((e) => [e.id, e.state])).toEqual([
       [
         'loc_new_1',

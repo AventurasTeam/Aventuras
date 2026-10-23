@@ -6,8 +6,8 @@ type StateReport = NonNullable<EntryMetadata['stateReport']>
 type ReportedTransfers = NonNullable<StateReport['transfers']>
 type ReportedDrop = NonNullable<ReportedTransfers['drops']>[number]
 
-// data-model.md → Entry metadata shape: the moves as emitted, without the order apply.ts followed,
-// and each drop where apply.ts put it, never the block's own.
+// data-model.md → Entry metadata shape: moves as emitted, minus `seq`; each drop as apply.ts put
+// it, never the block's own.
 function reportedTransfers(
   transfers: ParsedTransfers,
   drops: readonly ReportedDrop[],

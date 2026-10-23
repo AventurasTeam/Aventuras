@@ -151,10 +151,8 @@ function parseConditions(segment: string): ConditionChange[] {
   return changes
 }
 
-// <item id="..." to="..." from="..." slot="..." />, <drop id="..." from="..." /> and
-// <stackable key="..." amount="..." to="..." from="..." /> — self-closing, attribute-only. Holders
-// are listed entities; an item's id may also be a create's handle. Item moves and drops are
-// numbered together in document order, which apply.ts follows: an item taken, then put down.
+// Self-closing, attribute-only <item>, <drop> and <stackable> (piggyback.md → Trailing block
+// format). Item moves and drops share one document-order `seq`, which apply.ts follows.
 function parseTransfers(segment: string): ParsedTransfers {
   const items: ItemTransfer[] = []
   const drops: ItemDrop[] = []
@@ -269,8 +267,7 @@ const XML_ENTITIES = {
   amp: '&',
 } as const
 
-// One pass, so `&amp;lt;` reads `&lt;` and not `<`. Only a name, a description and a condition
-// are prose.
+// One pass, so `&amp;lt;` reads `&lt;`, not `<`. Prose fields only: name, description, condition.
 function decodeEntities(text: string): string {
   return text.replace(
     /&(quot|apos|lt|gt|amp);/g,

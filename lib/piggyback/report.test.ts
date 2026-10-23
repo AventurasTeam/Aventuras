@@ -217,8 +217,7 @@ describe('buildStateReport', () => {
     expect(report?.transfers?.stackables[0]?.key).toBe('gold')
   })
 
-  // data-model.md → Entry metadata shape: the report records the moves as emitted, not the order
-  // apply.ts followed.
+  // data-model.md → Entry metadata shape.
   it('reports item moves without the order the block carried', () => {
     const report = buildStateReport({
       layer: 'piggyback_tagged_block',
@@ -320,7 +319,7 @@ describe("buildStateReport with this turn's creates", () => {
   })
 })
 
-// data-model.md → Entry metadata shape: conditions as emitted; a drop where apply.ts put it.
+// data-model.md → Entry metadata shape.
 describe('buildStateReport — conditions and drops', () => {
   it('reports conditions as emitted', () => {
     const report = buildStateReport({

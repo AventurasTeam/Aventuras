@@ -273,7 +273,7 @@ describe('systemFailure', () => {
   })
 })
 
-// data-model.md → Entry metadata shape: conditions, drops where they landed, a create's condition.
+// data-model.md → Entry metadata shape.
 describe('stateReport conditions and drops', () => {
   const base = { sceneEntities: [], currentLocationId: null, worldTime: 0 }
   const stateReport = {

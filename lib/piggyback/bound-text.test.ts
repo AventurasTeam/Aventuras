@@ -4,7 +4,7 @@ import { entityStateSchemaForKind } from '@/lib/db'
 
 import { boundStateText } from './bound-text'
 
-// piggyback.md → Trailing block format: a visual value's bound and cut, which conditions share.
+// piggyback.md → Trailing block format.
 describe('boundStateText', () => {
   it('returns a text within the 500-character bound as it is, uncut', () => {
     expect(boundStateText('notched')).toEqual({ text: 'notched', cut: false })

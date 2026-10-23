@@ -3415,8 +3415,8 @@ describe('per-turn-piggyback', () => {
         ])
       })
 
-      // The JSON's two lists carry no order between them: its drops apply after every item move,
-      // not interleaved by index with the key's own move (a lamp's move comes first, the key's second).
+      // The JSON's two lists carry no order between them: drops apply after every item move, not
+      // interleaved by index (the lamp moves first, the key second).
       it('puts the key down after all the moves, so it lies where the scene is', async () => {
         const OLD_LAMP = 'item_00000000-0000-4000-8000-0000000000b2'
         seedFallbackTurn([
@@ -3480,8 +3480,7 @@ describe('per-turn-piggyback', () => {
         })
       })
 
-      // The fold applied these before its own parse failed: a reply naming neither keeps the
-      // fold's record of them, each drop where it landed.
+      // The fold applied these before its parse failed: a reply naming neither keeps its record.
       it("keeps the fold's conditions and drops when the reply reports neither", async () => {
         const foldReport: NonNullable<EntryMetadata['stateReport']> = {
           layer: 'piggyback_tagged_block',
@@ -3528,8 +3527,8 @@ describe('per-turn-piggyback', () => {
         expect(report?.transfers).toEqual(foldReport.transfers)
       })
 
-      // Nothing of the reply's field applied counts as absent too (the town is on the map by name
-      // only; the key lies in the market, away from the scene): the fold's record stays.
+      // Nothing of the reply's field applied counts as absent too (the town is name-only, the key
+      // lies away from the scene): the fold's record stays.
       describe('a reply field with nothing applied', () => {
         const LAMP = 'item_00000000-0000-4000-8000-0000000000b3'
         const foldReport: NonNullable<EntryMetadata['stateReport']> = {

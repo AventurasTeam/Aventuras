@@ -445,9 +445,8 @@ export async function buildGenerationContext(
   const sceneFactions = floorEntities(floor?.sceneFactions, views)
   const looseItems = looseRows.map((row) => promptEntity(row, views))
   const namedCharacters = named.map((e) => promptEntity(e, views))
-  // piggyback.md → Trailing block format: what a condition may name, the rows this prompt shows
-  // with their state, read off the rows the template renders. Real ids, so they stay out of
-  // `context`, which substituteIds rewrites.
+  // piggyback.md → Trailing block format: rows shown with their state, read off what the template
+  // renders. Real ids, so outside `context`, which substituteIds rewrites.
   const stateShownIds = shownWithState([
     ...inScene.map((e) => promptEntity(e, views)),
     ...(structuralLocation === null ? [] : [structuralLocation]),

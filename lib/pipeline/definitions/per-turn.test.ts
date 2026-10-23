@@ -2286,8 +2286,7 @@ describe('narrative fold — creates', () => {
     expect(events.filter((e) => e.type === 'delta_emitted')).toEqual([])
   })
 
-  // data-model.md → Authorship contract, seen before written: the prompt showed the held sword
-  // with its state, and the market only by name on the map.
+  // data-model.md → Authorship contract, seen before written: the market is listed by name only.
   it('writes a condition only for a row its prompt showed with its state', async () => {
     const SWORD = 'item_00000000-0000-4000-8000-0000000000b2'
     await seedTurn([

@@ -446,8 +446,7 @@ test.describe('turn creates — where a new place sits', () => {
   })
 })
 
-// piggyback.md → Trailing block format: a turn conditions the place its prompt showed with its
-// state, and puts a held item down there; the entry card lists both.
+// piggyback.md → Trailing block format.
 const BLADE = 'Courier’s Blade'
 const BLADE_REF = /\[(i\d+)\] Courier’s Blade/
 const SCENE_CONDITION = 'its gate smashed open and the yard ankle-deep in rain'

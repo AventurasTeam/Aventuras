@@ -1502,7 +1502,7 @@ describe('buildPiggybackActions input', () => {
   })
 })
 
-// piggyback.md → Trailing block format: conditions, drops, and the order the block gives its moves.
+// piggyback.md → Trailing block format.
 describe('buildPiggybackActions — conditions and drops', () => {
   const person = (id: string, over: Partial<CharacterState> = {}) =>
     mockEntity({ id, state: { ...emptyEntityState('character'), ...over } })
@@ -1644,8 +1644,8 @@ describe('buildPiggybackActions — conditions and drops', () => {
       expect(result.applied.conditionsRejected).toEqual([0])
     })
 
-    // An id can repeat in one block, so a refusal is recorded by its place in the list: each
-    // repeated id's refused copy comes after its first.
+    // A refusal is recorded by list position, not id: each repeated id's refused copy comes after
+    // its first, so the first index of the id can't pass for the position.
     it('records each refused condition by its position in the block', () => {
       const result = run(
         {

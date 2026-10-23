@@ -4,10 +4,9 @@ const CJK_CLAUSE_MARKS = '。、，；！？'
 const SENTENCE_ENDS = '.。！？'
 
 /**
- * piggyback.md → Trailing block format: a visual value's or a condition's bound. An over-long
- * value fails the whole-state re-validation of every later updateEntity carrying `state`, so it is
- * cut back to the last sentence or clause boundary in the bound's second half, else the last
- * whitespace there, else mid-word; by UTF-16 unit (Zod's `.length`), never mid-surrogate.
+ * piggyback.md → Trailing block format. An over-long value fails every later updateEntity's
+ * whole-state re-validation, so cut it at a clause or word boundary in the bound's second half,
+ * else mid-word; by UTF-16 unit (Zod's `.length`), never mid-surrogate.
  */
 export function boundStateText(text: string): { text: string; cut: boolean } {
   if (text.length <= VISUAL_TEXT_MAX) return { text, cut: false }
@@ -18,8 +17,7 @@ function cutAtBoundary(text: string): string {
   const head = text.slice(0, VISUAL_TEXT_MAX)
   // Below the midpoint a cut drops half the bound or more, too much to pay for a cleaner one.
   const floor = VISUAL_TEXT_MAX / 2
-  // An ASCII mark ends a clause only where whitespace follows it ("1.8 m" has none); CJK text
-  // puts no whitespace after its marks.
+  // ASCII marks end a clause only before whitespace ("1.8 m" has none); CJK marks need none.
   let clause = -1
   for (let i = head.length - 1; i >= floor && clause < 0; i--) {
     const mark = head[i]!
