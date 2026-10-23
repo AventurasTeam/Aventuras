@@ -15,6 +15,7 @@ import {
   specToAspectRatio,
   type ImageSpec,
 } from '#lib/utils/image.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 
 const DEFAULT_BASE_URL = 'https://api.nano-gpt.com/api/v1'
 const MODELS_ENDPOINT = 'https://nano-gpt.com/api/models'
@@ -26,8 +27,7 @@ const ASPECT_RATIO = /^\d+(\.\d+)?:\d+(\.\d+)?$/
 const IMG2IMG_TAGS = new Set(['image-to-image', 'image-edit'])
 
 export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvider {
-  const configured = config.baseUrl?.trim().replace(/\/+$/, '')
-  const baseUrl = configured || DEFAULT_BASE_URL
+  const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL
   const nanogpt = createNanoGPTImage({
     apiKey: config.apiKey,
     baseURL: baseUrl,

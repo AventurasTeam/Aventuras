@@ -12,8 +12,14 @@ vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
   createSdkFetch: vi.fn(() => sdkFetch),
 }))
 
+vi.mock('#lib/utils/url.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
+  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
+})
+
 import { imageGetFetch } from './fetchAdapter'
 import { createSdkFetch } from '#lib/services/ai/sdk/providers/sdkFetch.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { createNanoGPTProvider } from './nanogpt'
 import type { ImageGenerateOptions, ImageModelInfo } from './types'
 
@@ -71,13 +77,21 @@ describe('NanoGPT adapter', () => {
     )
   })
 
-  it.each(['https://nano-gpt.com/api/v1', 'https://nano-gpt.com/api/v1/', 'https://proxy.test/v1'])(
-    'keeps the configured base URL %s',
-    async (baseUrl) => {
-      await createNanoGPTProvider({ apiKey: 'k', baseUrl }).generate(options())
-      expect(sentRequest().url).toBe(`${baseUrl.replace(/\/+$/, '')}/images`)
-    },
-  )
+  it('posts to the normalized base URL', async () => {
+    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v1')
+    await createNanoGPTProvider({ apiKey: 'k', baseUrl: ' https://raw.test// ' }).generate(
+      options(),
+    )
+    expect(normalizeBaseUrl).toHaveBeenCalledWith(' https://raw.test// ')
+    expect(sentRequest().url).toBe('https://normalized.test/v1/images')
+  })
+
+  it('keeps a configured base URL as entered', async () => {
+    await createNanoGPTProvider({ apiKey: 'k', baseUrl: 'https://nano-gpt.com/api/v1' }).generate(
+      options(),
+    )
+    expect(sentRequest().url).toBe('https://nano-gpt.com/api/v1/images')
+  })
 
   it("picks the resolution from the model's supported resolutions", async () => {
     await createNanoGPTProvider({ apiKey: 'k' }).generate(
