@@ -123,6 +123,11 @@ type PickFromCastProps = {
   candidates: readonly { id: string; name: string }[]
   value: string | null
   onChange: (value: string | null) => void
+  /**
+   * Shown while `value` is null but not chosen as none (an import's unknown parent): no option
+   * reads as picked, so picking the null option still lands.
+   */
+  unknownLabel?: string
 }
 
 function PickFromCast({
@@ -132,6 +137,7 @@ function PickFromCast({
   candidates,
   value,
   onChange,
+  unknownLabel,
 }: PickFromCastProps) {
   if (candidates.length === 0) {
     return (
@@ -150,7 +156,8 @@ function PickFromCast({
     <FormRow label={label}>
       <Select
         options={options}
-        value={value ?? NULL_CAST_REF}
+        value={value ?? (unknownLabel == null ? NULL_CAST_REF : undefined)}
+        placeholder={unknownLabel}
         onValueChange={(next) => onChange(next === NULL_CAST_REF ? null : next)}
         label={label}
       />
@@ -284,10 +291,20 @@ export function LocationEditor({ row, invalid, cast }: CommonEditorProps<WizardL
               label={t('wizard:cast.editor.parentLocation')}
               emptyLabel={t('wizard:cast.editor.noLocationsYet')}
               nullLabel={t('wizard:cast.editor.noParent')}
+              unknownLabel={
+                row.parentLocationId == null &&
+                (row.parentUnknown || row.unresolvedParentLocationName.trim() !== '')
+                  ? t('wizard:cast.editor.parentUnknown')
+                  : undefined
+              }
               candidates={locationCandidates}
               value={row.parentLocationId}
               onChange={(parentLocationId) =>
-                wizardStore.patchCast(row, { parentLocationId, unresolvedParentLocationName: '' })
+                wizardStore.patchCast(row, {
+                  parentLocationId,
+                  unresolvedParentLocationName: '',
+                  parentUnknown: false,
+                })
               }
             />
             <FormRow label={t('wizard:cast.editor.condition')}>

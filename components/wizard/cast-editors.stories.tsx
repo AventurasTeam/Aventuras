@@ -350,7 +350,7 @@ export const Location: Story = {
     await waitFor(() =>
       expect((castRowById('loc-1') as WizardLocationDraft).parentLocationId).toBe('loc-2'),
     )
-    await userEvent.click(screen.getByRole('radio', { name: 'None' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Top level' }))
     await waitFor(() =>
       expect((castRowById('loc-1') as WizardLocationDraft).parentLocationId).toBeNull(),
     )
@@ -359,6 +359,28 @@ export const Location: Story = {
     await waitFor(() =>
       expect((castRowById('loc-1') as WizardLocationDraft).condition).toBe('Recently besieged'),
     )
+  },
+}
+
+/** An import's unknown parent reads Unknown, not Top level; picking Top level marks it top-level. */
+export const LocationUnknownParentPicksTopLevel: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([
+      locationRow({ id: 'loc-1', name: 'Lower', parentUnknown: true }),
+      locationRow({ id: 'loc-2', name: 'Upper' }),
+    ])
+  },
+  render: () => <LocationEditorDemo id="loc-1" />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'More options' }))
+    const topLevel = await screen.findByRole('radio', { name: 'Top level' })
+    await expect(topLevel).toHaveAttribute('aria-checked', 'false')
+    await userEvent.click(topLevel)
+    await waitFor(() =>
+      expect((castRowById('loc-1') as WizardLocationDraft).parentUnknown).toBe(false),
+    )
+    await expect((castRowById('loc-1') as WizardLocationDraft).parentLocationId).toBeNull()
   },
 }
 

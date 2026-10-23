@@ -33,7 +33,12 @@ import {
   resolveEmbedderGate,
   type EmbedderGateResult,
 } from '@/lib/embedder'
-import { checkParentChain, parentOfLocations } from '@/lib/world'
+import {
+  checkParentChain,
+  parentOfLocations,
+  withPlacement,
+  type PlacePlacement,
+} from '@/lib/world'
 
 import { clampEffectiveDim } from './memory-cost-logic'
 import { activeLead, invalidCastRowIds } from './step-cast-logic'
@@ -126,14 +131,27 @@ function characterState(
   }
 }
 
+// data-model.md → LocationState shape: no parent picked or asked for is top-level; one the import
+// couldn't resolve, dropped for a loop, or a pointer naming no other location is unplaced.
+function locationPlacement(draft: WizardLocationDraft, parentId: string | null): PlacePlacement {
+  if (parentId != null) return { kind: 'under', parentId }
+  const unknown =
+    draft.parentLocationId != null ||
+    draft.parentUnknown ||
+    draft.unresolvedParentLocationName.trim() !== ''
+  return unknown ? { kind: 'unplaced' } : { kind: 'top' }
+}
+
 function locationState(
   draft: WizardLocationDraft,
   cast: readonly WizardCastDraft[],
 ): LocationState {
-  return {
-    parent_location_id: castRef(cast, draft, draft.parentLocationId, 'location'),
+  const state: LocationState = {
+    parent_location_id: null,
     ...(draft.condition.trim().length > 0 ? { condition: draft.condition } : {}),
   }
+  const parentId = castRef(cast, draft, draft.parentLocationId, 'location')
+  return withPlacement(state, locationPlacement(draft, parentId))
 }
 
 function itemState(draft: WizardItemDraft): ItemState {

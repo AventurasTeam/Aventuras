@@ -472,6 +472,9 @@ describe('unresolved reference reporting', () => {
     expect(upper?.kind === 'location' && upper.parentLocationId).toBe(lower?.id)
     expect(lower?.kind === 'location' && lower.parentLocationId).toBeNull()
     expect(lower?.kind === 'location' && lower.unresolvedParentLocationName).toBe('')
+    // Matched, then dropped for the loop: Finish lands it unplaced, not top-level.
+    expect(lower?.kind === 'location' && lower.parentUnknown).toBe(true)
+    expect(upper?.kind === 'location' && upper.parentUnknown).toBe(false)
     // Matched, then dropped: not the "couldn't be matched" count.
     expect(unresolved).toEqual([])
     expect(looped).toEqual([{ rowName: 'Lower', field: 'parentLocation', wantedName: 'Upper' }])

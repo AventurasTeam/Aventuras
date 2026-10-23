@@ -212,7 +212,7 @@ export function resolveCastImports(
     const wantedName =
       suggestion.kind === 'location' ? (suggestion.parent_location_name ?? '').trim() : ''
     looped.push({ rowName: row.name, field: 'parentLocation', wantedName })
-    return { ...row, parentLocationId: null, unresolvedParentLocationName: '' }
+    return { ...row, parentLocationId: null, unresolvedParentLocationName: '', parentUnknown: true }
   })
 
   return { rows: acyclic, unresolved, looped }

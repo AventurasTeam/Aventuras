@@ -81,6 +81,11 @@ const locationCastDraftSchema = z.object({
   condition: z.string().default(''),
   /** Parent-location counterpart of `unresolvedFactionName`. */
   unresolvedParentLocationName: z.string().default(''),
+  /**
+   * An imported parent dropped because it closed a loop: Finish lands the row unplaced, as an
+   * unresolved name does. Cleared once the user picks the field. Wizard-only.
+   */
+  parentUnknown: z.boolean().default(false),
 })
 
 const itemCastDraftSchema = z.object({
