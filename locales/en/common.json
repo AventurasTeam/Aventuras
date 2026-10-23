@@ -177,7 +177,7 @@
       "noSignal": "Their descriptions couldn't be compared.",
       "sameParent": "Both are in \"{{parent}}\".",
       "sameParentRoot": "Both are top-level places.",
-      "unplaced": "Its location is unknown, and places elsewhere share its name."
+      "unplaced": "\"{{flagged}}\" was created with no known location, so it may be \"{{other}}\"."
     },
     "basis": "\"{{holder}}\" also goes by \"{{keyword}}\".",
     "description": "Pick how to resolve this collision. Switching modes discards in-progress choices.",

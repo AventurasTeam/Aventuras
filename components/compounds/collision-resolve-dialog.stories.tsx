@@ -1384,7 +1384,7 @@ export const Unplaced: Story = {
   play: async () => {
     expect(await dialogNamed('⚠ Two locations named "Varn"')).toBeInTheDocument()
     expect(
-      screen.getByText('Its location is unknown, and places elsewhere share its name.'),
+      screen.getByText('"Varn" was created with no known location, so it may be "Varn".'),
     ).toBeInTheDocument()
     expect(screen.queryByText(/^Both are /)).toBeNull()
   },
