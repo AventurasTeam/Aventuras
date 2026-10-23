@@ -488,7 +488,7 @@ describe('periodic classifier template — the writer map rules', () => {
     ],
     [
       'names',
-      '- Names. When the turns establish a listed entity\'s own name, a reveal ("the hooded stranger is Kael"), add a renames entry with its ID as ref, the name, and the sourceTurn; its old name stays on as an alias. An alias, a title or a disguise is not its name: put it in aliases. Add the entry even when another listed entity holds that name: the user is asked to merge the two.\n',
+      '- Names. When the turns establish a listed entity\'s own name, a reveal ("the hooded stranger is Kael"), add a renames entry with its ID as ref, the name, and the sourceTurn; the app keeps its old name as an alias. An alias, a title, a disguise, or a shortened or fuller form of its name is not its name: put it in aliases. Add the entry even when another listed entity holds that name: the user is asked to merge the two.\n',
     ],
     [
       'where places sit',
@@ -496,7 +496,7 @@ describe('periodic classifier template — the writer map rules', () => {
     ],
     [
       'threads',
-      "- Threads. Add a thread when the turns set up something the story will follow past the current scene: a goal a character commits to, a quest given, a mystery raised, a threat that looms. Not a passing intention, and not one already in the Threads list, even worded differently: change its status instead. Emit a status only when the turns establish the change. Put each new thread in newThreads with a title, a short description, its status (pending when the story knows of it but no one pursues it, active when someone does) and the sourceTurn. Put each change in threadStatuses with the listed thread's ID as thread, the new status (active when it is taken up, resolved when it is achieved, failed when it is made impossible) and the sourceTurn.\n",
+      "- Threads. Add a thread when the turns set up something the story will follow past the current scene: a goal a character commits to, a quest given, a mystery raised, a threat that looms. Not a passing intention, and not one already in the Threads list, even worded differently: change its status instead. Emit a status only when the turns establish the change. Put each new thread in newThreads with a title, a short description, its status (pending when the story knows of it but no one pursues it, active when someone does) and the sourceTurn. A thread the turns both open and close goes in newThreads as resolved or failed, with sourceTurn the turn that opened it and resolvedAtTurn the turn that closed it. Put each change in threadStatuses with the listed thread's ID as thread, the new status (active when it is taken up, resolved when it is achieved, failed when it is made impossible) and the sourceTurn.\n",
     ],
     [
       'categories and icons',
@@ -515,7 +515,7 @@ describe('periodic classifier template — the writer map rules', () => {
   // classifier.md → What the classifier writes → Happenings: awareness of a listed happening.
   it('sends awareness of a listed happening to knownAwareness, not a second happening', () => {
     expect(render().system).toContain(
-      'If a character learns of it in a later turn, set learnedAtTurn to the turn that narrated the learning. Never add a happening Known happenings lists again: when the turns show a character learning of one ("Kael tells Aria about the massacre"), add a knownAwareness entry with its ID as happening, the character\'s ID or a new character\'s handle as ref, source, severity and learnedAtTurn.\n',
+      'If a character learns of it after it happened, or learns of a past one, set learnedAtTurn to the turn that narrated the learning. Never add again a happening Known happenings lists: when the turns show a character learning of one ("Kael tells Aria about the massacre"), add a knownAwareness entry with its ID as happening, the character\'s ID or a new character\'s handle as ref, source, severity and learnedAtTurn.\n',
     )
   })
 
