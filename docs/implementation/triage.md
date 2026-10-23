@@ -862,3 +862,11 @@ slice-planning gate forces its resolution before that slice is planned.
   named entities, so a numeric reference (`&#39;`) stays literal in a
   name or description. Raised 2026-10-23 by the AI writer map's Task 11
   review.
+
+- **The entry card reports a skipped visual change.**
+  `lib/piggyback/apply.ts` skips a visual change whose id isn't a
+  character, silently, but the stored report keeps the block's visual
+  changes as emitted, so "Changes this turn" lists one that never
+  landed. The AI writer map's conditions raised the same question
+  (recorded as emitted vs as written); this one predates it. Raised
+  2026-10-23 by the AI writer map's Task 14 review.
