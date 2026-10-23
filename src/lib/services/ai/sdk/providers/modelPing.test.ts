@@ -12,13 +12,8 @@ vi.mock('#lib/stores/debug.svelte.ts', () => ({
   debug: { isActive: false, addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
 }))
 
-vi.mock('#lib/utils/url.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
-  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
-})
-
 const { extractQuotaPercent, getEffectiveBaseUrl, pingModel } = await import('./modelPing')
-const { normalizeBaseUrl } = await import('#lib/utils/url.ts')
+const { PROVIDERS } = await import('./config')
 const { fetch: tauriHttpFetch } = await import('@tauri-apps/plugin-http')
 
 /**
@@ -34,18 +29,16 @@ function headers(pairs: Record<string, string>): Headers {
 
 describe('getEffectiveBaseUrl', () => {
   it("returns the profile's own base URL, normalized", () => {
-    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v1')
     const url = getEffectiveBaseUrl({
       providerType: 'openrouter',
       baseUrl: ' https://raw.test/v1// ',
     } as never)
-    expect(normalizeBaseUrl).toHaveBeenCalledWith(' https://raw.test/v1// ')
-    expect(url).toBe('https://normalized.test/v1')
+    expect(url).toBe('https://raw.test/v1')
   })
 
   it("falls back to the provider's default when the profile has none", () => {
     const url = getEffectiveBaseUrl({ providerType: 'openrouter', baseUrl: '' } as never)
-    expect(url).toContain('openrouter')
+    expect(url).toBe(PROVIDERS.openrouter.baseUrl)
   })
 
   it('returns an empty string for a provider with no default endpoint', () => {
@@ -167,15 +160,13 @@ describe('pingModel', () => {
     expect(headers.get('authorization')).toBe('Bearer key')
   })
 
-  it('pings the normalized base URL', async () => {
+  it('appends the path to the base URL as given', async () => {
     vi.mocked(tauriHttpFetch).mockResolvedValue(new Response('{}', { status: 200 }))
-    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v1')
 
-    await pingModel(' https://raw.test/v1// ', 'key', 'llama')
+    await pingModel('https://host.test/v1', 'key', 'llama')
 
-    expect(normalizeBaseUrl).toHaveBeenCalledWith(' https://raw.test/v1// ')
     expect(vi.mocked(tauriHttpFetch).mock.calls.at(-1)![0]).toBe(
-      'https://normalized.test/v1/chat/completions',
+      'https://host.test/v1/chat/completions',
     )
   })
 })

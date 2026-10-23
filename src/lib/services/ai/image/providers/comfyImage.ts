@@ -28,6 +28,7 @@ export type Json = z.infer<typeof Json>
 type Graph = Record<string, Json>
 
 interface ComfyImageSettings {
+  /** Normalized by the provider factory. */
   baseURL: string
   fetch: Fetch
   /** For polls and cancels, whose requests share one debug entry. */

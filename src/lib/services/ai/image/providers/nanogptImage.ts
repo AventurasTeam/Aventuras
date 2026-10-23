@@ -18,6 +18,7 @@ import {
 
 interface NanoGPTImageSettings {
   apiKey: string
+  /** Normalized by the provider factory. */
   baseURL: string
   fetch: Fetch
 }

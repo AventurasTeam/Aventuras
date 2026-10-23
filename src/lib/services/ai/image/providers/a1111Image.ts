@@ -18,6 +18,7 @@ import {
 } from './imageModelUtils'
 
 interface A1111ImageSettings {
+  /** Normalized by the provider factory. */
   baseURL: string
   apiKey?: string
   fetch: Fetch

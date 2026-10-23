@@ -50,6 +50,16 @@ on load, so the key is always present, and a fallback at the call site is a seco
 the number that nothing forces to agree. That form had put four stale values in the tree at
 once — a `maxIterations` of 50 in the store, 3 in a constructor, 50 again in the slider.
 
+## Base URLs
+
+A configured base URL (an API profile, an image profile, the TTS endpoint) is normalized once,
+with `normalizeBaseUrl` in `utils/url.ts`, where it becomes a request URL: the provider factories,
+`fetchModelsFromProvider`, `getEffectiveBaseUrl` and `TTSService.getEndpoint`. The forms and the
+store keep what the user typed, and code below those boundaries (`pingModel`, the `create*Image`
+clients) takes the URL as given. Defaults we own (`PROVIDERS`, each provider's
+`DEFAULT_BASE_URL`) are never normalized at runtime. `config.test.ts` and the provider tests pin
+them instead.
+
 ## Reasoning Effort
 
 Every question about thinking effort is answered by `src/lib/services/ai/core/reasoning.ts`, a

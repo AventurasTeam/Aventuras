@@ -19,9 +19,7 @@ import {
 } from '#lib/constants/modelHealth.ts'
 
 export function getEffectiveBaseUrl(profile: APIProfile): string {
-  return (
-    normalizeBaseUrl(profile.baseUrl) || normalizeBaseUrl(PROVIDERS[profile.providerType]?.baseUrl)
-  )
+  return normalizeBaseUrl(profile.baseUrl) || PROVIDERS[profile.providerType].baseUrl
 }
 
 function classify(httpCode: number, latencyMs: number, quota: number | null): PingResult {
@@ -70,8 +68,7 @@ export async function pingModel(
   const timer = setTimeout(() => ctrl.abort(), PING_TIMEOUT_MS)
   const t0 = performance.now()
   try {
-    const url = `${normalizeBaseUrl(baseUrl)}/chat/completions`
-    const resp = await httpFetch(url, {
+    const resp = await httpFetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

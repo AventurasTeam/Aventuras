@@ -91,6 +91,22 @@ describe('Google model listing', () => {
     expect(fetchFn).toHaveBeenCalledWith('https://normalized.test/v1beta/models?key=k&pageSize=200')
   })
 
+  it('lists from the default host without a base URL', async () => {
+    const fetchFn = vi.fn(async (_url: string) => ({
+      ok: true,
+      json: async () => ({ models: [] }),
+    }))
+    vi.mocked(createTimeoutFetch).mockReturnValue(
+      fetchFn as unknown as ReturnType<typeof createTimeoutFetch>,
+    )
+
+    await createGoogleProvider({ apiKey: 'k' }).listModels()
+
+    expect(fetchFn).toHaveBeenCalledWith(
+      'https://generativelanguage.googleapis.com/v1beta/models?key=k&pageSize=200',
+    )
+  })
+
   it('returns no models, and makes no request, without a key', async () => {
     expect(await createGoogleProvider({ apiKey: '' }).listModels()).toEqual([])
     expect(createTimeoutFetch).not.toHaveBeenCalled()
