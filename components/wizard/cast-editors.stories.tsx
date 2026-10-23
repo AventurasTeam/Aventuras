@@ -560,6 +560,45 @@ export const LocationHasNoOtherLocationsYetShowsEmptyState: Story = {
   },
 }
 
+/** With no other place to pick, Unknown and Top level are still offered; once placed there is nothing to choose. */
+async function expectUnknownThenTopLevelWithNoOtherPlaces(opts: { clearedAsk: boolean }) {
+  await userEvent.click(await screen.findByRole('button', { name: 'More options' }))
+  await expect(await screen.findByRole('radio', { name: 'Unknown' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+  expect(screen.queryByText('(no locations yet — add one with + Add)')).toBeNull()
+
+  await userEvent.click(screen.getByRole('radio', { name: 'Top level' }))
+  expect(parentOf('loc-1')).toMatchObject({
+    parentLocationId: null,
+    parentUnknown: false,
+    ...(opts.clearedAsk ? { unresolvedParentLocationName: '' } : {}),
+  })
+  expect(await screen.findByText('(no locations yet — add one with + Add)')).toBeInTheDocument()
+  expect(screen.queryByRole('radio', { name: 'Unknown' })).toBeNull()
+}
+
+export const LocationUnresolvedParentWithNoOtherLocationsPicksTopLevel: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([
+      locationRow({ id: 'loc-1', name: 'Lower', unresolvedParentLocationName: 'Mornstone Keep' }),
+    ])
+  },
+  render: () => <LocationEditorDemo id="loc-1" />,
+  play: () => expectUnknownThenTopLevelWithNoOtherPlaces({ clearedAsk: true }),
+}
+
+export const LocationUnknownParentWithNoOtherLocationsPicksTopLevel: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([locationRow({ id: 'loc-1', name: 'Lower', parentUnknown: true })])
+  },
+  render: () => <LocationEditorDemo id="loc-1" />,
+  play: () => expectUnknownThenTopLevelWithNoOtherPlaces({ clearedAsk: false }),
+}
+
 export const Item: Story = {
   beforeEach: () => {
     wizardStore.reset()

@@ -412,13 +412,13 @@ an exact retired namesake or a partial match creates the row with
 `name_collision_flag = 1`, reason `same-parent`, the partner picked in
 that rule's order. An unplaced place flags with the reason `unplaced`
 instead: several active or staged exact namesakes anywhere, or an
-exact retired one alone, create it flagged against the first, an unplaced one first, then
-the older, then by id, and a partial name flags it only against another
-unplaced place. A reused place keeps its description and its
-status, since a mention doesn't enter a staged place, gains the
-entry's new keywords, takes the parent the entry gave when it was
-unplaced, and stands for the handle in the rest of the reply. Two new
-places with one name and parent map to the first.
+exact retired one alone, create it flagged, the partner an unplaced
+match first, then the older, then by id, and a partial name flags it
+only against another unplaced place. A reused place keeps its
+description and its status, since a mention doesn't enter a staged
+place, gains the entry's new keywords, takes the parent the entry gave
+when it was unplaced, and stands for the handle in the rest of the
+reply. Two new places with one name and parent map to the first.
 
 **After the turn.** A pass runs after the turn that brought it due, so
 a place the turn created is already a row it matches against, and the

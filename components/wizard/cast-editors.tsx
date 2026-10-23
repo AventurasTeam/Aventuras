@@ -151,7 +151,7 @@ function PickFromCast({
   const offered = unknownLabel != null && unknown && value == null
   const [reserveUnknown, setReserveUnknown] = useState(offered)
   if (offered && !reserveUnknown) setReserveUnknown(true)
-  if (candidates.length === 0) {
+  if (candidates.length === 0 && !offered) {
     return (
       <FormRow label={label}>
         <Text variant="muted" size="sm">
