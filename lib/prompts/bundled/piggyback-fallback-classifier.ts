@@ -52,10 +52,12 @@ source, and a section that shows state without one leaves the model matching by 
 Here:{% for i in looseItems %}{% include 'macro_item_line', item: i, condition: i.state.condition, ids: true %}{% endfor %}{% endif %}
 
 {% endif -%}
-{% if locationMap.size > 0 -%}
+{% if locationMap.size > 0 or locationMapUnplaced.size > 0 -%}
 # Places
 {% for p in locationMap %}{% for d in (1..p.depth) %}  {% endfor %}{% if p.retired %}{{ p.name }} (retired{% if p.retiredReason %}: {{ p.retiredReason }}{% endif %}){% else %}[{{ p.id }}] {{ p.name }}{% endif %}
-{% endfor %}
+{% endfor %}{% if locationMapUnplaced.size > 0 %}Unplaced:
+{% for p in locationMapUnplaced %}  {% for d in (1..p.depth) %}  {% endfor %}{% if p.retired %}{{ p.name }} (retired{% if p.retiredReason %}: {{ p.retiredReason }}{% endif %}){% else %}[{{ p.id }}] {{ p.name }}{% endif %}
+{% endfor %}{% endif %}
 {% endif -%}
 {% include 'macro_memory_blocks', ids: true -%}
 {%- comment -%}

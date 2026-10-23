@@ -32,9 +32,15 @@ Places, same ID rule — each nested under the place it is part of:
 {%- for p in places %}
 {% for d in (1..p.depth) %}  {% endfor %}- [{{ p.id }}] {{ p.name }}{% if p.status != 'active' %} ({{ p.status }}{% if p.retiredReason %}: {{ p.retiredReason }}{% endif %}){% endif %}{% if p.description %} — {{ p.description }}{% endif %}{% if p.keywords.size > 0 %} (also called: {{ p.keywords | join: ', ' }}){% endif %}
 {%- endfor %}
-{%- unless places and places.size > 0 %}
+{%- if placesUnplaced and placesUnplaced.size > 0 %}
+Unplaced:
+{%- for p in placesUnplaced %}
+  {% for d in (1..p.depth) %}  {% endfor %}- [{{ p.id }}] {{ p.name }}{% if p.status != 'active' %} ({{ p.status }}{% if p.retiredReason %}: {{ p.retiredReason }}{% endif %}){% endif %}{% if p.description %} — {{ p.description }}{% endif %}{% if p.keywords.size > 0 %} (also called: {{ p.keywords | join: ', ' }}){% endif %}
+{%- endfor %}
+{%- endif %}
+{%- unless places and places.size > 0 %}{% unless placesUnplaced and placesUnplaced.size > 0 %}
 (none)
-{%- endunless %}
+{%- endunless %}{% endunless %}
 
 Known relationships, same ID rule — how each character sees another:
 {%- for r in relationships %}

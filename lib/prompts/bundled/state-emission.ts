@@ -3,7 +3,7 @@ export const STATE_EMISSION = `After your narrative prose, append exactly one <s
 <state>
   <scene_entities>comma-separated IDs of every character/item present in this scene</scene_entities>
   <new_location handle="new:a-short-label" parent="the ID or handle of the place it is part of; leave out for a top-level place" name="the place's name">a short description of the place</new_location>
-  <current_location>{% if locationMap.size > 0 %}the ID from Places, or {% endif %}the handle of a new_location above</current_location>
+  <current_location>{% if locationMap.size > 0 or locationMapUnplaced.size > 0 %}the ID from Places, or {% endif %}the handle of a new_location above</current_location>
   <world_time_delta>{% if worldTimeDeltaBasis == 'sinceUserAction' %}seconds elapsed since the end of the user's action{% else %}seconds elapsed since the previous entry, including any time the user's action itself took{% endif %} (0 for a flashback or memory; never negative)</world_time_delta>
   <visual_changes>
     <entity id="ID" type="physique | face | hair | eyes | attire | distinguishing">the category as it is now, restated from its current value shown above: keep what still applies, drop what no longer does, in about 60 words — it replaces the stored value whole</entity>

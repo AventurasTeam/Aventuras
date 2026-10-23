@@ -17,9 +17,9 @@ import {
 import { currentStoryStore, entitiesStore } from '@/lib/stores'
 import {
   buildEntityViews,
-  buildLocationMap,
   byName,
   listedAncestorNames,
+  locationMapView,
   type EntityViews,
   type KindedView,
 } from '@/lib/world'
@@ -182,6 +182,7 @@ const SCENE_VARIABLES = [
   'sceneEntities',
   'currentLocationId',
   'locationMap',
+  'locationMapUnplaced',
   'heldItems',
   'entities',
   'structuralLocation',
@@ -404,6 +405,7 @@ export async function buildGenerationContext(
     currentLocationId: mapCurrentLocationId,
   })
   const branchById = new Map(branchEntities.map((e) => [e.id, e]))
+  const placesMap = locationMapView(branchEntities, mapCurrentLocationId)
   const retrievedEntities = promptEntityRows(retrieval?.bundles.entities.selected)
   const inSceneIds = new Set(scene.sceneEntities)
 
@@ -444,8 +446,9 @@ export async function buildGenerationContext(
     structuralPinnedThreads: floorThreads(floor?.alwaysThreads),
     locationIds: [...new Set(locationIds)],
     // piggyback.md → What the writer sees: the whole branch, never filtered through retrieval or
-    // Layer A, so a move can name any known place.
-    locationMap: buildLocationMap(branchEntities, mapCurrentLocationId),
+    // Layer A, so a move can name any known place, an unplaced one included.
+    locationMap: placesMap.rows,
+    locationMapUnplaced: placesMap.unplacedRows,
     currentLocationChain:
       structuralLocationId === null
         ? []

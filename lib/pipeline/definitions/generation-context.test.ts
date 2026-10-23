@@ -1491,6 +1491,26 @@ describe('buildGenerationContext — location map and held items', () => {
     ])
   })
 
+  // piggyback.md → What the writer sees: unplaced places follow the tree, in a group of their own.
+  it('lists an unplaced place, and what hangs under it, apart from the tree', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(ELDRA, VAULT, PORT),
+      entities: [
+        place(ELDRA, 'Eldra', null),
+        place(VAULT, 'The Vault', null, { state: { parent_location_id: null, unplaced: true } }),
+        place(PORT, 'Port Vellis', VAULT),
+      ],
+      retrieval: undefined,
+    })
+    expect(ctx.locationMap).toEqual([
+      { retired: false, id: 'l1', name: 'Eldra', depth: 0, retiredReason: null },
+    ])
+    expect(ctx.locationMapUnplaced).toEqual([
+      { retired: false, id: 'l2', name: 'The Vault', depth: 0, retiredReason: null },
+      { retired: false, id: 'l3', name: 'Port Vellis', depth: 1, retiredReason: null },
+    ])
+  })
+
   it('lists a retired place without an id, with its reason', async () => {
     const ctx = await buildContext({
       idMap: seededIdMap(ELDRA),
@@ -1744,6 +1764,24 @@ describe('buildGenerationContext — location map and held items', () => {
       entries: sceneAt(VAULT),
     })
     expect(ctx.locationMap).toEqual([
+      { retired: false, id: 'l1', name: 'The Vault', depth: 0, retiredReason: null },
+    ])
+  })
+
+  it('reads the scene for a template that names only locationMapUnplaced', async () => {
+    const readSceneSourceSpy = await readsOnly('locationMapUnplaced')
+    const ctx = await buildContext({
+      idMap: seededIdMap(VAULT),
+      entities: [
+        place(VAULT, 'The Vault', null, {
+          injectionMode: 'disabled',
+          state: { parent_location_id: null, unplaced: true },
+        }),
+      ],
+      entries: sceneAt(VAULT),
+    })
+    expect(readSceneSourceSpy).toHaveBeenCalled()
+    expect(ctx.locationMapUnplaced).toEqual([
       { retired: false, id: 'l1', name: 'The Vault', depth: 0, retiredReason: null },
     ])
   })

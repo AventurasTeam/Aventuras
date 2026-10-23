@@ -234,17 +234,15 @@ describe('matchNewLocation — by the map the prompt showed', () => {
     ).toEqual({ kind: 'reuse', id: 'loc_sanctum' })
   })
 
-  it('prefers a real root child to a place the map roots through a missing parent', () => {
+  // The map shows a place whose parent row is gone as unplaced, so it hangs at no root.
+  it('never reuses a place whose parent row is gone as a root child', () => {
     const orphan = place('loc_orphan', 'Quay', 'loc_gone', { createdAt: 1 })
     const root = place('loc_root', 'Quay', null, { createdAt: 9 })
     expect(matchNewLocation({ name: 'Quay', parentId: null }, [orphan, root])).toEqual({
       kind: 'reuse',
       id: 'loc_root',
     })
-    expect(matchNewLocation({ name: 'Quay', parentId: null }, [orphan])).toEqual({
-      kind: 'reuse',
-      id: 'loc_orphan',
-    })
+    expect(matchNewLocation({ name: 'Quay', parentId: null }, [orphan])).toEqual(PLAIN)
   })
 
   it('flags a place the map roots through a missing parent as a root sibling', () => {

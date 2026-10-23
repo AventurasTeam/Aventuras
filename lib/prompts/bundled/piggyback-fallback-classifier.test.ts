@@ -98,6 +98,7 @@ const context = (over: Record<string, unknown> = {}, rows: Entity[] = WORLD) => 
       { id: 'l2', name: 'The Marsh', depth: 0 },
       { id: 'l1', name: 'The Drowned Keep', depth: 1 },
     ],
+    locationMapUnplaced: [{ id: 'l9', name: 'Varn', depth: 0 }],
     currentLocationChain: ['The Marsh'],
     heldItems: [],
     looseItems: projected.filter((e) => e.id === 'i5'),
@@ -249,6 +250,23 @@ describe('bundled piggyback fallback classifier template', () => {
       expect(render(context())).toContain('# Places\n[l2] The Marsh\n  [l1] The Drowned Keep\n')
     })
 
+    // piggyback.md → What the writer sees: the unplaced places follow the tree under Unplaced:.
+    it('lists the unplaced places after the tree under Unplaced:, a level in, with IDs', () => {
+      const locationMapUnplaced = [
+        { retired: false, id: 'l9', name: 'Varn', depth: 0, retiredReason: null },
+        { retired: false, id: 'l10', name: 'Varn Docks', depth: 1, retiredReason: null },
+        { retired: true, id: null, name: 'Saltmere', depth: 0, retiredReason: null },
+      ]
+      expect(render(context({ locationMapUnplaced }))).toContain(
+        '# Places\n[l2] The Marsh\n  [l1] The Drowned Keep\nUnplaced:\n  [l9] Varn\n    [l10] Varn Docks\n  Saltmere (retired)\n\n',
+      )
+    })
+
+    it('renders Places when only unplaced places are listed, and no group when none is', () => {
+      expect(render(context({ locationMap: [] }))).toContain('# Places\nUnplaced:\n  [l9] Varn\n')
+      expect(render(context({ locationMapUnplaced: [] }))).not.toContain('Unplaced:')
+    })
+
     it('renders a retired place without an id, with its reason or none', () => {
       const locationMap = [
         { retired: false, id: 'l2', name: 'The Marsh', depth: 0, retiredReason: null },
@@ -365,10 +383,10 @@ describe('bundled piggyback fallback classifier template', () => {
 
     it('omits the map, the chain and the item lines when there are none', () => {
       const prompt = render(
-        context({ locationMap: [], currentLocationChain: [], looseItems: [] }, [
-          makeEntity({ ...KAEL, state: null }),
-          KEEP,
-        ]),
+        context(
+          { locationMap: [], locationMapUnplaced: [], currentLocationChain: [], looseItems: [] },
+          [makeEntity({ ...KAEL, state: null }), KEEP],
+        ),
       )
 
       expect(prompt).not.toContain('# Places')

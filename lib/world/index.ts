@@ -85,6 +85,7 @@ export {
   listedAncestorNames,
   locationMapView,
   placeTree,
+  realPlacementOf,
   unhiddenLocationView,
 } from './location-map'
 export type {
@@ -92,6 +93,7 @@ export type {
   LocationMapView,
   LocationMatchView,
   MapAnchor,
+  PlaceTree,
   PlaceTreeRow,
 } from './location-map'
 export { buildEntityViews, emptyEntityView } from './entity-views'
