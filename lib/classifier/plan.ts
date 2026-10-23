@@ -567,170 +567,185 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
 
   // classifier.md → What the classifier writes → Names. A name is taken when a row of the kind
   // holds it, one this reply creates or renames included.
-  const nameRows = new Map(
-    entities.map((e) => [e.id, { kind: e.kind, name: e.name, createdAt: e.createdAt }]),
-  )
-  for (const { action } of planned)
-    if (action.kind === 'createEntity') {
-      const { entry } = action.payload
-      nameRows.set(entry.id, { kind: entry.kind, name: entry.name, createdAt: entry.createdAt })
+  const planRenames = (): RenameClash[] => {
+    const nameRows = new Map(
+      entities.map((e) => [e.id, { kind: e.kind, name: e.name, createdAt: e.createdAt }]),
+    )
+    for (const { action } of planned)
+      if (action.kind === 'createEntity') {
+        const { entry } = action.payload
+        nameRows.set(entry.id, { kind: entry.kind, name: entry.name, createdAt: entry.createdAt })
+      }
+    const renameClashes: RenameClash[] = []
+    const raisedFlags = new Set<string>()
+    for (const rename of inTurnOrder(extraction.renames)) {
+      const row = rowById.get(rename.ref)
+      if (row === undefined) {
+        unseenRefs.push({ list: 'renames', ref: rename.ref })
+        continue
+      }
+      // Both hold every listed row; the check narrows their lookups.
+      const current = nameRows.get(row.id)
+      const known = index.get(row.id)
+      if (current === undefined || known === undefined) continue
+      const name = clampEmbedded(rename.name.trim(), MAX_EMBEDDED_NAME)
+      const key = normalizeTerm(name)
+      // A case-only change is no reveal, as renameEntity judges it.
+      if (key === '' || key === normalizeTerm(current.name)) continue
+      const holders = [...nameRows]
+        .filter(([id, r]) => id !== row.id && r.kind === row.kind && normalizeTerm(r.name) === key)
+        .sort(([idA, a], [idB, b]) => a.createdAt - b.createdAt || (idA < idB ? -1 : 1))
+      const at = anchorOnce(rename.sourceTurn)
+      const proseEntryId = proseSource(rename.sourceTurn)
+      const holder = holders[0]
+      if (holder === undefined) {
+        nameRows.set(row.id, { ...current, name })
+        // renameEntity keeps the old name as a keyword, so a later alias of it plans nothing.
+        index.set(row.id, {
+          ...known,
+          keywords: [...known.keywords, ...newTerms(known.keywords, [current.name])],
+        })
+        planned.push({
+          action: {
+            kind: 'renameEntity',
+            source: SOURCE,
+            payload: { branchId, id: row.id, name, proseEntryId },
+          },
+          entryId: at(),
+        })
+        continue
+      }
+      const [partnerId] = holder
+      // The revealed name is one the prose used for it, so the pair stays namesakes (world.md →
+      // Surfacing) and the user merges them.
+      const added = newTerms(known.keywords, [name])
+      if (added.length > 0) {
+        index.set(row.id, { ...known, keywords: [...known.keywords, ...added] })
+        planned.push({
+          action: {
+            kind: 'appendEntityKeywords',
+            source: SOURCE,
+            payload: { branchId, id: row.id, keywords: added, proseEntryId },
+          },
+          entryId: at(),
+        })
+      }
+      // One partner per row: a row already flagged keeps its flag and its partner.
+      const flagged = row.nameCollisionFlag !== 1 && !raisedFlags.has(row.id)
+      if (flagged) {
+        raisedFlags.add(row.id)
+        planned.push({
+          action: {
+            kind: 'raiseCollisionFlag',
+            source: SOURCE,
+            payload: { branchId, id: row.id, partnerId, reason: 'name-taken', proseEntryId },
+          },
+          entryId: at(),
+        })
+      }
+      renameClashes.push({ ref: rename.ref, name, partnerId, flagged })
     }
-  const renameClashes: RenameClash[] = []
-  const raisedFlags = new Set<string>()
-  for (const rename of inTurnOrder(extraction.renames)) {
-    const row = rowById.get(rename.ref)
-    if (row === undefined) {
-      unseenRefs.push({ list: 'renames', ref: rename.ref })
-      continue
-    }
-    // Both hold every listed row; the check narrows their lookups.
-    const current = nameRows.get(row.id)
-    const known = index.get(row.id)
-    if (current === undefined || known === undefined) continue
-    const name = clampEmbedded(rename.name.trim(), MAX_EMBEDDED_NAME)
-    const key = normalizeTerm(name)
-    // A case-only change is no reveal, as renameEntity judges it.
-    if (key === '' || key === normalizeTerm(current.name)) continue
-    const holders = [...nameRows]
-      .filter(([id, r]) => id !== row.id && r.kind === row.kind && normalizeTerm(r.name) === key)
-      .sort(([idA, a], [idB, b]) => a.createdAt - b.createdAt || (idA < idB ? -1 : 1))
-    const at = anchorOnce(rename.sourceTurn)
-    const proseEntryId = proseSource(rename.sourceTurn)
-    const holder = holders[0]
-    if (holder === undefined) {
-      nameRows.set(row.id, { ...current, name })
-      // renameEntity keeps the old name as a keyword, so a later alias of it plans nothing.
-      index.set(row.id, {
-        ...known,
-        keywords: [...known.keywords, ...newTerms(known.keywords, [current.name])],
-      })
-      planned.push({
-        action: {
-          kind: 'renameEntity',
-          source: SOURCE,
-          payload: { branchId, id: row.id, name, proseEntryId },
-        },
-        entryId: at(),
-      })
-      continue
-    }
-    const [partnerId] = holder
-    // The revealed name is one the prose used for it, so the pair stays namesakes (world.md →
-    // Surfacing) and the user merges them.
-    const added = newTerms(known.keywords, [name])
-    if (added.length > 0) {
-      index.set(row.id, { ...known, keywords: [...known.keywords, ...added] })
-      planned.push({
-        action: {
-          kind: 'appendEntityKeywords',
-          source: SOURCE,
-          payload: { branchId, id: row.id, keywords: added, proseEntryId },
-        },
-        entryId: at(),
-      })
-    }
-    // One partner per row: a row already flagged keeps its flag and its partner.
-    const flagged = row.nameCollisionFlag !== 1 && !raisedFlags.has(row.id)
-    if (flagged) {
-      raisedFlags.add(row.id)
-      planned.push({
-        action: {
-          kind: 'raiseCollisionFlag',
-          source: SOURCE,
-          payload: { branchId, id: row.id, partnerId, reason: 'name-taken', proseEntryId },
-        },
-        entryId: at(),
-      })
-    }
-    renameClashes.push({ ref: rename.ref, name, partnerId, flagged })
+    return renameClashes
   }
 
   // classifier.md → What the classifier writes → Where a place sits. Planned against this reply's
   // own creates and placements; a loop or a retired parent is dropped before the handler sees it.
-  const droppedPlacements: DroppedPlacement[] = []
-  const parentOfRows = parentOfLocations([...entities, ...createdPlaces])
-  const placeParentOf = (id: string): string | null =>
-    placedParents.has(id) ? (placedParents.get(id) ?? null) : parentOfRows(id)
-  const realPlacement = realPlacementOf(entities.filter((e) => e.kind === 'location'))
-  for (const fact of inTurnOrder(extraction.placements)) {
-    const row = rowById.get(fact.ref)
-    if (row === undefined) {
-      unseenRefs.push({ list: 'placements', ref: fact.ref })
-      continue
+  const planPlacements = (): DroppedPlacement[] => {
+    const droppedPlacements: DroppedPlacement[] = []
+    const parentOfRows = parentOfLocations([...entities, ...createdPlaces])
+    const placeParentOf = (id: string): string | null =>
+      placedParents.has(id) ? (placedParents.get(id) ?? null) : parentOfRows(id)
+    const realPlacement = realPlacementOf(entities.filter((e) => e.kind === 'location'))
+    for (const fact of inTurnOrder(extraction.placements)) {
+      const row = rowById.get(fact.ref)
+      if (row === undefined) {
+        unseenRefs.push({ list: 'placements', ref: fact.ref })
+        continue
+      }
+      if (row.kind !== 'location') {
+        unresolvedRefs.push(fact.ref)
+        continue
+      }
+      const { id } = row
+      let placement: { kind: 'under'; parentId: string } | { kind: 'top' }
+      if (isTopLevel(fact.parent)) {
+        // Only an unplaced place is marked top-level (data-model.md → Authorship contract).
+        if (placedParents.has(id) || realPlacement(id).kind !== 'unplaced') {
+          droppedPlacements.push({ ref: fact.ref, cause: 'not-unplaced' })
+          continue
+        }
+        placement = { kind: 'top' }
+      } else {
+        // An ID from Places: a new place's handle names none, its create carrying its own parent.
+        const parentId = fact.parent
+        const parent = rowById.get(parentId)
+        if (parent?.kind !== 'location') {
+          unresolvedRefs.push(fact.parent)
+          continue
+        }
+        if (placeParentOf(id) === parentId) continue
+        if (parent.status === 'retired') {
+          droppedPlacements.push({ ref: fact.ref, cause: 'retired' })
+          continue
+        }
+        const loop = placementLoop(id, parentId, placeParentOf)
+        if (loop !== null) {
+          droppedPlacements.push({ ref: fact.ref, cause: loop.cause })
+          continue
+        }
+        placement = { kind: 'under', parentId }
+      }
+      placedParents.set(id, placement.kind === 'under' ? placement.parentId : null)
+      planned.push({
+        action: {
+          kind: 'placeLocation',
+          source: SOURCE,
+          payload: { branchId, id, placement, proseEntryId: proseSource(fact.sourceTurn) },
+        },
+        entryId: anchor(fact.sourceTurn),
+      })
     }
-    if (row.kind !== 'location') {
-      unresolvedRefs.push(fact.ref)
-      continue
-    }
-    const { id } = row
-    let placement: { kind: 'under'; parentId: string } | { kind: 'top' }
-    if (isTopLevel(fact.parent)) {
-      // Only an unplaced place is marked top-level (data-model.md → Authorship contract).
-      if (placedParents.has(id) || realPlacement(id).kind !== 'unplaced') {
-        droppedPlacements.push({ ref: fact.ref, cause: 'not-unplaced' })
-        continue
-      }
-      placement = { kind: 'top' }
-    } else {
-      // An ID from Places: a new place's handle names none, its create carrying its own parent.
-      const parentId = fact.parent
-      const parent = rowById.get(parentId)
-      if (parent?.kind !== 'location') {
-        unresolvedRefs.push(fact.parent)
-        continue
-      }
-      if (placeParentOf(id) === parentId) continue
-      if (parent.status === 'retired') {
-        droppedPlacements.push({ ref: fact.ref, cause: 'retired' })
-        continue
-      }
-      const loop = placementLoop(id, parentId, placeParentOf)
-      if (loop !== null) {
-        droppedPlacements.push({ ref: fact.ref, cause: loop.cause })
-        continue
-      }
-      placement = { kind: 'under', parentId }
-    }
-    placedParents.set(id, placement.kind === 'under' ? placement.parentId : null)
-    planned.push({
-      action: {
-        kind: 'placeLocation',
-        source: SOURCE,
-        payload: { branchId, id, placement, proseEntryId: proseSource(fact.sourceTurn) },
-      },
-      entryId: anchor(fact.sourceTurn),
-    })
+    return droppedPlacements
   }
 
   // classifier.md → Factions: a listed faction's standing, on a change. Bounded as the handler
   // bounds it, so a restatement compares what it would store, on one line as the prompt shows it.
-  const standingOf = new Map<string, string | undefined>()
-  for (const fact of inTurnOrder(extraction.standings)) {
-    const row = rowById.get(fact.ref)
-    if (row === undefined) {
-      unseenRefs.push({ list: 'standings', ref: fact.ref })
-      continue
+  const planStandings = (): void => {
+    const standingOf = new Map<string, string | undefined>()
+    for (const fact of inTurnOrder(extraction.standings)) {
+      const row = rowById.get(fact.ref)
+      if (row === undefined) {
+        unseenRefs.push({ list: 'standings', ref: fact.ref })
+        continue
+      }
+      if (row.kind !== 'faction') {
+        unresolvedRefs.push(fact.ref)
+        continue
+      }
+      const standing = stateText(fact.standing)
+      const current = standingOf.has(row.id)
+        ? standingOf.get(row.id)
+        : stateOf(row, 'faction').standing
+      if (
+        standing === undefined ||
+        (current !== undefined && oneLine(standing) === oneLine(current))
+      )
+        continue
+      standingOf.set(row.id, standing)
+      planned.push({
+        action: {
+          kind: 'setFactionStanding',
+          source: SOURCE,
+          payload: { branchId, id: row.id, standing, proseEntryId: proseSource(fact.sourceTurn) },
+        },
+        entryId: anchor(fact.sourceTurn),
+      })
     }
-    if (row.kind !== 'faction') {
-      unresolvedRefs.push(fact.ref)
-      continue
-    }
-    const standing = stateText(fact.standing)
-    const current = standingOf.has(row.id)
-      ? standingOf.get(row.id)
-      : stateOf(row, 'faction').standing
-    if (standing === undefined || (current !== undefined && oneLine(standing) === oneLine(current)))
-      continue
-    standingOf.set(row.id, standing)
-    planned.push({
-      action: {
-        kind: 'setFactionStanding',
-        source: SOURCE,
-        payload: { branchId, id: row.id, standing, proseEntryId: proseSource(fact.sourceTurn) },
-      },
-      entryId: anchor(fact.sourceTurn),
-    })
   }
+
+  const renameClashes = planRenames()
+  const droppedPlacements = planPlacements()
+  planStandings()
 
   // Index is keyed by row id, so a handle this reply declares misses: its row already carries its
   // keywords. newTerms drops a term the snapshot or an earlier write in this reply holds.
