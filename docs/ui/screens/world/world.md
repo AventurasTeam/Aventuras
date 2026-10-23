@@ -1012,6 +1012,7 @@ flagged:
 | `ambiguous`   | Their descriptions are partly alike.                                                          |
 | `distinct`    | Their descriptions differ.                                                                    |
 | `in-scene`    | Their descriptions differ, but "Kael Stormborn" was in the scene where "Kael" first appeared. |
+| `name-taken`  | The turns call "the hooded stranger" by a name "Kael" already holds.                          |
 | `no-signal`   | Their descriptions couldn't be compared.                                                      |
 | `same-parent` | Both are in "The Rusty Anchor". (At the root: Both are top-level places.)                     |
 | `unplaced`    | "Varn" was created with no known location, so it may be "Varn".                               |

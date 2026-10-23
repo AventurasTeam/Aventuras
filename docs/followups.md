@@ -44,43 +44,6 @@ for the placement rule.
   error reaches the user is unverified. Raised 2026-10-19 by the
   entity-state design.
 
-- **Implement the AI writer map.** The per-turn writer and the
-  periodic classifier gain the writes the authorship contract gives
-  them
-  ([`data-model.md → Authorship contract`](./data-model.md#authorship-contract)):
-  the per-turn writer's conditions, drops, and `top` or unplaced
-  parents
-  ([`piggyback.md → Trailing block format`](./memory/piggyback.md#trailing-block-format));
-  a pass's first profiles, names, place moves, faction standing,
-  threads, happening category and icon, returns from retirement, and
-  awareness of listed happenings
-  ([`classifier.md → What the classifier writes`](./memory/classifier.md#what-the-classifier-writes));
-  and unplaced places with their matching
-  ([`data-model.md → LocationState shape`](./data-model.md#locationstate-shape)).
-  It builds on the gated classifier: a pass holds the gate and runs
-  between turns, so a pass and a turn can share a field. The plan must
-  check:
-  - that each new update's current value reaches its writer's prompt
-    first: standing, threads and happening ids in a pass's lists;
-  - a pass's parse-failure rate under the larger schema, which now
-    fails a Send rather than costing memory, splitting the pass into two
-    calls if it rises;
-  - the translation of a renamed entity and a rewritten field;
-  - every reader of a null parent, which now means top-level only (the
-    location map, `placeModes`, the state view, World, the merge
-    rules);
-  - the collision reasons the enum lacks, which the CHECK requires: a
-    pass's rename clash and a flag chapter close raises;
-  - the awareness upsert's user-precedence check, which a pass's
-    awareness of listed happenings reaches first;
-  - the `stateReport` additions;
-  - the E2E decision.
-
-  Once it runs, a play check of what rides on the models: the per-turn
-  writer writes a condition only when the prose changes it and puts
-  `top` only where nothing could contain a place; a pass tells a reveal
-  from an alias and a return from a memory.
-
 - **Periodic classifier context grows with the story.** A pass lists
   every entity, place, relationship view and happening on the branch
   ([`classifier.md → What the classifier reads`](./memory/classifier.md#what-the-classifier-reads)),
@@ -118,6 +81,13 @@ for the placement rule.
   - whether a cluster it can't decide gets a review flag (happenings
     have no column for one), and what it does with a row already
     flagged;
+  - the `name_collision_reason` a flag it raises stores, which
+    [`data-model.md → Diagram`](./data-model.md#diagram) leaves open:
+    the pair a close judges duplicates is usually not a namesake pair,
+    and World clears a flag whose pair isn't one at the next rename or
+    merge that touches it
+    ([`world.md → Surfacing`](./ui/screens/world/world.md#surfacing)),
+    so the reason comes with a way to keep the pair paired;
   - how the user reviews what a close changed;
   - whether boot holds a branch on a close's unreversed orphan as it
     does on a pass's: the reset counts only the pass's, so the next
@@ -129,7 +99,8 @@ for the placement rule.
   ([`classifier.md → Failure policy`](./memory/classifier.md#failure-policy)).
 
   Promoted from the developer's notes 2026-10-10; write set fixed
-  2026-10-20, failure policy 2026-10-22.
+  2026-10-20, failure policy 2026-10-22; its flag's reason left to it
+  by the AI writer map.
 
 - **Prompt content pass.** The
   [system and user halves](./architecture.md#system-and-user-halves)

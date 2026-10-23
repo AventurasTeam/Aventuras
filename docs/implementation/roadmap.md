@@ -181,8 +181,9 @@ companions.
   made the close pipeline gate every UI slice in the milestone.
 - M5.2 — Chapter-close pipeline: phases 3a–3f, agent invocations,
   delta writes. Chapter-close consolidates the `threads` rows the
-  periodic classifier writes once the AI writer map is implemented
-  (`followups.md`); surface (plot panel threads tab) already exists
+  periodic classifier writes
+  ([`memory/classifier.md → Threads`](../memory/classifier.md#threads));
+  surface (plot panel threads tab) already exists
   from M4.3. Per-chapter `retrieval_count`
   reset under the chapter-close `action_id` (paired with M3.4's
   per-injection increment). Extends the M1.5 awareness upsert arm
@@ -392,18 +393,20 @@ DB-backed `openRegionTokens` resolves all of them.
   shows exactly that once a close is taken back. Found while the
   2026-10-05 triage pass re-placed the seed's chapter closes; verified
   against canon and the schema, not reproduced in a real close.
-- **M5.2 — The close's awareness merge meets user-written awareness.**
+- **M5.2 — The close's awareness merge passes the prose it cites.**
   The awareness upsert (`lib/actions/happenings/register-awareness.ts`)
-  checks no user precedence: a re-emit overwrites `source` and
-  `decay_resistance` whoever wrote them. User rows exist since 4.2a's
-  Plot editor and 4.2c's collision merge, whose copied awareness is a
-  user create. Canon now settles it: a user-written row keeps its
-  values when the user wrote them after the cited prose
-  ([`memory/chapter-close.md → 3e`](../memory/chapter-close.md#3e--happenings-consolidation)).
-  A pass's awareness of listed happenings, from the AI writer map
-  (`followups.md`), reaches user rows before the close's cluster merge
-  does, so the check lands with whichever ships first. Found in 4.2c's
-  slice review (2026-10-07).
+  checks user precedence when its payload carries a `proseEntryId`,
+  since the AI writer map, whose pass reached user rows first: a pair
+  the user created after that prose keeps its values, a `source` or
+  `decay_resistance` the user wrote after it stands, and a pair the
+  user deleted since stays deleted. A payload without one checks
+  nothing, as a user write needs. Canon settles the close's case the
+  same way: a user-written row keeps its values when the user wrote
+  them after the cited prose
+  ([`memory/chapter-close.md → 3e`](../memory/chapter-close.md#3e--happenings-consolidation)),
+  so the close's cluster merge passes the latest entry it cites as
+  `proseEntryId`. Found in 4.2c's slice review (2026-10-07); the check
+  landed with the AI writer map.
 - **M5.2 — Send checks only the first run of its owed pass's chain.**
   `runPipeline` resolves with the origin run's result alone
   (`lib/pipeline/runtime/orchestrator.ts`), and `submitTurn`
@@ -1348,6 +1351,22 @@ each names.
   whether M8.1 adds a writer outside one. Surfaced by 4.2b planning
   (2026-09-28); the live-target race and the reversal half were raised
   in the reversal-integrity PR's review (2026-10-05) and merged here.
+- **M8.1 — A rewritten field keeps its old translation.**
+  [`architecture.md → display-translation`](../architecture.md#display-translation-post-narrative)
+  translates entity names and state fields "as they're created or
+  modified", but its
+  [graceful degradation contract](../architecture.md#graceful-degradation-contract)
+  looks up the existing row and skips the tuple when one is present, so
+  a field rewritten after its first translation would keep the old one.
+  The AI writer map added writers that rewrite translatable fields: a
+  pass's rename (`name`, `renameEntity`) and a faction's standing
+  (`state.standing`, `setFactionStanding`), and the per-turn writer's
+  conditions (`state.condition`, `updateEntityCondition`), beside its
+  earlier visual changes. This slice decides how a modified field's
+  translation is replaced (invalidated by the write, or keyed on the
+  source text, as suggestion chips are) and fixes the canon to match.
+  No translation phase runs before this slice, so nothing is stale yet.
+  Raised by the AI writer map's planning (2026-10-22).
 - **M8.3 — `getCalendar` consults only code builtins, never the
   `vault_calendars` table.** The registry holds only
   `earth-gregorian`, so a story configured with a `vault_calendars`
@@ -2043,8 +2062,8 @@ the screen its goal requires; later milestones extend.
     portrait slot, placeholders until the asset gallery pass.
 - **Plot panel** ([plot.md](../ui/screens/plot/plot.md)).
   - **M4.3** — Plot panel shell + threads tab + happenings tab +
-    happening awareness tab. Threads data sparse until M5.2
-    chapter-close populates it reliably.
+    happening awareness tab. Threads come from the periodic
+    classifier and the user; M5.2's chapter close consolidates them.
 - **App settings**
   ([app-settings.md](../ui/screens/app-settings/app-settings.md)).
   - **M3.1** — Embedder integration with minimal app-settings
