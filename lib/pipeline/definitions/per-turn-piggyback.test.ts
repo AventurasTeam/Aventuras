@@ -3562,8 +3562,12 @@ describe('per-turn-piggyback', () => {
       ],
       ['transfers.items[].id', ['transfers', 'items', '[]', 'id'], 'handle of an item in newItems'],
       ['conditions', ['conditions'], 'shown above with its state'],
-      ['conditions[].text', ['conditions', '[]', 'text'], 'replaces the stored condition whole'],
-      ['transfers.drops', ['transfers', 'drops'], 'where the scene is'],
+      [
+        'conditions[].text',
+        ['conditions', '[]', 'text'],
+        'in a few words, never more than about 60',
+      ],
+      ['transfers.drops', ['transfers', 'drops'], 'still lying there when the turn ends'],
       [
         'newLocations[].condition',
         ['newLocations', '[]', 'condition'],
@@ -3831,7 +3835,9 @@ describe("fallbackClassifierSchema — the emission prompt's rules", () => {
     "only for something they don't hold yet",
     'never more than the payer holds',
     'replaces the stored condition whole',
+    'in a few words, never more than about 60',
     'where the scene is',
+    'still lying there when the turn ends',
     'only when nothing in Places could contain it',
   ])('says "%s" in both', (rule) => {
     expect(emission).toContain(rule)

@@ -143,7 +143,7 @@ export const fallbackClassifierSchema = z.object({
         text: z
           .string()
           .describe(
-            'Its condition as it is now, the running consequence rather than the event, in about 60 words. It replaces the stored condition whole.',
+            'Its condition as it is now, the running consequence rather than the event: keep what still applies, drop what no longer does, in a few words, never more than about 60. It replaces the stored condition whole.',
           ),
       }),
     )
@@ -209,7 +209,7 @@ export const fallbackClassifierSchema = z.object({
         )
         .default([])
         .describe(
-          'Items someone holding them put down where the scene is, which leaves them lying there. An item put down anywhere else is left out.',
+          'Items someone holding them put down where the scene is and still lying there when the turn ends. An item picked up again, or put down anywhere else, is left out.',
         ),
     })
     .optional(),

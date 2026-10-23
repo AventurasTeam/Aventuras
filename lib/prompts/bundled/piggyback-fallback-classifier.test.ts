@@ -31,9 +31,9 @@ const ITEM_RULE =
 // piggyback.md → Trailing block format, verbatim in both writers' prompts: a condition only for a
 // row shown with its state and only on a change, and a drop only where the scene is.
 const CONDITION_RULE =
-  'Give a place or an item a condition only when the prose changes it, and only one shown above with its state: the current location, an item held in the scene or lying there, a place or item listed elsewhere in the world. Write it as it is now, the running consequence rather than the event (burned to the ground, not the fire), in about 60 words; it replaces the stored condition whole, so never restate one unchanged.'
+  'Give an existing place or item a condition only when the prose changes it, and only one shown above with its state: the current location, an item held in the scene or lying there, a place or item listed elsewhere in the world. Write it as it is now, the running consequence rather than the event (burned to the ground, not the fire), in a few words, never more than about 60; it replaces the stored condition whole, so never restate one unchanged. A place or item you create takes its condition where you create it.'
 const DROP_RULE =
-  'Put an item down only when someone holding it sets it down where the scene is, which leaves it lying there; an item put down anywhere else, thrown into a river or left in another place, stays prose.'
+  "Put an item down only when someone holding it sets it down where the scene is and it is still lying there when the turn ends, so an item picked up again isn't put down; an item put down anywhere else, thrown into a river or left in another place, stays prose."
 // piggyback.md → Parent, verbatim: when a new place is top-level and when it has no parent.
 const PARENT_RULE =
   "Set a new place's parent to top only when nothing in Places could contain it, as for the story's first place or a city when Places holds only cities. Leave its parent out when something in Places could contain it and the prose doesn't say which; when unsure, leave it out."

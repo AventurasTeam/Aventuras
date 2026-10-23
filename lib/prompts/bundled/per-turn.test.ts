@@ -905,7 +905,7 @@ describe('bundled per-turn template — create instructions', () => {
     const conditions = rendered.indexOf('<conditions>')
     expect(conditions).toBeGreaterThan(rendered.indexOf('</visual_changes>'))
     expect(rendered).toContain(
-      '<entity id="ID">the place or item as it is now, in about 60 words — it replaces the stored condition whole</entity>',
+      '<entity id="ID">the place or item as it is now: keep what still applies, drop what no longer does, in a few words, never more than about 60 — it replaces the stored condition whole</entity>',
     )
     const item = rendered.indexOf('<item id="item ID')
     const drop = rendered.indexOf('<drop id="item ID" from="ID" />')
