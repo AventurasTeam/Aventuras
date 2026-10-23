@@ -2931,8 +2931,8 @@ describe('periodicClassifierPhase — the writer map', () => {
   })
 })
 
-// generation-pipeline.md → Two retry tiers; Decisions → Parse reliability: the smoke reads the
-// counts off classifier.pass_completed.
+// generation-pipeline.md → Two retry tiers. The real-provider smoke reads the counts off
+// classifier.pass_completed, so its field names are asserted here.
 describe('periodicClassifierPhase — retried attempts', () => {
   beforeEach(() => {
     vi.resetAllMocks()

@@ -2809,7 +2809,8 @@ describe('first profiles', () => {
   })
 })
 
-// classifier.md → What the classifier writes → Names; Decisions → A rename clash.
+// classifier.md → What the classifier writes → Names. A rename onto a taken name adds it to the
+// entity's keywords and flags the pair, so World still pairs the namesakes.
 describe('renames', () => {
   const row = (id: string, kind: string, name: string, over: Record<string, unknown> = {}) =>
     ({

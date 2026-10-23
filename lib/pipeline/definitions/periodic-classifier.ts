@@ -392,7 +392,7 @@ export async function* periodicClassifierPhase(
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
 
   await writeSuccess(ctx, status, window.coversThrough)
-  // The real-provider smoke reports each pass's retries from this line.
+  // The smoke's regex parses this line: keep its field names and order.
   ctx.log.debug('classifier.pass_completed', {
     parseRetries: retried.filter((e) => e.tier === 'parse').length,
     providerRetries: retried.filter((e) => e.tier === 'provider').length,
