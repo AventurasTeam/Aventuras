@@ -101,6 +101,15 @@ function issuesOf(schema: z.ZodType, value: unknown) {
 }
 
 describe('entityExport', () => {
+  it('leaves an unplaced location’s flag out with its parent', () => {
+    expect(
+      payloadOf({
+        ...TAVERN,
+        state: { parent_location_id: null, unplaced: true, condition: 'smoky' },
+      }).state,
+    ).toEqual({ condition: 'smoky' })
+  })
+
   it('writes a character as an aventuras-entity envelope of its portable fields only', () => {
     const file = entityExport(KAEL, EXPORTED_AT)
     const parsed = JSON.parse(file.contents)
@@ -186,6 +195,16 @@ describe('entityExport', () => {
 })
 
 describe('EntityImportSchema', () => {
+  it('drops an unplaced flag a location file carries', () => {
+    expect(
+      EntityImportSchema.parse({
+        kind: 'location',
+        ...MINIMAL,
+        state: { unplaced: true, condition: 'ruined' },
+      }).state,
+    ).toEqual({ condition: 'ruined' })
+  })
+
   it.each([
     ['character', { visual: {}, traits: [], drives: [] }],
     ['location', {}],

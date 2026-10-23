@@ -68,7 +68,7 @@ function characterDraft(payload: EntityImportOf<'character'>): CharacterDraft {
   }
 }
 
-// data-model.md → Aventuras file format: branch-local refs never travel.
+// data-model.md → Aventuras file format: branch-local refs never travel, so a place lands unplaced.
 function entityInput(payload: EntityImport): EntitySaveInput {
   switch (payload.kind) {
     case 'character':
@@ -78,7 +78,7 @@ function entityInput(payload: EntityImport): EntitySaveInput {
         kind: 'location',
         draft: {
           ...baseDraft(payload),
-          placement: { kind: 'top' },
+          placement: { kind: 'unplaced' },
           condition: payload.state.condition ?? '',
         },
       }

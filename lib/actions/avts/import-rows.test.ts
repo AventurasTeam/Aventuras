@@ -230,6 +230,12 @@ describe('importEntity', () => {
     },
   )
 
+  it('lands an imported location unplaced', async () => {
+    const { db, ctx } = await setup()
+    const id = okId(await importEntity('br_2', entityPayload('location', 'Harbor'), ctx))
+    expect((await entityRow(db, id)).state).toEqual({ parent_location_id: null, unplaced: true })
+  })
+
   it('creates a character with its portable state and every reference empty', async () => {
     const { db, ctx } = await setup()
     const payload: EntityImport = {
@@ -505,7 +511,7 @@ describe('export → parse → import round trip', () => {
         ...seedBase('loc_harbor', 'location', 'Harbor'),
         state: { parent_location_id: 'loc_root', condition: 'Flooded.' },
       },
-      expected: { parent_location_id: null, condition: 'Flooded.' },
+      expected: { parent_location_id: null, unplaced: true, condition: 'Flooded.' },
     },
     {
       seed: {

@@ -3435,7 +3435,9 @@ id. One is read before it is dropped: a happening's
 [time-anchor exclusivity](#happenings--character-knowledge), so a
 file carrying both it and `temporal` is refused. An imported
 entity keeps its status (`staged`, `active` or `retired`, with its
-retired reason).
+retired reason). A location's `unplaced` flag is left out with its
+parent, and an imported location lands unplaced: where it sits on the
+new story's map is unknown ([LocationState shape](#locationstate-shape)).
 
 Per-row export files are named `<prefix>-<slug>.avts` by
 `avtsFileName` in `lib/avts`. The prefix is the entity's kind for an
