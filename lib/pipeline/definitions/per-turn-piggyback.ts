@@ -21,7 +21,6 @@ import {
   substitutePiggybackIds,
   suggestionRefSchema,
   type ParsedTransfers,
-  type PlannedStateBlock,
   type SubstitutedStateBlock,
   type TurnCreatesReport,
   VISUAL_CHANGE_TYPES,
@@ -284,29 +283,27 @@ function orderedTransfers(transfers: NonNullable<FallbackReply['transfers']>): P
   }
 }
 
-// The narrative fold applies its visual changes, conditions and transfers whenever it fires, parse
-// failure or not, so those rows are already written: a field this reply leaves out or reports empty
-// keeps the fold's record, its drops where they landed, copied onto the report and never read back
-// into a block.
+// The fold wrote its visual changes, conditions and transfers whatever its parse did: a field of
+// this reply with nothing applied keeps the fold's record, never read back into a block.
 function withFoldChanges(
   report: StateReport | undefined,
-  block: PlannedStateBlock,
   prior: StateReport | undefined,
 ): StateReport | undefined {
-  const { visualChanges, conditions, transfers } = block
-  const transfersEmpty =
-    transfers === undefined ||
-    (transfers.items.length === 0 &&
-      transfers.stackables.length === 0 &&
-      transfers.drops.length === 0)
+  const transfers = report?.transfers
+  const transfersApplied =
+    transfers !== undefined &&
+    (transfers.items.length > 0 ||
+      transfers.stackables.length > 0 ||
+      (transfers.drops?.length ?? 0) > 0)
+  const conditionsApplied = (report?.conditions ?? []).some((c) => c.rejected !== true)
   const carried: Pick<StateReport, 'visualChanges' | 'conditions' | 'transfers'> = {
-    ...((visualChanges?.length ?? 0) === 0 && prior?.visualChanges !== undefined
+    ...((report?.visualChanges?.length ?? 0) === 0 && prior?.visualChanges !== undefined
       ? { visualChanges: prior.visualChanges }
       : {}),
-    ...((conditions?.length ?? 0) === 0 && prior?.conditions !== undefined
+    ...(!conditionsApplied && prior?.conditions !== undefined
       ? { conditions: prior.conditions }
       : {}),
-    ...(transfersEmpty && prior?.transfers !== undefined ? { transfers: prior.transfers } : {}),
+    ...(!transfersApplied && prior?.transfers !== undefined ? { transfers: prior.transfers } : {}),
   }
   if (Object.keys(carried).length === 0) return report
   return { ...(report ?? { layer: 'per_turn_classifier' as const }), ...carried }
@@ -528,7 +525,6 @@ export async function* piggybackFallbackClassifierPhase(
       applied,
       ...(priorReport?.raw !== undefined ? { raw: priorReport.raw } : {}),
     }),
-    plan.block,
     priorReport,
   )
 

@@ -3524,6 +3524,99 @@ describe('per-turn-piggyback', () => {
         expect(report?.conditions).toEqual(foldReport.conditions)
         expect(report?.transfers).toEqual(foldReport.transfers)
       })
+
+      // Nothing of the reply's field applied counts as absent too (the town is on the map by name
+      // only; the key lies in the market, away from the scene): the fold's record stays.
+      describe('a reply field with nothing applied', () => {
+        const LAMP = 'item_00000000-0000-4000-8000-0000000000b3'
+        const foldReport: NonNullable<EntryMetadata['stateReport']> = {
+          layer: 'piggyback_tagged_block',
+          conditions: [{ id: TOWN, text: 'flooded to the knee' }],
+          transfers: { items: [], stackables: [], drops: [{ id: LAMP, from: HERO, at: TOWN }] },
+          failedFields: [{ field: 'sceneEntities', detail: 'unresolvable placeholder' }],
+        }
+        const fallbackAfterFold = (reply: Record<string, unknown>) =>
+          runFallback(
+            fallbackClassifierSchema.parse({ sceneEntities: ['c1'], worldTimeDelta: 0, ...reply }),
+            {
+              intermediates: {
+                idMap: idMapWithKey(),
+                piggybackOutcome: { attempted: true, succeeded: false },
+              },
+            },
+          )
+
+        it("keeps the fold's conditions when every condition is rejected", async () => {
+          seedFallbackTurn(
+            [keyHeld(), worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }), keyRow()],
+            foldReport,
+          )
+          const { events } = await fallbackAfterFold({
+            conditions: [{ id: 'l1', text: 'burned to the waterline' }],
+          })
+          expect(payloads(events, 'updateEntityCondition')).toEqual([])
+          expect(metadataPatch(events).stateReport?.conditions).toEqual(foldReport.conditions)
+        })
+
+        it('reports its own conditions when one of them is written', async () => {
+          seedFallbackTurn(
+            [keyHeld(), worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }), keyRow()],
+            foldReport,
+          )
+          const { events } = await fallbackAfterFold({
+            conditions: [
+              { id: 'i1', text: 'bent at the bit' },
+              { id: 'l1', text: 'burned to the waterline' },
+            ],
+          })
+          expect(metadataPatch(events).stateReport?.conditions).toEqual([
+            { id: OLD_KEY, text: 'bent at the bit' },
+            { id: TOWN, text: 'burned to the waterline', rejected: true },
+          ])
+        })
+
+        it("keeps the fold's transfers when every drop is refused", async () => {
+          seedFallbackTurn(
+            [
+              ...fallbackWorld(),
+              market('active'),
+              worldRow({ ...keyRow(), state: { at_location_id: MARKET } }),
+            ],
+            foldReport,
+          )
+          const { events } = await fallbackAfterFold({
+            transfers: { items: [], stackables: [], drops: [{ id: 'i1' }] },
+          })
+          expect(payloads(events, 'updateItemPosition')).toEqual([])
+          expect(metadataPatch(events).stateReport?.transfers).toEqual(foldReport.transfers)
+        })
+
+        // Each part of the transfers check on its own: a move, a stackable or an applied drop.
+        it.each([
+          [
+            'an item move',
+            { items: [{ id: 'i1', to: 'c1', slot: 'equipped_items' }], stackables: [], drops: [] },
+            { items: [{ id: OLD_KEY, to: HERO, slot: 'equipped_items' }], stackables: [] },
+          ],
+          [
+            'a stackable',
+            { items: [], stackables: [{ key: 'gold', amount: 5, to: 'c1' }], drops: [] },
+            { items: [], stackables: [{ key: 'gold', amount: 5, to: HERO }] },
+          ],
+          [
+            'an applied drop',
+            { items: [], stackables: [], drops: [{ id: 'i1', from: 'c1' }] },
+            { items: [], stackables: [], drops: [{ id: OLD_KEY, from: HERO, at: TOWN }] },
+          ],
+        ])('reports its own transfers when it has %s', async (_label, transfers, reported) => {
+          seedFallbackTurn(
+            [keyHeld(), worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }), keyRow()],
+            foldReport,
+          )
+          const { events } = await fallbackAfterFold({ transfers })
+          expect(metadataPatch(events).stateReport?.transfers).toEqual(reported)
+        })
+      })
     })
   })
 
