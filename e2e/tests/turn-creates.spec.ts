@@ -8,6 +8,7 @@ import { startMockLlm, type MockLlm, type MockRequest } from '../harness/mock-ll
 import {
   createSeededUserDataDir,
   removeUserDataDir,
+  seedUnplacedPlace,
   setPiggybackMode,
   setProviderEndpoint,
 } from '../harness/seed'
@@ -330,6 +331,116 @@ test.describe('turn creates — the fallback classifier', () => {
       expect(metadata?.stateReport?.newItems).toEqual([
         expect.objectContaining({ handle: 'new:lantern', outcome: 'created', id: lanternId }),
       ])
+    })
+  })
+})
+
+// piggyback.md → Creating a place or an item, Parent; data-model.md → LocationState shape.
+const HERO_BRANCH = 'br_hero_main'
+const REALM = 'E2E Far Realm'
+const VARN = 'E2E Varn'
+const COVE = 'E2E Hidden Cove'
+
+type PlacementView = { id: string; parent: string | null; unplaced: number | null }
+
+async function placementsNamed(
+  page: Page,
+  branchId: string,
+  name: string,
+): Promise<PlacementView[]> {
+  const rows = await queryApp(
+    page,
+    `SELECT id, json_extract(state, '$.parent_location_id'), json_extract(state, '$.unplaced')
+       FROM entities WHERE branch_id = ? AND kind = 'location' AND name = ? ORDER BY created_at, id`,
+    [branchId, name],
+  )
+  return rows.map(([id, parent, unplaced]) => ({
+    id: id as string,
+    parent: (parent as string | null) ?? null,
+    unplaced: unplaced == null ? null : Number(unplaced),
+  }))
+}
+
+// A top-level realm, and the seeded unplaced Varn named under it: reused and placed there.
+const placingNarrative = `E2E-PLACE-T1 Past the western sea lies a realm, and on its coast the town of Varn.
+<state>
+  <scene_entities></scene_entities>
+  <new_location handle="new:realm" parent="top" name="${REALM}">a realm beyond the western sea</new_location>
+  <new_location handle="new:varn" parent="new:realm" name="${VARN}">a harbour town on the realm's coast</new_location>
+  <current_location>new:varn</current_location>
+  <world_time_delta>60</world_time_delta>
+</state>`
+
+// No parent: the prose doesn't say where the cove is.
+const unplacedNarrative = `E2E-PLACE-T2 The boat noses into a cove no chart names.
+<state>
+  <scene_entities></scene_entities>
+  <new_location handle="new:cove" name="${COVE}">a shingle cove under black rock</new_location>
+  <current_location>new:cove</current_location>
+  <world_time_delta>60</world_time_delta>
+</state>`
+
+test.describe('turn creates — where a new place sits', () => {
+  let app: LaunchedApp
+  let mock: MockLlm
+  let userDataDir: string | undefined
+  let varnId = ''
+
+  test.beforeAll(async () => {
+    test.setTimeout(180_000)
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    varnId = seedUnplacedPlace(seeded.dbPath, HERO_BRANCH, VARN)
+    await installEmbedderModel(userDataDir)
+    mock = await startMockLlm()
+    mock.setNarrative(placingNarrative)
+    setProviderEndpoint(seeded.dbPath, mock.url)
+    app = await launchApp({ userDataDir, cleanupUserData: true })
+  })
+
+  test.afterAll(async () => {
+    await app?.close()
+    await mock?.close()
+    removeUserDataDir(userDataDir)
+  })
+
+  test('top lands top-level, no parent lands unplaced, and a named unplaced place is placed', async () => {
+    test.setTimeout(150_000)
+    await home.openStory(app.window, HERO_TITLE).click()
+    await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
+    const branchId = await currentBranchId(app.window, HERO_STORY)
+
+    await test.step('parent="top" lands top-level, and the unplaced Varn under it is reused', async () => {
+      await takeTurn(app.window, 'E2E-PLACE-U1 I sail west.', 'E2E-PLACE-T1')
+      await expect
+        .poll(() => placementsNamed(app.window, branchId, REALM), { timeout: 15_000 })
+        .toEqual([{ id: expect.any(String), parent: null, unplaced: null }])
+      const [realm] = await placementsNamed(app.window, branchId, REALM)
+      expect(await placementsNamed(app.window, branchId, VARN)).toEqual([
+        { id: varnId, parent: realm.id, unplaced: null },
+      ])
+      const metadata = await tailMetadata(app.window, branchId)
+      expect(metadata?.currentLocationId).toBe(varnId)
+      expect(metadata?.stateReport?.newLocations).toEqual([
+        expect.objectContaining({
+          handle: 'new:realm',
+          outcome: 'created',
+          id: realm.id,
+          parent: 'top',
+        }),
+        expect.objectContaining({ handle: 'new:varn', outcome: 'reused', id: varnId }),
+      ])
+    })
+
+    await test.step('a create with no parent lands unplaced', async () => {
+      mock.setNarrative(unplacedNarrative)
+      await takeTurn(app.window, 'E2E-PLACE-U2 I put in at the nearest cove.', 'E2E-PLACE-T2')
+      await expect
+        .poll(() => placementsNamed(app.window, branchId, COVE), { timeout: 15_000 })
+        .toEqual([{ id: expect.any(String), parent: null, unplaced: 1 }])
+      const [cove] = (await tailMetadata(app.window, branchId))?.stateReport?.newLocations ?? []
+      expect(cove).toMatchObject({ handle: 'new:cove', outcome: 'created' })
+      expect(cove).not.toHaveProperty('parent')
     })
   })
 })

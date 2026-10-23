@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -348,6 +349,26 @@ export function parkClassifierWatermarkAtLastReply(dbPath: string, branchId: str
   } finally {
     db.close()
   }
+}
+
+/**
+ * Insert an active location known to exist but not where (data-model.md → LocationState shape),
+ * the shape the fixture lacks, and return its id: a real `loc_<uuid>`, since the prompts
+ * substitute it (docs/testing.md → Fixture + seed contract). Runs before launch.
+ */
+export function seedUnplacedPlace(dbPath: string, branchId: string, name: string): string {
+  const id = `loc_${randomUUID()}`
+  const db = new DatabaseSync(dbPath)
+  try {
+    db.exec('PRAGMA busy_timeout = 10000')
+    db.prepare(
+      `INSERT INTO entities (id, branch_id, kind, name, description, status, injection_mode, state, tags, keywords, priority, embedding_stale, created_at, updated_at)
+       VALUES (?, ?, 'location', ?, NULL, 'active', 'auto', ?, '[]', '[]', 0, 1, 1, 1)`,
+    ).run(id, branchId, name, JSON.stringify({ parent_location_id: null, unplaced: true }))
+  } finally {
+    db.close()
+  }
+  return id
 }
 
 /** Strip the `classifier` agent assignment so the pass fails pre-flight. Runs before launch. */
