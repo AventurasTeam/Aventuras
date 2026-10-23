@@ -870,3 +870,13 @@ slice-planning gate forces its resolution before that slice is planned.
   landed. The AI writer map's conditions raised the same question
   (recorded as emitted vs as written); this one predates it. Raised
   2026-10-23 by the AI writer map's Task 14 review.
+
+- **A fallback field can hide the fold's landed write.** Unverified,
+  reasoned from the per-field rule in `withFoldChanges`
+  (`lib/pipeline/definitions/per-turn-piggyback.ts`): when the fallback
+  lands a condition or a drop on a different row than the fold did,
+  the field is the fallback's, so the fold's landed write drops off the
+  report and the entry card. Nobody has run it, or checked whether the
+  fallback's prompt already shows the fold's writes. A per-row merge
+  would cover it, but mixes the two writers in one field. Raised
+  2026-10-23 by the AI writer map's Q18.
