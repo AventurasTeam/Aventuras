@@ -663,7 +663,39 @@ describe('buildClassifierActions', () => {
       ])
     })
 
-    // A place or a faction comes back only by the user.
+    // classifier.md → What the classifier writes → Status transitions: the latest prose wins.
+    it.each([
+      ['an active', 'active', [['retireEntity', 'e3']]],
+      [
+        'a retired',
+        'retired',
+        [
+          ['returnFromRetirement', 'e1'],
+          ['retireEntity', 'e3'],
+        ],
+      ],
+      [
+        'a staged',
+        'staged',
+        [
+          ['promoteStagedEntity', 'e1'],
+          ['retireEntity', 'e3'],
+        ],
+      ],
+    ])("applies %s character's flips in source-turn order", (_label, status, expected) => {
+      const { planned } = buildClassifierActions(
+        reply({
+          statusFlips: [
+            { ref: 'char_x', to: 'retired', sourceTurn: 't3' },
+            { ref: 'char_x', to: 'active', sourceTurn: 't1' },
+          ],
+        }),
+        { ...base, entities: [entityRow('char_x', status)] },
+      )
+      expect(planned.map((p) => [p.action.kind, p.entryId])).toEqual(expected)
+    })
+
+    // A place, a faction or an item comes back only by the user.
     it.each(['faction', 'location', 'item'])(
       'never returns a retired %s, and reports its ref',
       (kind) => {
@@ -1106,8 +1138,8 @@ describe('prose source on guarded writes', () => {
       ['appendEntityKeywords', 'e1', 'e1'],
       ['appendEntityKeywords', 'e2', 'e2'],
       ['upsertCharacterRelationship', 'e3', 'e3'],
-      ['promoteStagedEntity', 'e2', 'e2'],
       ['retireEntity', 'e1', 'e1'],
+      ['promoteStagedEntity', 'e2', 'e2'],
     ])
   })
 

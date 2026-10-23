@@ -884,7 +884,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     })
   }
 
-  for (const flip of extraction.statusFlips) {
+  for (const flip of inTurnOrder(extraction.statusFlips)) {
     const id = resolveRef(flip.ref)
     if (id == null) continue
     const current = index.get(id)
