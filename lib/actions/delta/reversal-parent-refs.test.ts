@@ -562,7 +562,7 @@ describe('redo of a CTRL-Z that cleared a parent', () => {
 
 // cadence.md → User edits and classifier writes: a reversed pass placement keeps a later user
 // placement whole, the parent and the unplaced mark as one field.
-describe('a placement a later user write changed', () => {
+describe('a reversed pass placement and the writes after it', () => {
   const unplacedPlace = (id: string): NewEntity => ({
     ...place(id, null),
     state: { parent_location_id: null, unplaced: true },
@@ -588,6 +588,39 @@ describe('a placement a later user write changed', () => {
     expect(await stateOf('loc_u')).toEqual(UNPLACED)
   })
 
+  // The encoder records a mark absent before the write as null: undoing it leaves no mark.
+  it('puts a top-level place a reversed write marked unplaced back at the top', async () => {
+    await act('act_pass', {
+      kind: 'updateEntity',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: 'b1',
+        id: 'loc_p',
+        patch: { state: { parent_location_id: null, unplaced: true } },
+      },
+    })
+    const [marked] = await deltasOf('act_pass')
+    expect(marked.undoPayload).toEqual({ state: { unplaced: null } })
+    await reversePass()
+    expect(await stateOf('loc_p')).toEqual({ parent_location_id: null })
+  })
+
+  // A later machine write yields to the reversal, the pair restored as one field.
+  it('puts a place the pass marked top-level back unplaced over a later machine move', async () => {
+    await act('act_pass', placeAt('loc_u', { kind: 'top' }))
+    await act('act_later', {
+      kind: 'updateEntity',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: 'b1',
+        id: 'loc_u',
+        patch: { state: { parent_location_id: 'loc_quarter' } },
+      },
+    })
+    await reversePass()
+    expect(await stateOf('loc_u')).toEqual(UNPLACED)
+  })
+
   it.each([
     ['moved it elsewhere', { kind: 'under', parentId: 'loc_p' }, 'loc_quarter'],
     ['marked it top-level', { kind: 'under', parentId: 'loc_p' }, null],
@@ -601,6 +634,64 @@ describe('a placement a later user write changed', () => {
       expect(await stateOf('loc_u')).toEqual({ parent_location_id: userParent })
     },
   )
+})
+
+// The clear logs nothing, so a later undo's parent lands on a place it left unplaced: the undo
+// restores the placement whole, never a parent beside the mark.
+describe('an undo of a move over a place a clear unplaced', () => {
+  const machineMove = (id: string, parent: string): PipelineAction => ({
+    kind: 'updateEntity',
+    source: 'periodic_classifier',
+    payload: { branchId: 'b1', id, patch: { state: { parent_location_id: parent } } },
+  })
+
+  beforeEach(async () => {
+    await act('act_v', create('loc_v', 'loc_quarter', 'user_edit'))
+    await act('act_s', create('loc_s', null, 'periodic_classifier'))
+  })
+
+  it("puts the user's moved place back under its old parent", async () => {
+    await act('act_move', move('loc_v', 'loc_s'))
+    await reverse(
+      await selectReversalSet(ctx, { branchId: 'b1', target: [], sweep: await deltasOf('act_s') }),
+    )
+    expect(await stateOf('loc_v')).toEqual(UNPLACED)
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf('act_move') })
+    const { reverse: undo } = await prepareUndo(set, ctx)
+
+    await undo()
+
+    expect(await stateOf('loc_v')).toEqual({ parent_location_id: 'loc_quarter' })
+  })
+
+  it("puts a pass's moved place back under its old parent", async () => {
+    await act('act_move', machineMove('loc_v', 'loc_s'))
+    await reverse(await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf('act_s') }))
+    expect(await stateOf('loc_v')).toEqual(UNPLACED)
+
+    await reverse(
+      await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf('act_move') }),
+    )
+
+    expect(await stateOf('loc_v')).toEqual({ parent_location_id: 'loc_quarter' })
+  })
+
+  it("puts a held place's copy back under its old parent", async () => {
+    await act('act_move', move('loc_v', 'loc_s'))
+    await reverse(
+      await selectReversalSet(ctx, { branchId: 'b1', target: [], sweep: await deltasOf('act_s') }),
+    )
+    await act('act_del', remove('loc_v'))
+    const [held] = await deltasOf('act_del')
+    expect(held.undoPayload?.state).toEqual(UNPLACED)
+
+    await reverse(
+      await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf('act_move') }),
+    )
+
+    const [holder] = await deltasOf('act_del')
+    expect(holder.undoPayload?.state).toEqual({ parent_location_id: 'loc_quarter' })
+  })
 })
 
 describe('a parent a later user write changed', () => {

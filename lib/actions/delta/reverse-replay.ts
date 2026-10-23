@@ -9,11 +9,16 @@ import {
   isEmbeddedSourceTable,
   rowsPerInsert,
 } from '@/lib/db'
-import { withPlacement } from '@/lib/world'
+import { withPlacement, type PlacePlacement } from '@/lib/world'
 
 import type { DbCtx } from '../types'
 import { capturedChildren, vecSweepIdsOps, vecTableLister } from './delete-cascade'
-import { applyUndoPayload, isPayloadMetaKey, pruneUndoPartial } from './delta-encoding'
+import {
+  applyUndoPayload,
+  isPayloadMetaKey,
+  isPlainObject,
+  pruneUndoPartial,
+} from './delta-encoding'
 import { deletedRow, heldKey, type HeldRow } from './held-rows'
 import { withKeyLocks } from './key-lock'
 import { liveLinkFilter, type LiveLinkFilter } from './live-link-filter'
@@ -178,6 +183,36 @@ function undoneValue(schema: ZodType | undefined, partial: unknown, current: unk
         partial as Record<string, unknown>,
       )
     : partial
+}
+
+/**
+ * A column with its undo partial applied. A place's parent and unplaced mark go back as one field:
+ * the clear logs nothing, so a partial carrying only the parent can land on a place it unplaced.
+ */
+function undoneColumn(
+  entry: TableEntry,
+  table: string,
+  col: string,
+  partial: unknown,
+  current: unknown,
+): unknown {
+  const undone = undoneValue(entry.columnSchemas[col], partial, current)
+  if (table !== 'entities' || col !== 'state') return undone
+  if (!isPlainObject(partial) || !isPlainObject(undone)) return undone
+  if (!Object.hasOwn(partial, 'parent_location_id') && !Object.hasOwn(partial, 'unplaced'))
+    return undone
+  return withPlacement(undone as LocationState, undonePlacement(partial, undone))
+}
+
+// The encoder records an absent mark as null, so only `true` restores unplaced; any other
+// placement is the parent the undo leaves, a null one top-level.
+function undonePlacement(
+  partial: Record<string, unknown>,
+  undone: Record<string, unknown>,
+): PlacePlacement {
+  if (partial.unplaced === true) return { kind: 'unplaced' }
+  const parentId = undone.parent_location_id
+  return typeof parentId === 'string' ? { kind: 'under', parentId } : { kind: 'top' }
 }
 
 function rebuiltPayload(holder: Delta, copies: readonly HeldCopy[]): Record<string, unknown> {
@@ -571,14 +606,14 @@ async function undoUpdate(
   if (columns.length === 0) return
   const copy = await heldCopyOf(walk, target)
   if (copy) {
-    undoHeldUpdate(entry, copy, payload, columns)
+    undoHeldUpdate(entry, delta.targetTable, copy, payload, columns)
     return
   }
   const state = await rowStateOf(walk, target)
   const { row } = state
   const restored: Record<string, unknown> = {}
   for (const col of columns) {
-    const value = undoneValue(entry.columnSchemas[col], payload[col], row[col])
+    const value = undoneColumn(entry, delta.targetTable, col, payload[col], row[col])
     restored[col] = value
     row[col] = value // thread into the working copy for later-in-DESC undos
   }
@@ -595,13 +630,14 @@ async function undoUpdate(
 
 function undoHeldUpdate(
   entry: TableEntry,
+  table: string,
   copy: HeldCopy,
   payload: Record<string, unknown>,
   columns: readonly string[],
 ): void {
   if (copy.removedByCreate) return
   for (const col of columns)
-    copy.row[col] = undoneValue(entry.columnSchemas[col], payload[col], copy.row[col])
+    copy.row[col] = undoneColumn(entry, table, col, payload[col], copy.row[col])
   copy.removed = keepsNothing(entry, copy.row)
 }
 

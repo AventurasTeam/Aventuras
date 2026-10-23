@@ -224,6 +224,7 @@ describe('wroteField', () => {
     expect(wroteField(conditioned, 'entities', 'state', ['condition'])).toBe(true)
     expect(wroteField(moved, 'entities', 'state', ['faction_id'])).toBe(false)
     expect(wroteField(markedTop, 'other_table', 'state', ['parent_location_id'])).toBe(false)
+    expect(wroteField(moved, 'entities', 'description', ['parent_location_id'])).toBe(false)
   })
 })
 
