@@ -1712,6 +1712,7 @@ describe('per-turn-piggyback', () => {
             stateReport: {
               layer: 'piggyback_tagged_block',
               visualChanges: [{ id: charUuid, type: 'attire', text: 'torn cloak' }],
+              transfers: { items: [], stackables: [{ key: 'gold', amount: 5 }] },
             },
           },
         } as never,
@@ -1729,6 +1730,7 @@ describe('per-turn-piggyback', () => {
           currentLocation: undefined,
           worldTimeDelta: 60,
           visualChanges: [{ id: placeholder, type: 'hair', text: 'shorn short' }],
+          transfers: { items: [], stackables: [{ key: 'silver', amount: 3, to: placeholder }] },
         },
       })
 
@@ -1764,6 +1766,10 @@ describe('per-turn-piggyback', () => {
       expect(written.action.payload.metadata.stateReport?.visualChanges).toEqual([
         { id: charUuid, type: 'hair', text: 'shorn short' },
       ])
+      expect(written.action.payload.metadata.stateReport?.transfers).toEqual({
+        items: [],
+        stackables: [{ key: 'silver', amount: 3, to: charUuid }],
+      })
     })
 
     it('preserves narrative-fold chips already on the tail entry on a state-only refire (row 3 clobber guard)', async () => {

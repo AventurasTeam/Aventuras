@@ -241,8 +241,7 @@ async function generateClassifierState<T extends { worldTimeDelta: number }>(
 type FallbackReply = z.infer<typeof fallbackClassifierSchema>
 type StateReport = NonNullable<EntryMetadata['stateReport']>
 
-// The JSON has no tag order, so its item moves keep their list order, numbered as the tag parser
-// numbers tags (piggyback.md → Fallback classifier context).
+// The JSON has no tag order: items take `seq` by index, then drops.
 function orderedTransfers(transfers: NonNullable<FallbackReply['transfers']>): ParsedTransfers {
   return {
     items: transfers.items.map((item, seq) => ({ ...item, seq })),
