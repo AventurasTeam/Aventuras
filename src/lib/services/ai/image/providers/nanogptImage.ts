@@ -7,7 +7,14 @@ import type { ImageModelV4, SharedV4Warning } from '@ai-sdk/provider'
 import { bytesToBase64 } from '#lib/utils/image.ts'
 import { isPublicHttpUrl } from '#lib/utils/url.ts'
 import type { Fetch } from '#lib/services/ai/sdk/providers/index.ts'
-import { definedHeaders, httpError, parseJson, responseExcerpt } from './imageModelUtils'
+import {
+  definedHeaders,
+  fileBase64,
+  httpError,
+  inlineFile,
+  parseJson,
+  responseExcerpt,
+} from './imageModelUtils'
 
 interface NanoGPTImageSettings {
   apiKey: string
@@ -88,9 +95,8 @@ export function createNanoGPTImage(settings: NanoGPTImageSettings) {
           if (mask) warnings.push({ type: 'unsupported', feature: 'mask' })
 
           const inputReferences = files?.map((file) => {
-            if (file.type === 'url') throw new Error('NanoGPT image references must be base64.')
-            const data = typeof file.data === 'string' ? file.data : bytesToBase64(file.data)
-            return `data:${file.mediaType};base64,${data}`
+            const inline = inlineFile(file, 'NanoGPT')
+            return `data:${inline.mediaType};base64,${fileBase64(inline)}`
           })
 
           const body = {

@@ -6,13 +6,17 @@ import * as z from 'zod'
 import { APICallError, InvalidResponseDataError } from 'ai'
 import type { ImageModelV4 } from '@ai-sdk/provider'
 import type { Fetch } from '#lib/services/ai/sdk/providers/index.ts'
-import { sleep } from '#lib/utils/async.ts'
+import { abortable, sleep } from '#lib/utils/async.ts'
 import { errMessage } from '#lib/utils/error.ts'
+import { sha256Hex } from '#lib/utils/hash.ts'
 import { parseImageSize } from '#lib/utils/image.ts'
 import {
   definedHeaders,
+  fileBytes,
   httpError,
+  inlineFile,
   parseJson,
+  type ReferenceFile,
   responseExcerpt,
   unsupportedInputWarnings,
 } from './imageModelUtils'
@@ -50,11 +54,17 @@ const Options = z.object({
     negative: z.string().optional(),
     width: z.string().optional(),
     height: z.string().optional(),
+    /** `LoadImage` image inputs, filled in order with the uploaded reference images. */
+    references: z.array(z.string()).optional(),
   }),
   /** Dot-path / value pairs written into the workflow before the prompt, seed and size. */
   inputs: z.array(z.tuple([z.string(), Json])).optional(),
   negativePrompt: z.string().optional(),
+  /** Where references are uploaded; `temp` is emptied when ComfyUI restarts. */
+  referenceFolder: z.enum(['input', 'temp']).default('temp'),
 })
+
+type ReferenceFolder = z.infer<typeof Options>['referenceFolder']
 
 export type ComfyImageOptions = z.input<typeof Options>
 
@@ -91,6 +101,18 @@ const ImageInfo = z.object({
   subfolder: z.string().optional(),
   type: z.string().optional(),
 })
+
+const UPLOAD_SUBFOLDER = 'aventuras'
+
+const UploadedImage = z.object({
+  name: z.string(),
+  subfolder: z.string().catch(UPLOAD_SUBFOLDER),
+})
+
+const fileExtension = (mediaType: string): string => /^image\/(\w+)/.exec(mediaType)?.[1] ?? 'png'
+
+// A model is created per generation, so concurrent generations share their pending uploads here.
+const uploadsInFlight = new Map<string, { upload: Promise<string>; signal?: AbortSignal }>()
 
 const ExecutionError = z.object({
   node_id: z.string().optional().catch(undefined),
@@ -216,6 +238,69 @@ export function createComfyImage(settings: ComfyImageSettings) {
     })
   }
 
+  async function postReference(
+    form: FormData,
+    folder: ReferenceFolder,
+    headers: Record<string, string>,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const url = `${baseURL}/upload/image`
+    const response = await settings.fetch(url, { method: 'POST', headers, body: form, signal })
+    const text = await response.text()
+    if (!response.ok) {
+      throw httpError({
+        response,
+        text,
+        url,
+        message: `ComfyUI Error: reference upload failed: ${responseExcerpt(text, response.status)}`,
+      })
+    }
+    const uploaded = UploadedImage.safeParse(parseJson(text))
+    if (!uploaded.success) {
+      throw new InvalidResponseDataError({
+        data: text.slice(0, 200),
+        message: `ComfyUI returned an unreadable upload response: ${responseExcerpt(text, response.status)}`,
+      })
+    }
+    const { name, subfolder } = uploaded.data
+    const path = subfolder ? `${subfolder}/${name}` : name
+    return folder === 'temp' ? `${path} [temp]` : path
+  }
+
+  /** Puts a reference in the server's upload folder; returns the name a `LoadImage` node takes. */
+  async function uploadReference(
+    file: ReferenceFile,
+    folder: ReferenceFolder,
+    headers: Record<string, string>,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const inline = inlineFile(file, 'ComfyUI')
+    const bytes = fileBytes(inline)
+    // Names come from the bytes, so ComfyUI stores an identical upload once.
+    const fileName = `aventuras-${(await sha256Hex(bytes)).slice(0, 16)}.${fileExtension(inline.mediaType)}`
+    const key = `${baseURL}|${folder}|${fileName}`
+
+    // An upload whose owner aborted says nothing about this caller's, so it is redone.
+    for (let shared = uploadsInFlight.get(key); shared; shared = uploadsInFlight.get(key)) {
+      try {
+        return await abortable(shared.upload, signal)
+      } catch (error) {
+        if (signal?.aborted || !shared.signal?.aborted) throw error
+      }
+    }
+
+    const form = new FormData()
+    form.append('image', new Blob([bytes], { type: inline.mediaType }), fileName)
+    form.append('type', folder)
+    form.append('subfolder', UPLOAD_SUBFOLDER)
+
+    const upload = postReference(form, folder, headers, signal).finally(() =>
+      uploadsInFlight.delete(key),
+    )
+    uploadsInFlight.set(key, { upload, signal })
+    return upload
+  }
+
   async function readJob(id: string, firstPoll: boolean, signal?: AbortSignal): Promise<Job> {
     const url = jobUrl(id)
     const response = await settings.pollFetch(url, { signal })
@@ -295,7 +380,7 @@ export function createComfyImage(settings: ComfyImageSettings) {
         provider: 'comfyui.image',
         modelId,
         maxImagesPerCall: 1,
-        supportsFileInputs: false,
+        supportsFileInputs: true,
         supportsMaskInputs: false,
 
         async doGenerate({
@@ -315,10 +400,11 @@ export function createComfyImage(settings: ComfyImageSettings) {
               `ComfyUI image generation has invalid provider options:\n${z.prettifyError(parsedOptions.error)}`,
             )
           }
-          const { workflow, outputNodeId, paths, inputs, negativePrompt } = parsedOptions.data
+          const { workflow, outputNodeId, paths, inputs, negativePrompt, referenceFolder } =
+            parsedOptions.data
           if (prompt === undefined) throw new Error('ComfyUI image generation needs a text prompt.')
 
-          const warnings = unsupportedInputWarnings({ aspectRatio, files, mask })
+          const warnings = unsupportedInputWarnings({ aspectRatio, mask })
 
           let graph: Graph = workflow
           for (const [path, value] of inputs ?? []) graph = setGraphInput(graph, path, value)
@@ -332,6 +418,27 @@ export function createComfyImage(settings: ComfyImageSettings) {
             graph = setGraphInput(graph, paths.height, dimensions.height)
           } else if (size) {
             warnings.push({ type: 'unsupported', feature: 'size' })
+          }
+
+          const referencePaths = paths.references ?? []
+          if (files?.length && referencePaths.length === 0) {
+            warnings.push({ type: 'unsupported', feature: 'files' })
+          } else if (files?.length) {
+            const uploadHeaders = definedHeaders(headers)
+            const names = await Promise.all(
+              files
+                .slice(0, referencePaths.length)
+                .map((file) => uploadReference(file, referenceFolder, uploadHeaders, abortSignal)),
+            )
+            for (const [index, name] of names.entries()) {
+              graph = setGraphInput(graph, referencePaths[index], name)
+            }
+            if (files.length > referencePaths.length) {
+              warnings.push({
+                type: 'other',
+                message: `The workflow has ${referencePaths.length} reference input(s); ${files.length - referencePaths.length} reference image(s) were not used.`,
+              })
+            }
           }
 
           // The server adopts this id, which lets a cancel during the POST still find the job.

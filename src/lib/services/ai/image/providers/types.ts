@@ -33,6 +33,8 @@ export interface ComfyCustomWorkflow {
   outputNodeId: string
   /** Dot-path to the negative CLIPTextEncode text input, if detected — null otherwise. */
   negativePromptPath: string | null
+  /** `LoadImage` image inputs that take reference images; absent means the probe's suggestion. */
+  referenceInputPaths?: string[]
 }
 
 export interface ImageGenerateOptions {
@@ -56,7 +58,8 @@ export interface ImageModelInfo {
   id: string
   name: string
   description?: string
-  supportsImg2Img: boolean
+  /** Absent means unknown. */
+  supportsImg2Img?: boolean
   /** How many reference images one request takes; absent means no known limit. */
   maxReferenceImages?: number
   /**

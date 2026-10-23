@@ -20,6 +20,20 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
+/** Settles with `promise`, or rejects with the signal's reason as soon as it aborts. */
+export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason)
+      return
+    }
+    const onAbort = () => reject(signal.reason)
+    signal.addEventListener('abort', onAbort, { once: true })
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort))
+  })
+}
+
 /**
  * Minimal concurrency limiter. Returns a function that wraps tasks and
  * runs at most `n` concurrently.

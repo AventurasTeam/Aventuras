@@ -2,6 +2,7 @@
 
 import { APICallError } from 'ai'
 import type { ImageModelV4CallOptions, SharedV4Warning } from '@ai-sdk/provider'
+import { base64ToBytes, bytesToBase64 } from '#lib/utils/image.ts'
 
 export function parseJson(text: string): unknown {
   try {
@@ -51,17 +52,30 @@ export function definedHeaders(
   )
 }
 
-/** Warnings for the inputs a text-to-image backend takes no part in. */
+/** Warnings for the inputs a local backend takes no part in. */
 export function unsupportedInputWarnings({
   aspectRatio,
-  files,
   mask,
-}: Pick<ImageModelV4CallOptions, 'aspectRatio' | 'files' | 'mask'>): SharedV4Warning[] {
+}: Pick<ImageModelV4CallOptions, 'aspectRatio' | 'mask'>): SharedV4Warning[] {
   const warnings: SharedV4Warning[] = []
   if (aspectRatio) {
     warnings.push({ type: 'unsupported', feature: 'aspectRatio', details: 'Pass size instead.' })
   }
-  if (files?.length) warnings.push({ type: 'unsupported', feature: 'files' })
   if (mask) warnings.push({ type: 'unsupported', feature: 'mask' })
   return warnings
 }
+
+export type ReferenceFile = NonNullable<ImageModelV4CallOptions['files']>[number]
+type InlineFile = Extract<ReferenceFile, { type: 'file' }>
+
+/** A reference that carries its own data; a URL is refused. */
+export function inlineFile(file: ReferenceFile, provider: string): InlineFile {
+  if (file.type === 'url') throw new Error(`${provider} image references must be base64.`)
+  return file
+}
+
+export const fileBase64 = ({ data }: InlineFile): string =>
+  typeof data === 'string' ? data : bytesToBase64(data)
+
+export const fileBytes = ({ data }: InlineFile): Uint8Array<ArrayBuffer> =>
+  typeof data === 'string' ? base64ToBytes(data) : new Uint8Array(data)

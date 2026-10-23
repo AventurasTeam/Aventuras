@@ -356,6 +356,110 @@ export function detectWorkflowFields(workflow: ComfyCustomWorkflow['workflow']):
   return { positiveNodes, negativeNode, seedPath, outputNodeId, saveImageCount }
 }
 
+const byNodeId = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true })
+
+const imageInput = (nodeId: string) => `${nodeId}.inputs.image`
+
+/** The `image` input of every `LoadImage` node, in node-id order. */
+export function loadImageInputs(workflow: ComfyCustomWorkflow['workflow']) {
+  return Object.entries(workflow)
+    .filter(([, node]) => node.class_type === 'LoadImage')
+    .toSorted(([a], [b]) => byNodeId(a, b))
+    .map(([nodeId, node]) => ({
+      nodeId,
+      path: imageInput(nodeId),
+      title: node._meta?.title ?? 'LoadImage',
+      image: typeof node.inputs.image === 'string' ? node.inputs.image : '',
+    }))
+}
+
+// Consumers that read an image as something to look at.
+const REFERENCE = /ReferenceLatent|TextEncodeQwenImage|FluxKontextMultiReference/
+// Consumers that treat an image as guidance or a canvas, not as a reference.
+const NOT_A_REFERENCE = /ControlNet|IPAdapter|Preprocessor|Inpaint|Outpaint|Mask/i
+const PASS_THROUGH = /^(Image|Latent|VAEEncode)|Resize|Scale|Crop/
+
+interface Edge {
+  to: string
+  input: string
+  slot: number
+}
+
+function outgoingEdges(workflow: ComfyCustomWorkflow['workflow']): Map<string, Edge[]> {
+  const edges = new Map<string, Edge[]>()
+  for (const [to, node] of Object.entries(workflow)) {
+    for (const [input, value] of Object.entries(node.inputs)) {
+      if (!Array.isArray(value) || typeof value[1] !== 'number') continue
+      const from = String(value[0])
+      const list = edges.get(from) ?? []
+      list.push({ to, input, slot: value[1] })
+      edges.set(from, list)
+    }
+  }
+  return edges
+}
+
+/**
+ * Whether the picture from a `LoadImage` node is only a guide or canvas: some path reaches a
+ * ControlNet, mask, preprocessor or sampler latent, and none reaches a reference consumer.
+ */
+function isGuideOrCanvas(
+  workflow: ComfyCustomWorkflow['workflow'],
+  edges: Map<string, Edge[]>,
+  loadImageId: string,
+): boolean {
+  const seen = new Set<string>()
+  const pending = (edges.get(loadImageId) ?? []).filter((edge) => edge.slot === 0)
+  let guide = false
+  for (let edge = pending.pop(); edge; edge = pending.pop()) {
+    if (edge.input === 'latent_image') {
+      guide = true
+      continue
+    }
+    if (seen.has(edge.to)) continue
+    seen.add(edge.to)
+    const classType = workflow[edge.to]?.class_type ?? ''
+    if (REFERENCE.test(classType)) return false
+    if (NOT_A_REFERENCE.test(classType)) guide = true
+    else if (PASS_THROUGH.test(classType)) pending.push(...(edges.get(edge.to) ?? []))
+  }
+  return guide
+}
+
+/**
+ * The `LoadImage` inputs worth pre-selecting for references: every one except those whose picture
+ * only reaches a ControlNet, IP-Adapter, preprocessor, mask or an img2img sampler. Only the graph
+ * is known here, not the user's intent, so the profile's own selection overrides it.
+ */
+export function suggestReferenceInputs(workflow: ComfyCustomWorkflow['workflow']): string[] {
+  const edges = outgoingEdges(workflow)
+  return loadImageInputs(workflow)
+    .filter(({ nodeId }) => !isGuideOrCanvas(workflow, edges, nodeId))
+    .map(({ path }) => path)
+}
+
+/** The inputs references go to: the profile's selection, else the probe's suggestion. */
+export const referenceInputsOf = (customWorkflow: ComfyCustomWorkflow): string[] =>
+  customWorkflow.referenceInputPaths?.toSorted(byNodeId) ??
+  suggestReferenceInputs(customWorkflow.workflow)
+
+/** The profile's custom workflow, when it is in that mode and holds a workflow object. */
+function customWorkflowOf(
+  providerOptions: Record<string, unknown> | undefined,
+): ComfyCustomWorkflow | undefined {
+  if (providerOptions?.mode !== ComfyMode.CustomWorkflow) return undefined
+  const customWorkflow = providerOptions.customWorkflow as ComfyCustomWorkflow | null | undefined
+  return typeof customWorkflow?.workflow === 'object' && customWorkflow.workflow !== null
+    ? customWorkflow
+    : undefined
+}
+
+/** How many references a ComfyUI profile uses: the number of selected `LoadImage` inputs. */
+export function comfyReferenceLimit(providerOptions: Record<string, unknown> | undefined): number {
+  const customWorkflow = customWorkflowOf(providerOptions)
+  return customWorkflow ? referenceInputsOf(customWorkflow).length : 0
+}
+
 const KSamplerInfo = z.object({
   KSampler: z.object({
     input: z.object({
@@ -403,7 +507,7 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
     name: 'Comfy UI',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { prompt, spec, providerOptions, signal } = options
+      const { prompt, spec, referenceImages, providerOptions, signal } = options
       // Strip the source-namespace prefix added by listModels() to deduplicate entries
       // (e.g. "checkpoint:model.safetensors" → "model.safetensors"). Handles both
       // prefixed IDs (new) and bare filenames (profiles saved before this change).
@@ -422,8 +526,8 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
       // -----------------------------------------------------------------------
       // Custom workflow path — only when mode is explicitly CustomWorkflow.
       // -----------------------------------------------------------------------
-      const customWorkflow = providerOptions?.customWorkflow as ComfyCustomWorkflow | undefined
-      if (customWorkflow && explicitMode === ComfyMode.CustomWorkflow) {
+      const customWorkflow = customWorkflowOf(providerOptions)
+      if (customWorkflow) {
         const comfyui = {
           workflow: customWorkflow.workflow,
           outputNodeId: customWorkflow.outputNodeId,
@@ -433,17 +537,23 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
             ...(customWorkflow.negativePromptPath && {
               negative: customWorkflow.negativePromptPath,
             }),
+            references: referenceInputsOf(customWorkflow),
           },
           negativePrompt: negativeTags,
+          referenceFolder: providerOptions?.inputReferences === true ? 'input' : 'temp',
         } satisfies ComfyImageOptions
 
         // No size: a custom workflow's dimensions are the user's own.
         return generateSdkImage({
           model: comfyModel(model),
           prompt: finalPositivePrompt,
+          referenceImages,
           providerOptions: { comfyui },
           signal,
         })
+      }
+      if (explicitMode === ComfyMode.CustomWorkflow) {
+        throw new Error('This ComfyUI profile has no custom workflow loaded.')
       }
 
       // -----------------------------------------------------------------------
@@ -603,7 +713,6 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
           id: `${prefix}:${m}`,
           name: m,
           description,
-          supportsImg2Img: false,
           costPerImage: 0,
         })
 

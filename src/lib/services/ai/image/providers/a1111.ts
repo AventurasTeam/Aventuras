@@ -21,6 +21,11 @@ import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
 const DEFAULT_BASE_URL = 'http://localhost:7860'
 
+/** A1111 sends references only when the profile opts in: sd.cpp and KoboldCpp read `extra_images`. */
+export const a1111ReferenceLimit = (
+  providerOptions: Record<string, unknown> | undefined,
+): number => (providerOptions?.takesReferences === true ? Infinity : 0)
+
 export function createA1111Provider(config: ImageProviderConfig): ImageProvider {
   const baseUrl = config.baseUrl?.trim().replace(/\/$/, '') || DEFAULT_BASE_URL
   const a1111 = createA1111Image({
@@ -34,7 +39,7 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
     name: 'A1111 / SD WebUI',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, spec, signal, providerOptions } = options
+      const { model, prompt, spec, referenceImages, signal, providerOptions } = options
 
       const opts = providerOptions ?? config.providerOptions ?? {}
       const scheduler = (opts.scheduler as string) || undefined
@@ -42,6 +47,7 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
       return generateSdkImage({
         model: a1111.imageModel(model),
         prompt,
+        referenceImages,
         size: formatImageSize(specToPixels(spec)),
         providerOptions: {
           a1111: {
@@ -68,7 +74,6 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
       return (Array.isArray(data) ? data : []).map((m) => ({
         id: m.title || m.model_name || m.name || '',
         name: m.title || m.model_name || m.name || '',
-        supportsImg2Img: false,
       }))
     },
 

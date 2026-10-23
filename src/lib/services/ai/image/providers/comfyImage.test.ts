@@ -11,14 +11,19 @@ vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
 }))
 
 // Even a zero delay is a timer tick, and each poll would wait for one. An aborted signal still
-// ends the wait, as with the real one.
-vi.mock('#lib/utils/async.ts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('#lib/utils/async.ts')>()),
-  sleep: vi.fn(async (_ms: number, signal?: AbortSignal) => signal?.throwIfAborted()),
-}))
+// ends the wait, as with the real one. `abortable` is spied on, so a test can wait for the calls
+// parked on a pending upload.
+vi.mock('#lib/utils/async.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#lib/utils/async.ts')>()
+  return {
+    ...actual,
+    abortable: vi.fn(actual.abortable),
+    sleep: vi.fn(async (_ms: number, signal?: AbortSignal) => signal?.throwIfAborted()),
+  }
+})
 
 import type { Fetch } from '#lib/services/ai/sdk/providers/index.ts'
-import { sleep } from '#lib/utils/async.ts'
+import { abortable, sleep } from '#lib/utils/async.ts'
 import { generateSdkImage } from './sdkImage'
 import { createComfyImage, setGraphInput } from './comfyImage'
 
@@ -114,6 +119,7 @@ let clientId = ''
 
 interface Handlers {
   prompt?: Route
+  upload?: Route
   job?: Route
   cancel?: Route
   view?: Route
@@ -126,6 +132,13 @@ function serve(handlers: Handlers = {}) {
       clientId = bodyOf(init).prompt_id
       return (
         handlers.prompt?.(url, init) ?? json({ prompt_id: clientId, number: 1, node_errors: {} })
+      )
+    }
+    if (init?.method === 'POST' && pathname === '/upload/image') {
+      const file = (init.body as FormData).get('image') as File
+      return (
+        handlers.upload?.(url, init) ??
+        json({ name: file.name, subfolder: 'aventuras', type: 'input' })
       )
     }
     if (pathname.startsWith('/api/jobs/') && pathname.endsWith('/cancel')) {
@@ -254,7 +267,7 @@ describe('request', () => {
     expect(String(pollMock.mock.calls[0][0])).toBe(`${BASE_URL}/api/jobs/server-id`)
   })
 
-  it('warns when size has nowhere to go, and for aspect ratio, files and mask', async () => {
+  it('warns when size has nowhere to go, and for aspect ratio, unused files and mask', async () => {
     const { width: _w, height: _h, ...paths } = PATHS
     const result = await model().doGenerate(
       callOptions({
@@ -266,10 +279,11 @@ describe('request', () => {
     )
     expect(result.warnings.map((w) => (w as { feature: string }).feature)).toEqual([
       'aspectRatio',
-      'files',
       'mask',
       'size',
+      'files',
     ])
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/upload/image'))).toBe(false)
   })
 
   it('names what is wrong with the provider options', async () => {
@@ -285,6 +299,189 @@ describe('request', () => {
     const error = await rejection(model().doGenerate(callOptions({ prompt: undefined })))
     expect((error as Error).message).toContain('text prompt')
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('references', () => {
+  const LOAD_WORKFLOW = {
+    ...WORKFLOW,
+    '10': { class_type: 'LoadImage', inputs: { image: 'saved-a.png' } },
+    '11': { class_type: 'LoadImage', inputs: { image: 'saved-b.png' } },
+  }
+  const png = (data = 'iVBORw0KGgo=') => ({ type: 'file' as const, mediaType: 'image/png', data })
+  const uploads = () =>
+    fetchMock.mock.calls.filter(([url]) => String(url) === `${BASE_URL}/upload/image`)
+
+  const other = 'AQID'
+  const uploadedName = (index: number) =>
+    ((uploads()[index][1]!.body as FormData).get('image') as File).name
+  const generateWith = (
+    files: NonNullable<ImageModelV4CallOptions['files']>,
+    {
+      over = {},
+      references = ['10.inputs.image'],
+      call = {},
+    }: {
+      over?: Record<string, unknown>
+      references?: string[]
+      call?: Partial<ImageModelV4CallOptions>
+    } = {},
+  ) =>
+    model().doGenerate(
+      callOptions({
+        ...call,
+        files,
+        providerOptions: comfyOptions({
+          workflow: LOAD_WORKFLOW,
+          paths: { ...PATHS, references },
+          ...over,
+        }),
+      }),
+    )
+
+  it('uploads each reference into temp and writes the names into the graph', async () => {
+    const result = await generateWith([png(), png(other)], {
+      references: ['10.inputs.image', '11.inputs.image'],
+    })
+
+    expect(uploads()).toHaveLength(2)
+    const form = uploads()[0][1]!.body as FormData
+    expect(form.get('type')).toBe('temp')
+    expect(form.get('subfolder')).toBe('aventuras')
+    expect(uploadedName(0)).toMatch(/^aventuras-[0-9a-f]{16}\.png$/)
+
+    const graph = sentPrompt().body.prompt
+    expect(graph['10'].inputs.image).toBe(`aventuras/${uploadedName(0)} [temp]`)
+    expect(graph['11'].inputs.image).toBe(`aventuras/${uploadedName(1)} [temp]`)
+    expect(result.warnings).toEqual([])
+  })
+
+  it('names an upload after its bytes', async () => {
+    await generateWith([png()])
+    await generateWith([png()])
+    await generateWith([png(other)])
+    expect(uploadedName(1)).toBe(uploadedName(0))
+    expect(uploadedName(2)).not.toBe(uploadedName(0))
+  })
+
+  it('uploads into the input folder when asked, without an annotation', async () => {
+    await generateWith([png()], { over: { referenceFolder: 'input' } })
+    expect((uploads()[0][1]!.body as FormData).get('type')).toBe('input')
+    expect(sentPrompt().body.prompt['10'].inputs.image).toBe(`aventuras/${uploadedName(0)}`)
+  })
+
+  it('writes the name the server answers with', async () => {
+    serve({ upload: () => json({ name: 'taken (1).png', subfolder: 'aventuras', type: 'temp' }) })
+    await generateWith([png()])
+    expect(sentPrompt().body.prompt['10'].inputs.image).toBe('aventuras/taken (1).png [temp]')
+  })
+
+  describe('concurrent generations', () => {
+    let release: () => void
+    let gate: Promise<void>
+
+    beforeEach(() => {
+      gate = new Promise((resolve) => (release = resolve))
+      serve({
+        upload: async (_url, init) => {
+          await abortable(gate, init?.signal ?? undefined)
+          const file = (init!.body as FormData).get('image') as File
+          return json({ name: file.name, subfolder: 'aventuras', type: 'temp' })
+        },
+      })
+    })
+
+    const prompts = () => fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/prompt'))
+    // Hashing is asynchronous: the handler's gate is the first `abortable` call and each call
+    // parked on the pending upload adds one.
+    const parked = (calls: number) =>
+      vi.waitFor(() => expect(vi.mocked(abortable)).toHaveBeenCalledTimes(calls))
+
+    it('make one upload for the same bytes', async () => {
+      const first = generateWith([png()])
+      const second = generateWith([png()])
+      await parked(2)
+      release()
+      await Promise.all([first, second])
+
+      expect(uploads()).toHaveLength(1)
+      const sent = prompts().map(([, init]) => bodyOf(init).prompt['10'].inputs.image)
+      expect(sent).toEqual([
+        `aventuras/${uploadedName(0)} [temp]`,
+        `aventuras/${uploadedName(0)} [temp]`,
+      ])
+    })
+
+    it('upload again when the first one was aborted', async () => {
+      const controller = new AbortController()
+      const first = rejection(generateWith([png()], { call: { abortSignal: controller.signal } }))
+      const second = generateWith([png()])
+      await parked(2)
+      controller.abort()
+      release()
+
+      expect(await first).toBeDefined()
+      await second
+      expect(uploads()).toHaveLength(2)
+      expect(prompts()).toHaveLength(1)
+    })
+
+    it('let a waiting generation cancel at once', async () => {
+      const controller = new AbortController()
+      const first = generateWith([png()])
+      const waiting = rejection(generateWith([png()], { call: { abortSignal: controller.signal } }))
+      await parked(2)
+      controller.abort(new Error('stop'))
+
+      expect(((await waiting) as Error).message).toBe('stop')
+      release()
+      await first
+    })
+  })
+
+  it('uploads before it queues the prompt', async () => {
+    await generateWith([png()])
+    const paths = fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname)
+    expect(paths.indexOf('/upload/image')).toBeLessThan(paths.indexOf('/prompt'))
+  })
+
+  it('leaves the other LoadImage nodes at their saved image', async () => {
+    await generateWith([png()], { references: ['10.inputs.image', '11.inputs.image'] })
+    expect(uploads()).toHaveLength(1)
+    expect(sentPrompt().body.prompt['11'].inputs.image).toBe('saved-b.png')
+  })
+
+  it('drops references the workflow has no input for, with a warning', async () => {
+    const result = await generateWith([png(), png(), png()])
+    expect(uploads()).toHaveLength(1)
+    expect(result.warnings).toEqual([
+      expect.objectContaining({ type: 'other', message: expect.stringContaining('2 reference') }),
+    ])
+  })
+
+  it('does not upload without references', async () => {
+    await generateWith([])
+    expect(uploads()).toHaveLength(0)
+    expect(sentPrompt().body.prompt['10'].inputs.image).toBe('saved-a.png')
+  })
+
+  it('fails without queueing when an upload is refused', async () => {
+    serve({ upload: () => json({ error: 'no space left' }, 500) })
+    const error = await rejection(generateWith([png()]))
+    expect(APICallError.isInstance(error)).toBe(true)
+    expect((error as Error).message).toContain('reference upload failed')
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/prompt'))).toBe(false)
+  })
+
+  it('rejects an upload reply it cannot read', async () => {
+    serve({ upload: () => json({ unexpected: true }) })
+    const error = await rejection(generateWith([png()]))
+    expect(InvalidResponseDataError.isInstance(error)).toBe(true)
+  })
+
+  it('refuses a reference given as a URL', async () => {
+    const error = await rejection(generateWith([{ type: 'url', url: 'https://example.com/a.png' }]))
+    expect((error as Error).message).toContain('base64')
   })
 })
 
