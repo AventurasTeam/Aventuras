@@ -114,7 +114,7 @@ export function createA1111Image(settings: A1111ImageSettings) {
               text,
               url,
               message: errorMessage(parsed, text, response.status),
-              requestBodyValues: body,
+              requestBodyValues: { ...body, extra_images: undefined },
             })
           }
 

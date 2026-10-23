@@ -204,6 +204,18 @@ describe('request', () => {
     expect(sent().body).not.toHaveProperty('extra_images')
   })
 
+  it('keeps the reference images out of a failure', async () => {
+    fetchMock.mockResolvedValue(json({ detail: 'boom' }, 500))
+    const error = await rejection(
+      model().doGenerate(
+        callOptions({ files: [{ type: 'file', mediaType: 'image/png', data: PNG }] }),
+      ),
+    )
+    expect(APICallError.isInstance(error)).toBe(true)
+    const body = (error as APICallError).requestBodyValues as Record<string, unknown>
+    expect(body.extra_images).toBeUndefined()
+  })
+
   it('refuses a reference given as a URL', async () => {
     const error = await rejection(
       model().doGenerate(
