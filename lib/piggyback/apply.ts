@@ -255,10 +255,22 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   }
 
   const drops: AppliedDrop[] = []
+  // Someone who left this turn can still have put it down before going.
+  const nearScene = new Set([...sceneEntities, ...previousMetadata.sceneEntities])
   // piggyback.md → Trailing block format: a drop lands where the scene is; elsewhere stays prose.
   const putDown = (drop: ItemDrop) => {
     if (byId.get(drop.id)?.kind !== 'item') return
     const holders = entities.filter((holder) => holds(holder.id, drop.id)).map((h) => h.id)
+    if (holders.length > 0 && !holders.some((id) => nearScene.has(id))) {
+      log.warn('classifier.drop_dropped', {
+        entryId,
+        source,
+        itemId: drop.id,
+        reason: 'off_scene',
+        holderIds: holders,
+      })
+      return
+    }
     const lyingAt = positionOf(drop.id)
     if (holders.length === 0 && lyingAt !== null && lyingAt !== currentLocationId) {
       log.warn('classifier.drop_dropped', {

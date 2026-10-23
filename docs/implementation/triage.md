@@ -896,6 +896,21 @@ slice-planning gate forces its resolution before that slice is planned.
   for takes; drops add one more instance. Raised 2026-10-23 by the AI
   writer map's final review.
 
+- **A cut-off block can still put a drop down at the place the scene
+  left.** A `<state>` cut mid-stream between out-of-order tags (its
+  `<transfers>` closed, its `<current_location>` lost to the cut) fails
+  only `state`, so the failed fold's place counts as usable and its
+  drops land at the previous location; the fallback's own drop at the
+  new place is then refused as `elsewhere`. Reproduced in a throwaway
+  test. It needs the model to write `<transfers>` before
+  `<current_location>`, against the skeleton, and the cut to fall
+  between them. The same exposure exists without a fallback: a block
+  with no creates cut between out-of-order tags parses clean
+  ([`memory/piggyback.md → Creating a place or an item`](../memory/piggyback.md#creating-a-place-or-an-item)),
+  and its drops land at the previous place. Counting a cut-off as an
+  unusable place would hold drops back on the common, usable-place cut
+  too. Raised 2026-10-23 by the AI writer map's Q21 review.
+
 - **A stackable may move twice on a fallback turn.** A possible data
   error, not a display one: worth a look soon. Pre-existing on `main`;
   reasoned from the code, not run. A narrative fold whose block failed
@@ -904,5 +919,7 @@ slice-planning gate forces its resolution before that slice is planned.
   adds rather than replaces. The fallback then fires, sees the
   post-fold balance, and may re-emit the same transfer from the prose,
   so the amount moves a second time. Conditions, visual changes, item
-  moves and drops are idempotent, so a repeat of those is harmless.
+  moves and drops are idempotent, so a repeat of those is harmless, and
+  a failed fold that can't use its own place holds its drops back for
+  the fallback.
   Raised 2026-10-23 by the AI writer map's Q19.
