@@ -16,6 +16,12 @@ vi.mock('./sdkImage', () => ({
 }))
 vi.mock('./fetchAdapter', () => ({ imageGetFetch: vi.fn() }))
 
+vi.mock('#lib/utils/url.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
+  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
+})
+
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { imageGetFetch } from './fetchAdapter'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 import {
@@ -115,14 +121,30 @@ describe('OpenAI Compatible image generation', () => {
     })
   })
 
-  it('tolerates a trailing slash on the base URL', async () => {
-    await createOpenAICompatibleProvider({ apiKey: '', baseUrl: `${BASE_URL}/` }).generate(
+  it('generates against the normalized base URL', async () => {
+    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v1')
+    await createOpenAICompatibleProvider({ apiKey: '', baseUrl: ' https://raw.test// ' }).generate(
       options(),
     )
-    expect(sdk.config[0].baseURL).toBe(BASE_URL)
+    expect(normalizeBaseUrl).toHaveBeenCalledWith(' https://raw.test// ')
+    expect(sdk.config[0].baseURL).toBe('https://normalized.test/v1')
   })
 
-  it.each([undefined, '', '   '])('throws without a base URL (%j)', async (baseUrl) => {
+  it('lists models from the normalized base URL', async () => {
+    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v1')
+    vi.mocked(imageGetFetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [] }),
+    } as unknown as Response)
+    await createOpenAICompatibleProvider({
+      apiKey: '',
+      baseUrl: ' https://raw.test// ',
+    }).listModels('')
+    expect(normalizeBaseUrl).toHaveBeenCalledWith(' https://raw.test// ')
+    expect(vi.mocked(imageGetFetch).mock.lastCall![0]).toBe('https://normalized.test/v1/models')
+  })
+
+  it.each([undefined, ''])('throws without a base URL (%j)', async (baseUrl) => {
     await expect(
       createOpenAICompatibleProvider({ apiKey: 'k', baseUrl }).generate(options()),
     ).rejects.toThrow('requires a custom base URL')

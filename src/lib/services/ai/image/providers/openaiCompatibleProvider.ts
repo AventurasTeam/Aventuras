@@ -9,6 +9,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { JSONValue } from '@ai-sdk/provider'
 import * as z from 'zod'
 import { specToPixels, formatImageSize } from '#lib/utils/image.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -65,7 +66,7 @@ export async function generateOpenAICompatibleImage(options: {
 }
 
 export function createOpenAICompatibleProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = config.baseUrl?.trim().replace(/\/+$/, '')
+  const baseUrl = normalizeBaseUrl(config.baseUrl)
 
   return {
     id: 'openai-compatible',
