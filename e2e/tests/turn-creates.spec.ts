@@ -473,6 +473,21 @@ function puttingDownNarrative(ids: { kael: string; blade: string; place: string 
 </state>`
 }
 
+const KAEL_CONDITION = 'soaked through and shivering'
+const LATER_CONDITION = 'its yard drained, the gate propped shut'
+
+// Kael is shown, but a character has no condition: apply.ts refuses it and writes the place's.
+function refusedConditionNarrative(ids: { kael: string; place: string }): string {
+  return `E2E-COND-T3 The rain stops; Kael props the gate shut.
+<state>
+  <world_time_delta>30</world_time_delta>
+  <conditions>
+    <entity id="${ids.kael}">${KAEL_CONDITION}</entity>
+    <entity id="${ids.place}">${LATER_CONDITION}</entity>
+  </conditions>
+</state>`
+}
+
 async function stateOf(page: Page, branchId: string, id: string): Promise<Record<string, unknown>> {
   const rows = await queryApp(page, `SELECT state FROM entities WHERE branch_id = ? AND id = ?`, [
     branchId,
@@ -579,6 +594,39 @@ test.describe('turn creates — conditions and drops', () => {
           t('reader:entryCard.statePutDown', { item: BLADE, place: placeName }),
         ),
       ).toBeVisible()
+    })
+
+    await test.step('a refused condition is marked on the report and stays off the card and the row', async () => {
+      mock.setNarrative(refusedConditionNarrative(ids))
+      await takeTurn(app.window, 'E2E-COND-U3 I wait for the rain to stop.', 'E2E-COND-T3')
+      await expect
+        .poll(async () => (await stateOf(app.window, branchId, placeId)).condition, {
+          timeout: 15_000,
+        })
+        .toBe(LATER_CONDITION)
+      expect(await stateOf(app.window, branchId, kaelId)).not.toHaveProperty('condition')
+      const report = (await tailMetadata(app.window, branchId))?.stateReport
+      expect(report?.conditions).toEqual([
+        { id: kaelId, text: KAEL_CONDITION, rejected: true },
+        { id: placeId, text: LATER_CONDITION },
+      ])
+      const reply = await tailReply(app.window, branchId)
+      expect(reply?.content).toContain('E2E-COND-T3')
+      await reader.showState(app.window, reply!.id).click()
+      await expect(
+        reader.stateLine(
+          app.window,
+          reply!.id,
+          t('reader:entryCard.stateCondition', { name: placeName, text: LATER_CONDITION }),
+        ),
+      ).toBeVisible()
+      await expect(
+        reader.stateLine(
+          app.window,
+          reply!.id,
+          t('reader:entryCard.stateCondition', { name: 'Kael', text: KAEL_CONDITION }),
+        ),
+      ).toHaveCount(0)
     })
   })
 })
