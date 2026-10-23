@@ -1,9 +1,8 @@
-export type ClassifierLifecycleState = 'idle' | 'running' | 'retrying' | 'failed-persistent'
+export type ClassifierLifecycleState = 'idle' | 'running' | 'failed'
 
 export type ClassifierStatus = {
   state: ClassifierLifecycleState
   lastSuccessAt: number | null
   lastError: string | null
-  retryCount: number
   processedThrough: number | null
 }

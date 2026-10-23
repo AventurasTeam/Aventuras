@@ -1,4 +1,5 @@
 import type { CollisionReason, Entity } from '@/lib/db'
+import { logger, type Logger } from '@/lib/diagnostics'
 import { compareId } from '@/lib/list-modules'
 import { namesakeBasis } from '@/lib/world'
 
@@ -131,6 +132,8 @@ export async function scoreDescriptions(
   candidate: string,
   descriptions: readonly (string | null)[],
   embed: EmbedDescriptions,
+  /** The run's logger, so a failed embed's warn names the run; the global one otherwise. */
+  log: Pick<Logger, 'warn'> = logger,
 ): Promise<(number | null)[]> {
   const unscored = descriptions.map(() => null)
   if (!hasText(candidate)) return unscored
@@ -139,7 +142,11 @@ export async function scoreDescriptions(
   let vectors: Float32Array[]
   try {
     vectors = (await embed([candidate, ...sent.map((s) => s.text)])).vectors
-  } catch {
+  } catch (e) {
+    // Matching degrades to unscored rather than failing its caller, so only the log shows it.
+    log.warn('classifier.description_embed_failed', {
+      error: e instanceof Error ? e.message : String(e),
+    })
     return unscored
   }
   // A short reply or a dim mismatch mid embedder-swap would otherwise be scored on
@@ -160,6 +167,8 @@ export type ReconciledKind = Extract<Entity['kind'], 'character' | 'faction'>
 type ReconcileDeps = {
   entities: readonly Entity[]
   embedDescriptions: EmbedDescriptions
+  /** The run's logger. */
+  log?: Pick<Logger, 'warn'>
 } & (
   | {
       kind: 'character'
@@ -190,6 +199,7 @@ export async function reconcileNewEntity(
     candidate.description,
     matched.map((m) => m.entity.description),
     deps.embedDescriptions,
+    deps.log,
   )
   return decideReconcile(
     matched.map((m, i) => ({

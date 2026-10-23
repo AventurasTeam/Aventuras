@@ -27,6 +27,7 @@ const REGENERATE_REJECTION_COPY = {
   'generation-in-flight': 'reader:actions.blockedWhileGenerating',
   [STORY_ENTRY_REJECTION.countsChanged]: 'reader:rollbackCountsChanged',
   'branch-not-loaded': 'reader:regenerateUnavailable',
+  'classifier-held': 'reader:regenerateHeld',
   'not-an-ai-reply': 'reader:regenerateUnavailable',
   'no-origin': 'reader:regenerateUnavailable',
   'sweep-refused': 'reader:regenerateUnavailable',

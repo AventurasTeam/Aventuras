@@ -1,6 +1,13 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Entity } from '@/lib/db'
+import {
+  __resetDiagnosticsGate,
+  clearBuffers,
+  configureDiagnosticsGate,
+  getDiagnosticsSnapshot,
+  makeLogger,
+} from '@/lib/diagnostics'
 
 import {
   cosine,
@@ -543,6 +550,50 @@ describe('scoreDescriptions', () => {
     const embed = embedder({ [KEEPER]: 0.8 })
     expect(await scoreDescriptions('  ', [KEEPER], embed)).toEqual([null])
     expect(embed).not.toHaveBeenCalled()
+  })
+})
+
+// observability.md → Logger contract: an embedder outage turns matching off silently, so it warns.
+describe('a description embed that throws', () => {
+  beforeEach(() => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+  })
+  afterEach(() => {
+    __resetDiagnosticsGate()
+  })
+
+  const offline: EmbedDescriptions = async () => {
+    throw new Error('embedder offline')
+  }
+  const warned = () =>
+    getDiagnosticsSnapshot()
+      .logEntries.filter((e) => e.kind === 'classifier.description_embed_failed')
+      .map((e) => ({ level: e.level, actionId: e.actionId, fields: e.fields }))
+
+  it('warns with the thrown message and leaves every score null', async () => {
+    expect(await scoreDescriptions('The keeper.', [KEEPER, 'A courier.'], offline)).toEqual([
+      null,
+      null,
+    ])
+    expect(warned()).toEqual([
+      { level: 'warn', actionId: undefined, fields: { error: 'embedder offline' } },
+    ])
+  })
+
+  // observability.md → Record shape: inside a run the warn carries the run's actionId.
+  it("warns through the reconciling run's logger", async () => {
+    const decision = await reconcileNewEntity(candidate(), {
+      kind: 'character',
+      entities: [row()],
+      embedDescriptions: offline,
+      log: makeLogger('act_pass'),
+      scene: null,
+    })
+    expect(decision).toEqual(flagOf('char_1', 'no-signal'))
+    expect(warned()).toEqual([
+      { level: 'warn', actionId: 'act_pass', fields: { error: 'embedder offline' } },
+    ])
   })
 })
 

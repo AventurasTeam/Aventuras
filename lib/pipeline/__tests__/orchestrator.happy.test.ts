@@ -104,3 +104,42 @@ describe('orchestrator happy path', () => {
     expect(entry?.actionId).toBe(result.actionId)
   })
 })
+
+// classifier.md → Failure policy: a pass's run_complete tells Send's own pass from a chained one.
+describe('run_complete names beforeTurn', () => {
+  beforeEach(() => resetSingletons())
+  afterEach(() => resetSingletons())
+
+  type Complete = { kind: string; outcome: string; beforeTurn: boolean }
+
+  function recordCompletes(): Complete[] {
+    const seen: Complete[] = []
+    pipelineEventBus.subscribe('run_complete', (e) => {
+      seen.push({ kind: e.kind, outcome: e.outcome, beforeTurn: e.beforeTurn })
+    })
+    return seen
+  }
+
+  it.each([
+    ['completed', { status: 'completed' }],
+    ['failed', { status: 'failed', error: { kind: 'phase-logic', detail: 'boom' } }],
+    ['aborted', { status: 'aborted' }],
+  ] as const)("carries the run's beforeTurn when the run ends %s", async (outcome, end) => {
+    const { ctx } = await makeHarness()
+    async function* ends(): AsyncGenerator<never, PhaseResult> {
+      return end
+    }
+    definePipeline({ kind: 'send-work', phases: [{ name: 'p', run: ends }], ...base })
+    const seen = recordCompletes()
+
+    expect(expectRan(await runPipeline('send-work', { ...ctx, beforeTurn: true })).outcome).toBe(
+      outcome,
+    )
+    expect(expectRan(await runPipeline('send-work', ctx)).outcome).toBe(outcome)
+
+    expect(seen).toEqual([
+      { kind: 'send-work', outcome, beforeTurn: true },
+      { kind: 'send-work', outcome, beforeTurn: false },
+    ])
+  })
+})

@@ -4,7 +4,13 @@ import { storyEntries } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { isStorySwapPending, withTurnAdmission } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
-import { ensurePerTurnPipelineRegistered, type RejectedStart, type TxResult } from '@/lib/pipeline'
+import {
+  CLASSIFIER_HELD,
+  ensurePerTurnPipelineRegistered,
+  isClassifierHeld,
+  type RejectedStart,
+  type TxResult,
+} from '@/lib/pipeline'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import {
@@ -35,6 +41,7 @@ export type RegenerateRejectionCode =
   | 'embedder-swap'
   | 'generation-in-flight'
   | 'branch-not-loaded'
+  | typeof CLASSIFIER_HELD
   | 'not-an-ai-reply'
   | 'no-origin'
   | 'sweep-refused'
@@ -66,6 +73,12 @@ const SWAP_REJECTION = {
   status: 'rejected',
   code: 'embedder-swap',
   reason: 'embedder-swap',
+} as const
+
+const HELD_REJECTION = {
+  status: 'rejected',
+  code: CLASSIFIER_HELD,
+  reason: 'classifier held',
 } as const
 
 const IN_FLIGHT_REJECTION = {
@@ -119,6 +132,8 @@ export async function regenerateTurn(
         if (generationStore.isHeadReversalBlocked(ids.branchId)) return IN_FLIGHT_REJECTION
         if (entriesStore.getLoadedBranch() !== ids.branchId)
           return { status: 'rejected', code: 'branch-not-loaded', reason: 'branch not loaded' }
+        // Before the reads and the sweep: a held branch takes no turns, so nothing is destroyed.
+        if (await isClassifierHeld(ids.branchId, ctx)) return HELD_REJECTION
 
         const [target] = await ctx.db
           .select()

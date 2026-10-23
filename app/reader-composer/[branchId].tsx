@@ -20,6 +20,7 @@ import {
 } from '@/components/reader/confirm-refusal'
 import { useContentEditing } from '@/components/reader/content-editing'
 import { readerPillPhase } from '@/components/reader/generation-phase'
+import { settlePassFailureCustody } from '@/components/reader/pass-failure-custody'
 import { ReaderPeekDrawer } from '@/components/reader/peek/reader-peek-drawer'
 import { ReaderBrowseChip } from '@/components/reader/rail/reader-browse-chip'
 import { ReaderRailColumn } from '@/components/reader/rail/reader-rail-column'
@@ -44,15 +45,21 @@ import {
   cancelComposerRun,
   cancelPillRun,
   composerShowsCancel,
+  passRefusalOf,
   pillRunOf,
+  sendGapOpen,
   sendRunStreams,
+  type PassRefusal,
 } from '@/components/reader/send-run'
 import { describeSuggestionFailure } from '@/components/reader/suggestion-failure'
 import { suggestionRefreshBlocked } from '@/components/reader/suggestion-refresh-gate'
 import { SuggestionStrip, type SuggestionStripPhase } from '@/components/reader/suggestion-strip'
 import {
+  describePassFailure,
   describeTurnFailure,
   dismissSystemEntry,
+  retryPassEntry,
+  toPassFailureMeta,
   toSystemFailureMeta,
   useConfigFixAction,
   useSystemEntryActions,
@@ -84,6 +91,7 @@ import {
   refreshSuggestions,
   regenerateTurn,
   rollbackToEntry,
+  runClassifierNow,
   sameRollbackCounts,
   submitTurn,
   undoLastAction,
@@ -234,7 +242,7 @@ export default function ReaderComposerRoute() {
   )
   // Set around this route's submitTurn, whose pending mark alone holds the gaps around its runs.
   const [sendPending, setSendPending] = useState(false)
-  // Send in flight (its deferred pass, its turn and the gap between) swaps Send for Cancel; a pass
+  // Send in flight (its owed pass, its turn and the gap between) swaps Send for Cancel; a pass
   // chained after a turn leaves Send refused, the composer live. Booleans: no re-render per phase.
   const isGenerating = generationStore.useGeneration((s) =>
     composerShowsCancel(s.txState, branchId, sendPending),
@@ -357,10 +365,15 @@ export default function ReaderComposerRoute() {
   // turn and take a failure entry for it.
   const swapPending = swapRunning || swapPaused
 
+  // While Send's turn is pending with no run registered, the pending Send keeps the pill.
+  const sendGap = generationStore.useGeneration((s) =>
+    sendGapOpen(s.txState, branchId, sendPending),
+  )
   const activePhase = readerPillPhase({
     turnKind: pillRunKind,
     turnPhase: pillRunPhase,
     refreshingSuggestions,
+    turnPending: sendGap,
   })
 
   // Buffer instances live in a ref (mutable, not render state); the safe output
@@ -559,6 +572,21 @@ export default function ReaderComposerRoute() {
     [branchId, reload],
   )
 
+  const showPassFailure = useCallback(
+    async (refusal: PassRefusal, submission: SystemFailureMeta['submission']) => {
+      await writeSystemEntry(
+        {
+          branchId,
+          content: describePassFailure(refusal).content,
+          failure: toPassFailureMeta(refusal, submission),
+        },
+        ctx,
+      )
+      await reload()
+    },
+    [branchId, reload],
+  )
+
   type DroppedSystemEntry = { content: string; failure: SystemFailureMeta | undefined }
 
   // A prior failure leaves a system entry as the branch tail; drop it (and
@@ -653,7 +681,24 @@ export default function ReaderComposerRoute() {
           { content, composerMode },
           ctx,
         ).finally(() => setSendPending(false))
-        if (result.outcome === 'failed') await showTurnFailure(result.error, submission)
+        const refusal = passRefusalOf(result)
+        if (refusal != null) {
+          // The Send wrote nothing, so its text goes back to the composer or onto the entry.
+          setLastSubmission(null)
+          await settlePassFailureCustody({
+            held: refusal.held,
+            custodyNow: () => ({
+              stillOnBranch: branchUnchanged(branchId),
+              // An unmounted composer can't take the text back, so the entry keeps it.
+              draftEmpty:
+                composerRef.current != null && isDraftEmpty(composerRef.current.getDraft()),
+            }),
+            write: (withSubmission) =>
+              showPassFailure(refusal, withSubmission ? submission : undefined),
+            restoreDraft: () =>
+              composerRef.current?.restoreDraft(raw?.text ?? content, raw?.mode ?? 'free'),
+          })
+        } else if (result.outcome === 'failed') await showTurnFailure(result.error, submission)
         else if (result.outcome === 'rejected' && !result.converged) {
           // The refused turn's user_action is still in the branch, so a Retry would duplicate
           // it: the same hazard regenerate's unconverged arm refuses. A failed resync must not
@@ -678,7 +723,7 @@ export default function ReaderComposerRoute() {
             submission,
           )
         else if (result.outcome === 'aborted') {
-          // Cancelled during its deferred pass, the Send wrote nothing, so the entry it cleared
+          // Cancelled during its owed pass, the Send wrote nothing, so the entry it cleared
           // goes back, and that entry's Retry resends its own text rather than this Send's.
           const putBack = abortedBeforeTurn(result) ? dropped : null
           await restoreSystemTail(putBack)
@@ -714,6 +759,7 @@ export default function ReaderComposerRoute() {
       dropSystemTail,
       restoreSystemTail,
       showTurnFailure,
+      showPassFailure,
       beginDispatch,
       endDispatch,
       branchUnchanged,
@@ -866,16 +912,6 @@ export default function ReaderComposerRoute() {
     [entries],
   )
 
-  const { onRetry: retrySystemEntry, fixAction } = useSystemEntryActions(
-    systemFailure,
-    () => {
-      const submission = lastSubmission ?? systemFailure?.submission
-      if (submission) void runSubmit(submission.content, submission.composerMode)
-    },
-    storyId,
-    guardLeave,
-  )
-
   const handleDismissSystemEntry = useCallback(
     () =>
       dismissSystemEntry({
@@ -886,6 +922,51 @@ export default function ReaderComposerRoute() {
         handBack: handBackSubmission,
       }),
     [branchId, reload, handBackSubmission, systemFailure, branchUnchanged],
+  )
+
+  // Held until the pass ends: no double tap or Send slips in, head reversals wait;
+  // the pill's Cancel still ends the pass.
+  const retryPass = useCallback(async () => {
+    if (!beginDispatch()) {
+      logger.warn('pipeline.pass_retry_dispatch_suppressed', { branchId })
+      return
+    }
+    const submission = systemFailure?.submission
+    try {
+      await retryPassEntry({
+        runPass: () => runClassifierNow(branchId, ctx),
+        dismiss: handleDismissSystemEntry,
+        rewrite: (refusal) => showPassFailure(refusal, submission),
+        notify: (message) => toast.info(message),
+      })
+    } finally {
+      endDispatch()
+    }
+  }, [
+    branchId,
+    systemFailure,
+    showPassFailure,
+    handleDismissSystemEntry,
+    beginDispatch,
+    endDispatch,
+  ])
+
+  const { onRetry: retrySystemEntry, fixAction } = useSystemEntryActions(
+    systemFailure,
+    () => {
+      // A pass-failure entry's Retry runs the pass alone (classifier.md → Failure policy).
+      if (systemFailure?.pass === 'failed') {
+        runAction(retryPass(), {
+          event: 'reader.pass_retry_failed',
+          toastMessage: t('reader:passRetryFinishFailed'),
+        })
+        return
+      }
+      const submission = lastSubmission ?? systemFailure?.submission
+      if (submission) void runSubmit(submission.content, submission.composerMode)
+    },
+    storyId,
+    guardLeave,
   )
 
   const openRollback = useCallback(
@@ -1035,7 +1116,11 @@ export default function ReaderComposerRoute() {
     () => void cancelComposerRun(branchId, sendPending),
     [branchId, sendPending],
   )
-  const handleCancelPill = useCallback(() => void cancelPillRun(branchId), [branchId])
+  // In Send's gap no run holds the pill, so its Cancel is the composer's: it awaits the next run.
+  const handleCancelPill = useCallback(() => {
+    if (sendGapOpen(generationStore.getTxState(), branchId, sendPending)) handleCancelComposer()
+    else void cancelPillRun(branchId)
+  }, [branchId, sendPending, handleCancelComposer])
 
   // Read at settle time, not from the closure: a branch-switch abort whose
   // reverse-replay fails resolves 'failed' well after the switch, and the
@@ -1186,7 +1271,7 @@ export default function ReaderComposerRoute() {
     else documentRef.current?.jumpToBottom()
   }, [])
 
-  const handleRetrySystemEntry = useCallback(async () => retrySystemEntry(), [retrySystemEntry])
+  const handleRetrySystemEntry = useCallback(async () => retrySystemEntry?.(), [retrySystemEntry])
   const handleFixSystemEntry = useCallback(async () => fixAction?.onPress(), [fixAction])
   // Editable-target exclusion keeps End moving the caret inside the composer.
   useGlobalHotkey(matchesJumpToBottomShortcut, jumpToBottom, {
@@ -1281,7 +1366,8 @@ export default function ReaderComposerRoute() {
     onEditScene: editScene,
     onRequestEditScene: requestEditScene,
     onRegenerate: handleRequestRegenerate,
-    onRetrySystemEntry: handleRetrySystemEntry,
+    // Absent for a held pass entry: its branch can't run a pass.
+    ...(retrySystemEntry != null ? { onRetrySystemEntry: handleRetrySystemEntry } : {}),
     onDismissSystemEntry: handleDismissSystemEntry,
     onFixSystemEntry: handleFixSystemEntry,
   }
@@ -1325,7 +1411,9 @@ export default function ReaderComposerRoute() {
           activePhase={activePhase}
           beforeTurn={pillBeforeTurn}
           // Absent while nothing runs on the branch: a no-op handler would still open the popover.
-          {...(pillRunKind != null || refreshingSuggestions ? { onCancel: handleCancelPill } : {})}
+          {...(pillRunKind != null || refreshingSuggestions || sendGap
+            ? { onCancel: handleCancelPill }
+            : {})}
           onOpenMemory={() => {
             if (storyId != null) router.push(`/story-settings/${storyId}?tab=memory`)
           }}

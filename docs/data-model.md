@@ -2017,10 +2017,11 @@ story_entries.metadata: {
     kind: string                    // open string, not an enum: the taxonomy spans pipeline errors, provider errors and refusals, and each side evolves on its own release cadence
     failure?: string                // provider- or pipeline-supplied failure tag, when one was given
     detail?: string                 // human-readable cause, rendered in the reader's error surface
-    submission?: {                  // the reversed user action's text, so Retry survives a restart
+    submission?: {                  // the turn's text, kept across a restart: a turn entry's Retry resends it; on a pass entry it is custody only (always when held; when failed, only when the composer couldn't take it back: the draft was occupied, or the user left the branch)
       content: string
       composerMode: string
     }
+    pass?: 'failed' | 'held'        // a pass-failure entry: its Retry runs the pass alone; held has no Retry
   }
 }
 ```

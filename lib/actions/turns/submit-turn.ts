@@ -6,13 +6,14 @@ import { logger } from '@/lib/diagnostics'
 import { isStorySwapPending, withTurnAdmission } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
 import {
+  CLASSIFIER_HELD,
   ensurePerTurnPipelineRegistered,
   ensurePeriodicClassifierPipelineRegistered,
+  owedPassAtSend,
   runPipeline,
   type RejectedStart,
   type TxResult,
 } from '@/lib/pipeline'
-import { generationStore } from '@/lib/stores'
 
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { DeltaReplayError, reverseReplayDeltas } from '../delta/reverse-replay'
@@ -21,22 +22,25 @@ import { withBranchQueue, withPendingTurn } from './branch-queue'
 
 export type SubmitTurnMeta = { content: string; composerMode: string }
 
-/** Send's deferred pass was cancelled, so the whole Send was, before it wrote anything. */
-export type DeferredPassAborted = TxResult & { outcome: 'aborted'; beforeTurn: true }
+/** Send's owed pass was cancelled, so the whole Send was, before it wrote anything. */
+export type OwedPassAborted = TxResult & { outcome: 'aborted'; beforeTurn: true }
+
+/** Send's owed pass failed, so the Send did: no user_action (classifier.md → Failure policy). */
+export type OwedPassFailed = TxResult & { outcome: 'failed'; beforeTurn: true }
 
 /** `converged: false`: the refused user_action is still in the branch; never re-offer its text. */
 export type SubmitTurnResult =
   | TxResult
-  | DeferredPassAborted
+  | OwedPassAborted
+  | OwedPassFailed
   | (RejectedStart & { converged: boolean })
 
 const SWAP_REJECTION = { outcome: 'rejected', blockedBy: 'embedder-swap', converged: true } as const
 
-/**
- * Send's deferred work (generation-pipeline.md → chainsTo on predecessor): its own run with its
- * own actionId, awaited to its end so it commits before the turn's first write.
- */
-function runDeferredPass(
+const HELD_REJECTION = { outcome: 'rejected', blockedBy: CLASSIFIER_HELD, converged: true } as const
+
+/** Send's owed pass (classifier.md → Failure policy): own run and actionId, committed first. */
+function runOwedPass(
   ids: { storyId: string; branchId: string },
   ctx: DbCtx,
 ): Promise<TxResult | RejectedStart> {
@@ -64,13 +68,15 @@ export async function submitTurn(
       if (isStorySwapPending(ids.storyId)) return SWAP_REJECTION
 
       return withPendingTurn(ids.branchId, async (startTurn): Promise<SubmitTurnResult> => {
-        // Under the turn's mark, so no reversal interrupts Send's own deferred work.
-        if (generationStore.getTxState().deferred.get(ids.branchId)?.pass) {
-          const deferred = await runDeferredPass(ids, ctx)
-          // A cancel cancels the whole Send and the work stays deferred; a pass that failed or
-          // could not start lets the turn go ahead.
-          if (deferred.outcome === 'aborted')
-            return { ...deferred, outcome: 'aborted', beforeTurn: true }
+        // Under the turn's mark, so no reversal interrupts Send's own pass. Only a committed pass
+        // lets the turn start: a cancel cancels the Send, and a failure or a refusal fails it.
+        const owed = await owedPassAtSend(ids.branchId, ctx)
+        if (owed === 'held') return HELD_REJECTION
+        if (owed === 'owed') {
+          const pass = await runOwedPass(ids, ctx)
+          if (pass.outcome === 'rejected') return { ...pass, converged: true }
+          if (pass.outcome === 'aborted') return { ...pass, outcome: 'aborted', beforeTurn: true }
+          if (pass.outcome === 'failed') return { ...pass, outcome: 'failed', beforeTurn: true }
         }
 
         // Shared across the user_action's delta and the pipeline run it kicks off,

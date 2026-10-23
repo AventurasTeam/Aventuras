@@ -179,7 +179,6 @@ describe('undoLastAction / redoLastAction', () => {
           state: 'idle',
           lastSuccessAt: null,
           lastError: null,
-          retryCount: 0,
           processedThrough: 2,
         },
       })
@@ -599,7 +598,6 @@ describe('undo and redo carry the reversal closure', () => {
         state: 'idle',
         lastSuccessAt: null,
         lastError: null,
-        retryCount: 0,
         processedThrough: 2,
       },
     })

@@ -60,7 +60,6 @@ describe('resetStuckClassifierRunState', () => {
       state: 'running',
       lastSuccessAt: 111,
       lastError: null,
-      retryCount: 0,
       processedThrough: 7,
     }
     await seed(db, 'b1', running)
@@ -70,30 +69,21 @@ describe('resetStuckClassifierRunState', () => {
     expect(await readStatus(db, 'b1')).toEqual({ ...running, state: 'idle' })
   })
 
-  it('leaves retrying and failed-persistent branches completely alone', async () => {
+  // classifier.md → Failure policy: a failed branch's next Send runs the pass; boot resets nothing.
+  it('leaves a failed branch completely alone', async () => {
     const { db, runInTransaction } = await createTestDb()
     await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
-    const retrying: ClassifierStatus = {
-      state: 'retrying',
+    const failed: ClassifierStatus = {
+      state: 'failed',
       lastSuccessAt: null,
       lastError: 'boom',
-      retryCount: 1,
       processedThrough: 3,
     }
-    const failedPersistent: ClassifierStatus = {
-      state: 'failed-persistent',
-      lastSuccessAt: null,
-      lastError: 'boom again',
-      retryCount: 3,
-      processedThrough: 3,
-    }
-    await seed(db, 'b-retrying', retrying)
-    await seed(db, 'b-failed', failedPersistent)
+    await seed(db, 'b-failed', failed)
 
     await resetStuckClassifierRunState({ db, runInTransaction }, [])
 
-    expect(await readStatus(db, 'b-retrying')).toEqual(retrying)
-    expect(await readStatus(db, 'b-failed')).toEqual(failedPersistent)
+    expect(await readStatus(db, 'b-failed')).toEqual(failed)
   })
 
   it('leaves a branch with no classifier_status (NULL) untouched', async () => {
@@ -113,7 +103,6 @@ describe('resetStuckClassifierRunState', () => {
       state: 'running',
       lastSuccessAt: null,
       lastError: null,
-      retryCount: 0,
       processedThrough: 4,
     }
     await seed(db, 'b-hazard', running)
@@ -136,7 +125,6 @@ describe('resetStuckClassifierRunState', () => {
       state: 'running',
       lastSuccessAt: null,
       lastError: null,
-      retryCount: 0,
       processedThrough: 4,
     }
     await seed(db, 'b1', running)
@@ -153,7 +141,6 @@ describe('resetStuckClassifierRunState', () => {
       state: 'idle',
       lastSuccessAt: 42,
       lastError: null,
-      retryCount: 0,
       processedThrough: 5,
     }
     await seed(db, 'b-idle', idle)

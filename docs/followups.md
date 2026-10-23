@@ -44,31 +44,6 @@ for the placement rule.
   error reaches the user is unverified. Raised 2026-10-19 by the
   entity-state design.
 
-- **Implement the pass failure policy.** A pass that comes due must
-  succeed before its branch's next turn: a chained pass that fails
-  runs first at the next Send, and failing there fails the Send
-  ([`classifier.md → Failure policy`](./memory/classifier.md#failure-policy)).
-  `failed-persistent`, the retry count, the cadence suspension and the
-  `classifier-offline` pill code go. Designed 2026-10-22
-  ([exploration record](./explorations/2026-10-22-pass-failure-policy.md)).
-  The plan must check:
-  - Send's check for an owed pass, which reads the persisted cadence
-    beside the deferral mark, and every reader of the removed states
-    (`shouldCadenceFire`, `nextMemoryRun`, the status schema, and rows
-    stored as `retrying` or `failed-persistent`);
-  - the failure toast, and the system entry for a failed Send with the
-    composer's text kept;
-  - the bound: the classifier profile's `timeout` when set, ten
-    minutes otherwise, replacing `CALL_TIMEOUT_MS`;
-  - a branch held `running` failing Send with the recovery error;
-  - whether reconciliation's transient embeddings fail the pass when
-    the embedder is unavailable;
-  - the triage entries it closes, "A user Cancel whose abort reversal
-    fails lets the Send proceed" among them;
-  - the real-provider smoke, which lands a turn to retry a failed pass
-    and checks for `retrying`;
-  - the E2E decision ([`testing.md`](./testing.md)).
-
 - **Implement the AI writer map.** The per-turn writer and the
   periodic classifier gain the writes the authorship contract gives
   them

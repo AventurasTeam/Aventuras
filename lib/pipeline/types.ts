@@ -56,6 +56,8 @@ export type PipelineEvent =
       runId: string
       kind: string
       actionId: string
+      /** Send's work before the turn (RunState.beforeTurn); false for a chained successor. */
+      beforeTurn: boolean
       outcome: 'completed' | 'aborted' | 'failed'
       error?: PipelineError
     }
@@ -140,7 +142,7 @@ export type PreflightFailureHook = (
  * so a later sibling's own `{ status: 'failed' }` isn't synchronized with this hook.
  */
 export type PhaseExceptionHook = (
-  ctx: Pick<PhaseContext, 'db' | 'branchId'>,
+  ctx: Pick<PhaseContext, 'db' | 'branchId' | 'actionId'>,
   error: Extract<PipelineError, { kind: 'action-layer' | 'orchestrator' }>,
 ) => Promise<void>
 

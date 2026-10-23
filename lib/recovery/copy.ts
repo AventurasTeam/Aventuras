@@ -24,21 +24,20 @@ function formatRun(run: RecoveredRun, storyName: string | undefined): string {
   }
 }
 
-// The classifier writes `state: 'running'` before it emits any delta, so an orphan
-// of that kind which would not reverse is necessarily a branch boot held back —
-// this is the one failure that can promise the pause rather than describe the fault.
-// An integrity refusal recurs at every boot, so it promises no retry.
+// The classifier writes `state: 'running'` before any delta, so an orphan of that kind that won't
+// reverse holds its branch (Send refuses until a boot reverses it): the one failure that can
+// promise its turns stop, not describe the fault. An integrity refusal recurs every boot: no retry.
 function formatFailure(failure: RecoveryFailure, storyName: string | undefined): string {
-  const paused = failure.kind === 'periodic-classifier'
+  const held = failure.kind === 'periodic-classifier'
   const refused = failure.refusal !== null
-  if (paused && refused)
+  if (held && refused)
     return storyName
-      ? t('crashRecovery.memoryPausedRefusedNamed', { storyName })
-      : t('crashRecovery.memoryPausedRefusedUnnamed')
-  if (paused)
+      ? t('crashRecovery.branchHeldRefusedNamed', { storyName })
+      : t('crashRecovery.branchHeldRefusedUnnamed')
+  if (held)
     return storyName
-      ? t('crashRecovery.memoryPausedNamed', { storyName })
-      : t('crashRecovery.memoryPausedUnnamed')
+      ? t('crashRecovery.branchHeldNamed', { storyName })
+      : t('crashRecovery.branchHeldUnnamed')
   if (refused)
     return storyName
       ? t('crashRecovery.incompleteRefusedNamed', { storyName })

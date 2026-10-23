@@ -174,8 +174,7 @@ describe('runPipeline config pre-flight', () => {
       .from(branches)
       .where(eq(branches.id, 'b1'))
     expect(row.status).toEqual({
-      state: 'retrying',
-      retryCount: 1,
+      state: 'failed',
       lastError: 'classifier: no-profile-assigned',
       lastSuccessAt: null,
       processedThrough: null,

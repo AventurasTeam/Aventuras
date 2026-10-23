@@ -192,6 +192,7 @@ async function itemFlag(
   text: StoredText,
   entities: readonly Entity[],
   embed: EmbedDescriptions,
+  log: Logger,
 ): Promise<ItemMatchFlag | null> {
   const namesakes = itemNamesakes(text.name, entities)
   if (namesakes.length === 0) return null
@@ -199,6 +200,7 @@ async function itemFlag(
     text.description,
     namesakes.map((n) => n.description),
     embed,
+    log,
   )
   return decideNewItem(namesakes.map((entity, i) => ({ entity, similarity: scores[i] })))
 }
@@ -211,13 +213,14 @@ async function planItems(args: {
   embed: EmbedDescriptions
   now: () => number
   newId: (prefix: 'item') => string
+  log: Logger
 }): Promise<{ ids: Map<string, string>; rows: Entity[] }> {
   const scored = await Promise.all(
     args.emissions
       .filter((emission) => args.kept.has(emission.handle))
       .map(async (emission) => {
         const text = storedText(emission)
-        return { emission, text, flag: await itemFlag(text, args.entities, args.embed) }
+        return { emission, text, flag: await itemFlag(text, args.entities, args.embed, args.log) }
       }),
   )
   // Ids are drawn once every score is in, so they follow emission order, not embed timing.
@@ -358,6 +361,7 @@ export async function planTurnCreates(input: {
     embed,
     now,
     newId,
+    log,
   })
 
   const ids = new Map(things.ids)

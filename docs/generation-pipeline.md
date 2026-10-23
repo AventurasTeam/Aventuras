@@ -64,7 +64,7 @@ interface Pipeline {
   onPreflightFailure?: (ctx, error: PipelineError) => Promise<void> // pre-flight halts before phase 0, so only this hook ever sees that failure
   // a phase threw; runs once its rollback has committed, before the run releases
   onPhaseException?: (
-    ctx,
+    ctx: { db: DbCtx['db']; branchId: string; actionId: string },
     error: Extract<PipelineError, { kind: 'action-layer' | 'orchestrator' }>,
   ) => Promise<void>
   // a user Cancel or a head reversal ended me; runs once the abort's reversal has committed, before the run releases
@@ -127,6 +127,7 @@ type PipelineEvent =
       runId: string
       kind: string
       actionId: string
+      beforeTurn: boolean // Send's work before the turn (RunState.beforeTurn); false for a chained successor
       outcome: 'completed' | 'aborted' | 'failed'
       error?: PipelineError
     }
@@ -534,7 +535,7 @@ type RunState = {
   storyId: string | null // read by chainsTo + config resolution
   branchId: string
   interruptible: 'pass' | 'close' | null // copied from the pipeline at reserve; a head reversal or Cancel ends the run and defers it in this slot
-  beforeTurn: boolean // started by Send to run deferred work before the turn
+  beforeTurn: boolean // started by Send to run its owed pass before the turn
   abortController: AbortController
   currentPhase: string // name of declared phase or parallel group
   intermediates: Record<string, unknown> // phase outputs threaded through the run
@@ -547,12 +548,12 @@ type RunState = {
 Only the orchestrator writes `deferred`, through the generation store
 and in the same update that removes the run: an `interruptible` run
 that ends `aborted` records, for its branch, the slot its declaration
-names (the pass declares `pass`, the close `close`), and a commit or
-failure of a run declaring that slot clears it. So every way a pass or a close is cancelled — the interrupt, the
-pill's or the banner's Cancel, Cancel & leave — defers it, and a
-failed one is left to the next commit's retry. A newly recorded
-deferral emits `run_deferred` on the bus naming the slot it recorded,
-which raises that slot's toast.
+names (the pass declares `pass`, the close `close`), and only a commit
+of a run declaring that slot clears it. So every way a pass or a close
+is cancelled — the interrupt, the pill's or the banner's Cancel,
+Cancel & leave — defers it, and a failed one stays owed: Send runs it
+first again. A newly recorded deferral emits `run_deferred` on the bus
+naming the slot it recorded, which raises that slot's toast.
 
 ### Gate derivation as a selector
 
@@ -630,9 +631,8 @@ pre-flight.
 
 A run cancelled before its pre-flight skips it and takes the
 user-cancel abort: a pass the interrupt reached as its predecessor's
-commit swapped it in, or Send's deferred pass cancelled as it
-reserved, is interrupted, not failed, so it uses no retry and stays
-deferred.
+commit swapped it in, or Send's owed pass cancelled as it reserved, is
+interrupted, not failed, so it is deferred.
 
 **On failure**, the run halts before phase 0 fires — no LLM call
 goes out, no tokens spent, no deltas written. The orchestrator
@@ -1935,7 +1935,7 @@ const periodicClassifierPipeline: Pipeline = {
   concurrencyPolicy: {
     blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close', 'translation-retry'],
   },
-  // started by a chain, by Send for deferred work, or by Run now
+  // started by a chain, by Send as its owed pass, or by Run now
 }
 
 const chapterClosePipeline: Pipeline = {
@@ -2098,8 +2098,8 @@ run's abort then records it in `txState.deferred` for its branch
 ([Multi-run txState](#multi-run-txstate)), so the next Send runs it
 before the turn ([chainsTo on predecessor](#chainsto-on-predecessor)),
 and a toast says the memory update, or the chapter close, moved to
-the next turn. An interrupted pass restores its pre-run status, uses no
-retry and leaves the watermark where it was. The status is restored by
+the next turn. An interrupted pass restores its pre-run status and
+leaves the watermark where it was. The status is restored by
 the pipeline's `onInterrupt` hook, which the orchestrator runs after
 the abort's reversal has committed and before the run releases the
 gate; a reversal that cannot commit skips it and leaves the pass
@@ -2180,7 +2180,7 @@ A `chainsTo` returning a kind (per-turn's pass or close, a pass's next
 pass or close) triggers a chained transition (in `commitRun`) that
 directly creates the next `RunState` without going through
 `runPipeline`'s entry check. `blockedBy` reflects external start
-requests (UI, Run now, Send's deferred work); chains aren't external.
+requests (UI, Run now, Send's owed pass); chains aren't external.
 
 ### Cadence chain
 

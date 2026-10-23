@@ -96,17 +96,18 @@ export const entryMetadataSchema = z.object({
       refreshGuidance: z.string().optional(),
     })
     .optional(),
-  // System-entry failure record (reader-composer.md → Error surface): kind /
-  // failure mirror PipelineError / ResolveFailureKind as open strings — an
-  // unknown future pipeline kind must degrade to generic copy, not fail the
-  // whole metadata parse. submission preserves the reversed user_action's text
-  // so Retry survives an app restart.
+  // System-entry failure record (reader-composer.md → Error surface). kind / failure are open
+  // strings so an unknown future kind degrades to generic copy, not a failed metadata parse.
+  // submission survives a restart: a turn's Retry resends it; a pass entry's Dismiss or a committed
+  // Retry hands it back.
   systemFailure: z
     .object({
       kind: z.string(),
       failure: z.string().optional(),
       detail: z.string().optional(),
       submission: z.object({ content: z.string(), composerMode: z.string() }).optional(),
+      // A pass refused the Send: Retry runs the pass alone; 'held' has no Retry.
+      pass: z.enum(['failed', 'held']).optional(),
     })
     .optional(),
 })

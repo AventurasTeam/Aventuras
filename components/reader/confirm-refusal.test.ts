@@ -61,6 +61,10 @@ describe('regenerateRefusalCopy', () => {
     )
   })
 
+  it('names a held branch, which takes no turns until its memory update is undone', () => {
+    expect(regenerateRefusalCopy(refused('classifier-held'))).toBe('reader:regenerateHeld')
+  })
+
   it('offers no retry for a regenerate that cannot succeed', () => {
     expect(regenerateRefusalCopy(refused('sweep-refused'))).toBe('reader:regenerateUnavailable')
   })

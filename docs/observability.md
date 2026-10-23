@@ -210,7 +210,9 @@ convention, and the expectation that subsystems route through
   group, then rethrown) — `lib/actions/world/resolve-collision.ts`
 - `classifier.*` — `delta_clamped`, `schema_repair`, `empty_output`,
   `failure_record_retried` (warn: the first attempt to record a failed
-  pass threw, and the hook tried once more)
+  pass threw, and the hook tried once more), `description_embed_failed`
+  (warn: a namesake's description embed threw, so the match went on
+  unscored)
 - `retrieval.*` — `row_skipped_stale`, `empty_pool`, `knn_error`
 - `provider.*` — `retry_succeeded`, `rate_limited`,
   `stream_interrupted`, `request_failed`, `url_redaction_failed`
@@ -292,7 +294,8 @@ convention, and the expectation that subsystems route through
   row's removal) are gated by the master gate like any other kind
 - `reader.*` — reader-composer dispatches routed through `runAction`
   (`lib/utils.ts`) instead of a bare `void`: `undo_failed`, `redo_failed`,
-  `rollback_failed`, `regenerate_failed`
+  `rollback_failed`, `regenerate_failed`, `pass_retry_failed`
+  (a pass-failure entry's Retry, which runs the pass alone)
   — plus `undo_rejected` / `redo_rejected` at debug for the refusals
   that are routine (gated, nothing to apply, branch mid-switch), where
   `undo_failed` / `redo_failed` carry the ones that mean the delta log

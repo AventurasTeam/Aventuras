@@ -270,6 +270,16 @@ points Electron at it, giving isolation and seeding for free —
 and Electron honors the Chromium switch. Nothing binary lands in git,
 and the fixture always matches the current migrations.
 
+Every seeded branch's classifier watermark
+(`branches.classifier_status.processedThrough`) sits at its last
+non-system entry, so no branch owes a pass at its first Send
+([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)).
+It does not sit at the branch's highest position: a branch can end on
+a `system` row, which the first Send deletes before writing its
+user_action at that position. A spec that wants a backlog seeds one
+(`seedClassifierBacklog` in `e2e/harness/seed.ts`) or parks the
+watermark lower.
+
 ### Substitutable IDs must be real UUIDs
 
 Why the fixture can't use mnemonic IDs. During a turn, `substituteIds`

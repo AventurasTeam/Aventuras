@@ -3,8 +3,15 @@ import { useRouter } from 'expo-router'
 import type { ResolveFailureKind } from '@/lib/ai'
 import type { SystemFailureMeta } from '@/lib/db'
 import { t } from '@/lib/i18n'
-import type { PipelineError } from '@/lib/pipeline'
+import {
+  CLASSIFIER_HELD,
+  type PipelineError,
+  type RejectedStart,
+  type TxResult,
+} from '@/lib/pipeline'
 import { openEmbedderSwapDialog } from '@/lib/stores'
+
+import type { PassRefusal } from './send-run'
 
 export type SystemEntryFixAction = { label: string; onPress: () => void } | undefined
 
@@ -77,6 +84,71 @@ export function toSystemFailureMeta(
   }
 }
 
+// The pass's own vocabulary (classifier.md → Failure policy): a turn's copy names the narrative
+// agent, which would send the user to fix the wrong profile.
+export function describePassFailure(refusal: PassRefusal): { content: string; detail?: string } {
+  if (refusal.held) return { content: t('reader:systemEntry.failure.memoryHeld') }
+  const { error } = refusal
+  if (error?.kind === 'config-resolver') {
+    const contentKey =
+      error.failure === 'no-profile-assigned'
+        ? 'reader:systemEntry.failure.memoryNoProfileAssigned'
+        : error.failure === 'profile-missing'
+          ? 'reader:systemEntry.failure.memoryProfileMissing'
+          : error.failure === 'override-provider-missing'
+            ? 'reader:systemEntry.failure.memoryOverrideProviderMissing'
+            : 'reader:systemEntry.failure.memoryProviderMissing'
+    return { content: t(contentKey), detail: error.detail }
+  }
+  const detail =
+    error?.kind === 'provider'
+      ? error.detail != null
+        ? `${error.reason}: ${error.detail}`
+        : error.reason
+      : error?.detail
+  return { content: t('reader:systemEntry.failure.memory'), detail }
+}
+
+export function toPassFailureMeta(
+  refusal: PassRefusal,
+  submission: { content: string; composerMode: string } | undefined,
+): SystemFailureMeta {
+  const error = refusal.held ? undefined : refusal.error
+  const { detail } = describePassFailure(refusal)
+  return {
+    kind: error?.kind ?? 'orchestrator',
+    ...(error?.kind === 'config-resolver' ? { failure: error.failure } : {}),
+    ...(detail != null ? { detail } : {}),
+    ...(submission != null ? { submission } : {}),
+    pass: refusal.held ? 'held' : 'failed',
+  }
+}
+
+/**
+ * A pass-failure entry's Retry: runs the pass alone. A commit clears the entry through `dismiss`;
+ * a failure, a throw or a hold rewrites it; a cancel leaves it to the deferral toast. A throw from
+ * `dismiss` or `rewrite` propagates.
+ */
+export async function retryPassEntry(deps: {
+  runPass: () => Promise<TxResult | RejectedStart>
+  dismiss: () => Promise<void>
+  rewrite: (refusal: PassRefusal) => Promise<void>
+  notify: (message: string) => void
+}): Promise<void> {
+  let result: TxResult | RejectedStart
+  try {
+    result = await deps.runPass()
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    return deps.rewrite({ held: false, error: { kind: 'orchestrator', detail } })
+  }
+  if (result.outcome === 'completed') return deps.dismiss()
+  if (result.outcome === 'failed') return deps.rewrite({ held: false, error: result.error })
+  if (result.outcome !== 'rejected') return
+  if (result.blockedBy === CLASSIFIER_HELD) return deps.rewrite({ held: true })
+  deps.notify(t('reader:systemEntry.passRetryBlocked', { reason: result.blockedBy }))
+}
+
 // Shared by the system-entry bubble and the suggestion strip: a config-resolver
 // failure is deterministic, so both surfaces route to settings instead of
 // offering a retry that cannot succeed. Widened past ResolveFailureKind because
@@ -131,13 +203,17 @@ export function useSystemEntryActions(
   onRetry: () => void,
   storyId: string | null,
   leaveStory: LeaveStory,
-): { onRetry: () => void; fixAction: SystemEntryFixAction } {
+): { onRetry: (() => void) | undefined; fixAction: SystemEntryFixAction } {
   const configFix = useConfigFixAction(
     failure?.kind === 'config-resolver' ? failure.failure : undefined,
     storyId,
     leaveStory,
   )
   const embedderFix = useEmbedderFixAction(failure?.kind === 'embedder' ? storyId : null)
-  // The two gates are kind-exclusive, so the `??` order carries no meaning.
-  return { onRetry, fixAction: embedderFix ?? configFix }
+  // A held branch can't run a pass, so its entry offers Dismiss alone. The two fix gates are
+  // kind-exclusive, so the `??` order carries no meaning.
+  return {
+    onRetry: failure?.pass === 'held' ? undefined : onRetry,
+    fixAction: embedderFix ?? configFix,
+  }
 }

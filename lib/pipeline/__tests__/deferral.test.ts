@@ -177,7 +177,7 @@ describe('deferred work', () => {
     expect(await db.select().from(storyEntries)).toHaveLength(0)
   })
 
-  // No classifier profile is set, so this pass's pre-flight would fail and its hook burn a retry.
+  // No classifier profile is set: this pass's pre-flight would fail and its hook record a failure.
   describe('a pass cancelled before its pre-flight', () => {
     let preflightHookCalls = 0
     let phaseEntered = false
@@ -272,7 +272,8 @@ describe('deferred work', () => {
     expect(generationStore.getTxState().deferred.has('b1')).toBe(false)
   })
 
-  it('clears the record when the pass fails, without a new run_deferred', async () => {
+  // classifier.md → Failure policy: Send reruns failed work first, so only a commit clears it.
+  it('keeps the record when the pass fails, emitting no new run_deferred, until a commit', async () => {
     const { ctx } = await makeHarness()
     defineStandIn(PERIODIC_CLASSIFIER_KIND)
     const seen = recordTerminalEvents()
@@ -280,12 +281,18 @@ describe('deferred work', () => {
     await interruptMemoryRuns('b1')
     expect(deferredOnB1()).toEqual({ pass: true })
 
-    const { start, finish } = await startHeld(PERIODIC_CLASSIFIER_KIND, ctx)
-    finish({ status: 'failed', error: { kind: 'phase-logic', detail: 'pass failed' } })
+    const failing = await startHeld(PERIODIC_CLASSIFIER_KIND, { ...ctx, beforeTurn: true })
+    failing.finish({ status: 'failed', error: { kind: 'phase-logic', detail: 'pass failed' } })
 
-    expect(expectRan(await start.origin).outcome).toBe('failed')
-    expect(generationStore.getTxState().deferred.has('b1')).toBe(false)
+    expect(expectRan(await failing.start.origin).outcome).toBe('failed')
+    expect(deferredOnB1()).toEqual({ pass: true })
     expect(seen.filter((e) => e.type === 'run_deferred')).toHaveLength(1)
+
+    const committing = await startHeld(PERIODIC_CLASSIFIER_KIND, ctx)
+    committing.finish({ status: 'completed' })
+
+    expect(expectRan(await committing.start.origin).outcome).toBe('completed')
+    expect(generationStore.getTxState().deferred.has('b1')).toBe(false)
   })
 
   // A cancel whose reversal fails settles as 'failed': its writes are still on disk, so the next

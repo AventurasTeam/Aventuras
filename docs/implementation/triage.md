@@ -94,11 +94,6 @@ slice-planning gate forces its resolution before that slice is planned.
   no flag that pairs". Raised 2026-10-11 in the
   locations-and-items-from-prose PR.
 
-- **`scoreDescriptions` swallows embedder errors without logging.**
-  `lib/classifier/reconcile.ts` (~line 138) catches in a bare block, so
-  an embedder outage silently turns off item and character matching.
-  Raised 2026-10-11 in the locations-and-items-from-prose PR.
-
 - **A cancel after the last abort check still returns `completed`.**
   In `lib/pipeline/definitions/per-turn.ts` (~line 322) a cancel
   landing during the position SELECT or the yields leaves the phase
@@ -547,22 +542,6 @@ slice-planning gate forces its resolution before that slice is planned.
   [`parked.md → An abort waits on its phases, except a thrown parallel branch`](../parked.md#an-abort-waits-on-its-phases-except-a-thrown-parallel-branch).
   Raised 2026-10-21 by the gated classifier slice's task reviews.
 
-- **A user Cancel whose abort reversal fails lets the Send proceed.**
-  `abortRun` turns a cancelled run whose reversal failed into
-  `failed`, and a `failed` outcome clears the run's deferral.
-  `submitTurn` treats a `failed` deferred pass as "go ahead", so the
-  turn then runs over the unreversed orphans that boot recovery will
-  see. Rare: the reversal's SQLite transaction has to fail. The fix
-  belongs in the orchestrator: a user-cancel whose reversal fails ends
-  `aborted` with an error, so the deferral stays and the Send is
-  cancelled. A reversal that commits but whose store sync then fails
-  settles `failed` too, so that Cancel also lets the turn run (over no
-  orphans, but against the user's Cancel). That case is unreachable
-  today and is
-  [`parked.md → A store sync that fails after a committed reversal leaves stores stale`](../parked.md#a-store-sync-that-fails-after-a-committed-reversal-leaves-stores-stale),
-  whose fix lets the Cancel keep its `aborted` outcome. Raised
-  2026-10-21 by the gated classifier slice's task and branch reviews.
-
 - **The head turn's membership test is written out four times.**
   `resolveHeadTurn` in `lib/head-turn` is the one definition of the
   head turn, but the "is this entry its tail or origin" test on top of
@@ -656,26 +635,124 @@ slice-planning gate forces its resolution before that slice is planned.
   its 224 px. Raised 2026-10-21 by the gated classifier slice review's
   R1 probe.
 
-- **`classifier.failure_record_retried` carries no `actionId`.** The
-  periodic classifier's `onPhaseException`
-  (`lib/pipeline/definitions/periodic-classifier.ts`) logs it when its
-  first failure-record write throws, without the run's `actionId`, so
-  the Logs tab can't tie it to its pass
-  ([`observability.md → Record shape`](../observability.md#record-shape):
-  a run-scoped emission carries the run's `actionId`). The hook's
-  context type (`PhaseExceptionHook` in `lib/pipeline/types.ts`) has no
-  `actionId` to pass; the fix widens it, as the slice review did for
-  `onInterrupt`, whose `InterruptHook` context now carries one.
-  Predates the gated classifier slice. Raised 2026-10-21 by the gated
-  classifier slice review.
+- **A failed-pass entry can lose the turn's text to an occupied
+  draft.** The entry carries the turn's text only when the composer
+  couldn't take it back: the user typed a new draft during Send's owed
+  pass, which can run up to ten minutes with the composer editable
+  ([`reader-composer.md → Custody of the turn's text`](../ui/screens/reader-composer/reader-composer.md#custody-of-the-turns-text)).
+  From there a committed Retry and `Dismiss` both hand it into the
+  still-occupied draft and drop it with the `failedTurnTextDropped`
+  toast, as Custody allows; a Send of the new draft drops it silently
+  in the tail clear, as a turn-failure entry's does today. Only
+  clearing the draft first, then `Dismiss`, keeps it, and nothing says
+  so. A turn-failure entry escapes the Retry half because its Retry
+  resends the stored text. Candidate fixes: keep the entry as a notice
+  when a Retry commits over an occupied draft; or carry a dropped
+  entry's submission onto the next entry. Raised 2026-10-22 in the
+  pass failure policy slice's Task 7 review.
 
-- **The reader's status pill blanks between Send's deferred pass and
-  its turn.** After the deferred pass commits, `submitTurn`
-  (`lib/actions/turns/submit-turn.ts`) runs two reads and the
-  user_action transaction before the turn registers, holding only the
-  pending mark. The pill picks its run from the registered runs
-  (`pillRunOf` in `components/reader/send-run.ts`), so for that gap it
-  shows nothing, then the turn's phase. The composer's Cancel holds
-  through the gap (`composerShowsCancel`, same file); the pill doesn't.
-  A frame or two on desktop. Read, not probed. Raised 2026-10-21 by the
-  gated classifier slice review.
+- **A chained successor that throws raises no failure toast.**
+  `driveSuccessors` (`lib/pipeline/runtime/orchestrator.ts:606`) logs
+  `pipeline.chain_run_failed` and returns when `driveRun` throws for a
+  successor. `abortRun` rethrows a non-replay error from its reversal
+  (`:410`) before it emits `run_complete`, so nothing reaches the toast
+  listener and the reader never hears of that pass's failure; only the
+  log has it. Rare: the reversal has to throw something other than a
+  `DeltaReplayError`. Raised 2026-10-22 in the pass failure policy
+  slice's Task 8 review.
+
+- **Recovery copy matches the periodic classifier's kind as a
+  literal.** `formatRun` and `formatFailure` in `lib/recovery/copy.ts`
+  (`:16`, `:32`) compare against `'periodic-classifier'`, where
+  `lib/pipeline/definitions/memory-chain.ts` and `per-turn.ts` use
+  `PERIODIC_CLASSIFIER_KIND` from `@/lib/classifier`. A rename of the
+  kind would leave the recovery copy on its generic branch with no
+  type error. Raised 2026-10-22 in the pass failure policy slice's
+  Task 8 review.
+
+- **`onPreflightFailure` gets the caller's `RunCtx`, not the run's
+  identity.** The orchestrator passes `ctx` straight through
+  (`lib/pipeline/runtime/orchestrator.ts:537-541`), and a chained
+  successor shares its origin's `ctx`, so any `actionId` read off it
+  would be the origin's. `PreflightFailureHook`
+  (`lib/pipeline/types.ts:132`) takes `Pick<PhaseContext, 'db' |
+'branchId'>`, so nothing can read one today. Widening it to carry
+  `actionId` would reintroduce the bug `runPhaseExceptionHook` avoids by
+  building its context from the `RunState`; build the hook's context
+  the same way first. Raised 2026-10-22 in the pass failure policy
+  slice's Task 2 review.
+
+- **The `delta_emitted` event sketch lacks `entryId`.**
+  [`generation-pipeline.md`](../generation-pipeline.md) (the
+  `PipelineEvent` union, near the `delta_emitted` line) shows
+  `{ type: 'delta_emitted'; action: PipelineAction }`, while
+  `lib/pipeline/types.ts:49` carries `entryId?: string | null` as well.
+  Raised 2026-10-22 in the pass failure policy slice's Task 2 review.
+
+- **A refused Send destroys the earlier failure entry's text.**
+  `runSubmit` drops the system tail before it dispatches
+  (`app/reader-composer/[branchId].tsx`), and `dropSystemTail`'s own
+  comment says a dispatch that then refuses has destroyed the entry's
+  `submission` for nothing unless it puts the entry back. The
+  `aborted` arm restores it; the `rejected` arm (the blocked one,
+  around `:714`) writes a new failure entry for this Send's text
+  instead, so the earlier turn's text, which outlives a restart only
+  on that entry, is gone. The pass-refusal arms do the same: a Send
+  whose owed pass fails, or that meets a held branch, clears the
+  earlier failure entry in the tail drop and writes only this Send's
+  text (`:684-700`). The system entry is a branch singleton, so the
+  earlier entry can't simply be put back beside the new one. Raised
+  2026-10-22 in the pass failure policy slice's Task 7 review.
+
+- **The composer wireframe's memory-failure copy differs from the
+  shipped string.** The `memory` variant in
+  `docs/ui/screens/reader-composer/reader-composer.html:1945` reads
+  "The memory update failed, so your turn didn't start. … Your text is
+  still in the composer. Retry runs the memory update; Send runs it
+  first again.", while `reader:systemEntry.failure.memory`
+  (`locales/en/reader.json:149`) reads "Memory update failed, so your
+  turn didn't start. Retry it, or send again." Raised 2026-10-22 in the
+  pass failure policy slice's Task 7 review.
+
+- **`retries: 1` also applies to the opt-in real-provider smoke.**
+  `playwright.config.ts:20` sets it for every spec, and
+  `e2e/tests/classifier-real-provider.smoke.spec.ts` sets only a
+  timeout. A model failure there doubles the run's worst case, and one
+  that passes on the retry reports as flaky rather than failed. Raised
+  2026-10-22 in the pass failure policy slice's Task 11 review.
+
+- **The pass and turn failure copy resolvers repeat each other.**
+  `describePassFailure` and `toPassFailureMeta`
+  (`components/reader/system-entry-actions.tsx:89`, `:112`) repeat
+  `describeTurnFailure` and `toSystemFailureMeta`'s four-way
+  config-resolver key ternary (`:49-56`) and the provider detail
+  format. A new `ResolveFailureKind` must be added in both or it
+  silently falls through to the `providerMissing` copy; a
+  per-vocabulary `Record<ResolveFailureKind, key>` would make it
+  exhaustive. Raised 2026-10-22 in the pass failure policy slice's
+  branch review.
+
+- **The seeded hero branch holds six system rows.** `heroKind` in
+  `lib/db/devtools/seed-dataset.ts:246-250` makes every twelfth of the
+  72 hero entries `system`, against
+  [`data-model.md`](../data-model.md)'s system entry as a branch-tail
+  singleton, which `lib/classifier/window.ts:59-61`'s truncated-window
+  argument relies on. Raised 2026-10-22 in the pass failure policy
+  slice's branch review.
+
+- **A completed regenerate drops a cleared failure entry's
+  submission.** `runRegenerate` in `app/reader-composer/[branchId].tsx`
+  clears the system tail before dispatching (`:789`); the throw arm
+  hands `dropped.failure.submission` back (`:807`), but on a completed
+  regenerate `planRegenerateOutcome` returns `'none'`
+  (`components/reader/regenerate-outcome.ts:39`) and the submission is
+  not handed back. Raised 2026-10-22 in the pass failure policy
+  slice's branch review.
+
+- **The `*_dispatch_suppressed` events are not in the observability
+  inventory.** `pipeline.submit_dispatch_suppressed`,
+  `pipeline.regenerate_dispatch_suppressed` and
+  `pipeline.pass_retry_dispatch_suppressed`
+  (`app/reader-composer/[branchId].tsx:671`, `:779`, `:930`) appear
+  nowhere in `docs/observability.md`'s emission inventory. Raised
+  2026-10-22 in the pass failure policy slice's branch review.

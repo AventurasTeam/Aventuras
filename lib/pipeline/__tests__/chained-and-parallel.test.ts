@@ -198,6 +198,86 @@ describe('chained transition', () => {
     expect(succ?.actionId).not.toBe('act_turn')
   })
 
+  // A successor is handed the origin's ctx, so its hook must read the run's own actionId.
+  it("hands a successor's onPhaseException its own actionId, not the start's", async () => {
+    const { ctx } = await makeHarness()
+    const seen: (string | undefined)[] = []
+    const completes: { kind: string; actionId: string }[] = []
+    pipelineEventBus.subscribe('run_complete', (e) => {
+      completes.push({ kind: e.kind, actionId: e.actionId })
+    })
+    async function* updateMissing(): AsyncGenerator<ReturnType<typeof createEntry>, PhaseResult> {
+      yield {
+        type: 'delta_emitted',
+        action: {
+          kind: 'updateStoryEntryMetadata',
+          source: 'ai_classifier',
+          payload: {
+            branchId: 'b1',
+            id: 'ghost',
+            metadata: { sceneEntities: [], currentLocationId: null, worldTime: 1 },
+          },
+        },
+      }
+      return { status: 'completed' }
+    }
+    definePipeline({
+      kind: 'succ',
+      phases: [{ name: 'p', run: updateMissing }],
+      onPhaseException: async (hookCtx) => {
+        seen.push(hookCtx.actionId)
+      },
+      ...base,
+    })
+    definePipeline({
+      kind: 'pred',
+      phases: [{ name: 'p', run: noop }],
+      chainsTo: () => 'succ',
+      ...base,
+    })
+
+    expectRan(await runPipeline('pred', { ...ctx, actionId: 'act_turn' }))
+
+    const succComplete = completes.find((c) => c.kind === 'succ')
+    expect(succComplete?.actionId).not.toBe('act_turn')
+    expect(seen).toEqual([succComplete?.actionId])
+  })
+
+  it('reports a failed successor of a beforeTurn start as not beforeTurn', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({
+      kind: 'succ',
+      phases: [
+        {
+          name: 'p',
+          run: () =>
+            entryThen('entry_succ_fail', {
+              status: 'failed',
+              error: { kind: 'phase-logic', detail: 'boom' },
+            }),
+        },
+      ],
+      ...base,
+    })
+    definePipeline({
+      kind: 'pred',
+      phases: [{ name: 'p', run: noop }],
+      chainsTo: () => 'succ',
+      ...base,
+    })
+    const seen: { kind: string; outcome: string; beforeTurn: boolean }[] = []
+    pipelineEventBus.subscribe('run_complete', (e) => {
+      seen.push({ kind: e.kind, outcome: e.outcome, beforeTurn: e.beforeTurn })
+    })
+
+    expectRan(await runPipeline('pred', { ...ctx, beforeTurn: true }))
+
+    expect(seen).toEqual([
+      { kind: 'pred', outcome: 'completed', beforeTurn: true },
+      { kind: 'succ', outcome: 'failed', beforeTurn: false },
+    ])
+  })
+
   it('a failing successor of a start with an actionId reverses only its own deltas', async () => {
     const { db, ctx } = await makeHarness()
     definePipeline({
@@ -249,6 +329,22 @@ describe('chained transition', () => {
     await runPipeline('pred', { ...ctx, beforeTurn: true })
 
     expect(seen).toEqual({ pred: true, succ: false })
+  })
+
+  it("names beforeTurn on the started run's run_complete, never on its successor's", async () => {
+    const { ctx } = await makeHarness()
+    defineChain()
+    const seen: { kind: string; beforeTurn: boolean }[] = []
+    pipelineEventBus.subscribe('run_complete', (e) => {
+      seen.push({ kind: e.kind, beforeTurn: e.beforeTurn })
+    })
+
+    expectRan(await runPipeline('pred', { ...ctx, beforeTurn: true }))
+
+    expect(seen).toEqual([
+      { kind: 'pred', beforeTurn: true },
+      { kind: 'succ', beforeTurn: false },
+    ])
   })
 
   it('awaits an async chainsTo while the committing run still holds the gate', async () => {
@@ -481,6 +577,22 @@ describe('split start', () => {
     expect(generationStore.getTxState().runs.size).toBe(0)
     expect(completes).toEqual([markerUnwound('pred')])
     await expect(runPipeline('pred', { ...ctx, db })).rejects.toThrow('marker insert failed')
+  })
+
+  it('names beforeTurn on the run_complete of a start whose marker insert fails', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({ kind: 'pred', phases: [{ name: 'p', run: noop }], ...base })
+    const db = failingMarkerInsert(ctx.db, 'pred')
+    const seen: boolean[] = []
+    pipelineEventBus.subscribe('run_complete', (e) => {
+      seen.push(e.beforeTurn)
+    })
+
+    await expect(runPipeline('pred', { ...ctx, db, beforeTurn: true })).rejects.toThrow(
+      'marker insert failed',
+    )
+
+    expect(seen).toEqual([true])
   })
 
   it('unwinds a successor whose marker insert fails and ends the chain', async () => {

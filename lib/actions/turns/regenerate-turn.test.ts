@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import { idleStatus, PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   branches,
   characterRelationships,
@@ -16,6 +16,7 @@ import {
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import {
+  CLASSIFIER_HELD,
   PER_TURN_KIND,
   pipelineEventBus,
   startPipeline,
@@ -161,7 +162,6 @@ async function seedTwoTurnsWithCatchUp(ctx: Awaited<ReturnType<typeof makeHarnes
         state: 'idle',
         lastSuccessAt: 6,
         lastError: null,
-        retryCount: 0,
         processedThrough: 5,
       },
     })
@@ -407,6 +407,74 @@ describe('regenerateTurn', () => {
     expect(entriesStore.getById('e_r2')).toBeDefined()
     expect((await ctx.db.select().from(happenings)).map((f) => f.id)).toEqual(['h_a', 'h_b'])
     expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+  })
+
+  // generation-pipeline.md → Recovery-failure policy: a branch holding an unfinished pass takes no turns.
+  it('refuses a branch held running before it sweeps, starting no run and writing nothing', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    await db
+      .update(branches)
+      .set({ classifierStatus: { ...idleStatus(), state: 'running' } })
+      .where(eq(branches.id, 'b1'))
+    const swept = vi.fn()
+
+    const regen = await withSweepHook(swept, () =>
+      regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
+    )
+
+    expect(regen).toEqual({
+      status: 'rejected',
+      code: CLASSIFIER_HELD,
+      reason: 'classifier held',
+    })
+    expect(swept).not.toHaveBeenCalled()
+    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect((await ctx.db.select().from(happenings)).map((f) => f.id)).toEqual(['h_a', 'h_b'])
+    expect(await ctx.db.select().from(pipelineRuns)).toEqual([])
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+  })
+
+  // A user_action target is refused by a later check, so reaching it proves the live pass wasn't held.
+  it('does not treat a branch whose pass is live as held', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const pass = registerStandInPass({ anchorEntryId: 'e_r1' })
+    const start = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    const held = await pass.nextHeld()
+    await db
+      .update(branches)
+      .set({ classifierStatus: { ...idleStatus(), state: 'running' } })
+      .where(eq(branches.id, 'b1'))
+    const swept = vi.fn()
+
+    const regen = await withSweepHook(swept, () =>
+      regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_u2', ctx),
+    )
+
+    expect(regen).toMatchObject({ status: 'rejected', code: 'not-an-ai-reply' })
+    expect(swept).not.toHaveBeenCalled()
+    expect(branchEntries('b1').map((e) => e.id)).toEqual([
+      'e_opening',
+      'e_u1',
+      'e_r1',
+      'e_u2',
+      'e_r2',
+    ])
+    expect((await ctx.db.select().from(happenings)).map((f) => f.id)).toEqual([
+      'h_a',
+      'h_b',
+      `hap_${held.actionId}`,
+    ])
+    expect(runningPass('b1')?.actionId).toBe(held.actionId)
+    expect(generationStore.getTxState().runs.size).toBe(1)
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+    held.finish('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'completed' })
   })
 
   it('rejects a non-AI target without destroying anything', async () => {

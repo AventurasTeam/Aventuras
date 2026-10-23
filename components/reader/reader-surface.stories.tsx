@@ -3,11 +3,11 @@ import { useEffect, useState, type ComponentProps } from 'react'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { EARTH_GREGORIAN } from '@/lib/calendar'
-import type { StoryEntry } from '@/lib/db'
+import type { StoryEntry, SystemFailureMeta } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
 import { ReaderSurface } from './reader-surface'
-import { describeTurnFailure } from './system-entry-actions'
+import { describePassFailure, describeTurnFailure, toPassFailureMeta } from './system-entry-actions'
 
 const NOW = 1752900000000
 
@@ -793,5 +793,55 @@ export const EmbedderFailure: Story = {
       }),
     ],
     systemFixLabel: t('reader:systemEntry.switchEmbedder'),
+  },
+}
+
+// Composed through the helpers the host writes the entry with, so each bubble shows real copy.
+const HELD_PASS = describePassFailure({ held: true })
+const FAILED_PASS_ERROR = {
+  kind: 'provider',
+  reason: 'timeout',
+  detail: 'classifier: timeout after 600000ms',
+} as const
+const FAILED_PASS = describePassFailure({ held: false, error: FAILED_PASS_ERROR })
+
+function passFailureRows(content: string, failure: SystemFailureMeta): StoryEntry[] {
+  return [
+    ...ROWS,
+    entry({
+      id: 'e6',
+      kind: 'system',
+      content,
+      position: 6,
+      metadata: { ...BASE_META, systemFailure: failure },
+    }),
+  ]
+}
+
+// A held branch can't run a pass, so the host passes no Retry handler: Dismiss alone.
+export const PassFailureHeld: Story = {
+  args: {
+    rows: passFailureRows(HELD_PASS.content, toPassFailureMeta({ held: true }, undefined)),
+    onRetrySystemEntry: undefined,
+  },
+  play: async () => {
+    const row = entryRow('e6')
+    expect(within(row).getByRole('button', { name: /Dismiss/ })).toBeVisible()
+    expect(within(row).queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument()
+  },
+}
+
+// The control for the story above: with the handler, a failed pass entry offers Retry.
+export const PassFailureRetry: Story = {
+  args: {
+    rows: passFailureRows(
+      FAILED_PASS.content,
+      toPassFailureMeta({ held: false, error: FAILED_PASS_ERROR }, undefined),
+    ),
+    onRetrySystemEntry: fn(async () => {}),
+  },
+  play: async ({ args }) => {
+    await userEvent.click(within(entryRow('e6')).getByRole('button', { name: /Retry/ }))
+    await waitFor(() => expect(args.onRetrySystemEntry).toHaveBeenCalledTimes(1))
   },
 }

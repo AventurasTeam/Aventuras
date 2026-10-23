@@ -53,7 +53,7 @@ export type RunCtx = {
   // Kind-specific run parameters the starting action hands to the phases
   // (generation-pipeline.md → Run-scoped state: inputs, not intermediates).
   inputs?: unknown
-  /** Send's deferred work: shown as "before your turn", cancelled with the Send. */
+  /** Send's owed pass: shown as "before your turn", cancelled with the Send. */
   beforeTurn?: boolean
   /** Called once the run is in txState, before any await; not for a chain's successor. */
   onReserved?: () => void
@@ -127,6 +127,7 @@ async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
       runId: run.runId,
       kind: run.kind,
       actionId: run.actionId,
+      beforeTurn: run.beforeTurn,
       outcome: 'failed',
       error: {
         kind: 'orchestrator',
@@ -292,7 +293,7 @@ async function commitRun(
       { runId: run.runId, kind: run.kind, nextKind },
       { actionId: run.actionId },
     )
-  // A chained run gets its own context: no inputs, its own actionId, never Send's deferred work
+  // A chained run gets its own context: no inputs, its own actionId, never Send's owed pass
   // (generation-pipeline.md → chainsTo on predecessor).
   const successor = nextPipeline
     ? newRunState(nextPipeline.kind, {
@@ -328,6 +329,7 @@ async function commitRun(
     runId: run.runId,
     kind: run.kind,
     actionId: run.actionId,
+    beforeTurn: run.beforeTurn,
     outcome: 'completed',
   })
   run.resolveTerminal()
@@ -361,7 +363,10 @@ async function runPhaseExceptionHook(
   if (error.kind !== 'action-layer' && error.kind !== 'orchestrator') return
   const onPhaseException = getPipeline(run.kind).onPhaseException
   if (!onPhaseException) return
-  await runHook(run, 'pipeline.phase_exception_hook_failed', () => onPhaseException(ctx, error))
+  // Not ctx.actionId: a successor shares the origin's ctx, whose actionId isn't its own.
+  await runHook(run, 'pipeline.phase_exception_hook_failed', () =>
+    onPhaseException({ db: ctx.db, branchId: run.branchId, actionId: run.actionId }, error),
+  )
 }
 
 async function runInterruptHook(run: RunState, ctx: RunCtx): Promise<void> {
@@ -441,6 +446,7 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
     runId: run.runId,
     kind: run.kind,
     actionId: run.actionId,
+    beforeTurn: run.beforeTurn,
     outcome,
     ...(error ? { error } : {}),
   })
@@ -502,8 +508,8 @@ async function driveRun(
   run: RunState,
   ctx: RunCtx,
 ): Promise<{ tx: TxResult; successor?: RunState }> {
-  // A cancel that landed before pre-flight (at a chain's swap, or as a Send's deferred pass
-  // reserved) is an interrupt: a pre-flight failure would burn a retry and drop the deferral.
+  // A cancel that landed before pre-flight (at a chain's swap, or as Send's owed pass reserved)
+  // is an interrupt: a pre-flight failure would record a failed pass instead of a deferred one.
   if (run.abortController.signal.aborted)
     return { tx: await abortRun(run, ctx, { reason: 'user-cancel' }) }
   let preflightError: PipelineError | null

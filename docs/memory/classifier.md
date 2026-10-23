@@ -603,7 +603,7 @@ whole Send and keeps the user's text in the composer. The mark lives
 in memory: after a restart, the next Send finds the pass due and runs
 it first anyway ([Failure policy](#failure-policy)). A pass cancelled before its writes commits nothing; one
 cancelled during them reverses its own group, as any aborted run does.
-An interrupted pass uses no retry and leaves the watermark; it restores
+An interrupted pass leaves the watermark; it restores
 its pre-run status through the pipeline's `onInterrupt` hook, which runs
 after that reversal has committed. A reversal that cannot commit skips
 the hook and leaves the branch `running` for boot recovery
@@ -677,11 +677,16 @@ work does ([Pipeline framing](#pipeline-framing)): its own run,
 committing before the turn's first write. A pass is owed when one is
 deferred for the branch or the cadence is due. The cadence is read from
 the persisted watermark, so a failure, an interrupt, a crash and a
-restart all end the same way. If the pass fails there, the Send fails:
-no user_action is written, the composer keeps the text, and the reader
-shows the failure as a system entry with its cause
+restart all end the same way. One pass is owed per Send: a settings
+change (a lowered cadence or window max) can leave a backlog that drains
+over the next Sends, so a turn may run while a pass is still due. If the
+owed pass fails, the Send fails:
+no user_action is written, the text goes back to an empty composer
+(else onto the entry), and the reader shows the failure as a system entry with its cause
 ([`reader-composer.md → Transient pipeline failures`](../ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)).
-Its `Retry` runs the pass alone; Send runs it first again. There is no
+Its `Retry` runs the pass alone, holding the reader's actions, head
+reversals included, until the pass ends; the pill's `Cancel` ends it.
+Send runs it first again. There is no
 attempt counter and no suspension: every Send is a fresh attempt,
 whatever the cause. A cause that isn't transient (an invalid key, a
 model removed from the catalog) stops the branch's turns until the user
@@ -693,8 +698,8 @@ when the user set one, longer or shorter, and by ten minutes otherwise,
 so a hung provider ends in an error the user can act on.
 
 A branch held `running`, a pass left unfinished whose reversal hasn't
-committed, can't run a pass, so its Send fails with the recovery error
-until a boot reverses the orphan
+committed, can't run a pass, so its Send fails with the recovery error,
+keeping the text on the entry, until a boot reverses the orphan
 ([`generation-pipeline.md → Recovery-failure policy`](../generation-pipeline.md#recovery-failure-policy)).
 
 ### Persistence
@@ -708,7 +713,11 @@ so the status is operational state outside the reversal log.
 the classifier has fully processed; the pass range is
 `(processedThrough, head]`. It is the concrete field behind "unprocessed
 entries," read by the cadence trigger, Send's check for an owed pass,
-`[Run classifier now]`, and chapter-close phase 0. A successful pass over `(processedThrough, E]` sets
+`[Run classifier now]`, and chapter-close phase 0. A pass's range excludes
+trailing `system` rows: an untruncated window covers through its last
+non-system entry, so the watermark never lands on a trailing system row
+whose position the next Send's user_action reuses (a truncated window
+still claims its cut). A successful pass over `(processedThrough, E]` sets
 `processedThrough = E` in its commit transaction, in the same write as its
 success status. A prose reversal clamps
 it — `processedThrough ← min(processedThrough, position(B) − 1)` for `B`

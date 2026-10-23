@@ -304,7 +304,8 @@ reading `Updating memory before your turn…`, and the turn follows;
 Cancel then cancels the whole Send and keeps the text in the composer
 ([`memory/classifier.md → Pipeline framing`](../../../memory/classifier.md#pipeline-framing)).
 If the pass fails there, the Send fails too: the turn doesn't start,
-the composer keeps the text, and the failure shows as a
+the text goes back to an empty composer (else onto the entry), and the
+failure shows as a
 [system entry](#transient-pipeline-failures--system-entries-in-chat)
 ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy)).
 
@@ -506,6 +507,7 @@ chrome blip.
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
 | **LLM call failed**                                                                                                                                                                                                    | `Retry` · `View details` · `Dismiss`              |
 | **Memory update failed** before the turn, failing the Send ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy))                                                                   | `Retry` · `View details` · `Dismiss`              |
+| **Memory update failed**, branch held (an earlier update couldn't be undone, so Send is refused)                                                                                                                       | `Dismiss`                                         |
 | **Embed call failed** mid-turn (blocking per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle); the composer is not gated — a resubmit re-runs the same blocking sync stage) | `Switch embedder` · `Retry` · `Dismiss`           |
 | **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `View details` · `Dismiss`        |
 | **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `View details` · `Dismiss`        |
@@ -563,13 +565,20 @@ composer mode `Free`, since the stored content is already wrapped and
 must not be wrapped twice; a non-empty draft wins and the user is told
 the text was dropped rather than losing it silently.
 
+A **Memory update failed** entry carries the submission only where
+the composer can't hold the text. On a held branch it always does,
+since the entry advises a restart and the draft would not survive
+one. On a failed pass it does only when the composer couldn't take it
+back (the draft was occupied, or the user left the branch); otherwise
+the text goes straight back to the composer.
+
 Restoring the _entry_ is deliberately not the mechanism. A failure
 entry re-appends at the branch tail, so on a path where a partial
 sweep already moved the tail it would park a stale notice over a
 branch it no longer describes — which is why the regenerate rejection
 arm may put the entry back and the throw arm may not. A draft has no
-position, so it is safe on both. A Send cancelled during its deferred
-work has written nothing either, so it puts the entry back too, and
+position, so it is safe on both. A Send cancelled during its owed
+pass has written nothing either, so it puts the entry back too, and
 hands its own text to the draft.
 
 This leaves a failed turn's text under the same custody as any unsent

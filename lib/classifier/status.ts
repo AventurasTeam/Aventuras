@@ -1,14 +1,10 @@
 import type { ClassifierStatus } from '@/lib/db'
 
-// classifier.md -> Auto-retry policy: one attempt, three retries, each at a later turn's commit.
-export const CLASSIFIER_MAX_RETRIES = 3
-
 export function idleStatus(): ClassifierStatus {
   return {
     state: 'idle',
     lastSuccessAt: null,
     lastError: null,
-    retryCount: 0,
     processedThrough: null,
   }
 }
@@ -34,7 +30,6 @@ export function nextStatusOnSuccess(
     state: 'idle',
     lastSuccessAt: pass.at,
     lastError: null,
-    retryCount: 0,
     // A pass never un-processes prose: a clamp is the only way back.
     processedThrough: Math.max(status.processedThrough ?? 0, pass.coversThrough),
   }
@@ -44,12 +39,7 @@ export function nextStatusOnFailure(
   status: ClassifierStatus,
   failure: { error: string; at: number },
 ): ClassifierStatus {
-  return {
-    ...status,
-    state: status.retryCount >= CLASSIFIER_MAX_RETRIES ? 'failed-persistent' : 'retrying',
-    lastError: failure.error,
-    retryCount: Math.min(status.retryCount + 1, CLASSIFIER_MAX_RETRIES),
-  }
+  return { ...status, state: 'failed', lastError: failure.error }
 }
 
 /**
@@ -62,9 +52,9 @@ export function worstCaseCadenceEntries(cadence: number): number {
 }
 
 /**
- * Entry-counted (no token trigger in v1). Off in failed-persistent so a broken provider isn't hit
- * every turn: Run now is the only way out. Off in `running`, a pass left unfinished (crash, or an
- * interrupt's failed reversal or status write), until a boot reset, which unreversed orphans block.
+ * Entry-counted (no token trigger in v1). Off only in `running`, a pass left unfinished (crash, or
+ * an interrupt's failed reversal or status write), until a boot reset, which unreversed orphans
+ * block. A `failed` status fires: nothing suspends the pass (classifier.md → Failure policy).
  */
 export function shouldCadenceFire(args: {
   status: ClassifierStatus
@@ -72,6 +62,6 @@ export function shouldCadenceFire(args: {
   cadence: number
 }): boolean {
   const { status, unprocessedEntries, cadence } = args
-  if (status.state === 'failed-persistent' || status.state === 'running') return false
+  if (status.state === 'running') return false
   return unprocessedEntries >= Math.max(1, cadence)
 }
