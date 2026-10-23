@@ -195,11 +195,16 @@ async function main(): Promise<void> {
 
   const firstAttempt = outcomes.filter((o) => o.status === 'ok' && parseRetries(o) === 0).length
   const afterRetry = outcomes.filter((o) => o.status === 'ok' && parseRetries(o) > 0).length
-  const failed = outcomes.filter((o) => o.status !== 'ok')
+  // callWithRetry keeps a call's final error out of `recoverable`, so a failed run with a parse
+  // entry is one whose first reply didn't parse; its re-call failed for either tier.
+  const failedAfterParseRetry = outcomes.filter((o) => o.status === 'failed' && parseRetries(o) > 0)
+  const failedOther = outcomes.filter((o) => o.status === 'failed' && parseRetries(o) === 0)
+  const aborted = outcomes.filter((o) => o.status === 'aborted')
   console.log(
     `[probe] first-attempt parse ${firstAttempt}/${RUNS} ` +
-      `(${((100 * firstAttempt) / RUNS).toFixed(0)}%), ok after a parse retry ${afterRetry}, ` +
-      `failed ${failed.length} (both parse attempts ${failed.filter((o) => parseRetries(o) > 0).length}), ` +
+      `(${((100 * firstAttempt) / RUNS).toFixed(0)}%; a failed or aborted run counts as no success), ` +
+      `ok after a parse retry ${afterRetry}, failed after a parse retry ${failedAfterParseRetry.length}, ` +
+      `failed with no parse retry ${failedOther.length}, aborted ${aborted.length}, ` +
       `provider retries ${outcomes.reduce((n, o) => n + providerRetries(o), 0)}`,
   )
 }
