@@ -561,8 +561,9 @@ impossible. The rule:
 **The row.** Mode `auto`, `triggered_at_entry_id` its `sourceTurn`,
 landing `embedding_stale = 1` with `sourceTurn` as its survival anchor.
 A change to `resolved` or `failed` sets `resolved_at_entry_id` to its
-`sourceTurn`; one back to `pending` or `active` clears it. A status the
-user wrote after the change's prose stands
+`sourceTurn`; one back to `pending` or `active`, the pass's or the
+user's, clears it. A status the user wrote after the change's prose
+stands
 ([`cadence.md → User edits and classifier writes`](./cadence.md#user-edits-and-classifier-writes)).
 
 **The cost.** An active thread is injected every turn, outside the
