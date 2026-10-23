@@ -923,3 +923,22 @@ slice-planning gate forces its resolution before that slice is planned.
   a failed fold that can't use its own place holds its drops back for
   the fallback.
   Raised 2026-10-23 by the AI writer map's Q19.
+
+- **An unattributed pass fact isn't always re-derivable.**
+  [`memory/classifier.md`](../memory/classifier.md)'s provenance list
+  says a fact that falls back to the window head "reverses on any
+  reversal into its window (re-derivable)". When its real source turn
+  sits below the reversal point, the watermark clamps to that point
+  minus one ([`data-model.md`](../data-model.md), the watermark
+  clamp), so the source turn is never re-read and the fact is lost.
+  Since the AI writer map, an unattributed thread a pass opens and
+  closes is one such fact. Raised 2026-10-23 by the AI writer map's
+  Task 20 review.
+
+- **`buildClassifierActions` has outgrown one function.**
+  `lib/classifier/plan.ts`'s planner runs about 900 lines; its thread
+  and awareness blocks share about ten of the planner's locals
+  (`anchor`, `proseSource`, `entryPosition`, `inTurnOrder`, `iconOf`,
+  the drop lists, `planned`), so a split wants a shared planner
+  context rather than more closures. Raised 2026-10-23 by the AI
+  writer map's Task 20 review.
