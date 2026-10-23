@@ -1644,15 +1644,17 @@ describe('buildPiggybackActions — conditions and drops', () => {
       expect(result.applied.conditionsRejected).toEqual([0])
     })
 
-    // An id can repeat in one block, so a refusal is recorded by its place in the list.
+    // An id can repeat in one block, so a refusal is recorded by its place in the list: each
+    // repeated id's refused copy comes after its first.
     it('records each refused condition by its position in the block', () => {
       const result = run(
         {
           conditions: [
-            { id: 'loc_dock', text: '  ' },
             { id: 'loc_dock', text: 'flooded to the knee' },
+            { id: 'loc_far', text: '  ' },
             { id: 'char_1', text: 'scorched' },
             { id: 'loc_far', text: 'burned out' },
+            { id: 'loc_dock', text: '  ' },
           ],
         },
         [place('loc_dock'), place('loc_far'), person('char_1')],
@@ -1663,7 +1665,7 @@ describe('buildPiggybackActions — conditions and drops', () => {
           payload: { branchId: 'main', id: 'loc_dock', condition: 'flooded to the knee' },
         }),
       ])
-      expect(result.applied.conditionsRejected).toEqual([0, 2, 3])
+      expect(result.applied.conditionsRejected).toEqual([1, 2, 3, 4])
     })
   })
 

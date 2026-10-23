@@ -3504,7 +3504,10 @@ describe('per-turn-piggyback', () => {
         const foldReport: NonNullable<EntryMetadata['stateReport']> = {
           layer: 'piggyback_tagged_block',
           visualChanges: [{ id: HERO, type: 'attire', text: 'torn cloak' }],
-          conditions: [{ id: TOWN, text: 'flooded to the knee' }],
+          conditions: [
+            { id: TOWN, text: 'flooded to the knee' },
+            { id: MARKET, text: 'burned to the waterline', rejected: true },
+          ],
           transfers: { items: [], stackables: [], drops: [{ id: OLD_KEY, from: HERO, at: TOWN }] },
           failedFields: [{ field: 'sceneEntities', detail: 'unresolvable placeholder' }],
         }
