@@ -48,14 +48,23 @@ export type PerTurnPhaseName =
   | 'narrative'
   | typeof PIGGYBACK_FALLBACK_PHASE_NAME
 
-function holdDropsBack(
+// piggyback.md → Parse strategy and failure recovery: a failed fold that can't use its own place
+// leaves its drops to the fallback, which may resolve that place; here they'd land at the last one.
+function skipFailedFold(
   block: SubstitutedStateBlock,
+  failures: readonly ParseFieldFailure[],
   entryId: string,
   log: Logger,
-): SubstitutedStateBlock {
-  if (block.transfers === undefined || block.transfers.drops.length === 0) return block
-  log.debug('classifier.drops_held', { entryId, itemIds: block.transfers.drops.map((d) => d.id) })
-  return { ...block, transfers: { ...block.transfers, drops: [] } }
+): TurnCreatePlan {
+  const turn = skipTurnCreates(block, log)
+  const locationFailed = failures.some((f) => f.field === 'currentLocation')
+  const locationSkipped =
+    block.currentLocation !== undefined && turn.block.currentLocation === undefined
+  const transfers = turn.block.transfers
+  if (!(locationFailed || locationSkipped) || !transfers || transfers.drops.length === 0)
+    return turn
+  log.debug('classifier.drops_held', { entryId, itemIds: transfers.drops.map((d) => d.id) })
+  return { ...turn, block: { ...turn.block, transfers: { ...transfers, drops: [] } } }
 }
 
 async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
@@ -240,9 +249,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
         count: parsedState.malformedCreates,
         layer: 'piggyback_tagged_block',
       })
-    // A failed fold creates nothing and puts nothing down: the fallback that fires rewrites this
-    // turn's state, so a create made by both would duplicate a row, and a drop made here would lie
-    // at the place the fallback's scene leaves, where its own drop can't reach it.
+    // A failed fold creates nothing: creates aren't idempotent, and the fallback that fires
+    // rewrites this turn's state, so a create made by both would leave a duplicate row.
     const turn = piggybackParseSucceeded
       ? await planTurnCreates({
           block: resolvedBlock,
@@ -255,7 +263,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
           newId: (prefix) => generateId(prefix),
           log: ctx.log,
         })
-      : skipTurnCreates(holdDropsBack(resolvedBlock, entryId, ctx.log), ctx.log)
+      : skipFailedFold(resolvedBlock, parseFailures, entryId, ctx.log)
     // Matching an item can await an embed call; a cancel during it discards the reply.
     if (ctx.abortSignal.aborted) return { status: 'aborted' }
     fold = {
