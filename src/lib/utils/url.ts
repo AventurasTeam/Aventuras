@@ -53,6 +53,11 @@ function isPublicIPv6(host: string): boolean {
   return (first & 0xfe00) !== 0xfc00 && (first & 0xffc0) !== 0xfe80 && (first & 0xff00) !== 0xff00
 }
 
+/** Trims a configured base URL and strips every trailing `/`; blank or missing gives `''`. */
+export function normalizeBaseUrl(url: string | undefined): string {
+  return url?.trim().replace(/\/+$/, '') ?? ''
+}
+
 /**
  * Whether an `http(s)` URL points at a host outside the user's own machine and network.
  * Judges the name and IP literals only: a public name that resolves to a private address passes.

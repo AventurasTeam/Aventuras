@@ -1,5 +1,26 @@
 import { describe, it, expect } from 'vitest'
-import { isPublicHttpUrl } from './url'
+import { isPublicHttpUrl, normalizeBaseUrl } from './url'
+
+describe('normalizeBaseUrl', () => {
+  it.each([
+    ['https://api.example.com/v1/', 'https://api.example.com/v1'],
+    ['https://api.example.com/v1///', 'https://api.example.com/v1'],
+    ['  https://api.example.com/v1  ', 'https://api.example.com/v1'],
+    [' https://api.example.com/v1// ', 'https://api.example.com/v1'],
+    ['https://api.example.com/v1', 'https://api.example.com/v1'],
+    ['http://localhost:8188/', 'http://localhost:8188'],
+  ])('turns %j into %j', (input, expected) => {
+    expect(normalizeBaseUrl(input)).toBe(expected)
+  })
+
+  it('never strips the slashes in the scheme', () => {
+    expect(normalizeBaseUrl('https://')).toBe('https:')
+  })
+
+  it.each([undefined, '', '   ', ' / '])('gives an empty string for %j', (input) => {
+    expect(normalizeBaseUrl(input)).toBe('')
+  })
+})
 
 describe('isPublicHttpUrl', () => {
   it.each([
