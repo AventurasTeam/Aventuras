@@ -58,6 +58,21 @@ export type DroppedMembership = Pick<Membership, 'character'> & {
   cause: 'retired-faction'
 }
 
+/** A rename to a name another row of the kind holds; `flagged`: this rename raised the flag. */
+export type RenameClash = { ref: string; name: string; partnerId: string; flagged: boolean }
+
+/** A write naming a row its list didn't show (data-model.md → Authorship contract). */
+export type UnseenRef = {
+  list: 'renames' | 'placements' | 'standings' | 'threadStatuses' | 'knownAwareness'
+  ref: string
+}
+
+/** A placement that plans nothing: a loop, a retired parent, or a top-level mark of a placed place. */
+export type DroppedPlacement = {
+  ref: string
+  cause: 'cycle' | 'retired' | 'not-unplaced' | 'chain-broken'
+}
+
 export type PlanResult = {
   planned: readonly PlannedWrite[]
   /** Temp handle -> allocated or matched entity id, for refs later in the same reply. */
@@ -67,14 +82,9 @@ export type PlanResult = {
   droppedPlaces: readonly DroppedPlace[]
   parentDrops: readonly ParentDrop[]
   droppedMemberships: readonly DroppedMembership[]
-  /** A rename to a name another row of the kind holds; `flagged`: this rename raised the flag. */
-  renameClashes: { ref: string; name: string; partnerId: string; flagged: boolean }[]
-  /** A write naming a row its list didn't show (data-model.md → Authorship contract). */
-  unseenRefs: {
-    list: 'renames' | 'placements' | 'standings' | 'threadStatuses' | 'knownAwareness'
-    ref: string
-  }[]
-  droppedPlacements: { ref: string; cause: 'cycle' | 'retired' | 'not-unplaced' | 'chain-broken' }[]
+  renameClashes: readonly RenameClash[]
+  unseenRefs: readonly UnseenRef[]
+  droppedPlacements: readonly DroppedPlacement[]
 }
 
 export type PlanDeps = {
@@ -95,8 +105,8 @@ export type PlanDeps = {
 const SOURCE = 'periodic_classifier' as const
 
 /**
- * A kind's reply field, decision map and id prefix. NewCharacter and NewFaction share one shape, so
- * a hand-made pairing of them compiles swapped.
+ * A kind's reply field, decision map and id prefix. NewCharacter and NewFaction differ only in
+ * optional fields, so a hand-made pairing of them still compiles swapped.
  */
 export const RECONCILED_KINDS = {
   character: { reply: 'newCharacters', decisions: 'decisions', idPrefix: 'char' },
@@ -553,7 +563,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
 
   // data-model.md → Authorship contract → Seen before written: an update names a row the pass read
   // before its reply, and its prompt lists every such row.
-  const unseenRefs: PlanResult['unseenRefs'] = []
+  const unseenRefs: UnseenRef[] = []
 
   // classifier.md → What the classifier writes → Names. A name is taken when a row of the kind
   // holds it, one this reply creates or renames included.
@@ -565,7 +575,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       const { entry } = action.payload
       nameRows.set(entry.id, { kind: entry.kind, name: entry.name, createdAt: entry.createdAt })
     }
-  const renameClashes: PlanResult['renameClashes'] = []
+  const renameClashes: RenameClash[] = []
   const raisedFlags = new Set<string>()
   for (const rename of inTurnOrder(extraction.renames)) {
     const row = rowById.get(rename.ref)
@@ -573,26 +583,27 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       unseenRefs.push({ list: 'renames', ref: rename.ref })
       continue
     }
+    // Both hold every listed row; the check narrows their lookups.
     const current = nameRows.get(row.id)
+    const known = index.get(row.id)
+    if (current === undefined || known === undefined) continue
     const name = clampEmbedded(rename.name.trim(), MAX_EMBEDDED_NAME)
     const key = normalizeTerm(name)
     // A case-only change is no reveal, as renameEntity judges it.
-    if (current === undefined || key === '' || key === normalizeTerm(current.name)) continue
+    if (key === '' || key === normalizeTerm(current.name)) continue
     const holders = [...nameRows]
       .filter(([id, r]) => id !== row.id && r.kind === row.kind && normalizeTerm(r.name) === key)
       .sort(([idA, a], [idB, b]) => a.createdAt - b.createdAt || (idA < idB ? -1 : 1))
     const at = anchorOnce(rename.sourceTurn)
     const proseEntryId = proseSource(rename.sourceTurn)
-    const known = index.get(row.id)
     const holder = holders[0]
     if (holder === undefined) {
       nameRows.set(row.id, { ...current, name })
       // renameEntity keeps the old name as a keyword, so a later alias of it plans nothing.
-      if (known !== undefined)
-        index.set(row.id, {
-          ...known,
-          keywords: [...known.keywords, ...newTerms(known.keywords, [current.name])],
-        })
+      index.set(row.id, {
+        ...known,
+        keywords: [...known.keywords, ...newTerms(known.keywords, [current.name])],
+      })
       planned.push({
         action: {
           kind: 'renameEntity',
@@ -606,8 +617,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const [partnerId] = holder
     // The revealed name is one the prose used for it, so the pair stays namesakes (world.md →
     // Surfacing) and the user merges them.
-    const added = known === undefined ? [] : newTerms(known.keywords, [name])
-    if (known !== undefined && added.length > 0) {
+    const added = newTerms(known.keywords, [name])
+    if (added.length > 0) {
       index.set(row.id, { ...known, keywords: [...known.keywords, ...added] })
       planned.push({
         action: {
@@ -636,7 +647,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
 
   // classifier.md → What the classifier writes → Where a place sits. Planned against this reply's
   // own creates and placements; a loop or a retired parent is dropped before the handler sees it.
-  const droppedPlacements: PlanResult['droppedPlacements'] = []
+  const droppedPlacements: DroppedPlacement[] = []
   const parentOfRows = parentOfLocations([...entities, ...createdPlaces])
   const placeParentOf = (id: string): string | null =>
     placedParents.has(id) ? (placedParents.get(id) ?? null) : parentOfRows(id)
