@@ -67,8 +67,8 @@ export const entryMetadataSchema = z.object({
       visualChanges: z
         .array(z.object({ id: z.string(), type: z.enum(VISUAL_CATEGORIES), text: z.string() }))
         .optional(),
-      // As emitted. `rejected` is recorded, not re-derived: apply.ts refused it (a row the prompt
-      // didn't show with its state, or blank text); the World row kept its old condition.
+      // As emitted. `rejected` is recorded, not re-derived: apply.ts refused it, its id not a place
+      // or item the prompt showed with its state or its text blank, so World kept the old one.
       conditions: z
         .array(z.object({ id: z.string(), text: z.string(), rejected: z.literal(true).optional() }))
         .optional(),
