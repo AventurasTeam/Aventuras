@@ -11,11 +11,16 @@ vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
 }))
 
 // Even a zero delay is a timer tick, and each poll would wait for one. An aborted signal still
-// ends the wait, as with the real one.
-vi.mock('#lib/utils/async.ts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('#lib/utils/async.ts')>()),
-  sleep: vi.fn(async (_ms: number, signal?: AbortSignal) => signal?.throwIfAborted()),
-}))
+// ends the wait, as with the real one. `abortable` is spied on, so a test can wait for the calls
+// parked on a pending upload.
+vi.mock('#lib/utils/async.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#lib/utils/async.ts')>()
+  return {
+    ...actual,
+    abortable: vi.fn(actual.abortable),
+    sleep: vi.fn(async (_ms: number, signal?: AbortSignal) => signal?.throwIfAborted()),
+  }
+})
 
 import type { Fetch } from '#lib/services/ai/sdk/providers/index.ts'
 import { abortable, sleep } from '#lib/utils/async.ts'
@@ -130,10 +135,10 @@ function serve(handlers: Handlers = {}) {
       )
     }
     if (init?.method === 'POST' && pathname === '/upload/image') {
-      const name = (init.body as FormData).get('image') as File
+      const file = (init.body as FormData).get('image') as File
       return (
         handlers.upload?.(url, init) ??
-        json({ name: name.name, subfolder: 'aventuras', type: 'input' })
+        json({ name: file.name, subfolder: 'aventuras', type: 'input' })
       )
     }
     if (pathname.startsWith('/api/jobs/') && pathname.endsWith('/cancel')) {
@@ -303,8 +308,6 @@ describe('references', () => {
     '10': { class_type: 'LoadImage', inputs: { image: 'saved-a.png' } },
     '11': { class_type: 'LoadImage', inputs: { image: 'saved-b.png' } },
   }
-  const referenceOptions = (references: string[]) =>
-    comfyOptions({ workflow: LOAD_WORKFLOW, paths: { ...PATHS, references } })
   const png = (data = 'iVBORw0KGgo=') => ({ type: 'file' as const, mediaType: 'image/png', data })
   const uploads = () =>
     fetchMock.mock.calls.filter(([url]) => String(url) === `${BASE_URL}/upload/image`)
@@ -313,12 +316,20 @@ describe('references', () => {
   const uploadedName = (index: number) =>
     ((uploads()[index][1]!.body as FormData).get('image') as File).name
   const generateWith = (
-    files: ReturnType<typeof png>[],
-    over: Record<string, unknown> = {},
-    references = ['10.inputs.image'],
+    files: NonNullable<ImageModelV4CallOptions['files']>,
+    {
+      over = {},
+      references = ['10.inputs.image'],
+      call = {},
+    }: {
+      over?: Record<string, unknown>
+      references?: string[]
+      call?: Partial<ImageModelV4CallOptions>
+    } = {},
   ) =>
     model().doGenerate(
       callOptions({
+        ...call,
         files,
         providerOptions: comfyOptions({
           workflow: LOAD_WORKFLOW,
@@ -329,10 +340,9 @@ describe('references', () => {
     )
 
   it('uploads each reference into temp and writes the names into the graph', async () => {
-    const result = await generateWith([png(), png(other)], {}, [
-      '10.inputs.image',
-      '11.inputs.image',
-    ])
+    const result = await generateWith([png(), png(other)], {
+      references: ['10.inputs.image', '11.inputs.image'],
+    })
 
     expect(uploads()).toHaveLength(2)
     const form = uploads()[0][1]!.body as FormData
@@ -355,7 +365,7 @@ describe('references', () => {
   })
 
   it('uploads into the input folder when asked, without an annotation', async () => {
-    await generateWith([png()], { referenceFolder: 'input' })
+    await generateWith([png()], { over: { referenceFolder: 'input' } })
     expect((uploads()[0][1]!.body as FormData).get('type')).toBe('input')
     expect(sentPrompt().body.prompt['10'].inputs.image).toBe(`aventuras/${uploadedName(0)}`)
   })
@@ -382,14 +392,15 @@ describe('references', () => {
     })
 
     const prompts = () => fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/prompt'))
-    // Hashing is asynchronous, so the other call needs a moment to reach the pending upload.
-    const hashed = () => new Promise((resolve) => setTimeout(resolve, 20))
+    // Hashing is asynchronous: the handler's gate is the first `abortable` call and each call
+    // parked on the pending upload adds one.
+    const parked = (calls: number) =>
+      vi.waitFor(() => expect(vi.mocked(abortable)).toHaveBeenCalledTimes(calls))
 
     it('make one upload for the same bytes', async () => {
       const first = generateWith([png()])
       const second = generateWith([png()])
-      await vi.waitFor(() => expect(uploads()).toHaveLength(1))
-      await hashed()
+      await parked(2)
       release()
       await Promise.all([first, second])
 
@@ -403,18 +414,9 @@ describe('references', () => {
 
     it('upload again when the first one was aborted', async () => {
       const controller = new AbortController()
-      const first = rejection(
-        model().doGenerate(
-          callOptions({
-            files: [png()],
-            abortSignal: controller.signal,
-            providerOptions: referenceOptions(['10.inputs.image']),
-          }),
-        ),
-      )
+      const first = rejection(generateWith([png()], { call: { abortSignal: controller.signal } }))
       const second = generateWith([png()])
-      await vi.waitFor(() => expect(uploads()).toHaveLength(1))
-      await hashed()
+      await parked(2)
       controller.abort()
       release()
 
@@ -427,17 +429,8 @@ describe('references', () => {
     it('let a waiting generation cancel at once', async () => {
       const controller = new AbortController()
       const first = generateWith([png()])
-      const waiting = rejection(
-        model().doGenerate(
-          callOptions({
-            files: [png()],
-            abortSignal: controller.signal,
-            providerOptions: referenceOptions(['10.inputs.image']),
-          }),
-        ),
-      )
-      await vi.waitFor(() => expect(uploads()).toHaveLength(1))
-      await hashed()
+      const waiting = rejection(generateWith([png()], { call: { abortSignal: controller.signal } }))
+      await parked(2)
       controller.abort(new Error('stop'))
 
       expect(((await waiting) as Error).message).toBe('stop')
@@ -447,31 +440,19 @@ describe('references', () => {
   })
 
   it('uploads before it queues the prompt', async () => {
-    await model().doGenerate(
-      callOptions({ files: [png()], providerOptions: referenceOptions(['10.inputs.image']) }),
-    )
+    await generateWith([png()])
     const paths = fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname)
     expect(paths.indexOf('/upload/image')).toBeLessThan(paths.indexOf('/prompt'))
   })
 
   it('leaves the other LoadImage nodes at their saved image', async () => {
-    await model().doGenerate(
-      callOptions({
-        files: [png()],
-        providerOptions: referenceOptions(['10.inputs.image', '11.inputs.image']),
-      }),
-    )
+    await generateWith([png()], { references: ['10.inputs.image', '11.inputs.image'] })
     expect(uploads()).toHaveLength(1)
     expect(sentPrompt().body.prompt['11'].inputs.image).toBe('saved-b.png')
   })
 
   it('drops references the workflow has no input for, with a warning', async () => {
-    const result = await model().doGenerate(
-      callOptions({
-        files: [png(), png(), png()],
-        providerOptions: referenceOptions(['10.inputs.image']),
-      }),
-    )
+    const result = await generateWith([png(), png(), png()])
     expect(uploads()).toHaveLength(1)
     expect(result.warnings).toEqual([
       expect.objectContaining({ type: 'other', message: expect.stringContaining('2 reference') }),
@@ -479,20 +460,14 @@ describe('references', () => {
   })
 
   it('does not upload without references', async () => {
-    await model().doGenerate(
-      callOptions({ providerOptions: referenceOptions(['10.inputs.image']) }),
-    )
+    await generateWith([])
     expect(uploads()).toHaveLength(0)
     expect(sentPrompt().body.prompt['10'].inputs.image).toBe('saved-a.png')
   })
 
   it('fails without queueing when an upload is refused', async () => {
     serve({ upload: () => json({ error: 'no space left' }, 500) })
-    const error = await rejection(
-      model().doGenerate(
-        callOptions({ files: [png()], providerOptions: referenceOptions(['10.inputs.image']) }),
-      ),
-    )
+    const error = await rejection(generateWith([png()]))
     expect(APICallError.isInstance(error)).toBe(true)
     expect((error as Error).message).toContain('reference upload failed')
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/prompt'))).toBe(false)
@@ -500,23 +475,12 @@ describe('references', () => {
 
   it('rejects an upload reply it cannot read', async () => {
     serve({ upload: () => json({ unexpected: true }) })
-    const error = await rejection(
-      model().doGenerate(
-        callOptions({ files: [png()], providerOptions: referenceOptions(['10.inputs.image']) }),
-      ),
-    )
+    const error = await rejection(generateWith([png()]))
     expect(InvalidResponseDataError.isInstance(error)).toBe(true)
   })
 
   it('refuses a reference given as a URL', async () => {
-    const error = await rejection(
-      model().doGenerate(
-        callOptions({
-          files: [{ type: 'url', url: 'https://example.com/a.png' }],
-          providerOptions: referenceOptions(['10.inputs.image']),
-        }),
-      ),
-    )
+    const error = await rejection(generateWith([{ type: 'url', url: 'https://example.com/a.png' }]))
     expect((error as Error).message).toContain('base64')
   })
 })

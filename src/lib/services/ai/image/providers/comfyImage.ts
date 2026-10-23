@@ -425,15 +425,13 @@ export function createComfyImage(settings: ComfyImageSettings) {
             warnings.push({ type: 'unsupported', feature: 'files' })
           } else if (files?.length) {
             const uploadHeaders = definedHeaders(headers)
-            for (const [index, path] of referencePaths.entries()) {
-              if (!files[index]) break
-              const name = await uploadReference(
-                files[index],
-                referenceFolder,
-                uploadHeaders,
-                abortSignal,
-              )
-              graph = setGraphInput(graph, path, name)
+            const names = await Promise.all(
+              files
+                .slice(0, referencePaths.length)
+                .map((file) => uploadReference(file, referenceFolder, uploadHeaders, abortSignal)),
+            )
+            for (const [index, name] of names.entries()) {
+              graph = setGraphInput(graph, referencePaths[index], name)
             }
             if (files.length > referencePaths.length) {
               warnings.push({
