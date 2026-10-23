@@ -6,14 +6,15 @@ export const THREAD_STATUSES = ['pending', 'active', 'resolved', 'failed'] as co
 export type ThreadStatus = (typeof THREAD_STATUSES)[number]
 
 /**
- * Why a writer flagged a create: `name_collision_reason` (classifier.md → Disambiguation,
- * piggyback.md → Matching before creating).
+ * Why a writer flagged a row: `name_collision_reason` (classifier.md → Disambiguation and What the
+ * classifier writes, piggyback.md → Matching before creating).
  */
 export const COLLISION_REASONS = [
   'alike',
   'ambiguous',
   'distinct',
   'in-scene',
+  'name-taken',
   'no-signal',
   'same-parent',
   'unplaced',

@@ -104,6 +104,7 @@ const REASON_TEXT: Record<CollisionReason, (input: ReasonInput) => string> = {
   ambiguous: () => t('collisionDialog.reason.ambiguous'),
   distinct: () => t('collisionDialog.reason.distinct'),
   'in-scene': ({ flagged, other }) => t('collisionDialog.reason.inScene', { flagged, other }),
+  'name-taken': ({ flagged, other }) => t('collisionDialog.reason.nameTaken', { flagged, other }),
   'no-signal': () => t('collisionDialog.reason.noSignal'),
   'same-parent': ({ parentName }) =>
     parentName == null

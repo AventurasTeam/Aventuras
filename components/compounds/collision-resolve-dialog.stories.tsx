@@ -1436,6 +1436,32 @@ export const Unplaced: Story = {
   },
 }
 
+// edge-cases.md → Layer B: a pass's rename met a name another row holds, which joined the keywords.
+const hoodedStranger = baseEntity({
+  id: 'ent_stranger_2',
+  name: 'the hooded stranger',
+  createdAt: NEWER_AT,
+  keywords: ['Kael'],
+})
+
+export const NameTaken: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={olderKael}
+      entityB={hoodedStranger}
+      reason="name-taken"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(await dialogNamed('⚠ "the hooded stranger" may be "Kael"')).toBeInTheDocument()
+    expect(
+      screen.getByText('The turns call "the hooded stranger" by a name "Kael" already holds.'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('"the hooded stranger" also goes by "Kael".')).toBeInTheDocument()
+  },
+}
+
 // Only `same-parent` reads the parent: any other reason keeps its own line.
 export const ParentNameOnlyForSameParent: Story = {
   render: () => (

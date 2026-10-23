@@ -1546,3 +1546,523 @@ describe('updateEntityCondition', () => {
     )
   })
 })
+
+// cadence.md → User edits and classifier writes: the entry a pass's write rests on.
+const REVEAL = 'e_reveal'
+const writeRevealProse = (ctx: Ctx) =>
+  apply(
+    ctx,
+    {
+      kind: 'createStoryEntry',
+      source: 'ai_classifier',
+      payload: {
+        entry: {
+          id: REVEAL,
+          branchId: 'br_1',
+          position: 1,
+          kind: 'ai_reply',
+          content: 'The hooded stranger lowers her hood: she is Mira.',
+          createdAt: 1,
+        },
+      },
+    },
+    'act_prose',
+  )
+const noopBecause = (reason: string) => ({ status: 'rejected', reason, code: 'noop' })
+const userWonOver = noopBecause(USER_EDITED_SINCE_PROSE)
+type StateDb = Awaited<ReturnType<typeof setup>>['db']
+const undoPayloadOf = async (db: StateDb, actionId: string) =>
+  (await db.select().from(deltas).where(eq(deltas.actionId, actionId)))[0]?.undoPayload
+
+// classifier.md → What the classifier writes → Names.
+describe('renameEntity', () => {
+  const STRANGER: NewEntity = {
+    ...CHAR,
+    status: 'active',
+    name: 'the hooded stranger',
+    keywords: ['the stranger'],
+  }
+  const rename = (name: string, proseEntryId: string | null = REVEAL): PipelineAction => ({
+    kind: 'renameEntity',
+    source: 'periodic_classifier',
+    payload: { branchId: 'br_1', id: 'char_1', name, proseEntryId },
+  })
+
+  async function seed(ctx: Ctx, db: StateDb, entry: NewEntity = STRANGER) {
+    await create(ctx, entry)
+    await db.update(entities).set({ embeddingStale: 0 }).where(eq(entities.id, 'char_1'))
+    await writeRevealProse(ctx)
+  }
+
+  it('writes the name, keeps the old one as a keyword, and marks the row to re-embed', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    expect((await apply(ctx, rename('Mira'), 'act_n')).status).toBe('ok')
+
+    const row = await rowFor(db, 'char_1')
+    expect(row).toMatchObject({
+      name: 'Mira',
+      keywords: ['the stranger', 'the hooded stranger'],
+      embeddingStale: 1,
+    })
+    expect(entitiesStore.getById('char_1')).toMatchObject({
+      name: 'Mira',
+      keywords: ['the stranger', 'the hooded stranger'],
+    })
+    expect(await undoPayloadOf(db, 'act_n')).toEqual({
+      name: 'the hooded stranger',
+      keywords: ['the stranger'],
+    })
+  })
+
+  it('reverses to the old name and keywords', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    await apply(ctx, rename('Mira'), 'act_n')
+    expect(await reverseReplayDeltas('act_n', ctx)).toBe(1)
+    expect(await rowFor(db, 'char_1')).toMatchObject({
+      name: 'the hooded stranger',
+      keywords: ['the stranger'],
+    })
+  })
+
+  it('adds no keyword the row already holds under another spelling', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db, { ...STRANGER, keywords: ['The Hooded Stranger '] })
+    expect((await apply(ctx, rename('Mira'), 'act_n')).status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).keywords).toEqual(['The Hooded Stranger '])
+    expect(await undoPayloadOf(db, 'act_n')).toEqual({ name: 'the hooded stranger' })
+  })
+
+  it('no-ops on a change of case or surrounding space alone', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    expect(await apply(ctx, rename(' The Hooded Stranger '), 'act_n')).toEqual(
+      noopBecause('name-unchanged'),
+    )
+    expect((await rowFor(db, 'char_1')).name).toBe('the hooded stranger')
+  })
+
+  it('no-ops when the row is gone', async () => {
+    const { ctx } = await setup()
+    expect(await apply(ctx, rename('Mira'), 'act_n')).toEqual(
+      noopBecause('rename target entities br_1:char_1 not found'),
+    )
+  })
+
+  it('keeps a name the user wrote after the prose', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    await apply(ctx, userPatch({ name: 'the veiled woman' }), 'act_u')
+    expect(await apply(ctx, rename('Mira'), 'act_n')).toEqual(userWonOver)
+    expect((await rowFor(db, 'char_1')).name).toBe('the veiled woman')
+  })
+
+  it('renames past a later edit of the description', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    await apply(ctx, userPatch({ description: 'cloaked, watchful' }), 'act_u')
+    expect((await apply(ctx, rename('Mira'), 'act_n')).status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).name).toBe('Mira')
+  })
+
+  it('renames over a name the user wrote before the prose', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, STRANGER)
+    await apply(ctx, userPatch({ name: 'the veiled woman' }), 'act_u')
+    await writeRevealProse(ctx)
+    expect((await apply(ctx, rename('Mira'), 'act_n')).status).toBe('ok')
+    expect(await rowFor(db, 'char_1')).toMatchObject({
+      name: 'Mira',
+      keywords: ['the stranger', 'the veiled woman'],
+    })
+  })
+
+  it('keeps the name of an entity the user created after the prose', async () => {
+    const { db, ctx } = await setup()
+    await writeRevealProse(ctx)
+    await create(ctx, STRANGER)
+    expect(await apply(ctx, rename('Mira'), 'act_n')).toEqual(userWonOver)
+    expect((await rowFor(db, 'char_1')).name).toBe('the hooded stranger')
+  })
+
+  // cadence.md → User precedence: an alias the user removed after the prose stays removed.
+  it('leaves out an old name the user removed from the keywords after the prose', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db, { ...STRANGER, keywords: ['the stranger', 'the hooded stranger'] })
+    await apply(ctx, userPatch({ keywords: ['the stranger'] }), 'act_u')
+    expect((await apply(ctx, rename('Mira'), 'act_n')).status).toBe('ok')
+    expect(await rowFor(db, 'char_1')).toMatchObject({ name: 'Mira', keywords: ['the stranger'] })
+  })
+
+  it('checks nothing without a prose entry', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    await apply(ctx, userPatch({ name: 'the veiled woman' }), 'act_u')
+    expect((await apply(ctx, rename('Mira', null), 'act_n')).status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).name).toBe('Mira')
+  })
+
+  it("serializes on the entity's row key", () => {
+    expect(lockKeysFor(rename('Mira'))).toEqual(['entities:br_1:char_1'])
+  })
+})
+
+// edge-cases.md → Layer B: a pass whose rename meets a name another row of the kind holds.
+describe('raiseCollisionFlag', () => {
+  const STRANGER: NewEntity = { ...CHAR, status: 'active', name: 'the hooded stranger' }
+  const MIRA: NewEntity = { ...CHAR, id: 'char_2', status: 'active', name: 'Mira' }
+  const raise = (partnerId = 'char_2', proseEntryId: string | null = REVEAL): PipelineAction => ({
+    kind: 'raiseCollisionFlag',
+    source: 'periodic_classifier',
+    payload: { branchId: 'br_1', id: 'char_1', partnerId, reason: 'name-taken', proseEntryId },
+  })
+  const flagOf = async (db: StateDb) => {
+    const row = await rowFor(db, 'char_1')
+    return [row.nameCollisionFlag, row.nameCollisionPartnerId, row.nameCollisionReason]
+  }
+
+  async function seed(ctx: Ctx, db: StateDb, stranger: NewEntity = STRANGER) {
+    await db.insert(entities).values(MIRA)
+    await create(ctx, stranger)
+    await writeRevealProse(ctx)
+  }
+
+  it('raises the flag with its partner and reason, and reverses to none', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    expect((await apply(ctx, raise(), 'act_f')).status).toBe('ok')
+
+    expect(await flagOf(db)).toEqual([1, 'char_2', 'name-taken'])
+    expect(entitiesStore.getById('char_1')).toMatchObject({
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_2',
+      nameCollisionReason: 'name-taken',
+    })
+    expect(await undoPayloadOf(db, 'act_f')).toEqual({
+      nameCollisionFlag: 0,
+      nameCollisionPartnerId: null,
+      nameCollisionReason: null,
+    })
+    expect(await reverseReplayDeltas('act_f', ctx)).toBe(1)
+    expect(await flagOf(db)).toEqual([0, null, null])
+  })
+
+  it('no-ops on a row already flagged, which keeps its partner', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values({ ...CHAR, id: 'char_3', status: 'active', name: 'Mira' })
+    await seed(ctx, db, {
+      ...STRANGER,
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_3',
+      nameCollisionReason: 'alike',
+    })
+    expect(await apply(ctx, raise(), 'act_f')).toEqual(noopBecause('already-flagged'))
+    expect(await flagOf(db)).toEqual([1, 'char_3', 'alike'])
+  })
+
+  it.each([
+    ['is gone', 'char_gone'],
+    ['is of another kind', 'fact_1'],
+  ])('no-ops when the partner %s', async (_label, partnerId) => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values({
+      ...CHAR,
+      id: 'fact_1',
+      kind: 'faction',
+      name: 'Mira',
+      status: 'active',
+      state: {},
+    })
+    await seed(ctx, db)
+    expect(await apply(ctx, raise(partnerId), 'act_f')).toEqual(noopBecause('partner-not-of-kind'))
+    expect(await flagOf(db)).toEqual([0, null, null])
+  })
+
+  it('no-ops on the row as its own partner', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    expect(await apply(ctx, raise('char_1'), 'act_f')).toEqual(noopBecause('partner-is-self'))
+  })
+
+  it('no-ops when the row is gone', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values(MIRA)
+    expect(await apply(ctx, raise(), 'act_f')).toEqual(
+      noopBecause('flag target entities br_1:char_1 not found'),
+    )
+  })
+
+  // cadence.md → User edits and classifier writes: the user's resolution outranks older prose.
+  it('keeps a flag the user cleared after the prose', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db, {
+      ...STRANGER,
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_2',
+      nameCollisionReason: 'distinct',
+    })
+    await apply(
+      ctx,
+      userPatch({ nameCollisionFlag: 0, nameCollisionPartnerId: null, nameCollisionReason: null }),
+      'act_u',
+    )
+    expect(await apply(ctx, raise(), 'act_f')).toEqual(userWonOver)
+    expect(await flagOf(db)).toEqual([0, null, null])
+  })
+
+  it('raises past a later edit of the description', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    await apply(ctx, userPatch({ description: 'cloaked, watchful' }), 'act_u')
+    expect((await apply(ctx, raise(), 'act_f')).status).toBe('ok')
+  })
+
+  it('raises over a clear the user made before the prose', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values(MIRA)
+    await create(ctx, {
+      ...STRANGER,
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_2',
+      nameCollisionReason: 'distinct',
+    })
+    await apply(
+      ctx,
+      userPatch({ nameCollisionFlag: 0, nameCollisionPartnerId: null, nameCollisionReason: null }),
+      'act_u',
+    )
+    await writeRevealProse(ctx)
+    expect((await apply(ctx, raise(), 'act_f')).status).toBe('ok')
+    expect(await flagOf(db)).toEqual([1, 'char_2', 'name-taken'])
+  })
+
+  // The create check takes the new reason as it takes the others.
+  it('creates a row flagged name-taken', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values(MIRA)
+    const created = await create(ctx, {
+      ...STRANGER,
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_2',
+      nameCollisionReason: 'name-taken',
+    })
+    expect(created.status).toBe('ok')
+    expect(await flagOf(db)).toEqual([1, 'char_2', 'name-taken'])
+  })
+
+  it("serializes on the entity's row key", () => {
+    expect(lockKeysFor(raise())).toEqual(['entities:br_1:char_1'])
+  })
+})
+
+// classifier.md → Factions: a standing a pass sets on explicit prose.
+describe('setFactionStanding', () => {
+  const CIRCLE: NewEntity = {
+    id: 'fact_1',
+    branchId: 'br_1',
+    kind: 'faction',
+    name: 'The Iron Circle',
+    status: 'active',
+    injectionMode: 'auto',
+    state: { standing: 'a quiet guild', agenda: ['corner the iron trade'] },
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  const standing = (value: string, id = 'fact_1'): PipelineAction => ({
+    kind: 'setFactionStanding',
+    source: 'periodic_classifier',
+    payload: { branchId: 'br_1', id, standing: value, proseEntryId: REVEAL },
+  })
+  const userFactionState = (state: Record<string, unknown>): PipelineAction => ({
+    kind: 'updateEntity',
+    source: 'user_edit',
+    payload: { branchId: 'br_1', id: 'fact_1', patch: { state } },
+  })
+
+  async function seed(ctx: Ctx, entry: NewEntity = CIRCLE) {
+    await create(ctx, entry)
+    await writeRevealProse(ctx)
+  }
+
+  it('writes the standing alone, so its undo payload holds only that field', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx)
+    expect((await apply(ctx, standing('at war with the crown'), 'act_s')).status).toBe('ok')
+
+    expect((await rowFor(db, 'fact_1')).state).toEqual({
+      standing: 'at war with the crown',
+      agenda: ['corner the iron trade'],
+    })
+    expect(entitiesStore.getById('fact_1')?.state).toMatchObject({
+      standing: 'at war with the crown',
+    })
+    expect(await undoPayloadOf(db, 'act_s')).toEqual({ state: { standing: 'a quiet guild' } })
+  })
+
+  it('writes onto a faction whose state column is null', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx)
+    await db.update(entities).set({ state: null }).where(eq(entities.id, 'fact_1'))
+    expect((await apply(ctx, standing('outlawed'), 'act_s')).status).toBe('ok')
+    const { state } = await rowFor(db, 'fact_1')
+    expect(state).toMatchObject({ standing: 'outlawed' })
+    expect(entityStateSchemaForKind('faction').safeParse(state).success).toBe(true)
+  })
+
+  it('no-ops when the standing already matches', async () => {
+    const { ctx } = await setup()
+    await seed(ctx)
+    expect(await apply(ctx, standing('a quiet guild'), 'act_s')).toEqual(
+      noopBecause('standing-unchanged'),
+    )
+  })
+
+  it('no-ops on a row that is not a faction', async () => {
+    const { ctx } = await setup()
+    await seed(ctx)
+    await create(ctx, CHAR)
+    expect(await apply(ctx, standing('outlawed', 'char_1'), 'act_s')).toEqual(
+      noopBecause('not-a-faction'),
+    )
+  })
+
+  it('no-ops when the row is gone', async () => {
+    const { ctx } = await setup()
+    expect(await apply(ctx, standing('outlawed'), 'act_s')).toEqual(
+      noopBecause('standing target entities br_1:fact_1 not found'),
+    )
+  })
+
+  it('keeps a standing the user wrote after the prose', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx)
+    await apply(ctx, userFactionState({ ...CIRCLE.state, standing: 'in hiding' }), 'act_u')
+    expect(await apply(ctx, standing('at war with the crown'), 'act_s')).toEqual(userWonOver)
+    expect((await rowFor(db, 'fact_1')).state).toMatchObject({ standing: 'in hiding' })
+  })
+
+  it("writes past a later edit of the faction's agenda", async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx)
+    await apply(ctx, userFactionState({ ...CIRCLE.state, agenda: ['buy the mines'] }), 'act_u')
+    expect((await apply(ctx, standing('at war with the crown'), 'act_s')).status).toBe('ok')
+    expect((await rowFor(db, 'fact_1')).state).toEqual({
+      standing: 'at war with the crown',
+      agenda: ['buy the mines'],
+    })
+  })
+
+  it('writes over a standing the user wrote before the prose', async () => {
+    const { ctx } = await setup()
+    await create(ctx, CIRCLE)
+    await apply(ctx, userFactionState({ ...CIRCLE.state, standing: 'in hiding' }), 'act_u')
+    await writeRevealProse(ctx)
+    expect((await apply(ctx, standing('at war with the crown'), 'act_s')).status).toBe('ok')
+  })
+
+  it('keeps the standing of a faction the user created after the prose', async () => {
+    const { ctx } = await setup()
+    await writeRevealProse(ctx)
+    await create(ctx, CIRCLE)
+    expect(await apply(ctx, standing('at war with the crown'), 'act_s')).toEqual(userWonOver)
+  })
+
+  it("serializes on the faction's row key", () => {
+    expect(lockKeysFor(standing('outlawed'))).toEqual(['entities:br_1:fact_1'])
+  })
+})
+
+// classifier.md → What the classifier writes → Status transitions: retired → active.
+describe('returnFromRetirement', () => {
+  const RETIRED: NewEntity = { ...CHAR, status: 'retired', retiredReason: 'fell at the ford' }
+  const comeBack = (id = 'char_1', proseEntryId: string | null = REVEAL): PipelineAction => ({
+    kind: 'returnFromRetirement',
+    source: 'periodic_classifier',
+    payload: { branchId: 'br_1', id, proseEntryId },
+  })
+
+  async function seed(ctx: Ctx, entry: NewEntity = RETIRED) {
+    await create(ctx, entry)
+    await writeRevealProse(ctx)
+  }
+
+  it('brings a retired character back, clearing the reason, and reverses to retired', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx)
+    expect((await apply(ctx, comeBack(), 'act_r')).status).toBe('ok')
+
+    expect(await rowFor(db, 'char_1')).toMatchObject({ status: 'active', retiredReason: null })
+    expect(entitiesStore.getById('char_1')).toMatchObject({ status: 'active', retiredReason: null })
+    expect(await undoPayloadOf(db, 'act_r')).toEqual({
+      status: 'retired',
+      retiredReason: 'fell at the ford',
+    })
+    expect(await reverseReplayDeltas('act_r', ctx)).toBe(1)
+    expect(await rowFor(db, 'char_1')).toMatchObject({
+      status: 'retired',
+      retiredReason: 'fell at the ford',
+    })
+  })
+
+  it.each(['active', 'staged'] as const)('no-ops on a character now %s', async (status) => {
+    const { ctx } = await setup()
+    await seed(ctx, { ...RETIRED, status })
+    expect(await apply(ctx, comeBack(), 'act_r')).toEqual(noopBecause('not-retired'))
+  })
+
+  // Only the user brings back a place (data-model.md → Authorship contract).
+  it.each([
+    ['location', { parent_location_id: null }],
+    ['faction', {}],
+  ] as const)('no-ops on a retired %s', async (kind, state) => {
+    const { db, ctx } = await setup()
+    await seed(ctx, { ...RETIRED, kind, state })
+    expect(await apply(ctx, comeBack(), 'act_r')).toEqual(noopBecause('not-a-character'))
+    expect((await rowFor(db, 'char_1')).status).toBe('retired')
+  })
+
+  it('no-ops when the row is gone', async () => {
+    const { ctx } = await setup()
+    expect(await apply(ctx, comeBack('char_gone'), 'act_r')).toEqual(
+      noopBecause('return target entities br_1:char_gone not found'),
+    )
+  })
+
+  it('keeps a retirement the user wrote after the prose', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, { ...RETIRED, status: 'active', retiredReason: null })
+    await apply(ctx, userPatch({ status: 'retired', retiredReason: 'exiled' }), 'act_u')
+    expect(await apply(ctx, comeBack(), 'act_r')).toEqual(userWonOver)
+    expect(await rowFor(db, 'char_1')).toMatchObject({ status: 'retired', retiredReason: 'exiled' })
+  })
+
+  it('returns over a retirement the user wrote before the prose', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, { ...RETIRED, status: 'active', retiredReason: null })
+    await apply(ctx, userPatch({ status: 'retired', retiredReason: 'exiled' }), 'act_u')
+    await writeRevealProse(ctx)
+    expect((await apply(ctx, comeBack(), 'act_r')).status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).status).toBe('active')
+  })
+
+  it('returns past a later edit of the description', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx)
+    await apply(ctx, userPatch({ description: 'thought drowned' }), 'act_u')
+    expect((await apply(ctx, comeBack(), 'act_r')).status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).status).toBe('active')
+  })
+
+  it('checks nothing without a prose entry', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, { ...RETIRED, status: 'active', retiredReason: null })
+    await apply(ctx, userPatch({ status: 'retired', retiredReason: 'exiled' }), 'act_u')
+    expect((await apply(ctx, comeBack('char_1', null), 'act_r')).status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).status).toBe('active')
+  })
+
+  it("serializes on the character's row key", () => {
+    expect(lockKeysFor(comeBack())).toEqual(['entities:br_1:char_1'])
+  })
+})
