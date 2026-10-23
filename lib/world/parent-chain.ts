@@ -33,7 +33,7 @@ export function checkParentChain(
 
 type LocationRow = Pick<Entity, 'id' | 'kind' | 'state'>
 
-/** A location row's parent; null at the root. */
+/** A location row's parent; null at the root and for an unplaced place. */
 export function parentIdOf(row: Pick<Entity, 'state'>): string | null {
   return (row.state as LocationState | null)?.parent_location_id ?? null
 }
