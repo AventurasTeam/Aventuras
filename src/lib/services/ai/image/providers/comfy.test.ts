@@ -34,6 +34,7 @@ import {
   createComfyProvider,
   fetchModelList,
   loadImageInputs,
+  resolveComfyBaseUrl,
   suggestReferenceInputs,
 } from './comfy'
 import BasicWorkflow from './comfyWorkflows/basic-txt2img-workflow.json'
@@ -582,6 +583,14 @@ describe('server version', () => {
     system = { ...SERVER }
     await generate(opts)
     expect(statsRequests()).toHaveLength(2)
+  })
+})
+
+describe('resolveComfyBaseUrl', () => {
+  it('returns a default that is already normalized', () => {
+    const fallback = resolveComfyBaseUrl(undefined)
+    expect(fallback).toBe('http://localhost:8188')
+    expect(fallback).toBe(normalizeBaseUrl(fallback))
   })
 })
 

@@ -27,6 +27,9 @@ import { createImageSdkFetch, createPollImageSdkFetch, generateSdkImage } from '
 
 const DEFAULT_BASE_URL = 'http://localhost:8188'
 
+export const resolveComfyBaseUrl = (baseUrl: string | undefined): string =>
+  normalizeBaseUrl(baseUrl) || DEFAULT_BASE_URL
+
 // A server that does not answer is not worth the generation's own timeout.
 const PROBE_TIMEOUT_MS = 5_000
 const POLL_TIMEOUT_MS = 15_000
@@ -488,7 +491,7 @@ const numberOr = (value: unknown, fallback: number): number =>
   typeof value === 'number' ? value : fallback
 
 export function createComfyProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL
+  const baseUrl = resolveComfyBaseUrl(config.baseUrl)
 
   // One per generation, so concurrent generations keep separate poll traces in the debug log.
   const comfyModel = (model: string) =>
