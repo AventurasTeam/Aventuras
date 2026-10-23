@@ -1014,6 +1014,7 @@ flagged:
 | `in-scene`    | Their descriptions differ, but "Kael Stormborn" was in the scene where "Kael" first appeared. |
 | `no-signal`   | Their descriptions couldn't be compared.                                                      |
 | `same-parent` | Both are in "The Rusty Anchor". (At the root: Both are top-level places.)                     |
+| `unplaced`    | Its location is unknown, and places elsewhere share its name.                                 |
 
 When the two are namesakes only through a keyword, a basis line
 names it, read from the current keywords:

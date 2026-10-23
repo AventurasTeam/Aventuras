@@ -315,10 +315,11 @@ from that partner:
 | `in-scene`  | Partial, `sim < τ_low`, in the scene |
 | `no-signal` | No score                             |
 
-The per-turn writer and a pass creating a mentioned place add one more
-reason, `same-parent`, for a location created beside a similarly named
-sibling, and the per-turn writer gives an item's exact namesake `alike`
-or `ambiguous` by the same bands. World pairs a
+The per-turn writer and a pass creating a mentioned place add two more
+reasons: `same-parent`, for a location created beside a similarly
+named sibling, and `unplaced`, for an unplaced one created while places
+elsewhere share its name. The per-turn writer gives an item's exact
+namesake `alike` or `ambiguous` by the same bands. World pairs a
 flagged row with its partner and states the reason in the resolve
 dialog
 ([`world.md → Collision review and entity merge`](../ui/screens/world/world.md#collision-review-and-entity-merge)).
@@ -409,7 +410,11 @@ every place
 An exact name reuses an active or staged sibling, never a retired one;
 an exact retired namesake or a partial match creates the row with
 `name_collision_flag = 1`, reason `same-parent`, the partner picked in
-that rule's order. A reused place keeps its description and its
+that rule's order. An unplaced place flags with the reason `unplaced`
+instead: several exact namesakes anywhere, or an exact retired one
+alone, create it flagged against the first, an unplaced one first, then
+the older, then by id, and a partial name flags it only against another
+unplaced place. A reused place keeps its description and its
 status, since a mention doesn't enter a staged place, gains the
 entry's new keywords, takes the parent the entry gave when it was
 unplaced, and stands for the handle in the rest of the reply. Two new

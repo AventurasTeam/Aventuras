@@ -471,7 +471,12 @@ Maps to [`LocationState`](../../../data-model.md#locationstate-shape).
 picker reads currently-authored locations only, leaving out the
 location itself and any location whose chain of parents already
 leads back to it, so the cast can't loop. Finish still refuses a
-loop as a backstop.
+loop as a backstop. The picker offers `Top level` and the cast's
+places. While the parent is unknown (an AI-proposed name the wizard
+couldn't resolve, an imported parent dropped for a loop, or a parent
+removed from the cast) it also offers `Unknown`, until a parent or
+`Top level` is picked. Finish lands an unknown parent unplaced
+([LocationState shape](../../../data-model.md#locationstate-shape)).
 
 ### Item editor
 
@@ -620,7 +625,9 @@ A reference the model simply omitted is not counted — only one it
 supplied and the wizard could not honour. A parent that matched but
 would close a loop is left blank too and counted apart
 (`N location parents would have made a loop and were left blank.`),
-since the name did match.
+since the name did match. A location parent left blank either way,
+unmatched or dropped for a loop, lands unplaced at Finish, not
+top-level. A parent the model didn't name at all stays top-level.
 
 The toast is transient, so the **row keeps the ask** and warns
 inline in the compact list until the field is decided. The name is
