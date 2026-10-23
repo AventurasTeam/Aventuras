@@ -125,7 +125,7 @@
     const tts = settings.systemServicesSettings.tts
 
     if (tts.provider === 'openai') {
-      if (!tts.endpoint || !tts.apiKey) {
+      if (!tts.endpoint.trim() || !tts.apiKey) {
         return 'Endpoint and API key are required'
       }
     } else if (tts.provider === 'microsoft') {
