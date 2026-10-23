@@ -2947,6 +2947,7 @@ describe('periodicClassifierPhase — retried attempts', () => {
       .logEntries.filter((e) => e.kind === 'classifier.pass_completed')
       .map((e) => [e.level, e.fields, e.actionId])
 
+  // Uneven counts, so neither tier's count can stand in for the other or for the list's length.
   it('yields one recoverable_error per retried attempt, then logs its counts on completing', async () => {
     clearBuffers()
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
@@ -2955,21 +2956,29 @@ describe('periodicClassifierPhase — retried attempts', () => {
       value: extraction({
         happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
       }),
-      recoverable: [PARSE_RETRY, PROVIDER_RETRY],
+      recoverable: [PARSE_RETRY, PROVIDER_RETRY, PARSE_RETRY, PROVIDER_RETRY, PROVIDER_RETRY],
     })
     const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
     const { events, result } = await drain(h.ctx)
-    expect(events.slice(0, 2)).toEqual([
-      {
-        type: 'recoverable_error',
-        error: { kind: 'phase-logic', detail: 'Unexpected token < in JSON' },
-      },
-      { type: 'recoverable_error', error: { kind: 'provider', reason: 'timeout' } },
+    const parseEvent = {
+      type: 'recoverable_error',
+      error: { kind: 'phase-logic', detail: 'Unexpected token < in JSON' },
+    }
+    const providerEvent = {
+      type: 'recoverable_error',
+      error: { kind: 'provider', reason: 'timeout' },
+    }
+    expect(events.slice(0, 5)).toEqual([
+      parseEvent,
+      providerEvent,
+      parseEvent,
+      providerEvent,
+      providerEvent,
     ])
-    expect(events.slice(2).map((e) => (e as { type: string }).type)).toEqual(['delta_emitted'])
+    expect(events.slice(5).map((e) => (e as { type: string }).type)).toEqual(['delta_emitted'])
     expect(result).toEqual({ status: 'completed' })
     expect(passLogs()).toEqual([
-      ['debug', { parseRetries: 1, providerRetries: 1, writes: 1 }, 'a1'],
+      ['debug', { parseRetries: 2, providerRetries: 3, writes: 1 }, 'a1'],
     ])
   })
 

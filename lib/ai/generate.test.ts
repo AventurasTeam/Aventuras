@@ -271,6 +271,27 @@ describe('generateStructured', () => {
     expect(res).toEqual({ status: 'aborted', recoverable: [] })
   })
 
+  it('returns the parse retry a call recovered from before it was aborted mid-flight', async () => {
+    const controller = new AbortController()
+    vi.mocked(runProviderCall)
+      .mockResolvedValueOnce({ text: 'not json <<<' } as never)
+      .mockImplementationOnce(async () => {
+        controller.abort()
+        throw new Error('aborted')
+      })
+    const res = await generateStructured(
+      'wizard-assist',
+      PROMPT,
+      schema,
+      STRUCTURED_CFG,
+      controller.signal,
+    )
+    expect(res).toEqual({
+      status: 'aborted',
+      recoverable: [{ tier: 'parse', detail: expect.any(String), attempt: 0 }],
+    })
+  })
+
   async function sentProviderCall(prompt: PromptHalves) {
     vi.mocked(runProviderCall).mockClear()
     await generateStructured(
