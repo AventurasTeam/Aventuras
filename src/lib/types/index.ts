@@ -773,7 +773,11 @@ export interface APISettings {
   llmTimeoutMs: number // Request timeout in milliseconds (default: 360000 = 6 minutes)
 }
 
-export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+import type { LanguageModelV4CallOptions } from '@ai-sdk/provider'
+export type ReasoningEffort = Exclude<
+  NonNullable<LanguageModelV4CallOptions['reasoning']>,
+  'provider-default'
+>
 
 import type { ThemeId as ThemeIdImport } from '../../themes/themes'
 export type ThemeId = ThemeIdImport

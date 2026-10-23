@@ -16,6 +16,6 @@ SELECT 'main_reasoning_effort', 'high'
 FROM settings
 WHERE key = 'enable_thinking' AND value = 'true'
 ON CONFLICT (key) DO UPDATE SET value = excluded.value
-WHERE value NOT IN ('none', 'minimal', 'low', 'medium', 'high', 'xhigh');
+WHERE value NOT IN ('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max');
 
 DELETE FROM settings WHERE key = 'enable_thinking';

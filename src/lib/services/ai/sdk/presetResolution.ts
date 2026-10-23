@@ -53,6 +53,14 @@ const PROVIDER_OPTIONS_KEY: Record<ProviderType, string> = {
   mistral: 'mistral',
 }
 
+// Both packages' types predate 'max'; their APIs accept it and the packages pass it through.
+type OpenRouterOptions = Omit<OpenRouterProviderOptions, 'reasoning'> & {
+  reasoning?: { effort: ReasoningEffort }
+}
+type PollinationsOptions = Pick<PollinationsLanguageModelSettings, 'parallel_tool_calls'> & {
+  reasoning_effort?: ReasoningEffort
+}
+
 /**
  * Build provider-specific options from preset settings.
  *
@@ -85,13 +93,13 @@ export function buildProviderOptions(
         break
       }
       case 'openrouter':
-        options = { reasoning: { effort: reasoning_effort } } satisfies OpenRouterProviderOptions
+        options = { reasoning: { effort: reasoning_effort } } satisfies OpenRouterOptions
         break
       case 'pollinations':
         options = {
           reasoning_effort,
           parallel_tool_calls: true,
-        } satisfies PollinationsLanguageModelSettings
+        } satisfies PollinationsOptions
         break
       case 'groq':
         options = { parallelToolCalls: true } satisfies GroqProviderOptions

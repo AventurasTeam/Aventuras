@@ -60,7 +60,7 @@ mod tests {
 
     #[tokio::test]
     async fn current_levels_are_left_alone() {
-        for level in ["none", "minimal", "low", "medium", "high", "xhigh"] {
+        for level in ["none", "minimal", "low", "medium", "high", "xhigh", "max"] {
             let pool = migrate(&[("main_reasoning_effort", level)]).await;
 
             assert_eq!(raw(&pool, "main_reasoning_effort").await.unwrap(), level);
@@ -127,7 +127,7 @@ mod tests {
 
     #[tokio::test]
     async fn enable_thinking_replaces_an_unreadable_level() {
-        for stored in ["", "max", "nonsense"] {
+        for stored in ["", "nonsense"] {
             let pool = migrate(&[
                 ("enable_thinking", "true"),
                 ("main_reasoning_effort", stored),
@@ -144,7 +144,12 @@ mod tests {
 
     #[tokio::test]
     async fn enable_thinking_yields_to_a_readable_level() {
-        for (stored, expected) in [("low", "low"), ("off", "none"), ("none", "none")] {
+        for (stored, expected) in [
+            ("low", "low"),
+            ("max", "max"),
+            ("off", "none"),
+            ("none", "none"),
+        ] {
             let pool = migrate(&[
                 ("enable_thinking", "true"),
                 ("main_reasoning_effort", stored),

@@ -29,11 +29,19 @@ describe('REASONING_LEVELS', () => {
     expect(Object.keys(REASONING_LABELS).sort()).toEqual([...REASONING_LEVELS].sort())
   })
 
-  it('covers exactly the levels the AI SDK names, minus provider-default, starting at none', () => {
-    // Keeping these aligned is why 'off' was renamed to 'none' in the first place (rewritten on
-    // disk by migration 043). The slider index is the level's index, so 'none' has to be first.
-    const sdkLevels: ReasoningEffort[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh']
-    expect([...REASONING_LEVELS]).toEqual(sdkLevels)
+  it('lists the levels in slider order, starting at none', () => {
+    // The type already ties the set to the AI SDK's; this pins the order. The slider index is the
+    // level's index, so 'none' has to be first.
+    const ascending: ReasoningEffort[] = [
+      'none',
+      'minimal',
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+      'max',
+    ]
+    expect([...REASONING_LEVELS]).toEqual(ascending)
   })
 
   it('never labels the disabled level "Off"', () => {
@@ -49,7 +57,7 @@ describe('isReasoningEffort', () => {
   })
 
   it('rejects anything else', () => {
-    for (const value of ['off', 'max', '', null, undefined, 3]) {
+    for (const value of ['off', 'ultra', '', null, undefined, 3]) {
       expect(isReasoningEffort(value), String(value)).toBe(false)
     }
   })

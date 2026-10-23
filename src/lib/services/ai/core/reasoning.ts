@@ -15,14 +15,21 @@
 import type { ProviderType, ReasoningEffort } from '#lib/types/index.ts'
 
 /** Every level, ascending. Index order is the slider's order. */
-export const REASONING_LEVELS: readonly ReasoningEffort[] = [
+export const REASONING_LEVELS = [
   'none',
   'minimal',
   'low',
   'medium',
   'high',
   'xhigh',
-] as const
+  'max',
+] as const satisfies readonly ReasoningEffort[]
+
+// A level the SDK adds fails here until the slider places it.
+const _everyLevelPlaced: Record<
+  Exclude<ReasoningEffort, (typeof REASONING_LEVELS)[number]>,
+  never
+> = {}
 
 export function isReasoningEffort(value: unknown): value is ReasoningEffort {
   return (REASONING_LEVELS as readonly unknown[]).includes(value)
@@ -35,6 +42,7 @@ export const REASONING_LABELS: Record<ReasoningEffort, string> = {
   medium: 'Medium',
   high: 'High',
   xhigh: 'Extra',
+  max: 'Max',
 }
 
 /** Same levels, for the tick marks under the slider where the full words do not fit. */
@@ -45,6 +53,7 @@ export const REASONING_SHORT_LABELS: Record<ReasoningEffort, string> = {
   medium: 'Med',
   high: 'High',
   xhigh: 'Extra',
+  max: 'Max',
 }
 
 /**

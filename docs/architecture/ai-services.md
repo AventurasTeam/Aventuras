@@ -59,7 +59,11 @@ seven places, and the copies drifted.
 Three things about it are not obvious:
 
 - **The disabled level is `'none'`, and `'Off'` is not a value.** The levels are the AI SDK's
-  own names minus `provider-default`, which is why `'off'` was renamed in 0.7.x. Migration 043
+  own names minus `provider-default`, which is why `'off'` was renamed in 0.7.x. `ReasoningEffort`
+  is derived from the SDK's union, so a level the SDK adds fails the build until
+  `REASONING_LEVELS` places it. `@openrouter/ai-sdk-provider` and `ai-sdk-pollinations` type their
+  effort without `'max'` although their APIs accept it, so `presetResolution.ts` widens those two
+  options locally. Migration 043
   rewrote the old spelling on disk, and folded the legacy `enable_thinking` flag (`'true'` meant
   `'high'`) into `main_reasoning_effort`, so neither exists in code. A stored level that is not
   in `REASONING_LEVELS` is read as no stored choice.

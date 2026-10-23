@@ -178,6 +178,16 @@ describe('reasoning levels on the wire', () => {
         )
       }
     })
+
+    it('sends every level as a distinct request', async () => {
+      const levels = levelsFor(providerType)
+      const bodies: string[] = []
+      for (const level of levels) bodies.push(JSON.stringify(await bodyAt(providerType, level)))
+
+      expect(new Set(bodies).size, `${providerType} collapses two levels into one request`).toBe(
+        levels.length,
+      )
+    })
   })
 
   describe.each(PROVIDERS_UNDER_TEST.filter((p) => TIER[p] === 'native'))('%s', (providerType) => {
