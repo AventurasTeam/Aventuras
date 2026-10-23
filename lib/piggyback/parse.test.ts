@@ -1110,6 +1110,31 @@ describe('conditions and drops', () => {
     ])
   })
 
+  it.each([
+    ['a self-closed', '<entity id="i4" />'],
+    ['an unclosed', '<entity id="i4">snapped'],
+  ])('skips %s condition entry without swallowing the next one', (_label, broken) => {
+    const { block, failures } = parseStateBlock(`<state>
+  <conditions>
+    ${broken}
+    <entity id="l1">burned to the ground</entity>
+  </conditions>
+</state>`)
+    expect(failures).toEqual([])
+    expect(block.conditions).toEqual([{ id: 'l1', text: 'burned to the ground' }])
+  })
+
+  it('skips a condition entry whose id is empty', () => {
+    const { block, failures } = parseStateBlock(`<state>
+  <conditions>
+    <entity id="">a ring of ash</entity>
+    <entity id="l1">burned to the ground</entity>
+  </conditions>
+</state>`)
+    expect(failures).toEqual([])
+    expect(block.conditions).toEqual([{ id: 'l1', text: 'burned to the ground' }])
+  })
+
   it('fails conditions when its content holds no well-formed entry, leaving the other fields', () => {
     const { block, failures } = parseStateBlock(`<state>
   <scene_entities>c1</scene_entities>
@@ -1164,6 +1189,37 @@ describe('conditions and drops', () => {
       items: [],
       stackables: [],
       drops: [{ id: 'i4', from: 'c1', seq: 0 }],
+    })
+  })
+
+  it('loses a move tag missing its > rather than reading the next tag into it', () => {
+    const { block, failures } = parseStateBlock(`<state>
+  <transfers>
+    <item id="i1" to="c1" slot="inventory"
+    <drop id="i4" from="c2" />
+  </transfers>
+</state>`)
+    expect(failures).toEqual([])
+    expect(block.transfers).toEqual({
+      items: [],
+      stackables: [],
+      drops: [{ id: 'i4', from: 'c2', seq: 0 }],
+    })
+  })
+
+  it('skips a move or a drop whose id is empty, leaving it no place in the order', () => {
+    const { block, failures } = parseStateBlock(`<state>
+  <transfers>
+    <item id="" to="c1" slot="inventory" />
+    <drop id="" from="c1" />
+    <item id="i1" to="c1" slot="inventory" />
+  </transfers>
+</state>`)
+    expect(failures).toEqual([])
+    expect(block.transfers).toEqual({
+      items: [{ id: 'i1', slot: 'inventory', to: 'c1', seq: 0 }],
+      stackables: [],
+      drops: [],
     })
   })
 

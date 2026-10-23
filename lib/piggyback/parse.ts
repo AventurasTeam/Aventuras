@@ -137,13 +137,14 @@ function parseVisualChanges(segment: string): VisualChangeNote[] {
 // (docs/memory/piggyback.md → Trailing block format).
 function parseConditions(segment: string): ConditionChange[] {
   const changes: ConditionChange[] = []
-  const re = /<entity\s+([^>]*)>([\s\S]*?)<\/entity>/g
+  // No `<` inside, so a self-closed or unclosed entry can't swallow the next one.
+  const re = /<entity\s+([^<>]*)>([^<]*)<\/entity>/g
   for (const match of segment.matchAll(re)) {
     const [, attrText, text] = match
     if (attrText === undefined || text === undefined) continue
     const { id } = parseAttributes(attrText)
     const condition = text.trim()
-    if (id === undefined || condition === '') continue
+    if (!id || condition === '') continue
     changes.push({ id, text: condition })
   }
   assertNotTruncated(segment, changes.length, 'conditions')
@@ -158,12 +159,13 @@ function parseTransfers(segment: string): ParsedTransfers {
   const items: ItemTransfer[] = []
   const drops: ItemDrop[] = []
   let seq = 0
-  const moveRe = new RegExp(`<(item|${DROP_TAG})\\s+([^>]*)\\/?>`, 'g')
+  // No `<` in the attributes, so a tag missing its `>` is lost rather than read into the next one.
+  const moveRe = new RegExp(`<(item|${DROP_TAG})\\s+([^<>]*)\\/?>`, 'g')
   for (const match of segment.matchAll(moveRe)) {
     const [, tag, attrText] = match
     if (attrText === undefined) continue
     const attrs = parseAttributes(attrText)
-    if (attrs.id === undefined) continue
+    if (!attrs.id) continue
     const from = attrs.from !== undefined ? { from: attrs.from } : {}
     if (tag === DROP_TAG) {
       drops.push({ id: attrs.id, ...from, seq: seq++ })
