@@ -749,6 +749,29 @@ describe('collision flags a re-parent breaks', () => {
       updateOf('loc_market', { state: { parent_location_id: 'loc_quay' } }),
     ])
   })
+
+  describe('an unplaced place', () => {
+    const UNPLACED = place('loc_drift', 'The Drift', null, {
+      state: { parent_location_id: null, unplaced: true },
+    })
+
+    it('drops the unplaced flag when the save gives it a parent', () => {
+      const [action] = save(UNPLACED, { placement: { kind: 'under', parentId: 'loc_quay' } }, [
+        UNPLACED,
+      ])
+      const state = action?.kind === 'updateEntity' ? action.payload.patch.state : undefined
+      expect(state).toStrictEqual({ parent_location_id: 'loc_quay' })
+      expect(state).not.toHaveProperty('unplaced')
+    })
+
+    it('stays unplaced when the save changes only the condition', () => {
+      expect(save(UNPLACED, { condition: 'flooded' }, [UNPLACED])).toStrictEqual([
+        updateOf('loc_drift', {
+          state: { parent_location_id: null, unplaced: true, condition: 'flooded' },
+        }),
+      ])
+    })
+  })
 })
 
 // data-model.md → LocationState shape: placing a place clears the flag in the same write.
