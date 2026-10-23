@@ -408,6 +408,38 @@ export async function buildGenerationContext(
   const placesMap = locationMapView(branchEntities, mapCurrentLocationId)
   const retrievedEntities = promptEntityRows(retrieval?.bundles.entities.selected)
   const inSceneIds = new Set(scene.sceneEntities)
+  const inScene = branchEntities.filter((e) => e.status === 'active' && inSceneIds.has(e.id))
+  const heldItems = heldItemsInScene(scene.sceneEntities, branchEntities, views)
+  const looseRows =
+    structuralLocationId === null
+      ? []
+      : views.looseAt(structuralLocationId).flatMap((id) => {
+          const row = branchById.get(id)
+          return row === undefined ? [] : [row]
+        })
+  const named = reads.has('namedCharacters')
+    ? charactersNamed(
+        lastTurns,
+        branchEntities,
+        new Set([
+          ...inScene.map((e) => e.id),
+          ...(floor?.alwaysEntities ?? []).map((e) => e.id),
+          ...retrievedEntities.map((e) => e.id),
+        ]),
+      )
+    : []
+  // piggyback.md → Trailing block format: what a condition may name, the rows this prompt shows
+  // with their state. Real ids, so they stay out of `context`, which substituteIds rewrites.
+  const stateShownIds: ReadonlySet<string> = new Set([
+    ...inScene.map((e) => e.id),
+    ...(structuralLocationId === null ? [] : [structuralLocationId]),
+    ...heldItems.flatMap((holder) => holder.items.map((item) => item.id)),
+    ...looseRows.map((row) => row.id),
+    ...(floor?.alwaysEntities ?? []).map((e) => e.id),
+    ...(floor?.sceneFactions ?? []).map((e) => e.id),
+    ...retrievedEntities.map((e) => e.id),
+    ...named.map((e) => e.id),
+  ])
 
   const context = {
     // cadence.md → Composition rule: the two-mode window plus its
@@ -453,27 +485,9 @@ export async function buildGenerationContext(
       structuralLocationId === null
         ? []
         : listedAncestorNames(structuralLocationId, branchEntities),
-    heldItems: heldItemsInScene(scene.sceneEntities, branchEntities, views),
-    looseItems:
-      structuralLocationId === null
-        ? []
-        : views.looseAt(structuralLocationId).flatMap((id) => {
-            const row = branchById.get(id)
-            return row === undefined ? [] : [promptEntity(row, views)]
-          }),
-    namedCharacters: reads.has('namedCharacters')
-      ? charactersNamed(
-          lastTurns,
-          branchEntities,
-          new Set([
-            ...branchEntities
-              .filter((e) => e.status === 'active' && inSceneIds.has(e.id))
-              .map((e) => e.id),
-            ...(floor?.alwaysEntities ?? []).map((e) => e.id),
-            ...retrievedEntities.map((e) => e.id),
-          ]),
-        ).map((e) => promptEntity(e, views))
-      : [],
+    heldItems,
+    looseItems: looseRows.map((row) => promptEntity(row, views)),
+    namedCharacters: named.map((e) => promptEntity(e, views)),
     intermediates: {},
     piggybackFires,
     // Re-gated on the derived slots, not just the caller's flag: a caller
@@ -488,7 +502,13 @@ export async function buildGenerationContext(
   // Data-side, pre-render substitution: entity `id` (char_/loc_/... UUIDs) becomes
   // a placeholder; prose (entry.content, definition prose) has no IDs and passes through.
   // The real id, not its placeholder: the per-turn planner rebuilds this map's left-out places.
-  return { ok: true as const, context: substituteIds(context, idMap), idMap, mapCurrentLocationId }
+  return {
+    ok: true as const,
+    context: substituteIds(context, idMap),
+    idMap,
+    mapCurrentLocationId,
+    stateShownIds,
+  }
 }
 
 export type GenerationContextLoad = Awaited<ReturnType<typeof buildGenerationContext>>

@@ -320,6 +320,51 @@ describe('planTurnCreates — kept only if used', () => {
     expect(plan.report.newItems[0]?.outcome).toBe('dropped')
   })
 
+  // piggyback.md → Kept only if used: a drop is the last transfer naming the item, so it stays prose.
+  it('drops a new item taken and then put down with <drop>, and the drop with it, logged', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug')
+    const plan = await runPlanner({
+      newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
+      transfers: {
+        items: [{ id: 'new:key', to: HERO, slot: 'inventory', seq: 0 }],
+        stackables: [],
+        drops: [{ id: 'new:key', from: HERO, seq: 1 }],
+      },
+    })
+    expect(plan.creates).toEqual([])
+    expect(plan.block.transfers).toEqual({ items: [], stackables: [], drops: [] })
+    expect(plan.report.newItems[0]?.outcome).toBe('dropped')
+    expect(debugSpy).toHaveBeenCalledWith('classifier.drop_dropped', {
+      handle: 'new:key',
+      reason: 'not-created',
+    })
+  })
+
+  it('keeps a new item put down and then taken, naming its row in both', async () => {
+    const plan = await runPlanner({
+      newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
+      transfers: {
+        items: [{ id: 'new:key', to: HERO, slot: 'inventory', seq: 1 }],
+        stackables: [],
+        drops: [{ id: 'new:key', seq: 0 }],
+      },
+    })
+    expect(createdEntries(plan.creates).map((e) => e.id)).toEqual(['item_new_1'])
+    expect(plan.block.transfers).toEqual({
+      items: [{ id: 'item_new_1', to: HERO, slot: 'inventory', seq: 1 }],
+      stackables: [],
+      drops: [{ id: 'item_new_1', seq: 0 }],
+    })
+  })
+
+  it('leaves a drop of a stored item as it stands', async () => {
+    const plan = await runPlanner(
+      { transfers: { items: [], stackables: [], drops: [{ id: OLD_KEY, from: HERO, seq: 0 }] } },
+      { entities: world(oldKey()) },
+    )
+    expect(plan.block.transfers?.drops).toEqual([{ id: OLD_KEY, from: HERO, seq: 0 }])
+  })
+
   it('keeps a new item taken and then given to another character', async () => {
     const plan = await runPlanner(
       {
@@ -1443,6 +1488,7 @@ describe('skipTurnCreates', () => {
         },
         worldTimeDelta: 5,
       }),
+      logger,
     )
     expect(plan.block).toEqual({
       sceneEntities: [HERO],
@@ -1472,13 +1518,98 @@ describe('skipTurnCreates', () => {
       ],
     })
   })
+
+  it("drops a new item's handle drop where it stands, logged", () => {
+    const debugSpy = vi.spyOn(logger, 'debug')
+    const plan = skipTurnCreates(
+      assumeSubstituted({
+        newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
+        transfers: {
+          items: [],
+          stackables: [],
+          drops: [
+            { id: 'new:key', seq: 0 },
+            { id: OLD_KEY, from: HERO, seq: 1 },
+          ],
+        },
+      }),
+      logger,
+    )
+    expect(plan.block.transfers?.drops).toEqual([{ id: OLD_KEY, from: HERO, seq: 1 }])
+    expect(debugSpy).toHaveBeenCalledWith('classifier.drop_dropped', {
+      handle: 'new:key',
+      reason: 'not-created',
+    })
+  })
+})
+
+// piggyback.md → Creating a place or an item: a condition the prose shows lands with the row.
+describe("planTurnCreates — a create's condition", () => {
+  it("writes a create's condition into its row, cut to the bound, and none on a reuse", async () => {
+    const warnSpy = vi.spyOn(logger, 'warn')
+    const long = 'word '.repeat(150).trim()
+    const plan = await runPlanner(
+      {
+        sceneEntities: [HERO],
+        newLocations: [
+          {
+            handle: 'new:market',
+            name: 'The Drowned Market',
+            description: 'mud',
+            parent: PORT,
+            condition: 'half under water',
+          },
+          {
+            handle: 'new:docks',
+            name: 'Smuggler Docks',
+            description: 'a rotting pier',
+            parent: 'new:market',
+            condition: long,
+          },
+        ],
+        currentLocation: 'new:docks',
+        newItems: [
+          {
+            handle: 'new:key',
+            name: 'rusted key',
+            description: 'an iron key',
+            condition: 'bent at the bit',
+          },
+        ],
+        transfers: {
+          items: [{ id: 'new:key', to: HERO, slot: 'inventory', seq: 0 }],
+          stackables: [],
+          drops: [],
+        },
+      },
+      { entities: world(market('active')) },
+    )
+    // The market is reused (its exact name under the same parent), so only the docks and the key
+    // are new rows, and nothing writes the market's condition.
+    expect(createdEntries(plan.creates).map((e) => [e.id, e.state])).toEqual([
+      [
+        'loc_new_1',
+        {
+          parent_location_id: MARKET,
+          condition: Array.from({ length: 100 }, () => 'word').join(' '),
+        },
+      ],
+      ['item_new_1', { at_location_id: null, condition: 'bent at the bit' }],
+    ])
+    expect(plan.placements).toEqual([])
+    expect(warnSpy).toHaveBeenCalledWith('classifier.condition_truncated', {
+      handle: 'new:docks',
+      length: 749,
+      keptLength: 499,
+    })
+  })
 })
 
 describe('planner input', () => {
   it('takes only a substituted block', () => {
     const normalized = normalizeCreates({ sceneEntities: [HERO] }).block
     // @ts-expect-error a normalized block still holds placeholders
-    const skip = () => skipTurnCreates(normalized)
+    const skip = () => skipTurnCreates(normalized, logger)
     const plan = () =>
       planTurnCreates({
         // @ts-expect-error nor may it reach the planner

@@ -2285,6 +2285,54 @@ describe('narrative fold — creates', () => {
     expect(result).toEqual({ status: 'aborted' })
     expect(events.filter((e) => e.type === 'delta_emitted')).toEqual([])
   })
+
+  // data-model.md → Authorship contract, seen before written: the prompt showed the held sword
+  // with its state, and the market only by name on the map.
+  it('writes a condition only for a row its prompt showed with its state', async () => {
+    const SWORD = 'item_00000000-0000-4000-8000-0000000000b2'
+    await seedTurn([
+      worldRow({
+        id: HERO,
+        kind: 'character',
+        name: 'Aria',
+        state: {
+          ...emptyEntityState('character'),
+          current_location_id: TOWN,
+          equipped_items: [SWORD],
+        },
+      }),
+      worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }),
+      worldRow({
+        id: MARKET,
+        kind: 'location',
+        name: 'The Drowned Market',
+        state: { parent_location_id: TOWN },
+      }),
+      worldRow({ id: SWORD, kind: 'item', name: 'worn sword', state: { at_location_id: null } }),
+    ])
+    const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+    // c1 HERO, l1 TOWN and l2 MARKET (foldTurn allocates them); the sword, the one item, is i1.
+    const { events } = await foldTurn(
+      'Aria nicks the blade on the rail.\n<state><world_time_delta>5</world_time_delta>' +
+        '<conditions><entity id="i1">notched near the tip</entity>' +
+        '<entity id="l2">half under water</entity></conditions></state>',
+      { log },
+    )
+    await applyEvents(events)
+    const rows = await branchRows()
+    expect(rows.find((r) => r.id === SWORD)?.state).toEqual({
+      at_location_id: null,
+      condition: 'notched near the tip',
+    })
+    expect(rows.find((r) => r.id === MARKET)?.state).toEqual({ parent_location_id: TOWN })
+    expect(log.warn).toHaveBeenCalledWith('classifier.condition_unseen', {
+      entryId: expect.any(String),
+      source: 'piggyback_tagged_block',
+      entityId: MARKET,
+      kind: 'location',
+      shown: false,
+    })
+  })
 })
 
 // architecture.md → System and user halves. Fixture fills Setting/Genre/Tone and the calendar

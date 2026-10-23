@@ -1866,6 +1866,58 @@ describe('buildGenerationContext — location map and held items', () => {
       { holderId: 'c1', items: [{ id: 'i1', name: 'Silver Key', equipped: false }] },
     ])
   })
+
+  // piggyback.md → Trailing block format: a condition may name only a row shown with its state.
+  it('returns the ids the prompt shows with their state, real and outside the context', async () => {
+    const load = await buildLoad({
+      entities: [
+        place(ELDRA, 'Eldra', null),
+        place(INN, 'The Rusty Anchor', ELDRA),
+        place(VAULT, 'The Vault', ELDRA),
+        person(CHAR_ID, 'Mara', { inventory: [KEY] }),
+        person(CHAR_ID_2, 'Corvin', { inventory: [SWORD] }),
+        person(CHAR_ID_3, 'Ilse', {}, { status: 'staged' }),
+        thing(KEY, 'Silver Key', null),
+        thing(SWORD, 'worn sword', null),
+        thing(CHEST, 'the iron chest', INN),
+      ],
+      entries: sceneAt(INN, [CHAR_ID, CHAR_ID_3]),
+      retrieval: retrievalSuccess({
+        floor: {
+          currentLocation: floorPlace(INN, 'The Rusty Anchor'),
+          alwaysEntities: [floorPlace(ELDRA, 'Eldra')],
+        },
+      }),
+    })
+    // Mara in the scene, the place it is at, her key, the chest lying there, the pinned Eldra. Not
+    // Corvin (off the scene) or his sword, the staged Ilse, or the Vault (on the map by name only).
+    expect([...load.stateShownIds].sort()).toEqual([CHAR_ID, INN, KEY, CHEST, ELDRA].sort())
+    expect(load.context).not.toHaveProperty('stateShownIds')
+  })
+
+  it('counts a ranked row and a scene faction as shown with their state', async () => {
+    const ranked = {
+      ...candidate('entity', VAULT, 'The Vault'),
+      entity: {
+        kind: 'location' as const,
+        name: 'The Vault',
+        description: null,
+        status: 'active' as const,
+        state: emptyEntityView('location'),
+      },
+    }
+    const load = await buildLoad({
+      entities: [
+        place(VAULT, 'The Vault', null),
+        { ...base, id: HAND, kind: 'faction', name: 'The Silver Hand', state: {} },
+      ],
+      retrieval: retrievalSuccess({
+        selected: { entities: [ranked] },
+        floor: { sceneFactions: [{ ...entityRow(HAND, 'The Silver Hand'), kind: 'faction' }] },
+      }),
+    })
+    expect([...load.stateShownIds].sort()).toEqual([HAND, VAULT].sort())
+  })
 })
 
 describe('buildGenerationContext — entity state', () => {

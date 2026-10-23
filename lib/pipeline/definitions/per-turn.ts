@@ -243,7 +243,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
           newId: (prefix) => generateId(prefix),
           log: ctx.log,
         })
-      : skipTurnCreates(resolvedBlock)
+      : skipTurnCreates(resolvedBlock, ctx.log)
     // Matching an item can await an embed call; a cancel during it discards the reply.
     if (ctx.abortSignal.aborted) return { status: 'aborted' }
     fold = {
@@ -252,6 +252,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
         entryId,
         turn,
         entities,
+        stateShownIds: load.stateShownIds,
         previousMetadata: {
           ...inherited,
           ...(tail?.id ? { entryId: tail.id } : {}),

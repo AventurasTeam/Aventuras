@@ -8,11 +8,12 @@ import {
 } from '@/lib/db'
 import { logger, type Logger } from '@/lib/diagnostics'
 
-import { buildPiggybackActions } from './apply'
+import { buildPiggybackActions as buildActions } from './apply'
 import { parseStateBlock } from './parse'
 import {
   VISUAL_TEXT_MAX,
   type ParsedStateBlock,
+  type ParsedTransfers,
   type PlannedStateBlock,
   type PlannedTurn,
 } from './types'
@@ -45,6 +46,15 @@ function mockEntity(overrides: Partial<Entity>): Entity {
 }
 
 const spyLog = (): Logger => ({ error: vi.fn(), warn: vi.fn(), debug: vi.fn() })
+
+// Most cases show no row with its state; a condition case passes its own set.
+function buildPiggybackActions(
+  args: Omit<Parameters<typeof buildActions>[0], 'stateShownIds'> & {
+    stateShownIds?: ReadonlySet<string>
+  },
+): ReturnType<typeof buildActions> {
+  return buildActions({ ...args, stateShownIds: args.stateShownIds ?? new Set() })
+}
 
 // Cast, not planned: the planner hands on a block that declared no creates unchanged.
 function planned(
@@ -1489,5 +1499,346 @@ describe('buildPiggybackActions input', () => {
         branchId: 'main',
       })
     expect(build).toBeTypeOf('function')
+  })
+})
+
+// piggyback.md → Trailing block format: conditions, drops, and the order the block gives its moves.
+describe('buildPiggybackActions — conditions and drops', () => {
+  const person = (id: string, over: Partial<CharacterState> = {}) =>
+    mockEntity({ id, state: { ...emptyEntityState('character'), ...over } })
+  const place = (id: string) =>
+    mockEntity({ id, kind: 'location', name: id, state: { parent_location_id: null } })
+  const thing = (id: string, at: string | null = null) =>
+    mockEntity({ id, kind: 'item', name: id, state: { at_location_id: at } })
+  const transfers = (over: Partial<ParsedTransfers>): ParsedTransfers => ({
+    items: [],
+    stackables: [],
+    drops: [],
+    ...over,
+  })
+
+  // The previous entry's scene is the hall; a case states its own location or none.
+  function run(
+    block: ParsedStateBlock,
+    entities: Entity[],
+    over: {
+      stateShownIds?: ReadonlySet<string>
+      log?: Logger
+      previousLocationId?: string | null
+    } = {},
+  ) {
+    return buildPiggybackActions({
+      log: over.log ?? logger,
+      source: 'piggyback_tagged_block',
+      entryId: 'entry_1',
+      turn: planned(block),
+      entities,
+      previousMetadata: {
+        sceneEntities: [],
+        currentLocationId:
+          over.previousLocationId !== undefined ? over.previousLocationId : 'loc_hall',
+        worldTime: 100,
+      },
+      branchId: 'main',
+      stateShownIds: over.stateShownIds ?? new Set(),
+    })
+  }
+  const moves = (result: ReturnType<typeof run>) =>
+    result.actions.filter(
+      (a) => a.kind === 'updateEntityInventory' || a.kind === 'updateItemPosition',
+    )
+  const holdings = (id: string, equipped_items: string[], inventory: string[]) => ({
+    kind: 'updateEntityInventory',
+    source: 'piggyback_tagged_block',
+    payload: { branchId: 'main', id, equipped_items, inventory },
+  })
+  const position = (id: string, atLocationId: string | null) => ({
+    kind: 'updateItemPosition',
+    source: 'piggyback_tagged_block',
+    payload: { branchId: 'main', id, atLocationId },
+  })
+
+  describe('conditions', () => {
+    const conditionWrites = (result: ReturnType<typeof run>) =>
+      result.actions.filter((a) => a.kind === 'updateEntityCondition')
+
+    it('writes a condition for each place and item the prompt showed with its state', () => {
+      const result = run(
+        {
+          conditions: [
+            { id: 'loc_dock', text: 'flooded to the knee' },
+            { id: 'item_rope', text: ' frayed through ' },
+          ],
+        },
+        [place('loc_dock'), thing('item_rope')],
+        { stateShownIds: new Set(['loc_dock', 'item_rope']) },
+      )
+      expect(conditionWrites(result)).toEqual([
+        {
+          kind: 'updateEntityCondition',
+          source: 'piggyback_tagged_block',
+          payload: { branchId: 'main', id: 'loc_dock', condition: 'flooded to the knee' },
+        },
+        {
+          kind: 'updateEntityCondition',
+          source: 'piggyback_tagged_block',
+          payload: { branchId: 'main', id: 'item_rope', condition: 'frayed through' },
+        },
+      ])
+    })
+
+    // data-model.md → Authorship contract: seen before written.
+    it.each([
+      ['the prompt did not show with its state', 'loc_dock', [], 'location', false],
+      ['that is no place or item', 'char_1', ['char_1'], 'character', true],
+      ['that names no entity', 'loc_gone', ['loc_gone'], null, true],
+    ] as const)('refuses a condition for a row %s, logged', (_label, id, shown, kind, wasShown) => {
+      const log = spyLog()
+      const result = run(
+        { conditions: [{ id, text: 'scorched' }] },
+        [place('loc_dock'), person('char_1')],
+        { stateShownIds: new Set(shown), log },
+      )
+      expect(conditionWrites(result)).toEqual([])
+      expect(log.warn).toHaveBeenCalledWith('classifier.condition_unseen', {
+        entryId: 'entry_1',
+        source: 'piggyback_tagged_block',
+        entityId: id,
+        kind,
+        shown: wasShown,
+      })
+    })
+
+    it('cuts an over-long condition as it cuts a visual value, logged', () => {
+      const log = spyLog()
+      const result = run(
+        { conditions: [{ id: 'loc_dock', text: 'word '.repeat(150) }] },
+        [place('loc_dock')],
+        { stateShownIds: new Set(['loc_dock']), log },
+      )
+      expect(conditionWrites(result)).toEqual([
+        expect.objectContaining({
+          payload: {
+            branchId: 'main',
+            id: 'loc_dock',
+            condition: Array.from({ length: 100 }, () => 'word').join(' '),
+          },
+        }),
+      ])
+      expect(log.warn).toHaveBeenCalledWith('classifier.condition_truncated', {
+        entryId: 'entry_1',
+        source: 'piggyback_tagged_block',
+        entityId: 'loc_dock',
+        length: 749,
+        keptLength: 499,
+      })
+    })
+
+    it('writes no blank condition', () => {
+      const result = run({ conditions: [{ id: 'loc_dock', text: '   ' }] }, [place('loc_dock')], {
+        stateShownIds: new Set(['loc_dock']),
+      })
+      expect(conditionWrites(result)).toEqual([])
+    })
+  })
+
+  describe('drops', () => {
+    it("puts a held item down where the turn's scene is, off every holder", () => {
+      const result = run(
+        {
+          currentLocation: 'loc_dock',
+          transfers: transfers({ drops: [{ id: 'item_blade', from: 'char_1', seq: 0 }] }),
+        },
+        [
+          person('char_1', { equipped_items: ['item_blade'] }),
+          person('char_2', { inventory: ['item_blade', 'item_key'] }),
+          thing('item_blade'),
+          place('loc_dock'),
+        ],
+      )
+      expect(moves(result)).toEqual([
+        holdings('char_1', [], []),
+        holdings('char_2', [], ['item_key']),
+        position('item_blade', 'loc_dock'),
+      ])
+      expect(result.applied.drops).toEqual([{ id: 'item_blade', from: 'char_1', at: 'loc_dock' }])
+    })
+
+    it('puts it down at the previous location when the turn names none', () => {
+      const result = run({ transfers: transfers({ drops: [{ id: 'item_blade', seq: 0 }] }) }, [
+        person('char_1', { equipped_items: ['item_blade'] }),
+        thing('item_blade'),
+      ])
+      expect(moves(result)).toEqual([
+        holdings('char_1', [], []),
+        position('item_blade', 'loc_hall'),
+      ])
+      expect(result.applied.drops).toEqual([{ id: 'item_blade', at: 'loc_hall' }])
+    })
+
+    it('with no scene location, takes it off its holders and leaves it nowhere, logged', () => {
+      const log = spyLog()
+      const result = run(
+        { transfers: transfers({ drops: [{ id: 'item_blade', from: 'char_1', seq: 0 }] }) },
+        [person('char_1', { equipped_items: ['item_blade'] }), thing('item_blade')],
+        { previousLocationId: null, log },
+      )
+      expect(moves(result)).toEqual([holdings('char_1', [], [])])
+      expect(result.applied.drops).toEqual([{ id: 'item_blade', from: 'char_1', at: null }])
+      expect(log.warn).toHaveBeenCalledWith('classifier.drop_unplaced', {
+        entryId: 'entry_1',
+        source: 'piggyback_tagged_block',
+        itemId: 'item_blade',
+      })
+    })
+
+    it('drops a drop for an item nobody holds that lies elsewhere, logged', () => {
+      const log = spyLog()
+      const result = run(
+        {
+          currentLocation: 'loc_dock',
+          transfers: transfers({ drops: [{ id: 'item_rope', seq: 0 }] }),
+        },
+        [person('char_1'), thing('item_rope', 'loc_cellar'), place('loc_dock')],
+        { log },
+      )
+      expect(moves(result)).toEqual([])
+      expect(result.applied.drops).toEqual([])
+      expect(log.warn).toHaveBeenCalledWith('classifier.drop_dropped', {
+        entryId: 'entry_1',
+        source: 'piggyback_tagged_block',
+        itemId: 'item_rope',
+        reason: 'elsewhere',
+        atLocationId: 'loc_cellar',
+      })
+    })
+
+    it('leaves an item already lying where the scene is as it is, logged', () => {
+      const log = spyLog()
+      const result = run(
+        {
+          currentLocation: 'loc_dock',
+          transfers: transfers({ drops: [{ id: 'item_rope', seq: 0 }] }),
+        },
+        [person('char_1'), thing('item_rope', 'loc_dock'), place('loc_dock')],
+        { log },
+      )
+      expect(moves(result)).toEqual([])
+      expect(result.applied.drops).toEqual([{ id: 'item_rope', at: 'loc_dock' }])
+      expect(log.debug).toHaveBeenCalledWith('classifier.drop_unchanged', {
+        entryId: 'entry_1',
+        source: 'piggyback_tagged_block',
+        itemId: 'item_rope',
+        atLocationId: 'loc_dock',
+      })
+    })
+
+    it('puts down an item that nobody holds and lies nowhere', () => {
+      const result = run(
+        {
+          currentLocation: 'loc_dock',
+          transfers: transfers({ drops: [{ id: 'item_rope', seq: 0 }] }),
+        },
+        [thing('item_rope'), place('loc_dock')],
+      )
+      expect(moves(result)).toEqual([position('item_rope', 'loc_dock')])
+      expect(result.applied.drops).toEqual([{ id: 'item_rope', at: 'loc_dock' }])
+    })
+
+    // data-model.md → ItemState shape: a row left doubled by an older write moves on its next drop.
+    it('moves an item both held and lying elsewhere to the scene', () => {
+      const result = run(
+        {
+          currentLocation: 'loc_dock',
+          transfers: transfers({ drops: [{ id: 'item_rope', seq: 0 }] }),
+        },
+        [
+          person('char_1', { inventory: ['item_rope'] }),
+          thing('item_rope', 'loc_cellar'),
+          place('loc_dock'),
+        ],
+      )
+      expect(moves(result)).toEqual([holdings('char_1', [], []), position('item_rope', 'loc_dock')])
+    })
+
+    // One take and one drop of the same item, from the same rows, in each order.
+    const handOff = () => [
+      person('char_1'),
+      person('char_2', { inventory: ['item_rope'] }),
+      thing('item_rope'),
+      place('loc_dock'),
+    ]
+
+    it('takes, then puts down: the item lies where the scene is', () => {
+      const result = run(
+        {
+          currentLocation: 'loc_dock',
+          transfers: transfers({
+            items: [{ id: 'item_rope', to: 'char_1', slot: 'inventory', seq: 0 }],
+            drops: [{ id: 'item_rope', from: 'char_1', seq: 1 }],
+          }),
+        },
+        handOff(),
+      )
+      expect(moves(result)).toEqual([
+        holdings('char_2', [], []),
+        holdings('char_1', [], []),
+        position('item_rope', 'loc_dock'),
+      ])
+      expect(result.applied.drops).toEqual([{ id: 'item_rope', from: 'char_1', at: 'loc_dock' }])
+    })
+
+    it('puts down, then takes: the item ends held, with no position', () => {
+      const result = run(
+        {
+          currentLocation: 'loc_dock',
+          transfers: transfers({
+            items: [{ id: 'item_rope', to: 'char_1', slot: 'inventory', seq: 1 }],
+            drops: [{ id: 'item_rope', from: 'char_2', seq: 0 }],
+          }),
+        },
+        handOff(),
+      )
+      expect(moves(result)).toEqual([
+        holdings('char_2', [], []),
+        holdings('char_1', [], ['item_rope']),
+      ])
+      expect(result.applied.drops).toEqual([{ id: 'item_rope', from: 'char_2', at: 'loc_dock' }])
+    })
+
+    it("lists the drops it applied in the block's order", () => {
+      const result = run(
+        {
+          currentLocation: 'loc_dock',
+          transfers: transfers({
+            drops: [
+              { id: 'item_b', seq: 1 },
+              { id: 'item_a', seq: 0 },
+            ],
+          }),
+        },
+        [thing('item_a'), thing('item_b'), place('loc_dock')],
+      )
+      expect(result.applied.drops.map((d) => d.id)).toEqual(['item_a', 'item_b'])
+    })
+
+    // A producer can repeat a seq; the tie applies in list order, the take before the drop.
+    it('applies a take and a drop sharing a seq as the take, then the drop', () => {
+      const result = run(
+        {
+          currentLocation: 'loc_dock',
+          transfers: transfers({
+            items: [{ id: 'item_rope', to: 'char_1', slot: 'inventory', seq: 0 }],
+            drops: [{ id: 'item_rope', from: 'char_1', seq: 0 }],
+          }),
+        },
+        handOff(),
+      )
+      expect(moves(result)).toEqual([
+        holdings('char_2', [], []),
+        holdings('char_1', [], []),
+        position('item_rope', 'loc_dock'),
+      ])
+    })
   })
 })

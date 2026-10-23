@@ -11,6 +11,7 @@ import {
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { newTerms, normalizeTerm } from '@/lib/keyword-terms'
+import { boundStateText } from '@/lib/piggyback'
 import { entitiesStore } from '@/lib/stores'
 import {
   characterFactionId,
@@ -64,6 +65,10 @@ declare module '@/lib/actions/action-map' {
     updateItemPosition: {
       source: DeltaSource
       payload: { branchId: string; id: string; atLocationId: string | null }
+    }
+    updateEntityCondition: {
+      source: DeltaSource
+      payload: { branchId: string; id: string; condition: string }
     }
     updateEntityLocationTracking: {
       source: DeltaSource
@@ -274,6 +279,35 @@ export const updateItemPositionHandler: ActionHandler = async (action, branchId,
   if (current.kind !== 'item')
     return { status: 'rejected', reason: `updateItemPosition target ${bid}:${id} is not an item` }
   return buildStatePatchOutcome(bid, id, current, { at_location_id: atLocationId }, ctx)
+}
+
+/**
+ * A place's or an item's condition, replaced whole and bounded as a visual value is. Its writer is
+ * the per-turn writer, whose prose is always newer than a user edit (cadence.md), so it checks no
+ * precedence.
+ */
+export const updateEntityConditionHandler: ActionHandler = async (action, branchId, ctx) => {
+  if (action.kind !== 'updateEntityCondition')
+    throw new Error(`handler/kind mismatch: expected 'updateEntityCondition', got '${action.kind}'`)
+  const { branchId: bid, id, condition } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  const current = await loadCurrent(bid, id, ctx)
+  if (!current)
+    return {
+      status: 'rejected',
+      reason: `condition target entities ${bid}:${id} not found`,
+      code: 'noop',
+    }
+  if (current.kind !== 'location' && current.kind !== 'item')
+    return { status: 'rejected', reason: 'not-a-place-or-item', code: 'noop' }
+  return buildStatePatchOutcome(
+    bid,
+    id,
+    current,
+    { condition: boundStateText(condition).text },
+    ctx,
+  )
 }
 
 export const updateEntityLocationTrackingHandler: ActionHandler = async (action, branchId, ctx) => {

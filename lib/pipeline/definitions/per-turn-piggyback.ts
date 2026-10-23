@@ -455,6 +455,7 @@ export async function* piggybackFallbackClassifierPhase(
     entryId: tail.id,
     turn: plan,
     entities,
+    stateShownIds: load.stateShownIds,
     previousMetadata: {
       ...inheritedEntryMetadata(previousEntry?.metadata),
       ...(previousEntry?.id ? { entryId: previousEntry.id } : {}),
