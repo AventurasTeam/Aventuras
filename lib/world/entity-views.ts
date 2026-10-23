@@ -240,7 +240,7 @@ export function buildEntityViews(entities: readonly Entity[], scene: ViewScene):
         const placement = placementOf(e)
         return {
           condition: text(state.condition),
-          parent: ref(state.parent_location_id, 'location'),
+          parent: placement.kind === 'under' ? ref(placement.parentId, 'location') : null,
           unplaced:
             placement.kind === 'unplaced' ||
             (placement.kind === 'under' && byEntityId.get(placement.parentId)?.kind !== 'location'),

@@ -134,6 +134,21 @@ describe('buildEntityViews — an unplaced place', () => {
     })
   })
 
+  // A row breaking the invariant: the flag wins, and the view keeps `parent` null with it.
+  it('reads the parent of a row holding both the flag and a parent as null', () => {
+    const entities = [
+      location('loc_p', 'Port Vellis', null),
+      location('loc_a', 'Anchor', null, {
+        state: { parent_location_id: 'loc_p', unplaced: true },
+      }),
+    ]
+    expect(locationOf(entities, 'loc_a')).toEqual({
+      condition: null,
+      parent: null,
+      unplaced: true,
+    })
+  })
+
   it('marks a place whose stored parent names no place on the branch unplaced', () => {
     const entities = [
       location('loc_quay', 'Orphan Quay', 'loc_gone'),

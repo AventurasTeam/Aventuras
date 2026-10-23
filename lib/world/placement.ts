@@ -17,7 +17,7 @@ export function placementOf(row: Pick<Entity, 'state'>): PlacePlacement {
 }
 
 export function isUnplaced(row: Pick<Entity, 'state'>): boolean {
-  return (row.state as StoredPlacement | null)?.unplaced === true
+  return placementOf(row).kind === 'unplaced'
 }
 
 /** The state with both keys for `placement`; the only writer of the parent and flag together. */
@@ -38,6 +38,7 @@ export function withPlacement(state: LocationState, placement: PlacePlacement): 
   }
 }
 
+/** Two unplaced places are the same placement, not places sharing a parent. */
 export function samePlacement(a: PlacePlacement, b: PlacePlacement): boolean {
   if (a.kind === 'under' && b.kind === 'under') return a.parentId === b.parentId
   return a.kind === b.kind
