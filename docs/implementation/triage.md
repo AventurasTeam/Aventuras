@@ -871,8 +871,7 @@ slice-planning gate forces its resolution before that slice is planned.
   wrote; reasoned from the code, not run end to end. `withFoldChanges`
   in `lib/pipeline/definitions/per-turn-piggyback.ts` keeps the fold's
   record per field, so when the fallback lands a condition, an item
-  move, a stackable or a drop beside the fold's conditions, item moves
-  or stackables (a failed fold lands no drop), the field is the
+  move, a stackable or a drop beside the fold's, the field is the
   fallback's and the fold's landed write drops off the report and the
   entry card, though World keeps it. The fallback is steered away from
   re-emitting the fold's rows: the orchestrator applies each delta as
@@ -904,7 +903,8 @@ slice-planning gate forces its resolution before that slice is planned.
   (`lib/pipeline/definitions/per-turn.ts`), and a stackable transfer
   adds rather than replaces. The fallback then fires, sees the
   post-fold balance, and may re-emit the same transfer from the prose,
-  so the amount moves a second time. Conditions, visual changes and
-  item moves are idempotent, so a repeat of those is harmless, and a
-  failed fold holds its drops back for the fallback.
+  so the amount moves a second time. Conditions, visual changes, item
+  moves and drops are idempotent, so a repeat of those is harmless, and
+  a failed fold that can't use its own place holds its drops back for
+  the fallback.
   Raised 2026-10-23 by the AI writer map's Q19.

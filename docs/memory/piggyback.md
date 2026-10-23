@@ -443,13 +443,18 @@ per-field best-effort, one failing tag never blocks another. There
 are three exceptions. A failing field keeps the block's own creates
 from landing
 ([Creating a place or an item](#creating-a-place-or-an-item)). It
-keeps the block's drops from landing too, logged
-(`classifier.drops_held`), and the report lists none of them: the
-fallback that fires may move the scene, so the item stays held for the
-fallback to put down where it resolves the scene, and stays held when
-the fallback leaves the drop out or fails too. The fallback's
-transfers are the third: there a transfer with a bad ref drops alone
-and the rest of the field applies, as below.
+keeps the block's drops from landing too when the block's own place
+can't be used: its `<current_location>` names a place the block
+creates, which a failed block doesn't create, or the
+`<current_location>` field itself failed. Those drops are logged
+(`classifier.drops_held`) and the report lists none of them; the item
+stays held for the fallback to put down where it resolves the scene,
+and stays held when the fallback leaves the drop out or fails too. A
+place that can't be entered (an item's id, a retired place) doesn't
+count: it keeps the previous location on any block, as below, and the
+drops land there, as they do wherever a failed block's place stands.
+The fallback's transfers are the third: there a transfer with a bad
+ref drops alone and the rest of the field applies, as below.
 
 An empty `<state>` counts as a missing one, since no turn has no
 state, and so does a block holding nothing but creates, since only
