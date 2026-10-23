@@ -1,7 +1,7 @@
 import { and, desc, eq, getTableColumns, inArray } from 'drizzle-orm'
 import type { ZodType } from 'zod'
 
-import type { Delta, SqlOp } from '@/lib/db'
+import type { Delta, LocationState, SqlOp } from '@/lib/db'
 import {
   chunked,
   deltas,
@@ -9,6 +9,7 @@ import {
   isEmbeddedSourceTable,
   rowsPerInsert,
 } from '@/lib/db'
+import { withPlacement } from '@/lib/world'
 
 import type { DbCtx } from '../types'
 import { capturedChildren, vecSweepIdsOps, vecTableLister } from './delete-cascade'
@@ -16,6 +17,7 @@ import { applyUndoPayload, isPayloadMetaKey, pruneUndoPartial } from './delta-en
 import { deletedRow, heldKey, type HeldRow } from './held-rows'
 import { withKeyLocks } from './key-lock'
 import { liveLinkFilter, type LiveLinkFilter } from './live-link-filter'
+import type { RefPath } from './live-refs'
 import { resolveByTable, whereForDelta, type StorePatch, type TableEntry } from './registry'
 import { DeltaReplayError, ReversalIntegrityError, type IntegrityRefusal } from './replay-errors'
 import {
@@ -26,7 +28,7 @@ import {
   type ReversalSet,
   type RowRef,
 } from './row-closure'
-import { userEditsOutliving, wroteColumn, wrotePath } from './user-precedence'
+import { userEditsOutliving, wroteColumn, wroteField } from './user-precedence'
 
 export {
   DeltaReplayError,
@@ -530,9 +532,11 @@ function undoDelete(walk: UndoWalk, target: UndoTarget, liveLinks: LiveLinkFilte
   }
 }
 
-// A schema-backed column yields sub-field by sub-field, as its undo payload records them.
+// A schema-backed column yields sub-field by sub-field, as its undo payload records them; a
+// place's parent and unplaced mark yield together.
 function restorablePayload(
   entry: TableEntry,
+  table: string,
   payload: Record<string, unknown>,
   userEdits: readonly Delta[],
 ): Record<string, unknown> {
@@ -544,7 +548,7 @@ function restorablePayload(
       continue
     }
     const kept = pruneUndoPartial(entry.columnSchemas[col], partial, (path) =>
-      wrotePath(userEdits, col, path),
+      wroteField(userEdits, table, col, path),
     )
     if (kept !== undefined) restorable[col] = kept
   }
@@ -559,6 +563,7 @@ async function undoUpdate(
   const { delta, entry } = target
   const payload = restorablePayload(
     entry,
+    delta.targetTable,
     (delta.undoPayload ?? {}) as Record<string, unknown>,
     userEdits,
   )
@@ -600,10 +605,28 @@ function undoHeldUpdate(
   copy.removed = keepsNothing(entry, copy.row)
 }
 
-// As World's delete of the named row leaves the row (stateWithRefRewritten): kept, the ref nulled.
+/**
+ * An entity's `state` with a JSON-path ref set to `id`. A place's parent goes through
+ * withPlacement, so clearing one leaves the place unplaced and putting one back clears the mark
+ * (generation-pipeline.md → Reverse-replay).
+ */
+export function stateWithRef(
+  state: unknown,
+  ref: RefPath,
+  id: string | null,
+): Record<string, unknown> {
+  const current = (state ?? {}) as Record<string, unknown>
+  if (ref.path !== 'parent_location_id') return { ...current, [ref.path]: id }
+  return withPlacement(
+    current as LocationState,
+    id === null ? { kind: 'unplaced' } : { kind: 'under', parentId: id },
+  )
+}
+
+// As World's delete of the named row leaves the row: kept, a place unplaced, a member factionless.
 async function clearRef(walk: UndoWalk, { row, ref }: RefClear): Promise<void> {
   const target = rowTargetOf(row.table, walk.set.branchId, row.id)
-  const cleared = (column: unknown) => ({ ...(column as object), [ref.path]: null })
+  const cleared = (column: unknown) => stateWithRef(column, ref, null)
   const state = await rowStateOf(walk, target)
   if (state.presence === 'live') {
     const restored = { [ref.column]: cleared(state.row[ref.column]) }

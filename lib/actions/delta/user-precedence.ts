@@ -185,6 +185,26 @@ export function wrotePlacement(edits: readonly Delta[]): boolean {
   )
 }
 
+const PLACEMENT_PATHS: readonly string[] = ['parent_location_id', 'unplaced']
+
+/**
+ * wrotePath, judging a place's parent and its unplaced mark as one field: a user write to either
+ * keeps both (cadence.md → User edits and classifier writes).
+ */
+export function wroteField(
+  edits: readonly Delta[],
+  table: string,
+  column: string,
+  path: readonly string[],
+): boolean {
+  const placement =
+    table === 'entities' &&
+    column === 'state' &&
+    path.length === 1 &&
+    PLACEMENT_PATHS.includes(path[0])
+  return placement ? wrotePlacement(edits) : wrotePath(edits, column, path)
+}
+
 /** Whether the user deleted a `character_relationships` row for this pair after `since`. */
 export async function userDeletedPairSince(
   ctx: DbCtx,

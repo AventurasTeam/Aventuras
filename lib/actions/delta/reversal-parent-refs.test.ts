@@ -8,7 +8,7 @@ import { parentIdOf } from '@/lib/world'
 
 import { applyDeltaAction } from './apply-delta-action'
 import { withKeyLock } from './key-lock'
-import { applyRedo, prepareUndo } from './redo'
+import { __redoGroupForTest, applyRedo, prepareUndo } from './redo'
 import { ReversalIntegrityError } from './replay-errors'
 import { reverseAndPruneDeltaRows } from './reverse-replay'
 import { reversalLockKeys, selectReversalSet, type ReversalSet } from './row-closure'
@@ -98,6 +98,13 @@ async function parentOf(id: string): Promise<string | null> {
   return parentIdOf(await entityRow(id))
 }
 
+// generation-pipeline.md → Reverse-replay: a cleared parent leaves the place unplaced.
+const UNPLACED = { parent_location_id: null, unplaced: true }
+
+async function stateOf(id: string): Promise<unknown> {
+  return (await entityRow(id)).state
+}
+
 async function hydrateEntities(): Promise<void> {
   entitiesStore.hydrate(
     'b1',
@@ -148,9 +155,9 @@ describe('selectReversalSet — a place names its parent', () => {
     )
 
     expect(await entityIds()).toEqual(['loc_docks', 'loc_pier', 'loc_quarter'])
-    expect(await parentOf('loc_docks')).toBeNull()
+    expect(await stateOf('loc_docks')).toEqual(UNPLACED)
     expect((await entityRow('loc_docks')).name).toBe('The Docks')
-    expect(entitiesStore.getById('loc_docks')?.state).toEqual({ parent_location_id: null })
+    expect(entitiesStore.getById('loc_docks')?.state).toEqual(UNPLACED)
     expect(entitiesStore.getById('loc_varn')).toBeUndefined()
     expect(await parentOf('loc_pier')).toBe('loc_docks')
     expect(await parentOf('loc_fork')).toBe('loc_varn')
@@ -192,7 +199,7 @@ describe('selectReversalSet — a place names its parent', () => {
     expect(clears(set)).toEqual([])
     await reverse(set)
     expect(await entityIds()).toEqual(['loc_quarter', 'loc_root'])
-    expect(await parentOf('loc_root')).toBeNull()
+    expect(await stateOf('loc_root')).toEqual({ parent_location_id: null })
   })
 
   it('clears a child whose state the set changed without moving it', async () => {
@@ -208,7 +215,7 @@ describe('selectReversalSet — a place names its parent', () => {
     expect(labels(set.rows)).toEqual(['update entities:loc_docks', 'create entities:loc_varn'])
     expect(clears(set)).toEqual(['entities:loc_docks.parent_location_id -> loc_varn'])
     await reverse(set)
-    expect((await entityRow('loc_docks')).state).toEqual({ parent_location_id: null })
+    expect(await stateOf('loc_docks')).toEqual(UNPLACED)
   })
 
   it('judges a place the set moved twice by what its oldest move replaced', async () => {
@@ -251,7 +258,7 @@ describe('selectReversalSet — a place names its parent', () => {
     expect(holder.undoPayload?.state).toEqual({ parent_location_id: 'loc_quarter' })
   })
 
-  it('leaves a place the set moved off a removed parent at the root', async () => {
+  it('leaves a place the set moved off a removed parent unplaced', async () => {
     await act('act_varn', create('loc_varn', null, 'user_edit'))
     await act('act_pass', create('loc_docks', 'loc_varn', 'periodic_classifier'))
     await act('act_move', move('loc_docks', 'loc_quarter'))
@@ -265,7 +272,7 @@ describe('selectReversalSet — a place names its parent', () => {
     expect(clears(set)).toEqual(['entities:loc_docks.parent_location_id -> loc_varn'])
     await reverse(set)
     expect(await entityIds()).toEqual(['loc_docks', 'loc_quarter'])
-    expect(await parentOf('loc_docks')).toBeNull()
+    expect(await stateOf('loc_docks')).toEqual(UNPLACED)
   })
 
   it("clears a held child's copy in its holder's payload", async () => {
@@ -284,7 +291,7 @@ describe('selectReversalSet — a place names its parent', () => {
       'create entities:loc_docks',
     ])
     const [holder] = await deltasOf('act_del')
-    expect(holder.undoPayload?.state).toEqual({ parent_location_id: null })
+    expect(holder.undoPayload?.state).toEqual(UNPLACED)
   })
 
   it('clears a held child on its row once the set undoes its delete', async () => {
@@ -301,7 +308,7 @@ describe('selectReversalSet — a place names its parent', () => {
     expect(clears(set)).toEqual(['entities:loc_docks.parent_location_id -> loc_varn'])
     await reverse(set)
     expect(await entityIds()).toEqual(['loc_docks', 'loc_quarter'])
-    expect(await parentOf('loc_docks')).toBeNull()
+    expect(await stateOf('loc_docks')).toEqual(UNPLACED)
   })
 
   it.each([
@@ -326,7 +333,7 @@ describe('selectReversalSet — a place names its parent', () => {
       expect(labels(set.rows)).toEqual(['create entities:loc_p'])
       expect(clears(set)).toEqual([`entities:${moved}.parent_location_id -> loc_p`])
       await reverse(set)
-      expect(await parentOf(moved)).toBeNull()
+      expect(await stateOf(moved)).toEqual(UNPLACED)
       if (logged) expect(await parentOf('loc_z')).toBe('loc_x')
       expect(labels(await deltasOf('act_move'))).toEqual([`update entities:${moved}`])
     },
@@ -343,6 +350,7 @@ describe('selectReversalSet — a place names its parent', () => {
     await reverse(set)
     expect((await entityRow('loc_docks')).state).toEqual({
       parent_location_id: null,
+      unplaced: true,
       condition: 'flooded',
     })
   })
@@ -387,12 +395,12 @@ describe('redo of a CTRL-Z that cleared a parent', () => {
 
     await undo()
     expect(await entityIds()).toEqual(['loc_docks', 'loc_quarter'])
-    expect(await parentOf('loc_docks')).toBeNull()
-    expect(entitiesStore.getById('loc_docks')?.state).toEqual({ parent_location_id: null })
+    expect(await stateOf('loc_docks')).toEqual(UNPLACED)
+    expect(entitiesStore.getById('loc_docks')?.state).toEqual(UNPLACED)
 
     await applyRedo(group, ctx)
     expect(await entityIds()).toEqual(['loc_docks', 'loc_quarter', 'loc_varn'])
-    expect(await parentOf('loc_docks')).toBe('loc_varn')
+    expect(await stateOf('loc_docks')).toEqual({ parent_location_id: 'loc_varn' })
     expect(entitiesStore.getById('loc_docks')?.state).toEqual({ parent_location_id: 'loc_varn' })
     expect(entitiesStore.getById('loc_varn')).toBeDefined()
     expect(labels(await deltasOf('act_varn', 'act_pass'))).toEqual([
@@ -428,7 +436,7 @@ describe('redo of a CTRL-Z that cleared a parent', () => {
     await Promise.all([save, redo])
 
     expect(first).toBe('save')
-    expect(whileHeld.map((row) => row.state)).toEqual([{ parent_location_id: null }])
+    expect(whileHeld.map((row) => row.state)).toEqual([UNPLACED])
     expect(await parentOf('loc_docks')).toBe('loc_varn')
   })
 
@@ -454,7 +462,7 @@ describe('redo of a CTRL-Z that cleared a parent', () => {
     const { group, reverse: undo } = await prepareUndo(set, ctx)
 
     await undo()
-    expect((await entityRow('loc_docks')).state).toEqual({ parent_location_id: null })
+    expect(await stateOf('loc_docks')).toEqual(UNPLACED)
     await applyRedo(group, ctx)
 
     const restored = { parent_location_id: 'loc_varn', condition: 'flooded' }
@@ -509,7 +517,33 @@ describe('redo of a CTRL-Z that cleared a parent', () => {
 
     expect(await entityIds()).toEqual(['loc_docks', 'loc_quarter'])
     expect((await entityRow('loc_quarter')).name).toBe('The Quarter')
-    expect(await parentOf('loc_docks')).toBeNull()
+    expect(await stateOf('loc_docks')).toEqual(UNPLACED)
+  })
+
+  // An undo or a redo never leaves a parent naming a row that doesn't exist: the place is unplaced.
+  it('leaves a place unplaced when its redo would restore a parent no row holds', async () => {
+    const before = await entityRow('loc_quarter')
+    const delta: Delta = {
+      id: 'delta_redo',
+      branchId: 'b1',
+      actionId: 'act_redo',
+      op: 'update',
+      targetTable: 'entities',
+      targetId: 'loc_quarter',
+      entryId: null,
+      source: 'user_edit',
+      undoPayload: { state: { parent_location_id: null } },
+      logPosition: 99,
+      encodingVersion: 1,
+      createdAt: 99,
+    }
+    const rowBeforeUndo = { ...before, state: { parent_location_id: 'loc_gone' } }
+
+    await hydrateEntities()
+    await applyRedo(__redoGroupForTest([{ delta, rowBeforeUndo }]), ctx)
+
+    expect(await stateOf('loc_quarter')).toEqual(UNPLACED)
+    expect(entitiesStore.getById('loc_quarter')?.state).toEqual(UNPLACED)
   })
 
   it('refuses a CTRL-Z whose redo would restore the parent of a held child it clears', async () => {
@@ -524,6 +558,49 @@ describe('redo of a CTRL-Z that cleared a parent', () => {
     await expect(prepared).rejects.toMatchObject({ refusal: 'held-in-redo' })
     await expect(prepared).rejects.toThrow('entities:loc_docks held by')
   })
+})
+
+// cadence.md → User edits and classifier writes: a reversed pass placement keeps a later user
+// placement whole, the parent and the unplaced mark as one field.
+describe('a placement a later user write changed', () => {
+  const unplacedPlace = (id: string): NewEntity => ({
+    ...place(id, null),
+    state: { parent_location_id: null, unplaced: true },
+  })
+  const placeAt = (
+    id: string,
+    placement: { kind: 'under'; parentId: string } | { kind: 'top' },
+  ): PipelineAction => ({
+    kind: 'placeLocation',
+    source: 'periodic_classifier',
+    payload: { branchId: 'b1', id, placement, proseEntryId: null },
+  })
+  const reversePass = async () =>
+    reverse(await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf('act_pass') }))
+
+  beforeEach(async () => {
+    await ctx.db.insert(entities).values([unplacedPlace('loc_u'), place('loc_p', null)])
+  })
+
+  it('puts a place the pass placed back unplaced when no user write outlives it', async () => {
+    await act('act_pass', placeAt('loc_u', { kind: 'under', parentId: 'loc_p' }))
+    await reversePass()
+    expect(await stateOf('loc_u')).toEqual(UNPLACED)
+  })
+
+  it.each([
+    ['moved it elsewhere', { kind: 'under', parentId: 'loc_p' }, 'loc_quarter'],
+    ['marked it top-level', { kind: 'under', parentId: 'loc_p' }, null],
+    ['moved the place the pass marked top-level', { kind: 'top' }, 'loc_quarter'],
+  ] as const)(
+    'keeps the placement whole when the user later %s',
+    async (_label, placement, userParent) => {
+      await act('act_pass', placeAt('loc_u', placement))
+      await act('act_user', move('loc_u', userParent))
+      await reversePass()
+      expect(await stateOf('loc_u')).toEqual({ parent_location_id: userParent })
+    },
+  )
 })
 
 describe('a parent a later user write changed', () => {
@@ -542,6 +619,32 @@ describe('a parent a later user write changed', () => {
     expect(clears(set)).toEqual(['entities:loc_old.parent_location_id -> loc_varn'])
     await reverse(set)
     expect(await entityIds()).toEqual(['loc_old', 'loc_quarter'])
-    expect(await parentOf('loc_old')).toBeNull()
+    expect(await stateOf('loc_old')).toEqual(UNPLACED)
+  })
+
+  // The planner judges where a ref will stand by the same one-field rule as the walk: a top-level
+  // mark the user set on a place a reversal unplaced keeps it top-level, and plans no clear.
+  it('keeps a top-level mark the user set after a reversal unplaced the place', async () => {
+    await act('act_r', create('loc_r', null, 'periodic_classifier'))
+    await act('act_v', create('loc_v', 'loc_r', 'user_edit'))
+    await act('act_s', create('loc_s', null, 'periodic_classifier'))
+    await act('act_m', {
+      kind: 'updateEntity',
+      source: 'periodic_classifier',
+      payload: { branchId: 'b1', id: 'loc_v', patch: { state: { parent_location_id: 'loc_s' } } },
+    })
+    await reverse(await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf('act_s') }))
+    expect(await stateOf('loc_v')).toEqual(UNPLACED)
+    await act('act_top', move('loc_v', null))
+
+    const set = await selectReversalSet(ctx, {
+      branchId: 'b1',
+      target: await deltasOf('act_r', 'act_m'),
+    })
+
+    expect(clears(set)).toEqual([])
+    await reverse(set)
+    expect(await entityIds()).toEqual(['loc_quarter', 'loc_v'])
+    expect(await stateOf('loc_v')).toEqual({ parent_location_id: null })
   })
 })

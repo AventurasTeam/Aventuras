@@ -1682,8 +1682,10 @@ before the undo, the parent of each place and the faction of each
 character the reversal clears when the named row's `create` is among
 the first two, and redo puts that field alone back with the named row,
 over the row's `state` as the undo left it, logging nothing, as the
-clear did. A row the snapshot restores whole gets the field back with
-its row. A row whose reference only a sweep's row removes would stay
+clear did; a parent put back clears the place's `unplaced` mark, so the
+mark never sits beside a parent. A row the snapshot restores whole gets
+the field back with its row. A row whose reference only a sweep's row
+removes would stay
 cleared; that is a guard, since no sweep holds an entity create today. Every
 delta-logged write clears the redo stack, so redo always meets the
 state its undo left.

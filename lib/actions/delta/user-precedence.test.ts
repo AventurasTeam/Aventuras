@@ -1,7 +1,14 @@
 import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
-import { branches, characterRelationships, entities, stories, type NewEntity } from '@/lib/db'
+import {
+  branches,
+  characterRelationships,
+  entities,
+  stories,
+  type Delta,
+  type NewEntity,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { characterRelationshipsStore, entitiesStore, entriesStore } from '@/lib/stores'
 
@@ -17,6 +24,7 @@ import {
   userDeletedPairSince,
   userEditsSince,
   wroteColumn,
+  wroteField,
   wrotePlacement,
 } from './user-precedence'
 
@@ -192,6 +200,30 @@ describe('wrotePlacement', () => {
     expect(wrotePlacement([parent])).toBe(true)
     expect(wrotePlacement([condition, parent])).toBe(true)
     expect(wrotePlacement([])).toBe(false)
+  })
+})
+
+// cadence.md → User edits and classifier writes: a place's parent and its unplaced mark are one
+// field, so a reversal never restores one beside the other.
+describe('wroteField', () => {
+  const update = (undoPayload: Record<string, unknown>) => ({ op: 'update', undoPayload }) as Delta
+  const markedTop = [update({ state: { unplaced: true } })]
+  const moved = [update({ state: { parent_location_id: 'loc_old' } })]
+
+  it.each([['parent_location_id'], ['unplaced']])(
+    "reads a user write to either half of a place's placement as a write to %s",
+    (key) => {
+      expect(wroteField(markedTop, 'entities', 'state', [key])).toBe(true)
+      expect(wroteField(moved, 'entities', 'state', [key])).toBe(true)
+    },
+  )
+
+  it('judges every other path as wrotePath does', () => {
+    const conditioned = [update({ state: { condition: 'dry' } })]
+    expect(wroteField(conditioned, 'entities', 'state', ['parent_location_id'])).toBe(false)
+    expect(wroteField(conditioned, 'entities', 'state', ['condition'])).toBe(true)
+    expect(wroteField(moved, 'entities', 'state', ['faction_id'])).toBe(false)
+    expect(wroteField(markedTop, 'other_table', 'state', ['parent_location_id'])).toBe(false)
   })
 })
 

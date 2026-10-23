@@ -11,6 +11,7 @@ import {
   DeltaReplayError,
   ReversalIntegrityError,
   reverseAndPruneDeltaRows,
+  stateWithRef,
 } from './reverse-replay'
 import type { RefClear, ReversalSet, RowRef } from './row-closure'
 import { deltaLockKeys } from './row-locks'
@@ -212,7 +213,7 @@ function withoutDeadRefs(
   let out = row
   for (const { ref, id } of pathRefIds(table, row)) {
     if (id === null || !dead.has(heldKey(ref.refTable, id))) continue
-    out = { ...out, [ref.column]: { ...(out[ref.column] as object), [ref.path]: null } }
+    out = { ...out, [ref.column]: stateWithRef(out[ref.column], ref, null) }
   }
   return out
 }
@@ -280,7 +281,7 @@ async function applyRedoLocked(
     if (!current) continue
     const id =
       idBeforeUndo !== null && dead.has(heldKey(ref.refTable, idBeforeUndo)) ? null : idBeforeUndo
-    const columns = { [ref.column]: { ...(current[ref.column] as object), [ref.path]: id } }
+    const columns = { [ref.column]: stateWithRef(current[ref.column], ref, id) }
     ops.push(
       ctx.db
         .update(entry.descriptor.table)
