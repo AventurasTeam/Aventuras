@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { branches, deltas, stories, type ClassifierStatus } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
@@ -24,13 +25,14 @@ async function seedDelta(
   db: Awaited<ReturnType<typeof createTestDb>>['db'],
   branchId: string,
   actionId: string,
+  logPosition = 1,
 ) {
   await db.insert(deltas).values({
     id: `d_${branchId}_${actionId}`,
     branchId,
     entryId: null,
     actionId,
-    logPosition: 1,
+    logPosition,
     source: 'ai_classifier',
     targetTable: 'happenings',
     targetId: 'hap_1',
@@ -96,7 +98,7 @@ describe('resetStuckClassifierRunState', () => {
     expect(await readStatus(db, 'b-null')).toBeNull()
   })
 
-  it('leaves a branch holding an unreversed orphan running, reconciling its peers', async () => {
+  it("leaves a branch holding the pass's unreversed orphan running, reconciling its peers", async () => {
     const { db, runInTransaction } = await createTestDb()
     await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
     const running: ClassifierStatus = {
@@ -112,10 +114,53 @@ describe('resetStuckClassifierRunState', () => {
     // so its surviving deltas must not quarantine it.
     await seedDelta(db, 'b-clean', 'act_reversed')
 
-    await resetStuckClassifierRunState({ db, runInTransaction }, ['act_failed'])
+    await resetStuckClassifierRunState({ db, runInTransaction }, [
+      { kind: PERIODIC_CLASSIFIER_KIND, actionId: 'act_failed' },
+    ])
 
     expect(await readStatus(db, 'b-hazard')).toEqual(running)
     expect(await readStatus(db, 'b-clean')).toEqual({ ...running, state: 'idle' })
+  })
+
+  // generation-pipeline.md → Recovery-failure policy: only a pass's failure promises a stop.
+  it("frees a branch whose only surviving orphan is another kind's", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    const running: ClassifierStatus = {
+      state: 'running',
+      lastSuccessAt: null,
+      lastError: null,
+      processedThrough: 4,
+    }
+    await seed(db, 'b1', running)
+    await seedDelta(db, 'b1', 'act_turn')
+
+    await resetStuckClassifierRunState({ db, runInTransaction }, [
+      { kind: 'per-turn', actionId: 'act_turn' },
+    ])
+
+    expect(await readStatus(db, 'b1')).toEqual({ ...running, state: 'idle' })
+  })
+
+  it("holds a branch carrying both a turn's and the pass's surviving orphans", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    const running: ClassifierStatus = {
+      state: 'running',
+      lastSuccessAt: null,
+      lastError: null,
+      processedThrough: 4,
+    }
+    await seed(db, 'b1', running)
+    await seedDelta(db, 'b1', 'act_turn', 1)
+    await seedDelta(db, 'b1', 'act_pass', 2)
+
+    await resetStuckClassifierRunState({ db, runInTransaction }, [
+      { kind: 'per-turn', actionId: 'act_turn' },
+      { kind: PERIODIC_CLASSIFIER_KIND, actionId: 'act_pass' },
+    ])
+
+    expect(await readStatus(db, 'b1')).toEqual(running)
   })
 
   it('reconciles a failed orphan that left no deltas behind', async () => {
@@ -129,7 +174,9 @@ describe('resetStuckClassifierRunState', () => {
     }
     await seed(db, 'b1', running)
 
-    await resetStuckClassifierRunState({ db, runInTransaction }, ['act_no_deltas'])
+    await resetStuckClassifierRunState({ db, runInTransaction }, [
+      { kind: PERIODIC_CLASSIFIER_KIND, actionId: 'act_no_deltas' },
+    ])
 
     expect(await readStatus(db, 'b1')).toEqual({ ...running, state: 'idle' })
   })

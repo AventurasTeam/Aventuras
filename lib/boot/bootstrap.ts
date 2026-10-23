@@ -109,10 +109,7 @@ export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
   // orphans reversed; with no report at all, none of them are.
   if (recovery !== null) {
     try {
-      await resetStuckClassifierRunState(
-        ctx,
-        recovery.failures.map((f) => f.actionId),
-      )
+      await resetStuckClassifierRunState(ctx, recovery.failures)
     } catch (err) {
       logger.error('bootstrap.classifier_running_reset_failed', {
         error: err instanceof Error ? err.message : String(err),
