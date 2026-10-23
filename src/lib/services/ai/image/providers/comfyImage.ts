@@ -8,6 +8,7 @@ import type { ImageModelV4, ImageModelV4CallOptions } from '@ai-sdk/provider'
 import type { Fetch } from '#lib/services/ai/sdk/providers/index.ts'
 import { abortable, sleep } from '#lib/utils/async.ts'
 import { errMessage } from '#lib/utils/error.ts'
+import { sha256Hex } from '#lib/utils/hash.ts'
 import { base64ToBytes, parseImageSize } from '#lib/utils/image.ts'
 import {
   definedHeaders,
@@ -109,11 +110,6 @@ const UPLOAD_SUBFOLDER = 'aventuras'
 type ReferenceFile = NonNullable<ImageModelV4CallOptions['files']>[number]
 
 const fileExtension = (mediaType: string): string => /^image\/(\w+)/.exec(mediaType)?.[1] ?? 'png'
-
-async function sha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', bytes)
-  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('')
-}
 
 // A model is created per generation, so concurrent generations share their pending uploads here.
 const uploadsInFlight = new Map<string, { upload: Promise<string>; signal?: AbortSignal }>()
