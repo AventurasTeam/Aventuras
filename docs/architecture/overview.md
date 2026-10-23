@@ -141,10 +141,6 @@ path above: a busy or dirty sheet closes and comes back, asking when it is dirty
 Sheets open and close in 180ms, set in `app.css` over `vaul`'s 0.5s animation. Only the open and
 close animations change; a drag's settle keeps `vaul`'s timing, which the guard copies.
 
-A nested sheet (`Drawer.NestedRoot`, through `ActionModal`'s `nested`) finds its parent through
-`vaul`'s Svelte context, which throws when there is none. It has to be rendered inside the parent
-modal's content.
-
 ## The soft keyboard
 
 `MainActivity` calls `enableEdgeToEdge()`, which sets `decorFitsSystemWindows = false` and with it
@@ -203,8 +199,9 @@ Two controls that do the same thing make the reader wonder how they differ, and 
 confirming action is the clearer of the two wherever the dialog asks for a decision. Such a dialog
 passes `closeButton={false}` to `ResponsiveModal.Header`; the X stays for dialogs that only show
 something and have no action to cancel. The rule is about controls drawn on the dialog, not the
-platform's own gestures: on a phone the dialog is a drawer, and swiping it down stays available
-whenever Cancel is (`dismissible`), so it is withheld only while a write is in flight.
+platform's own gestures: where a dialog is a sheet on a phone, swiping it down stays available
+whenever Cancel is (`dismissible`), so it is withheld only while a write is in flight. Which
+dialogs are sheets on a phone is in [ui-components.md](../development/ui-components.md).
 
 ## Data Model
 

@@ -763,7 +763,6 @@
 
 <ActionModal
   bind:open={showBackupConfirm}
-  nested
   title="Backup Contains Sensitive Data"
   titleIcon={warning}
   action={{ label: 'Continue', icon: Download, onConfirm: handleBackupConfirmed }}
@@ -784,7 +783,6 @@
 
 <ActionModal
   bind:open={showRestoreConfirm}
-  nested
   title="Restore from Backup"
   titleIcon={warning}
   action={{

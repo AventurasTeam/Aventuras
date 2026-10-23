@@ -153,6 +153,7 @@
 
 <!-- Modal: the story must not change while the checkpoint is described and taken. -->
 <ActionModal
+  presentation="sheet"
   open={entry !== null}
   onCancel={cancel}
   title="Create checkpoint"

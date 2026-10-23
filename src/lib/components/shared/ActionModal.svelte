@@ -62,8 +62,8 @@
     dirty?: boolean
     discardQuestion?: Question
     size?: 'md' | 'lg'
-    /** Opened from inside another modal. */
-    nested?: boolean
+    /** A tool is a sheet on a phone; a command stays a dialog. See the catalog. */
+    presentation?: 'sheet' | 'dialog'
   }
 
   let {
@@ -86,7 +86,7 @@
       description: 'What you have entered here will be lost.',
     },
     size = 'md',
-    nested = false,
+    presentation = 'dialog',
   }: Props = $props()
 
   setTextareaUncapped()
@@ -205,11 +205,16 @@
   <ResponsiveModal.Root
     bind:open={sheetOpen}
     dismissible={!locked}
-    {nested}
+    sheet={presentation === 'sheet'}
     onOpenChange={handleOpenChange}
   >
     <ResponsiveModal.Content
-      class={cn('flex max-h-[85dvh] flex-col gap-0 p-0', size === 'lg' ? 'max-w-lg' : 'max-w-md')}
+      class={cn(
+        'flex max-h-[85dvh] flex-col gap-0 p-0',
+        size === 'lg' ? 'max-w-lg' : 'max-w-md',
+        // Inset from a phone's edges, where the dialog would otherwise run full width.
+        presentation === 'dialog' && 'w-[calc(100%-2rem)] rounded-lg',
+      )}
       onInteractOutside={(e: PointerEvent) => {
         e.preventDefault()
         request('outside')

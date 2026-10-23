@@ -131,6 +131,7 @@
 </script>
 
 <ActionModal
+  presentation="sheet"
   bind:open
   size="lg"
   title={existing ? 'Edit a reconciliation anchor' : 'Create a reconciliation anchor'}

@@ -16,8 +16,9 @@ rest:
   Below it, one scroller holds the body and the two buttons, so the action is reached by reading
   down to it. The header stays pinned. Nothing inside scrolls on its own: an autosizing `Textarea`
   in the body drops its height cap and lets the modal scroll.
-- **Phone.** Below 768px the modal is a bottom sheet with a handle. Only the handle drags; the
-  content scrolls.
+- **Phone.** Below 768px a tool is a bottom sheet with a handle, and a command is a centred dialog
+  inset from the screen's edges (see below). In a sheet, only the handle drags; the content
+  scrolls.
 - **Buttons.** An outlined Cancel and the action, side by side on a phone and at the trailing edge
   on desktop. The action's icon turns into a spinner while it runs.
 - **Ways out.** Cancel, Escape, a click outside and the handle (drag or tap) all go through one
@@ -38,8 +39,8 @@ rest:
 | `cancelLabel`              | only when Cancel ends more than the modal: "Cancel import"                      |
 | `titleIcon`                | only for a confirmation that warns, like the backup and restore ones            |
 | `removal`                  | removing the thing the modal edits; see below                                   |
-| `nested`                   | opened from inside another modal; see below                                     |
 | `size`                     | `md` (the default) or `lg`                                                      |
+| `presentation`             | `sheet` for a tool; the default `dialog` for a command; see below               |
 
 ### When to pass `dirty`
 
@@ -71,11 +72,27 @@ question when there is something to lose, or by the busy lock while the action r
 scrolls with the content and is read after what it would remove. It asks inside the modal before
 running. Use it only to remove the thing the modal edits, never as a general third action.
 
-### A modal inside another modal
+### Sheet or dialog
 
-`nested` makes the phone sheet a `vaul` nested sheet, which stacks on its parent's. `vaul` finds
-the parent through Svelte context, so the nested modal must be rendered inside the parent modal's
-content, not beside it.
+On a phone, a **tool** is a sheet and a **command** is a dialog. Pass `presentation="sheet"` for a
+tool; a command keeps the default.
+
+- **A tool** works on something the user opened it for: it edits an object's fields (the story
+  edit dialog, Edit the recorded time, the anchor editor), picks from a list (Manual chapter), or
+  creates a branch or a checkpoint.
+- **A command** asks for a decision: it confirms an operation, warns before one, resolves a
+  question the app raised in the middle of a flow, or takes a single value.
+
+A bottom sheet reads as more of the page it rises from, so it suits controls tied to that content,
+and it is dismissed casually. A centred dialog reads as "answer this". A confirmation in a sheet
+looks like a tool, and a tool in a small centred box crowds its fields.
+
+Create branch and Create checkpoint read as commands (a name, then an operation), but are sheets so
+that a later sheet of entry actions on a phone can host their forms as steps.
+
+**Sheets never stack.** A modal opened from inside another modal, such as a confirmation in
+Settings or the pack question during a sync, is a dialog whatever its kind. A sheet on a sheet
+leaves the user unsure which swipe closes what.
 
 ### Anomaly handlers
 

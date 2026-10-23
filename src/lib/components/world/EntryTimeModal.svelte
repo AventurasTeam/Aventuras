@@ -100,6 +100,7 @@
 {/snippet}
 
 <ActionModal
+  presentation="sheet"
   bind:open
   size="lg"
   title="Edit the recorded time"

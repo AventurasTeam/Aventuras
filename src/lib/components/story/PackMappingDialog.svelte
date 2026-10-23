@@ -32,11 +32,9 @@
     onlyVariables?: string[]
     /** Resolves once, with the user's choice or `null` if they backed out. */
     onResolve: (resolution: PackBindingResolution | null) => void
-    /** Opened from inside another modal, as during a sync. */
-    nested?: boolean
   }
 
-  let { context, lockedPack, onlyVariables, onResolve, nested = false }: Props = $props()
+  let { context, lockedPack, onlyVariables, onResolve }: Props = $props()
 
   let open = $state(true)
   let availablePacks = $state<PresetPack[]>([])
@@ -126,7 +124,6 @@
 <ActionModal
   {open}
   onCancel={cancel}
-  {nested}
   size="lg"
   title={lockedPack ? 'One more thing for this story' : 'Prompt Pack for this story'}
   action={{ label: 'Import story', disabled: loading, onConfirm: confirm }}

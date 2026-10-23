@@ -419,7 +419,6 @@
     customModelDialogError = ''
     customModelDialogInput = ''
   }}
-  nested
   title="Add Custom Model"
   description="Enter the model identifier (e.g., provider/model-name)"
   action={{

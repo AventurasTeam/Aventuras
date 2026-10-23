@@ -45,6 +45,7 @@
 </script>
 
 <ActionModal
+  presentation="sheet"
   open={true}
   onCancel={onClose}
   title="Create Chapter"
