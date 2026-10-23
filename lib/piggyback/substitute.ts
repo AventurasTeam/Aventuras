@@ -1,5 +1,6 @@
 import type { Entity } from '@/lib/db'
 import { MalformedPlaceholderError, type IdBiMap } from '@/lib/ids'
+import { TOP_LEVEL } from '@/lib/world'
 
 import { isCreateHandle, unwrapBracket } from './tags'
 import type {
@@ -75,9 +76,14 @@ function kindOf(resolved: string, refs: Refs): EntityKind | null {
   return refs.handles.get(resolved) ?? refs.kinds.get(resolved) ?? null
 }
 
-// Lenient: the planner drops a parent it can't resolve to the root rather than failing the turn.
+// piggyback.md → Parent: the token a tag or the fallback's JSON gives for a top-level place.
+const PARENT_TOP = 'top'
+
+// Lenient: the planner leaves a place unplaced for a parent it can't resolve rather than failing
+// the turn.
 function resolveParent(ref: string, idMap: IdBiMap): string {
   const bare = unwrapBracket(ref)
+  if (bare.toLowerCase() === PARENT_TOP) return TOP_LEVEL
   if (isCreateHandle(bare)) return bare
   return idMap.getUuidFor(bare) ?? ref
 }

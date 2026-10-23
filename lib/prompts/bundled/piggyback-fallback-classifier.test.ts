@@ -28,6 +28,9 @@ const PLACE_RULE =
   "Create a place only when the scene settles somewhere with its own identity the story could come back to: a named place, a building, a room that matters, a stretch of wild land where things happen. Don't create one for passing through (a corridor, a doorway, the road between two places); keep the current location then. Use an existing place's ID whenever the scene is somewhere already in Places, and nest a new place under the place it's part of."
 const ITEM_RULE =
   'Create an item only when a character takes, receives or is given something that matters beyond this moment: a weapon, a key, a letter, a relic. Not food eaten on the spot, not money (use a stackable), not scenery.'
+// piggyback.md → Parent, verbatim: when a new place is top-level and when it has no parent.
+const PARENT_RULE =
+  "Set a new place's parent to top only when nothing in Places could contain it, as for the story's first place or a city when Places holds only cities. Leave its parent out when something in Places could contain it and the prose doesn't say which; when unsure, leave it out."
 
 const KAEL = makeEntity({
   id: 'c1',
@@ -456,6 +459,13 @@ describe('bundled piggyback fallback classifier template', () => {
     ])('carries the significance rules verbatim in %s', (_, source) => {
       expect(source()).toContain(PLACE_RULE)
       expect(source()).toContain(ITEM_RULE)
+    })
+
+    it.each([
+      ['the fallback prompt', () => render(context())],
+      ['the tagged-block macro', () => STATE_EMISSION],
+    ])('carries the parent rule verbatim in %s', (_, source) => {
+      expect(source()).toContain(PARENT_RULE)
     })
   })
 

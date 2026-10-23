@@ -599,7 +599,7 @@ describe('creation tags', () => {
   // piggyback.md → Creating a place or an item, verbatim.
   const CANON = `The fog lifted.
 <state>
-  <new_location handle="new:saltmere" name="Saltmere">a fishing town under chalk cliffs</new_location>
+  <new_location handle="new:saltmere" parent="top" name="Saltmere">a fishing town under chalk cliffs</new_location>
   <new_location handle="new:docks" parent="new:saltmere" name="the Smuggler's Docks">a rotting pier below the eastern cliffs</new_location>
   <current_location>new:docks</current_location>
   <new_item handle="new:key" name="rusted key">an iron key, flaked with rust</new_item>
@@ -620,6 +620,7 @@ describe('creation tags', () => {
           handle: 'new:saltmere',
           name: 'Saltmere',
           description: 'a fishing town under chalk cliffs',
+          parent: 'top',
         },
         {
           handle: 'new:docks',

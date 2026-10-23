@@ -2527,6 +2527,68 @@ describe('per-turn-piggyback', () => {
       ])
     })
 
+    // data-model.md → LocationState shape: the fallback reuses and places an unplaced namesake too.
+    it('places a reused unplaced place right after the creates, before the metadata', async () => {
+      const DOCKS_ROW = 'loc_00000000-0000-4000-8000-0000000000a3'
+      seedFallbackTurn([
+        ...fallbackWorld(),
+        worldRow({
+          id: DOCKS_ROW,
+          kind: 'location',
+          name: 'Smuggler Docks',
+          state: { parent_location_id: null, unplaced: true },
+        }),
+      ])
+      const { events } = await runFallback(docksAndKey())
+      expect(events.flatMap((e) => (e.type === 'delta_emitted' ? [e.action.kind] : []))).toEqual([
+        'createEntity',
+        'placeLocation',
+        'updateStoryEntryMetadata',
+        'updateEntityLocationTracking',
+        'updateEntityInventory',
+      ])
+      expect(events).toContainEqual({
+        type: 'delta_emitted',
+        action: {
+          kind: 'placeLocation',
+          source: 'per_turn_classifier',
+          payload: {
+            branchId: 'b1',
+            id: DOCKS_ROW,
+            placement: { kind: 'under', parentId: TOWN },
+            proseEntryId: null,
+          },
+        },
+      })
+      expect(metadataPatch(events).currentLocationId).toBe(DOCKS_ROW)
+    })
+
+    it('creates a place whose parent is "top" at the top level', async () => {
+      seedFallbackTurn()
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          newLocations: [
+            { handle: 'new:isle', name: 'Gull Isle', description: 'a bare rock', parent: 'top' },
+          ],
+          currentLocation: 'new:isle',
+          worldTimeDelta: 30,
+        }),
+      )
+      const [isle] = createdEntries(events)
+      expect(isle?.state).toEqual({ parent_location_id: null })
+      expect(metadataPatch(events).stateReport?.newLocations).toEqual([
+        {
+          handle: 'new:isle',
+          name: 'Gull Isle',
+          description: 'a bare rock',
+          parent: 'top',
+          outcome: 'created',
+          id: isle?.id,
+        },
+      ])
+    })
+
     // piggyback.md → Matching before creating: reuse goes by the map this prompt showed. Around
     // Saltmere, disabled but the scene's, the market hangs under it, so a top-level namesake is new.
     it('matches against the map built around the scene this prompt read', async () => {
@@ -2540,7 +2602,9 @@ describe('per-turn-piggyback', () => {
       const { events } = await runFallback(
         fallbackClassifierSchema.parse({
           sceneEntities: ['c1'],
-          newLocations: [{ handle: 'new:market', name: 'The Drowned Market', description: 'mud' }],
+          newLocations: [
+            { handle: 'new:market', name: 'The Drowned Market', description: 'mud', parent: 'top' },
+          ],
           currentLocation: 'new:market',
           worldTimeDelta: 30,
         }),
@@ -2962,7 +3026,7 @@ describe('per-turn-piggyback', () => {
     })
 
     // JSON's way to say "none"; a schema that rejected it would fail the whole reply.
-    it('reads a null parent as none, creating the place at the root', async () => {
+    it('reads a null parent as none, leaving the place unplaced', async () => {
       seedFallbackTurn()
       const { events } = await runFallback(
         fallbackClassifierSchema.parse({
@@ -2977,7 +3041,8 @@ describe('per-turn-piggyback', () => {
       )
       const [isle] = createdEntries(events)
       if (!isle) throw new Error('expected a location create')
-      expect(isle).toMatchObject({ name: 'Gull Isle', state: { parent_location_id: null } })
+      expect(isle).toMatchObject({ name: 'Gull Isle' })
+      expect(isle.state).toEqual({ parent_location_id: null, unplaced: true })
       const patch = metadataPatch(events)
       expect(patch).toMatchObject({
         sceneEntities: [HERO],
@@ -3295,6 +3360,11 @@ describe('per-turn-piggyback', () => {
         'when Places lists it',
       ],
       [
+        'newLocations[].parent top',
+        ['newLocations', '[]', 'parent'],
+        '"top" only when nothing in Places could contain it',
+      ],
+      [
         'newItems',
         ['newItems'],
         'the last transfers.items entry naming it gives it to a character',
@@ -3536,6 +3606,7 @@ describe("fallbackClassifierSchema — the emission prompt's rules", () => {
     "exactly as the holder's Stackables line shows it",
     "only for something they don't hold yet",
     'never more than the payer holds',
+    'only when nothing in Places could contain it',
   ])('says "%s" in both', (rule) => {
     expect(emission).toContain(rule)
     expect(json).toContain(rule.replaceAll('"', '\\"'))

@@ -9,6 +9,10 @@ import { renderTemplate, TEMPLATE_IDS } from '../index'
 const PLACES_INSTRUCTION =
   'Use an ID from Places for <current_location>, or declare a new one with <new_location> in the state block below when the scene settles somewhere new.'
 
+// piggyback.md → Parent, verbatim in both writers' prompts.
+const PARENT_RULE =
+  "Set a new place's parent to top only when nothing in Places could contain it, as for the story's first place or a city when Places holds only cities. Leave its parent out when something in Places could contain it and the prose doesn't say which; when unsure, leave it out."
+
 // M2-shaped context: opening + a couple of entries, one entity, empty genre /
 // tone / setting (M2 stories carry these empty until M3.6).
 const m2Context = {
@@ -910,6 +914,12 @@ describe('bundled per-turn template — create instructions', () => {
     expect(rendered).not.toContain('describe it in prose only')
   })
 
+  it('offers top as a parent and says when to give it', () => {
+    expect(rendered).toContain('parent="the ID or handle of the place it is part of, or top"')
+    expect(rendered).toContain(PARENT_RULE)
+    expect(rendered).not.toContain('leave out for a top-level place')
+  })
+
   it('leaves the create instructions out when piggyback does not fire', () => {
     const off = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
@@ -917,6 +927,7 @@ describe('bundled per-turn template — create instructions', () => {
     }).user
     expect(off).not.toContain('<new_location')
     expect(off).not.toContain('Create a place only when')
+    expect(off).not.toContain('could contain it')
     expect(off).not.toContain('&quot;')
   })
 })

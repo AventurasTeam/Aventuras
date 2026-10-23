@@ -23,6 +23,13 @@ const LOOP_B = 'loc_00000000-0000-4000-8000-0000000000a5'
 const OLD_KEY = 'item_00000000-0000-4000-8000-0000000000b1'
 const BLANK_KEY = 'item_00000000-0000-4000-8000-0000000000b2'
 const IRON_KEY = 'item_00000000-0000-4000-8000-0000000000b3'
+const VARN = 'loc_00000000-0000-4000-8000-0000000000a6'
+const VARN_DOCKS = 'loc_00000000-0000-4000-8000-0000000000a7'
+const ASH = 'loc_00000000-0000-4000-8000-0000000000a8'
+const BIRCH = 'loc_00000000-0000-4000-8000-0000000000a9'
+const DROWNED = 'loc_00000000-0000-4000-8000-0000000000aa'
+// data-model.md → LocationState shape: known to exist, not where.
+const UNPLACED = { parent_location_id: null, unplaced: true }
 
 function row(over: Pick<Entity, 'id' | 'kind' | 'name'> & Partial<Entity>): Entity {
   return {
@@ -62,6 +69,9 @@ const market = (status: Entity['status']): Entity =>
     status,
     state: { parent_location_id: PORT },
   })
+
+const unplacedPlace = (id: string, name: string, over: Partial<Entity> = {}): Entity =>
+  row({ id, kind: 'location', name, state: { parent_location_id: null, unplaced: true }, ...over })
 
 const oldKey = (): Entity =>
   row({ id: OLD_KEY, kind: 'item', name: 'rusted key', description: 'an iron key' })
@@ -117,6 +127,7 @@ describe('planTurnCreates — kept only if used', () => {
     expect(plan.creates).toEqual([])
     expect(plan.createdRows).toEqual([])
     expect(plan.reusedIds).toEqual([])
+    expect(plan.placements).toEqual([])
     expect(plan.report).toEqual({ newLocations: [], newItems: [] })
   })
 
@@ -156,12 +167,13 @@ describe('planTurnCreates — kept only if used', () => {
     ])
   })
 
-  it('puts a new place with no parent at the root', async () => {
+  it('leaves a new place with no parent unplaced, reporting none', async () => {
     const plan = await runPlanner({
       newLocations: [{ handle: 'new:isle', name: 'Gull Isle', description: 'a bare rock' }],
       currentLocation: 'new:isle',
     })
-    expect(createdEntries(plan.creates)[0]?.state).toEqual({ parent_location_id: null })
+    expect(createdEntries(plan.creates)[0]?.state).toEqual(UNPLACED)
+    expect(plan.placements).toEqual([])
     expect(plan.report.newLocations).toEqual([
       {
         handle: 'new:isle',
@@ -171,6 +183,28 @@ describe('planTurnCreates — kept only if used', () => {
         id: 'loc_new_1',
       },
     ])
+  })
+
+  it("puts a new place whose parent is top at the top level, reporting 'top'", async () => {
+    const warnSpy = vi.spyOn(logger, 'warn')
+    const plan = await runPlanner({
+      newLocations: [
+        { handle: 'new:isle', name: 'Gull Isle', description: 'a bare rock', parent: 'top' },
+      ],
+      currentLocation: 'new:isle',
+    })
+    expect(createdEntries(plan.creates)[0]?.state).toEqual({ parent_location_id: null })
+    expect(plan.report.newLocations).toEqual([
+      {
+        handle: 'new:isle',
+        name: 'Gull Isle',
+        description: 'a bare rock',
+        parent: 'top',
+        outcome: 'created',
+        id: 'loc_new_1',
+      },
+    ])
+    expect(warnSpy).not.toHaveBeenCalledWith('classifier.create_parent_dropped', expect.anything())
   })
 
   it('keeps the places the current location is part of and drops the rest where they stand', async () => {
@@ -362,7 +396,7 @@ describe('planTurnCreates — parents', () => {
     ['a character', HERO],
     ['an undeclared handle', 'new:ghost'],
     ['an id the prompt never showed', 'l99'],
-  ])('drops a parent that is %s to the root, logged', async (_case, parent) => {
+  ])('drops a parent that is %s, leaving the place unplaced, logged', async (_case, parent) => {
     const warnSpy = vi.spyOn(logger, 'warn')
     const plan = await runPlanner({
       newLocations: [
@@ -370,7 +404,7 @@ describe('planTurnCreates — parents', () => {
       ],
       currentLocation: 'new:docks',
     })
-    expect(createdEntries(plan.creates)[0]?.state).toEqual({ parent_location_id: null })
+    expect(createdEntries(plan.creates)[0]?.state).toEqual(UNPLACED)
     expect(plan.report.newLocations).toEqual([
       {
         handle: 'new:docks',
@@ -389,7 +423,7 @@ describe('planTurnCreates — parents', () => {
     })
   })
 
-  it('drops both sides of a handle cycle to the root', async () => {
+  it('leaves both sides of a handle cycle unplaced', async () => {
     const plan = await runPlanner({
       newLocations: [
         { handle: 'new:upper', name: 'Upper Hall', description: 'a gallery', parent: 'new:lower' },
@@ -398,8 +432,8 @@ describe('planTurnCreates — parents', () => {
       currentLocation: 'new:upper',
     })
     expect(createdEntries(plan.creates).map((e) => [e.id, e.state])).toEqual([
-      ['loc_new_1', { parent_location_id: null }],
-      ['loc_new_2', { parent_location_id: null }],
+      ['loc_new_1', UNPLACED],
+      ['loc_new_2', UNPLACED],
     ])
     expect(plan.report.newLocations.map((r) => [r.parent, dropFlag(r)])).toEqual([
       ['new:lower', true],
@@ -410,7 +444,7 @@ describe('planTurnCreates — parents', () => {
 
   // A broken cycle check spins the synchronous settle loop forever; budgeting the parent read
   // turns that hang into a failure.
-  it('drops a place that names itself as parent to the root', async () => {
+  it('leaves a place that names itself as parent unplaced', async () => {
     let reads = 0
     const hall = {
       handle: 'new:hall',
@@ -424,7 +458,7 @@ describe('planTurnCreates — parents', () => {
     }
     const plan = await runPlanner({ newLocations: [hall], currentLocation: 'new:hall' })
     expect(createdEntries(plan.creates).map((e) => [e.id, e.state])).toEqual([
-      ['loc_new_1', { parent_location_id: null }],
+      ['loc_new_1', UNPLACED],
     ])
     expect(plan.report.newLocations).toEqual([
       {
@@ -455,7 +489,7 @@ describe('planTurnCreates — parents', () => {
       currentLocation: 'new:docks',
     })
     expect(createdEntries(plan.creates).map((e) => [e.name, e.state])).toEqual([
-      ['Saltmere', { parent_location_id: null }],
+      ['Saltmere', UNPLACED],
       ['Smuggler Docks', { parent_location_id: 'loc_new_1' }],
     ])
     expect(plan.report.newLocations.map((r) => [r.handle, r.parent, dropFlag(r)])).toEqual([
@@ -464,7 +498,7 @@ describe('planTurnCreates — parents', () => {
     ])
   })
 
-  it('hangs a place under a cycle member once the cycle drops to the root', async () => {
+  it('hangs a place under a cycle member once the cycle is left unplaced', async () => {
     const plan = await runPlanner({
       newLocations: [
         { handle: 'new:cellar', name: 'Cellar', description: 'damp', parent: 'new:upper' },
@@ -474,14 +508,14 @@ describe('planTurnCreates — parents', () => {
       currentLocation: 'new:cellar',
     })
     expect(createdEntries(plan.creates).map((e) => [e.id, e.name, e.state])).toEqual([
-      ['loc_new_1', 'Upper Hall', { parent_location_id: null }],
-      ['loc_new_2', 'Lower Hall', { parent_location_id: null }],
+      ['loc_new_1', 'Upper Hall', UNPLACED],
+      ['loc_new_2', 'Lower Hall', UNPLACED],
       ['loc_new_3', 'Cellar', { parent_location_id: 'loc_new_1' }],
     ])
     expect(plan.report.newLocations.map(dropFlag)).toEqual([undefined, true, true])
   })
 
-  it("creates at the root when the parent's stored chain loops", async () => {
+  it("creates the place unplaced when the parent's stored chain loops", async () => {
     const warnSpy = vi.spyOn(logger, 'warn')
     const plan = await runPlanner(
       {
@@ -507,7 +541,7 @@ describe('planTurnCreates — parents', () => {
         ),
       },
     )
-    expect(createdEntries(plan.creates)[0]?.state).toEqual({ parent_location_id: null })
+    expect(createdEntries(plan.creates)[0]?.state).toEqual(UNPLACED)
     expect(plan.report.newLocations[0]).toMatchObject({ parent: LOOP_A, parentDropped: true })
     expect(warnSpy).toHaveBeenCalledWith('classifier.create_parent_dropped', {
       handle: 'new:cellar',
@@ -520,7 +554,7 @@ describe('planTurnCreates — parents', () => {
 describe('planTurnCreates — a retired parent', () => {
   // piggyback.md → Creating a place or an item: a place pinned `always` can put a retired place in
   // the prompt with its id, and nothing active may sit inside a retired place.
-  it('creates under a retired parent at the root, logged', async () => {
+  it('creates a place under a retired parent unplaced, logged', async () => {
     const warnSpy = vi.spyOn(logger, 'warn')
     const retiredPort = row({
       id: PORT,
@@ -538,10 +572,241 @@ describe('planTurnCreates — a retired parent', () => {
       },
       { entities: [row({ id: ELDRA, kind: 'location', name: 'Eldra' }), retiredPort] },
     )
-    expect(createdEntries(plan.creates)[0]?.state).toEqual({ parent_location_id: null })
+    expect(createdEntries(plan.creates)[0]?.state).toEqual(UNPLACED)
     expect(plan.report.newLocations[0]).toMatchObject({ parent: PORT, parentDropped: true })
     expect(warnSpy).toHaveBeenCalledWith('classifier.create_parent_dropped', {
       handle: 'new:docks',
+      parent: PORT,
+      cause: 'retired',
+    })
+  })
+})
+
+// data-model.md → LocationState shape: matching takes in unplaced places, and a reuse places one.
+describe('planTurnCreates — unplaced places', () => {
+  const varnCreate = (parent?: string): ParsedStateBlock => ({
+    newLocations: [
+      {
+        handle: 'new:varn',
+        name: 'varn',
+        description: 'a salt town',
+        ...(parent !== undefined ? { parent } : {}),
+      },
+    ],
+    currentLocation: 'new:varn',
+  })
+  const placeVarn = (
+    placement: { kind: 'under'; parentId: string } | { kind: 'top' },
+    source: 'piggyback_tagged_block' | 'per_turn_classifier' = 'piggyback_tagged_block',
+  ) => ({
+    kind: 'placeLocation',
+    source,
+    payload: { branchId: BRANCH, id: VARN, placement, proseEntryId: null },
+  })
+
+  it.each(['piggyback_tagged_block', 'per_turn_classifier'] as const)(
+    'reuses an unplaced namesake of a create under a parent and places it there (%s)',
+    async (source) => {
+      const plan = await runPlanner(varnCreate(ELDRA), {
+        entities: world(unplacedPlace(VARN, 'Varn')),
+        source,
+      })
+      expect(plan.creates).toEqual([])
+      expect(plan.block.currentLocation).toBe(VARN)
+      expect(plan.placements).toEqual([placeVarn({ kind: 'under', parentId: ELDRA }, source)])
+      expect(plan.report.newLocations).toEqual([
+        {
+          handle: 'new:varn',
+          name: 'varn',
+          description: 'a salt town',
+          parent: ELDRA,
+          outcome: 'reused',
+          id: VARN,
+        },
+      ])
+    },
+  )
+
+  it("marks an unplaced namesake of a top-level create top-level, reporting 'top'", async () => {
+    const plan = await runPlanner(varnCreate('top'), {
+      entities: world(unplacedPlace(VARN, 'Varn')),
+    })
+    expect(plan.creates).toEqual([])
+    expect(plan.placements).toEqual([placeVarn({ kind: 'top' })])
+    expect(plan.report.newLocations[0]).toMatchObject({
+      parent: 'top',
+      outcome: 'reused',
+      id: VARN,
+    })
+  })
+
+  it('places a reused unplaced place under a place the same block creates', async () => {
+    const plan = await runPlanner(
+      {
+        newLocations: [
+          {
+            handle: 'new:reach',
+            name: 'the Eastern Reach',
+            description: 'salt flats',
+            parent: ELDRA,
+          },
+          { handle: 'new:varn', name: 'Varn', description: 'a salt town', parent: 'new:reach' },
+        ],
+        currentLocation: 'new:varn',
+      },
+      { entities: world(unplacedPlace(VARN, 'Varn')) },
+    )
+    expect(createdEntries(plan.creates).map((e) => [e.id, e.state])).toEqual([
+      ['loc_new_1', { parent_location_id: ELDRA }],
+    ])
+    expect(plan.placements).toEqual([placeVarn({ kind: 'under', parentId: 'loc_new_1' })])
+  })
+
+  it('collects a reused staged unplaced place for promotion as it places it', async () => {
+    const plan = await runPlanner(varnCreate(ELDRA), {
+      entities: world(unplacedPlace(VARN, 'Varn', { status: 'staged' })),
+    })
+    expect(plan.reusedIds).toEqual([VARN])
+    expect(plan.placements).toHaveLength(1)
+  })
+
+  it('reuses the one exact namesake anywhere for a create with no parent, placing nothing', async () => {
+    const plan = await runPlanner(
+      {
+        newLocations: [{ handle: 'new:market', name: 'the drowned market', description: 'mud' }],
+        currentLocation: 'new:market',
+      },
+      { entities: world(market('active')) },
+    )
+    expect(plan.creates).toEqual([])
+    expect(plan.placements).toEqual([])
+    expect(plan.block.currentLocation).toBe(MARKET)
+    expect(plan.report.newLocations).toEqual([
+      {
+        handle: 'new:market',
+        name: 'the drowned market',
+        description: 'mud',
+        outcome: 'reused',
+        id: MARKET,
+      },
+    ])
+  })
+
+  it('creates a place with no parent unplaced and flagged when several places share its name', async () => {
+    const plan = await runPlanner(
+      {
+        newLocations: [{ handle: 'new:market', name: 'The Drowned Market', description: 'mud' }],
+        currentLocation: 'new:market',
+      },
+      {
+        entities: world(
+          market('active'),
+          unplacedPlace(DROWNED, 'The Drowned Market', { createdAt: 2 }),
+        ),
+      },
+    )
+    expect(createdEntries(plan.creates)).toEqual([
+      expect.objectContaining({
+        state: UNPLACED,
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: DROWNED,
+        nameCollisionReason: 'unplaced',
+      }),
+    ])
+  })
+
+  it('keeps the reuse but drops its placement when the parent lies inside the reused place', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn')
+    const plan = await runPlanner(varnCreate(VARN_DOCKS), {
+      entities: world(
+        unplacedPlace(VARN, 'Varn'),
+        row({
+          id: VARN_DOCKS,
+          kind: 'location',
+          name: 'Varn Docks',
+          state: { parent_location_id: VARN },
+        }),
+      ),
+    })
+    expect(plan.creates).toEqual([])
+    expect(plan.placements).toEqual([])
+    expect(plan.block.currentLocation).toBe(VARN)
+    expect(plan.report.newLocations).toEqual([
+      {
+        handle: 'new:varn',
+        name: 'varn',
+        description: 'a salt town',
+        parent: VARN_DOCKS,
+        outcome: 'reused',
+        id: VARN,
+        parentDropped: true,
+      },
+    ])
+    expect(warnSpy).toHaveBeenCalledWith('classifier.create_parent_dropped', {
+      handle: 'new:varn',
+      parent: VARN_DOCKS,
+      cause: 'cycle',
+    })
+  })
+
+  it('drops a placement that would close a loop through one placed earlier in the block', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn')
+    const plan = await runPlanner(
+      {
+        newLocations: [
+          { handle: 'new:a', name: 'Ash', description: 'a grove', parent: BIRCH },
+          { handle: 'new:b', name: 'Birch', description: 'a copse', parent: 'new:a' },
+        ],
+        currentLocation: 'new:b',
+      },
+      { entities: world(unplacedPlace(ASH, 'Ash'), unplacedPlace(BIRCH, 'Birch')) },
+    )
+    expect(plan.placements).toEqual([
+      {
+        kind: 'placeLocation',
+        source: 'piggyback_tagged_block',
+        payload: {
+          branchId: BRANCH,
+          id: ASH,
+          placement: { kind: 'under', parentId: BIRCH },
+          proseEntryId: null,
+        },
+      },
+    ])
+    expect(plan.report.newLocations.map(dropFlag)).toEqual([undefined, true])
+    expect(warnSpy).toHaveBeenCalledWith('classifier.create_parent_dropped', {
+      handle: 'new:b',
+      parent: ASH,
+      cause: 'cycle',
+    })
+  })
+
+  it('keeps a reused unplaced place unplaced when the parent the create names is retired', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn')
+    const retiredPort = row({
+      id: PORT,
+      kind: 'location',
+      name: 'Port Vellis',
+      status: 'retired',
+      state: { parent_location_id: ELDRA },
+    })
+    const plan = await runPlanner(varnCreate(PORT), {
+      entities: [
+        row({ id: ELDRA, kind: 'location', name: 'Eldra' }),
+        retiredPort,
+        unplacedPlace(VARN, 'Varn'),
+      ],
+    })
+    expect(plan.creates).toEqual([])
+    expect(plan.placements).toEqual([])
+    expect(plan.report.newLocations[0]).toMatchObject({
+      parent: PORT,
+      outcome: 'reused',
+      id: VARN,
+      parentDropped: true,
+    })
+    expect(warnSpy).toHaveBeenCalledWith('classifier.create_parent_dropped', {
+      handle: 'new:varn',
       parent: PORT,
       cause: 'retired',
     })
@@ -912,7 +1177,7 @@ describe('planTurnCreates — rows and order', () => {
         nameCollisionFlag: 0,
         nameCollisionPartnerId: null,
         nameCollisionReason: null,
-        state: { parent_location_id: null },
+        state: UNPLACED,
         tags: [],
         keywords: [],
         priority: 0,
@@ -1014,6 +1279,7 @@ describe('skipTurnCreates', () => {
     expect(plan.creates).toEqual([])
     expect(plan.createdRows).toEqual([])
     expect(plan.reusedIds).toEqual([])
+    expect(plan.placements).toEqual([])
     expect(plan.report).toEqual({
       newLocations: [
         {
