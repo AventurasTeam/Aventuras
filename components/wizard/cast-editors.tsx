@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
-import { Select, type SelectOption } from '@/components/ui/select'
+import { resolveMode, Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import type {
@@ -40,6 +40,8 @@ const STATUS_OPTIONS: SelectOption[] = [
 const VISUAL_FIELDS = ['physique', 'face', 'hair', 'eyes', 'attire', 'distinguishing'] as const
 
 const NULL_CAST_REF = '__none__'
+// Never a row id and never reported: the Unknown option is only offered while it is the value.
+const UNKNOWN_CAST_REF = '__unknown__'
 
 function handleStatusChange(id: string, status: 'active' | 'staged') {
   if (wizardStore.setCastStatus(id, status)) {
@@ -124,10 +126,13 @@ type PickFromCastProps = {
   value: string | null
   onChange: (value: string | null) => void
   /**
-   * Shown while `value` is null but not chosen as none (an import's unknown parent): no option
-   * reads as picked, so picking the null option still lands.
+   * Gives the picker an Unknown option, labelled so, for a row whose null `value` can mean "not
+   * known" (an import's unresolved parent). It is offered only while `unknown`, selected then, and
+   * never reaches `onChange`; the mode is resolved as if it were always there, so the pick that
+   * removes it can't change the control's shape.
    */
   unknownLabel?: string
+  unknown?: boolean
 }
 
 function PickFromCast({
@@ -138,7 +143,9 @@ function PickFromCast({
   value,
   onChange,
   unknownLabel,
+  unknown = false,
 }: PickFromCastProps) {
+  const tier = useTier()
   if (candidates.length === 0) {
     return (
       <FormRow label={label}>
@@ -148,16 +155,25 @@ function PickFromCast({
       </FormRow>
     )
   }
+  const offered = unknownLabel != null && unknown && value == null
+  const unknownOption: SelectOption | null =
+    unknownLabel == null ? null : { value: UNKNOWN_CAST_REF, label: unknownLabel }
   const options: SelectOption[] = [
+    ...(offered && unknownOption != null ? [unknownOption] : []),
     { value: NULL_CAST_REF, label: nullLabel },
     ...candidates.map((c) => ({ value: c.id, label: c.name.trim() || t('wizard:cast.unnamed') })),
   ]
+  const mode = resolveMode(
+    unknownOption == null || offered ? options : [unknownOption, ...options],
+    undefined,
+    tier,
+  )
   return (
     <FormRow label={label}>
       <Select
         options={options}
-        value={value ?? (unknownLabel == null ? NULL_CAST_REF : undefined)}
-        placeholder={unknownLabel}
+        mode={mode}
+        value={offered ? UNKNOWN_CAST_REF : (value ?? NULL_CAST_REF)}
         onValueChange={(next) => onChange(next === NULL_CAST_REF ? null : next)}
         label={label}
       />
@@ -291,12 +307,8 @@ export function LocationEditor({ row, invalid, cast }: CommonEditorProps<WizardL
               label={t('wizard:cast.editor.parentLocation')}
               emptyLabel={t('wizard:cast.editor.noLocationsYet')}
               nullLabel={t('wizard:cast.editor.noParent')}
-              unknownLabel={
-                row.parentLocationId == null &&
-                (row.parentUnknown || row.unresolvedParentLocationName.trim() !== '')
-                  ? t('wizard:cast.editor.parentUnknown')
-                  : undefined
-              }
+              unknownLabel={t('wizard:cast.editor.parentUnknown')}
+              unknown={row.parentUnknown || row.unresolvedParentLocationName.trim() !== ''}
               candidates={locationCandidates}
               value={row.parentLocationId}
               onChange={(parentLocationId) =>
