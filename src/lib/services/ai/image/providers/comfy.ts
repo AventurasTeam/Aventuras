@@ -63,20 +63,20 @@ type ServerSystem = z.infer<typeof SystemStats>['system']
 const serverSystems = new Map<string, Promise<ServerSystem | undefined>>()
 
 export async function fetchModelList(
-  baseUrl: string,
+  baseUrl: string | undefined,
   type: string,
   timeoutMs?: number,
 ): Promise<string[]> {
   // Tauri HTTP, not the WebView's fetch (docs/architecture/overview.md, "Local image servers").
-  const resp = await imageGetFetch(`${normalizeBaseUrl(baseUrl)}/models/${type}`, undefined, {
+  const resp = await imageGetFetch(`${resolveComfyBaseUrl(baseUrl)}/models/${type}`, undefined, {
     serviceId: 'comfy-models',
     timeoutMs,
   })
   return (await resp.json()) as string[]
 }
 
-export function clearComfyCacheForUrl(baseUrl: string): void {
-  const key = normalizeBaseUrl(baseUrl)
+export function clearComfyCacheForUrl(baseUrl: string | undefined): void {
+  const key = resolveComfyBaseUrl(baseUrl)
   unetModelNames.delete(key)
   autoClipCache.delete(key)
   autoVaeCache.delete(key)

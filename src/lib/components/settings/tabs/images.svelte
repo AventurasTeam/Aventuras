@@ -33,6 +33,7 @@
     detectWorkflowFields,
     fetchModelList,
     clearComfyCacheForUrl,
+    resolveComfyBaseUrl,
   } from '#lib/services/ai/image/providers/comfy.ts'
   import ImageModelSelect from '#lib/components/settings/ImageModelSelect.svelte'
   import type { ImageProfile, ImageProviderType, APIProfile } from '#lib/types/index.ts'
@@ -694,7 +695,7 @@
 
   async function loadUnetModels() {
     if (profileProviderType !== 'comfyui') return
-    const baseUrl = profileBaseUrl?.trim() || 'http://localhost:8188'
+    const baseUrl = resolveComfyBaseUrl(profileBaseUrl)
     const reqId = ++unetModelsReqId
     isLoadingUnetModels = true
     try {
@@ -722,7 +723,7 @@
   // Also clear availableClips/Vaes so the auto-load effect can trigger a fresh fetch.
   $effect(() => {
     if (profileProviderType === 'comfyui') {
-      const currentUrl = profileBaseUrl.trim() || 'http://localhost:8188'
+      const currentUrl = resolveComfyBaseUrl(profileBaseUrl)
       if (prevComfyBaseUrl !== null && prevComfyBaseUrl !== currentUrl) {
         clearComfyCacheForUrl(prevComfyBaseUrl)
         availableClips = []
