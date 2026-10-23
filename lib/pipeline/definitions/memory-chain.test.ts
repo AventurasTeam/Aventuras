@@ -50,6 +50,12 @@ const EMPTY_REPLY = {
   aliases: [],
   newFactions: [],
   memberships: [],
+  renames: [],
+  placements: [],
+  standings: [],
+  newThreads: [],
+  threadStatuses: [],
+  knownAwareness: [],
 }
 
 function openStory(

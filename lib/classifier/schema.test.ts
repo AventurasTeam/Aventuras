@@ -201,7 +201,7 @@ describe('classifierExtractionSchema — the writer map', () => {
     ])
   })
 
-  // Decisions → Icons: a free string the schema describes with the catalog's keys.
+  // A free string so an off-catalog key still parses (the planner drops it); the catalog's keys are in the description.
   it("lists the catalog's keys in the icon's description, on happenings and new threads", () => {
     const expected =
       'One of: sparkles, eye, handshake, door, swords, flame, mask, scroll, key, skull, crown, map, heart, shield, coins, book. Omit when none fits.'
@@ -226,13 +226,34 @@ describe('classifierExtractionSchema — the writer map', () => {
     expect(parsed.standings).toEqual([
       { ref: 'f1', standing: 'at war with the crown', sourceTurn: 't3' },
     ])
-    for (const [list, entry] of [
-      ['renames', { ref: 'c1' }],
-      ['placements', { ref: 'l2' }],
-      ['standings', { ref: 'f1' }],
-    ] as const)
-      expect(classifierExtractionSchema.safeParse({ [list]: [entry] }).success, list).toBe(false)
   })
+
+  // Required-vs-optional reaches the model as the prompt's TS block, so each key is pinned.
+  const REQUIRED_KEYS = {
+    renames: { item: { ref: 'c1', name: 'Mira' }, keys: ['ref', 'name'] },
+    placements: { item: { ref: 'l2', parent: 'l1' }, keys: ['ref', 'parent'] },
+    standings: { item: { ref: 'f1', standing: 'outlawed' }, keys: ['ref', 'standing'] },
+    newThreads: {
+      item: { title: 'Recover the relic', description: 'Stolen.', status: 'active' },
+      keys: ['title', 'description', 'status'],
+    },
+    threadStatuses: { item: { thread: 'th1', status: 'resolved' }, keys: ['thread', 'status'] },
+    knownAwareness: {
+      item: { happening: 'hp1', ref: 'c2', source: 'told by Jorin' },
+      keys: ['happening', 'ref', 'source'],
+    },
+  } as const
+
+  it.each(Object.entries(REQUIRED_KEYS))(
+    'takes a %s entry whole and refuses it missing any required key',
+    (list, { item, keys }) => {
+      expect(classifierExtractionSchema.safeParse({ [list]: [item] }).success, 'whole').toBe(true)
+      for (const key of keys) {
+        const { [key as keyof typeof item]: _dropped, ...rest } = item
+        expect(classifierExtractionSchema.safeParse({ [list]: [rest] }).success, key).toBe(false)
+      }
+    },
+  )
 
   it("tells the model a placement's parent may be the top-level token", () => {
     expect(itemFields('placements').parent?.description).toContain(
@@ -240,8 +261,8 @@ describe('classifierExtractionSchema — the writer map', () => {
     )
   })
 
-  // classifier.md → Threads → What it emits; a developer decision (Q15) lets a new thread arrive
-  // already resolved or failed, naming the turn that closed it.
+  // classifier.md → Threads → What it emits. A thread these turns both open and close arrives already
+  // resolved or failed (no later pass sees the turn that closed it), naming that turn.
   it('takes a new thread in any of the four statuses, and a status change never to pending', () => {
     const thread = { title: 'Recover the relic', description: 'Stolen at the ford.' }
     expect(
@@ -279,6 +300,14 @@ describe('classifierExtractionSchema — the writer map', () => {
         threadStatuses: [{ thread: 'th1', status: 'pending' }],
       }).success,
     ).toBe(false)
+  })
+
+  it('tells the model when a new thread may be resolved or failed, and which turn is which', () => {
+    const fields = itemFields('newThreads')
+    expect(fields.status?.description).toContain(
+      'only for a thread these turns both open and close',
+    )
+    expect(fields.resolvedAtTurn?.description).toContain('sourceTurn stays the turn that opened it')
   })
 
   it('parses awareness of a listed happening, defaulting its severity to 0', () => {

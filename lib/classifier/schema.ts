@@ -9,7 +9,7 @@ const severity = z.number().default(0)
 /** classifier.md → Mentioned places → Parent: a new place's `parent` for a top-level place. */
 export const TOP_LEVEL_TOKEN = 'top-level'
 
-// A free string: the planner writes no icon for a key the catalog lacks (Decisions → Icons).
+// A free string so an off-catalog key still parses; the planner writes no icon for it.
 const icon = z
   .string()
   .optional()
@@ -171,13 +171,13 @@ export const classifierExtractionSchema = z.object({
         icon,
         status: z
           .enum(['pending', 'active', 'resolved', 'failed'])
-          .describe('resolved or failed only for a thread these turns both open and close.'),
+          .describe('Resolved or failed only for a thread these turns both open and close.'),
         sourceTurn,
         resolvedAtTurn: z
           .string()
           .optional()
           .describe(
-            'The turn that resolved or failed it, when this window both opens and closes it; omit otherwise.',
+            'The turn that resolved or failed it, when these turns both open and close it; sourceTurn stays the turn that opened it. Omit otherwise.',
           ),
       }),
     )
