@@ -193,48 +193,6 @@
     "vitest": "^4.1.5",
     "wait-on": "^9.0.5"
   },
-  "build": {
-    "appId": "com.aventuras.app",
-    "productName": "Aventuras",
-    "directories": {
-      "output": "release",
-      "buildResources": "assets"
-    },
-    "files": [
-      "electron/dist/**/*",
-      "dist/**/*",
-      "package.json"
-    ],
-    "asarUnpack": [
-      "**/node_modules/sqlite-vec-*/**",
-      "**/node_modules/onnxruntime-node/**",
-      "**/node_modules/sharp/**",
-      "**/node_modules/@img/**"
-    ],
-    "extraResources": [
-      {
-        "from": "lib/db/migrations",
-        "to": "migrations"
-      }
-    ],
-    "extraMetadata": {
-      "main": "electron/dist/main.js"
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Utility"
-    },
-    "mac": {
-      "target": "dmg",
-      "category": "public.app-category.utilities"
-    },
-    "win": {
-      "target": "nsis"
-    }
-  },
   "private": true,
   "remarkConfig": {
     "plugins": [
