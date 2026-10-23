@@ -905,10 +905,11 @@ describe('entity keywords', () => {
         ]),
       },
     )
+    // A mention's terms plan with the row's other keyword writes, after the creates.
     expect(planned.map((p) => p.action.kind)).toEqual([
       'promoteStagedEntity',
-      'appendEntityKeywords',
       'promoteStagedEntity',
+      'appendEntityKeywords',
       'appendEntityKeywords',
     ])
     expect(payloadOf<{ keywords: string[] }>(planned[3]).keywords).toEqual(['the innkeeper'])
@@ -2922,6 +2923,23 @@ describe('renames', () => {
     ])
     expect(renameClashes).toEqual([
       { ref: 'char_stranger', name: 'kael', partnerId: 'char_kael', flagged: true },
+    ])
+  })
+
+  // A keyword write's undo is the whole prior list, so a row's keyword writes plan in turn order;
+  // a clash's raise still follows its own keyword.
+  it("plans a row's keyword writes in turn order, the clash's raise after its keyword", () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        renames: [{ ref: 'char_stranger', name: 'Kael', sourceTurn: 't3' }],
+        aliases: [{ ref: 'char_stranger', terms: ['the fence'], sourceTurn: 't1' }],
+      }),
+      deps([STRANGER, KAEL]),
+    )
+    expect(planned.map((p) => [p.action.kind, p.entryId])).toEqual([
+      ['appendEntityKeywords', 'e1'],
+      ['appendEntityKeywords', 'e3'],
+      ['raiseCollisionFlag', 'e3'],
     ])
   })
 

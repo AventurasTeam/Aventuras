@@ -2588,6 +2588,105 @@ describe('periodicClassifierPhase via runPipeline', () => {
       expect(storeThreads()).toEqual([])
     })
   })
+
+  // classifier.md → Provenance attribution: a keyword write's undo is the whole prior list, so a
+  // row's keyword writes land in turn order and a rewritten turn spares a surviving turn's terms.
+  describe("a row's keyword writes these turns make, under a prose edit", () => {
+    const vorne = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Vorne',
+      description: 'A broker.',
+      status: 'active',
+      retiredReason: null,
+      injectionMode: 'auto',
+      nameCollisionFlag: 0,
+      nameCollisionPartnerId: null,
+      nameCollisionReason: null,
+      state: {
+        visual: {},
+        traits: [],
+        drives: [],
+        current_location_id: null,
+        equipped_items: [],
+        inventory: [],
+        faction_id: null,
+        lastSeenAt: null,
+      },
+      tags: [],
+      keywords: ['the broker'],
+      priority: 0,
+      embeddingStale: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    } as unknown as Entity
+
+    async function passOver(reply: Partial<Record<string, unknown>>): Promise<Seeded> {
+      const seeded = await seedStory()
+      const kinds = ['ai_reply', 'user_action', 'ai_reply'] as const
+      for (const [i, kind] of kinds.entries())
+        await seeded.db.insert(storyEntries).values({
+          id: `e${i + 1}`,
+          branchId: 'b1',
+          position: i + 1,
+          kind,
+          content: `turn ${i + 1}`,
+          chapterId: null,
+          metadata: {},
+          createdAt: 1,
+        } as never)
+      await seeded.db.insert(entities).values(vorne as never)
+      entitiesStore.hydrate('b1', [vorne])
+      threadsStore.hydrate('b1', [])
+      registerWithReply({ happenings: [], ...reply })
+      expect(await runOutcome({ storyId: 's1', branchId: 'b1', ...seeded })).toBe('completed')
+      return seeded
+    }
+    const rowOf = async (db: TestDb['db']) =>
+      (await db.select({ name: entities.name, keywords: entities.keywords }).from(entities))[0]
+    const rewriteE3 = async (seeded: Seeded) =>
+      expect(await updateStoryEntryContent('b1', 'e3', 'turn 3, rewritten', seeded)).toEqual({
+        status: 'ok',
+      })
+
+    it("keeps an earlier turn's alias when a later turn's rename is rewritten", async () => {
+      const seeded = await passOver({
+        renames: [{ ref: 'c1', name: 'Corvin Vale', sourceTurn: 't3' }],
+        aliases: [{ ref: 'c1', terms: ['the fence'], sourceTurn: 't1' }],
+      })
+      const landed = await rowOf(seeded.db)
+      expect(landed.name).toBe('Corvin Vale')
+      expect(landed.keywords).toEqual(expect.arrayContaining(['the broker', 'the fence', 'Vorne']))
+      await rewriteE3(seeded)
+      expect(await rowOf(seeded.db)).toEqual({
+        name: 'Vorne',
+        keywords: ['the broker', 'the fence'],
+      })
+    })
+
+    it("keeps an earlier turn's alias when a later turn's known mention is rewritten", async () => {
+      const vector = Float32Array.from([1, 0, 0])
+      configureClassifierEmbedder(vi.fn(async () => ({ vectors: [vector, vector], dim: 3 })))
+      const seeded = await passOver({
+        newCharacters: [
+          {
+            handle: 'nc1',
+            name: 'Vorne',
+            description: 'A broker.',
+            keywords: ['the dealer'],
+            sourceTurn: 't3',
+          },
+        ],
+        aliases: [{ ref: 'c1', terms: ['the fence'], sourceTurn: 't1' }],
+      })
+      expect((await rowOf(seeded.db)).keywords).toEqual(
+        expect.arrayContaining(['the broker', 'the fence', 'the dealer']),
+      )
+      await rewriteE3(seeded)
+      expect((await rowOf(seeded.db)).keywords).toEqual(['the broker', 'the fence'])
+    })
+  })
 })
 
 // classifier.md → Mentioned places: the setting is read once, when the pass builds its prompt.

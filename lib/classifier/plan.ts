@@ -298,8 +298,12 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   }
 
   // New terms only, so a term the row already holds plans no write.
-  // Anchored only when it writes, so a no-op never counts as a window-head fallback.
-  const appendNewTerms = (id: string, terms: readonly string[], sourceTurn?: string): void => {
+  const appendTerms = (
+    id: string,
+    terms: readonly string[],
+    proseEntryId: string,
+    entryId: () => string,
+  ): void => {
     const row = index.get(id)
     if (row == null) return
     const added = newTerms(row.keywords, terms)
@@ -309,11 +313,24 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       action: {
         kind: 'appendEntityKeywords',
         source: SOURCE,
-        payload: { branchId, id, keywords: added, proseEntryId: proseSource(sourceTurn) },
+        payload: { branchId, id, keywords: added, proseEntryId },
       },
-      entryId: anchor(sourceTurn),
+      entryId: entryId(),
     })
   }
+  // Anchored only when it writes, so a no-op never counts as a window-head fallback.
+  const appendNewTerms = (id: string, terms: readonly string[], sourceTurn?: string): void =>
+    appendTerms(id, terms, proseSource(sourceTurn), () => anchor(sourceTurn))
+
+  // A known or promoted mention's new keywords, written in turn order with the row's other
+  // keyword writes (planKeywordWrites).
+  const mentionTerms: {
+    id: string
+    terms: readonly string[]
+    sourceTurn?: string
+    proseEntryId: string
+    entryId: string
+  }[] = []
 
   // classifier.md → Mentioned places. After characters and factions, so the handle namespace
   // they share keeps their bindings; before anything that names a place by its handle.
@@ -472,16 +489,20 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       const entryId = anchor(candidate.sourceTurn)
       const proseEntryId = proseSource(candidate.sourceTurn)
       // New terms only, so a term the row already holds plans no write.
-      if (decision.kind === 'promote') {
+      if (decision.kind === 'promote' || decision.kind === 'known') {
         handleMap.set(candidate.handle, decision.entityId)
+        mentionTerms.push({
+          id: decision.entityId,
+          terms: candidate.keywords,
+          sourceTurn: candidate.sourceTurn,
+          proseEntryId,
+          entryId,
+        })
+      }
+      if (decision.kind === 'known') continue
+      if (decision.kind === 'promote') {
         const promoted = index.get(decision.entityId)
-        const added = newTerms(promoted?.keywords ?? [], candidate.keywords)
-        if (promoted != null)
-          index.set(decision.entityId, {
-            ...promoted,
-            status: 'active',
-            keywords: [...promoted.keywords, ...added],
-          })
+        if (promoted != null) index.set(decision.entityId, { ...promoted, status: 'active' })
         planned.push({
           action: {
             kind: 'promoteStagedEntity',
@@ -490,33 +511,6 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
           },
           entryId,
         })
-        if (added.length > 0)
-          planned.push({
-            action: {
-              kind: 'appendEntityKeywords',
-              source: SOURCE,
-              payload: { branchId, id: decision.entityId, keywords: added, proseEntryId },
-            },
-            entryId,
-          })
-        continue
-      }
-      if (decision.kind === 'known') {
-        handleMap.set(candidate.handle, decision.entityId)
-        const known = index.get(decision.entityId)
-        const added = newTerms(known?.keywords ?? [], candidate.keywords)
-        if (added.length > 0) {
-          if (known != null)
-            index.set(decision.entityId, { ...known, keywords: [...known.keywords, ...added] })
-          planned.push({
-            action: {
-              kind: 'appendEntityKeywords',
-              source: SOURCE,
-              payload: { branchId, id: decision.entityId, keywords: added, proseEntryId },
-            },
-            entryId,
-          })
-        }
         continue
       }
       const id = newId(idPrefix)
@@ -584,8 +578,10 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   const unseenRefs: UnseenRef[] = []
 
   // classifier.md → What the classifier writes → Names. A name is taken when a row of the kind
-  // holds it, one this reply creates or renames included.
-  const planRenames = (): RenameClash[] => {
+  // holds it, one this reply creates or renames included. A keyword write's undo is the whole
+  // prior list, so a row's renames, aliases and mention terms plan in turn order: reversing a turn
+  // then never writes an earlier turn's terms away (classifier.md → Provenance attribution).
+  const planKeywordWrites = (): RenameClash[] => {
     const nameRows = new Map(
       entities.map((e) => [e.id, { kind: e.kind, name: e.name, createdAt: e.createdAt }]),
     )
@@ -611,20 +607,20 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     }
     const renameClashes: RenameClash[] = []
     const raisedFlags = new Set<string>()
-    for (const rename of inTurnOrder(extraction.renames)) {
+    const planRename = (rename: ClassifierExtraction['renames'][number]): void => {
       const row = rowById.get(rename.ref)
       if (row === undefined) {
         unseenRefs.push({ list: 'renames', ref: rename.ref })
-        continue
+        return
       }
       // Both hold every listed row; the check narrows their lookups.
       const current = nameRows.get(row.id)
       const known = index.get(row.id)
-      if (current === undefined || known === undefined) continue
+      if (current === undefined || known === undefined) return
       const name = clampEmbedded(rename.name.trim(), MAX_EMBEDDED_NAME)
       const key = normalizeTerm(name)
       // A case-only change is no reveal, as renameEntity judges it.
-      if (key === '' || key === normalizeTerm(current.name)) continue
+      if (key === '' || key === normalizeTerm(current.name)) return
       const holders = [...nameRows]
         .filter(
           ([id, r]) =>
@@ -652,7 +648,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
           },
           entryId: at(),
         })
-        continue
+        return
       }
       const [partnerId] = holder
       // The revealed name is one the prose used for it, so the pair stays namesakes (world.md →
@@ -683,6 +679,25 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         })
       }
       renameClashes.push({ ref: rename.ref, name, partnerId, flagged })
+    }
+    // Index is keyed by row id, so a handle this reply declares misses: its row already carries
+    // its keywords. newTerms drops a term the snapshot or an earlier write in this reply holds.
+    const planAlias = (alias: ClassifierExtraction['aliases'][number]): void => {
+      if (!index.has(alias.ref)) unresolvedRefs.push(alias.ref)
+      else appendNewTerms(alias.ref, alias.terms, alias.sourceTurn)
+    }
+    // Ties keep this order: a mention's terms, then a rename, then an alias.
+    const facts = [
+      ...mentionTerms.map((mention) => ({ sourceTurn: mention.sourceTurn, mention })),
+      ...extraction.renames.map((rename) => ({ sourceTurn: rename.sourceTurn, rename })),
+      ...extraction.aliases.map((alias) => ({ sourceTurn: alias.sourceTurn, alias })),
+    ]
+    for (const fact of inTurnOrder(facts)) {
+      if ('mention' in fact) {
+        const { id, terms, proseEntryId, entryId } = fact.mention
+        appendTerms(id, terms, proseEntryId, () => entryId)
+      } else if ('rename' in fact) planRename(fact.rename)
+      else planAlias(fact.alias)
     }
     return renameClashes
   }
@@ -789,16 +804,9 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     return droppedStandings
   }
 
-  const renameClashes = planRenames()
+  const renameClashes = planKeywordWrites()
   const droppedPlacements = planPlacements()
   const droppedStandings = planStandings()
-
-  // Index is keyed by row id, so a handle this reply declares misses: its row already carries its
-  // keywords. newTerms drops a term the snapshot or an earlier write in this reply holds.
-  for (const alias of extraction.aliases) {
-    if (!index.has(alias.ref)) unresolvedRefs.push(alias.ref)
-    else appendNewTerms(alias.ref, alias.terms, alias.sourceTurn)
-  }
 
   // classifier.md → What the classifier writes → Happenings: an icon from the catalog, or none.
   const unknownIcons: UnknownIcon[] = []
