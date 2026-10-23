@@ -195,7 +195,6 @@ const SCENE_VARIABLES = [
 /** One of a holder's items in `heldItems`, from the holder's state view. */
 type HeldItemLine = { id: string; name: string; equipped: boolean }
 
-/** One entry per active in-scene character that holds anything, in scene order. */
 // An item on a shown character's Holds line (macro_entity_state) is shown with its state too.
 function shownWithState(rows: readonly ({ id: string } & KindedView)[]): ReadonlySet<string> {
   const ids = new Set<string>()
@@ -206,6 +205,7 @@ function shownWithState(rows: readonly ({ id: string } & KindedView)[]): Readonl
   return ids
 }
 
+/** One entry per active in-scene character that holds anything, in scene order. */
 function heldItemsInScene(
   sceneEntities: readonly string[],
   entities: readonly Entity[],
