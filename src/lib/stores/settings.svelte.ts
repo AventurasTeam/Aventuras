@@ -24,14 +24,12 @@ import {
   MAX_LOREBOOK_ENTRIES_FOR_SUGGESTIONS,
   WORLD_STATE_INJECTION_DEFAULTS,
 } from '#lib/services/ai/core/defaults.ts'
-import { isReasoningOn } from '#lib/services/ai/core/reasoning.ts'
+import { isReasoningEffort } from '#lib/services/ai/core/reasoning.ts'
 import {
   clearDanglingAssignments,
   migrateContextWindow,
   migrateEntryRetrieval,
   migrateImageGeneration,
-  migrateReasoningEffort,
-  migrateReasoningIn,
   migrateWorldStateBudget,
   migrateWorldStateInjection,
 } from './settingsMigrations'
@@ -1416,16 +1414,8 @@ class SettingsStore {
       if (temperature) this.apiSettings.temperature = parseFloat(temperature)
       if (maxTokens) this.apiSettings.maxTokens = parseInt(maxTokens)
 
-      // `enable_thinking` is a legacy boolean, kept only for installs old enough to have no
-      // stored level. It is never the source of truth while `main_reasoning_effort` exists.
-      const reasoningEffort = migrateReasoningEffort(
-        await database.getSetting('main_reasoning_effort'),
-      )
-      if (reasoningEffort) {
-        this.apiSettings.reasoningEffort = reasoningEffort
-      } else if ((await database.getSetting('enable_thinking')) === 'true') {
-        this.apiSettings.reasoningEffort = 'high'
-      }
+      const reasoningEffort = await database.getSetting('main_reasoning_effort')
+      if (isReasoningEffort(reasoningEffort)) this.apiSettings.reasoningEffort = reasoningEffort
 
       const manualBody = await database.getSetting('main_manual_body')
       if (manualBody !== null) {
@@ -1669,7 +1659,7 @@ class SettingsStore {
       const wizardSettingsJson = await database.getSetting('wizard_settings')
       if (wizardSettingsJson) {
         try {
-          const loaded = migrateReasoningIn(JSON.parse(wizardSettingsJson))
+          const loaded = JSON.parse(wizardSettingsJson)
           // Merge with defaults to ensure all fields exist
           const defaults = getDefaultAdvancedWizardSettings()
           this.wizardSettings = {
@@ -1701,7 +1691,7 @@ class SettingsStore {
       const presetsJson = await database.getSetting('generation_presets')
       if (presetsJson) {
         try {
-          const loadedPresets = migrateReasoningIn(JSON.parse(presetsJson))
+          const loadedPresets = JSON.parse(presetsJson)
           if (Array.isArray(loadedPresets) && loadedPresets.length > 0) {
             // Populate null profileIds with default profile
             const defaultProfileId = this.getDefaultProfileIdForProvider()
@@ -1809,7 +1799,7 @@ class SettingsStore {
       const systemServicesJson = await database.getSetting('system_services_settings')
       if (systemServicesJson) {
         try {
-          const loaded = migrateReasoningIn(JSON.parse(systemServicesJson))
+          const loaded = JSON.parse(systemServicesJson)
           const defaults = getDefaultSystemServicesSettingsForProvider(
             this.getDefaultProviderType(),
           )
@@ -1988,16 +1978,9 @@ class SettingsStore {
     await database.setSetting('llm_timeout_ms', clamped.toString())
   }
 
-  /**
-   * The only writer of the reasoning level, and of the legacy `enable_thinking` boolean that
-   * shadows it. The flag is derived here rather than tracked: it is a persistence detail for
-   * downgrades, not a second setting, and keeping it as one had eight call sites able to
-   * disagree with the level they sat next to.
-   */
   async setMainReasoningEffort(effort: ReasoningEffort) {
     this.apiSettings.reasoningEffort = effort
     await database.setSetting('main_reasoning_effort', effort)
-    await database.setSetting('enable_thinking', isReasoningOn(effort).toString())
   }
 
   async setMainManualBody(body: string) {
@@ -2732,10 +2715,6 @@ class SettingsStore {
       database.setSetting('temperature', this.apiSettings.temperature.toString()),
       database.setSetting('max_tokens', this.apiSettings.maxTokens.toString()),
       database.setSetting('main_reasoning_effort', this.apiSettings.reasoningEffort),
-      database.setSetting(
-        'enable_thinking',
-        isReasoningOn(this.apiSettings.reasoningEffort).toString(),
-      ),
       database.setSetting('default_model', this.apiSettings.defaultModel),
       database.setSetting('main_narrative_profile_id', this.apiSettings.mainNarrativeProfileId),
       database.setSetting('main_manual_body', this.apiSettings.manualBody),
@@ -3135,10 +3114,6 @@ class SettingsStore {
     await database.setSetting('default_model', this.apiSettings.defaultModel)
     await database.setSetting('temperature', this.apiSettings.temperature.toString())
     await database.setSetting('max_tokens', this.apiSettings.maxTokens.toString())
-    await database.setSetting(
-      'enable_thinking',
-      isReasoningOn(this.apiSettings.reasoningEffort).toString(),
-    )
     await database.setSetting('main_reasoning_effort', this.apiSettings.reasoningEffort)
     await database.setSetting('main_manual_body', this.apiSettings.manualBody)
     await database.setSetting('theme', this.uiSettings.theme)
@@ -3258,10 +3233,6 @@ class SettingsStore {
     await database.setSetting('max_tokens', this.apiSettings.maxTokens.toString())
     await database.setSetting('main_reasoning_effort', this.apiSettings.reasoningEffort)
     await database.setSetting('main_manual_body', this.apiSettings.manualBody)
-    await database.setSetting(
-      'enable_thinking',
-      isReasoningOn(this.apiSettings.reasoningEffort).toString(),
-    )
 
     // Apply provider-specific defaults to system services
     this.systemServicesSettings = getDefaultSystemServicesSettingsForProvider(provider)

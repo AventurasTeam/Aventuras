@@ -9,8 +9,7 @@
  * that only NanoGPT's `:thinking` variants really enforce reasoning, the store that forced the
  * level did not, and NanoGPT users could no longer turn reasoning off at all.
  *
- * Note there is no 'off': the value is 'none'. `settingsMigrations` recognises the pre-0.7.x
- * on-disk spelling and is the only place allowed to.
+ * Note there is no 'off': the value is 'none'.
  */
 
 import type { ProviderType, ReasoningEffort } from '#lib/types/index.ts'
@@ -24,6 +23,10 @@ export const REASONING_LEVELS: readonly ReasoningEffort[] = [
   'high',
   'xhigh',
 ] as const
+
+export function isReasoningEffort(value: unknown): value is ReasoningEffort {
+  return (REASONING_LEVELS as readonly unknown[]).includes(value)
+}
 
 export const REASONING_LABELS: Record<ReasoningEffort, string> = {
   none: 'None',

@@ -59,11 +59,10 @@ seven places, and the copies drifted.
 Three things about it are not obvious:
 
 - **The disabled level is `'none'`, and `'Off'` is not a value.** The levels are the AI SDK's
-  own names minus `provider-default`, which is why `'off'` was renamed in 0.7.x. The old
-  spelling survives in exactly one place — `LEGACY_REASONING_OFF` in `settingsMigrations.ts` —
-  because installs older than that have the literal string on disk, and refusing to read it
-  would discard the user's setting and fall back to the legacy `enable_thinking` flag, which
-  means `'high'`.
+  own names minus `provider-default`, which is why `'off'` was renamed in 0.7.x. Migration 043
+  rewrote the old spelling on disk, and folded the legacy `enable_thinking` flag (`'true'` meant
+  `'high'`) into `main_reasoning_effort`, so neither exists in code. A stored level that is not
+  in `REASONING_LEVELS` is read as no stored choice.
 - **`'none'` is sent, not omitted.** It is the value that switches thinking off. Omitting the
   parameter asks for the model's default instead — a different request. The effort travels in
   the SDK's top-level `reasoning` option, and in provider options only where a provider does not
