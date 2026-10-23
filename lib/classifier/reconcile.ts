@@ -8,8 +8,8 @@ import { namesakeBasis } from '@/lib/world'
 export const TAU_HIGH = 0.75
 export const TAU_LOW = 0.5
 
-/** classifier.md → Partner and reason; `same-parent` is the per-turn writer's alone. */
-type ClassifierFlagReason = Exclude<CollisionReason, 'same-parent'>
+/** classifier.md → Partner and reason; `same-parent` and `unplaced` are a place's matching alone. */
+type ClassifierFlagReason = Exclude<CollisionReason, 'same-parent' | 'unplaced'>
 
 export type ReconcileDecision =
   | { kind: 'create'; flag: null }

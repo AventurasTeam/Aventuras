@@ -27,6 +27,7 @@ import {
   placeNewLocation,
   settlingOrder,
   type ParentDropCause,
+  type PlacePlacement,
   type SettledNewPlace,
 } from '@/lib/world'
 
@@ -157,12 +158,17 @@ function planLocations(args: {
       statusOf: (id) => byId.get(id)?.status,
       parentOf: parentOfLocations([...entities, ...rows]),
     })
-    const parentId = placement.kind === 'kept' ? placement.parentId : null
+    // This writer stores a parent only: no parent, or a dropped one, is top-level.
+    const kept: PlacePlacement =
+      placement.kind === 'kept' && placement.placement.kind !== 'unplaced'
+        ? placement.placement
+        : { kind: 'top' }
+    const parentId = kept.kind === 'under' ? kept.parentId : null
     const parentDropped = placement.kind === 'dropped'
     if (placement.kind === 'dropped') logParentDropped(args.log, emission.handle, placement)
 
     const text = storedText(emission)
-    const match = matchNewPlace({ name: text.name, parentId }, placed, view)
+    const match = matchNewPlace({ name: text.name, placement: kept }, placed, view)
     let fate: LocationFate
     if (match.kind === 'twin') {
       fate = { outcome: 'reused', id: match.id, parentId, parentDropped }
@@ -182,7 +188,7 @@ function planLocations(args: {
       fate = { outcome: 'created', id: row.id, parentId, parentDropped }
     }
     fates.set(emission.handle, fate)
-    placed.push({ name: text.name, parentId, id: fate.id })
+    placed.push({ name: text.name, placement: kept, id: fate.id })
   }
   return { fates, rows, reusedIds: [...reused] }
 }

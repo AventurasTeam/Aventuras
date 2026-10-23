@@ -96,15 +96,6 @@ export function realPlacementOf(
   }
 }
 
-/** A place's real parent; null for a top-level place and for an unplaced one. */
-export function realParentOf(locations: readonly Entity[]): (id: string) => string | null {
-  const placementAt = realPlacementOf(locations)
-  return (id) => {
-    const placement = placementAt(id)
-    return placement.kind === 'under' ? placement.parentId : null
-  }
-}
-
 /**
  * classifier.md → Mentioned places: every place on the branch, whatever its status or mode, under
  * its real parent; an unplaced place, and what lies inside it, in a group of its own.

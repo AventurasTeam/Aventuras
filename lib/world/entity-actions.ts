@@ -29,6 +29,7 @@ import {
   type RelationshipLink,
 } from './entity-draft'
 import { retireCascade } from './place-rules'
+import { samePlacement, type PlacePlacement } from './placement'
 
 export type EntitySaveInput =
   | {
@@ -381,12 +382,18 @@ export function entityActions(args: EntityActionArgs): PipelineAction[] {
   }
   if (row == null || columns == null) return actions
   const before = pairSideOf(row)
-  const parentId = args.kind === 'location' ? args.draft.parentLocationId : before.parentId
-  if (columns.name === undefined && parentId === before.parentId) return actions
+  // A null draft parent reads as top-level.
+  const placement: PlacePlacement =
+    args.kind !== 'location'
+      ? before.placement
+      : args.draft.parentLocationId === null
+        ? { kind: 'top' }
+        : { kind: 'under', parentId: args.draft.parentLocationId }
+  if (columns.name === undefined && samePlacement(placement, before.placement)) return actions
   const saved: PairSide = {
     name: columns.name ?? row.name,
     keywords: columns.keywords ?? row.keywords,
-    parentId,
+    placement,
   }
   const broken = brokenFlags({ entities: args.branchEntities, after: new Map([[row.id, saved]]) })
   return withFlagClears(actions, branchId, broken)

@@ -16,5 +16,6 @@ export const COLLISION_REASONS = [
   'in-scene',
   'no-signal',
   'same-parent',
+  'unplaced',
 ] as const
 export type CollisionReason = (typeof COLLISION_REASONS)[number]

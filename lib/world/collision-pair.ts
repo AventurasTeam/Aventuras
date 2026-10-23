@@ -1,7 +1,7 @@
 import type { CollisionReason, Entity } from '@/lib/db'
 
 import { namesakeBasis, type NamesakeSide } from './namesakes'
-import { parentIdOf } from './parent-chain'
+import { placementOf, type PlacePlacement } from './placement'
 
 /**
  * Two distinct rows of one branch and kind, one of whose flags names the other and holds, in the
@@ -29,17 +29,23 @@ export type FlaggedEntity = Entity & {
   nameCollisionReason: CollisionReason
 }
 
-/** A row as the pair rule reads it: its name, keywords, and a place's parent (null otherwise). */
-export type PairSide = NamesakeSide & { parentId: string | null }
+/** A row as the pair rule reads it: its name, keywords, and a place's placement (`top` otherwise). */
+export type PairSide = NamesakeSide & { placement: PlacePlacement }
 
 export function pairSideOf(row: Entity): PairSide {
-  const parentId = row.kind === 'location' ? parentIdOf(row) : null
-  return { name: row.name, keywords: row.keywords, parentId }
+  const placement: PlacePlacement = row.kind === 'location' ? placementOf(row) : { kind: 'top' }
+  return { name: row.name, keywords: row.keywords, placement }
 }
 
-/** world.md → Surfacing: a `same-parent` pair needs a shared parent; every other reason passes. */
+/**
+ * world.md → Surfacing: a `same-parent` pair needs a shared parent, the top level counting as one;
+ * two unplaced places share none. Every other reason passes.
+ */
 export function sharesRequiredParent(reason: CollisionReason, a: PairSide, b: PairSide): boolean {
-  return reason !== 'same-parent' || a.parentId === b.parentId
+  if (reason !== 'same-parent') return true
+  if (a.placement.kind === 'under' && b.placement.kind === 'under')
+    return a.placement.parentId === b.placement.parentId
+  return a.placement.kind === 'top' && b.placement.kind === 'top'
 }
 
 /** Still namesakes, and `sharesRequiredParent`. What a write judges before keeping a flag. */

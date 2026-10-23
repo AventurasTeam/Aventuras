@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { placeNewLocation, settlingOrder, type SettlingPlace } from './new-place-order'
+import { placeNewLocation, settlingOrder, TOP_LEVEL, type SettlingPlace } from './new-place-order'
 
 const order = (creates: { handle: string; parent?: string }[], ids: readonly string[] = []) =>
   settlingOrder(creates, (id) => ids.includes(id)).order.map(
@@ -20,11 +20,17 @@ describe('settlingOrder', () => {
     ).toEqual(['a', 'b'])
   })
 
-  it('roots a create whose parent is neither a declared handle nor a location', () => {
+  it('settles a top-level create at once, as one that names no parent', () => {
+    expect(
+      order([{ handle: 'b', parent: 'a' }, { handle: 'a', parent: TOP_LEVEL }, { handle: 'c' }]),
+    ).toEqual(['a', 'c', 'b'])
+  })
+
+  it('leaves unresolved a create whose parent is neither a declared handle nor a location', () => {
     expect(order([{ handle: 'a', parent: 'loc_gone' }])).toEqual(['a!'])
   })
 
-  it('roots both sides of a handle cycle, then settles what hangs off it', () => {
+  it('leaves both sides of a handle cycle unresolved, then settles what hangs off it', () => {
     expect(
       order([
         { handle: 'a', parent: 'b' },
@@ -66,18 +72,26 @@ describe('placeNewLocation', () => {
   it('keeps a live parent, a declared handle under the row it resolved to', () => {
     expect(placeNewLocation({ ...base, place: settled('loc_town') })).toEqual({
       kind: 'kept',
-      parentId: 'loc_town',
+      placement: { kind: 'under', parentId: 'loc_town' },
     })
     expect(placeNewLocation({ ...base, place: settled('new:town') })).toEqual({
       kind: 'kept',
-      parentId: 'loc_town',
+      placement: { kind: 'under', parentId: 'loc_town' },
     })
   })
 
-  it('leaves a create that names no parent at the root, unlogged', () => {
+  // piggyback.md → Parent: top makes the place top-level, and no parent leaves it unplaced.
+  it("makes a create naming the per-turn tag's top token top-level", () => {
+    expect(placeNewLocation({ ...base, place: settled('top') })).toEqual({
+      kind: 'kept',
+      placement: { kind: 'top' },
+    })
+  })
+
+  it('keeps a create that names no parent unplaced, as no drop', () => {
     expect(placeNewLocation({ ...base, place: settled() })).toEqual({
       kind: 'kept',
-      parentId: null,
+      placement: { kind: 'unplaced' },
     })
   })
 
@@ -89,7 +103,7 @@ describe('placeNewLocation', () => {
     ['retired', settled('loc_ruin')],
     ['retired', settled('new:ruin')],
     ['chain-broken', settled('loc_a')],
-  ])('roots a %s parent, naming it as declared', (cause, place) => {
+  ])('drops a %s parent, naming it as declared: the place lands unplaced', (cause, place) => {
     expect(placeNewLocation({ ...base, place })).toEqual({
       kind: 'dropped',
       cause,

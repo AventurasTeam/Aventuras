@@ -9,6 +9,7 @@ import {
   settlingOrder,
   unhiddenLocationView,
   type ParentDropCause,
+  type PlacePlacement,
   type SettledNewPlace,
 } from '@/lib/world'
 
@@ -216,14 +217,19 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       })
       if (placement.kind === 'dropped')
         parentDrops.push({ handle: place.handle, parent: placement.parent, cause: placement.cause })
-      const parentId = placement.kind === 'kept' ? placement.parentId : null
+      // This planner stores a parent only: no parent, or a dropped one, is top-level.
+      const kept: PlacePlacement =
+        placement.kind === 'kept' && placement.placement.kind !== 'unplaced'
+          ? placement.placement
+          : { kind: 'top' }
+      const parentId = kept.kind === 'under' ? kept.parentId : null
 
       const stored = clampEmbeddedCharacter({
         name: place.name,
         description: place.description.trim(),
       })
       const match = matchNewPlace(
-        { name: stored.name, parentId, keywords: place.keywords },
+        { name: stored.name, placement: kept, keywords: place.keywords },
         placed,
         view,
       )
@@ -268,7 +274,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         })
       }
       handleMap.set(place.handle, id)
-      placed.push({ name: stored.name, parentId, id })
+      placed.push({ name: stored.name, placement: kept, id })
     }
     return { droppedPlaces, parentDrops }
   }

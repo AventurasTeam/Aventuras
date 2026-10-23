@@ -5,6 +5,7 @@ import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 
 import { locationMapView, unhiddenLocationView } from './location-map'
 import { itemNamesakes, matchNewLocation as matchAgainst, matchNewPlace } from './new-entity-match'
+import type { PlacePlacement } from './placement'
 
 const place = (
   id: string,
@@ -16,18 +17,34 @@ const place = (
 const thing = (id: string, name: string, overrides: Partial<Entity> = {}): Entity =>
   makeEntity({ id, kind: 'item', name, state: { at_location_id: null }, ...overrides })
 
+const under = (parentId: string) => ({ kind: 'under', parentId }) as const
+const TOP = { kind: 'top' } as const
+const UNPLACED = { kind: 'unplaced' } as const
+
 const PLAIN = { kind: 'create', flag: null }
-const flaggedWith = (partnerId: string) => ({
+const reuse = (id: string) => ({ kind: 'reuse', id, place: false })
+// An unplaced row reused by a create under a parent or at the top level: the writer places it.
+const reuseAndPlace = (id: string) => ({ kind: 'reuse', id, place: true })
+const flaggedWith = (partnerId: string, reason: 'same-parent' | 'unplaced' = 'same-parent') => ({
   kind: 'create',
-  flag: { partnerId, reason: 'same-parent' },
+  flag: { partnerId, reason },
 })
+// data-model.md → LocationState shape: known to exist, not where.
+const unplaced = (id: string, name: string, overrides: Partial<Entity> = {}): Entity =>
+  makeEntity({
+    id,
+    kind: 'location',
+    name,
+    state: { parent_location_id: null, unplaced: true },
+    ...overrides,
+  })
 
 const HOLLOW = place('loc_hollow', 'Hollow', null)
 const MARKET = place('loc_market', 'The Drowned Market', 'loc_hollow')
 
 // The map the prompt showed; it always holds the Hollow, as a candidate's parent always exists.
 const matchNewLocation = (
-  candidate: { name: string; parentId: string | null },
+  candidate: { name: string; placement: PlacePlacement },
   entities: readonly Entity[],
   currentLocationId: string | null = null,
 ) => matchAgainst(candidate, locationMapView([HOLLOW, ...entities], currentLocationId))
@@ -35,17 +52,17 @@ const matchNewLocation = (
 describe('matchNewLocation', () => {
   it('reuses an exact sibling across case and spacing', () => {
     expect(
-      matchNewLocation({ name: '  the DROWNED market ', parentId: 'loc_hollow' }, [MARKET]),
-    ).toEqual({ kind: 'reuse', id: 'loc_market' })
+      matchNewLocation({ name: '  the DROWNED market ', placement: under('loc_hollow') }, [MARKET]),
+    ).toEqual(reuse('loc_market'))
   })
 
   it('compares a root candidate with root rows, and never across parents', () => {
     const rootMarket = place('loc_root', 'The Drowned Market', null)
     expect(
-      matchNewLocation({ name: 'The Drowned Market', parentId: null }, [MARKET, rootMarket]),
-    ).toEqual({ kind: 'reuse', id: 'loc_root' })
+      matchNewLocation({ name: 'The Drowned Market', placement: TOP }, [MARKET, rootMarket]),
+    ).toEqual(reuse('loc_root'))
     expect(
-      matchNewLocation({ name: 'The Drowned Market', parentId: 'loc_elsewhere' }, [
+      matchNewLocation({ name: 'The Drowned Market', placement: under('loc_elsewhere') }, [
         MARKET,
         rootMarket,
       ]),
@@ -58,27 +75,22 @@ describe('matchNewLocation', () => {
       place('loc_z', 'Mill', null, { createdAt: 3 }),
       place('loc_b', 'mill', null, { createdAt: 3 }),
     ]
-    expect(matchNewLocation({ name: 'Mill', parentId: null }, entities)).toEqual({
-      kind: 'reuse',
-      id: 'loc_b',
-    })
+    expect(matchNewLocation({ name: 'Mill', placement: TOP }, entities)).toEqual(reuse('loc_b'))
   })
 
   it('reuses a disabled or a staged sibling', () => {
-    const candidate = { name: 'The Drowned Market', parentId: 'loc_hollow' }
-    expect(matchNewLocation(candidate, [{ ...MARKET, injectionMode: 'disabled' }])).toEqual({
-      kind: 'reuse',
-      id: 'loc_market',
-    })
-    expect(matchNewLocation(candidate, [{ ...MARKET, status: 'staged' }])).toEqual({
-      kind: 'reuse',
-      id: 'loc_market',
-    })
+    const candidate = { name: 'The Drowned Market', placement: under('loc_hollow') }
+    expect(matchNewLocation(candidate, [{ ...MARKET, injectionMode: 'disabled' }])).toEqual(
+      reuse('loc_market'),
+    )
+    expect(matchNewLocation(candidate, [{ ...MARKET, status: 'staged' }])).toEqual(
+      reuse('loc_market'),
+    )
   })
 
   // piggyback.md → Matching before creating: a retired place comes back only through review.
   it('never reuses a retired sibling, and flags an exact retired namesake', () => {
-    const candidate = { name: 'The Drowned Market', parentId: 'loc_hollow' }
+    const candidate = { name: 'The Drowned Market', placement: under('loc_hollow') }
     expect(matchNewLocation(candidate, [{ ...MARKET, status: 'retired' }])).toEqual(
       flaggedWith('loc_market'),
     )
@@ -87,7 +99,7 @@ describe('matchNewLocation', () => {
   it('pairs with an exact retired namesake before an older contained name', () => {
     const contained = place('loc_old', 'Market', 'loc_hollow', { createdAt: 1 })
     expect(
-      matchNewLocation({ name: 'The Drowned Market', parentId: 'loc_hollow' }, [
+      matchNewLocation({ name: 'The Drowned Market', placement: under('loc_hollow') }, [
         contained,
         { ...MARKET, status: 'retired', createdAt: 9 },
       ]),
@@ -97,13 +109,17 @@ describe('matchNewLocation', () => {
   it('flags a partial name on a retired sibling', () => {
     const retired = place('loc_retired', 'Market', 'loc_hollow', { status: 'retired' })
     expect(
-      matchNewLocation({ name: 'The Drowned Market Stalls', parentId: 'loc_hollow' }, [retired]),
+      matchNewLocation({ name: 'The Drowned Market Stalls', placement: under('loc_hollow') }, [
+        retired,
+      ]),
     ).toEqual(flaggedWith('loc_retired'))
   })
 
   it('flags same-parent a sibling whose name sits inside the candidate', () => {
     expect(
-      matchNewLocation({ name: 'The Drowned Market Stalls', parentId: 'loc_hollow' }, [MARKET]),
+      matchNewLocation({ name: 'The Drowned Market Stalls', placement: under('loc_hollow') }, [
+        MARKET,
+      ]),
     ).toEqual(flaggedWith('loc_market'))
   })
 
@@ -112,7 +128,7 @@ describe('matchNewLocation', () => {
       keywords: ['the customs house'],
     })
     expect(
-      matchNewLocation({ name: 'The Customs House', parentId: 'loc_hollow' }, [office]),
+      matchNewLocation({ name: 'The Customs House', placement: under('loc_hollow') }, [office]),
     ).toEqual(flaggedWith('loc_office'))
   })
 
@@ -122,7 +138,7 @@ describe('matchNewLocation', () => {
       createdAt: 1,
     })
     expect(
-      matchNewLocation({ name: 'The Drowned Market Stalls', parentId: 'loc_hollow' }, [
+      matchNewLocation({ name: 'The Drowned Market Stalls', placement: under('loc_hollow') }, [
         office,
         { ...MARKET, createdAt: 9 },
       ]),
@@ -136,7 +152,10 @@ describe('matchNewLocation', () => {
       place('loc_b', 'Market Stalls', 'loc_hollow', { createdAt: 2 }),
     ]
     expect(
-      matchNewLocation({ name: 'The Drowned Market Stalls', parentId: 'loc_hollow' }, entities),
+      matchNewLocation(
+        { name: 'The Drowned Market Stalls', placement: under('loc_hollow') },
+        entities,
+      ),
     ).toEqual(flaggedWith('loc_b'))
   })
 
@@ -146,18 +165,21 @@ describe('matchNewLocation', () => {
       place('loc_other', 'Drowned Market', 'loc_elsewhere'),
     ]
     expect(
-      matchNewLocation({ name: 'The Drowned Market Stalls', parentId: 'loc_hollow' }, entities),
+      matchNewLocation(
+        { name: 'The Drowned Market Stalls', placement: under('loc_hollow') },
+        entities,
+      ),
     ).toEqual(PLAIN)
   })
 
   it('reuses an exact sibling ahead of an older partial one', () => {
     const partial = place('loc_old', 'Market', 'loc_hollow', { createdAt: 1 })
     expect(
-      matchNewLocation({ name: 'The Drowned Market', parentId: 'loc_hollow' }, [
+      matchNewLocation({ name: 'The Drowned Market', placement: under('loc_hollow') }, [
         partial,
         { ...MARKET, createdAt: 9 },
       ]),
-    ).toEqual({ kind: 'reuse', id: 'loc_market' })
+    ).toEqual(reuse('loc_market'))
   })
 
   it('compares only locations', () => {
@@ -165,13 +187,13 @@ describe('matchNewLocation', () => {
       thing('item_lantern', 'Lantern'),
       makeEntity({ id: 'char_lantern', kind: 'character', name: 'Lantern' }),
     ]
-    expect(matchNewLocation({ name: 'Lantern', parentId: null }, entities)).toEqual(PLAIN)
+    expect(matchNewLocation({ name: 'Lantern', placement: TOP }, entities)).toEqual(PLAIN)
   })
 
   it('creates plain beside unrelated siblings', () => {
-    expect(matchNewLocation({ name: 'Lighthouse', parentId: 'loc_hollow' }, [MARKET])).toEqual(
-      PLAIN,
-    )
+    expect(
+      matchNewLocation({ name: 'Lighthouse', placement: under('loc_hollow') }, [MARKET]),
+    ).toEqual(PLAIN)
   })
 })
 
@@ -185,28 +207,24 @@ describe('matchNewLocation — by the map the prompt showed', () => {
   const REGION = [ELDRA, VELLIS, VAULT, SANCTUM]
 
   it('reuses a place hidden under a left-out parent, by the parent the map showed', () => {
-    expect(matchNewLocation({ name: 'The Vault', parentId: 'loc_eldra' }, REGION)).toEqual({
-      kind: 'reuse',
-      id: 'loc_vault',
-    })
-    expect(matchNewLocation({ name: 'Inner Sanctum', parentId: 'loc_eldra' }, REGION)).toEqual({
-      kind: 'reuse',
-      id: 'loc_sanctum',
-    })
+    expect(matchNewLocation({ name: 'The Vault', placement: under('loc_eldra') }, REGION)).toEqual(
+      reuse('loc_vault'),
+    )
+    expect(
+      matchNewLocation({ name: 'Inner Sanctum', placement: under('loc_eldra') }, REGION),
+    ).toEqual(reuse('loc_sanctum'))
   })
 
   it('reuses the left-out place itself under its listed parent', () => {
-    expect(matchNewLocation({ name: 'Port Vellis', parentId: 'loc_eldra' }, REGION)).toEqual({
-      kind: 'reuse',
-      id: 'loc_vellis',
-    })
+    expect(
+      matchNewLocation({ name: 'Port Vellis', placement: under('loc_eldra') }, REGION),
+    ).toEqual(reuse('loc_vellis'))
   })
 
   it('reuses under a left-out parent the create reached, as if it were listed', () => {
-    expect(matchNewLocation({ name: 'Inner Sanctum', parentId: 'loc_vault' }, REGION)).toEqual({
-      kind: 'reuse',
-      id: 'loc_sanctum',
-    })
+    expect(
+      matchNewLocation({ name: 'Inner Sanctum', placement: under('loc_vault') }, REGION),
+    ).toEqual(reuse('loc_sanctum'))
   })
 
   it('counts the left-out places under a left-out parent too', () => {
@@ -214,48 +232,54 @@ describe('matchNewLocation — by the map the prompt showed', () => {
     const cellar = place('loc_cellar', 'Cellar', 'loc_sanctum')
     const deepCrypt = place('loc_deep_crypt', 'Crypt', 'loc_cellar', { createdAt: 1 })
     expect(
-      matchNewLocation({ name: 'Crypt', parentId: 'loc_vault' }, [
+      matchNewLocation({ name: 'Crypt', placement: under('loc_vault') }, [
         ...REGION,
         crypt,
         cellar,
         deepCrypt,
       ]),
-    ).toEqual({ kind: 'reuse', id: 'loc_crypt' })
+    ).toEqual(reuse('loc_crypt'))
   })
 
   it('prefers a real child, then the fewest left-out places in between, then the older', () => {
     const near = place('loc_near', 'The Vault', 'loc_eldra', { createdAt: 9 })
     expect(
-      matchNewLocation({ name: 'The Vault', parentId: 'loc_eldra' }, [...REGION, near]),
-    ).toEqual({ kind: 'reuse', id: 'loc_near' })
+      matchNewLocation({ name: 'The Vault', placement: under('loc_eldra') }, [...REGION, near]),
+    ).toEqual(reuse('loc_near'))
     const deeper = place('loc_deep', 'Inner Sanctum', 'loc_sanctum', { createdAt: 1 })
     expect(
-      matchNewLocation({ name: 'Inner Sanctum', parentId: 'loc_eldra' }, [...REGION, deeper]),
-    ).toEqual({ kind: 'reuse', id: 'loc_sanctum' })
+      matchNewLocation({ name: 'Inner Sanctum', placement: under('loc_eldra') }, [
+        ...REGION,
+        deeper,
+      ]),
+    ).toEqual(reuse('loc_sanctum'))
   })
 
-  // The map shows a place whose parent row is gone as unplaced, so it hangs at no root.
-  it('never reuses a place whose parent row is gone as a root child', () => {
+  // A place whose parent row is gone is unplaced: its container is gone.
+  it('prefers a real top-level place to one whose parent row is gone, which it reuses and places', () => {
     const orphan = place('loc_orphan', 'Quay', 'loc_gone', { createdAt: 1 })
     const root = place('loc_root', 'Quay', null, { createdAt: 9 })
-    expect(matchNewLocation({ name: 'Quay', parentId: null }, [orphan, root])).toEqual({
-      kind: 'reuse',
-      id: 'loc_root',
-    })
-    expect(matchNewLocation({ name: 'Quay', parentId: null }, [orphan])).toEqual(PLAIN)
+    expect(matchNewLocation({ name: 'Quay', placement: TOP }, [orphan, root])).toEqual(
+      reuse('loc_root'),
+    )
+    expect(matchNewLocation({ name: 'Quay', placement: TOP }, [orphan])).toEqual(
+      reuseAndPlace('loc_orphan'),
+    )
   })
 
-  it('flags a place the map roots through a missing parent as a root sibling', () => {
+  it('never flags a place whose parent row is gone as a top-level sibling', () => {
     const orphan = place('loc_orphan', 'Quay', 'loc_gone')
-    expect(matchNewLocation({ name: 'Quay Street', parentId: null }, [orphan])).toEqual(
-      flaggedWith('loc_orphan'),
-    )
+    expect(matchNewLocation({ name: 'Quay Street', placement: TOP }, [orphan])).toEqual(PLAIN)
   })
 
   it('stops at a listed place: what hangs under it is not under the parent above', () => {
     const listedVellis = { ...VELLIS, injectionMode: 'auto' as const }
     expect(
-      matchNewLocation({ name: 'The Vault', parentId: 'loc_eldra' }, [ELDRA, listedVellis, VAULT]),
+      matchNewLocation({ name: 'The Vault', placement: under('loc_eldra') }, [
+        ELDRA,
+        listedVellis,
+        VAULT,
+      ]),
     ).toEqual(PLAIN)
   })
 
@@ -263,24 +287,36 @@ describe('matchNewLocation — by the map the prompt showed', () => {
     // The story is in the Vault, so Port Vellis's disabling is suspended for the Vault and
     // the Sanctum: both list under Eldra's map view, the Sanctum under the Vault.
     expect(
-      matchNewLocation({ name: 'Inner Sanctum', parentId: 'loc_eldra' }, REGION, 'loc_vault'),
+      matchNewLocation(
+        { name: 'Inner Sanctum', placement: under('loc_eldra') },
+        REGION,
+        'loc_vault',
+      ),
     ).toEqual(PLAIN)
     expect(
-      matchNewLocation({ name: 'Inner Sanctum', parentId: 'loc_vault' }, REGION, 'loc_vault'),
-    ).toEqual({ kind: 'reuse', id: 'loc_sanctum' })
+      matchNewLocation(
+        { name: 'Inner Sanctum', placement: under('loc_vault') },
+        REGION,
+        'loc_vault',
+      ),
+    ).toEqual(reuse('loc_sanctum'))
   })
 
   it('never reuses a retired place reached through a left-out one, nor flags it there', () => {
     const retiredVault = { ...VAULT, status: 'retired' as const }
     expect(
-      matchNewLocation({ name: 'The Vault', parentId: 'loc_eldra' }, [ELDRA, VELLIS, retiredVault]),
+      matchNewLocation({ name: 'The Vault', placement: under('loc_eldra') }, [
+        ELDRA,
+        VELLIS,
+        retiredVault,
+      ]),
     ).toEqual(PLAIN)
   })
 
   it('flags only real siblings, never a partial name reached through a left-out place', () => {
-    expect(matchNewLocation({ name: 'The Vault Door', parentId: 'loc_eldra' }, REGION)).toEqual(
-      PLAIN,
-    )
+    expect(
+      matchNewLocation({ name: 'The Vault Door', placement: under('loc_eldra') }, REGION),
+    ).toEqual(PLAIN)
   })
 })
 
@@ -291,32 +327,31 @@ describe('matchNewLocation — over an unhidden view, with the candidate keyword
   const VAULT = place('loc_vault', 'The Vault', 'loc_vellis')
   const REGION = [ELDRA, VELLIS, VAULT]
   const unhidden = (
-    candidate: { name: string; parentId: string | null; keywords?: readonly string[] },
+    candidate: { name: string; placement: PlacePlacement; keywords?: readonly string[] },
     entities: readonly Entity[],
   ) => matchAgainst(candidate, unhiddenLocationView(entities))
 
   it('reuses a disabled real child', () => {
-    expect(unhidden({ name: 'Port Vellis', parentId: 'loc_eldra' }, REGION)).toEqual({
-      kind: 'reuse',
-      id: 'loc_vellis',
-    })
+    expect(unhidden({ name: 'Port Vellis', placement: under('loc_eldra') }, REGION)).toEqual(
+      reuse('loc_vellis'),
+    )
   })
 
   it('never reaches through a disabled place: a grandchild is not a child', () => {
-    expect(unhidden({ name: 'The Vault', parentId: 'loc_eldra' }, REGION)).toEqual(PLAIN)
+    expect(unhidden({ name: 'The Vault', placement: under('loc_eldra') }, REGION)).toEqual(PLAIN)
   })
 
-  it('flags a place whose parent row is gone as a root sibling, where the tree shows it', () => {
+  it('flags no sibling in a place whose parent row is gone, which the tree shows unplaced', () => {
     const orphan = place('loc_orphan', 'Quay', 'loc_gone')
-    expect(unhidden({ name: 'Quay Street', parentId: null }, [orphan])).toEqual(
-      flaggedWith('loc_orphan'),
-    )
-    expect(unhidden({ name: 'Quay Street', parentId: 'loc_eldra' }, [ELDRA, orphan])).toEqual(PLAIN)
+    expect(unhidden({ name: 'Quay Street', placement: TOP }, [orphan])).toEqual(PLAIN)
+    expect(
+      unhidden({ name: 'Quay Street', placement: under('loc_eldra') }, [ELDRA, orphan]),
+    ).toEqual(PLAIN)
   })
 
   it("flags a sibling named among the candidate's keywords", () => {
     const mill = place('loc_mill', 'The Old Mill', 'loc_eldra')
-    const candidate = { name: 'Varn Mill', parentId: 'loc_eldra' }
+    const candidate = { name: 'Varn Mill', placement: under('loc_eldra') }
     expect(unhidden({ ...candidate, keywords: ['the old mill'] }, [ELDRA, mill])).toEqual(
       flaggedWith('loc_mill'),
     )
@@ -327,7 +362,7 @@ describe('matchNewLocation — over an unhidden view, with the candidate keyword
     const mill = place('loc_mill', 'The Old Mill', 'loc_eldra', { createdAt: 1 })
     const ford = place('loc_ford', 'Ford', 'loc_eldra', { createdAt: 9 })
     expect(
-      unhidden({ name: 'Varn Ford', parentId: 'loc_eldra', keywords: ['the old mill'] }, [
+      unhidden({ name: 'Varn Ford', placement: under('loc_eldra'), keywords: ['the old mill'] }, [
         ELDRA,
         mill,
         ford,
@@ -336,26 +371,194 @@ describe('matchNewLocation — over an unhidden view, with the candidate keyword
   })
 })
 
+// data-model.md → LocationState shape: matching takes in unplaced places three ways.
+describe('matchNewLocation — the unplaced places', () => {
+  const VARN = unplaced('loc_varn', 'Varn')
+  const placed = (candidate: { name: string; placement: PlacePlacement }, rows: Entity[]) =>
+    matchNewLocation(candidate, rows)
+
+  describe('a new place under a parent or top-level', () => {
+    it('reuses an unplaced place of exactly its name, which the writer places there', () => {
+      expect(placed({ name: 'varn', placement: under('loc_hollow') }, [VARN])).toEqual(
+        reuseAndPlace('loc_varn'),
+      )
+      expect(placed({ name: 'Varn', placement: TOP }, [VARN])).toEqual(reuseAndPlace('loc_varn'))
+    })
+
+    it('reuses what the map hangs there before an unplaced namesake', () => {
+      const local = place('loc_local', 'Varn', 'loc_hollow', { createdAt: 9 })
+      expect(
+        placed({ name: 'Varn', placement: under('loc_hollow') }, [
+          { ...VARN, createdAt: 1 },
+          local,
+        ]),
+      ).toEqual(reuse('loc_local'))
+    })
+
+    it('reuses the oldest of several unplaced namesakes, then the lowest id', () => {
+      const rows = [
+        unplaced('loc_new', 'Varn', { createdAt: 9 }),
+        unplaced('loc_z', 'Varn', { createdAt: 3 }),
+        unplaced('loc_b', 'varn', { createdAt: 3 }),
+      ]
+      expect(placed({ name: 'Varn', placement: TOP }, rows)).toEqual(reuseAndPlace('loc_b'))
+    })
+
+    it('reuses a staged or a disabled unplaced place, which the map leaves out', () => {
+      for (const row of [
+        { ...VARN, status: 'staged' as const },
+        { ...VARN, injectionMode: 'disabled' as const },
+      ])
+        expect(placed({ name: 'Varn', placement: under('loc_hollow') }, [row])).toEqual(
+          reuseAndPlace('loc_varn'),
+        )
+    })
+
+    it('never reuses a retired unplaced place, nor flags one from another placement', () => {
+      expect(
+        placed({ name: 'Varn', placement: under('loc_hollow') }, [
+          { ...VARN, status: 'retired' as const },
+        ]),
+      ).toEqual(PLAIN)
+    })
+
+    it('never reuses an unplaced place by a partial name, nor flags it', () => {
+      expect(placed({ name: 'Varn Docks', placement: under('loc_hollow') }, [VARN])).toEqual(PLAIN)
+      expect(placed({ name: 'Varn Docks', placement: TOP }, [VARN])).toEqual(PLAIN)
+    })
+
+    // world.md → Surfacing: two top-level places share the top level as a parent.
+    it('flags a top-level sibling same-parent, never an unplaced place', () => {
+      const quay = place('loc_quay', 'Quay', null)
+      expect(placed({ name: 'Quay Street', placement: TOP }, [quay])).toEqual(
+        flaggedWith('loc_quay'),
+      )
+      expect(placed({ name: 'Quay Street', placement: TOP }, [unplaced('loc_q', 'Quay')])).toEqual(
+        PLAIN,
+      )
+    })
+  })
+
+  describe('a new unplaced place', () => {
+    const EASTGATE = place('loc_east', 'Eastgate', null)
+    const MARKET_ELSEWHERE = place('loc_m2', 'The Drowned Market', 'loc_east')
+
+    it('reuses the one place of exactly its name, placed or not, as it stands', () => {
+      expect(placed({ name: 'the drowned MARKET', placement: UNPLACED }, [MARKET])).toEqual(
+        reuse('loc_market'),
+      )
+      expect(placed({ name: 'Varn', placement: UNPLACED }, [VARN])).toEqual(reuse('loc_varn'))
+    })
+
+    it('reuses one the map leaves out', () => {
+      const disabled = { ...MARKET, injectionMode: 'disabled' as const }
+      expect(placed({ name: 'The Drowned Market', placement: UNPLACED }, [disabled])).toEqual(
+        reuse('loc_market'),
+      )
+    })
+
+    it('flags several exact namesakes unplaced, an unplaced partner before an older placed one', () => {
+      expect(
+        placed({ name: 'Varn', placement: UNPLACED }, [
+          place('loc_placed', 'Varn', 'loc_hollow', { createdAt: 1 }),
+          { ...VARN, createdAt: 9 },
+        ]),
+      ).toEqual(flaggedWith('loc_varn', 'unplaced'))
+    })
+
+    it('pairs with the oldest of several placed namesakes, then the lowest id', () => {
+      expect(
+        placed({ name: 'The Drowned Market', placement: UNPLACED }, [
+          EASTGATE,
+          { ...MARKET, id: 'loc_z', createdAt: 3 },
+          { ...MARKET_ELSEWHERE, id: 'loc_b', createdAt: 3 },
+          { ...MARKET, id: 'loc_a', createdAt: 7 },
+        ]),
+      ).toEqual(flaggedWith('loc_b', 'unplaced'))
+    })
+
+    // A retired place is never reused, so it comes back only through review.
+    it('flags an exact retired namesake alone, and reuses a live one beside it', () => {
+      const retired = { ...MARKET, status: 'retired' as const }
+      expect(placed({ name: 'The Drowned Market', placement: UNPLACED }, [retired])).toEqual(
+        flaggedWith('loc_market', 'unplaced'),
+      )
+      expect(
+        placed({ name: 'The Drowned Market', placement: UNPLACED }, [
+          EASTGATE,
+          retired,
+          MARKET_ELSEWHERE,
+        ]),
+      ).toEqual(reuse('loc_m2'))
+    })
+
+    it('flags a partial name, or a keyword hit, against another unplaced place', () => {
+      expect(placed({ name: 'Varn Docks', placement: UNPLACED }, [VARN])).toEqual(
+        flaggedWith('loc_varn', 'unplaced'),
+      )
+      const ferry = unplaced('loc_ferry', 'The Ferry', { keywords: ['varn crossing'] })
+      expect(placed({ name: 'Varn Crossing', placement: UNPLACED }, [ferry])).toEqual(
+        flaggedWith('loc_ferry', 'unplaced'),
+      )
+    })
+
+    it('never flags a partial name elsewhere on the map', () => {
+      expect(placed({ name: 'The Drowned Market Stalls', placement: UNPLACED }, [MARKET])).toEqual(
+        PLAIN,
+      )
+    })
+
+    it('compares only locations', () => {
+      expect(
+        placed({ name: 'Varn', placement: UNPLACED }, [
+          thing('item_varn', 'Varn'),
+          makeEntity({ id: 'char_varn', kind: 'character', name: 'Varn' }),
+        ]),
+      ).toEqual(PLAIN)
+    })
+  })
+
+  // classifier.md → Mentioned places: the pass's top-level create places the unplaced match.
+  it('reuses and places an unplaced namesake over the unhidden view too', () => {
+    expect(
+      matchAgainst({ name: 'Varn', placement: TOP }, unhiddenLocationView([HOLLOW, VARN])),
+    ).toEqual(reuseAndPlace('loc_varn'))
+  })
+})
+
 describe('matchNewPlace', () => {
-  const settled = [{ name: 'the Gull Inn', parentId: 'loc_town', id: 'loc_new1' }]
+  const settled = [{ name: 'the Gull Inn', placement: under('loc_town'), id: 'loc_new1' }]
   const view = unhiddenLocationView([
     place('loc_town', 'Varn', null),
     place('loc_inn', 'The Gull Inn', 'loc_town'),
   ])
 
   it('maps a place to an earlier one in the reply with its name and parent, before any row', () => {
-    expect(matchNewPlace({ name: 'The Gull Inn', parentId: 'loc_town' }, settled, view)).toEqual({
+    expect(
+      matchNewPlace({ name: 'The Gull Inn', placement: under('loc_town') }, settled, view),
+    ).toEqual({
       kind: 'twin',
       id: 'loc_new1',
     })
   })
 
-  it('matches the existing rows when no earlier place shares its parent', () => {
-    expect(matchNewPlace({ name: 'The Gull Inn', parentId: 'loc_town' }, [], view)).toEqual({
-      kind: 'reuse',
-      id: 'loc_inn',
+  it('keys a twin on name and placement: a top-level and an unplaced create stay apart', () => {
+    const twins = [
+      { name: 'Ashfall', placement: TOP, id: 'loc_top' },
+      { name: 'Ashfall', placement: UNPLACED, id: 'loc_unplaced' },
+    ]
+    expect(matchNewPlace({ name: 'ashfall', placement: UNPLACED }, twins, view)).toEqual({
+      kind: 'twin',
+      id: 'loc_unplaced',
     })
-    expect(matchNewPlace({ name: 'the Gull Inn', parentId: null }, settled, view)).toEqual(PLAIN)
+    expect(matchNewPlace({ name: 'Ashfall', placement: TOP }, twins.slice(1), view)).toEqual(PLAIN)
+  })
+
+  it('matches the existing rows when no earlier place shares its parent', () => {
+    expect(matchNewPlace({ name: 'The Gull Inn', placement: under('loc_town') }, [], view)).toEqual(
+      reuse('loc_inn'),
+    )
+    expect(matchNewPlace({ name: 'the Gull Inn', placement: TOP }, settled, view)).toEqual(PLAIN)
   })
 })
 
