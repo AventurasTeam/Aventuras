@@ -53,8 +53,8 @@ export type MergeOverlap = {
   canonicalRefs: number
   /**
    * Set only when the canonical is an unplaced place: whether it takes the loser's placement,
-   * or stays unplaced because that place is unknown, retired, would close a loop, or is disabled
-   * with the story inside the canonical.
+   * or stays unplaced because that place is unknown, retired, would close a loop, or would put
+   * the story, held by the canonical, inside a disabled place.
    */
   canonicalPlacement?: 'takes-loser' | 'stays-unplaced'
 }

@@ -17,7 +17,7 @@ import { collisionPairOf, flaggedSideOf, type CollisionPair } from './collision-
 import { entityMergeActions, type EntityMergeInput } from './entity-merge'
 import { referencingEntities } from './entity-refs'
 import { mergeLinks } from './merge-links'
-import { storyPlaceOf } from './place-rules'
+import { mergePlaceRefusal, storyPlaceOf } from './place-rules'
 
 function entity(
   id: string,
@@ -724,6 +724,79 @@ describe('entityMergeActions — collision flags', () => {
           expect(kept.actions).toStrictEqual([deleteOf('loc_b')])
           expect(kept.overlap.canonicalPlacement).toBe('stays-unplaced')
         }
+      })
+
+      it('keeps it unplaced when only an ancestor of the loser’s parent is disabled', () => {
+        const varn = unplaced('loc_a', 'Varn')
+        const wing = place('loc_e', 'The East Hall', 'loc_d')
+        const deep = place('loc_b', 'Varn', 'loc_e')
+        const kept = merge({
+          canonical: varn,
+          loser: deep,
+          branchEntities: [dark, wing, varn, deep],
+          story: storyAt('loc_a'),
+        })
+        expect(kept.overlap.canonicalPlacement).toBe('stays-unplaced')
+      })
+
+      it('reads the scene as well as the tail', () => {
+        const varn = unplaced('loc_a', 'Varn')
+        const kept = merge({
+          canonical: varn,
+          loser: inDark,
+          branchEntities: [hollow, dark, varn, inDark],
+          story: storyPlaceOf({
+            tail: { metadata: { currentLocationId: 'loc_p' } },
+            sceneSource: { metadata: { currentLocationId: 'loc_a' } },
+          }),
+        })
+        expect(kept.overlap.canonicalPlacement).toBe('stays-unplaced')
+      })
+
+      // The footnote never sees fromLoser, so the adoption is judged apart from the merged mode.
+      it('judges the adoption alone, whatever mode the merged place ends with', () => {
+        const dim = unplaced('loc_a', 'Varn', { injectionMode: 'disabled' })
+        const lit = place('loc_b', 'Varn', 'loc_p')
+        const world = [hollow, dim, lit]
+        const story = storyAt('loc_b')
+
+        const takesMode = merge({
+          canonical: dim,
+          loser: lit,
+          branchEntities: world,
+          story,
+          fromLoser: ['injectionMode'],
+        })
+        expect(takesMode.overlap.canonicalPlacement).toBe('takes-loser')
+        expect(takesMode.actions).toStrictEqual([
+          updateOf('loc_a', {
+            injectionMode: 'auto',
+            state: { parent_location_id: 'loc_p' },
+          }),
+          deleteOf('loc_b'),
+        ])
+        expect(
+          mergePlaceRefusal({
+            canonical: dim,
+            loser: lit,
+            actions: takesMode.actions,
+            branchEntities: world,
+            story,
+          }),
+        ).toBeNull()
+
+        // Keeping its own disabled mode, the merge is refused for the mode, not the adoption.
+        const keepsMode = merge({ canonical: dim, loser: lit, branchEntities: world, story })
+        expect(keepsMode.overlap.canonicalPlacement).toBe('takes-loser')
+        expect(
+          mergePlaceRefusal({
+            canonical: dim,
+            loser: lit,
+            actions: keepsMode.actions,
+            branchEntities: world,
+            story,
+          }),
+        ).toBe('story-inside')
       })
 
       it('still places the canonical when the story is elsewhere or already in the loser', () => {

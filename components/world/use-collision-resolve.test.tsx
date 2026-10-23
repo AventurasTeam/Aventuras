@@ -25,7 +25,7 @@ import {
   translationsStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
-import { storyPlaceOf } from '@/lib/world'
+import { storyPlaceOf, type StoryPlace } from '@/lib/world'
 
 import {
   collisionResolveProp,
@@ -233,6 +233,49 @@ describe('useCollisionResolve → opening', () => {
 
     expect(openedPair(result).sides[1].relationCounts.awarenessRows).toBe(1)
     expect(openedPair(result).sides[1].relationCounts.translationRows).toBe(1)
+  })
+
+  it('passes the story to the summary: an unplaced canonical holding it stays unplaced under a disabled place', () => {
+    const harbor = makeEntity({
+      id: 'loc_harbor',
+      kind: 'location',
+      name: 'Harbor',
+      state: { parent_location_id: null, unplaced: true },
+      createdAt: 1_000,
+    })
+    const dark = makeEntity({
+      id: 'loc_dark',
+      kind: 'location',
+      name: 'Dark Wing',
+      injectionMode: 'disabled',
+      state: { parent_location_id: null },
+    })
+    const twin = makeEntity({
+      id: 'loc_harbor_2',
+      kind: 'location',
+      name: 'Harbor',
+      state: { parent_location_id: 'loc_dark' },
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: harbor.id,
+      nameCollisionReason: 'alike',
+      createdAt: 2_000,
+    })
+    act(() => entitiesStore.hydrate(BRANCH, [harbor, dark, twin]))
+    const placementWith = (story: StoryPlace) => {
+      const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run, story))
+      act(() => result.current.request(twin.id, harbor.id))
+      return openedPair(result).sides[1].relationCounts.overlap.canonicalPlacement
+    }
+
+    expect(placementWith(NOWHERE)).toBe('takes-loser')
+    expect(
+      placementWith(
+        storyPlaceOf({
+          tail: { metadata: { currentLocationId: harbor.id } },
+          sceneSource: { metadata: { currentLocationId: harbor.id } },
+        }),
+      ),
+    ).toBe('stays-unplaced')
   })
 
   it('closes once a row of the pair is gone, and stays closed when an undo brings it back', () => {
