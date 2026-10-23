@@ -3481,11 +3481,11 @@ describe('per-turn-piggyback', () => {
       })
 
       // The fold applied these before its parse failed: a reply naming neither keeps its record.
-      it("keeps the fold's conditions and drops when the reply reports neither", async () => {
+      it("keeps the fold's conditions and transfers when the reply reports neither", async () => {
         const foldReport: NonNullable<EntryMetadata['stateReport']> = {
           layer: 'piggyback_tagged_block',
           conditions: [{ id: TOWN, text: 'flooded to the knee' }],
-          transfers: { items: [], stackables: [], drops: [{ id: OLD_KEY, from: HERO, at: TOWN }] },
+          transfers: { items: [{ id: OLD_KEY, to: HERO, slot: 'inventory' }], stackables: [] },
           failedFields: [{ field: 'sceneEntities', detail: 'unresolvable placeholder' }],
         }
         seedFallbackTurn(fallbackWorld(), foldReport)
@@ -3507,7 +3507,7 @@ describe('per-turn-piggyback', () => {
             { id: TOWN, text: 'flooded to the knee' },
             { id: MARKET, text: 'burned to the waterline', rejected: true },
           ],
-          transfers: { items: [], stackables: [], drops: [{ id: OLD_KEY, from: HERO, at: TOWN }] },
+          transfers: { items: [{ id: OLD_KEY, to: HERO, slot: 'inventory' }], stackables: [] },
           failedFields: [{ field: 'sceneEntities', detail: 'unresolvable placeholder' }],
         }
         seedFallbackTurn(fallbackWorld(), foldReport)
@@ -3534,7 +3534,7 @@ describe('per-turn-piggyback', () => {
         const foldReport: NonNullable<EntryMetadata['stateReport']> = {
           layer: 'piggyback_tagged_block',
           conditions: [{ id: TOWN, text: 'flooded to the knee' }],
-          transfers: { items: [], stackables: [], drops: [{ id: LAMP, from: HERO, at: TOWN }] },
+          transfers: { items: [{ id: LAMP, to: HERO, slot: 'inventory' }], stackables: [] },
           failedFields: [{ field: 'sceneEntities', detail: 'unresolvable placeholder' }],
         }
         const fallbackAfterFold = (reply: Record<string, unknown>) =>
