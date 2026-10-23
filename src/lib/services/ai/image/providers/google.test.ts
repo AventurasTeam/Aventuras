@@ -11,7 +11,13 @@ vi.mock('../../sdk/providers/fetch', () => ({
   createTimeoutFetch: vi.fn(),
 }))
 
+vi.mock('#lib/utils/url.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
+  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
+})
+
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { createTimeoutFetch } from '../../sdk/providers/fetch'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 import { createGoogleProvider } from './google'
@@ -65,6 +71,25 @@ describe('Google model listing', () => {
     vi
       .mocked(createTimeoutFetch)
       .mockReturnValue((async () => response) as unknown as ReturnType<typeof createTimeoutFetch>)
+
+  it('uses the normalized base URL for the SDK and the model list', async () => {
+    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v1beta')
+    const fetchFn = vi.fn(async (_url: string) => ({
+      ok: true,
+      json: async () => ({ models: [] }),
+    }))
+    vi.mocked(createTimeoutFetch).mockReturnValue(
+      fetchFn as unknown as ReturnType<typeof createTimeoutFetch>,
+    )
+
+    await createGoogleProvider({ apiKey: 'k', baseUrl: ' https://raw.test// ' }).listModels()
+
+    expect(normalizeBaseUrl).toHaveBeenCalledWith(' https://raw.test// ')
+    expect(createGoogleGenerativeAI).toHaveBeenCalledWith(
+      expect.objectContaining({ baseURL: 'https://normalized.test/v1beta' }),
+    )
+    expect(fetchFn).toHaveBeenCalledWith('https://normalized.test/v1beta/models?key=k&pageSize=200')
+  })
 
   it('returns no models, and makes no request, without a key', async () => {
     expect(await createGoogleProvider({ apiKey: '' }).listModels()).toEqual([])
