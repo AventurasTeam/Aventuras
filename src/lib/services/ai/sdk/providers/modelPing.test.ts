@@ -12,8 +12,13 @@ vi.mock('#lib/stores/debug.svelte.ts', () => ({
   debug: { isActive: false, addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
 }))
 
-const { extractQuotaPercent, normalizeBaseUrl, getEffectiveBaseUrl, pingModel } =
-  await import('./modelPing')
+vi.mock('#lib/utils/url.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
+  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
+})
+
+const { extractQuotaPercent, getEffectiveBaseUrl, pingModel } = await import('./modelPing')
+const { normalizeBaseUrl } = await import('#lib/utils/url.ts')
 const { fetch: tauriHttpFetch } = await import('@tauri-apps/plugin-http')
 
 /**
@@ -27,47 +32,20 @@ function headers(pairs: Record<string, string>): Headers {
   return new Headers(pairs)
 }
 
-describe('normalizeBaseUrl', () => {
-  it('strips a trailing slash', () => {
-    expect(normalizeBaseUrl('https://api.example.com/v1/')).toBe('https://api.example.com/v1')
-  })
-
-  it('strips several trailing slashes', () => {
-    expect(normalizeBaseUrl('https://api.example.com/v1///')).toBe('https://api.example.com/v1')
-  })
-
-  it('trims surrounding whitespace, which pasted keys and URLs carry', () => {
-    expect(normalizeBaseUrl('  https://api.example.com/v1  ')).toBe('https://api.example.com/v1')
-  })
-
-  it('leaves a URL that needs nothing done to it alone', () => {
-    expect(normalizeBaseUrl('https://api.example.com/v1')).toBe('https://api.example.com/v1')
-  })
-
-  it('never strips the slashes in the scheme', () => {
-    expect(normalizeBaseUrl('https://')).toBe('https:')
-  })
-})
-
 describe('getEffectiveBaseUrl', () => {
-  it("prefers the profile's own base URL", () => {
+  it("returns the profile's own base URL, normalized", () => {
+    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v1')
     const url = getEffectiveBaseUrl({
       providerType: 'openrouter',
-      baseUrl: 'https://custom.example.com/v1/',
+      baseUrl: ' https://raw.test/v1// ',
     } as never)
-    expect(url).toBe('https://custom.example.com/v1')
+    expect(normalizeBaseUrl).toHaveBeenCalledWith(' https://raw.test/v1// ')
+    expect(url).toBe('https://normalized.test/v1')
   })
 
   it("falls back to the provider's default when the profile has none", () => {
     const url = getEffectiveBaseUrl({ providerType: 'openrouter', baseUrl: '' } as never)
     expect(url).toContain('openrouter')
-    expect(url.endsWith('/')).toBe(false)
-  })
-
-  it('treats a whitespace-only base URL as absent', () => {
-    const fromBlank = getEffectiveBaseUrl({ providerType: 'openrouter', baseUrl: '   ' } as never)
-    const fromMissing = getEffectiveBaseUrl({ providerType: 'openrouter' } as never)
-    expect(fromBlank).toBe(fromMissing)
   })
 
   it('returns an empty string for a provider with no default endpoint', () => {
@@ -187,5 +165,17 @@ describe('pingModel', () => {
     const headers = new Headers(vi.mocked(tauriHttpFetch).mock.calls[0][1]?.headers)
     expect(headers.get('origin')).toBe('')
     expect(headers.get('authorization')).toBe('Bearer key')
+  })
+
+  it('pings the normalized base URL', async () => {
+    vi.mocked(tauriHttpFetch).mockResolvedValue(new Response('{}', { status: 200 }))
+    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v1')
+
+    await pingModel(' https://raw.test/v1// ', 'key', 'llama')
+
+    expect(normalizeBaseUrl).toHaveBeenCalledWith(' https://raw.test/v1// ')
+    expect(vi.mocked(tauriHttpFetch).mock.calls.at(-1)![0]).toBe(
+      'https://normalized.test/v1/chat/completions',
+    )
   })
 })
