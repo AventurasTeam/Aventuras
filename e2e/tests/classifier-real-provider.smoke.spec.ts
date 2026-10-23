@@ -284,11 +284,16 @@ test.describe('periodic classifier — real provider smoke', () => {
                WHERE branch_id = ? AND kind <> 'system' AND position > ? AND position <= ?`,
               [branchId, from, to],
             )
+      // A missing pass_completed line must not cost the pass its timing and watermark line.
+      const retries = await passRetries(outcome).catch(() => {
+        logCursor = logs.length
+        return 'retries: no pass_completed line'
+      })
       process.stdout.write(
         `pass ${++passCount} (${label}): ${outcome} after ` +
           `${(((finishedAt ?? startedAt) - startedAt) / 1000).toFixed(1)} s, ` +
           `watermark ${from ?? '?'} -> ${to ?? '?'}, ${entries} entries classified, ` +
-          `${await passRetries(outcome)}` +
+          `${retries}` +
           `${outcome === 'failed' ? `, lastError: ${settled.lastError}` : ''}\n`,
       )
       return outcome
