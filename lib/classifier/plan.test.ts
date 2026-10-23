@@ -2676,7 +2676,7 @@ describe('first profiles', () => {
             sourceTurn: 't1',
             visual: { hair: ' salt-white ', eyes: '', attire: 'an oilskin coat' },
             traits: ['patient', ' Patient ', '', 'blunt'],
-            drives: ['find her brother'],
+            drives: ['find her brother', ' Find her brother ', ' '],
             voice: '  slow, certain  ',
           },
         ],
@@ -2919,6 +2919,17 @@ describe('renames', () => {
     expect(renameClashes).toEqual([
       { ref: 'char_stranger', name: 'kael', partnerId: 'char_kael', flagged: true },
     ])
+  })
+
+  it("keeps a clash's keyword for the rest of the reply", () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        renames: [{ ref: 'char_stranger', name: 'Kael', sourceTurn: 't1' }],
+        aliases: [{ ref: 'char_stranger', terms: ['kael'], sourceTurn: 't2' }],
+      }),
+      deps([STRANGER, KAEL]),
+    )
+    expect(kindsOf(planned)).toEqual(['appendEntityKeywords', 'raiseCollisionFlag'])
   })
 
   it('only adds the keyword to a row already flagged, keeping its partner', () => {
