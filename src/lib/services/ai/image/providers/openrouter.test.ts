@@ -13,7 +13,13 @@ vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
   createSdkFetch: vi.fn(() => sdkFetch),
 }))
 
+vi.mock('#lib/utils/url.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
+  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
+})
+
 import { createSdkFetch } from '#lib/services/ai/sdk/providers/sdkFetch.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { createOpenRouterProvider } from './openrouter'
 
 const PNG = 'iVBORw0KGgo='
@@ -64,6 +70,18 @@ describe('OpenRouter image provider', () => {
       resolution: '1.5K',
     })
     expect(result).toEqual({ base64: 'AAA' })
+  })
+
+  it('posts to the normalized base URL', async () => {
+    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/api/v1')
+    await provider(' https://raw.test// ').generate({
+      model: 'm',
+      prompt: 'p',
+      spec: landscapeMedium,
+    })
+
+    expect(normalizeBaseUrl).toHaveBeenCalledWith(' https://raw.test// ')
+    expect(sentRequest().url).toBe('https://normalized.test/api/v1/images')
   })
 
   it('sends references as input_references data URLs with their sniffed type', async () => {
