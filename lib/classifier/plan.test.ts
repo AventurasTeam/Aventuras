@@ -1919,6 +1919,24 @@ describe('mentioned places', () => {
         ])
       })
 
+      it('flags a later create beside the place this reply placed, as that place now sits', () => {
+        const { planned } = buildClassifierActions(
+          reply([
+            newPlace('new:a', 'the Cellar', { parent: 'loc_inn' }),
+            newPlace('new:b', 'the Cellar Stairs', { parent: 'loc_inn' }),
+          ]),
+          deps([INN, CELLAR]),
+        )
+        expect(createdPlaces(planned)).toEqual([
+          expect.objectContaining({
+            name: 'the Cellar Stairs',
+            nameCollisionFlag: 1,
+            nameCollisionPartnerId: 'loc_cellar',
+            nameCollisionReason: 'same-parent',
+          }),
+        ])
+      })
+
       it('still maps a same-placement twin to the first, placing once', () => {
         const { planned, handleMap } = buildClassifierActions(
           reply([

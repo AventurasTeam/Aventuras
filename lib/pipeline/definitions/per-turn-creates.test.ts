@@ -782,7 +782,7 @@ describe('planTurnCreates — unplaced places', () => {
   })
 
   // The kept chain is linear, so two same-named creates can only be staged one inside the other.
-  it('matches a later create against where this block placed a reused place, so nothing moves', async () => {
+  it('creates a namesake inside a place this block placed, instead of reusing it', async () => {
     const CELLAR = 'loc_00000000-0000-4000-8000-0000000000ab'
     const STAIRS = 'loc_00000000-0000-4000-8000-0000000000ac'
     const plan = await runPlanner(

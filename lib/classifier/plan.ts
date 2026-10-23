@@ -258,6 +258,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         name: place.name,
         description: place.description.trim(),
       })
+      // The snapshot's hiddenBetween stays valid beside the swapped rows: matching runs before any move.
       const match = matchNewPlace(
         { name: stored.name, placement: candidate, keywords: place.keywords },
         placed,
