@@ -201,7 +201,7 @@ describe('classifierExtractionSchema — the writer map', () => {
     ])
   })
 
-  // A free string so an off-catalog key still parses (the planner drops it); the catalog's keys are in the description.
+  // Free string: an off-catalog key still parses (the planner drops it); description lists keys.
   it("lists the catalog's keys in the icon's description, on happenings and new threads", () => {
     const expected =
       'One of: sparkles, eye, handshake, door, swords, flame, mask, scroll, key, skull, crown, map, heart, shield, coins, book. Omit when none fits.'
@@ -261,8 +261,8 @@ describe('classifierExtractionSchema — the writer map', () => {
     )
   })
 
-  // classifier.md → Threads → What it emits. A thread the turns both open and close arrives already
-  // resolved or failed (no later pass sees the turn that closed it), naming that turn.
+  // classifier.md → Threads → What it emits: opened and closed in one window arrives already
+  // resolved or failed, since no later pass sees the closing turn.
   it('takes a new thread in any of the four statuses, and a status change never to pending', () => {
     const thread = { title: 'Recover the relic', description: 'Stolen at the ford.' }
     expect(
@@ -309,7 +309,7 @@ describe('classifierExtractionSchema — the writer map', () => {
     expect(fields.resolvedAtTurn?.description).toContain('sourceTurn stays the turn that opened it')
   })
 
-  // The schema block ends the system message, before the turns: "these turns" has nothing to point at.
+  // The schema block ends the system message, before the turns: "these turns" has no referent.
   it.each([
     ['classifierExtractionSchema', classifierExtractionSchema],
     ['classifierExtractionWithPlacesSchema', classifierExtractionWithPlacesSchema],

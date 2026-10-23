@@ -70,7 +70,7 @@ export function buildClassifierContext(args: {
   entities: readonly Entity[]
   happenings: readonly Happening[]
   relationships: readonly CharacterRelationship[]
-  /** classifier.md → Threads → What the pass sees: every thread on the branch, the user's included. */
+  /** classifier.md → Threads → What the pass sees: every thread on the branch, user's included. */
   threads: readonly Thread[]
   /** stories.settings.classifierMentionedPlaces, read once when the pass builds its prompt. */
   mentionedPlaces: boolean

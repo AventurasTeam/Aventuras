@@ -145,8 +145,7 @@ export const classifierExtractionSchema = z.object({
       }),
     )
     .default([]),
-  // classifier.md → What the classifier writes: updates to listed rows. Each names its target by
-  // placeholder; the planner drops one whose target the prompt didn't list.
+  // classifier.md → What the classifier writes: the planner drops an update on an unlisted target.
   renames: z.array(z.object({ ref: z.string(), name: z.string(), sourceTurn })).default([]),
   placements: z
     .array(

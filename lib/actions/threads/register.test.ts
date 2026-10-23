@@ -417,7 +417,7 @@ describe('updateThread — the entry a status ended on', () => {
   })
 })
 
-// classifier.md → Threads → The row: a pass moves a listed thread's status.
+// classifier.md → Threads → The row.
 describe('setThreadStatus', () => {
   const PROSE = 'e_prose'
   // A thread a pass created carries the turn that set it up.
@@ -567,7 +567,7 @@ describe('setThreadStatus', () => {
     )
   })
 
-  // cadence.md → User edits and classifier writes: a status the user wrote after the prose stands.
+  // cadence.md → User edits and classifier writes.
   it('keeps a status the user wrote after the prose', async () => {
     const { db, ctx } = await setupWithProse()
     await seed(ctx)

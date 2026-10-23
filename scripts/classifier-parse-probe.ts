@@ -28,8 +28,7 @@ import { resolveDevSlot } from './dev-slot/resolve'
 
 // Opt-in: the real pass prompt, sent N times to a real provider, for a first-attempt parse rate.
 //   SMOKE_LLM_URL=http://host:port/v1 SMOKE_LLM_MODEL=<id> pnpm probe:classifier
-// PROBE_RUNS (default 20), PROBE_BRANCH_ID (default br_hero_main), AVENTURAS_DB_PATH (default:
-// the dev slot's aventuras.db, as `pnpm db:seed` writes it). The DB is opened read-only.
+// PROBE_RUNS (20), PROBE_BRANCH_ID (br_hero_main), AVENTURAS_DB_PATH (dev slot db, read-only).
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
 const RUNS = Number(process.env.PROBE_RUNS ?? 20)

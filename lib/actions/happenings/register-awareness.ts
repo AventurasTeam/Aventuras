@@ -27,8 +27,8 @@ type AwarenessUpsertPayload = {
   /** Honored only on a user-source create; an invalid value rejects the action regardless. */
   retrievalCount?: number
   /**
-   * A pass's source entry (cadence.md → User edits and classifier writes): a field, row or delete
-   * the user wrote after that prose stands. Absent or null checks nothing, as for a user write.
+   * A pass's source entry (cadence.md → User edits and classifier writes): user writes after it
+   * stand. Absent or null checks nothing, as for a user write.
    */
   proseEntryId?: ProseEntryId
 }

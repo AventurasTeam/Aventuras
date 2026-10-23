@@ -1484,9 +1484,8 @@ test.describe('periodic classifier — an owed pass across a restart', () => {
   })
 })
 
-// The pass's prompt lists each row as `- [<placeholder>] <name>`, nested places indented
-// (lib/prompts/bundled/periodic-classifier.ts). A reply naming listed rows is written once the
-// held call shows which placeholder each row got.
+// The pass's prompt lists rows as `- [<placeholder>] <name>`, nested places indented
+// (lib/prompts/bundled/periodic-classifier.ts), so a reply can name them once the call is held.
 function placeholderIn(prompt: string, name: string): string {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   // The name ends at a kind or status, a description, or the line's end, so a longer name it
@@ -1496,9 +1495,8 @@ function placeholderIn(prompt: string, name: string): string {
   return match[1]
 }
 
-// classifier.md → What the classifier writes: only a running app takes a reply through the real
-// schema, the planner and each narrow action to the rows. The planner's rules are unit-tested
-// (plan.test.ts); this pins that every write lands, and that a user's edit after the prose a write
+// classifier.md → What the classifier writes: pins that every write lands through the real
+// schema, planner and actions (rules: plan.test.ts), and that a user edit after the prose a write
 // rests on stands (cadence.md → User edits and classifier writes).
 test.describe('periodic classifier — the writer map', () => {
   let app: LaunchedApp
@@ -1717,7 +1715,6 @@ test.describe('periodic classifier — the writer map', () => {
         amulet,
       ]),
     ).toEqual([['resolved', turn2Reply]])
-    // A happening's category and icon, and awareness of a listed happening.
     expect(
       await queryApp(
         page,

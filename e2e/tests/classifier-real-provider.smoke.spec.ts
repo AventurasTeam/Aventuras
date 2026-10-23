@@ -238,9 +238,8 @@ test.describe('periodic classifier — real provider smoke', () => {
     const PASS_COMPLETED =
       /^classifier\.pass_completed \{parseRetries: (\d+), providerRetries: (\d+), writes: (\d+)\}/
     let logCursor = 0
-    // Passes never overlap, so the console lines since the last settle are this pass's: a completed
-    // pass logs its counts. The console text carries no run id, so a failed pass's count is every
-    // pipeline.recoverable_error line since the last settle, its turn's retries included.
+    // Passes never overlap, so console lines since the last settle are this pass's. The text has no
+    // run id: a failed pass's count is every recoverable_error line since, turn retries included.
     const passRetries = async (outcome: string | null): Promise<string> => {
       const from = logCursor
       const completed = () =>

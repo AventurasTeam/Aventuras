@@ -202,18 +202,14 @@ export function wroteCollisionFlag(edits: readonly Delta[]): boolean {
 
 const THREAD_STATUS_COLUMNS: readonly string[] = ['status', 'resolvedAtEntryId']
 
-/**
- * A user edit wrote a thread's status or the entry a resolved or failed status ended on, a ref that
- * only means something beside that status (classifier.md → Threads → The row).
- */
+/** A user edit wrote a thread's status or resolved-at entry (classifier.md → Threads → The row). */
 export function wroteThreadStatus(edits: readonly Delta[]): boolean {
   return THREAD_STATUS_COLUMNS.some((column) => wroteColumn(edits, column))
 }
 
 /**
- * wrotePath, judging a place's parent and its unplaced mark as one field, an entity's collision
- * flag, partner and reason as another, and a thread's status and its entry ref as a third: a user
- * write to any of one keeps all of it (cadence.md → User edits and classifier writes).
+ * wrotePath, but a place's parent and unplaced mark, an entity's collision columns and a thread's
+ * status and entry ref each count as one field (cadence.md → User edits and classifier writes).
  */
 export function wroteField(
   edits: readonly Delta[],
@@ -271,7 +267,7 @@ export function userDeletedPairSince(
   return userDeletedRowSince(ctx, branchId, 'character_relationships', { aId, bId }, since)
 }
 
-/** Whether the user deleted the character's `happening_awareness` row for the happening after `since`. */
+/** Whether the user deleted the character's awareness row for the happening after `since`. */
 export function userDeletedAwarenessSince(
   ctx: DbCtx,
   branchId: string,

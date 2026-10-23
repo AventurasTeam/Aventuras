@@ -79,7 +79,7 @@ export type DroppedStanding = { faction: string; cause: 'retired-faction' }
 /** A happening's or a new thread's icon the catalog lacks: written as none. */
 export type UnknownIcon = { title: string; icon: string }
 
-/** A placement that plans nothing: a loop, a retired parent, or a top-level mark of a placed place. */
+/** A placement that plans nothing: a loop, a retired parent, or top-level marking a placed one. */
 export type DroppedPlacement = {
   ref: string
   cause: 'cycle' | 'retired' | 'not-unplaced' | 'chain-broken'
@@ -115,7 +115,7 @@ export type PlanDeps = {
   // itself, so the planner must not.
   newId: (kind: 'hap' | 'char' | 'fact' | 'hinv' | 'loc' | 'thr') => string
   threads: readonly Thread[]
-  /** The happenings the prompt listed (the branch's, as the phase passes them to buildClassifierContext). */
+  /** The happenings the prompt listed: the same set the phase passes to buildClassifierContext. */
   happenings: readonly Pick<Happening, 'id'>[]
   /** The branch's stored pairs; a listed happening's stored pair plans nothing. */
   awareness: readonly Pick<HappeningAwareness, 'characterId' | 'happeningId'>[]
@@ -183,7 +183,6 @@ export function clampEmbeddedCharacter(candidate: { name: string; description: s
 // classifier.md → Mentioned places → Parent: a parent the planner can't use leaves it unplaced.
 const UNPLACED: PlacePlacement = { kind: 'unplaced' }
 
-// The schema's "top-level", as a new place's parent or a placement's.
 const isTopLevel = (parent: string | undefined): boolean =>
   parent?.trim().toLowerCase() === TOP_LEVEL_TOKEN
 
@@ -580,8 +579,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       .sort((a, b) => a.at - b.at || a.order - b.order)
       .map(({ fact }) => fact)
 
-  // data-model.md → Authorship contract → Seen before written: an update names a row the pass read
-  // before its reply, and its prompt lists every such row.
+  // data-model.md → Authorship contract → Seen before written.
   const unseenRefs: UnseenRef[] = []
 
   // classifier.md → What the classifier writes → Names. A name is taken when a row of the kind
@@ -884,9 +882,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     }
   }
 
-  // classifier.md → What the classifier writes → Happenings: a character learning of a listed
-  // happening. Create-only: the upsert would merge a stored pair's source and decay resistance,
-  // which chapter close tunes.
+  // classifier.md → What the classifier writes → Happenings. Create-only: the upsert would merge a
+  // stored pair's source and decay resistance, which chapter close tunes.
   const listedHappenings = new Set(deps.happenings.map((h) => h.id))
   const pairKey = (characterId: string, happeningId: string): string =>
     `${characterId} ${happeningId}`
@@ -1036,7 +1033,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     })
   }
 
-  // classifier.md → Threads: what the turns set up, and the status of listed ones.
+  // classifier.md → Threads.
   const threadStatusWrite = (
     id: string,
     status: ThreadStatusChange['status'],

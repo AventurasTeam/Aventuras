@@ -739,8 +739,7 @@ describe('upsertHappeningAwareness retrievalCount', () => {
   )
 })
 
-// cadence.md → User edits and classifier writes: a pass's awareness rests on its prose, and a field,
-// row or pair the user wrote after that prose stands.
+// cadence.md → User edits and classifier writes: what the user wrote after the prose stands.
 describe('upsertHappeningAwareness under user precedence', () => {
   const PROSE = 'e_prose'
   const userWon = { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }

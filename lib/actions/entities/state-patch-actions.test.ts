@@ -1783,8 +1783,8 @@ describe('raiseCollisionFlag', () => {
     expect(await flagOf(db)).toEqual([0, null, null])
   })
 
-  // generation-pipeline.md → Reverse-replay: the three flag columns are one field, as a place's
-  // parent and unplaced mark are, so the CHECK that ties them survives a partial keep.
+  // generation-pipeline.md → Reverse-replay: the three flag columns are one field, so the CHECK
+  // that ties them survives a partial keep.
   it.each([
     ['re-points the partner', { nameCollisionPartnerId: 'char_3' }, [1, 'char_3', 'name-taken']],
     [

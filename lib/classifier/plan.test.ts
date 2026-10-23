@@ -1415,8 +1415,8 @@ describe('mentioned places', () => {
     expect(parentDrops).toEqual([])
   })
 
-  // classifier.md → What the classifier writes → First profiles: a mentioned place's condition.
-  // piggyback.md → visuals: a long value is cut back to a clause boundary, as a per-turn one is.
+  // classifier.md → What the classifier writes → First profiles. piggyback.md → visuals: a long
+  // value is cut back to a clause boundary.
   it("cuts a new place's long condition at a clause", () => {
     const { planned } = buildClassifierActions(
       placesReply([
@@ -3330,7 +3330,7 @@ describe('standings', () => {
     }) as unknown as Entity
   const deps = (entities: Entity[]) => ({ ...base, entities }) as never
 
-  // classifier.md → Factions → Memberships' rule, for a standing: a retired faction's is a misreading.
+  // classifier.md → Factions → Memberships' rule: a retired faction's standing is a misreading.
   it('drops and reports a standing for a faction retired before the reply', () => {
     const retired = { ...(faction('fact_watch', 'wary allies') as object), status: 'retired' }
     const { planned, droppedStandings } = buildClassifierActions(
@@ -3547,7 +3547,7 @@ describe('plot writes', () => {
     expect(unknownIcons).toEqual([{ title: 'B', icon: 'rocket' }])
   })
 
-  // cadence.md → User edits and classifier writes: a pass's write to an existing row names its prose.
+  // cadence.md → User edits and classifier writes: a write to an existing row names its prose.
   it("dates a happening's own awareness by the happening's turn", () => {
     const { planned } = buildClassifierActions(
       reply({

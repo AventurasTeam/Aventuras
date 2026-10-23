@@ -580,8 +580,8 @@ export const placeLocationHandler: ActionHandler = async (action, branchId, ctx)
 }
 
 /**
- * classifier.md → What the classifier writes → Names: the revealed name, with the old one kept as a
- * keyword, in one write. The planner has already tested the name against the kind's other rows.
+ * classifier.md → What the classifier writes → Names. The planner has already tested the name
+ * against the kind's other rows.
  */
 export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'renameEntity')
@@ -623,10 +623,7 @@ export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) 
   }
 }
 
-/**
- * edge-cases.md → Layer B: a pass whose rename meets a name another row of the kind holds raises
- * the flag on the renamed row. A row already flagged keeps its partner: one per row.
- */
+/** edge-cases.md → Layer B. A row already flagged keeps its partner: one per row. */
 export const raiseCollisionFlagHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'raiseCollisionFlag')
     throw new Error(`handler/kind mismatch: expected 'raiseCollisionFlag', got '${action.kind}'`)
@@ -698,8 +695,8 @@ const retirementWritten = (edits: readonly Delta[]): boolean =>
   wroteColumn(edits, 'status') || wroteColumn(edits, 'retiredReason')
 
 /**
- * retired → active on a character, checked as the write lands, so a status the user wrote since
- * stands; the return clears the reason, as World's un-retire does. Only the user brings back a place.
+ * retired → active on a character, checked as the write lands so a status the user wrote since
+ * stands; clears the reason as World's un-retire does. Only the user brings back a place.
  */
 export const returnFromRetirementHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'returnFromRetirement')

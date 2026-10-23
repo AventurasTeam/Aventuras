@@ -391,8 +391,7 @@ describe('periodicClassifierPhase', () => {
     expect(system).not.toContain('as: ally')
   })
 
-  // classifier.md → Threads → What the pass sees. Fails if the phase stops passing the store's
-  // rows or stops filtering them by branch.
+  // classifier.md → Threads → What the pass sees: the store's rows, by branch.
   it("shows the classifier the stored threads for its own branch, the user's included", async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 1 })
     const thread = (id: string, branchId: string, title: string): Thread => ({
