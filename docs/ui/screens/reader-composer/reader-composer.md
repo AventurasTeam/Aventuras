@@ -575,8 +575,12 @@ A **Memory update failed** entry carries the submission only where
 the composer can't hold the text. A Send refused on a held branch
 always leaves its text on the entry, since the entry advises a restart
 and the draft would not survive one. A `Retry` that finds the branch
-held keeps whatever text its entry held, and an entry without text
-doesn't claim to keep it. On a failed pass the entry carries the text
+held keeps whatever text its entry held; an entry without text takes
+the composer's draft instead, for the same reason. The entry is
+written first, then the composer empties, unless the draft changed
+during the write: it stays, since duplicated text beats lost text.
+With an empty composer, or once the user has left the branch, the held
+entry keeps no text and doesn't claim to. On a failed pass the entry carries the text
 only when the composer couldn't take it back (the draft was occupied,
 or the user left the branch); otherwise the text goes straight back to
 the composer.

@@ -1,3 +1,6 @@
+import { wrapComposerText, type ComposerMode, type ComposerWrapPov } from '@/lib/composer-wrap'
+import type { SystemFailureMeta } from '@/lib/db'
+
 import { isDraftEmpty } from './composer-draft'
 
 /**
@@ -45,4 +48,60 @@ export async function settlePassFailureCustody(deps: {
   if (planPassFailureCustody({ held: deps.held, ...deps.custodyNow() }) === 'composer')
     deps.restoreDraft()
   else await deps.write(true)
+}
+
+type Submission = NonNullable<SystemFailureMeta['submission']>
+type ComposerDraft = { text: string; mode: ComposerMode }
+
+/**
+ * A pass-entry Retry's rewrite: a held entry with no text takes the composer's draft, since it
+ * advises a restart the draft wouldn't survive. Off the branch, the draft is another branch's.
+ */
+export function planPassRetryCustody(args: {
+  held: boolean
+  entryHasText: boolean
+  stillOnBranch: boolean
+  draftEmpty: boolean
+}): 'keep' | 'take-draft' {
+  return args.held && !args.entryHasText && args.stillOnBranch && !args.draftEmpty
+    ? 'take-draft'
+    : 'keep'
+}
+
+/** The draft as the composer's Send takes it: Dismiss hands an entry's text back under Free. */
+export function draftSubmission(
+  draft: ComposerDraft,
+  wrap: { modesUsable: boolean; pov: ComposerWrapPov; leadName: string | null },
+): Submission {
+  const mode = wrap.modesUsable ? draft.mode : 'free'
+  return {
+    content: wrapComposerText(draft.text, { mode, pov: wrap.pov, leadName: wrap.leadName }),
+    composerMode: mode,
+  }
+}
+
+/**
+ * Writes the entry before the composer empties, so a failed write leaves the text in the composer;
+ * a draft that changed during the write stays there too, duplicated rather than lost.
+ */
+export async function settlePassRetryCustody(deps: {
+  held: boolean
+  stored: Submission | undefined
+  stillOnBranch: () => boolean
+  draft: () => ComposerDraft | undefined
+  toSubmission: (draft: ComposerDraft) => Submission
+  write: (submission: Submission | undefined) => Promise<void>
+  clearDraft: () => void
+}): Promise<void> {
+  const draft = deps.draft()
+  const plan = planPassRetryCustody({
+    held: deps.held,
+    entryHasText: deps.stored != null,
+    stillOnBranch: deps.stillOnBranch(),
+    draftEmpty: isDraftEmpty(draft),
+  })
+  if (plan === 'keep' || draft == null) return deps.write(deps.stored)
+  await deps.write(deps.toSubmission(draft))
+  const now = deps.draft()
+  if (deps.stillOnBranch() && now?.text === draft.text && now.mode === draft.mode) deps.clearDraft()
 }

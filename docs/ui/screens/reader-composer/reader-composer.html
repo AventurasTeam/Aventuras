@@ -1946,13 +1946,14 @@
       content: "<b>Memory update failed, so your turn didn't start.</b> Retry it, or send again.",
       actions: '<span class="err-btn primary">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
-    // A held branch refuses Send; it can't run a pass, so there is no Retry.
+    // A Send refused held, or a held Retry that took the composer's draft. No pass can run, so
+    // there is no Retry.
     memoryHeld: {
       kind: '⚠ System · memory update error',
       content: "<b>An earlier memory update on this branch couldn't be undone, so it can't take turns yet.</b> Restarting the app retries the undo. Your text is kept on this entry; Dismiss hands it back to the composer.",
       actions: '<span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
-    // A Retry that comes back held keeps only the text its entry had, here none.
+    // A Retry that comes back held with no text to keep: its entry had none, the composer was empty.
     memoryHeldNoText: {
       kind: '⚠ System · memory update error',
       content: "<b>An earlier memory update on this branch couldn't be undone, so it can't take turns yet.</b> Restarting the app retries the undo.",

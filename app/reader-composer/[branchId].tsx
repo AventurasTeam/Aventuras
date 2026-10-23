@@ -21,8 +21,10 @@ import {
 import { useContentEditing } from '@/components/reader/content-editing'
 import { readerPillPhase } from '@/components/reader/generation-phase'
 import {
+  draftSubmission,
   readPassFailureCustody,
   settlePassFailureCustody,
+  settlePassRetryCustody,
 } from '@/components/reader/pass-failure-custody'
 import { ReaderPeekDrawer } from '@/components/reader/peek/reader-peek-drawer'
 import { ReaderBrowseChip } from '@/components/reader/rail/reader-browse-chip'
@@ -938,13 +940,30 @@ export default function ReaderComposerRoute() {
       logger.warn('pipeline.pass_retry_dispatch_suppressed', { branchId })
       return
     }
-    const submission = systemFailure?.submission
+    const stored = systemFailure?.submission
     try {
       await retryPassEntry({
         runPass: () => runClassifierNow(branchId, ctx),
         held: () => isClassifierHeld(branchId, ctx),
         dismiss: handleDismissSystemEntry,
-        rewrite: (refusal) => showPassFailure(refusal, submission),
+        rewrite: (refusal) =>
+          settlePassRetryCustody({
+            held: refusal.held,
+            stored,
+            stillOnBranch: () => branchUnchanged(branchId),
+            draft: () => composerRef.current?.getDraft(),
+            toSubmission: (draft) =>
+              draftSubmission(draft, {
+                modesUsable: modesEnabled && modesUnavailableReason == null,
+                pov: wrapPov,
+                leadName,
+              }),
+            write: (submission) => showPassFailure(refusal, submission),
+            clearDraft: () => {
+              const composer = composerRef.current
+              composer?.restoreDraft('', composer.getDraft().mode)
+            },
+          }),
         notify: (message) => toast.info(message),
       })
     } finally {
@@ -957,6 +976,11 @@ export default function ReaderComposerRoute() {
     handleDismissSystemEntry,
     beginDispatch,
     endDispatch,
+    branchUnchanged,
+    modesEnabled,
+    modesUnavailableReason,
+    wrapPov,
+    leadName,
   ])
 
   const { onRetry: retrySystemEntry, fixAction } = useSystemEntryActions(

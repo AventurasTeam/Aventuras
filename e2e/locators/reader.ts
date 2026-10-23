@@ -111,12 +111,15 @@ export const reader = {
     reader.row(page, entryId).getByLabel(WORLD_TIME_BREAK_LABEL),
 
   // System (failure) entry: its copy and actions.
-  systemEntryFailure: (page: Page, failure: 'memory' | 'memoryNoProfileAssigned'): Locator =>
-    page.getByText(t(`reader:systemEntry.failure.${failure}`), { exact: false }),
+  systemEntryFailure: (
+    page: Page,
+    failure: 'memory' | 'memoryNoProfileAssigned' | 'memoryHeld',
+  ): Locator => page.getByText(t(`reader:systemEntry.failure.${failure}`), { exact: false }),
   retrySystemEntry: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:systemEntry.retry') }),
+  // A toast's close button shares the name, so the entry rows scope it.
   dismissSystemEntry: (page: Page): Locator =>
-    page.getByRole('button', { name: t('reader:systemEntry.dismiss') }),
+    page.locator('[data-entry-row]').getByRole('button', { name: t('reader:systemEntry.dismiss') }),
   switchEmbedderFix: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:systemEntry.switchEmbedder') }),
   // A config-resolver failure's fix row (system-entry-actions.tsx, useConfigFixAction).

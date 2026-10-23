@@ -565,6 +565,8 @@ test.describe('periodic classifier — backlog deeper than the reader window', (
 // classifier.md → Failure policy: a pre-flight halt skips the phase, so only the pipeline's hook
 // records it; unrecorded, the status reads idle over a failed pass. Send owes it by the watermark.
 test.describe('periodic classifier — unassigned agent', () => {
+  test.describe.configure({ mode: 'serial' })
+
   let app: LaunchedApp
   let mock: MockLlm
   let userDataDir: string | undefined
@@ -595,6 +597,8 @@ test.describe('periodic classifier — unassigned agent', () => {
     () => mock,
   )
 
+  const REFUSED = 'E2E-NOAGENT I trim the wick.'
+
   test('records the pre-flight failure as failed, and the next Send fails on it before its turn', async () => {
     const page = app.window
     await home.openStory(page, 'The Veilstone Courier').click()
@@ -617,15 +621,14 @@ test.describe('periodic classifier — unassigned agent', () => {
     expect(await status()).toEqual(['failed', 'classifier: no-profile-assigned', parked])
 
     // Now owed, the pass runs first at the next Send and fails it: no user_action, no turn.
-    const action = 'E2E-NOAGENT I trim the wick.'
     const turnsBefore = await turnRuns()
-    await reader.composer(page).fill(action)
+    await reader.composer(page).fill(REFUSED)
     await reader.send(page).click()
     await expect(reader.systemEntryFailure(page, 'memoryNoProfileAssigned')).toBeVisible({
       timeout: 20_000,
     })
     await expect(reader.assignProfileFix(page)).toBeVisible()
-    await expect(reader.composer(page)).toHaveValue(action)
+    await expect(reader.composer(page)).toHaveValue(REFUSED)
     expect(
       await scalar(
         `SELECT COUNT(*) FROM story_entries WHERE branch_id = ? AND content LIKE '%E2E-NOAGENT I trim%'`,
@@ -648,6 +651,37 @@ test.describe('periodic classifier — unassigned agent', () => {
     // Neither pass reached the provider, and the refused Send never reached its narrative call.
     expect(mock.requests.some((r) => r.agent === 'periodic-classifier')).toBe(false)
     expect(mock.requests.filter((r) => r.streamed)).toHaveLength(1)
+  })
+
+  // reader-composer.md → Custody of the turn's text: the held entry advises a restart, which the
+  // draft wouldn't survive. A hold takes an undo that didn't commit, which no UI reaches, so the
+  // test writes the status that failure leaves.
+  test("a Retry that finds the branch held moves the composer's draft onto the entry", async () => {
+    const page = app.window
+    const branchId = await currentBranchId(page, 'story_hero')
+    await queryApp(
+      page,
+      `UPDATE branches SET classifier_status = json_set(classifier_status, '$.state', 'running')
+       WHERE id = ?`,
+      [branchId],
+    )
+
+    await reader.retrySystemEntry(page).click()
+    await expect(reader.systemEntryFailure(page, 'memoryHeld')).toBeVisible({ timeout: 20_000 })
+    await expect(reader.retrySystemEntry(page)).toHaveCount(0)
+    await expect(reader.composer(page)).toHaveValue('')
+    expect(
+      await queryApp(
+        page,
+        `SELECT json_extract(metadata, '$.systemFailure.pass'),
+                json_extract(metadata, '$.systemFailure.submission.content')
+         FROM story_entries WHERE branch_id = ? AND kind = 'system'`,
+        [branchId],
+      ),
+    ).toEqual([['held', REFUSED]])
+
+    await reader.dismissSystemEntry(page).click()
+    await expect(reader.composer(page)).toHaveValue(REFUSED)
   })
 })
 
