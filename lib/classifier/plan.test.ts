@@ -3763,6 +3763,49 @@ describe('plot writes', () => {
     ])
   })
 
+  it("judges each status change against the status the reply's earlier ones left", () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        threadStatuses: [
+          { thread: 'thr_a', status: 'resolved', sourceTurn: 't1' },
+          { thread: 'thr_a', status: 'active', sourceTurn: 't2' },
+          { thread: 'thr_b', status: 'resolved', sourceTurn: 't1' },
+          { thread: 'thr_b', status: 'resolved', sourceTurn: 't2' },
+        ],
+      }),
+      deps({ threads: [thread('thr_a', 'active'), thread('thr_b', 'active')] }),
+    )
+    expect(
+      planned.map((p) => {
+        const { id, status, resolvedAtEntryId } = payloadOf<{
+          id: string
+          status: string
+          resolvedAtEntryId: string | null
+        }>(p)
+        return [id, status, resolvedAtEntryId, p.entryId]
+      }),
+    ).toEqual([
+      ['thr_a', 'resolved', 'e1', 'e1'],
+      ['thr_b', 'resolved', 'e1', 'e1'],
+      ['thr_a', 'active', null, 'e2'],
+    ])
+  })
+
+  it("trims a new thread's category, and writes a blank one as none", () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        newThreads: [
+          { title: 'A', description: 'x', category: ' quest ', status: 'active', sourceTurn: 't1' },
+          { title: 'B', description: 'x', category: '  ', status: 'active', sourceTurn: 't1' },
+        ],
+      }),
+      deps(),
+    )
+    expect(
+      planned.map((p) => payloadOf<{ entry: { category: unknown } }>(p).entry.category),
+    ).toEqual(['quest', null])
+  })
+
   it('drops and reports a status for a thread the prompt never listed', () => {
     const { planned, unseenRefs } = buildClassifierActions(
       reply({ threadStatuses: [{ thread: 'th9', status: 'failed', sourceTurn: 't1' }] }),
@@ -3827,6 +3870,27 @@ describe('plot writes', () => {
       expect.objectContaining({ characterId: 'char_b', source: 'x' }),
     ])
     expect(unseenRefs).toEqual([{ list: 'knownAwareness', ref: 'hp9' }])
+  })
+
+  // The survival anchor falls back to the newest turn; the prose dates to the oldest.
+  it('dates an unattributed learning by the oldest window turn, anchoring it on the head', () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        knownAwareness: [
+          { happening: 'hap_fire', ref: 'char_a', source: 'x', severity: 0.5, learnedAtTurn: 't9' },
+        ],
+      }),
+      deps({ entities: [character('char_a')], happenings: [{ id: 'hap_fire' }] }),
+    )
+    expect(
+      planned.map((p) => {
+        const { learnedAtEntryId, proseEntryId } = payloadOf<{
+          learnedAtEntryId: string
+          proseEntryId: string
+        }>(p)
+        return [learnedAtEntryId, proseEntryId, p.entryId]
+      }),
+    ).toEqual([['e3', 'e1', 'e3']])
   })
 
   it('reports an awareness ref that is no character', () => {
