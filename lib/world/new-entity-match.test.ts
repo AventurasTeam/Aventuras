@@ -558,7 +558,7 @@ describe('matchNewPlace', () => {
   })
 
   describe('as successive replies would', () => {
-    it('maps an unplaced place to an earlier unplaced namesake, counting each row once', () => {
+    it('maps an unplaced place to an earlier unplaced namesake', () => {
       const earlier = [
         { name: 'Ashfall', placement: UNPLACED, id: 'loc_new1' },
         { name: 'ASHFALL', placement: UNPLACED, id: 'loc_new1' },
@@ -643,14 +643,14 @@ describe('matchNewPlace', () => {
       expect(
         matchNewPlace({ name: 'The Gull Inn', placement: UNPLACED }, [placedCreate], view),
       ).toEqual(flaggedWith('loc_inn', 'unplaced'))
-      const unplacedCreate = { name: 'The Gull Inn', placement: UNPLACED, id: 'loc_new2' }
+      const withUnplaced = unhiddenLocationView([
+        place('loc_town', 'Varn', null),
+        place('loc_inn', 'The Gull Inn', 'loc_town', { createdAt: 1 }),
+        unplaced('loc_gull', 'The Gull Inn', { createdAt: 9 }),
+      ])
       expect(
-        matchNewPlace(
-          { name: 'The Gull Inn', placement: UNPLACED },
-          [placedCreate, unplacedCreate],
-          view,
-        ),
-      ).toEqual(flaggedWith('loc_new2', 'unplaced'))
+        matchNewPlace({ name: 'The Gull Inn', placement: UNPLACED }, [placedCreate], withUnplaced),
+      ).toEqual(flaggedWith('loc_gull', 'unplaced'))
       const twoCreates = [
         { name: 'Ashfall', placement: TOP, id: 'loc_new1' },
         { name: 'Ashfall', placement: under('loc_town'), id: 'loc_new2' },
@@ -658,10 +658,18 @@ describe('matchNewPlace', () => {
       expect(matchNewPlace({ name: 'Ashfall', placement: UNPLACED }, twoCreates, view)).toEqual(
         flaggedWith('loc_new1', 'unplaced'),
       )
-      // Its own unplaced namesake counts as one more match, not a twin, as a stored one would.
+    })
+
+    // piggyback.md → Matching before creating: the twin rule comes before every other match.
+    it('maps an unplaced place to an earlier unplaced twin, even beside stored namesakes', () => {
+      const flaggedCreate = { name: 'The Gull Inn', placement: UNPLACED, id: 'loc_new2' }
       expect(
-        matchNewPlace({ name: 'The Gull Inn', placement: UNPLACED }, [unplacedCreate], view),
-      ).toEqual(flaggedWith('loc_new2', 'unplaced'))
+        matchNewPlace(
+          { name: 'the gull inn', placement: UNPLACED },
+          [{ name: 'The Gull Inn', placement: TOP, id: 'loc_new1' }, flaggedCreate],
+          view,
+        ),
+      ).toEqual(twin('loc_new2'))
     })
 
     it('maps an unplaced place to its one earlier create beside a retired namesake', () => {

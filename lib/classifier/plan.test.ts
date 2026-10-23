@@ -2176,6 +2176,30 @@ describe('mentioned places', () => {
         ])
       })
 
+      it('maps a second unplaced place to the first when several rows share its name', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          reply([newPlace('new:a', 'the Cellar'), newPlace('new:b', 'The Cellar')]),
+          deps([
+            TOWN,
+            KEEP,
+            placeRow('loc_cellar', 'the Cellar', 'loc_town'),
+            placeRow('loc_cellar2', 'the Cellar', 'loc_keep', { createdAt: 2 }),
+          ]),
+        )
+        expect(
+          createdPlaces(planned).map((e) => [
+            e.id,
+            e.state,
+            e.nameCollisionFlag,
+            e.nameCollisionPartnerId,
+            e.nameCollisionReason,
+          ]),
+        ).toEqual([
+          ['loc_new1', { parent_location_id: null, unplaced: true }, 1, 'loc_cellar', 'unplaced'],
+        ])
+        expect(handleMap.get('new:b')).toBe('loc_new1')
+      })
+
       it("drops a takeover's placement into the taken-over place's own subtree, as one row", () => {
         const { planned, handleMap, parentDrops } = buildClassifierActions(
           reply([

@@ -146,8 +146,9 @@ export type ReplyPlaceMatch = PlaceMatch | { kind: 'twin'; id: string; place: bo
 /**
  * piggyback.md → Matching before creating, within one reply: the reply's creates match as if
  * applied one at a time, as successive replies' would. A second new place with the same name and
- * placement maps to the first. An unplaced one matches the earlier creates of its name as stored
- * rows, newer than any. A placed one the rows would create takes over an earlier unplaced create.
+ * placement maps to the first, before any other match. Otherwise an unplaced one matches the
+ * earlier creates of its name as stored rows, newer than any, and a placed one the rows would
+ * create takes over an earlier unplaced create.
  */
 export function matchNewPlace(
   candidate: PlaceCandidate,
@@ -155,6 +156,9 @@ export function matchNewPlace(
   view: LocationMatchView,
 ): ReplyPlaceMatch {
   const named = settled.filter((p) => nameBasis(p.name, candidate.name) === 'same-name')
+  const twin = named.find((p) => samePlacement(p.placement, candidate.placement))
+  if (twin !== undefined) return { kind: 'twin', id: twin.id, place: false }
+
   // A create's first entry is its own; a kept takeover rewrites it where it placed the row.
   const stored = new Set(view.locations.map((e) => e.id))
   const created = new Map<string, SettledNewPlace>()
@@ -167,8 +171,6 @@ export function matchNewPlace(
       ? { kind: 'twin', id: match.id, place: false }
       : match
   }
-  const twin = named.find((p) => samePlacement(p.placement, candidate.placement))
-  if (twin !== undefined) return { kind: 'twin', id: twin.id, place: false }
   const match = matchNewLocation(candidate, view)
   if (match.kind !== 'create') return match
   const taken = earlier.find((p) => p.placement.kind === 'unplaced')
