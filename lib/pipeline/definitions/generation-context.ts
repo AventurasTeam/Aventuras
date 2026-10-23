@@ -196,6 +196,16 @@ const SCENE_VARIABLES = [
 type HeldItemLine = { id: string; name: string; equipped: boolean }
 
 /** One entry per active in-scene character that holds anything, in scene order. */
+// An item on a shown character's Holds line (macro_entity_state) is shown with its state too.
+function shownWithState(rows: readonly ({ id: string } & KindedView)[]): ReadonlySet<string> {
+  const ids = new Set<string>()
+  for (const row of rows) {
+    ids.add(row.id)
+    if (row.kind === 'character') for (const item of row.state.holdings) ids.add(item.id)
+  }
+  return ids
+}
+
 function heldItemsInScene(
   sceneEntities: readonly string[],
   entities: readonly Entity[],
@@ -428,17 +438,24 @@ export async function buildGenerationContext(
         ]),
       )
     : []
+  const structuralLocation = floor?.currentLocation
+    ? floorEntity(floor.currentLocation, views)
+    : null
+  const pinnedEntities = floorEntities(floor?.alwaysEntities, views)
+  const sceneFactions = floorEntities(floor?.sceneFactions, views)
+  const looseItems = looseRows.map((row) => promptEntity(row, views))
+  const namedCharacters = named.map((e) => promptEntity(e, views))
   // piggyback.md → Trailing block format: what a condition may name, the rows this prompt shows
-  // with their state. Real ids, so they stay out of `context`, which substituteIds rewrites.
-  const stateShownIds: ReadonlySet<string> = new Set([
-    ...inScene.map((e) => e.id),
-    ...(structuralLocationId === null ? [] : [structuralLocationId]),
-    ...heldItems.flatMap((holder) => holder.items.map((item) => item.id)),
-    ...looseRows.map((row) => row.id),
-    ...(floor?.alwaysEntities ?? []).map((e) => e.id),
-    ...(floor?.sceneFactions ?? []).map((e) => e.id),
-    ...retrievedEntities.map((e) => e.id),
-    ...named.map((e) => e.id),
+  // with their state, read off the rows the template renders. Real ids, so they stay out of
+  // `context`, which substituteIds rewrites.
+  const stateShownIds = shownWithState([
+    ...inScene.map((e) => promptEntity(e, views)),
+    ...(structuralLocation === null ? [] : [structuralLocation]),
+    ...looseItems,
+    ...pinnedEntities,
+    ...sceneFactions,
+    ...retrievedEntities,
+    ...namedCharacters,
   ])
 
   const context = {
@@ -466,14 +483,14 @@ export async function buildGenerationContext(
     retrievedHappenings: promptRows(retrieval?.bundles.happenings.selected),
     retrievedThreads: promptRows(retrieval?.bundles.threads.selected),
     retrievedChapters: promptRows(retrieval?.bundles.chapters.selected),
-    structuralLocation: floor?.currentLocation ? floorEntity(floor.currentLocation, views) : null,
+    structuralLocation,
     structuralActiveThreads: floorThreads(floor?.activeThreads),
     // Kept per type rather than concatenated: no field tags a row with its own
     // type, and an entity's `name` against lore's and threads' `title` leaves
     // one loop nothing uniform to render.
-    structuralPinnedEntities: floorEntities(floor?.alwaysEntities, views),
+    structuralPinnedEntities: pinnedEntities,
     // memory/retrieval.md → Structural floor: rendered with the pinned rows.
-    structuralSceneFactions: floorEntities(floor?.sceneFactions, views),
+    structuralSceneFactions: sceneFactions,
     structuralPinnedLore: floorLore(floor?.alwaysLore),
     structuralPinnedThreads: floorThreads(floor?.alwaysThreads),
     locationIds: [...new Set(locationIds)],
@@ -486,8 +503,8 @@ export async function buildGenerationContext(
         ? []
         : listedAncestorNames(structuralLocationId, branchEntities),
     heldItems,
-    looseItems: looseRows.map((row) => promptEntity(row, views)),
-    namedCharacters: named.map((e) => promptEntity(e, views)),
+    looseItems,
+    namedCharacters,
     intermediates: {},
     piggybackFires,
     // Re-gated on the derived slots, not just the caller's flag: a caller

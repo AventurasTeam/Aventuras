@@ -357,6 +357,20 @@ describe('planTurnCreates — kept only if used', () => {
     })
   })
 
+  // A producer can repeat a seq; apply.ts reads the tie as the take, then the drop.
+  it('drops a new item taken and put down under one seq, as apply.ts orders the tie', async () => {
+    const plan = await runPlanner({
+      newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
+      transfers: {
+        items: [{ id: 'new:key', to: HERO, slot: 'inventory', seq: 0 }],
+        stackables: [],
+        drops: [{ id: 'new:key', from: HERO, seq: 0 }],
+      },
+    })
+    expect(plan.creates).toEqual([])
+    expect(plan.report.newItems[0]?.outcome).toBe('dropped')
+  })
+
   it('leaves a drop of a stored item as it stands', async () => {
     const plan = await runPlanner(
       { transfers: { items: [], stackables: [], drops: [{ id: OLD_KEY, from: HERO, seq: 0 }] } },

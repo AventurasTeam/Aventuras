@@ -1918,6 +1918,36 @@ describe('buildGenerationContext — location map and held items', () => {
     })
     expect([...load.stateShownIds].sort()).toEqual([HAND, VAULT].sort())
   })
+
+  // macro_entity_state: a character shown with state lists each item it holds with its condition.
+  it("counts an off-scene pinned character's held items as shown with their state", async () => {
+    const load = await buildLoad({
+      entities: [
+        person(CHAR_ID_2, 'Corvin', { inventory: [SWORD] }),
+        thing(SWORD, 'worn sword', null),
+      ],
+      retrieval: retrievalSuccess({ floor: { alwaysEntities: [entityRow(CHAR_ID_2, 'Corvin')] } }),
+    })
+    expect(perTurnPrompt(load.context as Record<string, unknown>)).toContain('worn sword')
+    expect([...load.stateShownIds].sort()).toEqual([CHAR_ID_2, SWORD].sort())
+  })
+
+  it("counts a named character's held items as shown with their state", async () => {
+    const load = await buildLoad({
+      templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
+      entities: [
+        person(CHAR_ID_2, 'Corvin', { inventory: [SWORD] }, { keywords: [] }),
+        thing(SWORD, 'worn sword', null),
+      ],
+      entries: [
+        { ...entry('e1', 1, 'Corvin waved his sword.'), metadata: sceneMetadata(null, []) },
+      ] as never[],
+    })
+    expect((load.context.namedCharacters as { name: string }[]).map((c) => c.name)).toEqual([
+      'Corvin',
+    ])
+    expect([...load.stateShownIds].sort()).toEqual([CHAR_ID_2, SWORD].sort())
+  })
 })
 
 describe('buildGenerationContext — entity state', () => {
