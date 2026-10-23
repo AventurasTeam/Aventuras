@@ -27,7 +27,7 @@ import { createGoogleProvider } from './google'
 import { createZhipuProvider } from './zhipu'
 import { comfyReferenceLimit, createComfyProvider } from './comfy'
 import { createOpenRouterProvider } from './openrouter'
-import { createA1111Provider } from './a1111'
+import { a1111ReferenceLimit, createA1111Provider } from './a1111'
 
 const log = createLogger('ImageRegistry')
 
@@ -112,7 +112,7 @@ const PROVIDER_REFERENCE_LIMIT: Record<
   google: unlimited,
   zhipu: () => 0,
   comfyui: comfyReferenceLimit,
-  a1111: unlimited,
+  a1111: a1111ReferenceLimit,
 }
 
 /** How many references a profile of this provider type sends; 0 means none. */

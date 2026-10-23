@@ -21,6 +21,11 @@ import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
 const DEFAULT_BASE_URL = 'http://localhost:7860'
 
+/** A1111 sends references only when the profile opts in: sd.cpp and KoboldCpp read `extra_images`. */
+export const a1111ReferenceLimit = (
+  providerOptions: Record<string, unknown> | undefined,
+): number => (providerOptions?.takesReferences === true ? Infinity : 0)
+
 export function createA1111Provider(config: ImageProviderConfig): ImageProvider {
   const baseUrl = config.baseUrl?.trim().replace(/\/$/, '') || DEFAULT_BASE_URL
   const a1111 = createA1111Image({

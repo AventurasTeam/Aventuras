@@ -30,6 +30,12 @@ vi.mock('./comfy', () => ({
   comfyReferenceLimit: vi.fn(),
 }))
 
+vi.mock('./a1111', () => ({
+  createA1111Provider: vi.fn(),
+  a1111ReferenceLimit: (options: { takesReferences?: boolean }) =>
+    options.takesReferences === true ? Infinity : 0,
+}))
+
 vi.mock('./google', () => ({
   createGoogleProvider: vi.fn(),
 }))
@@ -37,6 +43,7 @@ vi.mock('./google', () => ({
 import { fetchPublicImageBase64 } from './fetchAdapter'
 import { createOpenAIProvider } from './openai'
 import { comfyReferenceLimit, createComfyProvider } from './comfy'
+import { createA1111Provider } from './a1111'
 import { createGoogleProvider } from './google'
 import type { ImageModelInfo } from './types'
 import {
@@ -193,7 +200,11 @@ describe('Image Provider Registry', () => {
 
     // The model list is cached per key, so each case gets its own.
     let keyCounter = 0
-    function setup(providerType: 'openai' | 'google' | 'comfyui', models: ImageModelInfo[] = []) {
+    function setup(
+      providerType: 'openai' | 'google' | 'comfyui' | 'a1111',
+      models: ImageModelInfo[] = [],
+      providerOptions: Record<string, unknown> = {},
+    ) {
       const generate = vi.fn(async (_options: unknown) => ({ base64: 'RESULT' }))
       const provider = {
         id: providerType,
@@ -204,9 +215,11 @@ describe('Image Provider Registry', () => {
       vi.mocked(createOpenAIProvider).mockReturnValue(provider)
       vi.mocked(createGoogleProvider).mockReturnValue(provider)
       vi.mocked(createComfyProvider).mockReturnValue(provider)
+      vi.mocked(createA1111Provider).mockReturnValue(provider)
       vi.mocked(settings.getImageProfile).mockReturnValue({
         providerType,
         apiKey: `sk-key-${keyCounter++}`,
+        providerOptions,
       } as ReturnType<typeof settings.getImageProfile>)
       vi.mocked(fetchPublicImageBase64).mockResolvedValue('DOWNLOADED')
       return generate
@@ -353,6 +366,35 @@ describe('Image Provider Registry', () => {
       )
     })
 
+    it('sends no references, and downloads none, to A1111 with the switch off', async () => {
+      const generate = setup('a1111')
+
+      await generateImage({
+        profileId: 'p',
+        model: 'm',
+        prompt: 'x',
+        referenceImages: ['https://img.test/a.png'],
+      })
+
+      expect(fetchPublicImageBase64).not.toHaveBeenCalled()
+      expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: undefined }))
+    })
+
+    it('hands A1111 references with the switch on', async () => {
+      const generate = setup('a1111', [], { takesReferences: true })
+
+      await generateImage({
+        profileId: 'p',
+        model: 'm',
+        prompt: 'x',
+        referenceImages: ['https://img.test/a.png'],
+      })
+
+      expect(generate).toHaveBeenCalledWith(
+        expect.objectContaining({ referenceImages: ['DOWNLOADED'] }),
+      )
+    })
+
     it('passes no references when none were given', async () => {
       const generate = setup('openai')
 
@@ -364,7 +406,11 @@ describe('Image Provider Registry', () => {
 
   describe('supportsReferenceImages', () => {
     let keyCounter = 0
-    function setup(providerType: 'openai' | 'comfyui', models: ImageModelInfo[]) {
+    function setup(
+      providerType: ImageProviderType,
+      models: ImageModelInfo[] = [],
+      providerOptions: Record<string, unknown> = {},
+    ) {
       const provider = {
         id: providerType,
         name: providerType,
@@ -373,37 +419,36 @@ describe('Image Provider Registry', () => {
       }
       vi.mocked(createOpenAIProvider).mockReturnValue(provider)
       vi.mocked(createComfyProvider).mockReturnValue(provider)
+      vi.mocked(createA1111Provider).mockReturnValue(provider)
       vi.mocked(settings.getImageProfile).mockReturnValue({
         providerType,
         apiKey: `sk-ref-${keyCounter++}`,
+        providerOptions,
       } as ReturnType<typeof settings.getImageProfile>)
     }
 
     it('is false for ComfyUI without a workflow that takes references', async () => {
-      setup('comfyui', [])
+      setup('comfyui')
       expect(await supportsReferenceImages('p', 'm')).toBe(false)
     })
 
     it('is true for ComfyUI with one', async () => {
-      setup('comfyui', [])
-      vi.mocked(comfyReferenceLimit).mockReturnValue(Infinity)
+      setup('comfyui')
+      vi.mocked(comfyReferenceLimit).mockReturnValue(1)
       expect(await supportsReferenceImages('p', 'm')).toBe(true)
     })
 
     it('is false for Z.AI', async () => {
-      vi.mocked(settings.getImageProfile).mockReturnValue({
-        providerType: 'zhipu',
-        apiKey: 'sk-zhipu',
-      } as ReturnType<typeof settings.getImageProfile>)
+      setup('zhipu')
       expect(await supportsReferenceImages('p', 'm')).toBe(false)
     })
 
-    it('is true for A1111, whose server decides', async () => {
-      vi.mocked(settings.getImageProfile).mockReturnValue({
-        providerType: 'a1111',
-        apiKey: '',
-      } as ReturnType<typeof settings.getImageProfile>)
-      expect(await supportsReferenceImages('p', 'm')).toBe(true)
+    it.each([
+      [{}, false],
+      [{ takesReferences: true }, true],
+    ])('for A1111 with %j is %s', async (providerOptions, expected) => {
+      setup('a1111', [], providerOptions)
+      expect(await supportsReferenceImages('p', 'm')).toBe(expected)
     })
 
     it('is false for a model marked as lacking img2img', async () => {

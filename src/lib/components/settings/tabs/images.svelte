@@ -20,6 +20,7 @@
     IMAGE_PROVIDER_LABELS,
     IMAGE_PROVIDER_OPTIONS,
     ComfyMode,
+    referenceLimit,
     type ImageModelInfo,
   } from '#lib/services/ai/image/index.ts'
   import {
@@ -145,18 +146,28 @@
   // Custom workflow state
   let profileCustomWorkflow = $state<ComfyCustomWorkflow | null>(null)
   let profileInputReferences = $state(false)
+  let profileTakesReferences = $state(false)
   const referenceInputCount = $derived(
     profileMode === ComfyMode.CustomWorkflow && profileCustomWorkflow
       ? findReferenceInputs(profileCustomWorkflow.workflow).length
       : 0,
   )
-  const referenceProfileImg2ImgWarning = $derived(
-    isEditingReferenceProfile &&
-      (profileProviderType === 'comfyui'
-        ? referenceInputCount === 0
-        : !!profileModel &&
-          profileModels.find((m) => m.id === profileModel)?.supportsImg2Img === false),
-  )
+  // The clause after "but" for a provider type that cannot send references.
+  const NO_REFERENCES_REASON: Partial<Record<ImageProviderType, string>> = {
+    comfyui: 'it needs a custom workflow with a LoadImage node to use reference images.',
+    a1111: 'the "Model takes reference images" switch is off.',
+  }
+  // Null when the profile can send references.
+  const referenceProfileWarningReason = $derived.by(() => {
+    if (!isEditingReferenceProfile) return null
+    if (referenceLimit(profileProviderType, buildProviderOptions()) === 0) {
+      return NO_REFERENCES_REASON[profileProviderType] ?? 'it cannot send reference images.'
+    }
+    return !!profileModel &&
+      profileModels.find((m) => m.id === profileModel)?.supportsImg2Img === false
+      ? 'the selected model does not support img2img.'
+      : null
+  })
   // Holds parsed workflow data while the user resolves an ambiguous picker — not yet saved to profileCustomWorkflow
   let pendingWorkflowData = $state<{
     workflow: ComfyCustomWorkflow['workflow']
@@ -335,6 +346,7 @@
         negativePrompt: profileNegativePrompt,
         sampler: profileSampler,
         scheduler: profileScheduler,
+        ...(profileTakesReferences && { takesReferences: true }),
       }
     }
     if (profileProviderType !== 'comfyui') return {}
@@ -402,6 +414,7 @@
         profileLoraStrengthClip,
         profileCustomWorkflow,
         profileInputReferences,
+        profileTakesReferences,
         profileClipName,
         profileVaeName,
         profileClipType,
@@ -444,6 +457,7 @@
     prevComfyBaseUrl = null
     profileCustomWorkflow = null
     profileInputReferences = false
+    profileTakesReferences = false
     pendingWorkflowData = null
     workflowAmbiguousNodes = []
     workflowPickerSelection = ''
@@ -474,6 +488,7 @@
     profileBaseUrl = profile.baseUrl || ''
     profileModel = profile.model || ''
     profileModels = []
+    profileTakesReferences = profile.providerOptions?.takesReferences === true
 
     if (profile.providerType === 'a1111') {
       const opts = profile.providerOptions || {}
@@ -1216,15 +1231,9 @@
         onRefresh={() =>
           loadProfileFormModels(profileProviderType, profileApiKey, profileBaseUrl, true)}
       />
-      {#if referenceProfileImg2ImgWarning}
+      {#if referenceProfileWarningReason}
         <p class="text-warning mt-1 text-xs">
-          {#if profileProviderType === 'comfyui'}
-            This profile is used for reference image generation (img2img), but only a custom
-            workflow with a LoadImage node can use reference images.
-          {:else}
-            This profile is used for reference image generation (img2img), but the selected model
-            does not support img2img.
-          {/if}
+          This profile is used for reference image generation, but {referenceProfileWarningReason}
         </p>
       {:else}
         <p class="text-muted-foreground mt-1 text-xs">
@@ -1280,6 +1289,15 @@
         <div class="col-span-2 space-y-2">
           <Label>Negative Prompt</Label>
           <Textarea bind:value={profileNegativePrompt} placeholder="Negative prompt..." />
+        </div>
+        <div class="col-span-2 flex items-center justify-between gap-3">
+          <div>
+            <Label for="a1111-takes-references">Model takes reference images</Label>
+            <p class="text-muted-foreground text-xs">
+              Kontext / Qwen Edit on sd.cpp or KoboldCpp; stock A1111 and Forge ignore them
+            </p>
+          </div>
+          <Switch id="a1111-takes-references" bind:checked={profileTakesReferences} />
         </div>
       </div>
     {/if}

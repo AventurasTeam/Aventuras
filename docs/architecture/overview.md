@@ -611,8 +611,9 @@ API profile into image profiles, moved proxy-style `openai` profiles and every `
 (that provider is gone) to OpenAI Compatible, and pinned `zhipu` profiles with an empty base URL to
 `open.bigmodel.cn`, which they used before the default became `api.z.ai`.
 
-Every provider except Z.AI takes reference images, and the registry hands them only to the ones
-that send them. It holds each provider's reference limit (`PROVIDER_REFERENCE_LIMIT`), downloads nothing for a limit of 0, and
+Every cloud provider except Z.AI takes reference images. A1111 takes them only with its profile
+switch on, and ComfyUI only through a custom workflow's `LoadImage` nodes. The registry holds each
+provider's reference limit (`PROVIDER_REFERENCE_LIMIT`), downloads nothing for a limit of 0, and
 otherwise cuts the references to the smaller of that limit and the model's `maxReferenceImages`
 before fetching `http(s)` ones to base64, so every adapter receives raw base64. A reference URL can
 come from a discovery card, so it is fetched only from a public host and each redirect is checked
@@ -621,9 +622,14 @@ caught. A NanoGPT reply that carries a URL instead of base64 gets the same publi
 that download is not redirected. A reference that cannot be fetched is dropped and the image is
 generated without it. Google takes them on every image model it lists.
 
-Two local backends take them differently. A1111 (and Forge, KoboldCpp, sd.cpp) sends them as
-`extra_images` on the `txt2img` request, and the model loaded on the server decides whether they do
-anything; `init_images` is not used, because that is a canvas to denoise, not a reference. ComfyUI
+Two local backends take them differently. A1111 sends them as `extra_images` on the `txt2img`
+request; `init_images` is not used, because that is a canvas to denoise, not a reference. Only
+sd.cpp documents `extra_images` on `txt2img`, and KoboldCpp, built on it, most likely follows;
+stock A1111 and Forge ignore the field. The profile's "Model takes reference images" switch
+(`takesReferences`, off by default) is therefore the only thing that makes the registry send them,
+and keeps the `edit_image` refusal in place for a server that would drop them.
+
+ComfyUI
 uploads each one to the server's `temp/aventuras/` folder and writes the file names (`… [temp]`) into
 a custom workflow's `LoadImage` nodes in node-id order; leftover nodes keep their saved image and extra
 references are dropped with a warning. Names are a hash of the bytes, so an image reused across scenes
