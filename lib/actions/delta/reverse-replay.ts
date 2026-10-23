@@ -185,10 +185,8 @@ function undoneValue(schema: ZodType | undefined, partial: unknown, current: unk
     : partial
 }
 
-/**
- * A column with its undo partial applied. A place's parent and unplaced mark go back as one field:
- * the clear logs nothing, so a partial carrying only the parent can land on a place it unplaced.
- */
+// A place's parent and unplaced mark restore as one field: the clear logs nothing, so a
+// parent-only partial can land on a place it unplaced.
 function undoneColumn(
   entry: TableEntry,
   table: string,

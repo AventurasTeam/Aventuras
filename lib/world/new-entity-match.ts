@@ -26,7 +26,7 @@ function byAge(a: Entity, b: Entity): number {
 const sameName = (candidate: PlaceCandidate, entity: Entity): boolean =>
   nameBasis(candidate.name, entity.name) === 'same-name'
 
-/** The flag partner's rank: an exact retired namesake, then a name inside the other, a keyword hit. */
+/** Flag partner's rank: an exact retired namesake, then a name inside the other, a keyword hit. */
 function partnerRank(candidate: PlaceCandidate, entity: Entity): number | null {
   const basis = namesakeBasis(
     { name: candidate.name, keywords: candidate.keywords ?? [] },
@@ -85,7 +85,7 @@ function matchPlaced(
   return flagPartner(candidate, siblings, SAME_PARENT)
 }
 
-/** A new place this reply already settled: the placement it declared, and the row it resolved to. */
+/** A new place this reply settled: the placement it declared, and the row it resolved to. */
 export type SettledNewPlace = { name: string; placement: PlacePlacement; id: string }
 
 /** Where this reply's placements put a place: its parent's id, null for top-level. */
@@ -121,11 +121,8 @@ function matchUnplaced(
 }
 
 /**
- * piggyback.md → Matching before creating. Under a parent or top-level, reuses a non-retired exact
- * namesake the prompt's map (`view`) hangs there, places it left out included, else an active or
- * staged unplaced place of that name (`place: true`); otherwise flags `same-parent` against the
- * real siblings of any status, the candidate's `keywords` counting for a keyword hit. An unplaced
- * candidate follows data-model.md → LocationState shape's third way.
+ * piggyback.md → Matching before creating. Under a parent or top-level: reuse a non-retired exact
+ * namesake `view` hangs there, left-out places too, else an unplaced one; else flag `same-parent`.
  */
 export function matchNewLocation(candidate: PlaceCandidate, view: LocationMatchView): PlaceMatch {
   const placementAt = realPlacementOf(view.locations)
@@ -144,12 +141,8 @@ export function matchNewLocation(candidate: PlaceCandidate, view: LocationMatchV
 export type ReplyPlaceMatch = PlaceMatch | { kind: 'twin'; id: string; place: boolean }
 
 /**
- * piggyback.md → Matching before creating, within one reply: the reply's creates match as if
- * applied one at a time, as successive replies' would. A second new place with the same name and
- * declared placement maps to the first, before any other match. Otherwise an unplaced one matches
- * the earlier creates of its name as stored rows, newer than any, each where it sits now
- * (`placedHere`), and a placed one the rows would create takes over an earlier create still
- * unplaced.
+ * piggyback.md → Matching before creating, within one reply: creates match as if applied one at a
+ * time, as successive replies' would; `placedHere` holds the placements made so far.
  */
 export function matchNewPlace(
   candidate: PlaceCandidate,

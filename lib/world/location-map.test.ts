@@ -344,7 +344,7 @@ describe('listedAncestorNames', () => {
   })
 })
 
-// data-model.md → LocationState shape: a place known to exist but not where, on every list of places.
+// data-model.md → LocationState shape: known to exist, not where, on every list of places.
 describe('realPlacementOf', () => {
   const VARN = unplaced('loc_varn', 'Varn')
   const ORPHAN = location('loc_orphan', 'Orphan Quay', 'loc_gone')

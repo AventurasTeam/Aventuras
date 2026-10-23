@@ -29,7 +29,7 @@ export type FlaggedEntity = Entity & {
   nameCollisionReason: CollisionReason
 }
 
-/** A row as the pair rule reads it: its name, keywords, and a place's placement (`top` otherwise). */
+/** A row as the pair rule reads it: name, keywords, and a place's placement (`top` otherwise). */
 export type PairSide = NamesakeSide & { placement: PlacePlacement }
 
 export function pairSideOf(row: Entity): PairSide {

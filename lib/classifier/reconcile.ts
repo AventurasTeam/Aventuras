@@ -8,7 +8,7 @@ import { namesakeBasis } from '@/lib/world'
 export const TAU_HIGH = 0.75
 export const TAU_LOW = 0.5
 
-/** classifier.md → Partner and reason; `same-parent` and `unplaced` are a place's matching alone. */
+/** classifier.md → Partner and reason; place matching alone sets `same-parent` and `unplaced`. */
 type ClassifierFlagReason = Exclude<CollisionReason, 'same-parent' | 'unplaced'>
 
 export type ReconcileDecision =

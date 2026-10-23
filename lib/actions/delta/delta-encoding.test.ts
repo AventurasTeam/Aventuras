@@ -159,8 +159,7 @@ describe('stateReport round-trip through entryMetadataSchema', () => {
   })
 })
 
-// data-model.md → LocationState shape: the encoder walks only the column schema, so undo keeps the
-// flag only while that schema carries it.
+// data-model.md → LocationState shape: undo keeps the flag only while the column schema has it.
 describe("a place's unplaced flag through entityStateColumnSchema", () => {
   it('records the flag absent -> present, and undo takes it away', () => {
     const prior = { parent_location_id: null }

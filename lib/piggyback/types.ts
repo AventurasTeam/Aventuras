@@ -42,7 +42,7 @@ export type ItemTransfer = {
 export type StackableTransfer = { key: string; amount: number; to?: string; from?: string }
 export type ParsedTransfers = { items: ItemTransfer[]; stackables: StackableTransfer[] }
 
-/** `parent`: a placeholder, a create's handle or `top` as emitted; an id or `TOP_LEVEL` substituted. */
+/** `parent`: a placeholder, a handle or `top` as emitted; an id or `TOP_LEVEL` substituted. */
 export type NewLocationEmission = {
   handle: string
   name: string
@@ -68,9 +68,8 @@ export type ParsedStateBlock = {
 export type NormalizedStateBlock = ParsedStateBlock & { readonly __brand: 'NormalizedStateBlock' }
 
 /**
- * A normalized block whose placeholders are entity ids and whose refs name only ids or declared
- * handles (a create's `parent` may also be `TOP_LEVEL`), a transfer's item only an item. Minted
- * only by `substitutePiggybackIds`.
+ * Entity-id placeholders; refs name only ids or declared handles (a create's `parent` may also be
+ * `TOP_LEVEL`), a transfer's item only an item. Minted only by `substitutePiggybackIds`.
  */
 export type SubstitutedStateBlock = ParsedStateBlock & { readonly __brand: 'SubstitutedStateBlock' }
 
@@ -87,7 +86,7 @@ export type ParseStateBlockResult = {
 }
 
 type StateReport = NonNullable<EntryMetadata['stateReport']>
-/** A `<new_location>` and its outcome; `parent` is the id, `top`, as emitted if dropped, none if unplaced. */
+/** A `<new_location>`'s outcome; `parent`: id, `top`, as emitted if dropped, none if unplaced. */
 export type NewLocationReport = NonNullable<StateReport['newLocations']>[number]
 export type NewItemReport = NonNullable<StateReport['newItems']>[number]
 export type TurnCreatesReport = { newLocations: NewLocationReport[]; newItems: NewItemReport[] }

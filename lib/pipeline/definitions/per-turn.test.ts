@@ -1809,8 +1809,7 @@ describe('narrative fold — creates', () => {
       state: { parent_location_id: null, unplaced: true },
     })
 
-  // data-model.md → LocationState shape: a create under a parent reuses an unplaced namesake and
-  // places it; the placement may name a row the creates insert, so it follows them.
+  // data-model.md → LocationState shape: a placement may name a created row, so it follows.
   it('reuses and places an unplaced namesake, logging the placement right after the creates', async () => {
     await seedTurn([...baseWorld(), unplacedDocks()])
     const { events } = await foldTurn(CREATE_REPLY)

@@ -37,7 +37,7 @@ export type LocationMapView = {
 /** The place-matching half of a view: which places exist, and where a place hangs. */
 export type LocationMatchView = Pick<LocationMapView, 'locations' | 'hiddenBetween'>
 
-/** classifier.md → Mentioned places: the tree, and the unplaced places with what lies inside them. */
+/** classifier.md → Mentioned places: the tree, and the unplaced places with what lies in them. */
 export type PlaceTree = { tree: PlaceTreeRow[]; unplaced: PlaceTreeRow[] }
 
 const UNPLACED_ROOT = Symbol('unplaced')
@@ -107,7 +107,7 @@ export function placeTree(entities: readonly Entity[]): PlaceTree {
   return { tree, unplaced }
 }
 
-/** A view that hides nothing: a place hangs only under its real parent, or at the root if top-level. */
+/** A view that hides nothing: a place hangs only under its real parent, or at root if top-level. */
 export function unhiddenLocationView(entities: readonly Entity[]): LocationMatchView {
   const locations = entities.filter((e) => e.kind === 'location')
   const placementAt = realPlacementOf(locations)

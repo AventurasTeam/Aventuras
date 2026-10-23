@@ -1,6 +1,6 @@
 import type { Entity, LocationState } from '@/lib/db'
 
-/** data-model.md → LocationState shape: under a parent, top-level, or known to exist but not where. */
+/** data-model.md → LocationState shape: under a parent, top-level, or known to exist, not where. */
 export type PlacePlacement =
   | { kind: 'under'; parentId: string }
   | { kind: 'top' }
@@ -8,7 +8,7 @@ export type PlacePlacement =
 
 type StoredPlacement = Partial<Pick<LocationState, 'parent_location_id' | 'unplaced'>>
 
-/** A row's stored placement; a reader holding the rows reads a parent naming no place as unplaced. */
+/** A row's stored placement; a reader with the rows reads a parent naming no place as unplaced. */
 export function placementOf(row: Pick<Entity, 'state'>): PlacePlacement {
   const state = row.state as StoredPlacement | null
   if (state?.unplaced === true) return { kind: 'unplaced' }
@@ -16,7 +16,7 @@ export function placementOf(row: Pick<Entity, 'state'>): PlacePlacement {
   return parentId === null ? { kind: 'top' } : { kind: 'under', parentId }
 }
 
-/** The stored flag only: a parent naming no place reads as placed. Row readers use `realPlacementOf`. */
+/** The stored flag only: a parent naming no place reads as placed. Rows: use `realPlacementOf`. */
 export function isUnplaced(row: Pick<Entity, 'state'>): boolean {
   return placementOf(row).kind === 'unplaced'
 }

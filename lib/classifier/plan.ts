@@ -273,8 +273,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         // A reused place keeps its description and its status: a mention doesn't enter it.
         id = match.id
         appendNewTerms(id, place.keywords, place.sourceTurn)
-        // It takes the entry's placement only when it was unplaced (`place`): a reused row, or
-        // this reply's own create taken over.
+        // `match.place`: an unplaced reused row, or this reply's own create taken over.
         if (match.place && candidate.kind !== 'unplaced') {
           const loop =
             candidate.kind === 'under' ? placementLoop(id, candidate.parentId, parentOf) : null

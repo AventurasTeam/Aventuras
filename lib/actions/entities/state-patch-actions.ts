@@ -472,9 +472,8 @@ const placeRefusal = (reason: string): HandlerOutcome => ({
 })
 
 /**
- * data-model.md → LocationState shape: writes the parent and the flag together as the row's whole
- * state, so placing clears `unplaced`. Every placement refusal is a noop: a machine writer plans
- * the same checks first, and a refusal that reached the orchestrator unmarked would fail its run.
+ * data-model.md → LocationState shape: parent and `unplaced` flag written as the row's whole state.
+ * Refusals are all noops: a machine writer plans the same checks; an unmarked one fails its run.
  */
 export const placeLocationHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'placeLocation')
