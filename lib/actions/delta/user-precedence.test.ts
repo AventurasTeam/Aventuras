@@ -160,7 +160,7 @@ describe('wroteColumn', () => {
   })
 })
 
-// data-model.md → LocationState shape: a place's parent and its unplaced flag are one field.
+// data-model.md → LocationState shape: the flag sits only beside a null parent.
 describe('wrotePlacement', () => {
   it('counts a create, or an update carrying the parent or the flag, not another state key', async () => {
     const { ctx } = await setup()

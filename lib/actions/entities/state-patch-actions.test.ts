@@ -1346,7 +1346,7 @@ describe('placeLocation', () => {
     })
   })
 
-  // cadence.md → User edits and classifier writes: the parent and the flag are one field.
+  // data-model.md → LocationState shape: the flag sits only beside a null parent.
   describe('user edits newer than the prose', () => {
     const fromProse = (placement: { kind: 'under'; parentId: string } | { kind: 'top' }) =>
       place(placement, { proseEntryId: PROSE })
@@ -1399,6 +1399,8 @@ describe('placeLocation', () => {
       expect(await apply(ctx, fromProse(UNDER_REACH), 'act_p')).toEqual(
         noop(USER_EDITED_SINCE_PROSE),
       )
+      // The user-created row is unplaced, a valid top target: only precedence refuses it.
+      expect(await apply(ctx, fromProse(TOP), 'act_t')).toEqual(noop(USER_EDITED_SINCE_PROSE))
     })
 
     it("places past a later edit of the place's condition", async () => {

@@ -175,8 +175,9 @@ export function wroteColumn(edits: readonly Delta[], column: string): boolean {
 }
 
 /**
- * A user edit wrote the place's placement: its parent or its unplaced flag. The pair is one field
- * (data-model.md → LocationState shape), so a write to either key keeps both.
+ * A user edit wrote the place's placement: its parent or its unplaced flag. The flag only sits
+ * beside a null parent (data-model.md → LocationState shape), so a write to either key is a write
+ * of the placement.
  */
 export function wrotePlacement(edits: readonly Delta[]): boolean {
   return (
