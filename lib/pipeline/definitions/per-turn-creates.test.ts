@@ -1630,6 +1630,13 @@ describe("planTurnCreates — a create's condition", () => {
             parent: PORT,
             condition: 'half under water',
           },
+          // Neither the current location nor its ancestor: the planner drops it.
+          {
+            handle: 'new:cellar',
+            name: 'The Flooded Cellar',
+            description: 'dark',
+            condition: 'knee-deep in brine',
+          },
         ],
         currentLocation: 'new:market',
         newItems: [
@@ -1655,6 +1662,11 @@ describe("planTurnCreates — a create's condition", () => {
         outcome: 'reused',
         id: MARKET,
         condition: 'half under water',
+      }),
+      expect.objectContaining({
+        handle: 'new:cellar',
+        outcome: 'dropped',
+        condition: 'knee-deep in brine',
       }),
     ])
     expect(plan.report.newItems).toEqual([

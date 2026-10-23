@@ -82,7 +82,8 @@ function renderConditions(block: AuthoredStateBlock): string | null {
   return list(
     STATE_TAGS.conditions,
     (block.conditions ?? []).map(
-      (c) => `    <entity id="${attr(c.id)}">${text(c.text, 'entity')}</entity>`,
+      (c) =>
+        `    <entity id="${attr(c.id)}">${text(c.text.replace(/[<>]/g, ''), 'entity')}</entity>`,
     ),
   )
 }

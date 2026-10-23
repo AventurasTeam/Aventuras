@@ -60,16 +60,31 @@ describe('renderStateBlock', () => {
   it("renders an authored block's moves in list order, its drops after its item moves", () => {
     const raw = renderStateBlock({
       transfers: {
-        items: [{ id: 'i1', slot: 'inventory', to: 'c1' }],
+        items: [
+          { id: 'i1', slot: 'inventory', to: 'c1' },
+          { id: 'i2', slot: 'inventory', to: 'c1' },
+        ],
         stackables: [],
         drops: [{ id: 'i1', from: 'c1' }],
       },
     })
     expect(parseStateBlock(raw).block.transfers).toEqual({
-      items: [{ id: 'i1', slot: 'inventory', to: 'c1', seq: 0 }],
+      items: [
+        { id: 'i1', slot: 'inventory', to: 'c1', seq: 0 },
+        { id: 'i2', slot: 'inventory', to: 'c1', seq: 1 },
+      ],
       stackables: [],
-      drops: [{ id: 'i1', from: 'c1', seq: 1 }],
+      drops: [{ id: 'i1', from: 'c1', seq: 2 }],
     })
+  })
+
+  // The parser's text pattern is `[^<]*`, so an angle bracket typed into a condition would fail it.
+  it('drops angle brackets from a condition so the field still parses', () => {
+    const { block, failures } = parseStateBlock(
+      renderStateBlock({ conditions: [{ id: 'l1', text: 'a <rotting> pier' }] }),
+    )
+    expect(failures).toEqual([])
+    expect(block.conditions).toEqual([{ id: 'l1', text: 'a rotting pier' }])
   })
 
   it('omits empty collections rather than emitting a tag the parser reads as truncated', () => {
