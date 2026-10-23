@@ -22,6 +22,12 @@ vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
 }))
 vi.mock('./fetchAdapter', () => ({ imageGetFetch: vi.fn() }))
 
+vi.mock('#lib/utils/url.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
+  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
+})
+
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { imageGetFetch } from './fetchAdapter'
 import { createOpenAIProvider } from './openai'
 import type { ImageGenerateOptions } from './types'
@@ -103,11 +109,13 @@ describe('OpenAI image generation', () => {
     ])
   })
 
-  it('goes to a custom base URL', async () => {
-    await createOpenAIProvider({ apiKey: 'k', baseUrl: 'https://proxy.test/v1/' }).generate(
+  it('goes to the normalized base URL', async () => {
+    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v1')
+    await createOpenAIProvider({ apiKey: 'k', baseUrl: ' https://proxy.test/v1// ' }).generate(
       options(),
     )
-    expect(lastCall().url).toBe('https://proxy.test/v1/images/generations')
+    expect(normalizeBaseUrl).toHaveBeenCalledWith(' https://proxy.test/v1// ')
+    expect(lastCall().url).toBe('https://normalized.test/v1/images/generations')
   })
 
   it('sends its requests under the openai-image debug id', () => {
