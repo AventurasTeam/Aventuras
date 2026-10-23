@@ -1643,6 +1643,20 @@ describe('renameEntity', () => {
     expect((await rowFor(db, 'char_1')).name).toBe('the hooded stranger')
   })
 
+  it('writes the trimmed name', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    expect((await apply(ctx, rename('  Mira '), 'act_n')).status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).name).toBe('Mira')
+  })
+
+  it.each(['', '   '])('no-ops on a blank name %j', async (name) => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    expect(await apply(ctx, rename(name), 'act_n')).toEqual(noopBecause('name-blank'))
+    expect((await rowFor(db, 'char_1')).name).toBe('the hooded stranger')
+  })
+
   it('no-ops when the row is gone', async () => {
     const { ctx } = await setup()
     expect(await apply(ctx, rename('Mira'), 'act_n')).toEqual(
@@ -1919,6 +1933,15 @@ describe('setFactionStanding', () => {
     expect(await undoPayloadOf(db, 'act_s')).toEqual({ state: { standing: 'a quiet guild' } })
   })
 
+  it("bounds a standing to the schema's 500 characters", async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx)
+    expect((await apply(ctx, standing('x'.repeat(600)), 'act_s')).status).toBe('ok')
+    const { state } = await rowFor(db, 'fact_1')
+    expect((state as { standing: string }).standing).toHaveLength(500)
+    expect(entityStateSchemaForKind('faction').safeParse(state).success).toBe(true)
+  })
+
   it('writes onto a faction whose state column is null', async () => {
     const { db, ctx } = await setup()
     await seed(ctx)
@@ -2055,6 +2078,21 @@ describe('returnFromRetirement', () => {
     expect(await apply(ctx, comeBack(), 'act_r')).toEqual(userWonOver)
     expect(await rowFor(db, 'char_1')).toMatchObject({ status: 'retired', retiredReason: 'exiled' })
   })
+
+  // data-model.md → Authorship contract: `status` and `retired_reason` are one field row.
+  it.each([
+    ['status', { status: 'retired' }, 'active'],
+    ['retired reason', { retiredReason: 'exiled' }, 'retired'],
+  ])(
+    'keeps a retirement whose %s alone the user wrote after the prose',
+    async (_l, patch, from) => {
+      const { db, ctx } = await setup()
+      await seed(ctx, { ...RETIRED, status: from as 'active' | 'retired', retiredReason: null })
+      await apply(ctx, userPatch(patch), 'act_u')
+      expect(await apply(ctx, comeBack(), 'act_r')).toEqual(userWonOver)
+      expect((await rowFor(db, 'char_1')).status).toBe('retired')
+    },
+  )
 
   it('returns over a retirement the user wrote before the prose', async () => {
     const { db, ctx } = await setup()

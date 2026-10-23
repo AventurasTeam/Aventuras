@@ -587,11 +587,13 @@ export const placeLocationHandler: ActionHandler = async (action, branchId, ctx)
 export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'renameEntity')
     throw new Error(`handler/kind mismatch: expected 'renameEntity', got '${action.kind}'`)
-  const { branchId: bid, id, name, proseEntryId } = action.payload
+  const { branchId: bid, id, proseEntryId } = action.payload
+  const name = action.payload.name.trim()
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
   if (!current) return noopRefusal(`rename target entities ${bid}:${id} not found`)
+  if (name === '') return noopRefusal('name-blank')
   // The same name under keyword-term normalization (case, surrounding space) is no reveal.
   if (normalizeTerm(name) === normalizeTerm(current.name)) return noopRefusal('name-unchanged')
   const edits =
@@ -670,17 +672,18 @@ export const raiseCollisionFlagHandler: ActionHandler = async (action, branchId,
   }
 }
 
-/** classifier.md → Factions: `state.standing` alone; the planner bounds it to the schema's 500. */
+/** classifier.md → Factions: `state.standing` alone, cut to the schema's 500 as a condition is. */
 export const setFactionStandingHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'setFactionStanding')
     throw new Error(`handler/kind mismatch: expected 'setFactionStanding', got '${action.kind}'`)
-  const { branchId: bid, id, standing, proseEntryId } = action.payload
+  const { branchId: bid, id, proseEntryId } = action.payload
+  const bounded = boundStateText(action.payload.standing).text
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
   if (!current) return noopRefusal(`standing target entities ${bid}:${id} not found`)
   if (current.kind !== 'faction') return noopRefusal('not-a-faction')
-  if (stateOf(current, 'faction').standing === standing) return noopRefusal('standing-unchanged')
+  if (stateOf(current, 'faction').standing === bounded) return noopRefusal('standing-unchanged')
   if (
     proseEntryId !== null &&
     wrotePath(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId), 'state', [
@@ -688,8 +691,12 @@ export const setFactionStandingHandler: ActionHandler = async (action, branchId,
     ])
   )
     return noopRefusal(USER_EDITED_SINCE_PROSE)
-  return buildStatePatchOutcome(bid, id, current, { standing }, ctx)
+  return buildStatePatchOutcome(bid, id, current, { standing: bounded }, ctx)
 }
+
+// data-model.md → Authorship contract: `status` and `retired_reason` are one field row.
+const retirementWritten = (edits: readonly Delta[]): boolean =>
+  wroteColumn(edits, 'status') || wroteColumn(edits, 'retiredReason')
 
 /**
  * retired → active on a character, checked as the write lands, so a status the user wrote since
@@ -707,7 +714,7 @@ export const returnFromRetirementHandler: ActionHandler = async (action, branchI
   if (current.status !== 'retired') return noopRefusal('not-retired')
   if (
     proseEntryId !== null &&
-    wroteColumn(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId), 'status')
+    retirementWritten(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
   )
     return noopRefusal(USER_EDITED_SINCE_PROSE)
   const columns = { status: 'active' as const, retiredReason: null }
