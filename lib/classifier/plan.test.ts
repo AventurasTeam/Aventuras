@@ -3508,7 +3508,7 @@ describe('plot writes', () => {
     keywords: [],
   })
 
-  it("writes a happening's category and a catalog icon, and no icon the catalog lacks", () => {
+  it("writes a happening's category and a catalog icon, and none for a blank or unknown one", () => {
     const { planned, unknownIcons } = buildClassifierActions(
       reply({
         happenings: [
@@ -3520,7 +3520,16 @@ describe('plot writes', () => {
             involvements: [],
             awareness: [],
           },
-          { title: 'B', icon: 'rocket', sourceTurn: 't1', involvements: [], awareness: [] },
+          {
+            title: 'B',
+            category: '  ',
+            icon: 'rocket',
+            sourceTurn: 't1',
+            involvements: [],
+            awareness: [],
+          },
+          { title: 'C', sourceTurn: 't1', involvements: [], awareness: [] },
+          { title: 'D', icon: '  ', sourceTurn: 't1', involvements: [], awareness: [] },
         ],
       }),
       deps(),
@@ -3530,7 +3539,10 @@ describe('plot writes', () => {
     ).toEqual([
       expect.objectContaining({ category: 'omen', icon: 'eye' }),
       expect.objectContaining({ category: null, icon: null }),
+      expect.objectContaining({ category: null, icon: null }),
+      expect.objectContaining({ category: null, icon: null }),
     ])
+    // An absent or blank icon is no claim on the catalog, so only B's is reported.
     expect(unknownIcons).toEqual([{ title: 'B', icon: 'rocket' }])
   })
 
