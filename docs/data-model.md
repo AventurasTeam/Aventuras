@@ -2086,7 +2086,9 @@ absolute state beside them:
   `parentDropped` record that, and the report's other fields carry the
   resolved id in place of the `new:` handle, apart from the rejected
   handle above.
-- A condition is rejected when its id isn't a place or item the prompt showed with its state, or its text is blank; `rejected` records that, and `classifier.condition_unseen` logs the first.
+- A condition is rejected when its id isn't a place or item the
+  prompt showed with its state, or its text is blank; `rejected`
+  records that, and `classifier.condition_unseen` logs the first.
 
 The decision is recorded rather than re-derived, because the
 difference alone does not identify its cause. An emitted location
