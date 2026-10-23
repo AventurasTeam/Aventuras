@@ -171,13 +171,13 @@ export const classifierExtractionSchema = z.object({
         icon,
         status: z
           .enum(['pending', 'active', 'resolved', 'failed'])
-          .describe('Resolved or failed only for a thread these turns both open and close.'),
+          .describe('Resolved or failed only for a thread the turns both open and close.'),
         sourceTurn,
         resolvedAtTurn: z
           .string()
           .optional()
           .describe(
-            'The turn that resolved or failed it, when these turns both open and close it; sourceTurn stays the turn that opened it. Omit otherwise.',
+            'The turn that resolved or failed it, when the turns both open and close it; sourceTurn stays the turn that opened it. Omit otherwise.',
           ),
       }),
     )

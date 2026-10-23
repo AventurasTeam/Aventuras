@@ -261,7 +261,7 @@ describe('classifierExtractionSchema — the writer map', () => {
     )
   })
 
-  // classifier.md → Threads → What it emits. A thread these turns both open and close arrives already
+  // classifier.md → Threads → What it emits. A thread the turns both open and close arrives already
   // resolved or failed (no later pass sees the turn that closed it), naming that turn.
   it('takes a new thread in any of the four statuses, and a status change never to pending', () => {
     const thread = { title: 'Recover the relic', description: 'Stolen at the ford.' }
@@ -304,10 +304,17 @@ describe('classifierExtractionSchema — the writer map', () => {
 
   it('tells the model when a new thread may be resolved or failed, and which turn is which', () => {
     const fields = itemFields('newThreads')
-    expect(fields.status?.description).toContain(
-      'only for a thread these turns both open and close',
-    )
+    expect(fields.status?.description).toContain('only for a thread the turns both open and close')
+    expect(fields.resolvedAtTurn?.description).toContain('when the turns both open and close it')
     expect(fields.resolvedAtTurn?.description).toContain('sourceTurn stays the turn that opened it')
+  })
+
+  // The schema block ends the system message, before the turns: "these turns" has nothing to point at.
+  it.each([
+    ['classifierExtractionSchema', classifierExtractionSchema],
+    ['classifierExtractionWithPlacesSchema', classifierExtractionWithPlacesSchema],
+  ])('never says "these turns" in the %s block', (_name, schema) => {
+    expect(JSON.stringify(z.toJSONSchema(schema))).not.toMatch(/these turns/i)
   })
 
   it('parses awareness of a listed happening, defaulting its severity to 0', () => {
