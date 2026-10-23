@@ -3612,12 +3612,20 @@ describe('per-turn-piggyback', () => {
       ],
       ['transfers.items[].id', ['transfers', 'items', '[]', 'id'], 'handle of an item in newItems'],
       ['conditions', ['conditions'], 'shown above with its state'],
+      ['conditions[].text', ['conditions', '[]', 'text'], 'replaces the stored condition whole'],
       [
-        'conditions[].text',
+        'conditions[].text limit',
         ['conditions', '[]', 'text'],
         'in a few words, never more than about 60',
       ],
-      ['transfers.drops', ['transfers', 'drops'], 'still lying there when the turn ends'],
+      [
+        'conditions[].text keeps what applies',
+        ['conditions', '[]', 'text'],
+        'keep what still applies, drop what no longer does, in a few words',
+      ],
+      ['transfers.drops', ['transfers', 'drops'], 'where the scene is'],
+      ['transfers.drops end state', ['transfers', 'drops'], 'still lying there when the turn ends'],
+      ['transfers.drops picked up again', ['transfers', 'drops'], 'An item picked up again'],
       [
         'newLocations[].condition',
         ['newLocations', '[]', 'condition'],
