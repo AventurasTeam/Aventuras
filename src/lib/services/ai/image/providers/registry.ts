@@ -7,7 +7,7 @@
  */
 
 import { settings } from '#lib/stores/settings.svelte.ts'
-import type { ImageProviderType } from '#lib/types/index.ts'
+import type { ImageProfile, ImageProviderType } from '#lib/types/index.ts'
 import { parseImageSpec, describeImageSpec, type ImageSpec } from '#lib/utils/image.ts'
 import type {
   ImageProvider,
@@ -25,7 +25,7 @@ import { createOpenAICompatibleProvider } from './openaiCompatibleProvider'
 import { createPollinationsProvider } from './pollinations'
 import { createGoogleProvider } from './google'
 import { createZhipuProvider } from './zhipu'
-import { comfyTakesReferences, createComfyProvider } from './comfy'
+import { comfyReferenceLimit, createComfyProvider } from './comfy'
 import { createOpenRouterProvider } from './openrouter'
 import { createA1111Provider } from './a1111'
 
@@ -97,27 +97,29 @@ const PROVIDER_BASE_URL: Record<ImageProviderType, FieldMode> = {
   a1111: 'optional',
 }
 
-/** Whether the adapter sends reference images; the rest would only waste the download. */
-const PROVIDER_READS_REFERENCES: Record<ImageProviderType, boolean> = {
-  nanogpt: true,
-  openai: true,
-  'openai-compatible': true,
-  openrouter: true,
-  pollinations: true,
-  google: true,
-  zhipu: false,
-  comfyui: true,
-  a1111: true,
+const unlimited = () => Infinity
+
+/** How many references the adapter sends; 0 skips the download. */
+const PROVIDER_REFERENCE_LIMIT: Record<
+  ImageProviderType,
+  (providerOptions: ImageProfile['providerOptions']) => number
+> = {
+  nanogpt: unlimited,
+  openai: unlimited,
+  'openai-compatible': unlimited,
+  openrouter: unlimited,
+  pollinations: unlimited,
+  google: unlimited,
+  zhipu: () => 0,
+  comfyui: comfyReferenceLimit,
+  a1111: unlimited,
 }
 
-/** ComfyUI sends them only through a custom workflow's `LoadImage` nodes. */
-function readsReferences(profile: {
-  providerType: ImageProviderType
-  providerOptions?: Record<string, unknown>
-}): boolean {
-  if (!PROVIDER_READS_REFERENCES[profile.providerType]) return false
-  return profile.providerType !== 'comfyui' || comfyTakesReferences(profile.providerOptions)
-}
+/** How many references a profile of this provider type sends; 0 means none. */
+export const referenceLimit = (
+  providerType: ImageProviderType,
+  providerOptions: ImageProfile['providerOptions'],
+): number => PROVIDER_REFERENCE_LIMIT[providerType](providerOptions)
 
 // ============================================================================
 // Model Cache
@@ -178,7 +180,7 @@ export function baseUrlMode(providerType: string): FieldMode {
  */
 export async function supportsReferenceImages(profileId: string, model: string): Promise<boolean> {
   const profile = settings.getImageProfile(profileId)
-  if (!profile || !readsReferences(profile)) return false
+  if (!profile || referenceLimit(profile.providerType, profile.providerOptions) === 0) return false
   const modelInfo = (await listImageModels(profileId)).find((m) => m.id === model)
   return modelInfo?.supportsImg2Img !== false
 }
@@ -238,13 +240,13 @@ export async function generateImage(options: {
   const modelInfo = (await listImageModels(profileId).catch(() => [])).find((m) => m.id === model)
 
   // A reference that cannot be fetched is dropped; the scene is still worth drawing without it.
+  const providerLimit = referenceLimit(profile.providerType, profile.providerOptions)
+  const limit = Math.min(modelInfo?.maxReferenceImages ?? Infinity, providerLimit)
   const cleanRefs =
-    referenceImages && readsReferences(profile)
+    referenceImages && providerLimit > 0
       ? (
           await Promise.allSettled(
-            referenceImages
-              .slice(0, modelInfo?.maxReferenceImages)
-              .map((img) => toRawBase64(img, signal)),
+            referenceImages.slice(0, limit).map((img) => toRawBase64(img, signal)),
           )
         ).flatMap((result) => {
           if (result.status === 'fulfilled') return [result.value]

@@ -27,7 +27,7 @@ vi.mock('./openai', () => ({
 
 vi.mock('./comfy', () => ({
   createComfyProvider: vi.fn(),
-  comfyTakesReferences: vi.fn(),
+  comfyReferenceLimit: vi.fn(),
 }))
 
 vi.mock('./google', () => ({
@@ -36,7 +36,7 @@ vi.mock('./google', () => ({
 
 import { fetchPublicImageBase64 } from './fetchAdapter'
 import { createOpenAIProvider } from './openai'
-import { comfyTakesReferences, createComfyProvider } from './comfy'
+import { comfyReferenceLimit, createComfyProvider } from './comfy'
 import { createGoogleProvider } from './google'
 import type { ImageModelInfo } from './types'
 import {
@@ -57,7 +57,7 @@ import type { ImageProviderType } from '#lib/types/index.ts'
 describe('Image Provider Registry', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(comfyTakesReferences).mockReturnValue(false)
+    vi.mocked(comfyReferenceLimit).mockReturnValue(0)
   })
 
   describe('supportsImageGeneration', () => {
@@ -336,17 +336,18 @@ describe('Image Provider Registry', () => {
       expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: undefined }))
     })
 
-    it('hands ComfyUI references when its workflow takes them', async () => {
+    it('hands ComfyUI as many references as its workflow has selected inputs', async () => {
       const generate = setup('comfyui')
-      vi.mocked(comfyTakesReferences).mockReturnValue(true)
+      vi.mocked(comfyReferenceLimit).mockReturnValue(1)
 
       await generateImage({
         profileId: 'p',
         model: 'm',
         prompt: 'x',
-        referenceImages: ['https://img.test/a.png'],
+        referenceImages: ['https://img.test/a.png', 'https://img.test/b.png'],
       })
 
+      expect(fetchPublicImageBase64).toHaveBeenCalledTimes(1)
       expect(generate).toHaveBeenCalledWith(
         expect.objectContaining({ referenceImages: ['DOWNLOADED'] }),
       )
@@ -385,7 +386,7 @@ describe('Image Provider Registry', () => {
 
     it('is true for ComfyUI with one', async () => {
       setup('comfyui', [])
-      vi.mocked(comfyTakesReferences).mockReturnValue(true)
+      vi.mocked(comfyReferenceLimit).mockReturnValue(Infinity)
       expect(await supportsReferenceImages('p', 'm')).toBe(true)
     })
 

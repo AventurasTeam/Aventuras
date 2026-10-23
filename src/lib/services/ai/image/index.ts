@@ -27,6 +27,7 @@ export {
   requiresApiKey,
   takesApiKey,
   baseUrlMode,
+  referenceLimit,
   IMAGE_PROVIDER_LABELS,
   IMAGE_PROVIDER_OPTIONS,
   type ImageModelInfo,

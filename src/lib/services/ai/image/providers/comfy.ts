@@ -377,6 +377,10 @@ export function comfyTakesReferences(
   )
 }
 
+/** How many references a ComfyUI profile uses: every one, or none without a custom workflow. */
+export const comfyReferenceLimit = (providerOptions: Record<string, unknown> | undefined): number =>
+  comfyTakesReferences(providerOptions) ? Infinity : 0
+
 const KSamplerInfo = z.object({
   KSampler: z.object({
     input: z.object({
