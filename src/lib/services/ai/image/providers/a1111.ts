@@ -69,7 +69,6 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
       return (Array.isArray(data) ? data : []).map((m) => ({
         id: m.title || m.model_name || m.name || '',
         name: m.title || m.model_name || m.name || '',
-        supportsImg2Img: true,
       }))
     },
 

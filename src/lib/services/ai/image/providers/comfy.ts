@@ -630,7 +630,6 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
           id: `${prefix}:${m}`,
           name: m,
           description,
-          supportsImg2Img: true,
           costPerImage: 0,
         })
 

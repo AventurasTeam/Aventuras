@@ -56,7 +56,8 @@ export interface ImageModelInfo {
   id: string
   name: string
   description?: string
-  supportsImg2Img: boolean
+  /** Absent means unknown. */
+  supportsImg2Img?: boolean
   /** How many reference images one request takes; absent means no known limit. */
   maxReferenceImages?: number
   /**
