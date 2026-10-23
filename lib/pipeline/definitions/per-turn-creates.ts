@@ -197,7 +197,7 @@ function planLocations(args: {
     const candidate = placement.kind === 'kept' ? placement.placement : UNPLACED
 
     const text = storedText(emission)
-    // The snapshot's hiddenBetween stays valid beside the swapped rows: one chain, settled top-down.
+    // Stale hiddenBetween above a row placed here is harmless: the one chain settles top-down.
     const match = matchNewPlace(
       { name: text.name, placement: candidate },
       placed,
