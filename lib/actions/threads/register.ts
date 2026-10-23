@@ -134,12 +134,8 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     // No columnSchemas registered: scalar/nullable columns take the whole prior value as undo.
     undoPayload[col] = current[col as keyof Thread]
   }
-  // The ref names where a resolved or failed status ended, so a thread taken up again drops it.
-  if (
-    (set.status === 'pending' || set.status === 'active') &&
-    !('resolvedAtEntryId' in set) &&
-    current.resolvedAtEntryId !== null
-  ) {
+  // The ref is the pass's claim of where its status ended; a user's status change retracts it.
+  if ('status' in set && set.status !== current.status && current.resolvedAtEntryId !== null) {
     set.resolvedAtEntryId = null
     undoPayload.resolvedAtEntryId = current.resolvedAtEntryId
   }

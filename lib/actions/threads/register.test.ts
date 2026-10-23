@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
-import { branches, deltas, stories, threads, type NewThread, type Thread } from '@/lib/db'
+import { branches, deltas, stories, threads, type NewThread } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { threadsStore } from '@/lib/stores'
 
@@ -41,6 +41,19 @@ async function rowFor(db: Awaited<ReturnType<typeof setup>>['db'], id: string) {
   const [r] = await db.select().from(threads).where(eq(threads.id, id))
   return r
 }
+
+type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
+const apply = (ctx: Ctx, action: PipelineAction, actionId: string) =>
+  applyDeltaAction({ action, actionId, branchId: 'br_1' }, ctx)
+const create = (ctx: Ctx, entry: NewThread, source: 'user_edit' | 'periodic_classifier') =>
+  apply(ctx, { kind: 'createThread', source, payload: { entry } }, 'act_c')
+const userPatch = (patch: Record<string, unknown>): PipelineAction => ({
+  kind: 'updateThread',
+  source: 'user_edit',
+  payload: { branchId: 'br_1', id: 'thr_1', patch },
+})
+const undoOf = async (db: Awaited<ReturnType<typeof setup>>['db'], actionId: string) =>
+  (await db.select().from(deltas).where(eq(deltas.actionId, actionId)))[0]?.undoPayload
 
 describe('threads CRUD arms', () => {
   it('create writes the row + create-patch into the held-branch store', async () => {
@@ -339,80 +352,62 @@ describe('threads CRUD arms', () => {
   })
 })
 
-// classifier.md → Threads → The row: the entry ref names where a resolved or failed status ended.
+// classifier.md → Threads → The row: the ref is only ever the pass's claim of where a status ended.
 describe('updateThread — the entry a status ended on', () => {
-  type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
-  const RESOLVED: NewThread = {
+  const PASS_THREAD: NewThread = {
     ...THREAD,
     status: 'resolved',
     triggeredAtEntryId: 'e_setup',
     resolvedAtEntryId: 'e_old',
   }
-  const create = (ctx: Ctx, entry: NewThread) =>
-    applyDeltaAction(
-      {
-        action: { kind: 'createThread', source: 'periodic_classifier', payload: { entry } },
-        actionId: 'act_c',
-        branchId: 'br_1',
-      },
-      ctx,
-    )
-  const userStatus = (ctx: Ctx, status: Thread['status'], actionId: string) =>
-    applyDeltaAction(
-      {
-        action: {
-          kind: 'updateThread',
-          source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'thr_1', patch: { status } },
-        },
-        actionId,
-        branchId: 'br_1',
-      },
-      ctx,
-    )
-  const undoOf = async (db: Awaited<ReturnType<typeof setup>>['db'], actionId: string) =>
-    (await db.select().from(deltas).where(eq(deltas.actionId, actionId)))[0]?.undoPayload
 
-  it.each(['pending', 'active'] as const)(
-    "clears it when the user moves a pass's resolved thread to %s, and undo restores it",
-    async (status) => {
+  it.each([
+    ['resolved', 'pending'],
+    ['resolved', 'active'],
+    ['resolved', 'failed'],
+    ['failed', 'resolved'],
+  ] as const)(
+    "clears it when the user changes a pass's %s thread to %s, and undo restores both",
+    async (from, to) => {
       const { db, ctx } = await setup()
-      await create(ctx, RESOLVED)
-      expect((await userStatus(ctx, status, 'act_u')).status).toBe('ok')
-      expect(await rowFor(db, 'thr_1')).toMatchObject({ status, resolvedAtEntryId: null })
-      expect(threadsStore.getById('thr_1')).toMatchObject({ status, resolvedAtEntryId: null })
-      expect(await undoOf(db, 'act_u')).toEqual({ status: 'resolved', resolvedAtEntryId: 'e_old' })
+      await create(ctx, { ...PASS_THREAD, status: from }, 'periodic_classifier')
+      expect((await apply(ctx, userPatch({ status: to }), 'act_u')).status).toBe('ok')
+      expect(await rowFor(db, 'thr_1')).toMatchObject({ status: to, resolvedAtEntryId: null })
+      expect(threadsStore.getById('thr_1')).toMatchObject({ status: to, resolvedAtEntryId: null })
+      expect(await undoOf(db, 'act_u')).toEqual({ status: from, resolvedAtEntryId: 'e_old' })
 
       await reverseReplayDeltas('act_u', ctx)
-      const restored = { status: 'resolved', resolvedAtEntryId: 'e_old' }
+      const restored = { status: from, resolvedAtEntryId: 'e_old' }
       expect(await rowFor(db, 'thr_1')).toMatchObject(restored)
       expect(threadsStore.getById('thr_1')).toMatchObject(restored)
     },
   )
 
-  it('leaves no entry on a thread the user fails after taking it up again', async () => {
+  it('clears it over a ref the same patch sends', async () => {
     const { db, ctx } = await setup()
-    await create(ctx, RESOLVED)
-    await userStatus(ctx, 'active', 'act_u1')
-    await userStatus(ctx, 'failed', 'act_u2')
-    expect(await rowFor(db, 'thr_1')).toMatchObject({ status: 'failed', resolvedAtEntryId: null })
+    await create(ctx, PASS_THREAD, 'periodic_classifier')
+    await apply(ctx, userPatch({ status: 'active', resolvedAtEntryId: 'e_other' }), 'act_u')
+    expect(await rowFor(db, 'thr_1')).toMatchObject({ status: 'active', resolvedAtEntryId: null })
   })
 
-  it.each(['resolved', 'failed'] as const)(
-    'keeps it when the user moves the thread to %s',
-    async (status) => {
+  it.each([[{ status: 'resolved' }], [{ title: 'Return the relic' }]])(
+    'keeps it on a save that leaves the status as it was (%o)',
+    async (patch) => {
       const { db, ctx } = await setup()
-      await create(ctx, { ...RESOLVED, status: status === 'resolved' ? 'failed' : 'resolved' })
-      await userStatus(ctx, status, 'act_u')
-      expect(await rowFor(db, 'thr_1')).toMatchObject({ status, resolvedAtEntryId: 'e_old' })
-      expect(Object.keys((await undoOf(db, 'act_u')) ?? {})).toEqual(['status'])
+      await create(ctx, PASS_THREAD, 'periodic_classifier')
+      expect((await apply(ctx, userPatch(patch), 'act_u')).status).toBe('ok')
+      expect(await rowFor(db, 'thr_1')).toMatchObject({
+        status: 'resolved',
+        resolvedAtEntryId: 'e_old',
+      })
+      expect(Object.keys((await undoOf(db, 'act_u')) ?? {})).toEqual(Object.keys(patch))
     },
   )
 
   it("writes only the status of a user's thread", async () => {
     const { db, ctx } = await setup()
-    await create(ctx, { ...THREAD, status: 'failed' })
-    await userStatus(ctx, 'active', 'act_u')
+    await create(ctx, { ...THREAD, status: 'failed' }, 'user_edit')
+    await apply(ctx, userPatch({ status: 'active' }), 'act_u')
     expect(await rowFor(db, 'thr_1')).toMatchObject({
       status: 'active',
       triggeredAtEntryId: null,
@@ -434,11 +429,6 @@ describe('setThreadStatus', () => {
     registerStoryEntries()
     return harness
   }
-  type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
-  const apply = (ctx: Ctx, action: PipelineAction, actionId: string) =>
-    applyDeltaAction({ action, actionId, branchId: 'br_1' }, ctx)
-  const create = (ctx: Ctx, entry: NewThread, source: 'user_edit' | 'periodic_classifier') =>
-    apply(ctx, { kind: 'createThread', source, payload: { entry } }, 'act_c')
   const writeProse = (ctx: Ctx) =>
     apply(
       ctx,
@@ -469,14 +459,7 @@ describe('setThreadStatus', () => {
     source: 'periodic_classifier',
     payload: { branchId: 'br_1', id: 'thr_1', status, resolvedAtEntryId, proseEntryId },
   })
-  const userPatch = (patch: Record<string, unknown>): PipelineAction => ({
-    kind: 'updateThread',
-    source: 'user_edit',
-    payload: { branchId: 'br_1', id: 'thr_1', patch },
-  })
   const noop = (reason: string) => ({ status: 'rejected', reason, code: 'noop' })
-  const undoOf = async (db: Awaited<ReturnType<typeof setup>>['db'], actionId: string) =>
-    (await db.select().from(deltas).where(eq(deltas.actionId, actionId)))[0]?.undoPayload
 
   async function seed(ctx: Ctx, entry: NewThread = PASS_THREAD) {
     await create(ctx, entry, 'periodic_classifier')
@@ -552,6 +535,17 @@ describe('setThreadStatus', () => {
     const { db, ctx } = await setupWithProse()
     await seed(ctx, { ...PASS_THREAD, status: 'resolved', resolvedAtEntryId: 'e_old' })
     await apply(ctx, setStatus('active'), 'act_s')
+    await apply(ctx, userPatch({ status: 'failed' }), 'act_u')
+    await reverseReplayDeltas('act_s', ctx)
+    const kept = { status: 'failed', resolvedAtEntryId: null }
+    expect(await rowFor(db, 'thr_1')).toMatchObject(kept)
+    expect(threadsStore.getById('thr_1')).toMatchObject(kept)
+  })
+
+  it('keeps no entry once the user fails a thread the pass resolved and the pass is reversed', async () => {
+    const { db, ctx } = await setupWithProse()
+    await seed(ctx)
+    await apply(ctx, setStatus('resolved'), 'act_s')
     await apply(ctx, userPatch({ status: 'failed' }), 'act_u')
     await reverseReplayDeltas('act_s', ctx)
     const kept = { status: 'failed', resolvedAtEntryId: null }
