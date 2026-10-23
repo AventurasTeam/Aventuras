@@ -8,6 +8,8 @@ import {
   type LocationState,
 } from '@/lib/db'
 import { dedupeTerms, newTerms, normalizeTerm } from '@/lib/keyword-terms'
+import { boundStateText } from '@/lib/piggyback'
+import { oneLine } from '@/lib/text'
 import {
   characterFactionId,
   checkParentChain,
@@ -174,13 +176,13 @@ function placementLoop(
 
 // data-model.md → Soft caps + compaction discipline: the Zod degradation bounds a create's state
 // must pass, else the handler refuses the row and the pass fails. The soft caps are the prompt's.
-const MAX_STATE_TEXT = 500
 const MAX_VOICE = 2000
 const MAX_STATE_LIST = 50
 
-function stateText(text: string | undefined, limit = MAX_STATE_TEXT): string | undefined {
+// A 500-character field, cut at a clause as a per-turn visual value is (piggyback.md).
+function stateText(text: string | undefined): string | undefined {
   const trimmed = nonBlank(text)
-  return trimmed === undefined ? undefined : clampEmbedded(trimmed, limit)
+  return trimmed === undefined ? undefined : boundStateText(trimmed).text
 }
 
 function stateList(items: readonly string[] | undefined): string[] {
@@ -194,7 +196,8 @@ function characterProfile(candidate: NewCharacter): CharacterState {
     const text = stateText(candidate.visual?.[key])
     if (text !== undefined) visual[key] = text
   }
-  const voice = stateText(candidate.voice, MAX_VOICE)
+  const voiceText = nonBlank(candidate.voice)
+  const voice = voiceText === undefined ? undefined : clampEmbedded(voiceText, MAX_VOICE)
   return {
     ...emptyEntityState('character'),
     visual,
@@ -688,9 +691,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     })
   }
 
-  // classifier.md → Factions: a listed faction's standing, on a change. Bounded here:
-  // setFactionStanding merges without parsing, and an over-long standing stored would fail every
-  // later World save of the faction.
+  // classifier.md → Factions: a listed faction's standing, on a change. Bounded as the handler
+  // bounds it, so a restatement compares what it would store, on one line as the prompt shows it.
   const standingOf = new Map<string, string | undefined>()
   for (const fact of inTurnOrder(extraction.standings)) {
     const row = rowById.get(fact.ref)
@@ -706,7 +708,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const current = standingOf.has(row.id)
       ? standingOf.get(row.id)
       : stateOf(row, 'faction').standing
-    if (standing === undefined || standing === current) continue
+    if (standing === undefined || (current !== undefined && oneLine(standing) === oneLine(current)))
+      continue
     standingOf.set(row.id, standing)
     planned.push({
       action: {

@@ -1413,6 +1413,23 @@ describe('mentioned places', () => {
   })
 
   // classifier.md → What the classifier writes → First profiles: a mentioned place's condition.
+  // piggyback.md → visuals: a long value is cut back to a clause boundary, as a per-turn one is.
+  it("cuts a new place's long condition at a clause", () => {
+    const { planned } = buildClassifierActions(
+      placesReply([
+        newPlace('new:a', 'Ash', {
+          parent: 'top-level',
+          condition: `${'a'.repeat(300)}, ${'b'.repeat(300)}`,
+        }),
+      ]),
+      deps([]),
+    )
+    expect(stateOf(planned, 'Ash')).toEqual({
+      parent_location_id: null,
+      condition: 'a'.repeat(300),
+    })
+  })
+
   it("writes a new place's condition into its state, trimmed and bounded", () => {
     const { planned } = buildClassifierActions(
       placesReply([
@@ -2687,6 +2704,25 @@ describe('first profiles', () => {
     expect(stateOf(planned)).toEqual(EMPTY_CHARACTER)
   })
 
+  it('cuts a long visual value at a clause', () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        newCharacters: [
+          {
+            handle: 'new:ilsa',
+            name: 'Ilsa',
+            description: 'x',
+            keywords: [],
+            sourceTurn: 't1',
+            visual: { face: `${'f'.repeat(300)}; ${'g'.repeat(300)}` },
+          },
+        ],
+      }),
+      deps({ decisions: decided('new:ilsa') }),
+    )
+    expect((stateOf(planned) as { visual: { face: string } }).visual.face).toBe('f'.repeat(300))
+  })
+
   it("clamps a profile to the state schema's bounds, never splitting a surrogate pair", () => {
     const { planned } = buildClassifierActions(
       reply({
@@ -3299,6 +3335,48 @@ describe('standings', () => {
         entryId: 'e2',
       },
     ])
+  })
+
+  it('cuts a long standing at a clause, as the handler stores it', () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        standings: [
+          {
+            ref: 'fact_watch',
+            standing: `${'a'.repeat(300)}, ${'b'.repeat(300)}`,
+            sourceTurn: 't1',
+          },
+        ],
+      }),
+      deps([faction('fact_watch')]),
+    )
+    expect(payloadOf<{ standing: string }>(planned[0]).standing).toBe('a'.repeat(300))
+  })
+
+  // The handler compares what it would store: a long restatement of a cut standing writes nothing.
+  it('plans nothing for a standing whose cut is the one stored', () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        standings: [
+          {
+            ref: 'fact_watch',
+            standing: `${'a'.repeat(300)}, ${'b'.repeat(300)}`,
+            sourceTurn: 't1',
+          },
+        ],
+      }),
+      deps([faction('fact_watch', 'a'.repeat(300))]),
+    )
+    expect(planned).toEqual([])
+  })
+
+  // classifier-context.ts shows a standing on one line, so the pass restates it so.
+  it('plans nothing for a standing the prompt showed on one line', () => {
+    const { planned } = buildClassifierActions(
+      reply({ standings: [{ ref: 'fact_watch', standing: 'wary allies', sourceTurn: 't1' }] }),
+      deps([faction('fact_watch', 'wary\n  allies')]),
+    )
+    expect(planned).toEqual([])
   })
 
   it("clamps a standing to the faction state's 500 characters, never splitting a pair", () => {
