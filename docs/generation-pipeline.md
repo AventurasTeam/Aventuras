@@ -1205,7 +1205,8 @@ observability — visible in the Diagnostics Hub Logs tab.
 The modal reports it too. SQLite ROLLBACK undoes the partial
 reverse-replay, not the orphan's own writes: those stay on disk, and
 for a `periodic-classifier` orphan the branch stays `running`
-(`resetStuckClassifierRunState` skips branches whose deltas survived),
+(`resetStuckClassifierRunState` skips a branch while that orphan's
+deltas survive),
 so it can't run a pass, and every Send on it fails until a boot
 reverses the orphan
 ([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)).
@@ -1240,8 +1241,9 @@ different versions. The third needs a run whose abort's own reversal
 failed: the orchestrator lifts the run's gate even then, so a user
 write can land that the reversal would break, and
 [Reverse-replay](#reverse-replay) refuses the reversal as `write-back`
-on each boot. The orphan's writes stay, and its branch takes no
-turns; a branch from an entry before the orphan starts idle and can.
+on each boot. The orphan's writes stay, and for a pass its branch
+takes no turns; a branch from an entry before the orphan starts idle
+and can.
 
 ### `chainsTo` on predecessor
 
