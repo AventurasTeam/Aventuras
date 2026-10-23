@@ -1,8 +1,17 @@
 import type { EntryMetadata } from '@/lib/db'
 
-import type { PlannedTurn } from './types'
+import type { ParsedTransfers, PlannedTurn } from './types'
 
 type StateReport = NonNullable<EntryMetadata['stateReport']>
+type ReportedTransfers = NonNullable<StateReport['transfers']>
+
+// data-model.md → Entry metadata shape: the moves as emitted, without the order apply.ts followed.
+function reportedTransfers(transfers: ParsedTransfers): ReportedTransfers {
+  return {
+    items: transfers.items.map(({ seq, ...item }) => item),
+    stackables: transfers.stackables,
+  }
+}
 
 type BuildReportArgs = {
   layer: StateReport['layer']
@@ -50,7 +59,7 @@ export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateRep
       ? { currentLocationRejected: true as const }
       : {}),
     ...(block.visualChanges !== undefined ? { visualChanges: block.visualChanges } : {}),
-    ...(block.transfers !== undefined ? { transfers: block.transfers } : {}),
+    ...(block.transfers !== undefined ? { transfers: reportedTransfers(block.transfers) } : {}),
     ...(newLocations.length > 0 ? { newLocations } : {}),
     ...(newItems.length > 0 ? { newItems } : {}),
     ...(failures.length > 0

@@ -377,7 +377,7 @@ describe('buildPiggybackActions', () => {
       sceneEntities: ['char_1'],
       worldTimeDelta: 0,
       visualChanges: [{ id: 'char_1', type: 'physique', text }],
-      transfers: { items: [], stackables: [] },
+      transfers: { items: [], stackables: [], drops: [] },
     })
 
     it('truncates an over-cap fallback classifier note to the schema cap', () => {
@@ -570,10 +570,11 @@ describe('buildPiggybackActions', () => {
     const block: ParsedStateBlock = {
       transfers: {
         items: [
-          { id: 'sword_1', slot: 'inventory', from: 'char_1', to: 'char_2' },
-          { id: 'potion_1', slot: 'equipped_items', from: 'char_1' },
+          { id: 'sword_1', slot: 'inventory', from: 'char_1', to: 'char_2', seq: 0 },
+          { id: 'potion_1', slot: 'equipped_items', from: 'char_1', seq: 1 },
         ],
         stackables: [],
+        drops: [],
       },
     }
 
@@ -635,6 +636,7 @@ describe('buildPiggybackActions', () => {
             { key: 'constructor', amount: 1, from: 'char_1', to: 'char_2' },
             { key: '__proto__', amount: 2, to: 'char_2' },
           ],
+          drops: [],
         },
       }),
       entities: [
@@ -681,7 +683,7 @@ describe('buildPiggybackActions', () => {
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned({
-        transfers: { items: [], stackables: [{ key: 'gold', amount: 1, to: 'char_1' }] },
+        transfers: { items: [], stackables: [{ key: 'gold', amount: 1, to: 'char_1' }], drops: [] },
       }),
       entities: [holder],
       previousMetadata,
@@ -703,7 +705,11 @@ describe('buildPiggybackActions', () => {
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned({
-        transfers: { items: [], stackables: [{ key: 'silver coins', amount: 5, from: 'char_1' }] },
+        transfers: {
+          items: [],
+          stackables: [{ key: 'silver coins', amount: 5, from: 'char_1' }],
+          drops: [],
+        },
       }),
       entities: [
         mockEntity({
@@ -765,8 +771,9 @@ describe('buildPiggybackActions', () => {
       const actions = run(
         {
           transfers: {
-            items: [{ id: 'item_rope', to: 'char_2', slot: 'inventory' }],
+            items: [{ id: 'item_rope', to: 'char_2', slot: 'inventory', seq: 0 }],
             stackables: [],
+            drops: [],
           },
         },
         [holding('char_2', {}), holding('char_3', { inventory: ['item_rope', 'item_key'] }), rope],
@@ -791,8 +798,9 @@ describe('buildPiggybackActions', () => {
       const actions = run(
         {
           transfers: {
-            items: [{ id: 'item_blade', to: 'char_2', slot: 'equipped_items' }],
+            items: [{ id: 'item_blade', to: 'char_2', slot: 'equipped_items', seq: 0 }],
             stackables: [],
+            drops: [],
           },
         },
         [holding('char_2', { inventory: ['item_blade'] })],
@@ -849,6 +857,7 @@ describe('buildPiggybackActions', () => {
           { key: 'gold', amount: 20, from: 'char_1', to: 'char_2' },
           { key: 'arrows', amount: 10, from: 'char_1' },
         ],
+        drops: [],
       },
     }
 
@@ -901,6 +910,7 @@ describe('buildPiggybackActions', () => {
             { key: 'gold', amount: 20, from: 'char_1', to: 'char_2' },
             { key: 'arrows', amount: 2, from: 'char_1' },
           ],
+          drops: [],
         },
       }),
       entities: [holder('char_1', { gold: 5, arrows: 6 }), holder('char_2', { gold: 1 })],
@@ -1112,8 +1122,9 @@ describe('buildPiggybackActions', () => {
         { id: 'char_kael', type: 'attire', text: 'leather jacket' },
       ],
       transfers: {
-        items: [{ id: 'item_blade', from: 'Andrea', to: 'char_kael', slot: 'inventory' }],
+        items: [{ id: 'item_blade', from: 'Andrea', to: 'char_kael', slot: 'inventory', seq: 0 }],
         stackables: [{ key: 'coins', amount: 5, from: 'Andrea', to: 'char_kael' }],
+        drops: [],
       },
     }
 
@@ -1171,8 +1182,9 @@ describe('buildPiggybackActions', () => {
     const block: ParsedStateBlock = {
       visualChanges: [{ id: 'loc_keep', type: 'attire', text: 'weathered stonework' }],
       transfers: {
-        items: [{ id: 'item_blade', from: 'char_kael', to: 'loc_keep', slot: 'inventory' }],
+        items: [{ id: 'item_blade', from: 'char_kael', to: 'loc_keep', slot: 'inventory', seq: 0 }],
         stackables: [{ key: 'coins', amount: 5, from: 'char_kael', to: 'loc_keep' }],
+        drops: [],
       },
     }
 
@@ -1381,7 +1393,11 @@ describe("buildPiggybackActions with this turn's creates", () => {
     })
     const result = build({
       block: {
-        transfers: { items: [{ id: 'item_key', slot: 'inventory', to: 'char_1' }], stackables: [] },
+        transfers: {
+          items: [{ id: 'item_key', slot: 'inventory', to: 'char_1', seq: 0 }],
+          stackables: [],
+          drops: [],
+        },
       },
       createdRows: [key],
     })

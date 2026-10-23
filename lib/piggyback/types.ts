@@ -33,14 +33,24 @@ export const VISUAL_TEXT_MAX = 500
 export const MAX_RETRIEVAL_QUERIES = 3
 
 export type VisualChangeNote = { id: string; type: VisualChangeType; text: string }
+/** A place's or an item's condition as it is now; it replaces the stored one whole. */
+export type ConditionChange = { id: string; text: string }
+/** `seq` is the tag's place among the block's item moves and drops: the order apply.ts follows. */
 export type ItemTransfer = {
   id: string
   slot: 'equipped_items' | 'inventory'
   to?: string
   from?: string
+  seq: number
 }
+/** A held item put down where the scene is; `seq` as on ItemTransfer. */
+export type ItemDrop = { id: string; from?: string; seq: number }
 export type StackableTransfer = { key: string; amount: number; to?: string; from?: string }
-export type ParsedTransfers = { items: ItemTransfer[]; stackables: StackableTransfer[] }
+export type ParsedTransfers = {
+  items: ItemTransfer[]
+  stackables: StackableTransfer[]
+  drops: ItemDrop[]
+}
 
 /** `parent`: a placeholder, a handle or `top` as emitted; an id or `TOP_LEVEL` substituted. */
 export type NewLocationEmission = {
@@ -48,14 +58,21 @@ export type NewLocationEmission = {
   name: string
   description: string
   parent?: string
+  condition?: string
 }
-export type NewItemEmission = { handle: string; name: string; description: string }
+export type NewItemEmission = {
+  handle: string
+  name: string
+  description: string
+  condition?: string
+}
 
 export type ParsedStateBlock = {
   sceneEntities?: string[]
   currentLocation?: string
   worldTimeDelta?: number
   visualChanges?: VisualChangeNote[]
+  conditions?: ConditionChange[]
   transfers?: ParsedTransfers
   summary?: string
   retrievalQueries?: string[]

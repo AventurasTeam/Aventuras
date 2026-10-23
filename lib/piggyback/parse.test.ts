@@ -46,8 +46,9 @@ describe('parseStateBlock', () => {
         { id: 'c2', type: 'hair', text: 'damp and matted to her forehead' },
       ],
       transfers: {
-        items: [{ id: 'i1', slot: 'inventory', to: 'c1', from: 'c3' }],
+        items: [{ id: 'i1', slot: 'inventory', to: 'c1', from: 'c3', seq: 0 }],
         stackables: [{ key: 'gold', amount: 50, to: 'c1', from: 'c3' }],
+        drops: [],
       },
       summary: 'Aria pushed into the marshes.',
       retrievalQueries: ["House Eldrin's history and its sigil", 'exiled nobility of the marshes'],
@@ -179,8 +180,9 @@ describe('parseStateBlock', () => {
     )
     expect(failures).toEqual([])
     expect(block.transfers).toEqual({
-      items: [{ id: 'i1', slot: 'inventory', from: 'c3', to: 'c1' }],
+      items: [{ id: 'i1', slot: 'inventory', from: 'c3', to: 'c1', seq: 0 }],
       stackables: [{ key: 'gold', amount: 50, from: 'c3', to: 'c1' }],
+      drops: [],
     })
   })
 
@@ -190,8 +192,9 @@ describe('parseStateBlock', () => {
     )
     expect(failures).toEqual([])
     expect(block.transfers).toEqual({
-      items: [{ id: 'i1', slot: 'inventory', to: 'c1' }],
+      items: [{ id: 'i1', slot: 'inventory', to: 'c1', seq: 0 }],
       stackables: [],
+      drops: [],
     })
   })
 
@@ -202,7 +205,7 @@ describe('parseStateBlock', () => {
   <transfers></transfers>
 </state>`
     const result = parseStateBlock(raw)
-    expect(result.block.transfers).toEqual({ items: [], stackables: [] })
+    expect(result.block.transfers).toEqual({ items: [], stackables: [], drops: [] })
     expect(result.failures).toEqual([])
   })
 
@@ -577,7 +580,9 @@ describe('unterminated blocks do not bleed into their sibling', () => {
   it('still parses the state block that follows an unterminated suggestions block', () => {
     const state = parseStateBlock(unterminatedSuggestions)
     expect(state.block.summary).toBe('x')
-    expect(state.block.transfers?.items).toEqual([{ id: 'i1', slot: 'inventory', to: 'c2' }])
+    expect(state.block.transfers?.items).toEqual([
+      { id: 'i1', slot: 'inventory', to: 'c2', seq: 0 },
+    ])
   })
 })
 
@@ -588,7 +593,9 @@ describe('<item> tag collision between transfers and suggestions', () => {
 
   it('routes transfer items and suggestion items to their own parsers', () => {
     const state = parseStateBlock(raw)
-    expect(state.block.transfers?.items).toEqual([{ id: 'i1', slot: 'inventory', to: 'c2' }])
+    expect(state.block.transfers?.items).toEqual([
+      { id: 'i1', slot: 'inventory', to: 'c2', seq: 0 },
+    ])
     expect(parseSuggestionsBlock(raw).items).toEqual([
       { categoryRef: 'cat1', text: 'Draw the blade.' },
     ])
@@ -614,7 +621,11 @@ describe('creation tags', () => {
     expect(result.malformedCreates).toBe(0)
     expect(result.block).toEqual({
       currentLocation: 'new:docks',
-      transfers: { items: [{ id: 'new:key', slot: 'inventory', to: 'c1' }], stackables: [] },
+      transfers: {
+        items: [{ id: 'new:key', slot: 'inventory', to: 'c1', seq: 0 }],
+        stackables: [],
+        drops: [],
+      },
       newLocations: [
         {
           handle: 'new:saltmere',
@@ -947,7 +958,7 @@ describe('creation tags', () => {
 </state>`)
     expect(failures).toEqual([])
     expect(block.newItems).toEqual([{ handle: 'new:key', name: 'key', description: 'iron' }])
-    expect(block.transfers?.items).toEqual([{ id: 'new:key', slot: 'inventory', to: 'c1' }])
+    expect(block.transfers?.items).toEqual([{ id: 'new:key', slot: 'inventory', to: 'c1', seq: 0 }])
   })
 })
 
@@ -1016,5 +1027,190 @@ describe('normalizeCreates', () => {
       block: { currentLocation: 'l1' },
       malformed: 0,
     })
+  })
+})
+
+// piggyback.md → Trailing block format: conditions, drops, and a create's condition.
+describe('conditions and drops', () => {
+  // The reference block, verbatim.
+  const CANON_BLOCK = `<state>
+  <scene_entities>c1, c2</scene_entities>
+  <new_location handle="new:docks" parent="l1" name="the Smuggler's Docks">a rotting pier below the eastern cliffs</new_location>
+  <current_location>new:docks</current_location>
+  <world_time_delta>120</world_time_delta>
+  <visual_changes>
+    <entity id="c2" type="attire">a grey travel cloak muddied to the waist over a linen shirt; riding boots</entity>
+  </visual_changes>
+  <conditions>
+    <entity id="i4">snapped in two at the hilt</entity>
+  </conditions>
+  <transfers>
+    <item id="i1" to="c1" from="c3" slot="inventory" />
+    <drop id="i4" from="c1" />
+    <stackable key="gold" amount="50" to="c1" from="c3" />
+  </transfers>
+  <summary>Aria pushed into the marshes; met an exiled noble who recognized House Eldrin's sigil.</summary>
+  <retrieval_queries>
+    <query>House Eldrin's history and its sigil</query>
+    <query>exiled nobility of the marsh territories</query>
+  </retrieval_queries>
+</state>`
+
+  it("parses canon's reference block, its condition and its drop included", () => {
+    const result = parseStateBlock(CANON_BLOCK)
+    expect(result.failures).toEqual([])
+    expect(result.malformedCreates).toBe(0)
+    expect(result.block).toEqual({
+      sceneEntities: ['c1', 'c2'],
+      currentLocation: 'new:docks',
+      worldTimeDelta: 120,
+      visualChanges: [
+        {
+          id: 'c2',
+          type: 'attire',
+          text: 'a grey travel cloak muddied to the waist over a linen shirt; riding boots',
+        },
+      ],
+      conditions: [{ id: 'i4', text: 'snapped in two at the hilt' }],
+      transfers: {
+        items: [{ id: 'i1', slot: 'inventory', to: 'c1', from: 'c3', seq: 0 }],
+        stackables: [{ key: 'gold', amount: 50, to: 'c1', from: 'c3' }],
+        drops: [{ id: 'i4', from: 'c1', seq: 1 }],
+      },
+      summary:
+        "Aria pushed into the marshes; met an exiled noble who recognized House Eldrin's sigil.",
+      retrievalQueries: [
+        "House Eldrin's history and its sigil",
+        'exiled nobility of the marsh territories',
+      ],
+      newLocations: [
+        {
+          handle: 'new:docks',
+          name: "the Smuggler's Docks",
+          description: 'a rotting pier below the eastern cliffs',
+          parent: 'l1',
+        },
+      ],
+    })
+  })
+
+  it('reads each condition trimmed, skipping one with no id or no text', () => {
+    const { block, failures } = parseStateBlock(`<state>
+  <conditions>
+    <entity id="l1">  burned to the ground  </entity>
+    <entity name="ash">a ring of ash</entity>
+    <entity id="i2">   </entity>
+    <entity id="i4">snapped in two at the hilt</entity>
+  </conditions>
+</state>`)
+    expect(failures).toEqual([])
+    expect(block.conditions).toEqual([
+      { id: 'l1', text: 'burned to the ground' },
+      { id: 'i4', text: 'snapped in two at the hilt' },
+    ])
+  })
+
+  it('fails conditions when its content holds no well-formed entry, leaving the other fields', () => {
+    const { block, failures } = parseStateBlock(`<state>
+  <scene_entities>c1</scene_entities>
+  <conditions>burned to the ground</conditions>
+</state>`)
+    expect(block.conditions).toBeUndefined()
+    expect(block.sceneEntities).toEqual(['c1'])
+    expect(failures).toEqual([{ field: 'conditions', detail: expect.any(String) }])
+  })
+
+  it('reads an empty <conditions></conditions> as nothing to report', () => {
+    const { block, failures } = parseStateBlock(
+      '<state><scene_entities>c1</scene_entities><conditions></conditions></state>',
+    )
+    expect(failures).toEqual([])
+    expect(block.conditions).toEqual([])
+  })
+
+  it('numbers item moves and drops by their place among the transfer tags', () => {
+    const { block, failures } = parseStateBlock(`<state>
+  <transfers>
+    <item id="i1" to="c1" slot="inventory" />
+    <stackable key="gold" amount="5" to="c1" />
+    <drop id="i1" from="c1" />
+    <item id="i2" from="c2" to="c1" slot="equipped_items" />
+    <drop id="i3" />
+  </transfers>
+</state>`)
+    expect(failures).toEqual([])
+    expect(block.transfers).toEqual({
+      items: [
+        { id: 'i1', slot: 'inventory', to: 'c1', seq: 0 },
+        { id: 'i2', slot: 'equipped_items', from: 'c2', to: 'c1', seq: 2 },
+      ],
+      stackables: [{ key: 'gold', amount: 5, to: 'c1' }],
+      drops: [
+        { id: 'i1', from: 'c1', seq: 1 },
+        { id: 'i3', seq: 3 },
+      ],
+    })
+  })
+
+  it('reads a transfers field holding only drops, skipping a drop with no id', () => {
+    const { block, failures } = parseStateBlock(`<state>
+  <transfers>
+    <drop from="c1" />
+    <drop id="i4" from="c1" />
+  </transfers>
+</state>`)
+    expect(failures).toEqual([])
+    expect(block.transfers).toEqual({
+      items: [],
+      stackables: [],
+      drops: [{ id: 'i4', from: 'c1', seq: 0 }],
+    })
+  })
+
+  it('fails transfers when its only tag is a drop with no id', () => {
+    const { block, failures } = parseStateBlock(
+      '<state><scene_entities>c1</scene_entities><transfers><drop from="c1" /></transfers></state>',
+    )
+    expect(block.transfers).toBeUndefined()
+    expect(block.sceneEntities).toEqual(['c1'])
+    expect(failures).toEqual([{ field: 'transfers', detail: expect.any(String) }])
+  })
+
+  it("reads a create's condition, decoding its entities as a name's are", () => {
+    const { block, failures } = parseStateBlock(`<state>
+  <new_location handle="new:yard" name="the yard" condition="flooded &amp; reeking of &quot;brine&quot;">a walled yard</new_location>
+  <current_location>new:yard</current_location>
+  <new_item handle="new:key" name="key" condition="bent &lt;badly&gt;">iron</new_item>
+</state>`)
+    expect(failures).toEqual([])
+    expect(block.newLocations).toEqual([
+      {
+        handle: 'new:yard',
+        name: 'the yard',
+        description: 'a walled yard',
+        condition: 'flooded & reeking of "brine"',
+      },
+    ])
+    expect(block.newItems).toEqual([
+      { handle: 'new:key', name: 'key', description: 'iron', condition: 'bent <badly>' },
+    ])
+  })
+
+  it("keeps a create's condition trimmed and drops a blank one", () => {
+    const { block, malformed } = normalizeCreates({
+      newLocations: [
+        { handle: 'new:a', name: 'A', condition: '  scorched  ' },
+        { handle: 'new:b', name: 'B', condition: '   ' },
+      ],
+      newItems: [{ handle: 'new:k', name: 'key', condition: ' rusted ' }],
+    })
+    expect(malformed).toBe(0)
+    expect(block.newLocations).toEqual([
+      { handle: 'new:a', name: 'A', description: '', condition: 'scorched' },
+      { handle: 'new:b', name: 'B', description: '' },
+    ])
+    expect(block.newItems).toEqual([
+      { handle: 'new:k', name: 'key', description: '', condition: 'rusted' },
+    ])
   })
 })

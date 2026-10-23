@@ -180,8 +180,9 @@ describe('buildStateReport', () => {
       turn: planned({
         visualChanges: [{ id: 'char_a', type: 'attire', text: 'muddied cloak' }],
         transfers: {
-          items: [{ id: 'item_a', slot: 'inventory', to: 'char_a', from: 'char_b' }],
+          items: [{ id: 'item_a', slot: 'inventory', to: 'char_a', from: 'char_b', seq: 0 }],
           stackables: [{ key: 'gold', amount: 50, to: 'char_a' }],
+          drops: [],
         },
       }),
       failures: [],
@@ -189,6 +190,26 @@ describe('buildStateReport', () => {
     expect(report?.visualChanges).toEqual([{ id: 'char_a', type: 'attire', text: 'muddied cloak' }])
     expect(report?.transfers?.items[0]?.from).toBe('char_b')
     expect(report?.transfers?.stackables[0]?.key).toBe('gold')
+  })
+
+  // data-model.md → Entry metadata shape: the report records the moves as emitted, not the order
+  // apply.ts followed.
+  it('reports item moves without the order the block carried', () => {
+    const report = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      turn: planned({
+        transfers: {
+          items: [{ id: 'item_a', slot: 'inventory', to: 'char_a', seq: 0 }],
+          stackables: [{ key: 'gold', amount: 5, to: 'char_a' }],
+          drops: [],
+        },
+      }),
+      failures: [],
+    })
+    expect(report?.transfers).toEqual({
+      items: [{ id: 'item_a', slot: 'inventory', to: 'char_a' }],
+      stackables: [{ key: 'gold', amount: 5, to: 'char_a' }],
+    })
   })
 })
 

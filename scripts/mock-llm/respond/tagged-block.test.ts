@@ -12,8 +12,9 @@ describe('renderStateBlock', () => {
       worldTimeDelta: 300,
       visualChanges: [{ id: 'c1', type: 'attire', text: 'a rain-dark cloak' }],
       transfers: {
-        items: [{ id: 'i1', slot: 'inventory', to: 'c1', from: 'c2' }],
+        items: [{ id: 'i1', slot: 'inventory', to: 'c1', from: 'c2', seq: 0 }],
         stackables: [{ key: 'gold', amount: 5, from: 'c1' }],
+        drops: [],
       },
       summary: 'Kael takes the cloak and pays for passage.',
     })
@@ -27,8 +28,9 @@ describe('renderStateBlock', () => {
     expect(block.worldTimeDelta).toBe(300)
     expect(block.visualChanges).toEqual([{ id: 'c1', type: 'attire', text: 'a rain-dark cloak' }])
     expect(block.transfers).toEqual({
-      items: [{ id: 'i1', slot: 'inventory', to: 'c1', from: 'c2' }],
+      items: [{ id: 'i1', slot: 'inventory', to: 'c1', from: 'c2', seq: 0 }],
       stackables: [{ key: 'gold', amount: 5, from: 'c1' }],
+      drops: [],
     })
     expect(block.summary).toBe('Kael takes the cloak and pays for passage.')
   })
@@ -38,7 +40,7 @@ describe('renderStateBlock', () => {
       worldTimeDelta: 0,
       sceneEntities: [],
       visualChanges: [],
-      transfers: { items: [], stackables: [] },
+      transfers: { items: [], stackables: [], drops: [] },
     })
 
     expect(raw).not.toContain('<visual_changes>')
@@ -85,9 +87,9 @@ describe('renderStateBlock', () => {
 describe('hasStateContent', () => {
   it('is false for an all-empty block and true once any field carries content', () => {
     expect(hasStateContent(undefined)).toBe(false)
-    expect(hasStateContent({ sceneEntities: [], transfers: { items: [], stackables: [] } })).toBe(
-      false,
-    )
+    expect(
+      hasStateContent({ sceneEntities: [], transfers: { items: [], stackables: [], drops: [] } }),
+    ).toBe(false)
     expect(hasStateContent({ worldTimeDelta: 0 })).toBe(true)
     expect(hasStateContent({ summary: 'something happened' })).toBe(true)
   })

@@ -255,10 +255,11 @@ describe('planTurnCreates — kept only if used', () => {
       ],
       transfers: {
         items: [
-          { id: 'new:key', to: HERO, slot: 'inventory' },
-          { id: 'new:map', to: PORT, slot: 'inventory' },
+          { id: 'new:key', to: HERO, slot: 'inventory', seq: 0 },
+          { id: 'new:map', to: PORT, slot: 'inventory', seq: 1 },
         ],
         stackables: [],
+        drops: [],
       },
     })
     expect(createdEntries(plan.creates)).toEqual([
@@ -270,8 +271,9 @@ describe('planTurnCreates — kept only if used', () => {
       }),
     ])
     expect(plan.block.transfers).toEqual({
-      items: [{ id: 'item_new_1', to: HERO, slot: 'inventory' }],
+      items: [{ id: 'item_new_1', to: HERO, slot: 'inventory', seq: 0 }],
       stackables: [],
+      drops: [],
     })
     expect(plan.report.newItems).toEqual([
       {
@@ -306,14 +308,15 @@ describe('planTurnCreates — kept only if used', () => {
       newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
       transfers: {
         items: [
-          { id: 'new:key', to: HERO, slot: 'inventory' },
-          { id: 'new:key', from: HERO, slot: 'inventory' },
+          { id: 'new:key', to: HERO, slot: 'inventory', seq: 0 },
+          { id: 'new:key', from: HERO, slot: 'inventory', seq: 1 },
         ],
         stackables: [],
+        drops: [],
       },
     })
     expect(plan.creates).toEqual([])
-    expect(plan.block.transfers).toEqual({ items: [], stackables: [] })
+    expect(plan.block.transfers).toEqual({ items: [], stackables: [], drops: [] })
     expect(plan.report.newItems[0]?.outcome).toBe('dropped')
   })
 
@@ -323,10 +326,11 @@ describe('planTurnCreates — kept only if used', () => {
         newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
         transfers: {
           items: [
-            { id: 'new:key', to: HERO, slot: 'inventory' },
-            { id: 'new:key', from: HERO, to: MIRA, slot: 'inventory' },
+            { id: 'new:key', to: HERO, slot: 'inventory', seq: 0 },
+            { id: 'new:key', from: HERO, to: MIRA, slot: 'inventory', seq: 1 },
           ],
           stackables: [],
+          drops: [],
         },
       },
       { entities: world(row({ id: MIRA, kind: 'character', name: 'Mira' })) },
@@ -341,10 +345,14 @@ describe('planTurnCreates — kept only if used', () => {
   it('drops a new item a transfer only takes from someone', async () => {
     const plan = await runPlanner({
       newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
-      transfers: { items: [{ id: 'new:key', from: HERO, slot: 'inventory' }], stackables: [] },
+      transfers: {
+        items: [{ id: 'new:key', from: HERO, slot: 'inventory', seq: 0 }],
+        stackables: [],
+        drops: [],
+      },
     })
     expect(plan.creates).toEqual([])
-    expect(plan.block.transfers).toEqual({ items: [], stackables: [] })
+    expect(plan.block.transfers).toEqual({ items: [], stackables: [], drops: [] })
     expect(plan.report.newItems[0]?.outcome).toBe('dropped')
   })
 
@@ -359,10 +367,14 @@ describe('planTurnCreates — kept only if used', () => {
         },
       ],
       currentLocation: 'new:docks',
-      transfers: { items: [{ id: 'new:docks', to: HERO, slot: 'inventory' }], stackables: [] },
+      transfers: {
+        items: [{ id: 'new:docks', to: HERO, slot: 'inventory', seq: 0 }],
+        stackables: [],
+        drops: [],
+      },
     })
     expect(createdEntries(plan.creates).map((e) => e.id)).toEqual(['loc_new_1'])
-    expect(plan.block.transfers).toEqual({ items: [], stackables: [] })
+    expect(plan.block.transfers).toEqual({ items: [], stackables: [], drops: [] })
   })
 })
 
@@ -1105,7 +1117,11 @@ describe('planTurnCreates — matching', () => {
 
   const keyCreate = (description: string, name = 'Rusted Key'): ParsedStateBlock => ({
     newItems: [{ handle: 'new:key', name, description }],
-    transfers: { items: [{ id: 'new:key', to: HERO, slot: 'inventory' }], stackables: [] },
+    transfers: {
+      items: [{ id: 'new:key', to: HERO, slot: 'inventory', seq: 0 }],
+      stackables: [],
+      drops: [],
+    },
   })
 
   it('flags a new item alike its exact namesake and creates it all the same', async () => {
@@ -1209,12 +1225,14 @@ describe('planTurnCreates — matching', () => {
           { handle: 'new:c', name: 'rusted key', description: 'large' },
         ],
         transfers: {
-          items: ['new:a', 'new:b', 'new:c'].map((id) => ({
+          items: ['new:a', 'new:b', 'new:c'].map((id, seq) => ({
             id,
             to: HERO,
             slot: 'inventory' as const,
+            seq,
           })),
           stackables: [],
+          drops: [],
         },
       },
       { entities: world(oldKey()), embed },
@@ -1245,12 +1263,14 @@ describe('planTurnCreates — matching', () => {
           { handle: 'new:c', name: 'rusted key', description: 'large' },
         ],
         transfers: {
-          items: ['new:a', 'new:b', 'new:c'].map((id) => ({
+          items: ['new:a', 'new:b', 'new:c'].map((id, seq) => ({
             id,
             to: HERO,
             slot: 'inventory' as const,
+            seq,
           })),
           stackables: [],
+          drops: [],
         },
       },
       { entities: world(oldKey()), embed },
@@ -1278,10 +1298,11 @@ describe('planTurnCreates — matching', () => {
       ],
       transfers: {
         items: [
-          { id: 'new:a', to: HERO, slot: 'inventory' },
-          { id: 'new:b', to: HERO, slot: 'equipped_items' },
+          { id: 'new:a', to: HERO, slot: 'inventory', seq: 0 },
+          { id: 'new:b', to: HERO, slot: 'equipped_items', seq: 1 },
         ],
         stackables: [],
+        drops: [],
       },
     })
     expect(createdEntries(plan.creates).map((e) => [e.id, e.nameCollisionFlag])).toEqual([
@@ -1343,7 +1364,11 @@ describe('planTurnCreates — rows and order', () => {
       ],
       currentLocation: 'new:docks',
       newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
-      transfers: { items: [{ id: 'new:key', to: HERO, slot: 'inventory' }], stackables: [] },
+      transfers: {
+        items: [{ id: 'new:key', to: HERO, slot: 'inventory', seq: 0 }],
+        stackables: [],
+        drops: [],
+      },
     })
     expect(createdEntries(plan.creates).map((e) => e.id)).toEqual([
       'loc_new_1',
@@ -1363,14 +1388,22 @@ describe('planTurnCreates — handles', () => {
         ],
         currentLocation: 'new:market',
         newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
-        transfers: { items: [{ id: 'new:key', to: HERO, slot: 'inventory' }], stackables: [] },
+        transfers: {
+          items: [{ id: 'new:key', to: HERO, slot: 'inventory', seq: 0 }],
+          stackables: [],
+          drops: [],
+        },
       },
       { entities: world(market('active')) },
     )
     expect(plan.block).toEqual({
       sceneEntities: [HERO, MARKET, 'item_new_1'],
       currentLocation: MARKET,
-      transfers: { items: [{ id: 'item_new_1', to: HERO, slot: 'inventory' }], stackables: [] },
+      transfers: {
+        items: [{ id: 'item_new_1', to: HERO, slot: 'inventory', seq: 0 }],
+        stackables: [],
+        drops: [],
+      },
     })
   })
 
@@ -1402,17 +1435,22 @@ describe('skipTurnCreates', () => {
         newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
         transfers: {
           items: [
-            { id: 'new:key', to: HERO, slot: 'inventory' },
-            { id: OLD_KEY, to: HERO, slot: 'equipped_items' },
+            { id: 'new:key', to: HERO, slot: 'inventory', seq: 0 },
+            { id: OLD_KEY, to: HERO, slot: 'equipped_items', seq: 1 },
           ],
           stackables: [],
+          drops: [],
         },
         worldTimeDelta: 5,
       }),
     )
     expect(plan.block).toEqual({
       sceneEntities: [HERO],
-      transfers: { items: [{ id: OLD_KEY, to: HERO, slot: 'equipped_items' }], stackables: [] },
+      transfers: {
+        items: [{ id: OLD_KEY, to: HERO, slot: 'equipped_items', seq: 1 }],
+        stackables: [],
+        drops: [],
+      },
       worldTimeDelta: 5,
     })
     expect(plan.creates).toEqual([])

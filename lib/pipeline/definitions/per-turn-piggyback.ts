@@ -8,7 +8,7 @@ import type {
   ResolveModelConfig,
   StructuredCallOptions,
 } from '@/lib/ai'
-import { inheritedEntryMetadata } from '@/lib/db'
+import { inheritedEntryMetadata, type EntryMetadata } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import {
   buildPiggybackActions,
@@ -20,6 +20,7 @@ import {
   resolveSuggestionItems,
   substitutePiggybackIds,
   suggestionRefSchema,
+  type ParsedTransfers,
   type PlannedStateBlock,
   type SubstitutedStateBlock,
   type TurnCreatesReport,
@@ -237,6 +238,39 @@ async function generateClassifierState<T extends { worldTimeDelta: number }>(
   return reroll.status === 'ok' ? reroll : first
 }
 
+type FallbackReply = z.infer<typeof fallbackClassifierSchema>
+type StateReport = NonNullable<EntryMetadata['stateReport']>
+
+// The JSON has no tag order, so its item moves keep their list order, numbered as the tag parser
+// numbers tags (piggyback.md → Fallback classifier context).
+function orderedTransfers(transfers: NonNullable<FallbackReply['transfers']>): ParsedTransfers {
+  return {
+    items: transfers.items.map((item, seq) => ({ ...item, seq })),
+    stackables: transfers.stackables,
+    drops: [],
+  }
+}
+
+// The narrative fold applies its visual changes and transfers whenever it fires, parse failure or
+// not, so those rows are already written: a field this reply leaves out keeps the fold's record,
+// copied onto the report and never read back into a block.
+function withFoldChanges(
+  report: StateReport | undefined,
+  block: PlannedStateBlock,
+  prior: StateReport | undefined,
+): StateReport | undefined {
+  const carried: Pick<StateReport, 'visualChanges' | 'transfers'> = {
+    ...(block.visualChanges === undefined && prior?.visualChanges !== undefined
+      ? { visualChanges: prior.visualChanges }
+      : {}),
+    ...(block.transfers === undefined && prior?.transfers !== undefined
+      ? { transfers: prior.transfers }
+      : {}),
+  }
+  if (Object.keys(carried).length === 0) return report
+  return { ...(report ?? { layer: 'per_turn_classifier' as const }), ...carried }
+}
+
 export async function* piggybackFallbackClassifierPhase(
   ctx: PhaseContext,
 ): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
@@ -358,7 +392,11 @@ export async function* piggybackFallbackClassifierPhase(
   }
 
   // Tagged-parser rule: a create with no usable handle or name is dropped and counted, not failed.
-  const normalized = normalizeCreates(result.value)
+  const { transfers: replyTransfers, ...reply } = result.value
+  const normalized = normalizeCreates({
+    ...reply,
+    ...(replyTransfers !== undefined ? { transfers: orderedTransfers(replyTransfers) } : {}),
+  })
   if (normalized.malformed > 0) {
     ctx.log.warn('classifier.create_malformed', {
       entryId: tail.id,
@@ -427,18 +465,6 @@ export async function* piggybackFallbackClassifierPhase(
     log: ctx.log,
   })
 
-  // The narrative fold applies visual/transfer changes whenever it fires, parse failure
-  // or not, so those rows are already written. A fallback that reports neither must not
-  // blank them out of the record — same reason failedFields and raw survive its write.
-  const reportedBlock: PlannedStateBlock = {
-    ...plan.block,
-    ...(plan.block.visualChanges === undefined && priorReport?.visualChanges !== undefined
-      ? { visualChanges: priorReport.visualChanges }
-      : {}),
-    ...(plan.block.transfers === undefined && priorReport?.transfers !== undefined
-      ? { transfers: priorReport.transfers }
-      : {}),
-  }
   // A failed fold reports its creates `dropped`: keep that list for a kind this phase's report
   // has none of (no-blanking rule), as when its only creates of that kind were malformed.
   const reportedCreates: TurnCreatesReport = {
@@ -449,16 +475,20 @@ export async function* piggybackFallbackClassifierPhase(
     newItems:
       plan.report.newItems.length > 0 ? plan.report.newItems : (priorReport?.newItems ?? []),
   }
-  const stateReport = buildStateReport({
-    layer: 'per_turn_classifier',
-    turn: { block: reportedBlock, report: reportedCreates },
-    failures: [
-      ...(priorReport?.failedFields ?? []),
-      ...failures.map((f) => ({ field: f.field, detail: f.detail })),
-    ],
-    applied,
-    ...(priorReport?.raw !== undefined ? { raw: priorReport.raw } : {}),
-  })
+  const stateReport = withFoldChanges(
+    buildStateReport({
+      layer: 'per_turn_classifier',
+      turn: { block: plan.block, report: reportedCreates },
+      failures: [
+        ...(priorReport?.failedFields ?? []),
+        ...failures.map((f) => ({ field: f.field, detail: f.detail })),
+      ],
+      applied,
+      ...(priorReport?.raw !== undefined ? { raw: priorReport.raw } : {}),
+    }),
+    plan.block,
+    priorReport,
+  )
 
   const rawSuggestions =
     askForSuggestions && hasSuggestions(result.value) ? result.value.suggestions : []

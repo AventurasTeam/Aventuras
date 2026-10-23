@@ -4,6 +4,7 @@ import type { StoryEntry } from '@/lib/db'
 import { foldStackableKey } from '@/lib/keyword-terms'
 
 import {
+  DROP_TAG,
   isCreateHandle,
   RETRIEVAL_QUERY_ITEM_TAG,
   STATE_CREATE_TAGS,
@@ -16,6 +17,8 @@ import {
 } from './tags'
 import { MAX_RETRIEVAL_QUERIES, VISUAL_CHANGE_TYPES } from './types'
 import type {
+  ConditionChange,
+  ItemDrop,
   ItemTransfer,
   NewItemEmission,
   NewLocationEmission,
@@ -130,23 +133,49 @@ function parseVisualChanges(segment: string): VisualChangeNote[] {
   return notes
 }
 
-// <item id="..." to="..." from="..." slot="..." /> and
-// <stackable key="..." amount="..." to="..." from="..." /> — self-closing,
-// attribute-only. Holders are listed entities; an item's id may also be a create's handle.
+// <entity id="...">text</entity> — full-replace condition, one entry per changed place or item
+// (docs/memory/piggyback.md → Trailing block format).
+function parseConditions(segment: string): ConditionChange[] {
+  const changes: ConditionChange[] = []
+  const re = /<entity\s+([^>]*)>([\s\S]*?)<\/entity>/g
+  for (const match of segment.matchAll(re)) {
+    const [, attrText, text] = match
+    if (attrText === undefined || text === undefined) continue
+    const { id } = parseAttributes(attrText)
+    const condition = text.trim()
+    if (id === undefined || condition === '') continue
+    changes.push({ id, text: condition })
+  }
+  assertNotTruncated(segment, changes.length, 'conditions')
+  return changes
+}
+
+// <item id="..." to="..." from="..." slot="..." />, <drop id="..." from="..." /> and
+// <stackable key="..." amount="..." to="..." from="..." /> — self-closing, attribute-only. Holders
+// are listed entities; an item's id may also be a create's handle. Item moves and drops are
+// numbered together in document order, which apply.ts follows: an item taken, then put down.
 function parseTransfers(segment: string): ParsedTransfers {
   const items: ItemTransfer[] = []
-  const itemRe = /<item\s+([^>]*)\/?>/g
-  for (const match of segment.matchAll(itemRe)) {
-    const [, attrText] = match
+  const drops: ItemDrop[] = []
+  let seq = 0
+  const moveRe = new RegExp(`<(item|${DROP_TAG})\\s+([^>]*)\\/?>`, 'g')
+  for (const match of segment.matchAll(moveRe)) {
+    const [, tag, attrText] = match
     if (attrText === undefined) continue
     const attrs = parseAttributes(attrText)
     if (attrs.id === undefined) continue
+    const from = attrs.from !== undefined ? { from: attrs.from } : {}
+    if (tag === DROP_TAG) {
+      drops.push({ id: attrs.id, ...from, seq: seq++ })
+      continue
+    }
     const slot = attrs.slot === 'equipped_items' ? 'equipped_items' : 'inventory'
     items.push({
       id: attrs.id,
       slot,
       ...(attrs.to !== undefined ? { to: attrs.to } : {}),
-      ...(attrs.from !== undefined ? { from: attrs.from } : {}),
+      ...from,
+      seq: seq++,
     })
   }
 
@@ -166,8 +195,8 @@ function parseTransfers(segment: string): ParsedTransfers {
     if (transfer !== null) stackables.push(transfer)
   }
 
-  assertNotTruncated(segment, items.length + stackables.length, 'transfers')
-  return { items, stackables }
+  assertNotTruncated(segment, items.length + drops.length + stackables.length, 'transfers')
+  return { items, stackables, drops }
 }
 
 // Total by contract, the only parser that never raises: recovering an optional hint via a
@@ -201,6 +230,7 @@ const FIELD_PARSERS: readonly FieldParser[] = [
   { field: 'currentLocation', tag: STATE_TAGS.currentLocation, parse: (s) => s.trim() },
   { field: 'worldTimeDelta', tag: STATE_TAGS.worldTimeDelta, parse: parseNumeric },
   { field: 'visualChanges', tag: STATE_TAGS.visualChanges, parse: parseVisualChanges },
+  { field: 'conditions', tag: STATE_TAGS.conditions, parse: parseConditions },
   { field: 'transfers', tag: STATE_TAGS.transfers, parse: parseTransfers },
   { field: 'summary', tag: STATE_TAGS.summary, parse: (s) => s.trim() },
   { field: 'retrievalQueries', tag: STATE_TAGS.retrievalQueries, parse: parseRetrievalQueries },
@@ -237,7 +267,8 @@ const XML_ENTITIES = {
   amp: '&',
 } as const
 
-// One pass, so `&amp;lt;` reads `&lt;` and not `<`. Only name and description are prose.
+// One pass, so `&amp;lt;` reads `&lt;` and not `<`. Only a name, a description and a condition
+// are prose.
 function decodeEntities(text: string): string {
   return text.replace(
     /&(quot|apos|lt|gt|amp);/g,
@@ -262,12 +293,15 @@ function readCreates(
 function parseCreates(segment: string): ParsedCreates {
   const locations = readCreates(segment, STATE_CREATE_TAGS.newLocation)
   const items = readCreates(segment, STATE_CREATE_TAGS.newItem)
+  const condition = (attrs: Record<string, string>) =>
+    attrs.condition !== undefined ? { condition: decodeEntities(attrs.condition) } : {}
   const newLocations = locations.creates.map(
     ({ attrs, text }): NewLocationEmission => ({
       handle: attrs.handle ?? '',
       name: decodeEntities(attrs.name ?? ''),
       description: decodeEntities(text.trim()),
       ...(attrs.parent !== undefined ? { parent: attrs.parent } : {}),
+      ...condition(attrs),
     }),
   )
   const newItems = items.creates.map(
@@ -275,6 +309,7 @@ function parseCreates(segment: string): ParsedCreates {
       handle: attrs.handle ?? '',
       name: decodeEntities(attrs.name ?? ''),
       description: decodeEntities(text.trim()),
+      ...condition(attrs),
     }),
   )
   const wholeTags =
@@ -306,8 +341,8 @@ type CreateBlockInput = Omit<ParsedStateBlock, 'newLocations' | 'newItems'> & {
 /**
  * Drops, and counts, a create with no `new:` handle, a blank name, or a handle an earlier create
  * declared (locations before items); unwraps a bracketed handle, trims what it keeps, and drops a
- * blank parent; a missing description reads as ''. Never a field failure itself: a ref to a
- * dropped handle fails in `substitutePiggybackIds`, so using one still fires the fallback.
+ * blank parent or condition; a missing description reads as ''. Never a field failure itself: a
+ * ref to a dropped handle fails in `substitutePiggybackIds`, so using one still fires the fallback.
  */
 export function normalizeCreates(block: CreateBlockInput): {
   block: NormalizedStateBlock
@@ -327,6 +362,10 @@ export function normalizeCreates(block: CreateBlockInput): {
     declared.add(handle)
     return true
   }
+  const conditionOf = (create: { condition?: string }) => {
+    const condition = create.condition?.trim() ?? ''
+    return condition !== '' ? { condition } : {}
+  }
   const locations = (newLocations ?? []).flatMap((create): NewLocationEmission[] => {
     const handle = bareHandle(create.handle)
     const name = create.name.trim()
@@ -338,6 +377,7 @@ export function normalizeCreates(block: CreateBlockInput): {
         name,
         description: create.description?.trim() ?? '',
         ...(parent !== '' ? { parent } : {}),
+        ...conditionOf(create),
       },
     ]
   })
@@ -345,7 +385,7 @@ export function normalizeCreates(block: CreateBlockInput): {
     const handle = bareHandle(create.handle)
     const name = create.name.trim()
     return accepts(handle, name)
-      ? [{ handle, name, description: create.description?.trim() ?? '' }]
+      ? [{ handle, name, description: create.description?.trim() ?? '', ...conditionOf(create) }]
       : []
   })
   const normalized = {

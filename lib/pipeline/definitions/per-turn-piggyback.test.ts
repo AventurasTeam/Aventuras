@@ -2838,7 +2838,7 @@ describe('per-turn-piggyback', () => {
       if (!docks || !key) throw new Error('expected a location create and an item create')
       expect(log.warn).toHaveBeenCalledWith('classifier.transfer_dropped', {
         entryId: 'entry-2',
-        transfer: { id: ref, to: 'c1', slot: 'inventory' },
+        transfer: { id: ref, to: 'c1', slot: 'inventory', seq: 1 },
         detail: expect.stringContaining('not an item'),
       })
       const patch = metadataPatch(events)
@@ -2884,7 +2884,7 @@ describe('per-turn-piggyback', () => {
       if (!key) throw new Error('expected the item create')
       expect(log.warn).toHaveBeenCalledWith('classifier.transfer_dropped', {
         entryId: 'entry-2',
-        transfer: unknownItem,
+        transfer: { ...unknownItem, seq: 1 },
         detail: expect.stringContaining('i9'),
       })
       expect(log.warn).toHaveBeenCalledWith('classifier.transfer_dropped', {

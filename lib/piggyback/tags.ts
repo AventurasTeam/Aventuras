@@ -4,10 +4,14 @@ export const STATE_TAGS = {
   currentLocation: 'current_location',
   worldTimeDelta: 'world_time_delta',
   visualChanges: 'visual_changes',
+  conditions: 'conditions',
   transfers: 'transfers',
   summary: 'summary',
   retrievalQueries: 'retrieval_queries',
 } as const
+
+/** The `<transfers>` child that puts a held item down where the scene is. */
+export const DROP_TAG = 'drop'
 
 /** The `<query>` children `<retrieval_queries>` nests. */
 export const RETRIEVAL_QUERY_ITEM_TAG = 'query'

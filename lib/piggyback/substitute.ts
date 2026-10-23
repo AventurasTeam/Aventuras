@@ -4,6 +4,7 @@ import { TOP_LEVEL } from '@/lib/world'
 
 import { isCreateHandle, unwrapBracket } from './tags'
 import type {
+  ItemDrop,
   ItemTransfer,
   NewLocationEmission,
   NormalizedStateBlock,
@@ -16,8 +17,8 @@ import type {
 
 type EntityKind = Entity['kind']
 
-/** A transfer as emitted, dropped for a ref that doesn't resolve or names no item. */
-type DroppedTransfer = { transfer: ItemTransfer | StackableTransfer; detail: string }
+/** A transfer or a drop as emitted, dropped for a ref that doesn't resolve or names no item. */
+type DroppedTransfer = { transfer: ItemTransfer | ItemDrop | StackableTransfer; detail: string }
 
 type SubstituteResult = {
   block: SubstitutedStateBlock
@@ -100,16 +101,19 @@ function declaredHandles(block: NormalizedStateBlock): ReadonlyMap<string, 'loca
   ])
 }
 
-// A transfer's item may be one this block creates; its holders are always listed entities.
-function resolveItemTransfer(item: ItemTransfer, refs: Refs): ItemTransfer {
+// A moved or put-down item may be one this block creates; its holders are always listed entities.
+function resolveItemMove<T extends { id: string; to?: string; from?: string }>(
+  move: T,
+  refs: Refs,
+): T {
   const resolved = {
-    ...item,
-    id: resolveRefOrHandle(item.id, refs),
-    ...(item.to !== undefined ? { to: resolveRef(item.to, refs.idMap) } : {}),
-    ...(item.from !== undefined ? { from: resolveRef(item.from, refs.idMap) } : {}),
+    ...move,
+    id: resolveRefOrHandle(move.id, refs),
+    ...(move.to !== undefined ? { to: resolveRef(move.to, refs.idMap) } : {}),
+    ...(move.from !== undefined ? { from: resolveRef(move.from, refs.idMap) } : {}),
   }
   const kind = kindOf(resolved.id, refs)
-  if (kind !== 'item') throw new WrongKindError(item.id, kind, 'item')
+  if (kind !== 'item') throw new WrongKindError(move.id, kind, 'item')
   return resolved
 }
 
@@ -127,7 +131,7 @@ function resolveTransfers(
   badRef: SubstituteOptions['badRef'],
   dropped: DroppedTransfer[],
 ): ParsedTransfers {
-  const settle = <T extends ItemTransfer | StackableTransfer>(
+  const settle = <T extends ItemTransfer | ItemDrop | StackableTransfer>(
     transfer: T,
     resolve: (transfer: T) => T,
   ): T[] => {
@@ -141,10 +145,11 @@ function resolveTransfers(
     }
   }
   return {
-    items: transfers.items.flatMap((item) => settle(item, (i) => resolveItemTransfer(i, refs))),
+    items: transfers.items.flatMap((item) => settle(item, (i) => resolveItemMove(i, refs))),
     stackables: transfers.stackables.flatMap((s) =>
       settle(s, (x) => resolveStackable(x, refs.idMap)),
     ),
+    drops: transfers.drops.flatMap((drop) => settle(drop, (d) => resolveItemMove(d, refs))),
   }
 }
 
@@ -209,6 +214,13 @@ export function substitutePiggybackIds(
     result,
     'visualChanges',
     (notes, m) => notes.map((n) => ({ ...n, id: resolveRef(n.id, m) })),
+    idMap,
+    failures,
+  )
+  resolveField(
+    result,
+    'conditions',
+    (changes, m) => changes.map((c) => ({ ...c, id: resolveRef(c.id, m) })),
     idMap,
     failures,
   )
