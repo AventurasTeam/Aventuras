@@ -7,7 +7,8 @@ import { threadsStore } from '@/lib/stores'
 import { nullifyRef } from '../coerce'
 import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
 import { register, TARGET_NOT_FOUND, undefinedColumn, type ActionHandler } from '../delta/registry'
-import type { DeltaSource } from '../types'
+import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteColumn } from '../delta/user-precedence'
+import type { DeltaSource, ProseEntryId } from '../types'
 
 const cascade = rowCascade('thread')
 
@@ -30,6 +31,18 @@ declare module '@/lib/actions/action-map' {
       payload: { branchId: string; id: string; patch: ThreadUpdatePatch }
     }
     deleteThread: { source: DeltaSource; payload: { branchId: string; id: string } }
+    setThreadStatus: {
+      source: DeltaSource
+      payload: {
+        branchId: string
+        id: string
+        /** classifier.md → Threads: a pass moves a thread to these; `pending` is a create's only. */
+        status: 'active' | 'resolved' | 'failed'
+        /** The change's source turn; written only on resolved or failed, to a pass's thread. */
+        resolvedAtEntryId: string | null
+        proseEntryId: ProseEntryId
+      }
+    }
   }
 }
 
@@ -155,6 +168,61 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   }
 }
 
+/**
+ * classifier.md → Threads → The row: a pass's status change, checked against the row as it stands
+ * and the user's later edits. Entry refs are AI-only (data-model.md → Authorship contract): on a
+ * thread a pass created, resolved or failed records the entry and active clears it; a user's thread
+ * keeps both null.
+ */
+const setStatusHandler: ActionHandler = async (action, branchId, ctx) => {
+  if (action.kind !== 'setThreadStatus')
+    throw new Error(`handler/kind mismatch: expected 'setThreadStatus', got '${action.kind}'`)
+  const { branchId: bid, id, status, resolvedAtEntryId, proseEntryId } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  const [current] = await ctx.db
+    .select()
+    .from(threads)
+    .where(and(eq(threads.branchId, bid), eq(threads.id, id)))
+  if (!current)
+    return {
+      status: 'rejected',
+      reason: `status target threads ${bid}:${id} not found`,
+      code: 'noop',
+    }
+  if (current.status === status)
+    return { status: 'rejected', reason: 'status-unchanged', code: 'noop' }
+  if (
+    proseEntryId !== null &&
+    wroteColumn(await userEditsSinceProse(ctx, bid, 'threads', id, proseEntryId), 'status')
+  )
+    return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
+  const set: Partial<Pick<Thread, 'status' | 'resolvedAtEntryId'>> = { status }
+  const undoPayload: Record<string, unknown> = { status: current.status }
+  if (current.triggeredAtEntryId !== null) {
+    const resolvedAt = status === 'active' ? null : nullifyRef(resolvedAtEntryId)
+    if (resolvedAt !== current.resolvedAtEntryId) {
+      set.resolvedAtEntryId = resolvedAt
+      undoPayload.resolvedAtEntryId = current.resolvedAtEntryId
+    }
+  }
+  return {
+    status: 'ok',
+    targetTable: 'threads',
+    targetId: id,
+    op: 'update',
+    undoPayload,
+    ops: [
+      ctx.db
+        .update(threads)
+        .set(set)
+        .where(and(eq(threads.branchId, bid), eq(threads.id, id)))
+        .toSQL(),
+    ],
+    patch: { op: 'update', id, columns: set },
+  }
+}
+
 const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'deleteThread')
     throw new Error(`handler/kind mismatch: expected 'deleteThread', got '${action.kind}'`)
@@ -190,6 +258,7 @@ export function registerThreads(): void {
       createThread: createHandler,
       updateThread: updateHandler,
       deleteThread: deleteHandler,
+      setThreadStatus: setStatusHandler,
     },
     patcher: (branchId, p) => threadsStore.patch(branchId, p),
     cascade,

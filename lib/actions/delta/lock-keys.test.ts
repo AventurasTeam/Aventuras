@@ -87,6 +87,42 @@ describe('lock keys', () => {
     ])
   })
 
+  // cadence.md → User edits and classifier writes: threads are precedence-checked, so a thread's
+  // writers and its reversals serialize on its row.
+  it('puts every thread writer but the create, and a thread reversal, on its row key', () => {
+    const THREAD_ROW = 'threads:b1:thr_1'
+    expect(
+      lockKeysFor({
+        kind: 'updateThread',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: 'thr_1', patch: { status: 'active' } },
+      }),
+    ).toEqual([THREAD_ROW])
+    expect(
+      lockKeysFor({
+        kind: 'deleteThread',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: 'thr_1' },
+      }),
+    ).toEqual([THREAD_ROW])
+    expect(
+      lockKeysFor({
+        kind: 'setThreadStatus',
+        source: 'periodic_classifier',
+        payload: {
+          branchId: 'b1',
+          id: 'thr_1',
+          status: 'resolved',
+          resolvedAtEntryId: 'e_1',
+          proseEntryId: 'e_1',
+        },
+      }),
+    ).toEqual([THREAD_ROW])
+    expect(
+      deltaLockKeys([{ branchId: 'b1', targetTable: 'threads', targetId: 'thr_1' } as Delta]),
+    ).toEqual([THREAD_ROW])
+  })
+
   it('makes a reversal of a happening link delta hold the happening links', () => {
     for (const targetTable of ['happening_involvements', 'happening_awareness']) {
       const delta = { branchId: 'b1', targetTable, targetId: 'link_1' } as Delta

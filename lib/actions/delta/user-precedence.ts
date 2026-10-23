@@ -220,16 +220,15 @@ export function wroteField(
   return wrotePath(edits, column, path)
 }
 
-/** Whether the user deleted a `character_relationships` row for this pair after `since`. */
-export async function userDeletedPairSince(
+// By natural key, not row id: a pair re-created after the delete is a new row. A delete's undo
+// payload is the whole row, so it still names the key.
+async function userDeletedRowSince(
   ctx: DbCtx,
   branchId: string,
-  aId: string,
-  bId: string,
+  table: 'character_relationships' | 'happening_awareness',
+  key: Readonly<Record<string, string>>,
   since: number,
 ): Promise<boolean> {
-  // By pair, not row id: a pair re-created after the delete is a new row. A delete's
-  // undo payload is the whole row, so it still names the pair.
   const [hit] = await ctx.db
     .select({ id: deltas.id })
     .from(deltas)
@@ -237,13 +236,43 @@ export async function userDeletedPairSince(
       and(
         eq(deltas.branchId, branchId),
         gt(deltas.logPosition, since),
-        eq(deltas.targetTable, 'character_relationships'),
+        eq(deltas.targetTable, table),
         eq(deltas.op, 'delete'),
         eq(deltas.source, 'user_edit'),
-        sql`json_extract(${deltas.undoPayload}, '$.aId') = ${aId}`,
-        sql`json_extract(${deltas.undoPayload}, '$.bId') = ${bId}`,
+        ...Object.entries(key).map(
+          ([column, value]) =>
+            sql`json_extract(${deltas.undoPayload}, ${`$.${column}`}) = ${value}`,
+        ),
       ),
     )
     .limit(1)
   return hit !== undefined
+}
+
+/** Whether the user deleted a `character_relationships` row for this pair after `since`. */
+export function userDeletedPairSince(
+  ctx: DbCtx,
+  branchId: string,
+  aId: string,
+  bId: string,
+  since: number,
+): Promise<boolean> {
+  return userDeletedRowSince(ctx, branchId, 'character_relationships', { aId, bId }, since)
+}
+
+/** Whether the user deleted the character's `happening_awareness` row for the happening after `since`. */
+export function userDeletedAwarenessSince(
+  ctx: DbCtx,
+  branchId: string,
+  characterId: string,
+  happeningId: string,
+  since: number,
+): Promise<boolean> {
+  return userDeletedRowSince(
+    ctx,
+    branchId,
+    'happening_awareness',
+    { characterId, happeningId },
+    since,
+  )
 }
