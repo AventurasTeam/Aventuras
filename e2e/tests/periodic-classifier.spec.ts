@@ -1489,7 +1489,9 @@ test.describe('periodic classifier — an owed pass across a restart', () => {
 // held call shows which placeholder each row got.
 function placeholderIn(prompt: string, name: string): string {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const match = new RegExp(`^\\s*- \\[([a-z]+\\d+)\\] ${escaped}(?= |$)`, 'm').exec(prompt)
+  // The name ends at a kind or status, a description, or the line's end, so a longer name it
+  // prefixes isn't matched.
+  const match = new RegExp(`^\\s*- \\[([a-z]+\\d+)\\] ${escaped}(?= \\(| —|$)`, 'm').exec(prompt)
   if (match === null) throw new Error(`the pass's prompt lists no "${name}"`)
   return match[1]
 }
