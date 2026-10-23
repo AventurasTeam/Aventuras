@@ -336,7 +336,9 @@ describe('periodic classifier template — places', () => {
     expect(on.system).toContain(
       "A new place's handle must differ from every newCharacters and newFactions handle and from every other new place's, even when a character or a faction shares its name.",
     )
-    expect(on.system).toMatch(/leave parent out when the turns don't say/)
+    expect(on.system).toContain(
+      'When the turns don\'t say, set parent to "top-level" only when nothing in Places could contain the place, as for a city when Places holds only cities; leave parent out when something could contain it, and when unsure.',
+    )
     expect(on.user).not.toContain('newPlaces')
 
     const off = render({ mentionedPlaces: false })

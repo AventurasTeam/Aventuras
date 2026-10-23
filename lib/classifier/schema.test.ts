@@ -154,6 +154,20 @@ describe('classifierExtractionWithPlacesSchema', () => {
   it('is representable as JSON schema for the structured call', () => {
     expect(() => z.toJSONSchema(classifierExtractionWithPlacesSchema)).not.toThrow()
   })
+
+  // classifier.md → Mentioned places → Parent: a parent, "top-level", or none for unplaced.
+  it('tells the model when a new place is top-level and when to leave its parent out', () => {
+    const json = z.toJSONSchema(classifierExtractionWithPlacesSchema) as unknown as {
+      properties: {
+        newPlaces: { items: { properties: { parent: { description?: string } } } }
+      }
+    }
+    const { description } = json.properties.newPlaces.items.properties.parent
+    expect(description).toContain('"top-level" only when nothing in Places could contain it')
+    expect(description).toContain(
+      "Omit it when something in Places could contain it and the turns don't say which",
+    )
+  })
 })
 
 describe('classifierReplySchema', () => {

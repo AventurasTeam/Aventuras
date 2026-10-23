@@ -2343,8 +2343,8 @@ describe('periodicClassifierPhase — mentioned places', () => {
       kind: 'location',
       name: 'the Drowned Inn',
       keywords: ['the inn'],
-      // Retired parent: the place goes to the root.
-      state: { parent_location_id: null },
+      // Retired parent: the place lands unplaced.
+      state: { parent_location_id: null, unplaced: true },
     })
     expect((events[0] as { entryId: string }).entryId).toBe('e2')
   })
@@ -2432,7 +2432,7 @@ describe('periodicClassifierPhase — mentioned places', () => {
     ])
   })
 
-  it("logs a place sent to the root under the per-turn writer's key and cause", async () => {
+  it("logs a place left unplaced under the per-turn writer's key and cause", async () => {
     clearBuffers()
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
     vi.mocked(generateStructured).mockResolvedValue({
