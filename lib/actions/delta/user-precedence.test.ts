@@ -255,6 +255,22 @@ describe('wroteField', () => {
     },
   )
 
+  // data-model.md → Authorship contract: an entity's status and retired reason are one field row.
+  it.each([['status'], ['retiredReason']])(
+    "reads a user write to an entity's status or retired reason as a write to %s",
+    (column) => {
+      const revived = [update({ status: 'retired' })]
+      const reworded = [update({ retiredReason: 'drowned' })]
+      expect(wroteField(revived, 'entities', column, [])).toBe(true)
+      expect(wroteField(reworded, 'entities', column, [])).toBe(true)
+      expect(wroteField([update({ description: 'x' })], 'entities', column, [])).toBe(false)
+    },
+  )
+
+  it("reads an entity's status and retired reason together only on an entity", () => {
+    expect(wroteField([update({ retiredReason: 'drowned' })], 'threads', 'status', [])).toBe(false)
+  })
+
   it("reads a thread's status and entry ref together only on a thread", () => {
     const failed = [update({ status: 'active' })]
     expect(wroteField(failed, 'entities', 'resolvedAtEntryId', [])).toBe(false)

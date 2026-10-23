@@ -44,6 +44,7 @@ import {
   wroteCollisionFlag,
   wrotePath,
   wrotePlacement,
+  wroteRetirement,
 } from '../delta/user-precedence'
 import type { DbCtx, DeltaSource, ProseEntryId } from '../types'
 
@@ -377,7 +378,7 @@ export const promoteStagedEntityHandler: ActionHandler = async (action, branchId
     return { status: 'rejected', reason: 'not-staged', code: 'noop' }
   if (
     proseEntryId !== null &&
-    wroteColumn(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId), 'status')
+    wroteRetirement(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
   )
     return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
   return {
@@ -459,7 +460,7 @@ export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) 
   if (current.kind === 'location') return { status: 'rejected', reason: 'location', code: 'noop' }
   if (
     proseEntryId !== null &&
-    wroteColumn(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId), 'status')
+    wroteRetirement(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
   )
     return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
   const columns = { status: 'retired' as const, retiredReason }
@@ -698,10 +699,6 @@ export const setFactionStandingHandler: ActionHandler = async (action, branchId,
   return buildStatePatchOutcome(bid, id, current, { standing: bounded }, ctx)
 }
 
-// data-model.md → Authorship contract: `status` and `retired_reason` are one field row.
-const retirementWritten = (edits: readonly Delta[]): boolean =>
-  wroteColumn(edits, 'status') || wroteColumn(edits, 'retiredReason')
-
 /**
  * retired → active on a character, checked as the write lands so a status the user wrote since
  * stands; clears the reason as World's un-retire does. Only the user brings back a place.
@@ -718,7 +715,7 @@ export const returnFromRetirementHandler: ActionHandler = async (action, branchI
   if (current.status !== 'retired') return noopRefusal('not-retired')
   if (
     proseEntryId !== null &&
-    retirementWritten(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
+    wroteRetirement(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
   )
     return noopRefusal(USER_EDITED_SINCE_PROSE)
   const columns = { status: 'active' as const, retiredReason: null }

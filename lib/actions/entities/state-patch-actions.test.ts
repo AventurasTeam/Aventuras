@@ -2234,3 +2234,60 @@ describe('returnFromRetirement', () => {
     expect(lockKeysFor(comeBack())).toEqual(['entities:br_1:char_1'])
   })
 })
+
+// data-model.md → Authorship contract: `status` and `retired_reason` are one field row, so a user
+// edit of either keeps both, through a reversal and against a write that lands later.
+describe("a retirement's status and reason, one field", () => {
+  const ACTIVE: NewEntity = { ...CHAR, status: 'active', retiredReason: null }
+  const RETIRED: NewEntity = { ...CHAR, status: 'retired', retiredReason: 'fell at the ford' }
+  const write = (kind: 'retireEntity' | 'returnFromRetirement' | 'promoteStagedEntity') =>
+    ({
+      kind,
+      source: 'periodic_classifier',
+      payload: {
+        branchId: 'br_1',
+        id: 'char_1',
+        proseEntryId: REVEAL,
+        ...(kind === 'retireEntity' ? { retiredReason: 'drowned' } : {}),
+      },
+    }) as PipelineAction
+  const statusOf = async (db: StateDb) => {
+    const row = await rowFor(db, 'char_1')
+    return [row.status, row.retiredReason]
+  }
+
+  it('keeps a retirement whose reason the user rewrote through its reversal', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, ACTIVE)
+    await writeRevealProse(ctx)
+    expect((await apply(ctx, write('retireEntity'), 'act_r')).status).toBe('ok')
+    await apply(ctx, userPatch({ retiredReason: 'lost at sea' }), 'act_u')
+    await reverseReplayDeltas('act_r', ctx)
+    expect(await statusOf(db)).toEqual(['retired', 'lost at sea'])
+  })
+
+  it('keeps a return whose reason the user wrote through its reversal', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, RETIRED)
+    await writeRevealProse(ctx)
+    expect((await apply(ctx, write('returnFromRetirement'), 'act_r')).status).toBe('ok')
+    await apply(ctx, userPatch({ retiredReason: 'came back changed' }), 'act_u')
+    await reverseReplayDeltas('act_r', ctx)
+    expect(await statusOf(db)).toEqual(['active', 'came back changed'])
+  })
+
+  it.each([
+    ['retire', ACTIVE, 'retireEntity'],
+    ['promote', CHAR, 'promoteStagedEntity'],
+  ] as const)(
+    'refuses to %s a row whose reason alone the user wrote after the prose',
+    async (_label, entry, kind) => {
+      const { db, ctx } = await setup()
+      await create(ctx, entry)
+      await writeRevealProse(ctx)
+      await apply(ctx, userPatch({ retiredReason: 'a note' }), 'act_u')
+      expect(await apply(ctx, write(kind), 'act_w')).toEqual(userWonOver)
+      expect(await statusOf(db)).toEqual([entry.status, 'a note'])
+    },
+  )
+})

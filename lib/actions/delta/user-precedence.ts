@@ -200,6 +200,13 @@ export function wroteCollisionFlag(edits: readonly Delta[]): boolean {
   return COLLISION_FLAG_COLUMNS.some((column) => wroteColumn(edits, column))
 }
 
+const RETIREMENT_COLUMNS: readonly string[] = ['status', 'retiredReason']
+
+/** A user edit wrote an entity's status or retired reason (data-model.md → Authorship contract). */
+export function wroteRetirement(edits: readonly Delta[]): boolean {
+  return RETIREMENT_COLUMNS.some((column) => wroteColumn(edits, column))
+}
+
 const THREAD_STATUS_COLUMNS: readonly string[] = ['status', 'resolvedAtEntryId']
 
 /** A user edit wrote a thread's status or resolved-at entry (classifier.md → Threads → The row). */
@@ -208,8 +215,9 @@ export function wroteThreadStatus(edits: readonly Delta[]): boolean {
 }
 
 /**
- * wrotePath, but a place's parent and unplaced mark, an entity's collision columns and a thread's
- * status and entry ref each count as one field (cadence.md → User edits and classifier writes).
+ * wrotePath, but a place's parent and unplaced mark, an entity's collision columns, an entity's
+ * status and retired reason, and a thread's status and entry ref each count as one field
+ * (cadence.md → User edits and classifier writes).
  */
 export function wroteField(
   edits: readonly Delta[],
@@ -222,6 +230,7 @@ export function wroteField(
       return wrotePlacement(edits)
     if (path.length === 0 && COLLISION_FLAG_COLUMNS.includes(column))
       return wroteCollisionFlag(edits)
+    if (path.length === 0 && RETIREMENT_COLUMNS.includes(column)) return wroteRetirement(edits)
   }
   if (table === 'threads' && THREAD_STATUS_COLUMNS.includes(column)) return wroteThreadStatus(edits)
   return wrotePath(edits, column, path)
