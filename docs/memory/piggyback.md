@@ -90,13 +90,18 @@ mark; it logs a diagnostics warning with the entity, the category and
 both lengths.
 
 **`conditions` is full-replace, one entry per changed place or
-item.** `id` names a place or an item the prompt shows with its state
-([What the writer sees](#what-the-writer-sees)): the current location,
-an item held in the scene or lying there, a retrieved place or item.
-The text replaces its `condition` wholesale, written as it is now, under
-the same bound and cut as a visual value. Like a visual category, a
-condition is written only when the prose changes it, never restated
-unchanged. A condition is the running consequence, not the event
+item.** `id` names an existing place or item the prompt shows with its
+state ([What the writer sees](#what-the-writer-sees)): the current
+location, an item held in the scene or lying there, a retrieved place
+or item. A place or item the block creates takes its condition on its
+create, not here (the create's `condition`, under
+[New locations and items](#new-locations-and-items)). The text
+replaces its `condition` wholesale, written as it is now: what still
+applies kept, what no longer does dropped, in a few words and never more
+than about 60. The prompt words the 60 as a limit, not a target, and the
+text keeps the same bound and cut as a visual value. Like a visual
+category, a condition is written only when the prose changes it, never
+restated unchanged. A condition is the running consequence, not the event
 ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)):
 "burned to the ground", not "the fire".
 
@@ -115,7 +120,11 @@ creates ([New locations and items](#new-locations-and-items)):
   when the turn names none. It leaves every holder and its
   `at_location_id` becomes that place; `from` is optional, as on
   `<item>`. An item put down somewhere else than the scene, thrown into
-  a river, stays prose.
+  a river, stays prose. The prompt asks for a drop only for an item
+  still lying there when the turn ends. Tags apply in document order and
+  a drop takes the item off every holder, and the fallback applies its
+  drops after its item moves, so an item set down and picked up again
+  gets its `<item>` move and no drop.
 - `<stackable key="..." amount="..." to="..." from="..." />` moves a
   quantity (gold, arrows, supplies) between characters' `stackables`
   records. Either `to` or `from` may be omitted (gained from
