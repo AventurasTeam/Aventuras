@@ -68,6 +68,8 @@ const NEW_HANDLE_PREFIX_DESCRIPTION =
   'A handle you choose, starting with "new:" (e.g. new:docks), so it is never mistaken for a listed ID.'
 const NEW_LOCATION_HANDLE_DESCRIPTION = `${NEW_HANDLE_PREFIX_DESCRIPTION} Use it only in currentLocation and another new place's parent.`
 const NEW_ITEM_HANDLE_DESCRIPTION = `${NEW_HANDLE_PREFIX_DESCRIPTION} Use it only in transfers.items[].id and sceneEntities.`
+const CREATE_CONDITION_DESCRIPTION =
+  'Its condition, only when the turn shows one: the running consequence, not the event. Omit it otherwise.'
 
 // A create follows the tags' rules: a wrong-typed handle or name reads as '', which
 // normalizeCreates drops and counts. Not .catch(''): that emits `default: ""` to the model.
@@ -109,6 +111,7 @@ export const fallbackClassifierSchema = z.object({
         .describe(
           'The place it is part of: its ID from Places when Places lists it, or the handle of another location in newLocations; "top" only when nothing in Places could contain it. Omit it when something in Places could contain it and the turn doesn\'t say which; when unsure, omit it.',
         ),
+      condition: z.string().optional().catch(undefined).describe(CREATE_CONDITION_DESCRIPTION),
     }),
   ).describe(
     'Places this turn creates, when the scene settles somewhere not in Places. A new place is kept only as currentLocation or a place currentLocation is part of; any other is dropped.',
@@ -133,6 +136,21 @@ export const fallbackClassifierSchema = z.object({
       }),
     )
     .optional(),
+  conditions: z
+    .array(
+      z.object({
+        id: z.string().describe('The ID of a place or item shown above with its state.'),
+        text: z
+          .string()
+          .describe(
+            'Its condition as it is now, the running consequence rather than the event, in about 60 words. It replaces the stored condition whole.',
+          ),
+      }),
+    )
+    .optional()
+    .describe(
+      "A place's or an item's condition, only when this turn changes it, and only for one shown above with its state: the current location, an item held in the scene or lying there, a place or item listed elsewhere in the world.",
+    ),
   newItems: createList(
     z.object({
       handle: createText().describe(NEW_ITEM_HANDLE_DESCRIPTION),
@@ -142,6 +160,7 @@ export const fallbackClassifierSchema = z.object({
         .optional()
         .catch(undefined)
         .describe('One short sentence describing the item.'),
+      condition: z.string().optional().catch(undefined).describe(CREATE_CONDITION_DESCRIPTION),
     }),
   ).describe(
     'Items this turn creates, when a character takes or receives something new. A new item is kept only when the last transfers.items entry naming it gives it to a character; any other is dropped.',
@@ -178,6 +197,20 @@ export const fallbackClassifierSchema = z.object({
           }),
         )
         .default([]),
+      drops: z
+        .array(
+          z.object({
+            id: z.string().describe("The item's ID from the list."),
+            from: z
+              .string()
+              .optional()
+              .describe('Who held it, when the turn says. Omit rather than inventing a roster ID.'),
+          }),
+        )
+        .default([])
+        .describe(
+          'Items someone holding them put down where the scene is, which leaves them lying there. An item put down anywhere else is left out.',
+        ),
     })
     .optional(),
   summary: z
@@ -246,7 +279,8 @@ function orderedTransfers(transfers: NonNullable<FallbackReply['transfers']>): P
   return {
     items: transfers.items.map((item, seq) => ({ ...item, seq })),
     stackables: transfers.stackables,
-    drops: [],
+    // generateStructured parses with the schema's default; a value handed in unparsed may lack it.
+    drops: (transfers.drops ?? []).map((drop, i) => ({ ...drop, seq: transfers.items.length + i })),
   }
 }
 

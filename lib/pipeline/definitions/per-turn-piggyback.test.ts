@@ -3296,6 +3296,128 @@ describe('per-turn-piggyback', () => {
       expect(result).toEqual({ status: 'aborted' })
       expect(events).toEqual([])
     })
+
+    // piggyback.md → Fallback classifier context: conditions and drops under the tags' rules.
+    describe('conditions and drops', () => {
+      const keyHeld = () =>
+        worldRow({
+          id: HERO,
+          kind: 'character',
+          name: 'Aria',
+          state: {
+            ...emptyEntityState('character'),
+            current_location_id: TOWN,
+            inventory: [OLD_KEY],
+          },
+        })
+      const keyRow = () =>
+        worldRow({
+          id: OLD_KEY,
+          kind: 'item',
+          name: 'rusted key',
+          description: 'an iron key',
+          state: { at_location_id: null },
+        })
+      // c1 HERO, l1 TOWN, l2 MARKET, i1 OLD_KEY: allocated in this order.
+      const idMapWithKey = () => {
+        const idMap = new IdBiMap()
+        for (const id of [HERO, TOWN, MARKET, OLD_KEY]) idMap.allocate(id)
+        return idMap
+      }
+      const payloads = (
+        events: readonly PhaseEmittedEvent[],
+        kind: 'updateEntityCondition' | 'updateEntityInventory' | 'updateItemPosition',
+      ) =>
+        events.flatMap((e) =>
+          e.type === 'delta_emitted' && e.action.kind === kind ? [e.action.payload] : [],
+        )
+
+      // data-model.md → Authorship contract: the key is held in the scene; the town, with no
+      // retrieval behind the turn, is on the map by name only.
+      it('writes a condition only for a row its prompt showed with its state', async () => {
+        seedFallbackTurn([
+          keyHeld(),
+          worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }),
+          keyRow(),
+        ])
+        const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+        const { events } = await runFallback(
+          fallbackClassifierSchema.parse({
+            sceneEntities: ['c1'],
+            worldTimeDelta: 0,
+            conditions: [
+              { id: 'i1', text: 'bent at the bit' },
+              { id: 'l1', text: 'flooded to the knee' },
+            ],
+          }),
+          { log, intermediates: { idMap: idMapWithKey() } },
+        )
+        expect(payloads(events, 'updateEntityCondition')).toEqual([
+          { branchId: 'b1', id: OLD_KEY, condition: 'bent at the bit' },
+        ])
+        expect(log.warn).toHaveBeenCalledWith('classifier.condition_unseen', {
+          entryId: 'entry-2',
+          source: 'per_turn_classifier',
+          entityId: TOWN,
+          kind: 'location',
+          shown: false,
+        })
+      })
+
+      it("writes the current location's condition once the floor seats it", async () => {
+        seedFallbackTurn()
+        const town: EntityRow = {
+          id: TOWN,
+          kind: 'location',
+          status: 'active',
+          injectionMode: 'auto',
+          name: 'Saltmere',
+          description: null,
+        }
+        const { events } = await runFallback(
+          fallbackClassifierSchema.parse({
+            sceneEntities: ['c1'],
+            worldTimeDelta: 0,
+            conditions: [{ id: 'l1', text: 'flooded to the knee' }],
+          }),
+          {
+            intermediates: {
+              [RETRIEVAL_INTERMEDIATE_KEY]: retrievalSuccess({ floor: { currentLocation: town } }),
+            },
+          },
+        )
+        expect(payloads(events, 'updateEntityCondition')).toEqual([
+          { branchId: 'b1', id: TOWN, condition: 'flooded to the knee' },
+        ])
+      })
+
+      // The JSON's two lists carry no order between them: its drops apply after its item moves.
+      it('puts the key down after moving it, so it lies where the scene is', async () => {
+        seedFallbackTurn([
+          keyHeld(),
+          worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }),
+          keyRow(),
+        ])
+        const { events } = await runFallback(
+          fallbackClassifierSchema.parse({
+            sceneEntities: ['c1'],
+            worldTimeDelta: 0,
+            transfers: {
+              items: [{ id: 'i1', to: 'c1', slot: 'equipped_items' }],
+              stackables: [],
+              drops: [{ id: 'i1', from: 'c1' }],
+            },
+          }),
+          { intermediates: { idMap: idMapWithKey() } },
+        )
+        expect(payloads(events, 'updateEntityInventory')).toEqual([
+          { branchId: 'b1', id: HERO, equipped_items: [], inventory: [] },
+        ])
+        expect(payloads(events, 'updateItemPosition')).toEqual([
+          { branchId: 'b1', id: OLD_KEY, atLocationId: TOWN },
+        ])
+      })
+    })
   })
 
   describe('fallbackClassifierSchema', () => {
@@ -3382,6 +3504,15 @@ describe('per-turn-piggyback', () => {
         'handle of a location in newLocations',
       ],
       ['transfers.items[].id', ['transfers', 'items', '[]', 'id'], 'handle of an item in newItems'],
+      ['conditions', ['conditions'], 'shown above with its state'],
+      ['conditions[].text', ['conditions', '[]', 'text'], 'replaces the stored condition whole'],
+      ['transfers.drops', ['transfers', 'drops'], 'where the scene is'],
+      [
+        'newLocations[].condition',
+        ['newLocations', '[]', 'condition'],
+        'only when the turn shows one',
+      ],
+      ['newItems[].condition', ['newItems', '[]', 'condition'], 'only when the turn shows one'],
     ] as const)('describes %s', (_field, path, marker) => {
       const jsonSchema = z.toJSONSchema(fallbackClassifierSchema)
       expect(fieldDescription(jsonSchema, path)).toContain(marker)
@@ -3422,6 +3553,36 @@ describe('per-turn-piggyback', () => {
       expect(
         typeof retrievalQueries === 'object' ? retrievalQueries.description : undefined,
       ).toBeTruthy()
+    })
+
+    // Optional or defaulted, so a canned mock reply without them stays valid.
+    it('defaults the drops and leaves conditions out of a reply that gives none', () => {
+      const parsed = fallbackClassifierSchema.parse({
+        sceneEntities: [],
+        worldTimeDelta: 0,
+        transfers: { items: [], stackables: [] },
+        newLocations: [{ handle: 'new:a', name: 'A' }],
+        newItems: [{ handle: 'new:k', name: 'key' }],
+      })
+      expect(parsed.transfers?.drops).toEqual([])
+      expect(parsed.conditions).toBeUndefined()
+      expect(parsed.newLocations?.[0]?.condition).toBeUndefined()
+      expect(parsed.newItems?.[0]?.condition).toBeUndefined()
+    })
+
+    it('keeps the conditions, the drops and the create conditions a reply gives', () => {
+      const parsed = fallbackClassifierSchema.parse({
+        sceneEntities: [],
+        worldTimeDelta: 0,
+        conditions: [{ id: 'l1', text: 'flooded to the knee' }],
+        transfers: { items: [], stackables: [], drops: [{ id: 'i1', from: 'c1' }] },
+        newLocations: [{ handle: 'new:a', name: 'A', condition: 'scorched' }],
+        newItems: [{ handle: 'new:k', name: 'key', condition: 'bent' }],
+      })
+      expect(parsed.conditions).toEqual([{ id: 'l1', text: 'flooded to the knee' }])
+      expect(parsed.transfers?.drops).toEqual([{ id: 'i1', from: 'c1' }])
+      expect(parsed.newLocations?.[0]?.condition).toBe('scorched')
+      expect(parsed.newItems?.[0]?.condition).toBe('bent')
     })
 
     // retrieval.md → Q4: emission is malformed-tolerant — raising here costs a full extra
@@ -3612,6 +3773,8 @@ describe("fallbackClassifierSchema — the emission prompt's rules", () => {
     "exactly as the holder's Stackables line shows it",
     "only for something they don't hold yet",
     'never more than the payer holds',
+    'replaces the stored condition whole',
+    'where the scene is',
     'only when nothing in Places could contain it',
   ])('says "%s" in both', (rule) => {
     expect(emission).toContain(rule)

@@ -28,6 +28,12 @@ const PLACE_RULE =
   "Create a place only when the scene settles somewhere with its own identity the story could come back to: a named place, a building, a room that matters, a stretch of wild land where things happen. Don't create one for passing through (a corridor, a doorway, the road between two places); keep the current location then. Use an existing place's ID whenever the scene is somewhere already in Places, and nest a new place under the place it's part of."
 const ITEM_RULE =
   'Create an item only when a character takes, receives or is given something that matters beyond this moment: a weapon, a key, a letter, a relic. Not food eaten on the spot, not money (use a stackable), not scenery.'
+// piggyback.md → Trailing block format, verbatim in both writers' prompts: a condition only for a
+// row shown with its state and only on a change, and a drop only where the scene is.
+const CONDITION_RULE =
+  'Give a place or an item a condition only when the prose changes it, and only one shown above with its state: the current location, an item held in the scene or lying there, a place or item listed elsewhere in the world. Write it as it is now, the running consequence rather than the event (burned to the ground, not the fire), in about 60 words; it replaces the stored condition whole, so never restate one unchanged.'
+const DROP_RULE =
+  'Put an item down only when someone holding it sets it down where the scene is, which leaves it lying there; an item put down anywhere else, thrown into a river or left in another place, stays prose.'
 // piggyback.md → Parent, verbatim: when a new place is top-level and when it has no parent.
 const PARENT_RULE =
   "Set a new place's parent to top only when nothing in Places could contain it, as for the story's first place or a city when Places holds only cities. Leave its parent out when something in Places could contain it and the prose doesn't say which; when unsure, leave it out."
@@ -466,6 +472,14 @@ describe('bundled piggyback fallback classifier template', () => {
       ['the tagged-block macro', () => STATE_EMISSION],
     ])('carries the parent rule verbatim in %s', (_, source) => {
       expect(source()).toContain(PARENT_RULE)
+    })
+
+    it.each([
+      ['the fallback prompt', () => render(context())],
+      ['the tagged-block macro', () => STATE_EMISSION],
+    ])('carries the condition and drop rules verbatim in %s', (_, source) => {
+      expect(source()).toContain(CONDITION_RULE)
+      expect(source()).toContain(DROP_RULE)
     })
   })
 

@@ -97,6 +97,10 @@ Create a place only when the scene settles somewhere with its own identity the s
 Set a new place's parent to top only when nothing in Places could contain it, as for the story's first place or a city when Places holds only cities. Leave its parent out when something in Places could contain it and the prose doesn't say which; when unsure, leave it out.
 
 Create an item only when a character takes, receives or is given something that matters beyond this moment: a weapon, a key, a letter, a relic. Not food eaten on the spot, not money (use a stackable), not scenery.
+
+Give a place or an item a condition only when the prose changes it, and only one shown above with its state: the current location, an item held in the scene or lying there, a place or item listed elsewhere in the world. Write it as it is now, the running consequence rather than the event (burned to the ground, not the fire), in about 60 words; it replaces the stored condition whole, so never restate one unchanged.
+
+Put an item down only when someone holding it sets it down where the scene is, which leaves it lying there; an item put down anywhere else, thrown into a river or left in another place, stays prose.
 {% if suggestionsFire -%}
 {% include 'macro_suggestion_emission_json' %}
 {%- endif -%}`,
