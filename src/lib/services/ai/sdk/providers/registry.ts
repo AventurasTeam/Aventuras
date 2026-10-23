@@ -17,6 +17,7 @@ import { createDeepSeek } from '@ai-sdk/deepseek'
 import { createMistral } from '@ai-sdk/mistral'
 
 import type { APIProfile } from '#lib/types/index.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { createTimeoutFetch } from './fetch'
 import { PROVIDERS, getBaseUrl } from './config'
 import { settings } from '#lib/stores/settings.svelte.ts'
@@ -58,7 +59,7 @@ function createProviderFromProfile(options: {
     manualBody,
     debugId,
   )
-  const baseURL = profile.baseUrl || getBaseUrl(profile.providerType)
+  const baseURL = normalizeBaseUrl(profile.baseUrl) || getBaseUrl(profile.providerType)
   const supportsStructuredOutputs = structuredOutputs ?? false
 
   switch (profile.providerType) {
