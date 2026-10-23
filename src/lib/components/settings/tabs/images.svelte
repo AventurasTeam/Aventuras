@@ -4,6 +4,7 @@
   import { settings } from '#lib/stores/settings.svelte.ts'
   import { Label } from '#lib/components/ui/label/index.ts'
   import { Switch } from '#lib/components/ui/switch/index.ts'
+  import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
   import { Autocomplete } from '#lib/components/ui/autocomplete/index.ts'
@@ -20,17 +21,19 @@
     IMAGE_PROVIDER_LABELS,
     IMAGE_PROVIDER_OPTIONS,
     ComfyMode,
+    loadImageInputs,
+    referenceInputsOf,
     referenceLimit,
+    suggestReferenceInputs,
+    type ComfyCustomWorkflow,
     type ImageModelInfo,
   } from '#lib/services/ai/image/index.ts'
   import {
     validateApiWorkflow,
     detectWorkflowFields,
-    findReferenceInputs,
     fetchModelList,
     clearComfyCacheForUrl,
   } from '#lib/services/ai/image/providers/comfy.ts'
-  import type { ComfyCustomWorkflow } from '#lib/services/ai/image/providers/types.ts'
   import ImageModelSelect from '#lib/components/settings/ImageModelSelect.svelte'
   import type { ImageProfile, ImageProviderType, APIProfile } from '#lib/types/index.ts'
   import * as Tabs from '#lib/components/ui/tabs/index.ts'
@@ -144,17 +147,18 @@
   const { trigger: triggerAutoSave, flush: flushAutoSave } = createDebouncedSave(autoSaveProfile)
 
   // Custom workflow state
-  let profileCustomWorkflow = $state<ComfyCustomWorkflow | null>(null)
+  let profileCustomWorkflow = $state.raw<ComfyCustomWorkflow | null>(null)
   let profileInputReferences = $state(false)
   let profileTakesReferences = $state(false)
-  const referenceInputCount = $derived(
-    profileMode === ComfyMode.CustomWorkflow && profileCustomWorkflow
-      ? findReferenceInputs(profileCustomWorkflow.workflow).length
-      : 0,
+  const activeWorkflow = $derived(
+    profileMode === ComfyMode.CustomWorkflow ? profileCustomWorkflow : null,
   )
+  const workflowGraph = $derived(activeWorkflow?.workflow)
+  const loadImageNodes = $derived(workflowGraph ? loadImageInputs(workflowGraph) : [])
+  const selectedReferenceInputs = $derived(activeWorkflow ? referenceInputsOf(activeWorkflow) : [])
   // The clause after "but" for a provider type that cannot send references.
   const NO_REFERENCES_REASON: Partial<Record<ImageProviderType, string>> = {
-    comfyui: 'it needs a custom workflow with a LoadImage node to use reference images.',
+    comfyui: 'it needs a custom workflow with a selected LoadImage node to use reference images.',
     a1111: 'the "Model takes reference images" switch is off.',
   }
   // Null when the profile can send references.
@@ -169,12 +173,7 @@
       : null
   })
   // Holds parsed workflow data while the user resolves an ambiguous picker — not yet saved to profileCustomWorkflow
-  let pendingWorkflowData = $state<{
-    workflow: ComfyCustomWorkflow['workflow']
-    seedPath: string
-    outputNodeId: string
-    negativePromptPath: string | null
-  } | null>(null)
+  let pendingWorkflowData = $state<Omit<ComfyCustomWorkflow, 'positivePromptPath'> | null>(null)
   let workflowAmbiguousNodes = $state<
     Array<{
       nodeId: string
@@ -489,6 +488,7 @@
     profileModel = profile.model || ''
     profileModels = []
     profileTakesReferences = profile.providerOptions?.takesReferences === true
+    profileInputReferences = profile.providerOptions?.inputReferences === true
 
     if (profile.providerType === 'a1111') {
       const opts = profile.providerOptions || {}
@@ -509,7 +509,6 @@
       profilePositivePrompt = (opts.positivePrompt as string) || ''
       profileNegativePrompt = (opts.negativePrompt as string) || ''
       profileCustomWorkflow = (opts.customWorkflow as ComfyCustomWorkflow) || null
-      profileInputReferences = opts.inputReferences === true
       pendingWorkflowData = null
       workflowFileName = profileCustomWorkflow ? 'Loaded from profile' : null
       workflowAmbiguousNodes = []
@@ -622,28 +621,24 @@
     }
 
     workflowFileName = filename
+    const detected = {
+      workflow,
+      seedPath,
+      outputNodeId: outputNodeId!,
+      negativePromptPath: negativeNode?.path ?? null,
+      referenceInputPaths: suggestReferenceInputs(workflow),
+    }
 
     if (positiveNodes.length > 1) {
       // Ambiguous — show picker. Store parsed data in pending state; do NOT write
       // profileCustomWorkflow yet so the auto-save effect doesn't fire prematurely.
-      pendingWorkflowData = {
-        workflow,
-        seedPath,
-        outputNodeId: outputNodeId!,
-        negativePromptPath: negativeNode?.path ?? null,
-      }
+      pendingWorkflowData = detected
       workflowAmbiguousNodes = positiveNodes
       workflowPickerSelection = positiveNodes[0].path
     } else {
       // Unambiguous — auto-confirm immediately
       pendingWorkflowData = null
-      profileCustomWorkflow = {
-        workflow,
-        positivePromptPath: positiveNodes[0].path,
-        seedPath,
-        outputNodeId: outputNodeId!,
-        negativePromptPath: negativeNode?.path ?? null,
-      }
+      profileCustomWorkflow = { ...detected, positivePromptPath: positiveNodes[0].path }
       workflowAmbiguousNodes = []
     }
   }
@@ -664,6 +659,15 @@
     reader.readAsText(file)
     // Reset input so the same file can be re-selected after clearing
     input.value = ''
+  }
+
+  function toggleReferenceInput(path: string, selected: boolean) {
+    if (!profileCustomWorkflow) return
+    const others = selectedReferenceInputs.filter((p) => p !== path)
+    profileCustomWorkflow = {
+      ...profileCustomWorkflow,
+      referenceInputPaths: selected ? [...others, path] : others,
+    }
   }
 
   function confirmWorkflowPicker() {
@@ -1406,17 +1410,35 @@
                     No negative prompt node detected (ignored).
                   </p>
                 {/if}
-                <p class="text-muted-foreground {referenceInputCount === 0 ? 'italic' : ''}">
-                  {#if referenceInputCount > 0}
-                    Reference images → {referenceInputCount} LoadImage input{referenceInputCount ===
-                    1
-                      ? ''
-                      : 's'}
-                  {:else}
+                {#if loadImageNodes.length === 0}
+                  <p class="text-muted-foreground italic">
                     No LoadImage node detected (reference images ignored).
-                  {/if}
-                </p>
-                {#if referenceInputCount > 0}
+                  </p>
+                {:else}
+                  <div class="space-y-1 pt-1">
+                    <p class="text-muted-foreground">
+                      Reference images → the checked LoadImage nodes. Unchecked ones keep their
+                      saved image.
+                    </p>
+                    {#each loadImageNodes as node (node.path)}
+                      <div class="flex items-center gap-2">
+                        <Checkbox
+                          id="comfy-reference-{node.nodeId}"
+                          checked={selectedReferenceInputs.includes(node.path)}
+                          onCheckedChange={(checked) => toggleReferenceInput(node.path, checked)}
+                        />
+                        <Label for="comfy-reference-{node.nodeId}" class="font-normal">
+                          <code class="text-xs">{node.nodeId}</code>
+                          {node.title}
+                          {#if node.image}
+                            <span class="text-muted-foreground">({node.image})</span>
+                          {/if}
+                        </Label>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+                {#if selectedReferenceInputs.length > 0}
                   <div class="flex items-center justify-between gap-3 pt-1">
                     <div>
                       <Label for="comfy-input-references"

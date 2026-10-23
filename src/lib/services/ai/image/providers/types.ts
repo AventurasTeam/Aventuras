@@ -33,6 +33,8 @@ export interface ComfyCustomWorkflow {
   outputNodeId: string
   /** Dot-path to the negative CLIPTextEncode text input, if detected — null otherwise. */
   negativePromptPath: string | null
+  /** `LoadImage` image inputs that take reference images; absent means the probe's suggestion. */
+  referenceInputPaths?: string[]
 }
 
 export interface ImageGenerateOptions {

@@ -64,4 +64,10 @@ export { resolveStylePrompt, resolveStylePromptForPack } from './stylePrompt'
 // Constants
 export { DEFAULT_FALLBACK_STYLE_PROMPT } from './constants'
 // Provider types
-export { ComfyMode } from './providers/comfy'
+export {
+  ComfyMode,
+  loadImageInputs,
+  referenceInputsOf,
+  suggestReferenceInputs,
+} from './providers/comfy'
+export type { ComfyCustomWorkflow } from './providers/types'

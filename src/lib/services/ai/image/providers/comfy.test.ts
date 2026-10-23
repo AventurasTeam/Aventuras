@@ -24,14 +24,16 @@ import { imageGetFetch } from './fetchAdapter'
 import {
   ComfyMode,
   clearComfyCacheForUrl,
-  comfyTakesReferences,
+  comfyReferenceLimit,
   createComfyProvider,
   fetchModelList,
-  findReferenceInputs,
+  loadImageInputs,
+  suggestReferenceInputs,
 } from './comfy'
 import BasicWorkflow from './comfyWorkflows/basic-txt2img-workflow.json'
 import LoraWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
+import type { Json } from './comfyImage'
 import type { ImageGenerateOptions } from './types'
 
 type Graph = Record<string, { inputs: Record<string, unknown> }>
@@ -259,6 +261,10 @@ describe('custom workflow', () => {
     negativePromptPath: '57:28.inputs.text',
     ...over,
   })
+  const withLoad = {
+    ...workflow,
+    '61': { class_type: 'LoadImage', inputs: { image: 'saved.png' } },
+  }
 
   beforeEach(() => serve('60'))
 
@@ -297,10 +303,6 @@ describe('custom workflow', () => {
   })
 
   it('uploads references into the workflow LoadImage nodes', async () => {
-    const withLoad = {
-      ...workflow,
-      '61': { class_type: 'LoadImage', inputs: { image: 'saved.png' } },
-    }
     await generate(
       { mode: ComfyMode.CustomWorkflow, customWorkflow: custom({ workflow: withLoad }) },
       { model: '', referenceImages: ['iVBORw0KGgo='] },
@@ -308,11 +310,23 @@ describe('custom workflow', () => {
     expect(postedGraph()['61'].inputs.image).toBe('aventuras/uploaded.png [temp]')
   })
 
-  it('uploads into the input folder when the profile asks for it', async () => {
-    const withLoad = {
-      ...workflow,
-      '61': { class_type: 'LoadImage', inputs: { image: 'saved.png' } },
+  it('uploads only into the LoadImage nodes the profile selected', async () => {
+    const twoLoads = {
+      ...withLoad,
+      '62': { class_type: 'LoadImage', inputs: { image: 'guide.png' } },
     }
+    await generate(
+      {
+        mode: ComfyMode.CustomWorkflow,
+        customWorkflow: custom({ workflow: twoLoads, referenceInputPaths: ['62.inputs.image'] }),
+      },
+      { model: '', referenceImages: ['iVBORw0KGgo=', 'AQID'] },
+    )
+    expect(postedGraph()['61'].inputs.image).toBe('saved.png')
+    expect(postedGraph()['62'].inputs.image).toBe('aventuras/uploaded.png [temp]')
+  })
+
+  it('uploads into the input folder when the profile asks for it', async () => {
     await generate(
       {
         mode: ComfyMode.CustomWorkflow,
@@ -345,6 +359,9 @@ describe('custom workflow', () => {
 
 describe('reference inputs', () => {
   const node = (class_type: string, image = 'a.png') => ({ class_type, inputs: { image } })
+  const consumer = (class_type: string, inputs: Record<string, Json>) => ({ class_type, inputs })
+  const paths = (workflow: Parameters<typeof loadImageInputs>[0]) =>
+    loadImageInputs(workflow).map(({ path }) => path)
 
   it('lists the LoadImage image inputs in node-id order', () => {
     const workflow = {
@@ -353,38 +370,154 @@ describe('reference inputs', () => {
       '57:4': node('LoadImage'),
       '2': node('SaveImage'),
     }
-    expect(findReferenceInputs(workflow)).toEqual([
-      '9.inputs.image',
-      '10.inputs.image',
-      '57:4.inputs.image',
-    ])
+    expect(paths(workflow)).toEqual(['9.inputs.image', '10.inputs.image', '57:4.inputs.image'])
   })
 
   it('ignores the other image-loading nodes', () => {
-    expect(
-      findReferenceInputs({ '1': node('LoadImageMask'), '2': node('LoadImageOutput') }),
-    ).toEqual([])
+    expect(paths({ '1': node('LoadImageMask'), '2': node('LoadImageOutput') })).toEqual([])
   })
 
-  describe('comfyTakesReferences', () => {
-    const customWorkflow = { workflow: { '1': node('LoadImage') } }
+  it('reads the node id, title and saved image of each LoadImage', () => {
+    expect(
+      loadImageInputs({
+        '1': { ...node('LoadImage', 'a.png'), _meta: { title: 'Pose' } },
+        '2': { class_type: 'LoadImage', inputs: { image: ['9', 0] } },
+      }),
+    ).toEqual([
+      { nodeId: '1', path: '1.inputs.image', title: 'Pose', image: 'a.png' },
+      { nodeId: '2', path: '2.inputs.image', title: 'LoadImage', image: '' },
+    ])
+  })
 
-    it('is true for a custom workflow with a LoadImage node', () => {
-      expect(comfyTakesReferences({ mode: ComfyMode.CustomWorkflow, customWorkflow })).toBe(true)
-    })
-
-    it('is false for a custom workflow without one', () => {
+  describe('suggestReferenceInputs', () => {
+    it('selects a LoadImage that nothing consumes, or that feeds an unknown node', () => {
       expect(
-        comfyTakesReferences({
-          mode: ComfyMode.CustomWorkflow,
-          customWorkflow: { workflow: { '1': node('SaveImage') } },
+        suggestReferenceInputs({
+          '1': node('LoadImage'),
+          '2': node('LoadImage'),
+          '3': consumer('SomeCustomNode', { picture: ['2', 0] }),
         }),
-      ).toBe(false)
+      ).toEqual(['1.inputs.image', '2.inputs.image'])
     })
 
-    it('is false for the built-in workflows, even with a workflow saved', () => {
-      expect(comfyTakesReferences({ mode: ComfyMode.BasicTxt2Img, customWorkflow })).toBe(false)
-      expect(comfyTakesReferences(undefined)).toBe(false)
+    it('selects the known reference consumers, through a scale and a VAE encode', () => {
+      expect(
+        suggestReferenceInputs({
+          '1': node('LoadImage'),
+          '2': node('LoadImage'),
+          '3': node('LoadImage'),
+          '10': consumer('FluxKontextImageScale', { image: ['1', 0] }),
+          '11': consumer('VAEEncode', { pixels: ['10', 0] }),
+          '12': consumer('ReferenceLatent', { latent: ['11', 0] }),
+          '13': consumer('TextEncodeQwenImageEditPlus', { image1: ['2', 0] }),
+          '14': consumer('FluxKontextMultiReferenceLatentMethod', { image: ['3', 0] }),
+        }),
+      ).toEqual(['1.inputs.image', '2.inputs.image', '3.inputs.image'])
+    })
+
+    it('de-selects ControlNet, IP-Adapter and preprocessor inputs', () => {
+      expect(
+        suggestReferenceInputs({
+          '1': node('LoadImage'),
+          '2': node('LoadImage'),
+          '3': node('LoadImage'),
+          '4': node('LoadImage'),
+          '10': consumer('ControlNetApplyAdvanced', { image: ['1', 0] }),
+          '11': consumer('IPAdapterAdvanced', { image: ['2', 0] }),
+          '12': consumer('DWPreprocessor', { image: ['3', 0] }),
+          '13': consumer('ControlNetApplyAdvanced', { image: ['12', 0] }),
+        }),
+      ).toEqual(['4.inputs.image'])
+    })
+
+    it('de-selects a path that reaches a mask or inpaint node', () => {
+      expect(
+        suggestReferenceInputs({
+          '1': node('LoadImage'),
+          '2': node('LoadImage'),
+          '10': consumer('ImageToMask', { image: ['1', 0] }),
+          '11': consumer('VAEEncodeForInpaint', { pixels: ['2', 0] }),
+        }),
+      ).toEqual([])
+    })
+
+    it('de-selects an image encoded into a sampler canvas, but not one encoded for a reference', () => {
+      expect(
+        suggestReferenceInputs({
+          '1': node('LoadImage'),
+          '2': node('LoadImage'),
+          '10': consumer('VAEEncode', { pixels: ['1', 0] }),
+          '11': consumer('LatentUpscaleBy', { samples: ['10', 0] }),
+          '12': consumer('KSampler', { latent_image: ['11', 0] }),
+          '13': consumer('VAEEncode', { pixels: ['2', 0] }),
+          '14': consumer('ReferenceLatent', { latent: ['13', 0] }),
+        }),
+      ).toEqual(['2.inputs.image'])
+    })
+
+    it('keeps an input that feeds both a reference consumer and a sampler canvas', () => {
+      expect(
+        suggestReferenceInputs({
+          '1': node('LoadImage'),
+          '10': consumer('ImageScaleToTotalPixels', { image: ['1', 0] }),
+          '11': consumer('TextEncodeQwenImageEdit', { image: ['10', 0] }),
+          '12': consumer('VAEEncode', { pixels: ['10', 0] }),
+          '13': consumer('KSampler', { latent_image: ['12', 0] }),
+        }),
+      ).toEqual(['1.inputs.image'])
+    })
+
+    it('ignores the mask output of a LoadImage node', () => {
+      expect(
+        suggestReferenceInputs({
+          '1': node('LoadImage'),
+          '10': consumer('SolidMask', { source: ['1', 1] }),
+          '11': consumer('GrowMask', { mask: ['1', 1] }),
+        }),
+      ).toEqual(['1.inputs.image'])
+    })
+
+    it('terminates on a cycle', () => {
+      expect(
+        suggestReferenceInputs({
+          '1': node('LoadImage'),
+          '10': consumer('ImageScale', { image: ['1', 0], other: ['11', 0] }),
+          '11': consumer('ImageScale', { image: ['10', 0] }),
+        }),
+      ).toEqual(['1.inputs.image'])
+    })
+  })
+
+  describe('comfyReferenceLimit', () => {
+    const workflow = {
+      '1': node('LoadImage'),
+      '2': node('LoadImage'),
+      '10': consumer('ControlNetApplyAdvanced', { image: ['2', 0] }),
+    }
+
+    const limitOf = (customWorkflow: object, mode = ComfyMode.CustomWorkflow) =>
+      comfyReferenceLimit({ mode, customWorkflow })
+
+    it('counts the suggested inputs of a custom workflow', () => {
+      expect(limitOf({ workflow })).toBe(1)
+    })
+
+    it('counts the profile selection instead when it has one', () => {
+      expect(limitOf({ workflow, referenceInputPaths: ['1.inputs.image', '2.inputs.image'] })).toBe(
+        2,
+      )
+      expect(limitOf({ workflow, referenceInputPaths: [] })).toBe(0)
+    })
+
+    it('is 0 for a custom workflow without a LoadImage node', () => {
+      expect(limitOf({ workflow: { '1': node('SaveImage') } })).toBe(0)
+    })
+
+    it('is 0 for the built-in workflows, even with a workflow saved, and for a malformed one', () => {
+      expect(limitOf({ workflow }, ComfyMode.BasicTxt2Img)).toBe(0)
+      expect(comfyReferenceLimit(undefined)).toBe(0)
+      expect(limitOf({})).toBe(0)
+      expect(comfyReferenceLimit({ mode: ComfyMode.CustomWorkflow })).toBe(0)
     })
   })
 })
