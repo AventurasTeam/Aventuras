@@ -66,6 +66,7 @@ export const characterStateSchema = z.object({
 
 export const locationStateSchema = z.object({
   parent_location_id: z.string().nullable(),
+  unplaced: z.literal(true).optional(),
   condition: z.string().max(500).optional(),
 })
 
@@ -102,6 +103,7 @@ export const entityStateColumnSchema = z.object({
   faction_id: z.string().nullable(),
   lastSeenAt: lastSeenAtSchema.nullable(),
   parent_location_id: z.string().nullable(),
+  unplaced: z.literal(true).optional(),
   condition: z.string().optional(),
   at_location_id: z.string().nullable(),
   standing: z.string().optional(),

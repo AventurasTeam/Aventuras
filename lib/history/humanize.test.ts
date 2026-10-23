@@ -80,6 +80,7 @@ describe('field labels', () => {
       'state.at_location_id',
       'state.current_location_id',
       'state.parent_location_id',
+      'state.unplaced',
     ])
   })
 })

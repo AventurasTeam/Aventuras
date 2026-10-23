@@ -22,6 +22,8 @@ export type CharacterState = {
 
 export type LocationState = {
   parent_location_id: EntityId | null
+  /** Known to exist, not where; only with a null parent (data-model.md → LocationState shape). */
+  unplaced?: true
   condition?: string
 }
 

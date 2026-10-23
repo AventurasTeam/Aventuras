@@ -111,6 +111,8 @@ export type {
 } from './entity-views'
 export { placeModes } from './place-modes'
 export type { PlaceModes } from './place-modes'
+export { isUnplaced, placementOf, samePlacement, withPlacement } from './placement'
+export type { PlacePlacement } from './placement'
 export {
   mergePlaceRefusal,
   PLACE_REFUSAL,

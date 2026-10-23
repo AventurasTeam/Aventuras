@@ -46,6 +46,8 @@ const ENTITY: Labels = {
   'state.faction_id': () => t('history:field.faction'),
   'state.lastSeenAt': () => t('history:field.lastSeen'),
   'state.parent_location_id': () => t('history:field.parentLocation'),
+  // The parent and the flag are one field (data-model.md → LocationState shape).
+  'state.unplaced': () => t('history:field.parentLocation'),
   'state.condition': () => t('history:field.condition'),
   'state.at_location_id': () => t('history:field.atLocation'),
   'state.standing': () => t('history:field.standing'),
