@@ -1,4 +1,5 @@
 import { Star } from 'lucide-react-native'
+import { useState } from 'react'
 import { View } from 'react-native'
 
 import { EmbedWindowTextarea } from '@/components/compounds/embed-window-textarea'
@@ -128,8 +129,9 @@ type PickFromCastProps = {
   /**
    * Gives the picker an Unknown option, labelled so, for a row whose null `value` can mean "not
    * known" (an import's unresolved parent). It is offered only while `unknown`, selected then, and
-   * never reaches `onChange`; the mode is resolved as if it were always there, so the pick that
-   * removes it can't change the control's shape.
+   * never reaches `onChange`. From the first render it is offered, the mode counts its slot for
+   * the life of the picker, so the pick that removes it can't change the control's shape; a row
+   * that is never unknown keeps `Select`'s own density rule.
    */
   unknownLabel?: string
   unknown?: boolean
@@ -146,6 +148,9 @@ function PickFromCast({
   unknown = false,
 }: PickFromCastProps) {
   const tier = useTier()
+  const offered = unknownLabel != null && unknown && value == null
+  const [reserveUnknown, setReserveUnknown] = useState(offered)
+  if (offered && !reserveUnknown) setReserveUnknown(true)
   if (candidates.length === 0) {
     return (
       <FormRow label={label}>
@@ -155,7 +160,6 @@ function PickFromCast({
       </FormRow>
     )
   }
-  const offered = unknownLabel != null && unknown && value == null
   const unknownOption: SelectOption | null =
     unknownLabel == null ? null : { value: UNKNOWN_CAST_REF, label: unknownLabel }
   const options: SelectOption[] = [
@@ -164,7 +168,7 @@ function PickFromCast({
     ...candidates.map((c) => ({ value: c.id, label: c.name.trim() || t('wizard:cast.unnamed') })),
   ]
   const mode = resolveMode(
-    unknownOption == null || offered ? options : [unknownOption, ...options],
+    unknownOption == null || !reserveUnknown || offered ? options : [unknownOption, ...options],
     undefined,
     tier,
   )
@@ -174,7 +178,10 @@ function PickFromCast({
         options={options}
         mode={mode}
         value={offered ? UNKNOWN_CAST_REF : (value ?? NULL_CAST_REF)}
-        onValueChange={(next) => onChange(next === NULL_CAST_REF ? null : next)}
+        onValueChange={(next) => {
+          if (next === UNKNOWN_CAST_REF) return
+          onChange(next === NULL_CAST_REF ? null : next)
+        }}
         label={label}
       />
     </FormRow>
