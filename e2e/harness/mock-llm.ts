@@ -214,6 +214,11 @@ function promptText(body: Record<string, unknown>): string {
     .join('\n')
 }
 
+/** A recorded request's prompt as the mock matched it: every message's text, in order. */
+export function promptOf(request: MockRequest): string {
+  return promptText(request.body)
+}
+
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let data = ''

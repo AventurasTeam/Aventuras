@@ -1,16 +1,20 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
+import { goToWorld, openStory } from '../flows/navigation'
+import { takeTurn } from '../flows/turn'
 import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
-import { EXAMPLES, startMockLlm, type MockLlm } from '../harness/mock-llm'
+import { EXAMPLES, promptOf, startMockLlm, type MockLlm } from '../harness/mock-llm'
 import {
   createSeededUserDataDir,
   enableDiagnostics,
   parkClassifierWatermarkAtLastReply,
   removeUserDataDir,
+  retireSeededCharacter,
   seedClassifierBacklog,
+  seedUnplacedPlace,
   setClassifierCadence,
   setClassifierMentionedPlaces,
   setProviderEndpoint,
@@ -20,8 +24,10 @@ import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { memoryBanner } from '../locators/memory-banner'
 import { reader, worldStateCountOf } from '../locators/reader'
+import { saveSession } from '../locators/save-session'
 import { storyLeave } from '../locators/story-leave'
 import { toast } from '../locators/toast'
+import { world } from '../locators/world'
 
 // Unit tests drive a turn's commit chaining its pass; only a running app runs the real pass, so
 // read its writes back through the DB bridge (docs/testing.md -> Selector strategy, tier 1).
@@ -1475,5 +1481,256 @@ test.describe('periodic classifier — an owed pass across a restart', () => {
     await expect
       .poll(async () => (await passOutcomes()).slice(outcomesBefore), { timeout: 20_000 })
       .toEqual(['completed', 'completed'])
+  })
+})
+
+// The pass's prompt lists each row as `- [<placeholder>] <name>`, nested places indented
+// (lib/prompts/bundled/periodic-classifier.ts). A reply naming listed rows is written once the
+// held call shows which placeholder each row got.
+function placeholderIn(prompt: string, name: string): string {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = new RegExp(`^\\s*- \\[([a-z]+\\d+)\\] ${escaped}(?= |$)`, 'm').exec(prompt)
+  if (match === null) throw new Error(`the pass's prompt lists no "${name}"`)
+  return match[1]
+}
+
+// classifier.md → What the classifier writes: only a running app takes a reply through the real
+// schema, the planner and each narrow action to the rows. The planner's rules are unit-tested
+// (plan.test.ts); this pins that every write lands, and that a user's edit after the prose a write
+// rests on stands (cadence.md → User edits and classifier writes).
+test.describe('periodic classifier — the writer map', () => {
+  let app: LaunchedApp
+  let mock: MockLlm
+  let userDataDir: string | undefined
+
+  const HERO_BRANCH = 'br_hero_main'
+  const SALTMERE = 'E2E Saltmere'
+  const FAR_SHORE = 'E2E Far Shore'
+  const REVEAL = 'E2E The broker gives his own name'
+  const NEW_THREAD = 'E2E Learn who Corvin Vale answers to'
+  const USER_STANDING = 'E2E-USER uneasy allies'
+  const OLD_PROSE_STANDING = 'E2E-PASS sworn to the Syndicate'
+  const SYNDICATE_STANDING = 'E2E-PASS outlawed by the Watch'
+
+  test.beforeAll(async () => {
+    test.setTimeout(180_000)
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    // The fixture has no unplaced place and no retired character.
+    seedUnplacedPlace(seeded.dbPath, HERO_BRANCH, SALTMERE)
+    seedUnplacedPlace(seeded.dbPath, HERO_BRANCH, FAR_SHORE)
+    retireSeededCharacter(seeded.dbPath, HERO_BRANCH, 'Mira', 'left the Hollow')
+    await installEmbedderModel(userDataDir)
+    mock = await startMockLlm()
+    setProviderEndpoint(seeded.dbPath, mock.url)
+    // Two turns' four entries bring the pass due, so a user edit can fall between its turns.
+    setClassifierCadence(seeded.dbPath, 'story_hero', 4)
+    app = await launchApp({ userDataDir, cleanupUserData: true })
+  })
+
+  test.afterAll(async () => {
+    await app?.close()
+    await mock?.close()
+    removeUserDataDir(userDataDir)
+  })
+
+  const { branchId, pollEntryId, passOutcomes, runOutcome, passCalls, heldPass } = passProbe(
+    () => app.window,
+    () => mock,
+  )
+
+  async function idOf(table: 'entities' | 'threads' | 'happenings', column: string, value: string) {
+    const rows = await queryApp(
+      app.window,
+      `SELECT id FROM ${table} WHERE branch_id = ? AND ${column} = ?`,
+      [HERO_BRANCH, value],
+    )
+    expect(rows, `${table} ${value}`).toHaveLength(1)
+    return rows[0][0] as string
+  }
+
+  async function entityOf(id: string) {
+    const [[name, keywords, status, retiredReason, state, flag, partner, reason]] = await queryApp(
+      app.window,
+      `SELECT name, keywords, status, retired_reason, state, name_collision_flag,
+              name_collision_partner_id, name_collision_reason
+       FROM entities WHERE id = ?`,
+      [id],
+    )
+    return {
+      name,
+      keywords: JSON.parse(keywords as string) as string[],
+      status,
+      retiredReason,
+      state: JSON.parse(state as string) as Record<string, unknown>,
+      flag,
+      partner,
+      reason,
+    }
+  }
+
+  test('a pass makes each write the contract gives it, and a later user edit stands', async () => {
+    test.setTimeout(150_000)
+    const page = app.window
+    await openStory(page, 'The Veilstone Courier')
+    expect(await branchId()).toBe(HERO_BRANCH)
+    const vorne = await idOf('entities', 'name', 'Vorne')
+    const sage = await idOf('entities', 'name', 'The Ashen Sage')
+    const kael = await idOf('entities', 'name', 'Kael')
+    const mira = await idOf('entities', 'name', 'Mira')
+    const hollow = await idOf('entities', 'name', 'Veil’s Hollow')
+    const saltmere = await idOf('entities', 'name', SALTMERE)
+    const farShore = await idOf('entities', 'name', FAR_SHORE)
+    const watch = await idOf('entities', 'name', 'The City Watch')
+    const syndicate = await idOf('entities', 'name', 'The Veil Syndicate')
+    const amulet = await idOf('threads', 'title', 'What the amulet wants')
+    const betrayal = await idOf('happenings', 'title', 'The old betrayal')
+
+    mock.setNarrative('E2E-WRITER-R1 The broker waits out the rain under the Watch-house eaves.')
+    await takeTurn(page, 'E2E-WRITER-U1 I watch the broker.', 'E2E-WRITER-R1')
+    // Below the cadence: no pass has read turn 1 when the user edits after it.
+    expect(await passOutcomes()).toEqual([])
+
+    await goToWorld(page)
+    await world.categoryTrigger(page).click()
+    await world.categoryOption(page, 'faction').click()
+    await world.row(page, 'The City Watch').click()
+    await world.tab(page, 'identity').click()
+    await world.standingField(page).fill(USER_STANDING)
+    await saveSession.saveBarSave(page).click()
+    await expect(saveSession.saveBarSave(page)).toHaveCount(0)
+    expect((await entityOf(watch)).state.standing).toBe(USER_STANDING)
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToReaderRow(page).click()
+    await page.waitForURL(/\/reader-composer\//)
+
+    // Turn 2 brings the pass due. Its call is held until the reply can name the prompt's ids.
+    mock.holdNextStructured('periodic-classifier')
+    const calls = passCalls()
+    mock.setNarrative('E2E-WRITER-R2 Mira walks back in from the rain as the broker names himself.')
+    await takeTurn(page, 'E2E-WRITER-U2 I ask the broker his real name.', 'E2E-WRITER-R2')
+    const pass = await heldPass(calls)
+    const turn2Reply = await pollEntryId(HERO_BRANCH, 'E2E-WRITER-R2')
+    const held = mock.requests.filter((r) => r.agent === 'periodic-classifier').at(-1)
+    if (held === undefined) throw new Error('the held pass call was not recorded')
+    const prompt = promptOf(held)
+    const ph = (name: string) => placeholderIn(prompt, name)
+
+    // t1..t4: turn 1's action and reply, then turn 2's.
+    mock.setStructured('periodic-classifier', {
+      happenings: [
+        {
+          title: REVEAL,
+          description: 'Vorne admits he was born Corvin Vale.',
+          category: 'revelation',
+          icon: 'mask',
+          sourceTurn: 't4',
+          involvements: [{ ref: ph('Vorne'), role: 'actor' }],
+          awareness: [],
+        },
+      ],
+      relationships: [],
+      newCharacters: [],
+      newFactions: [],
+      memberships: [],
+      aliases: [],
+      statusFlips: [{ ref: ph('Mira'), to: 'active', sourceTurn: 't4' }],
+      renames: [
+        { ref: ph('Vorne'), name: 'Corvin Vale', sourceTurn: 't4' },
+        // Kael holds that name: a clash, so a keyword and a flag instead of a rename.
+        { ref: ph('The Ashen Sage'), name: 'Kael', sourceTurn: 't4' },
+      ],
+      placements: [
+        { ref: ph(SALTMERE), parent: ph('Veil’s Hollow'), sourceTurn: 't4' },
+        { ref: ph(FAR_SHORE), parent: 'top-level', sourceTurn: 't4' },
+      ],
+      standings: [
+        // Turn 1's reply: older than the user's edit, so the edit stands.
+        { ref: ph('The City Watch'), standing: OLD_PROSE_STANDING, sourceTurn: 't2' },
+        { ref: ph('The Veil Syndicate'), standing: SYNDICATE_STANDING, sourceTurn: 't4' },
+      ],
+      newThreads: [
+        {
+          title: NEW_THREAD,
+          description: 'Someone above Vorne holds his leash.',
+          category: 'mystery',
+          icon: 'key',
+          status: 'active',
+          sourceTurn: 't4',
+        },
+      ],
+      threadStatuses: [
+        { thread: ph('What the amulet wants'), status: 'resolved', sourceTurn: 't4' },
+      ],
+      knownAwareness: [
+        {
+          happening: ph('The old betrayal'),
+          ref: ph('Vorne'),
+          source: 'told by Kael',
+          severity: 0.7,
+          learnedAtTurn: 't4',
+        },
+      ],
+    })
+    mock.releaseStructured()
+    await expect.poll(() => runOutcome(pass), { timeout: 30_000 }).toBe('completed')
+
+    // Names: a reveal renames, keeping the old name; a taken name is a keyword and a flag.
+    expect(await entityOf(vorne)).toMatchObject({
+      name: 'Corvin Vale',
+      keywords: ['the broker', 'Vorne'],
+    })
+    expect(await entityOf(sage)).toMatchObject({
+      name: 'The Ashen Sage',
+      keywords: ['the mentor', 'Kael'],
+      flag: 1,
+      partner: kael,
+      reason: 'name-taken',
+    })
+    // Where a place sits: placed under a parent, and marked top-level.
+    expect((await entityOf(saltmere)).state).toEqual({ parent_location_id: hollow })
+    expect((await entityOf(farShore)).state).toEqual({ parent_location_id: null })
+    // A standing on newer prose lands; the user's edit after older prose stands.
+    expect((await entityOf(syndicate)).state.standing).toBe(SYNDICATE_STANDING)
+    expect((await entityOf(watch)).state.standing).toBe(USER_STANDING)
+    expect(
+      await queryApp(page, `SELECT COUNT(*) FROM deltas WHERE action_id = ? AND target_id = ?`, [
+        pass,
+        watch,
+      ]),
+    ).toEqual([[0]])
+    // A return in the scene now.
+    expect(await entityOf(mira)).toMatchObject({ status: 'active', retiredReason: null })
+    // Threads: a new one triggered on its turn, a listed one resolved there.
+    expect(
+      await queryApp(
+        page,
+        `SELECT status, category, icon, injection_mode, triggered_at_entry_id, resolved_at_entry_id
+         FROM threads WHERE branch_id = ? AND title = ?`,
+        [HERO_BRANCH, NEW_THREAD],
+      ),
+    ).toEqual([['active', 'mystery', 'key', 'auto', turn2Reply, null]])
+    expect(
+      await queryApp(page, `SELECT status, resolved_at_entry_id FROM threads WHERE id = ?`, [
+        amulet,
+      ]),
+    ).toEqual([['resolved', turn2Reply]])
+    // A happening's category and icon, and awareness of a listed happening.
+    expect(
+      await queryApp(
+        page,
+        `SELECT category, icon FROM happenings WHERE branch_id = ? AND title = ?`,
+        [HERO_BRANCH, REVEAL],
+      ),
+    ).toEqual([['revelation', 'mask']])
+    const [awareness] = await queryApp(
+      page,
+      `SELECT source, decay_resistance, learned_at_entry_id FROM happening_awareness
+       WHERE branch_id = ? AND character_id = ? AND happening_id = ?`,
+      [HERO_BRANCH, vorne, betrayal],
+    )
+    expect(awareness?.[0]).toBe('told by Kael')
+    expect(awareness?.[1]).toBeCloseTo(0.7)
+    expect(awareness?.[2]).toBe(turn2Reply)
   })
 })
