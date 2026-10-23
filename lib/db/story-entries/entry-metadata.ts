@@ -2,7 +2,13 @@ import { z } from 'zod'
 
 import { VISUAL_CATEGORIES } from '../entities/entity-state-schema'
 
-const createEmission = { handle: z.string(), name: z.string(), description: z.string() }
+// `condition` as emitted, before the bound; a reused place's isn't written.
+const createEmission = {
+  handle: z.string(),
+  name: z.string(),
+  description: z.string(),
+  condition: z.string().optional(),
+}
 // A kept parent's id, 'top' for top-level, as emitted when dropped; absent when unplaced.
 const locationEmission = { ...createEmission, parent: z.string().optional() }
 
@@ -61,6 +67,7 @@ export const entryMetadataSchema = z.object({
       visualChanges: z
         .array(z.object({ id: z.string(), type: z.enum(VISUAL_CATEGORIES), text: z.string() }))
         .optional(),
+      conditions: z.array(z.object({ id: z.string(), text: z.string() })).optional(),
       transfers: z
         .object({
           items: z.array(
@@ -79,6 +86,13 @@ export const entryMetadataSchema = z.object({
               from: z.string().optional(),
             }),
           ),
+          // Each item put down, where it landed: null when the scene had no location. Optional,
+          // as rows written before drops lack it.
+          drops: z
+            .array(
+              z.object({ id: z.string(), from: z.string().optional(), at: z.string().nullable() }),
+            )
+            .optional(),
         })
         .optional(),
       // Each create as emitted, with what became of it; the fields above carry its resolved

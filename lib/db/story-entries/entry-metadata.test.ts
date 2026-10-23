@@ -272,3 +272,74 @@ describe('systemFailure', () => {
     expect(parsed.systemFailure).not.toHaveProperty('pass')
   })
 })
+
+// data-model.md → Entry metadata shape: conditions, drops where they landed, a create's condition.
+describe('stateReport conditions and drops', () => {
+  const base = { sceneEntities: [], currentLocationId: null, worldTime: 0 }
+  const stateReport = {
+    layer: 'piggyback_tagged_block' as const,
+    conditions: [{ id: 'loc_a', text: 'burned to the ground' }],
+    transfers: {
+      items: [{ id: 'item_a', slot: 'inventory' as const, to: 'char_a' }],
+      stackables: [],
+      drops: [
+        { id: 'item_b', from: 'char_a', at: 'loc_a' },
+        { id: 'item_c', at: null },
+      ],
+    },
+    newLocations: [
+      {
+        handle: 'new:a',
+        name: 'A',
+        description: '',
+        condition: 'scorched',
+        outcome: 'created' as const,
+        id: 'loc_new',
+      },
+    ],
+    newItems: [
+      {
+        handle: 'new:k',
+        name: 'key',
+        description: '',
+        condition: 'bent',
+        outcome: 'dropped' as const,
+      },
+    ],
+  }
+
+  it('round-trips conditions, drops and a create condition', () => {
+    expect(entryMetadataSchema.parse({ ...base, stateReport })).toEqual({ ...base, stateReport })
+  })
+
+  it('reads a stored report from before drops', () => {
+    const before = {
+      layer: 'piggyback_tagged_block' as const,
+      transfers: { items: [], stackables: [] },
+    }
+    expect(entryMetadataSchema.parse({ ...base, stateReport: before }).stateReport).toEqual(before)
+  })
+
+  // Null, never absent: the panel tells "landed nowhere" from a record that lost its place.
+  it('rejects a drop with no place', () => {
+    const report = {
+      layer: 'piggyback_tagged_block',
+      transfers: { items: [], stackables: [], drops: [{ id: 'item_b' }] },
+    }
+    expect(entryMetadataSchema.safeParse({ ...base, stateReport: report }).success).toBe(false)
+  })
+
+  // The schema is the metadata undo encoder: a key it lacks would outlive the undo.
+  it("undoes a fallback's conditions and drops to the report before it", () => {
+    const current = {
+      ...base,
+      stateReport: {
+        layer: 'piggyback_tagged_block' as const,
+        transfers: { items: [], stackables: [] },
+      },
+    }
+    const next = { ...base, stateReport: { ...stateReport, layer: 'per_turn_classifier' as const } }
+    const undo = computeUndoPayload(entryMetadataSchema, current, next)
+    expect(applyUndoPayload(entryMetadataSchema, next, undo)).toEqual(current)
+  })
+})

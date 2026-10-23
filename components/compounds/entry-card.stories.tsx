@@ -1235,6 +1235,90 @@ export const WorldStateReported: StoryT = {
   },
 }
 
+const ITEM_LANTERN = 'item_00000000-0000-4000-8000-0000000000c9'
+
+// entry-card.md → Panel anatomy: a condition with its text, an item put down at its place, or with
+// no place when the scene had none; each beside its kin.
+export const WorldStateConditionsAndDrops: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...reportedProps,
+    entityNames: [...entityNames, { id: ITEM_LANTERN, name: 'tin lantern' }],
+    stateReport: {
+      ...reportedProps.stateReport,
+      conditions: [{ id: LOC_A, text: 'flooded to the knee since the dyke broke' }],
+      transfers: {
+        ...reportedProps.stateReport.transfers,
+        drops: [
+          { id: ITEM_A, from: CHAR_B, at: LOC_A },
+          { id: ITEM_LANTERN, at: null },
+        ],
+      },
+    },
+  },
+  play: async () => {
+    await openPanel()
+    const visual = screen.getByText('cloak now muddied to the waist')
+    const condition = screen.getByText(
+      'Condition: Ashfen Marshes — flooded to the knee since the dyke broke',
+    )
+    const transfer = screen.getByText('Sword of Dawn → Aria (from Corin)')
+    const putDown = screen.getByText('Put down: Sword of Dawn at Ashfen Marshes')
+    const stackable = screen.getByText('gold ×50 → Aria (from Corin)')
+    expect(condition).toBeVisible()
+    expect(putDown).toBeVisible()
+    expect(screen.getByText('Put down: tin lantern')).toBeVisible()
+    expect(visual.compareDocumentPosition(condition)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(condition.compareDocumentPosition(transfer)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(transfer.compareDocumentPosition(putDown)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(putDown.compareDocumentPosition(stackable)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+  },
+}
+
+// A condition alone is a change this turn: the group needs nothing else beside it.
+export const WorldStateConditionOnly: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'piggyback_tagged_block',
+      conditions: [{ id: LOC_A, text: 'flooded to the knee' }],
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText('Changes this turn')).toBeVisible()
+    expect(screen.getByText('Condition: Ashfen Marshes — flooded to the knee')).toBeVisible()
+  },
+}
+
+// So is a drop alone.
+export const WorldStateDropOnly: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'piggyback_tagged_block',
+      transfers: { items: [], stackables: [], drops: [{ id: ITEM_A, from: CHAR_A, at: LOC_A }] },
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText('Changes this turn')).toBeVisible()
+    expect(screen.getByText('Put down: Sword of Dawn at Ashfen Marshes')).toBeVisible()
+  },
+}
+
 /** Empty `retrievalQueries` (classifier emitted none) and `undefined` (no metadata) must both
  *  render no group — a labelled group with no rows beneath it is a visible defect. */
 export const WorldStateEmptyRetrievalQueries: StoryT = {

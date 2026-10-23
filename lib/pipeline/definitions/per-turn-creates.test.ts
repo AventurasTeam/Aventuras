@@ -1617,6 +1617,55 @@ describe("planTurnCreates — a create's condition", () => {
       keptLength: 499,
     })
   })
+
+  it("reports each create's condition as emitted, a reused or dropped one's too", async () => {
+    const plan = await runPlanner(
+      {
+        sceneEntities: [HERO],
+        newLocations: [
+          {
+            handle: 'new:market',
+            name: 'The Drowned Market',
+            description: 'mud',
+            parent: PORT,
+            condition: 'half under water',
+          },
+        ],
+        currentLocation: 'new:market',
+        newItems: [
+          {
+            handle: 'new:key',
+            name: 'rusted key',
+            description: 'an iron key',
+            condition: 'bent at the bit',
+          },
+          { handle: 'new:coin', name: 'odd coin', description: 'a coin', condition: 'tarnished' },
+        ],
+        transfers: {
+          items: [{ id: 'new:key', to: HERO, slot: 'inventory', seq: 0 }],
+          stackables: [],
+          drops: [],
+        },
+      },
+      { entities: world(market('active')) },
+    )
+    expect(plan.report.newLocations).toEqual([
+      expect.objectContaining({
+        handle: 'new:market',
+        outcome: 'reused',
+        id: MARKET,
+        condition: 'half under water',
+      }),
+    ])
+    expect(plan.report.newItems).toEqual([
+      expect.objectContaining({
+        handle: 'new:key',
+        outcome: 'created',
+        condition: 'bent at the bit',
+      }),
+      expect.objectContaining({ handle: 'new:coin', outcome: 'dropped', condition: 'tarnished' }),
+    ])
+  })
 })
 
 describe('planner input', () => {

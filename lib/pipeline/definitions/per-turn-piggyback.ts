@@ -284,17 +284,20 @@ function orderedTransfers(transfers: NonNullable<FallbackReply['transfers']>): P
   }
 }
 
-// The narrative fold applies its visual changes and transfers whenever it fires, parse failure or
-// not, so those rows are already written: a field this reply leaves out keeps the fold's record,
-// copied onto the report and never read back into a block.
+// The narrative fold applies its visual changes, conditions and transfers whenever it fires, parse
+// failure or not, so those rows are already written: a field this reply leaves out keeps the fold's
+// record, its drops where they landed, copied onto the report and never read back into a block.
 function withFoldChanges(
   report: StateReport | undefined,
   block: PlannedStateBlock,
   prior: StateReport | undefined,
 ): StateReport | undefined {
-  const carried: Pick<StateReport, 'visualChanges' | 'transfers'> = {
+  const carried: Pick<StateReport, 'visualChanges' | 'conditions' | 'transfers'> = {
     ...(block.visualChanges === undefined && prior?.visualChanges !== undefined
       ? { visualChanges: prior.visualChanges }
+      : {}),
+    ...(block.conditions === undefined && prior?.conditions !== undefined
+      ? { conditions: prior.conditions }
       : {}),
     ...(block.transfers === undefined && prior?.transfers !== undefined
       ? { transfers: prior.transfers }

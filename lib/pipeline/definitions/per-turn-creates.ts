@@ -398,11 +398,13 @@ function locationReport(
   fate: LocationFate | undefined,
 ): NewLocationReport {
   const { handle, name, description } = emission
+  const condition = emission.condition !== undefined ? { condition: emission.condition } : {}
   if (fate === undefined) {
     return {
       handle,
       name,
       description,
+      ...condition,
       ...(emission.parent !== undefined ? { parent: emission.parent } : {}),
       outcome: 'dropped',
     }
@@ -413,6 +415,7 @@ function locationReport(
     handle,
     name,
     description,
+    ...condition,
     ...(parent !== undefined ? { parent } : {}),
     outcome: fate.outcome,
     id: fate.id,
@@ -422,9 +425,10 @@ function locationReport(
 
 function itemReport(emission: NewItemEmission, id: string | undefined): NewItemReport {
   const { handle, name, description } = emission
+  const condition = emission.condition !== undefined ? { condition: emission.condition } : {}
   return id === undefined
-    ? { handle, name, description, outcome: 'dropped' }
-    : { handle, name, description, outcome: 'created', id }
+    ? { handle, name, description, ...condition, outcome: 'dropped' }
+    : { handle, name, description, ...condition, outcome: 'created', id }
 }
 
 /**

@@ -3431,6 +3431,49 @@ describe('per-turn-piggyback', () => {
           { branchId: 'b1', id: OLD_KEY, atLocationId: TOWN },
         ])
       })
+
+      it('reports its conditions and where its drops landed', async () => {
+        seedFallbackTurn([
+          keyHeld(),
+          worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }),
+          keyRow(),
+        ])
+        const { events } = await runFallback(
+          fallbackClassifierSchema.parse({
+            sceneEntities: ['c1'],
+            worldTimeDelta: 0,
+            conditions: [{ id: 'i1', text: 'bent at the bit' }],
+            transfers: { items: [], stackables: [], drops: [{ id: 'i1', from: 'c1' }] },
+          }),
+          { intermediates: { idMap: idMapWithKey() } },
+        )
+        const report = metadataPatch(events).stateReport
+        expect(report?.conditions).toEqual([{ id: OLD_KEY, text: 'bent at the bit' }])
+        expect(report?.transfers).toEqual({
+          items: [],
+          stackables: [],
+          drops: [{ id: OLD_KEY, from: HERO, at: TOWN }],
+        })
+      })
+
+      // The fold applied these before its own parse failed: a reply naming neither keeps the
+      // fold's record of them, each drop where it landed.
+      it("keeps the fold's conditions and drops when the reply reports neither", async () => {
+        const foldReport: NonNullable<EntryMetadata['stateReport']> = {
+          layer: 'piggyback_tagged_block',
+          conditions: [{ id: TOWN, text: 'flooded to the knee' }],
+          transfers: { items: [], stackables: [], drops: [{ id: OLD_KEY, from: HERO, at: TOWN }] },
+          failedFields: [{ field: 'sceneEntities', detail: 'unresolvable placeholder' }],
+        }
+        seedFallbackTurn(fallbackWorld(), foldReport)
+        const { events } = await runFallback(
+          fallbackClassifierSchema.parse({ sceneEntities: ['c1'], worldTimeDelta: 0 }),
+          { intermediates: { piggybackOutcome: { attempted: true, succeeded: false } } },
+        )
+        const report = metadataPatch(events).stateReport
+        expect(report?.conditions).toEqual(foldReport.conditions)
+        expect(report?.transfers).toEqual(foldReport.transfers)
+      })
     })
   })
 

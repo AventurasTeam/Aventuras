@@ -571,11 +571,14 @@ function WorldStatePanel({
   editTriggerRef: RefObject<View | null>
 }) {
   const visualChanges = stateReport?.visualChanges ?? []
+  const conditions = stateReport?.conditions ?? []
   const items = stateReport?.transfers?.items ?? []
+  const drops = stateReport?.transfers?.drops ?? []
   const stackables = stateReport?.transfers?.stackables ?? []
   const createLines = turnCreateLines(stateReport, entityNames)
-  const hasChanges =
-    visualChanges.length + items.length + stackables.length + createLines.length > 0
+  const hasChanges = [visualChanges, conditions, items, drops, stackables, createLines].some(
+    (lines) => lines.length > 0,
+  )
 
   const emittedLocation = stateReport?.currentLocation
   // Read as a recorded fact, not inferred from `emitted !== current`: that inequality
@@ -667,6 +670,14 @@ function WorldStatePanel({
               {c.text}
             </StateLine>
           ))}
+          {conditions.map((c, i) => (
+            <StateLine key={`c${i}`}>
+              {t('reader:entryCard.stateCondition', {
+                name: resolveName(c.id, entityNames),
+                text: c.text,
+              })}
+            </StateLine>
+          ))}
           {items.map((it, i) => (
             <StateLine key={`i${i}`}>
               {it.from != null
@@ -678,6 +689,18 @@ function WorldStatePanel({
                 : t('reader:entryCard.stateItemTransfer', {
                     item: resolveName(it.id, entityNames),
                     to: resolveCounterparty(it.to, entityNames),
+                  })}
+            </StateLine>
+          ))}
+          {drops.map((d, i) => (
+            <StateLine key={`d${i}`}>
+              {d.at != null
+                ? t('reader:entryCard.statePutDown', {
+                    item: resolveName(d.id, entityNames),
+                    place: resolveName(d.at, entityNames),
+                  })
+                : t('reader:entryCard.statePutDownNowhere', {
+                    item: resolveName(d.id, entityNames),
                   })}
             </StateLine>
           ))}
