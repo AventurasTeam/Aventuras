@@ -372,7 +372,7 @@ export async function* periodicClassifierPhase(
   for (const drop of plan.droppedPlaces)
     ctx.log.warn('classifier.create_dropped', { kind: 'location', ...drop })
   for (const drop of plan.parentDrops) ctx.log.warn('classifier.create_parent_dropped', drop)
-  // data-model.md → Authorship contract: every write the planner dropped, under its own key.
+  // The planner's other lists, each under its own key.
   for (const clash of plan.renameClashes) ctx.log.warn('classifier.rename_clash', clash)
   for (const unseen of plan.unseenRefs) ctx.log.warn('classifier.unseen_ref', unseen)
   for (const drop of plan.droppedPlacements) ctx.log.warn('classifier.placement_dropped', drop)
