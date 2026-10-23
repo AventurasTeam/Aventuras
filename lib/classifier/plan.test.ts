@@ -2800,6 +2800,20 @@ describe('renames', () => {
     expect(planned).toEqual([])
   })
 
+  // renameEntity compares names under keyword-term normalization: a case-only change is no reveal.
+  it.each([
+    ['alone', [KAEL]],
+    ['beside a namesake', [KAEL, row('char_kael_twin', 'character', 'Kael', { createdAt: 0 })]],
+  ])('plans nothing for a case-only rename of a row %s', (_label, entities) => {
+    const { planned, renameClashes, fellBackCount } = buildClassifierActions(
+      reply({ renames: [{ ref: 'char_kael', name: ' KAEL ' }] }),
+      deps(entities),
+    )
+    expect(planned).toEqual([])
+    expect(renameClashes).toEqual([])
+    expect(fellBackCount).toBe(0)
+  })
+
   it('adds a name another row of the kind holds as a keyword and flags the pair name-taken', () => {
     const { planned, renameClashes } = buildClassifierActions(
       reply({ renames: [{ ref: 'char_stranger', name: ' kael ', sourceTurn: 't3' }] }),

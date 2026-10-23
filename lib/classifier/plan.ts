@@ -572,8 +572,9 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     }
     const current = nameRows.get(row.id)
     const name = clampEmbedded(rename.name.trim(), MAX_EMBEDDED_NAME)
-    if (current === undefined || name === '' || name === current.name) continue
     const key = normalizeTerm(name)
+    // A case-only change is no reveal, as renameEntity judges it.
+    if (current === undefined || key === '' || key === normalizeTerm(current.name)) continue
     const holders = [...nameRows]
       .filter(([id, r]) => id !== row.id && r.kind === row.kind && normalizeTerm(r.name) === key)
       .sort(([idA, a], [idB, b]) => a.createdAt - b.createdAt || (idA < idB ? -1 : 1))
