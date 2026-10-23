@@ -384,6 +384,28 @@ export const LocationUnknownParentPicksTopLevel: Story = {
   },
 }
 
+/** An import's unmatched parent name reads Unknown too; picking Top level clears the ask. */
+export const LocationUnresolvedParentPicksTopLevel: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([
+      locationRow({ id: 'loc-1', name: 'Lower', unresolvedParentLocationName: 'Mornstone Keep' }),
+      locationRow({ id: 'loc-2', name: 'Upper' }),
+    ])
+  },
+  render: () => <LocationEditorDemo id="loc-1" />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'More options' }))
+    const topLevel = await screen.findByRole('radio', { name: 'Top level' })
+    await expect(topLevel).toHaveAttribute('aria-checked', 'false')
+    await userEvent.click(topLevel)
+    await waitFor(() =>
+      expect((castRowById('loc-1') as WizardLocationDraft).unresolvedParentLocationName).toBe(''),
+    )
+    await expect((castRowById('loc-1') as WizardLocationDraft).parentLocationId).toBeNull()
+  },
+}
+
 export const LocationHasNoOtherLocationsYetShowsEmptyState: Story = {
   beforeEach: () => {
     wizardStore.reset()
