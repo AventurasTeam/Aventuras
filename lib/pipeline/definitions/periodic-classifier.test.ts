@@ -2269,6 +2269,79 @@ describe('periodicClassifierPhase via runPipeline', () => {
     })
   })
 
+  // classifier.md → Names: a rename clash's keyword lands first, and its raise needs the pair to
+  // be namesakes as the rows stand, so a keyword the user removed after the prose leaves no flag.
+  it.each([
+    ['raises the flag over the keyword it lands', [], ['Kael'], [1, 'name-taken']],
+    ['raises no flag once the user removed the keyword', ['Kael'], [], [0, null]],
+  ])('%s', async (_label, seeded, keywords, flag) => {
+    const { db, runInTransaction } = await seedStory()
+    const apply = async (action: PipelineAction, actionId: string) => {
+      const result = await realApplyDeltaAction(
+        { action, actionId, branchId: 'b1' },
+        { db, runInTransaction },
+      )
+      expect(result.status).toBe('ok')
+    }
+    const STRANGER = 'char_33333333-3333-3333-3333-333333333333'
+    const create = (id: string, name: string, terms: string[]): PipelineAction =>
+      ({
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: {
+          entry: {
+            id,
+            branchId: 'b1',
+            kind: 'character',
+            name,
+            description: 'Someone.',
+            keywords: terms,
+            status: 'active',
+            injectionMode: 'auto',
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      }) as never
+    await apply(create(CHAR_KAEL, 'Kael', []), 'act_kael')
+    await apply(create(STRANGER, 'the hooded stranger', seeded), 'act_stranger')
+    await apply(
+      {
+        kind: 'createStoryEntry',
+        source: 'ai_classifier',
+        payload: {
+          entry: {
+            id: 'e1',
+            branchId: 'b1',
+            position: 1,
+            kind: 'ai_reply',
+            content: 'turn 1',
+            createdAt: 1,
+          },
+        },
+      },
+      'act_e1',
+    )
+    if (seeded.length > 0)
+      await apply(
+        {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: { branchId: 'b1', id: STRANGER, patch: { keywords: [] } },
+        },
+        'act_unalias',
+      )
+
+    registerWithReply({ renames: [{ ref: 'c2', name: 'Kael', sourceTurn: 't1' }] })
+    expect(await runOutcome({ storyId: 's1', branchId: 'b1', db, runInTransaction })).toBe(
+      'completed',
+    )
+
+    const [stranger] = await db.select().from(entities).where(eq(entities.id, STRANGER))
+    expect(stranger.keywords).toEqual(keywords)
+    expect([stranger.nameCollisionFlag, stranger.nameCollisionReason]).toEqual(flag)
+  })
+
   it('commits nothing and keeps its pre-run status when interrupted during the model call', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
     await seedStatus(db, FAILED)

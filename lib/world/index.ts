@@ -42,7 +42,13 @@ export {
   renameIssue,
 } from './collision-resolve'
 export type { EntityRename, EntityRenamePlan, RenameIssue } from './collision-resolve'
-export { COLLISION_PAIR_MISS, collisionPairOf, flaggedSideOf, pairSideOf } from './collision-pair'
+export {
+  COLLISION_PAIR_MISS,
+  collisionPairOf,
+  flaggedSideOf,
+  pairSideOf,
+  stillPaired,
+} from './collision-pair'
 export type {
   CollisionPair,
   CollisionPairLookup,

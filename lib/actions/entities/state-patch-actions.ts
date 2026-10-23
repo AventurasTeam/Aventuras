@@ -20,11 +20,13 @@ import {
   PARENT_CHAIN_BROKEN,
   PARENT_CYCLE,
   parentOfLocations,
+  pairSideOf,
   PLACE_REFUSAL,
   placementOf,
   realPlacementOf,
   samePlacement,
   stateOf,
+  stillPaired,
   withPlacement,
 } from '@/lib/world'
 
@@ -639,6 +641,9 @@ export const raiseCollisionFlagHandler: ActionHandler = async (action, branchId,
   if (partnerId === id) return noopRefusal('partner-is-self')
   const partner = await loadCurrent(bid, partnerId, ctx)
   if (partner?.kind !== current.kind) return noopRefusal('partner-not-of-kind')
+  // World's pairing rule on the rows as they stand, a clash's keyword landed; World clears others.
+  if (!stillPaired(reason, pairSideOf(current), pairSideOf(partner)))
+    return noopRefusal('not-namesakes')
   // A user's clear stands against older prose; newer prose may raise the flag again.
   if (
     proseEntryId !== null &&

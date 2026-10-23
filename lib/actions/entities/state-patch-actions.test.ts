@@ -1756,7 +1756,13 @@ describe('renameEntity', () => {
 
 // edge-cases.md → Layer B: a pass whose rename meets a name another row of the kind holds.
 describe('raiseCollisionFlag', () => {
-  const STRANGER: NewEntity = { ...CHAR, status: 'active', name: 'the hooded stranger' }
+  // A clash's keyword lands before its raise, so the pair are namesakes through it.
+  const STRANGER: NewEntity = {
+    ...CHAR,
+    status: 'active',
+    name: 'the hooded stranger',
+    keywords: ['Mira'],
+  }
   const MIRA: NewEntity = { ...CHAR, id: 'char_2', status: 'active', name: 'Mira' }
   const raise = (partnerId = 'char_2', proseEntryId: string | null = REVEAL): PipelineAction => ({
     kind: 'raiseCollisionFlag',
@@ -1869,6 +1875,58 @@ describe('raiseCollisionFlag', () => {
     const { db, ctx } = await setup()
     await seed(ctx, db)
     expect(await apply(ctx, raise('char_1'), 'act_f')).toEqual(noopBecause('partner-is-self'))
+  })
+
+  // world.md → Surfacing: World clears a flag whose pair no longer holds, so none is raised on one.
+  it('no-ops on a pair that share no name, as when the user removed the keyword', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db, { ...STRANGER, keywords: ['the hood'] })
+    expect(await apply(ctx, raise(), 'act_f')).toEqual(noopBecause('not-namesakes'))
+    expect(await flagOf(db)).toEqual([0, null, null])
+  })
+
+  it('raises on a pair whose names alone match', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db, { ...STRANGER, name: 'Mira Vale', keywords: [] })
+    expect((await apply(ctx, raise(), 'act_f')).status).toBe('ok')
+    expect(await flagOf(db)).toEqual([1, 'char_2', 'name-taken'])
+  })
+
+  it.each([
+    ['refuses', 'loc_south', noopBecause('not-namesakes')],
+    ['raises', 'loc_north', { status: 'ok' }],
+  ])('%s a same-parent flag on namesake places under %s', async (_label, parent, outcome) => {
+    const { db, ctx } = await setup()
+    const place = (id: string, name: string, state: Record<string, unknown>): NewEntity => ({
+      ...CHAR,
+      id,
+      kind: 'location',
+      status: 'active',
+      name,
+      keywords: [],
+      state,
+    })
+    await db
+      .insert(entities)
+      .values([
+        place('loc_north', 'the North', { parent_location_id: null }),
+        place('loc_south', 'the South', { parent_location_id: null }),
+        place('loc_varn_2', 'Varn', { parent_location_id: parent }),
+      ])
+    await create(ctx, place('loc_varn', 'Varn', { parent_location_id: 'loc_north' }))
+    await writeRevealProse(ctx)
+    const sameParent: PipelineAction = {
+      kind: 'raiseCollisionFlag',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: 'br_1',
+        id: 'loc_varn',
+        partnerId: 'loc_varn_2',
+        reason: 'same-parent',
+        proseEntryId: REVEAL,
+      },
+    }
+    expect(await apply(ctx, sameParent, 'act_f')).toMatchObject(outcome)
   })
 
   it('no-ops when the row is gone', async () => {
