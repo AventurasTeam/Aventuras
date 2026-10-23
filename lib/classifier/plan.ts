@@ -21,6 +21,7 @@ import {
   parentOfLocations,
   placeNewLocation,
   realPlacementOf,
+  samePlacement,
   settlingOrder,
   stateOf,
   TOP_LEVEL,
@@ -593,6 +594,21 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         const { entry } = action.payload
         nameRows.set(entry.id, { kind: entry.kind, name: entry.name, createdAt: entry.createdAt })
       }
+    // piggyback.md → Matching before creating: a place is compared with its real siblings, the top
+    // level counting as one parent, and with every place when either is unplaced.
+    const storedPlacement = realPlacementOf([
+      ...entities.filter((e) => e.kind === 'location'),
+      ...createdPlaces,
+    ])
+    const placementAt = (id: string): PlacePlacement => {
+      if (!placedParents.has(id)) return storedPlacement(id)
+      const parentId = placedParents.get(id) ?? null
+      return parentId === null ? { kind: 'top' } : { kind: 'under', parentId }
+    }
+    const placesCompared = (a: string, b: string): boolean => {
+      const [first, second] = [placementAt(a), placementAt(b)]
+      return first.kind === 'unplaced' || second.kind === 'unplaced' || samePlacement(first, second)
+    }
     const renameClashes: RenameClash[] = []
     const raisedFlags = new Set<string>()
     for (const rename of inTurnOrder(extraction.renames)) {
@@ -610,7 +626,13 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       // A case-only change is no reveal, as renameEntity judges it.
       if (key === '' || key === normalizeTerm(current.name)) continue
       const holders = [...nameRows]
-        .filter(([id, r]) => id !== row.id && r.kind === row.kind && normalizeTerm(r.name) === key)
+        .filter(
+          ([id, r]) =>
+            id !== row.id &&
+            r.kind === row.kind &&
+            normalizeTerm(r.name) === key &&
+            (row.kind !== 'location' || placesCompared(row.id, id)),
+        )
         .sort(([idA, a], [idB, b]) => a.createdAt - b.createdAt || (idA < idB ? -1 : 1))
       const at = anchorOnce(rename.sourceTurn)
       const proseEntryId = proseSource(rename.sourceTurn)

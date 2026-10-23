@@ -2973,6 +2973,100 @@ describe('renames', () => {
     expect(kindsOf(planned)).toEqual(['renameEntity'])
   })
 
+  // piggyback.md → Matching before creating: places under different real parents are never
+  // compared; an unplaced place is compared with every place.
+  describe('of a place', () => {
+    const place = (id: string, name: string, state: Record<string, unknown>, createdAt = 1) =>
+      row(id, 'location', name, { state, createdAt })
+    const under = (parent: string) => ({ parent_location_id: parent })
+    const UNPLACED = { parent_location_id: null, unplaced: true }
+    // Two parents: the North, inside the Reach, and the top-level South.
+    const PARENTS = [
+      place('loc_reach', 'the Reach', {}, 0),
+      place('loc_north', 'the North', under('loc_reach'), 0),
+      place('loc_south', 'the South', {}, 0),
+    ]
+    const MILL = place('loc_mill', 'the old mill', under('loc_north'))
+    const renameMill = reply({ renames: [{ ref: 'loc_mill', name: 'Varn', sourceTurn: 't1' }] })
+
+    it('renames freely to a name a place under another parent holds', () => {
+      const { planned, renameClashes } = buildClassifierActions(
+        renameMill,
+        deps([...PARENTS, MILL, place('loc_varn', 'Varn', under('loc_south'), 2)]),
+      )
+      expect(kindsOf(planned)).toEqual(['renameEntity'])
+      expect(renameClashes).toEqual([])
+    })
+
+    it.each([
+      ['under the same parent', MILL, under('loc_north')],
+      ['top-level beside a top-level place', place('loc_mill', 'the old mill', {}), {}],
+      [
+        'unplaced, against a placed holder',
+        place('loc_mill', 'the old mill', UNPLACED),
+        under('loc_south'),
+      ],
+      ['placed, against an unplaced holder', MILL, UNPLACED],
+      ['placed, against a holder whose parent names no place', MILL, under('loc_gone')],
+    ])('clashes with a namesake %s', (_label, renamed, holderState) => {
+      const { renameClashes } = buildClassifierActions(
+        renameMill,
+        deps([...PARENTS, renamed, place('loc_varn', 'Varn', holderState, 2)]),
+      )
+      expect(renameClashes).toEqual([
+        { ref: 'loc_mill', name: 'Varn', partnerId: 'loc_varn', flagged: true },
+      ])
+    })
+
+    it("takes the oldest holder the rule pairs, past an older one it doesn't", () => {
+      const { renameClashes } = buildClassifierActions(
+        renameMill,
+        deps([
+          ...PARENTS,
+          MILL,
+          place('loc_varn_south', 'Varn', under('loc_south'), 0),
+          place('loc_varn_north', 'Varn', under('loc_north'), 3),
+        ]),
+      )
+      expect(renameClashes.map((c) => c.partnerId)).toEqual(['loc_varn_north'])
+    })
+
+    const newVarn = (parent: string): ClassifierPlacesExtraction => ({
+      ...renameMill,
+      newPlaces: [
+        {
+          handle: 'new:varn',
+          name: 'Varn',
+          description: 'x',
+          keywords: [],
+          parent,
+          sourceTurn: 't1',
+        } as NewPlace,
+      ],
+    })
+
+    it.each([
+      ['plans a plain rename', 'loc_south', ['createEntity', 'renameEntity']],
+      ['clashes', 'loc_north', ['createEntity', 'appendEntityKeywords', 'raiseCollisionFlag']],
+    ])("%s beside this reply's own create of the name under %s", (_label, parent, kinds) => {
+      const { planned } = buildClassifierActions(newVarn(parent), {
+        ...base,
+        entities: [...PARENTS, MILL],
+        newId: () => 'loc_new1',
+      } as never)
+      expect(kindsOf(planned)).toEqual(kinds)
+    })
+
+    // The rename lands after the create's placement, so the holder sits where this reply put it.
+    it('compares a holder this reply placed by where it put it', () => {
+      const { planned } = buildClassifierActions(newVarn('loc_south'), {
+        ...base,
+        entities: [...PARENTS, MILL, place('loc_varn', 'Varn', UNPLACED, 2)],
+      } as never)
+      expect(kindsOf(planned)).toEqual(['placeLocation', 'renameEntity'])
+    })
+  })
+
   it("clashes with a name this reply's own create or earlier rename holds", () => {
     const { renameClashes } = buildClassifierActions(
       reply({
