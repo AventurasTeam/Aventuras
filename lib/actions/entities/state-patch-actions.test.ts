@@ -1634,6 +1634,38 @@ describe('renameEntity', () => {
     expect(await undoPayloadOf(db, 'act_n')).toEqual({ name: 'the hooded stranger' })
   })
 
+  // The prompt's New characters rule: keywords omit the name itself.
+  it('drops the new name from the keywords, and undo puts the old array back', async () => {
+    const { db, ctx } = await setup()
+    const before = ['KAEL ', 'the stranger']
+    await seed(ctx, db, { ...STRANGER, keywords: before })
+    expect((await apply(ctx, rename('Kael'), 'act_n')).status).toBe('ok')
+    const after = ['the stranger', 'the hooded stranger']
+    expect((await rowFor(db, 'char_1')).keywords).toEqual(after)
+    expect(entitiesStore.getById('char_1')?.keywords).toEqual(after)
+    expect(await undoPayloadOf(db, 'act_n')).toEqual({
+      name: 'the hooded stranger',
+      keywords: before,
+    })
+
+    await reverseReplayDeltas('act_n', ctx)
+    expect(await rowFor(db, 'char_1')).toMatchObject({
+      name: 'the hooded stranger',
+      keywords: before,
+    })
+  })
+
+  it('drops the new name from keywords that already hold the old one', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db, { ...STRANGER, keywords: ['the hooded stranger', 'Kael'] })
+    expect((await apply(ctx, rename('Kael'), 'act_n')).status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).keywords).toEqual(['the hooded stranger'])
+    expect(await undoPayloadOf(db, 'act_n')).toEqual({
+      name: 'the hooded stranger',
+      keywords: ['the hooded stranger', 'Kael'],
+    })
+  })
+
   it('no-ops on a change of case or surrounding space alone', async () => {
     const { db, ctx } = await setup()
     await seed(ctx, db)
