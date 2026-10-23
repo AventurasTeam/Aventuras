@@ -4,7 +4,7 @@ import { eq, sql } from 'drizzle-orm'
 import { describeProviderError, resolveModel, resolveModelCapabilities, streamText } from '@/lib/ai'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
-import { redactUrl } from '@/lib/diagnostics'
+import { redactUrl, type Logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import {
   buildPiggybackActions,
@@ -16,6 +16,7 @@ import {
   resolveSuggestionItems,
   stripTrailingBlocks,
   substitutePiggybackIds,
+  type SubstitutedStateBlock,
 } from '@/lib/piggyback'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore, currentStoryStore } from '@/lib/stores'
@@ -46,6 +47,16 @@ export type PerTurnPhaseName =
   | typeof RETRIEVAL_PHASE_NAME
   | 'narrative'
   | typeof PIGGYBACK_FALLBACK_PHASE_NAME
+
+function holdDropsBack(
+  block: SubstitutedStateBlock,
+  entryId: string,
+  log: Logger,
+): SubstitutedStateBlock {
+  if (block.transfers === undefined || block.transfers.drops.length === 0) return block
+  log.debug('classifier.drops_held', { entryId, itemIds: block.transfers.drops.map((d) => d.id) })
+  return { ...block, transfers: { ...block.transfers, drops: [] } }
+}
 
 async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
   const { branchId } = ctx
@@ -229,8 +240,9 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
         count: parsedState.malformedCreates,
         layer: 'piggyback_tagged_block',
       })
-    // A failed fold creates nothing: creates aren't idempotent, and the fallback that fires
-    // rewrites this turn's state, so a create made by both would leave a duplicate row.
+    // A failed fold creates nothing and puts nothing down: the fallback that fires rewrites this
+    // turn's state, so a create made by both would duplicate a row, and a drop made here would lie
+    // at the place the fallback's scene leaves, where its own drop can't reach it.
     const turn = piggybackParseSucceeded
       ? await planTurnCreates({
           block: resolvedBlock,
@@ -243,7 +255,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
           newId: (prefix) => generateId(prefix),
           log: ctx.log,
         })
-      : skipTurnCreates(resolvedBlock, ctx.log)
+      : skipTurnCreates(holdDropsBack(resolvedBlock, entryId, ctx.log), ctx.log)
     // Matching an item can await an embed call; a cancel during it discards the reply.
     if (ctx.abortSignal.aborted) return { status: 'aborted' }
     fold = {
