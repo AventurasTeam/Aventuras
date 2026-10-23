@@ -437,6 +437,13 @@ describe('setThreadStatus', () => {
     expect(await undoOf(db, 'act_s')).toEqual({ status: 'active' })
   })
 
+  it('logs only the status when the entry stays as it was', async () => {
+    const { db, ctx } = await setupWithProse()
+    await seed(ctx, { ...PASS_THREAD, status: 'pending' })
+    expect((await apply(ctx, setStatus('active'), 'act_s')).status).toBe('ok')
+    expect(await undoOf(db, 'act_s')).toEqual({ status: 'pending' })
+  })
+
   it('reverses to the status and entry before it', async () => {
     const { db, ctx } = await setupWithProse()
     await seed(ctx)

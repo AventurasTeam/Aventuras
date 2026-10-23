@@ -758,6 +758,9 @@ describe('upsertHappeningAwareness under user precedence', () => {
       createdAt: 1,
       updatedAt: 1,
     })
+    await harness.db
+      .insert(happenings)
+      .values({ id: 'hap_2', branchId: BRANCH, title: 'The flood', createdAt: 1, updatedAt: 1 })
     return harness
   }
   type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
@@ -907,6 +910,25 @@ describe('upsertHappeningAwareness under user precedence', () => {
     )
     expect((await run(ctx, passLearns('char_b'), 'act_p')).status).toBe('ok')
     expect(await pair(db, 'char_b')).toMatchObject({ source: 'told by Jorin' })
+  })
+
+  it("creates a pair when the user deleted the character's pair for another happening", async () => {
+    const { db, ctx } = await setupWithProse()
+    const otherPair: HappeningAwareness = { ...PASS_ROW, id: 'haw_2', happeningId: 'hap_2' }
+    await db.insert(happeningAwareness).values(otherPair)
+    happeningAwarenessStore.hydrate(BRANCH, [otherPair])
+    await writeProse(ctx)
+    await run(
+      ctx,
+      {
+        kind: 'deleteHappeningAwareness',
+        source: 'user_edit',
+        payload: { branchId: BRANCH, id: 'haw_2' },
+      },
+      'act_d',
+    )
+    expect((await run(ctx, passLearns(), 'act_p')).status).toBe('ok')
+    expect(await pair(db)).toMatchObject({ source: 'told by Jorin' })
   })
 
   // A user's own write, and a pipeline write that names no prose, checks nothing.
