@@ -1516,9 +1516,11 @@ write left in the log targets a row that is gone. The prune passes
 over deletes: the pair's own delete is already pruned as its holder,
 and a delete that captured it still holds other rows. CTRL-Z and redo
 refuse such a reversal instead (below). Restoring column by column
-assumes no other constraint spans a row's columns:
-`happenings_mutual_excl` would break if a machine write ever updated a
-happening.
+assumes no other constraint spans a row's columns. The collision flag's
+three columns (flag, partner and reason) are the exception: they are
+restored and kept as one field, as a place's parent and its unplaced
+mark are. `happenings_mutual_excl` would break if a machine write ever
+updated a happening.
 
 **Undoing a `create` consults no cascade.**
 A domain may register a cascade hook for its child rows, but that hook
