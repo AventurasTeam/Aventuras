@@ -242,6 +242,24 @@ describe('wroteField', () => {
     const cleared = [update({ nameCollisionFlag: 1 })]
     expect(wroteField(cleared, 'other_table', 'nameCollisionReason', [])).toBe(false)
   })
+
+  // classifier.md → Threads → The row: the entry ref says where a resolved or failed status ended.
+  it.each([['status'], ['resolvedAtEntryId']])(
+    "reads a user write to a thread's status or its entry ref as a write to %s",
+    (column) => {
+      const failed = [update({ status: 'active' })]
+      const reopened = [update({ resolvedAtEntryId: 'e_old' })]
+      expect(wroteField(failed, 'threads', column, [])).toBe(true)
+      expect(wroteField(reopened, 'threads', column, [])).toBe(true)
+      expect(wroteField([update({ title: 'x' })], 'threads', column, [])).toBe(false)
+    },
+  )
+
+  it("reads a thread's status and entry ref together only on a thread", () => {
+    const failed = [update({ status: 'active' })]
+    expect(wroteField(failed, 'entities', 'resolvedAtEntryId', [])).toBe(false)
+    expect(wroteField(failed, 'threads', 'triggeredAtEntryId', [])).toBe(false)
+  })
 })
 
 describe('userDeletedPairSince', () => {

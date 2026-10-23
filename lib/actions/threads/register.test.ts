@@ -453,6 +453,29 @@ describe('setThreadStatus', () => {
     expect(threadsStore.getById('thr_1')).toMatchObject({ status: 'active' })
   })
 
+  // generation-pipeline.md → Reverse-replay: a status and its entry ref are restored as one field.
+  it('restores the status and entry together past a later edit of the title', async () => {
+    const { db, ctx } = await setupWithProse()
+    await seed(ctx, { ...PASS_THREAD, status: 'resolved', resolvedAtEntryId: 'e_old' })
+    await apply(ctx, setStatus('active'), 'act_s')
+    await apply(ctx, userPatch({ title: 'Return the relic' }), 'act_u')
+    await reverseReplayDeltas('act_s', ctx)
+    const restored = { status: 'resolved', resolvedAtEntryId: 'e_old' }
+    expect(await rowFor(db, 'thr_1')).toMatchObject(restored)
+    expect(threadsStore.getById('thr_1')).toMatchObject(restored)
+  })
+
+  it('keeps both when the user changed the status after the pass took the thread up', async () => {
+    const { db, ctx } = await setupWithProse()
+    await seed(ctx, { ...PASS_THREAD, status: 'resolved', resolvedAtEntryId: 'e_old' })
+    await apply(ctx, setStatus('active'), 'act_s')
+    await apply(ctx, userPatch({ status: 'failed' }), 'act_u')
+    await reverseReplayDeltas('act_s', ctx)
+    const kept = { status: 'failed', resolvedAtEntryId: null }
+    expect(await rowFor(db, 'thr_1')).toMatchObject(kept)
+    expect(threadsStore.getById('thr_1')).toMatchObject(kept)
+  })
+
   it('no-ops when the status already matches', async () => {
     const { db, ctx } = await setupWithProse()
     await seed(ctx)

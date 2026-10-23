@@ -200,10 +200,20 @@ export function wroteCollisionFlag(edits: readonly Delta[]): boolean {
   return COLLISION_FLAG_COLUMNS.some((column) => wroteColumn(edits, column))
 }
 
+const THREAD_STATUS_COLUMNS: readonly string[] = ['status', 'resolvedAtEntryId']
+
 /**
- * wrotePath, judging a place's parent and its unplaced mark as one field, and an entity's collision
- * flag, partner and reason as another: a user write to any of one keeps all of it
- * (cadence.md → User edits and classifier writes).
+ * A user edit wrote a thread's status or the entry a resolved or failed status ended on, which
+ * names the status it sits beside (classifier.md → Threads → The row).
+ */
+function wroteThreadStatus(edits: readonly Delta[]): boolean {
+  return THREAD_STATUS_COLUMNS.some((column) => wroteColumn(edits, column))
+}
+
+/**
+ * wrotePath, judging a place's parent and its unplaced mark as one field, an entity's collision
+ * flag, partner and reason as another, and a thread's status and its entry ref as a third: a user
+ * write to any of one keeps all of it (cadence.md → User edits and classifier writes).
  */
 export function wroteField(
   edits: readonly Delta[],
@@ -217,6 +227,7 @@ export function wroteField(
     if (path.length === 0 && COLLISION_FLAG_COLUMNS.includes(column))
       return wroteCollisionFlag(edits)
   }
+  if (table === 'threads' && THREAD_STATUS_COLUMNS.includes(column)) return wroteThreadStatus(edits)
   return wrotePath(edits, column, path)
 }
 

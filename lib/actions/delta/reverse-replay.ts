@@ -566,7 +566,8 @@ function undoDelete(walk: UndoWalk, target: UndoTarget, liveLinks: LiveLinkFilte
 }
 
 // A schema-backed column yields sub-field by sub-field, as its undo payload records them; a
-// place's parent and unplaced mark, and an entity's collision flag columns, yield together.
+// place's parent and unplaced mark, an entity's collision flag columns, and a thread's status and
+// entry ref yield together.
 function restorablePayload(
   entry: TableEntry,
   table: string,
