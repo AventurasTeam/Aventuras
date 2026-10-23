@@ -19,6 +19,21 @@ slice-planning gate forces its resolution before that slice is planned.
 
 ## Inbox
 
+- **ONNX Runtime's Android native library is unpinned.**
+  `onnxruntime-react-native`'s `android/build.gradle` resolves the
+  native AAR as `latest.integration`, and every version it has ever
+  resolved stays extracted under the package's `android/build/`. The
+  2026-10-20 debug APK shipped 1.28.0 (matched by size and GNU
+  build-id) although 1.31.0 is the newest resolved, so the shipped
+  runtime depends on stale local build state; the likely mechanism,
+  unconfirmed, is its `CMakeLists.txt` globbing every extracted AAR and
+  taking the first. A clean clone or CI build ships whatever Maven
+  serves that day, untested against the app and the 1.24.3 JS binding,
+  and 1.28 to 1.31 already grew the arm64 library by 5.6 MB. Fix: pin
+  the version in `patches/onnxruntime-react-native.patch` (npm's 1.24.3
+  or the tested 1.28.0 is the open choice) and clear the stale
+  extracts.
+
 - **Story isolation leaks across files under
   `--fileParallelism=false`.** Serializing puts every story file in one
   page, and some app-level DOM state survives the file that set it.
