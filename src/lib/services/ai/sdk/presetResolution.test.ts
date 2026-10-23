@@ -36,80 +36,20 @@ describe('buildProviderOptions', () => {
     reasoningEffort: 'none',
   }
 
-  it('names the reasoning option the way @ai-sdk/openai-compatible reads it', () => {
-    const resultNone = buildProviderOptions(
-      { ...basePreset, reasoningEffort: 'none' },
-      'openai-compatible',
-    )
-    expect(resultNone).toEqual({
-      openaiCompatible: {
-        reasoningEffort: 'none',
-      },
-    })
-
-    const resultHigh = buildProviderOptions(
-      { ...basePreset, reasoningEffort: 'high' },
-      'openai-compatible',
-    )
-    expect(resultHigh).toEqual({
-      openaiCompatible: {
-        reasoningEffort: 'high',
-      },
-    })
-  })
-
-  it('uses the same key for every provider built by createOpenAICompatible', () => {
-    for (const provider of [
-      'llamacpp',
-      'lmstudio',
-      'ollama',
-      'nanogpt',
-      'chutes',
-      'nvidia-nim',
-    ] as const) {
-      const result = buildProviderOptions({ ...basePreset, reasoningEffort: 'low' }, provider)
-      const options = Object.values(result ?? {})[0] as Record<string, unknown>
-
-      expect(options, `${provider} sent no reasoning option`).toHaveProperty(
-        'reasoningEffort',
-        'low',
-      )
-      expect(options, `${provider} still sends the snake_case key`).not.toHaveProperty(
-        'reasoning_effort',
-      )
+  it('hands OpenRouter its effort in the reasoning object, which it reads instead of the SDK option', () => {
+    for (const reasoningEffort of ['none', 'high'] as const) {
+      expect(buildProviderOptions({ ...basePreset, reasoningEffort }, 'openrouter')).toEqual({
+        openrouter: { reasoning: { effort: reasoningEffort } },
+      })
     }
   })
 
-  it('sends Zhipu the camelCase key alongside its own thinking switch', () => {
-    // Zhipu is `createOpenAICompatible` too, but has a second, provider-specific key, so
-    // it is the one branch the loop above cannot cover.
+  it('sends Zhipu its own thinking switch, leaving the effort to the SDK option', () => {
     expect(buildProviderOptions({ ...basePreset, reasoningEffort: 'high' }, 'zhipu')).toEqual({
-      zhipu: {
-        thinking: { type: 'enabled' },
-        reasoningEffort: 'high',
-      },
+      zhipu: { thinking: { type: 'enabled' } },
     })
-  })
-
-  it('turns Zhipu thinking off for "none" rather than asking for none of it', () => {
-    // The effort key is dropped here on purpose: `thinking: disabled` is what suppresses
-    // it, and sending both says two things about one setting.
     expect(buildProviderOptions({ ...basePreset, reasoningEffort: 'none' }, 'zhipu')).toEqual({
-      zhipu: {
-        thinking: { type: 'disabled' },
-      },
-    })
-  })
-
-  it('carries "none" through rather than omitting it', () => {
-    // `none` is what suppresses thinking, so omitting it is not equivalent to sending it.
-    const result = buildProviderOptions({ ...basePreset, reasoningEffort: 'none' }, 'llamacpp')
-    expect(result).toEqual({ llamacpp: { reasoningEffort: 'none' } })
-  })
-
-  it('looks up hyphenated providers under the camelCase key the SDK prefers', () => {
-    expect(buildProviderOptions({ ...basePreset, reasoningEffort: 'low' }, 'nvidia-nim')).toEqual({
-      nvidiaNim: { reasoningEffort: 'low' },
+      zhipu: { thinking: { type: 'disabled' } },
     })
   })
 

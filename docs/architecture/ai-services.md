@@ -64,11 +64,16 @@ Three things about it are not obvious:
   because installs older than that have the literal string on disk, and refusing to read it
   would discard the user's setting and fall back to the legacy `enable_thinking` flag, which
   means `'high'`.
-- **`'none'` is sent, not omitted.** It is the value that switches thinking off:
-  NanoGPT documents `reasoning_effort: "none"` as the way to disable reasoning, and
-  `@ai-sdk/openai-compatible` would _drop_ the parameter for `'none'` on its own `reasoning`
-  field. That is why the effort travels in provider options, which take precedence. Omitting
-  the parameter asks for the model's default instead — a different request.
+- **`'none'` is sent, not omitted.** It is the value that switches thinking off. Omitting the
+  parameter asks for the model's default instead — a different request. The effort travels in
+  the SDK's top-level `reasoning` option, and in provider options only where a provider does not
+  read that option: `@openrouter/ai-sdk-provider` and `ai-sdk-pollinations` take it from
+  `buildProviderOptions`, and Zhipu gets its `thinking` switch there. Both ways of losing the
+  effort have happened — `@ai-sdk/openai-compatible` once dropped `'none'`, and OpenRouter lost
+  every level when its provider options were removed — and neither shows in the options we build,
+  only in the request body. `sdk/reasoningWire.test.ts` therefore captures the body the real SDK
+  sends for every provider and compares levels against each other; a new provider gets a row
+  there. We do not stop a user picking a level their model rejects: they see the provider's error.
 - **Only NanoGPT's `:thinking` variants are `enforced`.** Those ids _are_ the reasoning model,
   so asking one for `'none'` is self-contradictory, and `clampReasoningToCapability` lifts it to
   `ENFORCED_REASONING_FLOOR` (`'medium'` — a floor, not a preference). Every other model that

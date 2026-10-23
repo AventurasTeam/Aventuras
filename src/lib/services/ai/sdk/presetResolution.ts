@@ -13,6 +13,7 @@ import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google'
 import type { GroqProviderOptions } from '@ai-sdk/groq'
 import type { MistralLanguageModelOptions } from '@ai-sdk/mistral'
 import type { JSONObject, LanguageModelV4, SharedV4ProviderOptions } from '@ai-sdk/provider'
+import type { OpenRouterProviderOptions } from '@openrouter/ai-sdk-provider'
 import type { PollinationsLanguageModelSettings } from 'ai-sdk-pollinations'
 
 import { settings } from '#lib/stores/settings.svelte.ts'
@@ -55,8 +56,9 @@ const PROVIDER_OPTIONS_KEY: Record<ProviderType, string> = {
 /**
  * Build provider-specific options from preset settings.
  *
- * Note that 'none' is sent, not omitted: it is the value that switches thinking off. The SDK's
- * own `reasoning` field would drop it, which is why the effort travels in provider options.
+ * The effort itself travels in the SDK's top-level `reasoning` option. It appears here only for
+ * a provider that does not read that option (OpenRouter, Pollinations), and 'none' is sent
+ * rather than omitted, since it is the value that switches thinking off.
  */
 export function buildProviderOptions(
   preset: GenerationPreset,
@@ -82,19 +84,8 @@ export function buildProviderOptions(
         }
         break
       }
-      // Everything built by `createOpenAICompatible` (see `providers/registry.ts`).
-      //
-      // camelCase, not snake_case: the SDK spreads unknown options into the body and then
-      // assigns `reasoning_effort` from its own parsed `reasoningEffort`, so the later key
-      // wins and a snake_case value is overwritten with `undefined` and dropped.
-      case 'nanogpt':
-      case 'llamacpp':
-      case 'lmstudio':
-      case 'ollama':
-      case 'chutes':
-      case 'nvidia-nim':
-      case 'openai-compatible':
-        options = { reasoningEffort: reasoning_effort }
+      case 'openrouter':
+        options = { reasoning: { effort: reasoning_effort } } satisfies OpenRouterProviderOptions
         break
       case 'pollinations':
         options = {
@@ -106,20 +97,8 @@ export function buildProviderOptions(
         options = { parallelToolCalls: true } satisfies GroqProviderOptions
         break
       case 'zhipu':
-        // Also `createOpenAICompatible`, so `reasoningEffort` for the reason above.
         // `thinking` is not a key the SDK knows, so it passes through the spread.
-        if (reasoningOn) {
-          options = {
-            thinking: { type: 'enabled' },
-            reasoningEffort: reasoning_effort,
-          }
-        } else {
-          // The effort key is dropped here on purpose: `thinking: disabled` is what
-          // suppresses it, and sending both says two things about one setting.
-          options = {
-            thinking: { type: 'disabled' },
-          }
-        }
+        options = { thinking: { type: reasoningOn ? 'enabled' : 'disabled' } }
         break
       case 'mistral':
         options = {
