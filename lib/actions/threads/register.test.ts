@@ -576,6 +576,14 @@ describe('setThreadStatus', () => {
     expect((await rowFor(db, 'thr_1')).status).toBe('failed')
   })
 
+  it('keeps the status when the user wrote its entry alone after the prose', async () => {
+    const { db, ctx } = await setupWithProse()
+    await seed(ctx, { ...PASS_THREAD, status: 'resolved', resolvedAtEntryId: 'e_old' })
+    await apply(ctx, userPatch({ resolvedAtEntryId: null }), 'act_u')
+    expect(await apply(ctx, setStatus('active'), 'act_s')).toEqual(noop(USER_EDITED_SINCE_PROSE))
+    expect((await rowFor(db, 'thr_1')).status).toBe('resolved')
+  })
+
   it("changes it past a later edit of the thread's title", async () => {
     const { db, ctx } = await setupWithProse()
     await seed(ctx)

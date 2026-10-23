@@ -203,10 +203,10 @@ export function wroteCollisionFlag(edits: readonly Delta[]): boolean {
 const THREAD_STATUS_COLUMNS: readonly string[] = ['status', 'resolvedAtEntryId']
 
 /**
- * A user edit wrote a thread's status or the entry a resolved or failed status ended on, which
- * names the status it sits beside (classifier.md → Threads → The row).
+ * A user edit wrote a thread's status or the entry a resolved or failed status ended on, a ref that
+ * only means something beside that status (classifier.md → Threads → The row).
  */
-function wroteThreadStatus(edits: readonly Delta[]): boolean {
+export function wroteThreadStatus(edits: readonly Delta[]): boolean {
   return THREAD_STATUS_COLUMNS.some((column) => wroteColumn(edits, column))
 }
 

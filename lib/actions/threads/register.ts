@@ -7,7 +7,11 @@ import { threadsStore } from '@/lib/stores'
 import { nullifyRef } from '../coerce'
 import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
 import { register, TARGET_NOT_FOUND, undefinedColumn, type ActionHandler } from '../delta/registry'
-import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteColumn } from '../delta/user-precedence'
+import {
+  USER_EDITED_SINCE_PROSE,
+  userEditsSinceProse,
+  wroteThreadStatus,
+} from '../delta/user-precedence'
 import type { DeltaSource, ProseEntryId } from '../types'
 
 const cascade = rowCascade('thread')
@@ -193,7 +197,7 @@ const setStatusHandler: ActionHandler = async (action, branchId, ctx) => {
     return { status: 'rejected', reason: 'status-unchanged', code: 'noop' }
   if (
     proseEntryId !== null &&
-    wroteColumn(await userEditsSinceProse(ctx, bid, 'threads', id, proseEntryId), 'status')
+    wroteThreadStatus(await userEditsSinceProse(ctx, bid, 'threads', id, proseEntryId))
   )
     return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
   const set: Partial<Pick<Thread, 'status' | 'resolvedAtEntryId'>> = { status }
