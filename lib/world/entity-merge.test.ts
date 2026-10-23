@@ -17,6 +17,7 @@ import { collisionPairOf, flaggedSideOf, type CollisionPair } from './collision-
 import { entityMergeActions, type EntityMergeInput } from './entity-merge'
 import { referencingEntities } from './entity-refs'
 import { mergeLinks } from './merge-links'
+import { storyPlaceOf } from './place-rules'
 
 function entity(
   id: string,
@@ -138,6 +139,7 @@ function merge({ canonical = A, loser = B, ...overrides }: MergeOverrides = {}) 
     involvements: [],
     relationships: [],
     tail: null,
+    story: storyPlaceOf({ tail: null, sceneSource: null }),
     newId: sequentialIds(),
     ...overrides,
   }
@@ -186,6 +188,7 @@ describe('entityMergeActions — refusals', () => {
         awareness: [],
         involvements: [],
         relationships: [],
+        story: storyPlaceOf({ tail: null, sceneSource: null }),
         tail: null,
         newId: sequentialIds(),
       }),
@@ -205,6 +208,7 @@ describe('entityMergeActions — refusals', () => {
       awareness: [],
       involvements: [],
       relationships: [],
+      story: storyPlaceOf({ tail: null, sceneSource: null }),
       tail: null,
       newId: sequentialIds(),
     })
@@ -696,6 +700,60 @@ describe('entityMergeActions — collision flags', () => {
       })
       expect(keptFromLoop.actions).toStrictEqual([deleteOf('loc_b')])
       expect(keptFromLoop.overlap.canonicalPlacement).toBe('stays-unplaced')
+    })
+
+    describe('under a disabled place', () => {
+      const storyAt = (id: string) =>
+        storyPlaceOf({
+          tail: { metadata: { currentLocationId: id } },
+          sceneSource: { metadata: { currentLocationId: id } },
+        })
+      const dark = place('loc_d', 'The Dark Wing', null, { injectionMode: 'disabled' })
+      const inDark = place('loc_b', 'Varn', 'loc_d')
+
+      it('keeps an unplaced canonical that holds the story unplaced', () => {
+        const varn = unplaced('loc_a', 'Varn')
+        const cellar = place('loc_c', 'The Cellar', 'loc_a')
+        for (const at of ['loc_a', 'loc_c']) {
+          const kept = merge({
+            canonical: varn,
+            loser: inDark,
+            branchEntities: [dark, varn, cellar, inDark],
+            story: storyAt(at),
+          })
+          expect(kept.actions).toStrictEqual([deleteOf('loc_b')])
+          expect(kept.overlap.canonicalPlacement).toBe('stays-unplaced')
+        }
+      })
+
+      it('still places the canonical when the story is elsewhere or already in the loser', () => {
+        const varn = unplaced('loc_a', 'Varn')
+        for (const at of ['loc_p', 'loc_b']) {
+          const placed = merge({
+            canonical: varn,
+            loser: inDark,
+            branchEntities: [hollow, dark, varn, inDark],
+            story: storyAt(at),
+          })
+          expect(placed.actions).toStrictEqual([
+            updateOf('loc_a', { state: { parent_location_id: 'loc_d' } }),
+            deleteOf('loc_b'),
+          ])
+          expect(placed.overlap.canonicalPlacement).toBe('takes-loser')
+        }
+      })
+
+      it('places a canonical the story is in when the disabled place is not above the loser', () => {
+        const varn = unplaced('loc_a', 'Varn')
+        const lit = place('loc_b', 'Varn', 'loc_p')
+        const placed = merge({
+          canonical: varn,
+          loser: lit,
+          branchEntities: [hollow, dark, varn, lit],
+          story: storyAt('loc_a'),
+        })
+        expect(placed.overlap.canonicalPlacement).toBe('takes-loser')
+      })
     })
 
     it('treats a canonical whose stored parent names no place as unplaced, and places it', () => {

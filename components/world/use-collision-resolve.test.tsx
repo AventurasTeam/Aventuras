@@ -25,6 +25,7 @@ import {
   translationsStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
+import { storyPlaceOf } from '@/lib/world'
 
 import {
   collisionResolveProp,
@@ -33,6 +34,8 @@ import {
 } from './use-collision-resolve'
 
 const resolveCollision = vi.hoisted(() => vi.fn())
+const NOWHERE = storyPlaceOf({ tail: null, sceneSource: null })
+
 vi.mock('@/lib/actions', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   resolveCollision,
@@ -133,7 +136,7 @@ function translation(id: string, targetId: string): Translation {
 
 // The flagged (newer) row asks, as the strip does; the pair must still come back older first.
 function openPair(guard: (proceed: () => void) => void = run) {
-  const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, guard))
+  const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, guard, NOWHERE))
   act(() => result.current.request(NEWER.id, OLDER.id))
   return result
 }
@@ -203,7 +206,7 @@ describe('useCollisionResolve → opening', () => {
     let renders = 0
     renderHook(() => {
       renders += 1
-      return useCollisionResolve(BRANCH, ctx, run)
+      return useCollisionResolve(BRANCH, ctx, run, NOWHERE)
     })
     const settled = renders
 
@@ -286,7 +289,7 @@ describe('useCollisionResolve → opening', () => {
       createdAt: 500,
     })
     entitiesStore.hydrate(BRANCH, [OLDER, harbor, { ...NEWER, nameCollisionPartnerId: harbor.id }])
-    const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run))
+    const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run, NOWHERE))
 
     act(() => result.current.request(NEWER.id, harbor.id))
 
@@ -317,7 +320,7 @@ describe('useCollisionResolve → the shared parent', () => {
   // The strip asks from the flagged (newer) row.
   function openPlaces(rows: Entity[]): CollisionDialogPair {
     entitiesStore.hydrate(BRANCH, rows)
-    const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run))
+    const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run, NOWHERE))
     act(() => result.current.request('loc_stalls', 'loc_market'))
     return openedPair(result)
   }

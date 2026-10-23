@@ -13,6 +13,7 @@ import {
   referencingEntities,
   stateOf,
   unheldItemsWithout,
+  type StoryPlace,
 } from '@/lib/world'
 
 export type CollisionSources = {
@@ -24,6 +25,8 @@ export type CollisionSources = {
   involvements: readonly HappeningInvolvement[]
   relationships: readonly CharacterRelationship[]
   translations: readonly Translation[]
+  /** Where the story is (`storyPlaceOf`), for a merge's placement footnote. */
+  story: StoryPlace
 }
 
 function isOlder(a: Entity, b: Entity): boolean {
@@ -54,6 +57,7 @@ function summarize(entity: Entity, partner: Entity, sources: CollisionSources): 
     awareness: sources.awareness,
     involvements: sources.involvements,
     relationships: sources.relationships,
+    story: sources.story,
   })
   const relationshipIds = new Set(links.relationships.map((row) => row.id))
   const inverseRefs = referencingEntities(entity.id, sources.entities).filter(

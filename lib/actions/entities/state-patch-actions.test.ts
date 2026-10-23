@@ -14,7 +14,7 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entitiesStore } from '@/lib/stores'
-import { collisionPairOf, entityDeleteActions, entityMergeActions } from '@/lib/world'
+import { collisionPairOf, entityDeleteActions, entityMergeActions, storyPlaceOf } from '@/lib/world'
 
 import { registerEntities } from './register'
 import { applyDeltaAction, applyDeltaActionGroup, lockKeysFor } from '../delta/apply-delta-action'
@@ -1105,6 +1105,7 @@ describe('setCharacterFaction', () => {
       awareness: [],
       involvements: [],
       relationships: [],
+      story: storyPlaceOf({ tail: null, sceneSource: null }),
       tail: null,
       newId: (prefix) => `${prefix}_merge`,
     })

@@ -595,7 +595,7 @@ export const MergePlacementFootnotes: Story = {
     await userEvent.click(screen.getByRole('radio', { name: /^VARN · Newer · / }))
     expect(
       await screen.findByText(
-        "VARN has no known location and stays unplaced: this location's own place is unknown, retired, or inside VARN.",
+        "VARN has no known location and stays unplaced: this location's own place is unknown, retired, inside VARN, or disabled while the story is in VARN.",
       ),
     ).toBeInTheDocument()
     expect(screen.queryByText(/takes this location/)).toBeNull()

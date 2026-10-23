@@ -1127,6 +1127,20 @@ describe('resolveCollision — location merge place rules', () => {
     await undoAll()
     expect((await entityRow('loc_a'))?.state).toEqual({ parent_location_id: null, unplaced: true })
   })
+
+  it('leaves an unplaced canonical the story is in unplaced under a disabled place, and undo restores', async () => {
+    await sceneAt('loc_a')
+    await ctx.db.insert(entities).values(place('loc_d', null, { injectionMode: 'disabled' }))
+    await setState('loc_a', { parent_location_id: null, unplaced: true })
+    await setState('loc_b', { parent_location_id: 'loc_d' })
+    const before = await worldSnapshot()
+    expect(await resolveCollision('b1', LOC_MERGE, ctx)).toEqual({ status: 'ok' })
+    expect((await entityRow('loc_a'))?.state).toEqual({ parent_location_id: null, unplaced: true })
+    expect(await entityRow('loc_b')).toBeUndefined()
+
+    await undoAll()
+    expect(await worldSnapshot()).toEqual(before)
+  })
 })
 
 describe('resolveCollision — rename', () => {

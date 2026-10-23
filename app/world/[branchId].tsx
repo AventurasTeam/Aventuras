@@ -271,7 +271,7 @@ export default function WorldRoute() {
     setEntityImportOpen(false)
     setLoreImportOpen(false)
   }, [setEntityImportOpen, setLoreImportOpen])
-  const collision = useCollisionResolve(branchId, ctx, guard)
+  const collision = useCollisionResolve(branchId, ctx, guard, story)
   const collisionBlocked = useCollisionGate(storyId ?? undefined, branchId)
   const { close: closeCollision, request: requestCollision } = collision
   const collisionPair = collision.pair

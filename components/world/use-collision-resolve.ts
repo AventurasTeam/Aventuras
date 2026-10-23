@@ -21,7 +21,13 @@ import {
   translationsStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
-import { collisionPairOf, flaggedSideOf, pairSideOf, type FlaggedEntity } from '@/lib/world'
+import {
+  collisionPairOf,
+  flaggedSideOf,
+  pairSideOf,
+  type FlaggedEntity,
+  type StoryPlace,
+} from '@/lib/world'
 
 import { collisionRejectionText } from './collision-copy'
 import { collisionPair } from './collision-summary'
@@ -122,6 +128,7 @@ export function useCollisionResolve(
   branchId: string,
   ctx: DbCtx,
   guard: (proceed: () => void) => void,
+  story: StoryPlace,
 ): {
   pair: CollisionDialogPair | null
   request: (flaggedId: string, otherId: string) => void
@@ -171,6 +178,7 @@ export function useCollisionResolve(
       involvements: inBranch(involvementRows, branchId),
       relationships: inBranch(relationshipRows, branchId),
       translations: inBranch(translationRows, branchId),
+      story,
     })
     if (sides == null) return null
     const parentName = sharedParentName(flagged, entities)
@@ -189,6 +197,7 @@ export function useCollisionResolve(
     involvementRows,
     relationshipRows,
     translationRows,
+    story,
   ])
 
   useEffect(() => {

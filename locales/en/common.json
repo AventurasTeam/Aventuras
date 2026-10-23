@@ -230,7 +230,7 @@
       "joiningRelationship": "The relationship between the two is dropped.",
       "canonicalRefs": "{{name}} sits under this location: it loses that parent and becomes unplaced, since a place can't contain itself.",
       "canonicalTakesPlacement": "{{name}} has no known location: it takes this location's place on the map.",
-      "canonicalStaysUnplaced": "{{name}} has no known location and stays unplaced: this location's own place is unknown, retired, or inside {{name}}."
+      "canonicalStaysUnplaced": "{{name}} has no known location and stays unplaced: this location's own place is unknown, retired, inside {{name}}, or disabled while the story is in {{name}}."
     },
     "mergeConfirm": {
       "older": "Merge into the older {{name}}",

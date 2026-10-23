@@ -397,6 +397,30 @@ function storyGainsDisabled(
 }
 
 /**
+ * Whether the canonical taking `parentId` as its parent would put the story inside a disabled
+ * place it wasn't inside: the `story-inside` merge rule, asked of an adoption alone.
+ */
+export function adoptionHidesStory(args: {
+  canonical: Entity
+  loser: Entity
+  parentId: string
+  branchEntities: readonly Entity[]
+  story: StoryPlace
+}): boolean {
+  const { canonical, loser, parentId, branchEntities } = args
+  const merged: MergedPlace = {
+    status: canonical.status,
+    injectionMode: canonical.injectionMode,
+    parentId,
+  }
+  const parentOf = parentOfLocations(branchEntities)
+  const byId = new Map(branchEntities.map((e) => [e.id, e]))
+  return storyLocations(args.story).some((at) =>
+    storyGainsDisabled(at, { canonical, loser }, merged, byId, parentOf),
+  )
+}
+
+/**
  * world.md → Merge, on the place the merge would leave: retired with the story in either place, or
  * with a place inside either that isn't retired; not retired under a retired parent, moved or not;
  * or the story's place gaining a disabled place.

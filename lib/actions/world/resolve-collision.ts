@@ -166,6 +166,7 @@ function buildResolution(
         awareness: branchRows(happeningAwarenessStore.getAwareness(), branchId),
         involvements: branchRows(happeningInvolvementsStore.getInvolvements(), branchId),
         relationships: branchRows(characterRelationshipsStore.getRelationshipRows(), branchId),
+        story,
         tail,
         newId: generateId,
       })
