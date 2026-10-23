@@ -787,7 +787,8 @@ takes in unplaced places three ways:
   and against unplaced places by exact name, with the same reuse.
 - **A new unplaced place** is compared by exact name against unplaced
   places and every placed one. One match is reused; several create it
-  unplaced with a collision flag. Partial matches flag, as elsewhere.
+  unplaced with a collision flag. Partial matches flag only against
+  other unplaced places, which stand in for its siblings.
 
 Who places one, and who may mark it top-level, is in the
 [Authorship contract](#authorship-contract). Rows from before the flag
