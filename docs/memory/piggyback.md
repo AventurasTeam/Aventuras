@@ -264,11 +264,11 @@ bracketed handle (`[new:a]`) reads as the bare handle.
 **Create tag format.** A create's attribute text must be entirely
 `key="value"` pairs; any other text drops the create and counts it
 malformed, so a reference to its handle then fails its field and the
-fallback fires. The five XML entities are decoded in a create's name
-and description, and a raw `<` or `>` in a name or a raw `<` in a
-description drops the create, so the prompt asks the model to write a
-double quote, `<` or `>` inside a name as `&quot;`, `&lt;` or `&gt;`,
-and a `<` inside a description as `&lt;`. A malformed create in a
+fallback fires. The five XML entities are decoded in a create's name,
+condition and description, and a raw `<` or `>` in a name or condition
+or a raw `<` in a description drops the create, so the prompt asks the
+model to write a double quote, `<` or `>` inside a name or condition as
+`&quot;`, `&lt;` or `&gt;`, and a `<` inside a description as `&lt;`. A malformed create in a
 closed block only logs a warning, unless the block held nothing but
 creates: that block counts as empty and fails `state`, so the fallback
 fires. A `<state>` the stream cut off (no `</state>`) that declares
