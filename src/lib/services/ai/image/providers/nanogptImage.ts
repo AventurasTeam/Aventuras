@@ -61,7 +61,7 @@ async function downloadBase64(fetch: Fetch, url: string, signal?: AbortSignal): 
 }
 
 export function createNanoGPTImage(settings: NanoGPTImageSettings) {
-  const url = `${settings.baseURL.replace(/\/+$/, '')}/images`
+  const url = `${settings.baseURL}/images`
 
   return {
     imageModel(modelId: string): ImageModelV4 {
