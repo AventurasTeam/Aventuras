@@ -40,6 +40,7 @@ import {
   characterRelationshipsStore,
   currentStoryStore,
   entitiesStore,
+  happeningAwarenessStore,
   happeningsStore,
   threadsStore,
   type OpenStory,
@@ -246,15 +247,20 @@ export async function* periodicClassifierPhase(
   const threads = [...threadsStore.getThreads().values()].filter((t) => t.branchId === ctx.branchId)
   // classifier.md → Mentioned places: read once, so prompt and reply schema agree.
   const mentionedPlaces = open.settings.classifierMentionedPlaces
+  const happenings = [...happeningsStore.getHappenings().values()].filter(
+    (h) => h.branchId === ctx.branchId,
+  )
+  // The stored pairs a listed happening's awareness skips (plan.ts → knownAwareness).
+  const awareness = [...happeningAwarenessStore.getAwareness().values()].filter(
+    (a) => a.branchId === ctx.branchId,
+  )
   const idMap = new IdBiMap()
   const prompt = renderTemplate(
     TEMPLATE_IDS.periodicClassifier,
     buildClassifierContext({
       window,
       entities,
-      happenings: [...happeningsStore.getHappenings().values()].filter(
-        (h) => h.branchId === ctx.branchId,
-      ),
+      happenings,
       relationships,
       threads,
       mentionedPlaces,
@@ -352,6 +358,9 @@ export async function* periodicClassifierPhase(
     factionDecisions,
     now: () => Date.now(),
     newId: (kind) => generateId(kind),
+    threads,
+    happenings,
+    awareness,
   })
   if (plan.fellBackCount > 0)
     ctx.log.warn('classifier.window_head_fallback', { count: plan.fellBackCount })
@@ -363,6 +372,11 @@ export async function* periodicClassifierPhase(
   for (const drop of plan.droppedPlaces)
     ctx.log.warn('classifier.create_dropped', { kind: 'location', ...drop })
   for (const drop of plan.parentDrops) ctx.log.warn('classifier.create_parent_dropped', drop)
+  // data-model.md → Authorship contract: every write the planner dropped, under its own key.
+  for (const clash of plan.renameClashes) ctx.log.warn('classifier.rename_clash', clash)
+  for (const unseen of plan.unseenRefs) ctx.log.warn('classifier.unseen_ref', unseen)
+  for (const drop of plan.droppedPlacements) ctx.log.warn('classifier.placement_dropped', drop)
+  for (const icon of plan.unknownIcons) ctx.log.warn('classifier.icon_unknown', icon)
 
   // classifier.md → Pipeline framing: a pass cancelled during its writes reverses its own group.
   for (const write of plan.planned) {

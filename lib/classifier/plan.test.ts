@@ -60,6 +60,9 @@ const base = {
     let n = 0
     return () => `gen_${++n}`
   })(),
+  threads: [],
+  happenings: [],
+  awareness: [],
 }
 
 // The reply schema defaults every list to []: a case names only the lists it fills.
@@ -3486,5 +3489,357 @@ describe('standings', () => {
       deps([faction('fact_watch', 'wary allies')]),
     )
     expect(planned.map((p) => payloadOf<{ standing: string }>(p).standing)).toEqual(['at war'])
+  })
+})
+
+// classifier.md → Threads and → What the classifier writes → Happenings.
+describe('plot writes', () => {
+  const deps = (over: Record<string, unknown> = {}) => {
+    let n = 0
+    return { ...base, newId: (kind: string) => `${kind}_new${++n}`, ...over } as never
+  }
+  const thread = (id: string, status: string) =>
+    ({ id, branchId: 'branch_1', title: id, status, triggeredAtEntryId: null }) as never
+  const character = (id: string) => ({
+    id,
+    kind: 'character',
+    name: id,
+    status: 'active',
+    keywords: [],
+  })
+
+  it("writes a happening's category and a catalog icon, and no icon the catalog lacks", () => {
+    const { planned, unknownIcons } = buildClassifierActions(
+      reply({
+        happenings: [
+          {
+            title: 'A',
+            category: ' omen ',
+            icon: ' Eye ',
+            sourceTurn: 't1',
+            involvements: [],
+            awareness: [],
+          },
+          { title: 'B', icon: 'rocket', sourceTurn: 't1', involvements: [], awareness: [] },
+        ],
+      }),
+      deps(),
+    )
+    expect(
+      planned.map((p) => payloadOf<{ entry: { category: unknown; icon: unknown } }>(p).entry),
+    ).toEqual([
+      expect.objectContaining({ category: 'omen', icon: 'eye' }),
+      expect.objectContaining({ category: null, icon: null }),
+    ])
+    expect(unknownIcons).toEqual([{ title: 'B', icon: 'rocket' }])
+  })
+
+  // cadence.md → User edits and classifier writes: a pass's write to an existing row names its prose.
+  it("dates a happening's own awareness by the happening's turn", () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        happenings: [
+          {
+            title: 'A',
+            sourceTurn: 't2',
+            involvements: [],
+            awareness: [{ ref: 'char_a', source: 'told', severity: 0.5, learnedAtTurn: 't3' }],
+          },
+          {
+            title: 'B',
+            involvements: [],
+            awareness: [{ ref: 'char_b', source: 'saw it', severity: 0.5 }],
+          },
+        ],
+      }),
+      deps(),
+    )
+    expect(
+      planned
+        .filter((p) => p.action.kind === 'upsertHappeningAwareness')
+        .map((p) => [payloadOf<{ proseEntryId?: string }>(p).proseEntryId, p.entryId]),
+    ).toEqual([
+      ['e2', 'e3'],
+      ['e1', 'e3'],
+    ])
+  })
+
+  it('creates a thread the turns set up, triggered and anchored on its turn', () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        newThreads: [
+          {
+            title: ' Find the ferryman ',
+            description: 'He knows the way.',
+            category: 'quest',
+            icon: 'map',
+            status: 'active',
+            sourceTurn: 't2',
+          },
+        ],
+      }),
+      deps(),
+    )
+    expect(planned).toEqual([
+      {
+        action: {
+          kind: 'createThread',
+          source: 'periodic_classifier',
+          payload: {
+            entry: {
+              id: 'thr_new1',
+              branchId: 'branch_1',
+              title: 'Find the ferryman',
+              description: 'He knows the way.',
+              category: 'quest',
+              icon: 'map',
+              status: 'active',
+              injectionMode: 'auto',
+              triggeredAtEntryId: 'e2',
+              resolvedAtEntryId: null,
+              embeddingStale: 1,
+              createdAt: 1_700_000_000_000,
+              updatedAt: 1_700_000_000_000,
+            },
+          },
+        },
+        entryId: 'e2',
+      },
+    ])
+  })
+
+  it("clamps a new thread's title and description as a happening's, and drops an unknown icon", () => {
+    const { planned, unknownIcons } = buildClassifierActions(
+      reply({
+        newThreads: [
+          {
+            title: 'T'.repeat(130),
+            description: 'D'.repeat(1300),
+            icon: 'rocket',
+            status: 'pending',
+            sourceTurn: 't1',
+          },
+          { title: '  ', description: 'x', status: 'active', sourceTurn: 't1' },
+        ],
+      }),
+      deps(),
+    )
+    expect(planned).toHaveLength(1)
+    const { entry } = payloadOf<{
+      entry: { title: string; description: string; icon: string | null }
+    }>(planned[0])
+    expect(entry.title).toBe('T'.repeat(120))
+    expect(entry.description).toBe('D'.repeat(1200))
+    expect(entry.icon).toBeNull()
+    expect(unknownIcons).toEqual([{ title: 'T'.repeat(130), icon: 'rocket' }])
+  })
+
+  describe('a thread these turns both open and close', () => {
+    const openAndClose = (over: Record<string, unknown>) =>
+      buildClassifierActions(
+        reply({
+          newThreads: [{ title: 'Cross the river', description: 'x', status: 'resolved', ...over }],
+        }),
+        deps(),
+      )
+    const writes = (planned: readonly PlannedWrite[]) =>
+      planned.map((p) => {
+        const payload = payloadOf<{
+          entry?: { status: string; triggeredAtEntryId: string; resolvedAtEntryId: string | null }
+        }>(p)
+        return [
+          p.action.kind,
+          payload.entry === undefined
+            ? payload
+            : {
+                status: payload.entry.status,
+                triggeredAtEntryId: payload.entry.triggeredAtEntryId,
+                resolvedAtEntryId: payload.entry.resolvedAtEntryId,
+              },
+          p.entryId,
+        ]
+      })
+    const opened = (at: string) => [
+      'createThread',
+      { status: 'active', triggeredAtEntryId: at, resolvedAtEntryId: null },
+      at,
+    ]
+    const closed = (status: string, at: string, prose = at) => [
+      'setThreadStatus',
+      {
+        branchId: 'branch_1',
+        id: 'thr_new1',
+        status,
+        resolvedAtEntryId: at,
+        proseEntryId: prose,
+      },
+      at,
+    ]
+
+    // Two writes, each kept by its own turn: reversing the closing turn alone reopens it.
+    it.each([['resolved'], ['failed']])(
+      'opens it active at its turn and moves it to %s at the closing turn',
+      (status) => {
+        const { planned, fellBackCount } = openAndClose({
+          status,
+          sourceTurn: 't1',
+          resolvedAtTurn: 't3',
+        })
+        expect(writes(planned)).toEqual([opened('e1'), closed(status, 'e3')])
+        expect(fellBackCount).toBe(0)
+      },
+    )
+
+    it('closes it at its own turn when no closing turn is named', () => {
+      const { planned } = openAndClose({ sourceTurn: 't2' })
+      expect(writes(planned)).toEqual([opened('e2'), closed('resolved', 'e2')])
+    })
+
+    it('closes it at its own turn, and reports the label, when the closing turn names none', () => {
+      const { planned, unresolvedRefs, fellBackCount } = openAndClose({
+        sourceTurn: 't2',
+        resolvedAtTurn: 't9',
+      })
+      expect(writes(planned)).toEqual([opened('e2'), closed('resolved', 'e2')])
+      expect(unresolvedRefs).toEqual(['t9'])
+      expect(fellBackCount).toBe(0)
+    })
+
+    it('never closes it before it opens', () => {
+      const { planned } = openAndClose({ sourceTurn: 't3', resolvedAtTurn: 't1' })
+      expect(writes(planned)).toEqual([opened('e3'), closed('resolved', 'e3')])
+    })
+
+    // An unattributed thread opens at the window head; an earlier closing turn can't precede it.
+    it('closes an unattributed thread at the window head it opened on', () => {
+      const { planned } = openAndClose({ resolvedAtTurn: 't2' })
+      expect(writes(planned)).toEqual([opened('e3'), closed('resolved', 'e3', 'e1')])
+    })
+
+    it.each([['active'], ['pending']])('ignores a closing turn on a %s thread', (status) => {
+      const { planned } = openAndClose({ status, sourceTurn: 't1', resolvedAtTurn: 't3' })
+      expect(writes(planned)).toEqual([
+        ['createThread', { status, triggeredAtEntryId: 'e1', resolvedAtEntryId: null }, 'e1'],
+      ])
+    })
+  })
+
+  it("moves a listed thread's status in source-turn order, resolving it at the change's turn", () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        threadStatuses: [
+          { thread: 'thr_a', status: 'resolved', sourceTurn: 't3' },
+          { thread: 'thr_b', status: 'active', sourceTurn: 't1' },
+          { thread: 'thr_c', status: 'active', sourceTurn: 't1' },
+        ],
+      }),
+      deps({
+        threads: [thread('thr_a', 'active'), thread('thr_b', 'failed'), thread('thr_c', 'active')],
+      }),
+    )
+    expect(planned.map((p) => [p.action.kind, p.action.payload, p.entryId])).toEqual([
+      [
+        'setThreadStatus',
+        {
+          branchId: 'branch_1',
+          id: 'thr_b',
+          status: 'active',
+          resolvedAtEntryId: null,
+          proseEntryId: 'e1',
+        },
+        'e1',
+      ],
+      [
+        'setThreadStatus',
+        {
+          branchId: 'branch_1',
+          id: 'thr_a',
+          status: 'resolved',
+          resolvedAtEntryId: 'e3',
+          proseEntryId: 'e3',
+        },
+        'e3',
+      ],
+    ])
+  })
+
+  it('drops and reports a status for a thread the prompt never listed', () => {
+    const { planned, unseenRefs } = buildClassifierActions(
+      reply({ threadStatuses: [{ thread: 'th9', status: 'failed', sourceTurn: 't1' }] }),
+      deps(),
+    )
+    expect(planned).toEqual([])
+    expect(unseenRefs).toEqual([{ list: 'threadStatuses', ref: 'th9' }])
+  })
+
+  it('adds awareness of a listed happening, dated on its learning turn', () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        knownAwareness: [
+          {
+            happening: 'hap_fire',
+            ref: 'char_a',
+            source: ' told by Mira ',
+            severity: 1.4,
+            learnedAtTurn: 't2',
+          },
+        ],
+      }),
+      deps({ entities: [character('char_a')], happenings: [{ id: 'hap_fire' }] }),
+    )
+    expect(planned).toEqual([
+      {
+        action: {
+          kind: 'upsertHappeningAwareness',
+          source: 'periodic_classifier',
+          payload: {
+            branchId: 'branch_1',
+            characterId: 'char_a',
+            happeningId: 'hap_fire',
+            learnedAtEntryId: 'e2',
+            decayResistance: 1,
+            source: 'told by Mira',
+            proseEntryId: 'e2',
+          },
+        },
+        entryId: 'e2',
+      },
+    ])
+  })
+
+  it('plans nothing for a stored pair or a repeat, and reports an unlisted happening', () => {
+    const { planned, unseenRefs } = buildClassifierActions(
+      reply({
+        knownAwareness: [
+          { happening: 'hap_fire', ref: 'char_a', source: 'x', severity: 0.5 },
+          { happening: 'hap_fire', ref: 'char_b', source: 'x', severity: 0.5 },
+          { happening: 'hap_fire', ref: 'char_b', source: 'y', severity: 0.9 },
+          { happening: 'hp9', ref: 'char_a', source: 'x', severity: 0.5 },
+        ],
+      }),
+      deps({
+        entities: [character('char_a'), character('char_b')],
+        happenings: [{ id: 'hap_fire' }],
+        awareness: [{ characterId: 'char_a', happeningId: 'hap_fire' }],
+      }),
+    )
+    expect(planned.map((p) => payloadOf<{ characterId: string; source: string }>(p))).toEqual([
+      expect.objectContaining({ characterId: 'char_b', source: 'x' }),
+    ])
+    expect(unseenRefs).toEqual([{ list: 'knownAwareness', ref: 'hp9' }])
+  })
+
+  it('reports an awareness ref that is no character', () => {
+    const { planned, unresolvedRefs } = buildClassifierActions(
+      reply({
+        knownAwareness: [{ happening: 'hap_fire', ref: 'loc_inn', source: 'x', severity: 0.5 }],
+      }),
+      deps({
+        entities: [{ ...character('loc_inn'), kind: 'location' }],
+        happenings: [{ id: 'hap_fire' }],
+      }),
+    )
+    expect(planned).toEqual([])
+    expect(unresolvedRefs).toEqual(['loc_inn'])
   })
 })

@@ -5,10 +5,14 @@ import {
   type CharacterState,
   type Entity,
   type FactionState,
+  type Happening,
+  type HappeningAwareness,
   type LocationState,
+  type Thread,
 } from '@/lib/db'
 import { dedupeTerms, newTerms, normalizeTerm } from '@/lib/keyword-terms'
 import { boundStateText } from '@/lib/piggyback'
+import { isPlotIconKey } from '@/lib/plot'
 import { oneLine } from '@/lib/text'
 import {
   characterFactionId,
@@ -37,6 +41,8 @@ import {
   type NewCharacter,
   type NewFaction,
   type NewPlace,
+  type NewThreadReply,
+  type ThreadStatusChange,
 } from './schema'
 import type { ClassifierWindow } from './window'
 
@@ -67,10 +73,13 @@ export type UnseenRef = {
   ref: string
 }
 
-/** A placement that plans nothing: a loop, a retired parent, or a top-level mark of a placed place. */
 /** A standing naming a faction retired before the reply, dropped as memberships are. */
 export type DroppedStanding = { faction: string; cause: 'retired-faction' }
 
+/** A happening's or a new thread's icon the catalog lacks: written as none. */
+export type UnknownIcon = { title: string; icon: string }
+
+/** A placement that plans nothing: a loop, a retired parent, or a top-level mark of a placed place. */
 export type DroppedPlacement = {
   ref: string
   cause: 'cycle' | 'retired' | 'not-unplaced' | 'chain-broken'
@@ -89,6 +98,7 @@ export type PlanResult = {
   unseenRefs: readonly UnseenRef[]
   droppedPlacements: readonly DroppedPlacement[]
   droppedStandings: readonly DroppedStanding[]
+  unknownIcons: readonly UnknownIcon[]
 }
 
 export type PlanDeps = {
@@ -103,7 +113,12 @@ export type PlanDeps = {
   // 'haw' is absent on purpose: the upsertHappeningAwareness handler in
   // lib/actions/happenings/register-awareness.ts allocates the awareness id
   // itself, so the planner must not.
-  newId: (kind: 'hap' | 'char' | 'fact' | 'hinv' | 'loc') => string
+  newId: (kind: 'hap' | 'char' | 'fact' | 'hinv' | 'loc' | 'thr') => string
+  threads: readonly Thread[]
+  /** The happenings the prompt listed (the branch's, as the phase passes them to buildClassifierContext). */
+  happenings: readonly Pick<Happening, 'id'>[]
+  /** The branch's stored pairs; a listed happening's stored pair plans nothing. */
+  awareness: readonly Pick<HappeningAwareness, 'characterId' | 'happeningId'>[]
 }
 
 const SOURCE = 'periodic_classifier' as const
@@ -555,10 +570,10 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   const { droppedPlaces, parentDrops } = planNewPlaces()
 
   // Facts about one row apply in source-turn order, ties in reply order, so the latest prose wins.
-  const turnPosition = (turn: string | undefined): number => {
-    const { entryId } = window.resolveHandle(turn)
-    return window.turns.findIndex((t) => t.entryId === entryId)
-  }
+  const entryPosition = (entryId: string): number =>
+    window.turns.findIndex((t) => t.entryId === entryId)
+  const turnPosition = (turn: string | undefined): number =>
+    entryPosition(window.resolveHandle(turn).entryId)
   const inTurnOrder = <T extends { sourceTurn?: string }>(facts: readonly T[]): T[] =>
     facts
       .map((fact, order) => ({ fact, order, at: turnPosition(fact.sourceTurn) }))
@@ -765,6 +780,16 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     else appendNewTerms(alias.ref, alias.terms, alias.sourceTurn)
   }
 
+  // classifier.md → What the classifier writes → Happenings: an icon from the catalog, or none.
+  const unknownIcons: UnknownIcon[] = []
+  const iconOf = (icon: string | undefined, title: string): string | null => {
+    const key = nonBlank(icon)?.toLowerCase()
+    if (key === undefined) return null
+    if (isPlotIconKey(key)) return key
+    unknownIcons.push({ title, icon: key })
+    return null
+  }
+
   for (const happening of extraction.happenings) {
     // Its involvements and awareness nest under it, so dropping it strands nothing.
     const title = nonBlank(happening.title)
@@ -793,6 +818,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
             branchId,
             title: clampEmbedded(title, MAX_EMBEDDED_NAME),
             description: description == null ? null : clampEmbedded(description, MAX_EMBEDDED_BODY),
+            category: nonBlank(happening.category) ?? null,
+            icon: iconOf(happening.icon, title),
             // Mutually exclusive per the table CHECK: an entry ref wins.
             temporal: occurredAtEntryId == null ? (nonBlank(happening.temporal) ?? null) : null,
             occurredAtEntryId,
@@ -849,11 +876,49 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
             decayResistance: Math.min(1, Math.max(0, row.severity)),
             // Undefined, not null: a blank re-emit must leave an existing source alone.
             source: nonBlank(row.source),
+            proseEntryId: proseSource(happening.sourceTurn),
           },
         },
         entryId: learnedEntryId,
       })
     }
+  }
+
+  // classifier.md → What the classifier writes → Happenings: a character learning of a listed
+  // happening. Create-only: the upsert would merge a stored pair's source and decay resistance,
+  // which chapter close tunes.
+  const listedHappenings = new Set(deps.happenings.map((h) => h.id))
+  const pairKey = (characterId: string, happeningId: string): string =>
+    `${characterId} ${happeningId}`
+  const storedPairs = new Set(deps.awareness.map((a) => pairKey(a.characterId, a.happeningId)))
+  for (const known of extraction.knownAwareness) {
+    // An unknown placeholder passes substituteClassifierIds untouched, so only this check sees it.
+    if (!listedHappenings.has(known.happening)) {
+      unseenRefs.push({ list: 'knownAwareness', ref: known.happening })
+      continue
+    }
+    const characterId = resolveRef(known.ref, 'character')
+    if (characterId == null) continue
+    const pair = pairKey(characterId, known.happening)
+    if (storedPairs.has(pair)) continue
+    storedPairs.add(pair)
+    const learnedEntryId = anchor(known.learnedAtTurn)
+    planned.push({
+      action: {
+        kind: 'upsertHappeningAwareness',
+        source: SOURCE,
+        payload: {
+          branchId,
+          characterId,
+          happeningId: known.happening,
+          learnedAtEntryId: learnedEntryId,
+          decayResistance: Math.min(1, Math.max(0, known.severity)),
+          source: nonBlank(known.source),
+          proseEntryId: proseSource(known.learnedAtTurn),
+        },
+      },
+      entryId: learnedEntryId,
+    })
   }
 
   for (const relationship of extraction.relationships) {
@@ -971,6 +1036,101 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     })
   }
 
+  // classifier.md → Threads: what the turns set up, and the status of listed ones.
+  const threadStatusWrite = (
+    id: string,
+    status: ThreadStatusChange['status'],
+    entryId: string,
+    proseEntryId: string,
+  ): PlannedWrite => ({
+    action: {
+      kind: 'setThreadStatus',
+      source: SOURCE,
+      payload: {
+        branchId,
+        id,
+        status,
+        resolvedAtEntryId: status === 'active' ? null : entryId,
+        proseEntryId,
+      },
+    },
+    entryId,
+  })
+  // A status change can't precede its thread, so a closing turn before the open closes it there.
+  const closingTurnOf = (
+    thread: NewThreadReply,
+    openedAt: string,
+  ): { entryId: string; proseEntryId: string } => {
+    if (thread.resolvedAtTurn !== undefined) {
+      const closed = window.resolveHandle(thread.resolvedAtTurn)
+      if (closed.fellBack) unresolvedRefs.push(thread.resolvedAtTurn)
+      else if (entryPosition(closed.entryId) >= entryPosition(openedAt))
+        return { entryId: closed.entryId, proseEntryId: closed.entryId }
+    }
+    return { entryId: openedAt, proseEntryId: proseSource(thread.sourceTurn) }
+  }
+  for (const thread of extraction.newThreads) {
+    const title = nonBlank(thread.title)
+    if (title == null) continue
+    const entryId = anchor(thread.sourceTurn)
+    // Opened and closed here: the create and the close are two writes, each kept by its own turn,
+    // so reversing the closing turn alone reopens the thread.
+    const closedAs =
+      thread.status === 'resolved' || thread.status === 'failed' ? thread.status : null
+    const id = newId('thr')
+    const description = nonBlank(thread.description)
+    const timestamp = now()
+    planned.push({
+      action: {
+        kind: 'createThread',
+        source: SOURCE,
+        payload: {
+          entry: {
+            id,
+            branchId,
+            title: clampEmbedded(title, MAX_EMBEDDED_NAME),
+            description: description == null ? null : clampEmbedded(description, MAX_EMBEDDED_BODY),
+            category: nonBlank(thread.category) ?? null,
+            icon: iconOf(thread.icon, title),
+            status: closedAs === null ? thread.status : 'active',
+            injectionMode: 'auto',
+            // Non-null on every thread a pass creates: setThreadStatus resolves only those.
+            triggeredAtEntryId: entryId,
+            resolvedAtEntryId: null,
+            embeddingStale: 1,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          },
+        },
+      },
+      entryId,
+    })
+    if (closedAs !== null) {
+      const closing = closingTurnOf(thread, entryId)
+      planned.push(threadStatusWrite(id, closedAs, closing.entryId, closing.proseEntryId))
+    }
+  }
+  const threadStatusOf = new Map<string, Thread['status']>(
+    deps.threads.map((t) => [t.id, t.status]),
+  )
+  for (const change of inTurnOrder(extraction.threadStatuses)) {
+    const current = threadStatusOf.get(change.thread)
+    if (current === undefined) {
+      unseenRefs.push({ list: 'threadStatuses', ref: change.thread })
+      continue
+    }
+    if (current === change.status) continue
+    threadStatusOf.set(change.thread, change.status)
+    planned.push(
+      threadStatusWrite(
+        change.thread,
+        change.status,
+        anchor(change.sourceTurn),
+        proseSource(change.sourceTurn),
+      ),
+    )
+  }
+
   return {
     planned,
     handleMap,
@@ -983,5 +1143,6 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     unseenRefs,
     droppedPlacements,
     droppedStandings,
+    unknownIcons,
   }
 }

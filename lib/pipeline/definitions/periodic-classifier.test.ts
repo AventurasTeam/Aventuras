@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   bracketProseReversal,
   classifierWatermarkClampOps,
+  updateStoryEntryContent,
   type PipelineAction,
 } from '@/lib/actions'
 import {
@@ -30,9 +31,12 @@ import {
   happenings,
   stories,
   storyEntries,
+  threads,
   type CharacterRelationship,
   type ClassifierStatus,
   type Entity,
+  type Happening,
+  type HappeningAwareness,
   type StoryEntry,
   type Thread,
 } from '@/lib/db'
@@ -50,6 +54,7 @@ import {
   entitiesStore,
   entriesStore,
   generationStore,
+  happeningAwarenessStore,
   happeningsStore,
   hydrateAppSettings,
   interruptMemoryRuns,
@@ -2342,6 +2347,89 @@ describe('periodicClassifierPhase via runPipeline', () => {
     expect(await storedStatus(db)).toEqual({ ...FAILED, state: 'running' })
     expect(generationStore.getTxState().deferred.get('b1')).toBeUndefined()
   })
+
+  // classifier.md → Threads: a thread these turns open and close lands as its create and its
+  // close, each kept by its own turn (generation-pipeline.md → Reverse-replay).
+  describe('a thread these turns open and close, under a prose edit', () => {
+    async function passOpensAndCloses(turns: {
+      sourceTurn: string
+      resolvedAtTurn: string
+    }): Promise<Seeded> {
+      const seeded = await seedStory()
+      // The head turn is e2's action and e3's reply: an edit to e3 reverses e3's facts alone.
+      const kinds = ['ai_reply', 'user_action', 'ai_reply'] as const
+      for (const [i, kind] of kinds.entries())
+        await seeded.db.insert(storyEntries).values({
+          id: `e${i + 1}`,
+          branchId: 'b1',
+          position: i + 1,
+          kind,
+          content: `turn ${i + 1}`,
+          chapterId: null,
+          metadata: {},
+          createdAt: 1,
+        } as never)
+      threadsStore.hydrate('b1', [])
+      registerWithReply({
+        happenings: [],
+        newThreads: [
+          {
+            title: 'Cross the river',
+            description: 'The ford is out.',
+            status: 'resolved',
+            ...turns,
+          },
+        ],
+      })
+      expect(await runOutcome({ storyId: 's1', branchId: 'b1', ...seeded })).toBe('completed')
+      return seeded
+    }
+    const storedThreads = (db: TestDb['db']) =>
+      db
+        .select({
+          status: threads.status,
+          triggeredAtEntryId: threads.triggeredAtEntryId,
+          resolvedAtEntryId: threads.resolvedAtEntryId,
+        })
+        .from(threads)
+    const storeThreads = () =>
+      [...threadsStore.getThreads().values()].map(
+        ({ status, triggeredAtEntryId, resolvedAtEntryId }) => ({
+          status,
+          triggeredAtEntryId,
+          resolvedAtEntryId,
+        }),
+      )
+
+    it('reopens it when the closing turn is rewritten and the opening turn stands', async () => {
+      const seeded = await passOpensAndCloses({ sourceTurn: 't1', resolvedAtTurn: 't3' })
+      const resolved = { status: 'resolved', triggeredAtEntryId: 'e1', resolvedAtEntryId: 'e3' }
+      expect(await storedThreads(seeded.db)).toEqual([resolved])
+
+      expect(await updateStoryEntryContent('b1', 'e3', 'turn 3, rewritten', seeded)).toEqual({
+        status: 'ok',
+      })
+
+      const reopened = { status: 'active', triggeredAtEntryId: 'e1', resolvedAtEntryId: null }
+      expect(await storedThreads(seeded.db)).toEqual([reopened])
+      expect(storeThreads()).toEqual([reopened])
+    })
+
+    it('removes it, close and all, when the opening turn is rewritten', async () => {
+      const seeded = await passOpensAndCloses({ sourceTurn: 't2', resolvedAtTurn: 't3' })
+      expect(await storedThreads(seeded.db)).toEqual([
+        { status: 'resolved', triggeredAtEntryId: 'e2', resolvedAtEntryId: 'e3' },
+      ])
+
+      // The head turn's action: its edit reverses the reply's facts with its own.
+      expect(await updateStoryEntryContent('b1', 'e2', 'turn 2, rewritten', seeded)).toEqual({
+        status: 'ok',
+      })
+
+      expect(await storedThreads(seeded.db)).toEqual([])
+      expect(storeThreads()).toEqual([])
+    })
+  })
 })
 
 // classifier.md → Mentioned places: the setting is read once, when the pass builds its prompt.
@@ -2564,5 +2652,188 @@ describe('passTimeoutMs', () => {
 
   it("caps a huge timeout at setTimeout's largest delay", () => {
     expect(passTimeoutMs(config(9_999_999))).toBe(2_147_483_647)
+  })
+})
+
+// classifier.md → What the classifier writes: the phase hands the planner the lists its prompt
+// showed, and logs every write the planner drops.
+describe('periodicClassifierPhase — the writer map', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    __resetRegistry()
+    __resetClassifierEmbedder()
+  })
+
+  const CHAR_STRANGER = 'char_33333333-3333-3333-3333-333333333333'
+  const LOC_FORD = 'loc_66666666-6666-6666-6666-666666666666'
+  const HAP_FIRE = 'hap_44444444-4444-4444-4444-444444444444'
+  const THR_AMULET = 'thr_55555555-5555-5555-5555-555555555555'
+  const character = (id: string, name: string) =>
+    ({
+      id,
+      branchId: 'b1',
+      kind: 'character',
+      name,
+      status: 'active',
+      description: `${name}, as stored.`,
+      keywords: [],
+      nameCollisionFlag: 0,
+      createdAt: 1,
+      state: {},
+    }) as unknown as Entity
+  const kael = character(CHAR_KAEL, 'Kael')
+  const aria = character(CHAR_ARIA, 'Aria')
+  const fire: Happening = {
+    id: HAP_FIRE,
+    branchId: 'b1',
+    title: 'The market fire',
+    description: null,
+    category: null,
+    icon: null,
+    temporal: null,
+    occurredAtEntryId: null,
+    commonKnowledge: 0,
+    embeddingStale: 0,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  const amulet: Thread = {
+    id: THR_AMULET,
+    branchId: 'b1',
+    title: 'What the amulet wants',
+    description: null,
+    category: null,
+    icon: null,
+    status: 'active',
+    injectionMode: 'auto',
+    triggeredAtEntryId: 'e1',
+    resolvedAtEntryId: null,
+    embeddingStale: 0,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  const actionsOf = (events: unknown[], kind: string) =>
+    events
+      .map((e) => (e as { action?: { kind: string; payload: unknown } }).action)
+      .filter((action) => action?.kind === kind)
+  const logged = (kind: string) =>
+    getDiagnosticsSnapshot()
+      .logEntries.filter((e) => e.kind === kind)
+      .map((e) => [e.level, e.fields])
+
+  it('adds awareness of a listed happening, and none for a pair the branch already stores', async () => {
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        knownAwareness: [
+          { happening: 'hp1', ref: 'c1', source: 'was there', severity: 0.6, learnedAtTurn: 't1' },
+          {
+            happening: 'hp1',
+            ref: 'c2',
+            source: 'saw the smoke',
+            severity: 0.4,
+            learnedAtTurn: 't2',
+          },
+        ],
+      }),
+    } as never)
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael, aria] })
+    happeningsStore.hydrate('b1', [fire])
+    const stored: HappeningAwareness = {
+      id: 'haw_1',
+      branchId: 'b1',
+      characterId: CHAR_KAEL,
+      happeningId: HAP_FIRE,
+      learnedAtEntryId: null,
+      decayResistance: 0.5,
+      retrievalCount: 0,
+      source: 'was there',
+    }
+    happeningAwarenessStore.hydrate('b1', [stored])
+    const { events } = await drain(h.ctx)
+    // c1 is Kael, the roster's first character; hp1 the one listed happening.
+    expect(actionsOf(events, 'upsertHappeningAwareness')).toEqual([
+      {
+        kind: 'upsertHappeningAwareness',
+        source: 'periodic_classifier',
+        payload: {
+          branchId: 'b1',
+          characterId: CHAR_ARIA,
+          happeningId: HAP_FIRE,
+          learnedAtEntryId: 'e2',
+          decayResistance: 0.4,
+          source: 'saw the smoke',
+          proseEntryId: 'e2',
+        },
+      },
+    ])
+  })
+
+  it("moves a listed thread's status at its turn, and logs one for a thread it never listed", async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        threadStatuses: [
+          { thread: 'th1', status: 'resolved', sourceTurn: 't2' },
+          { thread: 'th9', status: 'failed', sourceTurn: 't2' },
+        ],
+      }),
+    } as never)
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+    threadsStore.hydrate('b1', [amulet])
+    const { events } = await drain(h.ctx)
+    expect(actionsOf(events, 'setThreadStatus')).toEqual([
+      {
+        kind: 'setThreadStatus',
+        source: 'periodic_classifier',
+        payload: {
+          branchId: 'b1',
+          id: THR_AMULET,
+          status: 'resolved',
+          resolvedAtEntryId: 'e2',
+          proseEntryId: 'e2',
+        },
+      },
+    ])
+    expect(logged('classifier.unseen_ref')).toEqual([
+      ['warn', { list: 'threadStatuses', ref: 'th9' }],
+    ])
+  })
+
+  it('logs each write it drops under its own key', async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    const ford = {
+      ...character(LOC_FORD, 'The Ford'),
+      kind: 'location',
+      state: { parent_location_id: null },
+    } as Entity
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        happenings: [
+          { title: 'A', icon: 'rocket', sourceTurn: 't1', involvements: [], awareness: [] },
+        ],
+        renames: [{ ref: 'c2', name: 'Kael', sourceTurn: 't1' }],
+        placements: [{ ref: 'l1', parent: 'top-level', sourceTurn: 't1' }],
+        standings: [{ ref: 'f9', standing: 'feared', sourceTurn: 't1' }],
+      }),
+    } as never)
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      entities: [kael, character(CHAR_STRANGER, 'the hooded stranger'), ford],
+    })
+    await drain(h.ctx)
+    expect(logged('classifier.rename_clash')).toEqual([
+      ['warn', { ref: CHAR_STRANGER, name: 'Kael', partnerId: CHAR_KAEL, flagged: true }],
+    ])
+    expect(logged('classifier.placement_dropped')).toEqual([
+      ['warn', { ref: LOC_FORD, cause: 'not-unplaced' }],
+    ])
+    expect(logged('classifier.icon_unknown')).toEqual([['warn', { title: 'A', icon: 'rocket' }]])
+    expect(logged('classifier.unseen_ref')).toEqual([['warn', { list: 'standings', ref: 'f9' }]])
   })
 })
