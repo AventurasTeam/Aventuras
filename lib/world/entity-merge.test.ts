@@ -698,6 +698,17 @@ describe('entityMergeActions — collision flags', () => {
       expect(keptFromLoop.overlap.canonicalPlacement).toBe('stays-unplaced')
     })
 
+    it('treats a canonical whose stored parent names no place as unplaced, and places it', () => {
+      const canonical = place('loc_a', 'Varn', 'loc_gone')
+      const twin = place('loc_b', 'Varn', 'loc_p')
+      const plan = merge({ canonical, loser: twin, branchEntities: [hollow, canonical, twin] })
+      expect(plan.actions).toStrictEqual([
+        updateOf('loc_a', { state: { parent_location_id: 'loc_p' } }),
+        deleteOf('loc_b'),
+      ])
+      expect(plan.overlap.canonicalPlacement).toBe('takes-loser')
+    })
+
     it("keeps a same-parent pair on the loser once the canonical takes the loser's parent", () => {
       const canonical = unplaced('loc_a', 'The Market')
       const twin = place('loc_b', 'The Market', 'loc_p')
