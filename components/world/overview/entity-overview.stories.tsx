@@ -138,7 +138,32 @@ const VARN_DOCKS = makeEntity({
   name: 'The Varn Docks',
   state: { parent_location_id: 'loc_varn' },
 })
-const ENTITIES = [HOLLOW, MARKET, KAEL, MIRA, WATCH, KEY, SPARSE, VARN, VARN_DOCKS]
+// A stored parent naming no row reads as unplaced (data-model.md → LocationState shape).
+const ORPHAN = makeEntity({
+  id: 'loc_orphan',
+  kind: 'location',
+  name: 'Gone Annex',
+  state: { parent_location_id: 'loc_gone' },
+})
+const ORPHAN_CELLAR = makeEntity({
+  id: 'loc_orphan_cellar',
+  kind: 'location',
+  name: 'The Annex Cellar',
+  state: { parent_location_id: 'loc_orphan' },
+})
+const ENTITIES = [
+  HOLLOW,
+  MARKET,
+  KAEL,
+  MIRA,
+  WATCH,
+  KEY,
+  SPARSE,
+  VARN,
+  VARN_DOCKS,
+  ORPHAN,
+  ORPHAN_CELLAR,
+]
 const ROAMER = makeEntity({
   id: 'char_roamer',
   kind: 'character',
@@ -282,6 +307,26 @@ export const LocationUnplaced: Story = {
     await expect(within(region).queryByText('— not yet described —')).toBeNull()
     await userEvent.click(region)
     await expect(args.onRegionPress).toHaveBeenLastCalledWith('connections')
+  },
+}
+
+/** data-model.md → LocationState shape: a stored parent naming no place reads as unplaced. */
+export const LocationParentGoneReadsUnknown: Story = {
+  args: { entity: ORPHAN },
+  play: async () => {
+    const region = await screen.findByTestId('overview-part-of', {}, WAIT)
+    await expect(within(region).getByText('Location unknown')).toBeVisible()
+    await expect(within(region).queryByText('— not yet described —')).toBeNull()
+  },
+}
+
+/** A place inside one whose parent is gone: its chain ends in `Location unknown`. */
+export const LocationChainEndsAtGoneParent: Story = {
+  args: { entity: ORPHAN_CELLAR },
+  play: async () => {
+    const region = await screen.findByTestId('overview-part-of', {}, WAIT)
+    await expect(within(region).getByText('Gone Annex')).toBeVisible()
+    await expect(within(region).getByText(/Location unknown/)).toBeVisible()
   },
 }
 

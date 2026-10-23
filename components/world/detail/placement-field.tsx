@@ -16,8 +16,7 @@ import { Text } from '@/components/ui/text'
 import type { Entity } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { normalizeTerm } from '@/lib/keyword-terms'
-import { collate, compareId } from '@/lib/list-modules'
-import type { LocationDraft, PlacePlacement } from '@/lib/world'
+import { byName, type LocationDraft, type PlacePlacement } from '@/lib/world'
 
 import { issueLabel } from '../world-copy'
 import type { Gate } from './fields'
@@ -39,10 +38,6 @@ const CHOICE_LABEL: Record<Choice, () => string> = {
 
 function rowIdOf(placement: PlacePlacement): string {
   return placement.kind === 'under' ? placement.parentId : CHOICE_ROW_ID[placement.kind]
-}
-
-function comparePlaces(a: Entity, b: Entity): number {
-  return collate(a.name, b.name) || a.createdAt - b.createdAt || compareId(a.id, b.id)
 }
 
 function StatusTag({ entity }: { entity: Entity }) {
@@ -172,7 +167,7 @@ export function PlacementPicker({
         (e) =>
           e.kind === 'location' && (!excluded.has(e.id) || e.id === parentId) && matches(e.name),
       )
-      .sort(comparePlaces)
+      .sort(byName)
       .map((e): Row<PlacementRow> => ({ id: e.id, data: { kind: 'place', place: e } }))
     const all: Section<PlacementRow>[] = [
       { id: 'choices', rows: choiceRows },
