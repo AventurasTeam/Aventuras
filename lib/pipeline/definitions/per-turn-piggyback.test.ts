@@ -3391,27 +3391,41 @@ describe('per-turn-piggyback', () => {
         ])
       })
 
-      // The JSON's two lists carry no order between them: its drops apply after its item moves.
-      it('puts the key down after moving it, so it lies where the scene is', async () => {
+      // The JSON's two lists carry no order between them: its drops apply after every item move,
+      // not interleaved by index with the key's own move (a lamp's move comes first, the key's second).
+      it('puts the key down after all the moves, so it lies where the scene is', async () => {
+        const OLD_LAMP = 'item_00000000-0000-4000-8000-0000000000b2'
         seedFallbackTurn([
           keyHeld(),
           worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }),
           keyRow(),
+          worldRow({
+            id: OLD_LAMP,
+            kind: 'item',
+            name: 'tin lamp',
+            description: 'a dented lamp',
+            state: { at_location_id: null },
+          }),
         ])
+        const idMap = idMapWithKey()
+        idMap.allocate(OLD_LAMP) // i2
         const { events } = await runFallback(
           fallbackClassifierSchema.parse({
             sceneEntities: ['c1'],
             worldTimeDelta: 0,
             transfers: {
-              items: [{ id: 'i1', to: 'c1', slot: 'equipped_items' }],
+              items: [
+                { id: 'i2', to: 'c1', slot: 'inventory' },
+                { id: 'i1', to: 'c1', slot: 'equipped_items' },
+              ],
               stackables: [],
               drops: [{ id: 'i1', from: 'c1' }],
             },
           }),
-          { intermediates: { idMap: idMapWithKey() } },
+          { intermediates: { idMap } },
         )
         expect(payloads(events, 'updateEntityInventory')).toEqual([
-          { branchId: 'b1', id: HERO, equipped_items: [], inventory: [] },
+          { branchId: 'b1', id: HERO, equipped_items: [], inventory: [OLD_LAMP] },
         ])
         expect(payloads(events, 'updateItemPosition')).toEqual([
           { branchId: 'b1', id: OLD_KEY, atLocationId: TOWN },
