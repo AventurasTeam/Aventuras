@@ -546,6 +546,31 @@ describe('redo of a CTRL-Z that cleared a parent', () => {
     expect(entitiesStore.getById('loc_quarter')?.state).toEqual(UNPLACED)
   })
 
+  // Redo puts the field back as it stood before the undo: a top-level place stays top-level.
+  it('puts a child a sweep lifted to the top back at the top', async () => {
+    await act('act_varn', create('loc_varn', null, 'user_edit'))
+    await act('act_pass', create('loc_docks', 'loc_varn', 'periodic_classifier'))
+    await act('act_lift', {
+      kind: 'updateEntity',
+      source: 'periodic_classifier',
+      payload: { branchId: 'b1', id: 'loc_docks', patch: { state: { parent_location_id: null } } },
+    })
+    await hydrateEntities()
+    const set = await selectReversalSet(ctx, {
+      branchId: 'b1',
+      target: await deltasOf('act_varn'),
+      sweep: await deltasOf('act_lift'),
+    })
+    const { group, reverse: undo } = await prepareUndo(set, ctx)
+
+    await undo()
+    expect(await stateOf('loc_docks')).toEqual(UNPLACED)
+    await applyRedo(group, ctx)
+
+    expect(await stateOf('loc_docks')).toEqual({ parent_location_id: null })
+    expect(entitiesStore.getById('loc_docks')?.state).toEqual({ parent_location_id: null })
+  })
+
   it('refuses a CTRL-Z whose redo would restore the parent of a held child it clears', async () => {
     await act('act_varn', create('loc_varn', null, 'user_edit'))
     await act('act_pass', create('loc_docks', 'loc_varn', 'periodic_classifier'))
