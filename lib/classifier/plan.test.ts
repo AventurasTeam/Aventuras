@@ -1778,8 +1778,7 @@ describe('mentioned places', () => {
       expect(planned).toEqual([])
     })
 
-    // classifier.md → Mentioned places → Matching: a reused place takes the entry's parent when
-    // it was unplaced.
+    // classifier.md → Mentioned places → Matching: a reused unplaced place takes the entry's parent.
     const VARN = unplacedRow('loc_varn', 'Varn')
     const REACH = placeRow('loc_reach', 'the Eastern Reach', null)
 

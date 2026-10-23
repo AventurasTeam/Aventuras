@@ -103,7 +103,7 @@ describe('placeModes', () => {
     expect(disabledIds(loop, null)).toEqual(['loc_la', 'loc_lb'])
   })
 
-  // data-model.md → LocationState shape: an unplaced place sits inside nothing, so inherits nothing.
+  // data-model.md → LocationState shape: an unplaced place is inside nothing, so inherits nothing.
   it("gives an unplaced place no ancestor's mode, while what lies inside it inherits its own", () => {
     const varn = makeEntity({
       id: 'loc_varn',

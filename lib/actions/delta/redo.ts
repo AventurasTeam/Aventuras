@@ -209,8 +209,7 @@ async function deadAfterRedo(
   return dead
 }
 
-// The ref as it stood before the undo, null when it named a row gone at redo; a place's parent
-// goes back with its placement, so a top-level place stays top-level and a dead parent unplaces.
+// A place's parent goes back with its placement: top-level stays top, a dead parent unplaces.
 function restoredState(
   state: unknown,
   { ref, idBeforeUndo, placementBeforeUndo }: RefRestore,

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { VISUAL_CATEGORIES } from '../entities/entity-state-schema'
 
 const createEmission = { handle: z.string(), name: z.string(), description: z.string() }
-// A kept parent's id, 'top' for a top-level place, or as emitted when dropped; absent when unplaced.
+// A kept parent's id, 'top' for top-level, as emitted when dropped; absent when unplaced.
 const locationEmission = { ...createEmission, parent: z.string().optional() }
 
 // A create that made or reused a row carries that row's id; a dropped one has none.

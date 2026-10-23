@@ -79,8 +79,7 @@ function kindOf(resolved: string, refs: Refs): EntityKind | null {
 // piggyback.md → Parent: the token a tag or the fallback's JSON gives for a top-level place.
 const PARENT_TOP = 'top'
 
-// Lenient: the planner leaves a place unplaced for a parent it can't resolve rather than failing
-// the turn.
+// Lenient: the planner leaves the place unplaced for an unresolvable parent, not failing the turn.
 function resolveParent(ref: string, idMap: IdBiMap): string {
   const bare = unwrapBracket(ref)
   if (bare.toLowerCase() === PARENT_TOP) return TOP_LEVEL

@@ -47,9 +47,8 @@ const namesParent = <E extends NewPlaceDeclaration>(e: E): e is E & { parent: st
   e.parent !== undefined
 
 /**
- * Top-down passes: a child listed before its parent settles on a later pass. No parent and
- * `TOP_LEVEL` settle at once. A parent that never resolves (undeclared handle, non-location id,
- * handle cycle) leaves its create unplaced; children follow it.
+ * Top-down: a child may precede its parent. No parent or `TOP_LEVEL` settles at once; a parent that
+ * never resolves (undeclared handle, non-location id, cycle) unplaces its create; children follow.
  */
 export function settlingOrder<E extends NewPlaceDeclaration>(
   creates: readonly E[],
@@ -99,9 +98,8 @@ export function settlingOrder<E extends NewPlaceDeclaration>(
 }
 
 /**
- * piggyback.md → Parent: `TOP_LEVEL` makes the new place top-level and no parent leaves it
- * unplaced; a retired parent, or one whose stored chain is already broken, leaves it unplaced as an
- * unresolvable one does. `resolve` maps the declared parent to its row id.
+ * piggyback.md → Parent: `TOP_LEVEL` is top-level; no parent, a retired parent, a broken stored
+ * chain or an unresolvable one unplaces it. `resolve` maps the declared parent to its row id.
  */
 export function placeNewLocation(args: {
   place: SettlingPlace<NewPlaceDeclaration>

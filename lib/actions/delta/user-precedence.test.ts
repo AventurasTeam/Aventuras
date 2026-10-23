@@ -203,8 +203,7 @@ describe('wrotePlacement', () => {
   })
 })
 
-// cadence.md → User edits and classifier writes: a place's parent and its unplaced mark are one
-// field, so a reversal never restores one beside the other.
+// cadence.md → User edits and classifier writes: parent and unplaced mark are one field.
 describe('wroteField', () => {
   const update = (undoPayload: Record<string, unknown>) => ({ op: 'update', undoPayload }) as Delta
   const markedTop = [update({ state: { unplaced: true } })]

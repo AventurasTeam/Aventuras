@@ -121,7 +121,7 @@ describe('buildEntityViews — every kind', () => {
   )
 })
 
-// architecture.md → Entity state on the template surface: `unplaced`, its `parent` null.
+// architecture.md → Entity state on the template surface.
 describe('buildEntityViews — an unplaced place', () => {
   it('marks a place carrying the flag unplaced, with no parent', () => {
     const entities = [
