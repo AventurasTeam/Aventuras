@@ -107,6 +107,9 @@ export const reader = {
   // accessible name, so an unscoped query is ambiguous once more than one exists.
   showState: (page: Page, entryId: string): Locator =>
     reader.row(page, entryId).getByRole('button', { name: t('reader:entryCard.showState') }),
+  // A line of the world-state panel (entry-card.md → Panel anatomy), by its whole copy.
+  stateLine: (page: Page, entryId: string, text: string): Locator =>
+    reader.row(page, entryId).getByText(text, { exact: true }),
   monotonicityIndicator: (page: Page, entryId: string): Locator =>
     reader.row(page, entryId).getByLabel(WORLD_TIME_BREAK_LABEL),
 
