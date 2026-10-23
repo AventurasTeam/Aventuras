@@ -970,3 +970,19 @@ slice-planning gate forces its resolution before that slice is planned.
   so the pair stops being namesakes while World still shows the strip.
   Reasoned from the code, not run. Raised 2026-10-24 by the AI writer
   map's Task 22 review.
+
+- **A keyword write's undo restores the whole prior list.**
+  `appendEntityKeywords` and `renameEntity`
+  (`lib/actions/entities/state-patch-actions.ts`) store the row's
+  pre-write keywords as undo, so reversing a write that landed after
+  another turn's keyword write takes that turn's terms away too, and
+  the watermark clamp means that turn is never re-read
+  ([`classifier.md → Provenance attribution`](../memory/classifier.md#provenance-attribution)
+  says reversal spares facts about surviving turns). Within one reply
+  the planner now orders a row's renames, aliases and known or promoted
+  mention terms by turn, which closes the common case. The general fix
+  is an undo that removes only the terms its own write added. It would
+  also cover writes from different replies landing out of turn order,
+  and a reused place's keywords in the same reply (`planNewPlaces`
+  still appends those at the match, before the turn-ordered writes).
+  Raised 2026-10-24 by the AI writer map's branch review (Q25).
