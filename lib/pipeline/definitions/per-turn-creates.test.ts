@@ -832,6 +832,94 @@ describe('planTurnCreates — unplaced places', () => {
     ])
   })
 
+  // The kept chain settles its unplaced top, or a handle cycle, first: a takeover follows it.
+  it('takes over an unplaced place the block created and places it after the creates', async () => {
+    const plan = await runPlanner({
+      newLocations: [
+        { handle: 'new:upper', name: 'Upper Hall', description: 'a gallery', parent: 'new:lower' },
+        { handle: 'new:lower', name: 'Lower Hall', description: 'a crypt', parent: 'new:upper' },
+        { handle: 'new:hall', name: 'upper hall', description: 'the gallery', parent: 'new:lower' },
+      ],
+      currentLocation: 'new:hall',
+    })
+    expect(createdEntries(plan.creates).map((e) => [e.id, e.state])).toEqual([
+      ['loc_new_1', UNPLACED],
+      ['loc_new_2', UNPLACED],
+    ])
+    expect(plan.placements).toEqual([
+      {
+        kind: 'placeLocation',
+        source: 'piggyback_tagged_block',
+        payload: {
+          branchId: BRANCH,
+          id: 'loc_new_1',
+          placement: { kind: 'under', parentId: 'loc_new_2' },
+          proseEntryId: null,
+        },
+      },
+    ])
+    expect(plan.block.currentLocation).toBe('loc_new_1')
+    expect(plan.report.newLocations[2]).toEqual({
+      handle: 'new:hall',
+      name: 'upper hall',
+      description: 'the gallery',
+      parent: 'loc_new_2',
+      outcome: 'reused',
+      id: 'loc_new_1',
+    })
+  })
+
+  it('creates a namesake inside a taken-over place, matching it where it now sits', async () => {
+    const plan = await runPlanner({
+      newLocations: [
+        { handle: 'new:upper', name: 'Upper Hall', description: 'a gallery', parent: 'new:lower' },
+        { handle: 'new:lower', name: 'Lower Hall', description: 'a crypt', parent: 'new:upper' },
+        { handle: 'new:hall', name: 'upper hall', description: 'the gallery', parent: 'new:lower' },
+        { handle: 'new:alcove', name: 'Upper Hall', description: 'a nook', parent: 'new:hall' },
+      ],
+      currentLocation: 'new:alcove',
+    })
+    expect(createdEntries(plan.creates).map((e) => [e.id, e.state, e.nameCollisionFlag])).toEqual([
+      ['loc_new_1', UNPLACED, 0],
+      ['loc_new_2', UNPLACED, 0],
+      ['loc_new_3', { parent_location_id: 'loc_new_1' }, 0],
+    ])
+    expect(plan.placements.map((p) => p.payload.id)).toEqual(['loc_new_1'])
+    expect(plan.block.currentLocation).toBe('loc_new_3')
+  })
+
+  it("drops a takeover's placement into the taken-over place's own subtree, as one row", async () => {
+    const warnSpy = vi.spyOn(logger, 'warn')
+    const plan = await runPlanner({
+      newLocations: [
+        { handle: 'new:cellar', name: 'the Cellar', description: 'cold' },
+        { handle: 'new:rack', name: 'the Wine Rack', description: 'dusty', parent: 'new:cellar' },
+        { handle: 'new:inner', name: 'the cellar', description: 'colder', parent: 'new:rack' },
+      ],
+      currentLocation: 'new:inner',
+    })
+    expect(createdEntries(plan.creates).map((e) => [e.id, e.state])).toEqual([
+      ['loc_new_1', UNPLACED],
+      ['loc_new_2', { parent_location_id: 'loc_new_1' }],
+    ])
+    expect(plan.placements).toEqual([])
+    expect(plan.block.currentLocation).toBe('loc_new_1')
+    expect(plan.report.newLocations[2]).toEqual({
+      handle: 'new:inner',
+      name: 'the cellar',
+      description: 'colder',
+      parent: 'new:rack',
+      outcome: 'reused',
+      id: 'loc_new_1',
+      parentDropped: true,
+    })
+    expect(warnSpy).toHaveBeenCalledWith('classifier.create_parent_dropped', {
+      handle: 'new:inner',
+      parent: 'loc_new_2',
+      cause: 'cycle',
+    })
+  })
+
   it('keeps a reused unplaced place unplaced when the parent the create names is retired', async () => {
     const warnSpy = vi.spyOn(logger, 'warn')
     const retiredPort = row({

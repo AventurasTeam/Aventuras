@@ -220,8 +220,9 @@ function planLocations(args: {
     } else {
       id = match.id
       if (match.kind === 'reuse' && byId.get(id)?.status === 'staged') reused.add(id)
-      // data-model.md → Authorship contract: the writer places only an unplaced place it reuses.
-      if (match.kind === 'reuse' && match.place && candidate.kind !== 'unplaced') {
+      // data-model.md → Authorship contract: the writer places only an unplaced place it reuses:
+      // a row, or this block's own create taken over.
+      if (match.place && candidate.kind !== 'unplaced') {
         const loop =
           candidate.kind === 'under' ? placementLoop(id, candidate.parentId, parentOf) : null
         if (loop === null) {
@@ -232,6 +233,8 @@ function planLocations(args: {
               ...row,
               state: withPlacement(row.state as LocationState, candidate),
             })
+          if (match.kind === 'twin')
+            for (const settled of placed) if (settled.id === id) settled.placement = candidate
           placements.push({
             kind: 'placeLocation',
             source: args.source,
