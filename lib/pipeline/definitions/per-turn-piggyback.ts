@@ -285,23 +285,28 @@ function orderedTransfers(transfers: NonNullable<FallbackReply['transfers']>): P
 }
 
 // The narrative fold applies its visual changes, conditions and transfers whenever it fires, parse
-// failure or not, so those rows are already written: a field this reply leaves out keeps the fold's
-// record, its drops where they landed, copied onto the report and never read back into a block.
+// failure or not, so those rows are already written: a field this reply leaves out or reports empty
+// keeps the fold's record, its drops where they landed, copied onto the report and never read back
+// into a block.
 function withFoldChanges(
   report: StateReport | undefined,
   block: PlannedStateBlock,
   prior: StateReport | undefined,
 ): StateReport | undefined {
+  const { visualChanges, conditions, transfers } = block
+  const transfersEmpty =
+    transfers === undefined ||
+    (transfers.items.length === 0 &&
+      transfers.stackables.length === 0 &&
+      transfers.drops.length === 0)
   const carried: Pick<StateReport, 'visualChanges' | 'conditions' | 'transfers'> = {
-    ...(block.visualChanges === undefined && prior?.visualChanges !== undefined
+    ...((visualChanges?.length ?? 0) === 0 && prior?.visualChanges !== undefined
       ? { visualChanges: prior.visualChanges }
       : {}),
-    ...(block.conditions === undefined && prior?.conditions !== undefined
+    ...((conditions?.length ?? 0) === 0 && prior?.conditions !== undefined
       ? { conditions: prior.conditions }
       : {}),
-    ...(block.transfers === undefined && prior?.transfers !== undefined
-      ? { transfers: prior.transfers }
-      : {}),
+    ...(transfersEmpty && prior?.transfers !== undefined ? { transfers: prior.transfers } : {}),
   }
   if (Object.keys(carried).length === 0) return report
   return { ...(report ?? { layer: 'per_turn_classifier' as const }), ...carried }

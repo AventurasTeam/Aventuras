@@ -3498,6 +3498,32 @@ describe('per-turn-piggyback', () => {
         expect(report?.conditions).toEqual(foldReport.conditions)
         expect(report?.transfers).toEqual(foldReport.transfers)
       })
+
+      // An empty list reports nothing, as a field left out does: the fold's rows stay written.
+      it("keeps the fold's record when the reply reports its lists empty", async () => {
+        const foldReport: NonNullable<EntryMetadata['stateReport']> = {
+          layer: 'piggyback_tagged_block',
+          visualChanges: [{ id: HERO, type: 'attire', text: 'torn cloak' }],
+          conditions: [{ id: TOWN, text: 'flooded to the knee' }],
+          transfers: { items: [], stackables: [], drops: [{ id: OLD_KEY, from: HERO, at: TOWN }] },
+          failedFields: [{ field: 'sceneEntities', detail: 'unresolvable placeholder' }],
+        }
+        seedFallbackTurn(fallbackWorld(), foldReport)
+        const { events } = await runFallback(
+          fallbackClassifierSchema.parse({
+            sceneEntities: ['c1'],
+            worldTimeDelta: 0,
+            visualChanges: [],
+            conditions: [],
+            transfers: { items: [], stackables: [], drops: [] },
+          }),
+          { intermediates: { piggybackOutcome: { attempted: true, succeeded: false } } },
+        )
+        const report = metadataPatch(events).stateReport
+        expect(report?.visualChanges).toEqual(foldReport.visualChanges)
+        expect(report?.conditions).toEqual(foldReport.conditions)
+        expect(report?.transfers).toEqual(foldReport.transfers)
+      })
     })
   })
 
