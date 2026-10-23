@@ -851,3 +851,14 @@ slice-planning gate forces its resolution before that slice is planned.
   `inheritedEntryMetadata`; `EntityMergeInput` now carries both, and
   they can name different places. Predates the AI writer map; raised
   2026-10-23 by its merge-adoption review.
+
+- **Two trailing-block parsers can swallow the next tag.**
+  `lib/piggyback/parse.ts`'s `parseVisualChanges` reads
+  `<entity\s+([^>]*)>([\s\S]*?)</entity>`, so a self-closed or
+  unclosed entry runs into the next one, and the stackable pattern's
+  `[^>]*` reads the next tag into a stackable missing its `>`. The AI
+  writer map hardened its own conditions and moves with `[^<>]`; these
+  two predate it. Separately, `decodeEntities` handles only the five
+  named entities, so a numeric reference (`&#39;`) stays literal in a
+  name or description. Raised 2026-10-23 by the AI writer map's Task 11
+  review.
