@@ -256,7 +256,13 @@ describe('settlePassRetryCustody', () => {
     expect(h.calls).toEqual(['write:none'])
   })
 
-  it('rewrites a failed entry with its own text, leaving the draft alone', async () => {
+  it('rewrites a failed entry with its own text', async () => {
+    const h = harness({ held: false, stored: STORED, drafts: [DRAFT] })
+    await settlePassRetryCustody(h.deps)
+    expect(h.calls).toEqual(['write:I wait.'])
+  })
+
+  it('leaves the draft alone when a failed entry has no text', async () => {
     const h = harness({ held: false, drafts: [DRAFT] })
     await settlePassRetryCustody(h.deps)
     expect(h.calls).toEqual(['write:none'])
