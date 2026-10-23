@@ -173,6 +173,8 @@ function planLocations(args: {
   const placements: PlaceLocationAction[] = []
   // Where this turn's placements put a reused place, so a later walk sees it there.
   const placedParents = new Map<string, string | null>()
+  // The rows this turn placed, as matching must see them: no longer unplaced.
+  const placedRows = new Map<string, Entity>()
 
   // normalizeCreates already dropped a second declaration of a handle, so none is a duplicate.
   const { order } = settlingOrder(
@@ -195,7 +197,13 @@ function planLocations(args: {
     const candidate = placement.kind === 'kept' ? placement.placement : UNPLACED
 
     const text = storedText(emission)
-    const match = matchNewPlace({ name: text.name, placement: candidate }, placed, view)
+    const match = matchNewPlace(
+      { name: text.name, placement: candidate },
+      placed,
+      placedRows.size === 0
+        ? view
+        : { ...view, locations: view.locations.map((e) => placedRows.get(e.id) ?? e) },
+    )
     let id: string
     if (match.kind === 'create') {
       const row = newRow({
@@ -217,6 +225,12 @@ function planLocations(args: {
           candidate.kind === 'under' ? placementLoop(id, candidate.parentId, parentOf) : null
         if (loop === null) {
           placedParents.set(id, candidate.kind === 'under' ? candidate.parentId : null)
+          const row = byId.get(id)
+          if (row !== undefined)
+            placedRows.set(id, {
+              ...row,
+              state: withPlacement(row.state as LocationState, candidate),
+            })
           placements.push({
             kind: 'placeLocation',
             source: args.source,

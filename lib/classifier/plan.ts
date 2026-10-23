@@ -1,5 +1,5 @@
 import type { PipelineAction } from '@/lib/actions'
-import type { Entity } from '@/lib/db'
+import type { Entity, LocationState } from '@/lib/db'
 import { dedupeTerms, newTerms } from '@/lib/keyword-terms'
 import {
   characterFactionId,
@@ -222,6 +222,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const placed: SettledNewPlace[] = []
     // Where this reply's placements put a reused place, so a later walk sees it there.
     const placedParents = new Map<string, string | null>()
+    // The rows this reply placed, as matching must see them: no longer unplaced.
+    const placedRows = new Map<string, Entity>()
 
     const declared: NewPlace[] = []
     for (const place of newPlacesOf(extraction)) {
@@ -259,7 +261,9 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       const match = matchNewPlace(
         { name: stored.name, placement: candidate, keywords: place.keywords },
         placed,
-        view,
+        placedRows.size === 0
+          ? view
+          : { ...view, locations: view.locations.map((e) => placedRows.get(e.id) ?? e) },
       )
 
       let id: string
@@ -273,6 +277,12 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
             candidate.kind === 'under' ? placementLoop(id, candidate.parentId, parentOf) : null
           if (loop === null) {
             placedParents.set(id, candidate.kind === 'under' ? candidate.parentId : null)
+            const row = rowById.get(id)
+            if (row !== undefined)
+              placedRows.set(id, {
+                ...row,
+                state: withPlacement(row.state as LocationState, candidate),
+              })
             planned.push({
               action: {
                 kind: 'placeLocation',

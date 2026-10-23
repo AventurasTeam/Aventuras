@@ -1883,6 +1883,77 @@ describe('mentioned places', () => {
       ])
       expect(parentDrops).toEqual([{ handle: 'new:b', parent: 'loc_ash', cause: 'cycle' }])
     })
+
+    // piggyback.md → Matching before creating: places under different real parents are distinct.
+    describe("later creates against this reply's placements", () => {
+      const INN = placeRow('loc_inn', 'the Inn', null)
+      const KEEP = placeRow('loc_keep', 'the Keep', null)
+      const CELLAR = unplacedRow('loc_cellar', 'the Cellar')
+
+      it('reuses and places an unplaced place once, creating the namesake under another parent', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          reply([
+            newPlace('new:a', 'the Cellar', { parent: 'loc_inn' }),
+            newPlace('new:b', 'the Cellar', { parent: 'loc_keep' }),
+          ]),
+          deps([INN, KEEP, CELLAR, placeRow('loc_stairs', 'the Cellar Stairs', 'loc_keep')]),
+        )
+        expect(handleMap.get('new:a')).toBe('loc_cellar')
+        expect(handleMap.get('new:b')).toBe('loc_new1')
+        expect(
+          placementsOf(planned).map((p) => payloadOf<{ id: string; placement: unknown }>(p)),
+        ).toEqual([
+          expect.objectContaining({
+            id: 'loc_cellar',
+            placement: { kind: 'under', parentId: 'loc_inn' },
+          }),
+        ])
+        expect(createdPlaces(planned)).toEqual([
+          expect.objectContaining({
+            id: 'loc_new1',
+            state: { parent_location_id: 'loc_keep' },
+            nameCollisionFlag: 1,
+            nameCollisionPartnerId: 'loc_stairs',
+            nameCollisionReason: 'same-parent',
+          }),
+        ])
+      })
+
+      it('still maps a same-placement twin to the first, placing once', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          reply([
+            newPlace('new:a', 'the Cellar', { parent: 'loc_inn' }),
+            newPlace('new:b', 'The Cellar', { parent: 'loc_inn' }),
+          ]),
+          deps([INN, CELLAR]),
+        )
+        expect(handleMap.get('new:b')).toBe('loc_cellar')
+        expect(placementsOf(planned)).toHaveLength(1)
+        expect(createdPlaces(planned)).toEqual([])
+      })
+
+      it('lets a later create reuse a place whose placement the planner dropped', () => {
+        const { planned, handleMap, parentDrops } = buildClassifierActions(
+          reply([
+            newPlace('new:a', 'the Cellar', { parent: 'loc_cdocks' }),
+            newPlace('new:b', 'the Cellar', { parent: 'loc_keep' }),
+          ]),
+          deps([KEEP, CELLAR, placeRow('loc_cdocks', 'Cellar Docks', 'loc_cellar')]),
+        )
+        expect(handleMap.get('new:a')).toBe('loc_cellar')
+        expect(handleMap.get('new:b')).toBe('loc_cellar')
+        expect(
+          placementsOf(planned).map((p) => payloadOf<{ id: string; placement: unknown }>(p)),
+        ).toEqual([
+          expect.objectContaining({
+            id: 'loc_cellar',
+            placement: { kind: 'under', parentId: 'loc_keep' },
+          }),
+        ])
+        expect(createdPlaces(planned)).toEqual([])
+        expect(parentDrops).toEqual([{ handle: 'new:a', parent: 'loc_cdocks', cause: 'cycle' }])
+      })
+    })
   })
 
   describe('flags', () => {

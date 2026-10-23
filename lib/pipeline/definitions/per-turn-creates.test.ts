@@ -781,6 +781,57 @@ describe('planTurnCreates — unplaced places', () => {
     })
   })
 
+  // The kept chain is linear, so two same-named creates can only be staged one inside the other.
+  it('matches a later create against where this block placed a reused place, so nothing moves', async () => {
+    const CELLAR = 'loc_00000000-0000-4000-8000-0000000000ab'
+    const STAIRS = 'loc_00000000-0000-4000-8000-0000000000ac'
+    const plan = await runPlanner(
+      {
+        newLocations: [
+          { handle: 'new:a', name: 'the Cellar', description: 'cold', parent: PORT },
+          { handle: 'new:b', name: 'the Cellar', description: 'colder', parent: 'new:a' },
+        ],
+        currentLocation: 'new:b',
+      },
+      {
+        entities: world(
+          unplacedPlace(CELLAR, 'the Cellar'),
+          row({
+            id: STAIRS,
+            kind: 'location',
+            name: 'the Cellar Stairs',
+            state: { parent_location_id: CELLAR },
+          }),
+        ),
+      },
+    )
+    expect(plan.placements).toEqual([
+      {
+        kind: 'placeLocation',
+        source: 'piggyback_tagged_block',
+        payload: {
+          branchId: BRANCH,
+          id: CELLAR,
+          placement: { kind: 'under', parentId: PORT },
+          proseEntryId: null,
+        },
+      },
+    ])
+    expect(createdEntries(plan.creates)).toEqual([
+      expect.objectContaining({
+        id: 'loc_new_1',
+        state: { parent_location_id: CELLAR },
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: STAIRS,
+        nameCollisionReason: 'same-parent',
+      }),
+    ])
+    expect(plan.report.newLocations).toEqual([
+      expect.objectContaining({ handle: 'new:a', outcome: 'reused', id: CELLAR }),
+      expect.objectContaining({ handle: 'new:b', outcome: 'created', id: 'loc_new_1' }),
+    ])
+  })
+
   it('keeps a reused unplaced place unplaced when the parent the create names is retired', async () => {
     const warnSpy = vi.spyOn(logger, 'warn')
     const retiredPort = row({
