@@ -698,6 +698,20 @@ describe('matchNewPlace', () => {
         ).toEqual(twin('loc_new1'))
       })
 
+      it('never takes over one a takeover made top-level', () => {
+        expect(
+          matchNewPlace(
+            { name: 'Ashfall', placement: under('loc_town') },
+            [
+              { name: 'Ashfall', placement: UNPLACED, id: 'loc_new1' },
+              { name: 'Ashfall', placement: TOP, id: 'loc_new1' },
+            ],
+            view,
+            new Map([['loc_new1', null]]),
+          ),
+        ).toEqual(PLAIN)
+      })
+
       it('never takes it over again: a namesake under another parent is its own row', () => {
         expect(
           matchNewPlace({ name: 'Ashfall', placement: TOP }, earlier, view, placedHere),

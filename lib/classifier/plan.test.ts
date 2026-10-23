@@ -2191,6 +2191,25 @@ describe('mentioned places', () => {
         ])
       })
 
+      it('takes a place over once when the first takeover makes it top-level', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          reply([
+            newPlace('new:a', 'the Cellar'),
+            newPlace('new:b', 'the Cellar', { parent: 'top-level' }),
+            newPlace('new:c', 'the Cellar', { parent: 'loc_keep' }),
+          ]),
+          deps([TOWN, KEEP]),
+        )
+        expect(['new:a', 'new:b', 'new:c'].map((h) => handleMap.get(h))).toEqual([
+          'loc_new1',
+          'loc_new1',
+          'loc_new2',
+        ])
+        expect(
+          placementsOf(planned).map((p) => payloadOf<{ id: string; placement: unknown }>(p)),
+        ).toEqual([expect.objectContaining({ id: 'loc_new1', placement: { kind: 'top' } })])
+      })
+
       it('never takes over a placed create an unplaced namesake mapped to', () => {
         const { planned, handleMap } = buildClassifierActions(
           reply([
