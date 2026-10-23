@@ -190,15 +190,15 @@ external override prop, same as reasoning expansion.
 
 ### Panel anatomy
 
-| Group                 | Source                                                                     | Rendered when                    | Editable  |
-| --------------------- | -------------------------------------------------------------------------- | -------------------------------- | --------- |
-| **Scene**             | absolute triple, ids resolved to names                                     | always                           | tail only |
-| **Changes this turn** | `stateReport.visualChanges` / `.transfers` / `.newLocations` / `.newItems` | any renders a line               | never     |
-| **Reported delta**    | `stateReport.worldTimeDelta`                                               | present                          | never     |
-| **Summary**           | `metadata.summary`                                                         | present                          | never     |
-| **Retrieval asks**    | `metadata.retrievalQueries`                                                | non-empty                        | never     |
-| **Parse failure**     | `stateReport.failedFields` / `.raw`                                        | `failedFields` non-empty         | never     |
-| **Legacy block**      | `stripTrailingBlocks(content).stateRaw`                                    | no `stateReport`, markup present | never     |
+| Group                 | Source                                                                                     | Rendered when                    | Editable  |
+| --------------------- | ------------------------------------------------------------------------------------------ | -------------------------------- | --------- |
+| **Scene**             | absolute triple, ids resolved to names                                                     | always                           | tail only |
+| **Changes this turn** | `stateReport.visualChanges` / `.conditions` / `.transfers` / `.newLocations` / `.newItems` | any renders a line               | never     |
+| **Reported delta**    | `stateReport.worldTimeDelta`                                                               | present                          | never     |
+| **Summary**           | `metadata.summary`                                                                         | present                          | never     |
+| **Retrieval asks**    | `metadata.retrievalQueries`                                                                | non-empty                        | never     |
+| **Parse failure**     | `stateReport.failedFields` / `.raw`                                                        | `failedFields` non-empty         | never     |
+| **Legacy block**      | `stripTrailingBlocks(content).stateRaw`                                                    | no `stateReport`, markup present | never     |
 
 **Retrieval asks** lists what the turn's classifier requested for the
 next turn's retrieval — the
@@ -218,10 +218,13 @@ render an em-dash rather than collapsing the row, so the fields stay
 in the same place across entries.
 
 **Changes this turn** renders one line per reported mutation: a visual
-change as name, category and its full-replace text; an item transfer
-as item, recipient and prior holder when tracked; a stackable as key,
-amount and the same holders; a new place or item as `New place:` or
-`New item:` and its name, or `Matched place:` and the reused row's name.
+change as name, category and its full-replace text; a condition as
+`Condition:`, the place's or item's name and its full-replace text; an
+item transfer as item, recipient and prior holder when tracked; an item
+put down as `Put down:`, the item and the place it landed at, or the
+item alone when the scene had no place; a stackable as key, amount and
+the same holders; a new place or item as `New place:` or `New item:`
+and its name, or `Matched place:` and the reused row's name.
 A created or reused row is named from the live entity, as every other
 line is, and from the report's name only once the row is gone. A
 dropped create isn't listed; the per-turn inspector shows it. These

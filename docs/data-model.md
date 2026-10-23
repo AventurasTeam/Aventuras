@@ -1999,7 +1999,7 @@ story_entries.metadata: {
     currentLocationRejected?: true   // apply.ts refused the emitted id (or a fallback's new-item handle); absent otherwise, never false
     visualChanges?: { id: string; type: VisualChangeType; text: string }[]
     conditions?: { id: string; text: string }[]   // a place's or an item's condition, as emitted
-    transfers?: { items: ItemTransfer[]; drops: ItemDrop[]; stackables: StackableTransfer[] }
+    transfers?: { items: ItemTransfer[]; drops?: { id: string; from?: string; at: string | null }[]; stackables: StackableTransfer[] }  // drops: each item put down, the holder as emitted, and the place it landed (null when the scene had no location), from what apply.ts did; absent on rows written before drops
     newLocations?: ({ handle: string; name: string; description: string; condition?: string; parent?: string; outcome: 'created' | 'reused'; id: string; parentDropped?: true } | { handle: string; name: string; description: string; condition?: string; parent?: string; outcome: 'dropped' })[]  // as emitted, post-substitution, with what the per-turn create planner made of it; parent 'top' for top-level, absent for unplaced; see memory/piggyback.md → New locations and items
     newItems?: ({ handle: string; name: string; description: string; condition?: string; outcome: 'created'; id: string } | { handle: string; name: string; description: string; condition?: string; outcome: 'dropped' })[]
     failedFields?: { field: string; detail: string }[]  // the failed NARRATIVE attempt, retained even once a fallback supplied the fields
