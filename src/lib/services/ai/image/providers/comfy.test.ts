@@ -326,6 +326,12 @@ describe('custom workflow', () => {
     expect(postedGraph()['61'].inputs.image).toBe('aventuras/uploaded.png')
   })
 
+  it('refuses custom-workflow mode without a workflow instead of drawing another one', async () => {
+    await expect(generate({ mode: ComfyMode.CustomWorkflow }, { model: '' })).rejects.toThrow(
+      'no custom workflow',
+    )
+  })
+
   it('sends no upload for a workflow without a LoadImage node', async () => {
     await generate(
       { mode: ComfyMode.CustomWorkflow, customWorkflow: custom() },

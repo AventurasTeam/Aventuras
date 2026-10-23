@@ -469,6 +469,9 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
           signal,
         })
       }
+      if (explicitMode === ComfyMode.CustomWorkflow) {
+        throw new Error('This ComfyUI profile has no custom workflow loaded.')
+      }
 
       // -----------------------------------------------------------------------
       // Hardcoded workflows (basic / lora / unet).
