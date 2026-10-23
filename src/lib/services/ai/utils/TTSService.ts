@@ -797,7 +797,7 @@ export class OpenAICompatibleTTSProvider extends TTSProvider {
 
     // Try to fetch custom voices from provider (optional)
     try {
-      const response = await fetch(`${endpoint.replace('/audio/speech', '')}/models`, {
+      const response = await fetch(`${endpoint.slice(0, -SPEECH_PATH.length)}/models`, {
         headers: this.getHeaders(),
       })
 

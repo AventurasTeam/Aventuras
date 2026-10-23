@@ -45,4 +45,12 @@ describe('OpenAI compatible TTS endpoint', () => {
 
     expect(voicesUrl()).toBe('https://openrouter.ai/api/v1/models')
   })
+
+  it.each(['https://host.test/v1', 'https://host.test/v1/audio/speech'])(
+    'lists voices from the base of %s',
+    async (endpoint) => {
+      await provider(endpoint).getAvailableVoices()
+      expect(voicesUrl()).toBe('https://host.test/v1/models')
+    },
+  )
 })
