@@ -29,7 +29,7 @@ import {
   type RelationshipLink,
 } from './entity-draft'
 import { retireCascade } from './place-rules'
-import { samePlacement, type PlacePlacement } from './placement'
+import { samePlacement, withPlacement, type PlacePlacement } from './placement'
 
 export type EntitySaveInput =
   | {
@@ -172,10 +172,15 @@ function characterState(current: CharacterState, draft: CharacterDraft): Charact
 }
 
 function locationState(current: LocationState, draft: LocationDraft): LocationState | null {
-  const next: LocationState = { ...current }
+  let next: LocationState = { ...current }
   let changed = false
   if (draft.parentLocationId !== (current.parent_location_id ?? null)) {
-    next.parent_location_id = draft.parentLocationId
+    next = withPlacement(
+      next,
+      draft.parentLocationId === null
+        ? { kind: 'top' }
+        : { kind: 'under', parentId: draft.parentLocationId },
+    )
     changed = true
   }
   if (writeText(next, 'condition', draft.condition)) changed = true
