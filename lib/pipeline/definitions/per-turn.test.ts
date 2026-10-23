@@ -2404,7 +2404,8 @@ describe('narrative fold — creates', () => {
       })
     })
 
-    // Its place stands, so the fallback has nothing to move the item to: the drop lands now.
+    // The fold can use its own place, or keeps the previous one for a place apply.ts rejects on any
+    // block: the drop lands now.
     describe('a failed fold whose place stands', () => {
       const sceneReply = (location: string, transfers: string) =>
         'Aria sets her sword on a crate.\n<state><scene_entities>c1</scene_entities>' +
@@ -2414,6 +2415,7 @@ describe('narrative fold — creates', () => {
       it.each([
         ['names no location', ''],
         ['names the scene place', '<current_location>l1</current_location>'],
+        ['names an item, which apply.ts rejects', '<current_location>i1</current_location>'],
       ])('puts the item down at the scene when it %s', async (_label, location) => {
         const fold = await failedFold(sceneReply(location, '<drop id="i1" from="c1" />'))
         const rows = await branchRows()

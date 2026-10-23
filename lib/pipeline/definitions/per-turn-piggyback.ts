@@ -283,8 +283,8 @@ function orderedTransfers(transfers: NonNullable<FallbackReply['transfers']>): P
   }
 }
 
-// A failed fold still lands its visual changes, conditions, item moves and stackables, so each
-// record stays unless this reply's field holds one too (an unrejected condition) or a landed drop.
+// A failed fold lands its visual changes, conditions and transfers (bar drops it can't place), so
+// each record stays unless this reply's field has one too: an unrejected condition, a landed drop.
 function withFoldChanges(
   report: StateReport | undefined,
   prior: StateReport | undefined,
