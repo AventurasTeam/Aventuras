@@ -16,6 +16,7 @@ export function placementOf(row: Pick<Entity, 'state'>): PlacePlacement {
   return parentId === null ? { kind: 'top' } : { kind: 'under', parentId }
 }
 
+/** The stored flag only: a parent naming no place reads as placed. Row readers use `realPlacementOf`. */
 export function isUnplaced(row: Pick<Entity, 'state'>): boolean {
   return placementOf(row).kind === 'unplaced'
 }
