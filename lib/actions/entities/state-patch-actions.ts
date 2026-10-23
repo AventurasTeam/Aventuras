@@ -498,7 +498,6 @@ export const placeLocationHandler: ActionHandler = async (action, branchId, ctx)
     .from(entities)
     .where(and(eq(entities.branchId, bid), eq(entities.kind, 'location')))
   if (placement.kind === 'top') {
-    // A stored parent the branch has no place for reads as unplaced wherever places are listed.
     if (realPlacementOf(places)(id).kind !== 'unplaced') return placeRefusal('not-unplaced')
   } else {
     const parent = places.find((p) => p.id === placement.parentId)
