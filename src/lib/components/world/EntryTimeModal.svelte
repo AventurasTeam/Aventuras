@@ -103,7 +103,7 @@
   presentation="sheet"
   bind:open
   size="lg"
-  title="Edit the recorded time"
+  title={entry ? `Edit the time of entry ${entryNumber(entry)}` : 'Edit the recorded time'}
   action={{ label: 'Save', disabled: !canSave, onConfirm: () => void save() }}
   busy={saving}
   {dirty}

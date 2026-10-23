@@ -419,7 +419,7 @@
     customModelDialogError = ''
     customModelDialogInput = ''
   }}
-  title="Add Custom Model"
+  title="Add a custom model"
   description="Enter the model identifier (e.g., provider/model-name)"
   action={{
     label: 'Add',

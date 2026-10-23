@@ -156,10 +156,9 @@
   presentation="sheet"
   open={entry !== null}
   onCancel={cancel}
-  title="Create checkpoint"
-  description={entry ? `Create a new checkpoint at entry ${entryNumber(entry)}` : undefined}
+  title={entry ? `Create a checkpoint at entry ${entryNumber(entry)}` : 'Create a checkpoint'}
   action={{
-    label: 'Create Checkpoint',
+    label: 'Create checkpoint',
     icon: Bookmark,
     tone: 'checkpoint',
     disabled: !name.trim() || blocked,

@@ -125,14 +125,16 @@
   {open}
   onCancel={cancel}
   size="lg"
-  title={lockedPack ? 'One more thing for this story' : 'Prompt Pack for this story'}
+  title={lockedPack
+    ? 'Which value should this story use?'
+    : 'Which prompt pack should this story use?'}
   action={{ label: 'Import story', disabled: loading, onConfirm: confirm }}
   cancelLabel="Cancel import"
   dirty
   discardQuestion={{
     title: 'Cancel this import?',
     description: 'Nothing has been written yet. The story will have to be imported again.',
-    keepLabel: 'Keep Importing',
+    keepLabel: 'Keep importing',
     confirmLabel: 'Cancel import',
   }}
 >

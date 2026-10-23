@@ -101,6 +101,22 @@ import, is not a step of the control that started the flow. Its title asks its o
 buttons say what they do to the larger flow ("Cancel import", "Import story"), and its action
 carries no glyph of that control.
 
+### Wording
+
+- **Sentence case** for titles and buttons.
+- **A command's title is a statement:** a verb, its object with an article, and the target when
+  there is one: "Delete entry 47", "Create a checkpoint at entry 12". An anomaly handler's title is
+  its question: "Which prompt pack should this story use?"
+- **The description says what the title cannot,** a consequence or context, and never repeats it.
+  No deletion says "This cannot be undone": none can be, and each says what is lost instead.
+- **The action repeats the title's verb without the article,** "Create branch", "Delete all
+  entries", and is never "Continue" or "OK".
+- **The discard and removal questions name both outcomes:** "Keep editing" or "Discard", "Keep
+  anchor" or "Delete anchor". Their buttons are the footer's pair: Outline to stay, and the
+  `feature` variant in the `delete` tone to go.
+
+The backup and restore confirmations keep their own wording.
+
 ### `ModalActions` on its own
 
 `shared/ModalActions.svelte` is the shell's footer. Reach for it alone only for a modal whose body

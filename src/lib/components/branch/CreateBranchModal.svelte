@@ -50,9 +50,9 @@
   presentation="sheet"
   bind:open
   onCancel={cancel}
-  title="Create branch"
+  title="Create a branch"
   action={{
-    label: 'Create Branch',
+    label: 'Create branch',
     icon: GitBranch,
     tone: 'branch',
     disabled: !name.trim() || !checkpoint,
@@ -61,8 +61,8 @@
   busy={saving}
 >
   {#snippet description()}
-    Create a new branch from the Checkpoint “{checkpoint?.name}”{#if forkEntry}
-      at Entry {entryNumber(forkEntry)}{/if}
+    From the checkpoint “{checkpoint?.name}”{#if forkEntry}
+      at entry {entryNumber(forkEntry)}{/if}.
   {/snippet}
   <Input
     type="text"

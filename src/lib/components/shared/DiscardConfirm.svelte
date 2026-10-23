@@ -1,6 +1,8 @@
 <script lang="ts">
   import { Button } from '#lib/components/ui/button/index.ts'
   import { TriangleAlert } from '@lucide/svelte'
+  import { cn } from '#lib/utils/cn.ts'
+  import { FEATURE_COLORS } from './featureColors'
 
   interface Props {
     open: boolean
@@ -16,7 +18,7 @@
     open,
     title = 'Discard this story?',
     description = 'Everything you have filled in so far will be lost.',
-    keepLabel = 'Keep Editing',
+    keepLabel = 'Keep editing',
     discardLabel = 'Discard',
     onCancel,
     onDiscard,
@@ -59,9 +61,23 @@
         </div>
       </div>
 
-      <div class="mt-5 flex justify-end gap-2">
-        <Button bind:ref={cancelButton} variant="outline" onclick={onCancel}>{keepLabel}</Button>
-        <Button variant="destructive" onclick={onDiscard}>{discardLabel}</Button>
+      <!-- The same pair as an action modal's footer: neutral to stay, the delete tone to go. -->
+      <div class="mt-5 flex gap-2 sm:justify-end">
+        <Button
+          bind:ref={cancelButton}
+          variant="outline"
+          class="flex-1 sm:flex-none"
+          onclick={onCancel}
+        >
+          {keepLabel}
+        </Button>
+        <Button
+          variant="feature"
+          class={cn('flex-1 sm:flex-none', FEATURE_COLORS.delete.vars)}
+          onclick={onDiscard}
+        >
+          {discardLabel}
+        </Button>
       </div>
     </div>
   </div>

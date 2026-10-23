@@ -320,8 +320,10 @@
       </Button>
       <ActionModal
         bind:open={deleteAllDialogOpen}
-        title="Delete all lorebook entries?"
-        description={`This will permanently delete all ${story.lorebookEntries.length} entr${story.lorebookEntries.length === 1 ? 'y' : 'ies'} from this story's lorebook. This action cannot be undone.`}
+        title="Delete all lorebook entries"
+        description={story.lorebookEntries.length === 1
+          ? "The one entry in this story's lorebook will be deleted."
+          : `All ${story.lorebookEntries.length} entries in this story's lorebook will be deleted.`}
         action={{
           label: 'Delete all entries',
           icon: Trash2,

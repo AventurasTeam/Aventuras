@@ -134,7 +134,11 @@
   presentation="sheet"
   bind:open
   size="lg"
-  title={existing ? 'Edit a reconciliation anchor' : 'Create a reconciliation anchor'}
+  title={existing && usableEntry
+    ? `Edit the anchor on entry ${entryNumber(usableEntry)}`
+    : usableEntry
+      ? `Create an anchor on entry ${entryNumber(usableEntry)}`
+      : 'Create an anchor'}
   description="A point of reference for the time reconciliation. Asserts when the entry ended. Does not change the recorded time."
   action={{ label: 'Save', disabled: !canSave, onConfirm: () => void save() }}
   busy={saving}
@@ -145,8 +149,8 @@
         question: {
           title: 'Delete the anchor?',
           description: `The time you asserted on entry ${entryNumber(usableEntry)} is not recorded anywhere else.`,
-          keepLabel: 'Keep',
-          confirmLabel: 'Delete',
+          keepLabel: 'Keep anchor',
+          confirmLabel: 'Delete anchor',
         },
         onRemove: () => void remove(),
       }

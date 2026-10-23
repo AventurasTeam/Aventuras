@@ -48,10 +48,10 @@
   presentation="sheet"
   open={true}
   onCancel={onClose}
-  title="Create Chapter"
+  title="Create a chapter"
   description="Select where to end this chapter. All entries up to and including the selected entry will be summarized."
   action={{
-    label: 'Create Chapter',
+    label: 'Create chapter',
     icon: BookPlus,
     disabled: entries.length === 0,
     onConfirm: handleConfirm,

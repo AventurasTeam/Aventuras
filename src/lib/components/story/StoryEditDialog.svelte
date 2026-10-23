@@ -101,7 +101,7 @@
   presentation="sheet"
   bind:open={isOpen}
   onClosed={onClose}
-  title="Edit Story"
+  title="Edit story"
   description="Genre and description are used when generating every new entry in this story. Old entries are not affected."
   action={{ label: 'Save', disabled: !canSave, onConfirm: () => void save() }}
   busy={saving}
