@@ -1722,10 +1722,10 @@ describe('buildPiggybackActions — conditions and drops', () => {
 
     // piggyback.md → Trailing block format: a drop needs a holder in this turn's scene or the last.
     describe('a holder off the scene', () => {
-      const bladeWith = (holder: string) => [
-        person('char_1'),
-        person('char_2'),
-        person(holder, { inventory: ['item_blade'] }),
+      const bladeWith = (...holders: string[]) => [
+        ...['char_1', 'char_2', 'char_3'].map((id) =>
+          person(id, holders.includes(id) ? { inventory: ['item_blade'] } : {}),
+        ),
         thing('item_blade'),
         place('loc_dock'),
       ]
@@ -1767,6 +1767,52 @@ describe('buildPiggybackActions — conditions and drops', () => {
         const result = run(dropBlade(['char_2']), bladeWith('char_2'), { previousScene: [] })
         expect(moves(result)).toEqual([
           holdings('char_2', [], []),
+          position('item_blade', 'loc_dock'),
+        ])
+        expect(result.applied.drops).toEqual([{ id: 'item_blade', at: 'loc_dock' }])
+      })
+
+      // The holders are whoever has it at the drop's place in the block, not on the stored rows.
+      const takeThenDrop = (to: string): ParsedStateBlock => ({
+        sceneEntities: ['char_1'],
+        currentLocation: 'loc_dock',
+        transfers: transfers({
+          items: [{ id: 'item_blade', to, slot: 'inventory', seq: 0 }],
+          drops: [{ id: 'item_blade', from: to, seq: 1 }],
+        }),
+      })
+
+      it('puts down an item someone in the scene took from an off-scene holder first', () => {
+        const result = run(takeThenDrop('char_1'), bladeWith('char_3'), {
+          previousScene: ['char_1'],
+        })
+        expect(moves(result)).toEqual([
+          holdings('char_3', [], []),
+          holdings('char_1', [], []),
+          position('item_blade', 'loc_dock'),
+        ])
+        expect(result.applied.drops).toEqual([{ id: 'item_blade', from: 'char_1', at: 'loc_dock' }])
+      })
+
+      it('refuses the drop of an item someone off the scene took from the scene first', () => {
+        const result = run(takeThenDrop('char_3'), bladeWith('char_1'), {
+          previousScene: ['char_1'],
+        })
+        expect(moves(result)).toEqual([
+          holdings('char_1', [], []),
+          holdings('char_3', [], ['item_blade']),
+        ])
+        expect(result.applied.drops).toEqual([])
+      })
+
+      // data-model.md → ItemState shape: an older write can leave an item doubled across holders.
+      it('puts down an item doubled across holders when one of them is in the scene', () => {
+        const result = run(dropBlade(['char_1']), bladeWith('char_1', 'char_3'), {
+          previousScene: ['char_1'],
+        })
+        expect(moves(result)).toEqual([
+          holdings('char_1', [], []),
+          holdings('char_3', [], []),
           position('item_blade', 'loc_dock'),
         ])
         expect(result.applied.drops).toEqual([{ id: 'item_blade', at: 'loc_dock' }])
