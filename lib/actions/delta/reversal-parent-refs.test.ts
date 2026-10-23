@@ -571,6 +571,37 @@ describe('redo of a CTRL-Z that cleared a parent', () => {
     expect(entitiesStore.getById('loc_docks')?.state).toEqual({ parent_location_id: null })
   })
 
+  it('leaves a child unplaced when its redo would put back a parent only a sweep had set', async () => {
+    await act('act_varn', create('loc_varn', null, 'user_edit'))
+    await act('act_pass', create('loc_docks', 'loc_varn', 'periodic_classifier'))
+    await act('act_p2', create('loc_z', null, 'periodic_classifier'))
+    await act('act_p2', {
+      kind: 'updateEntity',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: 'b1',
+        id: 'loc_docks',
+        patch: { state: { parent_location_id: 'loc_z' } },
+      },
+    })
+    await hydrateEntities()
+    const set = await selectReversalSet(ctx, {
+      branchId: 'b1',
+      target: await deltasOf('act_varn'),
+      sweep: await deltasOf('act_p2'),
+    })
+    expect(clears(set)).toEqual(['entities:loc_docks.parent_location_id -> loc_varn'])
+    const { group, reverse: undo } = await prepareUndo(set, ctx)
+
+    await undo()
+    await applyRedo(group, ctx)
+
+    expect(await entityRow('loc_varn')).toBeDefined()
+    expect(await entityRow('loc_z')).toBeUndefined()
+    expect(await stateOf('loc_docks')).toEqual(UNPLACED)
+    expect(entitiesStore.getById('loc_docks')?.state).toEqual(UNPLACED)
+  })
+
   it('refuses a CTRL-Z whose redo would restore the parent of a held child it clears', async () => {
     await act('act_varn', create('loc_varn', null, 'user_edit'))
     await act('act_pass', create('loc_docks', 'loc_varn', 'periodic_classifier'))

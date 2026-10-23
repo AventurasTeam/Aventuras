@@ -641,28 +641,17 @@ function undoHeldUpdate(
   copy.removed = keepsNothing(entry, copy.row)
 }
 
-/**
- * An entity's `state` with a JSON-path ref set to `id`. A place's parent goes through
- * withPlacement, so clearing one leaves the place unplaced and putting one back clears the mark
- * (generation-pipeline.md → Reverse-replay).
- */
-export function stateWithRef(
-  state: unknown,
-  ref: RefPath,
-  id: string | null,
-): Record<string, unknown> {
+/** An entity's `state` with a JSON-path ref nulled; a place cleared of its parent is unplaced. */
+export function stateWithRefCleared(state: unknown, ref: RefPath): Record<string, unknown> {
   const current = (state ?? {}) as Record<string, unknown>
-  if (ref.path !== 'parent_location_id') return { ...current, [ref.path]: id }
-  return withPlacement(
-    current as LocationState,
-    id === null ? { kind: 'unplaced' } : { kind: 'under', parentId: id },
-  )
+  if (ref.path !== 'parent_location_id') return { ...current, [ref.path]: null }
+  return withPlacement(current as LocationState, { kind: 'unplaced' })
 }
 
 // As World's delete of the named row leaves the row: kept, a place unplaced, a member factionless.
 async function clearRef(walk: UndoWalk, { row, ref }: RefClear): Promise<void> {
   const target = rowTargetOf(row.table, walk.set.branchId, row.id)
-  const cleared = (column: unknown) => stateWithRef(column, ref, null)
+  const cleared = (column: unknown) => stateWithRefCleared(column, ref)
   const state = await rowStateOf(walk, target)
   if (state.presence === 'live') {
     const restored = { [ref.column]: cleared(state.row[ref.column]) }

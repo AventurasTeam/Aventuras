@@ -12,7 +12,7 @@ import {
   DeltaReplayError,
   ReversalIntegrityError,
   reverseAndPruneDeltaRows,
-  stateWithRef,
+  stateWithRefCleared,
 } from './reverse-replay'
 import type { RefClear, ReversalSet, RowRef } from './row-closure'
 import { deltaLockKeys } from './row-locks'
@@ -216,12 +216,10 @@ function restoredState(
   { ref, idBeforeUndo, placementBeforeUndo }: RefRestore,
   dead: ReadonlySet<HeldKey>,
 ): Record<string, unknown> {
-  const gone = idBeforeUndo !== null && dead.has(heldKey(ref.refTable, idBeforeUndo))
-  if (placementBeforeUndo === null) return stateWithRef(state, ref, gone ? null : idBeforeUndo)
-  return withPlacement(
-    (state ?? {}) as LocationState,
-    gone ? { kind: 'unplaced' } : placementBeforeUndo,
-  )
+  if (idBeforeUndo !== null && dead.has(heldKey(ref.refTable, idBeforeUndo)))
+    return stateWithRefCleared(state, ref)
+  if (placementBeforeUndo === null) return { ...(state as object), [ref.path]: idBeforeUndo }
+  return withPlacement((state ?? {}) as LocationState, placementBeforeUndo)
 }
 
 function withoutDeadRefs(
@@ -233,7 +231,7 @@ function withoutDeadRefs(
   let out = row
   for (const { ref, id } of pathRefIds(table, row)) {
     if (id === null || !dead.has(heldKey(ref.refTable, id))) continue
-    out = { ...out, [ref.column]: stateWithRef(out[ref.column], ref, null) }
+    out = { ...out, [ref.column]: stateWithRefCleared(out[ref.column], ref) }
   }
   return out
 }
