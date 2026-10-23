@@ -1237,8 +1237,7 @@ export const WorldStateReported: StoryT = {
 
 const ITEM_LANTERN = 'item_00000000-0000-4000-8000-0000000000c9'
 
-// entry-card.md → Panel anatomy: a condition with its text, an item put down at its place, or with
-// no place when the scene had none; each beside its kin.
+// entry-card.md → Panel anatomy: a condition and a drop (placed or not) sit beside their kin.
 export const WorldStateConditionsAndDrops: StoryT = {
   ...wrap,
   args: {
@@ -1298,7 +1297,54 @@ export const WorldStateConditionOnly: StoryT = {
   },
 }
 
-// So is a drop alone.
+// entry-card.md → Panel anatomy: a refused condition (unshown row, blank text) isn't listed.
+export const WorldStateRejectedConditions: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'piggyback_tagged_block',
+      conditions: [
+        { id: LOC_B, text: 'burned to the ground', rejected: true },
+        { id: LOC_A, text: 'flooded to the knee' },
+        { id: ITEM_A, text: ' ', rejected: true },
+      ],
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText('Condition: Ashfen Marshes — flooded to the knee')).toBeVisible()
+    expect(screen.queryByText(/Condition: Eldrin Keep/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Condition: Sword of Dawn/)).not.toBeInTheDocument()
+  },
+}
+
+// A refused condition alone is no change this turn.
+export const WorldStateRejectedConditionOnly: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'piggyback_tagged_block',
+      conditions: [{ id: LOC_B, text: 'burned to the ground', rejected: true }],
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.queryByText('Changes this turn')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Condition: Eldrin Keep/)).not.toBeInTheDocument()
+  },
+}
+
+// A drop alone is a change this turn, like a condition alone.
 export const WorldStateDropOnly: StoryT = {
   ...wrap,
   args: {

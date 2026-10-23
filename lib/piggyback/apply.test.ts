@@ -1502,7 +1502,7 @@ describe('buildPiggybackActions input', () => {
   })
 })
 
-// piggyback.md → Trailing block format: conditions, drops, and the order the block gives its moves.
+// piggyback.md → Trailing block format.
 describe('buildPiggybackActions — conditions and drops', () => {
   const person = (id: string, over: Partial<CharacterState> = {}) =>
     mockEntity({ id, state: { ...emptyEntityState('character'), ...over } })
@@ -1585,6 +1585,7 @@ describe('buildPiggybackActions — conditions and drops', () => {
           payload: { branchId: 'main', id: 'item_rope', condition: 'frayed through' },
         },
       ])
+      expect(result.applied.conditionsRejected).toEqual([])
     })
 
     // data-model.md → Authorship contract: seen before written.
@@ -1600,6 +1601,7 @@ describe('buildPiggybackActions — conditions and drops', () => {
         { stateShownIds: new Set(shown), log },
       )
       expect(conditionWrites(result)).toEqual([])
+      expect(result.applied.conditionsRejected).toEqual([0])
       expect(log.warn).toHaveBeenCalledWith('classifier.condition_unseen', {
         entryId: 'entry_1',
         source: 'piggyback_tagged_block',
@@ -1639,6 +1641,31 @@ describe('buildPiggybackActions — conditions and drops', () => {
         stateShownIds: new Set(['loc_dock']),
       })
       expect(conditionWrites(result)).toEqual([])
+      expect(result.applied.conditionsRejected).toEqual([0])
+    })
+
+    // A refusal is recorded by list position, not id: each repeated id's refused copy comes after
+    // its first, so the first index of the id can't pass for the position.
+    it('records each refused condition by its position in the block', () => {
+      const result = run(
+        {
+          conditions: [
+            { id: 'loc_dock', text: 'flooded to the knee' },
+            { id: 'loc_far', text: '  ' },
+            { id: 'char_1', text: 'scorched' },
+            { id: 'loc_far', text: 'burned out' },
+            { id: 'loc_dock', text: '  ' },
+          ],
+        },
+        [place('loc_dock'), place('loc_far'), person('char_1')],
+        { stateShownIds: new Set(['loc_dock', 'char_1']) },
+      )
+      expect(conditionWrites(result)).toEqual([
+        expect.objectContaining({
+          payload: { branchId: 'main', id: 'loc_dock', condition: 'flooded to the knee' },
+        }),
+      ])
+      expect(result.applied.conditionsRejected).toEqual([1, 2, 3, 4])
     })
   })
 

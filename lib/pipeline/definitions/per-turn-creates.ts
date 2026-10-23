@@ -124,8 +124,7 @@ function placementLoop(
   return { parent: parentId, cause: walk === 'cycle' ? 'cycle' : 'chain-broken' }
 }
 
-// piggyback.md → Creating a place or an item: a condition the prose shows, under a visual value's
-// bound.
+// piggyback.md → Creating a place or an item: bounded like a visual value.
 function createdCondition(
   emission: { handle: string; condition?: string },
   log: Logger,

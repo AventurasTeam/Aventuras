@@ -306,9 +306,8 @@ export const updateItemPositionHandler: ActionHandler = async (action, branchId,
 }
 
 /**
- * A place's or an item's condition, replaced whole and bounded as a visual value is. Its writer is
- * the per-turn writer, whose prose is always newer than a user edit (cadence.md), so it checks no
- * precedence.
+ * A place's or item's condition, replaced whole and bounded as a visual value is. Checks no
+ * precedence: the per-turn writer's prose is always newer than a user edit (cadence.md).
  */
 export const updateEntityConditionHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'updateEntityCondition')

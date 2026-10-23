@@ -21,7 +21,6 @@ import {
   substitutePiggybackIds,
   suggestionRefSchema,
   type ParsedTransfers,
-  type PlannedStateBlock,
   type SubstitutedStateBlock,
   type TurnCreatesReport,
   VISUAL_CHANGE_TYPES,
@@ -143,7 +142,7 @@ export const fallbackClassifierSchema = z.object({
         text: z
           .string()
           .describe(
-            'Its condition as it is now, the running consequence rather than the event, in about 60 words. It replaces the stored condition whole.',
+            'Its condition as it is now, the running consequence rather than the event: keep what still applies, drop what no longer does, in a few words, never more than about 60. It replaces the stored condition whole.',
           ),
       }),
     )
@@ -209,7 +208,7 @@ export const fallbackClassifierSchema = z.object({
         )
         .default([])
         .describe(
-          'Items someone holding them put down where the scene is, which leaves them lying there. An item put down anywhere else is left out.',
+          'Items someone holding them put down where the scene is and still lying there when the turn ends. An item picked up again, or put down anywhere else, is left out.',
         ),
     })
     .optional(),
@@ -284,24 +283,27 @@ function orderedTransfers(transfers: NonNullable<FallbackReply['transfers']>): P
   }
 }
 
-// The narrative fold applies its visual changes, conditions and transfers whenever it fires, parse
-// failure or not, so those rows are already written: a field this reply leaves out keeps the fold's
-// record, its drops where they landed, copied onto the report and never read back into a block.
+// The fold's writes landed whatever its parse did, so its record stays unless this reply's field
+// holds a visual change, an unrejected condition, or a move, a stackable or a landed drop.
 function withFoldChanges(
   report: StateReport | undefined,
-  block: PlannedStateBlock,
   prior: StateReport | undefined,
 ): StateReport | undefined {
+  const transfers = report?.transfers
+  const transfersApplied =
+    transfers !== undefined &&
+    (transfers.items.length > 0 ||
+      transfers.stackables.length > 0 ||
+      (transfers.drops?.length ?? 0) > 0)
+  const conditionsApplied = (report?.conditions ?? []).some((c) => c.rejected !== true)
   const carried: Pick<StateReport, 'visualChanges' | 'conditions' | 'transfers'> = {
-    ...(block.visualChanges === undefined && prior?.visualChanges !== undefined
+    ...((report?.visualChanges?.length ?? 0) === 0 && prior?.visualChanges !== undefined
       ? { visualChanges: prior.visualChanges }
       : {}),
-    ...(block.conditions === undefined && prior?.conditions !== undefined
+    ...(!conditionsApplied && prior?.conditions !== undefined
       ? { conditions: prior.conditions }
       : {}),
-    ...(block.transfers === undefined && prior?.transfers !== undefined
-      ? { transfers: prior.transfers }
-      : {}),
+    ...(!transfersApplied && prior?.transfers !== undefined ? { transfers: prior.transfers } : {}),
   }
   if (Object.keys(carried).length === 0) return report
   return { ...(report ?? { layer: 'per_turn_classifier' as const }), ...carried }
@@ -523,7 +525,6 @@ export async function* piggybackFallbackClassifierPhase(
       applied,
       ...(priorReport?.raw !== undefined ? { raw: priorReport.raw } : {}),
     }),
-    plan.block,
     priorReport,
   )
 

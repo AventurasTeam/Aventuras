@@ -57,6 +57,8 @@ type BuildResult = {
     currentLocationRejected: boolean
     /** The drops applied, in the block's order, each where it landed: null with no scene place. */
     drops: AppliedDrop[]
+    /** Positions in `block.conditions` refused, not ids: an id can repeat in one block. */
+    conditionsRejected: number[]
   }
 }
 
@@ -168,11 +170,14 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     }
   }
 
-  // data-model.md → Authorship contract, seen before written: a condition only for a place or an
-  // item the prompt showed with its state.
-  for (const change of block.conditions ?? []) {
+  // data-model.md → Authorship contract (seen before written): only shown places and items.
+  const conditionsRejected: number[] = []
+  for (const [position, change] of (block.conditions ?? []).entries()) {
     const condition = change.text.trim()
-    if (condition === '') continue
+    if (condition === '') {
+      conditionsRejected.push(position)
+      continue
+    }
     const row = byId.get(change.id)
     const shown = stateShownIds.has(change.id)
     if (!shown || (row?.kind !== 'location' && row?.kind !== 'item')) {
@@ -183,6 +188,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
         kind: row?.kind ?? null,
         shown,
       })
+      conditionsRejected.push(position)
       continue
     }
     const { text, cut } = boundStateText(condition)
@@ -201,8 +207,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     })
   }
 
-  // Item transfers and drops, in the block's order: an item taken and then put down lies where the
-  // scene is; one put down and then taken is held.
+  // In the block's order: taken then put down lies at the scene; put down then taken is held.
   const inventoryPatches = new Map<string, { equipped_items?: string[]; inventory?: string[] }>()
   const currentInventory = (id: string): { equipped_items: string[]; inventory: string[] } => {
     const state = byId.get(id)?.state as CharacterState | undefined
@@ -250,8 +255,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   }
 
   const drops: AppliedDrop[] = []
-  // piggyback.md → Trailing block format: a drop puts a held item down where the scene is, the
-  // turn's location or else the previous one; an item put down anywhere else stays prose.
+  // piggyback.md → Trailing block format: a drop lands where the scene is; elsewhere stays prose.
   const putDown = (drop: ItemDrop) => {
     if (byId.get(drop.id)?.kind !== 'item') return
     const holders = entities.filter((holder) => holds(holder.id, drop.id)).map((h) => h.id)
@@ -362,6 +366,6 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   return {
     metadata,
     actions,
-    applied: { worldTimeDelta: appliedDelta, currentLocationRejected, drops },
+    applied: { worldTimeDelta: appliedDelta, currentLocationRejected, drops, conditionsRejected },
   }
 }

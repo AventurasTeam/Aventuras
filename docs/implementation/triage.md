@@ -100,19 +100,14 @@ slice-planning gate forces its resolution before that slice is planned.
   returning `completed`. Pre-existing; surfaced 2026-10-11 in the
   locations-and-items-from-prose PR.
 
-- **The fallback's report blanks the fold's visual changes when it
-  emits `visualChanges: []`.** `reportedBlock` in
-  `lib/pipeline/definitions/per-turn-piggyback.ts` applies its
-  no-blanking rule only on `=== undefined`, so an explicit empty array
-  replaces the already-applied visual changes in the report. Raised
-  2026-10-11 in the locations-and-items-from-prose PR.
-
-- **The mock LLM ignores `newLocations`, `newItems` and
-  `retrievalQueries`.** `scripts/mock-llm` (`validate.ts`,
-  `respond/tagged-block.ts`) drops them, so a recorded narrative turn
-  with creates replays as `<current_location>new:…` with no create,
-  which fails substitution. Raised 2026-10-11 in the
-  locations-and-items-from-prose PR.
+- **The mock LLM's validator doesn't check the newer state fields.**
+  `scripts/mock-llm/respond/tagged-block.ts` renders every field the
+  parser reads, but `stateBlockSchema` in `scripts/mock-llm/validate.ts`
+  knows nothing of creates, conditions, drops or retrieval queries, so
+  a malformed authored one passes validation and fails the app's
+  parser at serve time (a drop with no id renders `id="undefined"`).
+  Raised 2026-10-11 in the locations-and-items-from-prose PR; the
+  rendering half was closed by the AI writer map.
 
 - **The `<entity …>` pattern in the state parser scans to the end of
   the segment per unclosed opener.** `lib/piggyback/parse.ts`
@@ -870,3 +865,44 @@ slice-planning gate forces its resolution before that slice is planned.
   landed. The AI writer map's conditions raised the same question
   (recorded as emitted vs as written); this one predates it. Raised
   2026-10-23 by the AI writer map's Task 14 review.
+
+- **A fallback field hides the fold's landed write.** Expected on a
+  fallback turn that adds a write of its own to a field the fold also
+  wrote; reasoned from the code, not run end to end. `withFoldChanges`
+  in `lib/pipeline/definitions/per-turn-piggyback.ts` keeps the fold's
+  record per field, so when the fallback lands a condition, an item
+  move, a stackable or a drop beside the fold's, the field is the
+  fallback's and the fold's landed write drops off the report and the
+  entry card, though World keeps it. The fallback is steered away from
+  re-emitting the fold's rows: the orchestrator applies each delta as
+  it is emitted (`handleEvent` in `lib/pipeline/runtime/orchestrator.ts`),
+  the fallback's working set reads those stores
+  (`lib/pipeline/definitions/working-set.ts`), and both prompts say
+  never to restate an unchanged condition and to drop only an item
+  someone still holds. The whole-field behaviour is pinned by the
+  "reports its own transfers when it has an applied drop" case in
+  `per-turn-piggyback.test.ts`. How often the fallback fires is
+  unmeasured. A per-row merge would cover it but mixes the two writers
+  in one field, and the carry-over rule itself isn't in canon yet
+  ([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape),
+  "One report, two possible writers"). Raised 2026-10-23 by the AI
+  writer map's Q18 and Q19.
+
+- **Undoing a take or a drop after a World move leaves the item held
+  and placed.** Reverse-replay keeps a field the user wrote since, so
+  undoing a turn's `<item>` or `<drop>` after the user moved the item
+  in World restores the holder's inventory but keeps the user's
+  position: the item ends both held and lying somewhere. Pre-existing
+  for takes; drops add one more instance. Raised 2026-10-23 by the AI
+  writer map's final review.
+
+- **A stackable may move twice on a fallback turn.** A possible data
+  error, not a display one: worth a look soon. Pre-existing on `main`;
+  reasoned from the code, not run. A narrative fold whose block failed
+  another field still applies its transfers
+  (`lib/pipeline/definitions/per-turn.ts`), and a stackable transfer
+  adds rather than replaces. The fallback then fires, sees the
+  post-fold balance, and may re-emit the same transfer from the prose,
+  so the amount moves a second time. Conditions, visual changes, item
+  moves and drops are idempotent, so a repeat of those is harmless.
+  Raised 2026-10-23 by the AI writer map's Q19.

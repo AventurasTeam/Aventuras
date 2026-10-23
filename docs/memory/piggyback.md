@@ -90,13 +90,18 @@ mark; it logs a diagnostics warning with the entity, the category and
 both lengths.
 
 **`conditions` is full-replace, one entry per changed place or
-item.** `id` names a place or an item the prompt shows with its state
-([What the writer sees](#what-the-writer-sees)): the current location,
-an item held in the scene or lying there, a retrieved place or item.
-The text replaces its `condition` wholesale, written as it is now, under
-the same bound and cut as a visual value. Like a visual category, a
-condition is written only when the prose changes it, never restated
-unchanged. A condition is the running consequence, not the event
+item.** `id` names an existing place or item the prompt shows with its
+state ([What the writer sees](#what-the-writer-sees)): the current
+location, an item held in the scene or lying there, a retrieved place
+or item. A place or item the block creates takes its condition on its
+create, not here (the create's `condition`, under
+[New locations and items](#new-locations-and-items)). The text
+replaces its `condition` wholesale, written as it is now: what still
+applies kept, what no longer does dropped, in a few words and never more
+than about 60. The prompt words the 60 as a limit, not a target, and the
+text keeps the same bound and cut as a visual value. Like a visual
+category, a condition is written only when the prose changes it, never
+restated unchanged. A condition is the running consequence, not the event
 ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)):
 "burned to the ground", not "the fire".
 
@@ -115,7 +120,11 @@ creates ([New locations and items](#new-locations-and-items)):
   when the turn names none. It leaves every holder and its
   `at_location_id` becomes that place; `from` is optional, as on
   `<item>`. An item put down somewhere else than the scene, thrown into
-  a river, stays prose.
+  a river, stays prose. The prompt asks for a drop only for an item
+  still lying there when the turn ends. Tags apply in document order and
+  a drop takes the item off every holder, and the fallback applies its
+  drops after its item moves, so an item set down and picked up again
+  gets its `<item>` move and no drop.
 - `<stackable key="..." amount="..." to="..." from="..." />` moves a
   quantity (gold, arrows, supplies) between characters' `stackables`
   records. Either `to` or `from` may be omitted (gained from
@@ -264,12 +273,13 @@ bracketed handle (`[new:a]`) reads as the bare handle.
 **Create tag format.** A create's attribute text must be entirely
 `key="value"` pairs; any other text drops the create and counts it
 malformed, so a reference to its handle then fails its field and the
-fallback fires. The five XML entities are decoded in a create's name
-and description, and a raw `<` or `>` in a name or a raw `<` in a
-description drops the create, so the prompt asks the model to write a
-double quote, `<` or `>` inside a name as `&quot;`, `&lt;` or `&gt;`,
-and a `<` inside a description as `&lt;`. A malformed create in a
-closed block only logs a warning, unless the block held nothing but
+fallback fires. The five XML entities are decoded in a create's name,
+condition and description, and a raw `<` or `>` in a name or condition
+or a raw `<` in a description drops the create, so the prompt asks the
+model to write a double quote, `<` or `>` inside a name or condition as
+`&quot;`, `&lt;` or `&gt;`, and a `<` inside a description as
+`&lt;`. A malformed create in a closed block only logs a warning,
+unless the block held nothing but
 creates: that block counts as empty and fails `state`, so the fallback
 fires. A `<state>` the stream cut off (no `</state>`) that declares
 any create, whole or not, fails the `state` field instead, because the

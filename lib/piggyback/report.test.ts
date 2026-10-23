@@ -39,7 +39,12 @@ describe('buildStateReport', () => {
       layer: 'piggyback_tagged_block',
       turn: planned({ worldTimeDelta: -600 }),
       failures: [],
-      applied: { worldTimeDelta: 0, currentLocationRejected: false, drops: [] },
+      applied: {
+        worldTimeDelta: 0,
+        currentLocationRejected: false,
+        drops: [],
+        conditionsRejected: [],
+      },
     })
     expect(report?.worldTimeDelta).toBe(-600)
     expect(report?.worldTimeDeltaApplied).toBe(0)
@@ -52,7 +57,12 @@ describe('buildStateReport', () => {
       layer: 'piggyback_tagged_block',
       turn: planned({ worldTimeDelta: 9_000_000 }),
       failures: [],
-      applied: { worldTimeDelta: 120, currentLocationRejected: false, drops: [] },
+      applied: {
+        worldTimeDelta: 120,
+        currentLocationRejected: false,
+        drops: [],
+        conditionsRejected: [],
+      },
     })
     expect(report?.worldTimeDelta).toBe(9_000_000)
     expect(report?.worldTimeDeltaApplied).toBe(120)
@@ -63,7 +73,12 @@ describe('buildStateReport', () => {
       layer: 'piggyback_tagged_block',
       turn: planned({ currentLocation: 'item_sword' }),
       failures: [],
-      applied: { worldTimeDelta: 0, currentLocationRejected: true, drops: [] },
+      applied: {
+        worldTimeDelta: 0,
+        currentLocationRejected: true,
+        drops: [],
+        conditionsRejected: [],
+      },
     })
     expect(rejected?.currentLocationRejected).toBe(true)
 
@@ -73,7 +88,12 @@ describe('buildStateReport', () => {
       layer: 'piggyback_tagged_block',
       turn: planned({ currentLocation: 'loc_keep' }),
       failures: [],
-      applied: { worldTimeDelta: 0, currentLocationRejected: false, drops: [] },
+      applied: {
+        worldTimeDelta: 0,
+        currentLocationRejected: false,
+        drops: [],
+        conditionsRejected: [],
+      },
     })
     expect(accepted).not.toHaveProperty('currentLocationRejected')
   })
@@ -130,7 +150,12 @@ describe('buildStateReport', () => {
       layer: 'piggyback_tagged_block',
       turn: planned({ summary: 'A sentence.' }),
       failures: [],
-      applied: { worldTimeDelta: 0, currentLocationRejected: false, drops: [] },
+      applied: {
+        worldTimeDelta: 0,
+        currentLocationRejected: false,
+        drops: [],
+        conditionsRejected: [],
+      },
     })
     expect(report).toEqual({ layer: 'piggyback_tagged_block' })
   })
@@ -192,8 +217,7 @@ describe('buildStateReport', () => {
     expect(report?.transfers?.stackables[0]?.key).toBe('gold')
   })
 
-  // data-model.md → Entry metadata shape: the report records the moves as emitted, not the order
-  // apply.ts followed.
+  // data-model.md → Entry metadata shape.
   it('reports item moves without the order the block carried', () => {
     const report = buildStateReport({
       layer: 'piggyback_tagged_block',
@@ -295,7 +319,7 @@ describe("buildStateReport with this turn's creates", () => {
   })
 })
 
-// data-model.md → Entry metadata shape: conditions as emitted; a drop where apply.ts put it.
+// data-model.md → Entry metadata shape.
 describe('buildStateReport — conditions and drops', () => {
   it('reports conditions as emitted', () => {
     const report = buildStateReport({
@@ -307,6 +331,32 @@ describe('buildStateReport — conditions and drops', () => {
       layer: 'piggyback_tagged_block',
       conditions: [{ id: 'loc_a', text: 'burned to the ground' }],
     })
+  })
+
+  // Positions, not ids: the same place can be conditioned twice in one block.
+  it('marks each condition apply.ts refused, by its position, keeping text and order', () => {
+    const report = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      turn: planned({
+        conditions: [
+          { id: 'loc_a', text: '' },
+          { id: 'loc_a', text: 'burned to the ground' },
+          { id: 'loc_b', text: 'flooded to the knee' },
+        ],
+      }),
+      failures: [],
+      applied: {
+        worldTimeDelta: 0,
+        currentLocationRejected: false,
+        drops: [],
+        conditionsRejected: [0, 2],
+      },
+    })
+    expect(report?.conditions).toEqual([
+      { id: 'loc_a', text: '', rejected: true },
+      { id: 'loc_a', text: 'burned to the ground' },
+      { id: 'loc_b', text: 'flooded to the knee', rejected: true },
+    ])
   })
 
   it("reports the drops apply.ts applied, where they landed, never the block's own", () => {
@@ -327,6 +377,7 @@ describe('buildStateReport — conditions and drops', () => {
         worldTimeDelta: 0,
         currentLocationRejected: false,
         drops: [{ id: 'item_a', from: 'char_a', at: 'loc_a' }],
+        conditionsRejected: [],
       },
     })
     expect(report?.transfers).toEqual({
@@ -343,7 +394,12 @@ describe('buildStateReport — conditions and drops', () => {
         transfers: { items: [], stackables: [], drops: [{ id: 'item_b', seq: 0 }] },
       }),
       failures: [],
-      applied: { worldTimeDelta: 0, currentLocationRejected: false, drops: [] },
+      applied: {
+        worldTimeDelta: 0,
+        currentLocationRejected: false,
+        drops: [],
+        conditionsRejected: [],
+      },
     })
     expect(report?.transfers).toEqual({ items: [], stackables: [] })
   })

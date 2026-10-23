@@ -1030,7 +1030,7 @@ describe('normalizeCreates', () => {
   })
 })
 
-// piggyback.md → Trailing block format: conditions, drops, and a create's condition.
+// piggyback.md → Trailing block format.
 describe('conditions and drops', () => {
   // The reference block, verbatim.
   const CANON_BLOCK = `<state>
