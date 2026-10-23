@@ -738,14 +738,9 @@ export class OpenAICompatibleTTSProvider extends TTSProvider {
     return 300
   }
 
-  /**
-   * Get endpoint URL
-   */
   private getEndpoint(): string {
     const url = normalizeBaseUrl(this.settings.endpoint)
-    // If no custom endpoint, use OpenRouter default
-    if (!url) return `${PROVIDERS.openrouter.baseUrl}/audio/speech`
-    // Ensure endpoint ends with /audio/speech
+    if (!url) return PROVIDERS.openrouter.baseUrl + SPEECH_PATH
     return url.endsWith(SPEECH_PATH) ? url : url + SPEECH_PATH
   }
 
