@@ -68,6 +68,9 @@ export type UnseenRef = {
 }
 
 /** A placement that plans nothing: a loop, a retired parent, or a top-level mark of a placed place. */
+/** A standing naming a faction retired before the reply, dropped as memberships are. */
+export type DroppedStanding = { faction: string; cause: 'retired-faction' }
+
 export type DroppedPlacement = {
   ref: string
   cause: 'cycle' | 'retired' | 'not-unplaced' | 'chain-broken'
@@ -85,6 +88,7 @@ export type PlanResult = {
   renameClashes: readonly RenameClash[]
   unseenRefs: readonly UnseenRef[]
   droppedPlacements: readonly DroppedPlacement[]
+  droppedStandings: readonly DroppedStanding[]
 }
 
 export type PlanDeps = {
@@ -710,7 +714,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
 
   // classifier.md → Factions: a listed faction's standing, on a change. Bounded as the handler
   // bounds it, so a restatement compares what it would store, on one line as the prompt shows it.
-  const planStandings = (): void => {
+  const planStandings = (): DroppedStanding[] => {
+    const droppedStandings: DroppedStanding[] = []
     const standingOf = new Map<string, string | undefined>()
     for (const fact of inTurnOrder(extraction.standings)) {
       const row = rowById.get(fact.ref)
@@ -720,6 +725,11 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       }
       if (row.kind !== 'faction') {
         unresolvedRefs.push(fact.ref)
+        continue
+      }
+      // The pre-reply row, so a faction this reply retires keeps the standings from its turns.
+      if (row.status === 'retired') {
+        droppedStandings.push({ faction: fact.ref, cause: 'retired-faction' })
         continue
       }
       const standing = stateText(fact.standing)
@@ -741,11 +751,12 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         entryId: anchor(fact.sourceTurn),
       })
     }
+    return droppedStandings
   }
 
   const renameClashes = planRenames()
   const droppedPlacements = planPlacements()
-  planStandings()
+  const droppedStandings = planStandings()
 
   // Index is keyed by row id, so a handle this reply declares misses: its row already carries its
   // keywords. newTerms drops a term the snapshot or an earlier write in this reply holds.
@@ -971,5 +982,6 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     renameClashes,
     unseenRefs,
     droppedPlacements,
+    droppedStandings,
   }
 }

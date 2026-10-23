@@ -3326,6 +3326,35 @@ describe('standings', () => {
     }) as unknown as Entity
   const deps = (entities: Entity[]) => ({ ...base, entities }) as never
 
+  // classifier.md → Factions → Memberships' rule, for a standing: a retired faction's is a misreading.
+  it('drops and reports a standing for a faction retired before the reply', () => {
+    const retired = { ...(faction('fact_watch', 'wary allies') as object), status: 'retired' }
+    const { planned, droppedStandings } = buildClassifierActions(
+      reply({ standings: [{ ref: 'fact_watch', standing: 'outlawed', sourceTurn: 't1' }] }),
+      deps([retired as Entity]),
+    )
+    expect(planned).toEqual([])
+    expect(droppedStandings).toEqual([{ faction: 'fact_watch', cause: 'retired-faction' }])
+  })
+
+  it.each([
+    ['before', 't1', 't2'],
+    ['after', 't3', 't2'],
+  ])(
+    'keeps a standing from %s the turn the reply retires its faction',
+    (_label, standingTurn, retireTurn) => {
+      const { planned, droppedStandings } = buildClassifierActions(
+        reply({
+          standings: [{ ref: 'fact_watch', standing: 'outlawed', sourceTurn: standingTurn }],
+          statusFlips: [{ ref: 'fact_watch', to: 'retired', sourceTurn: retireTurn }],
+        }),
+        deps([faction('fact_watch', 'wary allies')]),
+      )
+      expect(kindsOf(planned).sort()).toEqual(['retireEntity', 'setFactionStanding'])
+      expect(droppedStandings).toEqual([])
+    },
+  )
+
   it("writes a listed faction's new standing, trimmed, anchored and dated on its turn", () => {
     const { planned } = buildClassifierActions(
       reply({ standings: [{ ref: 'fact_watch', standing: ' outlawed ', sourceTurn: 't2' }] }),

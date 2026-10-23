@@ -1802,6 +1802,29 @@ describe('periodicClassifierPhase', () => {
         ['warn', { character: CHAR_KAEL, faction: FACT_CIRCLE, cause: 'retired-faction' }],
       ])
     })
+
+    it('logs and drops a standing naming a faction retired before the reply', async () => {
+      clearBuffers()
+      configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+      vi.mocked(generateStructured).mockResolvedValue({
+        status: 'ok',
+        value: extraction({ standings: [{ ref: 'f1', standing: 'outlawed', sourceTurn: 't1' }] }),
+      })
+      const h = await ctxWith({
+        processedThrough: 0,
+        headPosition: 2,
+        entities: [{ ...row(FACT_CIRCLE, 'faction', 'The Iron Circle'), status: 'retired' }],
+      })
+      const { events } = await drain(h.ctx)
+
+      expect(actionsOf(events)).toEqual([])
+      const logs = getDiagnosticsSnapshot().logEntries.filter(
+        (e) => e.kind === 'classifier.standing_dropped',
+      )
+      expect(logs.map((e) => [e.level, e.fields])).toEqual([
+        ['warn', { faction: FACT_CIRCLE, cause: 'retired-faction' }],
+      ])
+    })
   })
 })
 

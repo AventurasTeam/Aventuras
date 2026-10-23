@@ -358,6 +358,7 @@ export async function* periodicClassifierPhase(
   if (plan.unresolvedRefs.length > 0)
     ctx.log.warn('classifier.unresolved_refs', { refs: plan.unresolvedRefs })
   for (const drop of plan.droppedMemberships) ctx.log.warn('classifier.membership_dropped', drop)
+  for (const drop of plan.droppedStandings) ctx.log.warn('classifier.standing_dropped', drop)
   // The per-turn writer's keys (per-turn-creates.ts).
   for (const drop of plan.droppedPlaces)
     ctx.log.warn('classifier.create_dropped', { kind: 'location', ...drop })
