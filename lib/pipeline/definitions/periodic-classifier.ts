@@ -41,6 +41,7 @@ import {
   currentStoryStore,
   entitiesStore,
   happeningsStore,
+  threadsStore,
   type OpenStory,
 } from '@/lib/stores'
 
@@ -242,6 +243,7 @@ export async function* periodicClassifierPhase(
   const relationships = [...characterRelationshipsStore.getRelationshipRows().values()].filter(
     (r) => r.branchId === ctx.branchId,
   )
+  const threads = [...threadsStore.getThreads().values()].filter((t) => t.branchId === ctx.branchId)
   // classifier.md → Mentioned places: read once, so prompt and reply schema agree.
   const mentionedPlaces = open.settings.classifierMentionedPlaces
   const idMap = new IdBiMap()
@@ -254,6 +256,7 @@ export async function* periodicClassifierPhase(
         (h) => h.branchId === ctx.branchId,
       ),
       relationships,
+      threads,
       mentionedPlaces,
       idMap,
     }),

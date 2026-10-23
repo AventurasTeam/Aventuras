@@ -1,8 +1,8 @@
 import type { ClassifierWindow } from '@/lib/classifier'
-import type { CharacterRelationship, Entity, Happening } from '@/lib/db'
+import type { CharacterRelationship, Entity, Happening, Thread } from '@/lib/db'
 import { substituteIds, type IdBiMap } from '@/lib/ids'
 import { blankToNull } from '@/lib/text'
-import { characterFactionId, placeTree, type PlaceTreeRow } from '@/lib/world'
+import { characterFactionId, placeTree, stateOf, type PlaceTreeRow } from '@/lib/world'
 
 type RelationshipFact = {
   subject: string
@@ -70,11 +70,13 @@ export function buildClassifierContext(args: {
   entities: readonly Entity[]
   happenings: readonly Happening[]
   relationships: readonly CharacterRelationship[]
+  /** classifier.md → Threads → What the pass sees: every thread on the branch, the user's included. */
+  threads: readonly Thread[]
   /** stories.settings.classifierMentionedPlaces, read once when the pass builds its prompt. */
   mentionedPlaces: boolean
   idMap: IdBiMap
 }): Record<string, unknown> {
-  const { window, entities, happenings, relationships, mentionedPlaces, idMap } = args
+  const { window, entities, happenings, relationships, threads, mentionedPlaces, idMap } = args
   const known = new Set(entities.map((e) => e.id))
   const factions = new Set(entities.filter((e) => e.kind === 'faction').map((e) => e.id))
   // classifier.md → Factions: an id naming no listed faction would otherwise reach the prompt as
@@ -97,6 +99,8 @@ export function buildClassifierContext(args: {
         status: e.status,
         keywords: e.keywords.map(flat),
         faction: factionOf(e),
+        // classifier.md → Factions → What the pass sees: a standing change needs the standing.
+        standing: e.kind === 'faction' ? oneLine(stateOf(e, 'faction').standing ?? null) : null,
       })),
     places: places.tree.map(placeRow),
     // After the tree, so its places number first; ids kept, so a pass can place one.
@@ -111,6 +115,7 @@ export function buildClassifierContext(args: {
         t.currentLocationId != null && known.has(t.currentLocationId) ? t.currentLocationId : null,
     })),
     happenings: happenings.map((h) => ({ id: h.id, title: h.title })),
+    threads: threads.map((t) => ({ id: t.id, title: flat(t.title), status: t.status })),
     relationships: projectRelationships(relationships, entities),
     mentionedPlaces,
   }

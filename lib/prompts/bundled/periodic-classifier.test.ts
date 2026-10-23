@@ -40,6 +40,7 @@ const context = {
   ],
   placesUnplaced: [],
   happenings: [{ id: 'hp1', title: 'The satchel was stolen' }],
+  threads: [{ id: 'th1', title: 'Recover the satchel', status: 'active' }],
   relationships: [
     { subject: 'c1', subjectName: 'Kael', object: 'c2', objectName: 'Aria', kind: 'sister' },
   ],
@@ -410,5 +411,123 @@ describe('periodic classifier template — factions', () => {
     expect(user).toContain('- [c1] Kael (character) — A courier. (faction: [f1])')
     expect(user).toContain('- [c2] Aria (character) — His sister.\n')
     expect(user).toContain('- [f1] The Iron Circle (faction)\n')
+  })
+})
+
+// classifier.md → What the classifier reads: a faction's standing, the Threads list.
+describe('periodic classifier template — standing and threads', () => {
+  it("shows a faction's standing on its line, and nothing when it has none", () => {
+    const { user } = render({
+      entities: [
+        {
+          id: 'f1',
+          name: 'The Iron Circle',
+          kind: 'faction',
+          status: 'active',
+          description: 'Smiths.',
+          keywords: [],
+          faction: null,
+          standing: 'at war with the crown',
+        },
+        {
+          id: 'f2',
+          name: 'The Tidewardens',
+          kind: 'faction',
+          status: 'active',
+          description: null,
+          keywords: [],
+          faction: null,
+          standing: null,
+        },
+      ],
+    })
+    expect(user).toContain(
+      '- [f1] The Iron Circle (faction) — Smiths. (standing: at war with the crown)\n',
+    )
+    expect(user).toContain('- [f2] The Tidewardens (faction)\n')
+  })
+
+  it('lists the threads by ID, title and status between Known happenings and the turns', () => {
+    const { user, system } = render({
+      threads: [
+        { id: 'th1', title: 'Recover the satchel', status: 'active' },
+        { id: 'th2', title: 'Find the heir', status: 'pending' },
+      ],
+    })
+    expect(user).toContain(
+      [
+        '- [hp1] The satchel was stolen',
+        '',
+        'Threads, same ID rule — each with its status:',
+        '- [th1] Recover the satchel (active)',
+        '- [th2] Find the heir (pending)',
+        '',
+        'Turns to classify.',
+      ].join('\n'),
+    )
+    expect(system).not.toContain('[th1]')
+  })
+
+  it('prints (none) when no thread is listed', () => {
+    expect(render({ threads: [] }).user).toContain(
+      'Threads, same ID rule — each with its status:\n(none)\n\nTurns to classify.',
+    )
+  })
+})
+
+// classifier.md → What the classifier writes: a rule in the system half for every new write.
+describe('periodic classifier template — the writer map rules', () => {
+  const RULES = [
+    [
+      'returns',
+      "- Returns. Move a retired character back to active only when the turns put them in the scene now: not a memory, a flashback, a vision or someone's report of them. Never a place.\n",
+    ],
+    [
+      'standing',
+      '- Standing. A faction\'s line in Known entities shows its standing after "standing:". When the turns establish a change in a listed faction\'s position (it declares war, is outlawed, comes to power), add a standings entry with its ID as ref, the new standing in a short phrase, and the sourceTurn. Emit one only when the turns change it.\n',
+    ],
+    [
+      'names',
+      '- Names. When the turns establish a listed entity\'s own name, a reveal ("the hooded stranger is Kael"), add a renames entry with its ID as ref, the name, and the sourceTurn; its old name stays on as an alias. An alias, a title or a disguise is not its name: put it in aliases. Add the entry even when another listed entity holds that name: the user is asked to merge the two.\n',
+    ],
+    [
+      'where places sit',
+      '- Where places sit. When the turns establish where a place in the unplaced group of Places lies, or move a place in Places into another, add a placements entry with its ID as ref, parent set to the ID from Places of the place it is now part of, and the sourceTurn. Set parent to "top-level" only for an unplaced place nothing in Places could contain, as for a city when Places holds only cities.\n',
+    ],
+    [
+      'threads',
+      "- Threads. Add a thread when the turns set up something the story will follow past the current scene: a goal a character commits to, a quest given, a mystery raised, a threat that looms. Not a passing intention, and not one already in the Threads list, even worded differently: change its status instead. Emit a status only when the turns establish the change. Put each new thread in newThreads with a title, a short description, its status (pending when the story knows of it but no one pursues it, active when someone does) and the sourceTurn. Put each change in threadStatuses with the listed thread's ID as thread, the new status (active when it is taken up, resolved when it is achieved, failed when it is made impossible) and the sourceTurn.\n",
+    ],
+    [
+      'categories and icons',
+      '- Categories and icons. Give each happening and each new thread a free-form category (a battle, a betrayal, a quest) and, when one fits, an icon from the list its icon field gives.\n',
+    ],
+  ] as const
+
+  it.each(RULES)('carries the %s rule whatever the places setting', (_name, rule) => {
+    for (const mentionedPlaces of [true, false]) {
+      const { system, user } = render({ mentionedPlaces })
+      expect(system).toContain(rule)
+      expect(user).not.toContain(rule.trim())
+    }
+  })
+
+  // classifier.md → What the classifier writes → Happenings: awareness of a listed happening.
+  it('sends awareness of a listed happening to knownAwareness, not a second happening', () => {
+    expect(render().system).toContain(
+      'If a character learns of it in a later turn, set learnedAtTurn to the turn that narrated the learning. Never add a happening Known happenings lists again: when the turns show a character learning of one ("Kael tells Aria about the massacre"), add a knownAwareness entry with its ID as happening, the character\'s ID or a new character\'s handle as ref, source, severity and learnedAtTurn.\n',
+    )
+  })
+
+  // data-model.md → Soft caps: the caps are stated where the profile is asked for.
+  it("asks a new entry for its first profile within the soft caps, a new place's condition only with the setting on", () => {
+    const PROFILE =
+      '- First profiles. Give a newCharacters entry the profile the turns show: visual (physique, face, hair, eyes, attire, distinguishing), traits (at most 8), drives (at most 6) and voice. Give a newFactions entry its standing and agenda (at most 4).'
+    const on = render({ mentionedPlaces: true }).system
+    const off = render({ mentionedPlaces: false }).system
+    expect(on).toContain(
+      `${PROFILE} Give a newPlaces entry the condition the turns show it in. Leave out whatever the prose doesn't show.\n`,
+    )
+    expect(off).toContain(`${PROFILE} Leave out whatever the prose doesn't show.\n`)
   })
 })

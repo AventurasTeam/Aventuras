@@ -34,6 +34,7 @@ import {
   type ClassifierStatus,
   type Entity,
   type StoryEntry,
+  type Thread,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import {
@@ -53,6 +54,7 @@ import {
   hydrateAppSettings,
   interruptMemoryRuns,
   resetAllStores,
+  threadsStore,
 } from '@/lib/stores'
 
 import { __resetClassifierEmbedder, configureClassifierEmbedder } from './description-embedder'
@@ -367,6 +369,39 @@ describe('periodicClassifierPhase', () => {
     )
     expect(system).not.toContain('Kael sees')
     expect(system).not.toContain('as: ally')
+  })
+
+  // classifier.md → Threads → What the pass sees. Fails if the phase stops passing the store's
+  // rows or stops filtering them by branch.
+  it("shows the classifier the stored threads for its own branch, the user's included", async () => {
+    const h = await ctxWith({ processedThrough: 0, headPosition: 1 })
+    const thread = (id: string, branchId: string, title: string): Thread => ({
+      id,
+      branchId,
+      title,
+      description: null,
+      category: null,
+      icon: null,
+      status: 'active',
+      injectionMode: 'auto',
+      triggeredAtEntryId: null,
+      resolvedAtEntryId: null,
+      embeddingStale: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    threadsStore.hydrate('b1', [
+      thread('thr_11111111-1111-1111-1111-111111111111', 'b1', 'Recover the relic'),
+      thread('thr_22222222-2222-2222-2222-222222222222', 'other', 'Raise the dead'),
+    ])
+    vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: extraction() } as never)
+
+    await drain(h.ctx)
+
+    const { system, user } = vi.mocked(generateStructured).mock.calls[0][1]
+    expect(user).toContain('- [th1] Recover the relic (active)')
+    expect(user).not.toContain('Raise the dead')
+    expect(system).not.toContain('Recover the relic')
   })
 
   // Fails if the phase stops filtering a saved scene to the branch's live entities:

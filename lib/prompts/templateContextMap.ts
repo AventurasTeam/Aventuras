@@ -385,7 +385,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entity[]',
       category: 'Entities',
       description:
-        "Branch entities other than places (id/kind/name/description/status/keywords), any status, each on one line. A character's `faction` is its faction's id when that names a listed faction, else null.",
+        "Branch entities other than places (id/kind/name/description/status/keywords), any status, each on one line. A character's `faction` is its faction's id when that names a listed faction, else null. A faction's `standing` is its stored standing on one line, null when blank and on every other kind.",
       required: true,
     },
     {
@@ -417,6 +417,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: '{ id, title }[]',
       category: 'Plot',
       description: 'Existing happenings, so the model can reference rather than duplicate them.',
+      required: false,
+    },
+    {
+      name: 'threads',
+      type: '{ id, title, status }[]',
+      category: 'Plot',
+      description:
+        "Every thread on the branch, the user's included, by id, title (on one line) and status, so the model can change a listed thread's status rather than add it again.",
       required: false,
     },
     {
@@ -546,7 +554,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'cast',
     'relationships',
   ],
-  Plot: ['happenings'],
+  Plot: ['happenings', 'threads'],
   Retrieval: [
     'retrievedEntities',
     'retrievedLore',

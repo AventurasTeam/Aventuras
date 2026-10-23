@@ -215,6 +215,7 @@ const PASS_A: Record<string, unknown> = {
     { subject: 'c1', subjectName: 'Kael', object: 'c2', objectName: 'Aria', kind: 'sister' },
   ],
   happenings: [{ id: 'hp1', title: 'The satchel was stolen' }],
+  threads: [{ id: 'th1', title: 'Find the heir', status: 'active' }],
 }
 
 const PASS_B: Record<string, unknown> = {
@@ -236,6 +237,7 @@ const PASS_B: Record<string, unknown> = {
   placesUnplaced: [],
   relationships: [],
   happenings: [],
+  threads: [],
 }
 
 type RenderCase = {
