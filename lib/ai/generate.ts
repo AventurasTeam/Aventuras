@@ -179,11 +179,12 @@ export type StructuredCallOptions = {
   cacheSystemPrefix?: boolean
 }
 
+/** generation-pipeline.md → Two retry tiers: `recoverable` holds each retried attempt. */
 export type GenerateStructuredResult<T> =
-  | { status: 'ok'; value: T }
+  | { status: 'ok'; value: T; recoverable: CallRetryError[] }
   | { status: 'not-configured'; kind: ResolveFailureKind }
-  | { status: 'failed'; detail: string }
-  | { status: 'aborted' }
+  | { status: 'failed'; detail: string; recoverable: CallRetryError[] }
+  | { status: 'aborted'; recoverable: CallRetryError[] }
 
 function describeCallRetryError(error: CallRetryError): string {
   return error.tier === 'provider' ? (error.detail ?? error.reason) : error.detail
@@ -212,7 +213,11 @@ export async function generateStructured<T>(
   try {
     jsonSchema = z.toJSONSchema(schema) as JsonSchema
   } catch (err) {
-    return { status: 'failed', detail: err instanceof Error ? err.message : String(err) }
+    return {
+      status: 'failed',
+      detail: err instanceof Error ? err.message : String(err),
+      recoverable: [],
+    }
   }
   // 'auto' injects the schema via the prompt (no capability signal yet); native responseFormat
   // is opt-in via 'force-on'. The marker goes last: on a blank system half, the contract's
@@ -239,7 +244,8 @@ export async function generateStructured<T>(
     { maxProviderAttempts: 2, maxParseAttempts: 2, signal },
   )
 
-  if (result.status === 'ok') return { status: 'ok', value: result.result }
-  if (result.status === 'aborted') return { status: 'aborted' }
-  return { status: 'failed', detail: describeCallRetryError(result.error) }
+  const { recoverable } = result
+  if (result.status === 'ok') return { status: 'ok', value: result.result, recoverable }
+  if (result.status === 'aborted') return { status: 'aborted', recoverable }
+  return { status: 'failed', detail: describeCallRetryError(result.error), recoverable }
 }

@@ -52,6 +52,7 @@ import { readClassifierStatus } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
+import { toPipelineError } from '../call-error'
 import type {
   PhaseContext,
   PhaseEmittedEvent,
@@ -292,6 +293,10 @@ export async function* periodicClassifierPhase(
   } finally {
     bounded.dispose()
   }
+  // generation-pipeline.md → Two retry tiers: one event per retried attempt, however the call ended.
+  const retried = result.status === 'not-configured' ? [] : result.recoverable
+  for (const attempt of retried)
+    yield { type: 'recoverable_error', error: toPipelineError(attempt) }
   // An interrupt leaves the watermark; onInterrupt restores the pre-run status.
   if (result.status === 'aborted' && !bounded.expired()) return { status: 'aborted' }
   if (result.status !== 'ok') {
@@ -387,6 +392,12 @@ export async function* periodicClassifierPhase(
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
 
   await writeSuccess(ctx, status, window.coversThrough)
+  // The real-provider smoke reports each pass's retries from this line.
+  ctx.log.debug('classifier.pass_completed', {
+    parseRetries: retried.filter((e) => e.tier === 'parse').length,
+    providerRetries: retried.filter((e) => e.tier === 'provider').length,
+    writes: plan.planned.length,
+  })
   return { status: 'completed' }
 }
 

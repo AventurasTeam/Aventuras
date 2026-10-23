@@ -23,7 +23,11 @@ function okListRun(value: CastAssistValue) {
     _guidance: string,
     _signal: AbortSignal,
     _exclude: readonly string[],
-  ): Promise<GenerateStructuredResult<CastAssistValue>> => ({ status: 'ok', value })
+  ): Promise<GenerateStructuredResult<CastAssistValue>> => ({
+    status: 'ok',
+    recoverable: [],
+    value,
+  })
 }
 
 function characterRow(

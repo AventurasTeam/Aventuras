@@ -18,6 +18,7 @@ const MODEL_ID = 'gpt-4o-mini'
 function okRun<T>(value: T) {
   return async (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => ({
     status: 'ok',
+    recoverable: [],
     value,
   })
 }
@@ -26,6 +27,7 @@ function failRun<T>(detail: string) {
   return async (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => ({
     status: 'failed',
     detail,
+    recoverable: [],
   })
 }
 
@@ -35,8 +37,8 @@ function flakyThenOkRun<T>(value: T, detail: string) {
   let calls = 0
   return async (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => {
     calls += 1
-    if (calls === 1) return { status: 'failed', detail }
-    return { status: 'ok', value }
+    if (calls === 1) return { status: 'failed', recoverable: [], detail }
+    return { status: 'ok', recoverable: [], value }
   }
 }
 
@@ -54,9 +56,9 @@ function okHangThenOkRun<T>(first: T, after: T) {
   let call = 0
   return (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => {
     call += 1
-    if (call === 1) return Promise.resolve({ status: 'ok', value: first })
+    if (call === 1) return Promise.resolve({ status: 'ok', recoverable: [], value: first })
     if (call === 2) return new Promise(() => {})
-    return Promise.resolve({ status: 'ok', value: after })
+    return Promise.resolve({ status: 'ok', recoverable: [], value: after })
   }
 }
 
@@ -86,8 +88,8 @@ function flakyThenOkRefine<T>(
   ): Promise<GenerateStructuredResult<T>> => {
     calls.push({ current, instruction })
     attempts += 1
-    if (attempts === 1) return { status: 'failed', detail }
-    return { status: 'ok', value }
+    if (attempts === 1) return { status: 'failed', recoverable: [], detail }
+    return { status: 'ok', recoverable: [], value }
   }
 }
 
@@ -108,7 +110,7 @@ function sequentialRun<T>(results: GenerateStructuredResult<T>[]) {
 function guidanceCapturingRun<T>(value: T, calls: string[]) {
   return async (guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => {
     calls.push(guidance)
-    return { status: 'ok', value }
+    return { status: 'ok', recoverable: [], value }
   }
 }
 
@@ -125,7 +127,7 @@ function excludeCapturingRun<T>(pages: T[], calls: (readonly string[])[]) {
     calls.push(exclude)
     const value = pages[Math.min(call, pages.length - 1)]
     call += 1
-    return { status: 'ok', value }
+    return { status: 'ok', recoverable: [], value }
   }
 }
 
@@ -139,7 +141,11 @@ async function appendInstructionRefine(
   instruction: string,
   _signal: AbortSignal,
 ): Promise<GenerateStructuredResult<DescriptionValue>> {
-  return { status: 'ok', value: { description: `${current.description} / ${instruction}` } }
+  return {
+    status: 'ok',
+    recoverable: [],
+    value: { description: `${current.description} / ${instruction}` },
+  }
 }
 
 type ProseDemoProps = {
@@ -596,7 +602,7 @@ export const Committed_RefineBuildsOnCommittedProse: Story = {
       run={okRun<DescriptionValue>({ description: 'should not be reached' })}
       refine={async (current, instruction) => {
         seededRefineCalls.push({ current, instruction })
-        return { status: 'ok', value: { description: 'The refined take.' } }
+        return { status: 'ok', recoverable: [], value: { description: 'The refined take.' } }
       }}
       committed={COMMITTED}
       onSetup={fn()}
@@ -992,8 +998,8 @@ export const ListResult_GenerateMoreAppendsAndKeepsSelection: Story = {
     <ListDemo
       resolveModelId={() => MODEL_ID}
       run={sequentialRun<ListItemValue>([
-        { status: 'ok', value: { items: [RUIN_ITEM] } },
-        { status: 'ok', value: { items: [PAGE_TWO_ITEM] } },
+        { status: 'ok', recoverable: [], value: { items: [RUIN_ITEM] } },
+        { status: 'ok', recoverable: [], value: { items: [PAGE_TWO_ITEM] } },
       ])}
       onSetup={fn()}
       onImport={fn()}
@@ -1146,9 +1152,9 @@ export const ListResult_FailedGenerateMoreKeepsPageAndAppendsOnRetry: Story = {
     <ListDemo
       resolveModelId={() => MODEL_ID}
       run={sequentialRun<ListItemValue>([
-        { status: 'ok', value: { items: [RUIN_ITEM] } },
-        { status: 'failed', detail: 'Provider request timed out after 3 retries' },
-        { status: 'ok', value: { items: [PAGE_TWO_ITEM] } },
+        { status: 'ok', recoverable: [], value: { items: [RUIN_ITEM] } },
+        { status: 'failed', recoverable: [], detail: 'Provider request timed out after 3 retries' },
+        { status: 'ok', recoverable: [], value: { items: [PAGE_TWO_ITEM] } },
       ])}
       onSetup={fn()}
       onImport={fn()}
@@ -1181,8 +1187,8 @@ export const ListResult_FailedFirstGenerateThenRetrySucceedsWithExactPage: Story
     <ListDemo
       resolveModelId={() => MODEL_ID}
       run={sequentialRun<ListItemValue>([
-        { status: 'failed', detail: 'Provider request timed out after 3 retries' },
-        { status: 'ok', value: { items: [RUIN_ITEM, FACTION_ITEM] } },
+        { status: 'failed', recoverable: [], detail: 'Provider request timed out after 3 retries' },
+        { status: 'ok', recoverable: [], value: { items: [RUIN_ITEM, FACTION_ITEM] } },
       ])}
       onSetup={fn()}
       onImport={fn()}
@@ -1237,9 +1243,9 @@ export const ListResult_RegenerateReplacesGenerateMoreAppends: Story = {
     <ListDemo
       resolveModelId={() => MODEL_ID}
       run={sequentialRun<ListItemValue>([
-        { status: 'ok', value: { items: [RUIN_ITEM] } },
-        { status: 'ok', value: { items: [PAGE_TWO_ITEM] } },
-        { status: 'ok', value: { items: [FACTION_ITEM] } },
+        { status: 'ok', recoverable: [], value: { items: [RUIN_ITEM] } },
+        { status: 'ok', recoverable: [], value: { items: [PAGE_TWO_ITEM] } },
+        { status: 'ok', recoverable: [], value: { items: [FACTION_ITEM] } },
       ])}
       onSetup={fn()}
       onImport={fn()}
@@ -1269,8 +1275,8 @@ export const ListResult_RegenerateClearsSelectionForReusedName: Story = {
     <ListDemo
       resolveModelId={() => MODEL_ID}
       run={sequentialRun<ListItemValue>([
-        { status: 'ok', value: { items: [RUIN_ITEM] } },
-        { status: 'ok', value: { items: [RUIN_ITEM] } },
+        { status: 'ok', recoverable: [], value: { items: [RUIN_ITEM] } },
+        { status: 'ok', recoverable: [], value: { items: [RUIN_ITEM] } },
       ])}
       onSetup={fn()}
       onImport={fn()}
@@ -1441,9 +1447,9 @@ export const FailureCancelKeepingAListAsksBeforeDiscarding: Story = {
     <ListDemo
       resolveModelId={() => MODEL_ID}
       run={sequentialRun<ListItemValue>([
-        { status: 'ok', value: { items: [RUIN_ITEM] } },
-        { status: 'failed', detail: 'Provider request timed out after 3 retries' },
-        { status: 'ok', value: { items: [PAGE_TWO_ITEM] } },
+        { status: 'ok', recoverable: [], value: { items: [RUIN_ITEM] } },
+        { status: 'failed', recoverable: [], detail: 'Provider request timed out after 3 retries' },
+        { status: 'ok', recoverable: [], value: { items: [PAGE_TWO_ITEM] } },
       ])}
       onSetup={fn()}
       onImport={fn()}
@@ -1558,9 +1564,9 @@ export const FailureCancelKeepingAnUntouchedListAsksBeforeDiscarding: Story = {
     <ListDemo
       resolveModelId={() => MODEL_ID}
       run={sequentialRun<ListItemValue>([
-        { status: 'ok', value: { items: [RUIN_ITEM] } },
-        { status: 'failed', detail: 'Provider request timed out after 3 retries' },
-        { status: 'ok', value: { items: [PAGE_TWO_ITEM] } },
+        { status: 'ok', recoverable: [], value: { items: [RUIN_ITEM] } },
+        { status: 'failed', recoverable: [], detail: 'Provider request timed out after 3 retries' },
+        { status: 'ok', recoverable: [], value: { items: [PAGE_TWO_ITEM] } },
       ])}
       onSetup={fn()}
       onImport={fn()}
@@ -1596,7 +1602,8 @@ export const ConfirmDiscardAbortsTheInFlightCall: Story = {
           call += 1
           // Page one lands so the overlay is dirty; the Generate more behind the
           // confirm is what must still be in flight when Discard runs.
-          if (call === 1) return Promise.resolve({ status: 'ok', value: { items: [RUIN_ITEM] } })
+          if (call === 1)
+            return Promise.resolve({ status: 'ok', recoverable: [], value: { items: [RUIN_ITEM] } })
           return new Promise(() => {})
         }}
         onSetup={fn()}

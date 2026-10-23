@@ -550,7 +550,11 @@ describe('per-turn chains the pass through the orchestrator', () => {
     openStory(2)
     defineTurn()
     ensurePeriodicClassifierPipelineRegistered()
-    vi.mocked(generateStructured).mockResolvedValue({ status: 'failed', detail: 'rate limited' })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'failed',
+      recoverable: [],
+      detail: 'rate limited',
+    })
 
     const states: ClassifierStatus['state'][] = []
     for (let turn = 0; turn < 5; turn++) {
@@ -565,7 +569,11 @@ describe('per-turn chains the pass through the orchestrator', () => {
       processedThrough: null,
     })
 
-    vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: EMPTY_REPLY })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: EMPTY_REPLY,
+    })
     expect(
       await runClassifierNow('b1', { db: ctx.db, runInTransaction: ctx.runInTransaction }),
     ).toMatchObject({ outcome: 'completed' })

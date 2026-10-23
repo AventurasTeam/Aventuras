@@ -308,7 +308,11 @@ describe('periodicClassifierPhase', () => {
         content: `turn ${151 + i}`,
       })) as unknown as StoryEntry[],
     )
-    vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: extraction() } as never)
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction(),
+    } as never)
 
     const { result } = await drain(h.ctx)
 
@@ -367,7 +371,11 @@ describe('periodicClassifierPhase', () => {
         },
       ] as CharacterRelationship[],
     })
-    vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: extraction() } as never)
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction(),
+    } as never)
 
     await drain(h.ctx)
 
@@ -406,7 +414,11 @@ describe('periodicClassifierPhase', () => {
       thread('thr_11111111-1111-1111-1111-111111111111', 'b1', 'Recover the relic'),
       thread('thr_22222222-2222-2222-2222-222222222222', 'other', 'Raise the dead'),
     ])
-    vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: extraction() } as never)
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction(),
+    } as never)
 
     await drain(h.ctx)
 
@@ -440,7 +452,11 @@ describe('periodicClassifierPhase', () => {
         },
       },
     })
-    vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: extraction() } as never)
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction(),
+    } as never)
 
     await drain(h.ctx)
 
@@ -452,7 +468,11 @@ describe('periodicClassifierPhase', () => {
   // architecture.md → System and user halves.
   it('sends no cache marker: the call takes no sixth argument', async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 1 })
-    vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: extraction() } as never)
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction(),
+    } as never)
 
     await drain(h.ctx)
 
@@ -529,6 +549,7 @@ describe('periodicClassifierPhase', () => {
   it('emits one delta per planned write, each with its own entryId', async () => {
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         happenings: [
           { title: 'A', sourceTurn: 't1', involvements: [], awareness: [] },
@@ -550,7 +571,7 @@ describe('periodicClassifierPhase', () => {
     let stateAtCallTime: string | undefined
     vi.mocked(generateStructured).mockImplementation(async () => {
       stateAtCallTime = h.status()?.state
-      return { status: 'ok', value: extraction() }
+      return { status: 'ok', recoverable: [], value: extraction() }
     })
     await drain(h.ctx)
     expect(stateAtCallTime).toBe('running')
@@ -563,7 +584,7 @@ describe('periodicClassifierPhase', () => {
       headPosition: 1,
       seedStatus: { state: 'failed', lastError: 'rate limited' },
     })
-    vi.mocked(generateStructured).mockResolvedValue({ status: 'aborted' })
+    vi.mocked(generateStructured).mockResolvedValue({ status: 'aborted', recoverable: [] })
     const { result } = await drain(h.ctx)
     expect(result).toEqual({ status: 'aborted' })
     expect(h.status()).toMatchObject({ state: 'running', lastError: 'rate limited' })
@@ -579,7 +600,7 @@ describe('periodicClassifierPhase', () => {
 
   it('restores only the lifecycle keys from its interrupt hook, never the watermark', async () => {
     const h = await ctxWith({ processedThrough: 3, headPosition: 4 })
-    vi.mocked(generateStructured).mockResolvedValue({ status: 'aborted' })
+    vi.mocked(generateStructured).mockResolvedValue({ status: 'aborted', recoverable: [] })
     await drain(h.ctx)
     // A whole-blob restore would serialize the stashed 3 over the clamp's 1.
     h.clamp(1)
@@ -606,6 +627,7 @@ describe('periodicClassifierPhase', () => {
     })
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
       }),
@@ -632,6 +654,7 @@ describe('periodicClassifierPhase', () => {
     })
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
       }),
@@ -655,6 +678,7 @@ describe('periodicClassifierPhase', () => {
     })
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         happenings: [
           { title: 'A', sourceTurn: 't1', involvements: [], awareness: [] },
@@ -683,6 +707,7 @@ describe('periodicClassifierPhase', () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
       }),
@@ -705,6 +730,7 @@ describe('periodicClassifierPhase', () => {
       h.ctx.abortSignal = AbortSignal.abort()
       return {
         status: 'ok',
+        recoverable: [],
         value: extraction({
           happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
         }),
@@ -717,7 +743,7 @@ describe('periodicClassifierPhase', () => {
   })
 
   it('returns aborted with no deltas when the abort lands before parsing', async () => {
-    vi.mocked(generateStructured).mockResolvedValue({ status: 'aborted' })
+    vi.mocked(generateStructured).mockResolvedValue({ status: 'aborted', recoverable: [] })
     const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
     const { events, result } = await drain(h.ctx)
     expect(events).toEqual([])
@@ -736,6 +762,7 @@ describe('periodicClassifierPhase', () => {
     configureClassifierEmbedder(embedder)
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         newCharacters: [
           { handle: 'nc1', name: 'Kael', description: 'A courier.', keywords: [] },
@@ -775,7 +802,7 @@ describe('periodicClassifierPhase', () => {
               const startedAt = Date.now()
               signal.addEventListener('abort', () => {
                 reportElapsed(Date.now() - startedAt)
-                resolve({ status: 'aborted' } as never)
+                resolve({ status: 'aborted', recoverable: [] } as never)
               })
             }) as never,
         )
@@ -866,8 +893,10 @@ describe('periodicClassifierPhase', () => {
       (...args: unknown[]) =>
         new Promise((resolve) => {
           const signal = args[4] as AbortSignal
-          if (signal.aborted) resolve({ status: 'aborted' } as never)
-          signal.addEventListener('abort', () => resolve({ status: 'aborted' } as never))
+          if (signal.aborted) resolve({ status: 'aborted', recoverable: [] } as never)
+          signal.addEventListener('abort', () =>
+            resolve({ status: 'aborted', recoverable: [] } as never),
+          )
         }) as never,
     )
     const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
@@ -888,7 +917,8 @@ describe('periodicClassifierPhase', () => {
         (...args: unknown[]) =>
           new Promise((resolve) => {
             const signal = args[4] as AbortSignal
-            const settle = () => setTimeout(() => resolve({ status: 'aborted' } as never), 5_000)
+            const settle = () =>
+              setTimeout(() => resolve({ status: 'aborted', recoverable: [] } as never), 5_000)
             if (signal.aborted) settle()
             else signal.addEventListener('abort', settle)
           }) as never,
@@ -911,7 +941,11 @@ describe('periodicClassifierPhase', () => {
 
   it('fails without advancing the watermark on a provider failure', async () => {
     const watermarks: number[] = []
-    vi.mocked(generateStructured).mockResolvedValue({ status: 'failed', detail: 'rate limited' })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'failed',
+      recoverable: [],
+      detail: 'rate limited',
+    })
     const h = await ctxWith({
       processedThrough: 0,
       headPosition: 2,
@@ -966,6 +1000,7 @@ describe('periodicClassifierPhase', () => {
     })
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         newCharacters: [{ handle: 'nc1', name: 'Kael', description: 'A courier.', keywords: [] }],
       }),
@@ -1040,6 +1075,7 @@ describe('periodicClassifierPhase', () => {
     } as unknown as Entity
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         happenings: [
           {
@@ -1079,6 +1115,7 @@ describe('periodicClassifierPhase', () => {
     } as unknown as Entity
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         newCharacters: [
           {
@@ -1124,6 +1161,7 @@ describe('periodicClassifierPhase', () => {
     } as unknown as Entity
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         newCharacters: [
           { handle: 'nc1', name: 'kael', description: 'The courier from the ford.', keywords: [] },
@@ -1166,6 +1204,7 @@ describe('periodicClassifierPhase', () => {
         entitiesStore.hydrate('b1', [mara])
         return {
           status: 'ok',
+          recoverable: [],
           value: extraction({
             newCharacters: [{ handle: 'nc1', name: 'Mara', description: 'A smith.', keywords: [] }],
           }),
@@ -1197,6 +1236,7 @@ describe('periodicClassifierPhase', () => {
         entitiesStore.hydrate('b1', [varn])
         return {
           status: 'ok',
+          recoverable: [],
           value: extraction({
             newPlaces: [
               {
@@ -1248,6 +1288,7 @@ describe('periodicClassifierPhase', () => {
     } as unknown as Entity
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         newCharacters: [
           {
@@ -1305,6 +1346,7 @@ describe('periodicClassifierPhase', () => {
       )
       vi.mocked(generateStructured).mockResolvedValue({
         status: 'ok',
+        recoverable: [],
         value: extraction({
           newCharacters: [
             {
@@ -1337,6 +1379,7 @@ describe('periodicClassifierPhase', () => {
       ambiguous()
       vi.mocked(generateStructured).mockResolvedValue({
         status: 'ok',
+        recoverable: [],
         value: extraction({
           newCharacters: [
             {
@@ -1371,6 +1414,7 @@ describe('periodicClassifierPhase', () => {
       ambiguous()
       vi.mocked(generateStructured).mockResolvedValue({
         status: 'ok',
+        recoverable: [],
         value: extraction({
           newCharacters: [
             {
@@ -1414,6 +1458,7 @@ describe('periodicClassifierPhase', () => {
     } as unknown as Entity
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         newCharacters: [{ handle: 'nc1', name: ' ', description: 'Someone.', keywords: ['Kael'] }],
       }),
@@ -1430,6 +1475,7 @@ describe('periodicClassifierPhase', () => {
   it('keeps the first declaration of a repeated newCharacters handle', async () => {
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         newCharacters: [
           {
@@ -1491,6 +1537,7 @@ describe('periodicClassifierPhase', () => {
     } as unknown as Entity
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         newCharacters: [
           {
@@ -1531,6 +1578,7 @@ describe('periodicClassifierPhase', () => {
     } as unknown as Entity
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         newCharacters: [
           { handle: 'nc1', name: 'Kael', description: 'D'.repeat(2000), keywords: [] },
@@ -1556,6 +1604,7 @@ describe('periodicClassifierPhase', () => {
       h.clamp(7)
       return {
         status: 'ok',
+        recoverable: [],
         value: extraction({
           happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
         }),
@@ -1618,6 +1667,7 @@ describe('periodicClassifierPhase', () => {
       orthogonal()
       vi.mocked(generateStructured).mockResolvedValue({
         status: 'ok',
+        recoverable: [],
         value: extraction({
           newFactions: [
             {
@@ -1651,6 +1701,7 @@ describe('periodicClassifierPhase', () => {
     it("keeps a character's decision apart from a faction's on the same handle", async () => {
       vi.mocked(generateStructured).mockResolvedValue({
         status: 'ok',
+        recoverable: [],
         value: extraction({
           newCharacters: [
             {
@@ -1691,6 +1742,7 @@ describe('periodicClassifierPhase', () => {
       configureClassifierEmbedder(embed)
       vi.mocked(generateStructured).mockResolvedValue({
         status: 'ok',
+        recoverable: [],
         value: extraction({
           newCharacters: [
             {
@@ -1725,6 +1777,7 @@ describe('periodicClassifierPhase', () => {
     it('binds a membership to the new faction when its handle collides with a live placeholder', async () => {
       vi.mocked(generateStructured).mockResolvedValue({
         status: 'ok',
+        recoverable: [],
         value: extraction({
           newFactions: [
             {
@@ -1757,6 +1810,7 @@ describe('periodicClassifierPhase', () => {
     it("maps a membership's placeholders back to the character and faction ids", async () => {
       vi.mocked(generateStructured).mockResolvedValue({
         status: 'ok',
+        recoverable: [],
         value: extraction({
           memberships: [{ character: 'c1', faction: 'f1', sourceTurn: 't1' }],
         }),
@@ -1785,6 +1839,7 @@ describe('periodicClassifierPhase', () => {
       configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
       vi.mocked(generateStructured).mockResolvedValue({
         status: 'ok',
+        recoverable: [],
         value: extraction({
           memberships: [{ character: 'c1', faction: 'f1', sourceTurn: 't1' }],
         }),
@@ -1813,6 +1868,7 @@ describe('periodicClassifierPhase', () => {
       configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
       vi.mocked(generateStructured).mockResolvedValue({
         status: 'ok',
+        recoverable: [],
         value: extraction({ standings: [{ ref: 'f1', standing: 'outlawed', sourceTurn: 't1' }] }),
       })
       const h = await ctxWith({
@@ -1904,6 +1960,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
     ensurePeriodicClassifierPipelineRegistered()
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
         ...over,
@@ -1952,12 +2009,41 @@ describe('periodicClassifierPhase via runPipeline', () => {
       (...args: unknown[]) =>
         new Promise((resolve) => {
           const signal = args[4] as AbortSignal
-          signal.addEventListener('abort', () => resolve({ status: 'aborted' } as never))
+          signal.addEventListener('abort', () =>
+            resolve({ status: 'aborted', recoverable: [] } as never),
+          )
           calling()
         }) as never,
     )
     return inCall
   }
+
+  // generation-pipeline.md → Two retry tiers: the orchestrator logs each event as the run.
+  it('logs each retried attempt under the run', async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    const { db, runInTransaction } = await seedApplyTimeHarness()
+    ensurePeriodicClassifierPipelineRegistered()
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction(),
+      recoverable: [{ tier: 'parse', detail: 'Unexpected end of JSON input', attempt: 0 }],
+    })
+    const result = await runPipeline(PERIODIC_CLASSIFIER_KIND, {
+      storyId: 's1',
+      branchId: 'b1',
+      db,
+      runInTransaction,
+    })
+    if (result.outcome === 'rejected') throw new Error('unexpected rejected start')
+    expect(result.outcome).toBe('completed')
+    const logged = getDiagnosticsSnapshot().logEntries.filter(
+      (e) => e.kind === 'pipeline.recoverable_error',
+    )
+    expect(logged.map((e) => [e.level, e.fields, e.actionId])).toEqual([
+      ['warn', { detail: 'Unexpected end of JSON input' }, result.actionId],
+    ])
+  })
 
   it('routes a write the action layer rejects to the failed status instead of leaving running stuck', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
@@ -2467,6 +2553,7 @@ describe('periodicClassifierPhase — mentioned places', () => {
         })
       return {
         status: 'ok',
+        recoverable: [],
         value: extraction({
           newPlaces: [
             {
@@ -2506,7 +2593,7 @@ describe('periodicClassifierPhase — mentioned places', () => {
     let sent: { schema: unknown; system: string; user: string } | undefined
     vi.mocked(generateStructured).mockImplementation(async (_target, prompt, schema) => {
       sent = { schema, system: prompt.system, user: prompt.user }
-      return { status: 'ok', value: extraction() }
+      return { status: 'ok', recoverable: [], value: extraction() }
     })
     const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [ford] })
     await drain(h.ctx)
@@ -2528,6 +2615,7 @@ describe('periodicClassifierPhase — mentioned places', () => {
     })
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         newPlaces: [
           place('l1', 'the Drowned Inn'),
@@ -2569,6 +2657,7 @@ describe('periodicClassifierPhase — mentioned places', () => {
     const place = (name: string) => ({ handle: 'new:inn', name, description: '', keywords: [] })
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({ newPlaces: [place('the Gull Inn'), place('the Drowned Inn')] }),
     })
     const h = await ctxWith({ processedThrough: 0, headPosition: 2, mentionedPlaces: true })
@@ -2590,6 +2679,7 @@ describe('periodicClassifierPhase — mentioned places', () => {
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         newPlaces: [
           {
@@ -2724,6 +2814,7 @@ describe('periodicClassifierPhase — the writer map', () => {
   it('adds awareness of a listed happening, and none for a pair the branch already stores', async () => {
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         knownAwareness: [
           { happening: 'hp1', ref: 'c1', source: 'was there', severity: 0.6, learnedAtTurn: 't1' },
@@ -2774,6 +2865,7 @@ describe('periodicClassifierPhase — the writer map', () => {
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         threadStatuses: [
           { thread: 'th1', status: 'resolved', sourceTurn: 't2' },
@@ -2812,6 +2904,7 @@ describe('periodicClassifierPhase — the writer map', () => {
     } as Entity
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: extraction({
         happenings: [
           { title: 'A', icon: 'rocket', sourceTurn: 't1', involvements: [], awareness: [] },
@@ -2835,5 +2928,85 @@ describe('periodicClassifierPhase — the writer map', () => {
     ])
     expect(logged('classifier.icon_unknown')).toEqual([['warn', { title: 'A', icon: 'rocket' }]])
     expect(logged('classifier.unseen_ref')).toEqual([['warn', { list: 'standings', ref: 'f9' }]])
+  })
+})
+
+// generation-pipeline.md → Two retry tiers; Decisions → Parse reliability: the smoke reads the
+// counts off classifier.pass_completed.
+describe('periodicClassifierPhase — retried attempts', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    __resetRegistry()
+    __resetClassifierEmbedder()
+  })
+
+  const PARSE_RETRY = { tier: 'parse', detail: 'Unexpected token < in JSON', attempt: 0 } as const
+  const PROVIDER_RETRY = { tier: 'provider', reason: 'timeout' } as const
+  const passLogs = () =>
+    getDiagnosticsSnapshot()
+      .logEntries.filter((e) => e.kind === 'classifier.pass_completed')
+      .map((e) => [e.level, e.fields, e.actionId])
+
+  it('yields one recoverable_error per retried attempt, then logs its counts on completing', async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
+      }),
+      recoverable: [PARSE_RETRY, PROVIDER_RETRY],
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+    const { events, result } = await drain(h.ctx)
+    expect(events.slice(0, 2)).toEqual([
+      {
+        type: 'recoverable_error',
+        error: { kind: 'phase-logic', detail: 'Unexpected token < in JSON' },
+      },
+      { type: 'recoverable_error', error: { kind: 'provider', reason: 'timeout' } },
+    ])
+    expect(events.slice(2).map((e) => (e as { type: string }).type)).toEqual(['delta_emitted'])
+    expect(result).toEqual({ status: 'completed' })
+    expect(passLogs()).toEqual([
+      ['debug', { parseRetries: 1, providerRetries: 1, writes: 1 }, 'a1'],
+    ])
+  })
+
+  it('yields the retried attempts of a call that failed, and logs no completion', async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'failed',
+      detail: 'Unexpected end of JSON input',
+      recoverable: [PARSE_RETRY],
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+    const { events, result } = await drain(h.ctx)
+    expect(events).toEqual([
+      {
+        type: 'recoverable_error',
+        error: { kind: 'phase-logic', detail: 'Unexpected token < in JSON' },
+      },
+    ])
+    expect(result).toMatchObject({ status: 'failed' })
+    expect(passLogs()).toEqual([])
+  })
+
+  // An expiry reaches the phase as an aborted call: its retries are the pass's too.
+  it('yields the retried attempts of a call a cancel ended', async () => {
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'aborted',
+      recoverable: [{ tier: 'provider', reason: 'network', detail: 'ECONNRESET' }],
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+    const { events, result } = await drain(h.ctx)
+    expect(events).toEqual([
+      {
+        type: 'recoverable_error',
+        error: { kind: 'provider', reason: 'network', detail: 'ECONNRESET' },
+      },
+    ])
+    expect(result).toEqual({ status: 'aborted' })
   })
 })
