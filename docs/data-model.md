@@ -2017,7 +2017,7 @@ story_entries.metadata: {
     kind: string                    // open string, not an enum: the taxonomy spans pipeline errors, provider errors and refusals, and each side evolves on its own release cadence
     failure?: string                // provider- or pipeline-supplied failure tag, when one was given
     detail?: string                 // human-readable cause, rendered in the reader's error surface
-    submission?: {                  // the turn's text, kept across a restart: a turn entry's Retry resends it; on a pass entry it is custody only (always when held; when failed, only when the composer couldn't take it back: the draft was occupied, or the user left the branch)
+    submission?: {                  // the turn's text, kept across a restart: a turn entry's Retry resends it; on a pass entry it is custody only (always on a Send refused held; on a Retry come back held, the entry's own text, else the composer's draft; when failed, only when the composer couldn't take it back: the draft was occupied, or the user left the branch)
       content: string
       composerMode: string
     }

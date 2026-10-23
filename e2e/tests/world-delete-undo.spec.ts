@@ -19,7 +19,7 @@ const HERO_STORY = 'story_hero'
 const HERO_TITLE = 'The Veilstone Courier'
 
 // The delete's tail-scene drop needs Mira in the tail's scene; seed leaves her out of it.
-// See docs/implementation/lessons-learned/seed-tip-position-shifts-at-boot.md.
+// See docs/implementation/lessons-learned/seed-tip-position-shifts-at-first-send.md.
 function putInTailScene(dbPath: string, name: string): void {
   const db = new DatabaseSync(dbPath)
   try {

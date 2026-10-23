@@ -145,6 +145,65 @@ describe('runBootstrap', () => {
     expect(published?.failures).toMatchObject([{ runId: 'r-failed', storyId: 's1' }])
   })
 
+  it("holds a branch on its pass's failed orphan, not on a turn's", async () => {
+    await seedRow()
+    await ctx.db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    const running = {
+      state: 'running' as const,
+      lastSuccessAt: null,
+      lastError: null,
+      processedThrough: 2,
+    }
+    for (const [branchId, kind] of [
+      ['b-pass', PERIODIC_CLASSIFIER_KIND],
+      ['b-turn', 'per-turn'],
+    ] as const) {
+      await ctx.db.insert(branches).values({
+        id: branchId,
+        storyId: 's1',
+        name: branchId,
+        createdAt: 1,
+        classifierStatus: running,
+      })
+      await ctx.db.insert(pipelineRuns).values({
+        runId: `r-${branchId}`,
+        kind,
+        actionId: `a-${branchId}`,
+        storyId: 's1',
+        startedAt: 1,
+        finishedAt: null,
+        outcome: null,
+      })
+      // An unregistered target table fails the reversal, so the orphan's write survives.
+      await ctx.db.insert(deltas).values({
+        id: `d-${branchId}`,
+        branchId,
+        entryId: null,
+        actionId: `a-${branchId}`,
+        logPosition: 1,
+        source: 'ai_classifier',
+        targetTable: 'not_registered' as never,
+        targetId: 'missing',
+        op: 'create',
+        undoPayload: null,
+        encodingVersion: 1,
+        createdAt: 1,
+      })
+    }
+
+    await runBootstrap(ctx)
+
+    const status = async (branchId: string) =>
+      (
+        await ctx.db
+          .select({ status: branches.classifierStatus })
+          .from(branches)
+          .where(eq(branches.id, branchId))
+      )[0]?.status
+    expect(await status('b-pass')).toEqual(running)
+    expect(await status('b-turn')).toEqual({ ...running, state: 'idle' })
+  })
+
   // Guards the load-bearing registerAllDomains()-before-recovery order. Simulate a
   // cold boot (empty registry): runBootstrap's own registration must repopulate it
   // before reverse-replay, else recovery throws unknown target_table and the dirty

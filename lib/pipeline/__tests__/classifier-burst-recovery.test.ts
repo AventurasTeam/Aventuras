@@ -142,10 +142,7 @@ describe('a crashed classifier burst', () => {
     // The partial write survived, which is exactly why the branch cannot re-run.
     expect(await db.select().from(happenings)).toHaveLength(1)
 
-    await resetStuckClassifierRunState(
-      ctx,
-      report.failures.map((f) => f.actionId),
-    )
+    await resetStuckClassifierRunState(ctx, report.failures)
 
     const [branch] = await db
       .select({ classifierStatus: branches.classifierStatus })

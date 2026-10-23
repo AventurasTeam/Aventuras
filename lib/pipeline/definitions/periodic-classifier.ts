@@ -3,6 +3,7 @@ import { and, asc, eq, gt, sql, type SQL } from 'drizzle-orm'
 import { boundedSignal } from '@/lib/abort'
 import {
   generateStructured,
+  profileTimeoutMs,
   resolveModel,
   type GenerateStructuredResult,
   type ResolveModelConfig,
@@ -86,20 +87,15 @@ async function readWindowEntries(
 /** classifier.md → Failure policy: the bound when the classifier profile sets no timeout. */
 export const PASS_TIMEOUT_DEFAULT_MS = 600_000
 
-// setTimeout's largest delay; a longer one fires at once.
-const MAX_TIMER_DELAY_MS = 2_147_483_647
-
 const CLASSIFY_PHASE = 'classify'
 
 /** The classifier profile's `timeout` over the whole structured call, retries included. */
 export function passTimeoutMs(config: ResolveModelConfig): number {
   const resolved = resolveModel('classifier', config)
-  // Seconds, as buildCallSettings reads them; a story override resolves to no profile params.
-  const seconds = resolved.ok ? resolved.params.timeout : undefined
-  if (seconds === undefined || !Number.isFinite(seconds) || seconds <= 0) {
-    return PASS_TIMEOUT_DEFAULT_MS
-  }
-  return Math.min(seconds * 1000, MAX_TIMER_DELAY_MS)
+  // A story override resolves to no profile params.
+  return (
+    profileTimeoutMs(resolved.ok ? resolved.params.timeout : undefined) ?? PASS_TIMEOUT_DEFAULT_MS
+  )
 }
 
 type CallFailure = Exclude<GenerateStructuredResult<unknown>, { status: 'ok' }>
@@ -129,7 +125,6 @@ function passFailure(
           failure: result.kind,
           target: 'classifier',
           phaseName: CLASSIFY_PHASE,
-          detail: 'classifier',
         },
       }
     case 'failed':
@@ -272,8 +267,7 @@ export async function* periodicClassifierPhase(
   }
   const timeoutMs = passTimeoutMs(modelConfig)
 
-  // Read by the status block; left behind by a crash, it holds the branch (Send and Run now
-  // refuse) until a boot clears it.
+  // Read by the status block; left behind by a crash, it holds the branch until a boot clears it.
   await writeStatus(ctx, nextStatusOnStart(status))
 
   const bounded = boundedSignal(ctx.abortSignal, timeoutMs)
@@ -419,7 +413,7 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
         try {
           await writeStatus(ctx, status)
         } catch (e) {
-          // Left running, the branch is held (Send refuses) until a boot reverses it.
+          // Left running, the branch is held until a boot resets it.
           logger.warn(
             'classifier.interrupt_restore_retried',
             { branchId: ctx.branchId, error: e instanceof Error ? e.message : String(e) },

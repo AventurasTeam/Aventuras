@@ -894,9 +894,10 @@ Raised 2026-08-15 by the Slice 3.8 Task 2 review.
 `reverseReplayDeltas` resolves `deltas.target_table` through the
 runtime registry and throws `unknown target_table` when it misses, so
 an orphan written by a build that carried a domain the running build
-does not is unreversible by any retry. Boot then leaves that branch
-`running` indefinitely (`resetStuckClassifierRunState`), so it takes
-no turns: every Send fails with the recovery error
+does not is unreversible by any retry. For a pass's orphan, boot then
+leaves its branch `running` indefinitely
+(`resetStuckClassifierRunState`), so it takes no turns: every Send
+fails with the recovery error
 ([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)),
 and only a branch from an entry before the orphan continues. Reaching it requires running a build older than its own
 data — a downgrade, or a domain renamed without a migration. Not
@@ -922,20 +923,29 @@ field is the signal to revisit.
 #### The classifier can read a window holding un-reversed writes
 
 Boot holds a branch back from the cadence only when its own
-`classifier_status` was left `running`
-(`resetStuckClassifierRunState`). Another kind's failed reversal, on a
-branch whose classifier happened to be `idle`, holds nothing — so the
-cadence can fire over a window carrying those un-reversed writes.
+`classifier_status` was left `running` and the pass's own orphan
+didn't reverse (`resetStuckClassifierRunState`). Another kind's failed
+reversal holds nothing, whatever the classifier's state — so the
+cadence can fire over a window carrying those un-reversed writes. That
+is chosen, not missed: holding on any kind's orphan would stop a
+branch's turns, possibly for good, over a fault whose startup copy
+promises no stop
+([`generation-pipeline.md → Recovery-failure policy`](./generation-pipeline.md#recovery-failure-policy)).
+The cost is that the next pass reads prose including the failed run's
+leftover writes, which the turns since already build on.
 
-Benign in every reachable case, which is why it is parked rather than
-fixed:
+Benign in every reachable case except a close's (open below), which is
+why it is parked rather than fixed:
 
-- **On the boot path it needs the version skew above.** Every other
+- **On the boot path it needs the version skew above, or a close.** Every other
   reversal failure is transient and the next boot's retry clears it,
   or is
   [an integrity refusal](#a-boot-recovery-refused-as-an-integrity-error-never-settles),
-  which boot meets only for a pass's or a close's orphan, whose branch
-  it holds back. Either way the branch is reconciled or already held back.
+  which boot meets only for a pass's or a close's orphan. A pass's
+  branch it holds back. A close's it doesn't, and whether a pass over a
+  close's leftover writes is benign depends on the close's write set,
+  not yet designed (the Chapter-close agent design item in
+  [`followups.md → Data-model`](./followups.md#data-model)).
 - **In-session it needs a later turn or Send.** A pass starts only
   from a turn's commit (per-turn's `chainsTo`) or before a turn at
   Send, when one is owed
@@ -957,8 +967,9 @@ to be scoped to the kinds that re-derive from a window, and needs the
 concurrency contract to learn about orphans.
 
 Parked 2026-08-25 after the boot-recovery work closed the reachable
-half; duplicated happenings observed after a failed reversal are the
-signal to revisit.
+half; widened 2026-10-23, when the boot reset stopped holding a branch
+on another kind's orphan. Duplicated happenings observed after a failed
+reversal are the signal to revisit.
 
 #### A boot recovery refused as an integrity error never settles
 
@@ -973,9 +984,9 @@ would prune that delete with the create it holds, so it refuses as
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
 writes nothing, and leaves the marker open. Every boot refuses again
 while that delete stays in the log: the "Recovery incomplete" modal
-shows at each startup, without promising a retry, and boot leaves the
-branch `running` (`resetStuckClassifierRunState`), so it takes no
-turns: every Send fails with the recovery error
+shows at each startup, without promising a retry, and for a pass,
+boot leaves the branch `running` (`resetStuckClassifierRunState`), so
+it takes no turns: every Send fails with the recovery error
 ([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)).
 Its prose and facts are intact, and a branch from an entry before the
 orphan can continue, but v1 has no "drop orphan" affordance to clear

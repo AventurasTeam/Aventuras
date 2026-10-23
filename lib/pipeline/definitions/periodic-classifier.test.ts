@@ -60,7 +60,6 @@ import { unprocessedEntryCount } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import {
   ensurePeriodicClassifierPipelineRegistered,
-  PASS_TIMEOUT_DEFAULT_MS,
   passTimeoutMs,
   PERIODIC_CLASSIFIER_KIND,
   PERIODIC_CLASSIFIER_RESOLVES,
@@ -432,7 +431,7 @@ describe('periodicClassifierPhase', () => {
     ).toBe(false)
   })
 
-  // Past the cap lies prose the next pass must reach, so a cut of nothing but system rows advances.
+  // Past the cap may lie prose the next pass must reach, so a cut of only system rows advances.
   it('advances to the cut of a truncated window of only system entries, with no call', async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 25, entryKind: 'system' })
     const { events, result } = await drain(h.ctx)
@@ -901,7 +900,6 @@ describe('periodicClassifierPhase', () => {
         failure: 'profile-missing',
         target: 'classifier',
         phaseName: 'classify',
-        detail: 'classifier',
       },
     })
     expect(h.watermarks).toEqual([])
@@ -1992,8 +1990,8 @@ describe('periodicClassifierPhase via runPipeline', () => {
     })
   })
 
-  // A failed reversal leaves the write on disk, so a retry at the next turn would re-read it.
-  // `running` stays, holding the cadence, for boot's resetStuckClassifierRunState.
+  // A failed reversal leaves the write on disk, so the next Send's pass would re-read it.
+  // `running` stays, holding the branch, for boot's resetStuckClassifierRunState.
   it('leaves running when the reversal itself cannot commit, deferring to boot recovery', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
     const fixedActionId = 'act_classifier_poison'
@@ -2132,7 +2130,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
   })
 
-  // Left `running`, the cadence would stay suspended for the rest of the session.
+  // Left `running`, the branch is held, refusing Send, until the next boot.
   it('retries a status restore that fails once after an interrupt, logging it as the run', async () => {
     clearBuffers()
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
@@ -2495,7 +2493,7 @@ describe('passTimeoutMs', () => {
   it.each([0, -30, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
     'reads an invalid profile timeout (%s) as none',
     (timeout) => {
-      expect(passTimeoutMs(config(timeout))).toBe(PASS_TIMEOUT_DEFAULT_MS)
+      expect(passTimeoutMs(config(timeout))).toBe(600_000)
     },
   )
 

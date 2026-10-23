@@ -1,5 +1,5 @@
 import type { CollisionReason, Entity } from '@/lib/db'
-import { logger, type Logger } from '@/lib/diagnostics'
+import type { Logger } from '@/lib/diagnostics'
 import { compareId } from '@/lib/list-modules'
 import { namesakeBasis } from '@/lib/world'
 
@@ -132,8 +132,8 @@ export async function scoreDescriptions(
   candidate: string,
   descriptions: readonly (string | null)[],
   embed: EmbedDescriptions,
-  /** The run's logger, so a failed embed's warn names the run; the global one otherwise. */
-  log: Pick<Logger, 'warn'> = logger,
+  /** The run's, so a failed embed's warn carries its actionId. */
+  log: Pick<Logger, 'warn'>,
 ): Promise<(number | null)[]> {
   const unscored = descriptions.map(() => null)
   if (!hasText(candidate)) return unscored
@@ -167,8 +167,7 @@ export type ReconciledKind = Extract<Entity['kind'], 'character' | 'faction'>
 type ReconcileDeps = {
   entities: readonly Entity[]
   embedDescriptions: EmbedDescriptions
-  /** The run's logger. */
-  log?: Pick<Logger, 'warn'>
+  log: Pick<Logger, 'warn'>
 } & (
   | {
       kind: 'character'

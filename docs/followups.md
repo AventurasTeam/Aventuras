@@ -119,7 +119,11 @@ for the placement rule.
   - whether a cluster it can't decide gets a review flag (happenings
     have no column for one), and what it does with a row already
     flagged;
-  - how the user reviews what a close changed.
+  - how the user reviews what a close changed;
+  - whether boot holds a branch on a close's unreversed orphan as it
+    does on a pass's: the reset counts only the pass's, so the next
+    pass reads a graph carrying the close's leftover writes
+    ([`parked.md → The classifier can read a window holding un-reversed writes`](./parked.md#the-classifier-can-read-a-window-holding-un-reversed-writes)).
 
   Its failure policy is the pass's: a close that fails runs before the
   next turn and must succeed

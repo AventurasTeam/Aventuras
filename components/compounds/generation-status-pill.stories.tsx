@@ -94,7 +94,7 @@ export const ActiveUpdatingMemory: Story = {
   },
 }
 
-// Send's deferred work: the pass runs first and the turn waits behind it.
+// Send's owed pass: the pass runs first and the turn waits behind it.
 export const ActiveUpdatingMemoryBeforeTurn: Story = {
   args: { activePhase: 'updating-memory', beforeTurn: true, onCancel: fn(), onErrorTap: fn() },
   play: async () => {

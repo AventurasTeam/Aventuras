@@ -578,8 +578,8 @@ commit brings the cadence due — the unprocessed entries reach
 `running` is a pass left unfinished: by a crash,
 or in session by an interrupt whose reversal could not commit or a
 status write that failed its retry. It holds the cadence until boot
-resets it, which boot skips while the branch still holds unreversed
-orphans
+resets it, which boot skips while the branch still holds the pass's
+own unreversed orphans
 ([`generation-pipeline.md → chainsTo on predecessor`](../generation-pipeline.md#chainsto-on-predecessor)).
 The pass runs while the user reads the reply. A pass's own `chainsTo`
 returns another pass while a chapter close is pending and entries
@@ -623,9 +623,9 @@ Translation retry and chapter close wait for it.
 
 **Pill.** A pass shows on the generation indicator pill with the
 banner, as chapter close does, reading `Updating memory…`, and
-`Updating memory before your turn…` when it runs deferred. No ETA,
-since run length isn't predictable; the classifier's timeout bounds
-the whole structured call, retries included
+`Updating memory before your turn…` when it runs as Send's owed pass.
+No ETA, since run length isn't predictable; the classifier's timeout
+bounds the whole structured call, retries included
 ([Failure policy](#failure-policy)). The pill's popover carries
 Cancel.
 

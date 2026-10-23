@@ -20,7 +20,12 @@ import {
 } from '@/components/reader/confirm-refusal'
 import { useContentEditing } from '@/components/reader/content-editing'
 import { readerPillPhase } from '@/components/reader/generation-phase'
-import { settlePassFailureCustody } from '@/components/reader/pass-failure-custody'
+import {
+  draftSubmission,
+  readPassFailureCustody,
+  settlePassFailureCustody,
+  settlePassRetryCustody,
+} from '@/components/reader/pass-failure-custody'
 import { ReaderPeekDrawer } from '@/components/reader/peek/reader-peek-drawer'
 import { ReaderBrowseChip } from '@/components/reader/rail/reader-browse-chip'
 import { ReaderRailColumn } from '@/components/reader/rail/reader-rail-column'
@@ -119,7 +124,12 @@ import {
   findSuggestionAnchor,
   shouldShowSuggestionStrip,
 } from '@/lib/piggyback'
-import { pipelineEventBus, SUGGESTION_REFRESH_KIND, type PipelineError } from '@/lib/pipeline'
+import {
+  isClassifierHeld,
+  pipelineEventBus,
+  SUGGESTION_REFRESH_KIND,
+  type PipelineError,
+} from '@/lib/pipeline'
 import {
   appSettingsStore,
   awaitRunTerminal,
@@ -577,7 +587,7 @@ export default function ReaderComposerRoute() {
       await writeSystemEntry(
         {
           branchId,
-          content: describePassFailure(refusal).content,
+          content: describePassFailure(refusal, submission).content,
           failure: toPassFailureMeta(refusal, submission),
         },
         ctx,
@@ -687,12 +697,11 @@ export default function ReaderComposerRoute() {
           setLastSubmission(null)
           await settlePassFailureCustody({
             held: refusal.held,
-            custodyNow: () => ({
-              stillOnBranch: branchUnchanged(branchId),
-              // An unmounted composer can't take the text back, so the entry keeps it.
-              draftEmpty:
-                composerRef.current != null && isDraftEmpty(composerRef.current.getDraft()),
-            }),
+            custodyNow: () =>
+              readPassFailureCustody({
+                stillOnBranch: branchUnchanged(branchId),
+                composer: composerRef.current,
+              }),
             write: (withSubmission) =>
               showPassFailure(refusal, withSubmission ? submission : undefined),
             restoreDraft: () =>
@@ -724,7 +733,7 @@ export default function ReaderComposerRoute() {
           )
         else if (result.outcome === 'aborted') {
           // Cancelled during its owed pass, the Send wrote nothing, so the entry it cleared
-          // goes back, and that entry's Retry resends its own text rather than this Send's.
+          // goes back with its own Retry: a turn entry resends its own text, not this Send's.
           const putBack = abortedBeforeTurn(result) ? dropped : null
           await restoreSystemTail(putBack)
           if (branchUnchanged(branchId)) {
@@ -931,12 +940,30 @@ export default function ReaderComposerRoute() {
       logger.warn('pipeline.pass_retry_dispatch_suppressed', { branchId })
       return
     }
-    const submission = systemFailure?.submission
+    const stored = systemFailure?.submission
     try {
       await retryPassEntry({
         runPass: () => runClassifierNow(branchId, ctx),
+        held: () => isClassifierHeld(branchId, ctx),
         dismiss: handleDismissSystemEntry,
-        rewrite: (refusal) => showPassFailure(refusal, submission),
+        rewrite: (refusal) =>
+          settlePassRetryCustody({
+            held: refusal.held,
+            stored,
+            stillOnBranch: () => branchUnchanged(branchId),
+            draft: () => composerRef.current?.getDraft(),
+            toSubmission: (draft) =>
+              draftSubmission(draft, {
+                modesUsable: modesEnabled && modesUnavailableReason == null,
+                pov: wrapPov,
+                leadName,
+              }),
+            write: (submission) => showPassFailure(refusal, submission),
+            clearDraft: () => {
+              const composer = composerRef.current
+              composer?.restoreDraft('', composer.getDraft().mode)
+            },
+          }),
         notify: (message) => toast.info(message),
       })
     } finally {
@@ -949,6 +976,11 @@ export default function ReaderComposerRoute() {
     handleDismissSystemEntry,
     beginDispatch,
     endDispatch,
+    branchUnchanged,
+    modesEnabled,
+    modesUnavailableReason,
+    wrapPov,
+    leadName,
   ])
 
   const { onRetry: retrySystemEntry, fixAction } = useSystemEntryActions(
@@ -1366,8 +1398,8 @@ export default function ReaderComposerRoute() {
     onEditScene: editScene,
     onRequestEditScene: requestEditScene,
     onRegenerate: handleRequestRegenerate,
-    // Absent for a held pass entry: its branch can't run a pass.
-    ...(retrySystemEntry != null ? { onRetrySystemEntry: handleRetrySystemEntry } : {}),
+    // Undefined for a held pass entry: its branch can't run a pass.
+    onRetrySystemEntry: retrySystemEntry != null ? handleRetrySystemEntry : undefined,
     onDismissSystemEntry: handleDismissSystemEntry,
     onFixSystemEntry: handleFixSystemEntry,
   }

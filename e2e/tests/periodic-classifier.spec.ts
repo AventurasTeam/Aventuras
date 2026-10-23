@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
-import { queryApp } from '../harness/db'
+import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -565,6 +565,8 @@ test.describe('periodic classifier — backlog deeper than the reader window', (
 // classifier.md → Failure policy: a pre-flight halt skips the phase, so only the pipeline's hook
 // records it; unrecorded, the status reads idle over a failed pass. Send owes it by the watermark.
 test.describe('periodic classifier — unassigned agent', () => {
+  test.describe.configure({ mode: 'serial' })
+
   let app: LaunchedApp
   let mock: MockLlm
   let userDataDir: string | undefined
@@ -590,20 +592,18 @@ test.describe('periodic classifier — unassigned agent', () => {
     removeUserDataDir(userDataDir)
   })
 
-  const {
-    branchId: currentBranchId,
-    passOutcomes,
-    classifierStatus,
-  } = passProbe(
+  const { passOutcomes, classifierStatus } = passProbe(
     () => app.window,
     () => mock,
   )
+
+  const REFUSED = 'E2E-NOAGENT I trim the wick.'
 
   test('records the pre-flight failure as failed, and the next Send fails on it before its turn', async () => {
     const page = app.window
     await home.openStory(page, 'The Veilstone Courier').click()
     await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
-    const branchId = await currentBranchId()
+    const branchId = await currentBranchId(page, 'story_hero')
     const status = () => classifierStatus(branchId)
     const scalar = async (sql: string, params: unknown[] = []): Promise<unknown> =>
       (await queryApp(page, sql, params))[0][0]
@@ -621,15 +621,14 @@ test.describe('periodic classifier — unassigned agent', () => {
     expect(await status()).toEqual(['failed', 'classifier: no-profile-assigned', parked])
 
     // Now owed, the pass runs first at the next Send and fails it: no user_action, no turn.
-    const action = 'E2E-NOAGENT I trim the wick.'
     const turnsBefore = await turnRuns()
-    await reader.composer(page).fill(action)
+    await reader.composer(page).fill(REFUSED)
     await reader.send(page).click()
-    await expect(
-      page.getByText(t('reader:systemEntry.failure.memoryNoProfileAssigned'), { exact: false }),
-    ).toBeVisible({ timeout: 20_000 })
+    await expect(reader.systemEntryFailure(page, 'memoryNoProfileAssigned')).toBeVisible({
+      timeout: 20_000,
+    })
     await expect(reader.assignProfileFix(page)).toBeVisible()
-    await expect(reader.composer(page)).toHaveValue(action)
+    await expect(reader.composer(page)).toHaveValue(REFUSED)
     expect(
       await scalar(
         `SELECT COUNT(*) FROM story_entries WHERE branch_id = ? AND content LIKE '%E2E-NOAGENT I trim%'`,
@@ -652,6 +651,37 @@ test.describe('periodic classifier — unassigned agent', () => {
     // Neither pass reached the provider, and the refused Send never reached its narrative call.
     expect(mock.requests.some((r) => r.agent === 'periodic-classifier')).toBe(false)
     expect(mock.requests.filter((r) => r.streamed)).toHaveLength(1)
+  })
+
+  // reader-composer.md → Custody of the turn's text: the held entry advises a restart, which the
+  // draft wouldn't survive. A hold takes an undo that didn't commit, which no UI reaches, so the
+  // test writes the status that failure leaves.
+  test("a Retry that finds the branch held moves the composer's draft onto the entry", async () => {
+    const page = app.window
+    const branchId = await currentBranchId(page, 'story_hero')
+    await queryApp(
+      page,
+      `UPDATE branches SET classifier_status = json_set(classifier_status, '$.state', 'running')
+       WHERE id = ?`,
+      [branchId],
+    )
+
+    await reader.retrySystemEntry(page).click()
+    await expect(reader.systemEntryFailure(page, 'memoryHeld')).toBeVisible({ timeout: 20_000 })
+    await expect(reader.retrySystemEntry(page)).toHaveCount(0)
+    await expect(reader.composer(page)).toHaveValue('')
+    expect(
+      await queryApp(
+        page,
+        `SELECT json_extract(metadata, '$.systemFailure.pass'),
+                json_extract(metadata, '$.systemFailure.submission.content')
+         FROM story_entries WHERE branch_id = ? AND kind = 'system'`,
+        [branchId],
+      ),
+    ).toEqual([['held', REFUSED]])
+
+    await reader.dismissSystemEntry(page).click()
+    await expect(reader.composer(page)).toHaveValue(REFUSED)
   })
 })
 
@@ -703,10 +733,8 @@ const UNPARSEABLE_PASS_REPLY = { happenings: 'not a list' }
 // The run, status and entry reads the pass describes share. Getters, since each describe's
 // beforeAll assigns its app and mock after this runs.
 function passProbe(page: () => Page, mockLlm: () => MockLlm) {
-  async function branchId(): Promise<string> {
-    return (
-      await queryApp(page(), `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
+  function branchId(): Promise<string> {
+    return currentBranchId(page(), 'story_hero')
   }
 
   // A reply streams into the DOM before its row commits, so callers poll the row; more than one
@@ -1027,7 +1055,7 @@ test.describe('periodic classifier — the gated pass', () => {
     await expect.poll(() => runOutcome(interrupted)).toBe('aborted')
     // Held at its call, it wrote nothing; a burst's own reversal is unit-tested.
     expect((await passDeltas(interrupted)).count).toBe(0)
-    // Its pre-run status back: no retry spent, the watermark where it stood.
+    // Its pre-run status back: no failure recorded, the watermark where it stood.
     await expect.poll(() => classifierStatus(branch)).toEqual(settled)
     await expect(memoryBanner.updating(page)).toBeHidden()
 
@@ -1205,6 +1233,16 @@ test.describe('periodic classifier — failure policy', () => {
     )
   }
 
+  async function systemEntryIds(branch: string): Promise<unknown[]> {
+    return (
+      await queryApp(
+        app.window,
+        `SELECT id FROM story_entries WHERE branch_id = ? AND kind = 'system'`,
+        [branch],
+      )
+    ).map((r) => r[0])
+  }
+
   test('a chained pass that fails records failed, leaves the watermark and warns', async () => {
     const page = app.window
     await home.openStory(page, 'The Veilstone Courier').click()
@@ -1230,9 +1268,7 @@ test.describe('periodic classifier — failure policy', () => {
     const calls = passCalls()
 
     await send(U2, 'E2E-POLICY-R2 the far bank comes up out of the mist.')
-    await expect(
-      page.getByText(t('reader:systemEntry.failure.memory'), { exact: false }),
-    ).toBeVisible({ timeout: 20_000 })
+    await expect(reader.systemEntryFailure(page, 'memory')).toBeVisible({ timeout: 20_000 })
     await expect(reader.retrySystemEntry(page)).toBeVisible()
     // Send's own pass reports through the entry: run_complete names it beforeTurn, and the root
     // hook stays quiet. Counted once, not awaited: a toast raised with it would still be up.
@@ -1244,6 +1280,32 @@ test.describe('periodic classifier — failure policy', () => {
     expect(streamedCalls()).toBe(narratives)
     // The draft was empty, so the text went back to the composer and the entry carries none.
     expect(await systemFailures(branch)).toEqual([['failed', 'provider', null]])
+    const [state, , watermark] = await classifierStatus(branch)
+    expect(state).toBe('failed')
+    expect(watermark).toBe(parked)
+  })
+
+  test('a Retry whose pass fails again rewrites the entry and warns', async () => {
+    const page = app.window
+    const branch = await branchId()
+    const [before] = await systemEntryIds(branch)
+    await expect(failureToast()).toHaveCount(0)
+    const outcomes = await passOutcomes()
+    const narratives = streamedCalls()
+    const calls = passCalls()
+
+    // The reply still fails the schema.
+    await reader.retrySystemEntry(page).click()
+    // Not a Send's pass, so the root hook warns beside the entry.
+    await expect(failureToast()).toBeVisible({ timeout: 20_000 })
+    await expect.poll(passOutcomes, { timeout: 20_000 }).toEqual([...outcomes, 'failed'])
+    expect(passCalls()).toBeGreaterThan(calls)
+    // A new row for the new cause, still the pass's, still without the text the composer holds.
+    await expect.poll(() => systemEntryIds(branch)).not.toEqual([before])
+    expect(await systemFailures(branch)).toEqual([['failed', 'provider', null]])
+    await expect(reader.retrySystemEntry(page)).toBeVisible()
+    expect(streamedCalls()).toBe(narratives)
+    await expect(reader.composer(page)).toHaveValue(U2)
     const [state, , watermark] = await classifierStatus(branch)
     expect(state).toBe('failed')
     expect(watermark).toBe(parked)
@@ -1295,14 +1357,14 @@ test.describe('periodic classifier — failure policy', () => {
     const userEntry = await pollEntryId(branch, 'E2E-POLICY-U2')
     expect(await positionOf(userEntry)).toBeGreaterThan(watermark as number)
     // Nothing was owed: no pass ran ahead of this user_action.
-    expect(await passOutcomes()).toEqual(['failed', 'failed', 'completed'])
+    expect(await passOutcomes()).toEqual(['failed', 'failed', 'failed', 'completed'])
 
     mock.releaseNarrative()
     await pollEntryId(branch, 'E2E-POLICY-R2')
     // The turn's commit chains the next pass, as the cadence counts it.
     await expect
       .poll(passOutcomes, { timeout: 20_000 })
-      .toEqual(['failed', 'failed', 'completed', 'completed'])
+      .toEqual(['failed', 'failed', 'failed', 'completed', 'completed'])
   })
 })
 
@@ -1375,7 +1437,7 @@ test.describe('periodic classifier — an owed pass across a restart', () => {
     await expect.poll(() => classifierStatus(branch)).toEqual(['idle', null, parked])
   })
 
-  test('after a relaunch the mark is gone, and Send still runs the owed pass first', async () => {
+  test('after a relaunch, Send runs the pass the cadence owes first', async () => {
     // A close, a cold launch and a story open, on top of this test's own steps.
     test.setTimeout(150_000)
     await app.close()

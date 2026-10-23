@@ -183,7 +183,7 @@ slice plans when relevant.
   — `embedding_stale` is a handoff signal, not a durable property, so a
   post-hoc E2E assertion on it tests drain scheduling; assert the initial
   write or the settled end state, never the handoff.
-- [The seeded branch tip moves at the first Send](./seed-tip-position-shifts-at-boot.md)
+- [The seeded branch tip moves at the first Send](./seed-tip-position-shifts-at-first-send.md)
   — the fixture's hero branch ends on a system row the first Send deletes, so a
   pre-launch `MAX(position)` names the position the spec's first user_action
   reuses, one above the real tip, and shifts every classifier window handle;

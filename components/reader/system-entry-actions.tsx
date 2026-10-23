@@ -86,9 +86,26 @@ export function toSystemFailureMeta(
 
 // The pass's own vocabulary (classifier.md → Failure policy): a turn's copy names the narrative
 // agent, which would send the user to fix the wrong profile.
-export function describePassFailure(refusal: PassRefusal): { content: string; detail?: string } {
-  if (refusal.held) return { content: t('reader:systemEntry.failure.memoryHeld') }
+export function describePassFailure(
+  refusal: PassRefusal,
+  /** What the entry stores: the held copy says the text is kept only when it is. */
+  submission: SystemFailureMeta['submission'],
+): { content: string; detail?: string } {
+  if (refusal.held)
+    return {
+      content: t(
+        submission != null
+          ? 'reader:systemEntry.failure.memoryHeld'
+          : 'reader:systemEntry.failure.memoryHeldNoText',
+      ),
+    }
   const { error } = refusal
+  if (error?.kind === 'provider') {
+    return {
+      content: t('reader:systemEntry.failure.memory'),
+      detail: error.detail != null ? `${error.reason}: ${error.detail}` : error.reason,
+    }
+  }
   if (error?.kind === 'config-resolver') {
     const contentKey =
       error.failure === 'no-profile-assigned'
@@ -100,21 +117,15 @@ export function describePassFailure(refusal: PassRefusal): { content: string; de
             : 'reader:systemEntry.failure.memoryProviderMissing'
     return { content: t(contentKey), detail: error.detail }
   }
-  const detail =
-    error?.kind === 'provider'
-      ? error.detail != null
-        ? `${error.reason}: ${error.detail}`
-        : error.reason
-      : error?.detail
-  return { content: t('reader:systemEntry.failure.memory'), detail }
+  return { content: t('reader:systemEntry.failure.memory'), detail: error?.detail }
 }
 
 export function toPassFailureMeta(
   refusal: PassRefusal,
-  submission: { content: string; composerMode: string } | undefined,
+  submission: SystemFailureMeta['submission'],
 ): SystemFailureMeta {
   const error = refusal.held ? undefined : refusal.error
-  const { detail } = describePassFailure(refusal)
+  const { detail } = describePassFailure(refusal, submission)
   return {
     kind: error?.kind ?? 'orchestrator',
     ...(error?.kind === 'config-resolver' ? { failure: error.failure } : {}),
@@ -126,11 +137,13 @@ export function toPassFailureMeta(
 
 /**
  * A pass-failure entry's Retry: runs the pass alone. A commit clears the entry through `dismiss`;
- * a failure, a throw or a hold rewrites it; a cancel leaves it to the deferral toast. A throw from
- * `dismiss` or `rewrite` propagates.
+ * a failure, a throw or a hold rewrites it, a failure as held when its reversal didn't commit; a
+ * cancel leaves the entry as it was. A throw from `held`, `dismiss` or `rewrite` propagates.
  */
 export async function retryPassEntry(deps: {
   runPass: () => Promise<TxResult | RejectedStart>
+  /** Read once the pass ended: whether the branch is held `running`. */
+  held: () => Promise<boolean>
   dismiss: () => Promise<void>
   rewrite: (refusal: PassRefusal) => Promise<void>
   notify: (message: string) => void
@@ -143,7 +156,8 @@ export async function retryPassEntry(deps: {
     return deps.rewrite({ held: false, error: { kind: 'orchestrator', detail } })
   }
   if (result.outcome === 'completed') return deps.dismiss()
-  if (result.outcome === 'failed') return deps.rewrite({ held: false, error: result.error })
+  if (result.outcome === 'failed')
+    return deps.rewrite((await deps.held()) ? { held: true } : { held: false, error: result.error })
   if (result.outcome !== 'rejected') return
   if (result.blockedBy === CLASSIFIER_HELD) return deps.rewrite({ held: true })
   deps.notify(t('reader:systemEntry.passRetryBlocked', { reason: result.blockedBy }))

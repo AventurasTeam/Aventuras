@@ -60,7 +60,7 @@ type ErrorState = { code: 'memory-incomplete'; pendingRows: number } | { code: '
 
 type GenerationStatusPillProps = {
   activePhase?: GenerationPhase
-  // `updating-memory` running before the user's turn (Send's deferred work);
+  // `updating-memory` running before the user's turn (Send's owed pass);
   // ignored for every other phase.
   beforeTurn?: boolean
   error?: ErrorState
@@ -113,15 +113,15 @@ shifts into the gap on transitions.
 
 The compound owns phase → copy and error → copy:
 
-| Phase                    | Label                                                                            |
-| ------------------------ | -------------------------------------------------------------------------------- |
-| `reasoning`              | `reasoning…`                                                                     |
-| `recalling-memory`       | `recalling memory…`                                                              |
-| `generating-narrative`   | `generating narrative…`                                                          |
-| `classifying`            | `classifying…`                                                                   |
-| `updating-memory`        | `updating memory…`, or `updating memory before your turn…` when it runs deferred |
-| `closing-chapter`        | `closing chapter…`                                                               |
-| `refreshing-suggestions` | `refreshing suggestions…`                                                        |
+| Phase                    | Label                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------- |
+| `reasoning`              | `reasoning…`                                                                    |
+| `recalling-memory`       | `recalling memory…`                                                             |
+| `generating-narrative`   | `generating narrative…`                                                         |
+| `classifying`            | `classifying…`                                                                  |
+| `updating-memory`        | `updating memory…`, or `updating memory before your turn…` for Send's owed pass |
+| `closing-chapter`        | `closing chapter…`                                                              |
+| `refreshing-suggestions` | `refreshing suggestions…`                                                       |
 
 | Error code          | Label                                          |
 | ------------------- | ---------------------------------------------- |
@@ -166,7 +166,7 @@ shows beside them
 Cancelling either doesn't drop the work: it runs before the next turn
 instead, and a toast says so
 ([`memory/classifier.md → Pipeline framing`](../../memory/classifier.md#pipeline-framing)).
-A pass that runs before a deferred turn reads
+A pass that runs as Send's owed pass, before the turn, reads
 `updating memory before your turn…`.
 
 `updating-memory` stays a separate phase from `classifying`, which is

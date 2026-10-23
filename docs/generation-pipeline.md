@@ -1205,7 +1205,8 @@ observability — visible in the Diagnostics Hub Logs tab.
 The modal reports it too. SQLite ROLLBACK undoes the partial
 reverse-replay, not the orphan's own writes: those stay on disk, and
 for a `periodic-classifier` orphan the branch stays `running`
-(`resetStuckClassifierRunState` skips branches whose deltas survived),
+(`resetStuckClassifierRunState` skips a branch while that orphan's
+deltas survive),
 so it can't run a pass, and every Send on it fails until a boot
 reverses the orphan
 ([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)).
@@ -1240,8 +1241,9 @@ different versions. The third needs a run whose abort's own reversal
 failed: the orchestrator lifts the run's gate even then, so a user
 write can land that the reversal would break, and
 [Reverse-replay](#reverse-replay) refuses the reversal as `write-back`
-on each boot. The orphan's writes stay, and its branch takes no
-turns; a branch from an entry before the orphan starts idle and can.
+on each boot. The orphan's writes stay, and for a pass its branch
+takes no turns; a branch from an entry before the orphan starts idle
+and can.
 
 ### `chainsTo` on predecessor
 
@@ -1328,8 +1330,9 @@ catch-up passes as above), then writes the user_action and starts the
 turn. Each is its own run with its own `actionId`, committing before
 the turn's first write. Cancel during them cancels the whole Send; the
 work stays deferred and the composer keeps the user's text. A deferred
-run that fails there fails the Send: the turn doesn't start, the composer
-keeps the text, and the reader shows the failure
+run that fails there fails the Send: the turn doesn't start, the text
+goes back to an empty composer (else onto the entry), and the reader
+shows the failure
 ([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)). A pass or a close that commits
 some other way, Run now or a manual close, clears its record. Send also runs a pass first
 when none is deferred but the cadence is due, as a failed chained pass

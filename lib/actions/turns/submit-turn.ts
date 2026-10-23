@@ -1,6 +1,5 @@
 import { and, desc, eq, ne } from 'drizzle-orm'
 
-import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { isStorySwapPending, withTurnAdmission } from '@/lib/embedder-swap'
@@ -8,9 +7,9 @@ import { generateId } from '@/lib/ids'
 import {
   CLASSIFIER_HELD,
   ensurePerTurnPipelineRegistered,
-  ensurePeriodicClassifierPipelineRegistered,
+  isClassifierHeld,
   owedPassAtSend,
-  runPipeline,
+  runClassifierPass,
   type RejectedStart,
   type TxResult,
 } from '@/lib/pipeline'
@@ -30,7 +29,8 @@ export type OwedPassFailed = TxResult & { outcome: 'failed'; beforeTurn: true }
 
 /** `converged: false`: the refused user_action is still in the branch; never re-offer its text. */
 export type SubmitTurnResult =
-  | TxResult
+  // The turn's own result: only Send's pass carries `beforeTurn`.
+  | (TxResult & { beforeTurn?: never })
   | OwedPassAborted
   | OwedPassFailed
   | (RejectedStart & { converged: boolean })
@@ -38,21 +38,6 @@ export type SubmitTurnResult =
 const SWAP_REJECTION = { outcome: 'rejected', blockedBy: 'embedder-swap', converged: true } as const
 
 const HELD_REJECTION = { outcome: 'rejected', blockedBy: CLASSIFIER_HELD, converged: true } as const
-
-/** Send's owed pass (classifier.md → Failure policy): own run and actionId, committed first. */
-function runOwedPass(
-  ids: { storyId: string; branchId: string },
-  ctx: DbCtx,
-): Promise<TxResult | RejectedStart> {
-  ensurePeriodicClassifierPipelineRegistered()
-  return runPipeline(PERIODIC_CLASSIFIER_KIND, {
-    storyId: ids.storyId,
-    branchId: ids.branchId,
-    beforeTurn: true,
-    db: ctx.db,
-    runInTransaction: ctx.runInTransaction,
-  })
-}
 
 export async function submitTurn(
   ids: { storyId: string; branchId: string },
@@ -73,10 +58,14 @@ export async function submitTurn(
         const owed = await owedPassAtSend(ids.branchId, ctx)
         if (owed === 'held') return HELD_REJECTION
         if (owed === 'owed') {
-          const pass = await runOwedPass(ids, ctx)
+          const pass = await runClassifierPass(ids, ctx, { beforeTurn: true })
           if (pass.outcome === 'rejected') return { ...pass, converged: true }
           if (pass.outcome === 'aborted') return { ...pass, outcome: 'aborted', beforeTurn: true }
-          if (pass.outcome === 'failed') return { ...pass, outcome: 'failed', beforeTurn: true }
+          if (pass.outcome === 'failed') {
+            // A cancel or failure whose reversal didn't commit: the branch is held, not retryable.
+            if (await isClassifierHeld(ids.branchId, ctx)) return HELD_REJECTION
+            return { ...pass, outcome: 'failed', beforeTurn: true }
+          }
         }
 
         // Shared across the user_action's delta and the pipeline run it kicks off,

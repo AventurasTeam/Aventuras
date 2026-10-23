@@ -165,7 +165,7 @@ describe('pillRunOf', () => {
     expect(pillRunOf(txOf(REFRESH, CHAINED_PASS), 'br_1')).toBe(CHAINED_PASS)
   })
 
-  it("reads Send's deferred pass through, marked before the turn", () => {
+  it("reads Send's owed pass through, marked before the turn", () => {
     expect(pillRunOf(txOf(DEFERRED_PASS), 'br_1')?.beforeTurn).toBe(true)
   })
 
@@ -183,7 +183,7 @@ describe('sendRunStreams', () => {
     expect(sendRunStreams(txOf(TURN), 'br_1')).toBe(true)
   })
 
-  it("streams nothing during Send's deferred pass", () => {
+  it("streams nothing during Send's owed pass", () => {
     expect(sendRunStreams(txOf(DEFERRED_PASS), 'br_1')).toBe(false)
   })
 
@@ -193,7 +193,7 @@ describe('sendRunStreams', () => {
 })
 
 describe('cancelSendRun', () => {
-  it("interrupts Send's deferred pass", async () => {
+  it("interrupts Send's owed pass", async () => {
     await cancelSendRun(DEFERRED_PASS)
     expect(interruptMemoryRuns).toHaveBeenCalledWith('br_1')
     expect(awaitRunTerminal).not.toHaveBeenCalled()
@@ -237,7 +237,7 @@ describe('cancelPillRun', () => {
 })
 
 describe('cancelComposerRun', () => {
-  it("interrupts Send's deferred pass, keeping the work deferred", async () => {
+  it("interrupts Send's owed pass, keeping the work deferred", async () => {
     const pass = startLive(DEFERRED_PASS)
 
     await cancelComposerRun('br_1', true)
@@ -271,7 +271,7 @@ describe('composerShowsCancel', () => {
     expect(composerShowsCancel(txOf(DEFERRED_PASS), 'br_1', false)).toBe(true)
   })
 
-  // Between Send's deferred pass and its turn, only the pending mark holds.
+  // Between Send's owed pass and its turn, only the pending mark holds.
   it("holds Cancel through the gap while this host's Send has a turn pending", () => {
     expect(composerShowsCancel(pendingOn('br_1'), 'br_1', true)).toBe(true)
   })
@@ -303,7 +303,7 @@ describe('cancelComposerRun in the handoff gap', () => {
     await mark.end()
   })
 
-  it('cancels the deferred pass a pending Send registers', async () => {
+  it('cancels the owed pass a pending Send registers', async () => {
     const mark = holdPendingTurn('br_1')
 
     const cancel = cancelComposerRun('br_1', true)
@@ -342,13 +342,14 @@ describe('cancelComposerRun in the handoff gap', () => {
 describe('abortedBeforeTurn', () => {
   const ran = { runId: 'run_1', actionId: 'act_1' }
 
-  it('holds for a Send cancelled during its deferred pass, which wrote nothing', () => {
+  it('holds for a Send cancelled during its owed pass, which wrote nothing', () => {
     expect(abortedBeforeTurn({ ...ran, outcome: 'aborted', beforeTurn: true })).toBe(true)
   })
 
   // The turn wrote its user action before the cancel reversed it.
   it('holds for no cancel of the turn itself', () => {
     expect(abortedBeforeTurn({ ...ran, outcome: 'aborted' })).toBe(false)
+    expect(abortedBeforeTurn({ ...ran, outcome: 'aborted', beforeTurn: undefined })).toBe(false)
   })
 
   it('holds for no Send that ran or was refused', () => {
@@ -405,6 +406,7 @@ describe('passRefusalOf', () => {
   // The turn's own failure reversed its user action: that is the turn-failure entry's case.
   it("leaves a failed turn to the turn's failure entry", () => {
     expect(passRefusalOf({ ...ran, outcome: 'failed', error })).toBeNull()
+    expect(passRefusalOf({ ...ran, outcome: 'failed', beforeTurn: undefined, error })).toBeNull()
   })
 
   it('leaves any other refusal, a cancel and a landed turn alone', () => {

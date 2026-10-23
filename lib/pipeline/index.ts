@@ -16,6 +16,7 @@ export {
 export { readSceneSource } from './definitions/entry-reads'
 export { ensurePeriodicClassifierPipelineRegistered } from './definitions/periodic-classifier'
 export { CLASSIFIER_HELD, isClassifierHeld, owedPassAtSend } from './definitions/memory-chain'
+export { runClassifierPass } from './definitions/classifier-pass'
 export {
   ensureSuggestionRefreshPipelineRegistered,
   SUGGESTION_EMISSION_PHASE,

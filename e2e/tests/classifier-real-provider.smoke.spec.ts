@@ -224,52 +224,81 @@ test.describe('periodic classifier — real provider smoke', () => {
       return row ? { id: row[0], pass: row[1], content: row[2] } : null
     }
 
-    let passCount = 0
-    // Waits the pass out and writes its ### passes line as it settles, so a later throw keeps it.
-    const settlePass = async (
-      label: string,
-      rowid: number,
-      from: number,
-    ): Promise<{ outcome: string | null; to: number }> => {
-      await expect
+    const passSettled = (label: string, rowid: number, interval: number) =>
+      expect
         .poll(async () => (await runAt(rowid))[4], {
           timeout: PASS_WAIT_MS,
-          intervals: [3000],
+          intervals: [interval],
           message: `the ${label} pass did not settle within one call bound`,
         })
         .not.toBeNull()
+
+    let passCount = 0
+    // Writes the pass's ### passes line as it settles, so a later throw keeps it. A null watermark
+    // is one the spec couldn't attribute to this pass.
+    const reportPass = async (
+      label: string,
+      rowid: number,
+      from: number | null,
+      to: number | null,
+    ): Promise<string | null> => {
+      const [, , startedAt, finishedAt, outcome] = await runAt(rowid)
+      const entries =
+        from === null || to === null
+          ? '?'
+          : await count(
+              `SELECT COUNT(*) FROM story_entries
+               WHERE branch_id = ? AND kind <> 'system' AND position > ? AND position <= ?`,
+              [branchId, from, to],
+            )
+      process.stdout.write(
+        `pass ${++passCount} (${label}): ${outcome} after ` +
+          `${(((finishedAt ?? startedAt) - startedAt) / 1000).toFixed(1)} s, ` +
+          `watermark ${from ?? '?'} -> ${to ?? '?'}, ${entries} entries classified\n`,
+      )
+      return outcome
+    }
+
+    // Nothing starts another pass until the next Send, so the branch status is this pass's.
+    const settleChainedPass = async (rowid: number, from: number | null) => {
+      await passSettled('chained', rowid, 3000)
       // A failed burst commits the run's failed marker before onPhaseException writes `failed`.
       await expect
         .poll(async () => (await classifierStatus()).state, { timeout: STATUS_SETTLE_MS })
         .not.toBe('running')
-      const [, , startedAt, finishedAt, outcome] = await runAt(rowid)
-      const to = (await classifierStatus()).processedThrough ?? 0
-      const entries = await count(
-        `SELECT COUNT(*) FROM story_entries
-         WHERE branch_id = ? AND kind <> 'system' AND position > ? AND position <= ?`,
-        [branchId, from, to],
+      return reportPass('chained', rowid, from, (await classifierStatus()).processedThrough ?? 0)
+    }
+
+    // Settled by its own row: the turn runs on meanwhile, and its commit chains a pass that writes
+    // `running`. The pass's watermark lands before its outcome, so only a later pass can move it.
+    const settleOwedPass = async (rowid: number, from: number | null): Promise<number | null> => {
+      await passSettled('before its turn', rowid, 500)
+      const [[through, later]] = await queryApp(
+        app.window,
+        `SELECT COALESCE(json_extract(classifier_status, '$.processedThrough'), 0),
+                EXISTS (SELECT 1 FROM pipeline_runs WHERE rowid > ? AND kind = ?)
+         FROM branches WHERE id = ?`,
+        [rowid, PERIODIC, branchId],
       )
-      process.stdout.write(
-        `pass ${++passCount} (${label}): ${outcome} after ` +
-          `${(((finishedAt ?? startedAt) - startedAt) / 1000).toFixed(1)} s, ` +
-          `watermark ${from} -> ${to}, ${entries} entries classified\n`,
-      )
-      return { outcome, to }
+      const to = later === 1 ? null : (through as number)
+      await reportPass('before its turn', rowid, from, to)
+      return to
     }
 
     let attempts = 0
-    let beforeTurnPasses = 0
+    // Per Send, in order: whether it ran a pass before its turn.
+    const ranPassFirst: boolean[] = []
     let refusedSends = 0
     // classifier.md → Failure policy: an owed pass runs first, as its own run; failing it fails the
     // Send (system entry, no turn). turnRow is null then; from is the watermark the turn ran over.
-    const sendOnce = async (): Promise<{ turnRow: number | null; from: number }> => {
+    const sendOnce = async (): Promise<{ turnRow: number | null; from: number | null }> => {
       // The textarea is editable once hydrated; the Send click below waits for an enabled
       // Send, which is what outlasts a failed turn's reversal sweep.
       await expect(reader.composer(app.window)).toBeEditable({ timeout: EDITABLE_WAIT_MS })
       const since = await lastRowid()
       const settled = await settledTurns()
       const priorEntryId = (await systemEntry())?.id ?? null
-      let from = (await classifierStatus()).processedThrough ?? 0
+      let from: number | null = (await classifierStatus()).processedThrough ?? 0
       const prompt = PROMPTS[attempts]!
       await reader.composer(app.window).fill(prompt)
       attempts++
@@ -297,10 +326,8 @@ test.describe('periodic classifier — real provider smoke', () => {
       const owed = runs
         .slice(0, turnAt === -1 ? runs.length : turnAt)
         .find((r) => r[1] === PERIODIC)
-      if (owed) {
-        beforeTurnPasses++
-        from = (await settlePass('before its turn', owed[0], from)).to
-      }
+      ranPassFirst.push(owed !== undefined)
+      if (owed) from = await settleOwedPass(owed[0], from)
       // Settle on the run's outcome, never the reply row: the narrative phase commits prose
       // before later phases, so a reply can appear, then be reversed when a later action fails.
       await expect
@@ -326,9 +353,9 @@ test.describe('periodic classifier — real provider smoke', () => {
 
     // A real model fails turns (an entity patch restating current state is rejected and fails the
     // run), and a failed owed pass fails its Send: resend until a reply lands, pass first again.
-    const landTurn = async (label: string): Promise<{ turnRow: number; from: number }> => {
+    const landTurn = async (label: string): Promise<{ turnRow: number; from: number | null }> => {
       const target = (await replies()) + 1
-      let sent: { turnRow: number | null; from: number } | undefined
+      let sent: { turnRow: number | null; from: number | null } | undefined
       while (sent === undefined || (await replies()) < target) {
         expect(
           attempts,
@@ -341,7 +368,10 @@ test.describe('periodic classifier — real provider smoke', () => {
     }
 
     // A standing deferral or a failed chain leaves no pass row; fail here, not as a hung full wait.
-    const chainedPass = async (turn: { turnRow: number; from: number }): Promise<string | null> => {
+    const chainedPass = async (turn: {
+      turnRow: number
+      from: number | null
+    }): Promise<string | null> => {
       await expect
         .poll(async () => (await runsAfter(turn.turnRow)).some((r) => r[1] === PERIODIC), {
           timeout: ROW_WAIT_MS,
@@ -349,22 +379,21 @@ test.describe('periodic classifier — real provider smoke', () => {
         })
         .toBe(true)
       const pass = (await runsAfter(turn.turnRow)).find((r) => r[1] === PERIODIC)!
-      return (await settlePass('chained', pass[0], turn.from)).outcome
+      return settleChainedPass(pass[0], turn.from)
     }
 
     process.stdout.write('\n### passes\n')
-    const firstChain = await chainedPass(await landTurn('first'))
-    expect(beforeTurnPasses, 'the first Send ran no pass over the parked backlog').toBeGreaterThan(
-      0,
-    )
+    let lastChain = await chainedPass(await landTurn('first'))
+    // The first Send's flag alone: a resend can run a pass that Send skipped.
+    expect(ranPassFirst[0], 'the first Send ran no pass over the parked backlog').toBe(true)
     // classifier.md → Failure policy: a failed pass is owed again, and the next Send runs it first.
-    if (firstChain === 'failed') {
-      const passesBefore = beforeTurnPasses
-      await chainedPass(await landTurn('second'))
+    if (lastChain === 'failed') {
+      const next = attempts
+      lastChain = await chainedPass(await landTurn('second'))
       expect(
-        beforeTurnPasses,
+        ranPassFirst[next],
         'the Send after a failed chained pass ran no pass before its turn',
-      ).toBeGreaterThan(passesBefore)
+      ).toBe(true)
     }
     const failedTurns = await count(
       `SELECT COUNT(*) FROM pipeline_runs WHERE kind = 'per-turn' AND outcome = 'failed'`,
@@ -484,9 +513,8 @@ test.describe('periodic classifier — real provider smoke', () => {
     )
     expect(badSeverity[0][0]).toBe(0)
 
-    const status = (
-      await queryApp(app.window, `SELECT classifier_status FROM branches WHERE id = ?`, [branchId])
-    )[0][0] as string
-    expect(JSON.parse(status).state).not.toBe('failed')
+    // `failed` is ordinary, owed at the next Send (classifier.md → Failure policy); the status may
+    // read it only after a last pass that failed.
+    if (lastChain !== 'failed') expect((await classifierStatus()).state).not.toBe('failed')
   })
 })

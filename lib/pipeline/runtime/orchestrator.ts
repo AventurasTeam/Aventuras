@@ -293,8 +293,8 @@ async function commitRun(
       { runId: run.runId, kind: run.kind, nextKind },
       { actionId: run.actionId },
     )
-  // A chained run gets its own context: no inputs, its own actionId, never Send's owed pass
-  // (generation-pipeline.md → chainsTo on predecessor).
+  // A chained run's state takes no inputs, its own actionId, never Send's owed pass
+  // (generation-pipeline.md → chainsTo on predecessor); it still runs on the origin's ctx.
   const successor = nextPipeline
     ? newRunState(nextPipeline.kind, {
         ...ctx,

@@ -287,7 +287,8 @@ Every few turns a pass chains after the turn, and a chapter close
 after the turn that crosses the threshold. Both hold the gate while
 the user reads the reply, and the head reversals, regenerate among
 them, interrupt them
-([`principles.md → Edit restrictions during in-flight generation`](../../principles.md#edit-restrictions-during-in-flight-generation)).
+([`principles.md → Edit restrictions during in-flight generation`](../../principles.md#edit-restrictions-during-in-flight-generation)),
+except a pass a failure entry's `Retry` started (below).
 In the reader the banner shows `Updating memory… [Cancel]` or the
 close's progress, and the composer stays live while Send waits. An
 interrupt or the pill's Cancel shows an info
@@ -308,6 +309,9 @@ the text goes back to an empty composer (else onto the entry), and the
 failure shows as a
 [system entry](#transient-pipeline-failures--system-entries-in-chat)
 ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy)).
+Its `Retry` runs the pass alone, and that pass holds the reader's
+actions, head reversals included, until it ends; the pill's Cancel
+ends it.
 
 ### Save and regenerate on a content edit
 
@@ -559,18 +563,27 @@ A failure entry carries the submission that produced it
 `user_action` was reverse-replayed with the run, that copy is the only
 one left. It is a convenience for `Retry`, not a vault: **every path
 that destroys the entry hands the submission back to the composer
-draft** — `Dismiss`, and the pre-dispatch tail clear on a regenerate
-that then throws. An empty draft receives the text verbatim under
-composer mode `Free`, since the stored content is already wrapped and
-must not be wrapped twice; a non-empty draft wins and the user is told
-the text was dropped rather than losing it silently.
+draft** — `Dismiss`, a pass entry's `Retry` whose pass commits (it
+clears the entry through `Dismiss`), and the pre-dispatch tail clear on
+a regenerate that then throws. An empty draft receives the text
+verbatim under composer mode `Free`, since the stored content is
+already wrapped and must not be wrapped twice; a non-empty draft wins
+and the user is told the text was dropped rather than losing it
+silently.
 
 A **Memory update failed** entry carries the submission only where
-the composer can't hold the text. On a held branch it always does,
-since the entry advises a restart and the draft would not survive
-one. On a failed pass it does only when the composer couldn't take it
-back (the draft was occupied, or the user left the branch); otherwise
-the text goes straight back to the composer.
+the composer can't hold the text. A Send refused on a held branch
+always leaves its text on the entry, since the entry advises a restart
+and the draft would not survive one. A `Retry` that finds the branch
+held keeps whatever text its entry held; an entry without text takes
+the composer's draft instead, for the same reason. The entry is
+written first, then the composer empties, unless the draft changed
+during the write: it stays, since duplicated text beats lost text.
+With an empty composer, or once the user has left the branch, the held
+entry keeps no text and doesn't claim to. On a failed pass the entry carries the text
+only when the composer couldn't take it back (the draft was occupied,
+or the user left the branch); otherwise the text goes straight back to
+the composer.
 
 Restoring the _entry_ is deliberately not the mechanism. A failure
 entry re-appends at the branch tail, so on a path where a partial
