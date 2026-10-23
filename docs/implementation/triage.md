@@ -840,6 +840,7 @@ slice-planning gate forces its resolution before that slice is planned.
   renders its empty-state text when the cast holds no other row of the
   kind, so a character whose AI-proposed faction the wizard couldn't
   resolve keeps its warning with nothing to pick. The location picker
-  now offers `Unknown` and `Top level` there; the faction picker has no
-  equivalent "none". Raised 2026-10-23 by the AI writer map's final PR 1
+  now offers `Unknown` and `Top level` there; the faction picker's
+  `Unaffiliated` shows only beside other factions, so its empty state
+  offers no choice at all. Raised 2026-10-23 by the AI writer map's final PR 1
   review.
