@@ -959,3 +959,14 @@ slice-planning gate forces its resolution before that slice is planned.
   `detail ?? kind`, so a provider retry without a detail logs
   `"provider"` and drops its `reason` (`timeout` or `network`).
   Pre-existing. Raised 2026-10-23 by the AI writer map's Task 21 review.
+
+- **A pass's rename can leave a collision flag with no namesake
+  basis.** `renameEntity` (`lib/actions/entities/state-patch-actions.ts`)
+  writes no flag columns, and
+  [`world.md`](../ui/screens/world/world.md)'s rule for keeping flags
+  consistent lists only user writes. A row flagged against a namesake
+  that a pass then renames to an unrelated name keeps its old name as a
+  keyword, but the namesake match is exact (`lib/world/namesakes.ts`),
+  so the pair stops being namesakes while World still shows the strip.
+  Reasoned from the code, not run. Raised 2026-10-24 by the AI writer
+  map's Task 22 review.

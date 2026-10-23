@@ -393,7 +393,7 @@ DB-backed `openRegionTokens` resolves all of them.
   shows exactly that once a close is taken back. Found while the
   2026-10-05 triage pass re-placed the seed's chapter closes; verified
   against canon and the schema, not reproduced in a real close.
-- **M5.2 — The close's awareness merge passes the prose it cites.**
+- **M5.2 — The close's awareness merge must pass the prose it cites.**
   The awareness upsert (`lib/actions/happenings/register-awareness.ts`)
   checks user precedence when its payload carries a `proseEntryId`,
   since the AI writer map, whose pass reached user rows first: a pair

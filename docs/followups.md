@@ -27,7 +27,11 @@ for the placement rule.
   The visual-cut warning measures the first two; only play shows the
   last two. The shortfall warning measures one more: that the writer
   moves no more of a stackable than its payer holds. Raised 2026-10-19
-  by the entity-state implementation.
+  by the entity-state implementation. The AI writer map adds more
+  riding on the models: the per-turn writer writes a condition only
+  when the prose changes it and puts `top` only where nothing could
+  contain a place; a pass tells a reveal from an alias and a return
+  from a memory.
 
 - **Retrieval budget defaults.** The per-type budgets
   (`stories.settings.retrievalBudgets`, entities 1200) are
