@@ -54,6 +54,12 @@ function findPackageDir(name: string, fromDir: string): string | null {
   }
 }
 
+// Declared dependencies that main's code path never loads. transformers.js
+// lists onnxruntime-web for its browser build; its Node builds stub it out.
+const UNLOADED_DEPENDENCIES: Record<string, string[]> = {
+  '@huggingface/transformers': ['onnxruntime-web'],
+}
+
 // Package names reachable from `roots` through dependencies and installed
 // optionalDependencies (platform binaries like @img/sharp-linux-x64).
 // Peer dependencies are left out: drizzle-orm alone lists expo-sqlite and
@@ -72,8 +78,9 @@ function dependencyClosure(roots: string[]): Set<string> {
     if (visited.has(dir)) continue
     visited.add(dir)
     const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    const unloaded = UNLOADED_DEPENDENCIES[next.name] ?? []
     for (const name of Object.keys(manifest.dependencies ?? {})) {
-      queue.push({ name, from: dir, optional: false })
+      if (!unloaded.includes(name)) queue.push({ name, from: dir, optional: false })
     }
     for (const name of Object.keys(manifest.optionalDependencies ?? {})) {
       queue.push({ name, from: dir, optional: true })
