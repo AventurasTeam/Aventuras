@@ -383,11 +383,30 @@ describe('updateThread — the entry a status ended on', () => {
     },
   )
 
-  it('clears it over a ref the same patch sends', async () => {
+  it('writes the ref a status-changing patch names itself', async () => {
     const { db, ctx } = await setup()
     await create(ctx, PASS_THREAD, 'periodic_classifier')
-    await apply(ctx, userPatch({ status: 'active', resolvedAtEntryId: 'e_other' }), 'act_u')
-    expect(await rowFor(db, 'thr_1')).toMatchObject({ status: 'active', resolvedAtEntryId: null })
+    await apply(ctx, userPatch({ status: 'failed', resolvedAtEntryId: 'e_other' }), 'act_u')
+    expect(await rowFor(db, 'thr_1')).toMatchObject({
+      status: 'failed',
+      resolvedAtEntryId: 'e_other',
+    })
+  })
+
+  it("keeps it on a machine source's status change", async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, PASS_THREAD, 'periodic_classifier')
+    const machinePatch: PipelineAction = {
+      kind: 'updateThread',
+      source: 'chapter_close',
+      payload: { branchId: 'br_1', id: 'thr_1', patch: { status: 'failed' } },
+    }
+    expect((await apply(ctx, machinePatch, 'act_m')).status).toBe('ok')
+    expect(await rowFor(db, 'thr_1')).toMatchObject({
+      status: 'failed',
+      resolvedAtEntryId: 'e_old',
+    })
+    expect(await undoOf(db, 'act_m')).toEqual({ status: 'resolved' })
   })
 
   it.each([[{ status: 'resolved' }], [{ title: 'Return the relic' }]])(

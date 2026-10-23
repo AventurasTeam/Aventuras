@@ -12,7 +12,7 @@ import {
   userEditsSinceProse,
   wroteThreadStatus,
 } from '../delta/user-precedence'
-import type { DeltaSource, ProseEntryId } from '../types'
+import { isUserOriginatedSource, type DeltaSource, type ProseEntryId } from '../types'
 
 const cascade = rowCascade('thread')
 
@@ -139,7 +139,13 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     undoPayload[col] = current[col as keyof Thread]
   }
   // The ref is the pass's claim of where its status ended; a user's status change retracts it.
-  if ('status' in set && set.status !== current.status && current.resolvedAtEntryId !== null) {
+  if (
+    isUserOriginatedSource(action.source) &&
+    !('resolvedAtEntryId' in patch) &&
+    'status' in set &&
+    set.status !== current.status &&
+    current.resolvedAtEntryId !== null
+  ) {
     set.resolvedAtEntryId = null
     undoPayload.resolvedAtEntryId = current.resolvedAtEntryId
   }
