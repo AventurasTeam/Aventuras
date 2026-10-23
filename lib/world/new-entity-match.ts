@@ -85,11 +85,11 @@ function matchPlaced(
   return flagPartner(candidate, siblings, SAME_PARENT)
 }
 
-/**
- * A new place this reply already settled, where it resolved to. A writer that places its own
- * create on a takeover moves that create's entries there.
- */
+/** A new place this reply already settled: the placement it declared, and the row it resolved to. */
 export type SettledNewPlace = { name: string; placement: PlacePlacement; id: string }
+
+/** Where this reply's placements put a place: its parent's id, null for top-level. */
+export type ReplyPlacements = ReadonlyMap<string, string | null>
 
 // data-model.md → LocationState shape: compared by exact name with every place, placed or not.
 // `earlier`: this reply's own creates of the name, newer than every row as a later reply's are.
@@ -146,23 +146,31 @@ export type ReplyPlaceMatch = PlaceMatch | { kind: 'twin'; id: string; place: bo
 /**
  * piggyback.md → Matching before creating, within one reply: the reply's creates match as if
  * applied one at a time, as successive replies' would. A second new place with the same name and
- * placement maps to the first, before any other match. Otherwise an unplaced one matches the
- * earlier creates of its name as stored rows, newer than any, and a placed one the rows would
- * create takes over an earlier unplaced create.
+ * declared placement maps to the first, before any other match. Otherwise an unplaced one matches
+ * the earlier creates of its name as stored rows, newer than any, each where it sits now
+ * (`placedHere`), and a placed one the rows would create takes over an earlier create still
+ * unplaced.
  */
 export function matchNewPlace(
   candidate: PlaceCandidate,
   settled: readonly SettledNewPlace[],
   view: LocationMatchView,
+  placedHere: ReplyPlacements,
 ): ReplyPlaceMatch {
   const named = settled.filter((p) => nameBasis(p.name, candidate.name) === 'same-name')
   const twin = named.find((p) => samePlacement(p.placement, candidate.placement))
   if (twin !== undefined) return { kind: 'twin', id: twin.id, place: false }
 
-  // A create's first entry is its own; a kept takeover rewrites it where it placed the row.
+  // A create's first entry is its own: it sits there unless a takeover placed it since.
+  const sitsAt = (p: SettledNewPlace): PlacePlacement => {
+    if (!placedHere.has(p.id)) return p.placement
+    const parentId = placedHere.get(p.id) ?? null
+    return parentId === null ? { kind: 'top' } : { kind: 'under', parentId }
+  }
   const stored = new Set(view.locations.map((e) => e.id))
   const created = new Map<string, SettledNewPlace>()
-  for (const p of named) if (!stored.has(p.id) && !created.has(p.id)) created.set(p.id, p)
+  for (const p of named)
+    if (!stored.has(p.id) && !created.has(p.id)) created.set(p.id, { ...p, placement: sitsAt(p) })
   const earlier = [...created.values()]
 
   if (candidate.placement.kind === 'unplaced') {

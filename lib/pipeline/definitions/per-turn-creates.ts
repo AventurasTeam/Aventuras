@@ -204,6 +204,7 @@ function planLocations(args: {
       placedRows.size === 0
         ? view
         : { ...view, locations: view.locations.map((e) => placedRows.get(e.id) ?? e) },
+      placedParents,
     )
     let id: string
     if (match.kind === 'create') {
@@ -233,8 +234,6 @@ function planLocations(args: {
               ...row,
               state: withPlacement(row.state as LocationState, candidate),
             })
-          if (match.kind === 'twin')
-            for (const settled of placed) if (settled.id === id) settled.placement = candidate
           placements.push({
             kind: 'placeLocation',
             source: args.source,

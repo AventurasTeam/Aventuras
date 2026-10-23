@@ -265,6 +265,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         placedRows.size === 0
           ? view
           : { ...view, locations: view.locations.map((e) => placedRows.get(e.id) ?? e) },
+        placedParents,
       )
 
       let id: string
@@ -285,8 +286,6 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
                 ...row,
                 state: withPlacement(row.state as LocationState, candidate),
               })
-            if (match.kind === 'twin')
-              for (const settled of placed) if (settled.id === id) settled.placement = candidate
             planned.push({
               action: {
                 kind: 'placeLocation',

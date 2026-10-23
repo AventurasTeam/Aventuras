@@ -4,7 +4,12 @@ import type { Entity } from '@/lib/db'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 
 import { locationMapView, unhiddenLocationView } from './location-map'
-import { itemNamesakes, matchNewLocation as matchAgainst, matchNewPlace } from './new-entity-match'
+import {
+  itemNamesakes,
+  matchNewLocation as matchAgainst,
+  matchNewPlace as matchInReply,
+  type SettledNewPlace,
+} from './new-entity-match'
 import type { PlacePlacement } from './placement'
 
 const place = (
@@ -534,6 +539,14 @@ describe('matchNewLocation — the unplaced places', () => {
   })
 })
 
+// No create of the reply was placed by a takeover unless a case says so.
+const matchNewPlace = (
+  candidate: { name: string; placement: PlacePlacement },
+  settled: readonly SettledNewPlace[],
+  view: Parameters<typeof matchInReply>[2],
+  placedHere: ReadonlyMap<string, string | null> = new Map(),
+) => matchInReply(candidate, settled, view, placedHere)
+
 describe('matchNewPlace', () => {
   const settled = [{ name: 'the Gull Inn', placement: under('loc_town'), id: 'loc_new1' }]
   const view = unhiddenLocationView([
@@ -670,6 +683,26 @@ describe('matchNewPlace', () => {
           view,
         ),
       ).toEqual(twin('loc_new2'))
+    })
+
+    describe('an earlier create a takeover placed', () => {
+      const earlier = [
+        { name: 'Ashfall', placement: UNPLACED, id: 'loc_new1' },
+        { name: 'Ashfall', placement: under('loc_town'), id: 'loc_new1' },
+      ]
+      const placedHere = new Map([['loc_new1', 'loc_town']])
+
+      it('still maps an unplaced place to it, as the twin it declared', () => {
+        expect(
+          matchNewPlace({ name: 'Ashfall', placement: UNPLACED }, earlier, view, placedHere),
+        ).toEqual(twin('loc_new1'))
+      })
+
+      it('never takes it over again: a namesake under another parent is its own row', () => {
+        expect(
+          matchNewPlace({ name: 'Ashfall', placement: TOP }, earlier, view, placedHere),
+        ).toEqual(PLAIN)
+      })
     })
 
     it('maps an unplaced place to its one earlier create beside a retired namesake', () => {

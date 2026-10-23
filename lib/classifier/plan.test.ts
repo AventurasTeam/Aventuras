@@ -2075,7 +2075,7 @@ describe('mentioned places', () => {
         expect(placementsOf(planned)).toEqual([])
       })
 
-      it('takes over an unplaced place the reply created earlier, placing it after the creates', () => {
+      it('takes over an unplaced place the reply created earlier, placing it after its create', () => {
         const { planned, handleMap, parentDrops } = buildClassifierActions(
           reply([
             newPlace('new:a', 'the Cellar'),
@@ -2130,7 +2130,7 @@ describe('mentioned places', () => {
         )
       })
 
-      it('matches later creates against the taken-over place where it now sits', () => {
+      it('takes a place over once: a later namesake under another parent is its own row', () => {
         const { planned, handleMap } = buildClassifierActions(
           reply([
             newPlace('new:a', 'the Cellar'),
@@ -2151,6 +2151,61 @@ describe('mentioned places', () => {
           ['loc_new2', { parent_location_id: 'loc_keep' }, 0],
         ])
         expect(placementsOf(planned)).toHaveLength(1)
+      })
+
+      // The twin is keyed on what each create declared, whatever a takeover did to the row since.
+      it('maps an unplaced place to an earlier unplaced twin a namesake took over and placed', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          reply([
+            newPlace('new:a', 'the Cellar'),
+            newPlace('new:b', 'the Cellar', { parent: 'loc_town' }),
+            newPlace('new:c', 'the Cellar'),
+            newPlace('new:d', 'the Cellar', { parent: 'loc_inn' }),
+          ]),
+          deps([
+            TOWN,
+            KEEP,
+            placeRow('loc_mill', 'the Mill', null),
+            placeRow('loc_inn', 'the Inn', null),
+            placeRow('loc_cellar', 'the Cellar', 'loc_keep'),
+            placeRow('loc_cellar2', 'the Cellar', 'loc_mill', { createdAt: 2 }),
+          ]),
+        )
+        expect(['new:a', 'new:b', 'new:c', 'new:d'].map((h) => handleMap.get(h))).toEqual([
+          'loc_new1',
+          'loc_new1',
+          'loc_new1',
+          'loc_new2',
+        ])
+        expect(
+          placementsOf(planned).map((p) => payloadOf<{ id: string; placement: unknown }>(p)),
+        ).toEqual([
+          expect.objectContaining({
+            id: 'loc_new1',
+            placement: { kind: 'under', parentId: 'loc_town' },
+          }),
+        ])
+        expect(createdPlaces(planned).map((e) => [e.id, e.state, e.nameCollisionFlag])).toEqual([
+          ['loc_new1', { parent_location_id: null, unplaced: true }, 1],
+          ['loc_new2', { parent_location_id: 'loc_inn' }, 0],
+        ])
+      })
+
+      it('never takes over a placed create an unplaced namesake mapped to', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          reply([
+            newPlace('new:a', 'the Cellar', { parent: 'loc_town' }),
+            newPlace('new:b', 'the Cellar'),
+            newPlace('new:c', 'the Cellar', { parent: 'loc_keep' }),
+          ]),
+          deps([TOWN, KEEP]),
+        )
+        expect(['new:a', 'new:b', 'new:c'].map((h) => handleMap.get(h))).toEqual([
+          'loc_new1',
+          'loc_new1',
+          'loc_new2',
+        ])
+        expect(placementsOf(planned)).toEqual([])
       })
 
       it('creates an unplaced place flagged when a row and an earlier create share its name', () => {
