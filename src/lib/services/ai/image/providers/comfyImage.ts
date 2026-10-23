@@ -4,16 +4,19 @@
 
 import * as z from 'zod'
 import { APICallError, InvalidResponseDataError } from 'ai'
-import type { ImageModelV4, ImageModelV4CallOptions } from '@ai-sdk/provider'
+import type { ImageModelV4 } from '@ai-sdk/provider'
 import type { Fetch } from '#lib/services/ai/sdk/providers/index.ts'
 import { abortable, sleep } from '#lib/utils/async.ts'
 import { errMessage } from '#lib/utils/error.ts'
 import { sha256Hex } from '#lib/utils/hash.ts'
-import { base64ToBytes, parseImageSize } from '#lib/utils/image.ts'
+import { parseImageSize } from '#lib/utils/image.ts'
 import {
   definedHeaders,
+  fileBytes,
   httpError,
+  inlineFile,
   parseJson,
+  type ReferenceFile,
   responseExcerpt,
   unsupportedInputWarnings,
 } from './imageModelUtils'
@@ -104,10 +107,7 @@ const UploadedImage = z.object({
   subfolder: z.string().optional().catch(undefined),
 })
 
-// Names come from the bytes, so ComfyUI stores an identical upload once.
 const UPLOAD_SUBFOLDER = 'aventuras'
-
-type ReferenceFile = NonNullable<ImageModelV4CallOptions['files']>[number]
 
 const fileExtension = (mediaType: string): string => /^image\/(\w+)/.exec(mediaType)?.[1] ?? 'png'
 
@@ -274,10 +274,10 @@ export function createComfyImage(settings: ComfyImageSettings) {
     headers: Record<string, string>,
     signal?: AbortSignal,
   ): Promise<string> {
-    if (file.type === 'url') throw new Error('ComfyUI image references must be base64.')
-    const bytes =
-      typeof file.data === 'string' ? base64ToBytes(file.data) : new Uint8Array(file.data)
-    const fileName = `aventuras-${(await sha256Hex(bytes)).slice(0, 16)}.${fileExtension(file.mediaType)}`
+    const inline = inlineFile(file, 'ComfyUI')
+    const bytes = fileBytes(inline)
+    // Names come from the bytes, so ComfyUI stores an identical upload once.
+    const fileName = `aventuras-${(await sha256Hex(bytes)).slice(0, 16)}.${fileExtension(inline.mediaType)}`
     const key = `${baseURL}|${folder}|${fileName}`
 
     // An upload whose owner aborted says nothing about this caller's, so it is redone.
@@ -290,7 +290,7 @@ export function createComfyImage(settings: ComfyImageSettings) {
     }
 
     const form = new FormData()
-    form.append('image', new Blob([bytes], { type: file.mediaType }), fileName)
+    form.append('image', new Blob([bytes], { type: inline.mediaType }), fileName)
     form.append('type', folder)
     form.append('subfolder', UPLOAD_SUBFOLDER)
 

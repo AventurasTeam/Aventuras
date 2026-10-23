@@ -6,10 +6,12 @@ import * as z from 'zod'
 import { InvalidResponseDataError } from 'ai'
 import type { ImageModelV4 } from '@ai-sdk/provider'
 import type { Fetch } from '#lib/services/ai/sdk/providers/index.ts'
-import { bytesToBase64, parseImageSize } from '#lib/utils/image.ts'
+import { parseImageSize } from '#lib/utils/image.ts'
 import {
   definedHeaders,
+  fileBase64,
   httpError,
+  inlineFile,
   parseJson,
   responseExcerpt,
   unsupportedInputWarnings,
@@ -73,10 +75,7 @@ export function createA1111Image(settings: A1111ImageSettings) {
           const warnings = unsupportedInputWarnings({ aspectRatio, mask })
 
           // Reference images for edit models (Kontext, Qwen Image Edit); a plain checkpoint ignores them.
-          const extraImages = files?.map((file) => {
-            if (file.type === 'url') throw new Error('A1111 image references must be base64.')
-            return typeof file.data === 'string' ? file.data : bytesToBase64(file.data)
-          })
+          const extraImages = files?.map((file) => fileBase64(inlineFile(file, 'A1111')))
 
           // A checkpoint chosen per request is put back afterwards, so it does not stay loaded as
           // the server's default.

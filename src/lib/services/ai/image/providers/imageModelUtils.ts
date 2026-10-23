@@ -2,6 +2,7 @@
 
 import { APICallError } from 'ai'
 import type { ImageModelV4CallOptions, SharedV4Warning } from '@ai-sdk/provider'
+import { base64ToBytes, bytesToBase64 } from '#lib/utils/image.ts'
 
 export function parseJson(text: string): unknown {
   try {
@@ -63,3 +64,18 @@ export function unsupportedInputWarnings({
   if (mask) warnings.push({ type: 'unsupported', feature: 'mask' })
   return warnings
 }
+
+export type ReferenceFile = NonNullable<ImageModelV4CallOptions['files']>[number]
+type InlineFile = Extract<ReferenceFile, { type: 'file' }>
+
+/** A reference that carries its own data; a URL is refused. */
+export function inlineFile(file: ReferenceFile, provider: string): InlineFile {
+  if (file.type === 'url') throw new Error(`${provider} image references must be base64.`)
+  return file
+}
+
+export const fileBase64 = ({ data }: InlineFile): string =>
+  typeof data === 'string' ? data : bytesToBase64(data)
+
+export const fileBytes = ({ data }: InlineFile): Uint8Array<ArrayBuffer> =>
+  typeof data === 'string' ? base64ToBytes(data) : new Uint8Array(data)
