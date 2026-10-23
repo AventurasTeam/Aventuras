@@ -168,12 +168,6 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   }
 }
 
-/**
- * classifier.md → Threads → The row: a pass's status change, checked against the row as it stands
- * and the user's later edits. Entry refs are AI-only (data-model.md → Authorship contract): on a
- * thread a pass created, resolved or failed records the entry and active clears it; a user's thread
- * keeps both null.
- */
 const setStatusHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'setThreadStatus')
     throw new Error(`handler/kind mismatch: expected 'setThreadStatus', got '${action.kind}'`)
@@ -199,6 +193,7 @@ const setStatusHandler: ActionHandler = async (action, branchId, ctx) => {
     return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
   const set: Partial<Pick<Thread, 'status' | 'resolvedAtEntryId'>> = { status }
   const undoPayload: Record<string, unknown> = { status: current.status }
+  // Entry refs are AI-only (data-model.md → Authorship contract): a user's thread keeps both null.
   if (current.triggeredAtEntryId !== null) {
     const resolvedAt = status === 'active' ? null : nullifyRef(resolvedAtEntryId)
     if (resolvedAt !== current.resolvedAtEntryId) {
