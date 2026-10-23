@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
-import { branches, deltas, stories, threads, type NewThread } from '@/lib/db'
+import { branches, deltas, stories, threads, type NewThread, type Thread } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { threadsStore } from '@/lib/stores'
 
@@ -336,6 +336,89 @@ describe('threads CRUD arms', () => {
       ctx,
     )
     expect((await rowFor(db, 'thr_1')).embeddingStale).toBe(1) // embedded column changed
+  })
+})
+
+// classifier.md → Threads → The row: the entry ref names where a resolved or failed status ended.
+describe('updateThread — the entry a status ended on', () => {
+  type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
+  const RESOLVED: NewThread = {
+    ...THREAD,
+    status: 'resolved',
+    triggeredAtEntryId: 'e_setup',
+    resolvedAtEntryId: 'e_old',
+  }
+  const create = (ctx: Ctx, entry: NewThread) =>
+    applyDeltaAction(
+      {
+        action: { kind: 'createThread', source: 'periodic_classifier', payload: { entry } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+  const userStatus = (ctx: Ctx, status: Thread['status'], actionId: string) =>
+    applyDeltaAction(
+      {
+        action: {
+          kind: 'updateThread',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: 'thr_1', patch: { status } },
+        },
+        actionId,
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+  const undoOf = async (db: Awaited<ReturnType<typeof setup>>['db'], actionId: string) =>
+    (await db.select().from(deltas).where(eq(deltas.actionId, actionId)))[0]?.undoPayload
+
+  it.each(['pending', 'active'] as const)(
+    "clears it when the user moves a pass's resolved thread to %s, and undo restores it",
+    async (status) => {
+      const { db, ctx } = await setup()
+      await create(ctx, RESOLVED)
+      expect((await userStatus(ctx, status, 'act_u')).status).toBe('ok')
+      expect(await rowFor(db, 'thr_1')).toMatchObject({ status, resolvedAtEntryId: null })
+      expect(threadsStore.getById('thr_1')).toMatchObject({ status, resolvedAtEntryId: null })
+      expect(await undoOf(db, 'act_u')).toEqual({ status: 'resolved', resolvedAtEntryId: 'e_old' })
+
+      await reverseReplayDeltas('act_u', ctx)
+      const restored = { status: 'resolved', resolvedAtEntryId: 'e_old' }
+      expect(await rowFor(db, 'thr_1')).toMatchObject(restored)
+      expect(threadsStore.getById('thr_1')).toMatchObject(restored)
+    },
+  )
+
+  it('leaves no entry on a thread the user fails after taking it up again', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, RESOLVED)
+    await userStatus(ctx, 'active', 'act_u1')
+    await userStatus(ctx, 'failed', 'act_u2')
+    expect(await rowFor(db, 'thr_1')).toMatchObject({ status: 'failed', resolvedAtEntryId: null })
+  })
+
+  it.each(['resolved', 'failed'] as const)(
+    'keeps it when the user moves the thread to %s',
+    async (status) => {
+      const { db, ctx } = await setup()
+      await create(ctx, { ...RESOLVED, status: status === 'resolved' ? 'failed' : 'resolved' })
+      await userStatus(ctx, status, 'act_u')
+      expect(await rowFor(db, 'thr_1')).toMatchObject({ status, resolvedAtEntryId: 'e_old' })
+      expect(Object.keys((await undoOf(db, 'act_u')) ?? {})).toEqual(['status'])
+    },
+  )
+
+  it("writes only the status of a user's thread", async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, { ...THREAD, status: 'failed' })
+    await userStatus(ctx, 'active', 'act_u')
+    expect(await rowFor(db, 'thr_1')).toMatchObject({
+      status: 'active',
+      triggeredAtEntryId: null,
+      resolvedAtEntryId: null,
+    })
+    expect(await undoOf(db, 'act_u')).toEqual({ status: 'failed' })
   })
 })
 

@@ -134,6 +134,15 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     // No columnSchemas registered: scalar/nullable columns take the whole prior value as undo.
     undoPayload[col] = current[col as keyof Thread]
   }
+  // The ref names where a resolved or failed status ended, so a thread taken up again drops it.
+  if (
+    (set.status === 'pending' || set.status === 'active') &&
+    !('resolvedAtEntryId' in set) &&
+    current.resolvedAtEntryId !== null
+  ) {
+    set.resolvedAtEntryId = null
+    undoPayload.resolvedAtEntryId = current.resolvedAtEntryId
+  }
   // A patch that parsed but touched no updatable column would reach Drizzle's
   // .set({}) and throw "No values to set" — reject instead.
   if (Object.keys(set).length === 0)
