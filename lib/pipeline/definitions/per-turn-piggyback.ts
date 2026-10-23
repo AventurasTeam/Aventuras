@@ -283,8 +283,8 @@ function orderedTransfers(transfers: NonNullable<FallbackReply['transfers']>): P
   }
 }
 
-// The fold wrote its visual changes, conditions and transfers whatever its parse did: a field of
-// this reply keeps the fold's record when empty or, bar visual changes, when none of it applied.
+// The fold's writes landed whatever its parse did, so its record stays unless this reply's field
+// holds a visual change, an unrejected condition, or a move, a stackable or a landed drop.
 function withFoldChanges(
   report: StateReport | undefined,
   prior: StateReport | undefined,
