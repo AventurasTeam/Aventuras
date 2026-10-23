@@ -1998,7 +1998,7 @@ story_entries.metadata: {
     worldTimeDeltaApplied?: number   // what apply.ts actually added to worldTime; absent when nothing was applied
     currentLocationRejected?: true   // apply.ts refused the emitted id (or a fallback's new-item handle); absent otherwise, never false
     visualChanges?: { id: string; type: VisualChangeType; text: string }[]
-    conditions?: { id: string; text: string }[]   // a place's or an item's condition, as emitted
+    conditions?: { id: string; text: string; rejected?: true }[]   // a place's or an item's condition, as emitted; rejected set when apply.ts refused it (a row not shown with its state, or blank text)
     transfers?: { items: ItemTransfer[]; drops?: { id: string; from?: string; at: string | null }[]; stackables: StackableTransfer[] }  // drops: each item put down, the holder as emitted, and the place it landed (null when the scene had no location), from what apply.ts did; absent on rows written before drops
     newLocations?: ({ handle: string; name: string; description: string; condition?: string; parent?: string; outcome: 'created' | 'reused'; id: string; parentDropped?: true } | { handle: string; name: string; description: string; condition?: string; parent?: string; outcome: 'dropped' })[]  // as emitted, post-substitution, with what the per-turn create planner made of it; parent 'top' for top-level, absent for unplaced; see memory/piggyback.md → New locations and items
     newItems?: ({ handle: string; name: string; description: string; condition?: string; outcome: 'created'; id: string } | { handle: string; name: string; description: string; condition?: string; outcome: 'dropped' })[]
@@ -2064,7 +2064,7 @@ absolute after an edit is the correct outcome and is rendered as such
 (see [EntryCard → World-state panel](./ui/patterns/entry-card.md#world-state-panel)).
 
 **The report records what was emitted and what `apply.ts` and the
-create planner did with it.** Three things can differ from the
+create planner did with it.** Four things can differ from the
 absolute state beside them:
 
 - `currentLocation` is rejected when the id does not resolve to a
@@ -2086,6 +2086,7 @@ absolute state beside them:
   `parentDropped` record that, and the report's other fields carry the
   resolved id in place of the `new:` handle, apart from the rejected
   handle above.
+- A condition is rejected when its id isn't a place or item the prompt showed with its state, or its text is blank; `rejected` records that, and `classifier.condition_unseen` logs the first.
 
 The decision is recorded rather than re-derived, because the
 difference alone does not identify its cause. An emitted location

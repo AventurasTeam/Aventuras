@@ -227,7 +227,7 @@ the same holders; a new place or item as `New place:` or `New item:`
 and its name, or `Matched place:` and the reused row's name.
 A created or reused row is named from the live entity, as every other
 line is, and from the report's name only once the row is gone. A
-dropped create isn't listed; the per-turn inspector shows it. These
+dropped create or a rejected condition isn't listed; the per-turn inspector shows them. These
 exist nowhere else once the block is stripped from `content` — deltas carry the applied effect, not the
 narration of it.
 
