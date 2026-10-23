@@ -3229,6 +3229,24 @@ describe('placements', () => {
     expect(unseenRefs).toEqual([{ list: 'placements', ref: 'l7' }])
   })
 
+  it("applies a place's placements in source-turn order, so the latest prose places it", () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        placements: [
+          { ref: 'loc_varn', parent: 'loc_reach', sourceTurn: 't3' },
+          { ref: 'loc_varn', parent: 'loc_ford', sourceTurn: 't1' },
+        ],
+      }),
+      deps([REACH, place('loc_ford', null), VARN]),
+    )
+    expect(planned.map((p) => [payloadOf<{ placement: unknown }>(p).placement, p.entryId])).toEqual(
+      [
+        [{ kind: 'under', parentId: 'loc_ford' }, 'e1'],
+        [{ kind: 'under', parentId: 'loc_reach' }, 'e3'],
+      ],
+    )
+  })
+
   it('drops a top-level mark for a place this reply already placed', () => {
     const { planned, droppedPlacements } = buildClassifierActions(
       reply({
