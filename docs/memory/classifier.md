@@ -413,7 +413,12 @@ that rule's order. A reused place keeps its description and its
 status, since a mention doesn't enter a staged place, gains the
 entry's new keywords, takes the parent the entry gave when it was
 unplaced, and stands for the handle in the rest of the reply. Two new
-places with one name and parent map to the first.
+places with one name and parent map to the first. The reply's places
+match as successive passes' would: an unplaced one counts the reply's
+earlier new places of its name as stored places, newer than any, one
+match mapping it there and several flagging it `unplaced`; a placed
+one the stored places would create takes over an earlier unplaced new
+place of its name and places it.
 
 **After the turn.** A pass runs after the turn that brought it due, so
 a place the turn created is already a row it matches against, and the
