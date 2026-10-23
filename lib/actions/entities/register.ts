@@ -36,6 +36,7 @@ import type { DbCtx, DeltaSource } from '../types'
 import { entityCascade } from './entity-cascade'
 import {
   appendEntityKeywordsHandler,
+  placeLocationHandler,
   promoteStagedEntityHandler,
   retireEntityHandler,
   setCharacterFactionHandler,
@@ -416,6 +417,7 @@ export function registerEntities(): void {
       appendEntityKeywords: appendEntityKeywordsHandler,
       retireEntity: retireEntityHandler,
       setCharacterFaction: setCharacterFactionHandler,
+      placeLocation: placeLocationHandler,
     },
     patcher: (branchId, p) => entitiesStore.patch(branchId, p),
     cascade: entityCascade,

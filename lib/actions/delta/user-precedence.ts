@@ -174,6 +174,16 @@ export function wroteColumn(edits: readonly Delta[], column: string): boolean {
   return wrotePath(edits, column, [])
 }
 
+/**
+ * A user edit wrote the place's placement: its parent or its unplaced flag. The pair is one field
+ * (data-model.md → LocationState shape), so a write to either key keeps both.
+ */
+export function wrotePlacement(edits: readonly Delta[]): boolean {
+  return (
+    wrotePath(edits, 'state', ['parent_location_id']) || wrotePath(edits, 'state', ['unplaced'])
+  )
+}
+
 /** Whether the user deleted a `character_relationships` row for this pair after `since`. */
 export async function userDeletedPairSince(
   ctx: DbCtx,

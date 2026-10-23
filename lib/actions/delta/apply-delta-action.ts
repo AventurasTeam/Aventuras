@@ -63,6 +63,7 @@ const LOCK_KEY: { [K in ProductionKind]: LockKey<K> } = {
   appendEntityKeywords: entityRow,
   retireEntity: entityRow,
   setCharacterFaction: entityRow,
+  placeLocation: entityRow,
   upsertCharacterRelationship: relationships,
   deleteCharacterRelationship: relationships,
   createLore: null,

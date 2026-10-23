@@ -17,6 +17,7 @@ import {
   userDeletedPairSince,
   userEditsSince,
   wroteColumn,
+  wrotePlacement,
 } from './user-precedence'
 
 async function setup() {
@@ -156,6 +157,41 @@ describe('wroteColumn', () => {
     expect(wroteColumn([create], 'status')).toBe(true)
     expect(wroteColumn([update], 'status')).toBe(false)
     expect(wroteColumn([update], 'description')).toBe(true)
+  })
+})
+
+// data-model.md → LocationState shape: a place's parent and its unplaced flag are one field.
+describe('wrotePlacement', () => {
+  it('counts a create, or an update carrying the parent or the flag, not another state key', async () => {
+    const { ctx } = await setup()
+    const VARN: NewEntity = {
+      ...CHAR,
+      id: 'loc_varn',
+      kind: 'location',
+      name: 'Varn',
+      state: { parent_location_id: null, unplaced: true },
+    }
+    await ctx.db.insert(entities).values({ ...VARN, id: 'loc_reach', name: 'Reach', state: null })
+    await apply(ctx, { kind: 'createEntity', source: 'user_edit', payload: { entry: VARN } }, 'a0')
+    const state = (s: object) => updateEntity('user_edit', 'loc_varn', { state: s })
+    await apply(ctx, state({ parent_location_id: null }), 'a1')
+    await apply(ctx, state({ parent_location_id: null, condition: 'flooded' }), 'a2')
+    await apply(ctx, state({ parent_location_id: 'loc_reach', condition: 'flooded' }), 'a3')
+    const [create, flag, condition, parent] = await userEditsSince(
+      ctx,
+      'br_1',
+      'entities',
+      'loc_varn',
+      0,
+    )
+    expect(flag.undoPayload).toEqual({ state: { unplaced: true } })
+    expect(parent.undoPayload).toEqual({ state: { parent_location_id: null } })
+    expect(wrotePlacement([create])).toBe(true)
+    expect(wrotePlacement([flag])).toBe(true)
+    expect(wrotePlacement([condition])).toBe(false)
+    expect(wrotePlacement([parent])).toBe(true)
+    expect(wrotePlacement([condition, parent])).toBe(true)
+    expect(wrotePlacement([])).toBe(false)
   })
 })
 

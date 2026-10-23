@@ -9,9 +9,21 @@ import {
   type Entity,
   type EntityState,
 } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { newTerms, normalizeTerm } from '@/lib/keyword-terms'
 import { entitiesStore } from '@/lib/stores'
-import { characterFactionId } from '@/lib/world'
+import {
+  characterFactionId,
+  checkParentChain,
+  PARENT_CHAIN_BROKEN,
+  PARENT_CYCLE,
+  parentOfLocations,
+  PLACE_REFUSAL,
+  placementOf,
+  samePlacement,
+  stateOf,
+  withPlacement,
+} from '@/lib/world'
 
 import { computeUndoPayload } from '../delta/delta-encoding'
 import {
@@ -25,6 +37,7 @@ import {
   userEditsSinceProse,
   wroteColumn,
   wrotePath,
+  wrotePlacement,
 } from '../delta/user-precedence'
 import type { DbCtx, DeltaSource, ProseEntryId } from '../types'
 
@@ -87,6 +100,17 @@ declare module '@/lib/actions/action-map' {
         proseEntryId: ProseEntryId
       }
     }
+    placeLocation: {
+      source: DeltaSource
+      payload: {
+        branchId: string
+        id: string
+        /** `top` only for an unplaced place (data-model.md → Authorship contract). */
+        placement: { kind: 'under'; parentId: string } | { kind: 'top' }
+        /** Null skips user precedence: the per-turn writer's prose is always newer. */
+        proseEntryId: ProseEntryId
+      }
+    }
   }
 }
 
@@ -116,9 +140,7 @@ function buildStatePatchOutcome(
   topLevelPatch: Record<string, unknown>,
   ctx: DbCtx,
 ) {
-  // A null column reads as the empty state, as updateEntity's does.
-  const prior = (current.state ?? emptyEntityState(current.kind)) as Record<string, unknown>
-  const mergedState: Record<string, unknown> = { ...prior }
+  const mergedState: Record<string, unknown> = { ...priorState(current) }
   for (const [key, value] of Object.entries(topLevelPatch)) {
     if (key === 'visual' && typeof value === 'object' && value !== null) {
       mergedState.visual = {
@@ -129,9 +151,24 @@ function buildStatePatchOutcome(
       mergedState[key] = value
     }
   }
+  return stateWriteOutcome(branchId, id, current, mergedState, ctx)
+}
 
+// A null column reads as the empty state, as updateEntity's does.
+function priorState(current: Entity): Record<string, unknown> {
+  return (current.state ?? emptyEntityState(current.kind)) as Record<string, unknown>
+}
+
+/** Writes `next` as the row's whole state: a key `next` lacks is gone from the row. */
+function stateWriteOutcome(
+  branchId: string,
+  id: string,
+  current: Entity,
+  next: Record<string, unknown>,
+  ctx: DbCtx,
+): HandlerOutcome {
   const undoPayload = {
-    state: computeUndoPayload(entityStateColumnSchema, prior, mergedState),
+    state: computeUndoPayload(entityStateColumnSchema, priorState(current), next),
   }
   if (Object.keys(undoPayload.state).length === 0) {
     // 'noop', not a plain rejection: a model restating an entity's current state
@@ -153,11 +190,11 @@ function buildStatePatchOutcome(
     ops: [
       ctx.db
         .update(entities)
-        .set({ state: mergedState as EntityState })
+        .set({ state: next as EntityState })
         .where(and(eq(entities.branchId, branchId), eq(entities.id, id)))
         .toSQL(),
     ],
-    patch: { op: 'update' as const, id, columns: { state: mergedState } },
+    patch: { op: 'update' as const, id, columns: { state: next } },
   }
 }
 
@@ -425,4 +462,66 @@ export const setCharacterFactionHandler: ActionHandler = async (action, branchId
   )
     return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
   return buildStatePatchOutcome(bid, id, current, { faction_id: factionId }, ctx)
+}
+
+const placeRefusal = (reason: string): HandlerOutcome => ({
+  status: 'rejected',
+  reason,
+  code: 'noop',
+})
+
+/**
+ * data-model.md → LocationState shape: writes the parent and the flag together as the row's whole
+ * state, so placing clears `unplaced`. Every refusal is a noop: a machine writer plans the same
+ * checks first, and a refusal that reached the orchestrator unmarked would fail its run.
+ */
+export const placeLocationHandler: ActionHandler = async (action, branchId, ctx) => {
+  if (action.kind !== 'placeLocation')
+    throw new Error(`handler/kind mismatch: expected 'placeLocation', got '${action.kind}'`)
+  const { branchId: bid, id, placement, proseEntryId } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  const current = await loadCurrent(bid, id, ctx)
+  if (!current) return placeRefusal(`place target entities ${bid}:${id} not found`)
+  if (current.kind !== 'location') return placeRefusal('not-a-location')
+  const stored = placementOf(current)
+  if (samePlacement(stored, placement)) return placeRefusal('placement-unchanged')
+
+  const places = await ctx.db
+    .select({
+      id: entities.id,
+      kind: entities.kind,
+      state: entities.state,
+      status: entities.status,
+    })
+    .from(entities)
+    .where(and(eq(entities.branchId, bid), eq(entities.kind, 'location')))
+  if (placement.kind === 'top') {
+    // A stored parent the branch has no place for reads as unplaced wherever places are listed.
+    const unplaced =
+      stored.kind === 'unplaced' ||
+      (stored.kind === 'under' && !places.some((p) => p.id === stored.parentId))
+    if (!unplaced) return placeRefusal('not-unplaced')
+  } else {
+    const parent = places.find((p) => p.id === placement.parentId)
+    if (parent === undefined) return placeRefusal('parent-not-a-place')
+    if (parent.status === 'retired') return placeRefusal(PLACE_REFUSAL.retiredParent)
+    const check = checkParentChain(id, placement.parentId, parentOfLocations(places))
+    if (check === 'cycle') return placeRefusal(PARENT_CYCLE)
+    if (check === 'cap-hit') {
+      logger.error('action_layer.parent_chain_cap_hit', {
+        branchId: bid,
+        id,
+        parentId: placement.parentId,
+      })
+      return placeRefusal(PARENT_CHAIN_BROKEN)
+    }
+  }
+  if (
+    proseEntryId !== null &&
+    wrotePlacement(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
+  )
+    return placeRefusal(USER_EDITED_SINCE_PROSE)
+  const next = withPlacement(stateOf(current, 'location'), placement)
+  return stateWriteOutcome(bid, id, current, next, ctx)
 }

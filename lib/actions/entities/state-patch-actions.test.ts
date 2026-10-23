@@ -9,6 +9,7 @@ import {
   stories,
   type CharacterState,
   type Entity,
+  type LocationState,
   type NewEntity,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -1120,5 +1121,322 @@ describe('setCharacterFaction', () => {
 
   it("serializes on the character's row key", () => {
     expect(lockKeysFor(join('fact_circle'))).toEqual(['entities:br_1:char_1'])
+  })
+})
+
+// data-model.md → LocationState shape: a place's parent and its unplaced flag are written as one.
+describe('placeLocation', () => {
+  const PROSE = 'e_prose'
+  type Db = Awaited<ReturnType<typeof setup>>['db']
+
+  const placeRow = (
+    id: string,
+    state: LocationState,
+    over: Partial<NewEntity> = {},
+  ): NewEntity => ({
+    id,
+    branchId: 'br_1',
+    kind: 'location',
+    name: id,
+    status: 'active',
+    injectionMode: 'auto',
+    state,
+    createdAt: 1,
+    updatedAt: 1,
+    ...over,
+  })
+  const UNPLACED: LocationState = { parent_location_id: null, unplaced: true, condition: 'flooded' }
+  const place = (
+    placement: { kind: 'under'; parentId: string } | { kind: 'top' },
+    { id = 'loc_varn', proseEntryId = null }: { id?: string; proseEntryId?: string | null } = {},
+  ): PipelineAction => ({
+    kind: 'placeLocation',
+    source: 'periodic_classifier',
+    payload: { branchId: 'br_1', id, placement, proseEntryId },
+  })
+  const UNDER_REACH = { kind: 'under', parentId: 'loc_reach' } as const
+  const TOP = { kind: 'top' } as const
+  const noop = (reason: string) => ({ status: 'rejected', reason, code: 'noop' })
+  const userState = (state: LocationState): PipelineAction => ({
+    kind: 'updateEntity',
+    source: 'user_edit',
+    payload: { branchId: 'br_1', id: 'loc_varn', patch: { state } },
+  })
+  const writeProse = (ctx: Ctx) =>
+    apply(
+      ctx,
+      {
+        kind: 'createStoryEntry',
+        source: 'ai_classifier',
+        payload: {
+          entry: {
+            id: PROSE,
+            branchId: 'br_1',
+            position: 1,
+            kind: 'ai_reply',
+            content: 'The road to Varn ran through the Eastern Reach.',
+            createdAt: 1,
+          },
+        },
+      },
+      'act_prose',
+    )
+
+  // The neighbours go straight in; Varn goes through createEntity, so the store holds it too.
+  async function seed(ctx: Ctx, db: Db, varn: LocationState = UNPLACED, others: NewEntity[] = []) {
+    await db
+      .insert(entities)
+      .values([
+        placeRow('loc_reach', { parent_location_id: null }),
+        placeRow('loc_marsh', { parent_location_id: null }),
+        ...others,
+      ])
+    await create(ctx, placeRow('loc_varn', varn))
+  }
+
+  const stateIn = async (db: Db, id = 'loc_varn') => (await rowFor(db, id)).state
+  const undoOf = async (db: Db, actionId: string) =>
+    (await db.select().from(deltas).where(eq(deltas.actionId, actionId))).map((d) => d.undoPayload)
+
+  it('places an unplaced place under a parent: the flag leaves the row and the store', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    expect((await apply(ctx, place(UNDER_REACH), 'act_p')).status).toBe('ok')
+
+    const placed = { parent_location_id: 'loc_reach', condition: 'flooded' }
+    const stored = await stateIn(db)
+    expect(stored).toEqual(placed)
+    expect(Object.keys(stored ?? {})).not.toContain('unplaced')
+    const inStore = entitiesStore.getById('loc_varn')?.state
+    expect(inStore).toEqual(placed)
+    expect(Object.keys(inStore ?? {})).not.toContain('unplaced')
+    expect(await undoOf(db, 'act_p')).toEqual([
+      { state: { parent_location_id: null, unplaced: true } },
+    ])
+  })
+
+  it('marks an unplaced place top-level, the flag gone', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    expect((await apply(ctx, place(TOP), 'act_p')).status).toBe('ok')
+
+    const topLevel = { parent_location_id: null, condition: 'flooded' }
+    const stored = await stateIn(db)
+    expect(stored).toEqual(topLevel)
+    expect(Object.keys(stored ?? {})).not.toContain('unplaced')
+    const inStore = entitiesStore.getById('loc_varn')?.state
+    expect(inStore).toEqual(topLevel)
+    expect(Object.keys(inStore ?? {})).not.toContain('unplaced')
+    expect(await undoOf(db, 'act_p')).toEqual([{ state: { unplaced: true } }])
+  })
+
+  it('moves a placed place to another parent', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db, { parent_location_id: 'loc_reach' })
+    expect(
+      (await apply(ctx, place({ kind: 'under', parentId: 'loc_marsh' }), 'act_p')).status,
+    ).toBe('ok')
+    expect(await stateIn(db)).toEqual({ parent_location_id: 'loc_marsh' })
+    expect(await undoOf(db, 'act_p')).toEqual([{ state: { parent_location_id: 'loc_reach' } }])
+  })
+
+  it('reverses to the unplaced place it was, flag and all', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    await apply(ctx, place(UNDER_REACH), 'act_p')
+    expect(await reverseReplayDeltas('act_p', ctx)).toBe(1)
+    expect(await stateIn(db)).toEqual(UNPLACED)
+    expect(entitiesStore.getById('loc_varn')?.state).toEqual(UNPLACED)
+  })
+
+  // location-map.ts reads a parent the branch has no place for as unplaced; so does the handler.
+  it('marks a place whose stored parent names no place top-level', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db, { parent_location_id: 'loc_gone' })
+    expect((await apply(ctx, place(TOP), 'act_p')).status).toBe('ok')
+    expect(await stateIn(db)).toEqual({ parent_location_id: null })
+  })
+
+  describe('refusals, each a noop that leaves the row as it was', () => {
+    async function expectRefused(
+      ctx: Ctx,
+      db: Db,
+      action: PipelineAction,
+      reason: string | RegExp,
+      before: unknown = UNPLACED,
+    ) {
+      const result = await apply(ctx, action, 'act_p')
+      expect(result).toMatchObject({ status: 'rejected', code: 'noop', reason })
+      expect(await undoOf(db, 'act_p')).toEqual([])
+      if (before !== undefined) expect(await stateIn(db)).toEqual(before)
+    }
+
+    it('refuses a row that is gone, or is not a place', async () => {
+      const { db, ctx } = await setup()
+      await seed(ctx, db)
+      await db.insert(entities).values({ ...CHAR, status: 'active' })
+      await expectRefused(ctx, db, place(TOP, { id: 'loc_none' }), /not found/)
+      await expectRefused(ctx, db, place(TOP, { id: 'char_1' }), 'not-a-location')
+    })
+
+    it('refuses the placement the place already has', async () => {
+      const { db, ctx } = await setup()
+      await seed(ctx, db, { parent_location_id: 'loc_reach' })
+      await expectRefused(ctx, db, place(UNDER_REACH), 'placement-unchanged', {
+        parent_location_id: 'loc_reach',
+      })
+    })
+
+    it('refuses to mark a top-level place top-level', async () => {
+      const { db, ctx } = await setup()
+      await seed(ctx, db, { parent_location_id: null })
+      await expectRefused(ctx, db, place(TOP), 'placement-unchanged', { parent_location_id: null })
+    })
+
+    // data-model.md → Authorship contract: only an unplaced place may be marked top-level.
+    it('refuses to mark a placed place top-level', async () => {
+      const { db, ctx } = await setup()
+      await seed(ctx, db, { parent_location_id: 'loc_reach' })
+      await expectRefused(ctx, db, place(TOP), 'not-unplaced', { parent_location_id: 'loc_reach' })
+    })
+
+    it('refuses a parent that is no place on the branch', async () => {
+      const { db, ctx } = await setup()
+      await db
+        .insert(branches)
+        .values({ id: 'br_2', storyId: 'story_1', name: 'alt', createdAt: 1 })
+      await seed(ctx, db, UNPLACED, [
+        { ...CHAR, id: 'char_2', status: 'active' },
+        placeRow('loc_elsewhere', { parent_location_id: null }, { branchId: 'br_2' }),
+      ])
+      for (const parentId of ['loc_none', 'char_2', 'loc_elsewhere'])
+        await expectRefused(ctx, db, place({ kind: 'under', parentId }), 'parent-not-a-place')
+    })
+
+    it('refuses a retired parent', async () => {
+      const { db, ctx } = await setup()
+      await seed(ctx, db, UNPLACED, [
+        placeRow('loc_ruin', { parent_location_id: null }, { status: 'retired' }),
+      ])
+      await expectRefused(ctx, db, place({ kind: 'under', parentId: 'loc_ruin' }), 'retired-parent')
+    })
+
+    it('refuses a parent inside the place, or the place itself', async () => {
+      const { db, ctx } = await setup()
+      await seed(ctx, db, { parent_location_id: 'loc_reach' }, [
+        placeRow('loc_docks', { parent_location_id: 'loc_varn' }),
+      ])
+      const before = { parent_location_id: 'loc_reach' }
+      for (const parentId of ['loc_docks', 'loc_varn'])
+        await expectRefused(ctx, db, place({ kind: 'under', parentId }), 'parent-cycle', before)
+    })
+
+    it('refuses a parent whose own chain already loops', async () => {
+      const { db, ctx } = await setup()
+      await seed(ctx, db, UNPLACED, [
+        placeRow('loc_a', { parent_location_id: 'loc_b' }),
+        placeRow('loc_b', { parent_location_id: 'loc_a' }),
+      ])
+      await expectRefused(
+        ctx,
+        db,
+        place({ kind: 'under', parentId: 'loc_a' }),
+        'parent-chain-broken',
+      )
+    })
+  })
+
+  // cadence.md → User edits and classifier writes: the parent and the flag are one field.
+  describe('user edits newer than the prose', () => {
+    const fromProse = (placement: { kind: 'under'; parentId: string } | { kind: 'top' }) =>
+      place(placement, { proseEntryId: PROSE })
+
+    it('keeps a parent the user picked after the prose', async () => {
+      const { db, ctx } = await setup()
+      await seed(ctx, db)
+      await writeProse(ctx)
+      await apply(
+        ctx,
+        userState({ parent_location_id: 'loc_marsh', condition: 'flooded' }),
+        'act_u',
+      )
+      expect(await apply(ctx, fromProse(UNDER_REACH), 'act_p')).toEqual(
+        noop(USER_EDITED_SINCE_PROSE),
+      )
+      expect(await stateIn(db)).toEqual({ parent_location_id: 'loc_marsh', condition: 'flooded' })
+    })
+
+    // The user's edit changed the parent alone, so its undo payload holds no flag.
+    it('keeps a move the user made after the prose', async () => {
+      const { db, ctx } = await setup()
+      await seed(ctx, db, { parent_location_id: 'loc_reach' })
+      await writeProse(ctx)
+      await apply(ctx, userState({ parent_location_id: 'loc_marsh' }), 'act_u')
+      expect(await undoOf(db, 'act_u')).toEqual([{ state: { parent_location_id: 'loc_reach' } }])
+      expect(await apply(ctx, fromProse(UNDER_REACH), 'act_p')).toEqual(
+        noop(USER_EDITED_SINCE_PROSE),
+      )
+      expect(await stateIn(db)).toEqual({ parent_location_id: 'loc_marsh' })
+    })
+
+    // The user's edit changed the flag alone, so its undo payload holds no parent.
+    it('keeps a top-level mark the user made after the prose', async () => {
+      const { db, ctx } = await setup()
+      await seed(ctx, db)
+      await writeProse(ctx)
+      await apply(ctx, userState({ parent_location_id: null, condition: 'flooded' }), 'act_u')
+      expect(await undoOf(db, 'act_u')).toEqual([{ state: { unplaced: true } }])
+      expect(await apply(ctx, fromProse(UNDER_REACH), 'act_p')).toEqual(
+        noop(USER_EDITED_SINCE_PROSE),
+      )
+      expect(await stateIn(db)).toEqual({ parent_location_id: null, condition: 'flooded' })
+    })
+
+    it('keeps the placement of a place the user created after the prose', async () => {
+      const { db, ctx } = await setup()
+      await writeProse(ctx)
+      await seed(ctx, db)
+      expect(await apply(ctx, fromProse(UNDER_REACH), 'act_p')).toEqual(
+        noop(USER_EDITED_SINCE_PROSE),
+      )
+    })
+
+    it("places past a later edit of the place's condition", async () => {
+      const { db, ctx } = await setup()
+      await seed(ctx, db)
+      await writeProse(ctx)
+      await apply(ctx, userState({ ...UNPLACED, condition: 'drained' }), 'act_u')
+      expect((await apply(ctx, fromProse(UNDER_REACH), 'act_p')).status).toBe('ok')
+      expect(await stateIn(db)).toEqual({ parent_location_id: 'loc_reach', condition: 'drained' })
+    })
+
+    it('places over a placement the user made before the prose', async () => {
+      const { db, ctx } = await setup()
+      await seed(ctx, db)
+      await apply(
+        ctx,
+        userState({ parent_location_id: 'loc_marsh', condition: 'flooded' }),
+        'act_u',
+      )
+      await writeProse(ctx)
+      expect((await apply(ctx, fromProse(UNDER_REACH), 'act_p')).status).toBe('ok')
+    })
+
+    // The per-turn writer passes no prose entry: its prose is always newer.
+    it('checks nothing without a prose entry', async () => {
+      const { db, ctx } = await setup()
+      await seed(ctx, db)
+      await apply(
+        ctx,
+        userState({ parent_location_id: 'loc_marsh', condition: 'flooded' }),
+        'act_u',
+      )
+      expect((await apply(ctx, place(UNDER_REACH), 'act_p')).status).toBe('ok')
+      expect(await stateIn(db)).toEqual({ parent_location_id: 'loc_reach', condition: 'flooded' })
+    })
+  })
+
+  it("serializes on the place's row key", () => {
+    expect(lockKeysFor(place(TOP))).toEqual(['entities:br_1:loc_varn'])
   })
 })
