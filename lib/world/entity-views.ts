@@ -4,9 +4,9 @@ import { compareId } from '@/lib/list-modules'
 import { blankToNull } from '@/lib/text'
 
 import { stateOf } from './entity-draft'
+import { realPlacementOf } from './location-map'
 import { byName, itemsAt } from './overview'
 import { placeModes } from './place-modes'
-import { placementOf } from './placement'
 
 /** architecture.md → Entity state on the template surface: one shape for every reference. */
 export type EntityRef = { id: string; name: string; status: Entity['status'] }
@@ -132,6 +132,7 @@ export function buildEntityViews(entities: readonly Entity[], scene: ViewScene):
   const byEntityId = new Map(entities.map((e) => [e.id, e]))
   const inScene = new Set(scene.sceneEntities)
   const modes = placeModes(entities, scene.currentLocationId)
+  const placementAt = realPlacementOf(entities.filter((e) => e.kind === 'location'))
 
   const seatedByScene = (e: Entity): boolean => e.status === 'active' && inScene.has(e.id)
   const disabled = (e: Entity): boolean =>
@@ -237,13 +238,11 @@ export function buildEntityViews(entities: readonly Entity[], scene: ViewScene):
         return characterView(e)
       case 'location': {
         const state = stateOf(e, 'location')
-        const placement = placementOf(e)
+        const placement = placementAt(e.id)
         return {
           condition: text(state.condition),
           parent: placement.kind === 'under' ? ref(placement.parentId, 'location') : null,
-          unplaced:
-            placement.kind === 'unplaced' ||
-            (placement.kind === 'under' && byEntityId.get(placement.parentId)?.kind !== 'location'),
+          unplaced: placement.kind === 'unplaced',
         }
       }
       case 'item':

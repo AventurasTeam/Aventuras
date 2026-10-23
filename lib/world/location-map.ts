@@ -82,7 +82,9 @@ function nest(
  * A place's placement against the rows: a parent naming no place reads as unplaced, its container
  * gone. `locations` holds location rows only; an id naming none of them reads as top-level.
  */
-export function realPlacementOf(locations: readonly Entity[]): (id: string) => PlacePlacement {
+export function realPlacementOf(
+  locations: readonly Pick<Entity, 'id' | 'state'>[],
+): (id: string) => PlacePlacement {
   const byId = new Map(locations.map((e) => [e.id, e]))
   return (id) => {
     const row = byId.get(id)

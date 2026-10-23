@@ -20,6 +20,7 @@ import {
   parentOfLocations,
   PLACE_REFUSAL,
   placementOf,
+  realPlacementOf,
   samePlacement,
   stateOf,
   withPlacement,
@@ -498,10 +499,7 @@ export const placeLocationHandler: ActionHandler = async (action, branchId, ctx)
     .where(and(eq(entities.branchId, bid), eq(entities.kind, 'location')))
   if (placement.kind === 'top') {
     // A stored parent the branch has no place for reads as unplaced wherever places are listed.
-    const unplaced =
-      stored.kind === 'unplaced' ||
-      (stored.kind === 'under' && !places.some((p) => p.id === stored.parentId))
-    if (!unplaced) return placeRefusal('not-unplaced')
+    if (realPlacementOf(places)(id).kind !== 'unplaced') return placeRefusal('not-unplaced')
   } else {
     const parent = places.find((p) => p.id === placement.parentId)
     if (parent === undefined) return placeRefusal('parent-not-a-place')
