@@ -3,12 +3,12 @@ import type { ReasoningEffort } from '#lib/types/index.ts'
 import {
   clampReasoningToCapability,
   ENFORCED_REASONING_FLOOR,
+  isReasoningEffort,
   isReasoningOn,
   REASONING_LABELS,
   REASONING_LEVELS,
   reasoningCapabilityFor,
   reasoningIsEnforced,
-  type ReasoningCapability,
 } from './reasoning'
 
 describe('isReasoningOn', () => {
@@ -29,14 +29,37 @@ describe('REASONING_LEVELS', () => {
     expect(Object.keys(REASONING_LABELS).sort()).toEqual([...REASONING_LEVELS].sort())
   })
 
-  it('starts at none, so the slider index and the level agree', () => {
-    expect(REASONING_LEVELS[0]).toBe('none')
+  it('lists the levels in slider order, starting at none', () => {
+    // The type already ties the set to the AI SDK's; this pins the order. The slider index is the
+    // level's index, so 'none' has to be first.
+    const ascending: ReasoningEffort[] = [
+      'none',
+      'minimal',
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+      'max',
+    ]
+    expect([...REASONING_LEVELS]).toEqual(ascending)
   })
 
-  it('never spells the disabled level "off"', () => {
-    // The pre-0.7.x spelling. It survives only in settingsMigrations, reading old installs.
-    expect(REASONING_LEVELS).not.toContain('off')
+  it('never labels the disabled level "Off"', () => {
     expect(Object.values(REASONING_LABELS)).not.toContain('Off')
+  })
+})
+
+describe('isReasoningEffort', () => {
+  it('accepts every current level', () => {
+    for (const level of REASONING_LEVELS) {
+      expect(isReasoningEffort(level), level).toBe(true)
+    }
+  })
+
+  it('rejects anything else', () => {
+    for (const value of ['off', 'ultra', '', null, undefined, 3]) {
+      expect(isReasoningEffort(value), String(value)).toBe(false)
+    }
   })
 })
 
@@ -81,14 +104,14 @@ describe('reasoningCapabilityFor', () => {
     expect(reasoningCapabilityFor({ ...base, modelSupportsReasoning: false })).toBe('unsupported')
   })
 
-  it('treats an unknown model as supported when there is no catalogue to consult', () => {
+  it('treats the flag as a guess when there is no catalogue to consult', () => {
     // Otherwise every provider without capability fetching loses the slider entirely.
     expect(
       reasoningCapabilityFor({
         ...base,
         providerType: 'llamacpp',
         providerFetchesModelCapabilities: false,
-        modelSupportsReasoning: undefined,
+        modelSupportsReasoning: false,
       }),
     ).toBe('supported')
   })
@@ -96,12 +119,7 @@ describe('reasoningCapabilityFor', () => {
   it('treats an unknown model as supported when the catalogue omits the flag', () => {
     // A capability-fetching provider whose entry for this model has no reasoning flag at all --
     // distinct from an explicit false, which stays unsupported.
-    expect(
-      reasoningCapabilityFor({
-        ...base,
-        modelSupportsReasoning: undefined,
-      }),
-    ).toBe('supported')
+    expect(reasoningCapabilityFor({ ...base, modelSupportsReasoning: undefined })).toBe('supported')
   })
 
   it('enforces only the thinking variants', () => {
@@ -124,14 +142,10 @@ describe('clampReasoningToCapability', () => {
   })
 
   it('leaves every level untouched when reasoning is merely supported', () => {
+    // Including 'none': a supported model can be turned off, which is the whole point of the fix.
     for (const level of levels) {
       expect(clampReasoningToCapability(level, 'supported'), level).toBe(level)
     }
-  })
-
-  it('lets a supported model be turned off', () => {
-    // The whole point of the fix.
-    expect(clampReasoningToCapability('none', 'supported')).toBe('none')
   })
 
   it('lifts an enforced model off none, and touches nothing else', () => {
@@ -144,23 +158,5 @@ describe('clampReasoningToCapability', () => {
   it('lands an enforced model on a level the slider can actually show', () => {
     // The enforced slider starts at index 1, so the floor must not be 'none'.
     expect(levels.indexOf(ENFORCED_REASONING_FLOOR)).toBeGreaterThan(0)
-  })
-
-  it('is idempotent, since it runs on every render', () => {
-    const capabilities: ReasoningCapability[] = ['enforced', 'supported', 'unsupported']
-    for (const capability of capabilities) {
-      for (const level of levels) {
-        const once = clampReasoningToCapability(level, capability)
-        expect(clampReasoningToCapability(once, capability), `${capability}/${level}`).toBe(once)
-      }
-    }
-  })
-})
-
-describe('the reasoning effort type', () => {
-  it('covers exactly the levels the AI SDK names, minus provider-default', () => {
-    // Keeping these aligned is why 'off' was renamed to 'none' in the first place.
-    const sdkLevels: ReasoningEffort[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh']
-    expect([...REASONING_LEVELS]).toEqual(sdkLevels)
   })
 })

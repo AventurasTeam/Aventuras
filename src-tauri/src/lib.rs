@@ -7,6 +7,8 @@ mod db;
 mod db_tx;
 mod image_profiles;
 mod migration_patch;
+#[cfg(test)]
+mod reasoning_effort;
 mod sync;
 #[cfg(test)]
 mod test_db;
@@ -282,6 +284,12 @@ pub(crate) fn migrations() -> Vec<Migration> {
             version: 42,
             description: "image_profiles",
             sql: include_str!("../migrations/042_image_profiles.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 43,
+            description: "reasoning_effort",
+            sql: include_str!("../migrations/043_reasoning_effort.sql"),
             kind: MigrationKind::Up,
         },
     ]
