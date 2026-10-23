@@ -1853,6 +1853,25 @@ describe('raiseCollisionFlag', () => {
     expect(await flagOf(db)).toEqual([1, 'char_3', 'alike'])
   })
 
+  // classifier.md → Names: a dormant flag, one World's pairing rule no longer holds, counts as none.
+  it.each([
+    ['a partner it no longer shares a name with', 'char_3'],
+    ['a partner that is gone', 'char_gone'],
+  ])('re-points a flag dormant on %s, and reverses to it', async (_label, oldPartner) => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values({ ...CHAR, id: 'char_3', status: 'active', name: 'Zed' })
+    await seed(ctx, db, {
+      ...STRANGER,
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: oldPartner,
+      nameCollisionReason: 'distinct',
+    })
+    expect((await apply(ctx, raise(), 'act_f')).status).toBe('ok')
+    expect(await flagOf(db)).toEqual([1, 'char_2', 'name-taken'])
+    await reverseReplayDeltas('act_f', ctx)
+    expect(await flagOf(db)).toEqual([1, oldPartner, 'distinct'])
+  })
+
   it.each([
     ['is gone', 'char_gone'],
     ['is of another kind', 'fact_1'],

@@ -53,6 +53,19 @@ export function stillPaired(reason: CollisionReason, a: PairSide, b: PairSide): 
   return namesakeBasis(a, b) != null && sharesRequiredParent(reason, a, b)
 }
 
+/**
+ * classifier.md → Names: the row's flag names `partner` (undefined when gone) and the pair still
+ * holds under `stillPaired`. A flag that fails it is dormant and counts as none.
+ */
+export function flagStillHolds(row: Entity, partner: Entity | undefined): boolean {
+  return (
+    row.nameCollisionFlag === 1 &&
+    row.nameCollisionReason != null &&
+    partner?.id === row.nameCollisionPartnerId &&
+    stillPaired(row.nameCollisionReason, pairSideOf(row), pairSideOf(partner))
+  )
+}
+
 function flagNames(row: Entity, other: Entity): row is FlaggedEntity {
   return (
     row.nameCollisionFlag === 1 &&

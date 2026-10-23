@@ -46,6 +46,7 @@ export {
   COLLISION_PAIR_MISS,
   collisionPairOf,
   flaggedSideOf,
+  flagStillHolds,
   pairSideOf,
   stillPaired,
 } from './collision-pair'

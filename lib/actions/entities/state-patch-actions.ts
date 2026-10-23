@@ -17,6 +17,7 @@ import { entitiesStore } from '@/lib/stores'
 import {
   characterFactionId,
   checkParentChain,
+  flagStillHolds,
   PARENT_CHAIN_BROKEN,
   PARENT_CYCLE,
   parentOfLocations,
@@ -629,7 +630,10 @@ export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) 
   }
 }
 
-/** edge-cases.md → Layer B. A row already flagged keeps its partner: one per row. */
+/**
+ * edge-cases.md → Layer B. A row whose flag still holds keeps its partner, one per row; a dormant
+ * flag counts as none and is re-pointed (classifier.md → Names).
+ */
 export const raiseCollisionFlagHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'raiseCollisionFlag')
     throw new Error(`handler/kind mismatch: expected 'raiseCollisionFlag', got '${action.kind}'`)
@@ -638,7 +642,13 @@ export const raiseCollisionFlagHandler: ActionHandler = async (action, branchId,
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
   if (!current) return noopRefusal(`flag target entities ${bid}:${id} not found`)
-  if (current.nameCollisionFlag === 1) return noopRefusal('already-flagged')
+  if (current.nameCollisionFlag === 1) {
+    const flagged =
+      current.nameCollisionPartnerId === null
+        ? undefined
+        : await loadCurrent(bid, current.nameCollisionPartnerId, ctx)
+    if (flagStillHolds(current, flagged)) return noopRefusal('already-flagged')
+  }
   if (partnerId === id) return noopRefusal('partner-is-self')
   const partner = await loadCurrent(bid, partnerId, ctx)
   if (partner?.kind !== current.kind) return noopRefusal('partner-not-of-kind')

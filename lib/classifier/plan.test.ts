@@ -2960,14 +2960,49 @@ describe('renames', () => {
       nameCollisionPartnerId: 'char_other',
       nameCollisionReason: 'distinct',
     })
+    const other = row('char_other', 'character', 'the hooded stranger', { createdAt: 0 })
     const { planned, renameClashes } = buildClassifierActions(
       reply({ renames: [{ ref: 'char_stranger', name: 'Kael', sourceTurn: 't1' }] }),
-      deps([flagged, KAEL]),
+      deps([flagged, KAEL, other]),
     )
     expect(kindsOf(planned)).toEqual(['appendEntityKeywords'])
     expect(renameClashes).toEqual([
       { ref: 'char_stranger', name: 'Kael', partnerId: 'char_kael', flagged: false },
     ])
+  })
+
+  // classifier.md → Names: a flag whose pair World's rule no longer holds counts as none.
+  it.each([
+    ['a partner it shares no name with', [row('char_other', 'character', 'Zed')]],
+    ['a partner that is gone', []],
+  ])('re-points a flag dormant on %s at the holder', (_label, others) => {
+    const dormant = row('char_stranger', 'character', 'the hooded stranger', {
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_other',
+      nameCollisionReason: 'distinct',
+    })
+    const { planned, renameClashes } = buildClassifierActions(
+      reply({ renames: [{ ref: 'char_stranger', name: 'Kael', sourceTurn: 't1' }] }),
+      deps([dormant, KAEL, ...others]),
+    )
+    expect(kindsOf(planned)).toEqual(['appendEntityKeywords', 'raiseCollisionFlag'])
+    expect(payloadOf<{ partnerId: string }>(planned[1]).partnerId).toBe('char_kael')
+    expect(renameClashes.map((c) => c.flagged)).toEqual([true])
+  })
+
+  // The clash's keyword lands before the raise, so a flag it brings back to life keeps its partner.
+  it("keeps a dormant flag the clash's own keyword brings back to life", () => {
+    const dormant = row('char_stranger', 'character', 'the hooded stranger', {
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_kael_old',
+      nameCollisionReason: 'distinct',
+    })
+    const { planned, renameClashes } = buildClassifierActions(
+      reply({ renames: [{ ref: 'char_stranger', name: 'Kael', sourceTurn: 't1' }] }),
+      deps([dormant, KAEL, row('char_kael_old', 'character', 'Kael', { createdAt: 3 })]),
+    )
+    expect(kindsOf(planned)).toEqual(['appendEntityKeywords'])
+    expect(renameClashes.map((c) => c.flagged)).toEqual([false])
   })
 
   it('takes the oldest holder as the partner, then the lowest id', () => {

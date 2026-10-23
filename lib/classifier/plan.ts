@@ -17,6 +17,7 @@ import { oneLine } from '@/lib/text'
 import {
   characterFactionId,
   checkParentChain,
+  flagStillHolds,
   matchNewPlace,
   parentOfLocations,
   placeNewLocation,
@@ -605,6 +606,20 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       const [first, second] = [placementAt(a), placementAt(b)]
       return first.kind === 'unplaced' || second.kind === 'unplaced' || samePlacement(first, second)
     }
+    // A listed row as this reply's planned writes leave it, for World's pairing rule.
+    const asPlanned = (id: string): Entity | undefined => {
+      const stored = rowById.get(id)
+      if (stored === undefined) return undefined
+      const placed = stored.kind === 'location' && placedParents.has(id)
+      return {
+        ...stored,
+        name: nameRows.get(id)?.name ?? stored.name,
+        keywords: index.get(id)?.keywords ?? stored.keywords,
+        state: placed
+          ? withPlacement(stored.state as LocationState, placementAt(id))
+          : stored.state,
+      }
+    }
     const renameClashes: RenameClash[] = []
     const raisedFlags = new Set<string>()
     const planRename = (rename: ClassifierExtraction['renames'][number]): void => {
@@ -665,8 +680,14 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
           entryId: at(),
         })
       }
-      // One partner per row: a row already flagged keeps its flag and its partner.
-      const flagged = row.nameCollisionFlag !== 1 && !raisedFlags.has(row.id)
+      // One partner per row: a flag that still holds, its keyword landed, keeps its partner; a
+      // dormant one counts as none (classifier.md → Names), as raiseCollisionFlag judges it.
+      const landed = asPlanned(row.id)
+      const partnerOf = row.nameCollisionPartnerId
+      const holds =
+        landed !== undefined &&
+        flagStillHolds(landed, partnerOf === null ? undefined : asPlanned(partnerOf))
+      const flagged = !holds && !raisedFlags.has(row.id)
       if (flagged) {
         raisedFlags.add(row.id)
         planned.push({
