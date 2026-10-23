@@ -648,10 +648,31 @@ describe('buildClassifierActions', () => {
       expect(planned).toHaveLength(0)
     })
 
-    it('never revives a retired entity', () => {
+    // classifier.md → What the classifier writes → Status transitions: a return in the scene now.
+    it('returns a retired character to active', () => {
       const { planned } = flip('char_r', 'active', [entityRow('char_r', 'retired')])
-      expect(planned).toHaveLength(0)
+      expect(planned).toEqual([
+        {
+          action: {
+            kind: 'returnFromRetirement',
+            source: 'periodic_classifier',
+            payload: { branchId: 'branch_1', id: 'char_r', proseEntryId: 'e1' },
+          },
+          entryId: 'e1',
+        },
+      ])
     })
+
+    // A place or a faction comes back only by the user.
+    it.each(['faction', 'location', 'item'])(
+      'never returns a retired %s, and reports its ref',
+      (kind) => {
+        const row = { ...(nonCharacterRow('x_r', kind) as object), status: 'retired' } as never
+        const { planned, unresolvedRefs } = flip('x_r', 'active', [row])
+        expect(planned).toEqual([])
+        expect(unresolvedRefs).toEqual(['x_r'])
+      },
+    )
 
     // classifier.md → What the classifier writes: never a location; only the user retires a place.
     it('never retires a location', () => {
@@ -1357,6 +1378,34 @@ describe('mentioned places', () => {
     )
     expect(stateOf(planned, 'Ash')).toEqual({ parent_location_id: null, unplaced: true })
     expect(parentDrops).toEqual([])
+  })
+
+  // classifier.md → What the classifier writes → First profiles: a mentioned place's condition.
+  it("writes a new place's condition into its state, trimmed and bounded", () => {
+    const { planned } = buildClassifierActions(
+      placesReply([
+        newPlace('new:a', 'Ash', { parent: 'top-level', condition: '  burned to the waterline ' }),
+        newPlace('new:b', 'Birch', { condition: `${'c'.repeat(499)}😀tail` }),
+      ]),
+      deps([]),
+    )
+    expect(stateOf(planned, 'Ash')).toEqual({
+      parent_location_id: null,
+      condition: 'burned to the waterline',
+    })
+    expect(stateOf(planned, 'Birch')).toEqual({
+      parent_location_id: null,
+      unplaced: true,
+      condition: 'c'.repeat(499),
+    })
+  })
+
+  it('drops the condition of a place it reuses', () => {
+    const { planned } = buildClassifierActions(
+      placesReply([newPlace('new:v', 'Varn', { parent: 'top-level', condition: 'flooded' })]),
+      deps([TOWN]),
+    )
+    expect(planned).toEqual([])
   })
 
   // classifier.md → Mentioned places → Parent: the schema's explicit top-level choice.
@@ -2209,7 +2258,8 @@ describe('factions', () => {
         nameCollisionReason: null,
         embeddingStale: 1,
       })
-      expect(entry.state).toBeUndefined()
+      // classifier.md → Factions → The row: its state is empty when the turns gave none.
+      expect(entry.state).toEqual({})
       expect(planned[0].entryId).toBe('e2')
       expect(handleMap.get('new:circle')).toBe('fact_new1')
     })
@@ -2537,5 +2587,656 @@ describe('factions', () => {
       )
       expect(memberships(planned).map(({ factionId }) => factionId)).toEqual([null])
     })
+  })
+})
+
+const kindsOf = (planned: readonly PlannedWrite[]) => planned.map((p) => p.action.kind)
+
+// classifier.md → What the classifier writes → First profiles; data-model.md → Soft caps +
+// compaction discipline: the state schema's bounds, which the create handler enforces.
+describe('first profiles', () => {
+  const deps = (over: Record<string, unknown> = {}) => {
+    let n = 0
+    return { ...base, newId: (kind: string) => `${kind}_new${++n}`, ...over } as never
+  }
+  const decided = (handle: string) =>
+    new Map<string, ReconcileDecision>([[handle, { kind: 'create', flag: null }]])
+  const stateOf = (planned: readonly PlannedWrite[]) =>
+    payloadOf<{ entry: { state: unknown } }>(planned[0]).entry.state
+
+  const EMPTY_CHARACTER = {
+    visual: {},
+    traits: [],
+    drives: [],
+    current_location_id: null,
+    equipped_items: [],
+    inventory: [],
+    faction_id: null,
+    lastSeenAt: null,
+  }
+
+  it("writes a new character's visual categories, traits, drives and voice into its state", () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        newCharacters: [
+          {
+            handle: 'new:ilsa',
+            name: 'Ilsa',
+            description: 'A tide-reader.',
+            keywords: [],
+            sourceTurn: 't1',
+            visual: { hair: ' salt-white ', eyes: '', attire: 'an oilskin coat' },
+            traits: ['patient', ' Patient ', '', 'blunt'],
+            drives: ['find her brother'],
+            voice: '  slow, certain  ',
+          },
+        ],
+      }),
+      deps({ decisions: decided('new:ilsa') }),
+    )
+    expect(stateOf(planned)).toEqual({
+      ...EMPTY_CHARACTER,
+      visual: { hair: 'salt-white', attire: 'an oilskin coat' },
+      traits: ['patient', 'blunt'],
+      drives: ['find her brother'],
+      voice: 'slow, certain',
+    })
+  })
+
+  it('writes the empty character state when the turns give no profile', () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        newCharacters: [
+          { handle: 'new:ilsa', name: 'Ilsa', description: 'x', keywords: [], sourceTurn: 't1' },
+        ],
+      }),
+      deps({ decisions: decided('new:ilsa') }),
+    )
+    expect(stateOf(planned)).toEqual(EMPTY_CHARACTER)
+  })
+
+  it("clamps a profile to the state schema's bounds, never splitting a surrogate pair", () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        newCharacters: [
+          {
+            handle: 'new:ilsa',
+            name: 'Ilsa',
+            description: 'x',
+            keywords: [],
+            sourceTurn: 't1',
+            visual: { face: `${'f'.repeat(499)}😀tail` },
+            traits: Array.from({ length: 60 }, (_, i) => `trait ${i}`),
+            voice: 'v'.repeat(2100),
+          },
+        ],
+      }),
+      deps({ decisions: decided('new:ilsa') }),
+    )
+    const state = stateOf(planned) as { visual: { face: string }; traits: string[]; voice: string }
+    expect(state.visual.face).toBe('f'.repeat(499))
+    expect(state.traits).toHaveLength(50)
+    expect(state.traits.at(-1)).toBe('trait 49')
+    expect(state.voice).toBe('v'.repeat(2000))
+  })
+
+  it("writes a new faction's standing and agenda, bounded, and an empty state for none", () => {
+    const circle = {
+      handle: 'new:circle',
+      name: 'The Iron Circle',
+      description: 'Smiths.',
+      keywords: [],
+      sourceTurn: 't2',
+    }
+    const withProfile = buildClassifierActions(
+      reply({
+        newFactions: [
+          {
+            ...circle,
+            standing: ` ${'s'.repeat(510)} `,
+            agenda: ['arm the docks', ' ', 'Arm the docks'],
+          },
+        ],
+      }),
+      deps({ factionDecisions: decided('new:circle') }),
+    )
+    expect(stateOf(withProfile.planned)).toEqual({
+      standing: 's'.repeat(500),
+      agenda: ['arm the docks'],
+    })
+    const bare = buildClassifierActions(
+      reply({ newFactions: [circle] }),
+      deps({ factionDecisions: decided('new:circle') }),
+    )
+    expect(stateOf(bare.planned)).toEqual({})
+  })
+
+  it('writes no profile into a row the reconciliation absorbed', () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        newCharacters: [
+          {
+            handle: 'new:ilsa',
+            name: 'Ilsa',
+            description: 'x',
+            keywords: ['the tide-reader'],
+            sourceTurn: 't1',
+            traits: ['patient'],
+          },
+        ],
+      }),
+      deps({
+        entities: [
+          { id: 'char_ilsa', kind: 'character', name: 'Ilsa', status: 'active', keywords: [] },
+        ],
+        decisions: new Map([
+          ['new:ilsa', { kind: 'known', entityId: 'char_ilsa', similarity: 0.9 }],
+        ]),
+      }),
+    )
+    expect(kindsOf(planned)).toEqual(['appendEntityKeywords'])
+  })
+})
+
+// classifier.md → What the classifier writes → Names; Decisions → A rename clash.
+describe('renames', () => {
+  const row = (id: string, kind: string, name: string, over: Record<string, unknown> = {}) =>
+    ({
+      id,
+      branchId: 'branch_1',
+      kind,
+      name,
+      description: 'x',
+      status: 'active',
+      keywords: [],
+      nameCollisionFlag: 0,
+      createdAt: 1,
+      state: {},
+      ...over,
+    }) as unknown as Entity
+  const deps = (entities: Entity[], over: Record<string, unknown> = {}) =>
+    ({ ...base, entities, ...over }) as never
+  const STRANGER = row('char_stranger', 'character', 'the hooded stranger', {
+    keywords: ['the hood'],
+  })
+  const KAEL = row('char_kael', 'character', 'Kael', { createdAt: 2 })
+
+  it("writes a listed entity's revealed name, anchored and dated on its turn", () => {
+    const { planned, renameClashes } = buildClassifierActions(
+      reply({ renames: [{ ref: 'char_stranger', name: '  Corvin Vale ', sourceTurn: 't2' }] }),
+      deps([STRANGER, KAEL]),
+    )
+    expect(planned).toEqual([
+      {
+        action: {
+          kind: 'renameEntity',
+          source: 'periodic_classifier',
+          payload: {
+            branchId: 'branch_1',
+            id: 'char_stranger',
+            name: 'Corvin Vale',
+            proseEntryId: 'e2',
+          },
+        },
+        entryId: 'e2',
+      },
+    ])
+    expect(renameClashes).toEqual([])
+  })
+
+  it('clamps the name as a create clamps one', () => {
+    const { planned } = buildClassifierActions(
+      reply({ renames: [{ ref: 'char_stranger', name: 'N'.repeat(130), sourceTurn: 't1' }] }),
+      deps([STRANGER]),
+    )
+    expect(payloadOf<{ name: string }>(planned[0]).name).toBe('N'.repeat(120))
+  })
+
+  it.each([['   '], ['the hooded stranger']])('plans nothing for the name %j', (name) => {
+    const { planned } = buildClassifierActions(
+      reply({ renames: [{ ref: 'char_stranger', name, sourceTurn: 't1' }] }),
+      deps([STRANGER]),
+    )
+    expect(planned).toEqual([])
+  })
+
+  it('adds a name another row of the kind holds as a keyword and flags the pair name-taken', () => {
+    const { planned, renameClashes } = buildClassifierActions(
+      reply({ renames: [{ ref: 'char_stranger', name: ' kael ', sourceTurn: 't3' }] }),
+      deps([STRANGER, KAEL]),
+    )
+    expect(planned).toEqual([
+      {
+        action: {
+          kind: 'appendEntityKeywords',
+          source: 'periodic_classifier',
+          payload: {
+            branchId: 'branch_1',
+            id: 'char_stranger',
+            keywords: ['kael'],
+            proseEntryId: 'e3',
+          },
+        },
+        entryId: 'e3',
+      },
+      {
+        action: {
+          kind: 'raiseCollisionFlag',
+          source: 'periodic_classifier',
+          payload: {
+            branchId: 'branch_1',
+            id: 'char_stranger',
+            partnerId: 'char_kael',
+            reason: 'name-taken',
+            proseEntryId: 'e3',
+          },
+        },
+        entryId: 'e3',
+      },
+    ])
+    expect(renameClashes).toEqual([
+      { ref: 'char_stranger', name: 'kael', partnerId: 'char_kael', flagged: true },
+    ])
+  })
+
+  it('only adds the keyword to a row already flagged, keeping its partner', () => {
+    const flagged = row('char_stranger', 'character', 'the hooded stranger', {
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_other',
+      nameCollisionReason: 'distinct',
+    })
+    const { planned, renameClashes } = buildClassifierActions(
+      reply({ renames: [{ ref: 'char_stranger', name: 'Kael', sourceTurn: 't1' }] }),
+      deps([flagged, KAEL]),
+    )
+    expect(kindsOf(planned)).toEqual(['appendEntityKeywords'])
+    expect(renameClashes).toEqual([
+      { ref: 'char_stranger', name: 'Kael', partnerId: 'char_kael', flagged: false },
+    ])
+  })
+
+  it('takes the oldest holder as the partner, then the lowest id', () => {
+    const { renameClashes } = buildClassifierActions(
+      reply({ renames: [{ ref: 'char_stranger', name: 'Kael', sourceTurn: 't1' }] }),
+      deps([
+        STRANGER,
+        KAEL,
+        row('char_kael_b', 'character', 'Kael', { createdAt: 0 }),
+        row('char_kael_a', 'character', 'KAEL', { createdAt: 0 }),
+      ]),
+    )
+    expect(renameClashes.map((c) => c.partnerId)).toEqual(['char_kael_a'])
+  })
+
+  it('renames freely to a name only a row of another kind holds', () => {
+    const { planned } = buildClassifierActions(
+      reply({ renames: [{ ref: 'char_stranger', name: 'Varn', sourceTurn: 't1' }] }),
+      deps([STRANGER, row('loc_varn', 'location', 'Varn')]),
+    )
+    expect(kindsOf(planned)).toEqual(['renameEntity'])
+  })
+
+  it("clashes with a name this reply's own create or earlier rename holds", () => {
+    const { renameClashes } = buildClassifierActions(
+      reply({
+        newCharacters: [
+          { handle: 'new:mira', name: 'Mira', description: 'x', keywords: [], sourceTurn: 't1' },
+        ],
+        renames: [
+          { ref: 'char_stranger', name: 'Mira', sourceTurn: 't2' },
+          { ref: 'char_kael', name: 'Corvin', sourceTurn: 't2' },
+          { ref: 'char_third', name: 'corvin', sourceTurn: 't3' },
+        ],
+      }),
+      deps([STRANGER, KAEL, row('char_third', 'character', 'the third man')], {
+        decisions: new Map([['new:mira', { kind: 'create', flag: null }]]),
+        newId: () => 'char_new1',
+      }),
+    )
+    expect(renameClashes).toEqual([
+      { ref: 'char_stranger', name: 'Mira', partnerId: 'char_new1', flagged: true },
+      { ref: 'char_third', name: 'corvin', partnerId: 'char_kael', flagged: true },
+    ])
+  })
+
+  it("applies a row's renames in source-turn order, so the latest prose names it", () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        renames: [
+          { ref: 'char_stranger', name: 'Corvin Vale', sourceTurn: 't3' },
+          { ref: 'char_stranger', name: 'Corvin', sourceTurn: 't1' },
+        ],
+      }),
+      deps([STRANGER]),
+    )
+    expect(planned.map((p) => payloadOf<{ name: string }>(p).name)).toEqual([
+      'Corvin',
+      'Corvin Vale',
+    ])
+  })
+
+  it("keeps the old name as the row's keyword for the rest of the reply", () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        renames: [{ ref: 'char_stranger', name: 'Corvin Vale', sourceTurn: 't1' }],
+        aliases: [{ ref: 'char_stranger', terms: ['The Hooded Stranger'], sourceTurn: 't2' }],
+      }),
+      deps([STRANGER]),
+    )
+    expect(kindsOf(planned)).toEqual(['renameEntity'])
+  })
+
+  it('drops and reports a rename of a row the prompt never listed', () => {
+    const { planned, unseenRefs } = buildClassifierActions(
+      reply({
+        newCharacters: [
+          { handle: 'new:mira', name: 'Mira', description: 'x', keywords: [], sourceTurn: 't1' },
+        ],
+        renames: [
+          { ref: 'c9', name: 'Kael', sourceTurn: 't1' },
+          { ref: 'new:mira', name: 'Mirabel', sourceTurn: 't1' },
+        ],
+      }),
+      deps([STRANGER], { decisions: new Map([['new:mira', { kind: 'create', flag: null }]]) }),
+    )
+    expect(kindsOf(planned)).toEqual(['createEntity'])
+    expect(unseenRefs).toEqual([
+      { list: 'renames', ref: 'c9' },
+      { list: 'renames', ref: 'new:mira' },
+    ])
+  })
+})
+
+// classifier.md → What the classifier writes → Where a place sits; data-model.md → LocationState
+// shape: a machine writer walks a placement first and drops a loop.
+describe('placements', () => {
+  const place = (id: string, parent: string | null, over: Record<string, unknown> = {}) =>
+    ({
+      id,
+      branchId: 'branch_1',
+      kind: 'location',
+      name: id,
+      description: 'x',
+      status: 'active',
+      keywords: [],
+      createdAt: 1,
+      state: { parent_location_id: parent },
+      ...over,
+    }) as unknown as Entity
+  const unplaced = (id: string) =>
+    place(id, null, { state: { parent_location_id: null, unplaced: true } })
+  const deps = (entities: Entity[]) => ({ ...base, entities }) as never
+  const REACH = place('loc_reach', null)
+  const VARN = unplaced('loc_varn')
+  const KAEL = {
+    id: 'char_kael',
+    kind: 'character',
+    name: 'Kael',
+    status: 'active',
+    keywords: [],
+  } as unknown as Entity
+  const placementsOf = (planned: readonly PlannedWrite[]) =>
+    planned.map((p) => payloadOf<{ id: string; placement: unknown }>(p))
+
+  it('places an unplaced place under the parent the turns give, anchored and dated on its turn', () => {
+    const { planned } = buildClassifierActions(
+      reply({ placements: [{ ref: 'loc_varn', parent: 'loc_reach', sourceTurn: 't2' }] }),
+      deps([REACH, VARN]),
+    )
+    expect(planned).toEqual([
+      {
+        action: {
+          kind: 'placeLocation',
+          source: 'periodic_classifier',
+          payload: {
+            branchId: 'branch_1',
+            id: 'loc_varn',
+            placement: { kind: 'under', parentId: 'loc_reach' },
+            proseEntryId: 'e2',
+          },
+        },
+        entryId: 'e2',
+      },
+    ])
+  })
+
+  it('moves a placed place', () => {
+    const { planned } = buildClassifierActions(
+      reply({ placements: [{ ref: 'loc_inn', parent: 'loc_reach', sourceTurn: 't1' }] }),
+      deps([REACH, place('loc_town', null), place('loc_inn', 'loc_town')]),
+    )
+    expect(placementsOf(planned)).toEqual([
+      expect.objectContaining({
+        id: 'loc_inn',
+        placement: { kind: 'under', parentId: 'loc_reach' },
+      }),
+    ])
+  })
+
+  it.each(['top-level', ' Top-Level '])('marks an unplaced place %j top-level', (parent) => {
+    const { planned } = buildClassifierActions(
+      reply({ placements: [{ ref: 'loc_varn', parent, sourceTurn: 't1' }] }),
+      deps([VARN]),
+    )
+    expect(placementsOf(planned)).toEqual([
+      expect.objectContaining({ id: 'loc_varn', placement: { kind: 'top' } }),
+    ])
+  })
+
+  it('marks top-level a place whose stored parent names no place', () => {
+    const { planned } = buildClassifierActions(
+      reply({ placements: [{ ref: 'loc_orphan', parent: 'top-level', sourceTurn: 't1' }] }),
+      deps([place('loc_orphan', 'loc_gone')]),
+    )
+    expect(placementsOf(planned)).toEqual([
+      expect.objectContaining({ id: 'loc_orphan', placement: { kind: 'top' } }),
+    ])
+  })
+
+  it.each([
+    ['a top-level place', place('loc_town', null), []],
+    ['a place under a parent', place('loc_inn', 'loc_town'), [place('loc_town', null)]],
+  ])('drops a top-level mark for %s', (_label, target, others) => {
+    const { planned, droppedPlacements } = buildClassifierActions(
+      reply({ placements: [{ ref: target.id, parent: 'top-level', sourceTurn: 't1' }] }),
+      deps([target, ...others]),
+    )
+    expect(planned).toEqual([])
+    expect(droppedPlacements).toEqual([{ ref: target.id, cause: 'not-unplaced' }])
+  })
+
+  it.each([
+    [
+      'would close a loop',
+      [place('loc_town', null), place('loc_inn', 'loc_town')],
+      'loc_town',
+      'loc_inn',
+      'cycle',
+    ],
+    ['is itself', [place('loc_town', null)], 'loc_town', 'loc_town', 'cycle'],
+    [
+      'is retired',
+      [VARN, place('loc_ford', null, { status: 'retired' })],
+      'loc_varn',
+      'loc_ford',
+      'retired',
+    ],
+    [
+      'sits on a broken chain',
+      [VARN, place('loc_a', 'loc_b'), place('loc_b', 'loc_a')],
+      'loc_varn',
+      'loc_a',
+      'chain-broken',
+    ],
+  ] as const)('drops a placement whose parent %s', (_label, entities, ref, parent, cause) => {
+    const { planned, droppedPlacements } = buildClassifierActions(
+      reply({ placements: [{ ref, parent, sourceTurn: 't1' }] }),
+      deps([...entities]),
+    )
+    expect(planned).toEqual([])
+    expect(droppedPlacements).toEqual([{ ref, cause }])
+  })
+
+  it('walks the placements this reply made before it', () => {
+    const { planned, droppedPlacements } = buildClassifierActions(
+      reply({
+        placements: [
+          { ref: 'loc_a', parent: 'loc_b', sourceTurn: 't1' },
+          { ref: 'loc_b', parent: 'loc_a', sourceTurn: 't2' },
+        ],
+      }),
+      deps([unplaced('loc_a'), unplaced('loc_b')]),
+    )
+    expect(placementsOf(planned)).toEqual([expect.objectContaining({ id: 'loc_a' })])
+    expect(droppedPlacements).toEqual([{ ref: 'loc_b', cause: 'cycle' }])
+  })
+
+  it('plans nothing for a place already under that parent', () => {
+    const { planned, droppedPlacements } = buildClassifierActions(
+      reply({ placements: [{ ref: 'loc_inn', parent: 'loc_town', sourceTurn: 't1' }] }),
+      deps([place('loc_town', null), place('loc_inn', 'loc_town')]),
+    )
+    expect(planned).toEqual([])
+    expect(droppedPlacements).toEqual([])
+  })
+
+  // The schema's parent is an ID from Places or top-level: a new place is placed by its own create.
+  it("reports a new place's handle as a placement's parent as unresolved", () => {
+    const places: ClassifierPlacesExtraction = {
+      ...reply({ placements: [{ ref: 'loc_varn', parent: 'new:reach', sourceTurn: 't2' }] }),
+      newPlaces: [
+        {
+          handle: 'new:reach',
+          name: 'the Eastern Reach',
+          description: 'x',
+          keywords: [],
+          sourceTurn: 't1',
+        } as NewPlace,
+      ],
+    }
+    const { planned, unresolvedRefs } = buildClassifierActions(places, {
+      ...base,
+      entities: [VARN],
+      newId: () => 'loc_new1',
+    } as never)
+    expect(kindsOf(planned)).toEqual(['createEntity'])
+    expect(unresolvedRefs).toEqual(['new:reach'])
+  })
+
+  it('reports a parent naming no place, and a target that is no place, as unresolved', () => {
+    const { planned, unresolvedRefs } = buildClassifierActions(
+      reply({
+        placements: [
+          { ref: 'loc_varn', parent: 'l9', sourceTurn: 't1' },
+          { ref: 'char_kael', parent: 'loc_reach', sourceTurn: 't1' },
+        ],
+      }),
+      deps([REACH, VARN, KAEL]),
+    )
+    expect(planned).toEqual([])
+    expect(unresolvedRefs).toEqual(['l9', 'char_kael'])
+  })
+
+  it('drops and reports a placement of a place the prompt never listed', () => {
+    const { planned, unseenRefs } = buildClassifierActions(
+      reply({ placements: [{ ref: 'l7', parent: 'loc_reach', sourceTurn: 't1' }] }),
+      deps([REACH]),
+    )
+    expect(planned).toEqual([])
+    expect(unseenRefs).toEqual([{ list: 'placements', ref: 'l7' }])
+  })
+})
+
+// classifier.md → Factions: a listed faction's standing, emitted only when the turns change it.
+describe('standings', () => {
+  const faction = (id: string, standing?: string) =>
+    ({
+      id,
+      branchId: 'branch_1',
+      kind: 'faction',
+      name: id,
+      description: 'x',
+      status: 'active',
+      keywords: [],
+      state: standing === undefined ? {} : { standing },
+    }) as unknown as Entity
+  const deps = (entities: Entity[]) => ({ ...base, entities }) as never
+
+  it("writes a listed faction's new standing, trimmed, anchored and dated on its turn", () => {
+    const { planned } = buildClassifierActions(
+      reply({ standings: [{ ref: 'fact_watch', standing: ' outlawed ', sourceTurn: 't2' }] }),
+      deps([faction('fact_watch', 'wary allies')]),
+    )
+    expect(planned).toEqual([
+      {
+        action: {
+          kind: 'setFactionStanding',
+          source: 'periodic_classifier',
+          payload: {
+            branchId: 'branch_1',
+            id: 'fact_watch',
+            standing: 'outlawed',
+            proseEntryId: 'e2',
+          },
+        },
+        entryId: 'e2',
+      },
+    ])
+  })
+
+  it("clamps a standing to the faction state's 500 characters, never splitting a pair", () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        standings: [{ ref: 'fact_watch', standing: `${'s'.repeat(499)}😀tail`, sourceTurn: 't1' }],
+      }),
+      deps([faction('fact_watch')]),
+    )
+    expect(payloadOf<{ standing: string }>(planned[0]).standing).toBe('s'.repeat(499))
+  })
+
+  it.each([['  '], ['wary allies']])('plans nothing for the standing %j', (standing) => {
+    const { planned } = buildClassifierActions(
+      reply({ standings: [{ ref: 'fact_watch', standing, sourceTurn: 't1' }] }),
+      deps([faction('fact_watch', 'wary allies')]),
+    )
+    expect(planned).toEqual([])
+  })
+
+  it("applies a faction's standings in source-turn order", () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        standings: [
+          { ref: 'fact_watch', standing: 'at peace', sourceTurn: 't3' },
+          { ref: 'fact_watch', standing: 'at war', sourceTurn: 't1' },
+        ],
+      }),
+      deps([faction('fact_watch')]),
+    )
+    expect(planned.map((p) => payloadOf<{ standing: string }>(p).standing)).toEqual([
+      'at war',
+      'at peace',
+    ])
+  })
+
+  it('reports a standing for a row that is no faction, and one the prompt never listed', () => {
+    const kael = {
+      id: 'char_kael',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      keywords: [],
+    } as unknown as Entity
+    const { planned, unresolvedRefs, unseenRefs } = buildClassifierActions(
+      reply({
+        standings: [
+          { ref: 'char_kael', standing: 'feared', sourceTurn: 't1' },
+          { ref: 'f9', standing: 'feared', sourceTurn: 't1' },
+        ],
+      }),
+      deps([kael]),
+    )
+    expect(planned).toEqual([])
+    expect(unresolvedRefs).toEqual(['char_kael'])
+    expect(unseenRefs).toEqual([{ list: 'standings', ref: 'f9' }])
   })
 })
