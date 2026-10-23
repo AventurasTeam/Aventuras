@@ -2945,6 +2945,43 @@ describe('renames', () => {
       { list: 'renames', ref: 'new:mira' },
     ])
   })
+
+  it('raises one flag per row in a reply, however many taken names it meets', () => {
+    const { planned, renameClashes } = buildClassifierActions(
+      reply({
+        renames: [
+          { ref: 'char_stranger', name: 'Kael', sourceTurn: 't1' },
+          { ref: 'char_stranger', name: 'Mira', sourceTurn: 't2' },
+        ],
+      }),
+      deps([STRANGER, KAEL, row('char_mira', 'character', 'Mira')]),
+    )
+    expect(kindsOf(planned)).toEqual([
+      'appendEntityKeywords',
+      'raiseCollisionFlag',
+      'appendEntityKeywords',
+    ])
+    expect(renameClashes.map((c) => c.flagged)).toEqual([true, false])
+  })
+
+  // A clash that writes nothing takes no anchor, so it never counts as a window-head fallback.
+  it('counts no fallback for a clash that writes nothing', () => {
+    const settled = row('char_stranger', 'character', 'the hooded stranger', {
+      keywords: ['Kael'],
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_kael',
+      nameCollisionReason: 'name-taken',
+    })
+    const { planned, renameClashes, fellBackCount } = buildClassifierActions(
+      reply({ renames: [{ ref: 'char_stranger', name: 'Kael' }] }),
+      deps([settled, KAEL]),
+    )
+    expect(planned).toEqual([])
+    expect(renameClashes).toEqual([
+      { ref: 'char_stranger', name: 'Kael', partnerId: 'char_kael', flagged: false },
+    ])
+    expect(fellBackCount).toBe(0)
+  })
 })
 
 // classifier.md → What the classifier writes → Where a place sits; data-model.md → LocationState
@@ -3145,6 +3182,22 @@ describe('placements', () => {
     expect(planned).toEqual([])
     expect(unseenRefs).toEqual([{ list: 'placements', ref: 'l7' }])
   })
+
+  it('drops a top-level mark for a place this reply already placed', () => {
+    const { planned, droppedPlacements } = buildClassifierActions(
+      reply({
+        placements: [
+          { ref: 'loc_varn', parent: 'loc_reach', sourceTurn: 't1' },
+          { ref: 'loc_varn', parent: 'top-level', sourceTurn: 't2' },
+        ],
+      }),
+      deps([REACH, VARN]),
+    )
+    expect(placementsOf(planned)).toEqual([
+      expect.objectContaining({ placement: { kind: 'under', parentId: 'loc_reach' } }),
+    ])
+    expect(droppedPlacements).toEqual([{ ref: 'loc_varn', cause: 'not-unplaced' }])
+  })
 })
 
 // classifier.md → Factions: a listed faction's standing, emitted only when the turns change it.
@@ -3238,5 +3291,18 @@ describe('standings', () => {
     expect(planned).toEqual([])
     expect(unresolvedRefs).toEqual(['char_kael'])
     expect(unseenRefs).toEqual([{ list: 'standings', ref: 'f9' }])
+  })
+
+  it('plans one write for a standing the reply repeats', () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        standings: [
+          { ref: 'fact_watch', standing: 'at war', sourceTurn: 't1' },
+          { ref: 'fact_watch', standing: ' at war ', sourceTurn: 't2' },
+        ],
+      }),
+      deps([faction('fact_watch', 'wary allies')]),
+    )
+    expect(planned.map((p) => payloadOf<{ standing: string }>(p).standing)).toEqual(['at war'])
   })
 })
