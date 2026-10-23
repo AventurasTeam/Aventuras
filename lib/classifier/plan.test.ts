@@ -1828,6 +1828,18 @@ describe('mentioned places', () => {
       ])
     })
 
+    // An unresolved turn dates the prose at the window's oldest turn, so a user edit made inside
+    // the window outranks the pass; the anchor falls back to the newest.
+    it('dates the placement of a reused place at the oldest turn when its source turn is unresolved', () => {
+      const { planned, fellBackCount } = buildClassifierActions(
+        reply([newPlace('new:varn', 'Varn', { parent: 'loc_reach', sourceTurn: 't9' })]),
+        deps([REACH, VARN]),
+      )
+      expect(placementsOf(planned)).toEqual([expect.objectContaining({ entryId: 'e3' })])
+      expect(payloadOf<{ proseEntryId: string }>(placementsOf(planned)[0]).proseEntryId).toBe('e1')
+      expect(fellBackCount).toBe(1)
+    })
+
     it('places a reused place under a new place the reply creates, after its create', () => {
       const { planned } = buildClassifierActions(
         reply([
