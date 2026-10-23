@@ -13,13 +13,12 @@ describe('normalizeBaseUrl', () => {
     expect(normalizeBaseUrl(input)).toBe(expected)
   })
 
-  it('never strips the slashes in the scheme', () => {
-    expect(normalizeBaseUrl('https://')).toBe('https:')
-  })
-
-  it.each([undefined, '', '   ', ' / '])('gives an empty string for %j', (input) => {
-    expect(normalizeBaseUrl(input)).toBe('')
-  })
+  it.each([undefined, '', '   ', ' / ', 'https://', ' http:// ', 'http:///'])(
+    'gives an empty string for %j',
+    (input) => {
+      expect(normalizeBaseUrl(input)).toBe('')
+    },
+  )
 })
 
 describe('isPublicHttpUrl', () => {
