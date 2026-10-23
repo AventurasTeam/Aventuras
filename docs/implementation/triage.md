@@ -864,12 +864,35 @@ slice-planning gate forces its resolution before that slice is planned.
   (recorded as emitted vs as written); this one predates it. Raised
   2026-10-23 by the AI writer map's Task 14 review.
 
-- **A fallback field can hide the fold's landed write.** Unverified,
-  reasoned from the per-field rule in `withFoldChanges`
-  (`lib/pipeline/definitions/per-turn-piggyback.ts`): when the fallback
-  lands a condition or a drop on a different row than the fold did,
-  the field is the fallback's, so the fold's landed write drops off the
-  report and the entry card. Nobody has run it, or checked whether the
-  fallback's prompt already shows the fold's writes. A per-row merge
-  would cover it, but mixes the two writers in one field. Raised
-  2026-10-23 by the AI writer map's Q18.
+- **A fallback field hides the fold's landed write.** Expected on a
+  fallback turn that adds a write of its own to a field the fold also
+  wrote; reasoned from the code, not run end to end. `withFoldChanges`
+  in `lib/pipeline/definitions/per-turn-piggyback.ts` keeps the fold's
+  record per field, so when the fallback lands a condition, an item
+  move, a stackable or a drop beside the fold's, the field is the
+  fallback's and the fold's landed write drops off the report and the
+  entry card, though World keeps it. The fallback is steered away from
+  re-emitting the fold's rows: the orchestrator applies each delta as
+  it is emitted (`handleEvent` in `lib/pipeline/runtime/orchestrator.ts`),
+  the fallback's working set reads those stores
+  (`lib/pipeline/definitions/working-set.ts`), and both prompts say
+  never to restate an unchanged condition and to drop only an item
+  someone still holds. The whole-field behaviour is pinned by the
+  "reports its own transfers when it has an applied drop" case in
+  `per-turn-piggyback.test.ts`. How often the fallback fires is
+  unmeasured. A per-row merge would cover it but mixes the two writers
+  in one field, and the carry-over rule itself isn't in canon yet
+  ([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape),
+  "One report, two possible writers"). Raised 2026-10-23 by the AI
+  writer map's Q18 and Q19.
+
+- **A stackable may move twice on a fallback turn.** A possible data
+  error, not a display one: worth a look soon. Pre-existing on `main`;
+  reasoned from the code, not run. A narrative fold whose block failed
+  another field still applies its transfers
+  (`lib/pipeline/definitions/per-turn.ts`), and a stackable transfer
+  adds rather than replaces. The fallback then fires, sees the
+  post-fold balance, and may re-emit the same transfer from the prose,
+  so the amount moves a second time. Conditions, visual changes, item
+  moves and drops are idempotent, so a repeat of those is harmless.
+  Raised 2026-10-23 by the AI writer map's Q19.
