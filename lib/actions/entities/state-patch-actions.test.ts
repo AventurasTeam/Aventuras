@@ -1748,6 +1748,25 @@ describe('raiseCollisionFlag', () => {
     expect(await flagOf(db)).toEqual([0, null, null])
   })
 
+  // generation-pipeline.md → Reverse-replay: the three flag columns are one field, as a place's
+  // parent and unplaced mark are, so the CHECK that ties them survives a partial keep.
+  it.each([
+    ['re-points the partner', { nameCollisionPartnerId: 'char_3' }, [1, 'char_3', 'name-taken']],
+    [
+      're-points the partner and reason',
+      { nameCollisionPartnerId: 'char_3', nameCollisionReason: 'distinct' },
+      [1, 'char_3', 'distinct'],
+    ],
+  ])('keeps the flag whole when the user %s after the raise', async (_label, patch, flag) => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values({ ...MIRA, id: 'char_3' })
+    await seed(ctx, db)
+    await apply(ctx, raise(), 'act_f')
+    await apply(ctx, userPatch(patch), 'act_u')
+    await reverseReplayDeltas('act_f', ctx)
+    expect(await flagOf(db)).toEqual(flag)
+  })
+
   it('no-ops on a row already flagged, which keeps its partner', async () => {
     const { db, ctx } = await setup()
     await db.insert(entities).values({ ...CHAR, id: 'char_3', status: 'active', name: 'Mira' })

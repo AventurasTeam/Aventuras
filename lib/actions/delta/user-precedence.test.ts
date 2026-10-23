@@ -225,6 +225,23 @@ describe('wroteField', () => {
     expect(wroteField(markedTop, 'other_table', 'state', ['parent_location_id'])).toBe(false)
     expect(wroteField(moved, 'entities', 'description', ['parent_location_id'])).toBe(false)
   })
+
+  // data-model.md → Authorship contract: flag, partner and reason hold together (the table's CHECK).
+  it.each([['nameCollisionFlag'], ['nameCollisionPartnerId'], ['nameCollisionReason']])(
+    "reads a user write to any of a row's collision-flag columns as a write to %s",
+    (column) => {
+      const repointed = [update({ nameCollisionPartnerId: 'char_old' })]
+      const cleared = [update({ nameCollisionFlag: 1 })]
+      expect(wroteField(repointed, 'entities', column, [])).toBe(true)
+      expect(wroteField(cleared, 'entities', column, [])).toBe(true)
+      expect(wroteField([update({ description: 'x' })], 'entities', column, [])).toBe(false)
+    },
+  )
+
+  it('reads the flag columns together only on an entity', () => {
+    const cleared = [update({ nameCollisionFlag: 1 })]
+    expect(wroteField(cleared, 'other_table', 'nameCollisionReason', [])).toBe(false)
+  })
 })
 
 describe('userDeletedPairSince', () => {

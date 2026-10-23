@@ -186,9 +186,24 @@ export function wrotePlacement(edits: readonly Delta[]): boolean {
 
 const PLACEMENT_PATHS: readonly string[] = ['parent_location_id', 'unplaced']
 
+const COLLISION_FLAG_COLUMNS: readonly string[] = [
+  'nameCollisionFlag',
+  'nameCollisionPartnerId',
+  'nameCollisionReason',
+]
+
 /**
- * wrotePath, judging a place's parent and its unplaced mark as one field: a user write to either
- * keeps both (cadence.md → User edits and classifier writes).
+ * A user edit wrote an entity's collision flag, partner or reason, which the table's CHECK holds
+ * together (data-model.md → Authorship contract).
+ */
+export function wroteCollisionFlag(edits: readonly Delta[]): boolean {
+  return COLLISION_FLAG_COLUMNS.some((column) => wroteColumn(edits, column))
+}
+
+/**
+ * wrotePath, judging a place's parent and its unplaced mark as one field, and an entity's collision
+ * flag, partner and reason as another: a user write to any of one keeps all of it
+ * (cadence.md → User edits and classifier writes).
  */
 export function wroteField(
   edits: readonly Delta[],
@@ -196,12 +211,13 @@ export function wroteField(
   column: string,
   path: readonly string[],
 ): boolean {
-  const placement =
-    table === 'entities' &&
-    column === 'state' &&
-    path.length === 1 &&
-    PLACEMENT_PATHS.includes(path[0])
-  return placement ? wrotePlacement(edits) : wrotePath(edits, column, path)
+  if (table === 'entities') {
+    if (column === 'state' && path.length === 1 && PLACEMENT_PATHS.includes(path[0]))
+      return wrotePlacement(edits)
+    if (path.length === 0 && COLLISION_FLAG_COLUMNS.includes(column))
+      return wroteCollisionFlag(edits)
+  }
+  return wrotePath(edits, column, path)
 }
 
 /** Whether the user deleted a `character_relationships` row for this pair after `since`. */

@@ -39,6 +39,7 @@ import {
   USER_EDITED_SINCE_PROSE,
   userEditsSinceProse,
   wroteColumn,
+  wroteCollisionFlag,
   wrotePath,
   wrotePlacement,
 } from '../delta/user-precedence'
@@ -621,11 +622,6 @@ export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) 
   }
 }
 
-const wroteFlag = (edits: readonly Delta[]): boolean =>
-  wroteColumn(edits, 'nameCollisionFlag') ||
-  wroteColumn(edits, 'nameCollisionPartnerId') ||
-  wroteColumn(edits, 'nameCollisionReason')
-
 /**
  * edge-cases.md → Layer B: a pass whose rename meets a name another row of the kind holds raises
  * the flag on the renamed row. A row already flagged keeps its partner: one per row.
@@ -645,7 +641,7 @@ export const raiseCollisionFlagHandler: ActionHandler = async (action, branchId,
   // A user's clear stands against older prose; newer prose may raise the flag again.
   if (
     proseEntryId !== null &&
-    wroteFlag(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
+    wroteCollisionFlag(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
   )
     return noopRefusal(USER_EDITED_SINCE_PROSE)
   const columns = {
