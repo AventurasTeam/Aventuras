@@ -1,6 +1,8 @@
 import type { ClassifierWindow } from '@/lib/classifier'
 import type { CharacterRelationship, Entity, Happening } from '@/lib/db'
 import { substituteIds, type IdBiMap } from '@/lib/ids'
+import { blankToNull } from '@/lib/text'
+import { characterFactionId, placeTree } from '@/lib/world'
 
 type RelationshipFact = {
   subject: string
@@ -9,6 +11,11 @@ type RelationshipFact = {
   objectName: string
   kind: string
 }
+
+// One line per entity and place: stored text spanning several would break the list and the tree.
+const flat = (text: string): string => text.replace(/\s+/g, ' ').trim()
+const oneLine = (text: string | null): string | null =>
+  text == null ? null : blankToNull(flat(text))
 
 // One row can emit two facts, one per non-null perspective; a row whose character
 // has no entity in the snapshot (FK-less, deleted) has no name to inline and is dropped.
@@ -52,25 +59,55 @@ export function buildClassifierContext(args: {
   entities: readonly Entity[]
   happenings: readonly Happening[]
   relationships: readonly CharacterRelationship[]
+  /** stories.settings.classifierMentionedPlaces, read once when the pass builds its prompt. */
+  mentionedPlaces: boolean
   idMap: IdBiMap
 }): Record<string, unknown> {
-  const { window, entities, happenings, relationships, idMap } = args
+  const { window, entities, happenings, relationships, mentionedPlaces, idMap } = args
+  const known = new Set(entities.map((e) => e.id))
+  const factions = new Set(entities.filter((e) => e.kind === 'faction').map((e) => e.id))
+  // classifier.md → Factions: an id naming no listed faction would otherwise reach the prompt as
+  // a placeholder no faction's line holds.
+  const factionOf = (e: Entity): string | null => {
+    const id = characterFactionId(e)
+    return id != null && factions.has(id) ? id : null
+  }
   const context = {
-    // entryId/position stay out: the model addresses turns by handle only, and
-    // entry_* is not substitutable, so leaking it would put a raw id in the prompt.
-    turns: window.turns.map((t) => ({ handle: t.handle, content: t.content })),
-    // Projected to the fields templateContextMap documents, like happenings
-    // below. Narrower than generationContext's on purpose: the classifier reads
-    // prose and has no use for injectionMode, which is a retrieval-time knob.
-    entities: entities.map((e) => ({
+    // Before turns: substituteIds allocates in walk order, so the roster numbers first.
+    // No injectionMode, which generationContext's carries: a retrieval-time knob.
+    entities: entities
+      .filter((e) => e.kind !== 'location')
+      .map((e) => ({
+        id: e.id,
+        kind: e.kind,
+        name: flat(e.name),
+        description: oneLine(e.description),
+        status: e.status,
+        keywords: e.keywords.map(flat),
+        faction: factionOf(e),
+      })),
+    // classifier.md → Mentioned places. Retired places keep their id: a happening can name one.
+    places: placeTree(entities).map(({ entity: e, depth }) => ({
       id: e.id,
-      kind: e.kind,
-      name: e.name,
-      description: e.description,
+      name: flat(e.name),
+      depth,
       status: e.status,
+      retiredReason: e.status === 'retired' ? oneLine(e.retiredReason) : null,
+      description: oneLine(e.description),
+      keywords: e.keywords.map(flat),
+    })),
+    // entryId/position stay out: entry_* is not substitutable, so it would leak a raw id.
+    // Scene/location ids are filtered to known: a deleted row would get a placeholder.
+    turns: window.turns.map((t) => ({
+      handle: t.handle,
+      content: t.content,
+      scene: t.sceneEntities.filter((id) => known.has(id)),
+      location:
+        t.currentLocationId != null && known.has(t.currentLocationId) ? t.currentLocationId : null,
     })),
     happenings: happenings.map((h) => ({ id: h.id, title: h.title })),
     relationships: projectRelationships(relationships, entities),
+    mentionedPlaces,
   }
   return substituteIds(context, idMap) as Record<string, unknown>
 }

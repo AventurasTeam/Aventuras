@@ -5,8 +5,6 @@ import { expect, fireEvent, fn, screen, userEvent, waitFor, within } from 'story
 
 import { watchDownloads } from '@/components/compounds/download-probe'
 import { HistoryLoaderProvider } from '@/components/history/history-loader'
-import { Button } from '@/components/ui/button'
-import { Text } from '@/components/ui/text'
 import type { EntitySaveResult } from '@/lib/actions'
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 import type { CharacterState, Entity, EntityKind } from '@/lib/db'
@@ -14,7 +12,12 @@ import type { EntryIndex, EntryRef } from '@/lib/entry-refs'
 import type { HistoryChunk } from '@/lib/history'
 import { t } from '@/lib/i18n'
 import { toastStore } from '@/lib/toast'
-import type { EntitySaveInput, RelationshipLink } from '@/lib/world'
+import {
+  storyPlaceOf,
+  type EntitySaveInput,
+  type RelationshipLink,
+  type StoryPlace,
+} from '@/lib/world'
 
 import type { EntityInvolvement } from '../world-route-data'
 import { EntityDetailPane } from './entity-detail-pane'
@@ -36,6 +39,8 @@ function makeEntity(overrides: Partial<Entity> & Pick<Entity, 'id' | 'kind' | 'n
     retiredReason: null,
     injectionMode: 'auto',
     nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
     state: null,
     tags: [],
     keywords: [],
@@ -169,6 +174,12 @@ const ENTRY_INDEX: EntryIndex = new Map(
     { id: `e_${position}`, position, kind: 'ai_reply', chapterId: null, excerpt: 'Entry 47' },
   ]),
 )
+const storyAt = (id: string | null): StoryPlace =>
+  storyPlaceOf({
+    tail: { metadata: { currentLocationId: id } },
+    sceneSource: { metadata: { currentLocationId: id } },
+  })
+const NOWHERE = storyAt(null)
 
 type HarnessProps = {
   kind: EntityKind
@@ -178,14 +189,10 @@ type HarnessProps = {
   saveResult?: EntitySaveResult
   /** The row's stored links; Kael's by default. */
   links?: RelationshipLink[]
-  /** A pair the harness's button writes to the store, as the periodic classifier would. */
-  storeLink?: RelationshipLink
-  /** A keyword the harness's button appends to the stored row, as the periodic classifier would. */
-  storeKeyword?: string
-  /** An ok character Save writes its pairs to the store before resolving, as the delta layer does. */
-  commitLinks?: boolean
-  /** Save stays pending until the harness's `Finish save` button. */
-  holdSave?: boolean
+  /** The branch's entities; the shared cast by default. */
+  entities?: readonly Entity[]
+  /** Where the story is, which the place rules read. */
+  story?: StoryPlace
   onSave: (input: EntitySaveInput) => void
   onSaved: (id: string) => void
   onRejected: (reason: string) => void
@@ -202,11 +209,9 @@ function Harness({
   blocked: initialBlocked = false,
   leadId = 'char_kael',
   saveResult,
-  links: initialLinks,
-  storeLink,
-  storeKeyword,
-  commitLinks = false,
-  holdSave = false,
+  links,
+  entities = ENTITIES,
+  story = NOWHERE,
   onSave,
   onSaved,
   onRejected,
@@ -217,8 +222,6 @@ function Harness({
 }: HarnessProps) {
   const [row, setRow] = useState(initialRow)
   const [blocked, setBlocked] = useState(initialBlocked)
-  const [links, setLinks] = useState(initialLinks)
-  const [finishSave, setFinishSave] = useState<(() => void) | null>(null)
   const [createSeq, setCreateSeq] = useState(0)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -235,34 +238,23 @@ function Harness({
   const data = useMemo<EntityPaneData>(
     () => ({
       branchId: 'br_1',
-      entities: ENTITIES,
+      entities,
       relationships: links ?? (row?.id === 'char_kael' ? KAEL_LINKS : NO_LINKS),
       involvements: row?.id === 'char_kael' ? KAEL_INVOLVEMENTS : NO_INVOLVEMENTS,
       entryIndex: ENTRY_INDEX,
       worldTime: 1000 + 2 * DAY,
       calendar: EARTH_GREGORIAN,
       leadId,
+      story,
     }),
-    [row, links, leadId],
+    [row, links, leadId, entities, story],
   )
   const save = useCallback(
     async (input: EntitySaveInput): Promise<EntitySaveResult> => {
       onSave(input)
-      if (holdSave) await new Promise<void>((resolve) => setFinishSave(() => resolve))
-      const result = saveResult ?? { status: 'ok', id: row?.id ?? `${kind}_new` }
-      if (commitLinks && result.status === 'ok' && input.kind === 'character') {
-        setLinks(
-          input.draft.relationships.map((r) => ({
-            rowId: input.relationships.find((l) => l.otherId === r.otherId)?.rowId ?? r.cardKey,
-            otherId: r.otherId,
-            selfToOther: r.selfToOther.trim() || null,
-            otherToSelf: r.otherToSelf.trim() || null,
-          })),
-        )
-      }
-      return result
+      return saveResult ?? { status: 'ok', id: row?.id ?? `${kind}_new` }
     },
-    [onSave, holdSave, saveResult, row, kind, commitLinks],
+    [onSave, saveResult, row, kind],
   )
   const selectSaved = useCallback(
     (id: string) => {
@@ -272,65 +264,23 @@ function Harness({
     [onSaved, row, kind],
   )
   return (
-    <View className="gap-2">
-      <View style={{ width: 900, maxWidth: '100%', height: 760 }} className="border border-border">
-        <EntityDetailPane
-          kind={kind}
-          row={row}
-          createSeq={row == null ? createSeq : undefined}
-          data={data}
-          blocked={blocked}
-          blockedReason={BLOCKED_REASON}
-          onSave={save}
-          onSaved={selectSaved}
-          onRejected={onRejected}
-          onSession={() => {}}
-          onOpenEntity={onOpenEntity}
-          onOpenHappening={onOpenHappening}
-          onSetLead={onSetLead}
-          onDelete={onDelete}
-        />
-      </View>
-      {storeLink != null ? (
-        <View className="flex-row items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onPress={() => setLinks((prev) => [...(prev ?? NO_LINKS), storeLink])}
-          >
-            <Text>Classifier writes a pair</Text>
-          </Button>
-          <Text size="xs" variant="muted">
-            {`store pairs: ${data.relationships.length}`}
-          </Text>
-        </View>
-      ) : null}
-      {storeKeyword != null ? (
-        <Button
-          variant="secondary"
-          size="sm"
-          onPress={() =>
-            setRow((prev) =>
-              prev == null ? prev : { ...prev, keywords: [...prev.keywords, storeKeyword] },
-            )
-          }
-        >
-          <Text>Classifier appends a keyword</Text>
-        </Button>
-      ) : null}
-      {holdSave ? (
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={finishSave == null}
-          onPress={() => {
-            finishSave?.()
-            setFinishSave(null)
-          }}
-        >
-          <Text>Finish save</Text>
-        </Button>
-      ) : null}
+    <View style={{ width: 900, maxWidth: '100%', height: 760 }} className="border border-border">
+      <EntityDetailPane
+        kind={kind}
+        row={row}
+        createSeq={row == null ? createSeq : undefined}
+        data={data}
+        blocked={blocked}
+        blockedReason={BLOCKED_REASON}
+        onSave={save}
+        onSaved={selectSaved}
+        onRejected={onRejected}
+        onSession={() => {}}
+        onOpenEntity={onOpenEntity}
+        onOpenHappening={onOpenHappening}
+        onSetLead={onSetLead}
+        onDelete={onDelete}
+      />
     </View>
   )
 }
@@ -486,6 +436,33 @@ export const RetiredReasonConditional: Story = {
   },
 }
 
+/** world.md → Settings: a place's injection hint adds what each mode does to the location map. */
+export const LocationSettingsNamesTheMap: Story = {
+  args: { kind: 'location', row: MARKET },
+  play: async () => {
+    await userEvent.click(tab(/^Settings/))
+    await expect(
+      await screen.findByText(
+        `${t('world:fields.injectionOverride')} ${t('world:fields.injectionPlaceMap')}`,
+        {},
+        WAIT,
+      ),
+    ).toBeVisible()
+  },
+}
+
+export const CharacterSettingsLeavesOutTheMap: Story = {
+  play: async () => {
+    await userEvent.click(tab(/^Settings/))
+    await expect(
+      await screen.findByText(t('world:fields.injectionOverride'), {}, WAIT),
+    ).toBeVisible()
+    await expect(
+      screen.queryByText(t('world:fields.injectionPlaceMap'), { exact: false }),
+    ).toBeNull()
+  },
+}
+
 export const InjectionChipVisibility: Story = {
   play: async () => {
     await expect(await screen.findByText('Always injected', {}, WAIT)).toBeVisible()
@@ -552,36 +529,6 @@ export const RenameWarnsOfATakenName: Story = {
   },
 }
 
-/** The Relationships base freezes once dirty, so Save keeps a pair the classifier writes later. */
-export const RelationshipsBaseFrozenWhileDirty: Story = {
-  args: { links: [MIRA_LINK], storeLink: VORNE_LINK },
-  play: async ({ args }) => {
-    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
-    await userEvent.click(await screen.findByRole('button', { name: /^Mira/ }, WAIT))
-    const card = within(screen.getByTestId('relationship-0'))
-    const yours = await card.findByRole('textbox', { name: 'Your view' }, WAIT)
-    await userEvent.clear(yours)
-    await userEvent.type(yours, 'sworn ally')
-    await waitFor(() => expect(saveBar()).toHaveTextContent('Relationships'), WAIT)
-    await userEvent.click(screen.getByRole('button', { name: 'Classifier writes a pair' }))
-    await expect(await screen.findByText('store pairs: 2', {}, WAIT)).toBeInTheDocument()
-    await userEvent.click(within(saveBar()).getByRole('button', { name: /^Save/ }))
-    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
-    await expect(args.onSave).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'character',
-        relationshipsBase: [MIRA_LINK],
-        relationships: [MIRA_LINK, VORNE_LINK],
-        draft: expect.objectContaining({
-          relationships: [
-            expect.objectContaining({ otherId: 'char_mira', selfToOther: 'sworn ally' }),
-          ],
-        }),
-      }),
-    )
-  },
-}
-
 const editMiraView = async (name: 'Your view' | 'Their view', text: string) => {
   const view = within(screen.getByTestId('relationship-0')).getByRole('textbox', { name })
   await userEvent.clear(view)
@@ -611,29 +558,9 @@ export const RelationshipPartnerStatusBadged: Story = {
   },
 }
 
-/** A Save that leaves Relationships clean hands the base back to the store it wrote. */
-export const RelationshipsBaseFollowsStoreAfterSave: Story = {
-  args: { links: [MIRA_LINK], commitLinks: true },
-  play: async ({ args }) => {
-    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
-    await userEvent.click(await screen.findByRole('button', { name: /^Mira/ }, WAIT))
-    await screen.findByTestId('relationship-0', {}, WAIT)
-    await editMiraView('Your view', 'sworn ally')
-    await pressSave()
-    await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument(), WAIT)
-    await editMiraView('Their view', 'wary')
-    await pressSave()
-    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(2), WAIT)
-    const stored = { ...MIRA_LINK, selfToOther: 'sworn ally' }
-    await expect(args.onSave).toHaveBeenLastCalledWith(
-      expect.objectContaining({ relationshipsBase: [stored], relationships: [stored] }),
-    )
-  },
-}
-
-/** An edit typed while Save runs stays dirty, based on what that Save wrote. */
-export const RelationshipsBaseAfterMidSaveEdit: Story = {
-  args: { links: [MIRA_LINK], commitLinks: true, holdSave: true },
+/** world.md → Relationships: Save hands over the draft and the links stored at Save, nothing more. */
+export const RelationshipSaveSendsTheDraft: Story = {
+  args: { links: [MIRA_LINK] },
   play: async ({ args }) => {
     await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
     await userEvent.click(await screen.findByRole('button', { name: /^Mira/ }, WAIT))
@@ -641,33 +568,19 @@ export const RelationshipsBaseAfterMidSaveEdit: Story = {
     await editMiraView('Your view', 'sworn ally')
     await pressSave()
     await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
-    await editMiraView('Their view', 'wary')
-    await userEvent.click(screen.getByRole('button', { name: 'Finish save' }))
-    await waitFor(
-      () => expect(within(saveBar()).getByRole('button', { name: /^Save/ })).toBeEnabled(),
-      WAIT,
-    )
-    await expect(saveBar()).toHaveTextContent('Relationships')
-    await pressSave()
-    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(2), WAIT)
-    await expect(args.onSave).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        relationshipsBase: [
+    await expect(args.onSave).toHaveBeenCalledWith({
+      kind: 'character',
+      draft: expect.objectContaining({
+        relationships: [
           expect.objectContaining({
             otherId: 'char_mira',
             selfToOther: 'sworn ally',
             otherToSelf: 'ally',
           }),
         ],
-        relationships: [{ ...MIRA_LINK, selfToOther: 'sworn ally' }],
-        draft: expect.objectContaining({
-          relationships: [
-            expect.objectContaining({ selfToOther: 'sworn ally', otherToSelf: 'wary' }),
-          ],
-        }),
       }),
-    )
-    await userEvent.click(screen.getByRole('button', { name: 'Finish save' }))
+      relationships: [MIRA_LINK],
+    })
   },
 }
 
@@ -694,7 +607,6 @@ export const CreateLocation: Story = {
     // The whole create draft — schema defaults plus the name — so a create can't carry stray state.
     await expect(args.onSave).toHaveBeenCalledWith({
       kind: 'location',
-      keywordsBase: [],
       draft: {
         name: 'The Salt Wells',
         description: '',
@@ -918,32 +830,6 @@ export const ParentCycleFieldError: Story = {
   },
   play: async ({ args }) => {
     await expectParentRefusal(args.onRejected, PARENT_CYCLE_TEXT)
-  },
-}
-
-/** A keyword the classifier appends while the list is dirty doesn't become the Save's base. */
-export const KeywordsBaseFrozenWhileDirty: Story = {
-  args: {
-    kind: 'location',
-    row: { ...HOLLOW, keywords: ['the hollow'] },
-    storeKeyword: 'the dell',
-  },
-  play: async ({ args }) => {
-    await userEvent.click(await screen.findByRole('tab', { name: /^Settings/ }, WAIT))
-    await userEvent.type(
-      await screen.findByRole('textbox', { name: 'Keywords' }, WAIT),
-      'veil{Enter}',
-    )
-    await waitFor(() => expect(saveBar()).toHaveTextContent('Keywords'), WAIT)
-    await userEvent.click(screen.getByRole('button', { name: 'Classifier appends a keyword' }))
-    await userEvent.click(within(saveBar()).getByRole('button', { name: /^Save/ }))
-    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
-    await expect(args.onSave).toHaveBeenCalledWith(
-      expect.objectContaining({
-        keywordsBase: ['the hollow'],
-        draft: expect.objectContaining({ keywords: ['the hollow', 'veil'] }),
-      }),
-    )
   },
 }
 
@@ -1345,5 +1231,335 @@ export const FactionStaged: Story = {
   },
   play: async () => {
     await expectStatusPill('staged')
+  },
+}
+
+// data-model.md → LocationState shape: retired and disabled places.
+const THORNWOOD = makeEntity({
+  id: 'loc_thorn',
+  kind: 'location',
+  name: 'Thornwood',
+  injectionMode: 'disabled',
+  state: { parent_location_id: null },
+})
+const SALTMERE = makeEntity({
+  id: 'loc_salt',
+  kind: 'location',
+  name: 'Saltmere',
+  status: 'retired',
+  retiredReason: 'swallowed by the rift',
+  state: { parent_location_id: null },
+})
+const PLACES = [...ENTITIES, THORNWOOD, SALTMERE]
+
+async function pickStatus(name: string) {
+  await userEvent.click(tab(/^Settings/))
+  const status = await screen.findByRole('radiogroup', { name: 'Status' }, WAIT)
+  await userEvent.click(within(status).getByRole('radio', { name }))
+}
+
+async function pickMode(name: string) {
+  await userEvent.click(tab(/^Settings/))
+  const mode = await screen.findByRole(
+    'radiogroup',
+    { name: t('world:fields.injectionMode') },
+    WAIT,
+  )
+  await userEvent.click(within(mode).getByRole('radio', { name: new RegExp(`^${name}`) }))
+}
+
+// The dialog fades in, so its text is in the tree before it reads as visible.
+async function expectInDialog(dialog: HTMLElement, text: string | RegExp) {
+  await waitFor(() => expect(within(dialog).getByText(text)).toBeVisible(), WAIT)
+}
+
+const settingsNotice = (issue: string) =>
+  t('world:validation.inTab', { tab: t('world:detail.tabs.settings'), issue })
+
+async function clickSave() {
+  const bar = await screen.findByTestId('save-bar', {}, WAIT)
+  await userEvent.click(within(bar).getByRole('button', { name: /^Save/ }))
+}
+
+/** world.md → Settings: retiring a place with places inside asks first, listing them. */
+export const RetireConfirmListsPlaces: Story = {
+  args: { kind: 'location', row: HOLLOW, entities: PLACES },
+  play: async ({ args }) => {
+    await pickStatus(t('world:tiers.retired'))
+    await clickSave()
+    const dialog = await screen.findByRole('alertdialog', {}, WAIT)
+    await expectInDialog(
+      dialog,
+      t('world:placeConfirm.retireTitle', { place: 'Veil’s Hollow', count: 1 }),
+    )
+    await expectInDialog(dialog, /The Drowned Market/)
+    await expect(args.onSave).not.toHaveBeenCalled()
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: t('world:placeConfirm.retire') }),
+    )
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+    await expect(args.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ draft: expect.objectContaining({ status: 'retired' }) }),
+    )
+  },
+}
+
+/** Cancel leaves the draft as it was and writes nothing. */
+export const RetireConfirmCancelKeepsDraft: Story = {
+  args: { kind: 'location', row: HOLLOW, entities: PLACES },
+  play: async ({ args }) => {
+    await pickStatus(t('world:tiers.retired'))
+    await clickSave()
+    const dialog = await screen.findByRole('alertdialog', {}, WAIT)
+    await userEvent.click(within(dialog).getByRole('button', { name: t('cancel') }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), WAIT)
+    await expect(args.onSave).not.toHaveBeenCalled()
+    await expect(saveBar()).toHaveTextContent('Status')
+  },
+}
+
+/** Disabling a place counts the places inside it that weren't out of the story already. */
+export const DisableConfirmCounts: Story = {
+  args: { kind: 'location', row: HOLLOW, entities: PLACES },
+  play: async ({ args }) => {
+    await pickMode(t('world:fields.injection.disabled'))
+    await clickSave()
+    const dialog = await screen.findByRole('alertdialog', {}, WAIT)
+    await expectInDialog(dialog, t('world:placeConfirm.disableTitle', { place: 'Veil’s Hollow' }))
+    await expectInDialog(
+      dialog,
+      t('world:placeConfirm.disableLine', { place: 'Veil’s Hollow', count: 1 }),
+    )
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: t('world:placeConfirm.disable') }),
+    )
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+  },
+}
+
+/** Moving a place into a disabled one asks first, naming the region. */
+export const MoveIntoDisabledConfirm: Story = {
+  args: { kind: 'location', row: MARKET, entities: PLACES },
+  play: async ({ args }) => {
+    await userEvent.click(tab(/^Connections/))
+    await userEvent.click(await screen.findByRole('button', { name: /^Part of/ }, WAIT))
+    await userEvent.click(await screen.findByRole('option', { name: /Thornwood/ }, WAIT))
+    await clickSave()
+    const dialog = await screen.findByRole('alertdialog', {}, WAIT)
+    await expectInDialog(
+      dialog,
+      t('world:placeConfirm.moveLine', { region: 'Thornwood', place: 'The Drowned Market' }),
+    )
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: t('world:placeConfirm.move') }),
+    )
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+  },
+}
+
+/** A refused retire shows its named reason on the status field, and asks nothing first. */
+export const StoryInsideRefusalOnStatus: Story = {
+  args: {
+    kind: 'location',
+    row: HOLLOW,
+    entities: PLACES,
+    story: storyAt('loc_market'),
+    saveResult: {
+      status: 'rejected',
+      reason: 'place rule: story-inside',
+      code: 'story-inside',
+      refusal: {
+        code: 'story-inside',
+        field: 'status',
+        place: { id: 'loc_hollow', name: 'Veil’s Hollow' },
+        story: { id: 'loc_market', name: 'The Drowned Market' },
+      },
+    },
+  },
+  play: async ({ args }) => {
+    await pickStatus(t('world:tiers.retired'))
+    await clickSave()
+    const text = t('world:placeRefusal.storyInside', {
+      story: 'The Drowned Market',
+      place: 'Veil’s Hollow',
+    })
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+    await expect(screen.queryByRole('alertdialog')).toBeNull()
+    // On the status field, inside the Settings tab rather than the save bar.
+    await waitFor(
+      () => expect(within(screen.getByRole('tabpanel')).getByText(text)).toBeVisible(),
+      WAIT,
+    )
+    // The bar's notice names the tab, as an issue on another tab does.
+    const notice = settingsNotice(text)
+    await expect(within(saveBar()).getByRole('button', { name: notice })).toBeVisible()
+    await expect(args.onRejected).toHaveBeenCalledWith(notice)
+  },
+}
+
+/** A refused disable shows its named reason on the mode field, and asks nothing first. */
+export const StoryInsideRefusalOnMode: Story = {
+  args: {
+    kind: 'location',
+    row: HOLLOW,
+    entities: PLACES,
+    story: storyAt('loc_market'),
+    saveResult: {
+      status: 'rejected',
+      reason: 'place rule: story-inside',
+      code: 'story-inside',
+      refusal: {
+        code: 'story-inside',
+        field: 'injectionMode',
+        place: { id: 'loc_hollow', name: 'Veil’s Hollow' },
+        story: { id: 'loc_market', name: 'The Drowned Market' },
+      },
+    },
+  },
+  play: async ({ args }) => {
+    await pickMode(t('world:fields.injection.disabled'))
+    await clickSave()
+    const text = t('world:placeRefusal.storyInside', {
+      story: 'The Drowned Market',
+      place: 'Veil’s Hollow',
+    })
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+    await expect(screen.queryByRole('alertdialog')).toBeNull()
+    const error = await within(screen.getByRole('tabpanel')).findByText(text, {}, WAIT)
+    await expect(error).toBeVisible()
+    // In the mode's own row, which holds its radio group; the status row above doesn't.
+    const mode = screen.getByRole('radiogroup', { name: t('world:fields.injectionMode') })
+    await expect(error.parentElement).toContainElement(mode)
+    await expect(args.onRejected).toHaveBeenCalledWith(settingsNotice(text))
+  },
+}
+
+/** Disabled through an ancestor: a line under the mode explanation; its own mode stays editable. */
+export const DisabledThroughAncestor: Story = {
+  args: {
+    kind: 'location',
+    row: MARKET,
+    entities: [
+      ...ENTITIES.filter((e) => e.id !== 'loc_hollow'),
+      { ...HOLLOW, injectionMode: 'disabled' },
+    ],
+  },
+  play: async () => {
+    await userEvent.click(tab(/^Settings/))
+    const line = t('world:fields.disabledThrough', { place: 'Veil’s Hollow' })
+    const hint = await screen.findByText(new RegExp(line.slice(0, 30)), {}, WAIT)
+    await expect(hint).toBeVisible()
+    // Its own line under the explanation, not run into it.
+    await expect(hint.textContent).toContain(`\n${line}`)
+    await pickMode(t('world:fields.injection.always'))
+    const mode = screen.getByRole('radiogroup', { name: t('world:fields.injectionMode') })
+    const always = within(mode).getByRole('radio', {
+      name: new RegExp(`^${t('world:fields.injection.always')}`),
+    })
+    await waitFor(() => expect(always).toHaveAttribute('aria-checked', 'true'), WAIT)
+  },
+}
+
+/** The line leaves while the story is inside the region. */
+export const DisabledThroughSuspendedAroundTheStory: Story = {
+  args: {
+    kind: 'location',
+    row: MARKET,
+    story: storyAt('loc_market'),
+    entities: [
+      ...ENTITIES.filter((e) => e.id !== 'loc_hollow'),
+      { ...HOLLOW, injectionMode: 'disabled' },
+    ],
+  },
+  play: async () => {
+    await userEvent.click(tab(/^Settings/))
+    await screen.findByRole('radiogroup', { name: t('world:fields.injectionMode') }, WAIT)
+    const line = t('world:fields.disabledThrough', { place: 'Veil’s Hollow' })
+    // It shares a text node with the mode explanation, so the match is by substring.
+    await expect(screen.queryByText(line, { exact: false })).toBeNull()
+  },
+}
+
+/** A place's status explains that retiring takes the places inside it. */
+export const PlaceStatusHint: Story = {
+  args: { kind: 'location', row: HOLLOW },
+  play: async () => {
+    await userEvent.click(tab(/^Settings/))
+    await expect(await screen.findByText(t('world:fields.statusPlace'), {}, WAIT)).toBeVisible()
+  },
+}
+
+/** A character's Settings carries none of a place's hints. */
+export const CharacterHasNoPlaceHints: Story = {
+  args: { kind: 'character', row: KAEL },
+  play: async () => {
+    await userEvent.click(tab(/^Settings/))
+    await screen.findByRole('radiogroup', { name: t('world:fields.injectionMode') }, WAIT)
+    await expect(screen.queryByText(t('world:fields.statusPlace'))).toBeNull()
+    await expect(
+      screen.queryByText(t('world:fields.injectionPlaceMap'), { exact: false }),
+    ).toBeNull()
+    await expect(screen.getByText(t('world:fields.injectionOverride'))).toBeVisible()
+  },
+}
+
+/** world.md → Connections: a character's location picker doesn't offer a retired place. */
+export const PickersDropRetiredPlaces: Story = {
+  args: { entities: PLACES },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await userEvent.click(await screen.findByRole('button', { name: /^Current location/ }, WAIT))
+    await expect(await screen.findByRole('option', { name: /Thornwood/ }, WAIT)).toBeVisible()
+    await expect(screen.queryByRole('option', { name: /Saltmere/ })).toBeNull()
+  },
+}
+
+/** A stored value naming a retired place keeps showing until it is changed. */
+export const PickerKeepsStoredRetiredPlace: Story = {
+  args: {
+    entities: PLACES,
+    row: { ...KAEL, state: characterState({ current_location_id: 'loc_salt' }) },
+  },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await expect(
+      await screen.findByRole('button', { name: /^Current location: Saltmere/ }, WAIT),
+    ).toBeVisible()
+  },
+}
+
+/** A retired place's own parent may be retired: its parent picker offers retired places. */
+export const RetiredPlaceParentPickerOffersRetired: Story = {
+  args: {
+    kind: 'location',
+    entities: PLACES,
+    row: { ...MARKET, status: 'retired' },
+  },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await userEvent.click(await screen.findByRole('button', { name: /^Part of/ }, WAIT))
+    await expect(await screen.findByRole('option', { name: /Saltmere/ }, WAIT)).toBeVisible()
+  },
+}
+
+/** An item's location picker doesn't offer a retired place either. */
+export const ItemPickerDropsRetiredPlaces: Story = {
+  args: { kind: 'item', row: BLADE, entities: PLACES },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await userEvent.click(await screen.findByRole('button', { name: /^At location/ }, WAIT))
+    await expect(await screen.findByRole('option', { name: /Thornwood/ }, WAIT)).toBeVisible()
+    await expect(screen.queryByRole('option', { name: /Saltmere/ })).toBeNull()
+  },
+}
+
+/** Nothing active sits inside a retired place: an active place's parent picker drops them. */
+export const ParentPickerDropsRetiredPlaces: Story = {
+  args: { kind: 'location', row: MARKET, entities: PLACES },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await userEvent.click(await screen.findByRole('button', { name: /^Part of/ }, WAIT))
+    await expect(await screen.findByRole('option', { name: /Thornwood/ }, WAIT)).toBeVisible()
+    await expect(screen.queryByRole('option', { name: /Saltmere/ })).toBeNull()
   },
 }

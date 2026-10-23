@@ -3,17 +3,13 @@ import {
   describeDeltaReplayError,
   holdBranchWriteExclusive,
   normalizeAppSettingsRow,
-  readClassifierStatus,
   registerAllDomains,
   releaseBranchWriteExclusive,
   resetStuckClassifierRunState,
   reverseReplayDeltas,
-  runClassifierNow,
   settleUserWrites,
-  unprocessedEntryCount,
 } from '@/lib/actions'
-import { createClassifierScheduler } from '@/lib/classifier'
-import { STORY_SETTINGS_DEFAULTS, type DbCtx } from '@/lib/db'
+import type { DbCtx } from '@/lib/db'
 import { configureDiagnosticsGate, logger } from '@/lib/diagnostics'
 import {
   buildDrainController,
@@ -23,7 +19,7 @@ import {
 import {
   configureClassifierEmbedder,
   configureDeltaActionPort,
-  PER_TURN_KIND,
+  ensurePeriodicClassifierPipelineRegistered,
   pipelineEventBus,
   recoverInFlightRuns,
   type RecoveryReport,
@@ -56,8 +52,8 @@ export function ensureDeltaActionPort(): void {
     reverseReplayDeltas,
     describeReplayError: describeDeltaReplayError,
     settleUserWrites,
-    holdWritePhase: holdBranchWriteExclusive,
-    releaseWritePhase: releaseBranchWriteExclusive,
+    holdBranchWriteExclusive,
+    releaseBranchWriteExclusive,
   })
 }
 
@@ -85,45 +81,15 @@ export function wireDrainWorker(ctx: DbCtx): void {
   }
 }
 
-let teardownClassifierScheduler: (() => void) | null = null
-
-// Cadence tick for the periodic classifier. run_complete is the moment the
-// unprocessed count changes; idempotent across boot re-runs like the drain.
-export function wireClassifierScheduler(ctx: DbCtx): void {
-  teardownClassifierScheduler?.()
-  configureClassifierEmbedder(embedClassifierDescriptions)
-  const scheduler = createClassifierScheduler({
-    cadenceFor: () =>
-      currentStoryStore.getCurrentStory()?.settings.classifierCadence ??
-      STORY_SETTINGS_DEFAULTS.classifierCadence,
-    unprocessedEntriesFor: (branchId, processedThrough) =>
-      unprocessedEntryCount(branchId, processedThrough, ctx),
-    statusFor: (branchId) => readClassifierStatus(branchId, ctx),
-    startRun: (branchId) => runClassifierNow(branchId, ctx),
-    setTimer: (fn, ms) => setTimeout(fn, ms),
-    clearTimer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
-  })
-  const unsubscribe = pipelineEventBus.subscribe('run_complete', (event) => {
-    // Only a foreground turn changes the count; the classifier's own completion
-    // must not re-trigger it.
-    if (event.kind !== PER_TURN_KIND || event.outcome !== 'completed') return
-    const open = currentStoryStore.getCurrentStory()
-    if (open != null) void scheduler.noteTurnCommitted(open.branchId)
-  })
-  teardownClassifierScheduler = () => {
-    unsubscribe()
-    scheduler.stop()
-    teardownClassifierScheduler = null
-  }
-}
-
 export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
   // Registry must be populated before recovery drives reverse-replay (resolves by target_table).
   registerAllDomains()
   ensureDiagnosticsGate()
   ensureDeltaActionPort()
   wireDrainWorker(ctx)
-  wireClassifierScheduler(ctx)
+  configureClassifierEmbedder(embedClassifierDescriptions)
+  // per-turn's chain names the pass at a turn's commit; an unregistered kind chains nothing.
+  ensurePeriodicClassifierPipelineRegistered()
   // Recovery must never block boot: a failure of the orphan pass itself (not just
   // a per-orphan delta) is logged and boot proceeds to hydrate.
   let recovery: RecoveryReport | null = null
@@ -143,10 +109,7 @@ export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
   // orphans reversed; with no report at all, none of them are.
   if (recovery !== null) {
     try {
-      await resetStuckClassifierRunState(
-        ctx,
-        recovery.failures.map((f) => f.actionId),
-      )
+      await resetStuckClassifierRunState(ctx, recovery.failures)
     } catch (err) {
       logger.error('bootstrap.classifier_running_reset_failed', {
         error: err instanceof Error ? err.message : String(err),

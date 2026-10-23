@@ -47,6 +47,7 @@
   },
   "generationGate": {
     "inFlight": "Generation is in flight. Cancel to edit.",
+    "updatingMemory": "Updating memory. Cancel to edit.",
     "chapterClose": "Chapter close in progress. Cancel to edit.",
     "suggestionRefresh": "Refreshing suggestions. Cancel to edit."
   },
@@ -65,17 +66,17 @@
     "perTurnUnnamed": "An interrupted shutdown was detected. Your last AI response was reverted to keep the story consistent.",
     "chapterCloseNamed": "An interrupted shutdown was detected in {{storyName}}. The chapter-close pass was reverted; your story content is intact.",
     "chapterCloseUnnamed": "An interrupted shutdown was detected. The chapter-close pass was reverted; your story content is intact.",
-    "periodicClassifierNamed": "An interrupted shutdown was detected in {{storyName}}. A background memory update was reverted; your story content is intact.",
-    "periodicClassifierUnnamed": "An interrupted shutdown was detected. A background memory update was reverted; your story content is intact.",
+    "periodicClassifierNamed": "An interrupted shutdown was detected in {{storyName}}. A memory update was reverted; your story content is intact.",
+    "periodicClassifierUnnamed": "An interrupted shutdown was detected. A memory update was reverted; your story content is intact.",
     "genericNamed": "An interrupted shutdown was detected in {{storyName}}. An incomplete background update was reverted to keep the story consistent.",
     "genericUnnamed": "An interrupted shutdown was detected. An incomplete background update was reverted to keep the story consistent.",
     "titleIncomplete": "Recovery incomplete",
-    "memoryPausedNamed": "An interrupted background memory update in {{storyName}} could not be undone. Memory updates for this story are paused so nothing is duplicated — your story content is intact, and restarting the app retries automatically.",
-    "memoryPausedUnnamed": "An interrupted background memory update could not be undone. Memory updates for that story are paused so nothing is duplicated — your story content is intact, and restarting the app retries automatically.",
+    "branchHeldNamed": "An interrupted memory update in {{storyName}} could not be undone. Its branch can't take turns until it is — your story content is intact, and restarting the app retries automatically.",
+    "branchHeldUnnamed": "An interrupted memory update could not be undone. That story's branch can't take turns until it is — your story content is intact, and restarting the app retries automatically.",
     "incompleteNamed": "An interrupted background update in {{storyName}} could not be undone. Your story content is intact, and restarting the app retries automatically.",
     "incompleteUnnamed": "An interrupted background update could not be undone. Your story content is intact, and restarting the app retries automatically.",
-    "memoryPausedRefusedNamed": "An interrupted background memory update in {{storyName}} could not be undone without breaking later changes. Memory updates for this story stay paused so nothing is duplicated — your story content is intact.",
-    "memoryPausedRefusedUnnamed": "An interrupted background memory update could not be undone without breaking later changes. Memory updates for that story stay paused so nothing is duplicated — your story content is intact.",
+    "branchHeldRefusedNamed": "An interrupted memory update in {{storyName}} could not be undone without breaking later changes. Its branch can't take turns — your story content is intact.",
+    "branchHeldRefusedUnnamed": "An interrupted memory update could not be undone without breaking later changes. That story's branch can't take turns — your story content is intact.",
     "incompleteRefusedNamed": "An interrupted background update in {{storyName}} could not be undone without breaking later changes. Your story content is intact.",
     "incompleteRefusedUnnamed": "An interrupted background update could not be undone without breaking later changes. Your story content is intact."
   },
@@ -131,19 +132,29 @@
         "generatingNarrative": "generating narrative…",
         "classifying": "classifying…",
         "updatingMemory": "updating memory…",
+        "updatingMemoryBeforeTurn": "updating memory before your turn…",
         "closingChapter": "closing chapter…",
         "refreshingSuggestions": "refreshing suggestions…"
       },
       "error": {
         "memoryIncomplete_one": "Memory incomplete — {{count}} row pending",
         "memoryIncomplete_other": "Memory incomplete — {{count}} rows pending",
-        "classifierOffline": "Classifier offline — retrieval coverage thinning",
         "swapPaused": "Embedder switch paused — waiting on you"
       },
       "cancelGeneration": "Cancel generation",
       "cancelChapterClose": "Cancel chapter close",
+      "cancelMemoryUpdate": "Cancel memory update",
       "cancelSuggestionRefresh": "Cancel suggestion refresh"
-    }
+    },
+    "memoryBanner": {
+      "updating": "Updating memory…",
+      "updatingBeforeTurn": "Updating memory before your turn…"
+    },
+    "deferredWork": {
+      "pass": "Memory update moved to your next turn.",
+      "close": "Chapter close moved to your next turn."
+    },
+    "memoryUpdateFailed": "Memory update failed. It runs again before your next turn."
   },
   "collisionRow": {
     "collidesWith": "⚠ Collides with {{name}}",
@@ -157,6 +168,17 @@
       "item": "⚠ Two items named \"{{name}}\"",
       "faction": "⚠ Two factions named \"{{name}}\""
     },
+    "titleMayBe": "⚠ \"{{flagged}}\" may be \"{{other}}\"",
+    "reason": {
+      "alike": "Their descriptions read alike.",
+      "ambiguous": "Their descriptions are partly alike.",
+      "distinct": "Their descriptions differ.",
+      "inScene": "Their descriptions differ, but \"{{other}}\" was in the scene where \"{{flagged}}\" first appeared.",
+      "noSignal": "Their descriptions couldn't be compared.",
+      "sameParent": "Both are in \"{{parent}}\".",
+      "sameParentRoot": "Both are top-level places."
+    },
+    "basis": "\"{{holder}}\" also goes by \"{{keyword}}\".",
     "description": "Pick how to resolve this collision. Switching modes discards in-progress choices.",
     "modeLabel": "Resolution path",
     "mode": {
@@ -216,10 +238,11 @@
     "nameTaken": "Another row already has that name.",
     "renameIssue": {
       "emptyName": "A name can't be empty.",
-      "stillColliding": "These names still collide: letter case and spaces at either end don't count as a difference."
+      "stillColliding": "These names still match: the same name, or one name's words inside the other's. Letter case and extra spaces don't count as a difference."
     },
     "keepConfirm": "Keep as distinct",
     "keepBody": "Both \"{{name}}\" entities will continue to exist with the same name. Retrieval treats them by id, but storyteller responses may conflate them in prose. Polymorphic naming is a documented v1 limitation — the schema doesn't enforce unique names. The flag clears; no other writes.",
+    "keepBodyPartial": "\"{{older}}\" and \"{{newer}}\" will both continue to exist. The flag clears; no other writes.",
     "failed": "Resolution failed"
   },
   "importDialog": {
@@ -283,6 +306,12 @@
     "body": "You have unsaved changes on this screen. Save them, discard them, or stay here.",
     "discard": "Discard",
     "save": "Save"
+  },
+  "storyLeave": {
+    "title": "Generation in flight",
+    "body": "Leaving will cancel the in-flight generation and revert any changes.",
+    "stay": "Stay",
+    "cancelAndLeave": "Cancel & leave"
   },
   "storyCard": {
     "genreNotSet": "Genre not set",

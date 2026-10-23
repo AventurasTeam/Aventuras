@@ -12,7 +12,7 @@ import {
 
 import type { DbCtx } from '../types'
 import { capturedChildren, vecSweepIdsOps, vecTableLister } from './delete-cascade'
-import { applyUndoPayload, isPayloadMetaKey } from './delta-encoding'
+import { applyUndoPayload, isPayloadMetaKey, pruneUndoPartial } from './delta-encoding'
 import { deletedRow, heldKey, type HeldRow } from './held-rows'
 import { withKeyLocks } from './key-lock'
 import { liveLinkFilter, type LiveLinkFilter } from './live-link-filter'
@@ -22,10 +22,11 @@ import {
   reversalLockKeys,
   selectReversalSet,
   writesTo,
+  type RefClear,
   type ReversalSet,
   type RowRef,
 } from './row-closure'
-import { userEditsOutliving, wroteColumn } from './user-precedence'
+import { userEditsOutliving, wroteColumn, wrotePath } from './user-precedence'
 
 export {
   DeltaReplayError,
@@ -257,6 +258,15 @@ function namesId(value: unknown, id: string): boolean {
   )
 }
 
+// edge-cases.md → Schema: an entity's collision partner is a plain id outside the reference
+// registry, so a gone partner is dormant, never a reason to refuse.
+function referencingPayload(d: Delta, rewritten: ReadonlyMap<string, Record<string, unknown>>) {
+  const payload = rewritten.get(d.id) ?? d.undoPayload
+  if (d.targetTable !== 'entities' || payload == null) return payload
+  const { nameCollisionPartnerId: _partner, ...rest } = payload
+  return rest
+}
+
 // generation-pipeline.md → Reverse-replay: a later CTRL-Z of the pruned delete's group would
 // restore a dead id. A group-mate this plan rewrites is read as rewritten.
 async function refuseWriteBack(
@@ -279,7 +289,7 @@ async function refuseWriteBack(
         (d) =>
           d.actionId === holder.actionId &&
           !settled.has(d.id) &&
-          namesId(rewritten.get(d.id) ?? d.undoPayload, holder.targetId),
+          namesId(referencingPayload(d, rewritten), holder.targetId),
       )
       if (hit)
         throw new ReversalIntegrityError(
@@ -314,34 +324,39 @@ type UndoWalk = {
   readonly swept: Map<string, { table: string; branchId: string; ids: string[] }>
 }
 
-type UndoTarget = {
-  readonly delta: Delta
+/** A row the plan writes. */
+type RowTarget = {
+  readonly ref: RowRef
+  readonly branchId: string
   readonly entry: TableEntry
   readonly where: ReturnType<typeof whereForDelta>
-  /** The key `UndoWalk.rowStates` holds the delta's row under. */
+  /** The key `UndoWalk.rowStates` holds the row under. */
   readonly key: string
 }
+
+type UndoTarget = RowTarget & { readonly delta: Delta }
 
 function rowKey(table: string, branchId: string, id: string): string {
   return `${table}:${branchId}:${id}`
 }
 
-function undoTargetOf(delta: Delta): UndoTarget {
-  const entry = resolveByTable(delta.targetTable)
-  if (!entry) throw new Error(`reverse-replay: unknown target_table ${delta.targetTable}`)
+function rowTargetOf(table: string, branchId: string, id: string): RowTarget {
+  const entry = resolveByTable(table)
+  if (!entry) throw new Error(`reverse-replay: unknown target_table ${table}`)
   return {
-    delta,
+    ref: { table, id },
+    branchId,
     entry,
-    where: whereForDelta(entry.descriptor, delta),
-    key: rowKey(delta.targetTable, delta.branchId, delta.targetId),
+    where: whereForDelta(entry.descriptor, { branchId, targetId: id }),
+    key: rowKey(table, branchId, id),
   }
 }
 
-function refOf(delta: Delta): RowRef {
-  return { table: delta.targetTable, id: delta.targetId }
+function undoTargetOf(delta: Delta): UndoTarget {
+  return { ...rowTargetOf(delta.targetTable, delta.branchId, delta.targetId), delta }
 }
 
-async function rowStateOf(walk: UndoWalk, target: UndoTarget): Promise<RowState> {
+async function rowStateOf(walk: UndoWalk, target: RowTarget): Promise<RowState> {
   const known = walk.rowStates.get(target.key)
   if (known) return known
   const [current] = (await walk.ctx.db
@@ -349,7 +364,7 @@ async function rowStateOf(walk: UndoWalk, target: UndoTarget): Promise<RowState>
     .from(target.entry.descriptor.table)
     .where(target.where)) as Record<string, unknown>[]
   const state: RowState = {
-    ref: refOf(target.delta),
+    ref: target.ref,
     row: { ...(current ?? {}) },
     presence: current ? 'live' : 'missing',
   }
@@ -357,9 +372,8 @@ async function rowStateOf(walk: UndoWalk, target: UndoTarget): Promise<RowState>
   return state
 }
 
-async function heldCopyOf(walk: UndoWalk, target: UndoTarget): Promise<HeldCopy | undefined> {
-  const { delta } = target
-  const heldId = heldKey(delta.targetTable, delta.targetId)
+async function heldCopyOf(walk: UndoWalk, target: RowTarget): Promise<HeldCopy | undefined> {
+  const heldId = heldKey(target.ref.table, target.ref.id)
   const known = walk.heldCopies.get(heldId)
   if (known) return known
   const held = walk.set.held.byRow.get(heldId)
@@ -372,45 +386,41 @@ async function heldCopyOf(walk: UndoWalk, target: UndoTarget): Promise<HeldCopy 
 
 function emitUpdate(
   walk: UndoWalk,
-  { delta, entry, where }: UndoTarget,
+  { ref, branchId, entry, where }: RowTarget,
   restored: Record<string, unknown>,
   row: Record<string, unknown>,
 ): void {
   // Revalidation (app-deps.ts) only clears this flag — setting it dirty here self-corrects.
-  if (undoDirtiesVector(delta.targetTable, Object.keys(restored))) {
+  if (undoDirtiesVector(ref.table, Object.keys(restored))) {
     restored.embeddingStale = 1
     row.embeddingStale = 1
   }
   walk.ops.push(walk.ctx.db.update(entry.descriptor.table).set(restored).where(where).toSQL())
   walk.patches.push({
-    table: delta.targetTable,
-    branchId: delta.branchId,
-    patch: { op: 'update', id: delta.targetId, columns: restored },
+    table: ref.table,
+    branchId,
+    patch: { op: 'update', id: ref.id, columns: restored },
   })
 }
 
-function emitDelete(walk: UndoWalk, { delta, entry, where }: UndoTarget): void {
+function emitDelete(walk: UndoWalk, { ref, branchId, entry, where }: RowTarget): void {
   walk.ops.push(walk.ctx.db.delete(entry.descriptor.table).where(where).toSQL())
-  walk.patches.push({
-    table: delta.targetTable,
-    branchId: delta.branchId,
-    patch: { op: 'delete', id: delta.targetId },
-  })
+  walk.patches.push({ table: ref.table, branchId, patch: { op: 'delete', id: ref.id } })
 }
 
 function emitInsert(
   walk: UndoWalk,
-  { delta, entry }: UndoTarget,
+  { ref, branchId, entry }: RowTarget,
   row: Record<string, unknown>,
 ): void {
   // A deleted row's flag was accurate when it went, but an embedder swap since then re-embeds
   // only LIVE rows, so the vector can be gone while it reads clean.
-  if (isEmbeddedSourceTable(delta.targetTable)) row.embeddingStale = 1
+  if (isEmbeddedSourceTable(ref.table)) row.embeddingStale = 1
   walk.ops.push(walk.ctx.db.insert(entry.descriptor.table).values(row).toSQL())
   walk.patches.push({
-    table: delta.targetTable,
-    branchId: delta.branchId,
-    patch: { op: 'create', id: delta.targetId, row: { ...row } },
+    table: ref.table,
+    branchId,
+    patch: { op: 'create', id: ref.id, row: { ...row } },
   })
 }
 
@@ -442,7 +452,7 @@ async function undoCreate(
       return
     }
   }
-  walk.rowStates.set(target.key, { ref: refOf(delta), row: {}, presence: 'deleted' })
+  walk.rowStates.set(target.key, { ref: target.ref, row: {}, presence: 'deleted' })
   emitDelete(walk, target)
   if (isEmbeddedSourceTable(delta.targetTable)) {
     const sweepKey = `${delta.targetTable}:${delta.branchId}`
@@ -480,7 +490,7 @@ function undoDelete(walk: UndoWalk, target: UndoTarget, liveLinks: LiveLinkFilte
 
   const rowData = deletedRow(full, cascadeKeys)
   emitInsert(walk, target, rowData)
-  walk.rowStates.set(target.key, { ref: refOf(delta), row: { ...rowData }, presence: 'live' })
+  walk.rowStates.set(target.key, { ref: target.ref, row: { ...rowData }, presence: 'live' })
 
   for (const { table: childTableName, rows: childRows } of children) {
     // drizzle's values() throws on an empty array, so an empty child set must
@@ -520,20 +530,39 @@ function undoDelete(walk: UndoWalk, target: UndoTarget, liveLinks: LiveLinkFilte
   }
 }
 
+// A schema-backed column yields sub-field by sub-field, as its undo payload records them.
+function restorablePayload(
+  entry: TableEntry,
+  payload: Record<string, unknown>,
+  userEdits: readonly Delta[],
+): Record<string, unknown> {
+  const restorable: Record<string, unknown> = {}
+  for (const [col, partial] of Object.entries(payload)) {
+    if (isPayloadMetaKey(col)) continue
+    if (!Object.hasOwn(entry.columnSchemas, col)) {
+      if (!wroteColumn(userEdits, col)) restorable[col] = partial
+      continue
+    }
+    const kept = pruneUndoPartial(entry.columnSchemas[col], partial, (path) =>
+      wrotePath(userEdits, col, path),
+    )
+    if (kept !== undefined) restorable[col] = kept
+  }
+  return restorable
+}
+
 async function undoUpdate(
   walk: UndoWalk,
   target: UndoTarget,
   userEdits: readonly Delta[],
 ): Promise<void> {
   const { delta, entry } = target
-  const payload = (delta.undoPayload ?? {}) as Record<string, unknown>
-  // A schema-backed column's undo restores sub-fields — a user write to one doesn't cover
-  // the others this delta changed.
-  const columns = Object.keys(payload).filter(
-    (col) =>
-      !isPayloadMetaKey(col) &&
-      (Object.hasOwn(entry.columnSchemas, col) || !wroteColumn(userEdits, col)),
+  const payload = restorablePayload(
+    entry,
+    (delta.undoPayload ?? {}) as Record<string, unknown>,
+    userEdits,
   )
+  const columns = Object.keys(payload)
   if (columns.length === 0) return
   const copy = await heldCopyOf(walk, target)
   if (copy) {
@@ -571,6 +600,21 @@ function undoHeldUpdate(
   copy.removed = keepsNothing(entry, copy.row)
 }
 
+// As World's delete of the named row leaves the row (stateWithRefRewritten): kept, the ref nulled.
+async function clearRef(walk: UndoWalk, { row, ref }: RefClear): Promise<void> {
+  const target = rowTargetOf(row.table, walk.set.branchId, row.id)
+  const cleared = (column: unknown) => ({ ...(column as object), [ref.path]: null })
+  const state = await rowStateOf(walk, target)
+  if (state.presence === 'live') {
+    const restored = { [ref.column]: cleared(state.row[ref.column]) }
+    Object.assign(state.row, restored)
+    emitUpdate(walk, target, restored, state.row)
+    return
+  }
+  const copy = await heldCopyOf(walk, target)
+  if (copy && !copy.removed) copy.row[ref.column] = cleared(copy.row[ref.column])
+}
+
 // Machine undos yield to later user edits: generation-pipeline.md → Reverse-replay.
 async function buildUndoOps(
   set: ReversalSet,
@@ -599,6 +643,8 @@ async function buildUndoOps(
     else if (delta.op === 'delete') undoDelete(walk, target, liveLinks)
     else await undoUpdate(walk, target, userEdits)
   }
+  // After the walk, so a clear lands on the row as every undo of it leaves it.
+  for (const clear of set.refClears) await clearRef(walk, clear)
 
   // Stores hold no deleted rows, so a payload edit emits no patch.
   const { payloadOps, pruned, rewritten } = settleHeldCopies(walk.heldCopies, ctx)

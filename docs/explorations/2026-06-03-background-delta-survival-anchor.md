@@ -29,7 +29,7 @@ in [`Entry mutability & rollback`](../data-model.md#entry-mutability--rollback),
 the [branch fork model](../data-model.md#branch-model), the distinct
 `periodic_classifier` [`deltas.source`](../data-model.md#entry-mutability--rollback),
 and the classifier's
-[background-task framing](../memory/classifier.md#background-task-framing).
+[background-task framing](../memory/classifier.md#pipeline-framing).
 
 ## What this closes vs. defers
 

@@ -32,6 +32,8 @@ function entity(overrides: Partial<Entity> & Pick<Entity, 'id' | 'name'>): Entit
     retiredReason: null,
     injectionMode: 'auto',
     nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
     state: null,
     tags: [],
     keywords: [],
@@ -133,7 +135,13 @@ const onJumpToOther = fn()
 /** Flagged row: the strip renders below the row with a disabled Resolve. */
 export const Collision: Story = {
   args: {
-    row: entity({ id: 'char_brannoc_2', name: 'Brannoc', nameCollisionFlag: 1 }),
+    row: entity({
+      id: 'char_brannoc_2',
+      name: 'Brannoc',
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_brannoc',
+      nameCollisionReason: 'distinct',
+    }),
     selected: false,
     onPress: fn(),
     signals: {

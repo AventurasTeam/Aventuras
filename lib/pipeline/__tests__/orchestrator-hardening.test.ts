@@ -86,6 +86,14 @@ async function* failsCleanly(): AsyncGenerator<never, PhaseResult> {
   return { status: 'failed', error: { kind: 'phase-logic', detail: 'clean fail' } }
 }
 
+async function* writesThenCancels(): AsyncGenerator<
+  { type: 'delta_emitted'; action: PipelineAction },
+  PhaseResult
+> {
+  yield { type: 'delta_emitted', action: newEntry('entry_cancelled') }
+  return { status: 'aborted' }
+}
+
 // Only `cause.threw`, not the error-kind filter, keeps onPhaseException from firing here.
 async function* failsCleanlyWithHookEligibleKind(): AsyncGenerator<never, PhaseResult> {
   return { status: 'failed', error: { kind: 'orchestrator', detail: 'clean fail' } }
@@ -147,6 +155,25 @@ describe('orchestrator hardening', () => {
 
     expect(seen).toEqual([{ kind: 'action-layer', runStillRegistered: true }])
     expect(result.outcome).toBe('failed')
+  })
+
+  // observability.md → Record shape: hook logs must name the run; caller ctx may lack an actionId.
+  it("hands onPhaseException the run's own actionId", async () => {
+    const { ctx } = await makeHarness()
+    const seen: (string | undefined)[] = []
+    definePipeline({
+      kind: 'phase-exception-action-id',
+      phases: [{ name: 'p', run: updateMissing }],
+      onPhaseException: async (hookCtx) => {
+        seen.push(hookCtx.actionId)
+      },
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('phase-exception-action-id', ctx))
+
+    expect(result.outcome).toBe('failed')
+    expect(seen).toEqual([result.actionId])
   })
 
   it('winds the run down even when onPhaseException throws', async () => {
@@ -239,6 +266,63 @@ describe('orchestrator hardening', () => {
 
     expect(called).toBe(false)
     expect(result.outcome).toBe('failed')
+  })
+
+  it('runs onInterrupt for a cancel, after its reversal but before the run is released', async () => {
+    const { db, ctx } = await makeHarness()
+    const seen: { entriesLeft: number; runStillRegistered: boolean }[] = []
+    definePipeline({
+      kind: 'interrupt-hook',
+      phases: [{ name: 'p', run: writesThenCancels }],
+      onInterrupt: async () => {
+        seen.push({
+          entriesLeft: (await db.select().from(storyEntries)).length,
+          runStillRegistered: generationStore.getTxState().runs.size > 0,
+        })
+      },
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('interrupt-hook', ctx))
+
+    expect(seen).toEqual([{ entriesLeft: 0, runStillRegistered: true }])
+    expect(result.outcome).toBe('aborted')
+  })
+
+  it('winds the run down even when onInterrupt throws', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({
+      kind: 'interrupt-hook-throws',
+      phases: [{ name: 'p', run: writesThenCancels }],
+      onInterrupt: async () => {
+        throw new Error('boom')
+      },
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('interrupt-hook-throws', ctx))
+
+    expect(result.outcome).toBe('aborted')
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(
+      getDiagnosticsSnapshot().logEntries.some((e) => e.kind === 'pipeline.interrupt_hook_failed'),
+    ).toBe(true)
+  })
+
+  it('does not run onInterrupt for a failure', async () => {
+    const { ctx } = await makeHarness()
+    let called = false
+    definePipeline({
+      kind: 'interrupt-hook-on-failure',
+      phases: [{ name: 'p', run: failsCleanly }],
+      onInterrupt: async () => {
+        called = true
+      },
+      ...base,
+    })
+
+    expect(expectRan(await runPipeline('interrupt-hook-on-failure', ctx)).outcome).toBe('failed')
+    expect(called).toBe(false)
   })
 
   // A model restating current state is ordinary, and an unmarked rejection cost

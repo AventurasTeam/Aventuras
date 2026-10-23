@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import { createEngine } from '../engine'
-import { MACRO_IDS } from '../ids'
+import type { Entity } from '@/lib/db'
+import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
+import { buildEntityViews, emptyEntityView } from '@/lib/world'
+
+import { createEngine, renderWith } from '../engine'
 import type { Pack } from '../types'
-import { MEMORY_BLOCKS } from './memory-blocks'
+import { bundledPack } from './index'
 import { PER_TURN_NARRATIVE } from './per-turn'
+import { PIGGYBACK_FALLBACK_CLASSIFIER } from './piggyback-fallback-classifier'
 import { STATE_EMISSION } from './state-emission'
-import { SUGGESTION_EMISSION_JSON } from './suggestion-emission-json'
 import { SUGGESTION_REFRESH } from './suggestion-refresh'
 
 const sceneEntity = {
@@ -19,12 +22,6 @@ const sceneEntity = {
 }
 
 const context = {
-  definition: {
-    mode: 'adventure',
-    genre: { promptBody: '' },
-    tone: { promptBody: '' },
-    setting: '',
-  },
   entities: [sceneEntity],
   sceneEntities: ['char_1'],
   entries: [{ content: 'The gate groaned open.' }],
@@ -33,6 +30,7 @@ const context = {
   structuralLocation: null,
   structuralActiveThreads: [],
   structuralPinnedEntities: [],
+  structuralSceneFactions: [],
   structuralPinnedLore: [],
   structuralPinnedThreads: [],
   retrievedEntities: [],
@@ -56,24 +54,13 @@ const BROKEN_PER_TURN = `# Characters in scene
 {%- endfor %}`
 
 function render(source: string, extra: Record<string, unknown> = {}): string {
+  // Real macro sources, not stubs: the negative case below turns on memory-blocks being the
+  // ONLY route a staged entity has into the prompt.
   const pack: Pack = {
-    templates: { t: { group: 'generationContext', source } },
-    macros: {
-      // Real source, not a stub: the negative case below turns on this macro
-      // being the ONLY route a staged entity has into the prompt.
-      [MACRO_IDS.memoryBlocks]: { group: 'staticContent', source: MEMORY_BLOCKS },
-      [MACRO_IDS.outputFormatNarrative]: { group: 'staticContent', source: 'FMT' },
-      [MACRO_IDS.stateEmission]: { group: 'staticContent', source: STATE_EMISSION },
-      // suggestion-refresh includes this unconditionally (its whole purpose is
-      // emitting chips), so an absent stub fails the lookup rather than
-      // rendering the scene block this suite is actually checking.
-      [MACRO_IDS.suggestionEmissionJson]: {
-        group: 'staticContent',
-        source: SUGGESTION_EMISSION_JSON,
-      },
-    },
+    templates: { t: { group: 'generationContext', system: '', user: source } },
+    macros: bundledPack.macros,
   }
-  return createEngine(pack).renderFileSync('t', { ...context, ...extra }) as string
+  return renderWith(createEngine(pack), 't', { ...context, ...extra }).user
 }
 
 // The invariant check, factored so both fixtures run the identical assertion.
@@ -83,13 +70,13 @@ function injectsSceneEntity(source: string): boolean {
 
 describe('structural-floor invariant — active + in-scene always inject', () => {
   it('bundled per-turn template injects a disabled-but-active-in-scene entity', () => {
-    expect(injectsSceneEntity(PER_TURN_NARRATIVE)).toBe(true)
-    expect(render(PER_TURN_NARRATIVE)).toContain('A wary scout.')
+    expect(injectsSceneEntity(PER_TURN_NARRATIVE.user)).toBe(true)
+    expect(render(PER_TURN_NARRATIVE.user)).toContain('A wary scout.')
   })
 
   it('bundled suggestion-refresh template injects a disabled-but-active-in-scene entity', () => {
-    expect(injectsSceneEntity(SUGGESTION_REFRESH)).toBe(true)
-    expect(render(SUGGESTION_REFRESH)).toContain('A wary scout.')
+    expect(injectsSceneEntity(SUGGESTION_REFRESH.user)).toBe(true)
+    expect(render(SUGGESTION_REFRESH.user)).toContain('A wary scout.')
   })
 
   it('permanent negative fixture: an injectionMode-respecting variant DROPS it', () => {
@@ -110,7 +97,7 @@ describe('non-structural rows reach the prompt only by winning budget', () => {
   }
 
   it('does not dump a staged entity that only the branch roster knows about', () => {
-    const out = render(PER_TURN_NARRATIVE, { entities: [sceneEntity, stagedEntity] })
+    const out = render(PER_TURN_NARRATIVE.user, { entities: [sceneEntity, stagedEntity] })
     expect(out).not.toContain('Mira')
     // Positive control: an empty render would satisfy the line above just as
     // well, so pin something the same render must still carry.
@@ -118,18 +105,134 @@ describe('non-structural rows reach the prompt only by winning budget', () => {
   })
 
   it('renders a staged entity that WON budget, with its sub-pool framing', () => {
-    const out = render(PER_TURN_NARRATIVE, {
+    const out = render(PER_TURN_NARRATIVE.user, {
       entities: [sceneEntity, stagedEntity],
       retrievedEntities: [
         {
-          id: 'char_2',
+          ...stagedEntity,
           displayName: 'Mira',
-          renderedText: 'Mira (available to introduce): A courier who owes the guild.',
+          renderedText: 'never rendered',
+          state: emptyEntityView('character'),
         },
       ],
     })
     expect(out).toContain('# Elsewhere in the world')
     expect(out).toContain('Mira (available to introduce): A courier who owes the guild.')
+  })
+})
+
+// architecture.md → Entity state on the template surface: a disabled entity is absent from every
+// state the prompt shows, unless the active+in-scene invariant seats it.
+describe('structural-floor invariant — entity state', () => {
+  const ARIA = 'char_1'
+  const world = (overrides: { sword?: Partial<Entity>; hand?: Partial<Entity> } = {}): Entity[] => [
+    makeEntity({
+      id: ARIA,
+      kind: 'character',
+      name: 'Aria',
+      description: 'A wary scout.',
+      state: { inventory: ['item_s'], equipped_items: [], faction_id: 'fact_h' } as never,
+    }),
+    makeEntity({
+      id: 'item_s',
+      kind: 'item',
+      name: 'Sabre',
+      state: { at_location_id: null },
+      injectionMode: 'disabled',
+      ...overrides.sword,
+    }),
+    makeEntity({
+      id: 'fact_h',
+      kind: 'faction',
+      name: 'The Silver Hand',
+      injectionMode: 'disabled',
+      ...overrides.hand,
+    }),
+  ]
+  // The context generation-context builds: every entity projected with its view.
+  const contextOf = (entities: Entity[], sceneEntities: string[]) => {
+    const views = buildEntityViews(entities, { sceneEntities, currentLocationId: null })
+    return {
+      entities: entities.map((e) => ({ ...e, state: views.byId.get(e.id) })),
+      sceneEntities,
+    }
+  }
+  // Skips the fallback's roster: it names every active and staged entity, a rule apart from state.
+  const fromScene = (out: string): string => out.slice(out.indexOf('# In scene'))
+  const templates = [
+    ['per-turn', PER_TURN_NARRATIVE.user],
+    ['the fallback classifier', PIGGYBACK_FALLBACK_CLASSIFIER.user],
+    ['suggestion refresh', SUGGESTION_REFRESH.user],
+  ] as const
+
+  it.each(templates)(
+    '%s renders a disabled held item the scene seats, under its holder',
+    (_, source) => {
+      const out = render(source, contextOf(world(), [ARIA, 'item_s']))
+      expect(out).toMatch(/Holds:\n- (\[item_s\] )?Sabre/)
+      // Seated by the scene, so under its holder and not as an entity of its own.
+      expect(out).not.toContain('## Sabre')
+    },
+  )
+
+  it.each(templates)('%s leaves out a disabled held item the scene does not seat', (_, source) => {
+    const out = fromScene(render(source, contextOf(world(), [ARIA])))
+    expect(out).toContain('## Aria')
+    expect(out).not.toContain('Sabre')
+    // Positive control: enabled, the same item is listed under its holder.
+    expect(
+      render(source, contextOf(world({ sword: { injectionMode: 'auto' } }), [ARIA])),
+    ).toContain('Sabre')
+  })
+
+  it.each(templates)('%s shows a disabled faction on no member', (_, source) => {
+    const out = fromScene(render(source, contextOf(world(), [ARIA])))
+    expect(out).toContain('## Aria')
+    expect(out).not.toContain('The Silver Hand')
+    // Positive control: enabled, the member names it.
+    expect(render(source, contextOf(world({ hand: { injectionMode: 'auto' } }), [ARIA]))).toContain(
+      'Faction: The Silver Hand',
+    )
+  })
+
+  // The scene list leaves out a staged or retired holder, so its Holds line never shows the item.
+  it.each(
+    templates.flatMap(([name, source]) =>
+      (['staged', 'retired'] as const).map((status) => [name, status, source] as const),
+    ),
+  )('%s lists an in-scene item whose only holder is %s', (_, status, source) => {
+    const rows = [
+      makeEntity({ id: ARIA, kind: 'character', name: 'Aria' }),
+      makeEntity({
+        id: 'char_h',
+        kind: 'character',
+        name: 'Hollin',
+        status,
+        state: { inventory: ['item_l'], equipped_items: [] } as never,
+      }),
+      makeEntity({ id: 'item_l', kind: 'item', name: 'Lantern', state: { at_location_id: null } }),
+    ]
+    const ctx = contextOf(rows, [ARIA, 'char_h', 'item_l'])
+    expect(ctx.entities.find((e) => e.id === 'item_l')?.state).toMatchObject({
+      holder: { id: 'char_h', status },
+    })
+
+    const out = fromScene(render(source, ctx))
+    expect(out).toContain('## Lantern')
+    expect(out).not.toContain('Hollin')
+  })
+
+  // LiquidJS drops a filter on a for tag's collection, which would let every status through.
+  it.each(templates)('%s lists only active entities in scene', (_, source) => {
+    const rows = [
+      makeEntity({ id: ARIA, kind: 'character', name: 'Aria' }),
+      makeEntity({ id: 'char_s', kind: 'character', name: 'Sefa', status: 'staged' }),
+      makeEntity({ id: 'char_r', kind: 'character', name: 'Rook', status: 'retired' }),
+    ]
+    const out = render(source, contextOf(rows, [ARIA, 'char_s', 'char_r']))
+    expect(out).toContain('## Aria')
+    expect(out).not.toContain('## Sefa')
+    expect(out).not.toContain('## Rook')
   })
 })
 

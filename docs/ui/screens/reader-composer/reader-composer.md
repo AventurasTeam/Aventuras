@@ -257,15 +257,61 @@ reply alone (no chained chapter close), regenerate fires
 immediately; discarding that take is the point of the action, and
 prompting every time would nag.
 
+**While the chained pass or close still runs**, regenerate
+interrupts it instead, with no confirm: nothing of it has committed to
+re-run. The pass or close moves to the next turn, and a toast says so
+([During a memory update](#during-a-memory-update)).
+
 **Confirm when the turn closed a chapter.** If the turn chained a
-chapter close, its lore-management writes (the chapter-close
-sub-jobs) reverse and re-run. The gate is cost, not data loss —
+chapter close that committed, its lore-management writes (the
+chapter-close sub-jobs) reverse and re-run. The gate is cost, not data loss —
 regenerate owns the loss of the prior take intrinsically; what
 warrants consent is re-running the expensive sub-jobs, a boundary
 rare enough that the confirm never turns routine. It reuses the
 [rollback confirmation](./rollback-confirm/rollback-confirm.md#cross-chapter-case)
 cross-chapter copy, reframed as re-run rather than re-open: the
 chapter returns to in-progress and regenerates.
+
+**Its counts stay true while it is open**, as the rollback modal's do
+([`rollback-confirm.md → Counts`](./rollback-confirm/rollback-confirm.md#counts)):
+it recounts each time a run settles under it, and `regenerateTurn`
+refuses `counts-changed`, with the fresh counts, when the set it
+resolves at confirm differs from the counts the user saw. The reader
+then shows the toast
+`The counts changed while this was open. Check them before confirming.`
+and re-opens the confirm on the fresh counts.
+
+### During a memory update
+
+Every few turns a pass chains after the turn, and a chapter close
+after the turn that crosses the threshold. Both hold the gate while
+the user reads the reply, and the head reversals, regenerate among
+them, interrupt them
+([`principles.md → Edit restrictions during in-flight generation`](../../principles.md#edit-restrictions-during-in-flight-generation)),
+except a pass a failure entry's `Retry` started (below).
+In the reader the banner shows `Updating memory… [Cancel]` or the
+close's progress, and the composer stays live while Send waits. An
+interrupt or the pill's Cancel shows an info
+[toast](../../patterns/toast.md):
+
+- `Memory update moved to your next turn.`
+- `Chapter close moved to your next turn.`
+
+A pass that fails shows a warning toast,
+`Memory update failed. It runs again before your next turn.`
+
+At the next Send the deferred or failed work runs first, the banner
+reading `Updating memory before your turn…`, and the turn follows;
+Cancel then cancels the whole Send and keeps the text in the composer
+([`memory/classifier.md → Pipeline framing`](../../../memory/classifier.md#pipeline-framing)).
+If the pass fails there, the Send fails too: the turn doesn't start,
+the text goes back to an empty composer (else onto the entry), and the
+failure shows as a
+[system entry](#transient-pipeline-failures--system-entries-in-chat)
+([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy)).
+Its `Retry` runs the pass alone, and that pass holds the reader's
+actions, head reversals included, until it ends; the pill's Cancel
+ends it.
 
 ### Save and regenerate on a content edit
 
@@ -464,6 +510,8 @@ chrome blip.
 | Failure                                                                                                                                                                                                                | Action buttons                                    |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
 | **LLM call failed**                                                                                                                                                                                                    | `Retry` · `View details` · `Dismiss`              |
+| **Memory update failed** before the turn, failing the Send ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy))                                                                   | `Retry` · `View details` · `Dismiss`              |
+| **Memory update failed**, branch held (an earlier update couldn't be undone, so Send is refused)                                                                                                                       | `Dismiss`                                         |
 | **Embed call failed** mid-turn (blocking per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle); the composer is not gated — a resubmit re-runs the same blocking sync stage) | `Switch embedder` · `Retry` · `Dismiss`           |
 | **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `View details` · `Dismiss`        |
 | **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `View details` · `Dismiss`        |
@@ -515,18 +563,36 @@ A failure entry carries the submission that produced it
 `user_action` was reverse-replayed with the run, that copy is the only
 one left. It is a convenience for `Retry`, not a vault: **every path
 that destroys the entry hands the submission back to the composer
-draft** — `Dismiss`, and the pre-dispatch tail clear on a regenerate
-that then throws. An empty draft receives the text verbatim under
-composer mode `Free`, since the stored content is already wrapped and
-must not be wrapped twice; a non-empty draft wins and the user is told
-the text was dropped rather than losing it silently.
+draft** — `Dismiss`, a pass entry's `Retry` whose pass commits (it
+clears the entry through `Dismiss`), and the pre-dispatch tail clear on
+a regenerate that then throws. An empty draft receives the text
+verbatim under composer mode `Free`, since the stored content is
+already wrapped and must not be wrapped twice; a non-empty draft wins
+and the user is told the text was dropped rather than losing it
+silently.
+
+A **Memory update failed** entry carries the submission only where
+the composer can't hold the text. A Send refused on a held branch
+always leaves its text on the entry, since the entry advises a restart
+and the draft would not survive one. A `Retry` that finds the branch
+held keeps whatever text its entry held; an entry without text takes
+the composer's draft instead, for the same reason. The entry is
+written first, then the composer empties, unless the draft changed
+during the write: it stays, since duplicated text beats lost text.
+With an empty composer, or once the user has left the branch, the held
+entry keeps no text and doesn't claim to. On a failed pass the entry carries the text
+only when the composer couldn't take it back (the draft was occupied,
+or the user left the branch); otherwise the text goes straight back to
+the composer.
 
 Restoring the _entry_ is deliberately not the mechanism. A failure
 entry re-appends at the branch tail, so on a path where a partial
 sweep already moved the tail it would park a stale notice over a
 branch it no longer describes — which is why the regenerate rejection
 arm may put the entry back and the throw arm may not. A draft has no
-position, so it is safe on both.
+position, so it is safe on both. A Send cancelled during its owed
+pass has written nothing either, so it puts the entry back too, and
+hands its own text to the draft.
 
 This leaves a failed turn's text under the same custody as any unsent
 draft, including the same limit: composer input is pre-submit state
@@ -549,16 +615,12 @@ dismissed by the next turn:
   rather than a cause: the trigger is a non-zero stale-row count, which
   an available embedder also produces (a cancelled swap re-flags every
   row).
-- **Failed-persistent classifier** (per
-  [`memory/classifier.md → Pill priority`](../../../memory/classifier.md#background-task-framing)).
-  Pill copy: `Classifier offline — retrieval coverage thinning`.
-  Tap → routes to Story Settings · Memory · Classifier panel.
 
 Pill state precedence: blocking phase > error state > background
 phase > hidden, per
 [`generation-status-pill.md → Priority resolution`](../../patterns/generation-status-pill.md#priority-resolution).
-The background classifier pass is the one phase that yields, so a
-sticky error survives it rather than being blanked on its cadence.
+A pass blocks like a turn, so a sticky error hides while it runs and
+shows again when it ends.
 Sticky errors stay visible between turns; once resolved, the pill
 collapses back to hidden until the next event.
 
@@ -923,7 +985,12 @@ while still in the same stream → autoscroll re-engages. Viewport
 pins back to streaming entry's bottom.
 
 **Stream end.** Engaged / disengaged state resets. Next stream
-re-evaluates the engage condition fresh.
+re-evaluates the engage condition fresh. An engaged end holds the
+bottom while the reply settles: the committed row replaces the
+streaming card and lays out taller (its footer arrives with it), so
+the viewport re-asserts the bottom each frame until the content
+height holds, and a wheel or touch gesture hands control back. A
+disengaged end moves nothing.
 
 **Layout shifts during a stream.**
 
@@ -935,6 +1002,23 @@ re-evaluates the engage condition fresh.
   last entry and composer. Engaged: viewport stays at the new
   bottom (engagement carries through the layout shift). Disengaged
   - above tolerance: panel doesn't move them.
+
+**Viewport shrink at the bottom.** When the reader's viewport loses
+height while the user sits within ~20px of the bottom (the
+[jump button's](#jump-buttons) near-bottom tolerance), the viewport
+re-pins to the bottom, with or without a stream, unless a finger is
+down. The motivating trigger is the
+[memory banner](../../principles.md#affordance-loci) mounting below
+the top bar as a pass starts, right after a reply commits. The
+stream-end settle above leaves the reader at the bottom, and holds
+it there if the banner lands while it still runs; past the settle,
+without the re-pin, the reply's last lines would stay hidden for the
+whole pass. A draft that grows the composer is another trigger.
+Further from the bottom the user keeps their position, and a
+viewport that grows needs nothing. An entry's inline editor that has
+focus holds the position too: on Android the keyboard opening under
+it shrinks the viewport, and pinning the bottom then would push the
+editor up under the top bar.
 
 **Streaming while in a non-recent window.** Pipeline writes happen
 in the data layer regardless of which window is rendered. The

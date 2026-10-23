@@ -17,6 +17,6 @@ configureDeltaActionPort({
   reverseReplayDeltas,
   describeReplayError: describeDeltaReplayError,
   settleUserWrites,
-  holdWritePhase: holdBranchWriteExclusive,
-  releaseWritePhase: releaseBranchWriteExclusive,
+  holdBranchWriteExclusive,
+  releaseBranchWriteExclusive,
 })

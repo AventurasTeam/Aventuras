@@ -343,7 +343,7 @@ Adds `### GenerationStatusPill` section to
   [`memory/model-management.md → Staleness UI`](../memory/model-management.md#staleness-ui),
   `classifier-offline` from failed-persistent classifier state
   per
-  [`memory/classifier.md → Pill priority`](../memory/classifier.md#background-task-framing).
+  [`memory/classifier.md → Pill priority`](../memory/classifier.md#pipeline-framing).
 - **Top-bar consumer wiring** — render the pill on Reader,
   World, Plot, Story Settings, Chapter Timeline per
   [`principles.md → Universal in-story chrome`](../ui/principles.md#universal-in-story-chrome).

@@ -23,7 +23,7 @@ export type ImportRowResult =
   | { status: 'ok'; id: string }
   | { status: 'rejected'; reason: string; code: ImportRejectionCode }
 
-// An import writes no parent location, so a parent code can't arise; one that did is a failure.
+// An import writes no location ref, so a parent or place code here is a failure.
 function importResult(result: RowSaveResult): ImportRowResult {
   if (result.status === 'ok') return result
   const code =
@@ -70,19 +70,11 @@ function characterDraft(payload: EntityImportOf<'character'>): CharacterDraft {
 
 // data-model.md → Aventuras file format: branch-local refs never travel.
 function entityInput(payload: EntityImport): EntitySaveInput {
-  const create = { keywordsBase: [] }
   switch (payload.kind) {
     case 'character':
-      return {
-        ...create,
-        kind: 'character',
-        draft: characterDraft(payload),
-        relationships: [],
-        relationshipsBase: [],
-      }
+      return { kind: 'character', draft: characterDraft(payload), relationships: [] }
     case 'location':
       return {
-        ...create,
         kind: 'location',
         draft: {
           ...baseDraft(payload),
@@ -92,7 +84,6 @@ function entityInput(payload: EntityImport): EntitySaveInput {
       }
     case 'item':
       return {
-        ...create,
         kind: 'item',
         draft: {
           ...baseDraft(payload),
@@ -102,7 +93,6 @@ function entityInput(payload: EntityImport): EntitySaveInput {
       }
     case 'faction':
       return {
-        ...create,
         kind: 'faction',
         draft: {
           ...baseDraft(payload),

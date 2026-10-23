@@ -1,8 +1,9 @@
 import { and, eq } from 'drizzle-orm'
 
-import type { Entity, EntityState, LocationState, NewEntity } from '@/lib/db'
+import type { CollisionReason, Entity, EntityState, NewEntity } from '@/lib/db'
 import {
   branches,
+  COLLISION_REASONS,
   emptyEntityState,
   entities,
   entityStateColumnSchema,
@@ -13,7 +14,14 @@ import {
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { entitiesStore } from '@/lib/stores'
-import { checkParentChain, PARENT_CHAIN_BROKEN, PARENT_CYCLE, parentOfLocations } from '@/lib/world'
+import {
+  checkParentChain,
+  PARENT_CHAIN_BROKEN,
+  PARENT_CYCLE,
+  parentIdOf,
+  parentOfLocations,
+  PLACE_REFUSAL,
+} from '@/lib/world'
 
 import { cascadedDelete } from '../delta/delete-cascade'
 import { computeUndoPayload, deepEqual } from '../delta/delta-encoding'
@@ -30,6 +38,7 @@ import {
   appendEntityKeywordsHandler,
   promoteStagedEntityHandler,
   retireEntityHandler,
+  setCharacterFactionHandler,
   updateEntityInventoryHandler,
   updateEntityLocationTrackingHandler,
   updateEntityStackablesHandler,
@@ -37,7 +46,7 @@ import {
   updateItemPositionHandler,
 } from './state-patch-actions'
 
-type EntityUpdatePatch = Partial<{
+type EntityColumnPatch = Partial<{
   name: string
   description: string | null
   status: Entity['status']
@@ -47,12 +56,34 @@ type EntityUpdatePatch = Partial<{
   keywords: string[]
   priority: number
   state: EntityState
-  /**
-   * User paths only clear the flag; the classifier sets it at create. Omit the key to leave it: an
-   * explicit undefined is refused.
-   */
-  nameCollisionFlag: 0
 }>
+
+/** Clears a collision flag with its partner and reason, all three in one write. */
+export type FlagClearPatch = {
+  nameCollisionFlag: 0
+  nameCollisionPartnerId: null
+  nameCollisionReason: null
+}
+
+/**
+ * Points a flagged row at another partner, leaving its flag as it is. The reason stays too unless
+ * the patch carries the one that describes the new pairing (a merge taking over the loser's partner).
+ */
+export type FlagRepointPatch = {
+  nameCollisionPartnerId: string
+  nameCollisionReason?: CollisionReason
+  nameCollisionFlag?: never
+}
+
+type NoFlagPatch = {
+  nameCollisionFlag?: never
+  nameCollisionPartnerId?: never
+  nameCollisionReason?: never
+}
+
+// The classifier sets the flag at create; a user write only clears it or re-points the partner
+// (data-model.md → Authorship contract). Omit a key to leave it: an explicit undefined is refused.
+type EntityUpdatePatch = EntityColumnPatch & (NoFlagPatch | FlagClearPatch | FlagRepointPatch)
 
 declare module '@/lib/actions/action-map' {
   interface PipelineActionMap {
@@ -77,7 +108,11 @@ export const UPDATABLE = [
   'priority',
   'state',
   'nameCollisionFlag',
+  'nameCollisionPartnerId',
+  'nameCollisionReason',
 ] as const
+
+const FLAG_COLUMNS = ['nameCollisionFlag', 'nameCollisionPartnerId', 'nameCollisionReason'] as const
 
 function fullRow(entry: NewEntity): Entity {
   // Apply SQLite defaults so the inserted row and the store create-patch row are byte-identical.
@@ -91,6 +126,8 @@ function fullRow(entry: NewEntity): Entity {
     retiredReason: entry.retiredReason ?? null,
     injectionMode: entry.injectionMode,
     nameCollisionFlag: entry.nameCollisionFlag ?? 0,
+    nameCollisionPartnerId: entry.nameCollisionPartnerId ?? null,
+    nameCollisionReason: entry.nameCollisionReason ?? null,
     state: entry.state ?? emptyEntityState(entry.kind),
     tags: entry.tags ?? [],
     keywords: entry.keywords ?? [],
@@ -103,23 +140,80 @@ function fullRow(entry: NewEntity): Entity {
   }
 }
 
-// data-model.md → LocationState: the pre-commit walk, on every entity-handler write.
-async function refuseParentCycle(
+const SELF_PARTNER = 'an entity cannot be its own collision partner'
+
+// edge-cases.md → Schema's CHECK, refused here rather than failing as SQL.
+function flagTripleIssue(row: Entity): string | null {
+  const partner = row.nameCollisionPartnerId
+  const reason = row.nameCollisionReason
+  if (row.nameCollisionFlag === 0)
+    return partner == null && reason == null
+      ? null
+      : 'an unflagged entity has no collision partner or reason'
+  if (row.nameCollisionFlag !== 1)
+    return `nameCollisionFlag must be 0 or 1, got ${row.nameCollisionFlag}`
+  if (partner == null || partner === '') return 'a flagged entity needs a collision partner'
+  if (partner === row.id) return SELF_PARTNER
+  if (reason == null || !COLLISION_REASONS.includes(reason))
+    return `a flagged entity needs a collision reason, got ${String(reason)}`
+  return null
+}
+
+// entityWriteSchema omits the flag columns, so its parse strips them instead of checking them.
+function flagPatchIssue(patch: Record<string, unknown>, current: Entity): string | null {
+  const named = FLAG_COLUMNS.filter((col) => col in patch)
+  if (named.length === 0) return null
+  const clears =
+    named.length === FLAG_COLUMNS.length &&
+    patch.nameCollisionFlag === 0 &&
+    patch.nameCollisionPartnerId === null &&
+    patch.nameCollisionReason === null
+  if (clears) return null
+  const reason = patch.nameCollisionReason
+  const repoints =
+    named.every((col) => col !== 'nameCollisionFlag') &&
+    typeof patch.nameCollisionPartnerId === 'string' &&
+    patch.nameCollisionPartnerId !== '' &&
+    (!('nameCollisionReason' in patch) ||
+      (typeof reason === 'string' && COLLISION_REASONS.some((r) => r === reason)))
+  if (!repoints) return 'collision flag columns take only a clear or a partner re-point'
+  if (patch.nameCollisionPartnerId === current.id) return SELF_PARTNER
+  return current.nameCollisionFlag === 1 ? null : 'only a flagged entity has a partner to re-point'
+}
+
+// data-model.md → LocationState: the pre-commit walk. A create that isn't itself retired refuses a
+// retired parent: no group revives one beside a new child, so pre-group state counts. An update
+// can't be judged so (a merge revives a retired row while re-parenting), so its builders check it.
+async function refuseParent(
   branchId: string,
   id: string,
   proposed: string | null,
   ctx: DbCtx,
+  { refuseRetired }: { refuseRetired: boolean },
 ): Promise<HandlerOutcome | null> {
   if (proposed == null) return null
   const rows = await ctx.db
-    .select({ id: entities.id, kind: entities.kind, state: entities.state })
+    .select({
+      id: entities.id,
+      kind: entities.kind,
+      state: entities.state,
+      status: entities.status,
+    })
     .from(entities)
     .where(and(eq(entities.branchId, branchId), eq(entities.kind, 'location')))
   const check = checkParentChain(id, proposed, parentOfLocations(rows))
-  if (check === 'ok') return null
   if (check === 'cycle') return { status: 'rejected', reason: PARENT_CYCLE, code: PARENT_CYCLE }
-  logger.error('action_layer.parent_chain_cap_hit', { branchId, id, parentId: proposed })
-  return { status: 'rejected', reason: PARENT_CHAIN_BROKEN, code: PARENT_CHAIN_BROKEN }
+  if (check === 'cap-hit') {
+    logger.error('action_layer.parent_chain_cap_hit', { branchId, id, parentId: proposed })
+    return { status: 'rejected', reason: PARENT_CHAIN_BROKEN, code: PARENT_CHAIN_BROKEN }
+  }
+  if (refuseRetired && rows.find((r) => r.id === proposed)?.status === 'retired')
+    return {
+      status: 'rejected',
+      reason: PLACE_REFUSAL.retiredParent,
+      code: PLACE_REFUSAL.retiredParent,
+    }
+  return null
 }
 
 const createHandler: ActionHandler = async (action, branchId, ctx) => {
@@ -135,16 +229,15 @@ const createHandler: ActionHandler = async (action, branchId, ctx) => {
   const scalars = entityWriteSchema.safeParse(row)
   if (!scalars.success)
     return { status: 'rejected', reason: `invalid entity: ${scalars.error.message}` }
+  const flagIssue = flagTripleIssue(row)
+  if (flagIssue != null) return { status: 'rejected', reason: `invalid entity: ${flagIssue}` }
   const parsed = entityStateSchemaForKind(row.kind).safeParse(row.state)
   if (!parsed.success)
     return { status: 'rejected', reason: `invalid ${row.kind} state: ${parsed.error.message}` }
   if (row.kind === 'location') {
-    const refused = await refuseParentCycle(
-      branchId,
-      row.id,
-      (row.state as LocationState).parent_location_id,
-      ctx,
-    )
+    const refused = await refuseParent(branchId, row.id, parentIdOf(row), ctx, {
+      refuseRetired: row.status !== 'retired',
+    })
     if (refused) return refused
   }
   return {
@@ -181,12 +274,8 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   const scalars = entityWriteSchema.partial().safeParse(patch)
   if (!scalars.success)
     return { status: 'rejected', reason: `invalid entity patch: ${scalars.error.message}` }
-  // entityWriteSchema omits the flag, so the parse above strips it instead of checking it.
-  if ('nameCollisionFlag' in patch && patch.nameCollisionFlag !== 0)
-    return {
-      status: 'rejected',
-      reason: 'invalid entity patch: nameCollisionFlag can only be cleared',
-    }
+  const flagIssue = flagPatchIssue(patch, current)
+  if (flagIssue != null) return { status: 'rejected', reason: `invalid entity patch: ${flagIssue}` }
 
   if (patch.state !== undefined) {
     const parsed = entityStateSchemaForKind(current.kind).safeParse(patch.state)
@@ -198,10 +287,9 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   }
 
   if (patch.state !== undefined && current.kind === 'location') {
-    const proposed = (patch.state as LocationState).parent_location_id
-    const prior = (current.state as LocationState | null)?.parent_location_id ?? null
-    if (proposed !== prior) {
-      const refused = await refuseParentCycle(bid, id, proposed, ctx)
+    const proposed = parentIdOf({ state: patch.state })
+    if (proposed !== parentIdOf(current)) {
+      const refused = await refuseParent(bid, id, proposed, ctx, { refuseRetired: false })
       if (refused) return refused
     }
   }
@@ -327,6 +415,7 @@ export function registerEntities(): void {
       promoteStagedEntity: promoteStagedEntityHandler,
       appendEntityKeywords: appendEntityKeywordsHandler,
       retireEntity: retireEntityHandler,
+      setCharacterFaction: setCharacterFactionHandler,
     },
     patcher: (branchId, p) => entitiesStore.patch(branchId, p),
     cascade: entityCascade,

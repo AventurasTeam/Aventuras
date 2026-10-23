@@ -25,18 +25,18 @@ describe('classifyRegenerateGate', () => {
 })
 
 describe('regenerate dispatch preflight', () => {
-  it('requires the captured branch and both dispatch gates to remain current', () => {
-    const current = {
-      startedBranchId: 'br_1',
-      currentBranchId: 'br_1',
-      loadedBranchId: 'br_1',
-      dispatchInFlight: false,
-      userEditBlocked: false,
-    }
+  const current = {
+    startedBranchId: 'br_1',
+    currentBranchId: 'br_1',
+    loadedBranchId: 'br_1',
+    dispatchInFlight: false,
+    headReversalBlocked: false,
+  }
 
+  it('requires the captured branch and both dispatch gates to remain current', () => {
     expect(canContinueRegeneratePreflight(current)).toBe(true)
     expect(canContinueRegeneratePreflight({ ...current, dispatchInFlight: true })).toBe(false)
-    expect(canContinueRegeneratePreflight({ ...current, userEditBlocked: true })).toBe(false)
+    expect(canContinueRegeneratePreflight({ ...current, headReversalBlocked: true })).toBe(false)
     expect(canContinueRegeneratePreflight({ ...current, currentBranchId: 'br_2' })).toBe(false)
     expect(canContinueRegeneratePreflight({ ...current, loadedBranchId: 'br_2' })).toBe(false)
   })
@@ -58,17 +58,22 @@ describe('regenerate dispatch preflight', () => {
 
     const result = loadRegenerateCountsIfCurrent(
       () => pendingCounts,
-      () => ({
-        startedBranchId: 'br_1',
-        currentBranchId: 'br_1',
-        loadedBranchId: 'br_1',
-        dispatchInFlight,
-        userEditBlocked: false,
-      }),
+      () => ({ ...current, dispatchInFlight }),
     )
     dispatchInFlight = true
     resolveCounts({ entries: 3, chapters: 0, worldStateChanges: 1 })
 
+    expect(await result).toBeNull()
+  })
+
+  // A refresh started beside the pass while the counts loaded: the regenerate would refuse.
+  it('discards counts when the head-reversal gate rises while the query is awaiting', async () => {
+    let headReversalBlocked = false
+    const result = loadRegenerateCountsIfCurrent(
+      async () => ({ entries: 1, chapters: 0, worldStateChanges: 0 }),
+      () => ({ ...current, headReversalBlocked }),
+    )
+    headReversalBlocked = true
     expect(await result).toBeNull()
   })
 
@@ -78,13 +83,7 @@ describe('regenerate dispatch preflight', () => {
     await expect(
       loadRegenerateCountsIfCurrent(
         async () => counts,
-        () => ({
-          startedBranchId: 'br_1',
-          currentBranchId: 'br_1',
-          loadedBranchId: 'br_1',
-          dispatchInFlight: false,
-          userEditBlocked: false,
-        }),
+        () => current,
       ),
     ).resolves.toBe(counts)
   })

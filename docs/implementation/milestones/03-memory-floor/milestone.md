@@ -253,7 +253,7 @@ primitive (`reverseAndPruneDeltaRows` bracketed by
 one place: the in-flight drain
 (`await awaitRunTerminal('periodic-classifier', 'cancel')` before
 the sweep, per
-[`generation-pipeline.md → Prose reversals and the classifier barrier`](../../../generation-pipeline.md#prose-reversals-and-the-classifier-barrier))
+[`generation-pipeline.md → Prose reversals and the interrupt`](../../../generation-pipeline.md#prose-reversals-and-the-interrupt))
 and the watermark clamp
 (`processedThrough ← min(processedThrough, position(B) − 1)` inside
 the sweep transaction, per
@@ -432,7 +432,7 @@ cross-slice routing verifies at integration once both are merged
 - **Scheduler placement.** Where the cadence tick lives (store
   subscription on entry writes vs an orchestrator-adjacent
   module) — the framework deliberately excludes it
-  ([`generation-pipeline.md → Background scheduler`](../../../generation-pipeline.md#background-scheduler--out-of-framework-scope)).
+  ([`generation-pipeline.md → Cadence chain`](../../../generation-pipeline.md#cadence-chain)).
   Resolve in [Slice 3.3](./slices/03-classifier.md) planning.
 - **Token-progress strip fill.** `js-tiktoken` lands in 3.4; the
   reader's zero-filled token-progress strip (M2.5 interim) could

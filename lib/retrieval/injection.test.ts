@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
+import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
+import { buildEntityViews } from '@/lib/world'
+
 import { RANKER_DEFAULTS } from './constants'
 import { buildKeywordInjections, type KeywordInjectionInput } from './injection'
 import type { EntityRow, LoreRow } from './pools'
@@ -33,6 +36,8 @@ const input = (over: Partial<KeywordInjectionInput> = {}): KeywordInjectionInput
   entities: [],
   lore: [],
   floorIds: new Set<string>(),
+  disabledPlaceIds: new Set<string>(),
+  entityViews: buildEntityViews([], { sceneEntities: [], currentLocationId: null }),
   recentProse: '',
   scanText: '',
   budgets: { entities: 1200, lore: 1800, happenings: 1500, threads: 400, chapters: 600 },
@@ -126,6 +131,18 @@ describe('buildKeywordInjections — precedence and pool exclusions', () => {
 
     expect(out.entities).toEqual([])
     expect(out.lore).toEqual([])
+  })
+
+  it('leaves a place disabled through an ancestor alone however loudly it matches', () => {
+    const out = buildKeywordInjections(
+      input({
+        entities: [entity({ id: 'loc_vault', kind: 'location' })],
+        disabledPlaceIds: new Set(['loc_vault']),
+        scanText: 'Kael waits.',
+      }),
+    )
+
+    expect(out.entities).toEqual([])
   })
 
   it('skips a row the structural floor already seated, on either type', () => {
@@ -249,6 +266,101 @@ describe('buildKeywordInjections — the budget cap', () => {
     )
 
     expect(out.lore.map((i) => i.seated)).toEqual([false])
+  })
+})
+
+describe('buildKeywordInjections — entity rows', () => {
+  it('measures a seated entity from its view and carries the very view it measured', () => {
+    const entityViews = buildEntityViews(
+      [
+        makeEntity({
+          id: 'e1',
+          kind: 'character',
+          name: 'Kael',
+          state: { voice: 'clipped' } as never,
+        }),
+      ],
+      { sceneEntities: [], currentLocationId: null },
+    )
+    const out = buildKeywordInjections(
+      input({ entities: [entity()], entityViews, scanText: 'Kael waits.' }),
+    )
+    const [seat] = out.entities
+    expect(seat?.row.renderedText).toBe('Kael (not in the scene): A ferryman.\nVoice: clipped')
+    expect(seat?.row.kind === 'entity' && seat.row.entity.state).toBe(entityViews.byId.get('e1'))
+  })
+
+  // retrieval.md → Keyword injection.
+  it('cascades from an entity’s name and description, never from its state lines', () => {
+    const rows = [
+      makeEntity({
+        id: 'e1',
+        kind: 'character',
+        name: 'Kael',
+        description: 'Sworn to the Hand.',
+        state: { faction_id: 'f1' } as never,
+      }),
+      makeEntity({ id: 'f1', kind: 'faction', name: 'The Silver Hand' }),
+    ]
+    const entityViews = buildEntityViews(rows, { sceneEntities: [], currentLocationId: null })
+    const cascade = { mode: 'inject' as const, budgetShare: 1, cascade: true, cascadeMaxDepth: 2 }
+    const faction = entity({
+      id: 'f1',
+      kind: 'faction',
+      name: 'The Silver Hand',
+      description: null,
+    })
+
+    const viaState = buildKeywordInjections(
+      input({
+        settings: cascade,
+        entities: [entity({ description: null }), faction],
+        entityViews,
+        scanText: 'Kael waits.',
+      }),
+    )
+    expect(ids(viaState.entities)).toEqual(['e1'])
+    expect(viaState.entities[0]?.row.renderedText).toContain('Faction: The Silver Hand')
+
+    // Positive control: the same faction keyword in the head does cascade.
+    const viaHead = buildKeywordInjections(
+      input({
+        settings: cascade,
+        entities: [entity({ description: 'Sworn to the Silver Hand.' }), faction],
+        entityViews,
+        scanText: 'Kael waits.',
+      }),
+    )
+    expect(ids(viaHead.entities)).toEqual(['e1', 'f1'])
+  })
+
+  it.each([
+    ['active', 'not in the scene', 'scene'],
+    ['staged', 'available to introduce', 'introduce'],
+  ] as const)('never cascades from the framing of a row at status %s', (status, framing, word) => {
+    const cascade = { mode: 'inject' as const, budgetShare: 1, cascade: true, cascadeMaxDepth: 2 }
+    const run = (description: string) =>
+      buildKeywordInjections(
+        input({
+          settings: cascade,
+          entities: [
+            entity({ status, description }),
+            entity({ id: 'e2', name: 'Bosun', keywords: [word] }),
+          ],
+          lore: [lore({ keywords: [word] })],
+          scanText: 'Kael waits.',
+        }),
+      )
+
+    const viaFraming = run('A ferryman.')
+    expect(viaFraming.entities[0]?.row.renderedText).toBe(`Kael (${framing}): A ferryman.`)
+    expect(ids(viaFraming.entities)).toEqual(['e1'])
+    expect(ids(viaFraming.lore)).toEqual([])
+
+    // Positive control: the same word in the description does cascade.
+    const viaDescription = run(`A ferryman who knows when to ${word}.`)
+    expect(ids(viaDescription.entities)).toEqual(['e1', 'e2'])
+    expect(ids(viaDescription.lore)).toEqual(['l1'])
   })
 })
 

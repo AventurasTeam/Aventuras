@@ -62,6 +62,7 @@ const LOCK_KEY: { [K in ProductionKind]: LockKey<K> } = {
   promoteStagedEntity: entityRow,
   appendEntityKeywords: entityRow,
   retireEntity: entityRow,
+  setCharacterFaction: entityRow,
   upsertCharacterRelationship: relationships,
   deleteCharacterRelationship: relationships,
   createLore: null,
@@ -147,8 +148,8 @@ export async function settleUserWrites(): Promise<void> {
 
 export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<MutationResult> {
   const run = () => applyDeltaActionUnlocked(args, ctx)
-  // The branch lock sits outside the row keys: a write queued behind a no-gate run holds no key
-  // the run's own writes need (generation-pipeline.md → No-gate write phase).
+  // The branch lock sits outside the row keys: a write queued behind a reversal's exclusive hold
+  // holds no key that reversal needs (generation-pipeline.md → Branch write lock).
   const write = withBranchWriteShared(args.branchId, args.actionId, () =>
     withKeyLocks(lockKeysFor(args.action), run),
   )
@@ -158,8 +159,8 @@ export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<Mutation
 async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<MutationResult> {
   const { action, actionId, branchId } = args
   const entryId = args.entryId ?? null
-  // The barrier (prose-reversal.ts) sets reversalInProgress before draining the in-flight
-  // classifier burst, which must still commit — rejecting it here would burn a retry.
+  // The bracket (prose-reversal.ts) raises reversalInProgress before it interrupts a pass; a pass
+  // write already dispatched must land so its abort reverses it — refused, it would fail the run.
   if (isUserOriginatedSource(action.source) && generationStore.getTxState().reversalInProgress)
     return {
       status: 'rejected',
@@ -219,10 +220,9 @@ export type DeltaGroupResult =
 type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
 
 /**
- * Handlers read pre-group state, so a delete's cascade can't see the group's other writes: a
- * second delete of a row, or a second write to a cascaded one, logs it twice (undo then hits a
- * unique constraint forever); a write to a row the group deletes leaves an undo that refuses as
- * held; a link or translation to a deleted or cascaded row dangles.
+ * Handlers read pre-group state. A second delete of a row, or a write to a cascaded one, logs it
+ * twice (undo hits a unique constraint forever); a write to a deleted row leaves an undo refused as
+ * held; a link, translation, place parent or faction naming a deleted or cascaded row dangles.
  */
 function groupConflict(outcomes: readonly OkOutcome[]): string | null {
   const cascaded = new Set<string>()
@@ -272,32 +272,6 @@ export async function applyDeltaActionGroup(
     withKeyLocks(keys, () => applyDeltaActionGroupUnlocked(actions, args, ctx)),
   )
   return actions.some((a) => isUserOriginatedSource(a.source)) ? trackUserWrite(write) : write
-}
-
-export type BuiltGroup<Code extends string = string> =
-  | { status: 'ok'; actions: readonly PipelineAction[] }
-  | { status: 'rejected'; reason: string; code: Code }
-
-/**
- * applyDeltaActionGroup, but `build` runs under the branch lock's shared hold through the commit:
- * it reads every no-gate pass's writes so far, and none lands before commit. `build` must take no
- * lock, as the hold isn't reentrant. Refusals return as is, throws reject. Tracked as a user write.
- */
-export function applyDeltaActionGroupBuilt(
-  build: () => BuiltGroup,
-  args: GroupArgs,
-  ctx: DbCtx,
-): Promise<DeltaGroupResult> {
-  const write = withBranchWriteShared(args.branchId, args.actionId, async () => {
-    const built = build()
-    if (built.status === 'rejected') return built
-    const { actions } = built
-    // Row keys come from the plan, so they follow the build, still inside the branch lock.
-    return withKeyLocks(actions.flatMap(lockKeysFor), () =>
-      applyDeltaActionGroupUnlocked(actions, args, ctx),
-    )
-  })
-  return trackUserWrite(write)
 }
 
 async function applyDeltaActionGroupUnlocked(

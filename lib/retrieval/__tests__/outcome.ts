@@ -1,3 +1,5 @@
+import { buildEntityViews } from '@/lib/world'
+
 import type { StructuralFloor } from '../pools'
 import { buildQueryStack, type QueryStack } from '../queries'
 import type {
@@ -107,10 +109,15 @@ export function retrievalSuccess(over: RetrievalSuccessOverrides = {}): Retrieva
     floor: {
       sceneEntities: [],
       currentLocation: null,
+      currentLocationChain: [],
+      sceneFactions: [],
+      heldItems: [],
+      looseItems: [],
       activeThreads: [],
       alwaysEntities: [],
       alwaysLore: [],
       alwaysThreads: [],
+      views: buildEntityViews([], { sceneEntities: [], currentLocationId: null }),
       seatedIds: new Set(),
       ...over.floor,
     },

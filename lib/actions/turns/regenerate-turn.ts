@@ -5,11 +5,10 @@ import { logger } from '@/lib/diagnostics'
 import { isStorySwapPending, withTurnAdmission } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
 import {
+  CLASSIFIER_HELD,
   ensurePerTurnPipelineRegistered,
-  PER_TURN_KIND,
-  runPipeline,
+  isClassifierHeld,
   type RejectedStart,
-  type RunCtx,
   type TxResult,
 } from '@/lib/pipeline'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
@@ -22,27 +21,40 @@ import {
 import {
   resolveSweep,
   reversalRefused,
+  rollbackCountsOf,
+  sameRollbackCounts,
+  type CountsChangedRejection,
+  type RollbackCounts,
   type StoryEntryRejection,
 } from '../story-entries/operational'
 import { bracketProseReversal } from '../story-entries/prose-reversal'
+import { STORY_ENTRY_REJECTION } from '../story-entries/register'
 import type { DbCtx } from '../types'
-import { withBranchQueue } from './branch-queue'
+import { withBranchQueue, withPendingTurn } from './branch-queue'
 
 /**
  * Why a regenerate refused. Distinct from `reason` (a diagnostic string): the
  * host picks user-facing copy from this, and the classes differ in what the
- * user can do — wait, resume a swap, or nothing at all.
+ * user can do — wait, resume a swap, check the counts again, or nothing at all.
  */
 export type RegenerateRejectionCode =
   | 'embedder-swap'
   | 'generation-in-flight'
   | 'branch-not-loaded'
+  | typeof CLASSIFIER_HELD
   | 'not-an-ai-reply'
   | 'no-origin'
   | 'sweep-refused'
+  | typeof STORY_ENTRY_REJECTION.countsChanged
 
 export type RegenerateTurnResult =
-  | { status: 'rejected'; code: RegenerateRejectionCode; reason: string }
+  | {
+      status: 'rejected'
+      // Only `CountsChangedRejection` carries this code, so it alone narrows to the fresh counts.
+      code: Exclude<RegenerateRejectionCode, typeof STORY_ENTRY_REJECTION.countsChanged>
+      reason: string
+    }
+  | CountsChangedRejection
   | {
       status: 'ran'
       result: TxResult | RejectedStart
@@ -63,13 +75,37 @@ const SWAP_REJECTION = {
   reason: 'embedder-swap',
 } as const
 
+const HELD_REJECTION = {
+  status: 'rejected',
+  code: CLASSIFIER_HELD,
+  reason: 'classifier held',
+} as const
+
+const IN_FLIGHT_REJECTION = {
+  status: 'rejected',
+  code: 'generation-in-flight',
+  reason: 'generation in flight',
+} as const
+
 async function sweepFrom(
   branchId: string,
   targetId: string,
   ctx: DbCtx,
-): Promise<{ status: 'ok' } | StoryEntryRejection> {
+  expectedCounts?: RollbackCounts,
+): Promise<{ status: 'ok' } | StoryEntryRejection | CountsChangedRejection> {
   const swept = await resolveSweep(branchId, targetId, ctx)
   if ('status' in swept) return swept
+  // Compared with the set this sweep reverses, so the consent covers exactly what goes.
+  if (expectedCounts) {
+    const counts = rollbackCountsOf(swept.set)
+    if (!sameRollbackCounts(counts, expectedCounts))
+      return {
+        status: 'rejected',
+        code: STORY_ENTRY_REJECTION.countsChanged,
+        reason: 'regenerate counts changed since the confirm opened',
+        counts,
+      }
+  }
   try {
     await reverseAndPruneDeltaRows(swept.set, ctx, { keepRedoExact: false }, swept.clampOps)
   } catch (e) {
@@ -83,6 +119,7 @@ export async function regenerateTurn(
   ids: { storyId: string; branchId: string },
   replyEntryId: string,
   ctx: DbCtx,
+  opts?: { expectedCounts?: RollbackCounts },
 ): Promise<RegenerateTurnResult> {
   ensurePerTurnPipelineRegistered()
 
@@ -91,14 +128,12 @@ export async function regenerateTurn(
       ids.storyId,
       async (): Promise<RegenerateTurnResult> => {
         if (isStorySwapPending(ids.storyId)) return SWAP_REJECTION
-        if (generationStore.isUserEditBlocked())
-          return {
-            status: 'rejected',
-            code: 'generation-in-flight',
-            reason: 'generation in flight',
-          }
+        // Every regenerate is a head reversal: a pass or a close holding the gate is interrupted.
+        if (generationStore.isHeadReversalBlocked(ids.branchId)) return IN_FLIGHT_REJECTION
         if (entriesStore.getLoadedBranch() !== ids.branchId)
           return { status: 'rejected', code: 'branch-not-loaded', reason: 'branch not loaded' }
+        // Before the reads and the sweep: a held branch takes no turns, so nothing is destroyed.
+        if (await isClassifierHeld(ids.branchId, ctx)) return HELD_REJECTION
 
         const [target] = await ctx.db
           .select()
@@ -129,70 +164,83 @@ export async function regenerateTurn(
         if (origin == null || origin.kind !== 'user_action')
           return { status: 'rejected', code: 'no-origin', reason: 'no originating user action' }
 
-        let swept: { status: 'ok' } | StoryEntryRejection
-        try {
-          swept = await bracketProseReversal(ids.branchId, () =>
-            sweepFrom(ids.branchId, replyEntryId, ctx),
-          )
-        } catch (error) {
-          if (error instanceof DeltaReplayError && error.committed) undoRedoStore.clear()
-          throw error
-        }
-        if (swept.status === 'rejected')
-          return { status: 'rejected', code: 'sweep-refused', reason: swept.reason }
-        // A regenerate is a new unrelated action (data-model.md); the discarded
-        // take is not redo-restorable.
-        undoRedoStore.clear()
-
-        const runCtx: RunCtx = {
-          storyId: ids.storyId,
-          branchId: ids.branchId,
-          actionId: generateId('act'),
-          db: ctx.db,
-          runInTransaction: ctx.runInTransaction,
-        }
-        // No input threading: narrativePhase (per-turn.ts) reads its prompt from
-        // the branch tail and its insert position from MAX(position). Post-sweep the
-        // surviving user_action is that tail — provided the caller cleared any
-        // system tail first, which MAX(position) would otherwise insert after.
-        const result = await runPipeline(PER_TURN_KIND, runCtx)
-
-        // Non-success converges to the M2 failed-turn state: the standing
-        // user_action unwinds too, so Retry / draft-restore re-enter through
-        // the normal submit path without duplicating the action.
-        let converged = true
-        if (result.outcome !== 'completed') {
+        // Re-checked past the reads, synchronously with the mark and the bracket below: a reversal
+        // opened during them would otherwise throw this one out of its bracket as re-entry.
+        if (generationStore.isHeadReversalBlocked(ids.branchId)) return IN_FLIGHT_REJECTION
+        return withPendingTurn(ids.branchId, async (startTurn) => {
+          let swept:
+            | { status: 'ok' }
+            | StoryEntryRejection
+            | CountsChangedRejection
+            | typeof HELD_REJECTION
           try {
-            const followUp = await bracketProseReversal(ids.branchId, () =>
-              sweepFrom(ids.branchId, origin.id, ctx),
+            swept = await bracketProseReversal(ids.branchId, async () =>
+              // This interrupt can leave the branch held: a pass whose reversal didn't commit.
+              (await isClassifierHeld(ids.branchId, ctx))
+                ? HELD_REJECTION
+                : sweepFrom(ids.branchId, replyEntryId, ctx, opts?.expectedCounts),
             )
-            if (followUp.status === 'rejected') {
-              // A refused sweep reverses nothing, so the user_action stands.
-              converged = false
-              logger.warn('action_layer.regenerate_follow_up_sweep_rejected', {
+          } catch (error) {
+            if (error instanceof DeltaReplayError && error.committed) undoRedoStore.clear()
+            throw error
+          }
+          if (swept === HELD_REJECTION) return swept
+          if (swept.status === 'rejected')
+            return swept.code === STORY_ENTRY_REJECTION.countsChanged
+              ? swept
+              : { status: 'rejected', code: 'sweep-refused', reason: swept.reason }
+          // A regenerate is a new unrelated action (data-model.md); the discarded
+          // take is not redo-restorable.
+          undoRedoStore.clear()
+
+          // No input threading: narrativePhase (per-turn.ts) reads its prompt from
+          // the branch tail and its insert position from MAX(position). Post-sweep the
+          // surviving user_action is that tail — provided the caller cleared any
+          // system tail first, which MAX(position) would otherwise insert after.
+          const result = await startTurn({
+            storyId: ids.storyId,
+            actionId: generateId('act'),
+            db: ctx.db,
+            runInTransaction: ctx.runInTransaction,
+          })
+
+          // Non-success converges to the M2 failed-turn state: the standing
+          // user_action unwinds too, so Retry / draft-restore re-enter through
+          // the normal submit path without duplicating the action.
+          let converged = true
+          if (result.outcome !== 'completed') {
+            try {
+              const followUp = await bracketProseReversal(ids.branchId, () =>
+                sweepFrom(ids.branchId, origin.id, ctx),
+              )
+              if (followUp.status === 'rejected') {
+                // A refused sweep reverses nothing, so the user_action stands.
+                converged = false
+                logger.warn('action_layer.regenerate_follow_up_sweep_rejected', {
+                  branchId: ids.branchId,
+                  entryId: origin.id,
+                  reason: followUp.reason,
+                })
+              }
+            } catch (e) {
+              // A failed unwind must not cost the caller the run result and the
+              // user's text: without them the host has no Retry content and no
+              // draft to restore, the very state this convergence exists to avoid.
+              if (!(e instanceof DeltaReplayError)) throw e
+              // committed separates the two opposite recovery states: false leaves
+              // the user_action standing, true leaves entriesStore stale instead —
+              // and only the latter actually reached the converged state.
+              converged = e.committed
+              logger.warn('action_layer.regenerate_follow_up_sweep_failed', {
                 branchId: ids.branchId,
                 entryId: origin.id,
-                reason: followUp.reason,
+                committed: e.committed,
+                error: String(e),
               })
             }
-          } catch (e) {
-            // A failed unwind must not cost the caller the run result and the
-            // user's text: without them the host has no Retry content and no
-            // draft to restore, the very state this convergence exists to avoid.
-            if (!(e instanceof DeltaReplayError)) throw e
-            // committed separates the two opposite recovery states: false leaves
-            // the user_action standing, true leaves entriesStore stale instead —
-            // and only the latter actually reached the converged state.
-            converged = e.committed
-            logger.warn('action_layer.regenerate_follow_up_sweep_failed', {
-              branchId: ids.branchId,
-              entryId: origin.id,
-              committed: e.committed,
-              error: String(e),
-            })
           }
-        }
-        return { status: 'ran', result, userActionContent: origin.content, converged }
+          return { status: 'ran', result, userActionContent: origin.content, converged }
+        })
       },
     )
     return admission.admitted ? admission.value : SWAP_REJECTION

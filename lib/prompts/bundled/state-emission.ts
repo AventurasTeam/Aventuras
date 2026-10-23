@@ -2,14 +2,16 @@ export const STATE_EMISSION = `After your narrative prose, append exactly one <s
 
 <state>
   <scene_entities>comma-separated IDs of every character/item present in this scene</scene_entities>
-  <current_location>the ID of the current scene's location, if any</current_location>
+  <new_location handle="new:a-short-label" parent="the ID or handle of the place it is part of; leave out for a top-level place" name="the place's name">a short description of the place</new_location>
+  <current_location>{% if locationMap.size > 0 %}the ID from Places, or {% endif %}the handle of a new_location above</current_location>
   <world_time_delta>{% if worldTimeDeltaBasis == 'sinceUserAction' %}seconds elapsed since the end of the user's action{% else %}seconds elapsed since the previous entry, including any time the user's action itself took{% endif %} (0 for a flashback or memory; never negative)</world_time_delta>
   <visual_changes>
-    <entity id="ID" type="physique | face | hair | eyes | attire | distinguishing">the FULL new value for that category — this replaces whatever was there before, not a partial edit</entity>
+    <entity id="ID" type="physique | face | hair | eyes | attire | distinguishing">the category as it is now, restated from its current value shown above: keep what still applies, drop what no longer does, in about 60 words — it replaces the stored value whole</entity>
   </visual_changes>
+  <new_item handle="new:a-short-label" name="the item's name">a short description of the item</new_item>
   <transfers>
-    <item id="item ID" to="ID" from="ID" slot="equipped_items | inventory" />
-    <stackable key="lowercase name, e.g. gold" amount="quantity moved" to="ID" from="ID" />
+    <item id="item ID, or the handle of a new_item above" to="ID" from="ID" slot="equipped_items | inventory" />
+    <stackable key="the key exactly as the holder's Stackables line shows it, or a new lowercase name, e.g. gold, only for something they don't hold yet" amount="quantity moved, never more than the payer holds" to="ID" from="ID" />
   </transfers>
   <summary>one sentence summarizing what happened in this reply — identify the people, places and things that mattered by name, not ID</summary>
   <retrieval_queries>
@@ -17,4 +19,10 @@ export const STATE_EMISSION = `After your narrative prose, append exactly one <s
   </retrieval_queries>
 </state>
 
-Omit any inner tag you have nothing to report for. Use only the IDs shown to you above, without brackets — never invent one. Only reference items and locations that already have an ID; if something is genuinely new, describe it in prose only and leave it out of the structured block. \`to\` or \`from\` may be omitted on a transfer when there's no specific known other party (e.g. found loose, spent on someone off-scene).`
+Give each new place or item its own <new_location> or <new_item> tag with a handle that starts with new: (e.g. new:docks), and use a new place's handle like an ID only as the <current_location> or another new place's parent, and a new item's handle only as a transfer's item id or, when it is in the scene, in <scene_entities>. Write a double quote, < or > inside a create's name as &quot;, &lt; or &gt;, and a < inside its description as &lt;.
+
+Create a place only when the scene settles somewhere with its own identity the story could come back to: a named place, a building, a room that matters, a stretch of wild land where things happen. Don't create one for passing through (a corridor, a doorway, the road between two places); keep the current location then. Use an existing place's ID whenever the scene is somewhere already in Places, and nest a new place under the place it's part of.
+
+Create an item only when a character takes, receives or is given something that matters beyond this moment: a weapon, a key, a letter, a relic. Not food eaten on the spot, not money (use a stackable), not scenery.
+
+Omit any inner tag you have nothing to report for. Apart from those handles, use only the IDs shown to you above, without brackets — never invent one. \`to\` or \`from\` may be omitted on a transfer when there's no specific known other party (e.g. found loose, spent on someone off-scene).`

@@ -4,11 +4,13 @@ export {
   checkParentChain,
   PARENT_CHAIN_BROKEN,
   PARENT_CYCLE,
+  parentIdOf,
   parentOfLocations,
 } from './parent-chain'
 export {
   characterDraftFrom,
   characterDraftSchema,
+  characterFactionId,
   ENTITY_STATUSES,
   factionDraftFrom,
   factionDraftSchema,
@@ -27,11 +29,12 @@ export type {
   ItemDraft,
   LocationDraft,
   RelationshipDraft,
-  RelationshipBaseLink,
   RelationshipLink,
   StackableDraft,
 } from './entity-draft'
-export { nameTakenByOther, namesakeKey } from './collision-flags'
+export { nameTakenByOther } from './collision-flags'
+export { nameBasis, namesakeBasis } from './namesakes'
+export type { NameBasis, NamesakeMatch, NamesakeSide } from './namesakes'
 export {
   entityKeepActions,
   entityRenameActions,
@@ -39,8 +42,13 @@ export {
   renameIssue,
 } from './collision-resolve'
 export type { EntityRename, EntityRenamePlan, RenameIssue } from './collision-resolve'
-export { COLLISION_PAIR_MISS, collisionPairOf } from './collision-pair'
-export type { CollisionPair, CollisionPairLookup, CollisionPairMiss } from './collision-pair'
+export { COLLISION_PAIR_MISS, collisionPairOf, flaggedSideOf, pairSideOf } from './collision-pair'
+export type {
+  CollisionPair,
+  CollisionPairLookup,
+  CollisionPairMiss,
+  FlaggedEntity,
+} from './collision-pair'
 export { entityActions } from './entity-actions'
 export type { EntitySaveInput } from './entity-actions'
 export { deleteTailOf, entityDeleteActions } from './entity-delete'
@@ -51,8 +59,8 @@ export { entityMergeActions, MERGE_SCALARS } from './entity-merge'
 export type { EntityMergeInput, MergeScalar } from './entity-merge'
 export { mergeLinks } from './merge-links'
 export type { MergeOverlap } from './merge-links'
-export { mergedTerms } from './merge-terms'
-export type { MergeDeselections } from './merge-terms'
+export { addedNameKeyword, mergedTerms } from './merge-terms'
+export type { MergeDeselections, MergeTermChoices } from './merge-terms'
 export { cleanList } from './draft-text'
 export { EMPTY_LORE_DRAFT, loreActions, loreDraftFrom, loreDraftSchema } from './lore-draft'
 export type { LoreDraft } from './lore-draft'
@@ -60,6 +68,7 @@ export { leadLabelFor, resolveLead } from './lead'
 export type { LeadLabel } from './lead'
 export {
   branchWorldTime,
+  byName,
   carryingSummary,
   charactersAt,
   chipPreview,
@@ -71,3 +80,54 @@ export {
   visualParts,
 } from './overview'
 export type { CarryingSummary, ChipPreview } from './overview'
+export {
+  buildLocationMap,
+  listedAncestorNames,
+  locationMapView,
+  placeTree,
+  unhiddenLocationView,
+} from './location-map'
+export type {
+  LocationMapRow,
+  LocationMapView,
+  LocationMatchView,
+  MapAnchor,
+  PlaceTreeRow,
+} from './location-map'
+export { buildEntityViews, emptyEntityView } from './entity-views'
+export type {
+  CharacterStateView,
+  EntityRef,
+  EntityStateView,
+  EntityStateViewByKind,
+  EntityViews,
+  FactionStateView,
+  HoldingView,
+  ItemStateView,
+  KindedView,
+  LocationStateView,
+  StackableView,
+  ViewScene,
+} from './entity-views'
+export { placeModes } from './place-modes'
+export type { PlaceModes } from './place-modes'
+export {
+  mergePlaceRefusal,
+  PLACE_REFUSAL,
+  placeSaveConfirm,
+  placeSaveRefusal,
+  retireCascade,
+  retiredPlaceEntered,
+  storyPlaceOf,
+} from './place-rules'
+export type {
+  MergePlaceRefusalCode,
+  NamedPlace,
+  PlaceSaveConfirm,
+  PlaceSaveRefusal,
+  StoryPlace,
+} from './place-rules'
+export { itemNamesakes, matchNewPlace } from './new-entity-match'
+export type { SettledNewPlace } from './new-entity-match'
+export { placeNewLocation, settlingOrder } from './new-place-order'
+export type { NewPlaceDeclaration, ParentDropCause, SettlingPlace } from './new-place-order'

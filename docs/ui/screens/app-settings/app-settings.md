@@ -348,7 +348,9 @@ Fields:
     `Reasoning: not supported`.
   - Capability data unavailable → slider visible, info text
     `Reasoning: capability data unavailable — slider applies if model supports it`.
-- **timeout** — 5–300s slider, `[✎ custom]` for outliers. Default 60s.
+- **timeout** — 5–300s slider, `[✎ custom]` for outliers. Unset by
+  default: no limit, except a classifier pass's ten minutes
+  ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy)).
 - **structured output** — agent profiles only; not on narrative.
 - **Advanced — custom JSON payload** — collapsed by default. Per-field
   override merged on top of the constructed request payload. Any
@@ -580,8 +582,8 @@ stories.
 ### Memory
 
 Mirrors Story Settings · Memory's
-[Chapter close + Prompt context + Classifier (cadence + piggyback
-only) + Retrieval budgets + Embedder default](../story-settings/story-settings.md#memory-tab)
+[Chapter close + Prompt context + Classifier (cadence, piggyback and
+mentioned places only) + Retrieval budgets + Embedder default](../story-settings/story-settings.md#memory-tab)
 sections, bound to `app_settings.default_story_settings.*` instead
 of `stories.settings.*`. Form components literally reused; only
 data binding differs.

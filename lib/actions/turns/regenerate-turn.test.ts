@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import { idleStatus, PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   branches,
   characterRelationships,
@@ -9,15 +9,24 @@ import {
   entities,
   happeningInvolvements,
   happenings,
+  pipelineRuns,
   storyEntries,
   type Delta,
   type StoryEntry,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import { PER_TURN_KIND } from '@/lib/pipeline'
+import {
+  CLASSIFIER_HELD,
+  isClassifierHeld,
+  PER_TURN_KIND,
+  pipelineEventBus,
+  startPipeline,
+  SUGGESTION_REFRESH_KIND,
+} from '@/lib/pipeline'
 import {
   awaitRunTerminal,
   currentStoryStore,
+  entitiesStore,
   entriesStore,
   generationStore,
   hydrateAppSettings,
@@ -25,6 +34,12 @@ import {
 } from '@/lib/stores'
 
 import { branchEntries, openStory, sseFetch, WORKING_CONFIG } from './__tests__/fixtures'
+import {
+  failReversalsOf,
+  registerStandInPass,
+  registerStoreOnlyRun,
+  runningPass,
+} from './__tests__/stand-in-pass'
 import { regenerateTurn } from './regenerate-turn'
 import { submitTurn } from './submit-turn'
 import { expectRan, makeHarness, resetSingletons } from '../../pipeline/__tests__/harness'
@@ -35,7 +50,11 @@ import {
   ReversalIntegrityError,
   type reverseAndPruneDeltaRows,
 } from '../delta/reverse-replay'
-import { updateStoryEntryContent } from '../story-entries/operational'
+import {
+  getRollbackCounts,
+  updateStoryEntryContent,
+  type RollbackCounts,
+} from '../story-entries/operational'
 import { undoLastAction } from '../story-entries/undo'
 import type { PipelineAction } from '../types'
 
@@ -149,7 +168,6 @@ async function seedTwoTurnsWithCatchUp(ctx: Awaited<ReturnType<typeof makeHarnes
         state: 'idle',
         lastSuccessAt: 6,
         lastError: null,
-        retryCount: 0,
         processedThrough: 5,
       },
     })
@@ -309,54 +327,196 @@ describe('regenerateTurn', () => {
     expect(rows.map((r) => r.id)).toEqual(['e_opening', 'e_u1', 'e_r1'])
   })
 
-  it('drains an in-flight classifier before the sweep (C3 bracket)', async () => {
+  // principles.md → Edit restrictions during in-flight generation: head reversal interrupts a pass.
+  it('interrupts a pass in flight, reversing its write and deferring it before the sweep', async () => {
     const { ctx, db } = await makeHarness()
     await seedTwoTurnsWithCatchUp(ctx)
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
-
+    const pass = registerStandInPass({ anchorEntryId: 'e_r1' })
     const order: string[] = []
-    let resolveTerminal!: () => void
-    const terminal = new Promise<void>((r) => {
-      resolveTerminal = r
-    })
-    const abortController = new AbortController()
-    abortController.signal.addEventListener('abort', () => {
-      order.push('classifier-aborted')
-      // The orchestrator deregisters the run and resolves its terminal only
-      // after its own unwind, so a bracket that aborted without AWAITING the
-      // terminal would reach the sweep before 'classifier-drained' lands.
-      setTimeout(() => {
-        order.push('classifier-drained')
-        generationStore.abortRun('run_c')
-        resolveTerminal()
-      }, 0)
-    })
-    generationStore.startRun({
-      runId: 'run_c',
-      kind: PERIODIC_CLASSIFIER_KIND,
-      gateBehavior: 'no-gate',
-      actionId: 'act_live',
-      storyId: 's1',
-      branchId: 'b1',
-      abortController,
-      currentPhase: '',
-      intermediates: {},
-      terminal,
-      resolveTerminal,
-    })
+    pipelineEventBus.subscribe('run_deferred', (event) => order.push(`deferred ${event.kind}`))
+    const start = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    const held = await pass.nextHeld()
 
     const regen = await withSweepHook(
-      () => order.push('swept'),
+      () => order.push(runningPass('b1') ? 'swept beside the pass' : 'swept'),
       () => regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
     )
-    order.push('regen-settled')
 
-    expect(order).toEqual(['classifier-aborted', 'classifier-drained', 'swept', 'regen-settled'])
     expect(regen.status).toBe('ran')
-    // Committed catch-up facts about surviving turns are untouched by the drain.
-    const facts = await ctx.db.select().from(happenings)
-    expect(facts.map((f) => f.id)).toEqual(['h_a'])
+    if (regen.status !== 'ran') return
+    expect(expectRan(regen.result).outcome).toBe('completed')
+    expect(order).toEqual([`deferred ${PERIODIC_CLASSIFIER_KIND}`, 'swept'])
+    expect(await start.origin).toMatchObject({ outcome: 'aborted', actionId: held.actionId })
+    // The pass's happening anchors to the surviving turn, so only the abort can have removed it.
+    expect((await ctx.db.select().from(happenings)).map((f) => f.id)).toEqual(['h_a'])
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+    const [marker] = await ctx.db
+      .select()
+      .from(pipelineRuns)
+      .where(eq(pipelineRuns.actionId, held.actionId))
+    expect(marker?.outcome).toBe('aborted')
+  })
+
+  it('refuses while a suggestion refresh runs beside the pass, interrupting nothing', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const pass = registerStandInPass({ anchorEntryId: 'e_r1' })
+    const start = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    const held = await pass.nextHeld()
+    registerStoreOnlyRun(SUGGESTION_REFRESH_KIND, 'b1')
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+
+    expect(regen).toEqual({
+      status: 'rejected',
+      code: 'generation-in-flight',
+      reason: 'generation in flight',
+    })
+    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(runningPass('b1')?.actionId).toBe(held.actionId)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+    held.finish('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'completed' })
+  })
+
+  // A reversal opened during the two reads would throw this one out of its bracket as re-entry.
+  it('re-checks the gate past its reads, refusing a run that rose during them', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    // The target read is regenerate's first select: the gate rises after its first check.
+    const gate = vi.spyOn(generationStore, 'isHeadReversalBlocked')
+    const select = ctx.db.select.bind(ctx.db)
+    const spy = vi.spyOn(ctx.db, 'select').mockImplementationOnce(((
+      ...args: Parameters<typeof select>
+    ) => {
+      registerStoreOnlyRun(PER_TURN_KIND, 'b1')
+      return select(...args)
+    }) as unknown as typeof ctx.db.select)
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    spy.mockRestore()
+    const gateResults = gate.mock.results.map((r) => r.value)
+    gate.mockRestore()
+
+    expect(gateResults).toEqual([false, true])
+    expect(regen).toEqual({
+      status: 'rejected',
+      code: 'generation-in-flight',
+      reason: 'generation in flight',
+    })
+    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect((await ctx.db.select().from(happenings)).map((f) => f.id)).toEqual(['h_a', 'h_b'])
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+  })
+
+  // generation-pipeline.md → Recovery-failure policy: a branch holding an unfinished pass takes no turns.
+  it('refuses a branch held running before it sweeps, starting no run and writing nothing', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    await db
+      .update(branches)
+      .set({ classifierStatus: { ...idleStatus(), state: 'running' } })
+      .where(eq(branches.id, 'b1'))
+    const swept = vi.fn()
+
+    const regen = await withSweepHook(swept, () =>
+      regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
+    )
+
+    expect(regen).toEqual({
+      status: 'rejected',
+      code: CLASSIFIER_HELD,
+      reason: 'classifier held',
+    })
+    expect(swept).not.toHaveBeenCalled()
+    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect((await ctx.db.select().from(happenings)).map((f) => f.id)).toEqual(['h_a', 'h_b'])
+    expect(await ctx.db.select().from(pipelineRuns)).toEqual([])
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+  })
+
+  // The early check saw a live pass; the interrupt's uncommitted reversal is what holds the branch.
+  it('refuses a branch its interrupt leaves held, sweeping nothing and starting no turn', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const pass = registerStandInPass({ anchorEntryId: 'e_r1', statusLifecycle: true })
+    failReversalsOf(pass)
+    const start = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    const held = await pass.nextHeld()
+    const swept = vi.fn()
+
+    const regen = await withSweepHook(swept, () =>
+      regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
+    )
+
+    expect(await start.origin).toMatchObject({ outcome: 'failed', actionId: held.actionId })
+    expect(await isClassifierHeld('b1', ctx)).toBe(true)
+    expect(regen).toEqual({
+      status: 'rejected',
+      code: CLASSIFIER_HELD,
+      reason: 'classifier held',
+    })
+    expect(swept).not.toHaveBeenCalled()
+    expect(entriesStore.getById('e_r2')).toBeDefined()
+    const replies = await ctx.db
+      .select({ id: storyEntries.id })
+      .from(storyEntries)
+      .where(eq(storyEntries.kind, 'ai_reply'))
+    expect(replies.map((r) => r.id).sort()).toEqual(['e_r1', 'e_r2'])
+    expect(
+      await ctx.db.select().from(pipelineRuns).where(eq(pipelineRuns.kind, PER_TURN_KIND)),
+    ).toEqual([])
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+  })
+
+  // A user_action target is refused by a later check, so reaching it proves the live pass wasn't held.
+  it('does not treat a branch whose pass is live as held', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const pass = registerStandInPass({ anchorEntryId: 'e_r1' })
+    const start = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    const held = await pass.nextHeld()
+    await db
+      .update(branches)
+      .set({ classifierStatus: { ...idleStatus(), state: 'running' } })
+      .where(eq(branches.id, 'b1'))
+    const swept = vi.fn()
+
+    const regen = await withSweepHook(swept, () =>
+      regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_u2', ctx),
+    )
+
+    expect(regen).toMatchObject({ status: 'rejected', code: 'not-an-ai-reply' })
+    expect(swept).not.toHaveBeenCalled()
+    expect(branchEntries('b1').map((e) => e.id)).toEqual([
+      'e_opening',
+      'e_u1',
+      'e_r1',
+      'e_u2',
+      'e_r2',
+    ])
+    expect((await ctx.db.select().from(happenings)).map((f) => f.id)).toEqual([
+      'h_a',
+      'h_b',
+      `hap_${held.actionId}`,
+    ])
+    expect(runningPass('b1')?.actionId).toBe(held.actionId)
+    expect(generationStore.getTxState().runs.size).toBe(1)
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+    held.finish('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'completed' })
   })
 
   it('rejects a non-AI target without destroying anything', async () => {
@@ -393,6 +553,35 @@ describe('regenerateTurn', () => {
     // The reply and its classifier fact both survive an in-flight refusal.
     expect(entriesStore.getById('e_r2')).toBeDefined()
     expect((await ctx.db.select().from(happenings)).map((f) => f.id)).toEqual(['h_a', 'h_b'])
+  })
+
+  // generation-pipeline.md → Gate derivation as a selector: the sweep's barrier drops before the
+  // run registers, and a reversal opened in that gap would refuse the user's next Send.
+  it('keeps the edit gate up from its admission until its run registers', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    const seen: { reversal: boolean; blocked: boolean }[] = []
+    let registered = false
+    const unsubscribe = generationStore.subscribe(() => {
+      const tx = generationStore.getTxState()
+      registered ||= [...tx.runs.values()].some((r) => r.kind === PER_TURN_KIND)
+      if (!registered)
+        seen.push({ reversal: tx.reversalInProgress, blocked: generationStore.isUserEditBlocked() })
+    })
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    unsubscribe()
+
+    expect(regen.status).toBe('ran')
+    expect(registered).toBe(true)
+    // Marked, barrier up, barrier down: the last is the gap before the run registers.
+    expect(seen).toEqual([
+      { reversal: false, blocked: true },
+      { reversal: true, blocked: true },
+      { reversal: false, blocked: true },
+    ])
   })
 
   // The sweep destroys everything from the target forward, so a misresolved
@@ -525,6 +714,9 @@ describe('regenerateTurn', () => {
 
     await expect(regen).rejects.toBeInstanceOf(DeltaReplayError)
     expect(undoRedoStore.hasRedo()).toBe(expectedHasRedo)
+    // A thrown regenerate leaves no mark to hold the gate up and stall every pass.
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+    expect(generationStore.isUserEditBlocked()).toBe(false)
   })
 
   // Where clearing eagerly earns its keep: a failed run writes no delta, so
@@ -805,5 +997,163 @@ describe('regenerateTurn', () => {
     expect(regen.status).toBe('ran')
     expect(await db.select().from(characterRelationships)).toEqual([])
     expect(await pairDeltas()).toEqual([])
+  })
+
+  it('keeps a place whose parent only the regenerated turn anchors, at the root', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const createPlace = async (id: string, parent: string | null, entryId: string) => {
+      const entry = {
+        id,
+        branchId: 'b1',
+        kind: 'location' as const,
+        name: id,
+        status: 'active' as const,
+        injectionMode: 'auto' as const,
+        state: { parent_location_id: parent },
+        createdAt: 7,
+        updatedAt: 7,
+      }
+      const action: PipelineAction = {
+        kind: 'createEntity',
+        source: 'periodic_classifier',
+        payload: { entry },
+      }
+      const result = await applyDeltaAction(
+        { action, actionId: 'act_places', branchId: 'b1', entryId },
+        ctx,
+      )
+      expect(result.status).toBe('ok')
+    }
+    await createPlace('loc_varn', null, 'e_r2')
+    await createPlace('loc_docks', 'loc_varn', 'e_r1')
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+
+    expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(expectRan(regen.result).outcome).toBe('completed')
+    const places = await db.select({ id: entities.id, state: entities.state }).from(entities)
+    expect(places).toEqual([{ id: 'loc_docks', state: { parent_location_id: null } }])
+    expect(entitiesStore.getById('loc_docks')?.state).toEqual({ parent_location_id: null })
+    expect(entitiesStore.getById('loc_varn')).toBeUndefined()
+  })
+
+  async function shownCounts(
+    ctx: Awaited<ReturnType<typeof makeHarness>>['ctx'],
+    targetId: string,
+  ): Promise<RollbackCounts> {
+    const counts = await getRollbackCounts('b1', targetId, ctx)
+    if ('status' in counts) throw new Error(`preview refused: ${counts.reason}`)
+    return counts
+  }
+
+  // rollback-confirm.md → Counts: the confirm consents to what it showed, not to a later commit.
+  it('refuses with the fresh counts when a pass committed since the confirm opened', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const shown = await shownCounts(ctx, 'e_r2')
+    expect(shown).toEqual({ entries: 1, chapters: 0, worldStateChanges: 1 })
+    const late: PipelineAction = {
+      kind: 'createHappening',
+      source: 'periodic_classifier',
+      payload: {
+        entry: { id: 'h_late', branchId: 'b1', title: 'Late', createdAt: 7, updatedAt: 7 },
+      },
+    }
+    expect(
+      (
+        await applyDeltaAction(
+          { action: late, actionId: 'act_late', branchId: 'b1', entryId: 'e_r2' },
+          ctx,
+        )
+      ).status,
+    ).toBe('ok')
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    const before = await ctx.db.select().from(deltas)
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: shown,
+    })
+
+    expect(regen).toEqual({
+      status: 'rejected',
+      code: 'counts-changed',
+      reason: expect.any(String),
+      counts: { entries: 1, chapters: 0, worldStateChanges: 2 },
+    })
+    expect(await ctx.db.select().from(deltas)).toEqual(before)
+    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(await ctx.db.select().from(pipelineRuns)).toEqual([])
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+    expect(generationStore.isUserEditBlocked()).toBe(false)
+  })
+
+  it('regenerates when the confirmed counts still hold', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const shown = await shownCounts(ctx, 'e_r2')
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: shown,
+    })
+
+    expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(expectRan(regen.result).outcome).toBe('completed')
+  })
+
+  // The interrupt reverses the pass's write, so the set the sweep reverses is the one confirmed.
+  it('regenerates when the interrupt reverses the only change since the confirm', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const shown = await shownCounts(ctx, 'e_r2')
+    const pass = registerStandInPass({ anchorEntryId: 'e_r2' })
+    const start = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    await pass.nextHeld()
+    expect(await shownCounts(ctx, 'e_r2')).toEqual({ ...shown, worldStateChanges: 2 })
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: shown,
+    })
+
+    expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(expectRan(regen.result).outcome).toBe('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'aborted' })
+  })
+
+  // The user consented to the regenerate, not the unwind, so the follow-up sweep takes no counts.
+  it('unwinds a failed regenerate given confirmed counts', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const shown = await shownCounts(ctx, 'e_r2')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch')
+      }),
+    )
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: shown,
+    })
+
+    expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(expectRan(regen.result).outcome).toBe('failed')
+    expect(regen.converged).toBe(true)
+    expect(entriesStore.getById('e_u2')).toBeUndefined()
   })
 })

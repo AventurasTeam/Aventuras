@@ -59,10 +59,12 @@ type CollisionResolveDialogProps = {
   onOpenChange: (open: boolean) => void
   entityA: EntitySummary // older by createdAt; default canonical
   entityB: EntitySummary // newer
-  /** The flagged row the strip was opened from: the header names it first, and `reason` is its. */
+  /** The row whose flag names the other, preferring the one the strip was opened from: the header names it first, and `reason` is its. */
   flaggedId: string
   /** That row's `name_collision_reason`, for the reason line. */
-  reason: CollisionReason // alike | ambiguous | distinct | in-scene | no-signal
+  reason: CollisionReason // alike | ambiguous | distinct | in-scene | no-signal | same-parent
+  /** The shared parent's name, for the `same-parent` reason line; absent at the root. */
+  parentName?: string
   /** Rejects with an Error whose message is user-facing text; the dialog shows it inline. */
   onResolve: (resolution: Resolution) => Promise<void>
   /** Set while a write is gated (a turn in flight): every submit disables and shows it. */
@@ -91,7 +93,11 @@ chip) clears it.
 The dialog is 42rem wide from `sm` and 56rem from `lg`, so the merge
 table's columns have room: 672 and 896 px on web, 588 and 784 dp on
 native, where NativeWind's rem is 14. Below `sm` (the phone tier) it
-keeps the `Dialog` primitive's side margin.
+keeps the `Dialog` primitive's side margin, and the title and mode
+picker stay fixed while the reason, basis and description lines
+become the first block of the scrolling body, so the merge choices
+keep their room. Wider tiers keep the fixed header. Those lines
+together are the dialog's accessible description.
 
 ### Entity projection
 
@@ -190,8 +196,8 @@ which column a side sat in. A field that stopped diverging while the
 dialog was open isn't sent.
 
 The merge sends the terms the user dropped, never the final lists.
-The action builds those inside the branch lock from the rows as they
-are then (`mergedTerms`, lib/world): the union of both rows' terms
+The action builds those in the tick of its gate check, from the rows
+as they are then (`mergedTerms`, lib/world): the union of both rows' terms
 minus the dropped, keywords de-duplicated under the normalization
 `matchTerms` uses so a case variant does not survive as a second
 entry (a shared one in the canonical's spelling), tags trimmed and
@@ -202,8 +208,7 @@ answers to it through its kept name or a keyword in the union; a drop
 of it is sent like any other. Each list keeps the canonical's own entries
 in their stored order, then the other row's remaining additions
 sorted, and a list that comes out equal to the canonical's isn't
-written. So a keyword the classifier adds to either row while the
-merge waits for the lock is kept. Dropping every term is allowed
+written. Dropping every term is allowed
 (the entity becomes untagged). Only drops among the chips still
 shown are sent: when the two sides come to agree on a list while
 the dialog is open, its chips go and so do its drops.

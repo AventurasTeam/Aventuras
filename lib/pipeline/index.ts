@@ -12,8 +12,11 @@ export {
 export {
   __resetClassifierEmbedder,
   configureClassifierEmbedder,
-  ensurePeriodicClassifierPipelineRegistered,
-} from './definitions/periodic-classifier'
+} from './definitions/description-embedder'
+export { readSceneSource } from './definitions/entry-reads'
+export { ensurePeriodicClassifierPipelineRegistered } from './definitions/periodic-classifier'
+export { CLASSIFIER_HELD, isClassifierHeld, owedPassAtSend } from './definitions/memory-chain'
+export { runClassifierPass } from './definitions/classifier-pass'
 export {
   ensureSuggestionRefreshPipelineRegistered,
   SUGGESTION_EMISSION_PHASE,
@@ -30,9 +33,15 @@ export {
   configureDeltaActionPort,
   type DeltaActionPort,
 } from './runtime/action-port'
-// awaitRunTerminal is deliberately absent: it moved to lib/stores/generation so
-// lib/actions can await a terminal without importing the orchestrator.
-export { runPipeline, type RunCtx, type RunCtxFor } from './runtime/orchestrator'
+// awaitRunTerminal is deliberately absent: it lives in lib/stores/generation, beside
+// interruptMemoryRuns, so callers can await a terminal without importing the orchestrator.
+export {
+  runPipeline,
+  startPipeline,
+  type PipelineStart,
+  type RunCtx,
+  type RunCtxFor,
+} from './runtime/orchestrator'
 export { recoverInFlightRuns } from './runtime/recovery'
 export type { RecoveredRun, RecoveryFailure, RecoveryReport } from './runtime/recovery'
 export type {

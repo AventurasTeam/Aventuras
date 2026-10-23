@@ -28,6 +28,7 @@ export type ResolveModelResult =
   | {
       ok: true
       providerId: string
+      providerType: ProviderInstance['type']
       modelId: string
       params: ResolvedParams
       /** The profile the chain landed on. Absent when a story override short-circuited it. */
@@ -58,6 +59,7 @@ function fromProfile(
   return {
     ok: true,
     providerId: provider.id,
+    providerType: provider.type,
     modelId: profile.modelRef.modelId,
     params: paramsOf(profile),
     profileId: profile.id,
@@ -73,7 +75,13 @@ export function resolveModel(
   if (override !== undefined) {
     const provider = config.providers.find((p) => p.id === override.providerId)
     if (provider === undefined) return { ok: false, kind: 'override-provider-missing', target }
-    return { ok: true, providerId: provider.id, modelId: override.modelId, params: {} }
+    return {
+      ok: true,
+      providerId: provider.id,
+      providerType: provider.type,
+      modelId: override.modelId,
+      params: {},
+    }
   }
 
   if (target === 'narrative') {

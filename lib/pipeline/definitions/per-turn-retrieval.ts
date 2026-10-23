@@ -15,10 +15,13 @@ import {
   RANKER_DEFAULTS,
   readPromptBuffer,
   readScanEntries,
+  RETRIEVAL_TYPES,
   runRetrieval,
   type RetrievalOutcome,
+  type RetrievalType,
 } from '@/lib/retrieval'
 import { appSettingsStore } from '@/lib/stores'
+import { placeModes } from '@/lib/world'
 
 import { readSceneSource } from './entry-reads'
 import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
@@ -69,7 +72,12 @@ export async function* retrievalPhase(
   // retrieval.md → POV-awareness scope queries `sceneEntities ∩ characters`;
   // sceneEntities itself is kind-mixed (data-model.md → Entry metadata shape).
   const sceneCharacterIds = scene.sceneEntities.filter((id) => characterIds.has(id))
-
+  // Around the same location the prompt's map is built from, so a place the map hides stays out
+  // of the `always` seat, the pools and keyword injection.
+  const modes = placeModes(entities, scene.currentLocationId)
+  const disabledPlaceIds = new Set(
+    entities.filter((e) => e.kind === 'location' && modes.isDisabled(e.id)).map((e) => e.id),
+  )
   // The same window generation-context composes for the prompt, so the capture
   // prices what the pools actually competed against rather than re-deriving the
   // mode rule. Priced on the prose alone: the per-turn template wraps entries in
@@ -142,6 +150,9 @@ export async function* retrievalPhase(
         sceneCharacterIds,
         sceneEntityIds: scene.sceneEntities,
         currentLocationId: scene.currentLocationId,
+        disabledPlaceIds,
+        // Same store generation-context builds views from, so measured views match rendered ones.
+        storeEntities: entities,
         // Layer A scans the recent un-classified buffer prose (edge-cases.md →
         // Layer A — retrieval-time same-name suppression); the prompt buffer only
         // approximates that set, over-suppressing while classifierCadence stays
@@ -272,6 +283,28 @@ export async function* retrievalPhase(
         typeBudget: bundle.funnel.typeBudget,
       })
   }
+
+  // retrieval.md → Budget-fill termination: a row larger than its whole type budget is skipped
+  // permanently, and an entity row carries its state, so the most fully described entity is the
+  // one most likely to vanish. Logged here, not in the ranker, which a probe replay re-runs.
+  const budgets = open.settings.retrievalBudgets
+  const tooLarge = new Map<
+    string,
+    { type: RetrievalType; id: string; name: string; tokens: number }
+  >()
+  for (const type of RETRIEVAL_TYPES) {
+    for (const t of outcome.bundles[type].traces) {
+      if (t.dropReason === 'candidate_too_large' && t.tokensEstimated !== null)
+        tooLarge.set(t.id, { type, id: t.id, name: t.displayName, tokens: t.tokensEstimated })
+    }
+  }
+  for (const { row, tokensEstimated } of outcome.keywordInjections) {
+    const type: RetrievalType = row.kind === 'entity' ? 'entities' : 'lore'
+    if (tokensEstimated > budgets[type])
+      tooLarge.set(row.id, { type, id: row.id, name: row.displayName, tokens: tokensEstimated })
+  }
+  for (const row of tooLarge.values())
+    ctx.log.warn('retrieval.candidate_too_large', { ...row, typeBudget: budgets[row.type] })
 
   ctx.intermediates[RETRIEVAL_INTERMEDIATE_KEY] = outcome
   await captureProbe(outcome)

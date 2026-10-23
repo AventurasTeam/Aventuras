@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { PromptHalves } from '@/lib/ai'
 import { APP_SETTINGS_DEFAULTS, STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 import { runPreflight } from '@/lib/pipeline/runtime/preflight'
@@ -204,6 +205,7 @@ describe('suggestion-refresh declaration', () => {
     const running = {
       runs: new Map([['run-1', { runId: 'run-1', kind: SUGGESTION_REFRESH_KIND, gateBehavior }]]),
       reversalInProgress: false,
+      pendingTurns: new Set(),
     }
     expect(isUserEditBlocked(running as never)).toBe(true)
   })
@@ -453,7 +455,7 @@ describe('suggestion-refresh emission phase', () => {
     const { events } = await runEmission()
 
     expect(events[0]).toMatchObject({ entryId: 'entry-1' })
-    const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
+    const prompt = (generateStructuredMock.mock.calls[0]?.[1] as PromptHalves).user
     expect(prompt).not.toContain('THE TURN FAILED.')
   })
 
@@ -467,22 +469,36 @@ describe('suggestion-refresh emission phase', () => {
 
     expect(generateStructuredMock).toHaveBeenCalledWith(
       'suggestion',
-      expect.any(String),
+      { system: expect.any(String), user: expect.any(String) },
       suggestionRefreshSchema,
       expect.objectContaining({
         storyModels: { suggestion: { providerId: 'prov-1', modelId: 'story-model' } },
       }),
       expect.anything(),
     )
-    const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
-    expect(prompt).toContain('A keep on a hill.')
-    expect(prompt).toContain('The gate groans open.')
-    expect(prompt).toContain('id "cat1" = Action')
-    expect(prompt).toContain('id "cat2" = Dialogue')
+    const { system, user } = generateStructuredMock.mock.calls[0]?.[1] as PromptHalves
+    // architecture.md → System and user halves: the fixture's tone is empty, so it ends on Genre.
+    expect(system).toBe('# Setting\nA keep on a hill.\n\n# Genre\nHigh fantasy.')
+    expect(user).not.toContain('A keep on a hill.')
+    expect(user).toContain('The gate groans open.')
+    expect(user).toContain('id "cat1" = Action')
+    expect(user).toContain('id "cat2" = Dialogue')
     // Structured call: it must ask for the JSON field, never the tagged block
     // the narrative fold's shared macro instructs.
-    expect(prompt).toContain('"suggestions" field')
-    expect(prompt).not.toContain('<suggestions>')
+    expect(user).toContain('"suggestions" field')
+    expect(user).not.toContain('<suggestions>')
+  })
+
+  // architecture.md → System and user halves.
+  it('sends no cache marker: the call takes no sixth argument', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue(okChips([{ categoryRef: 'cat1', text: 'Draw.' }]))
+
+    await runEmission()
+
+    expect(generateStructuredMock.mock.calls[0]![5]).toBeUndefined()
   })
 
   it('threads composer text into the prompt as refresh guidance and persists it', async () => {
@@ -495,7 +511,7 @@ describe('suggestion-refresh emission phase', () => {
       refreshGuidance: 'I want to sneak around the back',
     })
 
-    const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
+    const prompt = (generateStructuredMock.mock.calls[0]?.[1] as PromptHalves).user
     expect(prompt).toContain('I want to sneak around the back')
     expect(events[0]).toMatchObject({
       action: {
@@ -518,7 +534,7 @@ describe('suggestion-refresh emission phase', () => {
 
     const { events } = await runEmission({ refreshGuidance: '   ' })
 
-    const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
+    const prompt = (generateStructuredMock.mock.calls[0]?.[1] as PromptHalves).user
     expect(prompt).not.toContain('already started writing')
     const event = events[0]
     if (
@@ -801,7 +817,7 @@ describe('suggestion-refresh emission phase', () => {
     // No caller-supplied target to truncate at any more: the anchor is the tail
     // by construction, so the whole branch is the window and recency windowing
     // is the template's `recent` filter.
-    const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
+    const prompt = (generateStructuredMock.mock.calls[0]?.[1] as PromptHalves).user
     expect(prompt).toContain('The gate groans open.')
     expect(prompt).toContain('THE LATEST TURN.')
     expect(events[0]).toMatchObject({ entryId: 'entry-2' })

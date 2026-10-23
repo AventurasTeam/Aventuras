@@ -1,14 +1,20 @@
 import { describe, expect, it } from 'vitest'
 
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { DEFAULT_SUGGESTION_CATEGORIES, type Entity } from '@/lib/db'
 import { BUNDLED_PACK_ID } from '@/lib/prompts'
 import {
   appSettingsStore,
+  cancelStoryRuns,
   entitiesStore,
   generationStore,
+  interruptMemoryRuns,
+  isHeadReversalBlocked,
+  isStoryBusy,
   navigationStore,
   recoveryReportStore,
   resetAllStores,
+  selectMemoryRun,
   storiesStore,
   type RunState,
 } from '@/lib/stores'
@@ -21,6 +27,19 @@ describe('lib/stores public surface', () => {
     expect(typeof generationStore.useGeneration).toBe('function')
     expect(typeof generationStore.startRun).toBe('function')
     expect(typeof generationStore.finishRun).toBe('function')
+    expect(typeof generationStore.abortRun).toBe('function')
+    expect(typeof generationStore.isHeadReversalBlocked).toBe('function')
+  })
+
+  it('exposes the memory-run selector', () => {
+    expect(typeof selectMemoryRun).toBe('function')
+  })
+
+  it('exposes the deferral and interrupt helpers', () => {
+    expect(typeof cancelStoryRuns).toBe('function')
+    expect(typeof interruptMemoryRuns).toBe('function')
+    expect(typeof isHeadReversalBlocked).toBe('function')
+    expect(typeof isStoryBusy).toBe('function')
   })
 
   it('exposes the app-settings read-model selectors', () => {
@@ -59,6 +78,8 @@ describe('lib/stores public surface', () => {
       runId: 'r1',
       kind: 'synthetic',
       gateBehavior: 'no-gate',
+      interruptible: null,
+      beforeTurn: false,
       actionId: 'a1',
       storyId: null,
       branchId: 'b1',
@@ -78,6 +99,8 @@ describe('lib/stores public surface', () => {
       retiredReason: null,
       injectionMode: 'auto',
       nameCollisionFlag: 0,
+      nameCollisionPartnerId: null,
+      nameCollisionReason: null,
       keywords: [],
       priority: 0,
       state: null,
@@ -87,6 +110,15 @@ describe('lib/stores public surface', () => {
       updatedAt: 1,
     }
     generationStore.startRun(run)
+    generationStore.startRun({
+      ...run,
+      runId: 'r_pass',
+      kind: PERIODIC_CLASSIFIER_KIND,
+      gateBehavior: 'hard-gate',
+      interruptible: 'pass',
+    })
+    generationStore.abortRun('r_pass', 'aborted')
+    expect(generationStore.getTxState().deferred.size).toBe(1)
     navigationStore.setCurrentStory('s1')
     entitiesStore.hydrate('br_1', [entity])
     recoveryReportStore.publish({
@@ -111,6 +143,7 @@ describe('lib/stores public surface', () => {
     resetAllStores()
 
     expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
     expect(navigationStore.getNavigation().currentStoryId).toBeNull()
     expect(entitiesStore.getEntities().size).toBe(0)
     expect(recoveryReportStore.getSnapshot()).toEqual({

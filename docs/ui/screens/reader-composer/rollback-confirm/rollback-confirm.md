@@ -22,7 +22,10 @@ Cross-cutting principles:
 - [Edit restrictions during in-flight generation](../../../principles.md#edit-restrictions-during-in-flight-generation) —
   rollback initiation (the per-entry `×`) disables while a
   generation pipeline is in flight; user cancels the pipeline first
-  via the status pill or composer cancel.
+  via the status pill or composer cancel. A memory pass or a chapter
+  close is the exception: rollback stays enabled, and confirming
+  interrupts it. A pass a failure entry's `Retry` started is not: it
+  holds rollback until it ends.
 
 ## Two visible states
 
@@ -80,11 +83,11 @@ the modal carries the consequence in numeric form, not visual:
 
 Three buckets, in commit order:
 
-| Count                     | Source                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **N entries**             | `op=create` deltas on `story_entries` in range                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| **M chapters re-opened**  | `op=create` deltas on `chapters` in range (line omitted when `M = 0`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| **K world-state changes** | All other narrative deltas in range (entities, lore, threads, happenings, entry_assets). Every `story_entries` delta is excluded, not just the creates: a non-create one amends an entry the sweep is deleting, which the entries line already reports. The discriminator is the target table, not `entry_id` — a delta on another table stays counted whether or not it carries an anchor. The range is the closed set the sweep reverses, so it also counts a fact anchored to a surviving turn that names a row the sweep removes ([`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay)). |
+| Count                     | Source                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **N entries**             | `op=create` deltas on `story_entries` in range                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **M chapters re-opened**  | `op=create` deltas on `chapters` in range (line omitted when `M = 0`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **K world-state changes** | All other narrative deltas in range (entities, lore, threads, happenings, entry_assets). Every `story_entries` delta is excluded, not just the creates: a non-create one amends an entry the sweep is deleting, which the entries line already reports. The discriminator is the target table, not `entry_id` — a delta on another table stays counted whether or not it carries an anchor. The range is the closed set the sweep reverses, so it also counts a fact anchored to a surviving turn that names a row the sweep removes ([`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay)). A place whose parent the sweep removes counts once too: it stays, and the reversal leaves it unplaced without a delta. So does a character whose faction the sweep removes, left with none. |
 
 Buckets are coarse-grained on purpose. Per-table breakdown reads as
 pedantic in a consent modal; "world-state changes" is the
@@ -93,6 +96,24 @@ load-bearing summary. The
 holds the full per-table record for anyone digging deeper; the
 [Diagnostics Hub · Delta log tab](../../diagnostics/diagnostics.md#tab-5--delta-log)
 exposes the global view (gated by the diagnostics master toggle).
+
+**The counts stay true while the modal is open.** A memory pass or a
+chapter close can run under the open modal (see
+[Edge cases](#edge-cases)), so the set can move after the counts were
+read: a pass commits facts, or the modal opened partway through a
+pass's writes. Whenever a run settles while the modal is open, it
+recounts and shows the fresh counts; a recount that fails or is
+refused keeps the counts on screen. The commit checks again:
+`rollbackToEntry` resolves the set it is about to reverse, after any
+interrupt, and refuses with `counts-changed`, carrying the fresh
+counts, when they differ from the counts the user saw. The reader then
+shows an error [toast](../../../patterns/toast.md),
+`The counts changed while this was open. Check them before confirming.`,
+and re-opens the modal on the fresh counts, so a second confirm
+consents to exactly what goes
+([`generation-pipeline.md → Branch write lock`](../../../../generation-pipeline.md#branch-write-lock)).
+A regenerate confirm does the same through `regenerateTurn`
+([`reader-composer.md → Regenerate confirmation`](../reader-composer.md#regenerate-confirmation)).
 
 ## Cross-chapter case
 
@@ -103,7 +124,7 @@ copy:
 
 > **1 chapter re-opened** — chapter 5 will return to in-progress.
 
-Why bold: chapter close fires lore-mgmt writes (the 5 sub-jobs);
+Why bold: chapter close fires lore-mgmt writes (its six sub-jobs);
 those reverse along with the chapter row itself. The re-open is the
 load-bearing consequence the user needs to see, not just the count.
 
@@ -166,11 +187,19 @@ mechanism rather than the hover-preview.
   reverses, so a set the log cannot close
   ([`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay))
   opens no modal and shows the rollback-failed toast instead. A refusal
-  only the commit raises shows the same toast with the modal still open.
+  only the commit raises shows the same toast with the modal still open,
+  except `counts-changed`, which has its own toast ([Counts](#counts)).
 - **During generation** — per
   [branch-navigator → during generation](../branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked),
-  the per-entry `×` is disabled while any pipeline phase is active.
-  No modal opens because the trigger is unavailable.
+  the per-entry `×` is disabled while any pipeline phase is active, so
+  no modal opens. A memory pass or a chapter close is the exception:
+  the `×` stays enabled and the modal opens as usual. While it is open
+  it recounts each time a run settles under it, per [Counts](#counts).
+  Confirming interrupts the pass or close and moves it to the next
+  turn, with its deferral toast. If the set the commit then resolves
+  differs from the counts on screen, the commit refuses
+  `counts-changed`: the counts-changed toast shows and the modal
+  re-opens on the fresh counts.
 
 ## Screen-specific open questions
 

@@ -9,8 +9,14 @@ documents rather than chases.
 
 ## Name collision and disambiguation
 
-Two layers handle the case where the AI invents a character whose name
-matches an existing (often staged) entity's, exactly or in part.
+Two layers handle the case where the AI invents a character, or the
+periodic classifier a faction, whose name matches an existing (often
+staged) entity's, exactly or in part. A
+place or an item the per-turn writer creates, or a place the periodic
+classifier creates from a mention, is matched when it is created
+instead
+([`piggyback.md → Matching before creating`](./piggyback.md#matching-before-creating),
+[`classifier.md → Mentioned places`](./classifier.md#mentioned-places)).
 
 ### Layer A — retrieval-time same-name suppression
 
@@ -52,6 +58,12 @@ story running that mode, which is Layer A switched off; and the
 exemption's justification is per-row user intent, which a story-wide
 mode is not.
 
+**The location map is exempt as well.** It lists staged locations by
+name only, so it can't feed a staged row's details into the narrative,
+and naming the place there is how a move to it resolves: the writer
+uses its id, or a re-created name reuses it
+([`piggyback.md → Matching before creating`](./piggyback.md#matching-before-creating)).
+
 **Layer A's window is an approximation.** The scan reads the prompt
 buffer rather than the genuinely un-classified set, so it
 over-suppresses while `classifierCadence` is under
@@ -70,6 +82,14 @@ is created with `name_collision_flag = 1` for World-panel review,
 naming the namesake it was compared against. The rule, the signals and the decision table
 live in
 [`classifier.md → Disambiguation on new-character mentions`](./classifier.md#disambiguation-on-new-character-mentions).
+A new faction is compared with the branch's factions the same way,
+without the scene signal
+([`classifier.md → Factions`](./classifier.md#factions)).
+Two later writers raise the same flag on an existing row: a pass whose
+rename meets a name another row of the kind holds
+([`classifier.md → What the classifier writes`](./classifier.md#what-the-classifier-writes)),
+and chapter close on a row it judges a duplicate
+([`chapter-close.md → 3f`](./chapter-close.md#3f--world-upkeep)).
 
 ### Schema
 
@@ -77,8 +97,8 @@ live in
 entities {
   ... existing fields ...
   name_collision_flag INTEGER DEFAULT 0   -- 1 = review needed
-  name_collision_partner_id TEXT          -- the namesake compared against, same branch
-  name_collision_reason TEXT              -- alike | ambiguous | distinct | in-scene | no-signal
+  name_collision_partner_id TEXT          -- the namesake compared against, or the row a merge re-pointed it at, same branch
+  name_collision_reason TEXT              -- alike | ambiguous | distinct | in-scene | no-signal | same-parent
   CHECK (flag 0: partner and reason null; flag 1: both set)
 }
 ```
@@ -119,6 +139,8 @@ Two paths to staged → active. Both converge on the same end state.
 
 When piggyback's `sceneEntities` includes an entity ID currently at
 `status='staged'`, that's a strong signal of intentional introduction.
+So is a `<current_location>` naming a staged location, or a new
+location reusing a staged place.
 Piggyback processing auto-promotes inline:
 
 1. Detect staged-ID in emitted `sceneEntities`.
@@ -176,6 +198,11 @@ unambiguous prose evidence:
 Conservative bias. Single-line ambiguous prose ("Kael wandered off")
 does **not** trigger retirement.
 
+Places are out of scope: a retired place can't be entered, so a
+destroyed one stays active with its destruction as a `condition`, and
+only the user retires a place
+([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
+
 ### "Wandered off" stays active
 
 Off-screen-but-alive characters stay `status='active'` with stale
@@ -193,15 +220,20 @@ the hard-finality model and would mislead the design.
 Across the closed range, can demote `active → retired` on chapter-scope
 evidence ("character mentioned once in 50 turns; last seen leaving the
 kingdom permanently") that single-prose-line periodic classifier would
-(correctly) skip.
+(correctly) skip. Never a location, for the reason above.
 
-### Retired → active is user-only in v1
+### Returning from retirement
 
 Resurrection / fake-death-reveal / return-from-exile are
-story-significant moments where the user explicitly toggles via the
-World panel. Agent-driven `retired → active` is parked-until-signal:
-auto-resurrecting on weak prose has a much worse failure mode than
-requiring a user click.
+story-significant moments. The periodic classifier brings a retired
+character back when the turns put them in the scene now
+([`classifier.md → What the classifier writes`](./classifier.md#what-the-classifier-writes)),
+since without that a returning character comes back as a duplicate.
+The bar is presence, not mention: a memory, a flashback, a vision or
+someone's report of them leaves the character retired. Auto-resurrecting
+on weak prose fails badly, so the user's own retirement written after
+that prose stands, and the World panel stays the place to toggle it by
+hand. Only the user brings back a place.
 
 ---
 
@@ -243,8 +275,9 @@ Known limitations the design accepts and documents rather than chases:
   manual rename.
 - **Multi-scene / cutaway entries** — not first-class; meanwhile-style
   prose degrades the structural model gracefully.
-- **Auto retired → active** — user-only in v1; agent-driven path is
-  parked-until-signal.
+- **Returning from retirement on presence alone** — a character the
+  scene shows alive comes back; one the prose only says is alive,
+  offstage, waits for the user.
 - **Single-axis `decay_resistance`** — one number can't capture
   orthogonal relevance dimensions ("emotionally resonant" vs.
   "plot-relevant" vs. "character-defining"). v1 floor; multi-axis is

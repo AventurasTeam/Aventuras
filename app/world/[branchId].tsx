@@ -15,11 +15,7 @@ import { distinctCategories } from '@/components/plot/plot-route-data'
 import { plotHref } from '@/components/plot/plot-selection'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
-import {
-  cancelStoryPillRun,
-  storyPillPhase,
-  useStoryGenerationGate,
-} from '@/components/story-settings/generation-run'
+import { storyPillPhase, useStoryGenerationGate } from '@/components/story-settings/generation-run'
 import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
 import { CollisionReviewPill } from '@/components/world/collision-review-pill'
@@ -62,6 +58,8 @@ import { useRouteLink } from '@/hooks/use-route-link'
 import { useRowImport } from '@/hooks/use-row-import'
 import { useRowSessionGuard } from '@/hooks/use-row-session-guard'
 import { useRowSignals } from '@/hooks/use-row-signals'
+import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
+import { useStoryPlace } from '@/hooks/use-story-place'
 import { useTier } from '@/hooks/use-tier'
 import {
   importEntity,
@@ -138,6 +136,7 @@ export default function WorldRoute() {
 
   const open = useColdOpenStory(branchId, 'world')
   const storyId = open?.storyId ?? null
+  const { guardLeave, dialog: storyLeaveDialog } = useStoryLeaveGuard(storyId, branchId)
   const storyTitle = storiesStore.useStories((s) => s.rows.find((r) => r.id === storyId)?.title)
 
   // Raw maps from the selectors (stable between patches); arrays via useMemo.
@@ -155,6 +154,7 @@ export default function WorldRoute() {
   const involvementRows = happeningInvolvementsStore.useInvolvements((m) => m)
   const happeningRows = happeningsStore.useHappenings((m) => m)
   const worldTime = useBranchWorldTime(branchId)
+  const story = useStoryPlace(branchId)
   const entryIndex = useEntryIndex(branchId)
   const calendarId = open?.definition.calendarSystemId ?? DEFAULT_CALENDAR_ID
   const calendar = useMemo(() => resolveCalendar(calendarId), [calendarId])
@@ -202,6 +202,7 @@ export default function WorldRoute() {
       worldTime,
       calendar,
       leadId,
+      story,
     }),
     [
       branchId,
@@ -212,13 +213,12 @@ export default function WorldRoute() {
       worldTime,
       calendar,
       leadId,
+      story,
     ],
   )
 
-  const { activeRunKind, editBlocked, gateReason, classifierRunning } = useStoryGenerationGate(
-    storyId ?? undefined,
-    branchId,
-  )
+  const { activeRunKind, editBlocked, gateReason, beforeTurn, cancelPillRun } =
+    useStoryGenerationGate(storyId ?? undefined, branchId)
   const openRegionPct = useOpenRegionTokens(storyId)
 
   const { onSession, guard, navigateGuarded } = useRowSessionGuard()
@@ -281,10 +281,10 @@ export default function WorldRoute() {
       ? undefined
       : (name: string) =>
           nameTakenByOther({
-            kind: collisionPair[0].kind,
+            kind: collisionPair.sides[0].kind,
             name,
             entities,
-            exclude: new Set(collisionPair.map((side) => side.id)),
+            exclude: new Set(collisionPair.sides.map((side) => side.id)),
           })
   // `open={focused}` already hides the dialog under a pushed screen; closing it here keeps it
   // from reopening when focus returns.
@@ -597,6 +597,7 @@ export default function WorldRoute() {
           contextual={open != null ? contextual : undefined}
           story={storyId != null ? { storyId, branchId, surface: 'world' } : undefined}
           beforeNavigate={guard}
+          beforeLeaveStory={guardLeave}
         />
       }
       statusSlot={
@@ -604,8 +605,9 @@ export default function WorldRoute() {
           <StoryStatusPill
             storyId={storyId}
             swapTarget={open?.settings.embedding_swap_target}
-            activePhase={storyPillPhase(activeRunKind, classifierRunning)}
-            onCancel={() => cancelStoryPillRun(storyId ?? undefined)}
+            activePhase={storyPillPhase(activeRunKind)}
+            beforeTurn={beforeTurn}
+            onCancel={cancelPillRun}
             onOpenMemory={() => {
               if (storyId != null) navigateGuarded(`/story-settings/${storyId}?tab=memory`)
             }}
@@ -678,8 +680,11 @@ export default function WorldRoute() {
           onOpenChange={(next) => {
             if (!next) closeCollision()
           }}
-          entityA={collision.pair[0]}
-          entityB={collision.pair[1]}
+          entityA={collision.pair.sides[0]}
+          entityB={collision.pair.sides[1]}
+          flaggedId={collision.pair.flaggedId}
+          reason={collision.pair.reason}
+          parentName={collision.pair.parentName}
           onResolve={collision.resolve}
           blockedReason={collisionBlocked}
           isNameTaken={collisionNameTaken}
@@ -700,6 +705,7 @@ export default function WorldRoute() {
           onValidated={loreImport.onValidated}
         />
       )}
+      {storyLeaveDialog}
     </ScreenShell>
   )
 }

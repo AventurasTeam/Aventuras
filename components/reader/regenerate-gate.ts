@@ -7,7 +7,8 @@ type RegeneratePreflightState = {
   currentBranchId: string
   loadedBranchId: string | null
   dispatchInFlight: boolean
-  userEditBlocked: boolean
+  /** isHeadReversalBlocked for the branch: a pass or a close alone lets a regenerate through. */
+  headReversalBlocked: boolean
 }
 
 export function canContinueRegeneratePreflight(args: RegeneratePreflightState): boolean {
@@ -15,7 +16,7 @@ export function canContinueRegeneratePreflight(args: RegeneratePreflightState): 
     args.currentBranchId === args.startedBranchId &&
     args.loadedBranchId === args.startedBranchId &&
     !args.dispatchInFlight &&
-    !args.userEditBlocked
+    !args.headReversalBlocked
   )
 }
 

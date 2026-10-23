@@ -50,7 +50,7 @@ import type { CalendarFrame } from '@/lib/calendar'
 import type { EntryMetadata, StoryEntry } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { detectRichEntryHtml, parseMarkdownToHtml, sanitizeHtml } from '@/lib/markdown'
-import { stripTrailingBlocks } from '@/lib/piggyback'
+import { isCreateHandle, stripTrailingBlocks } from '@/lib/piggyback'
 import { cn } from '@/lib/utils'
 
 import { RichEntryContent } from './rich-entry-content'
@@ -155,6 +155,10 @@ type EntryCardProps = {
   // edit-restrictions (uniform):
   disabled?: boolean
   disabledReason?: string
+  /** Gates the pencil and every edit-mode control; falls back to `disabled`. */
+  editDisabled?: boolean
+  /** Gates ↻, × and Save & regenerate (with `editDisabled`); falls back to `disabled`. */
+  reversalDisabled?: boolean
 
   // edit mode (host-controlled):
   editing?: boolean
@@ -491,8 +495,54 @@ function resolveName(id: string, pool: readonly ResolvedEntity[]): string {
   return pool.find((e) => e.id === id)?.name ?? t('reader:entryCard.stateUnknownEntity')
 }
 
+// A fallback keeps an uncreated item's handle as the rejected location; the turn's create names it.
+function rejectedLocationName(
+  ref: string,
+  stateReport: EntryMetadata['stateReport'],
+  pool: readonly ResolvedEntity[],
+): string {
+  if (!isCreateHandle(ref)) return resolveName(ref, pool)
+  const creates = [...(stateReport?.newItems ?? []), ...(stateReport?.newLocations ?? [])]
+  return creates.find((c) => c.handle === ref)?.name ?? t('reader:entryCard.stateUnknownEntity')
+}
+
 function resolveCounterparty(id: string | undefined, pool: readonly ResolvedEntity[]): string {
   return id != null ? resolveName(id, pool) : t('reader:entryCard.stateNone')
+}
+
+type CreateLine = { key: string; text: string }
+
+// entry-card.md → Panel anatomy: a dropped create isn't listed. A second new location
+// aliased to the first reports the same id again, so each row gets one line.
+function turnCreateLines(
+  report: EntryMetadata['stateReport'],
+  pool: readonly ResolvedEntity[],
+): CreateLine[] {
+  const lines: CreateLine[] = []
+  const seen = new Set<string>()
+  const push = (id: string, text: string) => {
+    if (seen.has(id)) return
+    seen.add(id)
+    lines.push({ key: id, text })
+  }
+  // Live name, not the writer's spelling; the report's name covers a row deleted since.
+  const liveName = (id: string, reported: string) => pool.find((e) => e.id === id)?.name ?? reported
+  for (const location of report?.newLocations ?? []) {
+    if (location.outcome === 'dropped') continue
+    const name = liveName(location.id, location.name)
+    push(
+      location.id,
+      location.outcome === 'created'
+        ? t('reader:entryCard.stateNewPlace', { name })
+        : t('reader:entryCard.stateMatchedPlace', { name }),
+    )
+  }
+  for (const item of report?.newItems ?? []) {
+    if (item.outcome === 'created') {
+      push(item.id, t('reader:entryCard.stateNewItem', { name: liveName(item.id, item.name) }))
+    }
+  }
+  return lines
 }
 
 function StateLine({ children }: { children: ReactNode }) {
@@ -523,7 +573,9 @@ function WorldStatePanel({
   const visualChanges = stateReport?.visualChanges ?? []
   const items = stateReport?.transfers?.items ?? []
   const stackables = stateReport?.transfers?.stackables ?? []
-  const hasChanges = visualChanges.length + items.length + stackables.length > 0
+  const createLines = turnCreateLines(stateReport, entityNames)
+  const hasChanges =
+    visualChanges.length + items.length + stackables.length + createLines.length > 0
 
   const emittedLocation = stateReport?.currentLocation
   // Read as a recorded fact, not inferred from `emitted !== current`: that inequality
@@ -588,7 +640,7 @@ function WorldStatePanel({
         <StateLine>
           {rejectedLocation != null ? (
             <Text size="xs" className="text-fg-muted line-through">
-              {`${resolveName(rejectedLocation, entityNames)} `}
+              {`${rejectedLocationName(rejectedLocation, stateReport, entityNames)} `}
             </Text>
           ) : null}
           {currentLocationId != null
@@ -644,6 +696,9 @@ function WorldStatePanel({
                     to: resolveCounterparty(st.to, entityNames),
                   })}
             </StateLine>
+          ))}
+          {createLines.map((line) => (
+            <StateLine key={line.key}>{line.text}</StateLine>
           ))}
         </StateGroup>
       ) : null}
@@ -778,6 +833,8 @@ export function EntryCard({
   onDismiss,
   disabled,
   disabledReason,
+  editDisabled,
+  reversalDisabled,
   editing,
   contentEditNotice,
   editDirty = true,
@@ -791,6 +848,9 @@ export function EntryCard({
   const [stateExpanded, setStateExpanded] = useState(false)
   const [sceneEditOpen, setSceneEditOpen] = useState(false)
   const hasReasoning = reasoning != null && reasoning.length > 0
+  // Head reversals are gated apart from `disabled`: they pass through a pass or a close.
+  const editOff = editDisabled ?? disabled
+  const reversalOff = reversalDisabled ?? disabled
 
   // Carries the narrowed values rather than a bare boolean so the footer can
   // forward them without a non-null assertion.
@@ -968,7 +1028,7 @@ export function EntryCard({
           <Textarea
             value={content}
             onChangeText={onContentChange}
-            editable={!disabled}
+            editable={!editOff}
             autoFocus
             aria-label={t('reader:entryCard.editContent')}
             onKeyPress={(e) => {
@@ -976,7 +1036,7 @@ export function EntryCard({
             }}
           />
           <View className="flex-row flex-wrap justify-end gap-2">
-            <Button variant="ghost" size="sm" onPress={onCancelEdit} disabled={disabled}>
+            <Button variant="ghost" size="sm" onPress={onCancelEdit} disabled={editOff}>
               <Text>{t('cancel')}</Text>
             </Button>
             {onCommitEditAndRegen != null ? (
@@ -984,7 +1044,7 @@ export function EntryCard({
                 variant="secondary"
                 size="sm"
                 onPress={onCommitEditAndRegen}
-                disabled={disabled || !editDirty}
+                disabled={editOff || reversalOff || !editDirty}
               >
                 <Icon as={RefreshCw} size="sm" />
                 <Text>{t('reader:entryCard.saveAndRegenerate')}</Text>
@@ -994,7 +1054,7 @@ export function EntryCard({
               variant="primary"
               size="sm"
               onPress={onCommitEdit}
-              disabled={disabled || !editDirty}
+              disabled={editOff || !editDirty}
             >
               <Text>{t('save')}</Text>
             </Button>
@@ -1050,7 +1110,7 @@ export function EntryCard({
               label={t('reader:entryCard.editEntry')}
               size="sm"
               onPress={onEdit}
-              disabled={disabled}
+              disabled={editOff}
               disabledReason={disabledReason}
             />
           ) : null}
@@ -1060,7 +1120,7 @@ export function EntryCard({
               label={t('reader:entryCard.regenerate')}
               size="sm"
               onPress={onRegen}
-              disabled={disabled}
+              disabled={reversalOff}
               disabledReason={disabledReason}
             />
           ) : null}
@@ -1091,7 +1151,7 @@ export function EntryCard({
               size="sm"
               variant="destructive"
               onPress={onDelete}
-              disabled={disabled}
+              disabled={reversalOff}
               disabledReason={disabledReason}
             />
           ) : null}

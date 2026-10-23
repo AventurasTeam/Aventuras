@@ -159,7 +159,7 @@ M9.3.
 **Goal.** Chapter timeline ships as a real surface; chapter-close
 pipeline runs at chapter boundaries doing the
 [`memory/chapter-close.md`](../memory/chapter-close.md) phase
-sequence (3a–3e). Threads management lands. Reader gains chapter
+sequence (3a–3f). Threads management lands. Reader gains chapter
 management affordances (insert break, view chapter context, etc.).
 
 **Why now.** Chapter-close is the second-largest piece of memory-
@@ -179,28 +179,34 @@ companions.
   primitive surface) — reinstated because a thin gate is the
   intended gate-then-parallel milestone shape, and the absorption
   made the close pipeline gate every UI slice in the milestone.
-- M5.2 — Chapter-close pipeline: phases 3a–3e, agent invocations,
-  delta writes. Chapter-close consolidates `threads` rows that
-  M3's classifier wrote sparsely; surface (plot panel threads
-  tab) already exists from M4.3. Per-chapter `retrieval_count`
+- M5.2 — Chapter-close pipeline: phases 3a–3f, agent invocations,
+  delta writes. Chapter-close consolidates the `threads` rows the
+  periodic classifier writes once the AI writer map is implemented
+  (`followups.md`); surface (plot panel threads tab) already exists
+  from M4.3. Per-chapter `retrieval_count`
   reset under the chapter-close `action_id` (paired with M3.4's
   per-injection increment). Extends the M1.5 awareness upsert arm
   with an earliest-wins `learned_at_entry_id` merge path — the
   shipped arm keeps-first with no write path to that column
   (forward seam named in the M1.5 happenings slice), and the
-  lore-mgmt phase needs it. This is the first real `chainsTo`
-  consumer (per-turn → chapter-close): M5.2 declares per-turn's
-  `chainsTo` predicate and builds the chapter-close pipeline. The
-  orchestrator's chained-execution capability (driving the successor
-  through its own commit, threading its fresh `actionId` and
-  active-run pointer) already landed in 1.5a during post-M1
-  reconciliation, so M5.2 needs no orchestrator change.
-  Slice-authoring note: the reader's regenerate confirm resolves its
-  cascade counts when the modal opens and never re-resolves them
-  (M3.10). No M3 writer can widen the window while the modal sits
-  open, but a background chapter close can — so this slice must
-  re-derive the counts under the branch queue at confirm time, or
-  invalidate an open modal when a close lands.
+  lore-mgmt phase needs it. M5.2 extends `nextMemoryRun`
+  (`lib/pipeline/definitions/memory-chain.ts`), per-turn's `chainsTo`,
+  with the close branch, gives the pass a `chainsTo` of its own for
+  phase 0, adds `pendingClose`, `closeOwed` and the open-region read,
+  and builds the chapter-close pipeline. The close branch of
+  `nextMemoryRun` reads at commit under the gate, in SQL as the pass
+  branch does, with no in-memory mirror of the open region's tokens.
+  The chain it extends is in place: the orchestrator awaits `chainsTo`
+  at commit while the run holds the gate and starts the successor with
+  a fresh `actionId`, and an `interruptible` run's abort records its
+  kind in `txState.deferred`, so a close declared `interruptible` is
+  interrupted, recorded and toasted (`chrome.deferredWork.close`) like
+  a pass.
+  Slice-authoring note: the reader's rollback and regenerate confirms
+  recount whenever a run settles while they are open, and
+  `rollbackToEntry` / `regenerateTurn` refuse `counts-changed` when
+  the set resolved at confirm differs from the counts the user saw,
+  so a close committing under an open modal is covered.
   Slice-authoring note: `orchestrator.handleEvent` stamps
   `turnCaptureSink.recordTargetEntry` on **any** `createStoryEntry`
   delta with per-turn anchor semantics — correct while `per-turn`
@@ -208,6 +214,57 @@ companions.
   `createStoryEntry` deltas, so this slice must gate the stamping
   on `run.kind === 'per-turn'` (or "beginTurn set no anchor") or
   its runs mis-stamp their anchors (surfaced by Slice 2.7).
+  Slice-authoring note: `interruptMemoryRuns`
+  (`lib/stores/generation/generation.ts`) aborts one snapshot of the
+  branch's interruptible runs. Once this slice gives the pass its
+  `chainsTo`, a pass committing during the interrupt can chain a close
+  that the snapshot misses and that then runs beside the reversal's
+  sweep. This slice must loop as `cancelStoryRuns` does, or have
+  `commitRun` refuse an interruptible successor while
+  `reversalInProgress`.
+  Slice-authoring note: Send runs a deferred pass before the turn
+  (`owedPassAtSend` reads only `deferred.pass`), and `nextMemoryRun`
+  returns null while the branch holds a `close` record, so a
+  `{ close: true }` record would stop all memory work on the branch
+  until a restart. This slice must run the deferred close after the
+  deferred pass.
+  Slice-authoring note: `undoLastAction` reads its target before the
+  gate decision, and `selectUndoTarget` skips only `periodic_classifier`
+  deltas. A close logs its own under `chapter_close` and emits
+  `createStoryEntry`, so the selector may classify the close's group as
+  a `turn` and CTRL-Z may reverse it as one, or refuse it while the
+  close runs. This slice must settle which target CTRL-Z picks for a
+  close.
+  Slice-authoring note: the Actions menu puts `Close chapter…` under
+  `STORY TOOLS` on every in-story surface
+  ([`actions-menu.md`](../ui/patterns/actions-menu.md)), so a close is
+  the first run startable from World, Plot or Story Settings, and a
+  screen that is both dirty and busy answers one back with two dialogs,
+  the story-leave confirm and the unsaved-changes one. It is
+  unreachable today: busy means edit-blocked, those screens disable
+  their inputs then, and nothing starts work from them. The fix shape:
+  the story-leave guard takes `dirty`, drops its own `usePreventRemove`
+  while dirty and exposes a removal-aware `guardRemoval(proceed)`, and
+  each route's unsaved guard calls
+  `requestLeave(() => guardRemoval(proceed))` (World and Plot thread it
+  through `useRowSessionGuard`). The two dialogs are the lesser cost.
+  World's Save no longer merges concurrent writes into a dirty pane's
+  keywords and relationships, since a pane is never dirty across a pass
+  ([`world.md → Relationships — character-to-character`](../ui/screens/world/world.md#relationships--character-to-character)),
+  and Plot's Save keeps a dirty links array whole. A close started from
+  the Actions menu over a dirty World or Plot pane would run under the
+  draft, and the pane's later Save would write its dirty fields, whole
+  arrays included, over the close's writes to them. That is the
+  revisit signal of
+  [`parked.md → A dirty links array on Save overwrites concurrent link writes`](../parked.md#a-dirty-links-array-on-save-overwrites-concurrent-link-writes),
+  whose first candidate is this close: this slice must keep a close
+  from starting over a dirty pane, or bring back the three-way merge
+  that entry describes, for both surfaces.
+  Slice-authoring note: the memory banner labels only the pass
+  (`use-memory-run-banner.ts`, and its test pins that a close shows
+  nothing); canon shows it for a pass or a chapter-close transaction
+  ([`principles.md → Affordance loci`](../ui/principles.md#affordance-loci)),
+  so this slice adds the close's label and flips that test.
 - M5.3 — Chapter timeline screen per
   [`docs/ui/screens/chapter-timeline/chapter-timeline.md`](../ui/screens/chapter-timeline/chapter-timeline.md);
   chapter delete routes through the deep-rollback surface (M5.5).
@@ -340,22 +397,24 @@ DB-backed `openRegionTokens` resolves all of them.
   checks no user precedence: a re-emit overwrites `source` and
   `decay_resistance` whoever wrote them. User rows exist since 4.2a's
   Plot editor and 4.2c's collision merge, whose copied awareness is a
-  user create. Today only the periodic classifier writes awareness, and
-  only for happenings it creates in the same pass. The close's
-  happening-cluster merge
-  ([`memory/chapter-close.md`](../memory/chapter-close.md)) will rewrite
-  awareness on rows it didn't create (max decay resistance, sources
-  concatenated), so M5.2 decides whether a user-written awareness row
-  keeps its values. Found in 4.2c's slice review (2026-10-07).
-- **M5.2 — A lore row with a null body exports a file its own import
-  refuses.** `lore.body` is nullable (`lib/db/lore/lore.table.ts`),
-  `loreExport` writes it as `''`, and the import refuses a lore file
-  without a body. No writer stores a null body today (the lore pane, the
-  wizard and the seed all require one), so a new lore writer is what
-  would surface it, and the close's lore-mgmt phase is the first. Either
-  that writer requires a body, or export and import agree on an empty
-  one. Split from a Slice 4.6 review entry; routed from triage
-  2026-10-09.
+  user create. Canon now settles it: a user-written row keeps its
+  values when the user wrote them after the cited prose
+  ([`memory/chapter-close.md → 3e`](../memory/chapter-close.md#3e--happenings-consolidation)).
+  A pass's awareness of listed happenings, from the AI writer map
+  (`followups.md`), reaches user rows before the close's cluster merge
+  does, so the check lands with whichever ships first. Found in 4.2c's
+  slice review (2026-10-07).
+- **M5.2 — Send checks only the first run of its owed pass's chain.**
+  `runPipeline` resolves with the origin run's result alone
+  (`lib/pipeline/runtime/orchestrator.ts`), and `submitTurn`
+  (`lib/actions/turns/submit-turn.ts`) starts the turn on it. Once the
+  pass's `chainsTo` returns a catch-up pass or the close while a close
+  is pending
+  ([`chapter-close.md → Phase 0`](../memory/chapter-close.md#phase-0--catch-up-passes)),
+  Send must wait on the whole chain, or a failed catch-up pass or close
+  lets the turn run. A failed close also keeps its `{ close: true }`
+  record, since only a commit clears a deferral. Raised 2026-10-23 by
+  the pass failure policy slice review.
 
 **Gates.** M4 (chapter-close compacts entities + lore the world
 panel renders; surfaces would be invisible without M4).
@@ -485,22 +544,16 @@ verified against the code first. Resolve with the slice each names.
   switching write `currentBranchId`, which `openStory` already routes
   through. Raised by Slice 4.2a against M7.2; routed from triage
   2026-09-27, retargeted to the slice that makes it reachable.
-- **M6.3 — Whether `updating-memory` blocks branch switching.**
-  [`branch-navigator.md → During generation`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked)
-  pauses switch, delete and create while the pill is active ("any
-  pipeline phase", line 116) and sends the user to wait or cancel from
-  `Send → Cancel` (lines 120-123). Its phase list doesn't name the
-  periodic classifier's `updating-memory`, which the pill now shows and
-  which can't be cancelled, so the rule either parks switching behind
-  an uncancellable pass or doesn't cover it. The list is stale beyond
-  that — it lacks `recalling-memory` and `refreshing-suggestions`, and
-  its `classifying` is the per-turn piggyback fallback — and a pass can
-  hold the pill for five minutes or more (`CALL_TIMEOUT_MS`, then
-  apply). Two shapes: exempt background phases, since the pass writes
-  only its own branch; or cancel it the way prose reversal does
-  (`awaitRunTerminal(PERIODIC_CLASSIFIER_KIND, branchId, 'cancel')`),
-  which discards a pass before its commit burst and lets one already
-  committing land. Routed from triage 2026-09-27.
+- **M6.3 — Branch switching during a pass or a close.** Settled
+  2026-10-20: switching waits like any gated branch operation, and the
+  way out is the pill's Cancel, which moves the pass or close to the
+  next turn
+  ([`branch-navigator.md → During generation`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked)).
+  The pill's `Cancel memory update`, the in-story memory banner's
+  Cancel and the deferral toast exist; M6.3 builds the navigator's
+  paused state and banner to that rule. A
+  pass can hold the story for as long as the classifier's timeout
+  allows (ten minutes by default), then apply. Routed from triage 2026-09-27.
 - **M6.3 — No shared branch filter for store rows.** About twenty call sites
   in `lib`, `components` and `app` filter a store's rows by
   `branchId` inline; 4.2c added two more (`branchRows` in
@@ -613,7 +666,7 @@ the underlying configuration surfaces.
   panel
   (cadence in-place
   edit, buffer-aware cadence indicator, status block,
-  `[Run classifier now]`, top-bar error pill routed back) per
+  `[Run classifier now]`) per
   [`memory/classifier.md → Settings · Memory · Classifier panel`](../memory/classifier.md#settings--memory--classifier-panel).
   Pack tab gates on the `templateContextMap.ts` integrity
   validator per
@@ -702,14 +755,24 @@ code before it moved; resolve with the slice it names.
   the fallback, whose schema asks for transfers again. Item moves and
   visual changes overwrite, so a repeat is harmless; stackable amounts
   add, so a transfer both layers report lands twice. Verified by
-  reading in the 2026-10-05 triage pass, not reproduced: the fallback
-  reads the post-fold store (`per-turn-piggyback.ts`) and
-  `lib/piggyback/apply.ts` adds the amount to the current count, with
-  no dedupe; one made-up id in `<scene_entities>` beside a valid
-  `<transfers>` is enough, since `substitute.ts` fails a whole field on
-  an unknown placeholder. Unreachable until this slice: `piggybackMode`
-  defaults to `'off'` and only the dev seed turns it on. Canon decides
-  the fold half
+  reading in the 2026-10-05 triage pass and reproduced 2026-10-11 by a
+  unit probe through the real fold and fallback: a block giving `c1`
+  10 gold as a stackable beside an unparseable `<world_time_delta>`
+  (`soon`) fails the parse, the fallback emits the same stackable, and
+  Aria's gold goes 10 → 20. The fallback reads the post-fold store
+  (`per-turn-piggyback.ts`) and `lib/piggyback/apply.ts` adds the
+  amount to the current count, with no dedupe; any failing field
+  beside a valid `<transfers>` is enough, a made-up id in
+  `<scene_entities>` among them. Reasoned, not probed: the same read
+  renders the fallback prompt's `Holds:` and `Here:` lines with the
+  fold's transfers already applied, under the template's "the world as
+  it stands going into that turn"; the same read renders each holder's
+  `Stackables:` balances too, and the fallback is told not to move more
+  than a payer holds
+  ([`architecture.md → Entity state on the template surface`](../architecture.md#entity-state-on-the-template-surface)).
+  Unreachable until this slice:
+  `piggybackMode` defaults to `'off'` and only the dev seed turns it
+  on. Canon decides the fold half
   ([`piggyback.md → Parse strategy and failure recovery`](../memory/piggyback.md#parse-strategy-and-failure-recovery))
   and frames the fallback as a from-scratch, last-writer-wins
   re-extraction, but never addresses fields that are deltas rather
@@ -1094,34 +1157,12 @@ code before it moved; resolve with the slice it names.
   window the window-level accounting entry above lacks, so the two land
   together. A window-free interim (drop retired entities, cap each
   description) is there if a long story reaches a provider's prompt
-  limit first, which today surfaces as a provider failure that spends
-  the retry budget toward `failed-persistent`. Revisit trigger: the
+  limit first, which fails the pass and so every Send on the branch
+  until the prompt fits
+  ([`classifier.md → Failure policy`](../memory/classifier.md#failure-policy)).
+  Revisit trigger: the
   first long-story prompt-size or cost signal. Routed from triage
   2026-09-27.
-- **M7.2 — A recurring classifier failure reaches `failed-persistent`
-  invisibly.** The backoff
-  ([`classifier.md → Auto-retry policy`](../memory/classifier.md#auto-retry-policy))
-  exhausts in about 7.5 minutes (30s + 2m + 5m) against a repeating
-  apply-time rejection, and `failed-persistent` survives a restart —
-  boot recovery (`resetStuckClassifierRunState`) resets only
-  `'running'`. Nothing in `app/`, `components/` or `hooks/` reads
-  classifier status or calls `runNow` (`scheduler.ts:85`) today, so a
-  branch can stop updating memory with no visible signal until this
-  slice builds Settings → Memory's `[Retry]` / `[Run classifier now]`
-  ([`story-settings.md → Classifier`](../ui/screens/story-settings/story-settings.md#classifier)).
-  Verified 2026-09-27, which added: a pass whose attempts time out
-  takes up to about 27.5 minutes to get there (four five-minute calls
-  plus the waits); the scheduler instance is local to
-  `wireClassifierScheduler` (`lib/boot/bootstrap.ts`), so the buttons
-  need a handle exported before they can call `runNow`; a branch whose
-  orphan reversal threw at boot stays `'running'` for good, which
-  suspends the cadence just as silently; the backoff timers live in
-  memory, so after a restart a `retrying` branch waits for the next
-  cadence tick; and the top-bar error pill canon promises for
-  `failed-persistent` is unbuilt — the story pill's error slot knows
-  only `swap-paused` and `memory-incomplete`. Reachable on any build
-  whose provider or apply step fails repeatedly. The developer chose
-  not to pull an interim pill forward. Routed from triage 2026-09-27.
 - **M7.3 — Reader jump-to-entry from a delta row.** The reader route
   takes only `branchId` and `ReaderSurfaceHandle` exposes
   `jumpToBottom`; History rows (4.2b) and the Diagnostics delta log
@@ -1140,6 +1181,43 @@ code before it moved; resolve with the slice it names.
   built-in Gregorian calendar (`earth-gregorian`,
   [`calendar-systems/spec.md`](../calendar-systems/spec.md)). Developer
   decision on the 4.2b stack review (2026-09-30).
+- **M7.5 — A probe capture's floor rows can't be grouped by source.**
+  Each `structural_floor` row is `{ target_kind, target_id, tokens }`,
+  and the seats entity state added (the in-scene characters' factions,
+  their held items, the items lying at the location) all carry the
+  `entity` target kind (`lib/probe/payload.ts`). The Selected tab's
+  wireframe groups "Their factions" and "Held and loose items" apart
+  from the in-scene entities
+  ([`memory-probe.md → Selected tab`](../ui/screens/memory-probe/memory-probe.md#selected-tab)),
+  and a capture written today can't be split later: the row carries no
+  source, and the entity it names may have changed since. A `source`
+  field means a `CAPTURE_VERSION` bump, which belongs with the
+  Selected-tab UI. Raised 2026-10-19 by the entity-state implementation;
+  routed by its slice review.
+- **M7.2 — "It runs again before your next turn" isn't always true.**
+  The status block's Failed line
+  ([`classifier.md → Status block`](../memory/classifier.md#status-block))
+  and the failure toast (`chrome.memoryUpdateFailed`, which
+  `hooks/use-memory-run-toasts.ts` raises for a pass that fails outside
+  a Send) both promise it. It is false when nothing is owed: a failed
+  `[Run classifier now]` with the cadence not due, or a chained pass
+  that failed before a reversal (CTRL-Z of the head turn) took the
+  unprocessed count back under the cadence. The status then reads
+  `failed` until some later pass. It is false too on a branch the
+  failure left held: a Cancel whose reversal didn't commit, or a pass
+  whose failure write failed its retry (`onPhaseException` in
+  `lib/pipeline/definitions/periodic-classifier.ts`), where the next
+  Send shows the held entry instead. The panel slice words both from
+  what it can read (a pass owed, the branch held) or drops the promise.
+  Raised 2026-10-23 by the pass failure policy slice review.
+- **M7.2 — `lastError` mixes prefixed and bare causes.** The status
+  block renders `classifier_status.lastError`. The pass's hooks
+  (`onPreflightFailure`, `onPhaseException` in
+  `lib/pipeline/definitions/periodic-classifier.ts`) write it as
+  `classifier: <detail>`, while a failed call writes the bare cause
+  (`passFailure`, e.g. `timeout after 600000ms`). The panel slice picks
+  one form. Predates the pass failure policy slice; raised 2026-10-23
+  by its slice review.
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware
@@ -1178,6 +1256,24 @@ already-shipped calendar editor.
   kind with `hard-gate` concurrency per
   [`generation-pipeline.md → V1 declarations`](../generation-pipeline.md#v1-declarations))
   lands alongside.
+  Slice-authoring note: two policies pick the run the pill names. The
+  reader's pill and its Cancel (`cancelPillRun`) use `pillRunOf` in
+  `components/reader/send-run.ts`: `findSendRun`, an allowlist of
+  per-turn and Send's deferred pass, then the branch's pass or close
+  (`selectMemoryRun`). World, Plot and Story Settings pick theirs by
+  interruptibility and gate in `pillRun`
+  (`components/story-settings/generation-run.ts`, private to that
+  file), through `useStoryGenerationGate`, which returns the pill's run
+  kind and a bound `cancelPillRun`. The reader uses `pillRun` too, for
+  its gate tooltip: `selectStorySettingsGenerationRunKind` reads it
+  across the story, not the branch, and feeds `generationGateReason`.
+  The two agree for today's kinds, but `translation-retry` is
+  hard-gate, non-interruptible and not a turn, so it would get a Cancel
+  on World and Plot and none in the reader, while the reader's tooltip,
+  through `pillRun`, still says to cancel it. This slice must export a
+  branch-scoped `pillRun` and have the reader's pill, its Cancel and
+  its gate tooltip all use it; `findSendRun` stays for the composer's
+  Send and Cancel.
 - M8.2 — Translation UI: the reactive `useTranslation`
   subscription over the M1.5 store (render reactivity was scoped
   out of the content slice to land with this display-translation
@@ -1704,7 +1800,9 @@ own.
   selected: every CTRL-Z, redo, prose edit, rollback and its preview,
   abort and boot recovery. CTRL-Z also loads the branch's whole log,
   payloads included, to pick its target (`recentDeltaRows` in
-  `lib/actions/story-entries/undo.ts`), and `reverseReplayDeltas`'s
+  `lib/actions/story-entries/undo.ts`), and while a pass runs
+  `undoLastAction` reads it twice: once before the gate decides, once
+  in the reversal bracket. `reverseReplayDeltas`'s
   `WHERE action_id = ?` in `lib/actions/delta/reverse-replay.ts`
   matches no index, so abort and boot recovery scan `deltas` across
   every story. The only `deltas` indexes are `(branch_id, log_position)`
@@ -1717,7 +1815,8 @@ own.
   read for CTRL-Z's target, measured on a bench beside
   `bench/retrieval-cost.test.ts`. Raised in the reversal-integrity PR's
   review (2026-10-05); the two wider scans were found when it was
-  routed.
+  routed, and the double read during a pass by the gated classifier
+  slice's task reviews (2026-10-21).
 - **M9.5 — SQLite never gathers table statistics.** Nothing runs `ANALYZE` or
   `PRAGMA optimize` (`lib/db`, `electron/`), so the planner picks
   indexes without statistics. Measured while planning 4.2c's History
@@ -1779,9 +1878,19 @@ own.
   AlertDialog or right Sheet) that opens with no toast showing hides the
   app root, and a toast mounted after inherits it. An always-rendered,
   empty live region would be spared by `hideOthers`. The observation in
-  [`parked.md → Background content behind AlertDialog is not aria-hidden`](../parked.md#background-content-behind-alertdialog-is-not-aria-hidden)
-  contradicts this; one browser probe settles both. Routed from triage
-  2026-10-09.
+  [`parked.md → Why one role locator matched both Discard buttons behind an AlertDialog`](../parked.md#why-one-role-locator-matched-both-discard-buttons-behind-an-alertdialog)
+  contradicts this; a browser probe (2026-10-21) sided with
+  `hideOthers`: it marks the app root `aria-hidden` while a Radix
+  dialog is open, a toast that exists before it runs stays announced,
+  one mounted after is hidden, and on screen the toast sits under the
+  scrim either way, since RN-Web's `z-index: 0` stacking contexts trap
+  the `Toaster`. New instances: the rollback and regenerate
+  `counts-changed` refusal toast, the deferral toast an interrupt fires
+  before a refusal, and the deferral toast during Story-leave
+  Cancel & leave while its confirm spins. The same trap contradicts
+  [`toast.md → Z-index`](../ui/patterns/toast.md#z-index), which puts
+  the `Toaster` (`z-[100]` in `components/ui/toast.tsx`) above Sheet and
+  AlertDialog. Routed from triage 2026-10-09.
 - **M9.5 — A Dialog opened as a bottom Sheet closes may sit under its scrim.** On
   native, gorhom's sheets render above the app's `PortalHost`, and since 4.5a
   a closing Sheet's scrim keeps catching touches until its animation ends

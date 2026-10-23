@@ -319,6 +319,37 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
     })
   })
 
+  it('keeps the faction the user set on a held row while restoring the attire', async () => {
+    const state = { ...emptyEntityState('character'), visual: { attire: 'cloak' } }
+    await ctx.db.insert(entities).values(character('char_v', { state }))
+    await act('act_pass', {
+      kind: 'updateEntity',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: 'b1',
+        id: 'char_v',
+        patch: { state: { ...state, visual: { attire: 'armor' }, faction_id: 'fact_pass' } },
+      },
+    })
+    await act('act_user', {
+      kind: 'updateEntity',
+      source: 'user_edit',
+      payload: {
+        branchId: 'b1',
+        id: 'char_v',
+        patch: { state: { ...state, visual: { attire: 'armor' }, faction_id: 'fact_user' } },
+      },
+    })
+    await act('act_del', deleteEntity('char_v'))
+
+    await reverseReplayDeltas('act_pass', ctx)
+
+    expect((await payloadOf('act_del')).state).toMatchObject({
+      visual: { attire: 'cloak' },
+      faction_id: 'fact_user',
+    })
+  })
+
   it('strips a held relationship that an update undo leaves with no view', async () => {
     await seedMentorPair(null, 'mentor')
     await act('act_pass', passView('char_x', 'char_y', 'rival'))
@@ -752,6 +783,18 @@ describe('the write-back refusal', () => {
 
   it('finds the removed id inside an id array', async () => {
     await seedWriteBack({ state: { inventory: ['char_q', 'char_p'] } })
+    await expectRefusedUnwritten(() => reverseReplayDeltas('act_pass', ctx))
+  })
+
+  // edge-cases.md → Schema: the partner is a plain id outside the reference registry.
+  it('does not read a flag partner in an entities undo payload as a reference', async () => {
+    await seedWriteBack({ nameCollisionPartnerId: 'char_p' })
+
+    expect(await reverseReplayDeltas('act_pass', ctx)).toBe(1)
+  })
+
+  it('still refuses a payload naming the removed id beside a flag partner', async () => {
+    await seedWriteBack({ nameCollisionPartnerId: 'char_p', state: { faction_id: 'char_p' } })
     await expectRefusedUnwritten(() => reverseReplayDeltas('act_pass', ctx))
   })
 

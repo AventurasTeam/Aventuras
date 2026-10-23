@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gt, inArray, or, sql } from 'drizzle-orm'
 import { chunked, deltas, type Delta } from '@/lib/db'
 
 import { isUserOriginatedSource, type DbCtx } from '../types'
+import { isPlainObject } from './delta-encoding'
 import type { LockedTable } from './row-locks'
 
 /** Noop reason for a classifier write a newer user edit of the same field outranks. */
@@ -144,9 +145,33 @@ export function carriesColumn(delta: Delta, column: string): boolean {
   return delta.undoPayload != null && column in delta.undoPayload
 }
 
+/**
+ * Whether the delta recorded a prior value at `path` inside `column`, at a path above it or at one
+ * below it: the undo payload records only the sub-fields an update changed.
+ */
+function carriesPath(delta: Delta, column: string, path: readonly string[]): boolean {
+  if (!carriesColumn(delta, column)) return false
+  let node: unknown = delta.undoPayload?.[column]
+  for (const key of path) {
+    if (!isPlainObject(node)) return true
+    if (!Object.hasOwn(node, key)) return false
+    node = node[key]
+  }
+  return true
+}
+
+/** Whether one of these deltas created the row or changed `path` inside `column` on it. */
+export function wrotePath(
+  edits: readonly Delta[],
+  column: string,
+  path: readonly string[],
+): boolean {
+  return edits.some((d) => d.op === 'create' || (d.op === 'update' && carriesPath(d, column, path)))
+}
+
 /** Whether one of these deltas created the row or changed `column` on it. */
 export function wroteColumn(edits: readonly Delta[], column: string): boolean {
-  return edits.some((d) => d.op === 'create' || (d.op === 'update' && carriesColumn(d, column)))
+  return wrotePath(edits, column, [])
 }
 
 /** Whether the user deleted a `character_relationships` row for this pair after `since`. */

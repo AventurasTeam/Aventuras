@@ -168,7 +168,7 @@ export const Composer = forwardRef(function Composer(
   }
 
   return (
-    <View className="gap-2">
+    <View className="gap-2" testID="composer">
       <SpellcheckTextarea
         value={text}
         onChangeText={setText}

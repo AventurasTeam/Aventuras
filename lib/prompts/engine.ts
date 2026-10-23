@@ -1,56 +1,85 @@
 import { Liquid } from 'liquidjs'
 
 import { registerFilters } from './filters'
-import type { Pack } from './types'
+import type { Pack, RenderedPrompt } from './types'
 
-// Build a liquidjs engine whose in-memory `templates` map carries both template
-// and macro sources keyed by id, so `{% include 'id' %}` resolves from the pack.
+export type TemplateHalf = 'system' | 'user'
+
+const HALVES: readonly TemplateHalf[] = ['system', 'user']
+
+// Halves and macros share the engine's one template map, so a macro id equal to a half key
+// would overwrite that half; createEngine rejects it.
+function halfKey(templateId: string, half: TemplateHalf): string {
+  return `${templateId}#${half}`
+}
+
+// In-memory `templates` (halves and macros) so `{% include 'id' %}` resolves from the pack.
 export function createEngine(pack: Pack): Liquid {
   const templates: Record<string, string> = {}
-  for (const [id, entry] of Object.entries(pack.templates)) templates[id] = entry.source
+  for (const [id, entry] of Object.entries(pack.templates)) {
+    for (const half of HALVES) templates[halfKey(id, half)] = entry[half]
+  }
   for (const [id, entry] of Object.entries(pack.macros)) {
-    // Templates and macros share one id namespace in the map; a collision would
-    // silently shadow a template's source, so fail loud instead.
-    if (Object.hasOwn(templates, id)) {
-      throw new Error(`pack id collision: '${id}' is registered as both a template and a macro`)
+    // Templates and macros share one id namespace; an id naming both would leave an include
+    // ambiguous to its author, so fail loud. The map check also covers half keys (see halfKey).
+    if (Object.hasOwn(pack.templates, id) || Object.hasOwn(templates, id)) {
+      throw new Error(`pack id collision: '${id}' is already registered as a template or half`)
     }
     templates[id] = entry.source
   }
 
-  const engine = new Liquid({ templates })
+  // Safe to cache: `templates` is this engine's own copy, fixed once built.
+  const engine = new Liquid({ templates, cache: true })
   registerFilters(engine)
   return engine
 }
 
-// Memoized per engine: a pack's sources are fixed once loaded, and the parse is
-// not free.
+// Memoized per engine: a pack's sources are fixed once loaded, and the parse is not free.
 const globalsByEngine = new WeakMap<Liquid, Map<string, ReadonlySet<string>>>()
 
 /**
  * The context variables `templateId` actually reads, following `{% include %}`
- * into macros and excluding anything the template assigns itself.
+ * into macros and excluding anything the half assigns itself. The union of both
+ * halves when `half` is omitted.
  */
-export function templateGlobals(engine: Liquid, templateId: string): ReadonlySet<string> {
-  let perTemplate = globalsByEngine.get(engine)
-  if (!perTemplate) {
-    perTemplate = new Map()
-    globalsByEngine.set(engine, perTemplate)
+export function templateGlobals(
+  engine: Liquid,
+  templateId: string,
+  half?: TemplateHalf,
+): ReadonlySet<string> {
+  let perKey = globalsByEngine.get(engine)
+  if (!perKey) {
+    perKey = new Map()
+    globalsByEngine.set(engine, perKey)
   }
 
-  const cached = perTemplate.get(templateId)
+  const key = half === undefined ? templateId : halfKey(templateId, half)
+  const cached = perKey.get(key)
   if (cached) return cached
 
-  const globals = new Set(engine.globalVariablesSync(engine.parseFileSync(templateId)))
-  perTemplate.set(templateId, globals)
+  const globals =
+    half === undefined
+      ? new Set([
+          ...templateGlobals(engine, templateId, 'system'),
+          ...templateGlobals(engine, templateId, 'user'),
+        ])
+      : new Set(engine.globalVariablesSync(engine.parseFileSync(key)))
+  perKey.set(key, globals)
   return globals
 }
 
-// Synchronous render. All M2 filters and in-memory includes are sync, so there
-// is no async path to force a promise.
+/**
+ * Renders both halves against one context, synchronously: every filter and
+ * in-memory include is sync. Throws when the user half renders blank, since
+ * there would be nothing for the model to answer; a blank system half is legal.
+ */
 export function renderWith(
   engine: Liquid,
   templateId: string,
   context: Record<string, unknown>,
-): string {
-  return engine.renderFileSync(templateId, context) as string
+): RenderedPrompt {
+  const system = engine.renderFileSync(halfKey(templateId, 'system'), context) as string
+  const user = engine.renderFileSync(halfKey(templateId, 'user'), context) as string
+  if (user.trim() === '') throw new Error(`template '${templateId}' rendered a blank user half`)
+  return { system, user }
 }

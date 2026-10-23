@@ -104,6 +104,75 @@ describe('useEntityRowSession', () => {
     await waitFor(() => expect(hook.result.current.invalidReason).toBeNull())
   })
 
+  // world.md → Settings: a place rule names its own field and places.
+  it('lands a place refusal on the field it names, and the notice names its tab', async () => {
+    const { hook, onRejected } = setup({
+      status: 'rejected',
+      reason: 'place rule: retired-parent',
+      code: 'retired-parent',
+      refusal: {
+        code: 'retired-parent',
+        field: 'status',
+        parent: { id: 'loc_p', name: 'Port Vellis' },
+      },
+    })
+    act(() => {
+      hook.result.current.form.setValue('status', 'staged', { shouldDirty: true })
+    })
+    await act(async () => {
+      await hook.result.current.save()
+    })
+    const text = 'Port Vellis is retired. Bring it back first.'
+    const notice = `Settings: ${text}`
+    expect(hook.result.current.form.getFieldState('status').error?.message).toBe(text)
+    expect(hook.result.current.form.getFieldState('parentLocationId').error).toBeUndefined()
+    expect(hook.result.current.invalidReason).toBe(notice)
+    expect(onRejected).toHaveBeenCalledWith(notice)
+    expect(hook.result.current.saveError).toBe(notice)
+  })
+
+  it('names the story inside a place, or the place itself when the story is there', async () => {
+    const story = (storyId: string, field: 'injectionMode' | 'parentLocationId') =>
+      setup({
+        status: 'rejected',
+        reason: 'place rule: story-inside',
+        code: 'story-inside',
+        refusal: {
+          code: 'story-inside',
+          field,
+          place: { id: 'loc_p', name: 'Port Vellis' },
+          story: { id: storyId, name: storyId === 'loc_p' ? 'Port Vellis' : 'The Rusty Anchor' },
+        },
+      })
+    for (const [storyId, field, text, tab] of [
+      [
+        'loc_inn',
+        'injectionMode',
+        'The story is in The Rusty Anchor, inside Port Vellis.',
+        'Settings',
+      ],
+      ['loc_p', 'injectionMode', 'The story is in Port Vellis.', 'Settings'],
+      [
+        'loc_inn',
+        'parentLocationId',
+        'The story is in The Rusty Anchor, inside Port Vellis.',
+        'Connections',
+      ],
+    ] as const) {
+      const { hook, onRejected } = story(storyId, field)
+      act(() => {
+        hook.result.current.form.setValue('condition', 'flooded', { shouldDirty: true })
+      })
+      await act(async () => {
+        await hook.result.current.save()
+      })
+      expect(hook.result.current.form.getFieldState(field).error?.message).toBe(text)
+      expect(hook.result.current.invalidReason).toBe(`${tab}: ${text}`)
+      expect(onRejected).toHaveBeenCalledWith(`${tab}: ${text}`)
+      cleanup()
+    }
+  })
+
   it('reports the saved id', async () => {
     const { hook, onSaved } = setup({ status: 'ok', id: 'loc_shop' })
     act(() => {
@@ -131,8 +200,7 @@ describe('useEntityRowSession', () => {
     expect(onRejected).not.toHaveBeenCalled()
   })
 
-  // A classifier alias landing while keywords are dirty must not become the Save's base.
-  it('saves against the keywords the draft was based on, not the list stored since', async () => {
+  it('hands onSave the draft alone, the dirty field as the user left it', async () => {
     const onSave = vi.fn(async () => ({ status: 'ok', id: 'loc_shop' }) as EntitySaveResult)
     const based = { ...VALUES, keywords: ['the shop'] }
     const hook = renderHook(
@@ -159,9 +227,9 @@ describe('useEntityRowSession', () => {
     await act(async () => {
       await hook.result.current.save()
     })
+    // toHaveBeenCalledWith matches the whole argument list.
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({ keywords: ['the shop', 'the store'] }),
-      ['the shop'],
     )
   })
 

@@ -33,25 +33,34 @@ export function deleteEntityRow(
   )
 }
 
+// No await from this store read through commitRowDelete's gate check and dispatch: a read made
+// under a run's gate is refused, and a run that starts after the check settles the write first.
 async function deleteEntityLocked(
   branchId: string,
   id: string,
   head: HeadTurn<StoryEntry> | null,
   ctx: DbCtx,
 ): Promise<RowDeleteResult> {
-  // Store read, plan build, and commitRowDelete's in-flight check must run with no await between
-  // them — a hard-gate run finishing in that gap would commit over a staled snapshot.
   const branchEntities = [...entitiesStore.getEntities().values()].filter(
     (e) => e.branchId === branchId,
   )
   const target = branchEntities.find((e) => e.id === id)
-  if (target == null)
-    return {
-      status: 'rejected',
-      reason: `entity ${id} not found`,
+  if (target == null) {
+    const reason = `entity ${id} not found`
+    logger.warn('action_layer.entity_delete_rejected', {
+      branchId,
+      id,
+      reason,
       code: ROW_DELETE_REJECTION.notFound,
-    }
+    })
+    return { status: 'rejected', reason, code: ROW_DELETE_REJECTION.notFound }
+  }
   const tail = deleteTailOf(head)
-  const { actions } = entityDeleteActions({ branchId, target, branchEntities, tail })
-  return commitRowDelete('entity', branchId, id, actions, ctx)
+  return commitRowDelete(
+    'entity',
+    branchId,
+    id,
+    entityDeleteActions({ branchId, target, branchEntities, tail }).actions,
+    ctx,
+  )
 }

@@ -215,3 +215,40 @@ describe('sceneTrackingActions', () => {
     expect(actions).toEqual([])
   })
 })
+
+describe('scenePromotionActions', () => {
+  const rows = [
+    { id: 'char_s', kind: 'character', status: 'staged' },
+    { id: 'loc_s', kind: 'location', status: 'staged' },
+    { id: 'loc_a', kind: 'location', status: 'active' },
+  ] as unknown as Entity[]
+  const promoted = (actions: ReturnType<typeof scenePromotionActions>) =>
+    actions.map((a) => (a.payload as { id: string }).id)
+  const promote = (sceneEntities: string[], alsoIds?: string[]) =>
+    promoted(
+      scenePromotionActions({
+        branchId,
+        source: 'piggyback_tagged_block',
+        entities: rows,
+        sceneEntities,
+        ...(alsoIds !== undefined ? { alsoIds } : {}),
+      }),
+    )
+
+  it('promotes a staged id from alsoIds as it does a staged scene member', () => {
+    expect(promote(['char_s'], ['loc_s'])).toEqual(['char_s', 'loc_s'])
+  })
+
+  // A second promoteStagedEntity for one row claims entities.status twice and is rejected.
+  it('promotes an id named more than once, in either list, once', () => {
+    expect(promote(['loc_s', 'char_s', 'loc_s'], ['loc_s', 'char_s'])).toEqual(['loc_s', 'char_s'])
+  })
+
+  it('skips an alsoIds id that is active or not on the branch', () => {
+    expect(promote([], ['loc_a', 'loc_gone'])).toEqual([])
+  })
+
+  it('promotes only the staged scene members when no alsoIds are given', () => {
+    expect(promote(['char_s', 'loc_a'])).toEqual(['char_s'])
+  })
+})

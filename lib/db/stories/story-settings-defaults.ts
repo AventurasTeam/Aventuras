@@ -27,6 +27,7 @@ export const STORY_SETTINGS_DEFAULTS: StorySettings = {
   classifierCadence: 5,
   classifierContextEntries: 4,
   piggybackMode: 'off',
+  classifierMentionedPlaces: false,
   embeddingBackend: 'local',
   embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
   // Token budgets, not row counts (data-model.md → stories.settings). An

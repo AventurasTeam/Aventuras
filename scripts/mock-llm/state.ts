@@ -159,6 +159,20 @@ function defaultLanes(): Record<string, Lane> {
         relationships: [],
         statusFlips: [],
         newCharacters: [],
+        newFactions: [],
+        memberships: [],
+      }),
+    ]),
+
+    'periodic-classifier-places': lane([
+      canned('Nothing extracted', {
+        happenings: [],
+        relationships: [],
+        statusFlips: [],
+        newCharacters: [],
+        newFactions: [],
+        memberships: [],
+        newPlaces: [],
       }),
     ]),
 

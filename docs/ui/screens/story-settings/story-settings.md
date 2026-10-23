@@ -465,8 +465,9 @@ prompt. Raising it improves what the classifier can reason over and
 raises its per-turn input cost on every turn it fires — which, while
 `piggybackMode` is off, is every turn.
 
-The structural floor — active+in-scene entities, current-location
-lore, awareness-driven happenings, always-injection rows — is not
+The structural floor — active+in-scene entities with their factions
+and held items, the current location with the items lying there,
+active threads, always-injection rows — is not
 governed by these buffer settings. Those reach the prompt
 unconditionally when their structural conditions hold. See
 [`memory/retrieval.md → Structural floor`](../../../memory/retrieval.md#structural-floor--always-inject)
@@ -480,8 +481,8 @@ Full design in
 this section captures what the screen renders.
 
 - **Cadence config** — in-place edit of
-  `stories.settings.classifierCadence` (entries, checked per
-  turn), `classifierContextEntries` (entries, min 2), and the
+  `stories.settings.classifierCadence` (entries, checked at each
+  turn's commit), `classifierContextEntries` (entries, min 2), and the
   `piggybackMode` toggle. Buffer-aware cadence indicator from
   [`memory/cadence.md → User-tunable knobs`](../../../memory/cadence.md#user-tunable-knobs)
   renders inline.
@@ -492,19 +493,28 @@ this section captures what the screen renders.
   In that state the toggle reads as off, a one-line hint explains
   the gate (`Requires a narrative model with structured-output
 capability`), and the **per-turn fallback classifier** covers the
-  work on every turn — not the periodic classifier, whose write set is
-  disjoint from piggyback's and could never supply those fields (see
+  work on every turn — not the periodic classifier, whose write set
+  covers none of piggyback's per-turn fields and could never supply
+  them (see
   [`memory/piggyback.md → Capability gate`](../../../memory/piggyback.md#capability-gate)).
   Swapping the narrative model to a capable profile re-enables the
   toggle automatically.
+- **Create mentioned places** — a SwitchRow bound to
+  `stories.settings.classifierMentionedPlaces`, off by default. On,
+  the periodic classifier also creates the places the story mentions
+  without entering
+  ([`memory/classifier.md → Mentioned places`](../../../memory/classifier.md#mentioned-places)).
+  Its hint says what it costs: the place map grows with every place
+  the story mentions, not only the ones it visits. A change applies
+  from the next pass; prose already classified isn't revisited.
 - **Status block** — current state for the active branch, one of
-  _idle / running / retrying / failed-persistent_. Each state
-  carries its own copy and inline actions; failed-persistent
-  additionally surfaces as a top-bar error pill in the reader,
-  parallel to the cluster-1 staleness pill.
+  _idle / running / failed_. Each state carries its own copy;
+  failed names the reason and reads "runs again before your next
+  turn".
 - **`Run classifier now`** button. Disabled while a run is
-  actively in flight; enabled in idle and retrying states (lets
-  the user preempt the auto-retry backoff).
+  actively in flight; enabled in idle and failed states (lets the
+  user retry without taking a turn). The pass it starts holds
+  the story like any other.
 
 ### Embedder
 

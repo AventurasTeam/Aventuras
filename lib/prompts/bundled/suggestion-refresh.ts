@@ -1,7 +1,10 @@
-// Structured-output call: the emission section asks for a JSON field, NOT the
-// tagged <suggestions> block macro_suggestion_emission instructs (that macro
-// belongs to the narrative fold, which appends the block to prose).
-export const SUGGESTION_REFRESH = `{% if definition.setting != blank -%}
+import type { TemplateSources } from '../types'
+
+export const SUGGESTION_REFRESH: TemplateSources = {
+  // rstrip: a JSON contract may be appended after this half with its own blank line, which the
+  // last block's separator would double.
+  system: `{%- capture definitionBlocks -%}
+{% if definition.setting != blank -%}
 # Setting
 {{ definition.setting }}
 
@@ -16,19 +19,29 @@ export const SUGGESTION_REFRESH = `{% if definition.setting != blank -%}
 {{ definition.tone.promptBody }}
 
 {% endif -%}
-{%- assign hasScene = false -%}
-{%- for e in entities | active -%}
-{%- if sceneEntities contains e.id -%}{%- assign hasScene = true -%}{%- endif -%}
+{%- endcapture -%}
+{{ definitionBlocks | rstrip }}`,
+  // Structured-output call: the emission section asks for a JSON field, NOT the tagged
+  // <suggestions> block (macro_suggestion_emission is the narrative fold's, appended to prose).
+  user: `{%- comment -%}
+The narrator's in-scene list (per-turn.ts), without ids: nothing here writes state. Assigned
+first: LiquidJS drops a filter on a for tag's collection.
+{%- endcomment -%}
+{%- assign activeEntities = entities | active -%}
+{%- assign inScene = '' | split: ',' -%}
+{%- for e in activeEntities -%}
+{%- if sceneEntities contains e.id -%}
+{%- assign listedElsewhere = false -%}
+{%- if e.state.holder and e.state.holder.status == 'active' and sceneEntities contains e.state.holder.id -%}{%- assign listedElsewhere = true -%}{%- endif -%}
+{%- unless listedElsewhere -%}{%- assign inScene = inScene | push: e -%}{%- endunless -%}
+{%- endif -%}
 {%- endfor -%}
-{% if hasScene -%}
+{% if inScene.size > 0 -%}
 # In scene
-{% for e in entities | active -%}
-{%- if sceneEntities contains e.id %}
-## {{ e.name }}
-{{ e.description }}
-{% endif -%}
-{%- endfor %}
-
+{% for e in inScene %}
+## {{ e.name }}{% if e.description != blank %}
+{{ e.description }}{% endif %}{% include 'macro_entity_state', e: e, here: true, ids: false %}
+{% endfor %}
 {% endif -%}
 # Story so far
 {% for entry in entries %}
@@ -53,4 +66,5 @@ The reader has already started writing their next turn:
 {{ refreshGuidance }}
 
 Build on that direction — take it further or offer variations of it — without repeating it back verbatim.
-{%- endif -%}`
+{%- endif -%}`,
+}

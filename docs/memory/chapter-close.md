@@ -10,17 +10,33 @@ section details the phases.
 
 Phases 1–4 commit under one chapter-close `action_id` for atomic
 rollback; a single CTRL-Z reverses the entire close. Phase 0 is **not**
-in that batch — the periodic classifier it runs holds its own
-`action_id`(s) with `source = periodic_classifier` (see
-[Phase 0](#phase-0--catch-up-classifier-pass)).
+in that batch — the passes it chains hold their own `action_id`s with
+`source = periodic_classifier` (see
+[Phase 0](#phase-0--catch-up-passes)).
 
-| Phase                           | Mode      | Drives                                                                                                      |
-| ------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------- |
-| **0. Catch-up classifier pass** | Both      | Bring periodic classifier current to chapter boundary                                                       |
-| **1. Boundary selection**       | Auto only | LLM picks a natural ending entry within the open region                                                     |
-| **2. Chapter metadata**         | Both      | LLM emits title / summary / theme / keywords for the `chapters` row                                         |
-| **3. Lore management**          | Both      | Lore creation, identity compaction, stackable normalization, awareness pin tuning, happenings consolidation |
-| **4. Lifecycle review**         | Both      | Demote `active → retired` on chapter-scope evidence                                                         |
+An auto close chains after the turn that crosses the threshold, behind
+that turn's pass when one is due, and holds the user-edit gate. A head
+reversal (regenerate, swipe, an edit of the head turn, CTRL-Z of the
+turn, rollback) and Cancel interrupt it, as they interrupt a pass: the
+close is cancelled, its writes reversed, and it runs before the next
+turn instead, with a toast saying so
+([`classifier.md → Pipeline framing`](./classifier.md#pipeline-framing)).
+
+The lore-management agent runs as a tool loop: it reads the chapter
+and the world through tools, and emits its writes as tool calls. A
+write the action layer rejects is handed back to the agent, which
+corrects or drops it, rather than failing the close. Its model needs
+tool calling. What it writes beyond phases 2–4's columns is the
+[authorship contract](../data-model.md#authorship-contract)'s
+chapter-close rows; see [3f — world upkeep](#3f--world-upkeep).
+
+| Phase                     | Mode      | Drives                                                                                                           |
+| ------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------- |
+| **0. Catch-up passes**    | Both      | Bring periodic classifier current to chapter boundary                                                            |
+| **1. Boundary selection** | Auto only | LLM picks a natural ending entry within the open region                                                          |
+| **2. Chapter metadata**   | Both      | LLM emits title / summary / theme / keywords for the `chapters` row                                              |
+| **3. Lore management**    | Both      | Lore, identity compaction, stackable normalization, awareness pin tuning, happenings consolidation, world upkeep |
+| **4. Lifecycle review**   | Both      | Demote `active → retired` on chapter-scope evidence                                                              |
 
 ## What chapter-close no longer owns
 
@@ -44,34 +60,27 @@ accumulate in the first place. The
 flagged the cost of eager summarization losing detail; upsert is the
 cleaner shape than chapter-close sweeps.
 
-## Phase 0 — catch-up classifier pass
+## Phase 0 — catch-up passes
 
 Before lore-mgmt and dedup phases run, the periodic classifier must
 be current with the chapter boundary. Otherwise lore-mgmt operates
 on a partial happening graph (recent turns un-classified) and dedup
 can't find rows the classifier hasn't written yet.
 
-**Drain in-flight periodic classifier first.** Phase 0 entry awaits
-any periodic-classifier run that was in flight when chapter-close
-started — `await awaitRunTerminal('periodic-classifier', 'finish')`
-blocks until the in-flight `actionId` resolves (commit or abort). This
-is the `'finish'` disposition of the shared run-terminal wait primitive; prose
-reversals use `'cancel'` (see
-[`generation-pipeline.md → Prose reversals and the classifier barrier`](../generation-pipeline.md#prose-reversals-and-the-classifier-barrier)). The wait happens
-under chapter-close's `gateBehavior: 'hard-gate'`, so user input is
-blocked the whole time; the user can't sneak in a new turn between
-the classifier finishing and phase 0 starting. Periodic-classifier
-runs are bounded by the cadence overlap window (a few turns), so the
-drain is short.
+**Phase 0 is a chain of ordinary passes.** Whatever starts a close —
+a turn crossing the threshold, the user's manual close, a deferred
+close at the next Send — starts a pass first when entries are
+unprocessed, whether or not the cadence is due, with the close marked
+pending. A pass's `chainsTo` returns another pass while a close is
+pending and entries remain unprocessed, and the close once none do
+([`classifier.md → Pipeline framing`](./classifier.md#pipeline-framing)).
+Each pass covers one window, up to
+`classifierWindowMaxEntries` entries, so a backlog takes several, each
+holding the gate. Nothing is ever in flight to drain: the passes and
+the close run one after another under the gate.
 
-After drain, phase 0 runs the classifier synchronously over any
-remaining unclassified entries in the open region. Bounded by the
-cadence overlap window — typically a few turns of un-classified
-content, fast.
-
-**Phase-0 writes stay off the chapter-close batch.** The catch-up runs
-the periodic classifier, so its writes carry their own
-`periodic_classifier` `action_id`(s) and per-fact provenance
+**Phase-0 writes stay off the chapter-close batch.** Each pass carries
+its own `periodic_classifier` `action_id` and per-fact provenance
 (`deltas.entry_id`) like any pass — never the phases-1–4 chapter-close
 `action_id`. So CTRL-Z of the close (an `action_id`-group reversal of
 phases 1–4) leaves phase-0's facts about the surviving, now-un-chaptered
@@ -79,19 +88,11 @@ turns intact, and a later deep rollback into the chapter spares them by
 the survival-anchor predicate (see
 [`data-model.md → Entry mutability & rollback → Survival anchor`](../data-model.md#survival-anchor)).
 
-**Concurrency.** The background classifier's
-`concurrencyPolicy.blockedBy` includes `'chapter-close'` — it cannot
-start a new pass for the duration of phases 0-4. Chapter-close holds
-the user-edit gate via `gateBehavior: 'hard-gate'` per
-[`generation-pipeline.md → Concurrency model`](../generation-pipeline.md#concurrency-model);
-user edits and new classifier starts are both blocked. One-direction
-lock — chapter-close blocks the background classifier; piggyback's
-per-turn writes can't be in flight because chapter-close runs between
-turns by construction. The drain step above closes the remaining
-window: a classifier that was already running when chapter-close
-chained-started finishes its own work before phase 0 starts its
-classifier pass, so neither writer is concurrent with the other on
-`entities.status` / `happenings` / `happening_awareness` rows.
+**A failed pass stops the chain.** The close doesn't run over
+unclassified prose: the pass runs before the next turn like any failed
+pass
+([`classifier.md → Failure policy`](./classifier.md#failure-policy)),
+and the close, still owed, follows it.
 
 ## Phase 1 — boundary selection
 
@@ -104,13 +105,13 @@ resolution, or narrative pause.
 
 **Prompt context:**
 
-- The open region's entry titles, opening sentences, closing
-  sentences (compact representation; full prose would blow context
-  on long open regions).
+- The open region's entries by position, each by its opening and
+  closing sentences (compact representation; entries have no title,
+  and full prose would blow context on long open regions).
 - The chapter's accumulated token count and the threshold value.
 - Active threads in the chapter's range.
 
-**Output (structured trailing block, same pattern as piggyback):**
+**Output (structured):**
 
 ```
 {
@@ -166,17 +167,17 @@ can edit afterward.
 
 ## Phase 3 — lore management
 
-The substantive phase. Five sub-jobs share a single LLM call (or a
-small number of structured calls — implementation detail).
-
-**Prompt context shared across sub-jobs:**
+The substantive phase: one tool loop for all six sub-jobs. The agent
+starts from the chapter's entries and reads the rest through tools,
+seeing a field's current value before it writes it
+([`data-model.md → Authorship contract`](../data-model.md#authorship-contract)):
 
 - Closed range entries (the chapter's content).
-- Existing lore rows — titles + bodies if budget allows, otherwise
-  titles + first paragraphs.
-- Cast roster — entities with `status='active'` that appeared in the
-  range, with their current `traits` / `drives` / `agenda` /
-  `stackables`.
+- Existing lore rows — titles, bodies on request.
+- The entities the chapter touches, with their state, and the rest of
+  the world on request: places, items and factions off the scene.
+- Happenings and awareness rows in the range, threads, and the
+  high-frequency awareness set (3d).
 
 ### 3a — lore creation
 
@@ -203,7 +204,7 @@ spam. The criterion for emitting a new lore row:
   body: string,        // classifier-authored; user can edit
   category: string,    // freeform: "magic-system" / "religion" / etc.
   keywords: string[],  // initial keyword set for retrieval (user can edit)
-  priority: number,    // default 50; agent can suggest higher for clearly load-bearing
+  priority: 0,         // the user's default too, so AI lore never outranks the user's
   injection_mode: 'auto'   // default; user can change
 }
 ```
@@ -216,13 +217,19 @@ spam. The criterion for emitting a new lore row:
 - **Cited evidence required.** Each lore create must include a
   one-sentence justification citing the prose passage that
   established the rule. If the agent can't cite, it shouldn't
-  create. Citation parsed at output validation time; uncited rows
-  rejected.
+  create. An uncited create is rejected and handed back.
+- **A body, always.** A lore row without one exports a file its own
+  import refuses.
+- **Existing rows too.** When the chapter establishes more about a
+  rule a lore row already holds, the agent extends or corrects that
+  row's body and keywords instead of creating a second, the user's
+  rows included, under the precedence the citation anchors.
 
 ### 3b — identity compaction
 
 For each entity active in the chapter, the agent reviews their
-identity arrays — `traits`, `drives`, `agenda` (faction-only) —
+identity arrays — `traits`, `drives`, `agenda` (faction-only) — the
+periodic classifier first wrote when it created them,
 against soft caps from
 [`data-model.md → Soft caps`](../data-model.md#soft-caps--compaction-discipline)
 (`traits ≤ 8`, `drives ≤ 6`, `agenda ≤ 4`).
@@ -240,8 +247,17 @@ against soft caps from
 removed because the chapter happened not to show bravery; it gets
 removed only when the chapter explicitly contradicts it.
 
-**Cited evidence:** like lore creation, each compaction op requires
-prose citation. Unsupported emissions are rejected at output parse.
+**Beyond the arrays.** A character's `voice` and a faction's `standing`
+are rewritten whole when the chapter shows them changed, and an
+entity's `description` when the chapter materially changes who or what
+it is (the stable boy who became the king's champion), never for
+detail the state slots already carry.
+
+**Cited evidence:** like lore creation, each op requires prose
+citation, and the latest entry it cites anchors the write's user
+precedence: a user edit made after that prose stands
+([`cadence.md → User edits and classifier writes`](./cadence.md#user-edits-and-classifier-writes)).
+An uncited op is rejected and handed back.
 
 ### 3c — stackable normalization
 
@@ -356,11 +372,11 @@ projected volumes.
 - `title` — pick the more general, or LLM-authored composite.
 - `occurred_at_entry_id` — earliest of the cluster by entry position (the
   later events' precise timing is lost; acceptable v1 trade).
-- `decay_resistance` on the surviving row — max of the cluster.
-- Awareness rows merge per-character via the existing
+- Awareness rows merge per-character via the
   `UNIQUE(branch_id, character_id, happening_id)` upsert: max
   `decay_resistance`, earliest `learned_at_entry_id` (by entry position),
-  source strings concatenated where they differ.
+  source strings concatenated where they differ. A user-written row's
+  values stand when the user wrote them after the cited prose.
 - Deleted rows are delta-logged for rollback.
 
 **Conservative override:** when the LLM is uncertain about cluster
@@ -368,6 +384,36 @@ membership, default to keep-distinct. The agent can also flag
 clusters as "review needed" rather than auto-merging — surfaces in
 the World panel for user review (similar to the
 `name_collision_flag` recovery path).
+
+### 3f — world upkeep
+
+The rest of what the chapter shows about the world, which no faster
+writer could see whole. Each write cites its evidence, under the same
+conservative bias as the sub-jobs above:
+
+- **Descriptions** rewritten on a material change (3b).
+- **Off-scene conditions.** A place's or an item's `condition` when
+  the chapter shows it changed while the scene was elsewhere ("news
+  came that the capital burned"); the per-turn writer keeps the ones
+  it showed.
+- **Keywords.** New aliases the chapter used, including the first
+  ones for places and items the per-turn writer created bare; removal
+  of a keyword an AI added that no longer fits, never one the user
+  added.
+- **Places.** A place's parent when the chapter places or moves it,
+  and the top-level mark for an unplaced place nothing could contain
+  ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
+- **Threads.** Duplicates merged, descriptions brought up to date, and
+  a thread resolved or failed when the chapter settles it or leaves it
+  plainly abandoned. An active thread costs every turn's prompt until
+  it closes
+  ([`classifier.md → Threads`](./classifier.md#threads)).
+- **`common_knowledge`** on a happening the chapter shows has spread
+  to everyone: news is a chapter-scale judgment. A wrong flag makes
+  every character aware, so the bar is explicit spread in the prose.
+- **Collision flags.** A flag on an unflagged row the agent judges a
+  duplicate of another ("the hooded stranger" and Kael), for the user
+  to merge. The agent never merges.
 
 ## Phase 4 — lifecycle review
 
@@ -377,7 +423,9 @@ and considers retirement on chapter-scope evidence:
 - **Auto-retire** when the chapter contains explicit hard-finality
   signal that the periodic classifier may have missed on single-line
   ambiguity (a death scene the classifier read as injury, the
-  chapter-scope context confirms otherwise).
+  chapter-scope context confirms otherwise). Never a location: only
+  the user retires a place
+  ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
 - **Surface for user review** when a character's `lastSeenAt` is
   far back AND prose doesn't explicitly justify keeping them
   active. Doesn't auto-mutate; surfaces in the World panel as
@@ -394,17 +442,19 @@ The chapter-close transaction holds the gate per
 [`generation-pipeline.md → Transaction lifecycle`](../generation-pipeline.md#transaction-lifecycle).
 User edits are blocked; pipeline phase failures cascade as follows:
 
-| Phase                       | Failure mode                                                                                                                                                            |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **0** (catch-up classifier) | Retry once, then proceed with what's classified. Worse retrieval input for downstream phases but not catastrophic.                                                      |
-| **1** (boundary selection)  | `callWithRetry` same-prompt retry; final fallback uses head-as-end.                                                                                                     |
-| **2** (metadata)            | Placeholder content; chapter row still creates.                                                                                                                         |
-| **3** (lore-mgmt)           | Per-emission validation; rejected emissions skipped, accepted ones commit. Phase as a whole may produce zero successful emissions on bad output — chapter still closes. |
-| **4** (lifecycle review)    | Skip; not critical.                                                                                                                                                     |
+| Phase                      | Failure mode                                                                                                                                                                  |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0** (catch-up passes)    | The failed pass stops the chain; it runs before the next turn, and the close follows it.                                                                                      |
+| **1** (boundary selection) | `callWithRetry` same-prompt retry; final fallback uses head-as-end.                                                                                                           |
+| **2** (metadata)           | Placeholder content; chapter row still creates.                                                                                                                               |
+| **3** (lore-mgmt)          | A rejected write is handed back to the loop, which corrects or drops it; accepted ones commit. Phase as a whole may produce zero writes on bad output — chapter still closes. |
+| **4** (lifecycle review)   | Skip; not critical.                                                                                                                                                           |
 
-**User abort** at any phase: the orchestrator reverse-replays the
-`action_id`'s deltas and exits. UI returns to pre-chapter-close
-state. Same path as any in-flight pipeline abort.
+**User abort** at any phase, Cancel or a head reversal: the
+orchestrator reverse-replays the `action_id`'s deltas and exits. UI
+returns to pre-chapter-close state, and the close runs before the next
+turn instead, with a toast. Same path as any in-flight pipeline
+abort.
 
 **Crash recovery** during chapter-close is the same as any
 in-flight transaction — see
@@ -414,7 +464,8 @@ in-flight transaction — see
 
 User can manually trigger chapter close at any time, regardless of
 threshold. The user picks the boundary entry explicitly (Phase 1
-skipped). Phases 0, 2-4 run normally.
+skipped). Phases 0, 2-4 run normally, under the same gate and
+interrupt rule as an auto close.
 
 UX surface: a "Close chapter here" affordance on entries in the open
 region. Clicking pre-flights the chapter-close pipeline with the

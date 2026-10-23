@@ -39,7 +39,6 @@ const status = (processedThrough: number): ClassifierStatus => ({
   state: 'idle',
   lastSuccessAt: null,
   lastError: null,
-  retryCount: 0,
   processedThrough,
 })
 
@@ -353,8 +352,8 @@ describe('AC6 — undo floor in a wizard-created story', () => {
   })
 })
 
-describe('AC4 — CTRL-Z with a classifier run mid-flight', () => {
-  it('aborts the run and holds the sweep until its terminal resolves', async () => {
+describe('AC4 — CTRL-Z of the turn with a classifier run mid-flight', () => {
+  it('interrupts the run and holds the sweep until its terminal resolves', async () => {
     const { db, ctx } = await seedBranch([
       entry('e_opening', 1, 'opening'),
       entry('e_t1', 2, 'ai_reply'),
@@ -368,16 +367,16 @@ describe('AC4 — CTRL-Z with a classifier run mid-flight', () => {
       resolveTerminal = r
     })
     const abortController = new AbortController()
-    let aborted = false
-    abortController.signal.addEventListener('abort', () => {
-      aborted = true
+    const aborted = new Promise<void>((resolve) => {
+      abortController.signal.addEventListener('abort', () => resolve(), { once: true })
     })
-    // A no-gate classifier run: does not block user edits, so undo proceeds
-    // and must drain it via the C3 bracket.
+    // A pass holds the gate; CTRL-Z of the turn passes it by interrupting it.
     generationStore.startRun({
       runId: 'run_c',
       kind: 'periodic-classifier',
-      gateBehavior: 'no-gate',
+      gateBehavior: 'hard-gate',
+      interruptible: 'pass',
+      beforeTurn: false,
       actionId: 'act_c',
       storyId: 's1',
       branchId: 'b1',
@@ -389,14 +388,16 @@ describe('AC4 — CTRL-Z with a classifier run mid-flight', () => {
     })
 
     const done = undoLastAction('b1', ctx)
-    // The bracket aborts the doomed run synchronously, before any sweep work…
-    expect(aborted).toBe(true)
+    // The undo reads its target before the gate decides; then the bracket aborts the run…
+    await aborted
     // …and the sweep waits for the terminal, not merely a microtask turn: an
     // unbracketed sweep would have finished within this flush (in-memory SQLite,
     // no real I/O), so the entry still standing is the barrier's own evidence.
     await new Promise((r) => setTimeout(r, 0))
     expect(entriesStore.getById('e_t1')).toBeDefined()
 
+    // What the orchestrator does at the end of an abort: deregister, then resolve the terminal.
+    generationStore.abortRun('run_c', 'aborted')
     resolveTerminal()
     expect((await done).status).toBe('ok')
     expect(entriesStore.getById('e_t1')).toBeUndefined()

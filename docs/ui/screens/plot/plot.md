@@ -89,8 +89,12 @@ shell + per-panel slot fills, not duplicated screens.
 ## Threads side
 
 Narrative arcs and overarching plot pressures. Predominantly
-classifier-tracked; user audits status, edits descriptions, manually
-creates if needed.
+classifier-tracked: the periodic classifier creates threads and moves
+their status as the turns set them up and settle them, and chapter
+close merges duplicates and resolves stale ones
+([`classifier.md → Threads`](../../../memory/classifier.md#threads)).
+The user audits status, edits descriptions, manually creates if
+needed.
 
 **Row composition.** kind glyph + title + status badge + category
 label.
@@ -222,7 +226,8 @@ tier rules. Two fields are editable through it — `occurred_at_entry_id`
 and `learned_at_entry_id`; the two thread refs
 (`triggered_at_entry_id`, `resolved_at_entry_id`) render read-only
 through the same `EntryRefText` label component the picker's trigger
-uses.
+uses: the classifier writes them, and a user's thread leaves them
+empty.
 
 **Common-knowledge interaction with Awareness tab.** When the
 `common_knowledge` toggle on Overview is on, the Awareness tab body

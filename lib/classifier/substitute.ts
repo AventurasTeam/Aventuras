@@ -1,19 +1,26 @@
 import type { IdBiMap } from '@/lib/ids'
 
 /** Schema fields whose string value is an entity reference. Must stay in sync
- * with plan.ts's `resolveRef` call sites. */
-export const PLACEHOLDER_FIELDS = ['ref', 'subject', 'object'] as const
+ * with the planner's ref consumers. */
+export const PLACEHOLDER_FIELDS = [
+  'ref',
+  'subject',
+  'object',
+  'parent',
+  'character',
+  'faction',
+] as const
 
 /**
- * Namespace the prompt reserves for `newCharacters` handles, so a handle can never
- * be mistaken for an entity placeholder (`c1`, `hp1`, ...).
+ * Namespace the prompt reserves for `newCharacters`, `newFactions` and `newPlaces` handles, so a
+ * handle can never be mistaken for an entity placeholder (`c1`, `hp1`, ...).
  */
 export const NEW_HANDLE_PREFIX = 'new:'
 
 /**
  * Placeholder -> UUID, the return trip for a classifier extraction (`substituteIds`
  * only maps the forward direction). Unknown strings pass through untouched, so the
- * planner can still resolve `newCharacters` temp handles through its own handleMap.
+ * planner can still resolve temp handles through its own handleMap.
  *
  * `reservedHandles` are never rewritten even when they collide with a placeholder:
  * a model that ignores NEW_HANDLE_PREFIX and names a new character `c1` would

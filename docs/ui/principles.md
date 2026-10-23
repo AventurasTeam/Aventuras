@@ -109,7 +109,7 @@ Settings, Chapter Timeline:
 
 - Generation status pill (hides when idle, shows during active
   pipeline phases: `reasoning…` / `generating narrative…` /
-  `classifying…` / `closing chapter…`). Driven by pipeline event
+  `classifying…` / `updating memory…` / `closing chapter…`). Driven by pipeline event
   stream (per [`generation-pipeline.md`](../generation-pipeline.md)).
   Pipeline state is global to the active story; users navigating
   between in-story sub-screens during generation deserve the same
@@ -281,7 +281,7 @@ writers (user, pipeline) racing on the same Zustand store.
 Implementation contract is in
 [`generation-pipeline.md → Transaction lifecycle`](../generation-pipeline.md#transaction-lifecycle).
 
-### Two pipelines covered
+### Pipelines covered
 
 - **Per-turn pipeline** — `user-action-translation` → Pre →
   Retrieval → Narrative → `[Classification ‖ display-translation]`
@@ -289,20 +289,34 @@ Implementation contract is in
   waiting; the existing reader-chrome status pill plus the streaming
   narrative are sufficient affordance. Phase contracts in
   [`architecture.md → Translation as a pipeline concern`](../architecture.md).
-- **Chapter-close pipeline** — Five phases under one `actionId`:
-  catch-up classifier → boundary → chapter metadata → lore-mgmt
-  (with sub-jobs 3a–3e) → lifecycle review. Triggered by
-  token-threshold cross at turn-commit time, or by explicit user
-  close. Decided as a **blocking pipeline**: the user is gated for
-  its full duration with a banner affordance (no streaming surface
+- **Periodic classifier pass** — chained after a turn every N
+  entries, so it runs while the user reads the reply. A **blocking
+  pipeline** with the banner. Phase detail in
+  [`memory/classifier.md → Pipeline framing`](../memory/classifier.md#pipeline-framing).
+- **Chapter-close pipeline** — catch-up passes, then boundary →
+  chapter metadata → lore-mgmt (sub-jobs 3a–3f, one tool loop) →
+  lifecycle review under one `actionId`. Triggered by token-threshold
+  cross at turn-commit time, behind that turn's pass, or by explicit
+  user close. Decided as a **blocking pipeline**: the user is gated
+  for its full duration with a banner affordance (no streaming surface
   to anchor attention). Phase detail in
   [`memory/chapter-close.md`](../memory/chapter-close.md).
 
-Both transactions are atomic per their `action_id` (see
+**Head reversals pass through a pass or a close.** While either holds
+the gate, regenerate, swipe, an edit of the head turn, CTRL-Z of the
+turn and rollback stay enabled: each interrupts it, and the pass or
+close runs before the next turn instead, with a toast saying so. The
+user never waits minutes to redo the reply they just read. The
+exception is a pass a system entry's `Retry` started: it holds the
+reader's actions, head reversals included, until it ends, and the
+pill's `Cancel` ends it
+([`memory/classifier.md → Failure policy`](../memory/classifier.md#failure-policy)).
+
+The turn and the close are atomic per their `action_id` (see
 [`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback))
 — a single CTRL-Z reverses an entire turn or chapter-close, and
 the orchestrator uses the same reverse-replay machinery to abort
-mid-flight.
+mid-flight. A pass is never an undo target; CTRL-Z steps over it.
 
 ### What's gated
 
@@ -340,7 +354,9 @@ menu, Story Settings; see
   adventure / creative mode, not this picker.
 - **Cancel** — always available, reverts the transaction via
   reverse-replay of the `action_id`'s deltas. Universal escape
-  hatch.
+  hatch. A cancelled pass or close runs before the next turn instead.
+- **Head reversals during a pass or a close** — see above, except
+  during a pass a system entry's `Retry` started.
 - **In-story navigation** — moving between reader, World, Plot,
   Story Settings, Chapter Timeline, Branch Navigator inside the
   active story. The transaction continues; affordances follow the
@@ -351,20 +367,22 @@ menu, Story Settings; see
 **Status pill (chrome — universal).** The pill specified in
 [Top-bar design rule](#top-bar-design-rule)
 gains click-to-cancel: clicking the active pill opens a small
-popover with `Cancel generation` (or `Cancel chapter close`) as
-its single action; one click triggers abort. Pill dimensions stay
+popover with `Cancel generation` (or `Cancel memory update`,
+`Cancel chapter close`) as its single action; one click triggers
+abort. Pill dimensions stay
 stable (no inline X chevron) so layout doesn't flicker on
 transaction start / end.
 
-**Banner (below chrome — chapter-close only).** A sticky banner
-appears below the top bar for the duration of a chapter-close
+**Banner (below chrome — memory runs).** A sticky banner appears
+below the top bar for the duration of a pass or a chapter-close
 transaction; dismissed on commit / abort. **Rendered on every
 in-story surface** (reader-composer, world, plot, story-settings,
 chapter-timeline) — the banner is universal in-story chrome that
 the surface itself doesn't have to opt into; whatever screen the
-user is on when chapter-close starts shows it.
+user is on when the run starts shows it.
 
 ```
+Updating memory… [Cancel]
 Closing chapter: 2 of 4 — generating chapter metadata… [Cancel]
 ```
 
@@ -378,14 +396,18 @@ editable control disables when a transaction is in flight,
 including form save buttons (so the user doesn't draft an edit
 they can't submit). Hover/focus reveals a uniform tooltip:
 
-| Pipeline           | Tooltip copy                                 |
-| ------------------ | -------------------------------------------- |
-| Per-turn           | `Generation is in flight. Cancel to edit.`   |
-| Chapter-close      | `Chapter close in progress. Cancel to edit.` |
-| Suggestion refresh | `Refreshing suggestions. Cancel to edit.`    |
+| Pipeline            | Tooltip copy                                 |
+| ------------------- | -------------------------------------------- |
+| Per-turn            | `Generation is in flight. Cancel to edit.`   |
+| Periodic classifier | `Updating memory. Cancel to edit.`           |
+| Chapter-close       | `Chapter close in progress. Cancel to edit.` |
+| Suggestion refresh  | `Refreshing suggestions. Cancel to edit.`    |
 
-Suggestion refresh is a third hard-gate run. It leaves Send in place
-rather than swapping it for Cancel, so its cancel is the status pill's.
+Suggestion refresh is a hard-gate run too, and may run beside a pass
+or a close. It leaves Send in place rather than swapping it for Cancel,
+so its cancel is the status pill's when it runs alone. Beside a pass or
+a close the pill names and cancels that run, and the refresh's cancel
+is the suggestion strip's ✕.
 
 Tooltip copy is principle-owned. Per-screen docs cite, don't
 reinvent.
@@ -404,11 +426,18 @@ changes.
                               [Stay]    [Cancel & leave]
 ```
 
+In flight covers more than a registered run: a Send admitted in its
+branch queue whose run hasn't registered yet, and a reversal's sweep
+(a regenerate's among them), prompt the same way.
+
 `Stay` dismisses the modal; user remains, transaction continues.
-`Cancel & leave` triggers abort + revert, then proceeds with
-navigation. Pack edits (vault is out-of-story) and global-settings
-access naturally route through this modal — no per-feature gate
-needed.
+`Cancel & leave` triggers abort + revert, waits for a pending Send or
+a sweep to end, then proceeds with navigation. A regenerate that
+failed or was aborted still has its follow-up sweep to run, so the
+wait covers a turn's whole body, not only its run. A pass or a close
+cancelled this way runs before the story's next turn instead. Pack
+edits (vault is out-of-story) and global-settings access naturally
+route through this modal — no per-feature gate needed.
 
 ### Background pipelines
 
@@ -815,6 +844,16 @@ that the UI exposes as a dropdown:
 | `always`   | Unconditional injection (the explicit override)              |
 | `auto`     | Keyword + embedding + LLM-fallback retrieval (smart default) |
 | `disabled` | Exists in data, never reaches the prompt                     |
+
+For a place, `disabled` covers every place inside it too, with the
+places around the story exempt while the story is inside
+([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
+
+The mode governs what the narrator sees. The periodic classifier,
+which extracts from prose rather than writing it, sees every row
+whatever its mode, so it can attribute a fact to a disabled row
+rather than create it again as new
+([`memory/classifier.md → What the classifier reads`](../memory/classifier.md#what-the-classifier-reads)).
 
 **Default: `auto`.** `happenings` deliberately don't expose this —
 the `happening_awareness` graph IS their structural injection rule.

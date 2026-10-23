@@ -82,7 +82,6 @@ const status = (processedThrough: number): ClassifierStatus => ({
   state: 'idle',
   lastSuccessAt: null,
   lastError: null,
-  retryCount: 0,
   processedThrough,
 })
 
@@ -158,8 +157,8 @@ async function redo(): Promise<void> {
   expect(await redoLastAction('b1', ctx)).toEqual({ status: 'ok' })
 }
 
-// Mirrors the orchestrator's abortRun. The no-gate write lock keeps user writes out of a pass's
-// burst in production, so these interleavings are unreachable there; driving it pins the planner.
+// Mirrors the orchestrator's abortRun. The gate keeps user writes out of a pass in production, so
+// these interleavings are unreachable there; driving it pins the planner.
 async function abort(actionId: string): Promise<void> {
   await reverseReplayDeltas(actionId, ctx)
 }

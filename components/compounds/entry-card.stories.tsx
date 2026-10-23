@@ -5,6 +5,7 @@ import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
 import { EARTH_GREGORIAN } from '@/lib/calendar'
+import { t } from '@/lib/i18n'
 import { themes } from '@/lib/themes'
 
 import { EntryCard, type EntryCardProps } from './entry-card'
@@ -297,6 +298,141 @@ export const Disabled: StoryT = {
     meta: aiMeta,
     disabled: true,
     disabledReason: 'Generation is in flight. Cancel to edit.',
+  },
+  play: async () => {
+    // A gated IconAction is named by its reason. With neither split prop set, `disabled`
+    // gates all five: pencil, regenerate, branch, flip era, delete.
+    const gated = await screen.findAllByRole('button', {
+      name: 'Generation is in flight. Cancel to edit.',
+    })
+    expect(gated).toHaveLength(5)
+    for (const button of gated) expect(button).toBeDisabled()
+  },
+}
+
+const PASS_REASON = 'Updating memory. Cancel to edit.'
+
+/** Older reply during a pass: ↻ and × interrupt it and stay live; the rest keep the whole gate. */
+export const OlderEntryDuringPass: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(async () => true),
+    disabled: true,
+    disabledReason: PASS_REASON,
+    editDisabled: true,
+    reversalDisabled: false,
+  },
+  play: async ({ args }) => {
+    const regenerate = await screen.findByRole('button', {
+      name: t('reader:entryCard.regenerate'),
+    })
+    expect(regenerate).not.toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: t('reader:entryCard.deleteEntry') }),
+    ).not.toBeDisabled()
+    // Pencil, branch and flip era, each renamed by the reason while gated.
+    const gated = screen.getAllByRole('button', { name: PASS_REASON })
+    expect(gated).toHaveLength(3)
+    for (const button of gated) expect(button).toBeDisabled()
+    expect(
+      screen.queryByRole('button', { name: t('reader:worldTimeEdit.title') }),
+    ).not.toBeInTheDocument()
+
+    await userEvent.click(regenerate)
+    await waitFor(() => expect(args.onRegen).toHaveBeenCalledTimes(1))
+  },
+}
+
+/** The head turn's reply during a pass: its pencil joins ↻ and × as a live head reversal. */
+export const HeadTurnDuringPass: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    disabled: true,
+    disabledReason: PASS_REASON,
+    editDisabled: false,
+    reversalDisabled: false,
+  },
+  play: async ({ args }) => {
+    const pencil = await screen.findByRole('button', { name: t('reader:entryCard.editEntry') })
+    expect(pencil).not.toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: t('reader:entryCard.regenerate') }),
+    ).not.toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: t('reader:entryCard.deleteEntry') }),
+    ).not.toBeDisabled()
+    // Branch and flip era are no head reversal.
+    const gated = screen.getAllByRole('button', { name: PASS_REASON })
+    expect(gated).toHaveLength(2)
+    for (const button of gated) expect(button).toBeDisabled()
+
+    await userEvent.click(pencil)
+    await waitFor(() => expect(args.onEdit).toHaveBeenCalledTimes(1))
+  },
+}
+
+/** Editing the head turn's action during a pass: every edit-mode control follows `editDisabled`. */
+export const HeadTurnEditDuringPass: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'user_action',
+    content: 'I draw my sword and step toward the figure in the doorway.',
+    editing: true,
+    disabled: true,
+    editDisabled: false,
+    reversalDisabled: false,
+    onContentChange: fn(),
+    onCommitEdit: fn(),
+    onCommitEditAndRegen: fn(),
+    onCancelEdit: fn(),
+  },
+  play: async ({ args }) => {
+    const textarea = await screen.findByRole('textbox', {
+      name: t('reader:entryCard.editContent'),
+    })
+    expect(textarea).not.toHaveAttribute('readonly')
+    expect(
+      screen.getByRole('button', { name: t('reader:entryCard.saveAndRegenerate') }),
+    ).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: t('cancel') })).not.toBeDisabled()
+    const save = screen.getByRole('button', { name: t('save') })
+    expect(save).not.toBeDisabled()
+
+    await userEvent.click(save)
+    await waitFor(() => expect(args.onCommitEdit).toHaveBeenCalledTimes(1))
+  },
+}
+
+/**
+ * Save & regenerate is a save then a regenerate: with the reversal gate held it stays off,
+ * so a saved edit is never followed by a refused regenerate. Plain Save follows `editDisabled`.
+ */
+export const SaveAndRegenerateWaitsOnReversalGate: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'user_action',
+    content: 'I draw my sword and step toward the figure in the doorway.',
+    editing: true,
+    disabled: true,
+    editDisabled: false,
+    reversalDisabled: true,
+    onContentChange: fn(),
+    onCommitEdit: fn(),
+    onCommitEditAndRegen: fn(),
+    onCancelEdit: fn(),
+  },
+  play: async () => {
+    expect(
+      await screen.findByRole('button', { name: t('reader:entryCard.saveAndRegenerate') }),
+    ).toBeDisabled()
+    expect(screen.getByRole('button', { name: t('save') })).not.toBeDisabled()
   },
 }
 
@@ -1157,6 +1293,57 @@ export const WorldStateRejectedLocation: StoryT = {
   },
 }
 
+// A fallback keeps a new item's handle as the rejected location when the item isn't created:
+// no row names it, but the turn's own create does.
+export const WorldStateRejectedCreateHandle: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'per_turn_classifier',
+      currentLocation: 'new:docks',
+      currentLocationRejected: true,
+      newItems: [
+        { handle: 'new:docks', name: 'the Docks', description: 'a pier', outcome: 'dropped' },
+      ],
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText('the Docks')).toBeVisible()
+    expect(screen.queryByText('Unknown entity')).not.toBeInTheDocument()
+    expect(screen.getByText(/emitted id was not a location/)).toBeVisible()
+  },
+}
+
+export const WorldStateRejectedUnmatchedHandle: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'per_turn_classifier',
+      currentLocation: 'new:ghost',
+      currentLocationRejected: true,
+      newItems: [
+        { handle: 'new:docks', name: 'the Docks', description: 'a pier', outcome: 'dropped' },
+      ],
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText('Unknown entity')).toBeVisible()
+    expect(screen.queryByText('the Docks')).not.toBeInTheDocument()
+  },
+}
+
 // The report is immutable provenance while currentLocationId is user-editable, so an
 // emitted id unequal to the applied one is the ordinary post-edit state. Labelling it a
 // rejection accuses the model of an error the user made deliberately.
@@ -1240,6 +1427,224 @@ export const WorldStateUnknownEntity: StoryT = {
   },
 }
 
+const LOC_NEW = 'loc_00000000-0000-4000-8000-0000000000a7'
+const ITEM_NEW = 'item_00000000-0000-4000-8000-0000000000b8'
+const LOC_GONE = 'loc_00000000-0000-4000-8000-0000000000f7'
+
+// The created rows were renamed live since the turn; the card names them as they stand.
+const createsEntityNames = [
+  ...entityNames,
+  { id: LOC_NEW, name: 'Smuggler’s Wharf' },
+  { id: ITEM_NEW, name: 'iron key' },
+]
+
+const createsProps = {
+  sceneEntities: [CHAR_A],
+  currentLocationId: LOC_NEW,
+  entityNames: createsEntityNames,
+  stateReport: {
+    layer: 'piggyback_tagged_block' as const,
+    sceneEntities: [CHAR_A],
+    currentLocation: LOC_NEW,
+    transfers: {
+      items: [{ id: ITEM_NEW, slot: 'inventory' as const, to: CHAR_A }],
+      stackables: [{ key: 'gold', amount: 5, to: CHAR_A }],
+    },
+    newLocations: [
+      {
+        handle: 'new:docks',
+        name: 'the Smuggler’s Docks',
+        description: 'a rotting pier below the cliffs',
+        parent: LOC_A,
+        outcome: 'created' as const,
+        id: LOC_NEW,
+      },
+      // A second create of the same name under the same parent aliases to the first.
+      {
+        handle: 'new:docks-again',
+        name: 'The Smuggler’s Docks',
+        description: 'the pier again',
+        parent: LOC_A,
+        outcome: 'reused' as const,
+        id: LOC_NEW,
+      },
+      // An exact sibling, emitted in the writer's own spelling.
+      {
+        handle: 'new:keep',
+        name: 'eldrin keep',
+        description: 'the old keep',
+        outcome: 'reused' as const,
+        id: LOC_B,
+      },
+      // A reused row deleted since the turn: the report's name is all there is.
+      {
+        handle: 'new:tower',
+        name: 'the old watchtower',
+        description: 'a ruin on the ridge',
+        outcome: 'reused' as const,
+        id: LOC_GONE,
+      },
+      {
+        handle: 'new:alley',
+        name: 'a side alley',
+        description: 'passing through',
+        outcome: 'dropped' as const,
+      },
+    ],
+    newItems: [
+      {
+        handle: 'new:key',
+        name: 'rusted key',
+        description: 'an iron key, flaked with rust',
+        outcome: 'created' as const,
+        id: ITEM_NEW,
+      },
+      {
+        handle: 'new:bread',
+        name: 'stale bread',
+        description: 'eaten on the spot',
+        outcome: 'dropped' as const,
+      },
+    ],
+  },
+} satisfies Partial<EntryCardProps>
+
+// entry-card.md → Panel anatomy: one line per create that landed on a row, none for a dropped one.
+export const WorldStateTurnCreates: StoryT = {
+  ...wrap,
+  args: { ...baseProps, ...aiEntry, ...createsProps },
+  play: async () => {
+    await openPanel()
+    const newPlace = screen.getByText('New place: Smuggler’s Wharf')
+    const matched = screen.getByText('Matched place: Eldrin Keep')
+    const newItem = screen.getByText('New item: iron key')
+    expect(newPlace).toBeVisible()
+    expect(matched).toBeVisible()
+    expect(newItem).toBeVisible()
+    expect(screen.getByText('Matched place: the old watchtower')).toBeVisible()
+    // Created rows are named as they stand, not as the writer first spelled them.
+    expect(screen.queryByText('New place: the Smuggler’s Docks')).not.toBeInTheDocument()
+    expect(screen.queryByText('New item: rusted key')).not.toBeInTheDocument()
+    // The alias landed on the row already listed as new, so adds no line: two matches, not three.
+    expect(screen.queryByText('Matched place: Smuggler’s Wharf')).not.toBeInTheDocument()
+    expect(screen.getAllByText(/^Matched place:/)).toHaveLength(2)
+    // A reused row is named live, not in the spelling the writer emitted.
+    expect(screen.queryByText('Matched place: eldrin keep')).not.toBeInTheDocument()
+    expect(screen.queryByText(/a side alley/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/stale bread/)).not.toBeInTheDocument()
+    // Canon's order: stackables, then places, then items.
+    const stackable = screen.getByText('gold ×5 → Aria')
+    expect(stackable.compareDocumentPosition(newPlace)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(newPlace.compareDocumentPosition(matched)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(matched.compareDocumentPosition(newItem)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+  },
+}
+
+// A create alone is a change this turn: the group needs no visual change or transfer beside it.
+export const WorldStateCreatesOnly: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_NEW,
+    entityNames: createsEntityNames,
+    stateReport: {
+      layer: 'per_turn_classifier',
+      currentLocation: LOC_NEW,
+      newLocations: [
+        {
+          handle: 'new:docks',
+          name: 'the Smuggler’s Docks',
+          description: 'a rotting pier below the cliffs',
+          outcome: 'created',
+          id: LOC_NEW,
+        },
+      ],
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText('Changes this turn')).toBeVisible()
+    expect(screen.getByText('New place: Smuggler’s Wharf')).toBeVisible()
+  },
+}
+
+// A created row deleted since the turn names itself from the report, like a reused one.
+export const WorldStateCreatedRowsGone: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'piggyback_tagged_block',
+      newLocations: [
+        {
+          handle: 'new:docks',
+          name: 'the Smuggler’s Docks',
+          description: 'a rotting pier below the cliffs',
+          outcome: 'created',
+          id: LOC_GONE,
+        },
+      ],
+      newItems: [
+        {
+          handle: 'new:key',
+          name: 'rusted key',
+          description: 'an iron key, flaked with rust',
+          outcome: 'created',
+          id: ITEM_NEW,
+        },
+      ],
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText('New place: the Smuggler’s Docks')).toBeVisible()
+    expect(screen.getByText('New item: rusted key')).toBeVisible()
+  },
+}
+
+// Every create dropped: nothing changed, so the group stays out rather than render an empty label.
+export const WorldStateDroppedCreatesOnly: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'piggyback_tagged_block',
+      newLocations: [
+        {
+          handle: 'new:alley',
+          name: 'a side alley',
+          description: 'passing through',
+          outcome: 'dropped',
+        },
+      ],
+      newItems: [
+        {
+          handle: 'new:bread',
+          name: 'stale bread',
+          description: 'eaten on the spot',
+          outcome: 'dropped',
+        },
+      ],
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.queryByText('Changes this turn')).not.toBeInTheDocument()
+    // Positive control: the panel rendered, so the absence above is not an empty render.
+    expect(screen.getByText('Ashfen Marshes')).toBeVisible()
+  },
+}
+
 export const WorldStateLegacyRow: StoryT = {
   ...wrap,
   args: {
@@ -1309,6 +1714,30 @@ export const WorldStateSaveRefused: StoryT = {
     expect(screen.queryByText('Could not save the scene. Try again.')).not.toBeInTheDocument()
     // The overlay stays open on failure, so the edit is not silently discarded.
     expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible()
+  },
+}
+
+// The scene editor's copy for a `retired-place` refusal; the stubbed save refuses any change.
+export const WorldStateSaveRefusedRetiredPlace: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...reportedProps,
+    sceneOptions,
+    onEditScene: fn(async () => ({ ok: false, code: 'retired-place' }) as const),
+  },
+  play: async () => {
+    await openPanel()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit scene' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible())
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Corin' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(
+        screen.getByText("That place is retired, so the story can't move there."),
+      ).toBeVisible(),
+    )
   },
 }
 

@@ -311,6 +311,16 @@ export function ClassifierCadenceSection({
           ) : null
         }
       />
+      <SwitchRow
+        label={t('storySettings:memory.knobs.mentionedPlaces')}
+        hint={t('storySettings:memory.knobs.mentionedPlacesHint')}
+        checked={draft.classifierMentionedPlaces}
+        onCheckedChange={(classifierMentionedPlaces) =>
+          onChange({ ...draft, classifierMentionedPlaces })
+        }
+        disabled={disabled}
+        disabledReason={disabledReason}
+      />
     </View>
   )
 }

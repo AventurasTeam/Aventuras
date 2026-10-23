@@ -2,6 +2,27 @@ import { z } from 'zod'
 
 import { VISUAL_CATEGORIES } from '../entities/entity-state-schema'
 
+const createEmission = { handle: z.string(), name: z.string(), description: z.string() }
+const locationEmission = { ...createEmission, parent: z.string().optional() }
+
+// A create that made or reused a row carries that row's id; a dropped one has none.
+const newLocationReportSchema = z.discriminatedUnion('outcome', [
+  z.object({
+    ...locationEmission,
+    outcome: z.enum(['created', 'reused']),
+    id: z.string(),
+    // Literal true: its parent couldn't be used, so it went to the root.
+    parentDropped: z.literal(true).optional(),
+  }),
+  z.object({ ...locationEmission, outcome: z.literal('dropped') }),
+])
+
+// An item is never reused, so it has no `reused` outcome.
+const newItemReportSchema = z.discriminatedUnion('outcome', [
+  z.object({ ...createEmission, outcome: z.literal('created'), id: z.string() }),
+  z.object({ ...createEmission, outcome: z.literal('dropped') }),
+])
+
 export const entryMetadataSchema = z.object({
   tokens: z
     .object({ prompt: z.number(), completion: z.number(), reasoning: z.number().optional() })
@@ -59,6 +80,10 @@ export const entryMetadataSchema = z.object({
           ),
         })
         .optional(),
+      // Each create as emitted, with what became of it; the fields above carry its resolved
+      // id, never the handle, bar a rejected currentLocation (data-model.md → Entry metadata shape).
+      newLocations: z.array(newLocationReportSchema).optional(),
+      newItems: z.array(newItemReportSchema).optional(),
       failedFields: z.array(z.object({ field: z.string(), detail: z.string() })).optional(),
       // Redundant on the happy path; the only inspectable remnant when a parse failed.
       raw: z.string().optional(),
@@ -71,17 +96,18 @@ export const entryMetadataSchema = z.object({
       refreshGuidance: z.string().optional(),
     })
     .optional(),
-  // System-entry failure record (reader-composer.md → Error surface): kind /
-  // failure mirror PipelineError / ResolveFailureKind as open strings — an
-  // unknown future pipeline kind must degrade to generic copy, not fail the
-  // whole metadata parse. submission preserves the reversed user_action's text
-  // so Retry survives an app restart.
+  // System-entry failure record (reader-composer.md → Error surface). kind / failure are open
+  // strings so an unknown future kind degrades to generic copy, not a failed metadata parse.
+  // submission survives a restart: a turn entry's Retry resends it; any Dismiss, or a pass entry's
+  // committed Retry, hands it back.
   systemFailure: z
     .object({
       kind: z.string(),
       failure: z.string().optional(),
       detail: z.string().optional(),
       submission: z.object({ content: z.string(), composerMode: z.string() }).optional(),
+      // A pass refused the Send: Retry runs the pass alone; 'held' has no Retry.
+      pass: z.enum(['failed', 'held']).optional(),
     })
     .optional(),
 })

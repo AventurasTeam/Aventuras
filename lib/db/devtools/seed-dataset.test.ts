@@ -247,8 +247,8 @@ describe('seeded rollback', () => {
     }
   })
 
-  // A pass's writes land as one burst under the branch write lock (generation-pipeline.md →
-  // No-gate write phase), so nothing else commits between them.
+  // Pins the fixture's layout, not a runtime guarantee: a refresh beside a live pass can
+  // interleave a metadata delta (cadence.md → Concurrency).
   it('logs the hero happening fire as one contiguous action', () => {
     const fire = (rowsOf('deltas') as { branchId: string; actionId: string; logPosition: number }[])
       .filter((r) => r.branchId === 'br_hero_main' && r.actionId === 'act_class_1')
@@ -371,5 +371,49 @@ describe('seeded rollback', () => {
     expect(target).toBeNull()
     expect(selected).toContain('act_create_br_hero_main_entry_hero_0022')
     expect(selected).not.toContain('act_class_1')
+  })
+})
+
+// docs/testing.md → Fixture + seed contract: no seeded branch owes a pass at its first Send.
+describe('seeded classifier watermarks', () => {
+  type BranchRow = { id: string; classifierStatus: unknown }
+  type EntryRow = { branchId: string; kind: string; position: number }
+
+  it('parks every branch idle at its last non-system entry', () => {
+    const entries = rowsOf('story_entries') as EntryRow[]
+    const branchRows = rowsOf('branches') as BranchRow[]
+    expect(branchRows.length).toBeGreaterThan(1)
+    for (const branch of branchRows) {
+      const prose = entries.filter((e) => e.branchId === branch.id && e.kind !== 'system')
+      expect(prose.length, branch.id).toBeGreaterThan(0)
+      expect(branch.classifierStatus, branch.id).toEqual({
+        state: 'idle',
+        lastSuccessAt: null,
+        lastError: null,
+        processedThrough: Math.max(...prose.map((e) => e.position)),
+      })
+    }
+  })
+
+  // A watermark at 72 would cover the user_action the first Send writes there, unread by any pass.
+  it('parks br_hero_main on its last reply, below the system row it ends on', () => {
+    const tail = (rowsOf('story_entries') as EntryRow[])
+      .filter((e) => e.branchId === 'br_hero_main')
+      .sort((a, b) => b.position - a.position)
+    expect(tail.slice(0, 2).map((e) => [e.kind, e.position])).toEqual([
+      ['system', 72],
+      ['ai_reply', 71],
+    ])
+    const hero = (rowsOf('branches') as BranchRow[]).find((b) => b.id === 'br_hero_main')
+    expect(hero?.classifierStatus).toMatchObject({ processedThrough: 71 })
+  })
+
+  it('parks the fork, the rich story and a filler on their own last entries', () => {
+    const statusOf = new Map(
+      (rowsOf('branches') as BranchRow[]).map((b) => [b.id, b.classifierStatus]),
+    )
+    expect(statusOf.get('br_hero_fork')).toMatchObject({ processedThrough: 12 })
+    expect(statusOf.get('br_rich_main')).toMatchObject({ processedThrough: 60 })
+    expect(statusOf.get('br_active2_main')).toMatchObject({ processedThrough: 4 })
   })
 })

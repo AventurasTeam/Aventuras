@@ -49,4 +49,4 @@ extends:
 - [`generation-pipeline.md → Transaction lifecycle`](../generation-pipeline.md#transaction-lifecycle)
   and [`generation-pipeline.md → Concurrency model`](../generation-pipeline.md#concurrency-model)
   — single-writer invariant and the gate / concurrency declaration
-  shape this design's background classifier consumes.
+  shape this design's periodic classifier consumes.

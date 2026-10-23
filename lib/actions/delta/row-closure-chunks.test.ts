@@ -12,6 +12,7 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
+import { absentRefs } from './live-refs'
 import { registerAllDomains } from './registrations'
 import { selectReversalSet } from './row-closure'
 
@@ -133,5 +134,22 @@ describe('the reversal closure across bind chunks', () => {
     const statements = prepare.mock.calls.map(([sql]) => sql)
     expect(inListSizes(statements, '"deltas"."target_id"')).toEqual([2, 1, 2, 1])
     expect(inListSizes(statements, '"happening_involvements"."entity_id"')).toEqual([2, 1])
+  })
+})
+
+describe('absentRefs across bind chunks', () => {
+  it('checks every id when the list spans several chunks', async () => {
+    const { sqlite, ctx } = await seed()
+    const prepare = vi.spyOn(sqlite, 'prepare')
+
+    const absent = await absentRefs(
+      ctx,
+      'b1',
+      ['char_a', 'char_gone', 'char_c'].map((id) => ({ table: 'entities', id })),
+    )
+
+    expect(absent).toEqual([{ table: 'entities', id: 'char_gone' }])
+    const statements = prepare.mock.calls.map(([sql]) => sql)
+    expect(inListSizes(statements, '"entities"."id"')).toEqual([2, 1])
   })
 })

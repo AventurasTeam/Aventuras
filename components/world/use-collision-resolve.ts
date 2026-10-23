@@ -9,6 +9,7 @@ import {
   type CollisionResolveResult,
   type DbCtx,
 } from '@/lib/actions'
+import type { CollisionReason, Entity } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import {
@@ -20,12 +21,22 @@ import {
   translationsStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
-import { namesakeKey } from '@/lib/world'
+import { collisionPairOf, flaggedSideOf, pairSideOf, type FlaggedEntity } from '@/lib/world'
 
 import { collisionRejectionText } from './collision-copy'
 import { collisionPair } from './collision-summary'
 
-type Pair = readonly [EntitySummary, EntitySummary]
+export type CollisionDialogPair = {
+  /** Older by createdAt first: the dialog's entityA / entityB. */
+  sides: readonly [EntitySummary, EntitySummary]
+  /** The row whose flag names the other: the requested flagged row when it still does. */
+  flaggedId: string
+  reason: CollisionReason
+  /** The shared parent's name for a `same-parent` pair; absent at the root or a missing row. */
+  parentName?: string
+}
+
+type Sides = CollisionDialogPair['sides']
 
 // A toast lands after the dialog closed, so it can't tell the user to close it or pick a row in it.
 const CLOSED_REJECTION_TEXT: Record<CollisionRejectionCode, () => string> = {
@@ -35,6 +46,9 @@ const CLOSED_REJECTION_TEXT: Record<CollisionRejectionCode, () => string> = {
   [COLLISION_REJECTION.parentCycle]: () => t('world:collision.closedRejection.parentCycle'),
   [COLLISION_REJECTION.parentChainBroken]: () =>
     collisionRejectionText(COLLISION_REJECTION.parentChainBroken),
+  [COLLISION_REJECTION.storyInside]: () => t('world:collision.closedRejection.storyInside'),
+  [COLLISION_REJECTION.placesInside]: () => t('world:collision.closedRejection.placesInside'),
+  [COLLISION_REJECTION.retiredParent]: () => t('world:collision.closedRejection.retiredParent'),
   [COLLISION_REJECTION.invalidRename]: () =>
     collisionRejectionText(COLLISION_REJECTION.invalidRename),
   [COLLISION_REJECTION.failed]: () => collisionRejectionText(COLLISION_REJECTION.failed),
@@ -47,7 +61,15 @@ function inBranch<Row extends { branchId: string }>(
   return [...rows.values()].filter((row) => row.branchId === branchId)
 }
 
-function toCollisionResolution(resolution: Resolution, [a, b]: Pair): CollisionResolution {
+/** The flagged row's parent, which the pair rule makes the other's too (`same-parent` only). */
+function sharedParentName(flagged: FlaggedEntity, entities: readonly Entity[]): string | undefined {
+  if (flagged.nameCollisionReason !== 'same-parent') return undefined
+  const { parentId } = pairSideOf(flagged)
+  if (parentId == null) return undefined
+  return entities.find((e) => e.id === parentId)?.name
+}
+
+function toCollisionResolution(resolution: Resolution, [a, b]: Sides): CollisionResolution {
   switch (resolution.mode) {
     case 'merge': {
       const { canonicalId, fromOther, deselectedTags, deselectedKeywords } = resolution
@@ -76,13 +98,13 @@ function toCollisionResolution(resolution: Resolution, [a, b]: Pair): CollisionR
   }
 }
 
-function resolvedText(resolution: CollisionResolution, pair: Pair): string {
+function resolvedText(resolution: CollisionResolution, sides: Sides): string {
   switch (resolution.mode) {
     case 'merge': {
       const nameFrom = resolution.fromLoser.includes('name')
         ? resolution.loserId
         : resolution.canonicalId
-      const name = pair.find((side) => side.id === nameFrom)?.name ?? pair[0].name
+      const name = sides.find((side) => side.id === nameFrom)?.name ?? sides[0].name
       return t('world:collision.resolved.merge', { name })
     }
     case 'rename':
@@ -93,15 +115,15 @@ function resolvedText(resolution: CollisionResolution, pair: Pair): string {
 }
 
 /**
- * world.md → Resolve dialog. The pair is read live while open and closes for good once its rows
- * stop colliding, so an undo that restores a merged-away row doesn't reopen the dialog.
+ * world.md → Resolve dialog. Pair read live under the resolve action's pair rule; closes for good
+ * once a row is gone or no flag names the other, so an undo can't reopen it.
  */
 export function useCollisionResolve(
   branchId: string,
   ctx: DbCtx,
   guard: (proceed: () => void) => void,
 ): {
-  pair: Pair | null
+  pair: CollisionDialogPair | null
   request: (flaggedId: string, otherId: string) => void
   close: () => void
   resolve: (resolution: Resolution) => Promise<void>
@@ -124,7 +146,7 @@ export function useCollisionResolve(
   )
   const translationRows = translationsStore.useTranslations((rows) => (open ? rows : null))
 
-  const pair = useMemo((): Pair | null => {
+  const pair = useMemo((): CollisionDialogPair | null => {
     if (
       requested == null ||
       entityRows == null ||
@@ -135,16 +157,29 @@ export function useCollisionResolve(
       translationRows == null
     )
       return null
-    const live = collisionPair(requested, {
+    const entities = inBranch(entityRows, branchId)
+    const lookup = collisionPairOf(entities, requested)
+    if ('miss' in lookup) return null
+    const [requestedRow, otherRow] = lookup.pair
+    const flagged = flaggedSideOf(requestedRow, otherRow)
+    if (flagged == null) return null
+    const sides = collisionPair(requested, {
       branchId,
-      entities: inBranch(entityRows, branchId),
+      entities,
       happenings: inBranch(happeningRows, branchId),
       awareness: inBranch(awarenessRows, branchId),
       involvements: inBranch(involvementRows, branchId),
       relationships: inBranch(relationshipRows, branchId),
       translations: inBranch(translationRows, branchId),
     })
-    return live != null && namesakeKey(live[0]) === namesakeKey(live[1]) ? live : null
+    if (sides == null) return null
+    const parentName = sharedParentName(flagged, entities)
+    return {
+      sides,
+      flaggedId: flagged.id,
+      reason: flagged.nameCollisionReason,
+      ...(parentName == null ? {} : { parentName }),
+    }
   }, [
     requested,
     branchId,
@@ -174,7 +209,7 @@ export function useCollisionResolve(
         if (requestedRef.current !== asked) toast.error(CLOSED_REJECTION_TEXT[code]())
         throw new Error(collisionRejectionText(code))
       }
-      const action = toCollisionResolution(resolution, pair)
+      const action = toCollisionResolution(resolution, pair.sides)
       let result: CollisionResolveResult
       try {
         result = await resolveCollision(branchId, action, ctx)
@@ -182,13 +217,13 @@ export function useCollisionResolve(
         logger.error('app.world_collision_resolve_failed', {
           branchId,
           mode: resolution.mode,
-          ids: pair.map((side) => side.id),
+          ids: pair.sides.map((side) => side.id),
           error: error instanceof Error ? error.message : String(error),
         })
         return refuse(COLLISION_REJECTION.failed)
       }
       if (result.status === 'rejected') return refuse(result.code)
-      toast.success(resolvedText(action, pair))
+      toast.success(resolvedText(action, pair.sides))
     },
     [pair, branchId, ctx],
   )

@@ -6,11 +6,7 @@ export {
   type ImportRejectionCode,
   type ImportRowResult,
 } from './avts/import-rows'
-export {
-  readClassifierStatus,
-  resetStuckClassifierRunState,
-  unprocessedEntryCount,
-} from './classifier/deps'
+export { resetStuckClassifierRunState } from './classifier/deps'
 export { runClassifierNow } from './classifier/run-now'
 export {
   applyDeltaAction,
@@ -48,6 +44,7 @@ export {
 } from './world/resolve-collision'
 export { deleteEntityRow } from './row-delete/delete-entity'
 export type { EntityCascadeLinkTable } from './entities/entity-cascade'
+export type { FlagClearPatch, FlagRepointPatch } from './entities/register'
 export {
   deleteRow,
   ROW_DELETE_REJECTION,
@@ -110,7 +107,9 @@ export { storyHasTurns } from './story-entries/has-turns'
 export {
   getRollbackCounts,
   rollbackToEntry,
+  sameRollbackCounts,
   updateStoryEntryContent,
+  type CountsChangedRejection,
   type RollbackCounts,
   type StoryEntryRejection,
 } from './story-entries/operational'

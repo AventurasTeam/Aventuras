@@ -1,4 +1,5 @@
 import type { Entity, EntityKind, InjectionMode, Thread, VecTargetKind } from '@/lib/db'
+import { buildEntityViews, listedAncestorNames, type EntityViews } from '@/lib/world'
 
 import { matchTerms, normalizeTerm } from './name-index'
 
@@ -30,20 +31,34 @@ export type ThreadRow = {
 export type StructuralFloor = {
   sceneEntities: readonly EntityRow[]
   currentLocation: EntityRow | null
+  /** The current location's listed ancestors' names, nearest first; empty with no location. */
+  currentLocationChain: readonly string[]
+  /** The factions of the in-scene characters. */
+  sceneFactions: readonly EntityRow[]
+  /** What the in-scene characters hold, rendered under each holder, less items the scene seats. */
+  heldItems: readonly EntityRow[]
+  /** The current location's `Here:` items, less those the scene or a holder seats. */
+  looseItems: readonly EntityRow[]
   activeThreads: readonly ThreadRow[]
   alwaysEntities: readonly EntityRow[]
   alwaysLore: readonly LoreRow[]
   alwaysThreads: readonly ThreadRow[]
+  /** The branch's views over this floor's scene; every entity row's state is read off these. */
+  views: EntityViews
   /** Every id the floor seats — excluded from the ranker pools. */
   seatedIds: ReadonlySet<string>
 }
 
 export type StructuralFloorInput = {
   entities: readonly EntityRow[]
+  /** The branch's store rows, which the views and the chain read: source rows carry no state. */
+  storeEntities: readonly Entity[]
   lore: readonly LoreRow[]
   threads: readonly ThreadRow[]
   sceneEntityIds: readonly string[]
   currentLocationId: string | null
+  /** Places effectively disabled around the scene; never the current location. */
+  disabledPlaceIds: ReadonlySet<string>
 }
 
 // The floor is built over loaded source rows, which carry `embeddingStale` (and
@@ -87,11 +102,18 @@ export const FLOOR_SEATABLE_KINDS = new Set<VecTargetKind>(['entity', 'lore', 't
  */
 export function buildStructuralFloor(input: StructuralFloorInput): StructuralFloor {
   const scene = new Set(input.sceneEntityIds)
+  const views = buildEntityViews(input.storeEntities, {
+    sceneEntities: input.sceneEntityIds,
+    currentLocationId: input.currentLocationId,
+  })
 
   // No entity id is null, so a null currentLocationId matches nothing.
   const currentLocationRow =
     input.entities.find((e) => e.id === input.currentLocationId && e.status === 'active') ?? null
   const currentLocation = currentLocationRow ? narrowEntity(currentLocationRow) : null
+  const currentLocationChain = currentLocation
+    ? listedAncestorNames(currentLocation.id, input.storeEntities)
+    : []
 
   // Scene presence is kind-aware (data-model.md → Entry metadata shape):
   // sceneEntities carries characters and items, so a location should never
@@ -108,14 +130,35 @@ export function buildStructuralFloor(input: StructuralFloorInput): StructuralFlo
     ...activeThreads.map((t) => t.id),
   ])
 
+  // retrieval.md → Structural floor: what the scene implies, read off the views the template
+  // renders, so seating follows rendering. Seated ahead of `always`, which then skips them.
+  const byId = new Map(input.entities.map((e) => [e.id, e]))
+  const seat = (ids: readonly string[]): Required<EntityRow>[] =>
+    ids.flatMap((id) => {
+      const row = byId.get(id)
+      if (row === undefined || row.status === 'retired' || seatedIds.has(id)) return []
+      seatedIds.add(id)
+      return [narrowEntity(row)]
+    })
+  const sceneCharacters = sceneEntities
+    .filter((e) => e.kind === 'character')
+    .map((e) => views.of(e.id, 'character'))
+  const sceneFactions = seat(sceneCharacters.flatMap((c) => (c.faction ? [c.faction.id] : [])))
+  const heldItems = seat(sceneCharacters.flatMap((c) => c.holdings.map((h) => h.id)))
+  const looseItems = seat(currentLocation ? views.looseAt(currentLocation.id) : [])
+
   // 'always' is a user-intent override across entities / lore / threads, and
   // deliberately status-blind: seating here is what exempts an `always` row from
   // the retired exclusion and from Layer-A same-name suppression, both of which
   // live in filterEntityPool and only ever see rows the floor did not take
   // (edge-cases.md → Layer A). Adding a status predicate here would make
   // `always` unreachable for retired rows, which is its only opt-in.
+  // A place disabled through an ancestor isn't seated: the ancestor's `disabled` wins.
   const alwaysEntities = input.entities
-    .filter((e) => e.injectionMode === 'always' && !seatedIds.has(e.id))
+    .filter(
+      (e) =>
+        e.injectionMode === 'always' && !seatedIds.has(e.id) && !input.disabledPlaceIds.has(e.id),
+    )
     .map(narrowEntity)
   const alwaysLore = input.lore
     .filter((l) => l.injectionMode === 'always' && !seatedIds.has(l.id))
@@ -128,10 +171,15 @@ export function buildStructuralFloor(input: StructuralFloorInput): StructuralFlo
   return {
     sceneEntities,
     currentLocation,
+    currentLocationChain,
+    sceneFactions,
+    heldItems,
+    looseItems,
     activeThreads,
     alwaysEntities,
     alwaysLore,
     alwaysThreads,
+    views,
     seatedIds,
   }
 }
@@ -140,6 +188,8 @@ export type EntityPoolInput = {
   floorIds: ReadonlySet<string>
   /** Un-classified buffer prose, for Layer-A same-name suppression. */
   recentProse: string
+  /** Places effectively disabled around the scene (retrieval.md → Pool exclusions). */
+  disabledPlaceIds: ReadonlySet<string>
 }
 
 // Allowlists, not fall-through: status reaches the pool through an unchecked
@@ -179,7 +229,7 @@ export function filterEntityPool<T extends EntityRow>(
 
   return rows.filter((r) => {
     if (input.floorIds.has(r.id)) return false
-    if (r.injectionMode === 'disabled') return false
+    if (r.injectionMode === 'disabled' || input.disabledPlaceIds.has(r.id)) return false
     if (r.status === 'retired') return r.injectionMode === 'always'
     if (!POOLABLE_ENTITY_STATUS.has(r.status)) return false
     if (suppressedIds.has(r.id)) return false

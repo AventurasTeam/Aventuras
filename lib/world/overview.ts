@@ -12,7 +12,8 @@ import { collate, compareId } from '@/lib/list-modules'
 import { stateOf } from './entity-draft'
 import { parentChainIds, parentOfLocations } from './parent-chain'
 
-function byName(a: Entity, b: Entity): number {
+/** World's row order: name, then age, then id. */
+export function byName(a: Entity, b: Entity): number {
   return collate(a.name, b.name) || a.createdAt - b.createdAt || compareId(a.id, b.id)
 }
 

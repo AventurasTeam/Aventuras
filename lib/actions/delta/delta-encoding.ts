@@ -117,6 +117,42 @@ function encodeField(schema: ZodType, cur: unknown, nxt: unknown): unknown {
   return deepEqual(cur, nxt) ? NOCHANGE : cur
 }
 
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * `partial` without the paths `blocked` reports, walked by the schema: an array, a leaf, a null or
+ * an empty object or record is one path, so an empty restore is kept. A container the pruning
+ * leaves empty drops; undefined when nothing is left.
+ */
+export function pruneUndoPartial(
+  schema: ZodType,
+  partial: unknown,
+  blocked: (path: readonly string[]) => boolean,
+): unknown {
+  return pruneNode(schema, partial, [], blocked)
+}
+
+function pruneNode(
+  schema: ZodType | undefined,
+  value: unknown,
+  path: readonly string[],
+  blocked: (path: readonly string[]) => boolean,
+): unknown {
+  const node = schema && classify(schema)
+  const container = node && (node.kind === 'object' || node.kind === 'record')
+  if (!container || !isPlainObject(value) || Object.keys(value).length === 0)
+    return blocked(path) ? undefined : value
+  const kept: Record<string, unknown> = {}
+  for (const [key, child] of Object.entries(value)) {
+    const childSchema = node.kind === 'object' ? node.shape?.[key] : node.valueType
+    const pruned = pruneNode(childSchema, child, [...path, key], blocked)
+    if (pruned !== undefined) kept[key] = pruned
+  }
+  return Object.keys(kept).length === 0 ? undefined : kept
+}
+
 // REVERSE: overlay the pre-change partial onto the current value.
 export function applyUndoPayload(
   schema: ZodType,

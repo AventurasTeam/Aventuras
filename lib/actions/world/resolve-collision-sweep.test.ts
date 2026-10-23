@@ -28,6 +28,7 @@ import { applyDeltaAction } from '../delta/apply-delta-action'
 import { __resetBranchWriteLocks } from '../delta/branch-write-lock'
 import { prepareUndo } from '../delta/redo'
 import { selectReversalSet } from '../delta/row-closure'
+import { shownCounts } from '../story-entries/__tests__/shown-counts'
 import { rollbackToEntry, updateStoryEntryContent } from '../story-entries/operational'
 import type { DbCtx, PipelineAction } from '../types'
 
@@ -36,7 +37,8 @@ import type { DbCtx, PipelineAction } from '../types'
 
 let ctx: DbCtx
 
-function character(id: string, createdAt: number, flagged: 0 | 1): NewEntity {
+/** `partnerId` flags the row against that namesake; null leaves it unflagged. */
+function character(id: string, createdAt: number, partnerId: string | null): NewEntity {
   return {
     id,
     branchId: 'b1',
@@ -46,7 +48,9 @@ function character(id: string, createdAt: number, flagged: 0 | 1): NewEntity {
     injectionMode: 'auto',
     state: emptyEntityState('character'),
     embeddingStale: 0,
-    nameCollisionFlag: flagged,
+    nameCollisionFlag: partnerId == null ? 0 : 1,
+    nameCollisionPartnerId: partnerId,
+    nameCollisionReason: partnerId == null ? null : 'distinct',
     createdAt,
     updatedAt: createdAt,
   }
@@ -171,7 +175,9 @@ beforeEach(async () => {
   ctx = { db: test.db, runInTransaction: test.runInTransaction }
   await ctx.db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
   await ctx.db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
-  await ctx.db.insert(entities).values([character('char_a', 1, 0), character('char_b', 2, 1)])
+  await ctx.db
+    .insert(entities)
+    .values([character('char_a', 1, null), character('char_b', 2, 'char_a')])
   entitiesStore.hydrate('b1', (await ctx.db.select().from(entities)) as never)
   happeningAwarenessStore.hydrate('b1', [])
   happeningInvolvementsStore.hydrate('b1', [])
@@ -211,7 +217,10 @@ describe('resolveCollision — merge link copies across a prose-edit sweep', () 
   it('rolls the merge back with the pass, restoring the loser as it stood before both', async () => {
     await passThenMerge(false)
 
-    expect((await rollbackToEntry('b1', 'e_reply', ctx)).status).toBe('ok')
+    const shown = await shownCounts('b1', 'e_reply', ctx)
+    expect((await rollbackToEntry('b1', 'e_reply', ctx, { expectedCounts: shown })).status).toBe(
+      'ok',
+    )
 
     expect(await entityIds()).toEqual(['char_a', 'char_b'])
     expect(await linksOn('char_a')).toEqual({ awareness: [], involvements: [] })

@@ -8,7 +8,9 @@ import {
 import {
   buildQueryStack,
   countTokens,
-  ENTITY_FRAMING,
+  entityHead,
+  entityStateLines,
+  itemLine,
   lines,
   TOKENIZER_IDENTITY,
   type CandidateTrace,
@@ -23,8 +25,10 @@ import {
   type RetrievalOutcome,
   type RetrievalType,
   type StructuralFloor,
+  type StateLineOptions,
   type ThreadRow,
 } from '@/lib/retrieval'
+import type { EntityViews } from '@/lib/world'
 
 export type CapturePayloadInput = {
   branchId: string
@@ -141,33 +145,48 @@ const queriesOf = (
 ): ProbeCapturePayload['queries'] =>
   (stack ?? ABSENT_QUERY_STACK).specs.map((q, i) => queryOf(q, redundancy[i] ?? null))
 
-const nameWithDescription = (name: string, description: string | null): string =>
-  description ? `${name}: ${description}` : name
+// probe.md → Structural floor. Omits piggybackFires' `[id]` affixes, decided after retrieval, so
+// a lower bound on those turns. Item lines count on the item's own row only, never twice.
+const stateLinesOf = (
+  e: Pick<EntityRow, 'id' | 'kind'>,
+  views: EntityViews,
+  options: StateLineOptions,
+): string[] => entityStateLines(views.kinded(e.id, e.kind), options)
 
-// Six floor branches render through two template families and none of them
-// share a formula. per-turn.ts's in-scene/current-location rows and
-// memory-blocks.ts's active-threads row carry no framing or status — a
-// floor-seated row is present, so it never reads as "elsewhere" or
-// "introducible" the way a pooled row can. Only the memory-blocks.ts "always"
-// rows (structuralPinnedEntities/Lore/Threads) reuse the ranker's own
-// entity/lore/thread projections, ENTITY_FRAMING included.
-// The three entity branches omit the `[id]` affix the templates add when
-// piggybackFires, which is decided after retrieval and so unknowable here —
-// the floor cost is a lower bound on those turns (probe.md → Structural floor).
-const sceneEntityText = (e: Pick<EntityRow, 'name' | 'description'>): string =>
-  lines(`## ${e.name}`, e.description)
+const sceneEntityText = (
+  e: Pick<EntityRow, 'id' | 'kind' | 'name' | 'description'>,
+  views: EntityViews,
+): string =>
+  lines(
+    `## ${e.name}`,
+    e.description?.trim() ? e.description : null,
+    ...stateLinesOf(e, views, { here: true, held: 'label' }),
+  )
 
-const currentLocationText = (e: Pick<EntityRow, 'name' | 'description'>): string =>
-  nameWithDescription(e.name, e.description)
+const currentLocationText = (
+  e: Pick<EntityRow, 'id' | 'kind' | 'name' | 'description'>,
+  views: EntityViews,
+  chain: readonly string[],
+): string =>
+  [
+    [
+      e.name,
+      chain.length > 0 ? ` — in ${chain.join(' › ')}` : '',
+      // Liquid's `blank` matches whitespace too, so the template leaves such a description out.
+      e.description?.trim() ? `: ${e.description}` : '',
+    ].join(''),
+    ...stateLinesOf(e, views, { here: true, held: null }),
+    ...(views.looseAt(e.id).length > 0 ? ['Here:'] : []),
+  ].join('\n')
+
+// A pinned row and a scene's faction share memory-blocks.ts's one row shape.
+const memoryRowText = (
+  e: Pick<EntityRow, 'id' | 'kind' | 'name' | 'description' | 'status'>,
+  views: EntityViews,
+): string => [entityHead(e), ...stateLinesOf(e, views, { here: false, held: null })].join('\n')
 
 const activeThreadText = (t: Pick<ThreadRow, 'title' | 'description'>): string =>
   lines(t.title, t.description)
-
-const alwaysEntityText = (e: Pick<EntityRow, 'name' | 'description' | 'status'>): string => {
-  const framing = ENTITY_FRAMING[e.status]
-  const head = framing === undefined ? e.name : `${e.name} (${framing})`
-  return nameWithDescription(head, e.description)
-}
 
 const alwaysThreadText = (t: Pick<ThreadRow, 'title' | 'description' | 'status'>): string =>
   lines(`${t.title} (${t.status})`, t.description)
@@ -176,16 +195,52 @@ const alwaysLoreText = (l: Pick<LoreRow, 'title' | 'body'>): string => lines(l.t
 
 const floorRowsOf = (floor: StructuralFloor | null): ProbeCapturePayload['structural_floor'] => {
   if (floor === null) return []
+  const { views } = floor
   const rows: ProbeCapturePayload['structural_floor'] = []
-  const push = (kind: VecTargetKind, id: string, text: string) =>
-    rows.push({ target_kind: kind, target_id: id, tokens: countTokens(text) })
+  const push = (kind: VecTargetKind, id: string, ...texts: string[]) =>
+    rows.push({
+      target_kind: kind,
+      target_id: id,
+      tokens: texts.reduce((sum, text) => sum + countTokens(text), 0),
+    })
 
-  for (const e of floor.sceneEntities) push('entity', e.id, sceneEntityText(e))
-  if (floor.currentLocation) {
-    push('entity', floor.currentLocation.id, currentLocationText(floor.currentLocation))
+  // Each in-scene holder's Holds lists its items, so an older write's two-holder item prints twice.
+  const sceneHoldings = floor.sceneEntities
+    .filter((e) => e.kind === 'character')
+    .flatMap((e) => views.of(e.id, 'character').holdings)
+  const heldLines = (itemId: string): string[] =>
+    sceneHoldings.filter((h) => h.id === itemId).map((h) => itemLine(h, null))
+  const looseLine = (e: Pick<EntityRow, 'id' | 'name' | 'description'>): string =>
+    itemLine(
+      { name: e.name, description: e.description, condition: views.of(e.id, 'item').condition },
+      null,
+    )
+  const here = floor.currentLocation?.id
+  // `Here:` lists every item lying here, one an older write left held as well included.
+  const hereLines = (e: Pick<EntityRow, 'id' | 'name' | 'description'>): string[] =>
+    here !== undefined && views.of(e.id, 'item').location?.id === here ? [looseLine(e)] : []
+
+  // An in-scene item a holder in the scene holds, or one lying here, renders as those lines alone.
+  for (const e of floor.sceneEntities) {
+    const listed = e.kind === 'item' ? [...heldLines(e.id), ...hereLines(e)] : []
+    push('entity', e.id, ...(listed.length > 0 ? listed : [sceneEntityText(e, views)]))
   }
+  if (floor.currentLocation) {
+    push(
+      'entity',
+      floor.currentLocation.id,
+      currentLocationText(floor.currentLocation, views, floor.currentLocationChain),
+    )
+  }
+  for (const e of floor.sceneFactions) push('entity', e.id, memoryRowText(e, views))
+  for (const e of floor.heldItems) {
+    const held = heldLines(e.id)
+    if (held.length === 0) throw new Error(`held item ${e.id} has no in-scene holder listing it`)
+    push('entity', e.id, ...held, ...hereLines(e))
+  }
+  for (const e of floor.looseItems) push('entity', e.id, looseLine(e))
   for (const t of floor.activeThreads) push('thread', t.id, activeThreadText(t))
-  for (const e of floor.alwaysEntities) push('entity', e.id, alwaysEntityText(e))
+  for (const e of floor.alwaysEntities) push('entity', e.id, memoryRowText(e, views))
   for (const l of floor.alwaysLore) push('lore', l.id, alwaysLoreText(l))
   for (const t of floor.alwaysThreads) push('thread', t.id, alwaysThreadText(t))
   return rows

@@ -184,10 +184,12 @@ convention, and the expectation that subsystems route through
   key paths, since the blob it describes is overwritten in the same call),
   `thread_save_rejected` / `happening_save_rejected` / `entity_save_rejected`
   (warn: the in-flight refusal, which the disabled UI should make
-  unreachable, or a rejected write), `thread_save_failed` /
+  unreachable, a location Save whose tail moved while it waited, or a
+  rejected write), `thread_save_failed` /
   `happening_save_failed` / `entity_save_failed` (error: a Save whose
   actions threw while building or writing, logged with its action kinds
-  once built, then rethrown), `parent_chain_cap_hit`
+  once built, then rethrown; a location Save's story read and place
+  rules log the same way, without action kinds), `parent_chain_cap_hit`
   (error: a `parent_location_id` walk hit the depth cap, meaning a loop
   already exists in the stored chain), `story_lead_rejected` (warn: the lead
   mutator refused, logged with its code), `entity_delete_rejected` /
@@ -196,9 +198,8 @@ convention, and the expectation that subsystems route through
   in-flight, not-found, or (entity only) the lead or a tail race; the
   tail race (`tail moved`) is logged from
   `lib/actions/row-delete/delete-entity.ts`, every other refusal from
-  `delete-row.ts`; an entity's store-miss not-found (`delete-entity.ts`,
-  `target == null`) returns before this log fires, so it covers
-  not-found only on the handler path) /
+  `delete-row.ts`, an entity's store-miss not-found (`delete-entity.ts`,
+  `target == null`) included) /
   `entity_delete_failed` / `lore_delete_failed` / `thread_delete_failed` /
   `happening_delete_failed` (error: the delete's delta group threw) —
   `lib/actions/row-delete/delete-row.ts`; `collision_resolve_rejected`
@@ -209,7 +210,9 @@ convention, and the expectation that subsystems route through
   group, then rethrown) — `lib/actions/world/resolve-collision.ts`
 - `classifier.*` — `delta_clamped`, `schema_repair`, `empty_output`,
   `failure_record_retried` (warn: the first attempt to record a failed
-  pass threw, and the hook tried once more)
+  pass threw, and the hook tried once more), `description_embed_failed`
+  (warn: the description embed call threw, so every namesake went
+  unscored)
 - `retrieval.*` — `row_skipped_stale`, `empty_pool`, `knn_error`
 - `provider.*` — `retry_succeeded`, `rate_limited`,
   `stream_interrupted`, `request_failed`, `url_redaction_failed`
@@ -291,7 +294,8 @@ convention, and the expectation that subsystems route through
   row's removal) are gated by the master gate like any other kind
 - `reader.*` — reader-composer dispatches routed through `runAction`
   (`lib/utils.ts`) instead of a bare `void`: `undo_failed`, `redo_failed`,
-  `rollback_failed`, `regenerate_failed`
+  `rollback_failed`, `regenerate_failed`, `pass_retry_failed`
+  (a pass-failure entry's Retry, which runs the pass alone)
   — plus `undo_rejected` / `redo_rejected` at debug for the refusals
   that are routine (gated, nothing to apply, branch mid-switch), where
   `undo_failed` / `redo_failed` carry the ones that mean the delta log
@@ -570,14 +574,13 @@ cases, stamped generically so every pipeline kind groups for free
   branch's **head reply/opening entry at run start**, passed to
   `beginTurn`.
 
-A chained chapter-close fires at the per-turn's commit, so at its
-run start the head _is_ that per-turn's reply entry — it inherits the
+A chained pass or chapter close starts after the turn's commit, so at
+its run start the head _is_ that turn's reply entry — it inherits the
 right turn with no chain-threading. **The head is read once at run
-start and frozen** on the capture, never recomputed: a classifier
-triggered at turn N that runs concurrently into N+1 keeps anchor N; a
-scheduler-delayed classifier that begins after N+1 landed anchors to
-N+1, correctly, because its `(processedThrough, head]` window then
-covers through N+1. The wizard is exempt — it is not a pipeline, so
+start and frozen** on the capture, never recomputed. A pass holds the
+gate, so no turn lands while it runs; one deferred to the next Send
+runs before that turn and anchors to the head it finds then, which its
+`(processedThrough, head]` window covers. The wizard is exempt — it is not a pipeline, so
 it produces no captures (see
 [`generation-pipeline.md → Wizard exemption`](./generation-pipeline.md#wizard-exemption)).
 
@@ -629,8 +632,8 @@ construction.
 "current `actionId`" at `beginRun` and cleared it at `commitRun` /
 `abortRun`, with sinks reading from it. A single global slot breaks under
 **any two concurrent runs** — not just cross-branch ones. The concurrency
-model invites exactly that on a single branch (per-turn ∥
-periodic-classifier, the disjoint-write-set premise): the later run
+model invites exactly that on a single branch (a pass or a close ∥
+suggestion refresh): the later run
 overwrites the slot, the other run's calls mis-attribute, then orphan when
 it clears to null. `AsyncLocalStorage` — the standard request-context fix
 — isn't available on Hermes or the Node-less Electron renderer, so

@@ -1,15 +1,10 @@
 import type { ClassifierStatus } from '@/lib/db'
 
-// classifier.md -> Auto-retry policy. One attempt plus three backed-off retries,
-// then failed-persistent.
-export const BACKOFF_MS = [30_000, 120_000, 300_000] as const
-
 export function idleStatus(): ClassifierStatus {
   return {
     state: 'idle',
     lastSuccessAt: null,
     lastError: null,
-    retryCount: 0,
     processedThrough: null,
   }
 }
@@ -35,35 +30,16 @@ export function nextStatusOnSuccess(
     state: 'idle',
     lastSuccessAt: pass.at,
     lastError: null,
-    retryCount: 0,
     // A pass never un-processes prose: a clamp is the only way back.
     processedThrough: Math.max(status.processedThrough ?? 0, pass.coversThrough),
   }
 }
 
-/**
- * The wait before the next attempt, or null when the backoff is exhausted.
- * `retryCount` counts failures so far, so attempt N waits `BACKOFF_MS[N - 1]`.
- * Sole owner of that mapping — the scheduler re-derives the delay from here.
- */
-export function retryDelayForStatus(status: ClassifierStatus): number | null {
-  if (status.state !== 'retrying') return null
-  return BACKOFF_MS[status.retryCount - 1] ?? null
-}
-
 export function nextStatusOnFailure(
   status: ClassifierStatus,
   failure: { error: string; at: number },
-): { status: ClassifierStatus; retryDelayMs: number | null } {
-  const attempt = status.retryCount
-  const exhausted = attempt >= BACKOFF_MS.length
-  const next: ClassifierStatus = {
-    ...status,
-    state: exhausted ? 'failed-persistent' : 'retrying',
-    lastError: failure.error,
-    retryCount: Math.min(attempt + 1, BACKOFF_MS.length),
-  }
-  return { status: next, retryDelayMs: retryDelayForStatus(next) }
+): ClassifierStatus {
+  return { ...status, state: 'failed', lastError: failure.error }
 }
 
 /**
@@ -76,9 +52,9 @@ export function worstCaseCadenceEntries(cadence: number): number {
 }
 
 /**
- * Entry-counted cadence (canon ships no token trigger in v1). Suspended in
- * failed-persistent so a broken provider is not spammed on every tick — the
- * manual run is the only way out.
+ * Entry-counted (no token trigger in v1). Off only in `running`, a pass left unfinished (crash, or
+ * an interrupt's failed reversal or status write), until a boot reset, which unreversed orphans
+ * block. A `failed` status fires: nothing suspends the pass (classifier.md → Failure policy).
  */
 export function shouldCadenceFire(args: {
   status: ClassifierStatus
@@ -86,6 +62,6 @@ export function shouldCadenceFire(args: {
   cadence: number
 }): boolean {
   const { status, unprocessedEntries, cadence } = args
-  if (status.state === 'failed-persistent' || status.state === 'running') return false
+  if (status.state === 'running') return false
   return unprocessedEntries >= Math.max(1, cadence)
 }

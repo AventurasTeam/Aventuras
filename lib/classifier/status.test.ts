@@ -1,46 +1,43 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  BACKOFF_MS,
   idleStatus,
   nextStatusOnFailure,
   nextStatusOnStart,
   nextStatusOnSuccess,
-  retryDelayForStatus,
   shouldCadenceFire,
   worstCaseCadenceEntries,
 } from './status'
 
+describe('idleStatus', () => {
+  // classifier.md → Persistence: state, last success, last error and the watermark, nothing more.
+  it('carries the four persisted keys and no attempt counter', () => {
+    expect(idleStatus()).toEqual({
+      state: 'idle',
+      lastSuccessAt: null,
+      lastError: null,
+      processedThrough: null,
+    })
+  })
+})
+
 describe('nextStatusOnSuccess', () => {
-  it('clears the error, resets attempts and advances the watermark', () => {
+  it('clears the error, lands idle and advances the watermark', () => {
     const next = nextStatusOnSuccess(
-      {
-        state: 'retrying',
-        lastSuccessAt: null,
-        lastError: 'boom',
-        retryCount: 2,
-        processedThrough: 4,
-      },
+      { state: 'failed', lastSuccessAt: null, lastError: 'boom', processedThrough: 4 },
       { coversThrough: 9, at: 1_000 },
     )
     expect(next).toEqual({
       state: 'idle',
       lastSuccessAt: 1_000,
       lastError: null,
-      retryCount: 0,
       processedThrough: 9,
     })
   })
 
   it('never moves the watermark backwards', () => {
     const next = nextStatusOnSuccess(
-      {
-        state: 'running',
-        lastSuccessAt: null,
-        lastError: null,
-        retryCount: 0,
-        processedThrough: 12,
-      },
+      { state: 'running', lastSuccessAt: null, lastError: null, processedThrough: 12 },
       { coversThrough: 9, at: 1_000 },
     )
     expect(next.processedThrough).toBe(12)
@@ -48,27 +45,33 @@ describe('nextStatusOnSuccess', () => {
 })
 
 describe('nextStatusOnFailure', () => {
-  it('walks the backoff 30s -> 2m -> 5m then lands failed-persistent', () => {
+  // classifier.md → Failure policy: no attempt counter, no suspension.
+  it('lands failed with the latest error however many times the pass fails', () => {
     let status = idleStatus()
-    const delays: (number | null)[] = []
-    for (let i = 0; i < 4; i++) {
-      const next = nextStatusOnFailure(status, { error: 'rate limited', at: 0 })
-      delays.push(next.retryDelayMs)
-      status = next.status
+    const seen: [string, string | null][] = []
+    for (const error of ['rate limited', 'network', 'invalid key', 'network']) {
+      status = nextStatusOnFailure(status, { error, at: 0 })
+      seen.push([status.state, status.lastError])
     }
-    expect(delays).toEqual([...BACKOFF_MS, null])
-    expect(BACKOFF_MS).toEqual([30_000, 120_000, 300_000])
-    expect(status.state).toBe('failed-persistent')
-    expect(status.lastError).toBe('rate limited')
-    expect(status.retryCount).toBe(3)
+    expect(seen).toEqual([
+      ['failed', 'rate limited'],
+      ['failed', 'network'],
+      ['failed', 'invalid key'],
+      ['failed', 'network'],
+    ])
   })
 
-  it('preserves the watermark across failures', () => {
-    const { status } = nextStatusOnFailure(
-      { state: 'running', lastSuccessAt: 5, lastError: null, retryCount: 0, processedThrough: 7 },
+  it('preserves the watermark and the last success, adding no key', () => {
+    const status = nextStatusOnFailure(
+      { state: 'running', lastSuccessAt: 5, lastError: null, processedThrough: 7 },
       { error: 'network', at: 0 },
     )
-    expect(status.processedThrough).toBe(7)
+    expect(status).toEqual({
+      state: 'failed',
+      lastSuccessAt: 5,
+      lastError: 'network',
+      processedThrough: 7,
+    })
   })
 })
 
@@ -97,35 +100,22 @@ describe('shouldCadenceFire', () => {
     expect(shouldCadenceFire({ status, unprocessedEntries: 8, cadence: 8 })).toBe(true)
   })
 
-  it('suspends in failed-persistent', () => {
-    const status = { ...idleStatus(), state: 'failed-persistent' as const }
+  it('does not fire for a running status, a pass left unfinished until boot resets it', () => {
+    const status = { ...idleStatus(), state: 'running' as const }
     expect(shouldCadenceFire({ status, unprocessedEntries: 99, cadence: 1 })).toBe(false)
   })
 
-  it('does not fire while a run is already recorded as running', () => {
-    const status = { ...idleStatus(), state: 'running' as const }
-    expect(shouldCadenceFire({ status, unprocessedEntries: 99, cadence: 1 })).toBe(false)
+  // classifier.md → Failure policy: every due commit is a fresh attempt, whatever the cause.
+  it('fires for a failed status once the count is due', () => {
+    const status = { ...idleStatus(), state: 'failed' as const, lastError: 'invalid key' }
+    expect(shouldCadenceFire({ status, unprocessedEntries: 8, cadence: 8 })).toBe(true)
+    expect(shouldCadenceFire({ status, unprocessedEntries: 7, cadence: 8 })).toBe(false)
   })
 
   it('treats a non-positive cadence as "every turn" rather than dividing by zero', () => {
     expect(shouldCadenceFire({ status: idleStatus(), unprocessedEntries: 1, cadence: 0 })).toBe(
       true,
     )
-  })
-})
-
-describe('retryDelayForStatus', () => {
-  it('returns null for every state other than retrying', () => {
-    for (const state of ['idle', 'running', 'failed-persistent'] as const) {
-      expect(retryDelayForStatus({ ...idleStatus(), state })).toBeNull()
-    }
-  })
-
-  // Unreachable through nextStatusOnFailure (attempt 1 is the first retryCount
-  // it ever produces), but reachable from a hand-edited or migrated row —
-  // pinning this keeps the scheduler from scheduling a bogus BACKOFF_MS[-1] read.
-  it('returns null for retrying with retryCount 0', () => {
-    expect(retryDelayForStatus({ ...idleStatus(), state: 'retrying', retryCount: 0 })).toBeNull()
   })
 })
 

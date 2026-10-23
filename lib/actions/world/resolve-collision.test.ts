@@ -18,6 +18,7 @@ import {
   storyEntries,
   translations,
   type CharacterState,
+  type CollisionReason,
   type Delta,
   type Entity,
   type EntityKind,
@@ -41,12 +42,8 @@ import {
 import { entityLinkRows } from '@/lib/world'
 
 import { resolveCollision, type CollisionResolution } from './resolve-collision'
-import { applyDeltaAction } from '../delta/apply-delta-action'
-import {
-  __resetBranchWriteLocks,
-  holdBranchWriteExclusive,
-  releaseBranchWriteExclusive,
-} from '../delta/branch-write-lock'
+import { reserveRunAfterGateCheck } from '../delta/__tests__/gate-race'
+import { __resetBranchWriteLocks } from '../delta/branch-write-lock'
 import { withKeyLock } from '../delta/key-lock'
 import { applyRedo, prepareUndo } from '../delta/redo'
 import { selectReversalSet } from '../delta/row-closure'
@@ -98,6 +95,12 @@ function row(
     ...extra,
   }
 }
+
+const flaggedWith = (partnerId: string): Partial<NewEntity> => ({
+  nameCollisionFlag: 1,
+  nameCollisionPartnerId: partnerId,
+  nameCollisionReason: 'distinct',
+})
 
 const characterState = (state: Partial<CharacterState>): CharacterState => ({
   ...emptyEntityState('character'),
@@ -175,8 +178,20 @@ async function setTail(metadata: EntryMetadata): Promise<void> {
   await ctx.db.update(storyEntries).set({ metadata }).where(eq(storyEntries.id, 'entry_2'))
 }
 
-async function setFlag(id: string, flag: 0 | 1): Promise<void> {
-  await ctx.db.update(entities).set({ nameCollisionFlag: flag }).where(eq(entities.id, id))
+/** Flags `id` against `partnerId` (reason `distinct` unless given); null clears both flags. */
+async function setFlag(
+  id: string,
+  partnerId: string | null,
+  reason: CollisionReason = 'distinct',
+): Promise<void> {
+  await ctx.db
+    .update(entities)
+    .set({
+      nameCollisionFlag: partnerId == null ? 0 : 1,
+      nameCollisionPartnerId: partnerId,
+      nameCollisionReason: partnerId == null ? null : reason,
+    })
+    .where(eq(entities.id, id))
   await hydrateStores()
 }
 
@@ -199,12 +214,7 @@ async function deltaRows(): Promise<Delta[]> {
 }
 
 async function undoAll() {
-  return undoAllBut(null)
-}
-
-async function undoAllBut(keptActionId: string | null) {
-  const target = (await deltaRows()).filter((r) => r.actionId !== keptActionId)
-  const set = await selectReversalSet(ctx, { branchId: 'b1', target })
+  const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltaRows() })
   const { group, reverse } = await prepareUndo(set, ctx)
   await reverse()
   return group
@@ -213,22 +223,6 @@ async function undoAllBut(keptActionId: string | null) {
 async function setTerms(id: string, terms: Partial<Pick<Entity, 'tags' | 'keywords'>>) {
   await ctx.db.update(entities).set(terms).where(eq(entities.id, id))
   await hydrateStores()
-}
-
-async function passAppendsKeyword(id: string, keyword: string) {
-  const written = await applyDeltaAction(
-    {
-      action: {
-        kind: 'appendEntityKeywords',
-        source: 'periodic_classifier',
-        payload: { branchId: 'b1', id, keywords: [keyword], proseEntryId: null },
-      },
-      actionId: 'act_pass',
-      branchId: 'b1',
-    },
-    ctx,
-  )
-  return written.status
 }
 
 async function awarenessIds(): Promise<string[]> {
@@ -273,6 +267,8 @@ function startHardGateRun(): void {
     runId: 'r1',
     kind: 'turn',
     gateBehavior: 'hard-gate',
+    interruptible: null,
+    beforeTurn: false,
     actionId: 'act_r1',
     storyId: 's1',
     branchId: 'b1',
@@ -304,16 +300,16 @@ beforeEach(async () => {
   await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
   await db.insert(entities).values([
     row('char_lead', 'character', 'Kael', 1),
-    row('char_kael2', 'character', 'Kael', 2, { nameCollisionFlag: 1 }),
+    row('char_kael2', 'character', 'Kael', 2, flaggedWith('char_lead')),
     row('char_a', 'character', 'Brannoc', 1),
-    row('char_b', 'character', 'Brannoc', 2, { nameCollisionFlag: 1 }),
+    row('char_b', 'character', 'Brannoc', 2, flaggedWith('char_a')),
     row('char_o', 'character', 'Vorne', 1, {
       state: characterState({ current_location_id: 'loc_b', inventory: ['item_b'] }),
     }),
     row('loc_a', 'location', 'Harbor', 1),
-    row('loc_b', 'location', 'Harbor', 2, { nameCollisionFlag: 1 }),
+    row('loc_b', 'location', 'Harbor', 2, flaggedWith('loc_a')),
     row('item_a', 'item', 'Lantern', 1),
-    row('item_b', 'item', 'Lantern', 2, { nameCollisionFlag: 1 }),
+    row('item_b', 'item', 'Lantern', 2, flaggedWith('item_a')),
   ])
   await db.insert(happenings).values([
     { id: 'hap_1', branchId: 'b1', title: 'Fire', createdAt: 1, updatedAt: 1 },
@@ -424,7 +420,7 @@ beforeEach(async () => {
 
 describe('resolveCollision — merge', () => {
   it('moves B onto A under one action_id and leaves B gone with no vectors', async () => {
-    await setFlag('char_a', 1)
+    await setFlag('char_a', 'char_b')
     expect(vectorCount('char_b')).toBe(2)
 
     expect(await resolveCollision('b1', MERGE_B_INTO_A, ctx)).toEqual({ status: 'ok' })
@@ -472,7 +468,7 @@ describe('resolveCollision — merge', () => {
   })
 
   it('CTRL-Z restores B with every row it held, re-flagged and stale; redo merges again', async () => {
-    await setFlag('char_a', 1)
+    await setFlag('char_a', 'char_b')
     const before = await worldSnapshot()
     await resolveCollision('b1', MERGE_B_INTO_A, ctx)
     const merged = await worldSnapshot()
@@ -628,7 +624,7 @@ describe('resolveCollision — merge', () => {
   })
 
   it('merges a namesake into the lead: the loser goes, the lead stays and loses its flag', async () => {
-    await setFlag('char_lead', 1)
+    await setFlag('char_lead', 'char_kael2')
 
     expect(await resolveCollision('b1', mergeInto('char_lead', 'char_kael2'), ctx)).toEqual({
       status: 'ok',
@@ -690,73 +686,116 @@ describe('resolveCollision — merge', () => {
     })
     expect(await deltaRows()).toEqual([])
   })
+})
 
-  it('plans from the stores only after a no-gate pass holding the branch lock has written', async () => {
-    await holdBranchWriteExclusive('b1', 'act_pass')
-    let settled = false
-    const merging = resolveCollision('b1', MERGE_B_INTO_A, ctx).finally(() => {
-      settled = true
-    })
-    await flush()
-    await flush()
-    expect(settled).toBe(false)
+// A run reserving right after the build's gate check settles the writes dispatched so far, so the
+// resolution must be among them (generation-pipeline.md → Action rejection — defense in depth).
+describe('resolveCollision — dispatches in the tick of its gate check', () => {
+  it.each([
+    ['merge', MERGE_B_INTO_A],
+    ['keep', KEEP_A_B],
+  ])('%s: a run reserving right after the check waits for the write', async (_, resolution) => {
+    // Check 1 is resolveCollision's own; check 2 is the build's, right before the dispatch.
+    const race = reserveRunAfterGateCheck(2, startHardGateRun)
+    try {
+      const resolving = resolveCollision('b1', resolution, ctx)
+      await race.settled
+      // Read as the run's wait ends: a write dispatched after that has no deltas yet.
+      expect((await deltaRows()).length).toBeGreaterThan(0)
+      expect(race.checks()).toBe(2)
+      expect(await resolving).toEqual({ status: 'ok' })
+    } finally {
+      race.restore()
+    }
+  })
+})
 
-    const written = await applyDeltaAction(
-      {
-        action: {
-          kind: 'upsertHappeningAwareness',
-          source: 'periodic_classifier',
-          payload: { branchId: 'b1', characterId: 'char_b', happeningId: 'hap_3' },
-        },
-        actionId: 'act_pass',
-        branchId: 'b1',
-      },
-      ctx,
+describe('resolveCollision — merge re-points and clears flags', () => {
+  it("re-points a flag on B at A and clears A's; CTRL-Z restores both, redo is exact", async () => {
+    await ctx.db.insert(entities).values(
+      row('char_c', 'character', 'Brannoc', 3, {
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: 'char_b',
+        nameCollisionReason: 'alike',
+      }),
     )
-    expect(written.status).toBe('ok')
-    releaseBranchWriteExclusive('b1', 'act_pass')
+    await setFlag('char_a', 'char_b')
+    const before = await worldSnapshot()
 
-    expect(await merging).toEqual({ status: 'ok' })
-    // A plan built before the hold released would miss this row, and B's delete would cascade it.
-    const onA = await ctx.db
-      .select()
-      .from(happeningAwareness)
-      .where(eq(happeningAwareness.characterId, 'char_a'))
-    expect(onA.map((r) => r.happeningId).sort()).toEqual(['hap_1', 'hap_2', 'hap_3'])
+    expect(await resolveCollision('b1', MERGE_B_INTO_A, ctx)).toEqual({ status: 'ok' })
+    const merged = await worldSnapshot()
+
+    expect(await entityRow('char_a')).toMatchObject({
+      nameCollisionFlag: 0,
+      nameCollisionPartnerId: null,
+      nameCollisionReason: null,
+    })
+    expect(await entityRow('char_c')).toMatchObject({
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_a',
+      nameCollisionReason: 'alike',
+    })
+    expect(
+      (await deltaRows()).filter((r) => r.targetId === 'char_c').map((r) => r.undoPayload),
+    ).toEqual([{ nameCollisionPartnerId: 'char_b' }])
+
+    const group = await undoAll()
+
+    expect(await worldSnapshot()).toEqual(before)
+    expect(await entityRow('char_a')).toMatchObject({
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_b',
+    })
+    expect(await entityRow('char_c')).toMatchObject({ nameCollisionPartnerId: 'char_b' })
+
+    await applyRedo(group, ctx)
+
+    expect(await worldSnapshot()).toEqual(merged)
   })
 
-  it.each([
-    ['the canonical', 'char_a'],
-    ['the loser', 'char_b'],
-  ])(
-    'keeps a keyword a pass appends to %s while the merge waits; CTRL-Z and redo are exact',
-    async (_, appendedTo) => {
-      await setTerms('char_a', { keywords: ['the guard'] })
-      await setTerms('char_b', { keywords: ['Captain Brannoc'] })
-      await holdBranchWriteExclusive('b1', 'act_pass')
-      const merging = resolveCollision('b1', MERGE_B_INTO_A, ctx)
-      await flush()
-      await flush()
+  it("adds the name the merge doesn't keep to the merged row's keywords", async () => {
+    await ctx.db
+      .update(entities)
+      .set({ name: 'Brannoc the Younger' })
+      .where(eq(entities.id, 'char_b'))
+    await hydrateStores()
 
-      expect(await passAppendsKeyword(appendedTo, 'the smith')).toBe('ok')
-      const before = await worldSnapshot()
-      releaseBranchWriteExclusive('b1', 'act_pass')
+    expect(await resolveCollision('b1', MERGE_B_INTO_A, ctx)).toEqual({ status: 'ok' })
 
-      expect(await merging).toEqual({ status: 'ok' })
-      expect((await entityRow('char_a'))?.keywords).toEqual(
-        appendedTo === 'char_a'
-          ? ['the guard', 'the smith', 'Captain Brannoc']
-          : ['the guard', 'Captain Brannoc', 'the smith'],
-      )
-      const merged = await worldSnapshot()
+    expect(await entityRow('char_a')).toMatchObject({
+      name: 'Brannoc',
+      keywords: ['Brannoc the Younger'],
+    })
+  })
+})
 
-      const group = await undoAllBut('act_pass')
-      expect(await worldSnapshot()).toEqual(before)
+describe("resolveCollision — merge re-points the canonical at the loser's partner", () => {
+  it("points A at the namesake B named, with B's reason; CTRL-Z restores both, redo re-takes them", async () => {
+    await ctx.db.insert(entities).values(row('char_t', 'character', 'Brannoc', 3))
+    await setFlag('char_b', 'char_t', 'in-scene')
+    await setFlag('char_a', 'char_b')
+    const before = await worldSnapshot()
 
-      await applyRedo(group, ctx)
-      expect(await worldSnapshot()).toEqual(merged)
-    },
-  )
+    expect(await resolveCollision('b1', MERGE_B_INTO_A, ctx)).toEqual({ status: 'ok' })
+    const merged = await worldSnapshot()
+    const flagOf = async (id: string) => {
+      const found = await entityRow(id)
+      return [found?.nameCollisionFlag, found?.nameCollisionPartnerId, found?.nameCollisionReason]
+    }
+
+    expect(await flagOf('char_a')).toEqual([1, 'char_t', 'in-scene'])
+    expect(await flagOf('char_t')).toEqual([0, null, null])
+
+    const group = await undoAll()
+
+    expect(await worldSnapshot()).toEqual(before)
+    expect(await flagOf('char_a')).toEqual([1, 'char_b', 'distinct'])
+
+    await applyRedo(group, ctx)
+
+    expect(await worldSnapshot()).toEqual(merged)
+    expect(await flagOf('char_a')).toEqual([1, 'char_t', 'in-scene'])
+  })
 })
 
 describe('resolveCollision — merge tags and keywords', () => {
@@ -987,15 +1026,109 @@ describe('resolveCollision — merge seats the canonical in the tail scene', () 
   })
 })
 
+// world.md → Merge: a location merge runs the checks a Save does on the place it would leave. The
+// tail's scene is at loc_b, the loser.
+describe('resolveCollision — location merge place rules', () => {
+  const place = (id: string, parent: string | null, extra: Partial<NewEntity> = {}) =>
+    row(id, 'location', id, 3, {
+      state: { parent_location_id: parent } satisfies LocationState,
+      ...extra,
+    })
+  const LOC_MERGE = mergeInto('loc_a', 'loc_b')
+  const sceneAt = (currentLocationId: string | null) =>
+    setTail({ sceneEntities: [], currentLocationId, worldTime: 0 } as EntryMetadata)
+
+  it('refuses a retired result while the story is in either place, writing nothing', async () => {
+    await setStatus('loc_a', 'retired')
+    expect(await resolveCollision('b1', LOC_MERGE, ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'story-inside',
+    })
+    expect(await deltaRows()).toEqual([])
+  })
+
+  // A user_action standing at the tail after a refused unwind: the reply before it, the scene
+  // source, names a deleted place, and the next turn inherits the tail's.
+  it("refuses a retired result while the tail's place is either, whatever the reply names", async () => {
+    await sceneAt('loc_gone')
+    await ctx.db.insert(storyEntries).values({
+      id: 'entry_3',
+      branchId: 'b1',
+      position: 3,
+      kind: 'user_action',
+      content: 'I wait.',
+      metadata: { sceneEntities: [], currentLocationId: 'loc_b', worldTime: 0 } as EntryMetadata,
+      createdAt: 3,
+    })
+    await setStatus('loc_a', 'retired')
+    expect(await resolveCollision('b1', LOC_MERGE, ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'story-inside',
+    })
+    expect(await deltaRows()).toEqual([])
+  })
+
+  it('refuses a retired result while a place inside either is not retired', async () => {
+    await sceneAt(null)
+    await ctx.db.insert(entities).values(place('loc_c', 'loc_b'))
+    await setStatus('loc_a', 'retired')
+    expect(await resolveCollision('b1', LOC_MERGE, ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'places-inside',
+    })
+  })
+
+  it('refuses a result that is not retired under a retired parent', async () => {
+    await sceneAt(null)
+    await ctx.db.insert(entities).values(place('loc_p', null, { status: 'retired' }))
+    await setState('loc_a', { parent_location_id: 'loc_p' })
+    expect(await resolveCollision('b1', LOC_MERGE, ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'retired-parent',
+    })
+  })
+
+  // The handler judges against the state before the group, so the re-parent of the loser's child
+  // under a canonical the same group brings back would misfire there; the builder checks it.
+  it("brings a retired canonical back with the loser's places moved inside it", async () => {
+    await sceneAt(null)
+    await ctx.db.insert(entities).values(place('loc_c', 'loc_b'))
+    await setStatus('loc_a', 'retired')
+    expect(await resolveCollision('b1', { ...LOC_MERGE, fromLoser: ['status'] }, ctx)).toEqual({
+      status: 'ok',
+    })
+    expect(await entityRow('loc_a')).toMatchObject({ status: 'active' })
+    expect((await entityRow('loc_c'))?.state).toEqual({ parent_location_id: 'loc_a' })
+  })
+
+  it('refuses a merge that puts the story into a disabled place', async () => {
+    await ctx.db.update(entities).set({ injectionMode: 'disabled' }).where(eq(entities.id, 'loc_a'))
+    await hydrateStores()
+    expect(await resolveCollision('b1', LOC_MERGE, ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'story-inside',
+    })
+  })
+
+  it('merges inside a disabled region the story walked into', async () => {
+    await ctx.db.insert(entities).values(place('loc_r', null, { injectionMode: 'disabled' }))
+    await setState('loc_a', { parent_location_id: 'loc_r' })
+    await setState('loc_b', { parent_location_id: 'loc_r' })
+    expect(await resolveCollision('b1', LOC_MERGE, ctx)).toEqual({ status: 'ok' })
+  })
+})
+
 describe('resolveCollision — rename', () => {
   it('renames only B and clears its flag in that same delta', async () => {
-    expect(await resolveCollision('b1', renameTo('Brannoc', ' Brannoc the Younger '), ctx)).toEqual(
-      { status: 'ok' },
-    )
+    expect(await resolveCollision('b1', renameTo('Brannoc', ' Bran the Younger '), ctx)).toEqual({
+      status: 'ok',
+    })
 
     expect(await entityRow('char_b')).toMatchObject({
-      name: 'Brannoc the Younger',
+      name: 'Bran the Younger',
       nameCollisionFlag: 0,
+      nameCollisionPartnerId: null,
+      nameCollisionReason: null,
     })
     const rows = await deltaRows()
     expect(rows).toHaveLength(1)
@@ -1003,7 +1136,7 @@ describe('resolveCollision — rename', () => {
       targetTable: 'entities',
       targetId: 'char_b',
       op: 'update',
-      undoPayload: { name: 'Brannoc', nameCollisionFlag: 1 },
+      undoPayload: { name: 'Brannoc', nameCollisionFlag: 1, nameCollisionPartnerId: 'char_a' },
     })
   })
 
@@ -1011,7 +1144,7 @@ describe('resolveCollision — rename', () => {
     const resolution: CollisionResolution = {
       mode: 'rename',
       renames: [
-        { id: 'char_b', name: 'Brannoc the Younger' },
+        { id: 'char_b', name: 'Bran the Younger' },
         { id: 'char_a', name: 'Brannoc' },
       ],
     }
@@ -1019,34 +1152,62 @@ describe('resolveCollision — rename', () => {
     expect(await resolveCollision('b1', resolution, ctx)).toEqual({ status: 'ok' })
 
     expect((await entityRow('char_a'))?.name).toBe('Brannoc')
-    expect((await entityRow('char_b'))?.name).toBe('Brannoc the Younger')
+    expect((await entityRow('char_b'))?.name).toBe('Bran the Younger')
     expect((await deltaRows()).map((r) => r.targetId)).toEqual(['char_b'])
   })
 
   it('CTRL-Z restores both names and flags; redo renames and clears again', async () => {
-    await setFlag('char_a', 1)
+    await setFlag('char_a', 'char_b')
     const before = await worldSnapshot()
-    await resolveCollision('b1', renameTo('Brannoc', 'Brannoc the Younger'), ctx)
+    await resolveCollision('b1', renameTo('Brannoc', 'Bran the Younger'), ctx)
     const renamed = await worldSnapshot()
-    expect(await entityRow('char_a')).toMatchObject({ name: 'Brannoc', nameCollisionFlag: 0 })
+    expect(await entityRow('char_a')).toMatchObject({
+      name: 'Brannoc',
+      nameCollisionFlag: 0,
+      nameCollisionPartnerId: null,
+    })
     expect(await entityRow('char_b')).toMatchObject({
-      name: 'Brannoc the Younger',
+      name: 'Bran the Younger',
       nameCollisionFlag: 0,
     })
 
     const group = await undoAll()
 
     expect(await worldSnapshot()).toEqual(before)
-    expect(await entityRow('char_b')).toMatchObject({ name: 'Brannoc', nameCollisionFlag: 1 })
-    expect((await entityRow('char_a'))?.nameCollisionFlag).toBe(1)
+    expect(await entityRow('char_b')).toMatchObject({
+      name: 'Brannoc',
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_a',
+    })
+    expect(await entityRow('char_a')).toMatchObject({
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_b',
+    })
 
     await applyRedo(group, ctx)
 
     expect(await worldSnapshot()).toEqual(renamed)
   })
 
+  it('keeps a pair row’s flag that names a live third row', async () => {
+    await ctx.db.insert(entities).values(row('char_c', 'character', 'Brannoc', 3))
+    await setFlag('char_a', 'char_c')
+
+    expect(await resolveCollision('b1', renameTo('Brannoc', 'Bran the Younger'), ctx)).toEqual({
+      status: 'ok',
+    })
+
+    expect(await entityRow('char_a')).toMatchObject({
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_c',
+    })
+    expect(await entityRow('char_b')).toMatchObject({ nameCollisionFlag: 0 })
+  })
+
   it.each([
+    ['an untouched rename', 'Brannoc'],
     ['a case-only rename', 'BRANNOC'],
+    ['a name holding the other', 'Brannoc the Younger'],
     ['an empty name', '   '],
   ])('refuses %s with invalid-rename and writes nothing', async (_, name) => {
     expect(await resolveCollision('b1', renameTo('Brannoc', name), ctx)).toMatchObject({
@@ -1058,26 +1219,54 @@ describe('resolveCollision — rename', () => {
 })
 
 describe('resolveCollision — keep as distinct', () => {
-  it('clears the flag on each flagged row of the pair; CTRL-Z re-flags both', async () => {
-    await setFlag('char_a', 1)
+  it('clears the flag on each pair row naming the other; CTRL-Z re-flags both', async () => {
+    await setFlag('char_a', 'char_b')
+    const before = await worldSnapshot()
 
     expect(await resolveCollision('b1', KEEP_A_B, ctx)).toEqual({ status: 'ok' })
 
     const rows = await deltaRows()
     expect(rows.map((r) => r.targetId).sort()).toEqual(['char_a', 'char_b'])
     expect(new Set(rows.map((r) => r.actionId)).size).toBe(1)
-    expect((await entityRow('char_a'))?.nameCollisionFlag).toBe(0)
-    expect((await entityRow('char_b'))?.nameCollisionFlag).toBe(0)
+    for (const id of ['char_a', 'char_b'])
+      expect(await entityRow(id)).toMatchObject({
+        nameCollisionFlag: 0,
+        nameCollisionPartnerId: null,
+        nameCollisionReason: null,
+      })
 
     await undoAll()
 
-    expect((await entityRow('char_a'))?.nameCollisionFlag).toBe(1)
-    expect((await entityRow('char_b'))?.nameCollisionFlag).toBe(1)
+    expect(await worldSnapshot()).toEqual(before)
+    expect(await entityRow('char_a')).toMatchObject({ nameCollisionPartnerId: 'char_b' })
+    expect(await entityRow('char_b')).toMatchObject({ nameCollisionPartnerId: 'char_a' })
   })
 
   it('writes one delta when only one row of the pair is flagged', async () => {
     await resolveCollision('b1', KEEP_A_B, ctx)
     expect((await deltaRows()).map((r) => r.targetId)).toEqual(['char_b'])
+  })
+
+  it('keeps a pair row’s flag that names a live third row', async () => {
+    await ctx.db.insert(entities).values(row('char_c', 'character', 'Brannoc', 3))
+    await setFlag('char_a', 'char_c')
+
+    expect(await resolveCollision('b1', KEEP_A_B, ctx)).toEqual({ status: 'ok' })
+
+    expect(await entityRow('char_a')).toMatchObject({
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_c',
+    })
+    expect((await entityRow('char_b'))?.nameCollisionFlag).toBe(0)
+  })
+
+  it('clears a pair row whose partner is gone from the branch', async () => {
+    await setFlag('char_a', 'char_gone')
+
+    expect(await resolveCollision('b1', KEEP_A_B, ctx)).toEqual({ status: 'ok' })
+
+    expect((await entityRow('char_a'))?.nameCollisionFlag).toBe(0)
+    expect((await entityRow('char_b'))?.nameCollisionFlag).toBe(0)
   })
 })
 
@@ -1206,13 +1395,37 @@ describe('resolveCollision — refusals', () => {
     expect(await deltaRows()).toEqual([])
   })
 
-  it('refuses not-found when the two rows no longer share a name', async () => {
-    entitiesStore.patch('b1', { op: 'update', id: 'char_b', columns: { name: 'Bran' } })
+  it('refuses not-found once neither row’s flag names the other', async () => {
+    entitiesStore.patch('b1', {
+      op: 'update',
+      id: 'char_b',
+      columns: { nameCollisionFlag: 0, nameCollisionPartnerId: null, nameCollisionReason: null },
+    })
 
     expect(await resolveCollision('b1', KEEP_A_B, ctx)).toMatchObject({
       status: 'rejected',
       code: 'not-found',
+      reason: 'the two rows are no longer flagged as a pair',
     })
     expect(await deltaRows()).toEqual([])
+  })
+
+  it('refuses not-found for two rows whose flags name other rows', async () => {
+    const keep: CollisionResolution = { mode: 'keep', ids: ['char_b', 'char_kael2'] }
+
+    expect(await resolveCollision('b1', keep, ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'not-found',
+    })
+    expect(await deltaRows()).toEqual([])
+  })
+})
+
+describe('resolveCollision — pairs by the stored partner', () => {
+  it('resolves a pair whose names stopped matching while the flag still names the other', async () => {
+    entitiesStore.patch('b1', { op: 'update', id: 'char_b', columns: { name: 'Bran' } })
+
+    expect(await resolveCollision('b1', KEEP_A_B, ctx)).toEqual({ status: 'ok' })
+    expect((await entityRow('char_b'))?.nameCollisionFlag).toBe(0)
   })
 })

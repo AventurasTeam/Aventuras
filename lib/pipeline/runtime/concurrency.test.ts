@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import type { ConcurrencyPolicy } from '@/lib/pipeline'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import type { ConcurrencyPolicy, Pipeline } from '@/lib/pipeline'
 import type { RunState } from '@/lib/stores'
 
 import { checkConcurrencyContract } from './concurrency'
@@ -13,13 +14,14 @@ async function* ok(): AsyncGenerator<never, PhaseResult> {
   return { status: 'completed' }
 }
 
-function define(kind: string, policy: ConcurrencyPolicy): void {
+function define(kind: string, policy: ConcurrencyPolicy, extra: Partial<Pipeline> = {}): void {
   definePipeline({
     kind,
     phases: [{ name: 'p', run: ok }],
     affordance: 'invisible',
-    gateBehavior: 'no-gate',
+    gateBehavior: 'hard-gate',
     concurrencyPolicy: policy,
+    ...extra,
   })
 }
 
@@ -27,7 +29,9 @@ function runState(kind: string): RunState {
   return {
     runId: `r_${kind}`,
     kind,
-    gateBehavior: 'no-gate',
+    gateBehavior: 'hard-gate',
+    interruptible: null,
+    beforeTurn: false,
     actionId: 'a',
     storyId: null,
     branchId: 'b',
@@ -76,19 +80,38 @@ describe('checkConcurrencyContract', () => {
     ).toEqual({ kind: 'blocked', by: 'periodic-classifier' })
   })
 
-  it('blocks a periodic-classifier start while a reversal is in progress', () => {
-    define('periodic-classifier', { blockedBy: ['periodic-classifier'] })
-    expect(checkConcurrencyContract('periodic-classifier', runs(), true)).toEqual({
+  // generation-pipeline.md → runPipeline entry algorithm: no pass or close may start between a
+  // reversal's interrupt and its sweep.
+  it('blocks an interruptible start while a reversal is in progress, and starts it after', () => {
+    define('memory-run', { blockedBy: ['memory-run'] }, { interruptible: 'pass' })
+    expect(checkConcurrencyContract('memory-run', runs(), true)).toEqual({
+      kind: 'blocked',
+      by: 'reversal',
+    })
+    expect(checkConcurrencyContract('memory-run', runs(), false)).toEqual({ kind: 'start' })
+  })
+
+  it('checks the reversal before blockedBy', () => {
+    define('memory-run', { blockedBy: ['per-turn'] }, { interruptible: 'pass' })
+    define('per-turn', {})
+    expect(checkConcurrencyContract('memory-run', runs('per-turn'), true)).toEqual({
       kind: 'blocked',
       by: 'reversal',
     })
   })
 
-  it('blocks a suggestion-refresh start while a reversal is in progress', () => {
+  it('does not block a suggestion-refresh start while a reversal is in progress', () => {
     define(SUGGESTION_REFRESH_KIND, { blockedBy: [SUGGESTION_REFRESH_KIND] })
     expect(checkConcurrencyContract(SUGGESTION_REFRESH_KIND, runs(), true)).toEqual({
-      kind: 'blocked',
-      by: 'reversal',
+      kind: 'start',
+    })
+  })
+
+  // The flag, not the kind name, decides: a classifier declared without it is not held back.
+  it('does not block a periodic-classifier start that is not interruptible', () => {
+    define(PERIODIC_CLASSIFIER_KIND, { blockedBy: [PERIODIC_CLASSIFIER_KIND] })
+    expect(checkConcurrencyContract(PERIODIC_CLASSIFIER_KIND, runs(), true)).toEqual({
+      kind: 'start',
     })
   })
 

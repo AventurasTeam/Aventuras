@@ -113,9 +113,6 @@
   .gen-status.visible { display: flex; }
   .gen-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: pulse 1.6s infinite; }
   .gen-status.error { border-color: #b45309; background: #b45309; color: #fff; }
-  /* Background phase: no accent fill, muted dot — nothing is being waited on. */
-  .gen-status.background { color: var(--ink-muted); }
-  .gen-status.background .dot { background: var(--ink-muted); }
   .gen-status.error .dot { background: var(--warn); animation: none; }
   @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(74,168,136,0.5);} 70% { box-shadow: 0 0 0 5px rgba(74,168,136,0);} 100% { box-shadow: 0 0 0 0 rgba(74,168,136,0);} }
 
@@ -125,9 +122,13 @@
   .gen-cancel-action { display: block; width: 100%; text-align: left; padding: 6px 10px; border: 0; background: transparent; color: var(--ink); font-size: 11px; cursor: pointer; border-radius: 2px; font-family: inherit; }
   .gen-cancel-action:hover { background: var(--bg-region); }
 
-  /* chapter-close banner — sticky below chrome for the duration of the close transaction */
+  /* memory-run banner — sticky below chrome for the duration of a pass or a close */
   .gen-banner { display: none; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--bg-region); align-items: center; gap: 12px; font-size: 12px; color: var(--ink); }
   .gen-banner.visible { display: flex; }
+
+  /* info toast — top-center, auto-dismissed (patterns/toast.md) */
+  .gen-toast { display: none; position: fixed; top: 16px; left: 50%; transform: translateX(-50%); max-width: 400px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); box-shadow: 0 4px 12px rgba(0,0,0,0.12); font-size: 12px; color: var(--ink); z-index: 200; }
+  .gen-toast.visible { display: block; }
 
   /* per-entry world-time footer — bottom-right of bubble; click-to-edit on AI/opening */
   .wt-footer { margin-top: 8px; display: flex; justify-content: flex-end; align-items: center; gap: 4px; font-size: 10.5px; color: var(--ink-muted); cursor: pointer; user-select: none; }
@@ -506,8 +507,11 @@
   .regen-btn { padding: 6px 12px; border: 1px solid var(--line-soft); border-radius: 4px; background: var(--bg-region); font-size: 12px; color: var(--ink); cursor: pointer; transition: opacity 0.1s; }
   .send-btn { padding: 8px 22px; border: 1px solid var(--ink); border-radius: 4px; background: var(--ink); color: #fff; font-weight: 600; font-size: 13px; cursor: pointer; }
   .cancel-btn { padding: 8px 22px; border: 1px solid var(--warn); border-radius: 4px; background: var(--warn); color: #fff; font-weight: 600; font-size: 13px; cursor: pointer; }
-  .composer.generating .mode-picker, .composer.generating .regen-btn { opacity: 0.45; pointer-events: none; }
+  /* the draft and the mode picker stay live through every gate (principles.md -> What's not gated);
+     a turn refuses only Send and regen */
+  .composer.generating .regen-btn { opacity: 0.45; pointer-events: none; }
   .send-btn.hidden, .cancel-btn.hidden { display: none; }
+  .send-btn.waiting { opacity: 0.45; cursor: not-allowed; }
 
   /* error entry visibility */
   .error-entry { display: none; }
@@ -645,9 +649,9 @@
     <button class="rb-btn" data-gen="chapter-close">chapter-close</button>
     <button class="rb-btn" data-gen="recalling-memory">recalling-memory</button>
     <button class="rb-btn" data-gen="updating-memory">updating-memory</button>
+    <button class="rb-btn" data-gen="before-turn">before-turn</button>
     <button class="rb-btn" data-gen="error-swap-paused">error-swap-paused</button>
     <button class="rb-btn" data-gen="error-stale">error-stale</button>
-    <button class="rb-btn" data-gen="error-classifier">error-classifier</button>
   </div>
 
   <div class="rb-group">
@@ -687,6 +691,10 @@
     <button class="rb-btn active" data-err="hidden">hidden</button>
     <button class="rb-btn" data-err="llm">LLM error</button>
     <button class="rb-btn" data-err="embed">embed error</button>
+    <button class="rb-btn" data-err="memory">memory update error</button>
+    <button class="rb-btn" data-err="memoryHeld">memory update held</button>
+    <button class="rb-btn" data-err="memoryHeldNoText">memory update held, no text</button>
+    <button class="rb-btn" data-pass-failed>pass-failed toast</button>
   </div>
 
   <div class="rb-group">
@@ -846,12 +854,15 @@
   <span class="chip browse recent-1" id="phone-browse-chip" title="Open Browse (rail) as Sheet — background tints when any rail-surfaceable category has recent classifier activity (aggregate across all 7 categories)">&#9776; Browse</span>
 </div>
 
-<!-- Chapter-close banner — sticky below chrome during chapter-close transaction -->
+<!-- Memory-run banner — sticky below chrome during a pass (updating-memory) or a chapter close -->
 <div class="gen-banner" id="gen-banner">
   <span class="gen-banner-icon"></span>
   <span class="gen-banner-label" id="gen-banner-label">Closing chapter: 2 of 4 &mdash; generating chapter metadata&hellip;</span>
   <button class="gen-banner-cancel" id="gen-banner-cancel">Cancel</button>
 </div>
+
+<!-- Toast — the deferral a Cancel of a pass or a close fires, and a failed pass's notice -->
+<div class="gen-toast" id="gen-toast" role="status" aria-live="polite"></div>
 
 <!-- Layout -->
 <div class="layout">
@@ -917,7 +928,13 @@
               <div class="ws-label">Changes this turn</div>
               <div class="ws-line"><span class="k">Corin &middot; attire &mdash;</span> cloak now muddied to the waist</div>
               <div class="ws-line"><span class="k">Sword of Dawn &rarr;</span> Aria <span class="k">(from Corin)</span></div>
+              <div class="ws-line"><span class="k">rusted key &rarr;</span> Aria</div>
               <div class="ws-line"><span class="k">gold &times;50 &rarr;</span> Aria <span class="k">(from Corin)</span></div>
+              <!-- Creates last: one line per distinct id, named from the live row. A dropped
+                   create isn't listed. -->
+              <div class="ws-line"><span class="k">Matched place:</span> the Fenlands</div>
+              <div class="ws-line"><span class="k">New place:</span> Ashfen Marshes</div>
+              <div class="ws-line"><span class="k">New item:</span> rusted key</div>
             </div>
             <div class="ws-group">
               <div class="ws-label">Reported delta</div>
@@ -1591,7 +1608,7 @@
 })();
 
 (function() {
-  // gen state → status pill + streaming entry + composer send/cancel + chapter-close banner
+  // gen state → status pill + streaming entry + composer send/cancel + memory-run banner
   const genStatus = document.getElementById('gen-pill');
   const genLabel = document.getElementById('gen-label');
   const streamingEntry = document.getElementById('streaming-entry');
@@ -1602,6 +1619,7 @@
   const cancelPopover = document.getElementById('gen-cancel-popover');
   const cancelAction = document.getElementById('gen-cancel-action');
   const bannerCancel = document.getElementById('gen-banner-cancel');
+  const bannerLabel = document.getElementById('gen-banner-label');
 
   const genPhaseLabels = {
     idle: null,
@@ -1611,30 +1629,68 @@
     'chapter-close': 'closing chapter…',
     'recalling-memory': 'recalling memory…',
     'updating-memory': 'updating memory…',
+    'before-turn': 'updating memory before your turn…',
     'error-swap-paused': 'Embedder switch paused — waiting on you',
     'error-stale': 'Memory incomplete — 12 rows pending',
-    'error-classifier': 'Classifier offline — retrieval coverage thinning',
   };
 
-  const errorStates = new Set(['error-swap-paused', 'error-stale', 'error-classifier']);
+  const errorStates = new Set(['error-swap-paused', 'error-stale']);
 
-  // The one non-blocking phase: it drops the accent fill and YIELDS the slot to
-  // any error, which is why gen-state and error-state are not mutually exclusive
-  // here (patterns/generation-status-pill.md -> Priority resolution).
-  const backgroundPhases = new Set(['updating-memory']);
+  // No v1 phase is non-blocking: updating-memory and chapter-close hold the gate like the
+  // rest, keep the accent fill and the slot, and own the cancel; the banner shows beside them
+  // (patterns/generation-status-pill.md -> Memory phases). Unlike a turn they leave the
+  // composer live: only Send waits (principles.md -> What's not gated).
+  const memoryRuns = {
+    'updating-memory': {
+      banner: 'Updating memory…',
+      cancel: 'Cancel memory update',
+      sendWaits: 'Updating memory. Cancel to edit.',
+      deferral: 'Memory update moved to your next turn.',
+    },
+    'chapter-close': {
+      banner: 'Closing chapter: 2 of 4 — generating chapter metadata…',
+      cancel: 'Cancel chapter close',
+      sendWaits: 'Chapter close in progress. Cancel to edit.',
+      deferral: 'Chapter close moved to your next turn.',
+    },
+  };
+  const turnStates = new Set(['reasoning', 'generating', 'classifying', 'recalling-memory']);
+
+  // Cancelling a pass or a close defers it: the next Send runs it first (before-turn).
+  let genState = 'idle';
+  let deferredWork = false;
+
+  const toast = document.getElementById('gen-toast');
+  let toastTimer = null;
+  function showToast(text) {
+    toast.textContent = text;
+    toast.classList.add('visible');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('visible'), 5000);
+  }
 
   const streamingBrain = document.getElementById('streaming-brain');
   const streamingToks = document.getElementById('streaming-toks');
   const streamingReasoning = document.getElementById('streaming-reasoning-body');
   const streamingContent = document.getElementById('streaming-content');
 
+  function setSendWaiting(reason) {
+    sendBtn.classList.toggle('waiting', reason != null);
+    if (reason != null) sendBtn.title = reason;
+    else sendBtn.removeAttribute('title');
+  }
+
   function setGenState(state) {
+    genState = state;
+    // A turn running means Send already ran the deferred work ahead of it.
+    if (turnStates.has(state)) deferredWork = false;
     const label = genPhaseLabels[state];
     const isError = errorStates.has(state);
+    const memoryRun = memoryRuns[state];
+    setSendWaiting(memoryRun ? memoryRun.sendWaits : null);
     if (label) {
       genStatus.classList.add('visible');
       genStatus.classList.toggle('error', isError);
-      genStatus.classList.toggle('background', backgroundPhases.has(state));
       genLabel.textContent = label;
 
       if (isError) {
@@ -1645,15 +1701,27 @@
         sendBtn.classList.remove('hidden');
         cancelBtn.classList.add('hidden');
         banner.classList.remove('visible');
-        cancelAction.textContent = state === 'error-classifier' ? 'Open Memory settings' : 'Open Memory settings';
-      } else if (backgroundPhases.has(state)) {
-        // Background phase: muted pill, no streaming surface, composer stays
-        // usable — nothing is being waited on and there is nothing to cancel.
+        cancelAction.textContent = 'Open Memory settings';
+      } else if (memoryRun) {
+        // A pass or a close: blocking, accent pill, no streaming surface. The composer stays
+        // live with Send waiting; the banner and the pill popover own the cancel.
         streamingEntry.classList.remove('visible');
         composer.classList.remove('generating');
         sendBtn.classList.remove('hidden');
         cancelBtn.classList.add('hidden');
-        banner.classList.remove('visible');
+        bannerLabel.textContent = memoryRun.banner;
+        banner.classList.add('visible');
+        cancelAction.textContent = memoryRun.cancel;
+      } else if (state === 'before-turn') {
+        // Send's deferred work runs before its turn: no streaming card yet; Send turns into
+        // Cancel, which cancels the whole Send and keeps the text in the composer.
+        streamingEntry.classList.remove('visible');
+        composer.classList.add('generating');
+        sendBtn.classList.add('hidden');
+        cancelBtn.classList.remove('hidden');
+        bannerLabel.textContent = 'Updating memory before your turn\u2026';
+        banner.classList.add('visible');
+        cancelAction.textContent = 'Cancel memory update';
       } else {
         // Active generation phase — streaming surface + composer-cancel mode.
         streamingEntry.classList.add('visible');
@@ -1673,13 +1741,13 @@
           streamingToks.textContent = '0.4k / 3.2k →';
           streamingContent.textContent = '[partial text appearing token by token…]';
         } else {
-          // classifying / chapter-close — keep streaming entry hidden
+          // classifying / recalling-memory — keep streaming entry hidden
           streamingEntry.classList.remove('visible');
         }
 
-        // Banner shows only during chapter-close
-        banner.classList.toggle('visible', state === 'chapter-close');
-        cancelAction.textContent = state === 'chapter-close' ? 'Cancel chapter close' : 'Cancel generation';
+        // The banner is for a pass or a close, which have their own branch above
+        banner.classList.remove('visible');
+        cancelAction.textContent = 'Cancel generation';
       }
     } else {
       genStatus.classList.remove('visible');
@@ -1709,8 +1777,30 @@
   document.querySelectorAll('[data-popover]').forEach(b => {
     b.addEventListener('click', () => setCancelPopover(b.dataset.popover === 'open'));
   });
-  sendBtn.addEventListener('click', () => setGenState('generating'));
+  // Send waits while a pass or a close holds the gate; with work deferred, it runs that first.
+  sendBtn.addEventListener('click', () => {
+    if (memoryRuns[genState]) return;
+    setGenState(deferredWork ? 'before-turn' : 'generating');
+  });
+  // The composer's Cancel ends the whole Send; deferred work stays deferred.
   cancelBtn.addEventListener('click', () => setGenState('idle'));
+
+  // The pill's and the banner's Cancel defer a pass or a close to the next Send, and say so.
+  function cancelFromChrome() {
+    const memoryRun = memoryRuns[genState];
+    setGenState('idle');
+    if (!memoryRun) return;
+    deferredWork = true;
+    showToast(memoryRun.deferral);
+  }
+
+  // A chained pass that fails says so; the next Send runs it first (before-turn).
+  document.querySelectorAll('[data-pass-failed]').forEach(b => {
+    b.addEventListener('click', () => {
+      deferredWork = true;
+      showToast('Memory update failed. It runs again before your next turn.');
+    });
+  });
 
   // Pill click toggles the cancel popover (only meaningful when pill is visible)
   genStatus.addEventListener('click', (e) => {
@@ -1718,8 +1808,8 @@
     if (!genStatus.classList.contains('visible')) return;
     setCancelPopover(!cancelPopover.classList.contains('visible'));
   });
-  cancelAction.addEventListener('click', (e) => { e.stopPropagation(); setGenState('idle'); });
-  bannerCancel.addEventListener('click', () => setGenState('idle'));
+  cancelAction.addEventListener('click', (e) => { e.stopPropagation(); cancelFromChrome(); });
+  bannerCancel.addEventListener('click', cancelFromChrome);
   // Click outside the popover dismisses it
   document.addEventListener('click', (e) => {
     if (!cancelPopover.classList.contains('visible')) return;
@@ -1834,7 +1924,7 @@
   });
   scopeClear.addEventListener('click', () => setScope('none'));
 
-  // error entry — two variants (LLM failure, embed failure) plus hidden
+  // error entry — one variant per failure, plus hidden
   const errorEntry = document.getElementById('error-entry');
   const errKind = document.getElementById('err-kind');
   const errContent = document.getElementById('err-content');
@@ -1849,6 +1939,25 @@
       kind: '⚠ System · embedding error',
       content: "<b>The embedder failed, so memory retrieval couldn't run.</b> call: embedding request failed: 503 (2 rows). The turn was reverse-replayed, so there is nothing to roll back; the composer stays enabled because a resubmit re-runs the same blocking sync stage.",
       actions: '<span class="err-btn primary">Switch embedder</span><span class="err-btn">Retry</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+    },
+    // An owed pass that fails at Send fails the Send (memory/classifier.md -> Failure policy).
+    memory: {
+      kind: '⚠ System · memory update error',
+      content: "<b>Memory update failed, so your turn didn't start.</b> Retry it, or send again.",
+      actions: '<span class="err-btn primary">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+    },
+    // A Send refused held, or a held Retry that took the composer's draft. No pass can run, so
+    // there is no Retry.
+    memoryHeld: {
+      kind: '⚠ System · memory update error',
+      content: "<b>An earlier memory update on this branch couldn't be undone, so it can't take turns yet.</b> Restarting the app retries the undo. Your text is kept on this entry; Dismiss hands it back to the composer.",
+      actions: '<span class="err-btn" id="err-dismiss">Dismiss</span>',
+    },
+    // A Retry that comes back held with no text to keep: its entry had none, the composer was empty.
+    memoryHeldNoText: {
+      kind: '⚠ System · memory update error',
+      content: "<b>An earlier memory update on this branch couldn't be undone, so it can't take turns yet.</b> Restarting the app retries the undo.",
+      actions: '<span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
   };
   function setErr(state) {

@@ -44,8 +44,11 @@
   },
   "editFailed": "Couldn't save your edit. Please try again.",
   "rollbackFailed": "Couldn't roll back the story. Please try again.",
+  "rollbackCountsChanged": "The counts changed while this was open. Check them before confirming.",
   "regenerateFailed": "Couldn't regenerate the reply. Please try again.",
+  "passRetryFinishFailed": "Couldn't update the memory entry. Please try again.",
   "regenerateUnavailable": "This reply can't be regenerated.",
+  "regenerateHeld": "An earlier memory update on this branch couldn't be undone, so it can't take turns yet.",
   "regenerateCancelledDraftKept": "Regeneration cancelled. Your draft was kept, so the discarded action wasn't restored.",
   "turnCancelledDraftKept": "Turn cancelled. Your draft was kept, so the cancelled action wasn't restored.",
   "failedTurnTextRestored": "Put the failed turn's text back in the composer.",
@@ -92,6 +95,9 @@
     "stateItemTransferFrom": "{{item}} → {{to}} (from {{from}})",
     "stateStackable": "{{key}} ×{{amount}} → {{to}}",
     "stateStackableFrom": "{{key}} ×{{amount}} → {{to}} (from {{from}})",
+    "stateNewPlace": "New place: {{name}}",
+    "stateNewItem": "New item: {{name}}",
+    "stateMatchedPlace": "Matched place: {{name}}",
     "stateNobody": "—",
     "thinking": "Thinking…",
     "generating": "Generating…",
@@ -134,13 +140,21 @@
     "switchEmbedder": "Switch embedder",
     "failureMessage": "Generation failed. Retry to try again.",
     "blockedDetail": "blocked by another operation ({{reason}})",
+    "passRetryBlocked": "Memory update couldn't start ({{reason}}).",
     "failure": {
       "llmCall": "LLM call failed.",
       "embed": "The embedder failed, so memory retrieval couldn't run.",
       "noProfileAssigned": "The narrative agent has no profile assigned.",
       "profileMissing": "The narrative agent's assigned profile is missing.",
       "providerMissing": "The narrative model's provider is missing.",
-      "overrideProviderMissing": "This story's narrative model override names a provider that no longer exists."
+      "overrideProviderMissing": "This story's narrative model override names a provider that no longer exists.",
+      "memory": "Memory update failed, so your turn didn't start. Retry it, or send again.",
+      "memoryNoProfileAssigned": "Memory update failed: the classifier agent has no profile assigned.",
+      "memoryProfileMissing": "Memory update failed: the classifier agent's assigned profile is missing.",
+      "memoryProviderMissing": "Memory update failed: the classifier model's provider is missing.",
+      "memoryOverrideProviderMissing": "Memory update failed: this story's classifier model override names a provider that no longer exists.",
+      "memoryHeld": "An earlier memory update on this branch couldn't be undone, so it can't take turns yet. Restarting the app retries the undo. Your text is kept on this entry; Dismiss hands it back to the composer.",
+      "memoryHeldNoText": "An earlier memory update on this branch couldn't be undone, so it can't take turns yet. Restarting the app retries the undo."
     }
   },
   "actions": {
@@ -165,6 +179,7 @@
     "failedNotTail": "Only the newest entry's scene can be edited.",
     "failedNoMetadata": "This entry has no world state to edit.",
     "failedNotFound": "This entry no longer exists.",
+    "failedRetiredPlace": "That place is retired, so the story can't move there.",
     "proseNote": "This doesn't change the entry's text. If the prose still names someone you removed, edit it too."
   },
   "rail": {

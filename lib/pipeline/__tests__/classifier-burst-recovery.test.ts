@@ -92,7 +92,6 @@ describe('a crashed classifier burst', () => {
       state: 'running',
       lastSuccessAt: null,
       lastError: null,
-      retryCount: 0,
       processedThrough: 4,
     }
     await db.update(branches).set({ classifierStatus: running }).where(eq(branches.id, 'b1'))
@@ -143,10 +142,7 @@ describe('a crashed classifier burst', () => {
     // The partial write survived, which is exactly why the branch cannot re-run.
     expect(await db.select().from(happenings)).toHaveLength(1)
 
-    await resetStuckClassifierRunState(
-      ctx,
-      report.failures.map((f) => f.actionId),
-    )
+    await resetStuckClassifierRunState(ctx, report.failures)
 
     const [branch] = await db
       .select({ classifierStatus: branches.classifierStatus })
@@ -155,8 +151,8 @@ describe('a crashed classifier burst', () => {
     expect(branch.classifierStatus).toEqual(running)
   })
 
-  // An abort whose reversal failed ends the pass's hold (generation-pipeline.md → No-gate write
-  // phase), so the user can delete a character the pass created while the tail scene names it.
+  // generation-pipeline.md → Recovery-failure policy: the gate lifts though the abort's reversal
+  // failed, so the user can delete a character the pass created while the tail scene names it.
   it('reports an integrity refusal by kind, and every boot meets it again', async () => {
     const { db, ctx } = await makeHarness()
     registerAllDomains()

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { schemaToTypeScriptBlock, type JsonSchema } from '@/lib/ai'
-import { classifierExtractionSchema } from '@/lib/classifier'
+import { classifierExtractionSchema, classifierExtractionWithPlacesSchema } from '@/lib/classifier'
 import {
   fallbackClassifierSchema,
   fallbackClassifierWithSuggestionsSchema,
@@ -26,12 +26,10 @@ import {
 // schema, produced by the app's own renderer over the app's own zod schema — so
 // a match can never drift from what the app actually sends.
 //
-// One entry per CALL SITE. Where several call sites answer with the same schema
-// — and therefore the same block — `marker` separates them: the literal text a
-// template opens with, before its first Liquid tag, sliced out of the pack the
-// app itself renders. Derived rather than hand-written, so editing a template
-// moves its marker in the same edit. Story shapes are one call site each and
-// carry no marker.
+// One entry per CALL SITE. Where call sites share a schema (hence a block), `marker`
+// separates them: the text a template's user half opens with before its first Liquid
+// tag, sliced from the app's own pack so editing a template moves its marker with it.
+// Story shapes are one call site each and carry none.
 //
 // Default replies are NOT shared. E2E wants inert no-ops for determinism, the
 // dev mock wants defaults lively enough that a manual turn visibly does
@@ -55,7 +53,7 @@ function blockOf(schema: z.ZodType): string {
 const LIQUID_TAG = /\{[{%]/
 
 function markerOf(templateId: TemplateId): string {
-  const source = bundledPack.templates[templateId]?.source ?? ''
+  const source = bundledPack.templates[templateId]?.user ?? ''
   const tag = source.search(LIQUID_TAG)
   return (tag === -1 ? source : source.slice(0, tag)).trim()
 }
@@ -72,6 +70,7 @@ export const STRUCTURED_SHAPES: readonly StructuredShape[] = [
   storyShape('per-turn-classifier', fallbackClassifierSchema),
   storyShape('per-turn-classifier-suggestions', fallbackClassifierWithSuggestionsSchema),
   storyShape('periodic-classifier', classifierExtractionSchema),
+  storyShape('periodic-classifier-places', classifierExtractionWithPlacesSchema),
   storyShape('suggestion-refresh', suggestionRefreshSchema),
 
   wizardShape('wizard-genre', labeledPromptOutputSchema, TEMPLATE_IDS.wizardGenre),

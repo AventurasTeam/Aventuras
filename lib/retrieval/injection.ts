@@ -1,9 +1,10 @@
 import { settingsCount } from '@/lib/settings-number'
+import type { EntityViews } from '@/lib/world'
 
 import { matchTerms, normalizeTerm } from './name-index'
 import { filterEntityPool, filterLorePool, type EntityRow, type LoreRow } from './pools'
 import { tokenCost, type RankTypeInput } from './ranker'
-import { entityRenderedText, loreRenderedText } from './rendered-text'
+import { entityRenderedText, lines, loreRenderedText, measuredEntity } from './rendered-text'
 import {
   type InjectedRow,
   type KeywordInjection,
@@ -36,6 +37,10 @@ export type KeywordInjectionInput = {
   floorIds: ReadonlySet<string>
   /** Un-classified buffer prose, for Layer-A same-name suppression. */
   recentProse: string
+  /** Places effectively disabled around the scene, which `disabled` keeps out like their own. */
+  disabledPlaceIds: ReadonlySet<string>
+  /** The branch's state views, which an entity row is measured from (retrieval.md → Token estimation). */
+  entityViews: EntityViews
   /** The haystack (retrieval.md → Keyword scan surface). */
   scanText: string
   budgets: Record<RetrievalType, number>
@@ -83,7 +88,13 @@ const byOverflowOrder = (a: KeywordInjection, b: KeywordInjection): number =>
   cmp(normalizeTerm(a.row.displayName), normalizeTerm(b.row.displayName)) ||
   cmp(a.row.id, b.row.id)
 
-type Matchable = { row: InjectedRow; priority: number; terms: readonly string[] }
+type Matchable = {
+  row: InjectedRow
+  priority: number
+  terms: readonly string[]
+  /** What cascade rescans once the row is seated; an entity's is its name and description alone. */
+  cascadeText: string
+}
 
 function matchable(input: KeywordInjectionInput): Record<Injectable, Matchable[]> {
   // The same filters the ranker pools run (retrieval.md → Keyword injection).
@@ -91,22 +102,28 @@ function matchable(input: KeywordInjectionInput): Record<Injectable, Matchable[]
   const entities = filterEntityPool(input.entities, {
     floorIds: input.floorIds,
     recentProse: input.recentProse,
+    disabledPlaceIds: input.disabledPlaceIds,
   })
   const lore = filterLorePool(input.lore, input.floorIds)
 
   return {
-    entities: entities.map((r) => ({
-      row: {
-        kind: 'entity' as const,
-        id: r.id,
-        displayName: r.name,
-        renderedText: entityRenderedText(r),
-      },
-      priority: r.priority,
-      // Canon: "Keyword on `name` and `entities.keywords`" — the name has no column,
-      // hence prepended. De-duped so a name also listed as a keyword is not two hits.
-      terms: [...new Set([r.name, ...r.keywords].map(normalizeTerm))],
-    })),
+    entities: entities.map((r) => {
+      const entity = measuredEntity(r, input.entityViews)
+      return {
+        row: {
+          kind: 'entity' as const,
+          id: r.id,
+          displayName: r.name,
+          renderedText: entityRenderedText(entity),
+          entity,
+        },
+        priority: r.priority,
+        // Canon: "Keyword on `name` and `entities.keywords`" — the name has no column,
+        // hence prepended. De-duped so a name also listed as a keyword is not two hits.
+        terms: [...new Set([r.name, ...r.keywords].map(normalizeTerm))],
+        cascadeText: lines(r.name, r.description),
+      }
+    }),
     lore: lore.map((r) => ({
       row: {
         kind: 'lore' as const,
@@ -118,6 +135,7 @@ function matchable(input: KeywordInjectionInput): Record<Injectable, Matchable[]
       // Lore's title is deliberately absent: canon's surface is `lore.keywords`
       // alone, and the ranked path's kwHits(r.keywords) says the same.
       terms: [...new Set(r.keywords.map(normalizeTerm))],
+      cascadeText: loreRenderedText(r),
     })),
   }
 }
@@ -153,7 +171,7 @@ export function buildKeywordInjections(input: KeywordInjectionInput): KeywordInj
     const seatedThisDepth: string[] = []
 
     for (const type of INJECTABLE) {
-      const hits: KeywordInjection[] = []
+      const hits: (KeywordInjection & { cascadeText: string })[] = []
       for (const m of pools[type]) {
         if (visited.has(m.row.id)) continue
         const terms = matchTerms(haystack, m.terms)
@@ -164,11 +182,12 @@ export function buildKeywordInjections(input: KeywordInjectionInput): KeywordInj
           priority: m.priority,
           tokensEstimated: tokenCost(m.row.renderedText, type, costInput),
           seated: false,
+          cascadeText: m.cascadeText,
         })
       }
       hits.sort(byOverflowOrder)
 
-      for (const hit of hits) {
+      for (const { cascadeText, ...hit } of hits) {
         // Marked whether or not it seats: a cut row re-offered deeper would take a
         // second probe entry and, on a cycle, be re-tried until the allowance ran out.
         visited.add(hit.row.id)
@@ -180,7 +199,7 @@ export function buildKeywordInjections(input: KeywordInjectionInput): KeywordInj
         }
         used[type] += hit.tokensEstimated
         out[type].push({ ...hit, seated: true })
-        seatedThisDepth.push(hit.row.renderedText)
+        seatedThisDepth.push(cascadeText)
       }
     }
 

@@ -1,13 +1,14 @@
-import type { PipelineAction } from '@/lib/actions'
-import type { Entity, EntityState, ItemState } from '@/lib/db'
+import type { FlagClearPatch, FlagRepointPatch, PipelineAction } from '@/lib/actions'
+import type { CollisionReason, Entity, EntityState, ItemState } from '@/lib/db'
 
-import type { CollisionPair } from './collision-pair'
+import { FLAG_CLEAR, withFlagWrites, type FlagWrite } from './collision-flags'
+import { pairSideOf, stillPaired, type CollisionPair, type PairSide } from './collision-pair'
 import { sameList } from './draft-text'
 import { tailSceneActions, type DeleteTail } from './entity-delete'
 import { stateOf } from './entity-draft'
 import { itemHasPosition, stateWithRefRewritten } from './entity-refs'
 import { canonicalRefsCleared, mergeLinks, type MergeLinkInput } from './merge-links'
-import { mergedTerms, type MergeDeselections } from './merge-terms'
+import { mergedTerms, type MergeDeselections, type MergedTerms } from './merge-terms'
 
 export const MERGE_SCALARS = [
   'name',
@@ -49,23 +50,108 @@ function takeScalar<K extends MergeScalar>(
   patch[field] = from[field]
 }
 
-function canonicalPatch(input: MergeContext): EntityPatch {
+/** The merged canonical's terms, and the canonical as the pair rule reads it after the merge. */
+type Merged = {
+  /** The merged row takes the loser's name: the one place the merge decides it. */
+  nameFromOther: boolean
+  terms: MergedTerms
+  side: PairSide
+}
+
+/** `row` as the flag rules read it post-merge: refs rewritten as the merge writes them. */
+function postMergeSide(input: MergeContext, row: Entity): PairSide {
+  const state = stateWithRefRewritten(row, input.loser.id, refTarget(input))
+  return pairSideOf(state == null ? row : { ...row, state })
+}
+
+function mergedRow(input: MergeContext): Merged {
+  const { canonical, loser } = input
+  const nameFromOther = input.fromLoser.includes('name') && loser.name !== canonical.name
+  const terms = mergedTerms(
+    { canonical, other: loser },
+    {
+      deselectedTags: input.deselectedTags,
+      deselectedKeywords: input.deselectedKeywords,
+      nameFromOther,
+    },
+  )
+  return {
+    nameFromOther,
+    terms,
+    side: {
+      ...postMergeSide(input, canonical),
+      name: nameFromOther ? loser.name : canonical.name,
+      keywords: terms.keywords,
+    },
+  }
+}
+
+/**
+ * world.md → Reversibility, against the merged row as it stands after the merge: keep the flag if
+ * its partner (not the loser) still pairs, else inherit the loser's if that pairs, else clear.
+ */
+function canonicalFlagPatch(
+  input: MergeContext,
+  merged: PairSide,
+): FlagClearPatch | FlagRepointPatch | null {
+  const { canonical, loser, branchEntities } = input
+  const partnerId = canonical.nameCollisionPartnerId
+  if (partnerId == null) return null
+  const pairsWith = (id: string, reason: CollisionReason) => {
+    const row = branchEntities.find((e) => e.id === id)
+    return row != null && stillPaired(reason, merged, postMergeSide(input, row))
+  }
+  const ownReason = canonical.nameCollisionReason
+  if (partnerId !== loser.id && ownReason != null && pairsWith(partnerId, ownReason)) return null
+  const inherited = loser.nameCollisionPartnerId
+  const reason = loser.nameCollisionReason
+  if (
+    inherited != null &&
+    reason != null &&
+    inherited !== canonical.id &&
+    pairsWith(inherited, reason)
+  )
+    return { nameCollisionPartnerId: inherited, nameCollisionReason: reason }
+  return FLAG_CLEAR
+}
+
+function canonicalPatch(input: MergeContext, merged: Merged): EntityPatch {
   const { canonical, loser } = input
   const scalars: Partial<Pick<Entity, MergeScalar>> = {}
   for (const field of input.fromLoser) {
-    if (loser[field] !== canonical[field]) takeScalar(scalars, field, loser)
+    const takes = field === 'name' ? merged.nameFromOther : loser[field] !== canonical[field]
+    if (takes) takeScalar(scalars, field, loser)
   }
-  const { tags, keywords } = mergedTerms({ canonical, other: loser }, input)
+  const { tags, keywords } = merged.terms
   const rewritten = canonicalRefsCleared(canonical, loser.id)
   const state = adoptedPlacement(input, rewritten) ?? rewritten
-  // Spread, never `nameCollisionFlag: undefined`: the update arm refuses any value but 0.
-  return {
+  const columns: EntityPatch = {
     ...scalars,
     ...(sameList(tags, canonical.tags) ? {} : { tags }),
     ...(sameList(keywords, canonical.keywords) ? {} : { keywords }),
-    ...(canonical.nameCollisionFlag === 1 ? { nameCollisionFlag: 0 as const } : {}),
     ...(state == null ? {} : { state }),
   }
+  const flag = canonicalFlagPatch(input, merged.side)
+  return flag == null ? columns : { ...columns, ...flag }
+}
+
+/**
+ * world.md → Reversibility: another row's flag on the loser re-points at the canonical; on either,
+ * it clears when that row and the merged canonical stop pairing under its reason, or it has none.
+ */
+function otherFlagWrites(input: MergeContext, merged: PairSide): FlagWrite[] {
+  const { canonical, loser, branchEntities } = input
+  const writes: FlagWrite[] = []
+  for (const row of branchEntities) {
+    const partnerId = row.nameCollisionPartnerId
+    const reason = row.nameCollisionReason
+    if (row.id === canonical.id || row.id === loser.id) continue
+    if (partnerId !== loser.id && partnerId !== canonical.id) continue
+    if (reason == null || !stillPaired(reason, postMergeSide(input, row), merged))
+      writes.push({ id: row.id, clear: true })
+    else if (partnerId === loser.id) writes.push({ id: row.id, partnerId: canonical.id })
+  }
+  return writes
 }
 
 /**
@@ -156,19 +242,21 @@ export function entityMergeActions(request: EntityMergeInput): PipelineAction[] 
   const input = mergeContext(request)
   const { branchId, canonical, loser, newId } = input
   const { moved } = mergeLinks(input)
+  const merged = mergedRow(input)
   const tail = tailSceneActions(branchId, input.tail, loser.id, canonical.id)
-  const scene = withSceneEffects(input, canonicalPatch(input), tail.length > 0)
-  const actions: PipelineAction[] = []
+  const scene = withSceneEffects(input, canonicalPatch(input, merged), tail.length > 0)
+  const updates: PipelineAction[] = []
 
   if (Object.keys(scene.patch).length > 0)
-    actions.push(updateEntity(branchId, canonical.id, scene.patch))
+    updates.push(updateEntity(branchId, canonical.id, scene.patch))
 
   const target = refTarget(input)
   for (const other of input.branchEntities) {
     if (other.id === canonical.id || other.id === loser.id) continue
     const state = stateWithRefRewritten(other, loser.id, target)
-    if (state != null) actions.push(updateEntity(branchId, other.id, { state }))
+    if (state != null) updates.push(updateEntity(branchId, other.id, { state }))
   }
+  const actions = withFlagWrites(updates, branchId, otherFlagWrites(input, merged.side))
 
   for (const row of moved.awareness)
     actions.push({

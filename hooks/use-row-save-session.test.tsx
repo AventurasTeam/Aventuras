@@ -10,6 +10,7 @@ import { logger } from '@/lib/diagnostics'
 import {
   useRowSaveSession,
   type RowCommitResult,
+  type RowSaveConfirm,
   type RowSaveOutcome,
   type RowSaveSession,
   type RowSaveSessionOptions,
@@ -51,14 +52,16 @@ function heldCommit() {
   }
 }
 
-type Extras = Partial<Pick<RowSaveSessionOptions<Draft>, 'resolver' | 'onRejected'>> & {
+type Extras = Partial<
+  Pick<RowSaveSessionOptions<Draft>, 'resolver' | 'onRejected' | 'confirmBeforeCommit'>
+> & {
   onRender?: (session: RowSaveSession<Draft>) => void
 }
 
 function setup(
   commit: Commit = okCommit(),
   initial: Props = { rowKey: 'row_1', values: VALUES },
-  { onRender, resolver = zodResolver(schema), onRejected }: Extras = {},
+  { onRender, resolver = zodResolver(schema), onRejected, confirmBeforeCommit }: Extras = {},
 ) {
   const hook = renderHook(
     ({ rowKey, values }: Props) => {
@@ -70,6 +73,7 @@ function setup(
         issueText,
         failureText,
         commit,
+        confirmBeforeCommit,
         onRejected,
       })
       onRender?.(session)
@@ -880,5 +884,273 @@ describe('useRowSaveSession', () => {
     expect(hook.result.current.saveError).toBe('blocked')
     expect(hook.result.current.saving).toBe(false)
     expect(error).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('useRowSaveSession — confirm before commit', () => {
+  const ASK: RowSaveConfirm = {
+    title: 'Retire Port Vellis and the 3 places inside it?',
+    lines: [],
+    items: ['Harbor Market'],
+    confirmLabel: 'Retire',
+  }
+  const asksAlways = () => ASK
+
+  async function saveOutcome(hook: ReturnType<typeof setup>): Promise<RowSaveOutcome | undefined> {
+    let outcome: RowSaveOutcome | undefined
+    await act(async () => {
+      outcome = await hook.result.current.save()
+    })
+    return outcome
+  }
+
+  it('parks a valid draft behind the question without committing, then writes it on confirm', async () => {
+    const commit = okCommit()
+    const hook = setup(commit, undefined, { confirmBeforeCommit: asksAlways })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    expect(await saveOutcome(hook)).toEqual({ status: 'confirm' })
+    expect(commit).not.toHaveBeenCalled()
+    expect(hook.result.current.pendingConfirm).toEqual(ASK)
+    expect(hook.result.current.saving).toBe(false)
+
+    await act(async () => {
+      hook.result.current.resolveConfirm('save')
+    })
+    expect(commit).toHaveBeenCalledWith({ title: 'Amulet', note: 'x' })
+    expect(hook.result.current.pendingConfirm).toBeNull()
+    expect(hook.result.current.dirty).toBe(false)
+  })
+
+  it('asks with the draft it is about to write', async () => {
+    const ask = vi.fn(() => ASK)
+    const hook = setup(okCommit(), undefined, { confirmBeforeCommit: ask })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    await saveOutcome(hook)
+    expect(ask).toHaveBeenCalledWith({ title: 'Amulet', note: 'x' })
+  })
+
+  it('writes straight away when there is nothing to ask', async () => {
+    const commit = okCommit()
+    const hook = setup(commit, undefined, { confirmBeforeCommit: () => null })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    expect(await saveOutcome(hook)).toEqual({ status: 'committed' })
+    expect(commit).toHaveBeenCalledTimes(1)
+  })
+
+  it('never asks about an invalid draft', async () => {
+    const ask = vi.fn(() => ASK)
+    const hook = setup(okCommit(), undefined, { confirmBeforeCommit: ask })
+    act(() => hook.result.current.form.setValue('title', '', { shouldDirty: true }))
+    expect(await saveOutcome(hook)).toMatchObject({ status: 'invalid' })
+    expect(ask).not.toHaveBeenCalled()
+    expect(hook.result.current.pendingConfirm).toBeNull()
+  })
+
+  it('keeps the draft on cancel, with no error, and drops a leave waiting on the Save', async () => {
+    const commit = okCommit()
+    const proceed = vi.fn()
+    const hook = setup(commit, undefined, { confirmBeforeCommit: asksAlways })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    act(() => hook.result.current.requestLeave(proceed))
+    await act(async () => {
+      hook.result.current.resolveLeave('save')
+    })
+    expect(hook.result.current.pendingConfirm).toEqual(ASK)
+
+    act(() => hook.result.current.resolveConfirm('cancel'))
+    expect(hook.result.current.pendingConfirm).toBeNull()
+    expect(hook.result.current.pendingLeave).toBe(false)
+    expect(hook.result.current.dirty).toBe(true)
+    expect(hook.result.current.saveError).toBeNull()
+    expect(commit).not.toHaveBeenCalled()
+    expect(proceed).not.toHaveBeenCalled()
+  })
+
+  // The leave dialog hides behind the question, so a leave raised meanwhile was never declined.
+  it('keeps a leave raised while the question was up, on cancel, for its own dialog', async () => {
+    const proceed = vi.fn()
+    const hook = setup(okCommit(), undefined, { confirmBeforeCommit: asksAlways })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    await saveOutcome(hook)
+    act(() => hook.result.current.requestLeave(proceed))
+    act(() => hook.result.current.resolveConfirm('cancel'))
+    expect(hook.result.current.pendingLeave).toBe(true)
+    expect(proceed).not.toHaveBeenCalled()
+  })
+
+  it('clears the previous rejection when a Save parks behind its question', async () => {
+    let ask: RowSaveConfirm | null = null
+    const commit = vi.fn<Commit>(async () => ({ status: 'rejected', reason: 'blocked' }))
+    const hook = setup(commit, undefined, { confirmBeforeCommit: () => ask })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    await saveOutcome(hook)
+    expect(hook.result.current.saveError).toBe('blocked')
+    ask = ASK
+    await saveOutcome(hook)
+    expect(hook.result.current.saveError).toBeNull()
+  })
+
+  it('runs a leave waiting on the Save once the confirmed write lands', async () => {
+    const proceed = vi.fn()
+    const hook = setup(okCommit(), undefined, { confirmBeforeCommit: asksAlways })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    act(() => hook.result.current.requestLeave(proceed))
+    await act(async () => {
+      hook.result.current.resolveLeave('save')
+    })
+    await act(async () => {
+      hook.result.current.resolveConfirm('save')
+    })
+    expect(proceed).toHaveBeenCalledTimes(1)
+  })
+
+  // RowLeaveDialog opens on `pendingLeave && pendingConfirm == null`.
+  it('holds the question until the confirmed write lands, keeping a waiting leave’s dialog shut', async () => {
+    const held = heldCommit()
+    const proceed = vi.fn()
+    const leaveDialogOpen: boolean[] = []
+    let recording = false
+    const hook = setup(held.commit, undefined, {
+      confirmBeforeCommit: asksAlways,
+      onRender: (session) => {
+        if (recording) leaveDialogOpen.push(session.pendingLeave && session.pendingConfirm == null)
+      },
+    })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    act(() => hook.result.current.requestLeave(proceed))
+    await act(async () => {
+      hook.result.current.resolveLeave('save')
+    })
+    recording = true
+    await act(async () => {
+      hook.result.current.resolveConfirm('save')
+    })
+    expect(held.commit).toHaveBeenCalledTimes(1)
+    expect(hook.result.current.saving).toBe(true)
+    expect(hook.result.current.pendingConfirm).toEqual(ASK)
+    expect(hook.result.current.pendingLeave).toBe(true)
+
+    // Escape on the question arrives as a cancel; the write owns the outcome.
+    act(() => hook.result.current.resolveConfirm('cancel'))
+    expect(hook.result.current.pendingConfirm).toEqual(ASK)
+    expect(hook.result.current.pendingLeave).toBe(true)
+
+    await act(async () => {
+      held.settle({ status: 'ok' })
+    })
+    expect(proceed).toHaveBeenCalledTimes(1)
+    expect(hook.result.current.pendingConfirm).toBeNull()
+    expect(hook.result.current.pendingLeave).toBe(false)
+    expect(leaveDialogOpen.length).toBeGreaterThan(0)
+    expect(leaveDialogOpen).not.toContain(true)
+  })
+
+  it('hands a waiting leave back to its dialog when the confirmed write is rejected', async () => {
+    const held = heldCommit()
+    const proceed = vi.fn()
+    const hook = setup(held.commit, undefined, { confirmBeforeCommit: asksAlways })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    act(() => hook.result.current.requestLeave(proceed))
+    await act(async () => {
+      hook.result.current.resolveLeave('save')
+    })
+    await act(async () => {
+      hook.result.current.resolveConfirm('save')
+    })
+    await act(async () => {
+      held.settle({ status: 'rejected', reason: 'blocked' })
+    })
+    expect(hook.result.current.pendingConfirm).toBeNull()
+    expect(hook.result.current.pendingLeave).toBe(true)
+    expect(hook.result.current.saveError).toBe('blocked')
+    expect(proceed).not.toHaveBeenCalled()
+  })
+
+  it('keeps the question through a row switch until the confirmed write lands', async () => {
+    const held = heldCommit()
+    const hook = setup(held.commit, undefined, { confirmBeforeCommit: asksAlways })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    await saveOutcome(hook)
+    await act(async () => {
+      hook.result.current.resolveConfirm('save')
+    })
+    hook.rerender({ rowKey: 'row_2', values: VALUES })
+    expect(hook.result.current.pendingConfirm).toEqual(ASK)
+    expect(hook.result.current.saving).toBe(true)
+
+    await act(async () => {
+      held.settle({ status: 'ok' })
+    })
+    expect(hook.result.current.pendingConfirm).toBeNull()
+  })
+
+  it('answers another Save while parked with the same question, committing nothing', async () => {
+    const commit = okCommit()
+    const ask = vi.fn(() => ASK)
+    const hook = setup(commit, undefined, { confirmBeforeCommit: ask })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    await saveOutcome(hook)
+    expect(await saveOutcome(hook)).toEqual({ status: 'confirm' })
+    expect(ask).toHaveBeenCalledTimes(1)
+    expect(commit).not.toHaveBeenCalled()
+  })
+
+  it('writes the draft as it stands when the user confirms', async () => {
+    const commit = okCommit()
+    const hook = setup(commit, undefined, { confirmBeforeCommit: asksAlways })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    await saveOutcome(hook)
+    act(() => hook.result.current.form.setValue('note', 'y', { shouldDirty: true }))
+    await act(async () => {
+      hook.result.current.resolveConfirm('save')
+    })
+    expect(commit).toHaveBeenCalledWith({ title: 'Amulet', note: 'y' })
+  })
+
+  it('drops the question on a row switch and on discard', async () => {
+    const hook = setup(okCommit(), undefined, { confirmBeforeCommit: asksAlways })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    await saveOutcome(hook)
+    hook.rerender({ rowKey: 'row_2', values: VALUES })
+    expect(hook.result.current.pendingConfirm).toBeNull()
+
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    await saveOutcome(hook)
+    act(() => hook.result.current.discard())
+    expect(hook.result.current.pendingConfirm).toBeNull()
+    expect(hook.result.current.dirty).toBe(false)
+  })
+
+  it('asks nothing on the new row when rows switch while the Save validates', async () => {
+    const real = zodResolver(schema)
+    let release = () => {}
+    let holding = false
+    const resolver: Resolver<Draft> = async (values, context, options) => {
+      if (holding) await new Promise<void>((resolve) => (release = resolve))
+      return real(values, context, options)
+    }
+    const hook = setup(okCommit(), undefined, { resolver, confirmBeforeCommit: asksAlways })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    holding = true
+    let saving: Promise<RowSaveOutcome> | undefined
+    act(() => {
+      saving = hook.result.current.save()
+    })
+    hook.rerender({ rowKey: 'row_2', values: VALUES })
+    await act(async () => {
+      release()
+      await saving
+    })
+    expect(hook.result.current.pendingConfirm).toBeNull()
+  })
+
+  it('ignores a resolution with nothing parked', async () => {
+    const commit = okCommit()
+    const hook = setup(commit, undefined, { confirmBeforeCommit: asksAlways })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    await act(async () => {
+      hook.result.current.resolveConfirm('save')
+    })
+    expect(commit).not.toHaveBeenCalled()
   })
 })

@@ -40,6 +40,9 @@ export const world = {
     world
       .collisionDialog(page)
       .getByRole('radio', { name: t(`collisionDialog.mode.${mode}`), exact: true }),
+  // The reason line under the title; the seeded Brannoc flag's stored reason is 'distinct'.
+  collisionReason: (page: Page, reason: 'distinct'): Locator =>
+    world.collisionDialog(page).getByText(t(`collisionDialog.reason.${reason}`), { exact: true }),
   mergeConfirm: (page: Page, canonical: 'older' | 'newer', canonicalName: string): Locator =>
     world.collisionDialog(page).getByRole('button', {
       name: t(`collisionDialog.mergeConfirm.${canonical}`, { name: canonicalName }),

@@ -42,6 +42,7 @@ describe('story settings ops', () => {
       classifierCadence: 5,
       classifierContextEntries: 4,
       piggybackMode: 'off',
+      classifierMentionedPlaces: false,
       embeddingBackend: 'local',
       embedding_model_id: 'old-model',
       retrievalBudgets: {

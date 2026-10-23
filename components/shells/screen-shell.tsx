@@ -3,6 +3,7 @@ import { type ReactNode } from 'react'
 import { View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { MemoryRunBanner } from '@/components/compounds/memory-run-banner'
 import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
 import { TextClassContext } from '@/components/ui/text'
@@ -224,6 +225,9 @@ export function ScreenShell({
           {mobileChipAction}
         </View>
       ) : null}
+
+      {/* Below all chrome, the phone chip strip too (principles.md → Affordance loci). */}
+      {isInStory ? <MemoryRunBanner /> : null}
 
       <View className="flex-1">{children}</View>
     </View>

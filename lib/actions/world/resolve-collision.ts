@@ -1,5 +1,8 @@
+import type { StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import type { HeadTurn } from '@/lib/head-turn'
 import { generateId } from '@/lib/ids'
+import { readSceneSource } from '@/lib/pipeline'
 import {
   characterRelationshipsStore,
   entitiesStore,
@@ -15,25 +18,27 @@ import {
   entityKeepActions,
   entityMergeActions,
   entityRenameActions,
+  mergePlaceRefusal,
   PARENT_CHAIN_BROKEN,
   PARENT_CYCLE,
+  PLACE_REFUSAL,
+  storyPlaceOf,
   type CollisionPairMiss,
-  type DeleteTail,
   type EntityRename,
   type MergeScalar,
+  type StoryPlace,
 } from '@/lib/world'
 
 import {
-  applyDeltaActionGroupBuilt,
+  applyDeltaActionGroup,
   DELTA_REJECTION,
-  type BuiltGroup,
   type DeltaGroupResult,
 } from '../delta/apply-delta-action'
 import { TARGET_NOT_FOUND } from '../delta/registry'
 import { ENTITY_DELETE_REJECTION } from '../entities/register'
 import { ROW_SAVE_REJECTION } from '../row-save/commit-row-save'
 import { withTailMetadataLock } from '../story-entries/entry-metadata-lock'
-import type { DbCtx } from '../types'
+import type { DbCtx, PipelineAction } from '../types'
 
 export const COLLISION_REJECTION = {
   inFlight: ROW_SAVE_REJECTION.inFlight,
@@ -41,6 +46,9 @@ export const COLLISION_REJECTION = {
   leadEntity: ENTITY_DELETE_REJECTION.leadEntity,
   parentCycle: PARENT_CYCLE,
   parentChainBroken: PARENT_CHAIN_BROKEN,
+  storyInside: PLACE_REFUSAL.storyInside,
+  placesInside: PLACE_REFUSAL.placesInside,
+  retiredParent: PLACE_REFUSAL.retiredParent,
   invalidRename: 'invalid-rename',
   failed: 'failed',
 } as const
@@ -55,7 +63,7 @@ export type CollisionResolution =
       fromLoser: readonly MergeScalar[]
       /**
        * Terms the user dropped (tags trimmed, keywords by `normalizeTerm`), never final lists: the
-       * build unions rows read under the branch lock, so a no-gate pass's interim terms survive.
+       * build unions the rows as they stand when it commits.
        */
       deselectedTags: readonly string[]
       deselectedKeywords: readonly string[]
@@ -72,7 +80,9 @@ export type CollisionResolveResult =
   | { status: 'rejected'; reason: string; code: CollisionRejectionCode }
 
 type MergeResolution = Extract<CollisionResolution, { mode: 'merge' }>
-type Built = BuiltGroup<CollisionRejectionCode>
+type Built =
+  | { status: 'ok'; actions: readonly PipelineAction[] }
+  | { status: 'rejected'; reason: string; code: CollisionRejectionCode }
 type Refusal = Extract<Built, { status: 'rejected' }>
 
 function refusal(code: CollisionRejectionCode, reason: string): Refusal {
@@ -116,8 +126,8 @@ function missRefusal(lookup: CollisionPairMiss): Refusal {
       return refusal(COLLISION_REJECTION.notFound, 'a row cannot collide with itself')
     case COLLISION_PAIR_MISS.notFound:
       return refusal(COLLISION_REJECTION.notFound, `entity ${lookup.id} not found`)
-    case COLLISION_PAIR_MISS.notColliding:
-      return refusal(COLLISION_REJECTION.notFound, 'the two rows no longer collide')
+    case COLLISION_PAIR_MISS.notFlagged:
+      return refusal(COLLISION_REJECTION.notFound, 'the two rows are no longer flagged as a pair')
   }
 }
 
@@ -132,7 +142,8 @@ function gateRefusal(): Refusal | null {
 function buildResolution(
   branchId: string,
   resolution: CollisionResolution,
-  tail: DeleteTail | null,
+  head: HeadTurn<StoryEntry> | null,
+  story: StoryPlace,
 ): Built {
   const gated = gateRefusal()
   if (gated) return gated
@@ -142,6 +153,7 @@ function buildResolution(
   const { pair } = lookup
   switch (resolution.mode) {
     case 'merge': {
+      const tail = deleteTailOf(head)
       const actions = entityMergeActions({
         branchId,
         pair,
@@ -157,6 +169,19 @@ function buildResolution(
         tail,
         newId: generateId,
       })
+      const canonical = pair.find((e) => e.id === resolution.canonicalId)
+      const loser = pair.find((e) => e.id === resolution.loserId)
+      if (canonical?.kind === 'location' && loser !== undefined) {
+        // world.md → Merge: the checks a Save runs, on the place the merge would leave.
+        const code = mergePlaceRefusal({
+          canonical,
+          loser,
+          actions,
+          branchEntities,
+          story,
+        })
+        if (code != null) return refusal(code, `the merged place breaks a place rule: ${code}`)
+      }
       return { status: 'ok', actions }
     }
     case 'rename': {
@@ -167,18 +192,19 @@ function buildResolution(
         : { status: 'ok', actions: plan.actions }
     }
     case 'keep':
-      return { status: 'ok', actions: entityKeepActions({ branchId, pair }) }
+      return { status: 'ok', actions: entityKeepActions({ branchId, pair, branchEntities }) }
   }
 }
 
-function commit(branchId: string, build: () => Built, ctx: DbCtx): Promise<DeltaGroupResult> {
-  return applyDeltaActionGroupBuilt(build, { actionId: generateId('act'), branchId }, ctx)
+// Built and dispatched in one tick: a run that starts after the build's gate check settles this
+// write before it reads.
+async function commit(branchId: string, build: () => Built, ctx: DbCtx): Promise<DeltaGroupResult> {
+  const built = build()
+  if (built.status === 'rejected') return built
+  return applyDeltaActionGroup(built.actions, { actionId: generateId('act'), branchId }, ctx)
 }
 
-/**
- * generation-pipeline.md → No-gate write phase: the merge rewrites the tail scene, so it holds the
- * tail's metadata lock around the branch lock.
- */
+/** The merge rewrites the tail scene, so it holds the tail's metadata lock around its write. */
 async function commitMerge(
   branchId: string,
   resolution: MergeResolution,
@@ -187,9 +213,10 @@ async function commitMerge(
   return withTailMetadataLock<DeltaGroupResult>(
     branchId,
     ctx,
-    (head) => {
-      const tail = deleteTailOf(head)
-      return commit(branchId, () => buildResolution(branchId, resolution, tail), ctx)
+    async (head) => {
+      const sceneSource = await readSceneSource(ctx.db, branchId)
+      const story = storyPlaceOf({ tail: head?.tail, sceneSource })
+      return commit(branchId, () => buildResolution(branchId, resolution, head, story), ctx)
     },
     () => refusal(COLLISION_REJECTION.inFlight, 'tail moved'),
   )
@@ -201,7 +228,8 @@ function dispatch(
   ctx: DbCtx,
 ): Promise<DeltaGroupResult> {
   if (resolution.mode === 'merge') return commitMerge(branchId, resolution, ctx)
-  return commit(branchId, () => buildResolution(branchId, resolution, null), ctx)
+  const nowhere = storyPlaceOf({ tail: null, sceneSource: null })
+  return commit(branchId, () => buildResolution(branchId, resolution, null, nowhere), ctx)
 }
 
 function rejected(
@@ -213,10 +241,7 @@ function rejected(
   return { status: 'rejected', reason, code }
 }
 
-/**
- * world.md → Collision review and entity merge: one resolution = one `action_id`, built under the
- * branch lock.
- */
+/** world.md → Collision review and entity merge: one resolution = one `action_id`. */
 export async function resolveCollision(
   branchId: string,
   resolution: CollisionResolution,

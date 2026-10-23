@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 
 import {
+  emptyEntityState,
   entities,
   entityStateColumnSchema,
   type CharacterState,
@@ -10,10 +11,21 @@ import {
 } from '@/lib/db'
 import { newTerms, normalizeTerm } from '@/lib/keyword-terms'
 import { entitiesStore } from '@/lib/stores'
+import { characterFactionId } from '@/lib/world'
 
 import { computeUndoPayload } from '../delta/delta-encoding'
-import type { ActionHandler, HandlerOutcome } from '../delta/registry'
-import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteColumn } from '../delta/user-precedence'
+import {
+  createdKey,
+  type ActionHandler,
+  type GroupScope,
+  type HandlerOutcome,
+} from '../delta/registry'
+import {
+  USER_EDITED_SINCE_PROSE,
+  userEditsSinceProse,
+  wroteColumn,
+  wrotePath,
+} from '../delta/user-precedence'
 import type { DbCtx, DeltaSource, ProseEntryId } from '../types'
 
 declare module '@/lib/actions/action-map' {
@@ -65,6 +77,16 @@ declare module '@/lib/actions/action-map' {
         proseEntryId: ProseEntryId
       }
     }
+    setCharacterFaction: {
+      source: DeltaSource
+      payload: {
+        branchId: string
+        id: string
+        /** Null clears the membership. */
+        factionId: string | null
+        proseEntryId: ProseEntryId
+      }
+    }
   }
 }
 
@@ -94,7 +116,9 @@ function buildStatePatchOutcome(
   topLevelPatch: Record<string, unknown>,
   ctx: DbCtx,
 ) {
-  const mergedState = { ...(current.state as Record<string, unknown>) } as Record<string, unknown>
+  // A null column reads as the empty state, as updateEntity's does.
+  const prior = (current.state ?? emptyEntityState(current.kind)) as Record<string, unknown>
+  const mergedState: Record<string, unknown> = { ...prior }
   for (const [key, value] of Object.entries(topLevelPatch)) {
     if (key === 'visual' && typeof value === 'object' && value !== null) {
       mergedState.visual = {
@@ -107,11 +131,7 @@ function buildStatePatchOutcome(
   }
 
   const undoPayload = {
-    state: computeUndoPayload(
-      entityStateColumnSchema,
-      current.state as Record<string, unknown>,
-      mergedState,
-    ),
+    state: computeUndoPayload(entityStateColumnSchema, prior, mergedState),
   }
   if (Object.keys(undoPayload.state).length === 0) {
     // 'noop', not a plain rejection: a model restating an entity's current state
@@ -281,8 +301,8 @@ export const promoteStagedEntityHandler: ActionHandler = async (action, branchId
 }
 
 /**
- * Appends only the payload terms the live row lacks, so a mid-pass removal stays removed;
- * with `proseEntryId`, a term the user removed after that prose also stays removed.
+ * Appends only the payload terms the row lacks as the write lands (cadence.md → User edits and
+ * classifier writes); with `proseEntryId`, a term the user removed after that prose stays removed.
  */
 export const appendEntityKeywordsHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'appendEntityKeywords')
@@ -323,7 +343,7 @@ export const appendEntityKeywordsHandler: ActionHandler = async (action, branchI
   }
 }
 
-/** active → retired only: a row moved since the pass read it keeps the user's status. */
+/** active → retired only, checked as the write lands, so a user-moved row keeps its status. */
 export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'retireEntity')
     throw new Error(`handler/kind mismatch: expected 'retireEntity', got '${action.kind}'`)
@@ -338,6 +358,8 @@ export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) 
       code: 'noop',
     }
   if (current.status !== 'active') return { status: 'rejected', reason: 'not-active', code: 'noop' }
+  // Only the user retires a place (classifier.md → What the classifier writes).
+  if (current.kind === 'location') return { status: 'rejected', reason: 'location', code: 'noop' }
   if (
     proseEntryId !== null &&
     wroteColumn(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId), 'status')
@@ -359,4 +381,48 @@ export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) 
     ],
     patch: { op: 'update', id, columns },
   }
+}
+
+async function isFaction(
+  ctx: DbCtx,
+  branchId: string,
+  id: string,
+  group: GroupScope | undefined,
+): Promise<boolean> {
+  if (group?.created.has(createdKey('entities', id))) return true
+  const [row] = await ctx.db
+    .select({ kind: entities.kind })
+    .from(entities)
+    .where(and(eq(entities.branchId, branchId), eq(entities.id, id)))
+  return row?.kind === 'faction'
+}
+
+/** cadence.md → User edits and classifier writes: `state.faction_id` alone, against the live row. */
+export const setCharacterFactionHandler: ActionHandler = async (action, branchId, ctx, group) => {
+  if (action.kind !== 'setCharacterFaction')
+    throw new Error(`handler/kind mismatch: expected 'setCharacterFaction', got '${action.kind}'`)
+  const { branchId: bid, id, factionId, proseEntryId } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  const current = await loadCurrent(bid, id, ctx)
+  if (!current)
+    return {
+      status: 'rejected',
+      reason: `faction target entities ${bid}:${id} not found`,
+      code: 'noop',
+    }
+  if (current.kind !== 'character')
+    return { status: 'rejected', reason: 'not-a-character', code: 'noop' }
+  if (characterFactionId(current) === factionId)
+    return { status: 'rejected', reason: 'faction-unchanged', code: 'noop' }
+  if (factionId !== null && !(await isFaction(ctx, bid, factionId, group)))
+    return { status: 'rejected', reason: 'not-a-faction', code: 'noop' }
+  if (
+    proseEntryId !== null &&
+    wrotePath(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId), 'state', [
+      'faction_id',
+    ])
+  )
+    return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
+  return buildStatePatchOutcome(bid, id, current, { faction_id: factionId }, ctx)
 }

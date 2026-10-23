@@ -3,6 +3,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { describeCalendarVocabulary, EARTH_GREGORIAN } from '@/lib/calendar'
 import {
   STORY_SETTINGS_DEFAULTS,
+  emptyEntityState,
   storyEntries,
   type EntryMetadata,
   type StoryEntry,
@@ -20,6 +21,13 @@ import type {
 } from '@/lib/retrieval'
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
+import {
+  emptyEntityView,
+  type CharacterStateView,
+  type FactionStateView,
+  type ItemStateView,
+  type LocationStateView,
+} from '@/lib/world'
 
 import { createPhaseDb, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { buildGenerationContext, PROMPT_ENTITY_FIELDS } from './generation-context'
@@ -67,6 +75,26 @@ function sceneMetadata(currentLocationId: string | null, sceneEntities: string[]
 }
 
 function candidate(kind: CandidateKind, id: string, displayName: string): Candidate {
+  if (kind === 'entity')
+    return {
+      kind,
+      id,
+      displayName,
+      renderedText: `${displayName} rendered`,
+      sims: [0, 0, 0],
+      vector: new Float32Array([1, 0, 0]),
+      chaptersOld: 0,
+      pinSignal: 0,
+      keywordHits: [],
+      embeddingStale: false,
+      entity: {
+        kind: 'character',
+        name: displayName,
+        description: null,
+        status: 'active',
+        state: emptyEntityView('character'),
+      },
+    }
   return {
     kind,
     id,
@@ -132,7 +160,7 @@ const seedEntries = (rows: StoryEntry[]) =>
  * is about, and everything it omits stays at the fixture default.
  * onConflictDoNothing because a case that builds twice seeds the same rows twice.
  */
-async function buildContext(args: {
+type BuildArgs = {
   entries?: StoryEntry[]
   entities?: unknown[]
   definition?: unknown
@@ -143,7 +171,9 @@ async function buildContext(args: {
   piggybackFires?: boolean
   suggestionsFire?: boolean
   refreshGuidance?: string
-}): Promise<Record<string, unknown>> {
+}
+
+async function buildLoad(args: BuildArgs) {
   currentStoryStore.set({
     storyId: 's1',
     branchId: 'b1',
@@ -170,7 +200,11 @@ async function buildContext(args: {
     refreshGuidance: args.refreshGuidance,
   })
   if (!load.ok) throw new Error(`expected a context, got ${JSON.stringify(load.result)}`)
-  return load.context
+  return load
+}
+
+async function buildContext(args: BuildArgs): Promise<Record<string, unknown>> {
+  return (await buildLoad(args)).context
 }
 
 describe('buildGenerationContext', () => {
@@ -245,6 +279,8 @@ describe('buildGenerationContext', () => {
           retiredReason: null,
           injectionMode: 'auto',
           nameCollisionFlag: 0,
+          nameCollisionPartnerId: null,
+          nameCollisionReason: null,
           state: { traits: ['stoic'] },
           tags: ['secret'],
           embeddingStale: 1,
@@ -282,7 +318,7 @@ describe('buildGenerationContext', () => {
     })
     expect(ctx.sceneEntities).toEqual([(ctx.entities as { id: string }[])[0]!.id])
 
-    const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, ctx)
+    const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, ctx).user
     expect(prompt).toContain('# In scene')
     expect(prompt).toContain('A knight.')
   })
@@ -310,15 +346,16 @@ describe('buildGenerationContext', () => {
       'The gate creaks open.',
     ])
 
-    const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, ctx)
-    expect(prompt).toContain('# Setting')
-    expect(prompt).toContain('# Genre')
-    expect(prompt).not.toContain('# Tone') // whitespace-only tone.promptBody guarded out
-    expect(prompt).toContain('The gate creaks open.')
-    expect(prompt).toContain('third-line')
-    expect(prompt).toContain('fourth-line')
-    expect(prompt).not.toContain('first-line') // composed out, three entries back
-    expect(prompt).not.toContain('second-line')
+    const { system, user } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, ctx)
+    expect(system).toContain('# Setting')
+    expect(system).toContain('# Genre')
+    expect(system).not.toContain('# Tone') // whitespace-only tone.promptBody guarded out
+    expect(user).not.toContain('# Setting')
+    expect(user).toContain('The gate creaks open.')
+    expect(user).toContain('third-line')
+    expect(user).toContain('fourth-line')
+    expect(user).not.toContain('first-line') // composed out, three entries back
+    expect(user).not.toContain('second-line')
   })
 
   // story_entries.content persists the reply verbatim; the reader renders
@@ -337,7 +374,7 @@ describe('buildGenerationContext', () => {
       'I step through.',
     ])
 
-    const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, ctx)
+    const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, ctx).user
     expect(prompt).toContain('The gate creaks open.')
     expect(prompt).not.toContain('<state>')
     expect(prompt).not.toContain('At the gate')
@@ -579,7 +616,7 @@ describe('buildGenerationContext — composed window reaches the bundled templat
     'renders every composed entry in %s',
     async (templateId) => {
       const ctx = await context()
-      const prompt = renderTemplate(templateId, ctx)
+      const prompt = renderTemplate(templateId, ctx).user
       const composed = contentsOf(ctx)
       expect(composed).toHaveLength(12)
       for (const content of composed) expect(prompt).toContain(content)
@@ -729,6 +766,7 @@ describe('buildGenerationContext — structural floor', () => {
       'id',
       'kind',
       'name',
+      'state',
       'status',
     ])
     expect(keysOf(ctx.structuralActiveThreads)).toEqual([['description', 'id', 'status', 'title']])
@@ -1370,5 +1408,645 @@ describe('buildGenerationContext — worldTimeDeltaBasis', () => {
       templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
     })
     expect(context.worldTimeDeltaBasis).toBe('sinceUserAction')
+  })
+})
+
+describe('buildGenerationContext — location map and held items', () => {
+  const ELDRA = 'loc_00000000-0000-4000-8000-000000000a01'
+  const PORT = 'loc_00000000-0000-4000-8000-000000000a02'
+  const INN = 'loc_00000000-0000-4000-8000-000000000a03'
+  const VAULT = 'loc_00000000-0000-4000-8000-000000000a04'
+  const KEY = 'item_00000000-0000-4000-8000-000000000b01'
+  const SWORD = 'item_00000000-0000-4000-8000-000000000b02'
+  const CHEST = 'item_00000000-0000-4000-8000-000000000b03'
+  const CHAR_ID_3 = 'char_00000000-0000-4000-8000-0000000000c3'
+  const HAND = 'fact_00000000-0000-4000-8000-000000000e01'
+
+  // No global restoreMocks: the templateReads stub below must not leak.
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const base = { description: null, status: 'active', injectionMode: 'auto', createdAt: 1 }
+  const place = (id: string, name: string, parent: string | null, over: object = {}) => ({
+    ...base,
+    id,
+    kind: 'location',
+    name,
+    state: { parent_location_id: parent },
+    ...over,
+  })
+  const thing = (id: string, name: string, at: string | null) => ({
+    ...base,
+    id,
+    kind: 'item',
+    name,
+    state: { at_location_id: at },
+  })
+  const person = (
+    id: string,
+    name: string,
+    state: { inventory?: string[]; equipped_items?: string[]; faction_id?: string },
+    over: object = {},
+  ) => ({
+    ...base,
+    id,
+    kind: 'character',
+    name,
+    state: { ...emptyEntityState('character'), ...state },
+    ...over,
+  })
+  const floorPlace = (id: string, name: string): EntityRow => ({
+    ...entityRow(id, name),
+    kind: 'location',
+  })
+  const floorAt = (id: string, name: string) =>
+    retrievalSuccess({ floor: { currentLocation: floorPlace(id, name) } })
+  const sceneAt = (currentLocationId: string | null, sceneEntities: string[] = []) =>
+    [
+      { ...entry('e1', 1, 'one'), metadata: sceneMetadata(currentLocationId, sceneEntities) },
+    ] as never[]
+  const perTurnPrompt = (ctx: Record<string, unknown>) =>
+    renderTemplate(TEMPLATE_IDS.perTurnNarrative, ctx).user
+  const readsOnly = async (name: string) => {
+    const entryReads = await import('./entry-reads')
+    const readSceneSourceSpy = vi.spyOn(entryReads, 'readSceneSource')
+    const prompts = await import('@/lib/prompts')
+    vi.spyOn(prompts, 'templateReads').mockReturnValue(new Set([name]))
+    return readSceneSourceSpy
+  }
+
+  it('lists every active and staged place on the branch, nested, with no retrieval', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(ELDRA, PORT),
+      entities: [
+        place(ELDRA, 'Eldra', null),
+        place(PORT, 'Port Vellis', ELDRA, { status: 'staged' }),
+      ],
+      retrieval: undefined,
+    })
+    expect(ctx.locationMap).toEqual([
+      { retired: false, id: 'l1', name: 'Eldra', depth: 0, retiredReason: null },
+      { retired: false, id: 'l2', name: 'Port Vellis', depth: 1, retiredReason: null },
+    ])
+  })
+
+  it('lists a retired place without an id, with its reason', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(ELDRA),
+      entities: [
+        place(ELDRA, 'Eldra', null),
+        place(PORT, 'Port Vellis', ELDRA, { status: 'retired', retiredReason: 'burned' }),
+      ],
+      retrieval: undefined,
+    })
+    expect(ctx.locationMap).toEqual([
+      { retired: false, id: 'l1', name: 'Eldra', depth: 0, retiredReason: null },
+      { retired: true, id: null, name: 'Port Vellis', depth: 1, retiredReason: 'burned' },
+    ])
+  })
+
+  it('keeps a disabled place on the map while the scene is there', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(VAULT),
+      entities: [place(VAULT, 'The Vault', null, { injectionMode: 'disabled' })],
+      entries: sceneAt(VAULT),
+    })
+    expect(ctx.locationMap).toEqual([
+      { retired: false, id: 'l1', name: 'The Vault', depth: 0, retiredReason: null },
+    ])
+  })
+
+  // Positive control for the case above: the same place leaves the map once the scene moves.
+  it('leaves a disabled place off the map when the scene is elsewhere', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(VAULT, ELDRA),
+      entities: [
+        place(VAULT, 'The Vault', null, { injectionMode: 'disabled' }),
+        place(ELDRA, 'Eldra', null),
+      ],
+      entries: sceneAt(ELDRA),
+    })
+    expect(ctx.locationMap).toEqual([
+      { retired: false, id: 'l2', name: 'Eldra', depth: 0, retiredReason: null },
+    ])
+  })
+
+  // The fallback's reply row can already hold the failed fold's move while the floor, built
+  // before the reply, still seats the place `# Current location` shows.
+  it('keeps the disabled place the floor seats on the map when the scene row names another', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(VAULT, ELDRA),
+      entities: [
+        place(VAULT, 'The Vault', null, { injectionMode: 'disabled' }),
+        place(ELDRA, 'Eldra', null),
+      ],
+      entries: sceneAt(ELDRA),
+      retrieval: retrievalSuccess({ floor: { currentLocation: floorPlace(VAULT, 'The Vault') } }),
+    })
+    expect(ctx.locationMap).toEqual([
+      { retired: false, id: 'l2', name: 'Eldra', depth: 0, retiredReason: null },
+      { retired: false, id: 'l1', name: 'The Vault', depth: 0, retiredReason: null },
+    ])
+  })
+
+  // The per-turn planner rebuilds the map's left-out places around this id, unsubstituted.
+  it('returns the real id of the location it built the map around', async () => {
+    const entities = [
+      place(VAULT, 'The Vault', null, { injectionMode: 'disabled' }),
+      place(ELDRA, 'Eldra', null),
+    ]
+    const seated = await buildLoad({
+      idMap: seededIdMap(VAULT, ELDRA),
+      entities,
+      entries: sceneAt(ELDRA),
+      retrieval: retrievalSuccess({ floor: { currentLocation: floorPlace(VAULT, 'The Vault') } }),
+    })
+    expect(seated.mapCurrentLocationId).toBe(VAULT)
+    resetPhaseDb(testDb)
+    const sceneOnly = await buildLoad({ entities, entries: sceneAt(ELDRA), retrieval: undefined })
+    expect(sceneOnly.mapCurrentLocationId).toBe(ELDRA)
+  })
+
+  it("names the structural location's listed ancestors, nearest first", async () => {
+    const ctx = await buildContext({
+      entities: [
+        place(ELDRA, 'Eldra', null),
+        place(PORT, 'Port Vellis', ELDRA),
+        place(INN, 'The Rusty Anchor', PORT),
+      ],
+      entries: sceneAt(INN),
+      retrieval: retrievalSuccess({
+        floor: { currentLocation: floorPlace(INN, 'The Rusty Anchor') },
+      }),
+    })
+    expect(ctx.currentLocationChain).toEqual(['Port Vellis', 'Eldra'])
+  })
+
+  it('leaves a disabled ancestor out of the chain when only the scene row names it', async () => {
+    const ctx = await buildContext({
+      entities: [
+        place(ELDRA, 'Eldra', null),
+        place(PORT, 'Port Vellis', ELDRA, { injectionMode: 'disabled' }),
+        place(INN, 'The Rusty Anchor', PORT),
+      ],
+      entries: sceneAt(PORT),
+      retrieval: retrievalSuccess({
+        floor: { currentLocation: floorPlace(INN, 'The Rusty Anchor') },
+      }),
+    })
+    expect(ctx.currentLocationChain).toEqual(['Eldra'])
+  })
+
+  it('lists the items lying at the structural location, with their views', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(CHEST),
+      entities: [
+        place(INN, 'The Rusty Anchor', null),
+        {
+          ...thing(CHEST, 'the iron chest', INN),
+          state: { at_location_id: INN, condition: 'locked' },
+        },
+      ],
+      entries: sceneAt(INN),
+      retrieval: floorAt(INN, 'The Rusty Anchor'),
+    })
+    const items = ctx.looseItems as Record<string, unknown>[]
+    expect(items.map((i) => [i.id, i.name])).toEqual([['i1', 'the iron chest']])
+    expect(Object.keys(items[0]!).sort()).toEqual([...PROMPT_ENTITY_FIELDS].sort())
+    expect((items[0]!.state as ItemStateView).condition).toBe('locked')
+  })
+
+  // The views are built over the scene: the active+in-scene invariant seats a disabled item.
+  it("shows an in-scene disabled item under its in-scene holder's Holds", async () => {
+    const ctx = await buildContext({
+      entities: [
+        person(CHAR_ID, 'Mara', { inventory: [KEY] }),
+        { ...thing(KEY, 'Silver Key', null), injectionMode: 'disabled' },
+      ],
+      entries: sceneAt(null, [CHAR_ID, KEY]),
+    })
+    expect(perTurnPrompt(ctx)).toContain('## Mara\nHolds:\n- Silver Key\n')
+  })
+
+  // ...and around the place the floor seats, though the scene row has moved on: inside a disabled
+  // region, that place alone stays shown.
+  it('lists an in-scene item lying where the floor seats the scene only under Here', async () => {
+    const ctx = await buildContext({
+      entities: [
+        place(ELDRA, 'Eldra', null),
+        place(PORT, 'Port Vellis', null, { injectionMode: 'disabled' }),
+        place(INN, 'The Rusty Anchor', PORT),
+        thing(CHEST, 'the iron chest', INN),
+      ],
+      entries: sceneAt(ELDRA, [CHEST]),
+      retrieval: floorAt(INN, 'The Rusty Anchor'),
+    })
+    const prompt = perTurnPrompt(ctx)
+    expect(prompt).toContain('Here:\n- the iron chest\n')
+    expect(prompt).not.toContain('## the iron chest')
+  })
+
+  it('leaves the chain and the loose items empty without a structural location', async () => {
+    const ctx = await buildContext({
+      entities: [
+        place(ELDRA, 'Eldra', null),
+        place(INN, 'The Rusty Anchor', ELDRA),
+        thing(CHEST, 'the iron chest', INN),
+      ],
+      entries: sceneAt(INN),
+      retrieval: undefined,
+    })
+    expect(ctx.currentLocationChain).toEqual([])
+    expect(ctx.looseItems).toEqual([])
+  })
+
+  it('gives each active in-scene holder its held items, substituted', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(CHAR_ID, CHAR_ID_2, KEY, SWORD),
+      entities: [
+        person(CHAR_ID, 'Mara', { inventory: [KEY], equipped_items: [SWORD] }),
+        person(CHAR_ID_2, 'Corvin', {}),
+        thing(KEY, 'Silver Key', null),
+        thing(SWORD, 'worn sword', null),
+      ],
+      entries: sceneAt(null, [CHAR_ID, CHAR_ID_2]),
+    })
+    expect(ctx.heldItems).toEqual([
+      {
+        holderId: 'c1',
+        items: [
+          { id: 'i1', name: 'Silver Key', equipped: false },
+          { id: 'i2', name: 'worn sword', equipped: true },
+        ],
+      },
+    ])
+  })
+
+  it('gives no entry to a staged, stateless or off-scene holder', async () => {
+    const ctx = await buildContext({
+      entities: [
+        person(CHAR_ID, 'Mara', { inventory: [KEY] }, { status: 'staged' }),
+        { ...base, id: CHAR_ID_2, kind: 'character', name: 'Corvin', state: null },
+        person(CHAR_ID_3, 'Ilse', { inventory: [SWORD] }),
+        thing(KEY, 'Silver Key', null),
+        thing(SWORD, 'worn sword', null),
+      ],
+      entries: sceneAt(null, [CHAR_ID, CHAR_ID_2]),
+    })
+    expect(ctx.heldItems).toEqual([])
+  })
+
+  it('gives no entry to an in-scene row that is not a character, whatever its state holds', async () => {
+    const ctx = await buildContext({
+      entities: [
+        place(INN, 'The Rusty Anchor', null, {
+          state: { parent_location_id: null, inventory: [KEY] },
+        }),
+        thing(KEY, 'Silver Key', null),
+      ],
+      entries: sceneAt(INN, [INN]),
+    })
+    expect(ctx.heldItems).toEqual([])
+  })
+
+  it('gives a holder named twice in the scene one entry', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(CHAR_ID, KEY),
+      entities: [person(CHAR_ID, 'Mara', { inventory: [KEY] }), thing(KEY, 'Silver Key', null)],
+      entries: sceneAt(null, [CHAR_ID, CHAR_ID]),
+    })
+    expect(ctx.heldItems).toEqual([
+      { holderId: 'c1', items: [{ id: 'i1', name: 'Silver Key', equipped: false }] },
+    ])
+  })
+
+  it('lists holders in scene order, not entity order', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(CHAR_ID, CHAR_ID_2, KEY, SWORD),
+      entities: [
+        person(CHAR_ID, 'Mara', { inventory: [KEY] }),
+        person(CHAR_ID_2, 'Corvin', { inventory: [SWORD] }),
+        thing(KEY, 'Silver Key', null),
+        thing(SWORD, 'worn sword', null),
+      ],
+      entries: sceneAt(null, [CHAR_ID_2, CHAR_ID]),
+    })
+    expect((ctx.heldItems as { holderId: string }[]).map((h) => h.holderId)).toEqual(['c2', 'c1'])
+  })
+
+  it('reads the scene for a template that names only locationMap', async () => {
+    const prompts = await import('@/lib/prompts')
+    vi.spyOn(prompts, 'templateReads').mockReturnValue(new Set(['locationMap']))
+    const ctx = await buildContext({
+      idMap: seededIdMap(VAULT),
+      entities: [place(VAULT, 'The Vault', null, { injectionMode: 'disabled' })],
+      entries: sceneAt(VAULT),
+    })
+    expect(ctx.locationMap).toEqual([
+      { retired: false, id: 'l1', name: 'The Vault', depth: 0, retiredReason: null },
+    ])
+  })
+
+  // An in-scene character's view puts it at the scene's location.
+  it('reads the scene for a template that names only entities', async () => {
+    const readSceneSourceSpy = await readsOnly('entities')
+    const ctx = await buildContext({
+      entities: [person(CHAR_ID, 'Mara', {}), place(INN, 'The Rusty Anchor', null)],
+      entries: sceneAt(INN, [CHAR_ID]),
+    })
+    expect(readSceneSourceSpy).toHaveBeenCalled()
+    const [mara] = ctx.entities as { state: CharacterStateView }[]
+    expect(mara!.state.location?.name).toBe('The Rusty Anchor')
+  })
+
+  // A place the classifier named in the scene is seated by the invariant, disabled or not.
+  it('reads the scene for a template that names only structuralLocation', async () => {
+    const readSceneSourceSpy = await readsOnly('structuralLocation')
+    const ctx = await buildContext({
+      entities: [
+        place(PORT, 'Port Vellis', null, { injectionMode: 'disabled' }),
+        place(INN, 'The Rusty Anchor', PORT),
+      ],
+      entries: sceneAt(INN, [PORT]),
+      retrieval: floorAt(INN, 'The Rusty Anchor'),
+    })
+    expect(readSceneSourceSpy).toHaveBeenCalled()
+    const { state } = ctx.structuralLocation as { state: LocationStateView }
+    expect(state.parent?.name).toBe('Port Vellis')
+  })
+
+  // A disabled member counts only while the invariant seats them in the scene.
+  it.each([
+    ['structuralPinnedEntities', 'alwaysEntities'],
+    ['structuralSceneFactions', 'sceneFactions'],
+  ] as const)('reads the scene for a template that names only %s', async (name, seat) => {
+    const readSceneSourceSpy = await readsOnly(name)
+    const ctx = await buildContext({
+      entities: [
+        person(CHAR_ID, 'Mara', { faction_id: HAND }, { injectionMode: 'disabled' }),
+        { ...base, id: HAND, kind: 'faction', name: 'The Silver Hand', state: {} },
+      ],
+      entries: sceneAt(null, [CHAR_ID]),
+      retrieval: retrievalSuccess({
+        floor: { [seat]: [{ ...entityRow(HAND, 'The Silver Hand'), kind: 'faction' }] },
+      }),
+    })
+    expect(readSceneSourceSpy).toHaveBeenCalled()
+    const [hand] = ctx[name] as { state: FactionStateView }[]
+    expect(hand!.state.members.map((m) => m.name)).toEqual(['Mara'])
+  })
+
+  it('reads the scene for a template that names only looseItems', async () => {
+    const readSceneSourceSpy = await readsOnly('looseItems')
+    const ctx = await buildContext({
+      entities: [
+        place(INN, 'The Rusty Anchor', null),
+        { ...thing(CHEST, 'the iron chest', INN), injectionMode: 'disabled' },
+      ],
+      entries: sceneAt(INN, [CHEST]),
+      retrieval: floorAt(INN, 'The Rusty Anchor'),
+    })
+    expect(readSceneSourceSpy).toHaveBeenCalled()
+    expect((ctx.looseItems as { name: string }[]).map((i) => i.name)).toEqual(['the iron chest'])
+  })
+
+  it('reads the scene for a template that names only heldItems', async () => {
+    const entryReads = await import('./entry-reads')
+    const readSceneSourceSpy = vi.spyOn(entryReads, 'readSceneSource')
+    const prompts = await import('@/lib/prompts')
+    vi.spyOn(prompts, 'templateReads').mockReturnValue(new Set(['heldItems']))
+
+    const ctx = await buildContext({
+      idMap: seededIdMap(CHAR_ID, KEY),
+      entities: [person(CHAR_ID, 'Mara', { inventory: [KEY] }), thing(KEY, 'Silver Key', null)],
+      entries: sceneAt(null, [CHAR_ID]),
+    })
+
+    expect(readSceneSourceSpy).toHaveBeenCalled()
+    expect(ctx.heldItems).toEqual([
+      { holderId: 'c1', items: [{ id: 'i1', name: 'Silver Key', equipped: false }] },
+    ])
+  })
+})
+
+describe('buildGenerationContext — entity state', () => {
+  // No global restoreMocks: the templateReads stub below must not leak.
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const KAEL = 'char_00000000-0000-4000-8000-0000000000f1'
+  const MIRA = 'char_00000000-0000-4000-8000-0000000000f2'
+  const ORIN = 'char_00000000-0000-4000-8000-0000000000f3'
+  const HAND = 'fact_00000000-0000-4000-8000-0000000000f4'
+  const SEFA = 'char_00000000-0000-4000-8000-0000000000f5'
+  const DAL = 'char_00000000-0000-4000-8000-0000000000f6'
+
+  const person = (id: string, name: string, state: object = {}, over: object = {}) => ({
+    id,
+    kind: 'character',
+    name,
+    description: null,
+    status: 'active',
+    injectionMode: 'auto',
+    keywords: [],
+    createdAt: 1,
+    state: { ...emptyEntityState('character'), ...state },
+    ...over,
+  })
+  const hand = {
+    id: HAND,
+    kind: 'faction',
+    name: 'The Silver Hand',
+    description: null,
+    status: 'active',
+    injectionMode: 'auto',
+    createdAt: 1,
+    state: { agenda: ['take the port'] },
+  }
+  const sceneOf = (sceneEntities: string[], ...prose: string[]) =>
+    prose.map((content, i) => ({
+      ...entry(`e${i + 1}`, i + 1, content),
+      metadata: sceneMetadata(null, sceneEntities),
+    })) as never[]
+
+  it('gives every entity its state view, never the stored column', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(KAEL, HAND),
+      entities: [
+        person(KAEL, 'Kael', {
+          faction_id: HAND,
+          lastSeenAt: { entryId: 'entry_seen', locationId: null, worldTime: 3 },
+        }),
+        hand,
+      ],
+    })
+    const [kael] = ctx.entities as { state: CharacterStateView }[]
+    expect(Object.keys(kael!.state).sort()).toEqual(
+      Object.keys(emptyEntityView('character')).sort(),
+    )
+    // References are entity ids, so substitution turns them into placeholders too.
+    expect(kael!.state.faction).toEqual({ id: 'f1', name: 'The Silver Hand', status: 'active' })
+    expect(JSON.stringify(ctx)).not.toContain('entry_seen')
+  })
+
+  // architecture.md → Entity state on the template surface: what's measured and what's rendered
+  // come from one object, so a ranked row never takes a view rebuilt from the store.
+  it('hands a ranked row the view it was measured with, not one rebuilt from the store', async () => {
+    const empty = emptyEntityView('character')
+    const measured: CharacterStateView = {
+      ...empty,
+      visual: { ...empty.visual, attire: 'a cloak' },
+    }
+    const ranked = {
+      ...candidate('entity', KAEL, 'Kael'),
+      entity: {
+        kind: 'character' as const,
+        name: 'Kael',
+        description: 'A smuggler.',
+        status: 'active' as const,
+        state: measured,
+      },
+    }
+    const ctx = await buildContext({
+      idMap: seededIdMap(KAEL),
+      entities: [person(KAEL, 'Kael', { visual: { attire: 'noble robes' } })],
+      retrieval: retrievalSuccess({ selected: { entities: [ranked] } }),
+    })
+    const [row] = ctx.retrievedEntities as Record<string, unknown>[]
+    expect((row!.state as CharacterStateView).visual.attire).toBe('a cloak')
+    expect(Object.keys(row!).sort()).toEqual([
+      'description',
+      'displayName',
+      'id',
+      'kind',
+      'name',
+      'renderedText',
+      'state',
+      'status',
+    ])
+    expect(row!.description).toBe('A smuggler.')
+  })
+
+  it("passes the floor's scene factions through with their views", async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(HAND),
+      entities: [hand],
+      retrieval: retrievalSuccess({
+        floor: { sceneFactions: [{ ...entityRow(HAND, 'The Silver Hand'), kind: 'faction' }] },
+      }),
+    })
+    const [faction] = ctx.structuralSceneFactions as Record<string, unknown>[]
+    expect(faction!.id).toBe('f1')
+    expect((faction!.state as { agenda: string[] }).agenda).toEqual(['take the port'])
+  })
+
+  describe('namedCharacters', () => {
+    const readsNamed = async () => {
+      const prompts = await import('@/lib/prompts')
+      // The fallback reads lastTurns too, over a window wider than the pair the names come from.
+      vi.spyOn(prompts, 'templateReads').mockReturnValue(new Set(['namedCharacters', 'lastTurns']))
+    }
+    const namesOf = (ctx: Record<string, unknown>) =>
+      (ctx.namedCharacters as { name: string }[]).map((c) => c.name)
+
+    it('lists the characters the last two entries name, by name or keyword', async () => {
+      await readsNamed()
+      const ctx = await buildContext({
+        entities: [
+          person(MIRA, 'Mira'),
+          person(ORIN, 'Orin', {}, { keywords: ['the ferryman'], status: 'staged' }),
+          person(DAL, 'Dalen'),
+        ],
+        entries: sceneOf([], 'Dalen left at dawn.', 'Mira waved.', 'The ferryman poled closer.'),
+        settings: storySettings({ classifierContextEntries: 5 }),
+      })
+      expect(ctx.lastTurns).toHaveLength(3)
+      expect(namesOf(ctx)).toEqual(['Mira', 'Orin'])
+      const [mira] = ctx.namedCharacters as Record<string, unknown>[]
+      expect(Object.keys(mira!).sort()).toEqual([...PROMPT_ENTITY_FIELDS].sort())
+    })
+
+    it('leaves out characters shown with state elsewhere, disabled ones and other kinds', async () => {
+      await readsNamed()
+      const ctx = await buildContext({
+        idMap: seededIdMap(KAEL, MIRA, SEFA),
+        entities: [
+          person(KAEL, 'Kael'),
+          person(MIRA, 'Mira'),
+          person(SEFA, 'Sefa', {}, { injectionMode: 'disabled' }),
+          person(DAL, 'Dalen', {}, { status: 'retired' }),
+          person(ORIN, 'Orin'),
+          { ...hand, name: 'Hand' },
+        ],
+        entries: sceneOf([KAEL], 'Kael, Mira, Sefa, Dalen, Orin and the Hand.'),
+        retrieval: retrievalSuccess({
+          selected: { entities: [candidate('entity', MIRA, 'Mira')] },
+        }),
+      })
+      // Positive control: a character only the turn names is still listed.
+      expect(namesOf(ctx)).toEqual(['Orin'])
+    })
+
+    it('leaves out a pinned character the turn names', async () => {
+      await readsNamed()
+      const ctx = await buildContext({
+        entities: [person(KAEL, 'Kael', {}, { injectionMode: 'always' }), person(DAL, 'Dalen')],
+        entries: sceneOf([], 'Kael and Dalen row out.'),
+        retrieval: retrievalSuccess({ floor: { alwaysEntities: [entityRow(KAEL, 'Kael')] } }),
+      })
+      expect(namesOf(ctx)).toEqual(['Dalen'])
+    })
+
+    // `# In scene` shows only its active rows; a staged one there has no state on show.
+    it('lists a staged character the scene names', async () => {
+      await readsNamed()
+      const ctx = await buildContext({
+        entities: [person(ORIN, 'Orin', {}, { status: 'staged' })],
+        entries: sceneOf([ORIN], 'Orin poled closer.'),
+      })
+      expect(namesOf(ctx)).toEqual(['Orin'])
+    })
+
+    it('names no one only a persisted trailing block names', async () => {
+      await readsNamed()
+      const ctx = await buildContext({
+        entities: [person(MIRA, 'Mira'), person(ORIN, 'Orin')],
+        entries: sceneOf(
+          [],
+          'Mira waved.\n<state><summary>Orin waits by the gate</summary></state>',
+        ),
+      })
+      expect(namesOf(ctx)).toEqual(['Mira'])
+    })
+
+    it('reads the turns for a template that names it without lastTurns', async () => {
+      const prompts = await import('@/lib/prompts')
+      vi.spyOn(prompts, 'templateReads').mockReturnValue(new Set(['namedCharacters']))
+      const ctx = await buildContext({
+        entities: [person(MIRA, 'Mira')],
+        entries: sceneOf([], 'Mira waved.'),
+      })
+      expect(ctx.lastTurns).toEqual([])
+      expect(namesOf(ctx)).toEqual(['Mira'])
+    })
+
+    it('lists them by name the way every other prompt list sorts, not by code unit', async () => {
+      await readsNamed()
+      const ctx = await buildContext({
+        entities: [person(MIRA, 'Zed'), person(ORIN, 'alice')],
+        entries: sceneOf([], 'Zed and alice wave.'),
+      })
+      expect(namesOf(ctx)).toEqual(['alice', 'Zed'])
+    })
+
+    it('is empty for a template that does not read it', async () => {
+      const ctx = await buildContext({
+        entities: [person(MIRA, 'Mira')],
+        entries: sceneOf([], 'Mira waved.'),
+      })
+      expect(ctx.namedCharacters).toEqual([])
+    })
   })
 })

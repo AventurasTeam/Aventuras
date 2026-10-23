@@ -73,6 +73,8 @@ const FULL_ROW_DELETE_PAYLOAD = {
   retiredReason: null,
   injectionMode: 'auto',
   nameCollisionFlag: 0,
+  nameCollisionPartnerId: null,
+  nameCollisionReason: null,
   state: {
     visual: {},
     traits: ['brave'],
@@ -645,12 +647,15 @@ describe('link-row union', () => {
   })
 
   it("a merged pair: the canonical lists the moved rows' creates, the other ends keep the originals' history and the removal", async () => {
-    await db
-      .insert(entities)
-      .values([
-        entity('char_a', 'character', 'Brannoc'),
-        entity('char_b', 'character', 'Brannoc', { nameCollisionFlag: 1, createdAt: 2 }),
-      ])
+    await db.insert(entities).values([
+      entity('char_a', 'character', 'Brannoc'),
+      entity('char_b', 'character', 'Brannoc', {
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: 'char_a',
+        nameCollisionReason: 'distinct',
+        createdAt: 2,
+      }),
+    ])
     await write(relate('char_b', 'char_kael', 'friend', 'rival'))
     await write(relate('char_b', 'char_kael', 'brother', 'rival'))
     await write(aware('char_b', 'hap_fire'))

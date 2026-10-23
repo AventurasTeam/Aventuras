@@ -241,15 +241,15 @@ export function markSwapPending(dbPath: string, storyId: string, targetModelId: 
   }
 }
 
-// Force the classifier to fire on the next committed turn. Runs before launch.
-export function setClassifierCadence(dbPath: string, storyId: string, cadence: number): void {
+// A story missing from the fixture throws here; markSwapPending's json_patch would match no row.
+function setStorySetting(dbPath: string, storyId: string, key: string, value: unknown): void {
   const db = new DatabaseSync(dbPath)
   try {
     const row = db.prepare(`SELECT settings FROM stories WHERE id = ?`).get(storyId) as {
       settings: string
     }
     const settings = JSON.parse(row.settings) as Record<string, unknown>
-    settings.classifierCadence = cadence
+    settings[key] = value
     db.prepare(`UPDATE stories SET settings = ? WHERE id = ?`).run(
       JSON.stringify(settings),
       storyId,
@@ -257,50 +257,34 @@ export function setClassifierCadence(dbPath: string, storyId: string, cadence: n
   } finally {
     db.close()
   }
+}
+
+// Force the classifier to fire on the next committed turn. Runs before launch.
+export function setClassifierCadence(dbPath: string, storyId: string, cadence: number): void {
+  setStorySetting(dbPath, storyId, 'classifierCadence', cadence)
+}
+
+// Story Settings → Classifier's "Create mentioned places" switch. Runs before launch.
+export function setClassifierMentionedPlaces(dbPath: string, storyId: string, on: boolean): void {
+  setStorySetting(dbPath, storyId, 'classifierMentionedPlaces', on)
 }
 
 // The fixture seeds 'on'; 'off' is what story-settings-defaults.ts gives a real story — and
 // unlike disablePiggybackCapability it doesn't lie about the model. Runs before launch.
 export function setPiggybackMode(dbPath: string, storyId: string, mode: 'on' | 'off'): void {
-  const db = new DatabaseSync(dbPath)
-  try {
-    const row = db.prepare(`SELECT settings FROM stories WHERE id = ?`).get(storyId) as {
-      settings: string
-    }
-    const settings = JSON.parse(row.settings) as Record<string, unknown>
-    settings.piggybackMode = mode
-    db.prepare(`UPDATE stories SET settings = ? WHERE id = ?`).run(
-      JSON.stringify(settings),
-      storyId,
-    )
-  } finally {
-    db.close()
-  }
+  setStorySetting(dbPath, storyId, 'piggybackMode', mode)
 }
 
 // Arm the story half of the probe's two gates (the app half is enableDiagnostics).
 // Both must be on before a turn writes a capture. Runs before launch.
 export function enableStoryProbeMode(dbPath: string, storyId: string): void {
-  const db = new DatabaseSync(dbPath)
-  try {
-    const row = db.prepare(`SELECT settings FROM stories WHERE id = ?`).get(storyId) as {
-      settings: string
-    }
-    const settings = JSON.parse(row.settings) as Record<string, unknown>
-    settings.probe_mode_active = true
-    db.prepare(`UPDATE stories SET settings = ? WHERE id = ?`).run(
-      JSON.stringify(settings),
-      storyId,
-    )
-  } finally {
-    db.close()
-  }
+  setStorySetting(dbPath, storyId, 'probe_mode_active', true)
 }
 
 function parkWatermark(db: DatabaseSync, branchId: string, processedThrough: number): void {
   db.prepare(
     `UPDATE branches SET classifier_status = json_set(
-       COALESCE(classifier_status, '{}'), '$.state', 'idle', '$.retryCount', 0,
+       COALESCE(classifier_status, '{}'), '$.state', 'idle',
        '$.lastSuccessAt', NULL, '$.lastError', NULL, '$.processedThrough', ?)
      WHERE id = ?`,
   ).run(processedThrough, branchId)
@@ -343,12 +327,10 @@ export function seedClassifierBacklog(
 }
 
 /**
- * Park the classifier watermark at the last `ai_reply` and return that position, so a pass
- * covers only the turns a spec commits after launch — the fixture seeds
- * `classifier_status = NULL`, which floors the window at 0. Anchors on the last reply rather
- * than MAX(position) because the fixture ends on a dangling in-flight turn that boot recovery
- * reverse-replays, putting the seed-time maximum above the tip the app boots with.
- * Runs before launch.
+ * Park the classifier watermark at the last `ai_reply` and return it, so a pass covers only turns
+ * committed after launch. Equals the seed's park (last non-system row) when that row is a reply,
+ * as on br_hero_main; a row lower on br_hero_fork (ends on a user_action). Not MAX(position):
+ * the first Send's user_action takes a trailing `system` row's position. Runs before launch.
  */
 export function parkClassifierWatermarkAtLastReply(dbPath: string, branchId: string): number {
   const db = new DatabaseSync(dbPath)

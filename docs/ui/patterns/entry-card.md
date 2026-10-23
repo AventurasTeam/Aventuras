@@ -81,6 +81,8 @@ type EntryCardProps = {
   // Edit-restrictions (uniform with principles):
   disabled?: boolean
   disabledReason?: string
+  editDisabled?: boolean // pencil and every edit-mode control; falls back to disabled
+  reversalDisabled?: boolean // regen and delete; Save & regenerate needs both flags; falls back to disabled
 
   // Edit mode (host-controlled):
   editing?: boolean
@@ -188,15 +190,15 @@ external override prop, same as reasoning expansion.
 
 ### Panel anatomy
 
-| Group                 | Source                                     | Rendered when                    | Editable  |
-| --------------------- | ------------------------------------------ | -------------------------------- | --------- |
-| **Scene**             | absolute triple, ids resolved to names     | always                           | tail only |
-| **Changes this turn** | `stateReport.visualChanges` / `.transfers` | either is non-empty              | never     |
-| **Reported delta**    | `stateReport.worldTimeDelta`               | present                          | never     |
-| **Summary**           | `metadata.summary`                         | present                          | never     |
-| **Retrieval asks**    | `metadata.retrievalQueries`                | non-empty                        | never     |
-| **Parse failure**     | `stateReport.failedFields` / `.raw`        | `failedFields` non-empty         | never     |
-| **Legacy block**      | `stripTrailingBlocks(content).stateRaw`    | no `stateReport`, markup present | never     |
+| Group                 | Source                                                                     | Rendered when                    | Editable  |
+| --------------------- | -------------------------------------------------------------------------- | -------------------------------- | --------- |
+| **Scene**             | absolute triple, ids resolved to names                                     | always                           | tail only |
+| **Changes this turn** | `stateReport.visualChanges` / `.transfers` / `.newLocations` / `.newItems` | any renders a line               | never     |
+| **Reported delta**    | `stateReport.worldTimeDelta`                                               | present                          | never     |
+| **Summary**           | `metadata.summary`                                                         | present                          | never     |
+| **Retrieval asks**    | `metadata.retrievalQueries`                                                | non-empty                        | never     |
+| **Parse failure**     | `stateReport.failedFields` / `.raw`                                        | `failedFields` non-empty         | never     |
+| **Legacy block**      | `stripTrailingBlocks(content).stateRaw`                                    | no `stateReport`, markup present | never     |
 
 **Retrieval asks** lists what the turn's classifier requested for the
 next turn's retrieval — the
@@ -218,8 +220,12 @@ in the same place across entries.
 **Changes this turn** renders one line per reported mutation: a visual
 change as name, category and its full-replace text; an item transfer
 as item, recipient and prior holder when tracked; a stackable as key,
-amount and the same holders. These exist nowhere else once the block
-is stripped from `content` — deltas carry the applied effect, not the
+amount and the same holders; a new place or item as `New place:` or
+`New item:` and its name, or `Matched place:` and the reused row's name.
+A created or reused row is named from the live entity, as every other
+line is, and from the report's name only once the row is gone. A
+dropped create isn't listed; the per-turn inspector shows it. These
+exist nowhere else once the block is stripped from `content` — deltas carry the applied effect, not the
 narration of it.
 
 **Reported delta** renders `worldTimeDelta` raw, in seconds, exactly
@@ -233,14 +239,18 @@ field, since it is the number the model actually emitted.
 ### Emitted vs. applied
 
 `stateReport` records what the model emitted **and** what `apply.ts`
-did with it. Two fields can disagree with the absolute triple, and the
-panel shows the disagreement rather than hiding it:
+and the create planner did with it. Two fields can disagree with the
+absolute triple, and the panel shows the disagreement rather than
+hiding it:
 
 - **Location rejected.** `apply.ts` refuses a `currentLocation` that
   does not resolve to a `kind='location'` entity and inherits the
   previous location instead. The panel renders the rejected value
   struck through beside the location that was actually applied, keyed
-  on `stateReport.currentLocationRejected`.
+  on `stateReport.currentLocationRejected`. A fallback that named a new
+  item's handle there keeps the handle when the item isn't created, so
+  the panel names it from the report's own create with that handle,
+  dropped or not, and reads "Unknown entity" only when none matches.
 - **Delta clamped.** A negative or non-finite `worldTimeDelta` clamps
   to zero, and one that would push `worldTime` past the renderable
   ceiling clamps to the remaining headroom. The panel renders the
@@ -265,6 +275,8 @@ id.** `stateReport` is immutable while entities are deletable and
 rollback-able, so a dangling id is a permanent state, not a transient
 one. Never a crash, and never a bare UUID in the reader per
 [data-model.md → ID shape](../../data-model.md#id-shape--kind-prefixed-uuids-throughout).
+The one exception is a created or reused row that is gone since: its
+line names it from the report. Create lines are one per distinct id.
 
 ### Scene editor
 
@@ -288,7 +300,8 @@ refuses it, so the host offers no control rather than one that fails.
 **A refusal says which one it was.** `SceneSaveResult` carries the
 action layer's rejection code back across the bridge, and the overlay
 maps it to copy. Only `deltaFailed` is worth retrying; `notTailEntry`,
-`noMetadata` and `notFound` are terminal, and a generic "try again"
+`noMetadata`, `notFound` and `retiredPlace` (the edit moves the scene
+into a retired place) are terminal, and a generic "try again"
 sends the user round a loop the action layer refuses identically every
 time. The overlay stays open on failure so the edit is never silently
 discarded.
@@ -311,6 +324,13 @@ prohibits. `MultiSelect` therefore contributes
 [`MultiSelectList`](./forms.md), its list body without the trigger and
 overlay, and the location field forces `Select`'s inline `radio` mode
 rather than letting the auto-derivation pick `dropdown`.
+
+The location list leaves out retired places and disabled ones,
+including places disabled only through an ancestor
+([`data-model.md → LocationState shape`](../../data-model.md#locationstate-shape)):
+a retired place can't be entered, and the way into a disabled region
+is re-enabling it first. A current location that is already one of
+them keeps showing until it is changed.
 
 Tier split and hosting otherwise follow the world-time overlay: at
 desktop and tablet the card hosts a Dialog itself; at phone it renders
@@ -681,7 +701,9 @@ holds, cleared on next render when the user fixes it.
 **Edit-restrictions interaction.** Footer click respects the
 `disabled` prop (per
 [`principles.md → Edit restrictions during in-flight generation`](../principles.md#edit-restrictions-during-in-flight-generation))
-— same gating as content edit, regen, and delete. No new mechanism.
+— same gating as branch and flip era. Content edit, regen and delete
+take their own props during a pass ([Action cluster](#action-cluster)).
+No new mechanism.
 
 ## Action cluster
 
@@ -703,6 +725,19 @@ Position: absolute top-right of bubble; opacity 0.55 default,
 1.0 on hover or focus per the
 [icon-actions pattern](./icon-actions.md). Cluster gap and
 density-aware sizing inherit from icon-actions.
+
+**During a pass or a close.** Head reversals pass through either
+([`principles.md → Edit restrictions during in-flight generation`](../principles.md#edit-restrictions-during-in-flight-generation)),
+so the gate splits in three. `reversalDisabled` gates regen and
+delete, `editDisabled` gates the pencil and every edit-mode control,
+and `disabled` gates the rest: branch, flip era, the world-time
+footer, the scene editor and the system-entry buttons. Save &
+regenerate saves, then regenerates, so it needs both flags clear. Each
+split prop falls back to `disabled` when absent. The reader leaves regen and
+delete live while only a pass or a close holds the gate, and the
+pencil live on the head turn's entries alone: the tail and, when the
+tail answers one, its `user_action`. An edit off the head turn
+interrupts nothing, so it waits like any other edit.
 
 ## Variable-height plus virtualization compatibility
 
@@ -728,7 +763,7 @@ Live demos for: user kind, ai kind (with reasoning expanded /
 collapsed), opening kind (no delete action), system kind (with
 detail expanded), streaming kind (reasoning-phase, reply-phase),
 edit mode (textarea, with and without `Save & regenerate`),
-disabled state, world-time footer
+disabled state, the gate split during a pass (older entry, head turn, head-turn edit), world-time footer
 shown/hidden by kind, world-state panel (reported, fallback-layer
 badge, rejected location, clamped delta, parse failure with raw
 block, legacy row, unknown-entity chip), scene editor (tail entry

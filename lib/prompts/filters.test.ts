@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { byKind, active, staged, recent, proseJoin, jsonFilter } from './filters'
+import { byKind, active, staged, recent, proseJoin, jsonFilter, oneLineFilter } from './filters'
 
 describe('prompt filters', () => {
   const entities = [
@@ -67,5 +67,11 @@ describe('prompt filters', () => {
     circular.self = circular
     expect(() => jsonFilter(circular)).not.toThrow()
     expect(jsonFilter(circular)).toBe('')
+  })
+
+  it('one_line folds a value onto one line, and renders nothing for a non-string', () => {
+    expect(oneLineFilter(' a blade\n\nthat glows ')).toBe('a blade that glows')
+    expect(oneLineFilter(null)).toBe('')
+    expect(oneLineFilter(undefined)).toBe('')
   })
 })

@@ -796,6 +796,14 @@
           <span class="toggle on"></span>
         </div>
 
+        <div class="switch-row" role="switch" aria-checked="false">
+          <div class="switch-row-text">
+            <div class="switch-row-label">create mentioned places</div>
+            <div class="switch-row-hint">the background classifier also adds places the story mentions without going there &mdash; the place map grows with every one; applies from the next run</div>
+          </div>
+          <span class="toggle off"></span>
+        </div>
+
         <div class="field-row">
           <div class="field-label">classifier context
             <span class="hint">trailing entries the per-turn fallback classifier sees</span>
@@ -816,8 +824,7 @@
             <div class="status-tabs" style="display: flex; gap: 4px; margin-bottom: 8px; font-size: 10px;">
               <span class="status-tab active" data-cstate="idle" style="padding: 3px 8px; border: 1px solid var(--border); background: var(--bg-highlight); cursor: pointer;">idle</span>
               <span class="status-tab" data-cstate="running" style="padding: 3px 8px; border: 1px solid var(--border); cursor: pointer;">running</span>
-              <span class="status-tab" data-cstate="retrying" style="padding: 3px 8px; border: 1px solid var(--border); cursor: pointer;">retrying</span>
-              <span class="status-tab" data-cstate="failed" style="padding: 3px 8px; border: 1px solid var(--border); cursor: pointer;">failed-persistent</span>
+              <span class="status-tab" data-cstate="failed" style="padding: 3px 8px; border: 1px solid var(--border); cursor: pointer;">failed</span>
             </div>
             <div class="status-body" data-cstate="idle">
               <span style="font-size: 12px;">Last run <b>3 turns ago</b>, processed 4 happenings + 2 awareness rows.</span>
@@ -825,12 +832,8 @@
             <div class="status-body" data-cstate="running" hidden>
               <span style="font-size: 12px;">Running&hellip; processed <b>2 of 8</b> turns.</span>
             </div>
-            <div class="status-body" data-cstate="retrying" hidden>
-              <span style="font-size: 12px; color: var(--warn);">&#9888; Last run failed (1 of 3 attempts), retrying in <b>2 minutes</b>.</span>
-            </div>
             <div class="status-body" data-cstate="failed" hidden>
-              <div style="font-size: 12px; color: var(--warn); margin-bottom: 6px;">&#9888; Classifier failed after 3 attempts: <i>rate limit exceeded</i>.</div>
-              <span class="add-chip" style="padding: 3px 10px; font-size: 11px;">Retry</span>
+              <div style="font-size: 12px; color: var(--warn); margin-bottom: 6px;">&#9888; Last run failed: <i>rate limit exceeded</i>. It runs again before your next turn.</div>
               <span class="add-chip" style="padding: 3px 10px; font-size: 11px;">View error details</span>
             </div>
           </div>

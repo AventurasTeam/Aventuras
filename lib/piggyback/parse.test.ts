@@ -3,7 +3,13 @@ import { describe, expect, it } from 'vitest'
 import { emptyEntityState, entityStateSchemaForKind, VISUAL_CATEGORIES } from '@/lib/db'
 import { MAX_EMITTED_QUERIES } from '@/lib/retrieval'
 
-import { parseStateBlock, parseSuggestionsBlock, stripTrailingBlocks } from './parse'
+import {
+  normalizeCreates,
+  normalizeStackableTransfer,
+  parseStateBlock,
+  parseSuggestionsBlock,
+  stripTrailingBlocks,
+} from './parse'
 import { MAX_RETRIEVAL_QUERIES, VISUAL_TEXT_MAX } from './types'
 
 const WELL_FORMED = `Some narrative prose here.
@@ -61,6 +67,22 @@ describe('parseStateBlock', () => {
   </transfers>
 </state>`)
     expect(result.block.transfers?.stackables).toEqual([{ key: 'gold', amount: 5, to: 'c1' }])
+  })
+
+  it('folds whitespace runs in a stackable key to single spaces, for both producers', () => {
+    const result = parseStateBlock(`<state>
+  <transfers>
+    <stackable key=" Silver  coins " amount="5" to="c1" />
+  </transfers>
+</state>`)
+    expect(result.block.transfers?.stackables).toEqual([
+      { key: 'silver coins', amount: 5, to: 'c1' },
+    ])
+    expect(normalizeStackableTransfer({ key: 'Silver\ncoins', amount: 5, from: 'c1' })).toEqual({
+      key: 'silver coins',
+      amount: 5,
+      from: 'c1',
+    })
   })
 
   it('reports blockFound=false and no failures when no <state> tag exists', () => {
@@ -148,6 +170,29 @@ describe('parseStateBlock', () => {
     expect(result.block.sceneEntities).toEqual(['c1'])
     expect(result.block.transfers).toBeUndefined()
     expect(result.failures).toEqual([{ field: 'transfers', detail: expect.any(String) }])
+  })
+
+  it('reads attributes that follow a closing quote with no space between them', () => {
+    const { block, failures } = parseStateBlock(
+      '<state><transfers><item id="i1" from="c3"to="c1" slot="inventory" />' +
+        '<stackable key="gold" amount="50" from="c3"to="c1"/></transfers></state>',
+    )
+    expect(failures).toEqual([])
+    expect(block.transfers).toEqual({
+      items: [{ id: 'i1', slot: 'inventory', from: 'c3', to: 'c1' }],
+      stackables: [{ key: 'gold', amount: 50, from: 'c3', to: 'c1' }],
+    })
+  })
+
+  it('reads attributes separated by a comma', () => {
+    const { block, failures } = parseStateBlock(
+      '<state><transfers><item id="i1",to="c1" slot="inventory" /></transfers></state>',
+    )
+    expect(failures).toEqual([])
+    expect(block.transfers).toEqual({
+      items: [{ id: 'i1', slot: 'inventory', to: 'c1' }],
+      stackables: [],
+    })
   })
 
   it('an empty <transfers></transfers> tag is a legitimate no-op, not a failure', () => {
@@ -547,5 +592,428 @@ describe('<item> tag collision between transfers and suggestions', () => {
     expect(parseSuggestionsBlock(raw).items).toEqual([
       { categoryRef: 'cat1', text: 'Draw the blade.' },
     ])
+  })
+})
+
+describe('creation tags', () => {
+  // piggyback.md → Creating a place or an item, verbatim.
+  const CANON = `The fog lifted.
+<state>
+  <new_location handle="new:saltmere" name="Saltmere">a fishing town under chalk cliffs</new_location>
+  <new_location handle="new:docks" parent="new:saltmere" name="the Smuggler's Docks">a rotting pier below the eastern cliffs</new_location>
+  <current_location>new:docks</current_location>
+  <new_item handle="new:key" name="rusted key">an iron key, flaked with rust</new_item>
+  <transfers>
+    <item id="new:key" to="c1" slot="inventory" />
+  </transfers>
+</state>`
+
+  it("parses canon's example into creates beside the refs that name them", () => {
+    const result = parseStateBlock(CANON)
+    expect(result.failures).toEqual([])
+    expect(result.malformedCreates).toBe(0)
+    expect(result.block).toEqual({
+      currentLocation: 'new:docks',
+      transfers: { items: [{ id: 'new:key', slot: 'inventory', to: 'c1' }], stackables: [] },
+      newLocations: [
+        {
+          handle: 'new:saltmere',
+          name: 'Saltmere',
+          description: 'a fishing town under chalk cliffs',
+        },
+        {
+          handle: 'new:docks',
+          name: "the Smuggler's Docks",
+          description: 'a rotting pier below the eastern cliffs',
+          parent: 'new:saltmere',
+        },
+      ],
+      newItems: [
+        { handle: 'new:key', name: 'rusted key', description: 'an iron key, flaked with rust' },
+      ],
+    })
+  })
+
+  it('reads a self-closed create with an empty description', () => {
+    const { block, failures } = parseStateBlock(`<state>
+  <scene_entities>c1</scene_entities>
+  <new_location handle="new:yard" name="the yard" />
+  <new_item handle="new:coin" name="coin"/>
+</state>`)
+    expect(failures).toEqual([])
+    expect(block.newLocations).toEqual([{ handle: 'new:yard', name: 'the yard', description: '' }])
+    expect(block.newItems).toEqual([{ handle: 'new:coin', name: 'coin', description: '' }])
+  })
+
+  it('reads attributes in any order and trims the handle, name and description', () => {
+    const { block } = parseStateBlock(`<state>
+  <new_item name="  rusted key " handle=" new:key ">
+    an iron key
+  </new_item>
+</state>`)
+    expect(block.newItems).toEqual([
+      { handle: 'new:key', name: 'rusted key', description: 'an iron key' },
+    ])
+  })
+
+  it('keeps a parent only on a location', () => {
+    const { block } = parseStateBlock(`<state>
+  <new_location handle="new:a" name="A">x</new_location>
+  <new_item handle="new:b" parent="l1" name="B">y</new_item>
+</state>`)
+    expect(block.newLocations).toEqual([{ handle: 'new:a', name: 'A', description: 'x' }])
+    expect(block.newItems).toEqual([{ handle: 'new:b', name: 'B', description: 'y' }])
+  })
+
+  it('drops and counts a create with no new: handle or no name, failing no field', () => {
+    const result = parseStateBlock(`<state>
+  <scene_entities>c1</scene_entities>
+  <new_location name="Saltmere">no handle</new_location>
+  <new_location handle="saltmere" name="Saltmere">no prefix</new_location>
+  <new_location handle="new:" name="Saltmere">nothing after the prefix</new_location>
+  <new_item handle="new:key" name="   ">blank name</new_item>
+  <new_item handle="new:coin">no name</new_item>
+  <new_item handle="new:ring" name="ring">kept</new_item>
+</state>`)
+    expect(result.failures).toEqual([])
+    expect(result.malformedCreates).toBe(5)
+    expect(result.block.newLocations).toBeUndefined()
+    expect(result.block.newItems).toEqual([
+      { handle: 'new:ring', name: 'ring', description: 'kept' },
+    ])
+  })
+
+  it('drops a handle declared earlier in the block, across both kinds', () => {
+    const result = parseStateBlock(`<state>
+  <new_location handle="new:a" name="First">kept</new_location>
+  <new_location handle="new:a" name="Second">dropped</new_location>
+  <new_item handle="new:a" name="Third">dropped</new_item>
+</state>`)
+    expect(result.malformedCreates).toBe(2)
+    expect(result.block.newLocations).toEqual([
+      { handle: 'new:a', name: 'First', description: 'kept' },
+    ])
+    expect(result.block.newItems).toBeUndefined()
+  })
+
+  // A stream cut off in a block that declares a create may have lost the tags after it
+  // (the refs that name it), so the fallback fires; the fields before it are kept.
+  it('fails the state block when the stream was cut off inside a create', () => {
+    const result = parseStateBlock(`<state>
+  <scene_entities>c1</scene_entities>
+  <new_location handle="new:a" name="A">a pier below`)
+    expect(result.failures).toEqual([{ field: 'state', detail: 'block with creates cut off' }])
+    expect(result.block).toEqual({ sceneEntities: ['c1'] })
+    expect(result.malformedCreates).toBe(1)
+  })
+
+  it('fails the state block when the stream was cut off inside current_location after a create', () => {
+    const result = parseStateBlock(
+      '<state><new_location handle="new:a" name="A">a pier</new_location><current_location>new:',
+    )
+    expect(result.failures).toEqual([{ field: 'state', detail: 'block with creates cut off' }])
+    expect(result.malformedCreates).toBe(0)
+  })
+
+  it('fails the state block when the cut falls between tags after whole creates', () => {
+    const result = parseStateBlock(
+      '<state><new_location handle="new:a" name="A">a pier</new_location><current_location>new:a</current_location>',
+    )
+    expect(result.failures).toEqual([{ field: 'state', detail: 'block with creates cut off' }])
+    expect(result.block.currentLocation).toBe('new:a')
+  })
+
+  it('fails the state block when the cut lands right after a create opener', () => {
+    const result = parseStateBlock('<state><scene_entities>c1</scene_entities><new_location')
+    expect(result.failures).toEqual([{ field: 'state', detail: 'block with creates cut off' }])
+    expect(result.malformedCreates).toBe(1)
+  })
+
+  it('fails the state block when a cut-off block holds a whole create with bad attributes', () => {
+    const result = parseStateBlock(
+      `<state><new_item handle="new:k" name='key'>iron</new_item><scene_entities>c1`,
+    )
+    expect(result.failures).toEqual([{ field: 'state', detail: 'block with creates cut off' }])
+    expect(result.malformedCreates).toBe(1)
+  })
+
+  it('fails a cut-off block with creates even when prose before it quotes </state>', () => {
+    const result = parseStateBlock(
+      'The sign read </state> in chalk.\n<state><new_location handle="new:a" name="A">a pier</new_location><current_location>new:',
+    )
+    expect(result.failures).toEqual([{ field: 'state', detail: 'block with creates cut off' }])
+  })
+
+  it('leaves a cut-off block that declares no creates as a clean parse', () => {
+    const result = parseStateBlock('<state><scene_entities>c1</scene_entities><current_location>l')
+    expect(result.failures).toEqual([])
+    expect(result.malformedCreates).toBe(0)
+  })
+
+  it('keeps a closed block with an unclosed create warn-only', () => {
+    const result = parseStateBlock(`<state>
+  <scene_entities>c1</scene_entities>
+  <new_location handle="new:a" name="A">a pier below
+</state>`)
+    expect(result.failures).toEqual([])
+    expect(result.block).toEqual({ sceneEntities: ['c1'] })
+    expect(result.malformedCreates).toBe(1)
+  })
+
+  // Attribute text must be entirely key="value" pairs.
+  it.each([
+    ['an unescaped quote in a value', 'name="the "Rusty" Anchor"'],
+    ['single quotes', `name="Anchor" parent='l1'`],
+    ['spaces around =', 'name="Anchor" parent = "l1"'],
+    ['a bare word', 'name="Anchor" hidden'],
+    ['a stray slash', 'name="Anchor" /x'],
+    ['pairs run together', 'name="Anchor"parent="l1"'],
+  ])('drops and counts a create with %s in its attributes', (_label, attrs) => {
+    const result = parseStateBlock(`<state>
+  <scene_entities>c1</scene_entities>
+  <new_item handle="new:a" ${attrs}>x</new_item>
+  <new_item handle="new:ok" name="ok">y</new_item>
+</state>`)
+    expect(result.failures).toEqual([])
+    expect(result.malformedCreates).toBe(1)
+    expect(result.block.newItems).toEqual([{ handle: 'new:ok', name: 'ok', description: 'y' }])
+  })
+
+  it('reads a hyphenated attribute key whole, so it cannot overwrite handle or name', () => {
+    const { block, failures } = parseStateBlock(`<state>
+  <scene_entities>c1</scene_entities>
+  <new_location handle="new:a" name="A" alt-name="B" x-handle="new:z">x</new_location>
+</state>`)
+    expect(failures).toEqual([])
+    expect(block.newLocations).toEqual([{ handle: 'new:a', name: 'A', description: 'x' }])
+  })
+
+  it('drops a self-closed create with malformed attributes, counting it once', () => {
+    const result = parseStateBlock(`<state>
+  <scene_entities>c1</scene_entities>
+  <new_location handle="new:a" name='A' />
+</state>`)
+    expect(result.malformedCreates).toBe(1)
+    expect(result.block.newLocations).toBeUndefined()
+  })
+
+  it('counts a bare create with no attributes once', () => {
+    const result = parseStateBlock(`<state>
+  <scene_entities>c1</scene_entities>
+  <new_item>iron</new_item>
+</state>`)
+    expect(result.malformedCreates).toBe(1)
+    expect(result.block.newItems).toBeUndefined()
+  })
+
+  it('counts a malformed-attribute create and a duplicate handle separately', () => {
+    const result = parseStateBlock(`<state>
+  <new_item handle="new:a" name="A">x</new_item>
+  <new_item handle="new:a" name="B">dup</new_item>
+  <new_item handle="new:c" name='C'>bad</new_item>
+</state>`)
+    expect(result.malformedCreates).toBe(2)
+  })
+
+  // The five XML entities, decoded in name and description only.
+  it('decodes the five XML entities in a name and a description, in one pass', () => {
+    const { block } = parseStateBlock(`<state>
+  <new_location handle="new:a" name="the &quot;Rusty&quot; Anchor">a &lt;b&gt; sign</new_location>
+  <new_location handle="new:b" name="Salt &amp; Pepper Inn">it&apos;s &amp;lt;</new_location>
+</state>`)
+    expect(block.newLocations).toEqual([
+      { handle: 'new:a', name: 'the "Rusty" Anchor', description: 'a <b> sign' },
+      { handle: 'new:b', name: 'Salt & Pepper Inn', description: "it's &lt;" },
+    ])
+  })
+
+  it('decodes entities in an item the same way', () => {
+    const { block } = parseStateBlock(
+      '<state><new_item handle="new:k" name="Salt &amp; Pepper">a &lt;b&gt; &amp;lt;</new_item></state>',
+    )
+    expect(block.newItems).toEqual([
+      { handle: 'new:k', name: 'Salt & Pepper', description: 'a <b> &lt;' },
+    ])
+  })
+
+  it('does not decode entities in a handle or a parent', () => {
+    const { block } = parseStateBlock(
+      '<state><new_location handle="new:a&amp;b" parent="l&amp;1" name="A" /></state>',
+    )
+    expect(block.newLocations).toEqual([
+      { handle: 'new:a&amp;b', name: 'A', description: '', parent: 'l&amp;1' },
+    ])
+  })
+
+  // A model that echoes the prompt's bracket form still declares the handle.
+  it('unwraps a bracketed handle', () => {
+    const { block, failures } = parseStateBlock(
+      '<state><scene_entities>c1</scene_entities><new_item handle="[new:key]" name="key">iron</new_item></state>',
+    )
+    expect(failures).toEqual([])
+    expect(block.newItems).toEqual([{ handle: 'new:key', name: 'key', description: 'iron' }])
+  })
+
+  it('keeps a cut-off create from swallowing the create after it', () => {
+    const result = parseStateBlock(`<state>
+  <new_location handle="new:a" name="A">a pier below
+  <new_location handle="new:b" name="B">kept</new_location>
+</state>`)
+    expect(result.block.newLocations).toEqual([{ handle: 'new:b', name: 'B', description: 'kept' }])
+    expect(result.malformedCreates).toBe(1)
+  })
+
+  it('counts a create whose description holds a <, and drops it', () => {
+    const result = parseStateBlock(`<state>
+  <scene_entities>c1</scene_entities>
+  <new_item handle="new:k" name="key">an <b>iron</b> key</new_item>
+</state>`)
+    expect(result.failures).toEqual([])
+    expect(result.block).toEqual({ sceneEntities: ['c1'] })
+    expect(result.malformedCreates).toBe(1)
+  })
+
+  it('drops a create missing its > instead of reading the next tag as its attributes', () => {
+    const result = parseStateBlock(`<state>
+<scene_entities>c1</scene_entities>
+<new_location handle="new:a" name="Saltmere"
+<new_location name="the Docks" parent="l1">a pier</new_location>
+<current_location>new:a</current_location>
+</state>`)
+    expect(result.failures).toEqual([])
+    expect(result.malformedCreates).toBe(2)
+    expect(result.block).toEqual({ sceneEntities: ['c1'], currentLocation: 'new:a' })
+  })
+
+  it('keeps a create with an unclosed name quote from swallowing the whole create after it', () => {
+    const result = parseStateBlock(`<state>
+<scene_entities>c1</scene_entities>
+<new_location handle="new:a" name="Saltmere
+<new_location handle="new:b" name="the Docks">a pier</new_location>
+</state>`)
+    expect(result.failures).toEqual([])
+    expect(result.malformedCreates).toBe(1)
+    expect(result.block.newLocations).toEqual([
+      { handle: 'new:b', name: 'the Docks', description: 'a pier' },
+    ])
+  })
+
+  it('does not count a longer tag that starts like a create as a cut-off create', () => {
+    const result = parseStateBlock(`<state>
+  <scene_entities>c1</scene_entities>
+  <new_items>
+    <new_item handle="new:k" name="key">iron</new_item>
+  </new_items>
+  <new_locations></new_locations>
+</state>`)
+    expect(result.malformedCreates).toBe(0)
+    expect(result.block.newItems).toEqual([{ handle: 'new:k', name: 'key', description: 'iron' }])
+  })
+
+  // Nothing in it can keep a create, and the turn would keep its old scene with no time or summary.
+  it('records the empty-block failure for a block of creates alone, keeping them to report', () => {
+    const result = parseStateBlock(
+      '<state><new_item handle="new:key" name="key">iron</new_item></state>',
+    )
+    expect(result.failures).toEqual([{ field: 'state', detail: 'block held only creates' }])
+    expect(result.malformedCreates).toBe(0)
+    expect(result.block).toEqual({
+      newItems: [{ handle: 'new:key', name: 'key', description: 'iron' }],
+    })
+  })
+
+  // A block that carried nothing usable is no report: the fallback must still fire.
+  it('records the empty-block failure when every create in the block was malformed', () => {
+    const result = parseStateBlock('<state><new_item name="key">iron</new_item></state>')
+    expect(result.block).toEqual({})
+    expect(result.malformedCreates).toBe(1)
+    expect(result.failures).toEqual([
+      { field: 'state', detail: 'block held only malformed creates' },
+    ])
+  })
+
+  it('reports no malformed creates when no block was found', () => {
+    expect(parseStateBlock('Prose only.').malformedCreates).toBe(0)
+  })
+
+  // `<new_item` must not read as a transfer `<item`, nor a transfer item as a create.
+  it('keeps a create inside <transfers> apart from the transfer items', () => {
+    const { block, failures } = parseStateBlock(`<state>
+  <transfers>
+    <new_item handle="new:key" name="key">iron</new_item>
+    <item id="new:key" to="c1" slot="inventory" />
+  </transfers>
+</state>`)
+    expect(failures).toEqual([])
+    expect(block.newItems).toEqual([{ handle: 'new:key', name: 'key', description: 'iron' }])
+    expect(block.transfers?.items).toEqual([{ id: 'new:key', slot: 'inventory', to: 'c1' }])
+  })
+})
+
+// The fallback runs this on its structured reply, which the tag parser never saw.
+describe('normalizeCreates', () => {
+  it('trims what it keeps, drops a blank parent, and counts what it drops', () => {
+    const { block, malformed } = normalizeCreates({
+      sceneEntities: ['c1'],
+      newLocations: [
+        { handle: ' new:a ', name: ' A ', description: ' x ', parent: '  ' },
+        { handle: 'new:b', name: 'B', description: '', parent: ' l1 ' },
+        { handle: 'b', name: 'C', description: '' },
+      ],
+      newItems: [{ handle: 'new:b', name: 'duplicate', description: '' }],
+    })
+    expect(malformed).toBe(2)
+    expect(block).toEqual({
+      sceneEntities: ['c1'],
+      newLocations: [
+        { handle: 'new:a', name: 'A', description: 'x' },
+        { handle: 'new:b', name: 'B', description: '', parent: 'l1' },
+      ],
+    })
+  })
+
+  it('reads a create with no description as an empty one', () => {
+    const { block, malformed } = normalizeCreates({
+      newLocations: [{ handle: 'new:a', name: 'A' }],
+      newItems: [{ handle: 'new:k', name: 'key' }],
+    })
+    expect(malformed).toBe(0)
+    expect(block).toEqual({
+      newLocations: [{ handle: 'new:a', name: 'A', description: '' }],
+      newItems: [{ handle: 'new:k', name: 'key', description: '' }],
+    })
+  })
+
+  it('unwraps brackets on a handle before judging it', () => {
+    const { block, malformed } = normalizeCreates({
+      newLocations: [
+        { handle: ' [new:a] ', name: 'A', description: '' },
+        { handle: '[new:]', name: 'B', description: '' },
+        { handle: '[new:a', name: 'C', description: '' },
+        { handle: '[ new:b ]', name: 'D', description: '' },
+      ],
+    })
+    expect(malformed).toBe(2)
+    expect(block.newLocations).toEqual([
+      { handle: 'new:a', name: 'A', description: '' },
+      { handle: 'new:b', name: 'D', description: '' },
+    ])
+  })
+
+  it('removes a list it emptied, and an empty list it was given', () => {
+    expect(
+      normalizeCreates({ newItems: [{ handle: 'key', name: 'key', description: '' }] }),
+    ).toEqual({ block: {}, malformed: 1 })
+    expect(normalizeCreates({ newLocations: [], newItems: [] })).toEqual({
+      block: {},
+      malformed: 0,
+    })
+  })
+
+  it('leaves a block without creates as it is', () => {
+    expect(normalizeCreates({ currentLocation: 'l1' })).toEqual({
+      block: { currentLocation: 'l1' },
+      malformed: 0,
+    })
   })
 })

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   emptyEntityState,
@@ -6,10 +6,16 @@ import {
   type CharacterState,
   type Entity,
 } from '@/lib/db'
+import { logger, type Logger } from '@/lib/diagnostics'
 
 import { buildPiggybackActions } from './apply'
 import { parseStateBlock } from './parse'
-import { VISUAL_TEXT_MAX, type ParsedStateBlock } from './types'
+import {
+  VISUAL_TEXT_MAX,
+  type ParsedStateBlock,
+  type PlannedStateBlock,
+  type PlannedTurn,
+} from './types'
 
 function mockEntity(overrides: Partial<Entity>): Entity {
   return {
@@ -38,6 +44,24 @@ function mockEntity(overrides: Partial<Entity>): Entity {
   } as Entity
 }
 
+const spyLog = (): Logger => ({ error: vi.fn(), warn: vi.fn(), debug: vi.fn() })
+
+// Cast, not planned: the planner hands on a block that declared no creates unchanged.
+function planned(
+  block: ParsedStateBlock,
+  rows: { createdRows?: readonly Entity[]; reusedIds?: readonly string[] } = {},
+): PlannedTurn {
+  const { newLocations, newItems, ...rest } = block
+  if (newLocations !== undefined || newItems !== undefined)
+    throw new Error('a planned block declares no creates')
+  return {
+    block: rest as PlannedStateBlock,
+    createdRows: rows.createdRows ?? [],
+    reusedIds: rows.reusedIds ?? [],
+    report: { newLocations: [], newItems: [] },
+  }
+}
+
 describe('buildPiggybackActions', () => {
   const previousMetadata = {
     sceneEntities: ['char_1'],
@@ -52,9 +76,10 @@ describe('buildPiggybackActions', () => {
     }
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block,
+      turn: planned(block),
       entities: [],
       previousMetadata,
       branchId: 'main',
@@ -70,9 +95,10 @@ describe('buildPiggybackActions', () => {
 
   it('carries an emitted retrievalQueries onto the entry metadata', () => {
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: { sceneEntities: [], retrievalQueries: ['marsh nobility'] },
+      turn: planned({ sceneEntities: [], retrievalQueries: ['marsh nobility'] }),
       entities: [],
       previousMetadata,
       branchId: 'main',
@@ -83,9 +109,10 @@ describe('buildPiggybackActions', () => {
 
   it('leaves retrievalQueries absent when the block emitted none', () => {
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: { sceneEntities: [] },
+      turn: planned({ sceneEntities: [] }),
       entities: [],
       previousMetadata,
       branchId: 'main',
@@ -97,9 +124,10 @@ describe('buildPiggybackActions', () => {
   // The parser cannot produce [] today, but the fallback classifier's schema can.
   it('leaves retrievalQueries absent when the block emitted an empty array', () => {
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: { sceneEntities: [], retrievalQueries: [] },
+      turn: planned({ sceneEntities: [], retrievalQueries: [] }),
       entities: [],
       previousMetadata,
       branchId: 'main',
@@ -112,9 +140,10 @@ describe('buildPiggybackActions', () => {
   // its .max() only counts, so blanks and repeats arrive here unfiltered.
   it('stores a repeated query once', () => {
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: { sceneEntities: [], retrievalQueries: ['marsh nobility', 'marsh nobility'] },
+      turn: planned({ sceneEntities: [], retrievalQueries: ['marsh nobility', 'marsh nobility'] }),
       entities: [],
       previousMetadata,
       branchId: 'main',
@@ -125,9 +154,10 @@ describe('buildPiggybackActions', () => {
 
   it('drops empty and whitespace-only queries', () => {
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: { sceneEntities: [], retrievalQueries: ['', '   ', 'House Eldrin sigil'] },
+      turn: planned({ sceneEntities: [], retrievalQueries: ['', '   ', 'House Eldrin sigil'] }),
       entities: [],
       previousMetadata,
       branchId: 'main',
@@ -138,9 +168,10 @@ describe('buildPiggybackActions', () => {
 
   it('caps a four-query emission at MAX_RETRIEVAL_QUERIES', () => {
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: { sceneEntities: [], retrievalQueries: ['one', 'two', 'three', 'four'] },
+      turn: planned({ sceneEntities: [], retrievalQueries: ['one', 'two', 'three', 'four'] }),
       entities: [],
       previousMetadata,
       branchId: 'main',
@@ -151,9 +182,10 @@ describe('buildPiggybackActions', () => {
 
   it('leaves retrievalQueries absent when every emitted query is blank', () => {
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: { sceneEntities: [], retrievalQueries: ['', '  '] },
+      turn: planned({ sceneEntities: [], retrievalQueries: ['', '  '] }),
       entities: [],
       previousMetadata,
       branchId: 'main',
@@ -171,9 +203,10 @@ describe('buildPiggybackActions', () => {
     }
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block,
+      turn: planned(block),
       entities: [stagedChar, activeChar],
       previousMetadata,
       branchId: 'main',
@@ -197,9 +230,10 @@ describe('buildPiggybackActions', () => {
     const stagedChar = mockEntity({ id: 'char_staged', status: 'staged' })
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: { sceneEntities: ['char_staged', 'char_1', 'char_staged'] },
+      turn: planned({ sceneEntities: ['char_staged', 'char_1', 'char_staged'] }),
       entities: [stagedChar, mockEntity({ id: 'char_1' })],
       previousMetadata,
       branchId: 'main',
@@ -227,9 +261,10 @@ describe('buildPiggybackActions', () => {
     }
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_2',
-      block,
+      turn: planned(block),
       entities: [char1, char2, loc2],
       previousMetadata,
       branchId: 'main',
@@ -261,9 +296,10 @@ describe('buildPiggybackActions', () => {
     }
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_2',
-      block,
+      turn: planned(block),
       entities: [char1, char2, loc2],
       previousMetadata,
       branchId: 'main',
@@ -296,9 +332,10 @@ describe('buildPiggybackActions', () => {
     }
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block,
+      turn: planned(block),
       entities: [mockEntity({ id: 'char_1' })],
       previousMetadata,
       branchId: 'main',
@@ -322,11 +359,12 @@ describe('buildPiggybackActions', () => {
   // Truncate rather than drop: an over-long note would fail every later updateEntity that
   // re-validates the whole state, a delete's ref clear included.
   describe('visual text cap', () => {
-    const visualText = (block: ParsedStateBlock): string | undefined => {
+    const visualText = (block: ParsedStateBlock, log: Logger = logger): string | undefined => {
       const [action] = buildPiggybackActions({
+        log,
         source: 'per_turn_classifier',
         entryId: 'entry_1',
-        block,
+        turn: planned(block),
         entities: [mockEntity({ id: 'char_1' })],
         previousMetadata,
         branchId: 'main',
@@ -369,6 +407,136 @@ describe('buildPiggybackActions', () => {
       const emoji = '\u{1F600}' // 2 UTF-16 units; index 499 is the high surrogate
       expect(visualText(fallbackBlock('a'.repeat(499) + emoji))).toBe('a'.repeat(499))
     })
+
+    // piggyback.md → Trailing block format: back to the last sentence or clause boundary in the
+    // bound's second half, else the last whitespace there, mid-word only as a last resort.
+    it('cuts back to the last sentence end inside the bound, keeping the period', () => {
+      const text = `${'a'.repeat(300)}. ${'b'.repeat(150)}. ${'c'.repeat(100)}`
+      expect(visualText(fallbackBlock(text))).toBe(`${'a'.repeat(300)}. ${'b'.repeat(150)}.`)
+    })
+
+    it.each([',', ';'])('cuts back to the last %s inside the bound, dropping it', (mark) => {
+      const text = `${'a'.repeat(200)}. ${'b'.repeat(250)}${mark} ${'c'.repeat(100)}`
+      expect(visualText(fallbackBlock(text))).toBe(`${'a'.repeat(200)}. ${'b'.repeat(250)}`)
+    })
+
+    // A decimal point or an abbreviation's dot has no whitespace after it, and ends nothing.
+    it('reads a mark with no whitespace after it as part of a word', () => {
+      const text = `${'a'.repeat(390)} stands 1.8 m tall ${'b'.repeat(120)}`
+      expect(visualText(fallbackBlock(text))).toBe(`${'a'.repeat(390)} stands 1.8 m tall`)
+    })
+
+    it('takes no boundary from the first half of the bound, cutting at the last whitespace', () => {
+      const text = `Tall, ${'lean and weathered '.repeat(30)}`
+      const cut = visualText(fallbackBlock(text)) ?? ''
+      expect(cut.length).toBeGreaterThan(450)
+      expect(cut.startsWith('Tall, lean')).toBe(true)
+    })
+
+    // The period sits at index 249, then at 250: either side of the midpoint.
+    it('takes no boundary just below the midpoint, cutting at the last whitespace', () => {
+      const text = `${'a'.repeat(249)}. ${'b'.repeat(200)} ${'c'.repeat(100)}`
+      expect(visualText(fallbackBlock(text))).toBe(`${'a'.repeat(249)}. ${'b'.repeat(200)}`)
+    })
+
+    it('takes a boundary at the midpoint', () => {
+      const text = `${'a'.repeat(250)}. ${'b'.repeat(200)} ${'c'.repeat(100)}`
+      expect(visualText(fallbackBlock(text))).toBe(`${'a'.repeat(250)}.`)
+    })
+
+    // The b-word ends at index 499, then at 500: inside the bound, then one past it.
+    it('keeps a last word that ends right at the bound', () => {
+      const text = `${'a'.repeat(250)} ${'b'.repeat(249)} ccc`
+      expect(visualText(fallbackBlock(text))).toBe(`${'a'.repeat(250)} ${'b'.repeat(249)}`)
+    })
+
+    it('drops a last word that runs one past the bound', () => {
+      const text = `${'a'.repeat(250)} ${'b'.repeat(250)} ccc`
+      expect(visualText(fallbackBlock(text))).toBe('a'.repeat(250))
+    })
+
+    it('ignores a boundary past the bound, falling back to the last whitespace', () => {
+      const text = `${'a '.repeat(240)}${'b'.repeat(40)}, more.`
+      const cut = visualText(fallbackBlock(text))
+      expect(cut).toBe('a '.repeat(240).trimEnd())
+    })
+
+    // The space sits at index 249, then at 250: either side of the midpoint.
+    it('takes no whitespace below the midpoint, cutting at the bound', () => {
+      const text = `${'a'.repeat(249)} ${'b'.repeat(400)}`
+      expect(visualText(fallbackBlock(text))).toBe(`${'a'.repeat(249)} ${'b'.repeat(250)}`)
+    })
+
+    it('takes whitespace at the midpoint', () => {
+      const text = `${'a'.repeat(250)} ${'b'.repeat(400)}`
+      expect(visualText(fallbackBlock(text))).toBe('a'.repeat(250))
+    })
+
+    it('cuts a CJK note at the bound when its only whitespace sits in the first half', () => {
+      const text = `Akira は${'あ'.repeat(800)}`
+      expect(visualText(fallbackBlock(text))).toBe(`Akira は${'あ'.repeat(493)}`)
+    })
+
+    // The bound's last mark is the 、 at index 499, after the 。 at 490: the last mark wins.
+    it('cuts a Japanese note back to its last clause mark, which needs no whitespace after it', () => {
+      const text = `Akira は${'黒い外套をまとい、腰には古い剣を下げている。'.repeat(30)}`
+      expect(visualText(fallbackBlock(text))).toBe(
+        `Akira は${'黒い外套をまとい、腰には古い剣を下げている。'.repeat(22)}黒い外套をまとい`,
+      )
+    })
+
+    it('cuts a Chinese note back to its last full-width comma, dropping it', () => {
+      const text = `李明${'他身穿黑色长袍，腰间挂着一把古老的长剑。'.repeat(30)}`
+      expect(visualText(fallbackBlock(text))).toBe(
+        `李明${'他身穿黑色长袍，腰间挂着一把古老的长剑。'.repeat(24)}他身穿黑色长袍`,
+      )
+    })
+
+    it.each(['。', '！', '？'])('cuts back to the last %s inside the bound, keeping it', (mark) => {
+      const text = `${'あ'.repeat(300)}${mark}${'い'.repeat(150)} ${'う'.repeat(100)}`
+      expect(visualText(fallbackBlock(text))).toBe(`${'あ'.repeat(300)}${mark}`)
+    })
+
+    it.each(['、', '，', '；'])(
+      'cuts back to the last %s inside the bound, dropping it',
+      (mark) => {
+        const text = `${'あ'.repeat(300)}${mark}${'い'.repeat(150)} ${'う'.repeat(100)}`
+        expect(visualText(fallbackBlock(text))).toBe('あ'.repeat(300))
+      },
+    )
+
+    it('takes no CJK mark from the first half of the bound, cutting at the bound', () => {
+      expect(visualText(fallbackBlock(`黒髪、${'あ'.repeat(800)}`))).toBe(
+        `黒髪、${'あ'.repeat(497)}`,
+      )
+    })
+
+    // The mark sits at index 249, then at 250: either side of the midpoint.
+    it('takes no CJK mark just below the midpoint, cutting at the bound', () => {
+      const text = `${'あ'.repeat(249)}。${'い'.repeat(400)}`
+      expect(visualText(fallbackBlock(text))).toBe(`${'あ'.repeat(249)}。${'い'.repeat(250)}`)
+    })
+
+    it('takes a CJK mark at the midpoint', () => {
+      const text = `${'あ'.repeat(250)}。${'い'.repeat(400)}`
+      expect(visualText(fallbackBlock(text))).toBe(`${'あ'.repeat(250)}。`)
+    })
+
+    it("logs the cut on the run's logger with the entry, the producer, the entity, the category and both lengths", () => {
+      const log = spyLog()
+      visualText(fallbackBlock(`${'a'.repeat(300)}. ${'b'.repeat(300)}`), log)
+      expect(log.warn).toHaveBeenCalledWith('classifier.visual_truncated', {
+        entryId: 'entry_1',
+        source: 'per_turn_classifier',
+        entityId: 'char_1',
+        type: 'physique',
+        length: 602,
+        keptLength: 301,
+      })
+      vi.mocked(log.warn).mockClear()
+      visualText(fallbackBlock('b'.repeat(VISUAL_TEXT_MAX)), log)
+      expect(log.warn).not.toHaveBeenCalled()
+    })
   })
 
   it('handles item transfers between characters', () => {
@@ -410,9 +578,10 @@ describe('buildPiggybackActions', () => {
     }
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block,
+      turn: planned(block),
       entities: [char1, char2],
       previousMetadata,
       branchId: 'main',
@@ -456,9 +625,10 @@ describe('buildPiggybackActions', () => {
       lastSeenAt: null,
     })
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: {
+      turn: planned({
         transfers: {
           items: [],
           stackables: [
@@ -466,7 +636,7 @@ describe('buildPiggybackActions', () => {
             { key: '__proto__', amount: 2, to: 'char_2' },
           ],
         },
-      },
+      }),
       entities: [
         mockEntity({ id: 'char_1', state: state({ constructor: 2 }) }),
         mockEntity({ id: 'char_2', state: state({}) }),
@@ -507,9 +677,12 @@ describe('buildPiggybackActions', () => {
       },
     })
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: { transfers: { items: [], stackables: [{ key: 'gold', amount: 1, to: 'char_1' }] } },
+      turn: planned({
+        transfers: { items: [], stackables: [{ key: 'gold', amount: 1, to: 'char_1' }] },
+      }),
       entities: [holder],
       previousMetadata,
       branchId: 'main',
@@ -521,6 +694,38 @@ describe('buildPiggybackActions', () => {
         payload: { branchId: 'main', id: 'char_1', stackables: { gold: 8 } },
       },
     ])
+  })
+
+  it('debits a stored key with a line break under the single-spaced key the prompt shows', () => {
+    const log = spyLog()
+    const result = buildPiggybackActions({
+      log,
+      source: 'ai_classifier',
+      entryId: 'entry_1',
+      turn: planned({
+        transfers: { items: [], stackables: [{ key: 'silver coins', amount: 5, from: 'char_1' }] },
+      }),
+      entities: [
+        mockEntity({
+          id: 'char_1',
+          state: { ...emptyEntityState('character'), stackables: { 'silver\ncoins': 7 } },
+        }),
+      ],
+      previousMetadata,
+      branchId: 'main',
+    })
+    expect(result.actions.filter((a) => a.kind === 'updateEntityStackables')).toEqual([
+      {
+        kind: 'updateEntityStackables',
+        source: 'ai_classifier',
+        payload: { branchId: 'main', id: 'char_1', stackables: { 'silver coins': 2 } },
+      },
+    ])
+    expect(
+      vi
+        .mocked(log.warn)
+        .mock.calls.filter(([event]) => event === 'classifier.stackable_shortfall'),
+    ).toEqual([])
   })
 
   describe('one position per item', () => {
@@ -542,9 +747,10 @@ describe('buildPiggybackActions', () => {
       })
     const run = (block: ParsedStateBlock, entities: Entity[]) =>
       buildPiggybackActions({
+        log: logger,
         source: 'ai_classifier',
         entryId: 'entry_1',
-        block,
+        turn: planned(block),
         entities,
         previousMetadata,
         branchId: 'main',
@@ -647,9 +853,10 @@ describe('buildPiggybackActions', () => {
     }
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block,
+      turn: planned(block),
       entities: [char1, char2],
       previousMetadata,
       branchId: 'main',
@@ -678,6 +885,55 @@ describe('buildPiggybackActions', () => {
     ])
   })
 
+  // data-model.md → Stackable items: the prose stays true for the payee, and the shortfall shows.
+  it('credits the payee in full on a shortfall, clamps the payer at zero and logs it', () => {
+    const holder = (id: string, stackables: Record<string, number>) =>
+      mockEntity({ id, state: { ...emptyEntityState('character'), stackables } })
+    const log = spyLog()
+    const result = buildPiggybackActions({
+      log,
+      source: 'ai_classifier',
+      entryId: 'entry_1',
+      turn: planned({
+        transfers: {
+          items: [],
+          stackables: [
+            { key: 'gold', amount: 20, from: 'char_1', to: 'char_2' },
+            { key: 'arrows', amount: 2, from: 'char_1' },
+          ],
+        },
+      }),
+      entities: [holder('char_1', { gold: 5, arrows: 6 }), holder('char_2', { gold: 1 })],
+      previousMetadata,
+      branchId: 'main',
+    })
+
+    expect(
+      result.actions.flatMap((a) =>
+        a.kind === 'updateEntityStackables' ? [[a.payload.id, a.payload.stackables]] : [],
+      ),
+    ).toEqual([
+      ['char_1', { arrows: 4 }],
+      ['char_2', { gold: 21 }],
+    ])
+    const shortfalls = vi
+      .mocked(log.warn)
+      .mock.calls.filter(([event]) => event === 'classifier.stackable_shortfall')
+    expect(shortfalls).toEqual([
+      [
+        'classifier.stackable_shortfall',
+        {
+          entryId: 'entry_1',
+          source: 'ai_classifier',
+          entityId: 'char_1',
+          key: 'gold',
+          amount: 20,
+          balance: 5,
+        },
+      ],
+    ])
+  })
+
   describe('malformed block fixture matrix', () => {
     it('handles truncated tag: worldTime is finite number and valid fields still apply', () => {
       const raw = `<state>
@@ -691,9 +947,10 @@ describe('buildPiggybackActions', () => {
       expect(parsed.failures).toHaveLength(1)
 
       const result = buildPiggybackActions({
+        log: logger,
         source: 'ai_classifier',
         entryId: 'entry_1',
-        block: parsed.block,
+        turn: planned(parsed.block),
         entities: [],
         previousMetadata,
         branchId: 'main',
@@ -714,9 +971,10 @@ describe('buildPiggybackActions', () => {
       expect(parsed.blockFound).toBe(true)
 
       const result = buildPiggybackActions({
+        log: logger,
         source: 'ai_classifier',
         entryId: 'entry_1',
-        block: parsed.block,
+        turn: planned(parsed.block),
         entities: [],
         previousMetadata,
         branchId: 'main',
@@ -736,9 +994,10 @@ describe('buildPiggybackActions', () => {
       const parsed = parseStateBlock(raw)
 
       const result = buildPiggybackActions({
+        log: logger,
         source: 'ai_classifier',
         entryId: 'entry_1',
-        block: parsed.block,
+        turn: planned(parsed.block),
         entities: [],
         previousMetadata,
         branchId: 'main',
@@ -763,9 +1022,10 @@ describe('buildPiggybackActions', () => {
     const item = mockEntity({ id: 'item_1', kind: 'item' })
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_2',
-      block: { sceneEntities: ['char_1'], currentLocation: 'item_1' },
+      turn: planned({ sceneEntities: ['char_1'], currentLocation: 'item_1' }),
       entities: [char1, item],
       previousMetadata,
       branchId: 'main',
@@ -787,9 +1047,10 @@ describe('buildPiggybackActions', () => {
     const loc2 = mockEntity({ id: 'loc_2', kind: 'location' })
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_2',
-      block: { sceneEntities: ['char_1'], currentLocation: 'loc_2' },
+      turn: planned({ sceneEntities: ['char_1'], currentLocation: 'loc_2' }),
       entities: [char1, loc2],
       previousMetadata,
       branchId: 'main',
@@ -806,9 +1067,10 @@ describe('buildPiggybackActions', () => {
     }
 
     const firstResult = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: firstBlock,
+      turn: planned(firstBlock),
       entities: [stagedChar],
       previousMetadata,
       branchId: 'main',
@@ -829,9 +1091,10 @@ describe('buildPiggybackActions', () => {
     }
 
     const secondResult = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_2',
-      block: secondBlock,
+      turn: planned(secondBlock),
       entities: [activeChar],
       previousMetadata: firstResult.metadata,
       branchId: 'main',
@@ -855,9 +1118,10 @@ describe('buildPiggybackActions', () => {
     }
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block,
+      turn: planned(block),
       entities: [activeChar],
       previousMetadata: { sceneEntities: [], currentLocationId: null, worldTime: 0 },
       branchId: 'main',
@@ -913,9 +1177,10 @@ describe('buildPiggybackActions', () => {
     }
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block,
+      turn: planned(block),
       entities: [activeChar, location],
       previousMetadata: { sceneEntities: [], currentLocationId: null, worldTime: 0 },
       branchId: 'main',
@@ -944,24 +1209,32 @@ describe('buildPiggybackActions', () => {
   // are a no-op unless diagnostics is on. Returning them is what lets the report record
   // the cause instead of leaving the reader to guess it from a difference.
   describe('applied outcomes', () => {
-    it('reports the clamped delta while metadata carries the clamped total', () => {
+    it("reports the clamped delta while metadata carries the clamped total, warning on the run's logger", () => {
+      const log = spyLog()
       const result = buildPiggybackActions({
+        log,
         source: 'ai_classifier',
         entryId: 'entry_1',
-        block: { worldTimeDelta: -600 },
+        turn: planned({ worldTimeDelta: -600 }),
         entities: [],
         previousMetadata,
         branchId: 'main',
       })
       expect(result.applied.worldTimeDelta).toBe(0)
       expect(result.metadata.worldTime).toBe(previousMetadata.worldTime)
+      expect(log.warn).toHaveBeenCalledWith('classifier.delta_clamped', {
+        originalDelta: -600,
+        finalDelta: 0,
+        entryId: 'entry_1',
+      })
     })
 
     it('passes an unclamped delta through unchanged', () => {
       const result = buildPiggybackActions({
+        log: logger,
         source: 'ai_classifier',
         entryId: 'entry_1',
-        block: { worldTimeDelta: 30 },
+        turn: planned({ worldTimeDelta: 30 }),
         entities: [],
         previousMetadata,
         branchId: 'main',
@@ -973,9 +1246,10 @@ describe('buildPiggybackActions', () => {
     it('flags a location the model named that is not a location', () => {
       const sword = mockEntity({ id: 'item_sword', kind: 'item', name: 'Sword' })
       const result = buildPiggybackActions({
+        log: logger,
         source: 'ai_classifier',
         entryId: 'entry_1',
-        block: { currentLocation: 'item_sword' },
+        turn: planned({ currentLocation: 'item_sword' }),
         entities: [sword],
         previousMetadata,
         branchId: 'main',
@@ -985,12 +1259,41 @@ describe('buildPiggybackActions', () => {
       expect(result.metadata.currentLocationId).toBe(previousMetadata.currentLocationId)
     })
 
+    // piggyback.md → A bad ref in the two writers: a retired place can't be entered.
+    it('rejects a retired location, logged, and keeps the previous one', () => {
+      const log = spyLog()
+      const sunk = mockEntity({
+        id: 'loc_sunk',
+        kind: 'location',
+        name: 'Saltmere',
+        status: 'retired',
+      })
+      const result = buildPiggybackActions({
+        log,
+        source: 'ai_classifier',
+        entryId: 'entry_1',
+        turn: planned({ currentLocation: 'loc_sunk' }),
+        entities: [sunk],
+        previousMetadata,
+        branchId: 'main',
+      })
+      expect(result.applied.currentLocationRejected).toBe(true)
+      expect(result.metadata.currentLocationId).toBe(previousMetadata.currentLocationId)
+      expect(log.warn).toHaveBeenCalledWith('classifier.current_location_rejected', {
+        entryId: 'entry_1',
+        currentLocation: 'loc_sunk',
+        kind: 'location',
+        status: 'retired',
+      })
+    })
+
     it('does not flag a location the model named correctly', () => {
       const keep = mockEntity({ id: 'loc_keep', kind: 'location', name: 'The Keep' })
       const result = buildPiggybackActions({
+        log: logger,
         source: 'ai_classifier',
         entryId: 'entry_1',
-        block: { currentLocation: 'loc_keep' },
+        turn: planned({ currentLocation: 'loc_keep' }),
         entities: [keep],
         previousMetadata,
         branchId: 'main',
@@ -998,5 +1301,177 @@ describe('buildPiggybackActions', () => {
       expect(result.applied.currentLocationRejected).toBe(false)
       expect(result.metadata.currentLocationId).toBe('loc_keep')
     })
+  })
+})
+
+// piggyback.md → New locations and items.
+describe("buildPiggybackActions with this turn's creates", () => {
+  const previousMetadata = { sceneEntities: ['char_1'], currentLocationId: 'loc_1', worldTime: 100 }
+  const hero = mockEntity({ id: 'char_1' })
+  const docks = mockEntity({
+    id: 'loc_docks',
+    kind: 'location',
+    name: 'the Docks',
+    state: { parent_location_id: null },
+  })
+  const mill = mockEntity({
+    id: 'loc_mill',
+    kind: 'location',
+    name: 'the Mill',
+    status: 'staged',
+    state: { parent_location_id: null },
+  })
+  const build = ({
+    block,
+    createdRows,
+    reusedIds,
+    ...args
+  }: Partial<Omit<Parameters<typeof buildPiggybackActions>[0], 'turn'>> & {
+    block: ParsedStateBlock
+    createdRows?: readonly Entity[]
+    reusedIds?: readonly string[]
+  }) =>
+    buildPiggybackActions({
+      log: logger,
+      source: 'piggyback_tagged_block',
+      entryId: 'entry_2',
+      turn: planned(block, { createdRows, reusedIds }),
+      entities: [hero],
+      previousMetadata,
+      branchId: 'main',
+      ...args,
+    })
+  const promotes = (result: ReturnType<typeof buildPiggybackActions>) =>
+    result.actions.filter((a) => a.kind === 'promoteStagedEntity')
+  const promoteOf = (id: string) => ({
+    kind: 'promoteStagedEntity',
+    source: 'piggyback_tagged_block',
+    payload: { branchId: 'main', id, proseEntryId: null },
+  })
+
+  it('accepts a location this turn creates as the scene, and moves the scene there', () => {
+    const result = build({
+      block: { sceneEntities: ['char_1'], currentLocation: 'loc_docks' },
+      createdRows: [docks],
+    })
+    expect(result.applied.currentLocationRejected).toBe(false)
+    expect(result.metadata.currentLocationId).toBe('loc_docks')
+    expect(result.actions.filter((a) => a.kind === 'updateEntityLocationTracking')).toEqual([
+      {
+        kind: 'updateEntityLocationTracking',
+        source: 'piggyback_tagged_block',
+        payload: { branchId: 'main', id: 'char_1', currentLocationId: 'loc_docks' },
+      },
+    ])
+  })
+
+  // The control for the case above: without the planner's row the id is unknown.
+  it('refuses the same id when the turn planned no such row', () => {
+    const result = build({ block: { sceneEntities: ['char_1'], currentLocation: 'loc_docks' } })
+    expect(result.applied.currentLocationRejected).toBe(true)
+    expect(result.metadata.currentLocationId).toBe('loc_1')
+  })
+
+  it('moves a new item into a holder with no position write', () => {
+    const key = mockEntity({
+      id: 'item_key',
+      kind: 'item',
+      name: 'rusted key',
+      state: { at_location_id: null },
+    })
+    const result = build({
+      block: {
+        transfers: { items: [{ id: 'item_key', slot: 'inventory', to: 'char_1' }], stackables: [] },
+      },
+      createdRows: [key],
+    })
+    expect(
+      result.actions.filter(
+        (a) => a.kind === 'updateEntityInventory' || a.kind === 'updateItemPosition',
+      ),
+    ).toEqual([
+      {
+        kind: 'updateEntityInventory',
+        source: 'piggyback_tagged_block',
+        payload: { branchId: 'main', id: 'char_1', equipped_items: [], inventory: ['item_key'] },
+      },
+    ])
+  })
+
+  it('promotes a staged location the block names as the scene', () => {
+    const result = build({
+      block: { sceneEntities: ['char_1'], currentLocation: 'loc_mill' },
+      entities: [hero, mill],
+    })
+    expect(promotes(result)).toEqual([promoteOf('loc_mill')])
+  })
+
+  it('promotes it once when the scene and the reused ids name it too', () => {
+    const result = build({
+      block: { sceneEntities: ['char_1', 'loc_mill'], currentLocation: 'loc_mill' },
+      entities: [hero, mill],
+      reusedIds: ['loc_mill'],
+    })
+    expect(promotes(result)).toEqual([promoteOf('loc_mill')])
+  })
+
+  it('promotes a staged row a create reused, and leaves an active one', () => {
+    const hall = mockEntity({
+      id: 'loc_hall',
+      kind: 'location',
+      status: 'staged',
+      state: { parent_location_id: null },
+    })
+    const yard = mockEntity({
+      id: 'loc_yard',
+      kind: 'location',
+      state: { parent_location_id: null },
+    })
+    const result = build({
+      block: { sceneEntities: ['char_1'] },
+      entities: [hero, hall, yard],
+      reusedIds: ['loc_hall', 'loc_yard'],
+    })
+    expect(promotes(result)).toEqual([promoteOf('loc_hall')])
+  })
+
+  // A rejected current_location names no place, so it introduces nothing.
+  it('does not promote a staged non-location the block names as the scene', () => {
+    const ghost = mockEntity({ id: 'char_ghost', status: 'staged' })
+    const result = build({
+      block: { sceneEntities: ['char_1'], currentLocation: 'char_ghost' },
+      entities: [hero, ghost],
+    })
+    expect(result.applied.currentLocationRejected).toBe(true)
+    expect(promotes(result)).toEqual([])
+  })
+
+  // Auto-promote keys on the block naming the place; an inherited location names nothing.
+  it('does not promote a staged location the turn only inherited', () => {
+    const result = build({
+      block: { sceneEntities: ['char_1'] },
+      entities: [hero, mill],
+      previousMetadata: { ...previousMetadata, currentLocationId: 'loc_mill' },
+    })
+    expect(result.metadata.currentLocationId).toBe('loc_mill')
+    expect(promotes(result)).toEqual([])
+  })
+})
+
+describe('buildPiggybackActions input', () => {
+  it('takes only a block the planner handed on', () => {
+    const turn = { ...planned({}), block: { sceneEntities: ['char_1'] } }
+    const build = () =>
+      buildPiggybackActions({
+        log: logger,
+        source: 'ai_classifier',
+        entryId: 'entry_1',
+        // @ts-expect-error a hand-built block was never planned
+        turn,
+        entities: [],
+        previousMetadata: { sceneEntities: [], currentLocationId: null, worldTime: 0 },
+        branchId: 'main',
+      })
+    expect(build).toBeTypeOf('function')
   })
 })

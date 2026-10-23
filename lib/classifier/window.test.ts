@@ -87,6 +87,40 @@ describe('buildClassifierWindow', () => {
     expect(w.coversThrough).toBe(3)
   })
 
+  // classifier.md → Persistence: the reader clears a trailing system entry before the next Send,
+  // whose user_action takes its position. Claimed, that turn would sit at the watermark unread.
+  it('leaves a trailing system entry above coversThrough', () => {
+    const w = buildClassifierWindow({
+      entries: [entry(1, 'e1'), entry(2, 'e2'), entry(3, 'e3', 'system')],
+      processedThrough: 0,
+      maxEntries: 20,
+    })
+    expect(w.turns.map((t) => t.entryId)).toEqual(['e1', 'e2'])
+    expect(w.coversThrough).toBe(2)
+  })
+
+  it('stays at the watermark for a window of nothing but system entries', () => {
+    const w = buildClassifierWindow({
+      entries: [entry(4, 'e4', 'system'), entry(5, 'e5', 'system')],
+      processedThrough: 3,
+      maxEntries: 20,
+    })
+    expect(w.isEmpty).toBe(true)
+    expect(w.coversThrough).toBe(3)
+  })
+
+  // Prose lies past the cut, so a system entry at the cut is interior, never the tail.
+  it('claims a truncated window up to its cut, a system entry at the cut included', () => {
+    const w = buildClassifierWindow({
+      entries: [entry(1, 'e1'), entry(2, 'e2'), entry(3, 'e3', 'system'), entry(4, 'e4')],
+      processedThrough: 0,
+      maxEntries: 3,
+    })
+    expect(w.truncated).toBe(true)
+    expect(w.turns.map((t) => t.entryId)).toEqual(['e1', 'e2'])
+    expect(w.coversThrough).toBe(3)
+  })
+
   it('is empty when the watermark is already at head', () => {
     const w = buildClassifierWindow({
       entries: [entry(1, 'e1')],
@@ -106,5 +140,56 @@ describe('buildClassifierWindow', () => {
     expect(w.resolveHandle('t1')).toEqual({ entryId: 'e1', fellBack: false })
     expect(w.resolveHandle('t99')).toEqual({ entryId: 'e2', fellBack: true })
     expect(w.resolveHandle(undefined)).toEqual({ entryId: 'e2', fellBack: true })
+  })
+})
+
+// classifier.md → What the classifier reads: each turn carries the scene saved on it.
+describe('saved scene per turn', () => {
+  const scened = (
+    position: number,
+    id: string,
+    kind: string,
+    metadata: { sceneEntities: string[]; currentLocationId: string | null } | null,
+  ) => ({ id, position, kind, content: `prose ${position}`, metadata }) as never
+
+  const w = buildClassifierWindow({
+    entries: [
+      scened(1, 'e1', 'ai_reply', {
+        sceneEntities: ['char_a', 'item_b'],
+        currentLocationId: 'loc_c',
+      }),
+      // A user action carries the scene submitTurn inherited onto it.
+      scened(2, 'e2', 'user_action', { sceneEntities: ['char_d'], currentLocationId: null }),
+      scened(3, 'e3', 'ai_reply', null),
+    ],
+    processedThrough: 0,
+    maxEntries: 20,
+  })
+
+  it("copies each entry's sceneEntities and currentLocationId onto its turn", () => {
+    expect(w.turns.map((t) => [t.sceneEntities, t.currentLocationId])).toEqual([
+      [['char_a', 'item_b'], 'loc_c'],
+      [['char_d'], null],
+      [[], null],
+    ])
+  })
+
+  it('returns the saved scene of the turn a handle names, the head included', () => {
+    expect(w.sceneOf('t1')).toEqual(new Set(['char_a', 'item_b']))
+    expect(w.sceneOf('t2')).toEqual(new Set(['char_d']))
+    // Naming the head directly is not a fallback: its own (empty) scene comes back.
+    expect(w.sceneOf('t3')).toEqual(new Set())
+  })
+
+  it('returns null for a handle that falls back to the window head', () => {
+    const headed = buildClassifierWindow({
+      entries: [
+        scened(1, 'e1', 'ai_reply', { sceneEntities: ['char_a'], currentLocationId: null }),
+      ],
+      processedThrough: 0,
+      maxEntries: 20,
+    })
+    expect(headed.sceneOf('t9')).toBeNull()
+    expect(headed.sceneOf(undefined)).toBeNull()
   })
 })

@@ -21,4 +21,8 @@ export const chrome = {
     page.getByRole('option', { name: t('chrome.goTo.openPlot'), exact: true }),
   goToStorySettingsRow: (page: Page): Locator =>
     page.getByRole('option', { name: t('chrome.goTo.openStorySettings'), exact: true }),
+
+  // The menu's jump out of the story, present only with the diagnostics gate seeded on.
+  diagnosticsHubRow: (page: Page): Locator =>
+    page.getByText(t('settings:diagnosticsHub.actionLabel'), { exact: true }),
 }

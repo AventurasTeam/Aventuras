@@ -259,6 +259,8 @@ describe('updateEntryWorldTime', () => {
       runId: 'r1',
       kind: 'per-turn',
       gateBehavior: 'hard-gate',
+      interruptible: null,
+      beforeTurn: false,
       actionId: 'a',
       storyId: 's1',
       branchId: 'b1',

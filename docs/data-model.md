@@ -57,7 +57,7 @@ erDiagram
         text fork_entry_id "entry in parent branch the fork diverged from"
         text name
         integer created_at
-        json classifier_status "per-branch periodic-classifier status: lifecycle state, last-success-at, last-error, retry-count, and processedThrough (highest entry position fully processed; pass range is (processedThrough, head]). Operational state — branches is not delta-logged, so reversal clamps processedThrough imperatively. See docs/memory/classifier.md → Persistence"
+        json classifier_status "per-branch periodic-classifier status: lifecycle state, last-success-at, last-error, and processedThrough (highest entry position fully processed; pass range is (processedThrough, head]). Operational state — branches is not delta-logged, so reversal clamps processedThrough imperatively. See docs/memory/classifier.md → Persistence"
     }
 
     story_entries {
@@ -78,13 +78,13 @@ erDiagram
         text name
         text description
         text status "staged | active | retired"
-        text retired_reason "free-form; only meaningful when status=retired. Hard-finality only — e.g. 'killed by Kael', 'temple destroyed in quake', 'faction disbanded after coup', 'exiled to the southern wastes'. Off-screen-but-alive characters stay status=active with stale lastSeenAt; see docs/memory/edge-cases.md → Retirement"
-        json keywords "string[]; aliases / epithets / relational references beyond the canonical name. User-authored, OR periodic-classifier-emitted at entity creation and appended on later passes (append-only, never removes). Matched alongside name in the keyword pathway. See docs/memory/retrieval.md → Keywords schema"
+        text retired_reason "free-form; only meaningful when status=retired. Hard-finality only — e.g. 'killed by Kael', 'faction disbanded after coup', 'exiled to the southern wastes'. Off-screen-but-alive characters stay status=active with stale lastSeenAt; see docs/memory/edge-cases.md → Retirement"
+        json keywords "string[]; aliases / epithets / relational references beyond the canonical name. User-authored, OR periodic-classifier-emitted at entity creation and appended on later passes, OR added by chapter close, which alone removes, and only keywords an AI added. Matched alongside name in the keyword pathway. See docs/memory/retrieval.md → Keywords schema"
         text injection_mode "always | auto | disabled; short-circuited by active+in-scene invariant"
         integer priority "0..100; orders keyword-inject overflow ONLY — unlike lore.priority it does not feed the ranker pin_signal, which stays 0 for entities. See docs/memory/retrieval.md → Keyword injection budget"
-        integer name_collision_flag "0 | 1; 1 = possible duplicate of an exact or partial namesake, detected at classifier extraction; surfaces in World panel for review. See docs/memory/edge-cases.md → Name collision"
-        text name_collision_partner_id "set iff flagged: the same-branch namesake the classifier compared the row against, which World pairs it with; a gone partner leaves the flag dormant. See docs/memory/classifier.md → Disambiguation"
-        text name_collision_reason "set iff flagged: alike | ambiguous | distinct | in-scene | no-signal, why the classifier flagged"
+        integer name_collision_flag "0 | 1; 1 = possible duplicate of an exact or partial namesake, raised when the classifier or the per-turn writer creates the row, when a pass's rename meets a name another row holds, or by chapter close on a row it judges a duplicate; surfaces in World panel for review. See docs/memory/edge-cases.md → Name collision"
+        text name_collision_partner_id "set iff flagged: the same-branch namesake the row's writer compared it against, or the row a merge re-pointed it at, which World pairs it with; a gone partner leaves the flag dormant. See docs/memory/classifier.md → Disambiguation"
+        text name_collision_reason "set iff flagged: alike | ambiguous | distinct | in-scene | no-signal | same-parent, why the row's writer flagged it; the values for a rename clash, a chapter-close flag and a cross-parent unplaced match are open (docs/followups.md → Implement the AI writer map)"
         json state "typed per kind"
         json tags
         integer embedding_stale "0 | 1; 1 = embedded fields (name/description) need (re-)embedding. Set on any embedded-field write whose content hash differs from the vector's source_hash (edit, create, or failed sync); cleared when the pre-retrieval sync stage embeds the row or content reverts to the embedded value. Still flagged at retrieval means the sync stage couldn't embed it (embedder unavailable), so it is excluded. See docs/memory/retrieval.md → Compute lifecycle"
@@ -501,8 +501,7 @@ column, not a branch-scoped table. The new branch initializes
 `processedThrough = min(parent.processedThrough, position(N))` (it cannot
 have processed turns it does not contain, and step 2 already copied facts
 about kept entries up to that point); the rest of the status resets to
-idle, so a fresh branch does not inherit a parent's failed-persistent
-state. See
+idle, so a fresh branch does not inherit a parent's failed pass. See
 [classifier.md → Persistence](./memory/classifier.md#persistence).
 
 Reads on the new branch are always fast because state is pre-materialized
@@ -567,38 +566,36 @@ in character knowledge in a way static reference doesn't.
 
 #### Description vs `state` boundary
 
-`entities.description` (top-level text column) is the
-**user-authoritative "who" prose**. State is the **typed,
-classifier-mutable layer** carrying everything that needs structure
-for query, classifier evolution, or prompt rendering.
+`entities.description` (top-level text column) is the **"who"
+prose**. State is the **typed, AI-mutable layer** carrying everything
+that needs structure for query, evolution from prose, or prompt
+rendering.
 
 The split rule:
 
 - **Description** holds the prose-y identity sketch. Whoever spawns
-  the entity authors the initial description (user via wizard /
-  `+ New entity` → user-authored; classifier via mid-story discovery
-  → classifier-authored once). Subsequent writes are **user-only**
-  in v1.
+  the entity authors the initial description: the user (wizard,
+  `+ New entity`), the per-turn writer creating a place or an item, or
+  the periodic classifier creating a character, a faction or a
+  mentioned place. After that, chapter close rewrites it when a chapter
+  materially changes who or what the entity is, and the user edits it
+  ([Authorship contract](#authorship-contract)).
 - **State** holds typed slots for: things that evolve mid-stream
-  (classifier needs structural slots to record changes), things
+  (writers need structural slots to record changes), things
   needed structurally (entity refs, hierarchy walks, caches), and
   things the UI needs as discrete fields rather than parsed from
   prose.
 
-The classifier writes prose well at _introduction_ moments; mid-stream
-description rewrites risk coherence drift across long stories. Keeping
-description as a stable user-authoritative surface protects the entity's
-"who" from per-turn churn; typed state slots absorb the per-turn /
-per-chapter evolution.
+Mid-stream description rewrites risk coherence drift across long
+stories, so neither the per-turn writer nor a pass rewrites one: typed
+state slots absorb the per-turn evolution. Chapter close is the one AI
+writer that does, once per chapter, with the whole chapter in view and
+only on a material change (the stable boy who became the king's
+champion). A user edit made after the prose a rewrite cites stands.
 
-**v1 collapse:** the lore-management agent suggestion-queue UI
-(autonomous-vs-confirm-mode toggle on classifier-proposed description
-revisions) is deferred. Until it ships, classifier never updates
-description after first introduction; user is the only ongoing editor.
-Stale descriptions are the user's problem until they edit — acceptable
-v1 floor. The suggestion-queue UI is a separate UX design pass; the
-broader memory-mgmt design landed in
-[`docs/memory/`](./memory/README.md).
+**No suggestion queue in v1.** Chapter close writes a rewrite directly,
+as one of the close's undoable writes. A confirm-mode queue for
+proposed rewrites is a separate UX design pass, not v1.
 
 #### `CharacterState` shape
 
@@ -642,10 +639,10 @@ in romance vs war saga vs eldritch horror demands different vocabularies.
 Free strings let the classifier write whatever fits the prose; field
 names stay stable for UI and translation.
 
-**`attire` is live current attire**, not signature. Classifier updates on
-observed prose change ("Kael changed into noble robes"). Staleness risk
-is acknowledged; mitigation is prompting discipline + chapter-close
-compaction.
+**`attire` is live current attire**, not signature. The per-turn
+writer updates it on observed prose change ("Kael changed into noble
+robes"). Staleness risk is acknowledged; mitigation is prompting
+discipline, since the writer sees the current value it restates.
 
 **`traits` and `drives` are flat string arrays.** Symmetric shape; UI
 renders as chip groups; classifier emits one element at a time. A third
@@ -676,10 +673,11 @@ either; they live in the separate `stackables` slot.
 
 **`lastSeenAt`** drives "last seen 3 days ago in The Tavern" UX on the
 World panel and Browse rail; without caching, surfacing this would
-require walking entry history per row on every render. Classifier
-updates whenever the character is present in `metadata.sceneEntities`
-of a new entry (or is the location's anchor via
-`metadata.currentLocationId`).
+require walking entry history per row on every render. The per-turn
+writer sets it when a character leaves the scene, from the entry it
+was last in
+([`piggyback.md → What piggyback writes`](./memory/piggyback.md#what-piggyback-writes)),
+and a user scene edit re-derives it; nothing edits it directly.
 
 #### Stackable items — holder-side `Record<string, number>`, not entities
 
@@ -704,6 +702,10 @@ conditions, or any entity machinery; they're just quantities.
 - Transfer ("Aria gives Kael 50 gold") writes deltas under one matching
   `action_id`: decrement on Aria's `stackables.gold`, increment-or-create
   on Kael's.
+- Shortfall: a payer holding less than the amount is clamped at zero
+  while the payee gains the full amount, keeping the prose true for the
+  receiver; the shortfall is logged
+  ([`piggyback.md → Trailing block format`](./memory/piggyback.md#trailing-block-format)).
 - Depletion: decrement; if count → 0, remove the key from the Record.
 
 **v1 limitations** — locations don't get stackables (loose-fungibles-at-
@@ -735,6 +737,7 @@ tooltip ("Container — contents are tracked on the holder").
 ```ts
 type LocationState = {
   parent_location_id: EntityId | null // compositional hierarchy
+  unplaced?: true // known to exist, not where; only with a null parent
   condition?: string // ongoing dynamic state delta from description baseline
   // ("war-damaged", "abandoned since the plague")
 }
@@ -746,8 +749,49 @@ entity where `kind=location`, giving locations a containment hierarchy
 `current_location_id` / items' `at_location_id`, which are _positional_
 (where something is right now); `parent_location_id` is _compositional_
 (this place is part of that place). Prompt rendering walks the parent
-chain at runtime (e.g. `Aria is in [Shop in Town Square in City]`).
+chain at runtime (`The Rusty Anchor — in Port Vellis › Eldra`, see
+[`piggyback.md → What the writer sees`](./memory/piggyback.md#what-the-writer-sees)).
 Cycle prevention is app-layer — SQLite can't enforce it.
+
+**Unplaced places.** A null parent means a top-level place: a world, a
+realm, or a city in a story whose map knows nothing larger. A place
+known to exist but not where carries `unplaced: true` instead, and sits
+outside the tree rather than at its root. A writer that isn't told
+where a new place is decides by containment: if nothing on the map
+could contain it, it is top-level; if something could and the turns
+don't say which, it is unplaced. When unsure, unplaced: a wrongly
+unplaced place heals when a later mention places it (matching below),
+while a wrongly top-level one is never compared against the place a
+later turn creates under its real parent. Placing a place clears the
+flag in the same write, so the flag never sits beside a parent. A
+place whose parent can't be resolved at create (it names nothing, is
+retired, or its chain is broken) is unplaced too, and so is one whose
+parent a reversal removes.
+
+Unplaced places are listed in their own group, on the narrator's
+`# Places` map and in the periodic classifier's Places list, with ids
+there so a pass can place them. World's Location Overview reads
+`Location unknown` where the parent chain would be, and its parent
+picker shows `Unknown` until the user picks a parent or `Top level`. A
+current location that is unplaced shows just its name.
+
+Matching a new place against existing rows
+([`piggyback.md → Matching before creating`](./memory/piggyback.md#matching-before-creating))
+takes in unplaced places three ways:
+
+- **A new place under a parent** is compared against that parent's
+  children, and against unplaced places by exact name. An unplaced
+  match is reused and placed under the parent: a turn that goes to
+  Varn under the Eastern Reach finds the Varn a pass mentioned.
+- **A new top-level place** is compared against the top-level places,
+  and against unplaced places by exact name, with the same reuse.
+- **A new unplaced place** is compared by exact name against unplaced
+  places and every placed one. One match is reused; several create it
+  unplaced with a collision flag. Partial matches flag, as elsewhere.
+
+Who places one, and who may mark it top-level, is in the
+[Authorship contract](#authorship-contract). Rows from before the flag
+keep a null parent's meaning, top-level.
 
 **Cycle guard owner.** The action-layer mutator that writes
 `entities.state.parent_location_id` (per
@@ -764,17 +808,24 @@ happen in real data).
 already stored above the proposed parent rather than the write (mirrors the
 gate-rejection shape at
 [`generation-pipeline.md → Action rejection`](./generation-pipeline.md#action-rejection--defense-in-depth)).
-A classifier writer never lets a looping parent reach the mutator: its
-planner runs the same walk against the branch's locations and drops the
-fact, the way the periodic planner drops a ref it can't resolve. A
+A machine writer never lets a looping parent reach the mutator: its
+planner runs the same walk against the branch's locations first and
+drops the parent, the way the periodic planner drops a ref it can't
+resolve. A
 rejection that did reach the orchestrator would fail the whole run
 (see the run state transitions in
 [`generation-pipeline.md → Transaction lifecycle`](./generation-pipeline.md#transaction-lifecycle)),
 and neither the phase nor the LLM retry tier can recover it — the retry
 finishes before any write is emitted, and a phase never sees a write's
-result. No classifier path writes `parent_location_id` in v1. User
-edits surface as a form-validation error in the World panel — user
-fixes or leaves it.
+result. The machine paths that write `parent_location_id` are the
+per-turn writer creating a location or placing an unplaced one it
+reuses, the periodic classifier creating a mentioned place or moving
+one the prose places, and chapter close; a create whose parent fails
+the walk lands unplaced, and a move that fails it is dropped
+([`piggyback.md → New locations and items`](./memory/piggyback.md#new-locations-and-items),
+[`classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)).
+User edits surface as a form-validation error in the World
+panel — user fixes or leaves it.
 
 **Why so few fields.** Locations are dramatically less dynamic than
 characters. Type, appearance, atmosphere, landmark features all
@@ -784,6 +835,71 @@ tower fell, the gate was breached) are recorded as `happenings` rows
 with the location as a participant via `happening_involvements` — not
 as state mutations. State carries the _running consequence_ (`condition:
 "earthquake-damaged"`), not the event log.
+
+**Retired places.** A retired place is gone: it can't be entered.
+Destruction is a `condition` ("burned to the ground", "sank beneath
+the waves"), and a destroyed place stays active, since ruins can still
+be visited. Only the user retires a place; the periodic classifier
+never does
+([`classifier.md → What the classifier writes`](./memory/classifier.md#what-the-classifier-writes)).
+A World Save that retires a place retires every place inside it that
+isn't retired yet in the same action, after a confirm naming them, each
+with the same `retired_reason`, so one undo restores them all; a place
+inside that is already retired keeps its own reason and goes unnamed.
+That keeps an
+invariant: **no active or staged place sits inside a retired one.**
+Every write that could break it refuses, or redirects:
+
+- retiring a place while the branch's tail scene is in it or anywhere
+  inside it refuses (`story-inside`);
+- bringing back a place whose parent is retired refuses
+  (`retired-parent`), so a cascade comes back top-down, or by undo;
+- a World create or re-parent into a retired place refuses
+  (`retired-parent`); a retired place may still sit inside another
+  retired one. The `createEntity` handler refuses such a create too, a
+  backstop behind the writers' own checks: a refusal there fails a
+  machine writer's whole run, so its planner redirects first;
+- a per-turn create or a pass's mentioned place naming a retired
+  parent lands unplaced, logged, as an unresolvable parent does
+  ([`piggyback.md → Creating a place or an item`](./memory/piggyback.md#creating-a-place-or-an-item),
+  [`classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places));
+- a location merge refuses a result that breaks it
+  ([`world.md → Merge`](./ui/screens/world/world.md#merge)).
+
+Nothing enters a retired place: the per-turn writer refuses one as the
+`<current_location>`, keeping the previous location; the reader's scene
+editor and World's position pickers don't offer one, and the action
+layer refuses it (`retired-place`). Characters and items already there
+when a place retires stay where they were, as the last place they were
+seen, until the story or the user moves them. Places an earlier
+classifier retired, and active places inside them, need no migration:
+every reader renders them as they stand.
+
+**Disabled places.** `injection_mode = 'disabled'` keeps a place out of
+the prompt with every place inside it. A location is effectively
+disabled when its own mode is `disabled` or an ancestor's is, unless
+the story is inside that ancestor: while the tail scene's location is
+the disabled ancestor or below it, the ancestor's disabling doesn't
+reach the places around the story, though the ancestor itself stays
+off the map unless it is the current location. The effective mode is
+computed, never written, so every place keeps its own mode and
+re-enabling a parent gives the children theirs back. The location map
+([`piggyback.md → What the writer sees`](./memory/piggyback.md#what-the-writer-sees)),
+retrieval
+([`retrieval.md → Pool exclusions`](./memory/retrieval.md#pool-exclusions))
+and World read it; it follows `parent_location_id` only, so the
+characters and items at a place are unaffected. Disabling a place, or
+moving one into a disabled region, refuses while the tail scene is in
+it or inside it (`story-inside`): a disabled region the story enters is
+one the model walked into through the prose, never one disabled around
+it.
+
+**The story's place.** The tail scene above is the location the next
+prompt's map is built around, read off the latest `ai_reply` or
+`opening`. A `user_action` standing at the tail, left by a regenerate
+whose unwind was refused, can name another place, which the next turn
+inherits. A `story-inside` refusal counts both places; the suspension
+follows the prompt's.
 
 #### `ItemState` shape
 
@@ -819,7 +935,10 @@ writer moves it rather than adding a second position: putting it in a
 holder's slot removes it from the holder's other slot and from every
 other holder, and clears `at_location_id`; setting `at_location_id`
 removes it from every holder. The piggyback `transfers` writer applies
-this whatever `from` names, and a World Save applies it to the items
+this whatever `from` names, including a `<drop>` that puts a held item
+down at the current place
+([`piggyback.md → Trailing block format`](./memory/piggyback.md#trailing-block-format)),
+and a World Save applies it to the items
 the Save newly holds or places, touching the other rows in the same
 action. A row left doubled by an older write is shown as it stands
 until one of those writes moves the item.
@@ -1017,17 +1136,19 @@ Schema does NOT enforce field-count caps via Zod `.max()` (would
 create production write-rejection drama on classifier overflow). Bloat
 is mitigated structurally:
 
-- **Soft caps in classifier prompt.** `traits ≤ 8`, `drives ≤ 6`,
-  `agenda ≤ 4`. Classifier prompt explicitly directs "replace, don't
-  append" when at cap.
-- **No per-turn classifier write to traits / drives / agenda.** These
-  slow-evolving identity fields update only at chapter-close
-  lore-mgmt agent. Per-turn pipeline handles scene metadata,
-  `lastSeenAt`, `current_location_id`, attire changes,
-  `equipped_items` / `inventory` / `stackables` transfers.
-  Personality / behavioral / motivational fields lag scene-by-scene
-  observations by up to one chapter — the right cadence for these
-  fields specifically.
+- **Soft caps in the writers' prompts.** `traits ≤ 8`, `drives ≤ 6`,
+  `agenda ≤ 4`. The periodic classifier writes within them when it
+  creates an entity; chapter close is told "replace, don't append" when
+  at cap.
+- **No per-turn or per-pass update to traits / drives / voice /
+  agenda.** The periodic classifier writes them once, from the window
+  that introduces the entity; after that these slow-evolving identity
+  fields update only at chapter close. The per-turn writer handles
+  scene metadata, `lastSeenAt`, `current_location_id`, visual changes,
+  `equipped_items` / `inventory` / `stackables` transfers and the
+  `condition` of what it shows. Personality / behavioral / motivational
+  fields lag scene-by-scene observations by up to one chapter — the
+  right cadence for these fields specifically.
 - **Chapter-close compaction (lore-mgmt agent).** Dedupes synonyms
   ("brave" + "courageous" → one), prunes outdated ("former alcoholic"
   10 chapters past sobriety → drop), consolidates overly-specific
@@ -1073,29 +1194,89 @@ via dotted paths. The split:
 
 #### Authorship contract
 
-Per-field "who writes / when":
+Who writes each piece of story state, and when. Four writers touch it
+besides the wizard and the user:
 
-| Field group                                                 | First write                             | Subsequent writes                                                     |
-| ----------------------------------------------------------- | --------------------------------------- | --------------------------------------------------------------------- |
-| `description` (top-level)                                   | Whoever spawns the entity               | User-only in v1                                                       |
-| `name_collision_flag`, `_partner_id`, `_reason` (top-level) | Classifier at create (Layer B)          | User-only: clearing, or a merge re-pointing the partner; delta-logged |
-| `visual.*`                                                  | Classifier from prose, or user via form | Both — classifier evolves on observed prose change                    |
-| `traits`, `drives`                                          | Classifier from prose, or user via form | Classifier (chapter-close lore-mgmt only) + user via form             |
-| `voice`                                                     | Classifier from prose, or user via form | Both                                                                  |
-| `current_location_id`                                       | Classifier per-turn                     | Classifier per-turn primary; user can edit                            |
-| `equipped_items`, `inventory`, `stackables`                 | Classifier per-turn                     | Classifier per-turn primary; user can edit                            |
-| `faction_id`                                                | Classifier or user                      | Both                                                                  |
-| `lastSeenAt`                                                | Classifier-only                         | Classifier-only                                                       |
-| `parent_location_id`                                        | User at creation                        | User-only in v1                                                       |
-| `condition` (Location/Item)                                 | Classifier or user                      | Both                                                                  |
-| `standing`, `agenda` (Faction)                              | Classifier or user                      | Classifier (chapter-close) + user                                     |
-| `at_location_id` (Item)                                     | Classifier per-turn                     | Classifier per-turn primary; user can edit                            |
+- **The per-turn writer** — piggyback's trailing block on the narrative
+  call, or its fallback classifier in its place: one layer
+  ([`memory/piggyback.md`](./memory/piggyback.md)). It owns the
+  physical state the next turn's prose must not contradict: where
+  things are, what's held, worn or broken.
+- **The periodic classifier**, a pass over the turns since its last
+  ([`memory/classifier.md`](./memory/classifier.md)). It owns facts
+  evidenced across turns (memberships, a faction's standing, where a
+  place sits, a name) and the first profile of everything it creates.
+- **Chapter close**
+  ([`memory/chapter-close.md`](./memory/chapter-close.md)). It owns
+  what needs the whole chapter: the slow identity fields, lore,
+  consolidation, and the upkeep of what the scene no longer shows.
 
-Manual user edit vs classifier overwrite policy is parked as an
-architecture concern. v1 lean: classifier writes from prose-evidenced
-changes; user edits "stick" only until classifier reads contradicting
-prose. Per-field provenance metadata (deferred to v1.5) is the proper
-fix.
+The fastest layer that has the evidence writes first, and slower layers
+correct and consolidate. Three rules hold across them:
+
+- **Order.** A turn, then a pass, then a close, never overlapping
+  ([`memory/cadence.md → Concurrency`](./memory/cadence.md#concurrency)),
+  so a field can have two AI writers and the later write wins.
+- **User precedence.** A user edit made after the prose an AI write
+  rests on stands. A per-turn or pass write rests on its source entry;
+  a chapter-close write rests on the latest entry it cites
+  ([`memory/cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes)).
+- **Seen before written.** A layer updates a field only if its prompt
+  showed it the field's current value. Creating a row is exempt.
+
+**Entities, top-level:**
+
+| Field                                           | First write                                                                                 | Later writes                                                                                                                                                                                                                                                                                                                          |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                                          | Whoever creates the row                                                                     | The periodic classifier, when the prose establishes the entity's own name ("the hooded stranger is Kael"), keeping the old name as a keyword; a name another row holds raises a collision flag instead. The user                                                                                                                      |
+| `description`                                   | Whoever creates the row ([Description vs `state` boundary](#description-vs-state-boundary)) | Chapter close, on a material change; the user                                                                                                                                                                                                                                                                                         |
+| `status`, `retired_reason`                      | The wizard and the user; an AI creates `active`                                             | The per-turn writer: staged → active. The periodic classifier: staged → active, active → retired on hard finality, retired → active on a return in the scene now. Chapter close: active → retired on chapter-scope finality. The user. Only the user retires a place or brings one back ([LocationState shape](#locationstate-shape)) |
+| `keywords`                                      | The periodic classifier at create; the wizard and the user                                  | The periodic classifier appends. Chapter close adds, including a place's or an item's first, and removes only keywords an AI added. The user                                                                                                                                                                                          |
+| `name_collision_flag`, `_partner_id`, `_reason` | The periodic classifier (Layer B, or a place's matching) or the per-turn writer, at create  | Chapter close may raise one on an unflagged row it judges a duplicate of another. User-only: clearing, or a merge re-pointing the partner (with the deleted row's reason when it takes over the deleted row's partner); delta-logged                                                                                                  |
+| `injection_mode`, `priority`, `tags`            | Defaults; the wizard and the user                                                           | User-only                                                                                                                                                                                                                                                                                                                             |
+
+**Entity `state`, per kind:**
+
+| Field                                     | First write                                                                                              | Later writes                                                                                                                                                                                                   |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Character `visual.*`                      | The periodic classifier at create; the wizard and the user                                               | The per-turn writer, when the prose changes a category or first describes one; the user. Never chapter close                                                                                                   |
+| Character `traits`, `drives`, `voice`     | The periodic classifier at create; the wizard and the user                                               | Chapter close, under the [soft caps](#soft-caps--compaction-discipline); the user                                                                                                                              |
+| Character `current_location_id`           | —                                                                                                        | The per-turn writer, from the scene; the user                                                                                                                                                                  |
+| Character `equipped_items`, `inventory`   | —                                                                                                        | The per-turn writer; the user                                                                                                                                                                                  |
+| Character `stackables`                    | —                                                                                                        | The per-turn writer; chapter close normalizes keys; the user                                                                                                                                                   |
+| Character `faction_id`                    | The periodic classifier; the user                                                                        | The periodic classifier sets and clears it from prose; the user                                                                                                                                                |
+| Character `lastSeenAt`                    | —                                                                                                        | The per-turn writer, when the character leaves the scene; a user scene edit re-derives it. Never edited directly                                                                                               |
+| Location `parent_location_id`, `unplaced` | Whoever creates it; unplaced when the turns don't place it ([LocationState shape](#locationstate-shape)) | The periodic classifier, when the prose places or moves it; chapter close; the per-turn writer only by reusing an unplaced place in a create. A pass or a close may mark an unplaced place top-level. The user |
+| Location `condition`                      | Whoever creates it, when the prose shows one                                                             | The per-turn writer, for a place its prompt showed with state; chapter close, for the rest; the user                                                                                                           |
+| Item `at_location_id`                     | —                                                                                                        | The per-turn writer: cleared when a holder takes the item, set to the current place when it's put down; the user                                                                                               |
+| Item `condition`                          | The per-turn writer at create                                                                            | The per-turn writer, for an item its prompt showed; chapter close, for the rest; the user                                                                                                                      |
+| Faction `standing`                        | The periodic classifier at create; the wizard and the user                                               | The periodic classifier, on explicit prose; chapter close; the user                                                                                                                                            |
+| Faction `agenda`                          | The periodic classifier at create; the wizard and the user                                               | Chapter close; the user                                                                                                                                                                                        |
+
+**Plot, lore, chapters and entries:**
+
+| Rows                                                                                         | First write                                                                           | Later writes                                                                                                                                                                                                                   |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Happenings: `title`, `description`, `category`, `icon`, `occurred_at_entry_id` or `temporal` | The periodic classifier; the user                                                     | Chapter close, when it merges happenings; the user                                                                                                                                                                             |
+| Happening `common_knowledge`                                                                 | 0                                                                                     | Chapter close; the user                                                                                                                                                                                                        |
+| Involvements                                                                                 | The periodic classifier; the user                                                     | Chapter close re-points them on a merge; the user                                                                                                                                                                              |
+| Awareness                                                                                    | The periodic classifier, for a happening it creates or one its prompt lists; the user | Chapter close tunes `decay_resistance`, and on a happening merge keeps the earliest `learned_at_entry_id`, the highest `decay_resistance` and both sources. Retrieval counts `retrieval_count`; each close resets it. The user |
+| Relationships                                                                                | The periodic classifier, one view per fact; the user                                  | The periodic classifier, on contradicting prose; the user                                                                                                                                                                      |
+| Threads: `title`, `description`, `category`, `icon`, `status`                                | The periodic classifier, `pending` or `active`; the user                              | The periodic classifier moves `status` on explicit prose. Chapter close merges duplicates, brings descriptions up to date, and resolves or fails stale threads. The user                                                       |
+| Thread `triggered_at_entry_id`, `resolved_at_entry_id`                                       | The periodic classifier                                                               | The periodic classifier, on resolution. AI-only; a user's thread keeps them null                                                                                                                                               |
+| Lore: `title`, `body`, `category`, `keywords`                                                | Chapter close, always with a body; the wizard and the user                            | Chapter close extends or corrects a row; the user                                                                                                                                                                              |
+| Thread and lore `injection_mode`, lore `priority` and `tags`                                 | Defaults (`auto`; priority 0); the wizard and the user                                | User-only                                                                                                                                                                                                                      |
+| Chapters                                                                                     | Chapter close, at the boundary it picks or the user's                                 | The user: `title`, `summary`, `theme`, `keywords`                                                                                                                                                                              |
+| `story_entries.chapter_id`                                                                   | Chapter close                                                                         | —                                                                                                                                                                                                                              |
+| Entry metadata: scene, location, world time, summary, queries                                | The per-turn writer                                                                   | The user's scene and world-time edits                                                                                                                                                                                          |
+| Entry `metadata.stateReport`                                                                 | The per-turn writer                                                                   | AI-only, never edited                                                                                                                                                                                                          |
+| `branch_era_flips`                                                                           | The user; the wizard at world time 0                                                  | User-only: calendar configuration, not narrative                                                                                                                                                                               |
+
+What a user edit protects, and for how long, is the precedence rule
+above: an edit stands against an AI write resting on older prose and
+gives way to newer prose. Per-field provenance, for surfacing a stale
+field, is parked
+([`parked.md → Per-field provenance metadata`](./parked.md#per-field-provenance-metadata-for-entitiesstate)).
 
 ### Story identity fields
 
@@ -1252,9 +1433,10 @@ stories.settings: {
   fullChapterInBuffer: boolean      // default false; two-mode axis — true = full current chapter verbatim, false = last partialChapterBuffer entries of current chapter
   partialChapterBuffer: number       // default 10; entries from current chapter when fullChapterInBuffer = false. See docs/memory/cadence.md → User-tunable knobs
   protectedBuffer: number            // default 10; chapter-boundary spillover floor — applies to BOTH modes. If current chapter has fewer entries, fill from previous chapter up to this floor. See docs/memory/cadence.md → User-tunable knobs
-  classifierCadence: number          // entries between periodic classifier runs in the background; checked after each completed turn, so a run can fire up to one entry past it. Cadence-vs-window overlap warning only fires in partial mode (full mode catches up unclassified entries at chapter close)
+  classifierCadence: number          // entries between periodic classifier runs, each chained after the turn that brings it due and holding the gate; checked after each completed turn, so a run can fire up to one entry past it. Cadence-vs-window overlap warning only fires in partial mode (full mode catches up unclassified entries at chapter close)
   classifierContextEntries: number   // default 4, MINIMUM 2; trailing entries the per-turn fallback classifier sees. The floor is the fixed action-plus-reply pair it extracts from — see docs/memory/cadence.md → User-tunable knobs
   piggybackMode: 'on' | 'off'       // capability-gated; on = narrative emits structured trailing block; off = separate per-turn classifier pass
+  classifierMentionedPlaces: boolean // default false; the periodic classifier also creates places the prose mentions but the scene doesn't enter. Read once per pass. See docs/memory/classifier.md → Mentioned places
   embeddingBackend: 'provider' | 'local'   // embedding runtime (provider endpoint OR bundled local ONNX); both produce identical retrieval algorithm
   embedding_model_id: string        // canonical embedding model id; copied from app_settings.embedding_model_id at story creation. Locked thereafter unless the user explicitly re-indexes via the model swap UX. Different stories may carry different model ids; vec0 partitions per branch. See docs/memory/retrieval.md → Storage and Model swap UX
   embedding_swap_target?: string    // model id of the in-flight re-index target. Non-null while a stage-then-flip swap is in progress; cleared atomically with the swap's Phase 2 commit. Crash recovery on story open surfaces a resume/cancel prompt when this is set. See docs/memory/retrieval.md → Model swap UX
@@ -1489,7 +1671,7 @@ app_settings.profiles: Array<{
   temperature?: number                       // 0-2 (provider-dependent; Anthropic caps at 1, OpenAI/Google allow 2)
   maxOutput?: number
   thinking?: number                          // reasoning slider; conditional on model capability
-  timeout?: number                           // seconds; default 60
+  timeout?: number                           // seconds; unset = no limit, except a classifier pass's ten minutes
   structuredOutput?: 'auto' | 'force-on' | 'force-off'  // agent profiles only
   customJson?: Record<string, unknown>       // advanced — per-field merge over constructed payload
 }>
@@ -1813,9 +1995,12 @@ story_entries.metadata: {
     currentLocation?: string         // as emitted; NOT nullable — the model cannot emit null, and a leaf may not stack optional over nullable, see [Entry mutability & rollback](#entry-mutability--rollback)
     worldTimeDelta?: number          // seconds, as emitted before clamping
     worldTimeDeltaApplied?: number   // what apply.ts actually added to worldTime; absent when nothing was applied
-    currentLocationRejected?: true   // apply.ts refused the emitted id; absent otherwise, never false
+    currentLocationRejected?: true   // apply.ts refused the emitted id (or a fallback's new-item handle); absent otherwise, never false
     visualChanges?: { id: string; type: VisualChangeType; text: string }[]
-    transfers?: { items: ItemTransfer[]; stackables: StackableTransfer[] }
+    conditions?: { id: string; text: string }[]   // a place's or an item's condition, as emitted
+    transfers?: { items: ItemTransfer[]; drops: ItemDrop[]; stackables: StackableTransfer[] }
+    newLocations?: ({ handle: string; name: string; description: string; condition?: string; parent?: string; outcome: 'created' | 'reused'; id: string; parentDropped?: true } | { handle: string; name: string; description: string; condition?: string; parent?: string; outcome: 'dropped' })[]  // as emitted, post-substitution, with what the per-turn create planner made of it; parent 'top' for top-level, absent for unplaced; see memory/piggyback.md → New locations and items
+    newItems?: ({ handle: string; name: string; description: string; condition?: string; outcome: 'created'; id: string } | { handle: string; name: string; description: string; condition?: string; outcome: 'dropped' })[]
     failedFields?: { field: string; detail: string }[]  // the failed NARRATIVE attempt, retained even once a fallback supplied the fields
     raw?: string                     // the unparseable block text; present only alongside failedFields
   }
@@ -1832,10 +2017,11 @@ story_entries.metadata: {
     kind: string                    // open string, not an enum: the taxonomy spans pipeline errors, provider errors and refusals, and each side evolves on its own release cadence
     failure?: string                // provider- or pipeline-supplied failure tag, when one was given
     detail?: string                 // human-readable cause, rendered in the reader's error surface
-    submission?: {                  // the reversed user action's text, so Retry survives a restart
+    submission?: {                  // the turn's text, kept across a restart: a turn entry's Retry resends it; on a pass entry it is custody only (always on a Send refused held; on a Retry come back held, the entry's own text, else the composer's draft; when failed, only when the composer couldn't take it back: the draft was occupied, or the user left the branch)
       content: string
       composerMode: string
     }
+    pass?: 'failed' | 'held'        // a pass-failure entry: its Retry runs the pass alone; held has no Retry
   }
 }
 ```
@@ -1876,15 +2062,28 @@ exist specifically to say what happened. Divergence between report and
 absolute after an edit is the correct outcome and is rendered as such
 (see [EntryCard → World-state panel](./ui/patterns/entry-card.md#world-state-panel)).
 
-**The report records what was emitted and what `apply.ts` did with
-it.** Two fields can differ from the absolute state beside them:
+**The report records what was emitted and what `apply.ts` and the
+create planner did with it.** Three things can differ from the
+absolute state beside them:
 
 - `currentLocation` is rejected when the id does not resolve to a
-  `kind='location'` entity, and the previous location is inherited
-  instead. `currentLocationRejected` records that decision.
+  `kind='location'` entity, or resolves to a retired one, and the
+  previous location is inherited
+  instead. `currentLocationRejected` records that decision. The
+  fallback rejects a new item's handle there the same way, and keeps
+  the handle in `currentLocation` when the item isn't created
+  ([`memory/piggyback.md → Parse strategy and failure recovery`](./memory/piggyback.md#parse-strategy-and-failure-recovery)).
 - `worldTimeDelta` is clamped to `0` when negative or non-finite, and
   to the remaining headroom when it would push `worldTime` past the
   ceiling. `worldTimeDeltaApplied` records what landed.
+- A create in `newLocations` or `newItems` is created, reused (a
+  location's exact match under the parent the map showed, or an earlier
+  new location of the same name and parent in the block) or dropped (unused, or the narrative
+  block it sits in has a failing field), and a location's parent can
+  be dropped, leaving it unplaced. Its `outcome`, `id` and
+  `parentDropped` record that, and the report's other fields carry the
+  resolved id in place of the `new:` handle, apart from the rejected
+  handle above.
 
 The decision is recorded rather than re-derived, because the
 difference alone does not identify its cause. An emitted location
@@ -2236,7 +2435,15 @@ swap UX warns about this case.
   - LLM-fallback. **Default** for new rows. See
     [docs/memory/retrieval.md → Hybrid retrieval per type](./memory/retrieval.md#hybrid-retrieval-per-type).
 - `disabled` — never include automatically; only surfaces if
-  explicitly referenced.
+  explicitly referenced. Another entity's state isn't such a reference:
+  a disabled entity is absent from every state the prompt shows — no
+  member's faction, no one's held item — unless the active+in-scene
+  invariant below seats it
+  ([`architecture.md → Entity state on the template surface`](./architecture.md#entity-state-on-the-template-surface)).
+
+For a location, `disabled` also covers every place inside it, and a
+disabled ancestor beats a place's own `always`
+([`LocationState shape`](#locationstate-shape)).
 
 **Keyword behaviour is a second, orthogonal axis — not a fourth enum
 value.** `injection_mode` answers "does this row inject." What a
@@ -2430,6 +2637,9 @@ arbitrary editing.
   since a fact anchored to a surviving turn can name a row the suffix
   removes
   ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+  A row naming a removed row through a `state` reference is the
+  exception: a place naming a removed parent stays and goes to the
+  root, and a character naming a removed faction stays with none.
 - **A first-introduction entity survives the edit that removed its prose.**
   It is not a fact about that turn but a row the rest of the branch now
   references — `sceneEntities` arrays, later happenings' involvements,
@@ -2655,8 +2865,9 @@ by the same user-visible operation. Action boundaries:
   their own right (see the algorithm). The `story_entries` row is
   deleted as the reversal of its `op=create` delta.
 - **Chapter close** — the chapter row insert + `story_entries.chapter_id`
-  updates across the range + lore-mgmt writes (the 5 sub-jobs) all
-  share one `action_id`. CTRL-Z collapses the entire batch as a
+  updates across the range + the close's other writes (phases 1–4) all
+  share one `action_id`; the passes chained ahead of it as phase 0
+  hold their own, like any pass. CTRL-Z collapses the entire batch as a
   single unit, because a user who clicks "undo" expects the whole
   "the chapter closed" event to disappear in one press.
 
@@ -2721,11 +2932,13 @@ anchors by construction. The one exception runs the other way: a
 background delta naming a row the reversal removes goes with it
 whatever its anchor, so a fact about a surviving turn cannot name a
 row that exists nowhere
-([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)). The same predicate drives the
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+A `state` reference the reversal registers is cleared instead: a place
+whose parent the reversal removes stays and becomes unplaced, and a
+character whose faction it removes stays with none. The same predicate drives the
 [fork reverse-apply partition](#branch-model), and is orthogonal to the
-in-flight
-[classifier barrier](./generation-pipeline.md#prose-reversals-and-the-classifier-barrier),
-which guards the racing classifier, not committed deltas.
+[interrupt](./generation-pipeline.md#prose-reversals-and-the-interrupt),
+which cancels an in-flight pass or close, not committed deltas.
 
 For this to hold, background-source (`periodic_classifier`) deltas stamp
 `entry_id` with per-fact **provenance**, and translation deltas stamp
@@ -2970,9 +3183,10 @@ entry explicitly.
 
 **Chapter-close is the single cadence trigger** for the 5-phase
 pipeline (catch-up classifier, boundary selection, chapter metadata,
-lore management with five sub-jobs, lifecycle review). All five
-phases share one `action_id` so a single CTRL-Z reverses the entire
-chapter-close. See
+lore management, lifecycle review). Phases 1–4 share one `action_id`
+so a single CTRL-Z reverses the entire chapter-close; phase 0 is
+ordinary periodic-classifier passes chained ahead of it, each in its
+own group. See
 [docs/memory/chapter-close.md](./memory/chapter-close.md) for the
 full pipeline design.
 

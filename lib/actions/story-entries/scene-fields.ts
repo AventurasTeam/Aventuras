@@ -2,13 +2,14 @@ import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from '@/lib/piggyback'
 import { entitiesStore, generationStore } from '@/lib/stores'
+import { retiredPlaceEntered } from '@/lib/world'
 
 import { loadHeadTurn } from './head-turn'
 import { applyDeltaActionGroup } from '../delta/apply-delta-action'
 import type { DbCtx, PipelineAction } from '../types'
 import { withEntryMetadataLock } from './entry-metadata-lock'
 import type { StoryEntryRejection } from './operational'
-import { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './register'
+import { STORY_ENTRY_REJECTION } from './register'
 
 export type SceneFieldsEdit = {
   sceneEntities: string[]
@@ -18,7 +19,7 @@ export type SceneFieldsEdit = {
 
 export type UpdateSceneFieldsResult = { status: 'ok' } | StoryEntryRejection
 
-function rejected(code: StoryEntryRejectionCode, reason: string): StoryEntryRejection {
+function rejected(code: StoryEntryRejection['code'], reason: string): StoryEntryRejection {
   return { status: 'rejected', reason, code }
 }
 
@@ -95,6 +96,15 @@ async function updateEntrySceneFieldsLocked(
   const branchEntities = [...entitiesStore.getEntities().values()].filter(
     (e) => e.branchId === branchId,
   )
+  // Nothing enters a retired place (data-model.md → LocationState shape); a scene already in one
+  // keeps it until it is changed.
+  if (
+    retiredPlaceEntered(after.currentLocationId, before.currentLocationId, branchEntities) != null
+  )
+    return rejected(
+      STORY_ENTRY_REJECTION.retiredPlace,
+      `location ${after.currentLocationId} is retired`,
+    )
   // An entity delete clears only the tail's scene fields; the entries before it keep the id,
   // and tracking anchored there would write the deleted location back.
   const live = new Set(branchEntities.map((e) => e.id))
@@ -105,8 +115,7 @@ async function updateEntrySceneFieldsLocked(
       source: 'user_edit',
       payload: { branchId, id, metadata: after },
     },
-    // Promotion first: a staged entity the edit brings into the scene is promoted
-    // exactly as the generation fold would, which is what the editor's copy promises.
+    // Promotion first: a staged scene member is promoted as the generation fold promotes one.
     ...scenePromotionActions({
       branchId,
       source: 'user_edit',

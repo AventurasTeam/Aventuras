@@ -13,6 +13,13 @@ export type EditResult = { ok: true } | { ok: false; code?: string }
 export type ReaderSurfaceHandle = { jumpToBottom: () => void }
 
 /**
+ * What the row controls may do: `open` lets everything through; `interruptible` (only a pass or a
+ * close holds the gate) lets the head reversals through — ↻, × and the head turn's pencil — each
+ * interrupting it; `closed` gates every control.
+ */
+export type EditGate = 'open' | 'interruptible' | 'closed'
+
+/**
  * Bridge contract (reader-document.md → Bridge contract): every field must be
  * JSON-serializable and every function must be async — on native these cross
  * the expo-dom bridge. Web consumes the identical shape inline.
@@ -35,7 +42,7 @@ export type ReaderSurfaceProps = {
    * math (a short load proves the branch top is in the window).
    */
   hasOlder: boolean
-  editBlocked: boolean
+  editGate: EditGate
   jumpButtonEnabled: boolean
   /** Present when the system entry has a kind-specific fix route (host-derived label). */
   systemFixLabel?: string
@@ -62,7 +69,8 @@ export type ReaderSurfaceProps = {
   /** Phone tier: the document requests; the host presents the native Sheet. */
   onRequestEditScene: (entryId: string) => void
   onRegenerate: (entryId: string) => Promise<void>
-  onRetrySystemEntry: () => Promise<void>
+  /** Undefined when the system entry offers no Retry (a branch held `running`). */
+  onRetrySystemEntry: (() => Promise<void>) | undefined
   onDismissSystemEntry: () => Promise<void>
   onFixSystemEntry: () => Promise<void>
 }

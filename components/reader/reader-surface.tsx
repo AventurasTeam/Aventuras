@@ -27,6 +27,7 @@ import type { StoryEntry } from '@/lib/db'
 import { computeScrollMetrics, createAutoscrollMachine } from '@/lib/reader-scroll'
 
 import type { EditResult, ReaderSurfaceHandle, ReaderSurfaceProps } from './reader-document-types'
+import { headTurnIdsOf, rowReversalFlags } from './row-reversal-flags'
 import { resolveSaveAndRegenTurn } from './save-and-regen'
 import type { ResolvedEntity } from './scene-editing'
 
@@ -48,6 +49,9 @@ type ReaderRowProps = {
   editing: boolean
   editContent: string | null
   editBlocked: boolean
+  // Split from editBlocked by rowReversalFlags, so the head reversals stay live during a pass.
+  editDisabled: boolean
+  reversalDisabled: boolean
   systemFixLabel?: string
   // Flat primitives rather than the decoration object: a fresh `{…}` per walk
   // would defeat the shallow memo compare the same way a merged row would.
@@ -74,7 +78,7 @@ type ReaderRowProps = {
   onRequestRollback: (entryId: string) => Promise<void>
   onRegenerate: (entryId: string) => Promise<void>
   onFixSystemEntry: () => Promise<void>
-  onRetrySystemEntry: () => Promise<void>
+  onRetrySystemEntry?: () => Promise<void>
   onDismissSystemEntry: () => Promise<void>
 }
 
@@ -88,6 +92,8 @@ const ReaderRow = memo(function ReaderRow({
   editing,
   editContent,
   editBlocked,
+  editDisabled,
+  reversalDisabled,
   systemFixLabel,
   worldTimeLabel,
   worldTimeRaw,
@@ -135,6 +141,8 @@ const ReaderRow = memo(function ReaderRow({
       meta={row.metadata ?? undefined}
       reasoning={row.metadata?.reasoning}
       disabled={editBlocked}
+      editDisabled={editDisabled}
+      reversalDisabled={reversalDisabled}
       editing={editing}
       contentEditNotice={contentEditNotice ?? undefined}
       editDirty={editing && editContent !== row.content}
@@ -155,7 +163,7 @@ const ReaderRow = memo(function ReaderRow({
           ? { label: systemFixLabel, onPress: () => void onFixSystemEntry() }
           : undefined
       }
-      onRetry={isSystem ? () => void onRetrySystemEntry() : undefined}
+      onRetry={isSystem && onRetrySystemEntry != null ? () => void onRetrySystemEntry() : undefined}
       onDismiss={isSystem ? () => void onDismissSystemEntry() : undefined}
       worldTimeLabel={worldTimeLabel}
       worldTimeRaw={timeEditable ? worldTimeRaw : undefined}
@@ -185,7 +193,7 @@ export function ReaderSurface({
   streaming,
   branchKey,
   hasOlder,
-  editBlocked,
+  editGate,
   jumpButtonEnabled,
   systemFixLabel,
   entityNames,
@@ -234,21 +242,21 @@ export function ReaderSurface({
     setEditingId(null)
     setEditDraft('')
   }, [branchKey])
-  // Open-at-bottom is a pin, not a one-shot: late layout (font swaps, image
-  // decode) can still grow content after the first scrollTop write. Re-assert
-  // per frame until the scroll height settles; the user's first gesture
-  // breaks the pin. Keyed on hasRows (not rows) so prepends don't cancel a
-  // running pin.
-  const hasRows = rows.length > 0
-  useLayoutEffect(() => {
-    if (!hasRows || landedBranchRef.current === branchKey) return
-    landedBranchRef.current = branchKey
+  // Bottom pin: late layout (font swaps, image decode) can still grow content
+  // after a scrollTop write, so re-assert per frame until the scroll height
+  // settles. A wheel or touch drag breaks it.
+  const pinRafRef = useRef(0)
+  const stopBottomPin = useCallback(() => {
+    pinActiveRef.current = false
+    cancelAnimationFrame(pinRafRef.current)
+  }, [])
+  const startBottomPin = useCallback(() => {
     const el = scrollRef.current
     if (el == null) return
+    cancelAnimationFrame(pinRafRef.current)
     pinActiveRef.current = true
     let stableFrames = 0
     let lastHeight = -1
-    let raf = 0
     const assertBottom = () => {
       if (!pinActiveRef.current) return
       el.scrollTop = el.scrollHeight
@@ -258,14 +266,20 @@ export function ReaderSurface({
         pinActiveRef.current = false
         return
       }
-      raf = requestAnimationFrame(assertBottom)
+      pinRafRef.current = requestAnimationFrame(assertBottom)
     }
     assertBottom()
-    return () => {
-      pinActiveRef.current = false
-      cancelAnimationFrame(raf)
-    }
-  }, [branchKey, hasRows])
+  }, [])
+  useEffect(() => stopBottomPin, [stopBottomPin])
+  // Open-at-bottom. Keyed on hasRows (not rows) so prepends don't cancel a
+  // running pin.
+  const hasRows = rows.length > 0
+  useLayoutEffect(() => {
+    if (!hasRows || landedBranchRef.current === branchKey) return
+    landedBranchRef.current = branchKey
+    startBottomPin()
+    return stopBottomPin
+  }, [branchKey, hasRows, startBottomPin, stopBottomPin])
 
   // Everything that changes height above the reading position — a prepended
   // block, the boundary shimmer mounting or unmounting, or both in one
@@ -380,12 +394,15 @@ export function ReaderSurface({
 
   // Upward only: wheel-down toward the live edge should let the positional
   // rule re-engage autoscroll, not interrupt it. Any wheel breaks the
-  // open-at-bottom pin — the user has taken over.
-  const handleWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
-    pinActiveRef.current = false
-    anchorHoldActiveRef.current = false
-    if (event.deltaY < 0) autoscrollRef.current.userInterrupted()
-  }, [])
+  // bottom pin — the user has taken over.
+  const handleWheel = useCallback(
+    (event: WheelEvent<HTMLDivElement>) => {
+      stopBottomPin()
+      anchorHoldActiveRef.current = false
+      if (event.deltaY < 0) autoscrollRef.current.userInterrupted()
+    },
+    [stopBottomPin],
+  )
 
   // Touch drags interrupt like native drag-begin did — keyed off the first
   // touchmove, not touchstart, so plain taps can't disengage a pinned stream.
@@ -393,12 +410,12 @@ export function ReaderSurface({
     gestureActiveRef.current = true
   }, [])
   const handleTouchMove = useCallback(() => {
-    pinActiveRef.current = false
+    stopBottomPin()
     anchorHoldActiveRef.current = false
     if (touchInterruptedRef.current) return
     touchInterruptedRef.current = true
     autoscrollRef.current.userInterrupted()
-  }, [])
+  }, [stopBottomPin])
   const handleTouchEnd = useCallback(() => {
     touchInterruptedRef.current = false
     gestureActiveRef.current = false
@@ -414,7 +431,11 @@ export function ReaderSurface({
     if (streaming == null) {
       if (streamActiveRef.current) {
         streamActiveRef.current = false
+        // The committed row that replaces the streaming card is taller (its
+        // footer); hold an engaged reader at the bottom through the swap.
+        const engaged = machine.state === 'engaged'
         machine.streamEnded()
+        if (engaged) startBottomPin()
       }
       return
     }
@@ -430,13 +451,37 @@ export function ReaderSurface({
       if (el != null) el.scrollTop = el.scrollHeight
       machine.autoscrollApplied({ distanceFromBottomPx: 0 })
     }
-  }, [streaming])
+  }, [streaming, startBottomPin])
+
+  // A viewport shrinking under a reader at the bottom would otherwise hide the newest lines.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el == null) return
+    let lastClientHeight = el.clientHeight
+    const observer = new ResizeObserver(() => {
+      const previousClientHeight = lastClientHeight
+      lastClientHeight = el.clientHeight
+      if (el.clientHeight >= previousClientHeight || gestureActiveRef.current) return
+      // The Android keyboard opening under an in-row editor would push the editor up under
+      // the top. hasFocus: a tap on the native composer leaves activeElement on an open editor.
+      const doc = el.ownerDocument
+      const active = doc.activeElement
+      if (active instanceof HTMLTextAreaElement && el.contains(active) && doc.hasFocus()) return
+      // Read from geometry, not lastDistanceRef: content can grow below without a scroll
+      // event, and a shrink never clamps scrollTop.
+      const distanceBeforePx = el.scrollHeight - el.scrollTop - previousClientHeight
+      if (distanceBeforePx > NEAR_BOTTOM_THRESHOLD_PX) return
+      el.scrollTop = el.scrollHeight
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   const jumpToBottom = useCallback(() => {
-    // Cancel any active landing pin / anchor-hold loop first: otherwise a hold
+    // Cancel any active bottom pin / anchor-hold loop first: otherwise a hold
     // spawned by a just-fired boundary prepend keeps yanking scrollTop toward
     // the top anchor while this animates to the bottom, and they fight.
-    pinActiveRef.current = false
+    stopBottomPin()
     anchorHoldActiveRef.current = false
     const el = scrollRef.current
     if (el != null) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
@@ -447,7 +492,7 @@ export function ReaderSurface({
       autoscrollRef.current.autoscrollApplied({ distanceFromBottomPx: 0 })
       pendingJumpAtRef.current = Date.now()
     }
-  }, [])
+  }, [stopBottomPin])
   useImperativeHandle(ref, () => ({ jumpToBottom }), [jumpToBottom])
 
   const startEdit = useCallback((row: StoryEntry) => {
@@ -483,6 +528,7 @@ export function ReaderSurface({
     setEditDraft('')
   }, [])
   const headTurn = useMemo(() => resolveSaveAndRegenTurn(rows, tailEntryId), [rows, tailEntryId])
+  const headTurnIds = useMemo(() => headTurnIdsOf(rows, tailEntryId), [rows, tailEntryId])
 
   return (
     <div className="relative h-full">
@@ -507,6 +553,7 @@ export function ReaderSurface({
         ) : null}
         {rows.map((row) => {
           const decoration = worldTimeDecorations[row.id]
+          const flags = rowReversalFlags({ rowId: row.id, headTurnIds, editGate })
           return (
             <div key={row.id} data-entry-row={row.id} className={ROW_FRAME_CLASS}>
               <ReaderRow
@@ -514,7 +561,9 @@ export function ReaderSurface({
                 tier={tier}
                 editing={editingId === row.id}
                 editContent={editingId === row.id ? editDraft : null}
-                editBlocked={editBlocked}
+                editBlocked={editGate !== 'open'}
+                editDisabled={flags.editDisabled}
+                reversalDisabled={flags.reversalDisabled}
                 systemFixLabel={systemFixLabel}
                 worldTimeLabel={decoration?.label}
                 worldTimeRaw={decoration?.raw}

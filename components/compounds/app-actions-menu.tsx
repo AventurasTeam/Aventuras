@@ -22,6 +22,11 @@ type AppActionsMenuProps = {
    */
   beforeNavigate?: (proceed: () => void) => void
   /**
+   * Wraps story-leaving jumps (the Diagnostics Hub) inside `beforeNavigate`; `GO TO` skips it.
+   * In-story surfaces pass `guardLeave`; off-story screens pass null, having no story to leave.
+   */
+  beforeLeaveStory: ((proceed: () => void) => void) | null
+  /**
    * Whether the surface is mid-decision — a confirm the user must answer before
    * navigating away — per [`actions-menu.md`](../../docs/ui/patterns/actions-menu.md).
    * Open sheets gate themselves; only the judgment half is route-supplied, because
@@ -36,6 +41,7 @@ export function AppActionsMenu({
   contextual,
   story,
   beforeNavigate,
+  beforeLeaveStory,
   blocked,
 }: AppActionsMenuProps) {
   const router = useRouter()
@@ -48,11 +54,15 @@ export function AppActionsMenu({
     if (beforeNavigate) beforeNavigate(go)
     else go()
   }
+  const leaveStory = (go: () => void) => {
+    if (beforeLeaveStory) beforeLeaveStory(go)
+    else go()
+  }
   const navigateGoTo = (path: string) => jump(() => surfaceNavigate(path))
   return (
     <AppActionsMenuPure
       diagnosticsEnabled={diagnosticsEnabled}
-      onOpenDiagnosticsHub={() => jump(() => router.push('/diagnostics'))}
+      onOpenDiagnosticsHub={() => jump(() => leaveStory(() => router.push('/diagnostics')))}
       contextual={contextual}
       goTo={story != null ? buildGoToGroup(story, navigateGoTo) : undefined}
       hotkeyEnabled={hotkeyEnabled}

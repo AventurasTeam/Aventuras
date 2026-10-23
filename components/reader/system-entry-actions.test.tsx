@@ -5,12 +5,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { entryMetadataSchema, type SystemFailureMeta } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { hasCopy } from '@/lib/i18n/__tests__/locale-keys'
-import type { PipelineError } from '@/lib/pipeline'
+import {
+  CLASSIFIER_HELD,
+  type PipelineError,
+  type RejectedStart,
+  type TxResult,
+} from '@/lib/pipeline'
 import { embedderSwapStore } from '@/lib/stores'
 
+import type { PassRefusal } from './send-run'
 import {
+  describePassFailure,
   describeTurnFailure,
   dismissSystemEntry,
+  retryPassEntry,
+  toPassFailureMeta,
   toSystemFailureMeta,
   useConfigFixAction,
   useEmbedderFixAction,
@@ -31,6 +40,8 @@ beforeEach(() => {
 })
 
 afterEach(cleanup)
+
+const leaveAtOnce = (proceed: () => void) => proceed()
 
 const EMBEDDER_INIT: PipelineError = {
   kind: 'embedder',
@@ -136,6 +147,275 @@ describe('toSystemFailureMeta', () => {
   })
 })
 
+describe('describePassFailure', () => {
+  const SUBMISSION = { content: 'I wait.', composerMode: 'free' }
+
+  it('names the hold and the text it keeps, with no detail line', () => {
+    const key = 'reader:systemEntry.failure.memoryHeld'
+    expect(hasCopy(key)).toBe(true)
+    expect(describePassFailure({ held: true }, SUBMISSION)).toEqual({ content: t(key) })
+  })
+
+  // The text went back to the composer before a Retry came back held: the entry stores none.
+  it('claims no kept text for a held entry that stores none', () => {
+    const key = 'reader:systemEntry.failure.memoryHeldNoText'
+    expect(hasCopy(key)).toBe(true)
+    const out = describePassFailure({ held: true }, undefined)
+    expect(out).toEqual({ content: t(key) })
+    expect(out.content).not.toBe(t('reader:systemEntry.failure.memoryHeld'))
+  })
+
+  it.each([
+    ['no-profile-assigned', 'reader:systemEntry.failure.memoryNoProfileAssigned'],
+    ['profile-missing', 'reader:systemEntry.failure.memoryProfileMissing'],
+    ['provider-missing', 'reader:systemEntry.failure.memoryProviderMissing'],
+    ['override-provider-missing', 'reader:systemEntry.failure.memoryOverrideProviderMissing'],
+  ] as const)('names the classifier for a %s resolver failure', (failure, key) => {
+    const out = describePassFailure(
+      {
+        held: false,
+        error: {
+          kind: 'config-resolver',
+          failure,
+          target: 'classifier',
+          phaseName: 'classify',
+        },
+      },
+      undefined,
+    )
+    expect(hasCopy(key)).toBe(true)
+    expect(out).toEqual({ content: t(key) })
+  })
+
+  it('gives a provider failure the pass copy with its reason and detail', () => {
+    expect(hasCopy('reader:systemEntry.failure.memory')).toBe(true)
+    expect(
+      describePassFailure(
+        {
+          held: false,
+          error: {
+            kind: 'provider',
+            reason: 'timeout',
+            detail: 'classifier: timeout after 600000ms',
+          },
+        },
+        undefined,
+      ),
+    ).toEqual({
+      content: t('reader:systemEntry.failure.memory'),
+      detail: 'timeout: classifier: timeout after 600000ms',
+    })
+  })
+
+  it('falls back to the reason when a provider failure has no detail', () => {
+    expect(
+      describePassFailure(
+        { held: false, error: { kind: 'provider', reason: 'network' } },
+        undefined,
+      ).detail,
+    ).toBe('network')
+  })
+
+  it('carries any other cause in the detail line', () => {
+    expect(
+      describePassFailure(
+        { held: false, error: { kind: 'phase-logic', detail: 'window read' } },
+        undefined,
+      ),
+    ).toEqual({ content: t('reader:systemEntry.failure.memory'), detail: 'window read' })
+  })
+
+  it('still names the failure when the run carried no error', () => {
+    expect(describePassFailure({ held: false, error: undefined }, undefined)).toEqual({
+      content: t('reader:systemEntry.failure.memory'),
+    })
+  })
+
+  // The turn copy names the narrative agent; a pass's failure must not send the user there.
+  it('never borrows the turn failure copy', () => {
+    const config = {
+      kind: 'config-resolver',
+      failure: 'no-profile-assigned',
+      target: 'classifier',
+      phaseName: 'classify',
+    } as const
+    expect(describePassFailure({ held: false, error: config }, undefined).content).not.toBe(
+      describeTurnFailure(config).content,
+    )
+    expect(
+      describePassFailure({ held: false, error: { kind: 'provider', reason: 'auth' } }, undefined)
+        .content,
+    ).not.toBe(t('reader:systemEntry.failure.llmCall'))
+  })
+})
+
+describe('toPassFailureMeta', () => {
+  const SUBMISSION = { content: 'I wait.', composerMode: 'free' }
+
+  it('marks a held refusal and keeps a carried submission', () => {
+    expect(toPassFailureMeta({ held: true }, SUBMISSION)).toEqual({
+      kind: 'orchestrator',
+      submission: SUBMISSION,
+      pass: 'held',
+    })
+  })
+
+  it("keeps a resolver failure's kind and failure, which pick its fix row", () => {
+    expect(
+      toPassFailureMeta(
+        {
+          held: false,
+          error: {
+            kind: 'config-resolver',
+            failure: 'no-profile-assigned',
+            target: 'classifier',
+            phaseName: 'classify',
+          },
+        },
+        undefined,
+      ),
+    ).toEqual({ kind: 'config-resolver', failure: 'no-profile-assigned', pass: 'failed' })
+  })
+
+  it('persists a provider failure with its detail line, and no submission the composer took', () => {
+    expect(
+      toPassFailureMeta(
+        {
+          held: false,
+          error: {
+            kind: 'provider',
+            reason: 'timeout',
+            detail: 'classifier: timeout after 600000ms',
+          },
+        },
+        undefined,
+      ),
+    ).toEqual({
+      kind: 'provider',
+      detail: 'timeout: classifier: timeout after 600000ms',
+      pass: 'failed',
+    })
+  })
+
+  it('records a failure with no error as an orchestrator one', () => {
+    expect(toPassFailureMeta({ held: false, error: undefined }, undefined)).toEqual({
+      kind: 'orchestrator',
+      pass: 'failed',
+    })
+  })
+
+  it('round-trips through the persisted metadata schema, marker included', () => {
+    const meta = toPassFailureMeta(
+      {
+        held: false,
+        error: {
+          kind: 'config-resolver',
+          failure: 'profile-missing',
+          target: 'classifier',
+          phaseName: 'classify',
+        },
+      },
+      SUBMISSION,
+    )
+    const parsed = entryMetadataSchema.parse({
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: 0,
+      systemFailure: meta,
+    })
+    expect(parsed.systemFailure).toEqual(meta)
+    expect(parsed.systemFailure?.pass).toBe('failed')
+  })
+})
+
+describe('retryPassEntry', () => {
+  const ran = { runId: 'run_pass', actionId: 'act_pass' }
+
+  function harness(result: TxResult | RejectedStart | Error, heldAfter = false) {
+    const calls: string[] = []
+    const rewrite = vi.fn(async (_refusal: PassRefusal) => {
+      calls.push('rewrite')
+    })
+    const dismiss = vi.fn(async () => {
+      calls.push('dismiss')
+    })
+    const notify = vi.fn((_message: string) => {
+      calls.push('notify')
+    })
+    const runPass = vi.fn(() =>
+      result instanceof Error ? Promise.reject(result) : Promise.resolve(result),
+    )
+    const held = vi.fn(async () => heldAfter)
+    return { calls, rewrite, notify, runPass, deps: { runPass, held, dismiss, rewrite, notify } }
+  }
+
+  it('clears the entry once the pass commits, sending nothing', async () => {
+    const h = harness({ ...ran, outcome: 'completed' })
+    await retryPassEntry(h.deps)
+    expect(h.runPass).toHaveBeenCalledTimes(1)
+    expect(h.calls).toEqual(['dismiss'])
+  })
+
+  it('rewrites the entry with the new cause when the pass fails again', async () => {
+    const error: PipelineError = {
+      kind: 'provider',
+      reason: 'network',
+      detail: 'classifier: ECONNREFUSED',
+    }
+    const h = harness({ ...ran, outcome: 'failed', error })
+    await retryPassEntry(h.deps)
+    expect(h.calls).toEqual(['rewrite'])
+    expect(h.rewrite).toHaveBeenCalledWith({ held: false, error })
+  })
+
+  // A cancel during the pass's writes, or a failed write, whose reversal didn't commit.
+  it('rewrites the entry as held when the failed pass left its branch held', async () => {
+    const error: PipelineError = { kind: 'orchestrator', detail: 'reverse-replay failed: locked' }
+    const h = harness({ ...ran, outcome: 'failed', error }, true)
+    await retryPassEntry(h.deps)
+    expect(h.calls).toEqual(['rewrite'])
+    expect(h.rewrite).toHaveBeenCalledWith({ held: true })
+  })
+
+  it('rewrites the entry as held when the branch is held running', async () => {
+    const h = harness({ outcome: 'rejected', blockedBy: CLASSIFIER_HELD })
+    await retryPassEntry(h.deps)
+    expect(h.calls).toEqual(['rewrite'])
+    expect(h.rewrite).toHaveBeenCalledWith({ held: true })
+  })
+
+  it('leaves the entry and says why when the pass could not start', async () => {
+    const h = harness({ outcome: 'rejected', blockedBy: 'periodic-classifier' })
+    await retryPassEntry(h.deps)
+    expect(h.calls).toEqual(['notify'])
+    expect(h.notify).toHaveBeenCalledWith("Memory update couldn't start (periodic-classifier).")
+  })
+
+  it('leaves the entry alone when the pass is cancelled', async () => {
+    const h = harness({ ...ran, outcome: 'aborted' })
+    await retryPassEntry(h.deps)
+    expect(h.calls).toEqual([])
+  })
+
+  it('rewrites the entry as a failed pass when the pass throws', async () => {
+    const h = harness(new Error('marker insert failed'))
+    await retryPassEntry(h.deps)
+    expect(h.calls).toEqual(['rewrite'])
+    expect(h.rewrite).toHaveBeenCalledWith({
+      held: false,
+      error: { kind: 'orchestrator', detail: 'marker insert failed' },
+    })
+  })
+
+  // The pass committed, so its failure copy would be wrong: the throw goes to the caller.
+  it('lets a throw from the clear through without rewriting the entry', async () => {
+    const h = harness({ ...ran, outcome: 'completed' })
+    const dismiss = vi.fn(() => Promise.reject(new Error('reload failed')))
+    await expect(retryPassEntry({ ...h.deps, dismiss })).rejects.toThrow('reload failed')
+    expect(h.rewrite).not.toHaveBeenCalled()
+  })
+})
+
 describe('dismissSystemEntry', () => {
   const SUBMISSION: SystemFailureMeta['submission'] = {
     content: 'the unsent turn',
@@ -221,7 +501,9 @@ describe('useEmbedderFixAction', () => {
 
 describe('useConfigFixAction', () => {
   it("sends a broken override to that story's Models tab, where the row can be cleared", () => {
-    const { result } = renderHook(() => useConfigFixAction('override-provider-missing', 'story_1'))
+    const { result } = renderHook(() =>
+      useConfigFixAction('override-provider-missing', 'story_1', leaveAtOnce),
+    )
     expect(result.current?.label).toBe(t('reader:systemEntry.fixOverride'))
 
     act(() => result.current?.onPress())
@@ -231,7 +513,9 @@ describe('useConfigFixAction', () => {
   })
 
   it('still sends an app-chain provider failure to App Settings', () => {
-    const { result } = renderHook(() => useConfigFixAction('provider-missing', 'story_1'))
+    const { result } = renderHook(() =>
+      useConfigFixAction('provider-missing', 'story_1', leaveAtOnce),
+    )
     expect(result.current?.label).toBe(t('reader:systemEntry.fixDefault'))
 
     act(() => result.current?.onPress())
@@ -241,15 +525,47 @@ describe('useConfigFixAction', () => {
   })
 
   it('drops the override action when no story is resolved', () => {
-    const { result } = renderHook(() => useConfigFixAction('override-provider-missing', null))
+    const { result } = renderHook(() =>
+      useConfigFixAction('override-provider-missing', null, leaveAtOnce),
+    )
     expect(result.current).toBeUndefined()
   })
 
   // The bubble reads a persisted open string, so a kind written by a newer build
   // must keep an affordance rather than lose one.
   it('lands an unrecognised persisted failure on the generic default fix', () => {
-    const { result } = renderHook(() => useConfigFixAction('from-a-newer-build', 'story_1'))
+    const { result } = renderHook(() =>
+      useConfigFixAction('from-a-newer-build', 'story_1', leaveAtOnce),
+    )
     expect(result.current?.label).toBe(t('reader:systemEntry.fixDefault'))
+  })
+
+  // App Settings is outside the story, so the push waits on the story-leave guard.
+  it('routes the App Settings fix through the story-leave guard', () => {
+    const held: (() => void)[] = []
+    const leaveStory = vi.fn((proceed: () => void) => {
+      held.push(proceed)
+    })
+    const { result } = renderHook(() =>
+      useConfigFixAction('provider-missing', 'story_1', leaveStory),
+    )
+
+    act(() => result.current?.onPress())
+    expect(leaveStory).toHaveBeenCalledTimes(1)
+    expect(router.push).not.toHaveBeenCalled()
+
+    act(() => held.forEach((proceed) => proceed()))
+    expect(router.push).toHaveBeenCalledWith('/settings?tab=providers')
+  })
+
+  it('keeps the in-story override fix off the story-leave guard', () => {
+    const leaveStory = vi.fn()
+    const { result } = renderHook(() =>
+      useConfigFixAction('override-provider-missing', 'story_1', leaveStory),
+    )
+    act(() => result.current?.onPress())
+    expect(router.navigate).toHaveBeenCalledWith('/story-settings/story_1?tab=models')
+    expect(leaveStory).not.toHaveBeenCalled()
   })
 })
 
@@ -257,7 +573,8 @@ describe('useSystemEntryActions', () => {
   const onRetry = () => {}
 
   function actionsFor(failure: SystemFailureMeta | undefined, storyId: string | null = 'story_1') {
-    return renderHook(() => useSystemEntryActions(failure, onRetry, storyId)).result.current
+    return renderHook(() => useSystemEntryActions(failure, onRetry, storyId, leaveAtOnce)).result
+      .current
   }
 
   it('offers Switch embedder for an embedder failure', () => {
@@ -276,6 +593,26 @@ describe('useSystemEntryActions', () => {
     expect(actionsFor({ kind: 'provider' }).fixAction).toBeUndefined()
   })
 
+  // A held branch can't run a pass: its entry offers Dismiss alone.
+  it('offers no Retry on a held pass entry', () => {
+    expect(actionsFor({ kind: 'orchestrator', pass: 'held' }).onRetry).toBeUndefined()
+  })
+
+  it('keeps Retry on a failed pass entry and on a turn failure', () => {
+    expect(actionsFor({ kind: 'provider', pass: 'failed' }).onRetry).toBe(onRetry)
+    expect(actionsFor({ kind: 'provider' }).onRetry).toBe(onRetry)
+  })
+
+  it("keeps a failed pass's config fix beside its Retry", () => {
+    const actions = actionsFor({
+      kind: 'config-resolver',
+      failure: 'no-profile-assigned',
+      pass: 'failed',
+    })
+    expect(actions.fixAction?.label).toBe(t('reader:systemEntry.assignProfile'))
+    expect(actions.onRetry).toBe(onRetry)
+  })
+
   it('offers no fix action for an embedder failure with no story resolved', () => {
     expect(actionsFor({ kind: 'embedder' }, null).fixAction).toBeUndefined()
   })
@@ -288,5 +625,20 @@ describe('useSystemEntryActions', () => {
     expect(
       actionsFor({ kind: 'config-resolver', failure: 'override-provider-missing' }, null).fixAction,
     ).toBeUndefined()
+  })
+
+  it('threads the story-leave guard to the config fix', () => {
+    const leaveStory = vi.fn()
+    const { result } = renderHook(() =>
+      useSystemEntryActions(
+        { kind: 'config-resolver', failure: 'profile-missing' },
+        onRetry,
+        'story_1',
+        leaveStory,
+      ),
+    )
+    act(() => result.current.fixAction?.onPress())
+    expect(leaveStory).toHaveBeenCalledTimes(1)
+    expect(router.push).not.toHaveBeenCalled()
   })
 })

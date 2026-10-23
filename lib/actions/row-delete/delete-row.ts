@@ -2,7 +2,11 @@ import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { generationStore } from '@/lib/stores'
 
-import { applyDeltaActionGroup, DELTA_REJECTION } from '../delta/apply-delta-action'
+import {
+  applyDeltaActionGroup,
+  DELTA_REJECTION,
+  type DeltaGroupResult,
+} from '../delta/apply-delta-action'
 import { TARGET_NOT_FOUND } from '../delta/registry'
 import { ENTITY_DELETE_REJECTION } from '../entities/register'
 import { ROW_SAVE_REJECTION } from '../row-save/commit-row-save'
@@ -22,18 +26,16 @@ export type RowDeleteResult =
   | { status: 'ok' }
   | { status: 'rejected'; reason: string; code: RowDeleteRejectionCode }
 
+const ROW_DELETE_CODES: ReadonlySet<string> = new Set(Object.values(ROW_DELETE_REJECTION))
+
+function isRowDeleteCode(code: string): code is RowDeleteRejectionCode {
+  return ROW_DELETE_CODES.has(code)
+}
+
 // A reversal raised while the delete awaited its lock is what the gate below reports as in-flight.
 function rejectionCode(code: string | undefined): RowDeleteRejectionCode {
-  switch (code) {
-    case DELTA_REJECTION.reversalInProgress:
-      return ROW_DELETE_REJECTION.inFlight
-    case TARGET_NOT_FOUND:
-      return ROW_DELETE_REJECTION.notFound
-    case ENTITY_DELETE_REJECTION.leadEntity:
-      return ROW_DELETE_REJECTION.leadEntity
-    default:
-      return ROW_DELETE_REJECTION.failed
-  }
+  if (code === DELTA_REJECTION.reversalInProgress) return ROW_DELETE_REJECTION.inFlight
+  return code != null && isRowDeleteCode(code) ? code : ROW_DELETE_REJECTION.failed
 }
 
 export type RowDeleteKind = 'entity' | 'lore' | 'thread' | 'happening'
@@ -46,20 +48,14 @@ export async function commitRowDelete(
   actions: readonly PipelineAction[],
   ctx: DbCtx,
 ): Promise<RowDeleteResult> {
-  // generation-pipeline.md → Action rejection — defense in depth: the UI disables first.
+  // generation-pipeline.md → Action rejection — defense in depth. No await may precede the write
+  // registering: reversals raised before are refused here; later ones settle it, then read the log.
   if (generationStore.isUserEditBlocked()) {
-    logger.warn(`action_layer.${kind}_delete_rejected`, {
-      branchId,
-      id,
-      code: ROW_DELETE_REJECTION.inFlight,
-    })
-    return {
-      status: 'rejected',
-      reason: 'generation in flight',
-      code: ROW_DELETE_REJECTION.inFlight,
-    }
+    const code = ROW_DELETE_REJECTION.inFlight
+    logger.warn(`action_layer.${kind}_delete_rejected`, { branchId, id, code })
+    return { status: 'rejected', reason: 'generation in flight', code }
   }
-  let result
+  let result: DeltaGroupResult
   try {
     result = await applyDeltaActionGroup(actions, { actionId: generateId('act'), branchId }, ctx)
   } catch (error) {

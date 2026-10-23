@@ -1,12 +1,22 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
-import { branches, entities, stories, type NewEntity } from '@/lib/db'
+import {
+  branches,
+  deltas,
+  entities,
+  entityStateSchemaForKind,
+  stories,
+  type CharacterState,
+  type Entity,
+  type NewEntity,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entitiesStore } from '@/lib/stores'
+import { collisionPairOf, entityDeleteActions, entityMergeActions } from '@/lib/world'
 
 import { registerEntities } from './register'
-import { applyDeltaAction } from '../delta/apply-delta-action'
+import { applyDeltaAction, applyDeltaActionGroup, lockKeysFor } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
 import { USER_EDITED_SINCE_PROSE } from '../delta/user-precedence'
@@ -47,6 +57,18 @@ const CHAR: NewEntity = {
   },
   createdAt: 1,
   updatedAt: 1,
+}
+
+// Spelled out, not taken from emptyEntityState: the null-column fill under test calls it.
+const NO_CHARACTER_STATE = {
+  visual: {},
+  traits: [],
+  drives: [],
+  current_location_id: null,
+  equipped_items: [],
+  inventory: [],
+  faction_id: null,
+  lastSeenAt: null,
 }
 
 async function rowFor(db: Awaited<ReturnType<typeof setup>>['db'], id: string) {
@@ -267,6 +289,31 @@ describe('character-only state arms', () => {
   })
 })
 
+describe('a null state column', () => {
+  it('reads as the empty state for a per-turn state patch', async () => {
+    const { db, ctx } = await setup()
+    await apply(
+      ctx,
+      { kind: 'createEntity', source: 'user_edit', payload: { entry: CHAR } },
+      'act_c',
+    )
+    await db.update(entities).set({ state: null }).where(eq(entities.id, 'char_1'))
+    const result = await apply(
+      ctx,
+      {
+        kind: 'updateEntityInventory',
+        source: 'piggyback_tagged_block',
+        payload: { branchId: 'br_1', id: 'char_1', inventory: ['item_rope'] },
+      },
+      'act_i',
+    )
+    expect(result.status).toBe('ok')
+    const { state } = await rowFor(db, 'char_1')
+    expect(state).toEqual({ ...NO_CHARACTER_STATE, inventory: ['item_rope'] })
+    expect(entityStateSchemaForKind('character').safeParse(state).success).toBe(true)
+  })
+})
+
 describe('updateEntityStackables', () => {
   it('replaces the stackables record', async () => {
     const { db, ctx } = await setup()
@@ -471,7 +518,7 @@ describe('promoteStagedEntity', () => {
     expect(entitiesStore.getById('char_1')?.status).toBe('active')
   })
 
-  it('no-ops when the target row is gone, same as any other row the pass read stale', async () => {
+  it('no-ops when the target row is gone', async () => {
     const { ctx } = await setup()
     expect(
       await applyDeltaAction(
@@ -515,7 +562,7 @@ describe('appendEntityKeywords', () => {
     payload: { branchId: 'br_1', id: 'char_1', keywords, proseEntryId: null },
   })
 
-  it('appends only what the live row lacks, keeping an alias the user added mid-pass', async () => {
+  it('appends only what the live row lacks, keeping an alias the user added before the pass', async () => {
     const { db, ctx } = await setup()
     await create(ctx, { ...CHAR, keywords: ['the knight'] })
     expect(
@@ -535,7 +582,7 @@ describe('appendEntityKeywords', () => {
     ])
   })
 
-  it('extends the live list, so an alias removed mid-pass stays out when the payload omits it', async () => {
+  it('extends the live list, so an alias removed before the pass stays out when the payload omits it', async () => {
     const { db, ctx } = await setup()
     await create(ctx, { ...CHAR, keywords: ['the knight', 'the drunk'] })
     expect((await apply(ctx, userPatch({ keywords: ['the knight'] }), 'act_u')).status).toBe('ok')
@@ -561,7 +608,7 @@ describe('appendEntityKeywords', () => {
     expect((await rowFor(db, 'char_1')).keywords).toEqual(['the knight'])
   })
 
-  it('no-ops when the target row is gone, same as any other row the pass read stale', async () => {
+  it('no-ops when the target row is gone', async () => {
     const { ctx } = await setup()
     expect(await apply(ctx, append(['the wanderer']), 'act_k')).toEqual({
       status: 'rejected',
@@ -609,7 +656,7 @@ describe('retireEntity', () => {
     expect((await rowFor(db, 'char_1')).retiredReason).toBeNull()
   })
 
-  it("no-ops on a row the user retired mid-pass, keeping the user's reason", async () => {
+  it("no-ops on a row the user retired before the pass, keeping the user's reason", async () => {
     const { db, ctx } = await setup()
     await create(ctx, ACTIVE)
     expect(
@@ -621,6 +668,24 @@ describe('retireEntity', () => {
       code: 'noop',
     })
     expect((await rowFor(db, 'char_1')).retiredReason).toBe('exiled')
+  })
+
+  // classifier.md → What the classifier writes: checked again when the write lands.
+  it('no-ops on a location', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, {
+      ...CHAR,
+      kind: 'location',
+      name: 'The Rusty Anchor',
+      status: 'active',
+      state: { parent_location_id: null },
+    })
+    expect(await apply(ctx, retire('burned down'), 'act_r')).toEqual({
+      status: 'rejected',
+      reason: 'location',
+      code: 'noop',
+    })
+    expect((await rowFor(db, 'char_1')).status).toBe('active')
   })
 
   it('no-ops on a staged row', async () => {
@@ -643,7 +708,7 @@ describe('retireEntity', () => {
     expect(row.retiredReason).toBeNull()
   })
 
-  it('no-ops when the target row is gone, same as any other row the pass read stale', async () => {
+  it('no-ops when the target row is gone', async () => {
     const { ctx } = await setup()
     expect(await apply(ctx, retire('fell at the ford'), 'act_r')).toEqual({
       status: 'rejected',
@@ -800,5 +865,260 @@ describe('user edits newer than the prose', () => {
       'The Drunk',
       'the wanderer',
     ])
+  })
+})
+
+describe('setCharacterFaction', () => {
+  const PROSE = 'e_prose'
+  const writeProse = (ctx: Ctx) =>
+    apply(
+      ctx,
+      {
+        kind: 'createStoryEntry',
+        source: 'ai_classifier',
+        payload: {
+          entry: {
+            id: PROSE,
+            branchId: 'br_1',
+            position: 1,
+            kind: 'ai_reply',
+            content: 'Kael swore to the Iron Circle.',
+            createdAt: 1,
+          },
+        },
+      },
+      'act_prose',
+    )
+  const faction = (id: string, over: Partial<NewEntity> = {}): NewEntity => ({
+    id,
+    branchId: 'br_1',
+    kind: 'faction',
+    name: id,
+    status: 'active',
+    injectionMode: 'auto',
+    createdAt: 1,
+    updatedAt: 1,
+    ...over,
+  })
+  const ACTIVE = { ...CHAR, status: 'active' as const }
+  const join = (
+    factionId: string | null,
+    { id = 'char_1', proseEntryId = PROSE }: { id?: string; proseEntryId?: string | null } = {},
+  ): PipelineAction => ({
+    kind: 'setCharacterFaction',
+    source: 'periodic_classifier',
+    payload: { branchId: 'br_1', id, factionId, proseEntryId },
+  })
+  const noop = (reason: string) => ({ status: 'rejected', reason, code: 'noop' })
+  const userWon = noop(USER_EDITED_SINCE_PROSE)
+
+  async function seedRows(ctx: Ctx, db: Db, character: NewEntity = ACTIVE) {
+    await db.insert(entities).values([faction('fact_circle'), faction('fact_crown')])
+    await create(ctx, character)
+  }
+
+  async function seed(ctx: Ctx, db: Db, character: NewEntity = ACTIVE) {
+    await seedRows(ctx, db, character)
+    await writeProse(ctx)
+  }
+
+  const factionOf = async (db: Db, id = 'char_1') =>
+    ((await rowFor(db, id)).state as CharacterState).faction_id
+
+  type Db = Awaited<ReturnType<typeof setup>>['db']
+
+  it('writes the faction alone, so its undo payload holds only that field', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    expect((await apply(ctx, join('fact_circle'), 'act_j')).status).toBe('ok')
+
+    expect((await rowFor(db, 'char_1')).state).toEqual({ ...CHAR.state, faction_id: 'fact_circle' })
+    expect((entitiesStore.getById('char_1')?.state as CharacterState | undefined)?.faction_id).toBe(
+      'fact_circle',
+    )
+    const [delta] = await db.select().from(deltas).where(eq(deltas.actionId, 'act_j'))
+    expect(delta.undoPayload).toEqual({ state: { faction_id: null } })
+  })
+
+  it('clears a faction to none', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db, { ...ACTIVE, state: { ...CHAR.state, faction_id: 'fact_circle' } as never })
+    expect((await apply(ctx, join(null), 'act_j')).status).toBe('ok')
+    expect(await factionOf(db)).toBeNull()
+  })
+
+  it('writes onto a character whose state column is null', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    await db.update(entities).set({ state: null }).where(eq(entities.id, 'char_1'))
+    expect((await apply(ctx, join('fact_circle'), 'act_j')).status).toBe('ok')
+    const { state } = await rowFor(db, 'char_1')
+    expect(state).toEqual({ ...NO_CHARACTER_STATE, faction_id: 'fact_circle' })
+    expect(entityStateSchemaForKind('character').safeParse(state).success).toBe(true)
+  })
+
+  it('no-ops on a row that is gone', async () => {
+    const { ctx, db } = await setup()
+    await seed(ctx, db)
+    expect(await apply(ctx, join('fact_circle', { id: 'char_gone' }), 'act_j')).toMatchObject({
+      status: 'rejected',
+      code: 'noop',
+    })
+  })
+
+  it('no-ops on a row that is not a character', async () => {
+    const { ctx, db } = await setup()
+    await seed(ctx, db)
+    expect(await apply(ctx, join('fact_circle', { id: 'fact_crown' }), 'act_j')).toEqual(
+      noop('not-a-character'),
+    )
+  })
+
+  it('no-ops when the faction already matches', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db, { ...ACTIVE, state: { ...CHAR.state, faction_id: 'fact_circle' } as never })
+    expect(await apply(ctx, join('fact_circle'), 'act_j')).toEqual(noop('faction-unchanged'))
+  })
+
+  it.each([
+    ['names no row', 'fact_gone'],
+    ['names a character', 'char_2'],
+  ])('no-ops on a faction that %s', async (_label, factionId) => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    await db.insert(entities).values({ ...ACTIVE, id: 'char_2' })
+    expect(await apply(ctx, join(factionId), 'act_j')).toEqual(noop('not-a-faction'))
+    expect(await factionOf(db)).toBeNull()
+  })
+
+  it('no-ops on a faction that exists only on another branch', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    await db.insert(branches).values({ id: 'br_2', storyId: 'story_1', name: 'alt', createdAt: 1 })
+    await db.insert(entities).values(faction('fact_elsewhere', { branchId: 'br_2' }))
+    expect(await apply(ctx, join('fact_elsewhere'), 'act_j')).toEqual(noop('not-a-faction'))
+    expect(await factionOf(db)).toBeNull()
+  })
+
+  it('takes a faction the same group creates', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    const result = await applyDeltaActionGroup(
+      [
+        join('fact_new'),
+        {
+          kind: 'createEntity',
+          source: 'periodic_classifier',
+          payload: { entry: faction('fact_new') },
+        },
+      ],
+      { actionId: 'act_g', branchId: 'br_1' },
+      ctx,
+    )
+    expect(result).toEqual({ status: 'ok' })
+    expect(await factionOf(db)).toBe('fact_new')
+  })
+
+  it('keeps a faction the user set after the prose', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    await apply(ctx, userPatch({ state: { ...CHAR.state, faction_id: 'fact_crown' } }), 'act_u')
+    expect(await apply(ctx, join('fact_circle'), 'act_j')).toEqual(userWon)
+    expect(await factionOf(db)).toBe('fact_crown')
+  })
+
+  it("writes past a later edit of the character's traits", async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    await apply(ctx, userPatch({ state: { ...CHAR.state, traits: ['brave', 'stern'] } }), 'act_u')
+    expect((await apply(ctx, join('fact_circle'), 'act_j')).status).toBe('ok')
+    expect(await factionOf(db)).toBe('fact_circle')
+  })
+
+  it('writes over a faction the user set before the prose', async () => {
+    const { db, ctx } = await setup()
+    await seedRows(ctx, db)
+    await apply(ctx, userPatch({ state: { ...CHAR.state, faction_id: 'fact_crown' } }), 'act_u')
+    await writeProse(ctx)
+    expect((await apply(ctx, join('fact_circle'), 'act_j')).status).toBe('ok')
+    expect(await factionOf(db)).toBe('fact_circle')
+  })
+
+  it('keeps the faction of a character the user created after the prose', async () => {
+    const { db, ctx } = await setup()
+    await writeProse(ctx)
+    await seedRows(ctx, db)
+    expect(await apply(ctx, join('fact_circle'), 'act_j')).toEqual(userWon)
+  })
+
+  async function rows(db: Db): Promise<Entity[]> {
+    return (await db.select().from(entities).where(eq(entities.branchId, 'br_1'))) as Entity[]
+  }
+
+  it('treats a World delete re-pointing the faction as a user write to it', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db, { ...ACTIVE, state: { ...CHAR.state, faction_id: 'fact_crown' } as never })
+    const branchEntities = await rows(db)
+    const target = branchEntities.find((e) => e.id === 'fact_crown')!
+    const { actions } = entityDeleteActions({
+      branchId: 'br_1',
+      target,
+      branchEntities,
+      tail: null,
+    })
+    expect(
+      await applyDeltaActionGroup(actions, { actionId: 'act_d', branchId: 'br_1' }, ctx),
+    ).toEqual({
+      status: 'ok',
+    })
+
+    expect(await apply(ctx, join('fact_circle'), 'act_j')).toEqual(userWon)
+    expect(await factionOf(db)).toBeNull()
+  })
+
+  it('treats a merge re-pointing the faction as a user write to it', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values([
+      faction('fact_circle'),
+      faction('fact_crown'),
+      faction('fact_crown_2', {
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: 'fact_crown',
+        nameCollisionReason: 'alike',
+      }),
+    ])
+    await create(ctx, { ...ACTIVE, state: { ...CHAR.state, faction_id: 'fact_crown_2' } as never })
+    await writeProse(ctx)
+    const branchEntities = await rows(db)
+    const lookup = collisionPairOf(branchEntities, ['fact_crown', 'fact_crown_2'])
+    if ('miss' in lookup) throw new Error(lookup.miss)
+    const actions = entityMergeActions({
+      branchId: 'br_1',
+      pair: lookup.pair,
+      canonicalId: 'fact_crown',
+      fromLoser: [],
+      deselectedTags: [],
+      deselectedKeywords: [],
+      branchEntities,
+      happenings: [],
+      awareness: [],
+      involvements: [],
+      relationships: [],
+      tail: null,
+      newId: (prefix) => `${prefix}_merge`,
+    })
+    expect(
+      await applyDeltaActionGroup(actions, { actionId: 'act_m', branchId: 'br_1' }, ctx),
+    ).toEqual({
+      status: 'ok',
+    })
+    expect(await factionOf(db)).toBe('fact_crown')
+
+    expect(await apply(ctx, join('fact_circle'), 'act_j')).toEqual(userWon)
+    expect(await factionOf(db)).toBe('fact_crown')
+  })
+
+  it("serializes on the character's row key", () => {
+    expect(lockKeysFor(join('fact_circle'))).toEqual(['entities:br_1:char_1'])
   })
 })

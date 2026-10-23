@@ -1,19 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { storyDefinitionSchema, storySettingsSchema } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { CLASSIFIER_HELD } from '@/lib/pipeline'
 import { currentStoryStore } from '@/lib/stores'
 
 import { runClassifierNow } from './run-now'
 
-const ensurePeriodicClassifierPipelineRegistered = vi.fn()
-const runPipeline = vi.fn()
+const runClassifierPass = vi.fn()
 
-vi.mock('@/lib/pipeline', () => ({
-  ensurePeriodicClassifierPipelineRegistered: (...args: unknown[]) =>
-    ensurePeriodicClassifierPipelineRegistered(...args),
-  runPipeline: (...args: unknown[]) => runPipeline(...args),
+vi.mock('@/lib/pipeline', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  runClassifierPass: (...args: unknown[]) => runClassifierPass(...args),
 }))
 
 const DEFINITION = storyDefinitionSchema.parse({
@@ -62,61 +60,53 @@ const SETTINGS = storySettingsSchema.parse({
   packVariables: {},
 })
 
+function open(branchId: string): void {
+  currentStoryStore.set({ storyId: 's1', branchId, definition: DEFINITION, settings: SETTINGS })
+}
+
 describe('runClassifierNow', () => {
   beforeEach(() => {
-    ensurePeriodicClassifierPipelineRegistered.mockReset()
-    runPipeline.mockReset()
+    runClassifierPass.mockReset()
     currentStoryStore.__reset()
   })
-  afterEach(() => currentStoryStore.__reset())
-
-  it('rejects when the branch is not open', async () => {
-    currentStoryStore.set({
-      storyId: 's1',
-      branchId: 'b1',
-      definition: DEFINITION,
-      settings: SETTINGS,
-    })
-    const { db, runInTransaction } = await createTestDb()
-
-    const result = await runClassifierNow('b-other', { db, runInTransaction })
-
-    expect(result).toEqual({ outcome: 'rejected', blockedBy: 'branch-not-open' })
-    expect(runPipeline).not.toHaveBeenCalled()
+  afterEach(() => {
+    currentStoryStore.__reset()
   })
 
-  it('calls runPipeline with the open story storyId/branchId', async () => {
-    currentStoryStore.set({
-      storyId: 's1',
-      branchId: 'b1',
-      definition: DEFINITION,
-      settings: SETTINGS,
-    })
+  it('rejects when the branch is not open', async () => {
+    open('b-other')
     const { db, runInTransaction } = await createTestDb()
-    runPipeline.mockResolvedValue({ outcome: 'completed' })
 
     const result = await runClassifierNow('b1', { db, runInTransaction })
 
-    expect(ensurePeriodicClassifierPipelineRegistered).toHaveBeenCalled()
-    expect(runPipeline).toHaveBeenCalledWith(
-      PERIODIC_CLASSIFIER_KIND,
-      expect.objectContaining({ storyId: 's1', branchId: 'b1', db, runInTransaction }),
-    )
+    expect(result).toEqual({ outcome: 'rejected', blockedBy: 'branch-not-open' })
+    expect(runClassifierPass).not.toHaveBeenCalled()
+  })
+
+  // Exact arguments: a `beforeTurn` anywhere would show Run now's pass as Send's.
+  it('starts the pass on the open story’s branch, never as Send’s', async () => {
+    open('b1')
+    const { db, runInTransaction } = await createTestDb()
+    runClassifierPass.mockResolvedValue({ outcome: 'completed' })
+
+    const result = await runClassifierNow('b1', { db, runInTransaction })
+
+    expect(runClassifierPass.mock.calls).toStrictEqual([
+      [
+        { storyId: 's1', branchId: 'b1' },
+        { db, runInTransaction },
+      ],
+    ])
     expect(result).toEqual({ outcome: 'completed' })
   })
 
-  it('passes through a rejected outcome unchanged', async () => {
-    currentStoryStore.set({
-      storyId: 's1',
-      branchId: 'b1',
-      definition: DEFINITION,
-      settings: SETTINGS,
-    })
+  it('passes the starter’s held refusal through unchanged', async () => {
+    open('b1')
     const { db, runInTransaction } = await createTestDb()
-    runPipeline.mockResolvedValue({ outcome: 'rejected', blockedBy: 'chapter-close' })
+    runClassifierPass.mockResolvedValue({ outcome: 'rejected', blockedBy: CLASSIFIER_HELD })
 
     const result = await runClassifierNow('b1', { db, runInTransaction })
 
-    expect(result).toEqual({ outcome: 'rejected', blockedBy: 'chapter-close' })
+    expect(result).toEqual({ outcome: 'rejected', blockedBy: CLASSIFIER_HELD })
   })
 })

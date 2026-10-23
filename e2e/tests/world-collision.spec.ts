@@ -21,7 +21,7 @@ const FLAGGED_VIEW = 'owes a favor to'
 const MIRA_VIEW = 'buys from'
 
 // The seed gives neither Brannoc a link row or a scene place; the merge needs one of each to move.
-// See docs/implementation/lessons-learned/seed-tip-position-shifts-at-boot.md for the tail anchor.
+// Tail anchor: docs/implementation/lessons-learned/seed-tip-position-shifts-at-first-send.md.
 function giveFlaggedBrannocLinks(dbPath: string): void {
   const db = new DatabaseSync(dbPath)
   try {
@@ -311,6 +311,7 @@ test.describe.serial('World collision resolve', () => {
     const head = await logHead(page, pair.branchId)
 
     await world.resolveButton(page).click()
+    await expect(world.collisionReason(page, 'distinct')).toBeVisible()
     await world.collisionMode(page, 'keep').click()
     await world.keepConfirm(page).click()
 

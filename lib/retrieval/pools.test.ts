@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
+import type { Entity } from '@/lib/db'
+import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
+
 import {
   buildStructuralFloor,
   filterEntityPool,
@@ -55,13 +58,17 @@ const loadedThread = (over: Partial<ThreadRow> & Pick<ThreadRow, 'id'>): LoadedT
   embeddingStale: true,
 })
 
+const NONE: ReadonlySet<string> = new Set()
+
 const floorOf = (over: Partial<Parameters<typeof buildStructuralFloor>[0]> = {}) =>
   buildStructuralFloor({
     entities: [],
+    storeEntities: [],
     lore: [],
     threads: [],
     sceneEntityIds: [],
     currentLocationId: null,
+    disabledPlaceIds: NONE,
     ...over,
   })
 
@@ -82,7 +89,11 @@ describe('buildStructuralFloor', () => {
 
   it('does not seat or pool a disabled entity that is off-scene', () => {
     const floor = floorOf({ entities, sceneEntityIds: ['char_a'] })
-    const pool = filterEntityPool(entities, { floorIds: floor.seatedIds, recentProse: '' })
+    const pool = filterEntityPool(entities, {
+      disabledPlaceIds: NONE,
+      floorIds: floor.seatedIds,
+      recentProse: '',
+    })
     expect(ids(floor.sceneEntities)).not.toContain('char_b')
     expect(ids(floor.alwaysEntities)).not.toContain('char_b')
     expect(ids(pool)).not.toContain('char_b')
@@ -116,6 +127,14 @@ describe('buildStructuralFloor', () => {
     })
     expect(floor.currentLocation?.id).toBe('loc_a')
     expect(ids(floor.sceneEntities)).toEqual(['char_a'])
+  })
+
+  // retrieval.md → Structural floor: the ancestor's `disabled` beats a place's own `always`.
+  it('does not seat an always place disabled through an ancestor', () => {
+    const room = entity({ id: 'loc_room', kind: 'location', injectionMode: 'always' })
+    const floor = floorOf({ entities: [room], disabledPlaceIds: new Set(['loc_room']) })
+    expect(floor.alwaysEntities).toEqual([])
+    expect(floor.seatedIds.has('loc_room')).toBe(false)
   })
 
   it('seats injection_mode=always rows across entities, lore and threads', () => {
@@ -162,11 +181,15 @@ describe('buildStructuralFloor', () => {
 
   it('never lists a row in both the floor and the ranker pool', () => {
     const floor = floorOf({ entities, sceneEntityIds: ['char_a'], currentLocationId: 'loc_a' })
-    const pool = filterEntityPool(entities, { floorIds: floor.seatedIds, recentProse: '' })
+    const pool = filterEntityPool(entities, {
+      disabledPlaceIds: NONE,
+      floorIds: floor.seatedIds,
+      recentProse: '',
+    })
     for (const id of floor.seatedIds) expect(ids(pool)).not.toContain(id)
   })
 
-  it('projects loaded rows down to the declared shape, on all six seated lists', () => {
+  it('projects loaded rows down to the declared shape, on all nine seated lists', () => {
     // Typed as Loaded*Row via the factories above, not EntityRow/LoreRow/ThreadRow:
     // annotating the fixture as the narrower type would trip excess-property
     // checking and force it narrow, proving nothing about the runtime widening.
@@ -177,6 +200,9 @@ describe('buildStructuralFloor', () => {
         loadedEntity({ id: 'char_1' }),
         loadedEntity({ id: 'loc_1', kind: 'location' }),
         loadedEntity({ id: 'char_2', injectionMode: 'always' }),
+        loadedEntity({ id: 'fact_1', kind: 'faction' }),
+        loadedEntity({ id: 'item_1', kind: 'item' }),
+        loadedEntity({ id: 'item_2', kind: 'item' }),
       ],
       lore: [loadedLore({ id: 'lo_1', injectionMode: 'always' })],
       threads: [
@@ -185,17 +211,38 @@ describe('buildStructuralFloor', () => {
       ],
       sceneEntityIds: ['char_1'],
       currentLocationId: 'loc_1',
+      disabledPlaceIds: NONE,
+      storeEntities: [
+        makeEntity({
+          id: 'char_1',
+          kind: 'character',
+          name: 'char_1',
+          state: { faction_id: 'fact_1', inventory: ['item_1'] } as Entity['state'],
+        }),
+        makeEntity({ id: 'loc_1', kind: 'location', name: 'loc_1' }),
+        makeEntity({ id: 'fact_1', kind: 'faction', name: 'fact_1' }),
+        makeEntity({ id: 'item_1', kind: 'item', name: 'item_1' }),
+        makeEntity({
+          id: 'item_2',
+          kind: 'item',
+          name: 'item_2',
+          state: { at_location_id: 'loc_1' },
+        }),
+      ],
     })
 
     expect(
       [
         floor.sceneEntities,
+        floor.sceneFactions,
+        floor.heldItems,
+        floor.looseItems,
         floor.alwaysEntities,
         floor.activeThreads,
         floor.alwaysThreads,
         floor.alwaysLore,
       ].map((l) => l.length),
-    ).toEqual([1, 1, 1, 1, 1])
+    ).toEqual([1, 1, 1, 1, 1, 1, 1, 1])
 
     const entityKeys = ['description', 'id', 'injectionMode', 'kind', 'name', 'status'].sort()
     const threadKeys = ['description', 'id', 'injectionMode', 'status', 'title'].sort()
@@ -204,9 +251,140 @@ describe('buildStructuralFloor', () => {
     expect(Object.keys(floor.sceneEntities[0]).sort()).toEqual(entityKeys)
     expect(Object.keys(floor.currentLocation ?? {}).sort()).toEqual(entityKeys)
     expect(Object.keys(floor.alwaysEntities[0]).sort()).toEqual(entityKeys)
+    for (const row of [floor.sceneFactions[0], floor.heldItems[0], floor.looseItems[0]])
+      expect(Object.keys(row).sort()).toEqual(entityKeys)
     expect(Object.keys(floor.activeThreads[0]).sort()).toEqual(threadKeys)
     expect(Object.keys(floor.alwaysThreads[0]).sort()).toEqual(threadKeys)
     expect(Object.keys(floor.alwaysLore[0]).sort()).toEqual(loreKeys)
+  })
+})
+
+// One world as both the store's rows, which the views read, and retrieval's source rows.
+function impliedFloor(
+  rows: Entity[],
+  scene: { sceneEntities: string[]; currentLocationId: string | null },
+) {
+  return buildStructuralFloor({
+    entities: rows.map((e) => entity(e)),
+    lore: [],
+    threads: [],
+    sceneEntityIds: scene.sceneEntities,
+    currentLocationId: scene.currentLocationId,
+    disabledPlaceIds: NONE,
+    storeEntities: rows,
+  })
+}
+
+const character = (id: string, state: object, over: Partial<Entity> = {}) =>
+  makeEntity({ id, kind: 'character', name: id, state: state as Entity['state'], ...over })
+const thing = (id: string, over: Partial<Entity> = {}, state: object = {}) =>
+  makeEntity({ id, kind: 'item', name: id, state: { at_location_id: null, ...state }, ...over })
+const faction = (id: string, over: Partial<Entity> = {}) =>
+  makeEntity({ id, kind: 'faction', name: id, ...over })
+const place = (id: string) => makeEntity({ id, kind: 'location', name: id })
+
+describe('buildStructuralFloor — what the scene implies', () => {
+  const SCENE = { sceneEntities: ['char_a', 'char_b'], currentLocationId: 'loc_1' }
+
+  it("seats the in-scene characters' factions, their held items and the loose items, once each", () => {
+    const rows = [
+      character('char_a', { faction_id: 'fact_1', inventory: ['item_h'] }),
+      character('char_b', { faction_id: 'fact_1', equipped_items: ['item_e'] }),
+      faction('fact_1'),
+      thing('item_h'),
+      thing('item_e'),
+      thing('item_l', {}, { at_location_id: 'loc_1' }),
+      place('loc_1'),
+    ]
+    const floor = impliedFloor(rows, SCENE)
+    expect(ids(floor.sceneFactions)).toEqual(['fact_1'])
+    expect(ids(floor.heldItems)).toEqual(['item_h', 'item_e'])
+    expect(ids(floor.looseItems)).toEqual(['item_l'])
+    for (const id of ['fact_1', 'item_h', 'item_e', 'item_l']) expect(floor.seatedIds).toContain(id)
+    // Seated means never ranked or keyword-injected again: both read the pool filter.
+    const pool = filterEntityPool(
+      rows.map((e) => entity(e)),
+      {
+        floorIds: floor.seatedIds,
+        recentProse: '',
+        disabledPlaceIds: NONE,
+      },
+    )
+    expect(ids(pool)).toEqual([])
+  })
+
+  it('seats an `always` held item and faction once, as what the scene implies', () => {
+    const rows = [
+      character('char_a', { faction_id: 'fact_1', inventory: ['item_h'] }),
+      faction('fact_1', { injectionMode: 'always' }),
+      thing('item_h', { injectionMode: 'always' }),
+    ]
+    const floor = impliedFloor(rows, SCENE)
+    expect(ids(floor.sceneFactions)).toEqual(['fact_1'])
+    expect(ids(floor.heldItems)).toEqual(['item_h'])
+    expect(ids(floor.alwaysEntities)).toEqual([])
+  })
+
+  it('seats nothing retired or disabled, nor what an off-scene or staged character holds', () => {
+    const rows = [
+      character('char_a', { faction_id: 'fact_r', inventory: ['item_r', 'item_d'] }),
+      character('char_b', { faction_id: 'fact_d' }),
+      character('char_s', { inventory: ['item_s'] }, { status: 'staged' }),
+      character('char_o', { faction_id: 'fact_o', inventory: ['item_o'] }),
+      faction('fact_r', { status: 'retired' }),
+      faction('fact_d', { injectionMode: 'disabled' }),
+      faction('fact_o'),
+      thing('item_r', { status: 'retired' }),
+      thing('item_d', { injectionMode: 'disabled' }),
+      thing('item_s'),
+      thing('item_o'),
+      thing('item_x', { injectionMode: 'disabled' }, { at_location_id: 'loc_1' }),
+      place('loc_1'),
+    ]
+    const floor = impliedFloor(rows, { ...SCENE, sceneEntities: ['char_a', 'char_b', 'char_s'] })
+    expect(ids(floor.sceneFactions)).toEqual([])
+    expect(ids(floor.heldItems)).toEqual([])
+    expect(ids(floor.looseItems)).toEqual([])
+  })
+
+  it('leaves a disabled held item the scene names to the scene seat, not a second one', () => {
+    const rows = [
+      character('char_a', { inventory: ['item_d'] }),
+      thing('item_d', { injectionMode: 'disabled' }),
+    ]
+    const floor = impliedFloor(rows, {
+      sceneEntities: ['char_a', 'item_d'],
+      currentLocationId: null,
+    })
+    expect(ids(floor.sceneEntities)).toEqual(['char_a', 'item_d'])
+    expect(ids(floor.heldItems)).toEqual([])
+  })
+})
+
+describe("buildStructuralFloor — the current location's chain", () => {
+  const nested = (id: string, name: string, parent: string | null, over: Partial<Entity> = {}) =>
+    makeEntity({ id, kind: 'location', name, state: { parent_location_id: parent }, ...over })
+  const WORLD = [
+    nested('loc_back', 'The back room', 'loc_anchor'),
+    nested('loc_anchor', 'The Rusty Anchor', 'loc_docks'),
+    nested('loc_docks', 'The Docks', 'loc_vellis', { injectionMode: 'disabled' }),
+    nested('loc_vellis', 'Port Vellis', 'loc_eldra'),
+    nested('loc_eldra', 'Eldra', null),
+  ]
+
+  it('lists the listed ancestors, nearest first, leaving out a disabled one', () => {
+    const floor = impliedFloor(WORLD, { sceneEntities: [], currentLocationId: 'loc_back' })
+    expect(floor.currentLocationChain).toEqual(['The Rusty Anchor', 'Port Vellis', 'Eldra'])
+  })
+
+  it.each([
+    ['no location', null],
+    ['an inactive one', 'loc_gone'],
+  ])('is empty when the scene names %s', (_case, currentLocationId) => {
+    const rows = [...WORLD, nested('loc_gone', 'The old mill', 'loc_eldra', { status: 'retired' })]
+    const floor = impliedFloor(rows, { sceneEntities: [], currentLocationId })
+    expect(floor.currentLocation).toBeNull()
+    expect(floor.currentLocationChain).toEqual([])
   })
 })
 
@@ -274,7 +452,11 @@ describe('entity placement sweep', () => {
       sceneEntityIds: inScene === '1' ? ['x'] : [],
       currentLocationId: isLocation === '1' ? 'x' : null,
     })
-    const pool = filterEntityPool([row], { floorIds: floor.seatedIds, recentProse: '' })
+    const pool = filterEntityPool([row], {
+      disabledPlaceIds: NONE,
+      floorIds: floor.seatedIds,
+      recentProse: '',
+    })
 
     const actual: EntityDestination[] = []
     if (ids(floor.sceneEntities).includes('x')) actual.push('scene')
@@ -362,7 +544,11 @@ describe('filterEntityPool', () => {
   ]
 
   it('admits active off-scene and staged, excludes disabled', () => {
-    const pool = filterEntityPool(rows, { floorIds: new Set(), recentProse: '' })
+    const pool = filterEntityPool(rows, {
+      disabledPlaceIds: NONE,
+      floorIds: new Set(),
+      recentProse: '',
+    })
     expect(ids(pool)).toContain('a')
     expect(ids(pool)).toContain('b')
     expect(ids(pool)).not.toContain('e')
@@ -373,23 +559,47 @@ describe('filterEntityPool', () => {
   // through — admitting it injects content injection_mode was meant to gate.
   it('excludes a status outside the union rather than admitting it', () => {
     const rogue = { ...entity({ id: 'x', name: 'Rogue' }), status: 'archived' as never }
-    const pool = filterEntityPool([...rows, rogue], { floorIds: new Set(), recentProse: '' })
+    const pool = filterEntityPool([...rows, rogue], {
+      disabledPlaceIds: NONE,
+      floorIds: new Set(),
+      recentProse: '',
+    })
     expect(ids(pool)).not.toContain('x')
   })
 
+  // retrieval.md → Pool exclusions: effectively disabled locations.
+  it('excludes a place disabled through an ancestor', () => {
+    const room = entity({ id: 'loc_room', kind: 'location', name: 'Vault' })
+    const pool = filterEntityPool([room], {
+      disabledPlaceIds: new Set(['loc_room']),
+      floorIds: new Set(),
+      recentProse: '',
+    })
+    expect(pool).toEqual([])
+  })
+
   it('excludes retired by default but admits retired + always', () => {
-    const pool = filterEntityPool(rows, { floorIds: new Set(), recentProse: '' })
+    const pool = filterEntityPool(rows, {
+      disabledPlaceIds: NONE,
+      floorIds: new Set(),
+      recentProse: '',
+    })
     expect(ids(pool)).not.toContain('c')
     expect(ids(pool)).toContain('d')
   })
 
   it('excludes rows the structural floor already seated', () => {
-    const pool = filterEntityPool(rows, { floorIds: new Set(['a', 'd']), recentProse: '' })
+    const pool = filterEntityPool(rows, {
+      disabledPlaceIds: NONE,
+      floorIds: new Set(['a', 'd']),
+      recentProse: '',
+    })
     expect(ids(pool)).toEqual(['b'])
   })
 
   it('suppresses a staged entity whose name appears in recent buffer prose', () => {
     const pool = filterEntityPool(rows, {
+      disabledPlaceIds: NONE,
       floorIds: new Set(),
       recentProse: 'A woman calling herself Mira stepped out of the rain.',
     })
@@ -408,7 +618,13 @@ describe('filterEntityPool', () => {
     const floor = floorOf({ entities: [flagged] })
     expect(ids(floor.alwaysEntities)).toEqual(['mira'])
     expect(
-      ids(filterEntityPool([flagged], { floorIds: floor.seatedIds, recentProse: named })),
+      ids(
+        filterEntityPool([flagged], {
+          disabledPlaceIds: NONE,
+          floorIds: floor.seatedIds,
+          recentProse: named,
+        }),
+      ),
     ).toEqual([])
 
     // Same row, same prose, without the flag: suppressed and unseated.
@@ -416,7 +632,13 @@ describe('filterEntityPool', () => {
     const plainFloor = floorOf({ entities: [ordinary] })
     expect(ids(plainFloor.alwaysEntities)).toEqual([])
     expect(
-      ids(filterEntityPool([ordinary], { floorIds: plainFloor.seatedIds, recentProse: named })),
+      ids(
+        filterEntityPool([ordinary], {
+          disabledPlaceIds: NONE,
+          floorIds: plainFloor.seatedIds,
+          recentProse: named,
+        }),
+      ),
     ).toEqual([])
   })
 
@@ -426,6 +648,7 @@ describe('filterEntityPool', () => {
       entity({ id: 'staged_mira', status: 'staged', name: 'Mira' }),
     ]
     const pool = filterEntityPool(namesakes, {
+      disabledPlaceIds: NONE,
       floorIds: new Set(),
       recentProse: 'Mira turned away.',
     })
@@ -437,6 +660,7 @@ describe('filterEntityPool', () => {
     const nfc = 'Zoë' // precomposed
     expect(nfd).not.toBe(nfc)
     const pool = filterEntityPool([entity({ id: 'zoe', status: 'staged', name: nfd })], {
+      disabledPlaceIds: NONE,
       floorIds: new Set(),
       recentProse: `${nfc} crossed the yard.`,
     })
@@ -445,6 +669,7 @@ describe('filterEntityPool', () => {
 
   it('suppresses a staged name prose wrote in a different case', () => {
     const pool = filterEntityPool([entity({ id: 'zoe', status: 'staged', name: 'Zoe' })], {
+      disabledPlaceIds: NONE,
       floorIds: new Set(),
       recentProse: 'ZOE crossed the yard.',
     })
@@ -453,6 +678,7 @@ describe('filterEntityPool', () => {
 
   it('suppresses a staged name stored with surrounding whitespace', () => {
     const pool = filterEntityPool([entity({ id: 'padded', status: 'staged', name: '  Mira  ' })], {
+      disabledPlaceIds: NONE,
       floorIds: new Set(),
       recentProse: 'Mira left before dawn.',
     })
@@ -466,6 +692,7 @@ describe('filterEntityPool', () => {
     const row = entity({ id: 'm', status: 'staged', injectionMode: 'always', name: 'Mira' })
     const floor = floorOf({ entities: [row] })
     const pool = filterEntityPool([row], {
+      disabledPlaceIds: NONE,
       floorIds: floor.seatedIds,
       recentProse: 'Mira stepped out of the rain.',
     })
@@ -475,6 +702,7 @@ describe('filterEntityPool', () => {
 
   it('does not suppress on a substring hit inside a longer word', () => {
     const pool = filterEntityPool(rows, {
+      disabledPlaceIds: NONE,
       floorIds: new Set(),
       recentProse: 'It was nothing short of a miracle.',
     })
@@ -486,7 +714,11 @@ describe('filterEntityPool', () => {
       entity({ id: 'blank', status: 'staged', name: '   ' }),
       entity({ id: 'other', status: 'staged', name: 'Mira' }),
     ]
-    const pool = filterEntityPool(blank, { floorIds: new Set(), recentProse: 'Quiet street.' })
+    const pool = filterEntityPool(blank, {
+      disabledPlaceIds: NONE,
+      floorIds: new Set(),
+      recentProse: 'Quiet street.',
+    })
     expect(ids(pool)).toEqual(['blank', 'other'])
   })
 })

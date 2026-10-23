@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
+import type { Entity } from '@/lib/db'
+import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
+import { buildEntityViews, emptyEntityView } from '@/lib/world'
+
 import { renderTemplate, TEMPLATE_IDS } from '../index'
+
+const PLACES_INSTRUCTION =
+  'Use an ID from Places for <current_location>, or declare a new one with <new_location> in the state block below when the scene settles somewhere new.'
 
 // M2-shaped context: opening + a couple of entries, one entity, empty genre /
 // tone / setting (M2 stories carry these empty until M3.6).
@@ -30,6 +37,10 @@ const m2Context = {
   // comparison that is false for the wrong reason and lets a broken guard pass.
   structuralLocation: null,
   locationIds: [],
+  locationMap: [],
+  currentLocationChain: [],
+  heldItems: [],
+  looseItems: [],
   structuralActiveThreads: [],
   structuralPinnedEntities: [],
   structuralPinnedLore: [],
@@ -41,13 +52,66 @@ const m2Context = {
   retrievedChapters: [],
 }
 
+// A ranked row as generation-context hands it over: the data the ranker measured, which the
+// template renders from; renderedText is the measured string and never reaches the prompt.
+const rankedRow = (
+  id: string,
+  name: string,
+  status: 'active' | 'staged' = 'active',
+  description: string | null = null,
+) => ({
+  id,
+  displayName: name,
+  renderedText: 'never rendered',
+  kind: 'character',
+  name,
+  description,
+  status,
+  state: emptyEntityView('character'),
+})
+
+// Rows as generation-context projects them, each with the view built over this scene.
+function withViews(
+  rows: Entity[],
+  sceneEntities: string[],
+  currentLocationId: string | null = null,
+) {
+  const views = buildEntityViews(rows, { sceneEntities, currentLocationId })
+  return rows.map((e) => ({
+    id: e.id,
+    kind: e.kind,
+    name: e.name,
+    description: e.description,
+    status: e.status,
+    injectionMode: e.injectionMode,
+    state: views.byId.get(e.id),
+  }))
+}
+
+const aria = (state: object = {}) =>
+  makeEntity({
+    id: 'char_1',
+    kind: 'character',
+    name: 'Aria',
+    description: 'A wary scout.',
+    state: { inventory: [], equipped_items: [], ...state } as never,
+  })
+const thing = (id: string, name: string, over: Partial<Entity> = {}, state: object = {}) =>
+  makeEntity({ id, kind: 'item', name, state: { at_location_id: null, ...state }, ...over })
+
 describe('bundled per-turn template — empty-guard contract', () => {
-  const out = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)
+  const out = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context).user
 
   it('emits no dangling section headers for empty genre/tone/setting', () => {
-    expect(out).not.toContain('# Setting')
-    expect(out).not.toContain('# Genre')
-    expect(out).not.toContain('# Tone')
+    const { system } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)
+    expect(system).not.toContain('# Setting')
+    expect(system).not.toContain('# Genre')
+    expect(system).not.toContain('# Tone')
+  })
+
+  // Whitespace control around the scene list sets this gap; one stray newline doubles it.
+  it('leaves one blank line between the scene list and the next heading', () => {
+    expect(out).toContain('A wary scout.\n\n# Story so far')
   })
 
   it('still renders the in-scene character and the entry buffer', () => {
@@ -58,7 +122,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
   })
 
   it('matches the recorded snapshot', () => {
-    expect(out).toMatchSnapshot()
+    expect(renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)).toMatchSnapshot()
   })
 
   // Both branches asserted directly: the snapshot pins whichever one the fixture
@@ -69,7 +133,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
       ...m2Context,
       piggybackFires: true,
       worldTimeDeltaBasis: 'sinceLastAiReply',
-    })
+    }).user
     expect(rendered).toContain("including any time the user's action itself took")
   })
 
@@ -78,7 +142,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
       ...m2Context,
       piggybackFires: true,
       worldTimeDeltaBasis: 'sinceUserAction',
-    })
+    }).user
     expect(rendered).toContain("seconds elapsed since the end of the user's action")
     expect(rendered).not.toContain("including any time the user's action itself took")
   })
@@ -97,16 +161,29 @@ describe('bundled per-turn template — empty-guard contract', () => {
           description: 'A weathered hilltop fortress.',
         },
         locationIds: ['loc_1'],
+        locationMap: [
+          { id: 'loc_0', name: 'Highmoor', depth: 0 },
+          { id: 'loc_1', name: 'The Keep', depth: 1 },
+          { id: 'loc_2', name: 'The Gatehouse', depth: 2 },
+          { id: 'loc_3', name: 'Lowmarsh', depth: 0 },
+        ],
+        currentLocationChain: ['Highmoor'],
+        entities: withViews(
+          [
+            aria({ inventory: ['item_1'], equipped_items: ['item_2'] }),
+            thing('item_1', 'Silver Key'),
+            thing('item_2', 'worn sword'),
+          ],
+          ['char_1'],
+        ),
+        looseItems: withViews(
+          [thing('item_3', 'the iron chest', {}, { at_location_id: 'loc_1' })],
+          [],
+        ),
         structuralActiveThreads: [
           { id: 'thr_1', status: 'active', title: 'The siege', description: 'Three weeks in.' },
         ],
-        retrievedEntities: [
-          {
-            id: 'char_2',
-            displayName: 'Mira',
-            renderedText: 'Mira (currently elsewhere): A courier.',
-          },
-        ],
+        retrievedEntities: [rankedRow('char_2', 'Mira', 'active', 'A courier.')],
         retrievedLore: [
           {
             id: 'lore_1',
@@ -118,24 +195,21 @@ describe('bundled per-turn template — empty-guard contract', () => {
     ).toMatchSnapshot()
   })
 
-  // The ID instructions say "any off-scene character above" and "somewhere not
-  // listed above" — words that point at the memory blocks. Move the include
-  // below them and the prompt asks the model to look at something it has not
-  // been shown yet; scene-entity promotion and location selection degrade with
-  // no parse error, and the snapshot diff is a pure hunk move.
-  it('renders the memory blocks before the instructions that refer back to them', () => {
+  // The ID instructions refer back ("off-scene character above", "an ID from Places"); a block
+  // moved below them silently breaks promotion and location choice; the snapshot shows a hunk move.
+  it('renders the memory blocks and the map before the instructions that refer back to them', () => {
     const withMemory = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
-      locationIds: ['loc_1'],
-      retrievedEntities: [
-        { id: 'char_2', displayName: 'Mira', renderedText: 'Mira (currently elsewhere).' },
-      ],
-    })
+      locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
+      retrievedEntities: [rankedRow('char_2', 'Mira')],
+    }).user
 
     const blocks = withMemory.indexOf('# Elsewhere in the world')
+    const places = withMemory.indexOf('# Places')
     expect(blocks).toBeGreaterThan(-1)
+    expect(places).toBeGreaterThan(-1)
     expect(blocks).toBeLessThan(withMemory.indexOf('off-scene character above'))
-    expect(blocks).toBeLessThan(withMemory.indexOf('not listed above'))
+    expect(places).toBeLessThan(withMemory.indexOf(PLACES_INSTRUCTION))
   })
 
   // The builder hands over an already-composed window (cadence.md → Composition
@@ -146,7 +220,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
       ...m2Context,
       userSettings: { partialChapterBuffer: 1 },
       entries: [{ content: 'alpha-line' }, { content: 'beta-line' }, { content: 'gamma-line' }],
-    })
+    }).user
     expect(rendered).toContain('alpha-line')
     expect(rendered).toContain('beta-line')
     expect(rendered).toContain('gamma-line')
@@ -155,14 +229,8 @@ describe('bundled per-turn template — empty-guard contract', () => {
   it('renders a ranked off-scene entity with promotion instructions', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
-      retrievedEntities: [
-        {
-          id: 'char_2',
-          displayName: 'Lord Eldrin',
-          renderedText: 'Lord Eldrin (available to introduce): An exiled noble.',
-        },
-      ],
-    })
+      retrievedEntities: [rankedRow('char_2', 'Lord Eldrin', 'staged', 'An exiled noble.')],
+    }).user
     expect(rendered).toContain('# Elsewhere in the world')
     expect(rendered).toContain('[char_2] Lord Eldrin (available to introduce): An exiled noble.')
     expect(rendered).toContain(
@@ -186,7 +254,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
           injectionMode: 'auto',
         },
       ],
-    })
+    }).user
     expect(rendered).not.toContain('# Elsewhere in the world')
     expect(rendered).not.toContain('Lord Eldrin')
     // The instruction has no referent without the block, so it must go too.
@@ -207,7 +275,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
           description: 'A ferryman long dead.',
         },
       ],
-    })
+    }).user
     expect(rendered).toContain('# Elsewhere in the world')
     expect(rendered).toContain('[char_3] Old Sesk: A ferryman long dead.')
     // The bracketed id is meaningless without the instruction that explains it,
@@ -224,15 +292,16 @@ describe('bundled per-turn template — empty-guard contract', () => {
         tiers: [{ name: 'month', labels: ['January', 'February'] }],
       },
     }
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, contextWithCalendar)
-    expect(rendered).toContain('# Calendar')
-    expect(rendered).toContain('This story tracks time in seconds (1 seconds per second).')
-    expect(rendered).toContain('month (January and February)')
+    const { system, user } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, contextWithCalendar)
+    expect(system).toContain('# Calendar')
+    expect(system).toContain('This story tracks time in seconds (1 seconds per second).')
+    expect(system).toContain('month (January and February)')
+    expect(user).not.toContain('# Calendar')
   })
 
   it('omits the calendar section when calendarVocabulary is absent', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)
-    expect(rendered).not.toContain('# Calendar')
+    const { system } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)
+    expect(system).not.toContain('# Calendar')
   })
 
   it('renders the current location from the structural floor, with its ID', () => {
@@ -245,40 +314,38 @@ describe('bundled per-turn template — empty-guard contract', () => {
         name: 'The Keep',
         description: 'A weathered hilltop fortress.',
       },
-      locationIds: ['loc_1'],
-    })
+    }).user
     expect(rendered).toContain('# Current location')
     expect(rendered).toContain('[loc_1] The Keep: A weathered hilltop fortress.')
-    expect(rendered).toContain('for <current_location> when the scene is at that place: loc_1.')
   })
 
   it('drops the colon on a current location with no description', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
       structuralLocation: { id: 'loc_2', kind: 'location', status: 'active', name: 'Old Mill' },
-    })
+    }).user
     expect(rendered).toContain('[loc_2] Old Mill')
     expect(rendered).not.toContain('[loc_2] Old Mill:')
   })
 
-  // structuralLocation is null when the scene names a location that is staged,
-  // retired, or gone — guarding on it rather than on currentLocationId is what
-  // keeps a dangling header out (templateContextMap → structuralLocation).
-  it('omits the location block and its ID instruction when the floor seats none', () => {
+  // structuralLocation is null for a staged, retired or gone location; guarding on it, not on
+  // currentLocationId, avoids a dangling header; the map must not hang off it (templateContextMap).
+  it('omits the location block when the floor seats none, but still offers the map', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
       currentLocationId: 'loc_1',
       structuralLocation: null,
-    })
+      locationMap: [{ id: 'loc_2', name: 'Old Mill', depth: 0 }],
+    }).user
     expect(rendered).not.toContain('# Current location')
-    expect(rendered).not.toContain('<current_location> when the scene is at that place')
+    expect(rendered).toContain('# Places\n[loc_2] Old Mill\n')
+    expect(rendered).toContain(PLACES_INSTRUCTION)
     expect(rendered).toContain('## Aria [char_1]')
   })
 
-  // The regression this pins: a ranked location renders with a bracketed ID, so
-  // the scene moving there has to be expressible. locationIds is what tells the
-  // template which of those IDs are places.
-  it('offers a ranked location as a <current_location> target', () => {
+  // The map, not retrieval, makes a move expressible: a place retrieval never ranked still carries
+  // an ID the model can name (piggyback.md → What the writer sees).
+  it('offers every listed place as a <current_location> target, retrieved or not', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
       structuralLocation: {
@@ -288,44 +355,37 @@ describe('bundled per-turn template — empty-guard contract', () => {
         name: 'The Keep',
         description: 'A weathered hilltop fortress.',
       },
-      retrievedEntities: [
-        {
-          id: 'loc_9',
-          displayName: 'The Market',
-          renderedText: 'The Market (currently elsewhere): Stalls under sailcloth.',
-        },
+      locationMap: [
+        { id: 'loc_1', name: 'The Keep', depth: 0 },
+        { id: 'loc_9', name: 'The Market', depth: 0 },
       ],
-      locationIds: ['loc_1', 'loc_9'],
-    })
-    expect(rendered).toContain('[loc_9] The Market (currently elsewhere): Stalls under sailcloth.')
-    expect(rendered).toContain(
-      'for <current_location> when the scene is at that place: loc_1, loc_9.',
-    )
+    }).user
+    expect(rendered).toContain('# Places\n[loc_1] The Keep\n[loc_9] The Market\n')
+    expect(rendered).toContain(PLACES_INSTRUCTION)
   })
 
-  // RetrievedRow is { id, displayName, renderedText } — no EntityKind — so an
-  // instruction naming "the IDs above" would point <current_location> at an ID
-  // set that can be entirely characters, and nothing downstream kind-checks what
-  // comes back (lib/piggyback/apply.ts writes it through unvalidated).
-  it('drops the <current_location> instruction when no ranked entity is a place', () => {
+  // An instruction naming "an ID from Places" has no referent without the block.
+  it('drops the map and its instruction when the branch has no listed place', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
-      structuralLocation: null,
-      retrievedEntities: [
-        {
-          id: 'char_9',
-          displayName: 'Mira',
-          renderedText: 'Mira (currently elsewhere): A courier.',
-        },
-      ],
-      locationIds: [],
-    })
-    expect(rendered).not.toContain('# Current location')
-    expect(rendered).not.toContain('for <current_location> when the scene is at that place')
+      retrievedEntities: [rankedRow('char_9', 'Mira', 'active', 'A courier.')],
+    }).user
+    expect(rendered).not.toContain('# Places')
+    expect(rendered).not.toContain('Use an ID from Places')
     // Positive control: the ranked row and its own instruction still render, so
     // the exclusion above is not passing on an empty block.
-    expect(rendered).toContain('[char_9] Mira (currently elsewhere): A courier.')
+    expect(rendered).toContain('[char_9] Mira (not in the scene): A courier.')
     expect(rendered).toContain('enters the scene, include their ID')
+  })
+
+  // locationIds stays a pinned variable for custom packs; the bundled template uses the map.
+  it('does not render locationIds', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...m2Context,
+      locationIds: ['loc_1'],
+    }).user
+    expect(rendered).not.toContain('loc_1')
+    expect(rendered).toContain('## Aria [char_1]')
   })
 
   // The classifier can name one entity as both in-scene and the location; the
@@ -353,7 +413,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
         name: 'The Keep',
         description: 'A weathered hilltop fortress.',
       },
-    })
+    }).user
     expect(rendered.split('The Keep')).toHaveLength(2)
     expect(rendered).not.toContain('## The Keep')
     // Positive control: the other in-scene row is untouched by the de-dupe.
@@ -381,7 +441,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
         name: 'The Keep',
         description: 'A weathered hilltop fortress.',
       },
-    })
+    }).user
     expect(rendered).not.toContain('# In scene')
     // Positive control: the row itself still reaches the prompt, via the floor.
     expect(rendered).toContain('[loc_1] The Keep: A weathered hilltop fortress.')
@@ -397,11 +457,12 @@ describe('bundled per-turn template — empty-guard contract', () => {
         { ...m2Context.entities[0], description: null },
         { ...m2Context.entities[0], id: 'char_2', name: 'Bex', description: 'A quiet smith.' },
       ],
-    })
+    }).user
     expect(rendered).toContain('## Aria [char_1]\n\n## Bex [char_2]\nA quiet smith.')
   })
 
-  it('does not dump every active location — locations rank like any other entity', () => {
+  // Names only on the map: an off-scene place's description still competes for retrieval budget.
+  it('lists an off-scene location on the map by name, without its description', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
       entities: [
@@ -415,8 +476,10 @@ describe('bundled per-turn template — empty-guard contract', () => {
           injectionMode: 'auto',
         },
       ],
-    })
-    expect(rendered).not.toContain('The Keep')
+      locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
+    }).user
+    expect(rendered).toContain('# Places\n[loc_1] The Keep\n')
+    expect(rendered).not.toContain('A weathered hilltop fortress.')
     expect(rendered).toContain('## Aria [char_1]')
   })
 })
@@ -425,13 +488,7 @@ describe('bundled per-turn template — piggybackFires gating', () => {
   const contextWithEverything = {
     ...m2Context,
     piggybackFires: false,
-    retrievedEntities: [
-      {
-        id: 'char_2',
-        displayName: 'Lord Eldrin',
-        renderedText: 'Lord Eldrin (available to introduce): An exiled noble.',
-      },
-    ],
+    retrievedEntities: [rankedRow('char_2', 'Lord Eldrin', 'staged', 'An exiled noble.')],
     structuralLocation: {
       id: 'loc_1',
       kind: 'location',
@@ -440,6 +497,12 @@ describe('bundled per-turn template — piggybackFires gating', () => {
       description: 'A weathered hilltop fortress.',
     },
     locationIds: ['loc_1'],
+    locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
+    entities: withViews(
+      [aria({ inventory: ['item_1'] }), thing('item_1', 'Silver Key')],
+      ['char_1'],
+    ),
+    looseItems: withViews([thing('item_7', 'the iron chest', {}, { at_location_id: 'loc_1' })], []),
     calendarVocabulary: {
       baseUnitName: 'second',
       secondsPerBaseUnit: 1,
@@ -448,34 +511,377 @@ describe('bundled per-turn template — piggybackFires gating', () => {
   }
 
   it('keeps the memory/location/calendar info sections but drops ID brackets, ID-usage instructions, and the state-emission macro when the fallback classifier will fire anyway', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, contextWithEverything)
-    expect(rendered).toContain('## Aria')
-    expect(rendered).not.toContain('## Aria [char_1]')
-    expect(rendered).toContain('# Elsewhere in the world')
-    expect(rendered).toContain('Lord Eldrin (available to introduce): An exiled noble.')
-    expect(rendered).not.toContain('[char_2]')
-    expect(rendered).not.toContain(
+    const { system, user } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, contextWithEverything)
+    expect(user).toContain('## Aria')
+    expect(user).not.toContain('## Aria [char_1]')
+    expect(user).toContain('# Elsewhere in the world')
+    expect(user).toContain('Lord Eldrin (available to introduce): An exiled noble.')
+    expect(user).not.toContain('[char_2]')
+    expect(user).not.toContain(
       'include their ID (without brackets) in the trailing <scene_entities> block',
     )
-    expect(rendered).toContain('# Current location')
-    expect(rendered).toContain('The Keep: A weathered hilltop fortress.')
-    expect(rendered).not.toContain('[loc_1]')
-    expect(rendered).not.toContain('for <current_location> when the scene is at that place')
-    expect(rendered).toContain('# Calendar')
-    expect(rendered).not.toContain('<world_time_delta>')
-    expect(rendered).not.toContain('<state>')
+    expect(user).toContain('# Current location')
+    expect(user).toContain('The Keep: A weathered hilltop fortress.')
+    expect(user).not.toContain('[loc_1]')
+    expect(user).not.toContain('Use an ID from Places')
+    expect(user).toContain('# Places\nThe Keep\n')
+    expect(user).toContain('Holds:\n- Silver Key\n')
+    expect(user).toContain('Here:\n- the iron chest\n')
+    expect(user).not.toContain('[item_')
+    expect(system).toContain('# Calendar')
+    expect(system).not.toContain('<world_time_delta>')
+    expect(user).not.toContain('<world_time_delta>')
+    expect(user).not.toContain('<state>')
   })
 
   it('renders all of it when piggybackFires is true', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+    const { system, user } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...contextWithEverything,
       piggybackFires: true,
     })
-    expect(rendered).toContain('## Aria [char_1]')
-    expect(rendered).toContain('[char_2] Lord Eldrin')
-    expect(rendered).toContain('[loc_1] The Keep')
-    expect(rendered).toContain('# Calendar')
-    expect(rendered).toContain('<state>')
+    expect(user).toContain('## Aria [char_1]')
+    expect(user).toContain('[char_2] Lord Eldrin')
+    expect(user).toContain('[loc_1] The Keep')
+    expect(user).toContain('# Places\n[loc_1] The Keep\n')
+    expect(user).toContain('Holds:\n- [item_1] Silver Key\n')
+    expect(user).toContain('Here:\n- [item_7] the iron chest\n')
+    expect(user).toContain(PLACES_INSTRUCTION)
+    expect(system).toContain('# Calendar')
+    expect(system).toContain('into a seconds delta on <world_time_delta> using these units.')
+    expect(user).toContain('<state>')
+  })
+})
+
+describe('bundled per-turn template — the location map and item lines', () => {
+  const KEEP = {
+    id: 'loc_1',
+    kind: 'location',
+    status: 'active',
+    name: 'The Keep',
+    description: 'A weathered hilltop fortress.',
+  }
+  const MAP = [
+    { id: 'loc_0', name: 'Highmoor', depth: 0 },
+    { id: 'loc_1', name: 'The Keep', depth: 1 },
+    { id: 'loc_2', name: 'The Gatehouse', depth: 2 },
+    { id: 'loc_3', name: 'Lowmarsh', depth: 0 },
+  ]
+  const KEY = thing('item_1', 'Silver Key', { description: 'Cold to the touch.' })
+  const HOLDER = [
+    aria({ inventory: ['item_1'], equipped_items: ['item_2'] }),
+    KEY,
+    thing('item_2', 'worn sword'),
+  ]
+  const BEX = makeEntity({
+    id: 'char_2',
+    kind: 'character',
+    name: 'Bex',
+    description: 'A quiet smith.',
+  })
+  const render = (over: Record<string, unknown>) =>
+    renderTemplate(TEMPLATE_IDS.perTurnNarrative, { ...m2Context, ...over }).user
+
+  it('nests the map two spaces per level, with IDs when piggyback fires', () => {
+    expect(render({ locationMap: MAP })).toContain(
+      '# Places\n[loc_0] Highmoor\n  [loc_1] The Keep\n    [loc_2] The Gatehouse\n[loc_3] Lowmarsh\n',
+    )
+  })
+
+  it('renders the map by name alone when piggyback does not fire', () => {
+    expect(render({ piggybackFires: false, locationMap: MAP })).toContain(
+      '# Places\nHighmoor\n  The Keep\n    The Gatehouse\nLowmarsh\n',
+    )
+  })
+
+  // piggyback.md → What the writer sees: a retired place is listed without an id, with its reason.
+  const RETIRED_MAP = [
+    { retired: false, id: 'loc_0', name: 'Highmoor', depth: 0, retiredReason: null },
+    { retired: true, id: null, name: 'Saltmere', depth: 1, retiredReason: 'swallowed by the rift' },
+    { retired: true, id: null, name: 'the Drowned Chapel', depth: 2, retiredReason: null },
+  ]
+
+  it('renders a retired place without an id, with its reason or none', () => {
+    expect(render({ locationMap: RETIRED_MAP })).toContain(
+      '# Places\n[loc_0] Highmoor\n  Saltmere (retired: swallowed by the rift)\n    the Drowned Chapel (retired)\n',
+    )
+  })
+
+  it('marks a retired place when piggyback does not fire', () => {
+    expect(render({ piggybackFires: false, locationMap: RETIRED_MAP })).toContain(
+      '# Places\nHighmoor\n  Saltmere (retired: swallowed by the rift)\n    the Drowned Chapel (retired)\n',
+    )
+  })
+
+  it('puts the map after the current location and before the memory blocks', () => {
+    const rendered = render({
+      structuralLocation: KEEP,
+      locationMap: MAP,
+      retrievedEntities: [rankedRow('char_2', 'Mira')],
+    })
+    const location = rendered.indexOf('# Current location')
+    const places = rendered.indexOf('# Places')
+    expect(location).toBeGreaterThan(-1)
+    expect(location).toBeLessThan(places)
+    expect(places).toBeLessThan(rendered.indexOf('# Elsewhere in the world'))
+  })
+
+  it('renders the current location with its chain of listed ancestors, nearest first', () => {
+    const rendered = render({
+      structuralLocation: {
+        ...KEEP,
+        id: 'loc_2',
+        name: 'The Gatehouse',
+        description: 'Two towers and a rusted portcullis.',
+      },
+      currentLocationChain: ['The Keep', 'Highmoor'],
+    })
+    expect(rendered).toContain(
+      '[loc_2] The Gatehouse — in The Keep › Highmoor: Two towers and a rusted portcullis.\n',
+    )
+  })
+
+  it('renders no chain for a top-level place', () => {
+    const rendered = render({ structuralLocation: KEEP })
+    expect(rendered).toContain('[loc_1] The Keep: A weathered hilltop fortress.\n')
+    expect(rendered).not.toContain(' — in ')
+  })
+
+  it('lists the items lying at the current location, one per line with their state', () => {
+    const rendered = render({
+      structuralLocation: KEEP,
+      looseItems: withViews(
+        [
+          thing(
+            'item_7',
+            'the iron chest',
+            { description: 'Banded in iron.' },
+            { at_location_id: 'loc_1', condition: 'locked' },
+          ),
+          thing('item_8', 'a coil of rope', {}, { at_location_id: 'loc_1' }),
+        ],
+        [],
+      ),
+    })
+    expect(rendered).toContain(
+      '[loc_1] The Keep: A weathered hilltop fortress.\nHere:\n- [item_7] the iron chest: Banded in iron. Condition: locked\n- [item_8] a coil of rope\n',
+    )
+  })
+
+  // The location's own state lines, minus Part of: the current location keeps its chain.
+  it('gives the current location its condition, and no parent line', () => {
+    const rendered = render({
+      structuralLocation: {
+        ...KEEP,
+        state: {
+          condition: 'half-burned',
+          parent: { id: 'loc_0', name: 'Highmoor', status: 'active' },
+        },
+      },
+    })
+    expect(rendered).toContain(
+      '[loc_1] The Keep: A weathered hilltop fortress.\nCondition: half-burned\n',
+    )
+    expect(rendered).not.toContain('Part of:')
+  })
+
+  // piggyback.md → What the writer sees: an item listed under Here: isn't listed again.
+  it('lists an in-scene item lying here under Here: only', () => {
+    const keep = makeEntity({ id: 'loc_1', kind: 'location', name: 'The Keep' })
+    const chest = thing(
+      'item_7',
+      'the iron chest',
+      { description: 'Banded in iron.' },
+      { at_location_id: 'loc_1' },
+    )
+    const rendered = render({
+      sceneEntities: ['char_1', 'item_7'],
+      entities: withViews([aria(), chest, keep], ['char_1', 'item_7'], 'loc_1'),
+      structuralLocation: KEEP,
+      looseItems: withViews([chest, keep], ['char_1', 'item_7'], 'loc_1').slice(0, 1),
+    })
+    expect(rendered).not.toContain('## the iron chest')
+    // A character's location is the current place too, and must not be skipped for it.
+    expect(rendered).toContain('## Aria [char_1]\nA wary scout.\n')
+    expect(rendered.split('Banded in iron.')).toHaveLength(2)
+    expect(rendered).toContain('Here:\n- [item_7] the iron chest: Banded in iron.\n')
+  })
+
+  it('omits the Here line when nothing lies at the current location', () => {
+    const rendered = render({ structuralLocation: KEEP })
+    expect(rendered).not.toContain('Here:')
+    expect(rendered).toContain('# Current location')
+  })
+
+  it('lists what an in-scene character holds under its own entry, one per line, equipped marked', () => {
+    expect(render({ entities: withViews(HOLDER, ['char_1']) })).toContain(
+      '## Aria [char_1]\nA wary scout.\nHolds:\n- [item_1] Silver Key: Cold to the touch.\n- [item_2] worn sword (equipped)\n',
+    )
+  })
+
+  it('drops the held-item IDs when piggyback does not fire', () => {
+    expect(render({ piggybackFires: false, entities: withViews(HOLDER, ['char_1']) })).toContain(
+      '## Aria\nA wary scout.\nHolds:\n- Silver Key: Cold to the touch.\n- worn sword (equipped)\n',
+    )
+  })
+
+  it('puts the Holds block straight under a holder with no description', () => {
+    const [holder, ...items] = HOLDER
+    const rendered = render({
+      entities: withViews([{ ...holder!, description: null }, ...items], ['char_1']),
+    })
+    expect(rendered).toContain('## Aria [char_1]\nHolds:\n- [item_1] Silver Key')
+  })
+
+  // In scene, where the scene is: no Location line.
+  it('renders an in-scene character’s state lines under its description', () => {
+    const rendered = render({
+      entities: withViews(
+        [
+          aria({ visual: { attire: 'a grey cloak' }, voice: 'low', current_location_id: 'loc_1' }),
+          makeEntity({ id: 'loc_1', kind: 'location', name: 'The Keep' }),
+        ],
+        ['char_1'],
+      ),
+    })
+    expect(rendered).toContain(
+      '## Aria [char_1]\nA wary scout.\nAttire: a grey cloak\nVoice: low\n',
+    )
+    expect(rendered).not.toContain('Location:')
+  })
+
+  // In scene, an item is where the scene is, whoever off-scene holds it.
+  it('renders an in-scene item held off-scene with no Location or Held by line', () => {
+    const scene = ['char_1', 'item_9']
+    const entities = withViews(
+      [
+        aria(),
+        makeEntity({ ...BEX, state: { inventory: ['item_9'], equipped_items: [] } as never }),
+        thing('item_9', 'A lantern', { description: 'Still lit.' }, { at_location_id: 'loc_2' }),
+        makeEntity({ id: 'loc_2', kind: 'location', name: 'The Mill' }),
+      ],
+      scene,
+    )
+    expect(entities.find((e) => e.id === 'item_9')?.state).toMatchObject({
+      holder: { name: 'Bex' },
+      location: { name: 'The Mill' },
+    })
+
+    const rendered = render({ sceneEntities: scene, entities })
+    expect(rendered).toContain('## A lantern [item_9]\nStill lit.\n\n# Story so far')
+    expect(rendered).not.toContain('Held by:')
+    expect(rendered).not.toContain('Location:')
+  })
+
+  // piggyback.md → What the writer sees.
+  it('does not repeat a held item in the scene list', () => {
+    const scene = ['char_1', 'item_1', 'item_9', 'char_2']
+    const rendered = render({
+      sceneEntities: scene,
+      entities: withViews(
+        [...HOLDER, thing('item_9', 'A lantern', { description: 'Still lit.' }), BEX],
+        scene,
+      ),
+    })
+    expect(rendered).not.toContain('## Silver Key')
+    expect(rendered.split('Cold to the touch.')).toHaveLength(2)
+    // Positive controls: an unheld item keeps its entry; a non-holder gets no Holds line.
+    expect(rendered).toContain('## A lantern [item_9]\nStill lit.\n')
+    expect(rendered).toContain('## Bex [char_2]\nA quiet smith.\n\n')
+    expect(rendered.split('Holds:')).toHaveLength(2)
+  })
+
+  it('does not repeat an item held by any in-scene character, not only the last holder', () => {
+    const scene = ['char_1', 'char_2', 'item_1']
+    const rendered = render({
+      sceneEntities: scene,
+      entities: withViews(
+        [
+          aria({ inventory: ['item_1'] }),
+          makeEntity({ ...BEX, state: { inventory: ['item_2'], equipped_items: [] } as never }),
+          KEY,
+          thing('item_2', 'hammer'),
+        ],
+        scene,
+      ),
+    })
+    expect(rendered).not.toContain('## Silver Key')
+    expect(rendered).toContain(
+      '## Aria [char_1]\nA wary scout.\nHolds:\n- [item_1] Silver Key: Cold to the touch.\n',
+    )
+    expect(rendered).toContain('## Bex [char_2]\nA quiet smith.\nHolds:\n- [item_2] hammer\n')
+  })
+
+  it('gives a Holds block only to the character that holds the items', () => {
+    const rendered = render({
+      sceneEntities: ['char_1', 'char_2'],
+      entities: withViews([...HOLDER, BEX], ['char_1', 'char_2']),
+    })
+    expect(rendered.split('Holds:')).toHaveLength(2)
+    expect(rendered).toContain('## Bex [char_2]\nA quiet smith.\n\n')
+  })
+})
+
+describe('bundled per-turn template — create instructions', () => {
+  const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context).user
+
+  // A model copies the skeleton's order, and canon's example declares before it uses; the parser
+  // doesn't care. <scene_entities>, which may name a new item, still leads.
+  it('shows the creation tags in the state block, <new_location> above <current_location> and <new_item> above <transfers>', () => {
+    const newLocation = rendered.indexOf('<new_location handle="new:')
+    const newItem = rendered.indexOf('<new_item handle="new:')
+    expect(newLocation).toBeGreaterThan(-1)
+    expect(newItem).toBeGreaterThan(-1)
+    expect(newLocation).toBeLessThan(rendered.indexOf('<current_location>'))
+    expect(newItem).toBeLessThan(rendered.indexOf('<transfers>'))
+    expect(rendered).toContain('<item id="item ID, or the handle of a new_item above"')
+  })
+
+  it('offers an ID from Places for <current_location> only when the map lists a place', () => {
+    expect(rendered).toContain(
+      '<current_location>the handle of a new_location above</current_location>',
+    )
+    expect(rendered).not.toContain('<current_location>the ID from Places')
+    const withPlaces = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...m2Context,
+      locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
+    }).user
+    expect(withPlaces).toContain(
+      '<current_location>the ID from Places, or the handle of a new_location above</current_location>',
+    )
+  })
+
+  it('explains handles and carries the significance rules', () => {
+    expect(rendered).toContain('a handle that starts with new:')
+    expect(rendered).toContain(
+      "use a new place's handle like an ID only as the <current_location> or another new place's parent, and a new item's handle only as a transfer's item id or, when it is in the scene, in <scene_entities>.",
+    )
+    expect(rendered).toContain('Create a place only when the scene settles somewhere')
+    expect(rendered).toContain('Create an item only when a character takes, receives or is given')
+    expect(rendered).toContain('Apart from those handles, use only the IDs shown to you above')
+  })
+
+  // The parser decodes five XML entities but drops a create with malformed attributes (raw " < or >
+  // in the name) or a raw < in the description, so the model must be told how to write them.
+  it("tells the model to escape a double quote, < or > in a create's name and a < in its description", () => {
+    expect(rendered).toContain(
+      "Write a double quote, < or > inside a create's name as &quot;, &lt; or &gt;, and a < inside its description as &lt;.",
+    )
+  })
+
+  // A prompt that keeps new places and items out of the block starves the create path.
+  it('does not tell the model to leave new places and items out of the block', () => {
+    expect(rendered).not.toContain('Only reference items and locations that already have an ID')
+    expect(rendered).not.toContain('describe it in prose only')
+  })
+
+  it('leaves the create instructions out when piggyback does not fire', () => {
+    const off = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...m2Context,
+      piggybackFires: false,
+    }).user
+    expect(off).not.toContain('<new_location')
+    expect(off).not.toContain('Create a place only when')
+    expect(off).not.toContain('&quot;')
   })
 })
 
@@ -491,7 +897,7 @@ describe('bundled per-turn template — suggestionsFire gating', () => {
   }
 
   it('includes the suggestion-emission macro when suggestionsFire is true', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext)
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext).user
     expect(rendered).toContain('<suggestions>')
     // The id is its own labelled field, not bracketed beside the name: a model
     // that reads "[cat1] Action" as one label emits an unresolvable ref.
@@ -506,13 +912,13 @@ describe('bundled per-turn template — suggestionsFire gating', () => {
   // doesn't forbid mid-prose emission risks the model burying <suggestions>
   // inside the narrative and silently truncating everything after it.
   it('forbids mid-prose emission regardless of whether the state block is present', () => {
-    const withState = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext)
+    const withState = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext).user
     expect(withState).toContain('never inside the prose itself')
 
     const withoutState = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...suggestionContext,
       piggybackFires: false,
-    })
+    }).user
     expect(withoutState).toContain('never inside the prose itself')
   })
 
@@ -520,23 +926,166 @@ describe('bundled per-turn template — suggestionsFire gating', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...suggestionContext,
       suggestionsFire: false,
-    })
+    }).user
     expect(rendered).not.toContain('<suggestions>')
   })
 
   it('joins the state block and the suggestions block with a single newline, no blank line, when both fire', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext)
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext).user
     expect(rendered).toContain('off-scene).\nAppend exactly one <suggestions> block')
   })
 
-  it('places the suggestions block directly after the narrative instruction when piggybackFires is false', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+  it('places the suggestions block one blank line below the story when piggybackFires is false', () => {
+    const { system, user } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...suggestionContext,
       piggybackFires: false,
     })
-    expect(rendered).not.toContain('<state>')
-    expect(rendered).toContain(
-      'Do not break character or address the reader.\nAppend exactly one <suggestions> block',
+    expect(user).not.toContain('<state>')
+    expect(user).toContain('Aria stepped through.\n\nAppend exactly one <suggestions> block')
+    expect(system).toBe(
+      'Write the next beat of the story as prose. Do not break character or address the reader.',
+    )
+  })
+})
+
+// architecture.md → System and user halves.
+describe('bundled per-turn template — system and user halves', () => {
+  const OUTPUT_FORMAT =
+    'Write the next beat of the story as prose. Do not break character or address the reader.'
+  const everything = {
+    ...m2Context,
+    definition: {
+      mode: 'adventure',
+      setting: 'A keep on a hill.',
+      genre: { promptBody: 'High fantasy.' },
+      tone: { promptBody: 'Dry humor.' },
+    },
+    calendarVocabulary: {
+      baseUnitName: 'second',
+      secondsPerBaseUnit: 1,
+      tiers: [{ name: 'month', labels: ['January', 'February'] }],
+    },
+    structuralLocation: {
+      id: 'loc_1',
+      kind: 'location',
+      status: 'active',
+      name: 'The Keep',
+      description: 'A weathered hilltop fortress.',
+    },
+    locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
+    retrievedEntities: [
+      {
+        ...rankedRow('char_2', 'Mira', 'active', 'A courier.'),
+        state: {
+          ...emptyEntityView('character'),
+          voice: 'quick and low',
+          location: { id: 'loc_9', name: 'The Market', status: 'active' },
+        },
+      },
+    ],
+    suggestionsFire: true,
+    suggestionCount: 2,
+    suggestionSlots: [{ ref: 'cat1', label: 'Action', promptHint: 'A decisive move.' }],
+  }
+  const render = (over: Record<string, unknown> = {}) =>
+    renderTemplate(TEMPLATE_IDS.perTurnNarrative, { ...everything, ...over })
+  const headings = (half: string) => half.split('\n').filter((line) => line.startsWith('# '))
+
+  it('holds Setting, Genre, Tone and Calendar in that order, then the output-format line', () => {
+    const { system } = render()
+    expect(headings(system)).toEqual(['# Setting', '# Genre', '# Tone', '# Calendar'])
+    expect(system).toContain('# Setting\nA keep on a hill.\n\n# Genre\nHigh fantasy.')
+    expect(system.split('\n').at(-1)).toBe(OUTPUT_FORMAT)
+  })
+
+  it('keeps every per-call block in the user half, and the system blocks out of it', () => {
+    const { system, user } = render()
+    expect(headings(user)).toEqual([
+      '# In scene',
+      '# Current location',
+      '# Places',
+      '# Elsewhere in the world',
+      '# Story so far',
+    ])
+    for (const perCall of [
+      'off-scene character above',
+      PLACES_INSTRUCTION,
+      '<state>',
+      '<suggestions>',
+    ]) {
+      expect(user).toContain(perCall)
+      expect(system).not.toContain(perCall)
+    }
+    for (const heading of ['# Setting', '# Genre', '# Tone', '# Calendar']) {
+      expect(user).not.toContain(heading)
+    }
+    expect(user).not.toContain(OUTPUT_FORMAT)
+  })
+
+  it('drops the <world_time_delta> sentence from the system half when piggyback does not fire', () => {
+    const { system } = render({ piggybackFires: false })
+    expect(system).toContain('Tiers: month (January and February).\n\n')
+    expect(system).not.toContain('<world_time_delta>')
+    expect(render().system).toContain(
+      'into a seconds delta on <world_time_delta> using these units.',
+    )
+  })
+
+  it('matches the recorded snapshot with every block filled', () => {
+    expect(render()).toMatchSnapshot()
+  })
+
+  it('is the output-format line alone for a story with no setting, genre, tone or calendar', () => {
+    expect(renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context).system).toBe(OUTPUT_FORMAT)
+  })
+
+  // Neither half starts or ends on a blank line; whatever follows a half supplies its own separator.
+  const flagCombinations = [
+    [true, true],
+    [true, false],
+    [false, true],
+    [false, false],
+  ]
+  it.each(flagCombinations)(
+    'starts and ends neither half on a blank line (piggybackFires %s, suggestionsFire %s)',
+    (piggybackFires, suggestionsFire) => {
+      const { system, user } = render({ piggybackFires, suggestionsFire })
+      for (const half of [system, user]) {
+        expect(half).not.toMatch(/^[ \t]*\n/)
+        expect(half).not.toMatch(/\n[ \t]*\n[ \t]*$/)
+      }
+    },
+  )
+
+  it.each(flagCombinations)(
+    'starts and ends neither half on a blank line with a calendar-only system half (piggybackFires %s, suggestionsFire %s)',
+    (piggybackFires, suggestionsFire) => {
+      const { system, user } = render({
+        definition: {
+          mode: 'adventure',
+          setting: '',
+          genre: { promptBody: '' },
+          tone: { promptBody: '' },
+        },
+        piggybackFires,
+        suggestionsFire,
+      })
+      expect(system).toMatch(/^# Calendar\n[^\n]+\n\n/)
+      expect(headings(system)).toEqual(['# Calendar'])
+      for (const half of [system, user]) {
+        expect(half).not.toMatch(/^[ \t]*\n/)
+        expect(half).not.toMatch(/\n[ \t]*\n[ \t]*$/)
+      }
+    },
+  )
+
+  // Each emission block opens with its own newline, which keeps one blank line below the story.
+  it('keeps one blank line between the story and the state block, and ends on the story when nothing follows', () => {
+    expect(render({ suggestionsFire: false }).user).toContain(
+      'Aria stepped through.\n\nAfter your narrative prose, append exactly one <state> block',
+    )
+    expect(render({ piggybackFires: false, suggestionsFire: false }).user).toMatch(
+      /\nAria stepped through\.\n$/,
     )
   })
 })

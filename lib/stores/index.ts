@@ -97,12 +97,20 @@ export type { OpenStory } from './current-story/current-story'
 export type { WorkingSetStore } from './factory/working-set-store'
 export {
   awaitRunTerminal,
-  backgroundClassifierRunning,
-  isBackgroundKind,
-  isForegroundGenerating,
+  cancelStoryRuns,
+  interruptMemoryRuns,
+  isHeadReversalBlocked,
+  isStoryBusy,
   isUserEditBlocked,
+  selectMemoryRun,
 } from './generation/generation'
-export type { RunState, TxState } from './generation/generation'
+export type {
+  DeferredWork,
+  DeferredWorkKind,
+  PendingTurn,
+  RunState,
+  TxState,
+} from './generation/generation'
 export type { NavigationSnapshot } from './navigation/navigation'
 export type { OpenFailure, OpenFailureKind, StoriesSnapshot } from './stories/stories'
 export type { RecoveryReportSnapshot } from './ui/recovery-report'

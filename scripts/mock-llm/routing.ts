@@ -6,12 +6,11 @@ import { STRUCTURED_SHAPES, type StructuredShape } from './shapes'
 
 export const NARRATIVE_LANE = 'narrative'
 
-// The bracketing text of SCHEMA_INSTRUCTION_TEMPLATE (lib/ai/prompt-schema.ts).
-// Not exported by the app, so routing.test.ts drives the real
-// promptSchemaMiddleware and asserts the extractor still recovers the block —
-// a template edit fails that test rather than silently degrading every match.
+// Opener of SCHEMA_CONTRACT_TEMPLATE (lib/ai/prompt-schema.ts), appended last so the block runs
+// to its end. Unexported: routing.test.ts drives the real middleware, so an edit fails there.
 const BLOCK_OPEN = 'from the following:\n\n'
-const BLOCK_CLOSE = '\n\nOutput ONLY the JSON object'
+// What schemaToTypeScriptBlock emits first; story text quoting the opener doesn't.
+const BLOCK_START = /^(interface Response |type Response = )/
 
 export type Route =
   | { lane: typeof NARRATIVE_LANE }
@@ -24,27 +23,40 @@ export type Route =
       block: string | null
     }
 
+function messagesOf(body: Record<string, unknown>): unknown[] {
+  return Array.isArray(body.messages) ? body.messages : []
+}
+
+function contentText(message: unknown): string {
+  const content = (message as { content?: unknown }).content
+  if (typeof content === 'string') return content
+  if (Array.isArray(content))
+    return content.map((p) => (p as { text?: string }).text ?? '').join('\n')
+  return ''
+}
+
 export function promptText(body: Record<string, unknown>): string {
-  const messages = Array.isArray(body.messages) ? body.messages : []
-  return messages
-    .map((m) => {
-      const content = (m as { content?: unknown }).content
-      if (typeof content === 'string') return content
-      if (Array.isArray(content))
-        return content.map((p) => (p as { text?: string }).text ?? '').join('\n')
-      return ''
-    })
+  return messagesOf(body).map(contentText).join('\n')
+}
+
+/** The text of the request's system messages, where the contract's block sits. */
+export function systemText(body: Record<string, unknown>): string {
+  return messagesOf(body)
+    .filter((m) => (m as { role?: unknown }).role === 'system')
+    .map(contentText)
     .join('\n')
 }
 
-/** The TS block the prompt-injection path writes into the last user message. */
+/**
+ * The TS block the prompt-injection path writes at the end of the system message.
+ * The last opener, not the first: the system half before the contract is story
+ * text, which may quote the opener.
+ */
 export function extractBlockFromPrompt(text: string): string | null {
-  const open = text.indexOf(BLOCK_OPEN)
+  const open = text.lastIndexOf(BLOCK_OPEN)
   if (open === -1) return null
-  const start = open + BLOCK_OPEN.length
-  const close = text.indexOf(BLOCK_CLOSE, start)
-  if (close === -1) return null
-  return text.slice(start, close)
+  const block = text.slice(open + BLOCK_OPEN.length)
+  return BLOCK_START.test(block) ? block : null
 }
 
 // The 'force-on' path keeps responseFormat instead of injecting the block, so
@@ -64,11 +76,8 @@ function blockFromResponseFormat(body: Record<string, unknown>): string | null {
 }
 
 /**
- * Exact block equality first; the substring scan is the fallback for a prompt
- * the extractor could not bracket. That scan takes the longest block first, so
- * a schema that is a superset of another still wins — today no registered block
- * contains another (asserted in routing.test.ts), but the scan must not be the
- * thing that breaks on the day one does.
+ * Exact block match first, else a substring scan, longest block first so a superset schema wins:
+ * none exists today (asserted in routing.test.ts), but the scan must not break the day one does.
  */
 function candidatesFor(
   block: string | null,
@@ -85,11 +94,9 @@ function candidatesFor(
 }
 
 /**
- * Earliest occurrence wins, not registry order. A marker is the literal its
- * template OPENS with, so the real one sits at the top of the prompt, while a
- * sibling's marker can only appear deeper — quoted back inside the `current`
- * preview a refine embeds. Taking the first candidate that matches anywhere
- * would let that quotation outrank the directive the call actually carries.
+ * Earliest occurrence wins, not registry order: the real marker opens the user half (wizard system
+ * halves are empty; no contract carries a marker, per routing.test.ts), while a sibling's, quoted
+ * in a refine's `current` preview, sits deeper.
  */
 function pickByMarker(
   candidates: readonly StructuredShape[],
@@ -139,7 +146,7 @@ export function classifyRequest(body: Record<string, unknown>): Route {
   if (body.stream === true) return { lane: NARRATIVE_LANE }
 
   const text = promptText(body)
-  const block = extractBlockFromPrompt(text) ?? blockFromResponseFormat(body)
+  const block = extractBlockFromPrompt(systemText(body)) ?? blockFromResponseFormat(body)
   const shape = matchShape(block, text)
 
   return {

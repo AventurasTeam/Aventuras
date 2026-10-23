@@ -7,6 +7,8 @@ import {
   locationDraftSchema,
   PARENT_CHAIN_BROKEN,
   PARENT_CYCLE,
+  placeModes,
+  placeSaveConfirm,
   WORLD_ISSUE,
   type LocationDraft,
 } from '@/lib/world'
@@ -15,7 +17,7 @@ import { LocationConnections } from '../tabs/connections-tab'
 import { LocationIdentity } from '../tabs/identity-tab'
 import { SettingsTab } from '../tabs/settings-tab'
 import { useEntityRowSession } from '../use-entity-row-session'
-import { entityFieldLabel, entityIssueText } from '../world-copy'
+import { entityFieldLabel, entityIssueText, placeConfirmCopy } from '../world-copy'
 import { OverviewTab, TrailingTabs } from './common-tabs'
 import { asBaseControl, EntityDetailFrame, useEntityTab } from './entity-detail-frame'
 import type { EntityPaneProps } from './entity-pane-props'
@@ -54,12 +56,27 @@ export function LocationDetailPane({
     resolver,
     fieldLabel,
     issueText: entityIssueText,
-    onSave: (draft, keywordsBase) => onSave({ kind: 'location', draft, keywordsBase }),
+    onSave: (draft) => onSave({ kind: 'location', draft }),
     onSaved,
     onRejected,
     onSession,
     fieldErrors: FIELD_ERRORS,
+    // world.md → Settings: a cascading retire/disable or a move into a disabled place asks first.
+    confirmBeforeCommit: (draft) => {
+      const confirm = placeSaveConfirm({
+        kind: 'location',
+        draft,
+        row,
+        branchEntities: data.entities,
+        story: data.story,
+      })
+      return confirm == null ? null : placeConfirmCopy(confirm)
+    },
   })
+  const disabledThrough =
+    row == null
+      ? null
+      : (placeModes(data.entities, data.story.scene).disabledThrough(row.id)?.name ?? null)
   const { control } = session.form
   const [tab, setTab] = useEntityTab(row == null, createSeq, initialTab)
   const gate = { blocked, blockedReason }
@@ -93,7 +110,7 @@ export function LocationDetailPane({
         />
       </TabsContent>
       <TabsContent value="settings">
-        <SettingsTab control={asBaseControl(control)} {...gate} />
+        <SettingsTab control={asBaseControl(control)} place={{ disabledThrough }} {...gate} />
       </TabsContent>
       <TrailingTabs row={row} data={data} onOpenHappening={onOpenHappening} />
     </EntityDetailFrame>

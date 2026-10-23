@@ -3,7 +3,7 @@ import type { ResolveFailureKind, ResolveTarget } from '@/lib/ai'
 import type { DbCtx, StorySettings } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import type { EmbedderErrorKind } from '@/lib/embedder'
-import type { AppSettingsSnapshot, RunState } from '@/lib/stores'
+import type { AppSettingsSnapshot, DeferredWorkKind, RunState } from '@/lib/stores'
 
 export type PipelineError =
   | { kind: 'provider'; reason: 'auth' | 'network' | 'timeout' | 'unknown'; detail?: string }
@@ -56,11 +56,15 @@ export type PipelineEvent =
       runId: string
       kind: string
       actionId: string
+      /** Send's work before the turn (RunState.beforeTurn); false for a chained successor. */
+      beforeTurn: boolean
       outcome: 'completed' | 'aborted' | 'failed'
       error?: PipelineError
     }
   | { type: 'phase_start'; runId: string; name: string }
   | { type: 'phase_complete'; runId: string; name: string; result: PhaseResult }
+  // `work` is the slot newly recorded; `kind` is the run's, for diagnostics.
+  | { type: 'run_deferred'; runId: string; kind: string; branchId: string; work: DeferredWorkKind }
   | PhaseEmittedEvent
 
 // Caller-supplied run parameters, keyed by kind. Only kinds that REQUIRE inputs
@@ -138,8 +142,18 @@ export type PreflightFailureHook = (
  * so a later sibling's own `{ status: 'failed' }` isn't synchronized with this hook.
  */
 export type PhaseExceptionHook = (
-  ctx: Pick<PhaseContext, 'db' | 'branchId'>,
+  ctx: Pick<PhaseContext, 'db' | 'branchId' | 'actionId'>,
   error: Extract<PipelineError, { kind: 'action-layer' | 'orchestrator' }>,
+) => Promise<void>
+
+/**
+ * Runs after a user-cancel abort's reversal committed, while the run still holds the gate; skipped
+ * when the reversal can't commit, so recovery owns the writes left on disk.
+ */
+export type InterruptHook = (
+  ctx: Pick<PhaseContext, 'db' | 'branchId' | 'actionId'> & {
+    intermediates: Readonly<Record<string, unknown>>
+  },
 ) => Promise<void>
 
 export type Pipeline = {
@@ -147,10 +161,14 @@ export type Pipeline = {
   phases: readonly PhaseNode[]
   affordance: 'invisible' | 'pill-only' | 'pill-and-banner'
   gateBehavior: 'hard-gate' | 'no-gate'
+  /** A head reversal or Cancel ends me and defers me, in this slot, to the branch's next Send. */
+  interruptible?: DeferredWorkKind
   concurrencyPolicy: ConcurrencyPolicy
-  chainsTo?: (run: RunState) => string | null
+  /** Awaited at commit while the run still holds the gate; the swap after it stays synchronous. */
+  chainsTo?: (run: RunState, ctx: DbCtx) => string | null | Promise<string | null>
   onPreflightFailure?: PreflightFailureHook
   onPhaseException?: PhaseExceptionHook
+  onInterrupt?: InterruptHook
 }
 
 export type TxResult = {

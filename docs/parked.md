@@ -228,6 +228,11 @@ mismatches on pack load" without specifying:
     to the active+in-scene iteration. Flag for the design
     pass; harder to mechanically detect than the empty-bundle
     case.
+  - **System-half stability** — a template's system half that
+    reads a variable changing per call
+    ([`architecture.md → System and user halves`](./architecture.md#system-and-user-halves)).
+    Needs the variable registry to tag each variable as stable
+    or per-call.
 - **What it surfaces — severity: warnings, not errors.** The
   validator surfaces issues as warnings in the editor; never
   blocks save or pack activation on user-authored packs. User
@@ -470,10 +475,11 @@ sync. Pending — revisit when a real story hits the wall.
 [`generation-pipeline.md → Pipeline declaration`](./generation-pipeline.md#pipeline-declaration)
 defines the Pipeline shape every future background pipeline picks
 values for at its own design pass — `gateBehavior`,
-`concurrencyPolicy`, `affordance`. The periodic classifier is the
-first consumer (see [`memory/classifier.md → Background-task framing`](./memory/classifier.md#background-task-framing));
-future style-review or any agent that splits out of chapter-close is
-another candidate. Each pipeline's design pass picks values with
+`concurrencyPolicy`, `affordance`. No v1 pipeline runs in the
+background: the periodic classifier holds the gate (see
+[`memory/classifier.md → Pipeline framing`](./memory/classifier.md#pipeline-framing)).
+Future style-review or any agent that splits out of chapter-close is
+a candidate. Each pipeline's design pass picks values with
 reasoning; the framework doesn't prescribe defaults.
 
 #### Smarter mid-pipeline data-error recovery
@@ -661,9 +667,9 @@ are built.
 - **`entry_swipes` shape**, and whether takes carry across a branch
   fork or are pruned at the fork point.
 - **Classifier concurrency** is resolved: prose reversals — including
-  regenerate and swipe — cancel the in-flight periodic classifier via
-  the classifier barrier (see
-  [`generation-pipeline.md → Prose reversals and the classifier barrier`](./generation-pipeline.md#prose-reversals-and-the-classifier-barrier)),
+  regenerate and swipe — interrupt an in-flight pass or close and
+  defer it to the next turn (see
+  [`generation-pipeline.md → Prose reversals and the interrupt`](./generation-pipeline.md#prose-reversals-and-the-interrupt)),
   so swipe inherits the contract for free. The residual log-position
   over-reversal is spared by the survival-anchor predicate (see
   [`data-model.md → Survival anchor`](./data-model.md#survival-anchor)).
@@ -691,25 +697,16 @@ wizard) or _when_ it was last touched. Two real costs:
   classifier could honor user-asserted values until prose
   explicitly contradicts.
 
-User-edit precedence for `status`, keywords and relationship views
-has landed without this sidecar, through the delta log's order
+User-edit precedence over a pass's and a close's writes needs no
+sidecar: it rides the delta log's order, for every field they update
 ([`memory/cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes)).
-What remains here is stale detection, and honoring a user's
-`entities.state` value until prose explicitly contradicts it. Ordering
+What remains here is stale detection, and honoring a user's other
+`entities.state` values until prose explicitly contradicts them. Ordering
 alone can't do that for state: piggyback, its per-turn writer, always
-reads the newest prose. Chapter-close identity compaction, once built,
-is the exception, since it reads a whole chapter whose prose can
-predate the user's edit.
-
-Reverse-replay's schema-backed-column exception is the same gap from
-the undo side: reversing a machine delta on `entities.state` or
-`story_entries.metadata` restores the sub-fields it changed, even over
-a later user write to one of them
-([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
-Latent: only hard-gated runs write either column, so no user edit lands
-while such a run can abort, and a rollback or regenerate that reverses
-them sweeps the user's later edits too. Provenance would let the undo
-skip a sub-field the user wrote. Added 2026-09-27 from triage.
+reads the newest prose. Chapter close reads a whole chapter whose prose
+can predate the user's edit, so each of its writes rests on the latest
+entry it cites, and ordering covers it too
+([`memory/cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes)).
 
 Sketch shape (v1.5):
 
@@ -849,7 +846,7 @@ description demand emerges.
 #### Token-trigger classifier cadence mode
 
 `stories.settings.classifierCadence` ships v1 as a single number
-(entries between background classifier runs). The original schema
+(entries between periodic classifier runs). The original schema
 was a discriminated union — `{ mode: 'turns' | 'token-trigger',
 value: number }` — but the token-trigger variant was dropped from
 v1 because the buffer-aware overlap UX
@@ -897,10 +894,12 @@ Raised 2026-08-15 by the Slice 3.8 Task 2 review.
 `reverseReplayDeltas` resolves `deltas.target_table` through the
 runtime registry and throws `unknown target_table` when it misses, so
 an orphan written by a build that carried a domain the running build
-does not is unreversible by any retry. Boot then holds that branch
-back from the classifier cadence indefinitely
-(`resetStuckClassifierRunState`), which is the safe direction but a
-permanent one. Reaching it requires running a build older than its own
+does not is unreversible by any retry. For a pass's orphan, boot then
+leaves its branch `running` indefinitely
+(`resetStuckClassifierRunState`), so it takes no turns: every Send
+fails with the recovery error
+([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)),
+and only a branch from an entry before the orphan continues. Reaching it requires running a build older than its own
 data — a downgrade, or a domain renamed without a migration. Not
 corruption, and not otherwise reachable. Of the other reversal
 failures, only the
@@ -924,23 +923,34 @@ field is the signal to revisit.
 #### The classifier can read a window holding un-reversed writes
 
 Boot holds a branch back from the cadence only when its own
-`classifier_status` was left `running`
-(`resetStuckClassifierRunState`). Another kind's failed reversal, on a
-branch whose classifier happened to be `idle`, holds nothing — so the
-cadence can fire over a window carrying those un-reversed writes.
+`classifier_status` was left `running` and the pass's own orphan
+didn't reverse (`resetStuckClassifierRunState`). Another kind's failed
+reversal holds nothing, whatever the classifier's state — so the
+cadence can fire over a window carrying those un-reversed writes. That
+is chosen, not missed: holding on any kind's orphan would stop a
+branch's turns, possibly for good, over a fault whose startup copy
+promises no stop
+([`generation-pipeline.md → Recovery-failure policy`](./generation-pipeline.md#recovery-failure-policy)).
+The cost is that the next pass reads prose including the failed run's
+leftover writes, which the turns since already build on.
 
-Benign in every reachable case, which is why it is parked rather than
-fixed:
+Benign in every reachable case except a close's (open below), which is
+why it is parked rather than fixed:
 
-- **On the boot path it needs the version skew above.** Every other
+- **On the boot path it needs the version skew above, or a close.** Every other
   reversal failure is transient and the next boot's retry clears it,
   or is
   [an integrity refusal](#a-boot-recovery-refused-as-an-integrity-error-never-settles),
-  which boot meets only for a `no-gate` orphan, whose branch it holds
-  back. Either way the branch is reconciled or already held back.
-- **In-session it needs a later successful turn.** The scheduler ticks
-  only on `kind === PER_TURN_KIND && outcome === 'completed'`, so the
-  failed run does not fire it.
+  which boot meets only for a pass's or a close's orphan. A pass's
+  branch it holds back. A close's it doesn't, and whether a pass over a
+  close's leftover writes is benign depends on the close's write set,
+  not yet designed (the Chapter-close agent design item in
+  [`followups.md → Data-model`](./followups.md#data-model)).
+- **In-session it needs a later turn or Send.** A pass starts only
+  from a turn's commit (per-turn's `chainsTo`) or before a turn at
+  Send, when one is owed
+  ([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)),
+  so the failed run itself does not start one.
 - **What is stranded is not duplicate material.** A failed reversal
   leaves the aborted run's own entry and its piggyback facts on disk
   _and_ on screen — the patchers never ran either, so the store keeps
@@ -952,19 +962,20 @@ fixed:
 The obvious remedy is wrong and is recorded so it is not re-proposed:
 a run-start gate goes through `checkConcurrencyContract`, which gates
 **every** kind including `per-turn`, so it would block the user from
-submitting a turn to protect a background pass. A correct version has
+submitting a turn to protect a pass that isn't running. A correct version has
 to be scoped to the kinds that re-derive from a window, and needs the
 concurrency contract to learn about orphans.
 
 Parked 2026-08-25 after the boot-recovery work closed the reachable
-half; duplicated happenings observed after a failed reversal are the
-signal to revisit.
+half; widened 2026-10-23, when the boot reset stopped holding a branch
+on another kind's orphan. Duplicated happenings observed after a failed
+reversal are the signal to revisit.
 
 #### A boot recovery refused as an integrity error never settles
 
-A `no-gate` run whose abort's own reversal fails leaves its writes to
-boot recovery, and its hold ends anyway
-([`generation-pipeline.md → No-gate write phase`](./generation-pipeline.md#no-gate-write-phase)),
+A pass or a close whose abort's own reversal fails leaves its writes
+to boot recovery, and its gate lifts anyway
+([`generation-pipeline.md → Recovery-failure policy`](./generation-pipeline.md#recovery-failure-policy)),
 so the user can write to the branch before recovery runs. If the
 latest scene names a character the pass created and the user deletes
 it in World, the delete's tail-scene update still names it. Recovery
@@ -973,21 +984,24 @@ would prune that delete with the create it holds, so it refuses as
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
 writes nothing, and leaves the marker open. Every boot refuses again
 while that delete stays in the log: the "Recovery incomplete" modal
-shows at each startup, without promising a retry, and boot keeps the
-branch off the classifier cadence (`resetStuckClassifierRunState`).
-Nothing else is lost, but v1 has no "drop orphan" affordance to clear
+shows at each startup, without promising a retry, and for a pass,
+boot leaves the branch `running` (`resetStuckClassifierRunState`), so
+it takes no turns: every Send fails with the recovery error
+([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)).
+Its prose and facts are intact, and a branch from an entry before the
+orphan can continue, but v1 has no "drop orphan" affordance to clear
 it. It takes two faults in one session: a database error during the
 abort's reversal, then that delete.
 
 The remedy is to settle such an orphan at recovery: on an integrity
 refusal, close its `pipeline_runs` row as `failed` and keep its writes
-as ordinary history, which CTRL-Z steps over as a background pass.
-Memory updates resume, at a cost: the pass's partial facts stay, and
+as ordinary history, which CTRL-Z steps over as it does any pass.
+The branch's turns resume, at a cost: the pass's partial facts stay, and
 the next pass may derive some of them again, so duplicates are
 possible.
 
 Parked 2026-10-05 as too rare to trade for those duplicates; a user
-report of a story whose memory stopped updating, or a "Recovery
+report of a branch whose every Send fails with the recovery error, or a "Recovery
 incomplete" modal that persists across restarts, is the signal to
 revisit.
 
@@ -1015,21 +1029,14 @@ prune. And phases also write directly through `ctx.db` (classifier
 status, for one), which dropping events does not stop, so each phase's
 direct writes need auditing first.
 
-Seen again 2026-10-05 in the reversal-integrity PR's review, with part
-of that fix in place: `handleEvent` (`lib/pipeline/runtime/orchestrator.ts`)
-drops a `no-gate` run's write once the run has left txState, keyed on
-its removal rather than its abort. Two windows stay open. A straggler
-that first emits before the run leaves txState, during the reversal or
-the exception hook, passes that check and commits under the run's
-`actionId` unreversed, and boot recovery never reverses it, since the
-run's marker settled with the reversal. And if the reversal throws
-something other than a `DeltaReplayError`, `abortRun` rethrows before
-`generationStore.abortRun`, so the run stays registered and a later
-straggler passes the check and takes a write-phase hold nobody
-releases; that needs both latent conditions at once. Dropping from the
-abort on, as above, covers both. Waiting for every sibling to settle
-before the run aborts would close them too, but contradicts the abort's
-"no drain" step in
+Seen again 2026-10-05 in the reversal-integrity PR's review, which
+found part of that fix in place: `handleEvent` dropped a `no-gate`
+run's write once the run had left txState. That drop went with the
+no-gate write phase when the periodic classifier became gated, and it
+covered only `no-gate` runs, so the straggler above is unguarded.
+Dropping from the abort on, as above, is the fix. Waiting for every
+sibling to settle before the run aborts would also close it, but
+contradicts the abort's "no drain" step in
 [Run state transitions](./generation-pipeline.md#run-state-transitions),
 so it needs a canon edit first.
 
@@ -1070,43 +1077,123 @@ gaining a synchronous subscriber or patch logic that can throw
 
 #### The reversal closure doesn't follow ids inside JSON columns
 
-`REF_COLUMNS` in `lib/actions/delta/live-refs.ts` registers only
-link-table columns, so `selectReversalSet` in
-`lib/actions/delta/row-closure.ts` never reaches ids held inside JSON:
-`entities.state`'s `current_location_id`, `faction_id`,
-`parent_location_id`, `at_location_id`, `lastSeenAt.locationId` and
-`lastSeenAt.entryId`, its `equipped_items` and `inventory` arrays (all
-in `lib/db/entities/entity-state-schema.ts`), and
+`REF_COLUMNS` in `lib/actions/delta/live-refs.ts` registers link-table
+columns and, inside JSON, only a place's `state.parent_location_id` and
+a character's `state.faction_id`, which a reversal clears rather than
+follows
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
+so `selectReversalSet` in `lib/actions/delta/row-closure.ts` never
+reaches the other ids held inside JSON: `entities.state`'s
+`current_location_id`, `at_location_id`,
+`lastSeenAt.locationId` and `lastSeenAt.entryId`, its `equipped_items`
+and `inventory` arrays (all in
+`lib/db/entities/entity-state-schema.ts`), and
 `story_entries.metadata`'s `sceneEntities` and `currentLocationId`. A
 reversal that removes an entity could leave one of them naming it.
 
 Not reachable for `state`, verified by reading in the 2026-10-05
-triage pass: only characters are ever machine-created
+triage pass: the periodic classifier created only characters then
 (`lib/classifier/plan.ts`), and no `state` field names a character;
 CTRL-Z is newest-first, and rollback and regenerate windows take every
-later write; prose-edit sweeps spare entity creates; and a no-gate
-run's abort holds the branch lock exclusive. Inferred, not verified:
-in the boot-recovery window after an abort's own reversal failed
-([no-gate write phase](./generation-pipeline.md#no-gate-write-phase)),
+later write; prose-edit sweeps spare entity creates; and a pass's
+abort runs under its gate. Inferred, not verified: in the
+boot-recovery window after an abort's own reversal failed
+([Recovery-failure policy](./generation-pipeline.md#recovery-failure-policy)),
 a later turn's piggyback or a tail scene edit can name the pass's new
 character in `sceneEntities`, and recovery then reverses the create
-with no refusal. A dangling id renders as "Entity no longer exists"
-(`components/world/overview/overview-parts.tsx`), never a crash, and
-`namesId` in `lib/actions/delta/reverse-replay.ts` already walks
-nested payloads, so the write-back refusal covers ids in `state`.
+with no refusal. A dangling id never crashes, but the same state
+renders two ways: Overview's single-reference regions show "Entity no
+longer exists" (`refTargets` in
+`components/world/overview/overview-parts.tsx`) and the entity picker
+shows "Missing entity", while Overview's "Part of" drops a dangling
+parent silently (`locationAncestors` in `lib/world/overview.ts` skips a
+missing id). `namesId` in `lib/actions/delta/reverse-replay.ts` already
+walks nested payloads, so the write-back refusal covers ids in
+`state`.
 
-A fix is a JSON-path reference registry the closure queries through
-`json_each`. Parked 2026-10-05; the signal to revisit is a machine
-writer that creates entities other than characters.
+The first revisit signal, a machine writer creating entities other
+than characters, fired 2026-10-10, when the per-turn writer began creating
+locations and items
+([`piggyback.md → New locations and items`](./memory/piggyback.md#new-locations-and-items)),
+whose ids land in `currentLocationId`, `sceneEntities`, characters'
+`current_location_id`, `inventory` and `equipped_items`, and a child
+location's `parent_location_id`. Re-checked by reading the reversal
+canon, still not reachable: a create sits in its turn's action group,
+so the reasons above hold for it, with a branch fork's reverse-apply
+also taking every later write and an aborted turn having nothing after
+it. The boot-recovery caveat above stands.
 
-The group runner's conflict check has the same blind spot and would be
-the registry's second consumer: `rowRefs` (`lib/actions/delta/live-refs.ts`)
-covers link-row columns but not the ref fields inside an entity's `state`
-or an entry's `metadata`, so `groupConflict` can't refuse a write there
-that names a row the same group deletes. Planners avoid it by discipline
-(4.2c's merge rewrites every ref to the loser before deleting it, and the
-entity delete clears the tail's scene fields); nothing checks it. Folded
-in from triage 2026-10-09.
+Re-checked 2026-10-16 for the places a pass creates from mentions
+([`classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)),
+by reading the reversal canon and code, and wrong for the parent: a
+pass anchors each place on its own turn, so a child can sit on an
+earlier turn than its parent, and a rollback or regenerate that removed
+the parent's turn spared the child, left naming a parent that existed
+nowhere. Since 2026-10-17 the reversal clears that parent instead, so
+the child keeps its facts, unplaced since 2026-10-20.
+
+Re-checked 2026-10-17 for the remaining fields, by reading the reversal
+canon and code: still not reachable outside the boot-recovery window.
+A pass writes none of them, only a new place's parent
+(`lib/classifier/plan.ts`), and every other write naming a place lands
+after its create, so after its parent's too. CTRL-Z reverses the
+parent's create only once every later group but a pass's is undone, a
+rollback or regenerate that removes the parent's turn takes every later
+turn and every null-anchored edit after its target, a prose edit's
+sweep spares entity creates of every kind (`isReversible` in
+`lib/actions/story-entries/classifier-facts.ts`), and a pass's abort
+runs inside its write lock, which it takes only when no turn is in
+flight. In the boot-recovery window above, an entry's
+`currentLocationId`, a character's `current_location_id` or
+`lastSeenAt` and an item's `at_location_id` can still name a place
+recovery removes. A user's move of another place under it is cleared
+too, leaving that place unplaced
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+A move under it and back off it was not: the place stayed where the
+user left it, but the later move's undo still named the removed place,
+so a later CTRL-Z of that move wrote the dead id back (closed
+2026-10-18, below). The `write-back` refusal checks only the groups of
+the deletes recovery prunes.
+
+Re-checked 2026-10-18 for the factions design
+([`classifier.md → Factions`](./memory/classifier.md#factions)): a pass
+now writes a character's `faction_id`, and a membership can sit on an
+earlier turn than the faction it names, or name a faction the user
+created whose create CTRL-Z then undoes. So `faction_id` joined the
+registry beside a place's parent, cleared when a reversal removes its
+faction, and an undo or a redo never leaves either reference naming a
+row that doesn't exist, writing null instead
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+That also closes the place case above: a later CTRL-Z of a move under
+a removed place and back off it writes null, not the dead id. Both
+were implemented 2026-10-18. The fields left are the rest of the list
+above, which no pass writes.
+
+A fix adds these fields to the registry's JSON-path references, which
+the closure reads through `json_extract`; the arrays need `json_each`.
+Parked 2026-10-05, re-checked 2026-10-10, 2026-10-16, 2026-10-17 and
+2026-10-18; the signal to revisit now is a machine writer of another of
+these fields outside a turn.
+
+The group runner's conflict check, the registry's second consumer, has
+the same blind spot: `rowRefs` (`lib/actions/delta/live-refs.ts`)
+covers link-row columns, a place's parent and a character's faction
+but not the other ref fields inside an entity's `state` or an entry's
+`metadata`, so `groupConflict` refuses a place written under a parent,
+or a character given a faction, that the same group deletes, but can't
+refuse a write through another field that names such a row. Planners
+avoid it by discipline (4.2c's merge rewrites every ref to the loser
+before deleting it, and the entity delete clears the tail's scene
+fields); nothing checks it. Folded in from triage
+2026-10-09.
+
+Nor does the write path stop a dangling parent: the entity create and
+update handler accepts a `parent_location_id` naming no row (cycle
+check only, `lib/actions/entities/register.ts`). And the World resolve
+dialog's `same-parent` line reads "Both are top-level places." for a
+flagged row whose parent names no row (`sharedParentName` in
+`components/world/use-collision-resolve.ts` returns undefined for root
+and missing alike). Folded in from triage 2026-10-11.
 
 #### A kept create in a redo group fails redo with a raw SQLite error
 
@@ -1129,6 +1216,49 @@ refused state in
 Parked 2026-10-05; the signal to revisit is a non-periodic machine
 source writing a table with row-keeping columns, or a user write to
 one gaining an entry anchor.
+
+#### Prompt-cache optimization
+
+The [system and user halves](./architecture.md#system-and-user-halves)
+cache only the system prefix, and only on the calls that recur at a
+turn's pace. Beyond that:
+
+- **The history.** With `fullChapterInBuffer` off, the window drops the
+  oldest pair every turn
+  ([`cadence.md → Composition rule`](./memory/cadence.md#composition-rule)),
+  so nothing from the history on is reusable on any provider. Sliding
+  in steps of several turns would hold the window's head still between
+  steps, at the price of a window that varies by a step's worth of
+  entries.
+- **More Anthropic markers.** After the stable blocks of a user half;
+  on the newest message of each step of an agentic tool loop, which
+  resends the whole prompt every step and wants all of it cached; and a
+  1-hour TTL for the periodic classifier, whose passes are often more
+  than 5 minutes apart.
+- **Claude through OpenRouter.** It goes through the `openai-compatible`
+  provider, which sends no Anthropic marker.
+- **Measurement.** How each provider and server actually reuses a
+  prefix. Legacy v1 found `llama-server` with a sliding-window model
+  reusing nothing once a prompt diverged about 8k tokens before its
+  end, so order alone may not serve every server.
+
+Parked 2026-10-11; the signal is the prompt shapes settling, through
+the prompt content pass in
+[`followups.md → Data-model`](./followups.md#data-model), with test data
+and per-provider measurements to tune against.
+
+#### A model whose chat template rejects the system role
+
+Most calls now send a system message, from the template's system half
+or, on the prompt-injection path, from the structured-output contract,
+which adds one even when the system half is blank. Some older chat templates
+refuse the role (Gemma 2's under `llama-server --jinja`, as recalled
+rather than checked), which fails the call outright. Legacy v1 sent a
+system message on every call without such reports. The fix would be a
+model capability, detected and user-overridable like the others, that
+folds the system half into the start of the user message. Parked
+2026-10-11; the signal is a report of a model failing on the system
+role.
 
 ### Memory pipeline (parked)
 
@@ -1228,10 +1358,6 @@ underfills lands post-v1.
 
 Schema-level support for two distinct entities with the same name
 (without one being renamed).
-
-#### Auto-promotion `retired → active`
-
-Agent-driven path; v1 is user-only.
 
 #### Per-type query pools
 
@@ -1406,9 +1532,8 @@ exclusive; only the metadata lock is skipped. The scene editor, the
 world-time edit and the entity delete re-check the gate and register
 their write with no await between, so a reversal refuses or outwaits
 them. Only the collision merge reads the tail outside the branch lock,
-and canon already calls that path unreachable
-([no-gate write phase](./generation-pipeline.md#no-gate-write-phase):
-the resolve dialog is modal, and Reader undo needs the Reader's focus).
+and that path is unreachable: the resolve dialog is modal, and Reader
+undo needs the Reader's focus.
 The lock order now lives in `withTailMetadataLock`
 (`lib/actions/story-entries/entry-metadata-lock.ts`). Parked
 2026-10-09; the signal is a non-modal merge, or any surface where Reader
@@ -1430,6 +1555,29 @@ obvious fix, writing `parsed.data`, would silently drop a stackable
 named `__proto__`, which the pane and piggyback store deliberately:
 zod's record skips that key. Parked 2026-10-09; the signal is a writer
 that can emit model-shaped state, such as an agentic classifier.
+
+#### Merging any two rows of one kind
+
+World merges two rows only inside the collision dialog, which pairs a
+row with the partner a collision flag names. Duplicates no flag pairs,
+such as two places both placed under the wrong parents, can only be
+fixed by delete or rename. A merge of any two rows of one kind would
+cover them. Split 2026-10-20 from "Placing a mentioned place later",
+which unplaced places resolved
+([`data-model.md → LocationState shape`](./data-model.md#locationstate-shape));
+the signal is duplicates in real stories that no flag pairs.
+
+#### Confirm-mode queue for chapter-close rewrites
+
+Chapter close rewrites a description, and the other slow identity
+fields, directly, as one of the close's undoable writes
+([`data-model.md → Description vs state boundary`](./data-model.md#description-vs-state-boundary)).
+A user who wants to approve each rewrite first would need a queue of
+proposed rewrites with accept and reject in World, and a rule for what
+a pending proposal means to the next close and to retrieval. Today a
+user edit made after the cited prose stands, and CTRL-Z of the close
+reverses all of it. Parked 2026-10-20 with the AI writer map; the
+signal is users undoing whole closes to keep one description.
 
 ### UX (parked)
 
@@ -1905,8 +2053,8 @@ Decision lands at scoped-gate's own design pass.
 Two future background pipelines running simultaneously
 (style-review + standalone memory-compaction or similar). The
 cascading `concurrencyPolicy` interactions when multiple background
-pipelines overlap aren't covered by the periodic classifier alone
-(which is the v1 single background consumer). Owned by the first
+pipelines overlap aren't covered in v1, which has no background
+pipeline: the periodic classifier holds the gate. Owned by the first
 design pass that introduces a second concurrent background pipeline.
 Foundation in
 [`memory/cadence.md → Concurrency`](./memory/cadence.md#concurrency).
@@ -2744,18 +2892,23 @@ so a twin unmounting no longer detaches the survivor's callbacks, and
 for same-tab siblings. Surfaced by M3.11 Task 4 review (2026-07-22),
 narrowed 2026-07-22 and 2026-08-18.
 
-#### Background content behind AlertDialog is not aria-hidden
+#### Why one role locator matched both Discard buttons behind an AlertDialog
 
-**Background content behind an open `AlertDialog` is not
-`aria-hidden`.** Contrary to the usual Radix `hideOthers`
-assumption, an E2E locator scoped only by role matched both the
+**Open question: why did a role locator match both Discard buttons
+behind an open `AlertDialog`?** It read as the background not being
+`aria-hidden`, contrary to the usual Radix `hideOthers`
+assumption: an E2E locator scoped only by role matched both the
 save bar's Discard button and the unsaved-changes dialog's Discard
 button while the dialog was open — confirmed by an actual run
 (`e2e/locators/story-settings.ts`). Fixed in the spec by scoping
 through the dialog, but the root cause (portal nesting?) was never
 investigated, and any future locator or a11y assumption about
 background-hiding on this stack is unsafe. Surfaced by M3.7b
-implementation (2026-07-31).
+implementation (2026-07-31). A browser probe on 2026-10-21 found that
+Radix's `hideOthers` does mark the app root `aria-hidden` while a
+dialog is open, sparing an `aria-live` node that existed before it
+opened, so the claim doesn't hold for the dialogs probed; why this
+locator matched both stays uninvestigated.
 
 #### BC-style origin era rendering
 
@@ -2869,24 +3022,25 @@ reads that stale array as the truth and deletes or reverts the rows a
 concurrent write added. It also re-creates a row a concurrent write
 deleted, since a draft row whose id left the baseline reads as new.
 
-Unreachable today. Every writer that can link an existing happening is
-`hard-gate`, which blocks the Plot pane while it runs, and the periodic
-classifier, the one `no-gate` writer, links only happenings it creates
-in the same pass. Chapter-close does rewrite links on existing
-happenings
+Unreachable. Every writer that can link an existing happening holds
+the gate, which blocks the Plot pane while it runs — the periodic
+classifier, which links a character's awareness to a happening it
+lists, and chapter-close, which rewrites links on existing happenings
 ([awareness pin tuning](./memory/chapter-close.md#3d--awareness-pin-tuning),
-[happenings consolidation](./memory/chapter-close.md#3e--happenings-consolidation)),
-but under the same gate. The fix is a three-way merge: record each
-links field's baseline when it goes dirty, then apply the user's diff
-onto the latest rows — about 60–100 lines across the hook and the
-draft builder.
+[happenings consolidation](./memory/chapter-close.md#3e--happenings-consolidation))
+— and no pass starts from Plot or World, while the Actions menu's
+close will, and leaving a dirty pane asks first. The fix is a
+three-way merge: record each links field's baseline when it goes
+dirty, then apply the user's diff onto the latest rows — about 60–100
+lines across the hook and the draft builder. World's pane Save carried such a merge for keywords and
+relationships until the gated classifier removed it on the same
+reasoning, so a change to either premise needs both.
 
 Parked 2026-09-23. Revisit when a `no-gate` writer links an existing
-happening —
-[`classifier.md → Provenance attribution`](./memory/classifier.md#provenance-attribution)
-already describes a character learning of an old happening, which
-today's schema cannot express — or when a gated run becomes startable
-while a Plot session is dirty. Raised 2026-09-22 by Slice 4.3.
+happening, or when a gated run becomes startable while a Plot or World
+pane is dirty. M5.2's chapter close, startable from the Actions menu
+on either surface, is the first candidate. Raised 2026-09-22 by
+Slice 4.3.
 
 #### Select's dropdown popover is pinned to its trigger's width
 

@@ -10,7 +10,7 @@
 // macro holds everything the two have in common (the output contract, and the
 // wizard state that grounds the call); only the leading directive and the
 // revise block differ. Splitting it the other way would duplicate the quality
-// bar, which is the half most likely to be tuned and so the half most likely to
+// bar, which is the part most likely to be tuned and so the part most likely to
 // drift. Refine templates take `current` (the preview being revised) and
 // `instruction`, and deliberately carry no `guidance`: canon defines a refine as
 // current preview plus refinement instruction, and the guidance a refine could

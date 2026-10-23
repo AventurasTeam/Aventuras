@@ -58,6 +58,7 @@ import type {
   NewTranslation,
   NewVaultCalendar,
 } from '../types'
+import type { ClassifierStatus } from '../world-json-types'
 
 // A seed step is one table's worth of rows; the runner inserts steps in array
 // order (FK-correct) and wipes beforehand. Rows are type-checked per table at
@@ -497,6 +498,8 @@ const heroEntities: NewEntity[] = [
     status: 'active',
     injectionMode: 'auto',
     nameCollisionFlag: 1,
+    nameCollisionPartnerId: ID.brannoc,
+    nameCollisionReason: 'distinct',
     tags: ['smuggler'],
     keywords: ['the river gate'],
     priority: 10,
@@ -1461,7 +1464,6 @@ function fillerStoryRows(): {
       forkEntryId: null,
       name: 'Main',
       createdAt: t0,
-      classifierStatus: null,
     })
     if (f.lead) entityRows.push(f.lead)
     for (let i = 1; i <= f.entries; i++) {
@@ -1666,7 +1668,6 @@ function richStoryRows(): { story: NewStory; branch: NewBranch; entries: NewStor
       forkEntryId: null,
       name: 'Main',
       createdAt: t0,
-      classifierStatus: null,
     },
     entries: richEntries(),
   }
@@ -1788,6 +1789,24 @@ const appSettingsRow: NewAppSettings = {
 
 // ---------------------------------------------------------------------------
 
+// Parked at the last prose row, not MAX(position): the first Send deletes a trailing `system` row
+// and writes its user_action there (docs/testing.md → Fixture + seed contract).
+function parkedClassifierStatus(
+  branchId: string,
+  entries: readonly NewStoryEntry[],
+): ClassifierStatus {
+  const prose = entries.filter((e) => e.branchId === branchId && e.kind !== 'system')
+  if (prose.length === 0) {
+    throw new Error(`seed branch ${branchId} has no prose entry to park its watermark on`)
+  }
+  return {
+    state: 'idle',
+    lastSuccessAt: null,
+    lastError: null,
+    processedThrough: Math.max(...prose.map((e) => e.position)),
+  }
+}
+
 export function buildSeedSteps(): SeedStep[] {
   const filler = fillerStoryRows()
   const rich = richStoryRows()
@@ -1827,7 +1846,6 @@ export function buildSeedSteps(): SeedStep[] {
       forkEntryId: null,
       name: 'Main',
       createdAt: BASE,
-      classifierStatus: null,
     },
     {
       id: FORK,
@@ -1836,7 +1854,6 @@ export function buildSeedSteps(): SeedStep[] {
       forkEntryId: entryId('hero', 40),
       name: 'The road not taken',
       createdAt: BASE + DAY,
-      classifierStatus: null,
     },
     ...filler.branches,
   ]
@@ -1848,7 +1865,14 @@ export function buildSeedSteps(): SeedStep[] {
     step('vault_calendars', vaultCalendars, vaultCalendarRows),
     step('assets', assets, assetRows),
     step('stories', stories, [heroStory, rich.story, ...filler.stories]),
-    step('branches', branches, [...branchRows, rich.branch]),
+    step(
+      'branches',
+      branches,
+      [...branchRows, rich.branch].map((branch) => ({
+        ...branch,
+        classifierStatus: parkedClassifierStatus(branch.id, allEntries),
+      })),
+    ),
     step('story_entries', storyEntries, allEntries),
     step('chapters', chapters, heroChapters),
     step('entities', entities, [...heroEntities, ...filler.entities]),

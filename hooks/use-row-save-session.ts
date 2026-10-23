@@ -11,12 +11,26 @@ import { logger } from '@/lib/diagnostics'
 
 export type RowCommitResult = { status: 'ok' } | { status: 'rejected'; reason: string }
 
+/** What a Save asks before it writes, all of it translated: one dialog, however many lines. */
+export type RowSaveConfirm = {
+  title: string
+  lines: readonly string[]
+  /** A bulleted list under the lines, e.g. the places a retire takes with it. */
+  items: readonly string[]
+  confirmLabel: string
+}
+
 export type RowSaveOutcome =
   /** Nothing to write; a leave waiting on the session was released. */
   | { status: 'noop' }
   | { status: 'busy' }
   /** The draft cannot be written; nothing was attempted. */
   | { status: 'invalid'; reason: string }
+  /**
+   * Parked behind `pendingConfirm`; `resolveConfirm` writes or drops it. Nothing parks when the
+   * row switched while the Save validated.
+   */
+  | { status: 'confirm' }
   /** The write landed. The session may still be dirty with an edit typed while it ran. */
   | { status: 'committed' }
   | { status: 'rejected'; reason: string }
@@ -42,6 +56,11 @@ export type RowSaveSessionOptions<Draft extends FieldValues> = {
    */
   commit: (draft: Draft) => Promise<RowCommitResult>
   /**
+   * What to ask before writing a valid draft; null writes it straight away. The Save parks until
+   * `resolveConfirm`, and writes the draft as it stands then.
+   */
+  confirmBeforeCommit?: (draft: Draft) => RowSaveConfirm | null
+  /**
    * A save failed, with its translated reason — also when the form has since moved to another
    * row, which keeps no `saveError` for it. The bar's notice is tooltip-only on phone; toast this.
    */
@@ -55,7 +74,7 @@ export type RowSaveSession<Draft extends FieldValues> = {
   dirtyFields: readonly string[]
   /** The first validation issue, translated; null while the draft is writable. */
   invalidReason: string | null
-  /** From validation until the commit settles; Discard and leave choices are ignored meanwhile. */
+  /** From validation until the commit settles; Discard and dialog answers are ignored meanwhile. */
   saving: boolean
   /** This row's last failed save; cleared as a retry starts writing, on discard, on row switch. */
   saveError: string | null
@@ -65,6 +84,10 @@ export type RowSaveSession<Draft extends FieldValues> = {
   requestLeave: (proceed: () => void) => void
   pendingLeave: boolean
   resolveLeave: (outcome: 'save' | 'discard' | 'cancel') => void
+  /** The question a parked Save asks, held until its confirmed write settles; null when none. */
+  pendingConfirm: RowSaveConfirm | null
+  /** Writes the parked Save, or drops it with the leaves that were waiting on it. */
+  resolveConfirm: (outcome: 'save' | 'cancel') => void
 }
 
 /** What a surface needs from a pane's session to route its transitions (row switch, `←`, GO TO). */
@@ -74,6 +97,7 @@ type Attempt = { outcome: RowSaveOutcome; clean: boolean }
 
 type Written<Draft> =
   | { status: 'invalid'; reason: string }
+  | { status: 'confirm'; ask: RowSaveConfirm }
   | { status: 'rejected'; reason: string }
   | { status: 'ok'; draft: Draft }
 
@@ -148,6 +172,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
   issueText,
   failureText,
   commit,
+  confirmBeforeCommit,
   onRejected,
 }: RowSaveSessionOptions<Draft>): RowSaveSession<Draft> {
   // react-hook-form mutates formState in place; compiled memos keyed on it would go stale.
@@ -164,6 +189,14 @@ export function useRowSaveSession<Draft extends FieldValues>({
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [pendingLeave, setPendingLeave] = useState(false)
+  const [pendingConfirm, setPendingConfirmState] = useState<RowSaveConfirm | null>(null)
+  const pendingConfirmRef = useRef<RowSaveConfirm | null>(null)
+  // How many queued leaves were waiting on the Save when it parked: a cancel drops only those.
+  const parkedIntentsRef = useRef(0)
+  const setPendingConfirm = useCallback((ask: RowSaveConfirm | null) => {
+    pendingConfirmRef.current = ask
+    setPendingConfirmState(ask)
+  }, [])
   // Callbacks decide on refs: state renders late, and Cmd-S can race the dialog's Save.
   const busyRef = useRef(false)
   // Oldest first: a window close and a back can both be outstanding.
@@ -216,13 +249,16 @@ export function useRowSaveSession<Draft extends FieldValues>({
     appliedRef.current = { rowKey, values }
     if (applied.rowKey !== rowKey) {
       setSaveError(null)
+      // A question about the previous row's draft has nothing left to answer, unless its confirmed
+      // write is still running: that clears it once it settles.
+      if (!busyRef.current) setPendingConfirm(null)
       form.reset(values)
       return
     }
     if (sameValue(applied.values, values)) return
-    // Refreshes untouched fields on a store patch (classifier, undo), else a later save writes
-    // stale values back. Per top-level field: a path-wise merge would graft a patch onto whichever
-    // array row shifted into its index.
+    // Refreshes untouched fields on a store patch (a pass under a blocked pane, an undo), else a
+    // later save writes stale values back. Per top-level field: a path-wise merge would graft onto
+    // whichever array row shifted into the index.
     const current: Record<string, unknown> = form.getValues()
     const touched: Record<string, unknown> = form.formState.dirtyFields
     const merged: Record<string, unknown> = { ...values }
@@ -239,7 +275,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
         logger.error('app.row_save_validate_failed', { error: errorMessage(error) })
       })
     }
-  }, [rowKey, values, form])
+  }, [rowKey, values, form, setPendingConfirm])
 
   const settleIntents = useCallback(() => {
     const queued = intentsRef.current
@@ -272,22 +308,27 @@ export function useRowSaveSession<Draft extends FieldValues>({
     [onRejected],
   )
 
-  const write = useCallback(async (): Promise<Written<Draft>> => {
-    try {
-      if (!(await form.trigger())) {
-        const issue = firstIssue(errorsRef.current)
-        return { status: 'invalid', reason: issue == null ? '' : issueText(issue) }
+  const write = useCallback(
+    async (confirmed: boolean): Promise<Written<Draft>> => {
+      try {
+        if (!(await form.trigger())) {
+          const issue = firstIssue(errorsRef.current)
+          return { status: 'invalid', reason: issue == null ? '' : issueText(issue) }
+        }
+        const draft = cloneValue(form.getValues())
+        setSaveError(null)
+        const ask = confirmed ? null : (confirmBeforeCommit?.(draft) ?? null)
+        if (ask != null) return { status: 'confirm', ask }
+        const result = await commit(draft)
+        return result.status === 'ok' ? { status: 'ok', draft } : result
+      } catch (error) {
+        // Raw errors (SQLITE_BUSY, a resolver bug) are for the log, not the user.
+        logger.error('app.row_save_failed', { error: errorMessage(error) })
+        return { status: 'rejected', reason: failureText() }
       }
-      setSaveError(null)
-      const draft = cloneValue(form.getValues())
-      const result = await commit(draft)
-      return result.status === 'ok' ? { status: 'ok', draft } : result
-    } catch (error) {
-      // Raw errors (SQLITE_BUSY, a resolver bug) are for the log, not the user.
-      logger.error('app.row_save_failed', { error: errorMessage(error) })
-      return { status: 'rejected', reason: failureText() }
-    }
-  }, [form, commit, issueText, failureText])
+    },
+    [form, commit, confirmBeforeCommit, issueText, failureText],
+  )
 
   // Clean at the saved values unless an edit was typed while the write ran; returns whether clean.
   const rebase = useCallback(
@@ -314,51 +355,88 @@ export function useRowSaveSession<Draft extends FieldValues>({
     [form],
   )
 
-  const attempt = useCallback(async (): Promise<Attempt> => {
-    const { rowKey: key, values: valuesAtStart } = appliedRef.current
-    const written = await write()
-    if (written.status === 'invalid') return { outcome: written, clean: false }
-    if (written.status === 'rejected') reportRejection(written.reason)
-    const outcome: RowSaveOutcome = written.status === 'ok' ? { status: 'committed' } : written
-    // The form moved to another row mid-write: nothing here is that row's to carry, and a queued
-    // leave waits only on an edit of its own (a clean session satisfies it, as a noop save does).
-    if (appliedRef.current.rowKey !== key) {
-      return { outcome, clean: !hasDirty(form.formState.dirtyFields) }
-    }
-    if (written.status === 'rejected') {
-      setSaveError(written.reason)
-      return { outcome, clean: false }
-    }
-    return { outcome, clean: rebase(written.draft, valuesAtStart) }
-  }, [form, write, rebase, reportRejection])
+  const attempt = useCallback(
+    async (confirmed: boolean): Promise<Attempt> => {
+      const { rowKey: key, values: valuesAtStart } = appliedRef.current
+      const written = await write(confirmed)
+      if (written.status === 'invalid') return { outcome: written, clean: false }
+      if (written.status === 'confirm') {
+        // Not across a row switch: the question would be about a draft the form no longer holds.
+        if (appliedRef.current.rowKey === key) {
+          parkedIntentsRef.current = intentsRef.current.length
+          setPendingConfirm(written.ask)
+        }
+        return { outcome: { status: 'confirm' }, clean: false }
+      }
+      if (written.status === 'rejected') reportRejection(written.reason)
+      const outcome: RowSaveOutcome = written.status === 'ok' ? { status: 'committed' } : written
+      // The form moved to another row mid-write: nothing here is that row's to carry, and a queued
+      // leave waits only on an edit of its own (a clean session satisfies it, as a noop save does).
+      if (appliedRef.current.rowKey !== key) {
+        return { outcome, clean: !hasDirty(form.formState.dirtyFields) }
+      }
+      if (written.status === 'rejected') {
+        setSaveError(written.reason)
+        return { outcome, clean: false }
+      }
+      return { outcome, clean: rebase(written.draft, valuesAtStart) }
+    },
+    [form, write, rebase, reportRejection, setPendingConfirm],
+  )
 
-  const save = useCallback(async (): Promise<RowSaveOutcome> => {
-    if (busyRef.current) return { status: 'busy' }
-    if (!hasDirty(form.formState.dirtyFields)) {
-      // Nothing to write, so a leave waiting on this save is already satisfied.
-      settleIntents()
-      return { status: 'noop' }
-    }
-    busyRef.current = true
-    setSaving(true)
-    let result: Attempt
-    try {
-      result = await attempt()
-    } finally {
-      busyRef.current = false
-      setSaving(false)
-    }
-    // A leave waits for a clean session, not just a landed write.
-    if (result.clean) settleIntents()
-    return result.outcome
-  }, [form, attempt, settleIntents])
+  // `confirmed` is the user's consent; only resolveConfirm passes true.
+  const runSave = useCallback(
+    async (confirmed: boolean): Promise<RowSaveOutcome> => {
+      if (busyRef.current) return { status: 'busy' }
+      // A parked Save moves only through resolveConfirm or a discard.
+      if (!confirmed && pendingConfirmRef.current != null) return { status: 'confirm' }
+      if (!hasDirty(form.formState.dirtyFields)) {
+        // Nothing to write, so a leave waiting on this save is already satisfied.
+        settleIntents()
+        return { status: 'noop' }
+      }
+      busyRef.current = true
+      setSaving(true)
+      let result: Attempt
+      try {
+        result = await attempt(confirmed)
+      } finally {
+        busyRef.current = false
+        setSaving(false)
+      }
+      // A leave waits for a clean session, not just a landed write.
+      if (result.clean) settleIntents()
+      return result.outcome
+    },
+    [form, attempt, settleIntents],
+  )
+
+  const save = useCallback(() => runSave(false), [runSave])
 
   const discard = useCallback(() => {
     // A save in flight owns the outcome; the bar's disabled buttons are presentation.
     if (busyRef.current) return
     setSaveError(null)
+    setPendingConfirm(null)
     form.reset(values)
-  }, [form, values])
+  }, [form, values, setPendingConfirm])
+
+  const resolveConfirm = useCallback(
+    (outcome: 'save' | 'cancel') => {
+      if (pendingConfirmRef.current == null || busyRef.current) return
+      // The user did not consent, so a leave waiting on this Save must not fire later either. One
+      // raised while the question hid the leave dialog was never declined, so it gets that dialog.
+      if (outcome === 'cancel') {
+        setPendingConfirm(null)
+        intentsRef.current = intentsRef.current.slice(parkedIntentsRef.current)
+        setPendingLeave(intentsRef.current.length > 0)
+        return
+      }
+      // Held until the write settles, however it ends: a waiting leave's dialog can't open over it.
+      void runSave(true).finally(() => setPendingConfirm(null))
+    },
+    [runSave, setPendingConfirm],
+  )
 
   const requestLeave = useCallback(
     (proceed: () => void) => {
@@ -411,5 +489,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
     requestLeave,
     pendingLeave,
     resolveLeave,
+    pendingConfirm,
+    resolveConfirm,
   }
 }

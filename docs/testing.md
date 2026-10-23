@@ -270,6 +270,16 @@ points Electron at it, giving isolation and seeding for free —
 and Electron honors the Chromium switch. Nothing binary lands in git,
 and the fixture always matches the current migrations.
 
+Every seeded branch's classifier watermark
+(`branches.classifier_status.processedThrough`) sits at its last
+non-system entry, so no branch owes a pass at its first Send
+([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)).
+It does not sit at the branch's highest position: a branch can end on
+a `system` row, which the first Send deletes before writing its
+user_action at that position. A spec that wants a backlog seeds one
+(`seedClassifierBacklog` in `e2e/harness/seed.ts`) or parks the
+watermark lower.
+
 ### Substitutable IDs must be real UUIDs
 
 Why the fixture can't use mnemonic IDs. During a turn, `substituteIds`
@@ -348,9 +358,9 @@ on the request:
 
 - **`stream: true`** → an SSE prose stream (the narrative call).
 - **otherwise (structured)** → a JSON chat completion whose body is
-  chosen by matching the exact TypeScript block the app injects into
-  the prompt — `schemaToTypeScriptBlock` over each agent's Zod schema
-  (`lib/ai/prompt-schema.ts`). Each structured **call site** is one
+  chosen by matching the exact TypeScript block the app writes at the
+  end of the system message — `schemaToTypeScriptBlock` over each
+  agent's Zod schema (`lib/ai/prompt-schema.ts`). Each structured **call site** is one
   `STRUCTURED_SHAPES` entry (`scripts/mock-llm/shapes.ts`, shared with
   the dev mock server) with an `EXAMPLES` reply beside it here; the
   match can't drift because it reuses the app's own renderer, and
@@ -359,9 +369,10 @@ on the request:
 Call sites that answer with the same schema render the same block, so
 the block alone cannot separate them — the wizard's thirteen assist
 calls share seven schemas. Those entries carry a `marker` as well: the
-literal text their template opens with, sliced out of the prompt pack
-the app itself renders, so a template edit moves the marker in the same
-edit. The marker is consulted only when the block is ambiguous.
+literal text their template's user half opens with, sliced out of the
+prompt pack the app itself renders, so a template edit moves the marker
+in the same edit. The marker is consulted only when the block is
+ambiguous.
 
 Two one-shot narrative controls model the boundary states a running turn
 can hit: `failNextNarrative()` makes the next streaming call return HTTP
@@ -369,6 +380,12 @@ can hit: `failNextNarrative()` makes the next streaming call return HTTP
 `holdNextNarrative()` opens the stream but holds it unfinished until
 `releaseNarrative()` or a client abort — the deterministic in-flight
 window the cancel spec cancels into, with no sleep-based wait.
+
+`holdNextStructured(name)` does the same for the next structured call
+whose prompt matches that shape: the call is recorded in `requests`,
+then answered only at `releaseStructured()`, with the reply set by
+then — the in-flight window the gated pass's interrupt and Cancel
+specs act in.
 
 Block-matching keys on the **auto** (prompt-injection) path the fixture
 uses — the only path E2E relies on. A `force-on` profile takes the

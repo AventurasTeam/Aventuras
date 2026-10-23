@@ -179,7 +179,11 @@ treatment used by `retired_reason` (visible only when
 - Status pill + location icon
 - Description prose
 - Parent chain — breadcrumb (`Shop in Town Square in City`) per
-  [`LocationState.parent_location_id`](../../../data-model.md#locationstate-shape)
+  [`LocationState.parent_location_id`](../../../data-model.md#locationstate-shape);
+  none for a top-level place, and `Location unknown` for an unplaced
+  one, known to exist but not where. Its parent picker shows
+  `Unknown` until the user picks a parent or `Top level`, either of
+  which places it.
 - `condition` — single line if populated
 - "Characters here" count + first 3 names (portraits once the
   asset gallery lands)
@@ -288,6 +292,15 @@ that opens that entity's detail pane; it stays live while edits
 are blocked, since navigating isn't editing. The inverse lists
 link each name.
 
+The location pickers (a character's current location, an item's
+location, and the parent location of a place that isn't retired) don't
+offer retired places, since a retired place can't be entered and
+nothing active sits inside one
+([`data-model.md → LocationState shape`](../../../data-model.md#locationstate-shape));
+a stored value naming one keeps showing until it is changed. Moving a
+place into a disabled region asks first, as disabling does (see
+[Settings](#settings--entity-management-chrome)).
+
 The tab name **Connections** is the umbrella for both structural
 links (positional, affiliation) and social bonds. It was originally
 slimmed from an older "Relationships" tab to be forward-compatible
@@ -295,8 +308,8 @@ when the char→char schema landed — see
 [`patterns/entity.md`](../../patterns/entity.md#entity-detail-pane-composition).
 The Relationships sub-section (below) is that landing.
 
-`lastSeenAt` is classifier-only per the
-[authorship contract](../../../data-model.md#authorship-contract);
+`lastSeenAt` is the per-turn writer's, re-derived by a scene edit, per
+the [authorship contract](../../../data-model.md#authorship-contract);
 read-only on the UI.
 
 #### Relationships — character-to-character
@@ -350,25 +363,24 @@ are referenced.
   the editor, not on the row.
 - **Save** — relationship edits join the pane's save session: one Save
   commits them with the rest of the pane under one `action_id`, each
-  pair as a single write carrying both perspectives. Only the user's
-  own changes relative to what the pane showed are written; a pair or
-  view the classifier changed meanwhile, and the user left alone,
-  keeps its stored value.
+  pair as a single write carrying both perspectives. The draft is
+  diffed against the links stored at Save: an edited view is written,
+  an untouched one keeps its stored text, and a pair the user deleted
+  is removed.
 
-**Edits and memory updates.** A memory update never overwrites a
-status, a removed alias or a relationship view the user saved after the
-prose it processes, whether the save came before the pass started or
-while it ran, and it does not re-create a pair the user deleted after
-that prose
+**Edits and memory updates.** A memory update never overwrites a field
+the user saved after the prose it processes (a status, a removed
+alias, a character's faction, a relationship view, a description), and
+it does not re-create a pair the user deleted after that prose
 ([`cadence.md → User edits and classifier writes`](../../../memory/cadence.md#user-edits-and-classifier-writes)).
 Prose written after the user's edit can still revise it, per the
-authoring contract below. A Save leaves a pass's writes alone the same
-way: keywords, like relationships, merge three-way, so the Save applies
-only the terms the user added or removed to the stored list, and an
-alias a pass appended while the list was dirty stays. The generation
-status pill reads
-`updating memory…` while a pass runs
-([`generation-status-pill.md → Non-blocking phases`](../../patterns/generation-status-pill.md#non-blocking-phases)).
+authoring contract below. A pass holds the gate, so World's Saves wait
+while it runs, and the generation status pill and banner read
+`updating memory…`
+([`generation-status-pill.md → Memory phases`](../../patterns/generation-status-pill.md#memory-phases)).
+A pane is never dirty across a pass: none starts from World, and
+leaving a dirty pane asks first, so a Save writes the draft as the user
+left it.
 
 **Empty state.** When the character has no recorded relationships,
 render the Relationships sub-section heading + an empty-state hint
@@ -390,10 +402,42 @@ for the full authoring + UPSERT contract.
 Same fields for every kind:
 
 - `status` (enum select): `active` / `staged` / `retired`. Edits
-  here propagate to the Overview status pill.
+  here propagate to the Overview status pill. For a place, retiring
+  retires every place inside it
+  ([`data-model.md → LocationState shape`](../../../data-model.md#locationstate-shape)):
+  a Save that retires a place with places inside asks first ("Retire
+  Port Vellis and the 3 places inside it?", listing them), and each
+  takes the `retired_reason` entered here. A place inside that is
+  already retired keeps its own reason, and the confirm neither lists
+  nor counts it. The Save refuses, with the
+  reason on this field, while the story is in the place or inside it
+  ("The story is in The Rusty Anchor, inside Port Vellis.",
+  `story-inside`), and when it would bring back a place whose parent
+  is retired ("Port Vellis is retired. Bring it back first.",
+  `retired-parent`).
 - `injection_mode` (enum select with explanation): `always` /
   `auto` (default) / `disabled`. Includes the standard
-  in-line explanation about scene-presence override.
+  in-line explanation about scene-presence override. For a place it
+  adds that `always` and `auto` keep its name on the location map and
+  govern only its description, while `disabled` takes it off the map
+  with every place inside it, unless it is the current location
+  ([`piggyback.md → What the writer sees`](../../../memory/piggyback.md#what-the-writer-sees)).
+  A Save that disables a place with places inside asks first
+  ("Disabling Port Vellis also keeps the 3 places inside it out of the
+  story.", counting only places not already disabled), and so does
+  moving a place into a disabled one ("Port Vellis is disabled, so The
+  Rusty Anchor and the 2 places inside it will stay out of the
+  story."); both refuse while the story is in the place or inside it
+  (`story-inside`). While the story is somewhere in the disabled
+  region, the move still asks, saying what holds then ("Port Vellis is
+  disabled. The Rusty Anchor and the 2 places inside it stay in the
+  story only while the story is somewhere in Port Vellis."). A Save
+  that would ask twice asks once, with both
+  lines. A place disabled through an ancestor adds a line under the
+  explanation ("Disabled through Port Vellis: stays out of the story
+  whatever its own mode, unless it's the current location."); its own
+  dropdown stays editable. List rows show no injection mode, so they
+  gain no indicator.
 - `retired_reason` (text, conditional): only enabled when
   `status === 'retired'`.
 - `keywords` (chip row with `+ add`): aliases, titles and relational
@@ -402,8 +446,9 @@ Same fields for every kind:
   alongside `name` by the keyword retrieval pathway. Same TagInput
   shape as `tags`, but distinct in purpose: tags are user-meaningful
   labels, keywords are retrieval-targeted strings. The periodic
-  classifier also appends here when it observes a new reference; it
-  never removes, so user-authored entries survive.
+  classifier also appends here when it observes a new reference, and
+  chapter close adds and may remove keywords an AI added, never one
+  the user wrote, so user-authored entries survive.
 - `priority` (integer input, narrow; range `0..100`). Default `0`.
   Orders which keyword-matched rows seat first when more match than
   the keyword budget admits. **Unlike lore's `priority`, it does not
@@ -465,7 +510,7 @@ Undo last action in its menu, or Cmd/Ctrl-Z," naming the reader's own
 undo label so the copy can't drift from the reader's menu — one shared
 string (`common:deleteUndoHint`) across every kind. What else it lists
 is per kind: an entity's awareness, involvement and relationship
-counts, other entities losing their link to it, items left unplaced,
+counts, other entities losing their link to it, items and places left unplaced,
 and "Removed from the current scene" when the tail scene names it; a
 happening's involvement and awareness counts; nothing beyond the title
 for lore or a thread. The CTA is per kind too — `Delete character`,
@@ -488,7 +533,9 @@ cascade covers:
     `parent_location_id`, `at_location_id`, `faction_id`,
     `equipped_items[]`, `inventory[]` — cleared in one `state` patch
     per entity. Items at a deleted location, or held by a deleted
-    character, are left unplaced (no position is invented). A
+    character, are left unplaced (no position is invented), and so are
+    the places inside a deleted location: the same patch marks each
+    `unplaced`, since a cleared parent alone means top-level. A
     character's `lastSeenAt` is a snapshot, not a ref, and keeps a
     deleted location's id; the Last-seen line drops a location it
     can't resolve.
@@ -842,17 +889,19 @@ lore-specific deviation.
 
 ## Collision review and entity merge
 
-The classifier writes `name_collision_flag = true` on a
-freshly-created entity when it may duplicate an existing
-namesake: a row of the same name it didn't match strongly enough
-to absorb into, or a partial namesake that a similar description
-or a shared scene makes likely. It stores that namesake as the
+The classifier, or the per-turn writer creating a place or an
+item, writes `name_collision_flag = true` on a freshly-created
+entity when it may duplicate an existing namesake: a row of the
+same name it didn't match strongly enough to absorb into, or a
+partial namesake that a similar description, a shared scene or,
+for a place, a shared parent makes likely. It stores that namesake as the
 row's partner, and why it flagged. The flag means "this could be
 a duplicate; the user should decide." Schema and classifier rules
 live in
-[`memory/edge-cases.md → Name collision`](../../../memory/edge-cases.md#name-collision-and-disambiguation)
+[`memory/edge-cases.md → Name collision`](../../../memory/edge-cases.md#name-collision-and-disambiguation),
+[`memory/classifier.md → Disambiguation`](../../../memory/classifier.md#disambiguation-on-new-character-mentions)
 and
-[`memory/classifier.md → Disambiguation`](../../../memory/classifier.md#disambiguation-on-new-character-mentions).
+[`memory/piggyback.md → Matching before creating`](../../../memory/piggyback.md#matching-before-creating).
 
 The World panel is the only surface where the flag is resolved.
 Three resolution paths are offered: **merge** the two rows into
@@ -907,14 +956,16 @@ lands on: keyboard focus on web, the screen reader's on native.
 On web, a surface that takes focus before the jump lands (a menu
 opened in the meantime) keeps it.
 
-A flagged row pairs with its stored partner, the namesake the
-classifier compared it against, so the strip names exactly that row
+A flagged row pairs with its stored partner, the namesake its
+writer compared it against, so the strip names exactly that row
 and nothing is guessed from names. Two rows are namesakes under the
 classifier's rule
 ([`classifier.md → Disambiguation`](../../../memory/classifier.md#disambiguation-on-new-character-mentions)):
 same kind, and the same name trimmed and case-folded, one name's
 words inside the other's, or one name among the other's keywords;
-staged and retired rows included. A flag whose partner the branch no
+staged and retired rows included. A location pair flagged
+`same-parent` is a pair only while the two share a parent
+([`piggyback.md → Matching before creating`](../../../memory/piggyback.md#matching-before-creating)). A flag whose partner the branch no
 longer has is dormant: it has nothing to pair with, so it gets no
 strip and counts toward no pill or badge. Writes keep dormant flags
 from forming, each in the same action and delta-logged, so CTRL-Z
@@ -925,10 +976,14 @@ re-flags the row:
 - a rename (a detail-pane Save, or the dialog's [Rename](#rename))
   after which a flagged row and its partner stop being namesakes
   clears that row's flag;
+- a re-parent (a detail-pane Save) that separates a `same-parent`
+  pair clears the flag, as a rename does;
 - a [merge](#merge) re-points a flag whose partner it deletes at the
   surviving row, and then clears any flag pairing the surviving row
   that isn't a namesake pair any more, since the merge can change
-  its name.
+  its name, or a place's parent. A surviving row whose own flag named
+  the deleted row takes the deleted row's live partner and reason
+  instead ([Reversibility](#reversibility)).
 
 A reversal can still leave one, such as undoing the partner's
 create. It stays hidden until the partner returns (ids are never
@@ -945,10 +1000,11 @@ user and the action with no compensating browsing benefit.
 
 `Resolve →` opens a modal anchored to the World panel. Header
 states the collision from the two rows' current names:
-`⚠ Two characters named "Kael"` when the names are the same, and
+`⚠ Two characters named "Kael"` when the names are the same (places,
+items or factions by the pair's kind), and
 `⚠ "Kael" may be "Kael Stormborn"` otherwise, the row the strip was
-opened from first. Under it, a reason line gives why the classifier
-flagged that row:
+opened from first. Under it, a reason line gives why that row was
+flagged:
 
 | Stored reason | Line                                                                                          |
 | ------------- | --------------------------------------------------------------------------------------------- |
@@ -957,6 +1013,7 @@ flagged that row:
 | `distinct`    | Their descriptions differ.                                                                    |
 | `in-scene`    | Their descriptions differ, but "Kael Stormborn" was in the scene where "Kael" first appeared. |
 | `no-signal`   | Their descriptions couldn't be compared.                                                      |
+| `same-parent` | Both are in "The Rusty Anchor". (At the root: Both are top-level places.)                     |
 
 When the two are namesakes only through a keyword, a basis line
 names it, read from the current keywords:
@@ -970,7 +1027,10 @@ three resolution paths as a primary action picker:
 Default is `Merge` — the most common intended resolution. Each
 path collapses the dialog to a different body shape (below).
 All paths are dismissible without writes (`Cancel` in the footer
-or Esc).
+or Esc). On phone only, the title and the mode picker stay fixed
+while the reason, basis and description lines become the first block
+of the scrolling body, so the merge choices keep their room; wider
+tiers keep the fixed header.
 
 When the open row has unsaved edits, `Resolve →` routes through
 the pane's Save / Discard / Cancel guard first, as [Delete](#delete)
@@ -1040,8 +1100,7 @@ Field-level rules:
   and for keywords, keeps the canonical's entries in their order,
   with the other row's additions after them, the order the chips
   show. The merge builds it from the rows as they are when it
-  writes, less the terms the user dropped, so a keyword the
-  classifier adds while the merge waits is kept.
+  writes, less the terms the user dropped.
 - **`state` JSON** — taken whole-side from canonical. Per-field
   diff inside `state` is out of scope for v1: schema shape
   varies per kind (character / location / item / faction),
@@ -1092,7 +1151,7 @@ non-canonical's counts:
   rewritten to canonical. A ref between the two rows doesn't
   count: it collapses rather than moves, and when it is the
   canonical's (a location parented under the non-canonical) a
-  footnote says the canonical loses it. A holder of a
+  footnote says the canonical loses it and becomes unplaced. A holder of a
   non-canonical item drops it instead when the canonical item
   already has a position ([Reversibility](#reversibility)), and
   still counts here.
@@ -1146,7 +1205,20 @@ that location's parent to the canonical would make the canonical its
 own ancestor — picking the other row as canonical merges cleanly).
 A parent chain the merge touches that already loops or runs past
 the depth cap refuses as `parent-chain-broken`; fix that chain
-first. The reason clears once the user changes a merge choice.
+first. A location merge also runs the checks a Save does
+([`data-model.md → LocationState shape`](../../../data-model.md#locationstate-shape)),
+on the status, mode and parent it would leave: it refuses a retired
+result while the story is in either place (`story-inside`) or while
+either has a place inside that isn't retired (`places-inside`), a
+result that isn't retired under a retired parent (`retired-parent`),
+and a result that puts the place the story is in inside a disabled
+place it wasn't inside, by that place's own mode or an ancestor's
+(`story-inside`): as with a Save, a disabled region the story walked
+into stays mergeable. A merge that changes which places are disabled adds
+no line to the confirm. A retired row comes back through a merge too:
+picking `active` for the status brings it back, and its retired
+children may sit inside the active result. The reason clears once the
+user changes a merge choice.
 
 **The tail scene.** The tail entry's scene is the next turn's
 retrieval floor, and the newer row a default merge deletes is the one
@@ -1172,7 +1244,7 @@ Body is a single inline rename form, two rows stacked:
 
 ```
 Older · 3 days ago:   [ Kael                       ]
-Newer · just now:     [ Kael (the guardsman)       ]
+Newer · just now:     [ Kaelan (the guardsman)     ]
 ```
 
 Editing either field dirties the form. Save commits under one
@@ -1244,9 +1316,16 @@ Merge writes, in order:
   array drops it — since a location can't parent itself), the
   non-canonical's `at_location_id` when the canonical item has no
   position of its own (no holder, no placement), so the merged item
-  keeps whichever position either side had, and the flag clear when
-  the canonical's partner is the non-canonical, is gone, or isn't the
-  merged canonical's namesake.
+  keeps whichever position either side had, and the canonical's flag
+  when the merge changes it. The flag stays when it names a live
+  namesake of the merged row other than the non-canonical, and for a
+  `same-parent` flag one that still shares the merged row's parent.
+  Otherwise (its partner is the non-canonical, is gone, or no longer
+  pairs with the merged row) the canonical takes over the
+  non-canonical's own partner and reason when that row is live, isn't
+  the canonical and pairs with the merged row under that reason; else
+  the flag clears. Names and parents are read as they stand after the
+  merge.
 - `entities` op=`update` on every other entity that held a ref to
   the non-canonical: its `state` paths rewritten to the canonical,
   one patch per entity, a character's `lastSeenAt` location among
@@ -1262,8 +1341,10 @@ Merge writes, in order:
   the non-canonical or the canonical: a partner naming the
   non-canonical becomes the canonical, and the flag clears (with its
   partner and reason) when the row and the merged canonical aren't
-  namesakes; no write when neither applies. Folded into that row's
-  `state` patch above when it has one.
+  namesakes, or for a `same-parent` flag no longer share a parent,
+  both read as they stand after the merge; no write when neither
+  applies. Folded into that row's `state` patch above when it has
+  one.
 - `happening_awareness` op=`create` per moved row, on the
   canonical, carrying the row's `retrieval_count`. A row for a
   happening the canonical already knows, or one gone from the branch,
@@ -1328,8 +1409,8 @@ clears. Both unwind as one step, like the merge.
 
 The resolve dialog is a write surface; per
 [`principles.md → Edit restrictions during in-flight generation`](../../principles.md#edit-restrictions-during-in-flight-generation),
-the `Resolve →` button is disabled while narrative or
-chapter-close generation is running, with the same disabled-
+the `Resolve →` button is disabled while a turn, a memory update or
+a chapter close is running, with the same disabled-
 tooltip language as the entity save bar. A dialog already open
 when generation starts stays open, with every submit disabled and
 that reason under its footer; the write refuses while generation
@@ -1339,12 +1420,14 @@ discovery isn't gated, only the write.
 ### Authorship and 3+ collisions
 
 Resolution writes deltas with `source = user_edit`. The classifier
-sets the flag, with its partner and reason, at create
+or the per-turn writer sets the flag, with its partner and reason, at
+create; a pass also sets it when a rename meets a name another row
+holds, and chapter close on a row it judges a duplicate
 ([authorship contract](../../../data-model.md#authorship-contract));
 clearing it is always a user write, delta-logged, so CTRL-Z
 re-flags the row. Where
 [user precedence](../../../memory/cadence.md#user-edits-and-classifier-writes)
-applies (status, keywords, relationship views), what a resolution
+applies (every field a pass or a close updates), what a resolution
 writes counts as the user's: a classifier fact from prose older than
 the resolution doesn't overwrite it. That includes a relationship
 view the merge carries over from the non-canonical, though the
@@ -1358,8 +1441,12 @@ stored partner, and resolving a pair clears only the flags of that
 pair that name each other or name a row that's gone. A flag on a row
 of the pair that names a live third row stays, since it is a separate
 question, and a merge that deletes a flagged row's partner re-points
-the flag at the surviving row. So a dormant flag clears the next time
-its row is in a resolved pair. N-way merge UI is not v1.
+the flag at the surviving row. A surviving row whose own partner was
+the deleted row takes the deleted row's live partner and reason
+instead, when that row pairs with the merged row under that reason (a
+namesake, and for `same-parent` one sharing its parent).
+So a dormant flag clears the next time its row is in a resolved
+pair. N-way merge UI is not v1.
 
 ## Mobile expression
 
@@ -1475,7 +1562,10 @@ overflows.
   per
   [`mobile/layout.md → Mapping — desktop to mobile`](../../foundations/mobile/layout.md#mapping--desktop-to-mobile);
   it has no Sheet expression. Its body scrolls and its footer stays
-  put. The merge body's column grid ([Merge](#merge)) stacks: each
+  put. Its title and mode picker stay fixed, while the reason, basis
+  and description lines open the scrolling body so the merge choices
+  keep their room; wider tiers keep the fixed header
+  ([Resolve dialog](#resolve-dialog)). The merge body's column grid ([Merge](#merge)) stacks: each
   divergent field is a section (field name as header, then a radio
   row per side), and with no column headers to read, each radio
   carries an inline age caption under its value. The canonical

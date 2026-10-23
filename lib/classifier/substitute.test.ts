@@ -3,11 +3,12 @@ import { z } from 'zod'
 
 import { IdBiMap } from '@/lib/ids'
 
-import { classifierExtractionSchema } from './schema'
+import { classifierExtractionWithPlacesSchema } from './schema'
 import { PLACEHOLDER_FIELDS, substituteClassifierIds } from './substitute'
 
 const CHAR_A = 'char_11111111-1111-1111-1111-111111111111'
 const CHAR_B = 'char_22222222-2222-2222-2222-222222222222'
+const LOC_A = 'loc_33333333-3333-3333-3333-333333333333'
 
 /** Every string-valued property name the wire schema declares, at any depth. */
 function stringFieldsOf(schema: z.ZodType): string[] {
@@ -18,7 +19,9 @@ function stringFieldsOf(schema: z.ZodType): string[] {
     const properties = record.properties as Record<string, unknown> | undefined
     if (properties) {
       for (const [name, child] of Object.entries(properties)) {
-        if ((child as { type?: string }).type === 'string') found.add(name)
+        const { type, anyOf } = child as { type?: string; anyOf?: { type?: string }[] }
+        // A nullable string is `anyOf [string, null]`.
+        if (type === 'string' || anyOf?.some((member) => member.type === 'string')) found.add(name)
         walk(child)
       }
       return
@@ -48,11 +51,10 @@ const NON_REF_FIELDS = [
 ]
 
 describe('PLACEHOLDER_FIELDS', () => {
-  // The link plan.ts's four resolveRef call sites and this list otherwise lack:
-  // a fifth ref-bearing field in the schema fails here until it is classified,
-  // instead of silently never resolving and landing in unresolvedRefs.
+  // A new ref-bearing schema field fails here until classified, instead of silently
+  // never resolving and landing in unresolvedRefs. The places schema is the superset.
   it('partitions every string field the schema declares into ref-bearing or not', () => {
-    expect(stringFieldsOf(classifierExtractionSchema)).toEqual(
+    expect(stringFieldsOf(classifierExtractionWithPlacesSchema)).toEqual(
       [...PLACEHOLDER_FIELDS, ...NON_REF_FIELDS].sort(),
     )
   })
@@ -111,6 +113,27 @@ describe('substituteClassifierIds', () => {
     expect(out).toEqual({
       newCharacters: [{ handle: collide }],
       relationships: [{ subject: collide, object: 'c9' }],
+    })
+  })
+
+  it("maps a new place's parent placeholder back, and leaves another new place's handle", () => {
+    const idMap = new IdBiMap()
+    const town = idMap.allocate(LOC_A)
+    const out = substituteClassifierIds(
+      {
+        newPlaces: [
+          { handle: 'new:inn', parent: town },
+          { handle: 'new:cellar', parent: 'new:inn' },
+        ],
+      },
+      idMap,
+      new Set(['new:inn', 'new:cellar']),
+    )
+    expect(out).toEqual({
+      newPlaces: [
+        { handle: 'new:inn', parent: LOC_A },
+        { handle: 'new:cellar', parent: 'new:inn' },
+      ],
     })
   })
 

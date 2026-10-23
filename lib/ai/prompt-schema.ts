@@ -98,39 +98,37 @@ export function schemaToTypeScriptBlock(schema: JsonSchema, name = 'Response'): 
   return `type ${name} = ${typeBody}`
 }
 
-const SCHEMA_INSTRUCTION_TEMPLATE = `Respond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:
+// Placement and its rationale: architecture.md → Structured output.
+const SCHEMA_CONTRACT_TEMPLATE = `Respond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:
 
-{schema}
+{schema}`
+const SCHEMA_CLOSING = 'Output ONLY the JSON object, no other text or markdown.'
 
-Output ONLY the JSON object, no other text or markdown.`
+const SIMPLE_JSON_CONTRACT = 'Respond strictly with valid JSON.'
+const SIMPLE_JSON_CLOSING = 'Output ONLY the JSON, no other text.'
 
-const SIMPLE_JSON_INSTRUCTION =
-  'Respond strictly with valid JSON. Output ONLY the JSON, no other text.'
+function appendToLastSystem(prompt: ModelPrompt, contract: string): ModelPrompt {
+  const lastSystemIdx = prompt.findLastIndex((msg) => msg.role === 'system')
+  if (lastSystemIdx === -1) return [{ role: 'system', content: contract }, ...prompt]
+  return prompt.map((msg, i) =>
+    i === lastSystemIdx && msg.role === 'system'
+      ? { ...msg, content: `${msg.content}\n\n${contract}` }
+      : msg,
+  )
+}
 
-function injectSchemaIntoPrompt(prompt: ModelPrompt, instruction: string): ModelPrompt {
-  const newPrompt = [...prompt]
-  const lastUserIdx = newPrompt.findLastIndex((msg) => msg.role === 'user')
-
-  if (lastUserIdx >= 0) {
-    const lastUserMsg = newPrompt[lastUserIdx]
-    if (lastUserMsg && lastUserMsg.role === 'user') {
-      const textParts = lastUserMsg.content.filter((p) => p.type === 'text')
-      const otherParts = lastUserMsg.content.filter((p) => p.type !== 'text')
-      const combinedText = textParts.map((p) => p.text).join('\n') + '\n\n' + instruction
-
-      newPrompt[lastUserIdx] = {
-        ...lastUserMsg,
-        content: [{ type: 'text', text: combinedText }, ...otherParts],
-      }
-    }
-  } else {
-    newPrompt.push({
-      role: 'user',
-      content: [{ type: 'text', text: instruction }],
-    })
+function appendToLastUser(prompt: ModelPrompt, closing: string): ModelPrompt {
+  const lastUserIdx = prompt.findLastIndex((msg) => msg.role === 'user')
+  if (lastUserIdx === -1) {
+    return [...prompt, { role: 'user', content: [{ type: 'text', text: closing }] }]
   }
-
-  return newPrompt
+  return prompt.map((msg, i) => {
+    if (i !== lastUserIdx || msg.role !== 'user') return msg
+    const textParts = msg.content.filter((p) => p.type === 'text')
+    const otherParts = msg.content.filter((p) => p.type !== 'text')
+    const text = textParts.map((p) => p.text).join('\n') + '\n\n' + closing
+    return { ...msg, content: [{ type: 'text', text }, ...otherParts] }
+  })
 }
 
 /** Declares the JSON output contract on the call so a provider with native structured output (or the prompt-injection middleware below) can act on it. */
@@ -145,9 +143,8 @@ export function jsonResponseFormatMiddleware(schema: JsonSchema): LanguageModelM
 }
 
 /**
- * For providers/models without native structured output: converts a declared
- * `responseFormat: json` into the schema rendered as TypeScript types inside
- * the prompt, and strips the responseFormat from the request.
+ * For providers without native structured output: swaps `responseFormat: json` for TS types ending
+ * the system message (created if absent) and a closing line ending the last user message.
  */
 export function promptSchemaMiddleware(): LanguageModelMiddleware {
   return {
@@ -159,16 +156,19 @@ export function promptSchemaMiddleware(): LanguageModelMiddleware {
         return params
       }
 
-      const instruction = responseFormat.schema
-        ? SCHEMA_INSTRUCTION_TEMPLATE.replace(
-            '{schema}',
-            schemaToTypeScriptBlock(responseFormat.schema),
-          )
-        : SIMPLE_JSON_INSTRUCTION
+      const [contract, closing] = responseFormat.schema
+        ? [
+            SCHEMA_CONTRACT_TEMPLATE.replace(
+              '{schema}',
+              schemaToTypeScriptBlock(responseFormat.schema),
+            ),
+            SCHEMA_CLOSING,
+          ]
+        : [SIMPLE_JSON_CONTRACT, SIMPLE_JSON_CLOSING]
 
       return {
         ...params,
-        prompt: injectSchemaIntoPrompt(params.prompt, instruction),
+        prompt: appendToLastUser(appendToLastSystem(params.prompt, contract), closing),
         responseFormat: undefined,
       }
     },

@@ -3,10 +3,19 @@ import { useRouter } from 'expo-router'
 import type { ResolveFailureKind } from '@/lib/ai'
 import type { SystemFailureMeta } from '@/lib/db'
 import { t } from '@/lib/i18n'
-import type { PipelineError } from '@/lib/pipeline'
+import {
+  CLASSIFIER_HELD,
+  type PipelineError,
+  type RejectedStart,
+  type TxResult,
+} from '@/lib/pipeline'
 import { openEmbedderSwapDialog } from '@/lib/stores'
 
+import type { PassRefusal } from './send-run'
+
 export type SystemEntryFixAction = { label: string; onPress: () => void } | undefined
+
+type LeaveStory = (proceed: () => void) => void
 
 /**
  * Hand the draft back only once the entry is gone: a rejected clear keeps Retry, and a
@@ -75,6 +84,85 @@ export function toSystemFailureMeta(
   }
 }
 
+// The pass's own vocabulary (classifier.md → Failure policy): a turn's copy names the narrative
+// agent, which would send the user to fix the wrong profile.
+export function describePassFailure(
+  refusal: PassRefusal,
+  /** What the entry stores: the held copy says the text is kept only when it is. */
+  submission: SystemFailureMeta['submission'],
+): { content: string; detail?: string } {
+  if (refusal.held)
+    return {
+      content: t(
+        submission != null
+          ? 'reader:systemEntry.failure.memoryHeld'
+          : 'reader:systemEntry.failure.memoryHeldNoText',
+      ),
+    }
+  const { error } = refusal
+  if (error?.kind === 'provider') {
+    return {
+      content: t('reader:systemEntry.failure.memory'),
+      detail: error.detail != null ? `${error.reason}: ${error.detail}` : error.reason,
+    }
+  }
+  if (error?.kind === 'config-resolver') {
+    const contentKey =
+      error.failure === 'no-profile-assigned'
+        ? 'reader:systemEntry.failure.memoryNoProfileAssigned'
+        : error.failure === 'profile-missing'
+          ? 'reader:systemEntry.failure.memoryProfileMissing'
+          : error.failure === 'override-provider-missing'
+            ? 'reader:systemEntry.failure.memoryOverrideProviderMissing'
+            : 'reader:systemEntry.failure.memoryProviderMissing'
+    return { content: t(contentKey), detail: error.detail }
+  }
+  return { content: t('reader:systemEntry.failure.memory'), detail: error?.detail }
+}
+
+export function toPassFailureMeta(
+  refusal: PassRefusal,
+  submission: SystemFailureMeta['submission'],
+): SystemFailureMeta {
+  const error = refusal.held ? undefined : refusal.error
+  const { detail } = describePassFailure(refusal, submission)
+  return {
+    kind: error?.kind ?? 'orchestrator',
+    ...(error?.kind === 'config-resolver' ? { failure: error.failure } : {}),
+    ...(detail != null ? { detail } : {}),
+    ...(submission != null ? { submission } : {}),
+    pass: refusal.held ? 'held' : 'failed',
+  }
+}
+
+/**
+ * A pass-failure entry's Retry: runs the pass alone. A commit clears the entry through `dismiss`;
+ * a failure, a throw or a hold rewrites it, a failure as held when its reversal didn't commit; a
+ * cancel leaves the entry as it was. A throw from `held`, `dismiss` or `rewrite` propagates.
+ */
+export async function retryPassEntry(deps: {
+  runPass: () => Promise<TxResult | RejectedStart>
+  /** Read once the pass ended: whether the branch is held `running`. */
+  held: () => Promise<boolean>
+  dismiss: () => Promise<void>
+  rewrite: (refusal: PassRefusal) => Promise<void>
+  notify: (message: string) => void
+}): Promise<void> {
+  let result: TxResult | RejectedStart
+  try {
+    result = await deps.runPass()
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    return deps.rewrite({ held: false, error: { kind: 'orchestrator', detail } })
+  }
+  if (result.outcome === 'completed') return deps.dismiss()
+  if (result.outcome === 'failed')
+    return deps.rewrite((await deps.held()) ? { held: true } : { held: false, error: result.error })
+  if (result.outcome !== 'rejected') return
+  if (result.blockedBy === CLASSIFIER_HELD) return deps.rewrite({ held: true })
+  deps.notify(t('reader:systemEntry.passRetryBlocked', { reason: result.blockedBy }))
+}
+
 // Shared by the system-entry bubble and the suggestion strip: a config-resolver
 // failure is deterministic, so both surfaces route to settings instead of
 // offering a retry that cannot succeed. Widened past ResolveFailureKind because
@@ -83,6 +171,8 @@ export function toSystemFailureMeta(
 export function useConfigFixAction(
   failure: ResolveFailureKind | (string & {}) | undefined,
   storyId: string | null,
+  /** App Settings is outside the story, so the push waits on the host's story-leave guard. */
+  leaveStory: LeaveStory,
 ): SystemEntryFixAction {
   const router = useRouter()
   if (failure === undefined) return undefined
@@ -101,7 +191,10 @@ export function useConfigFixAction(
       : failure === 'profile-missing'
         ? 'reader:systemEntry.fixProfile'
         : 'reader:systemEntry.fixDefault'
-  return { label: t(labelKey), onPress: () => router.push('/settings?tab=providers') }
+  return {
+    label: t(labelKey),
+    onPress: () => leaveStory(() => router.push('/settings?tab=providers')),
+  }
 }
 
 // components/story-settings/memory-panel.tsx is the swap dialog's only mount
@@ -123,12 +216,18 @@ export function useSystemEntryActions(
   failure: SystemFailureMeta | undefined,
   onRetry: () => void,
   storyId: string | null,
-): { onRetry: () => void; fixAction: SystemEntryFixAction } {
+  leaveStory: LeaveStory,
+): { onRetry: (() => void) | undefined; fixAction: SystemEntryFixAction } {
   const configFix = useConfigFixAction(
     failure?.kind === 'config-resolver' ? failure.failure : undefined,
     storyId,
+    leaveStory,
   )
   const embedderFix = useEmbedderFixAction(failure?.kind === 'embedder' ? storyId : null)
-  // The two gates are kind-exclusive, so the `??` order carries no meaning.
-  return { onRetry, fixAction: embedderFix ?? configFix }
+  // A held branch can't run a pass, so its entry offers Dismiss alone. The two fix gates are
+  // kind-exclusive, so the `??` order carries no meaning.
+  return {
+    onRetry: failure?.pass === 'held' ? undefined : onRetry,
+    fixAction: embedderFix ?? configFix,
+  }
 }

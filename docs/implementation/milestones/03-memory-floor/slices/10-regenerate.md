@@ -45,7 +45,7 @@ slice enables it.
   survival-anchor consumer ("it fires even on
   regenerate-the-last-reply, when a catch-up pass landed between
   the reply and its regenerate").
-- [`generation-pipeline.md → Prose reversals and the classifier barrier`](../../../../generation-pipeline.md#prose-reversals-and-the-classifier-barrier)
+- [`generation-pipeline.md → Prose reversals and the interrupt`](../../../../generation-pipeline.md#prose-reversals-and-the-interrupt)
   — regenerate is one of the four bracketing reversal kinds.
 - [`ui/patterns/entry-card.md → Action cluster`](../../../../ui/patterns/entry-card.md#action-cluster)
   — regen's per-kind availability (AI entries only).

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { deltas } from '@/lib/db'
+import { deltas, pipelineRuns } from '@/lib/db'
 import {
   definePipeline,
   runPipeline,
@@ -11,13 +11,20 @@ import { generationStore } from '@/lib/stores'
 
 import { expectRan, makeHarness, resetSingletons } from './harness'
 
-const base = { affordance: 'invisible', gateBehavior: 'no-gate', concurrencyPolicy: {} } as const
+const base = {
+  affordance: 'pill-and-banner',
+  gateBehavior: 'hard-gate',
+  interruptible: 'pass',
+  concurrencyPolicy: {},
+} as const
 
 describe('reversalInProgress guard scope at the delta choke point', () => {
   beforeEach(() => resetSingletons())
   afterEach(() => resetSingletons())
 
-  it('lets a no-gate run already in flight land its periodic_classifier delta and complete', async () => {
+  // Mirrors bracketProseReversal: the flag rises before the interrupt aborts the pass, so a
+  // write past the abort check must land to be reversed; refused, it'd fail the run, not defer it.
+  it('lets an interruptible run already in flight land its periodic_classifier delta', async () => {
     const { db, ctx } = await makeHarness()
     let release!: () => void
     const gate = new Promise<void>((r) => {
@@ -48,11 +55,11 @@ describe('reversalInProgress guard scope at the delta choke point', () => {
       tailRan = true
       return { status: 'completed' }
     }
-    definePipeline({ kind: 'bg-classifier', phases: [{ name: 'p', run: phase }], ...base })
+    definePipeline({ kind: 'memory-run', phases: [{ name: 'p', run: phase }], ...base })
 
-    // Mirrors bracketProseReversal: the run is parked past its own gate (the classifier's
-    // LLM call) when the reversal flag flips, and its burst must still reach the delta log.
-    const inflight = runPipeline('bg-classifier', ctx)
+    // The run starts before the flag rises, so the start check never applies to it: this pins
+    // the choke point's scope, which refuses only user-originated sources.
+    const inflight = runPipeline('memory-run', ctx)
     generationStore.setReversalInProgress(true)
     release()
 
@@ -62,5 +69,21 @@ describe('reversalInProgress guard scope at the delta choke point', () => {
     // A 'noop'-coded rejection also completes the run and runs the tail, so the outcome
     // alone can't tell that apart from the burst actually landing.
     expect(await db.select().from(deltas)).toHaveLength(1)
+  })
+
+  it('refuses a fresh start of that kind while the flag is up', async () => {
+    const { db, ctx } = await makeHarness()
+    async function* phase(): AsyncGenerator<never, PhaseResult> {
+      return { status: 'completed' }
+    }
+    definePipeline({ kind: 'memory-run', phases: [{ name: 'p', run: phase }], ...base })
+
+    generationStore.setReversalInProgress(true)
+
+    expect(await runPipeline('memory-run', ctx)).toEqual({
+      outcome: 'rejected',
+      blockedBy: 'reversal',
+    })
+    expect(await db.select().from(pipelineRuns)).toHaveLength(0)
   })
 })

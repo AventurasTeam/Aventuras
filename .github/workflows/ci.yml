@@ -70,7 +70,7 @@ jobs:
 
       - name: Restore Playwright cache
         id: playwright-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
@@ -78,6 +78,14 @@ jobs:
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
+
+      # Cache saves run on main only; see .github/actions/pnpm-install/action.yml.
+      - name: Save Playwright cache
+        if: github.ref == 'refs/heads/main' && steps.playwright-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.playwright-cache.outputs.cache-primary-key }}
 
       - name: Install Playwright system deps
         if: steps.playwright-cache.outputs.cache-hit == 'true'
@@ -105,7 +113,8 @@ jobs:
           echo "versions=$versions" >> "$GITHUB_OUTPUT"
 
       - name: Restore Electron cache
-        uses: actions/cache@v6
+        id: electron-cache
+        uses: actions/cache/restore@v6
         with:
           path: |
             ~/.cache/electron
@@ -124,6 +133,15 @@ jobs:
       - name: Package desktop (unpacked)
         run: pnpm exec electron-builder --linux --dir
 
+      - name: Save Electron cache
+        if: github.ref == 'refs/heads/main' && steps.electron-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ steps.electron-cache.outputs.cache-primary-key }}
+
       # Electron needs Chromium's shared libraries; install-deps provides them
       # (and xvfb) without downloading a browser.
       - name: Install system libraries for Electron
@@ -132,7 +150,8 @@ jobs:
       # Fixture embedder model (~24 MB from Hugging Face); the harness downloads
       # it on a cache miss. Keyed on the catalog so a model/revision bump busts.
       - name: Restore embedder model cache
-        uses: actions/cache@v6
+        id: embedder-cache
+        uses: actions/cache/restore@v6
         with:
           path: ~/.cache/aventuras-e2e
           key: e2e-embedder-${{ hashFiles('lib/embedder/catalog-data.json') }}
@@ -142,3 +161,10 @@ jobs:
       # built binary; the harness seeds a throwaway userData per run.
       - name: Run E2E (packaged, headless via xvfb)
         run: pnpm test:e2e:packaged
+
+      - name: Save embedder model cache
+        if: github.ref == 'refs/heads/main' && steps.embedder-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/aventuras-e2e
+          key: ${{ steps.embedder-cache.outputs.cache-primary-key }}

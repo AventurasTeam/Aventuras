@@ -147,6 +147,8 @@ function startHardGateRun(): void {
     runId: 'run-hard-gate',
     kind: 'per-turn',
     gateBehavior: 'hard-gate',
+    interruptible: null,
+    beforeTurn: false,
     actionId: 'action-hard-gate',
     storyId: 'story-1',
     branchId: 'branch-1',

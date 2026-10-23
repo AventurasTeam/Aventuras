@@ -97,8 +97,8 @@ read them.
   not the builder. But the builder asks the engine which variables the
   template actually references (following `{% include %}`), and skips
   the read behind one it never mentions; the variable is still there,
-  just empty. The classifier template names neither `entries` nor any
-  scene variable, so its build issues one query instead of four.
+  just empty. The fallback classifier template reads `lastTurns` and
+  never names `entries`, so its build skips the prompt-buffer read.
 - **`entity.id` exposed to templates is the placeholder, not the
   UUID.** Per
   [`data-model.md → ID shape`](./data-model.md#id-shape--kind-prefixed-uuids-throughout)
@@ -156,6 +156,9 @@ override it — that violates the north star. Two categories:
 - `truncate_tokens: n` — truncate to N tokens, smart at sentence
   boundaries
 - `prose_join` — `["A","B","C"]` → `"A, B, and C"`
+- `one_line` — a string with every whitespace run, line breaks
+  included, as one space, for a value that must keep to its line: a
+  labelled state line or a one-line list item
 - `json` — stringify for cases where the prompt embeds JSON literally
 - `has_keyword: source_text` — truthy when any of the filter's
   keywords appear in source_text
@@ -166,7 +169,7 @@ fn)`. Filter function is TypeScript, typed end-to-end.
 
 ### Macros — reusable Liquid snippets, not code-side formatters
 
-Text formatting — a character block, a happening rendered for memory
+Text formatting — an entity's state lines, a happening rendered for memory
 recall, an output-format directive — belongs in **macros**, not
 filters. A macro is a `.liquid` snippet included from other templates
 via `{% include 'macro-id' %}`. The old app had a `staticContent`
@@ -188,8 +191,11 @@ Every macro is created with a **context group tag**. The group drives:
 
 Example built-in macros:
 
-- `macro_character_block` (`generationContext`) — a character formatted
-  as a description block
+- `macro_entity_state` (`generationContext`) — an entity's state
+  lines, shared by every block that shows an entity
+  ([Entity state on the template surface](#entity-state-on-the-template-surface))
+- `macro_item_line` (`generationContext`) — one held or loose item's
+  line, shared by `Holds:` and `Here:`
 - `macro_happening_for_memory` (`generationContext`) — a happening
   formatted as it would appear in a POV character's memory, including
   the source descriptor
@@ -204,10 +210,68 @@ iterate on has two templates — `tmpl_wizard_genre` and
 `tmpl_wizard_genre_refine` — differing only in the leading directive
 and the revise block. Everything else (the output contract and the
 grounding state) lives in one macro both include. Splitting them the
-other way duplicates the quality bar, which is the half most likely
-to be tuned and so the half most likely to drift. A refine template
+other way duplicates the quality bar, which is the part most likely
+to be tuned and so the part most likely to drift. A refine template
 reads `current` and `instruction`; it carries no `guidance`, which
 steers a generate.
+
+### System and user halves
+
+Every template has two Liquid sources, a **system half** and a **user
+half**, and a call sends them as a system message followed by one user
+message. The narrative call is exactly that pair; an agent that loops
+over tool calls sends the pair first and appends its steps after it.
+
+- **Both halves render against the same context.** Either may include
+  any macro its group allows, the include validator checks both, and
+  a template reads the union of what its halves read, so an unread
+  variable still costs no query. Each half renders on its own, though:
+  a variable one half assigns or captures is unset in the other.
+- **A blank system half is legal.** The call then sends no system
+  message, since providers reject an empty one, unless the
+  [structured-output contract](#structured-output--the-json-contract-is-not-pack-content)
+  supplies one.
+- **A blank user half is a template error,** raised the way a render
+  failure is: there would be nothing for the model to answer.
+
+**The system half is stable.** It holds what stays the same across a
+story's calls of that template, its standing instructions and the
+story definition, and must render byte-identically from one call to the
+next unless the user edits the story. Everything that changes per call
+goes in the user half: the scene, retrieval, the history, and a format
+directive that depends on a per-call flag. Providers send the system
+message first and cache from the start of the request, so one per-call
+byte there moves the prefix every one of them reuses. Like the
+[empty-bucket rule](#empty-retrieval-buckets--author-contract), this is
+an author contract; the deferred
+[pack validator](./parked.md#pack-validation-contract) warns on a
+system half that reads a per-call variable. A block that points at
+user-half content by position ("the LAST entry above") stays in the
+user half beside it.
+
+**The cache marker.** OpenAI-compatible servers generally reuse a
+request's longest matching token prefix on their own, so for them the
+order of the blocks is what counts. Anthropic
+caches only at an explicit breakpoint, so on an `anthropic` provider the
+call layer marks the last system block of the request as sent, the
+structured-output contract included. Anthropic ignores a marker whose
+prefix is too short, at no cost, and charges extra to write the cache,
+so the marker goes only on calls that follow each other at a turn's
+pace: the narrative call, and the piggyback fallback classifier when it
+is the turn's regular classifier because piggyback isn't firing. The
+periodic classifier, suggestion refresh and the wizard carry none.
+Wider caching is
+[parked](./parked.md#prompt-cache-optimization).
+
+The bundled pack splits its templates this way:
+
+| Template                      | System half                                                                     | User half                                                                                                                                                                                       |
+| ----------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-turn narrative            | Setting, Genre, Tone, Calendar, the output-format line                          | In scene, Current location, the location map and held items, the memory blocks, the ID instructions, Story so far, the state and suggestion emission                                            |
+| Piggyback fallback classifier | Calendar                                                                        | Everything else in its order: the ID roster, the scene, the location map and held items, the memory blocks, the characters the turn names, the turns and the report directives that follow them |
+| Periodic classifier           | The role line and the rules                                                     | The Known lists and the turns                                                                                                                                                                   |
+| Suggestion refresh            | Setting, Genre, Tone                                                            | In scene, Story so far, the next-turn options and the reader's draft                                                                                                                            |
+| Wizard templates              | Empty; on the prompt-injection path the structured-output contract supplies one | Everything                                                                                                                                                                                      |
 
 ### Structured output — the JSON contract is not pack content
 
@@ -218,11 +282,20 @@ edit can never break reply parsing. Field descriptions authored with
 `.describe()` on the schema reach the model as comments on the
 rendered interface. The profile's `structuredOutput` param picks the
 mechanism: `force-on` sends the schema as the provider-native
-response format; `force-off` appends it to the prompt as a
+response format; `force-off` renders it into the prompt as a
 TypeScript `interface Response` block via AI SDK middleware
 (`lib/ai/prompt-schema.ts`); `auto` takes the prompt-injection path
 until provider capability detection lands, at which point it will
 follow the detected capability.
+
+The injected contract is split across the
+[two halves](#system-and-user-halves). Its lead-in and the interface
+block go at the end of the system message, which the middleware
+creates when the template's system half is blank: the contract is
+fixed per call site, so it belongs to the stable prefix. Its closing
+"Output ONLY the JSON object" line goes at the end of the user message,
+where the models that need the prompt-injection path follow a format
+instruction best.
 
 ### Template and macro id space
 
@@ -230,9 +303,10 @@ Template ids are a **closed static union**: the render entry
 (`renderTemplate`) accepts only a known `TemplateId`, so authors edit
 content within a fixed template set rather than defining arbitrary
 template pipelines. Macro ids carry a `macro_` prefix
-(e.g. `macro_output_format_narrative`); the engine merges template and
-macro ids into one flat lookup for include resolution, and the prefix
-keeps that merged namespace collision-free.
+(e.g. `macro_output_format_narrative`); the engine merges each
+template's two halves (keyed `<id>#system` and `<id>#user`) and every
+macro into one flat lookup for include resolution, and the prefix keeps
+that merged namespace collision-free.
 
 ### Empty retrieval buckets — author contract
 
@@ -264,7 +338,8 @@ any `{% for x in retrieved* %}` lacks a sibling or wrapping
 A **pack is a complete, self-contained bundle** of prompts + macros.
 It contains the full required surface — every template the app
 invokes, every macro the app's templates include — not a patch layer
-on top of a default.
+on top of a default. A template is its
+[two halves](#system-and-user-halves); a macro is one source.
 
 **Creation flow:** a user creating a custom pack starts with a **full
 copy of the default pack**. Every prompt and macro is already there;
@@ -316,20 +391,20 @@ buried in code that isn't reachable from a template.
 Different surfaces need different variable sets. The template registry
 maps every `templateId` to exactly one group:
 
-| Group               | Consumers                                                                                                                                                                                                               |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `generationContext` | Pipeline + post-pipeline generation templates: classifier, narrative, suggestions, action-choices, chapter-analysis, chapter-summarization, translate-\*, style-reviewer, agentic-retrieval, image-prompt-analysis, ... |
-| `wizard`            | Story-creation flow: setting expansion, character elaboration, opening generation, supporting characters                                                                                                                |
-| `vault`             | Vault (reusable library) AI interactions                                                                                                                                                                                |
-| `lore`              | Lore-management agent templates (at chapter close)                                                                                                                                                                      |
-| `import`            | Character-card imports, vault imports, lorebook classifiers                                                                                                                                                             |
-| `portrait`          | Character portrait generation                                                                                                                                                                                           |
-| `translateWizard`   | Translation-wizard flow                                                                                                                                                                                                 |
-| `staticContent`     | Variable-free macros (output-format directives, boilerplate blocks) — includable from any group                                                                                                                         |
+| Group               | Consumers                                                                                                                                                                                                                        |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generationContext` | Pipeline + post-pipeline generation templates: fallback classifier, narrative, suggestions, action-choices, chapter-analysis, chapter-summarization, translate-\*, style-reviewer, agentic-retrieval, image-prompt-analysis, ... |
+| `classifierContext` | The periodic classifier: the unclassified turn window with each turn's saved scene, and the branch's entity, relationship and happening rosters                                                                                  |
+| `wizard`            | Story-creation flow: setting expansion, character elaboration, opening generation, supporting characters                                                                                                                         |
+| `vault`             | Vault (reusable library) AI interactions                                                                                                                                                                                         |
+| `lore`              | Lore-management agent templates (at chapter close)                                                                                                                                                                               |
+| `import`            | Character-card imports, vault imports, lorebook classifiers                                                                                                                                                                      |
+| `portrait`          | Character portrait generation                                                                                                                                                                                                    |
+| `translateWizard`   | Translation-wizard flow                                                                                                                                                                                                          |
+| `staticContent`     | Variable-free macros (output-format directives, boilerplate blocks) — includable from any group                                                                                                                                  |
 
-For v1 ship `generationContext` + `wizard` (likely — wizard lands with
-the first "create a story" flow). The others land with their
-corresponding features. The group system itself is day-one
+V1 ships `generationContext`, `classifierContext` and `wizard`. The
+others land with their corresponding features. The group system itself is day-one
 infrastructure; without it the prompt editor can't provide autocomplete
 or validate references.
 
@@ -367,12 +442,115 @@ for authoring ergonomics.
 **Every context is a projection, never a spread.** Both
 `buildGenerationContext` and the wizard's `wizardTemplateContext` list
 their keys explicitly and project the rows they carry — runtime entity
-rows down to `PROMPT_ENTITY_FIELDS`, wizard cast and lore rows minus
-`tags`. Handing a template a whole DB row or a whole working state makes
-every present and future field part of the authoring surface, and a
-field a user's pack can reach is a field that can't be withdrawn.
-Parity tests run in both directions: the registry's variables must all
-be emitted, and nothing outside the registry may be.
+rows down to `PROMPT_ENTITY_FIELDS`, whose `state` is a view built per
+kind rather than the stored column
+([Entity state on the template surface](#entity-state-on-the-template-surface)),
+wizard cast and lore rows minus `tags`. Handing a template a whole DB
+row or a whole working state makes every present and future field part
+of the authoring surface, and a field a user's pack can reach is a
+field that can't be withdrawn. Parity tests run in both directions: the
+registry's variables must all be emitted, and nothing outside the
+registry may be.
+
+### Entity state on the template surface
+
+Every entity a `generationContext` template sees carries `state`: a
+view of its stored state built per kind, never the column itself. It's
+on `entities`, `structuralLocation`, `structuralPinnedEntities`,
+`structuralSceneFactions`, `retrievedEntities`, `looseItems` and
+`namedCharacters`, and a
+ranked row also carries `kind`, `name`, `description` and `status`, so
+a template renders it from data rather than from its measured string.
+`structuralSceneFactions` is the factions the floor seats for the
+in-scene characters
+([`memory/retrieval.md → Structural floor`](./memory/retrieval.md#structural-floor--always-inject)).
+The column isn't a surface: it holds `lastSeenAt.entryId`, a raw entry
+id ID substitution doesn't cover, bare id arrays and caches.
+
+| Kind      | `state`                                                                                                                                                                                                                                                                                                                                                           |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| character | `visual` (`physique`, `face`, `hair`, `eyes`, `attire`, `distinguishing`), `traits`, `drives`, `voice`, `faction`, `location` (the current place for an active character in the scene, else the last-seen one), `holdings` (`{ id, name, status, description, condition, equipped }` per item, inventory then equipped), `stackables` (`{ key, amount }` per key) |
+| location  | `condition`, `parent`, `unplaced` (true for a place known to exist but not where; its `parent` is null)                                                                                                                                                                                                                                                           |
+| item      | `condition`, `location`, `holder` (a reference with `equipped`)                                                                                                                                                                                                                                                                                                   |
+| faction   | `standing`, `agenda`, `members` (a list of references)                                                                                                                                                                                                                                                                                                            |
+
+A reference is `{ id, name, status }`, one shape everywhere. A template
+wanting the whole referenced entity finds it in `entities`
+(`entities | find: 'id', ref.id`) rather than through a deeper
+reference. Its id is an entity id, so ID substitution turns it into a
+placeholder like any other.
+
+**Who a reference names.** A reference is left out — nil, or absent
+from its list — when its target is disabled and the active+in-scene
+invariant doesn't seat it
+([Structural floor](#structural-floor--always-inject)): a disabled
+entity doesn't exist narratively, so a member of a disabled faction has
+no faction and a disabled item is held by no one. For a place, disabled
+means effectively disabled
+([`data-model.md → LocationState shape`](./data-model.md#locationstate-shape)).
+Holdings and members leave out retired items, as held items always
+have; members keep retired characters, marked by `status`. The rule is
+applied when the view is built, so every template inherits it; a
+custom template can still reach a disabled entity through `entities`.
+
+**One builder, one view.** One module, beside the location map in
+`lib/world`, builds the views from the branch's entities and the scene.
+The ranker builds a candidate's view to measure it, and the seated row
+carries that view to the template, so what's measured and what's
+rendered come from one object
+([`memory/retrieval.md → Token estimation`](./memory/retrieval.md#token-estimation)).
+
+**The bundled rendering.** `macro_entity_state` renders an entity's
+state lines from its view, and each caller keeps its own head line:
+`## name` and the description in scene, the chain for the current
+location, `name (framing): description` in the memory blocks. The
+narrator's in-scene and current-location blocks, the memory blocks, the
+fallback classifier's scene sections and the characters it shows as
+named this turn, and suggestion refresh's in-scene block all include
+it. A field with nothing in it prints nothing, label included, and a
+value with line breaks in it keeps to its one line (`one_line`).
+
+- **Character.** `Location:`, out of scene only; one line per visual
+  category, labelled with its emission name (`Physique:` through
+  `Distinguishing:`), so the writer maps a line to the `type` a change
+  restates; `Voice:`; `Traits:` and `Drives:`, joined with `; ` since an
+  entry can hold a comma; `Faction:`; `Holds:`, one item per line with
+  its id, name, `(equipped)`, description and condition, folded onto the
+  line (`macro_item_line`, as `Here:` prints a loose item); `Stackables:`
+  as `gold 30, arrows 12`, largest first.
+- **Location.** `Condition:`, and `Part of:` with the parent's name,
+  except the current location, which keeps its chain. An unplaced
+  place prints no `Part of:`.
+- **Item.** `Condition:`, and out of scene `Location:` and `Held by:`.
+- **Faction.** `Standing:`, `Agenda:` joined with `; `, and `Members:`,
+  the names of the members not retired.
+
+Ids are bracketed only where a write uses them, on held and loose
+items, which a transfer moves, under the same condition as the rest of
+the block's ids. A faction, a location, a holder and members print a
+name, and a retired faction, place or holder is marked `(retired)`: the
+reference is still true, a disbanded faction or the place last seen,
+but mustn't read as current. A ranked character, with piggyback firing:
+
+```
+[c3] Kael (not in the scene): A scarred ex-soldier turned smuggler.
+Location: The Docks
+Physique: tall, broad-shouldered, a soldier's posture gone slack
+Hair: close-cropped, grey at the temples
+Attire: a salt-stained greatcoat over a leather jerkin; knee boots
+Voice: clipped, never wastes a word; calls everyone "friend"
+Traits: wary; loyal to a fault
+Drives: clear his brother's name
+Faction: The Silver Hand
+Holds:
+- [i2] Sword of Vael (equipped): a blade that glows near the dead. Condition: cracked near the hilt
+Stackables: gold 30
+```
+
+The periodic classifier's context and the wizard's `cast` are
+separate surfaces and carry no view: the classifier writes only a
+character's faction, which its own entity lines show, and `cast`
+exposes the wizard's state fields directly.
 
 ### v2 shape of `generationContext` — what's carried over, what changes
 
@@ -536,18 +714,21 @@ shape for templates to consume.
 Memory-state writes split across three time scales per the cadence
 stratification in [`memory/cadence.md`](./memory/cadence.md):
 
-| Layer                      | Trigger                                                                 | Scope                                                                                                                                             |
-| -------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Piggyback**              | Every AI reply, inline on the narrative call (capability-gated)         | Scene-local fast-mutating state — `sceneEntities`, `currentLocationId`, `worldTime`, visual mutations, item transfers                             |
-| **Periodic classifier**    | Background, configurable cadence (`stories.settings.classifierCadence`) | Multi-turn batch extractions — happenings, involvements, awareness, new characters, entity status flips, keyword appends, character relationships |
-| **Chapter-close pipeline** | Token threshold crossed OR user-triggered                               | 5-phase pipeline: catch-up classifier, boundary, metadata, lore-mgmt (5 sub-jobs), lifecycle review                                               |
+| Layer                      | Trigger                                                                                   | Scope                                                                                                                                                                                                                                                                                                |
+| -------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Piggyback**              | Every AI reply, inline on the narrative call (capability-gated)                           | Physical state a turn changes — `sceneEntities`, `currentLocationId`, `worldTime`, visual mutations, conditions, item transfers and drops, and the new locations and items they name                                                                                                                 |
+| **Periodic classifier**    | Chained after a turn every `stories.settings.classifierCadence` entries; blocks the story | Facts evidenced across turns — happenings, involvements, awareness, threads, new characters and factions with their first profiles and (by story setting) mentioned places, names, where places sit, faction standing and memberships, entity status flips, keyword appends, character relationships |
+| **Chapter-close pipeline** | Token threshold crossed OR user-triggered                                                 | 5-phase pipeline: catch-up passes, boundary, metadata, lore-mgmt (six sub-jobs in one tool loop), lifecycle review                                                                                                                                                                                   |
 
 The periodic classifier is itself a Pipeline (per
 [`generation-pipeline.md`](./generation-pipeline.md)) — same
-declaration shape as per-turn and chapter-close, with
-`gateBehavior: 'no-gate'` and a `concurrencyPolicy` that lets it run
-alongside per-turn while blocking it from starting during
-chapter-close. Detailed contracts for each layer in
+declaration shape as per-turn and chapter-close, gated like them and
+chained after the turn that brings it due; the writers run one after
+another, never at once
+([`memory/cadence.md → Concurrency`](./memory/cadence.md#concurrency)).
+Who writes which field is the
+[authorship contract](./data-model.md#authorship-contract). Detailed
+contracts for each layer in
 [`memory/piggyback.md`](./memory/piggyback.md),
 [`memory/classifier.md`](./memory/classifier.md), and
 [`memory/chapter-close.md`](./memory/chapter-close.md).
@@ -563,12 +744,12 @@ Two agents from the prior design were collapsed:
 - **Per-reply classifier** split into piggyback (when
   `piggybackMode='on'` and the narrative model is capability-flagged
   reliable at tagged blocks), its per-turn fallback classifier, and the
-  periodic classifier (background; handles the larger multi-turn
-  batch). Parity holds between **piggyback and its per-turn fallback**,
-  which cover the same write set — the periodic classifier's set is
-  disjoint from both and could never recover their fields, which is why
-  a failed parse falls back to a per-turn pass rather than waiting for
-  the background one (see
+  periodic classifier (chained every few turns; handles the larger
+  multi-turn batch). Parity holds between **piggyback and its per-turn
+  fallback**, which cover the same write set — the periodic classifier
+  covers none of their per-turn fields and could never recover them,
+  which is why a failed parse falls back to a per-turn pass rather than
+  waiting for the next periodic one (see
   [`memory/piggyback.md → Parse strategy and failure recovery`](./memory/piggyback.md#parse-strategy-and-failure-recovery)).
   Mode toggle is at `stories.settings.piggybackMode`.
 
@@ -653,15 +834,14 @@ the full opening contract.
 
 ### Chapter-close pipeline
 
-Chapter-close is its own pipeline kind. Five phases under one
-`actionId` (catch-up classifier, boundary selection, metadata,
-lore-mgmt with five sub-jobs, lifecycle review). A single CTRL-Z
-from the user reverses the entire chapter-close. Full design in
+Chapter-close is its own pipeline kind: catch-up passes chained ahead
+of it, then boundary selection, metadata, lore-mgmt (six sub-jobs in
+one tool loop) and lifecycle review under one `actionId`. A single
+CTRL-Z from the user reverses the entire chapter-close. Full design in
 [`memory/chapter-close.md`](./memory/chapter-close.md). Chapter-close
-holds the user-edit gate via `gateBehavior: 'hard-gate'`; the periodic
-classifier is blocked from starting a new pass while chapter-close
-is in flight (one-direction lock via the classifier's
-`concurrencyPolicy.blockedBy`). The framework-level transaction +
+holds the user-edit gate via `gateBehavior: 'hard-gate'`, and a head
+reversal or Cancel interrupts it and defers it to the next turn, as
+for a pass. The framework-level transaction +
 gate mechanism lives in
 [`generation-pipeline.md → Transaction lifecycle`](./generation-pipeline.md#transaction-lifecycle).
 
@@ -868,10 +1048,16 @@ unconditionally before per-type retrieval allocates the remainder:
 - **Active + in-scene entities.** `entities.status='active' AND id ∈
 metadata.sceneEntities` are ALWAYS injected, regardless of
   `injection_mode`. `currentLocationId` gets the same treatment.
+- **What the scene implies.** The factions of active in-scene
+  characters, the items they hold and the items lying at the current
+  location, unless retired or disabled
+  ([`memory/retrieval.md → Structural floor`](./memory/retrieval.md#structural-floor--always-inject)).
 - **Active threads.** `threads.status='active'` must-inject as
   structural framing.
 - **`injection_mode='always'` rows** across entities / lore /
-  threads — user-intent override.
+  threads — user-intent override, except a location disabled through
+  an ancestor
+  ([`data-model.md → LocationState shape`](./data-model.md#locationstate-shape)).
 
 Rationale for the active+in-scene invariant: the entity IS what the
 current narrative revolves around. Excluding one on a user-set
