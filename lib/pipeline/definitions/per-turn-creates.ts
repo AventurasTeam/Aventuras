@@ -47,7 +47,7 @@ export type TurnCreatePlan = PlannedTurn & {
 type LocationFate = {
   outcome: 'created' | 'reused'
   id: string
-  /** Where the create asked for its row: under a parent, top-level, or unplaced. */
+  /** The create's settled placement, unplaced if its parent dropped; a reused row keeps its own. */
   placement: PlacePlacement
   parentDropped: boolean
 }
@@ -350,7 +350,7 @@ function locationReport(
       outcome: 'dropped',
     }
   }
-  // A dropped parent reports what was emitted; a kept one, where it put the row.
+  // A dropped parent reports what was emitted; a kept one, where the planner settled the create.
   const parent = fate.parentDropped ? emission.parent : reportedParent(fate.placement)
   return {
     handle,
