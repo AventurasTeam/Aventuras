@@ -18,6 +18,7 @@
   } from '#lib/services/ai/utils/ttsText.ts'
   import TTSVoiceSelector from './TTSVoiceSelector.svelte'
   import { isIos } from '#lib/utils/platform.ts'
+  import { normalizeBaseUrl } from '#lib/utils/url.ts'
 
   const PREVIEW_TEXT =
     'This is a preview of the selected voice. The story narration will sound like this.'
@@ -125,7 +126,7 @@
     const tts = settings.systemServicesSettings.tts
 
     if (tts.provider === 'openai') {
-      if (!tts.endpoint.trim() || !tts.apiKey) {
+      if (!normalizeBaseUrl(tts.endpoint) || !tts.apiKey) {
         return 'Endpoint and API key are required'
       }
     } else if (tts.provider === 'microsoft') {
