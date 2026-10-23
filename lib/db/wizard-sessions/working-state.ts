@@ -81,7 +81,7 @@ const locationCastDraftSchema = z.object({
   condition: z.string().default(''),
   /** Parent-location counterpart of `unresolvedFactionName`. */
   unresolvedParentLocationName: z.string().default(''),
-  /** The parent is unknown (dropped by an import loop or a removed row): Finish lands it unplaced. */
+  /** Parent unknown (dropped by an import loop or a removed row): Finish lands it unplaced. */
   parentUnknown: z.boolean().default(false),
 })
 

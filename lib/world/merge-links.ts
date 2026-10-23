@@ -52,9 +52,8 @@ export type MergeOverlap = {
   /** 1 when the canonical's state names the loser (a location under it): that ref is cleared. */
   canonicalRefs: number
   /**
-   * Set only when the canonical is an unplaced place: whether it takes the loser's placement,
-   * or stays unplaced because that place is unknown, retired, would close a loop, or would put
-   * the story, held by the canonical, inside a disabled place.
+   * Only for an unplaced canonical place: takes the loser's placement, or stays unplaced when that
+   * place is unknown, retired, loops, or would put the canonical's story in a disabled place.
    */
   canonicalPlacement?: 'takes-loser' | 'stays-unplaced'
 }
@@ -93,10 +92,9 @@ export type CanonicalPlacement =
 const STAYS_UNPLACED: CanonicalPlacement = { outcome: 'stays-unplaced' }
 
 /**
- * Decisions → A merge: an unplaced canonical place takes the loser's placement, unless that
- * parent is retired, its chain reaches the canonical (or is already broken), or it would put the
- * story inside a disabled place, which the handler or the merge's place rules would refuse. Null
- * when the canonical isn't an unplaced place (a stored parent naming no place counts as unplaced).
+ * world.md → Merge: an unplaced canonical takes the loser's placement unless that parent is
+ * retired, its chain loops or is broken, or the story would land in a disabled place. Null unless
+ * the canonical is an unplaced place; a stored parent naming no place counts as unplaced.
  */
 export function canonicalPlacementOf(
   input: Pick<MergeLinkInput, 'canonical' | 'loser' | 'branchEntities' | 'story'>,

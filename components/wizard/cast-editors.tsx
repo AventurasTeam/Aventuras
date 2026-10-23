@@ -127,11 +127,9 @@ type PickFromCastProps = {
   value: string | null
   onChange: (value: string | null) => void
   /**
-   * Gives the picker an Unknown option, labelled so, for a row whose null `value` can mean "not
-   * known" (an import's unresolved parent). It is offered only while `unknown`, selected then, and
-   * never reaches `onChange`. From the first render it is offered, the mode counts its slot for
-   * the life of the picker, so the pick that removes it can't change the control's shape; a row
-   * that is never unknown keeps `Select`'s own density rule.
+   * Label of an Unknown option, for a row whose null `value` can mean "not known" (an import's
+   * unresolved parent). Offered and selected only while `unknown`; never reaches `onChange`. Once
+   * offered, the mode keeps counting its slot so the pick removing it can't reshape the control.
    */
   unknownLabel?: string
   unknown?: boolean

@@ -364,7 +364,7 @@ export const Location: Story = {
 
 const parentOf = (id: string) => castRowById(id) as WizardLocationDraft
 
-/** A segmented picker: Unknown is selected until Top level is picked, and the control keeps its shape. */
+/** Segmented picker: Unknown is selected until Top level is picked; the control keeps its shape. */
 async function expectSegmentUnknownThenTopLevel(opts: { clearedAsk: boolean }) {
   // A group whose value flips between undefined and a pick warns "controlled"/"uncontrolled".
   const warn = spyOn(console, 'warn')
@@ -404,7 +404,7 @@ async function expectSegmentUnknownThenTopLevel(opts: { clearedAsk: boolean }) {
   }
 }
 
-/** An import's unknown parent reads as the selected Unknown option; picking Top level removes it. */
+/** An import's unknown parent reads as the selected Unknown option; picking Top level drops it. */
 export const LocationUnknownParentPicksTopLevel: Story = {
   beforeEach: () => {
     wizardStore.reset()
@@ -432,7 +432,7 @@ export const LocationUnresolvedParentPicksTopLevel: Story = {
 
 const optionNamed = (name: string) => screen.findByRole('option', { name })
 
-/** A dropdown picker: Unknown is the selected option until a parent is picked, and stays controlled. */
+/** Dropdown picker: Unknown is selected until a parent is picked; the control stays controlled. */
 export const LocationUnknownParentDropdown: Story = {
   beforeEach: () => {
     wizardStore.reset()
@@ -469,10 +469,7 @@ export const LocationUnknownParentDropdown: Story = {
   },
 }
 
-/**
- * Two other places is the boundary: with Unknown counted the picker is a dropdown, and the pick
- * that takes Unknown away must not turn it into a segmented control under the user's click.
- */
+/** Two other places and Unknown make a dropdown; dropping Unknown must not flip it to a segment. */
 export const LocationUnknownParentKeepsItsShape: Story = {
   beforeEach: () => {
     wizardStore.reset()
@@ -516,10 +513,7 @@ export const LocationNeverUnknownStaysSegment: Story = {
   },
 }
 
-/**
- * A row that goes unknown mid-session (its parent leaves the cast) reserves the Unknown slot from
- * then on: the pick that removes Unknown can't turn its dropdown into a segmented control.
- */
+/** Going unknown mid-session reserves the Unknown slot, so the dropdown never becomes a segment. */
 export const LocationGoesUnknownKeepsItsShape: Story = {
   beforeEach: () => {
     wizardStore.reset()
@@ -560,7 +554,7 @@ export const LocationHasNoOtherLocationsYetShowsEmptyState: Story = {
   },
 }
 
-/** With no other place to pick, Unknown and Top level are still offered; once placed there is nothing to choose. */
+/** No other place: Unknown and Top level still show; once placed, there is nothing to choose. */
 async function expectUnknownThenTopLevelWithNoOtherPlaces(opts: { clearedAsk: boolean }) {
   await userEvent.click(await screen.findByRole('button', { name: 'More options' }))
   await expect(await screen.findByRole('radio', { name: 'Unknown' })).toHaveAttribute(

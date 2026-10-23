@@ -352,9 +352,8 @@ export function parkClassifierWatermarkAtLastReply(dbPath: string, branchId: str
 }
 
 /**
- * Insert an active location known to exist but not where (data-model.md → LocationState shape),
- * the shape the fixture lacks, and return its id: a real `loc_<uuid>`, since the prompts
- * substitute it (docs/testing.md → Fixture + seed contract). Runs before launch.
+ * Insert an unplaced location (data-model.md → LocationState shape); its id is a real `loc_<uuid>`,
+ * since prompts substitute it (docs/testing.md → Fixture + seed contract). Runs before launch.
  */
 export function seedUnplacedPlace(dbPath: string, branchId: string, name: string): string {
   const id = `loc_${randomUUID()}`

@@ -9,9 +9,8 @@ import { createSeededUserDataDir, removeUserDataDir, seedUnplacedPlace } from '.
 import { saveSession } from '../locators/save-session'
 import { world } from '../locators/world'
 
-// world.md → Overview and Delete; data-model.md → LocationState shape. The places are seeded
-// unplaced, since the fixture has none; each write goes through the pane and is read back from
-// the DB as parsed JSON, so key order doesn't decide a pin.
+// world.md → Overview and Delete; data-model.md → LocationState shape. Places are seeded unplaced
+// (the fixture has none); state is read back as parsed JSON, so key order decides no pin.
 
 const HERO_TITLE = 'The Veilstone Courier'
 const HERO_BRANCH = 'br_hero_main'

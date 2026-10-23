@@ -397,9 +397,8 @@ function storyGainsDisabled(
 }
 
 /**
- * Whether the canonical taking `parentId` as its parent would put the story inside a disabled
- * place it wasn't inside: the `story-inside` merge rule, asked of the adoption alone. The merged
- * mode is read as `auto`, so a mode the merge writes decides nothing here; the rule judges that.
+ * Whether the canonical adopting `parentId` would put the story inside a disabled place it wasn't
+ * in: the `story-inside` merge rule on the adoption alone, so the merged mode is read as `auto`.
  */
 export function adoptionHidesStory(args: {
   canonical: Entity

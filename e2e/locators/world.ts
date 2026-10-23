@@ -132,15 +132,13 @@ export const world = {
     page.getByRole('button', { name: t('world:detail.namePlaceholder'), exact: true }),
   nameInput: (page: Page): Locator => page.getByPlaceholder(t('world:detail.namePlaceholder')),
 
-  // The Connections placement picker (placement-field.tsx): a PickerField always holding a value,
-  // so its name is "Part of: <value>" (common:picker.fieldLabel).
+  // Always holds a value, so the button reads "Part of: <value>" (common:picker.fieldLabel).
   placementPicker: (page: Page, value: string): Locator =>
     page.getByRole('button', {
       name: t('picker.fieldLabel', { label: t('world:fields.parentLocation'), value }),
       exact: true,
     }),
-  // A choice row is named by its label; a place row's name also carries its kind icon's label,
-  // so this keeps Playwright's substring match.
+  // Not exact: a place row's name also carries its kind icon's label.
   placementOption: (page: Page, name: string): Locator => page.getByRole('option', { name }),
   // Visible only: the reader's peek drawer can hold an Overview hidden under World.
   locationUnknown: (page: Page): Locator =>
