@@ -204,6 +204,7 @@ function planLocations(args: {
       placedRows.size === 0
         ? view
         : { ...view, locations: view.locations.map((e) => placedRows.get(e.id) ?? e) },
+      placedParents,
     )
     let id: string
     if (match.kind === 'create') {
@@ -220,8 +221,9 @@ function planLocations(args: {
     } else {
       id = match.id
       if (match.kind === 'reuse' && byId.get(id)?.status === 'staged') reused.add(id)
-      // data-model.md → Authorship contract: the writer places only an unplaced place it reuses.
-      if (match.kind === 'reuse' && match.place && candidate.kind !== 'unplaced') {
+      // data-model.md → Authorship contract: the writer places only an unplaced place it reuses:
+      // a row, or this block's own create taken over.
+      if (match.place && candidate.kind !== 'unplaced') {
         const loop =
           candidate.kind === 'under' ? placementLoop(id, candidate.parentId, parentOf) : null
         if (loop === null) {

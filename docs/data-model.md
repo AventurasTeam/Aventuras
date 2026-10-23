@@ -2078,8 +2078,9 @@ absolute state beside them:
   to the remaining headroom when it would push `worldTime` past the
   ceiling. `worldTimeDeltaApplied` records what landed.
 - A create in `newLocations` or `newItems` is created, reused (a
-  location's exact match under the parent the map showed, or an earlier
-  new location of the same name and parent in the block) or dropped (unused, or the narrative
+  location's match by
+  [`memory/piggyback.md → Matching before creating`](./memory/piggyback.md#matching-before-creating)'s
+  rules, the block's earlier new locations included) or dropped (unused, or the narrative
   block it sits in has a failing field), and a location's parent can
   be dropped, leaving it unplaced. Its `outcome`, `id` and
   `parentDropped` record that, and the report's other fields carry the

@@ -4,7 +4,12 @@ import type { Entity } from '@/lib/db'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 
 import { locationMapView, unhiddenLocationView } from './location-map'
-import { itemNamesakes, matchNewLocation as matchAgainst, matchNewPlace } from './new-entity-match'
+import {
+  itemNamesakes,
+  matchNewLocation as matchAgainst,
+  matchNewPlace as matchInReply,
+  type SettledNewPlace,
+} from './new-entity-match'
 import type { PlacePlacement } from './placement'
 
 const place = (
@@ -534,32 +539,28 @@ describe('matchNewLocation — the unplaced places', () => {
   })
 })
 
+// No create of the reply was placed by a takeover unless a case says so.
+const matchNewPlace = (
+  candidate: { name: string; placement: PlacePlacement },
+  settled: readonly SettledNewPlace[],
+  view: Parameters<typeof matchInReply>[2],
+  placedHere: ReadonlyMap<string, string | null> = new Map(),
+) => matchInReply(candidate, settled, view, placedHere)
+
 describe('matchNewPlace', () => {
   const settled = [{ name: 'the Gull Inn', placement: under('loc_town'), id: 'loc_new1' }]
   const view = unhiddenLocationView([
     place('loc_town', 'Varn', null),
     place('loc_inn', 'The Gull Inn', 'loc_town'),
   ])
+  const twin = (id: string) => ({ kind: 'twin', id, place: false })
+  // An earlier create of this reply left unplaced, which the writer places where this one sits.
+  const takeOver = (id: string) => ({ kind: 'twin', id, place: true })
 
   it('maps a place to an earlier one in the reply with its name and parent, before any row', () => {
     expect(
       matchNewPlace({ name: 'The Gull Inn', placement: under('loc_town') }, settled, view),
-    ).toEqual({
-      kind: 'twin',
-      id: 'loc_new1',
-    })
-  })
-
-  it('keys a twin on name and placement: a top-level and an unplaced create stay apart', () => {
-    const twins = [
-      { name: 'Ashfall', placement: TOP, id: 'loc_top' },
-      { name: 'Ashfall', placement: UNPLACED, id: 'loc_unplaced' },
-    ]
-    expect(matchNewPlace({ name: 'ashfall', placement: UNPLACED }, twins, view)).toEqual({
-      kind: 'twin',
-      id: 'loc_unplaced',
-    })
-    expect(matchNewPlace({ name: 'Ashfall', placement: TOP }, twins.slice(1), view)).toEqual(PLAIN)
+    ).toEqual(twin('loc_new1'))
   })
 
   it('matches the existing rows when no earlier place shares its parent', () => {
@@ -567,6 +568,169 @@ describe('matchNewPlace', () => {
       reuse('loc_inn'),
     )
     expect(matchNewPlace({ name: 'the Gull Inn', placement: TOP }, settled, view)).toEqual(PLAIN)
+  })
+
+  describe('as successive replies would', () => {
+    it('maps an unplaced place to an earlier unplaced namesake', () => {
+      const earlier = [
+        { name: 'Ashfall', placement: UNPLACED, id: 'loc_new1' },
+        { name: 'ASHFALL', placement: UNPLACED, id: 'loc_new1' },
+      ]
+      expect(matchNewPlace({ name: 'ashfall', placement: UNPLACED }, earlier, view)).toEqual(
+        twin('loc_new1'),
+      )
+    })
+
+    it('maps an unplaced place to an earlier namesake placed anywhere', () => {
+      expect(
+        matchNewPlace(
+          { name: 'Ashfall', placement: UNPLACED },
+          [{ name: 'Ashfall', placement: under('loc_town'), id: 'loc_new1' }],
+          view,
+        ),
+      ).toEqual(twin('loc_new1'))
+      expect(
+        matchNewPlace(
+          { name: 'Ashfall', placement: UNPLACED },
+          [{ name: 'Ashfall', placement: TOP, id: 'loc_new1' }],
+          view,
+        ),
+      ).toEqual(twin('loc_new1'))
+    })
+
+    it('takes over an earlier unplaced namesake for a place under a parent or top-level', () => {
+      const earlier = [{ name: 'Ashfall', placement: UNPLACED, id: 'loc_new1' }]
+      expect(matchNewPlace({ name: 'ashfall', placement: TOP }, earlier, view)).toEqual(
+        takeOver('loc_new1'),
+      )
+      expect(
+        matchNewPlace({ name: 'Ashfall', placement: under('loc_town') }, earlier, view),
+      ).toEqual(takeOver('loc_new1'))
+    })
+
+    // An earlier create is newer than every row, as a later reply's would be.
+    it('reuses a row the map hangs there, or an unplaced row, before taking an earlier create over', () => {
+      const earlier = [{ name: 'The Gull Inn', placement: UNPLACED, id: 'loc_new1' }]
+      expect(
+        matchNewPlace({ name: 'The Gull Inn', placement: under('loc_town') }, earlier, view),
+      ).toEqual(reuse('loc_inn'))
+      const withUnplaced = unhiddenLocationView([unplaced('loc_ash', 'Ashfall')])
+      expect(
+        matchNewPlace(
+          { name: 'Ashfall', placement: TOP },
+          [{ name: 'Ashfall', placement: UNPLACED, id: 'loc_new1' }],
+          withUnplaced,
+        ),
+      ).toEqual(reuseAndPlace('loc_ash'))
+    })
+
+    it('takes over an earlier unplaced create ahead of flagging a partial sibling', () => {
+      expect(
+        matchNewPlace(
+          { name: 'The Gull', placement: under('loc_town') },
+          [{ name: 'The Gull', placement: UNPLACED, id: 'loc_new1' }],
+          view,
+        ),
+      ).toEqual(takeOver('loc_new1'))
+    })
+
+    it('never takes over a row an earlier unplaced place reused', () => {
+      const reusedRow = [{ name: 'The Gull Inn', placement: UNPLACED, id: 'loc_inn' }]
+      expect(matchNewPlace({ name: 'The Gull Inn', placement: TOP }, reusedRow, view)).toEqual(
+        PLAIN,
+      )
+    })
+
+    it('keeps a place apart from an earlier namesake placed elsewhere', () => {
+      expect(
+        matchNewPlace(
+          { name: 'Ashfall', placement: TOP },
+          [{ name: 'Ashfall', placement: under('loc_town'), id: 'loc_new1' }],
+          view,
+        ),
+      ).toEqual(PLAIN)
+    })
+
+    it('flags several namesakes unplaced: an unplaced partner first, then a row before a create', () => {
+      const placedCreate = { name: 'The Gull Inn', placement: TOP, id: 'loc_new1' }
+      expect(
+        matchNewPlace({ name: 'The Gull Inn', placement: UNPLACED }, [placedCreate], view),
+      ).toEqual(flaggedWith('loc_inn', 'unplaced'))
+      const withUnplaced = unhiddenLocationView([
+        place('loc_town', 'Varn', null),
+        place('loc_inn', 'The Gull Inn', 'loc_town', { createdAt: 1 }),
+        unplaced('loc_gull', 'The Gull Inn', { createdAt: 9 }),
+      ])
+      expect(
+        matchNewPlace({ name: 'The Gull Inn', placement: UNPLACED }, [placedCreate], withUnplaced),
+      ).toEqual(flaggedWith('loc_gull', 'unplaced'))
+      const twoCreates = [
+        { name: 'Ashfall', placement: TOP, id: 'loc_new1' },
+        { name: 'Ashfall', placement: under('loc_town'), id: 'loc_new2' },
+      ]
+      expect(matchNewPlace({ name: 'Ashfall', placement: UNPLACED }, twoCreates, view)).toEqual(
+        flaggedWith('loc_new1', 'unplaced'),
+      )
+    })
+
+    // piggyback.md → Matching before creating: the twin rule comes before every other match.
+    it('maps an unplaced place to an earlier unplaced twin, even beside stored namesakes', () => {
+      const flaggedCreate = { name: 'The Gull Inn', placement: UNPLACED, id: 'loc_new2' }
+      expect(
+        matchNewPlace(
+          { name: 'the gull inn', placement: UNPLACED },
+          [{ name: 'The Gull Inn', placement: TOP, id: 'loc_new1' }, flaggedCreate],
+          view,
+        ),
+      ).toEqual(twin('loc_new2'))
+    })
+
+    describe('an earlier create a takeover placed', () => {
+      const earlier = [
+        { name: 'Ashfall', placement: UNPLACED, id: 'loc_new1' },
+        { name: 'Ashfall', placement: under('loc_town'), id: 'loc_new1' },
+      ]
+      const placedHere = new Map([['loc_new1', 'loc_town']])
+
+      it('still maps an unplaced place to it, as the twin it declared', () => {
+        expect(
+          matchNewPlace({ name: 'Ashfall', placement: UNPLACED }, earlier, view, placedHere),
+        ).toEqual(twin('loc_new1'))
+      })
+
+      it('never takes over one a takeover made top-level', () => {
+        expect(
+          matchNewPlace(
+            { name: 'Ashfall', placement: under('loc_town') },
+            [
+              { name: 'Ashfall', placement: UNPLACED, id: 'loc_new1' },
+              { name: 'Ashfall', placement: TOP, id: 'loc_new1' },
+            ],
+            view,
+            new Map([['loc_new1', null]]),
+          ),
+        ).toEqual(PLAIN)
+      })
+
+      it('never takes it over again: a namesake under another parent is its own row', () => {
+        expect(
+          matchNewPlace({ name: 'Ashfall', placement: TOP }, earlier, view, placedHere),
+        ).toEqual(PLAIN)
+      })
+    })
+
+    it('maps an unplaced place to its one earlier create beside a retired namesake', () => {
+      const retired = unhiddenLocationView([
+        place('loc_ruin', 'Ashfall', null, { status: 'retired' }),
+      ])
+      expect(
+        matchNewPlace(
+          { name: 'Ashfall', placement: UNPLACED },
+          [{ name: 'Ashfall', placement: TOP, id: 'loc_new1' }],
+          retired,
+        ),
+      ).toEqual(twin('loc_new1'))
+    })
   })
 })
 

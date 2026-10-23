@@ -85,21 +85,33 @@ function matchPlaced(
   return flagPartner(candidate, siblings, SAME_PARENT)
 }
 
+/** A new place this reply already settled: the placement it declared, and the row it resolved to. */
+export type SettledNewPlace = { name: string; placement: PlacePlacement; id: string }
+
+/** Where this reply's placements put a place: its parent's id, null for top-level. */
+export type ReplyPlacements = ReadonlyMap<string, string | null>
+
 // data-model.md → LocationState shape: compared by exact name with every place, placed or not.
+// `earlier`: this reply's own creates of the name, newer than every row as a later reply's are.
 function matchUnplaced(
   candidate: PlaceCandidate,
   view: LocationMatchView,
   placementAt: PlacementAt,
+  earlier: readonly SettledNewPlace[],
 ): PlaceMatch {
   const { locations } = view
   const exact = locations.filter((e) => sameName(candidate, e))
   const live = exact.filter((e) => e.status !== 'retired')
-  if (live.length === 1) return { kind: 'reuse', id: live[0].id, place: false }
+  const liveCount = live.length + earlier.length
+  const namesakes = [
+    ...(liveCount > 0 ? live : exact)
+      .sort(byAge)
+      .map((e) => ({ id: e.id, unplaced: placementAt(e.id).kind === 'unplaced' })),
+    ...earlier.map((p) => ({ id: p.id, unplaced: p.placement.kind === 'unplaced' })),
+  ]
+  if (liveCount === 1) return { kind: 'reuse', id: namesakes[0].id, place: false }
 
-  const placedLast = (e: Entity) => (placementAt(e.id).kind === 'unplaced' ? 0 : 1)
-  const [namesake] = (live.length > 0 ? live : exact).sort(
-    (a, b) => placedLast(a) - placedLast(b) || byAge(a, b),
-  )
+  const [namesake] = namesakes.sort((a, b) => Number(b.unplaced) - Number(a.unplaced))
   if (namesake !== undefined)
     return { kind: 'create', flag: { partnerId: namesake.id, reason: UNPLACED } }
 
@@ -124,28 +136,53 @@ export function matchNewLocation(candidate: PlaceCandidate, view: LocationMatchV
     case 'top':
       return matchPlaced(candidate, null, view, placementAt)
     case 'unplaced':
-      return matchUnplaced(candidate, view, placementAt)
+      return matchUnplaced(candidate, view, placementAt, [])
   }
 }
 
-/** A new place this reply already settled, where it resolved to. */
-export type SettledNewPlace = { name: string; placement: PlacePlacement; id: string }
+/** `place`: an earlier create of this reply left unplaced, which the writer must place. */
+export type ReplyPlaceMatch = PlaceMatch | { kind: 'twin'; id: string; place: boolean }
 
 /**
- * piggyback.md → Matching before creating, within one reply: a second new place with the same name
- * and placement maps to the first; otherwise the place is matched against the existing rows.
+ * piggyback.md → Matching before creating, within one reply: the reply's creates match as if
+ * applied one at a time, as successive replies' would. A second new place with the same name and
+ * declared placement maps to the first, before any other match. Otherwise an unplaced one matches
+ * the earlier creates of its name as stored rows, newer than any, each where it sits now
+ * (`placedHere`), and a placed one the rows would create takes over an earlier create still
+ * unplaced.
  */
 export function matchNewPlace(
   candidate: PlaceCandidate,
   settled: readonly SettledNewPlace[],
   view: LocationMatchView,
-): PlaceMatch | { kind: 'twin'; id: string } {
-  const twin = settled.find(
-    (p) =>
-      samePlacement(p.placement, candidate.placement) &&
-      nameBasis(p.name, candidate.name) === 'same-name',
-  )
-  return twin === undefined ? matchNewLocation(candidate, view) : { kind: 'twin', id: twin.id }
+  placedHere: ReplyPlacements,
+): ReplyPlaceMatch {
+  const named = settled.filter((p) => nameBasis(p.name, candidate.name) === 'same-name')
+  const twin = named.find((p) => samePlacement(p.placement, candidate.placement))
+  if (twin !== undefined) return { kind: 'twin', id: twin.id, place: false }
+
+  // A create's first entry is its own: it sits there unless a takeover placed it since.
+  const sitsAt = (p: SettledNewPlace): PlacePlacement => {
+    if (!placedHere.has(p.id)) return p.placement
+    const parentId = placedHere.get(p.id) ?? null
+    return parentId === null ? { kind: 'top' } : { kind: 'under', parentId }
+  }
+  const stored = new Set(view.locations.map((e) => e.id))
+  const created = new Map<string, SettledNewPlace>()
+  for (const p of named)
+    if (!stored.has(p.id) && !created.has(p.id)) created.set(p.id, { ...p, placement: sitsAt(p) })
+  const earlier = [...created.values()]
+
+  if (candidate.placement.kind === 'unplaced') {
+    const match = matchUnplaced(candidate, view, realPlacementOf(view.locations), earlier)
+    return match.kind === 'reuse' && created.has(match.id)
+      ? { kind: 'twin', id: match.id, place: false }
+      : match
+  }
+  const match = matchNewLocation(candidate, view)
+  if (match.kind !== 'create') return match
+  const taken = earlier.find((p) => p.placement.kind === 'unplaced')
+  return taken === undefined ? match : { kind: 'twin', id: taken.id, place: true }
 }
 
 /** An item's exact namesakes anywhere on the branch, any status, oldest first. */
