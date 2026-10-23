@@ -942,3 +942,20 @@ slice-planning gate forces its resolution before that slice is planned.
   the drop lists, `planned`), so a split wants a shared planner
   context rather than more closures. Raised 2026-10-23 by the AI
   writer map's Task 20 review.
+
+- **Two structured-call phases never report their retries.**
+  [`generation-pipeline.md → Two retry tiers`](../generation-pipeline.md#two-retry-tiers-both-at-phase-level)
+  says a phase yields a `recoverable_error` per retried attempt however
+  the call resolves. The periodic classifier pass now does; the per-turn
+  fallback classifier (`lib/pipeline/definitions/per-turn-piggyback.ts`,
+  where `generateClassifierState` also drops one call's list when it
+  re-rolls) and the suggestion refresh
+  (`lib/pipeline/definitions/suggestion-refresh.ts`) receive
+  `generateStructured`'s `recoverable` list and never yield it.
+  Pre-existing. Raised 2026-10-23 by the AI writer map's Task 21 review.
+
+- **A provider retry's log loses its reason.**
+  `lib/pipeline/runtime/orchestrator.ts` logs a `recoverable_error` with
+  `detail ?? kind`, so a provider retry without a detail logs
+  `"provider"` and drops its `reason` (`timeout` or `network`).
+  Pre-existing. Raised 2026-10-23 by the AI writer map's Task 21 review.
