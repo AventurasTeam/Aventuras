@@ -40,6 +40,12 @@ vi.mock('./google', () => ({
   createGoogleProvider: vi.fn(),
 }))
 
+vi.mock('#lib/utils/url.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
+  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
+})
+
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { fetchPublicImageBase64 } from './fetchAdapter'
 import { createOpenAIProvider } from './openai'
 import { comfyReferenceLimit, createComfyProvider } from './comfy'
@@ -506,6 +512,28 @@ describe('Image Provider Registry', () => {
         listModels,
       })
       expect(await listImageModels('p')).toHaveLength(1)
+      expect(listModels).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('model cache key', () => {
+    it('shares one entry across base URLs that normalize alike', async () => {
+      const listModels = vi.fn(async () => [{ id: 'm', name: 'm', supportsImg2Img: true }])
+      vi.mocked(createOpenAIProvider).mockReturnValue({
+        id: 'openai',
+        name: 'openai',
+        generate: vi.fn(),
+        listModels,
+      })
+      vi.mocked(normalizeBaseUrl)
+        .mockReturnValueOnce('https://normalized.test/v1')
+        .mockReturnValueOnce('https://normalized.test/v1')
+
+      await listImageModelsByProvider('openai', 'sk-key-norm', false, 'https://one.test/')
+      await listImageModelsByProvider('openai', 'sk-key-norm', false, 'https://two.test//')
+
+      expect(normalizeBaseUrl).toHaveBeenCalledWith('https://one.test/')
+      expect(normalizeBaseUrl).toHaveBeenCalledWith('https://two.test//')
       expect(listModels).toHaveBeenCalledTimes(1)
     })
   })

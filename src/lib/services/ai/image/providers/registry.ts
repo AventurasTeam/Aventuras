@@ -9,6 +9,7 @@
 import { settings } from '#lib/stores/settings.svelte.ts'
 import type { ImageProfile, ImageProviderType } from '#lib/types/index.ts'
 import { parseImageSpec, describeImageSpec, type ImageSpec } from '#lib/utils/image.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -135,7 +136,7 @@ const modelCaches = new Map<string, ModelCache>()
 
 function getCacheKey(providerType: ImageProviderType, apiKey?: string, baseUrl?: string): string {
   const keyHash = apiKey ? apiKey.slice(-8) : 'nokey'
-  const urlKey = baseUrl ? baseUrl.trim().replace(/\/+$/, '') : 'nourl'
+  const urlKey = normalizeBaseUrl(baseUrl) || 'nourl'
   return `${providerType}:${keyHash}:${urlKey}`
 }
 
