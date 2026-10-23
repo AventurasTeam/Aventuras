@@ -2,7 +2,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { useMemo, useState } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import type { PlotSaveResult } from '@/lib/actions'
 import type { Thread } from '@/lib/db'
@@ -10,9 +10,6 @@ import { threadDraftFrom, threadDraftSchema, type ThreadDraft } from '@/lib/plot
 
 import { usePlotRowSession } from './use-plot-row-session'
 import { usePlotSelection } from './use-plot-selection'
-
-// The real catalog pulls lucide-react-native, which node can't parse.
-vi.mock('./plot-icon', () => ({ PLOT_ICON_KEYS: [] }))
 
 const resolver = zodResolver(threadDraftSchema)
 const noop = () => {}

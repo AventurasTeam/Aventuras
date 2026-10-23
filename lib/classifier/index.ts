@@ -11,10 +11,16 @@ export type {
   ClassifierExtraction,
   ClassifierPlacesExtraction,
   ClassifierReply,
+  KnownAwareness,
   Membership,
   NewCharacter,
   NewFaction,
   NewPlace,
+  NewThreadReply,
+  Placement,
+  Rename,
+  Standing,
+  ThreadStatusChange,
 } from './schema'
 export { NEW_HANDLE_PREFIX, PLACEHOLDER_FIELDS, substituteClassifierIds } from './substitute'
 export {

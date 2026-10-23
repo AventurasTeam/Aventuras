@@ -9,6 +9,8 @@ import { PLACEHOLDER_FIELDS, substituteClassifierIds } from './substitute'
 const CHAR_A = 'char_11111111-1111-1111-1111-111111111111'
 const CHAR_B = 'char_22222222-2222-2222-2222-222222222222'
 const LOC_A = 'loc_33333333-3333-3333-3333-333333333333'
+const HAP_A = 'hap_44444444-4444-4444-4444-444444444444'
+const THR_A = 'thr_55555555-5555-5555-5555-555555555555'
 
 /** Every string-valued property name the wire schema declares, at any depth. */
 function stringFieldsOf(schema: z.ZodType): string[] {
@@ -35,19 +37,32 @@ function stringFieldsOf(schema: z.ZodType): string[] {
 // Fields the model fills with something other than an entity reference: prose,
 // free-form anchors, and the provenance handles the window map owns.
 const NON_REF_FIELDS = [
+  'attire',
+  'category',
+  'condition',
   'description',
+  'distinguishing',
+  'eyes',
+  'face',
+  'hair',
   'handle',
+  'icon',
   'kind',
   'learnedAtTurn',
   'name',
   'occurredAtTurn',
+  'physique',
   'reason',
+  'resolvedAtTurn',
   'role',
   'source',
   'sourceTurn',
+  'standing',
+  'status',
   'temporal',
   'title',
   'to',
+  'voice',
 ]
 
 describe('PLACEHOLDER_FIELDS', () => {
@@ -134,6 +149,36 @@ describe('substituteClassifierIds', () => {
         { handle: 'new:inn', parent: LOC_A },
         { handle: 'new:cellar', parent: 'new:inn' },
       ],
+    })
+  })
+
+  // classifier.md → ID handling: a listed happening and a listed thread go back to their ids.
+  it("maps a listed happening's and thread's placeholders back, and leaves the top-level token", () => {
+    const idMap = new IdBiMap()
+    const kael = idMap.allocate(CHAR_A)
+    const fire = idMap.allocate(HAP_A)
+    const relic = idMap.allocate(THR_A)
+    const town = idMap.allocate(LOC_A)
+    const out = substituteClassifierIds(
+      {
+        knownAwareness: [{ happening: fire, ref: kael, source: fire }],
+        threadStatuses: [{ thread: relic, status: 'resolved' }],
+        placements: [
+          { ref: town, parent: 'top-level' },
+          { ref: town, parent: town },
+        ],
+        renames: [{ ref: kael, name: kael }],
+      },
+      idMap,
+    )
+    expect(out).toEqual({
+      knownAwareness: [{ happening: HAP_A, ref: CHAR_A, source: fire }],
+      threadStatuses: [{ thread: THR_A, status: 'resolved' }],
+      placements: [
+        { ref: LOC_A, parent: 'top-level' },
+        { ref: LOC_A, parent: LOC_A },
+      ],
+      renames: [{ ref: CHAR_A, name: kael }],
     })
   })
 

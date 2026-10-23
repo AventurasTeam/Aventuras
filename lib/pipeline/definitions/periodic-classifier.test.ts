@@ -220,6 +220,7 @@ async function ctxWith(opts: {
   }
 }
 
+// Fed to the planner unparsed, so it spells out every list the schema defaults.
 const extraction = (over: Partial<Record<string, unknown>> = {}) => ({
   happenings: [],
   relationships: [],
@@ -228,6 +229,12 @@ const extraction = (over: Partial<Record<string, unknown>> = {}) => ({
   aliases: [],
   newFactions: [],
   memberships: [],
+  renames: [],
+  placements: [],
+  standings: [],
+  newThreads: [],
+  threadStatuses: [],
+  knownAwareness: [],
   ...over,
 })
 
