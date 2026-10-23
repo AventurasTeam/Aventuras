@@ -554,7 +554,7 @@ describe('entityMergeActions — collision flags', () => {
       ).toStrictEqual([
         updateOf('loc_a', {
           keywords: ['The Old Inn'],
-          state: { parent_location_id: null },
+          state: { parent_location_id: null, unplaced: true },
           ...FLAG_CLEAR,
         }),
         updateOf('loc_s', { state: { parent_location_id: 'loc_a' } }),
@@ -589,7 +589,7 @@ describe('entityMergeActions — collision flags', () => {
       ])
     })
 
-    it('lifts a canonical under the loser to the root, beside the root siblings', () => {
+    it('leaves a canonical under the loser unplaced, which no longer pairs with the root siblings', () => {
       const loser = place('loc_b', 'The Market', null, flaggedWith('loc_s', 'same-parent'))
       const canonical = place('loc_a', 'The Market', 'loc_b', flaggedWith('loc_b'))
       const stalls = place('loc_s', 'The Market Stalls', null)
@@ -597,9 +597,8 @@ describe('entityMergeActions — collision flags', () => {
         merge({ canonical, loser, branchEntities: [canonical, loser, stalls] }).actions,
       ).toStrictEqual([
         updateOf('loc_a', {
-          state: { parent_location_id: null },
-          nameCollisionPartnerId: 'loc_s',
-          nameCollisionReason: 'same-parent',
+          state: { parent_location_id: null, unplaced: true },
+          ...FLAG_CLEAR,
         }),
         deleteOf('loc_b'),
       ])
@@ -619,8 +618,8 @@ describe('entityMergeActions — collision flags', () => {
           branchEntities: [under, plainLoser, rootStalls],
         }).actions,
       ).toStrictEqual([
-        updateOf('loc_a', { state: { parent_location_id: null } }),
-        updateOf('loc_s', { nameCollisionPartnerId: 'loc_a' }),
+        updateOf('loc_a', { state: { parent_location_id: null, unplaced: true } }),
+        updateOf('loc_s', FLAG_CLEAR),
         deleteOf('loc_b'),
       ])
     })
@@ -640,6 +639,80 @@ describe('entityMergeActions — collision flags', () => {
           .actions,
       ).toStrictEqual([
         updateOf('loc_a', { nameCollisionPartnerId: 'loc_s', nameCollisionReason: 'same-parent' }),
+        deleteOf('loc_b'),
+      ])
+    })
+
+    const unplaced = (id: string, name: string, overrides: Partial<Entity> = {}): Entity =>
+      entity(id, 'location', { name, ...overrides }, { parent_location_id: null, unplaced: true })
+
+    it('places an unplaced canonical where the loser sat, and says so', () => {
+      const varn = unplaced('loc_a', 'Varn')
+      const twin = place('loc_b', 'Varn', 'loc_p')
+      const placed = merge({ canonical: varn, loser: twin, branchEntities: [hollow, varn, twin] })
+      expect(placed.actions).toStrictEqual([
+        updateOf('loc_a', { state: { parent_location_id: 'loc_p' } }),
+        deleteOf('loc_b'),
+      ])
+      expect(placed.overlap.canonicalPlacement).toBe('takes-loser')
+
+      const topTwin = place('loc_b', 'Varn', null)
+      const lifted = merge({ canonical: varn, loser: topTwin, branchEntities: [varn, topTwin] })
+      expect(lifted.actions).toStrictEqual([
+        updateOf('loc_a', { state: { parent_location_id: null } }),
+        deleteOf('loc_b'),
+      ])
+      expect(lifted.overlap.canonicalPlacement).toBe('takes-loser')
+    })
+
+    it('keeps an unplaced canonical unplaced when the loser’s place is retired, unknown or inside it', () => {
+      const varn = unplaced('loc_a', 'Varn')
+      const retired = place('loc_p', 'Veil’s Hollow', null, { status: 'retired' })
+      const underRetired = place('loc_b', 'Varn', 'loc_p')
+      const keptFromRetired = merge({
+        canonical: varn,
+        loser: underRetired,
+        branchEntities: [retired, varn, underRetired],
+      })
+      expect(keptFromRetired.actions).toStrictEqual([deleteOf('loc_b')])
+      expect(keptFromRetired.overlap.canonicalPlacement).toBe('stays-unplaced')
+
+      const unknownTwin = unplaced('loc_b', 'Varn')
+      const keptUnknown = merge({
+        canonical: varn,
+        loser: unknownTwin,
+        branchEntities: [varn, unknownTwin],
+      })
+      expect(keptUnknown.actions).toStrictEqual([deleteOf('loc_b')])
+      expect(keptUnknown.overlap.canonicalPlacement).toBe('stays-unplaced')
+
+      // The loser sits in a place inside the canonical: taking its parent would close a loop.
+      const quarter = place('loc_q', 'The Old Quarter', 'loc_a')
+      const inside = place('loc_b', 'Varn', 'loc_q')
+      const keptFromLoop = merge({
+        canonical: varn,
+        loser: inside,
+        branchEntities: [varn, quarter, inside],
+      })
+      expect(keptFromLoop.actions).toStrictEqual([deleteOf('loc_b')])
+      expect(keptFromLoop.overlap.canonicalPlacement).toBe('stays-unplaced')
+    })
+
+    it("keeps a same-parent pair on the loser once the canonical takes the loser's parent", () => {
+      const canonical = unplaced('loc_a', 'The Market')
+      const twin = place('loc_b', 'The Market', 'loc_p')
+      const stalls = place(
+        'loc_s',
+        'The Market Stalls',
+        'loc_p',
+        flaggedWith('loc_b', 'same-parent'),
+      )
+      expect(
+        merge({ canonical, loser: twin, branchEntities: [hollow, canonical, twin, stalls] })
+          .actions,
+      ).toStrictEqual([
+        updateOf('loc_a', { state: { parent_location_id: 'loc_p' } }),
+        updateOf('loc_s', { nameCollisionPartnerId: 'loc_a' }),
         deleteOf('loc_b'),
       ])
     })
@@ -786,7 +859,7 @@ describe('entityMergeActions — inverse refs', () => {
     expect(ofKind(kept.actions, 'updateEntity')).toStrictEqual([])
   })
 
-  it('nulls the canonical’s parent when it was the loser, and counts the cleared ref', () => {
+  it('unplaces the canonical when its parent was the loser, and counts the cleared ref', () => {
     const cellar = entity('loc_a', 'location', {}, { parent_location_id: 'loc_b' })
     const hall = entity('loc_b', 'location')
     const { actions, overlap } = merge({
@@ -798,12 +871,19 @@ describe('entityMergeActions — inverse refs', () => {
     expect(actions[0]).toStrictEqual({
       kind: 'updateEntity',
       source: 'user_edit',
-      payload: { branchId: 'b1', id: 'loc_a', patch: { state: { parent_location_id: null } } },
+      payload: {
+        branchId: 'b1',
+        id: 'loc_a',
+        patch: { state: { parent_location_id: null, unplaced: true } },
+      },
     })
     expect(overlap.canonicalRefs).toBe(1)
+    // Placed before the merge, so it takes nothing from the loser: no placement footnote.
+    expect(overlap).not.toHaveProperty('canonicalPlacement')
     // The other way round the loser's own parent goes with it: nothing on the canonical clears.
     const reversed = merge({ canonical: hall, loser: cellar, branchEntities: [cellar, hall] })
     expect(reversed.overlap.canonicalRefs).toBe(0)
+    expect(reversed.overlap).not.toHaveProperty('canonicalPlacement')
   })
 })
 

@@ -7,8 +7,14 @@ import { sameList } from './draft-text'
 import { tailSceneActions, type DeleteTail } from './entity-delete'
 import { stateOf } from './entity-draft'
 import { itemHasPosition, stateWithRefRewritten } from './entity-refs'
-import { canonicalRefsCleared, mergeLinks, type MergeLinkInput } from './merge-links'
+import {
+  canonicalPlacementOf,
+  canonicalRefsCleared,
+  mergeLinks,
+  type MergeLinkInput,
+} from './merge-links'
 import { mergedTerms, type MergeDeselections, type MergedTerms } from './merge-terms'
+import { withPlacement } from './placement'
 
 export const MERGE_SCALARS = [
   'name',
@@ -75,11 +81,12 @@ function mergedRow(input: MergeContext): Merged {
       nameFromOther,
     },
   )
+  const state = canonicalStateAfter(input)
   return {
     nameFromOther,
     terms,
     side: {
-      ...postMergeSide(input, canonical),
+      ...pairSideOf(state == null ? canonical : { ...canonical, state }),
       name: nameFromOther ? loser.name : canonical.name,
       keywords: terms.keywords,
     },
@@ -123,8 +130,7 @@ function canonicalPatch(input: MergeContext, merged: Merged): EntityPatch {
     if (takes) takeScalar(scalars, field, loser)
   }
   const { tags, keywords } = merged.terms
-  const rewritten = canonicalRefsCleared(canonical, loser.id)
-  const state = adoptedPlacement(input, rewritten) ?? rewritten
+  const state = canonicalStateAfter(input)
   const columns: EntityPatch = {
     ...scalars,
     ...(sameList(tags, canonical.tags) ? {} : { tags }),
@@ -165,16 +171,30 @@ function refTarget({ canonical, branchEntities }: MergeContext): string | null {
 }
 
 /**
- * A canonical item with no position takes the loser's placement, so the merged item keeps whichever
- * position either side had. A held loser needs nothing here: its holders move through `refTarget`.
+ * A canonical with no position takes the loser's: an item the loser's placement, so the merged
+ * item keeps whichever position either side had (a held loser needs nothing here: its holders
+ * move through `refTarget`); an unplaced place the loser's placement, as `canonicalPlacementOf`
+ * decides.
  */
 function adoptedPlacement(input: MergeContext, rewritten: EntityState | null): EntityState | null {
   const { canonical, loser } = input
+  if (canonical.kind === 'location') {
+    const adopted = canonicalPlacementOf(input)
+    return adopted?.outcome === 'takes-loser'
+      ? withPlacement(stateOf(canonical, 'location'), adopted.placement)
+      : null
+  }
   if (canonical.kind !== 'item' || refTarget(input) !== canonical.id) return null
   const at = stateOf(loser, 'item').at_location_id
   if (at == null) return null
   const base = (rewritten as ItemState | null) ?? stateOf(canonical, 'item')
   return { ...base, at_location_id: at }
+}
+
+/** The canonical's state as the merge writes it: refs to the loser cleared, any adoption. */
+function canonicalStateAfter(input: MergeContext): EntityState | null {
+  const rewritten = canonicalRefsCleared(input.canonical, input.loser.id)
+  return adoptedPlacement(input, rewritten) ?? rewritten
 }
 
 /**

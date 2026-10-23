@@ -48,6 +48,7 @@ describe('entityDeleteImpact', () => {
       relationships: 1,
       references: 0,
       unplacedItems: 0,
+      unplacedPlaces: 0,
       tailScene: true,
     })
     expect(entityDeleteCopy(mira, impact)).toEqual({
@@ -121,6 +122,37 @@ describe('entityDeleteImpact', () => {
     expect(entityDeleteCopy(hollow, impact).impacts).toEqual([
       '3 other entities lose their link to it',
       '1 item will have no position',
+    ])
+  })
+
+  it('counts the places inside a deleted location as left with no known location', () => {
+    const hollow = {
+      id: 'loc_hollow',
+      branchId: 'b1',
+      kind: 'location',
+      name: 'Veil’s Hollow',
+      state: emptyEntityState('location'),
+    } as Entity
+    const market = {
+      id: 'loc_market',
+      branchId: 'b1',
+      kind: 'location',
+      name: 'The Drowned Market',
+      state: { parent_location_id: 'loc_hollow' },
+    } as Entity
+    const impact = entityDeleteImpact({
+      branchId: 'b1',
+      row: hollow,
+      entities: [hollow, market],
+      entries: [],
+      awareness: [],
+      involvements: [],
+      relationships: [],
+    })
+    expect(impact.unplacedPlaces).toBe(1)
+    expect(entityDeleteCopy(hollow, impact).impacts).toEqual([
+      '1 other entity loses its link to it',
+      '1 place will have no known location',
     ])
   })
 })

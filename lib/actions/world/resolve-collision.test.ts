@@ -1116,6 +1116,17 @@ describe('resolveCollision — location merge place rules', () => {
     await setState('loc_b', { parent_location_id: 'loc_r' })
     expect(await resolveCollision('b1', LOC_MERGE, ctx)).toEqual({ status: 'ok' })
   })
+  it('places an unplaced canonical where the loser sat, and undo leaves it unplaced again', async () => {
+    await sceneAt(null)
+    await ctx.db.insert(entities).values(place('loc_p', null))
+    await setState('loc_a', { parent_location_id: null, unplaced: true })
+    await setState('loc_b', { parent_location_id: 'loc_p' })
+    expect(await resolveCollision('b1', LOC_MERGE, ctx)).toEqual({ status: 'ok' })
+    expect((await entityRow('loc_a'))?.state).toEqual({ parent_location_id: 'loc_p' })
+
+    await undoAll()
+    expect((await entityRow('loc_a'))?.state).toEqual({ parent_location_id: null, unplaced: true })
+  })
 })
 
 describe('resolveCollision — rename', () => {

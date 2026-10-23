@@ -518,7 +518,7 @@ export const MergeSummaryCounts: Story = {
       '3 of these involvements are duplicates (HARBOR already takes part in their happening, or they repeat one) and are dropped.',
       "HARBOR already relates to 4 of these characters: it keeps its own views and takes the duplicate's only where its own is blank.",
       '5 holders lose this item: HARBOR is already held or placed.',
-      "HARBOR sits under this location: the merge clears that parent, since a place can't contain itself.",
+      "HARBOR sits under this location: it loses that parent and becomes unplaced, since a place can't contain itself.",
     ])
   },
 }
@@ -553,6 +553,52 @@ export const MergeHoldersFootnote: Story = {
     // With the newer item canonical the shown side is the older, whose holders keep theirs.
     await userEvent.click(screen.getAllByRole('radio', { name: /^Lantern · / })[1])
     await waitFor(() => expect(screen.queryByText(/holders? lose/)).toBeNull())
+  },
+}
+
+/** An unplaced canonical: the footnote says whether it takes the duplicate's place. */
+export const MergePlacementFootnotes: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({
+        id: 'ent_varn_1',
+        kind: 'location',
+        name: 'Varn',
+        relationCounts: {
+          ...entityA.relationCounts,
+          overlap: { ...entityA.relationCounts.overlap, canonicalPlacement: 'stays-unplaced' },
+        },
+      })}
+      entityB={baseEntity({
+        id: 'ent_varn_2',
+        kind: 'location',
+        // A case variant, so a footnote naming the wrong row is visible.
+        name: 'VARN',
+        createdAt: new Date().toISOString(),
+        relationCounts: {
+          ...entityB.relationCounts,
+          overlap: { ...entityB.relationCounts.overlap, canonicalPlacement: 'takes-loser' },
+        },
+      })}
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    // The older row survives by default, so the newer row's counts say what becomes of its place.
+    expect(
+      await screen.findByText(
+        "Varn has no known location: it takes this location's place on the map.",
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/stays unplaced/)).toBeNull()
+
+    await userEvent.click(screen.getByRole('radio', { name: /^VARN · Newer · / }))
+    expect(
+      await screen.findByText(
+        "VARN has no known location and stays unplaced: this location's own place is unknown, retired, or inside VARN.",
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/takes this location/)).toBeNull()
   },
 }
 

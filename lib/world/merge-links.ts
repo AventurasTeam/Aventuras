@@ -13,6 +13,8 @@ import {
   stateWithRefRewritten,
   type EntityLinkRows,
 } from './entity-refs'
+import { realPlacementOf } from './location-map'
+import { checkParentChain, parentOfLocations } from './parent-chain'
 
 export type MergeLinkInput = {
   branchId: string
@@ -46,6 +48,11 @@ export type MergeOverlap = {
   holdersLosingItem: number
   /** 1 when the canonical's state names the loser (a location under it): that ref is cleared. */
   canonicalRefs: number
+  /**
+   * Set only when the canonical is an unplaced place: whether it takes the loser's placement,
+   * or stays unplaced because that place is unknown, retired, or would close a loop.
+   */
+  canonicalPlacement?: 'takes-loser' | 'stays-unplaced'
 }
 
 /** A relationship the canonical takes from the loser: the other end and the merged views. */
@@ -73,6 +80,36 @@ export type MergeLinks = {
 /** The canonical's state with its refs to the loser cleared, since it can't point at itself. */
 export function canonicalRefsCleared(canonical: Entity, loserId: string): EntityState | null {
   return stateWithRefRewritten(canonical, loserId, canonical.id)
+}
+
+export type CanonicalPlacement =
+  | { outcome: 'takes-loser'; placement: { kind: 'under'; parentId: string } | { kind: 'top' } }
+  | { outcome: 'stays-unplaced' }
+
+const STAYS_UNPLACED: CanonicalPlacement = { outcome: 'stays-unplaced' }
+
+/**
+ * Decisions → A merge: an unplaced canonical place takes the loser's placement, unless that
+ * parent is retired or its chain reaches the canonical (or is already broken), which the handler
+ * would refuse. Null when the canonical isn't an unplaced place (a stored parent naming no place
+ * counts as unplaced).
+ */
+export function canonicalPlacementOf(
+  input: Pick<MergeLinkInput, 'canonical' | 'loser' | 'branchEntities'>,
+): CanonicalPlacement | null {
+  const { canonical, loser, branchEntities } = input
+  if (canonical.kind !== 'location' || loser.kind !== 'location') return null
+  const locations = branchEntities.filter((e) => e.kind === 'location')
+  const placementIn = realPlacementOf(locations)
+  if (placementIn(canonical.id).kind !== 'unplaced') return null
+  const taken = placementIn(loser.id)
+  if (taken.kind === 'top') return { outcome: 'takes-loser', placement: taken }
+  if (taken.kind === 'unplaced') return STAYS_UNPLACED
+  const parent = locations.find((e) => e.id === taken.parentId)
+  if (parent == null || parent.status === 'retired') return STAYS_UNPLACED
+  return checkParentChain(canonical.id, taken.parentId, parentOfLocations(locations)) === 'ok'
+    ? { outcome: 'takes-loser', placement: taken }
+    : STAYS_UNPLACED
 }
 
 /** A relationship row seen from `id`: the other end, `id`'s view of it, and its view of `id`. */
@@ -110,6 +147,7 @@ function relationshipCopies(
 /** world.md → Merge: the loser's links a merge re-creates on the canonical, and those it drops. */
 export function mergeLinks(input: MergeLinkInput): MergeLinks {
   const { branchId, canonical, loser } = input
+  const placement = canonicalPlacementOf(input)
   const linksOf = (id: string) =>
     entityLinkRows({
       branchId,
@@ -154,6 +192,7 @@ export function mergeLinks(input: MergeLinkInput): MergeLinks {
       relationships: relationships.overlap,
       holdersLosingItem: holdersLosingItem(loser, canonical, input.branchEntities),
       canonicalRefs: canonicalRefsCleared(canonical, loser.id) == null ? 0 : 1,
+      ...(placement == null ? {} : { canonicalPlacement: placement.outcome }),
     },
   }
 }

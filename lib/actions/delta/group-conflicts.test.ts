@@ -374,7 +374,7 @@ describe('applyDeltaActionGroup — a delete and a write naming what it removes'
     expect(await snapshot()).toEqual(before)
   })
 
-  it('commits the entity delete builder output for a place, moving its child to the root', async () => {
+  it('commits the entity delete builder output for a place, leaving its child unplaced', async () => {
     await ctx.db
       .insert(entities)
       .values([
@@ -391,7 +391,7 @@ describe('applyDeltaActionGroup — a delete and a write naming what it removes'
 
     expect(await group(actions)).toEqual({ status: 'ok' })
     const [child] = await ctx.db.select().from(entities).where(eq(entities.id, 'loc_c'))
-    expect(child.state).toEqual({ parent_location_id: null })
+    expect(child.state).toEqual({ parent_location_id: null, unplaced: true })
   })
 
   it('commits a create-with-links Save naming rows the group creates or keeps', async () => {
