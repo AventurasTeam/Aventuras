@@ -61,10 +61,10 @@ const Options = z.object({
   inputs: z.array(z.tuple([z.string(), Json])).optional(),
   negativePrompt: z.string().optional(),
   /** Where references are uploaded; `temp` is emptied when ComfyUI restarts. */
-  referenceFolder: z.enum(['input', 'temp']).optional(),
+  referenceFolder: z.enum(['input', 'temp']).default('temp'),
 })
 
-type ReferenceFolder = NonNullable<z.infer<typeof Options>['referenceFolder']>
+type ReferenceFolder = z.infer<typeof Options>['referenceFolder']
 
 export type ComfyImageOptions = z.input<typeof Options>
 
@@ -102,12 +102,12 @@ const ImageInfo = z.object({
   type: z.string().optional(),
 })
 
+const UPLOAD_SUBFOLDER = 'aventuras'
+
 const UploadedImage = z.object({
   name: z.string(),
-  subfolder: z.string().optional().catch(undefined),
+  subfolder: z.string().catch(UPLOAD_SUBFOLDER),
 })
-
-const UPLOAD_SUBFOLDER = 'aventuras'
 
 const fileExtension = (mediaType: string): string => /^image\/(\w+)/.exec(mediaType)?.[1] ?? 'png'
 
@@ -262,7 +262,7 @@ export function createComfyImage(settings: ComfyImageSettings) {
         message: `ComfyUI returned an unreadable upload response: ${responseExcerpt(text, response.status)}`,
       })
     }
-    const { name, subfolder = UPLOAD_SUBFOLDER } = uploaded.data
+    const { name, subfolder } = uploaded.data
     const path = subfolder ? `${subfolder}/${name}` : name
     return folder === 'temp' ? `${path} [temp]` : path
   }
@@ -429,7 +429,7 @@ export function createComfyImage(settings: ComfyImageSettings) {
               if (!files[index]) break
               const name = await uploadReference(
                 files[index],
-                referenceFolder ?? 'temp',
+                referenceFolder,
                 uploadHeaders,
                 abortSignal,
               )
