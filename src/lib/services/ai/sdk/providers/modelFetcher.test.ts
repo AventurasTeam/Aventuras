@@ -58,3 +58,15 @@ describe('fetchModelsFromProvider base URL', () => {
     expect(requested).toEqual(['https://api.mistral.ai/v1/models'])
   })
 })
+
+describe('Ollama model listing', () => {
+  it.each([
+    [undefined, 'http://localhost:11434/api/tags'],
+    ['http://box:11434/v1', 'http://box:11434/api/tags'],
+    ['http://box:11434/api', 'http://box:11434/api/tags'],
+    ['http://box:11434', 'http://box:11434/api/tags'],
+  ])('given %j requests %s', async (baseUrl, expected) => {
+    await fetchModelsFromProvider('ollama', baseUrl)
+    expect(requested).toEqual([expected])
+  })
+})

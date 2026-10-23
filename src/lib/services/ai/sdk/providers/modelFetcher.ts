@@ -372,7 +372,8 @@ async function fetchChutesModels(baseUrl?: string, apiKey?: string): Promise<str
 
 async function fetchOllamaModels(baseUrl?: string): Promise<string[]> {
   const effectiveBaseUrl = baseUrl || PROVIDERS.ollama.baseUrl
-  const tagsUrl = effectiveBaseUrl.replace(/\/api$/, '') + '/api/tags'
+  // `/api/tags` is served at the root, while the profile's base URL ends in `/v1` or `/api`.
+  const tagsUrl = effectiveBaseUrl.replace(/\/(?:api|v1)$/, '') + '/api/tags'
 
   const fetchFn = createTimeoutFetch(10000, 'model-fetch')
   const response = await fetchFn(tagsUrl, { method: 'GET' })
