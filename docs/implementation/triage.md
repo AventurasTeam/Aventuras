@@ -100,12 +100,14 @@ slice-planning gate forces its resolution before that slice is planned.
   returning `completed`. Pre-existing; surfaced 2026-10-11 in the
   locations-and-items-from-prose PR.
 
-- **The mock LLM ignores `newLocations`, `newItems` and
-  `retrievalQueries`.** `scripts/mock-llm` (`validate.ts`,
-  `respond/tagged-block.ts`) drops them, so a recorded narrative turn
-  with creates replays as `<current_location>new:…` with no create,
-  which fails substitution. Raised 2026-10-11 in the
-  locations-and-items-from-prose PR.
+- **The mock LLM's validator doesn't check the newer state fields.**
+  `scripts/mock-llm/respond/tagged-block.ts` renders every field the
+  parser reads, but `stateBlockSchema` in `scripts/mock-llm/validate.ts`
+  knows nothing of creates, conditions, drops or retrieval queries, so
+  a malformed authored one passes validation and fails the app's
+  parser at serve time (a drop with no id renders `id="undefined"`).
+  Raised 2026-10-11 in the locations-and-items-from-prose PR; the
+  rendering half was closed by the AI writer map.
 
 - **The `<entity …>` pattern in the state parser scans to the end of
   the segment per unclosed opener.** `lib/piggyback/parse.ts`
@@ -885,6 +887,14 @@ slice-planning gate forces its resolution before that slice is planned.
   ([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape),
   "One report, two possible writers"). Raised 2026-10-23 by the AI
   writer map's Q18 and Q19.
+
+- **Undoing a take or a drop after a World move leaves the item held
+  and placed.** Reverse-replay keeps a field the user wrote since, so
+  undoing a turn's `<item>` or `<drop>` after the user moved the item
+  in World restores the holder's inventory but keeps the user's
+  position: the item ends both held and lying somewhere. Pre-existing
+  for takes; drops add one more instance. Raised 2026-10-23 by the AI
+  writer map's final review.
 
 - **A stackable may move twice on a fallback turn.** A possible data
   error, not a display one: worth a look soon. Pre-existing on `main`;
