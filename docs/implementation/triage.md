@@ -100,13 +100,6 @@ slice-planning gate forces its resolution before that slice is planned.
   returning `completed`. Pre-existing; surfaced 2026-10-11 in the
   locations-and-items-from-prose PR.
 
-- **The fallback's report blanks the fold's visual changes when it
-  emits `visualChanges: []`.** `reportedBlock` in
-  `lib/pipeline/definitions/per-turn-piggyback.ts` applies its
-  no-blanking rule only on `=== undefined`, so an explicit empty array
-  replaces the already-applied visual changes in the report. Raised
-  2026-10-11 in the locations-and-items-from-prose PR.
-
 - **The mock LLM ignores `newLocations`, `newItems` and
   `retrievalQueries`.** `scripts/mock-llm` (`validate.ts`,
   `respond/tagged-block.ts`) drops them, so a recorded narrative turn
