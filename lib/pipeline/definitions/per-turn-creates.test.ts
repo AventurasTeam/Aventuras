@@ -109,8 +109,17 @@ function runPlanner(
   })
 }
 
-const createdEntries = (creates: TurnCreatePlan['creates']) =>
-  creates.map((action) => action.payload.entry)
+type Structural = TurnCreatePlan['structural'][number]
+type CreateAction = Extract<Structural, { kind: 'createEntity' }>
+
+const creates = (plan: TurnCreatePlan): CreateAction[] =>
+  plan.structural.flatMap((action) => (action.kind === 'createEntity' ? [action] : []))
+
+const placements = (plan: TurnCreatePlan) =>
+  plan.structural.flatMap((action) => (action.kind === 'placeLocation' ? [action] : []))
+
+const createdEntries = (actions: readonly CreateAction[]) =>
+  actions.map((action) => action.payload.entry)
 
 beforeEach(() => {
   vi.restoreAllMocks()
@@ -125,10 +134,10 @@ describe('planTurnCreates — kept only if used', () => {
     }
     const plan = await runPlanner(block)
     expect(plan.block).toEqual(block)
-    expect(plan.creates).toEqual([])
+    expect(creates(plan)).toEqual([])
     expect(plan.createdRows).toEqual([])
     expect(plan.reusedIds).toEqual([])
-    expect(plan.placements).toEqual([])
+    expect(placements(plan)).toEqual([])
     expect(plan.report).toEqual({ newLocations: [], newItems: [] })
   })
 
@@ -145,7 +154,7 @@ describe('planTurnCreates — kept only if used', () => {
       ],
       currentLocation: 'new:docks',
     })
-    expect(createdEntries(plan.creates)).toEqual([
+    expect(createdEntries(creates(plan))).toEqual([
       expect.objectContaining({
         id: 'loc_new_1',
         kind: 'location',
@@ -173,8 +182,8 @@ describe('planTurnCreates — kept only if used', () => {
       newLocations: [{ handle: 'new:isle', name: 'Gull Isle', description: 'a bare rock' }],
       currentLocation: 'new:isle',
     })
-    expect(createdEntries(plan.creates)[0]?.state).toEqual(UNPLACED)
-    expect(plan.placements).toEqual([])
+    expect(createdEntries(creates(plan))[0]?.state).toEqual(UNPLACED)
+    expect(placements(plan)).toEqual([])
     expect(plan.report.newLocations).toEqual([
       {
         handle: 'new:isle',
@@ -194,7 +203,7 @@ describe('planTurnCreates — kept only if used', () => {
       ],
       currentLocation: 'new:isle',
     })
-    expect(createdEntries(plan.creates)[0]?.state).toEqual({ parent_location_id: null })
+    expect(createdEntries(creates(plan))[0]?.state).toEqual({ parent_location_id: null })
     expect(plan.report.newLocations).toEqual([
       {
         handle: 'new:isle',
@@ -229,7 +238,7 @@ describe('planTurnCreates — kept only if used', () => {
       ],
       currentLocation: 'new:docks',
     })
-    expect(createdEntries(plan.creates).map((e) => e.name)).toEqual(['Saltmere', 'Smuggler Docks'])
+    expect(createdEntries(creates(plan)).map((e) => e.name)).toEqual(['Saltmere', 'Smuggler Docks'])
     expect(plan.block.sceneEntities).toEqual([HERO])
     expect(plan.block.currentLocation).toBe('loc_new_2')
     expect(plan.report.newLocations[2]).toEqual({
@@ -263,7 +272,7 @@ describe('planTurnCreates — kept only if used', () => {
         drops: [],
       },
     })
-    expect(createdEntries(plan.creates)).toEqual([
+    expect(createdEntries(creates(plan))).toEqual([
       expect.objectContaining({
         id: 'item_new_1',
         kind: 'item',
@@ -316,7 +325,7 @@ describe('planTurnCreates — kept only if used', () => {
         drops: [],
       },
     })
-    expect(plan.creates).toEqual([])
+    expect(creates(plan)).toEqual([])
     expect(plan.block.transfers).toEqual({ items: [], stackables: [], drops: [] })
     expect(plan.report.newItems[0]?.outcome).toBe('dropped')
   })
@@ -332,7 +341,7 @@ describe('planTurnCreates — kept only if used', () => {
         drops: [{ id: 'new:key', from: HERO, seq: 1 }],
       },
     })
-    expect(plan.creates).toEqual([])
+    expect(creates(plan)).toEqual([])
     expect(plan.block.transfers).toEqual({ items: [], stackables: [], drops: [] })
     expect(plan.report.newItems[0]?.outcome).toBe('dropped')
     expect(debugSpy).toHaveBeenCalledWith('classifier.drop_dropped', {
@@ -350,7 +359,7 @@ describe('planTurnCreates — kept only if used', () => {
         drops: [{ id: 'new:key', seq: 0 }],
       },
     })
-    expect(createdEntries(plan.creates).map((e) => e.id)).toEqual(['item_new_1'])
+    expect(createdEntries(creates(plan)).map((e) => e.id)).toEqual(['item_new_1'])
     expect(plan.block.transfers).toEqual({
       items: [{ id: 'item_new_1', to: HERO, slot: 'inventory', seq: 1 }],
       stackables: [],
@@ -368,7 +377,7 @@ describe('planTurnCreates — kept only if used', () => {
         drops: [{ id: 'new:key', from: HERO, seq: 0 }],
       },
     })
-    expect(plan.creates).toEqual([])
+    expect(creates(plan)).toEqual([])
     expect(plan.report.newItems[0]?.outcome).toBe('dropped')
   })
 
@@ -395,7 +404,7 @@ describe('planTurnCreates — kept only if used', () => {
       },
       { entities: world(row({ id: MIRA, kind: 'character', name: 'Mira' })) },
     )
-    expect(createdEntries(plan.creates).map((e) => e.id)).toEqual(['item_new_1'])
+    expect(createdEntries(creates(plan)).map((e) => e.id)).toEqual(['item_new_1'])
     expect(plan.block.transfers?.items.map((t) => [t.id, t.to])).toEqual([
       ['item_new_1', HERO],
       ['item_new_1', MIRA],
@@ -411,7 +420,7 @@ describe('planTurnCreates — kept only if used', () => {
         drops: [],
       },
     })
-    expect(plan.creates).toEqual([])
+    expect(creates(plan)).toEqual([])
     expect(plan.block.transfers).toEqual({ items: [], stackables: [], drops: [] })
     expect(plan.report.newItems[0]?.outcome).toBe('dropped')
   })
@@ -433,7 +442,7 @@ describe('planTurnCreates — kept only if used', () => {
         drops: [],
       },
     })
-    expect(createdEntries(plan.creates).map((e) => e.id)).toEqual(['loc_new_1'])
+    expect(createdEntries(creates(plan)).map((e) => e.id)).toEqual(['loc_new_1'])
     expect(plan.block.transfers).toEqual({ items: [], stackables: [], drops: [] })
   })
 })
@@ -452,7 +461,7 @@ describe('planTurnCreates — parents', () => {
       ],
       currentLocation: 'new:docks',
     })
-    expect(createdEntries(plan.creates).map((e) => [e.id, e.state])).toEqual([
+    expect(createdEntries(creates(plan)).map((e) => [e.id, e.state])).toEqual([
       ['loc_new_1', { parent_location_id: ELDRA }],
       ['loc_new_2', { parent_location_id: 'loc_new_1' }],
     ])
@@ -476,7 +485,7 @@ describe('planTurnCreates — parents', () => {
       ],
       currentLocation: 'new:docks',
     })
-    expect(createdEntries(plan.creates)[0]?.state).toEqual(UNPLACED)
+    expect(createdEntries(creates(plan))[0]?.state).toEqual(UNPLACED)
     expect(plan.report.newLocations).toEqual([
       {
         handle: 'new:docks',
@@ -503,7 +512,7 @@ describe('planTurnCreates — parents', () => {
       ],
       currentLocation: 'new:upper',
     })
-    expect(createdEntries(plan.creates).map((e) => [e.id, e.state])).toEqual([
+    expect(createdEntries(creates(plan)).map((e) => [e.id, e.state])).toEqual([
       ['loc_new_1', UNPLACED],
       ['loc_new_2', UNPLACED],
     ])
@@ -529,7 +538,7 @@ describe('planTurnCreates — parents', () => {
       },
     }
     const plan = await runPlanner({ newLocations: [hall], currentLocation: 'new:hall' })
-    expect(createdEntries(plan.creates).map((e) => [e.id, e.state])).toEqual([
+    expect(createdEntries(creates(plan)).map((e) => [e.id, e.state])).toEqual([
       ['loc_new_1', UNPLACED],
     ])
     expect(plan.report.newLocations).toEqual([
@@ -560,7 +569,7 @@ describe('planTurnCreates — parents', () => {
       ],
       currentLocation: 'new:docks',
     })
-    expect(createdEntries(plan.creates).map((e) => [e.name, e.state])).toEqual([
+    expect(createdEntries(creates(plan)).map((e) => [e.name, e.state])).toEqual([
       ['Saltmere', UNPLACED],
       ['Smuggler Docks', { parent_location_id: 'loc_new_1' }],
     ])
@@ -579,7 +588,7 @@ describe('planTurnCreates — parents', () => {
       ],
       currentLocation: 'new:cellar',
     })
-    expect(createdEntries(plan.creates).map((e) => [e.id, e.name, e.state])).toEqual([
+    expect(createdEntries(creates(plan)).map((e) => [e.id, e.name, e.state])).toEqual([
       ['loc_new_1', 'Upper Hall', UNPLACED],
       ['loc_new_2', 'Lower Hall', UNPLACED],
       ['loc_new_3', 'Cellar', { parent_location_id: 'loc_new_1' }],
@@ -613,7 +622,7 @@ describe('planTurnCreates — parents', () => {
         ),
       },
     )
-    expect(createdEntries(plan.creates)[0]?.state).toEqual(UNPLACED)
+    expect(createdEntries(creates(plan))[0]?.state).toEqual(UNPLACED)
     expect(plan.report.newLocations[0]).toMatchObject({ parent: LOOP_A, parentDropped: true })
     expect(warnSpy).toHaveBeenCalledWith('classifier.create_parent_dropped', {
       handle: 'new:cellar',
@@ -644,7 +653,7 @@ describe('planTurnCreates — a retired parent', () => {
       },
       { entities: [row({ id: ELDRA, kind: 'location', name: 'Eldra' }), retiredPort] },
     )
-    expect(createdEntries(plan.creates)[0]?.state).toEqual(UNPLACED)
+    expect(createdEntries(creates(plan))[0]?.state).toEqual(UNPLACED)
     expect(plan.report.newLocations[0]).toMatchObject({ parent: PORT, parentDropped: true })
     expect(warnSpy).toHaveBeenCalledWith('classifier.create_parent_dropped', {
       handle: 'new:docks',
@@ -683,9 +692,9 @@ describe('planTurnCreates — unplaced places', () => {
         entities: world(unplacedPlace(VARN, 'Varn')),
         source,
       })
-      expect(plan.creates).toEqual([])
+      expect(creates(plan)).toEqual([])
       expect(plan.block.currentLocation).toBe(VARN)
-      expect(plan.placements).toEqual([placeVarn({ kind: 'under', parentId: ELDRA }, source)])
+      expect(placements(plan)).toEqual([placeVarn({ kind: 'under', parentId: ELDRA }, source)])
       expect(plan.report.newLocations).toEqual([
         {
           handle: 'new:varn',
@@ -703,8 +712,8 @@ describe('planTurnCreates — unplaced places', () => {
     const plan = await runPlanner(varnCreate('top'), {
       entities: world(unplacedPlace(VARN, 'Varn')),
     })
-    expect(plan.creates).toEqual([])
-    expect(plan.placements).toEqual([placeVarn({ kind: 'top' })])
+    expect(creates(plan)).toEqual([])
+    expect(placements(plan)).toEqual([placeVarn({ kind: 'top' })])
     expect(plan.report.newLocations[0]).toMatchObject({
       parent: 'top',
       outcome: 'reused',
@@ -728,10 +737,31 @@ describe('planTurnCreates — unplaced places', () => {
       },
       { entities: world(unplacedPlace(VARN, 'Varn')) },
     )
-    expect(createdEntries(plan.creates).map((e) => [e.id, e.state])).toEqual([
+    expect(createdEntries(creates(plan)).map((e) => [e.id, e.state])).toEqual([
       ['loc_new_1', { parent_location_id: ELDRA }],
     ])
-    expect(plan.placements).toEqual([placeVarn({ kind: 'under', parentId: 'loc_new_1' })])
+    expect(placements(plan)).toEqual([placeVarn({ kind: 'under', parentId: 'loc_new_1' })])
+  })
+
+  // Emitted ahead of its parent's create, the placement is refused parent-not-a-place.
+  it('lists a placement after the create of the parent it names', async () => {
+    const plan = await runPlanner(
+      {
+        newLocations: [
+          { handle: 'new:reach', name: 'the Eastern Reach', description: 'flats', parent: ELDRA },
+          { handle: 'new:varn', name: 'Varn', description: 'a salt town', parent: 'new:reach' },
+        ],
+        currentLocation: 'new:varn',
+      },
+      { entities: world(unplacedPlace(VARN, 'Varn')) },
+    )
+    expect(plan.structural.map((action) => [action.kind, action.payload])).toEqual([
+      ['createEntity', { entry: expect.objectContaining({ id: 'loc_new_1' }) }],
+      [
+        'placeLocation',
+        expect.objectContaining({ id: VARN, placement: { kind: 'under', parentId: 'loc_new_1' } }),
+      ],
+    ])
   })
 
   it('collects a reused staged unplaced place for promotion as it places it', async () => {
@@ -739,7 +769,7 @@ describe('planTurnCreates — unplaced places', () => {
       entities: world(unplacedPlace(VARN, 'Varn', { status: 'staged' })),
     })
     expect(plan.reusedIds).toEqual([VARN])
-    expect(plan.placements).toHaveLength(1)
+    expect(placements(plan)).toHaveLength(1)
   })
 
   it('reuses the one exact namesake anywhere for a create with no parent, placing nothing', async () => {
@@ -750,8 +780,8 @@ describe('planTurnCreates — unplaced places', () => {
       },
       { entities: world(market('active')) },
     )
-    expect(plan.creates).toEqual([])
-    expect(plan.placements).toEqual([])
+    expect(creates(plan)).toEqual([])
+    expect(placements(plan)).toEqual([])
     expect(plan.block.currentLocation).toBe(MARKET)
     expect(plan.report.newLocations).toEqual([
       {
@@ -777,7 +807,7 @@ describe('planTurnCreates — unplaced places', () => {
         ),
       },
     )
-    expect(createdEntries(plan.creates)).toEqual([
+    expect(createdEntries(creates(plan))).toEqual([
       expect.objectContaining({
         state: UNPLACED,
         nameCollisionFlag: 1,
@@ -800,8 +830,8 @@ describe('planTurnCreates — unplaced places', () => {
         }),
       ),
     })
-    expect(plan.creates).toEqual([])
-    expect(plan.placements).toEqual([])
+    expect(creates(plan)).toEqual([])
+    expect(placements(plan)).toEqual([])
     expect(plan.block.currentLocation).toBe(VARN)
     expect(plan.report.newLocations).toEqual([
       {
@@ -844,8 +874,8 @@ describe('planTurnCreates — unplaced places', () => {
         ),
       },
     )
-    expect(plan.creates).toEqual([])
-    expect(plan.placements).toEqual([])
+    expect(creates(plan)).toEqual([])
+    expect(placements(plan)).toEqual([])
     expect(plan.report.newLocations[2]).toEqual({
       handle: 'new:c',
       name: 'Varn',
@@ -874,7 +904,7 @@ describe('planTurnCreates — unplaced places', () => {
       },
       { entities: world(unplacedPlace(ASH, 'Ash'), unplacedPlace(BIRCH, 'Birch')) },
     )
-    expect(plan.placements).toEqual([
+    expect(placements(plan)).toEqual([
       {
         kind: 'placeLocation',
         source: 'piggyback_tagged_block',
@@ -918,7 +948,7 @@ describe('planTurnCreates — unplaced places', () => {
         ),
       },
     )
-    expect(plan.placements).toEqual([
+    expect(placements(plan)).toEqual([
       {
         kind: 'placeLocation',
         source: 'piggyback_tagged_block',
@@ -930,7 +960,7 @@ describe('planTurnCreates — unplaced places', () => {
         },
       },
     ])
-    expect(createdEntries(plan.creates)).toEqual([
+    expect(createdEntries(creates(plan))).toEqual([
       expect.objectContaining({
         id: 'loc_new_1',
         state: { parent_location_id: CELLAR },
@@ -955,11 +985,11 @@ describe('planTurnCreates — unplaced places', () => {
       ],
       currentLocation: 'new:hall',
     })
-    expect(createdEntries(plan.creates).map((e) => [e.id, e.state])).toEqual([
+    expect(createdEntries(creates(plan)).map((e) => [e.id, e.state])).toEqual([
       ['loc_new_1', UNPLACED],
       ['loc_new_2', UNPLACED],
     ])
-    expect(plan.placements).toEqual([
+    expect(placements(plan)).toEqual([
       {
         kind: 'placeLocation',
         source: 'piggyback_tagged_block',
@@ -992,12 +1022,12 @@ describe('planTurnCreates — unplaced places', () => {
       ],
       currentLocation: 'new:alcove',
     })
-    expect(createdEntries(plan.creates).map((e) => [e.id, e.state, e.nameCollisionFlag])).toEqual([
+    expect(createdEntries(creates(plan)).map((e) => [e.id, e.state, e.nameCollisionFlag])).toEqual([
       ['loc_new_1', UNPLACED, 0],
       ['loc_new_2', UNPLACED, 0],
       ['loc_new_3', { parent_location_id: 'loc_new_1' }, 0],
     ])
-    expect(plan.placements.map((p) => p.payload.id)).toEqual(['loc_new_1'])
+    expect(placements(plan).map((p) => p.payload.id)).toEqual(['loc_new_1'])
     expect(plan.block.currentLocation).toBe('loc_new_3')
   })
 
@@ -1011,11 +1041,11 @@ describe('planTurnCreates — unplaced places', () => {
       ],
       currentLocation: 'new:inner',
     })
-    expect(createdEntries(plan.creates).map((e) => [e.id, e.state])).toEqual([
+    expect(createdEntries(creates(plan)).map((e) => [e.id, e.state])).toEqual([
       ['loc_new_1', UNPLACED],
       ['loc_new_2', { parent_location_id: 'loc_new_1' }],
     ])
-    expect(plan.placements).toEqual([])
+    expect(placements(plan)).toEqual([])
     expect(plan.block.currentLocation).toBe('loc_new_1')
     expect(plan.report.newLocations[2]).toEqual({
       handle: 'new:inner',
@@ -1049,8 +1079,8 @@ describe('planTurnCreates — unplaced places', () => {
         unplacedPlace(VARN, 'Varn'),
       ],
     })
-    expect(plan.creates).toEqual([])
-    expect(plan.placements).toEqual([])
+    expect(creates(plan)).toEqual([])
+    expect(placements(plan)).toEqual([])
     expect(plan.report.newLocations[0]).toMatchObject({
       parent: PORT,
       outcome: 'reused',
@@ -1075,7 +1105,7 @@ describe('planTurnCreates — matching', () => {
     const plan = await runPlanner(marketCreate('the drowned market', PORT), {
       entities: world(market('active')),
     })
-    expect(plan.creates).toEqual([])
+    expect(creates(plan)).toEqual([])
     expect(plan.block.currentLocation).toBe(MARKET)
     expect(plan.reusedIds).toEqual([])
     expect(plan.report.newLocations).toEqual([
@@ -1101,7 +1131,7 @@ describe('planTurnCreates — matching', () => {
     const plan = await runPlanner(marketCreate('The Drowned Market Stalls', PORT), {
       entities: world(market('active')),
     })
-    expect(createdEntries(plan.creates)).toEqual([
+    expect(createdEntries(creates(plan))).toEqual([
       expect.objectContaining({
         name: 'The Drowned Market Stalls',
         nameCollisionFlag: 1,
@@ -1115,7 +1145,7 @@ describe('planTurnCreates — matching', () => {
     const plan = await runPlanner(marketCreate('The Drowned Market', PORT), {
       entities: world(market('retired')),
     })
-    expect(createdEntries(plan.creates)).toEqual([
+    expect(createdEntries(creates(plan))).toEqual([
       expect.objectContaining({
         name: 'The Drowned Market',
         nameCollisionFlag: 1,
@@ -1141,14 +1171,14 @@ describe('planTurnCreates — matching', () => {
       market('active'),
     ]
     const hidden = await runPlanner(marketCreate('The Drowned Market', ELDRA), { entities })
-    expect(hidden.creates).toEqual([])
+    expect(creates(hidden)).toEqual([])
     expect(hidden.block.currentLocation).toBe(MARKET)
     // Around Port Vellis the map lists it, with the market under it rather than under Eldra.
     const shown = await runPlanner(marketCreate('The Drowned Market', ELDRA), {
       entities,
       mapCurrentLocationId: PORT,
     })
-    expect(createdEntries(shown.creates)).toEqual([
+    expect(createdEntries(creates(shown))).toEqual([
       expect.objectContaining({ name: 'The Drowned Market', nameCollisionFlag: 0 }),
     ])
   })
@@ -1157,7 +1187,7 @@ describe('planTurnCreates — matching', () => {
     const plan = await runPlanner(marketCreate('The Drowned Market', ELDRA), {
       entities: world(market('active')),
     })
-    expect(createdEntries(plan.creates)).toEqual([
+    expect(createdEntries(creates(plan))).toEqual([
       expect.objectContaining({ name: 'The Drowned Market', nameCollisionFlag: 0 }),
     ])
   })
@@ -1175,7 +1205,7 @@ describe('planTurnCreates — matching', () => {
       ],
       currentLocation: 'new:inner',
     })
-    expect(createdEntries(plan.creates).map((e) => [e.id, e.state])).toEqual([
+    expect(createdEntries(creates(plan)).map((e) => [e.id, e.state])).toEqual([
       ['loc_new_1', { parent_location_id: ELDRA }],
       ['loc_new_2', { parent_location_id: 'loc_new_1' }],
     ])
@@ -1190,7 +1220,7 @@ describe('planTurnCreates — matching', () => {
       ],
       currentLocation: 'new:mill',
     })
-    expect(createdEntries(plan.creates).map((e) => e.id)).toEqual(['loc_new_1'])
+    expect(createdEntries(creates(plan)).map((e) => e.id)).toEqual(['loc_new_1'])
     expect(plan.report.newLocations[1]).toEqual({
       handle: 'new:mill2',
       name: 'old mill',
@@ -1210,7 +1240,7 @@ describe('planTurnCreates — matching', () => {
       ],
       currentLocation: 'new:a',
     })
-    expect(createdEntries(plan.creates).map((e) => [e.name, e.nameCollisionFlag])).toEqual([
+    expect(createdEntries(creates(plan)).map((e) => [e.name, e.nameCollisionFlag])).toEqual([
       ['Hall', 0],
       ['Great Hall', 0],
     ])
@@ -1236,7 +1266,7 @@ describe('planTurnCreates — matching', () => {
     })
     expect(embed).toHaveBeenCalledOnce()
     expect(embed).toHaveBeenCalledWith(['an iron key, flaked with rust', 'an iron key'])
-    expect(createdEntries(plan.creates)).toEqual([
+    expect(createdEntries(creates(plan))).toEqual([
       expect.objectContaining({
         id: 'item_new_1',
         nameCollisionFlag: 1,
@@ -1256,7 +1286,7 @@ describe('planTurnCreates — matching', () => {
       entities: world(oldKey()),
       embed,
     })
-    expect(createdEntries(plan.creates)).toEqual([
+    expect(createdEntries(creates(plan))).toEqual([
       expect.objectContaining({
         nameCollisionPartnerId: OLD_KEY,
         nameCollisionReason: 'ambiguous',
@@ -1268,7 +1298,7 @@ describe('planTurnCreates — matching', () => {
     const embed = vi.fn(noEmbed)
     const plan = await runPlanner(keyCreate('   '), { entities: world(oldKey()), embed })
     expect(embed).not.toHaveBeenCalled()
-    expect(createdEntries(plan.creates)).toEqual([
+    expect(createdEntries(creates(plan))).toEqual([
       expect.objectContaining({ description: null, nameCollisionFlag: 0 }),
     ])
   })
@@ -1286,7 +1316,7 @@ describe('planTurnCreates — matching', () => {
     expect(warn).toHaveBeenCalledWith('classifier.description_embed_failed', {
       error: 'embedder offline',
     })
-    expect(createdEntries(plan.creates)).toEqual([
+    expect(createdEntries(creates(plan))).toEqual([
       expect.objectContaining({ id: 'item_new_1', nameCollisionFlag: 0 }),
     ])
   })
@@ -1311,7 +1341,7 @@ describe('planTurnCreates — matching', () => {
       embed,
     })
     expect(embed).toHaveBeenCalledWith(['an iron key, flaked with rust', 'bronze', 'iron'])
-    expect(createdEntries(plan.creates)).toEqual([
+    expect(createdEntries(creates(plan))).toEqual([
       expect.objectContaining({ nameCollisionPartnerId: IRON_KEY, nameCollisionReason: 'alike' }),
     ])
   })
@@ -1378,7 +1408,7 @@ describe('planTurnCreates — matching', () => {
     )
     expect(peak).toBe(2)
     expect(
-      createdEntries(plan.creates).map((e) => [e.id, e.description, e.nameCollisionPartnerId]),
+      createdEntries(creates(plan)).map((e) => [e.id, e.description, e.nameCollisionPartnerId]),
     ).toEqual([
       ['item_new_1', 'small', OLD_KEY],
       ['item_new_2', 'salt-stained', null],
@@ -1406,7 +1436,7 @@ describe('planTurnCreates — matching', () => {
         drops: [],
       },
     })
-    expect(createdEntries(plan.creates).map((e) => [e.id, e.nameCollisionFlag])).toEqual([
+    expect(createdEntries(creates(plan)).map((e) => [e.id, e.nameCollisionFlag])).toEqual([
       ['item_new_1', 0],
       ['item_new_2', 0],
     ])
@@ -1424,8 +1454,8 @@ describe('planTurnCreates — rows and order', () => {
       },
       { source: 'per_turn_classifier' },
     )
-    expect(plan.creates.map((a) => a.source)).toEqual(['per_turn_classifier'])
-    expect(createdEntries(plan.creates)).toEqual([
+    expect(creates(plan).map((a) => a.source)).toEqual(['per_turn_classifier'])
+    expect(createdEntries(creates(plan))).toEqual([
       {
         id: 'loc_new_1',
         branchId: BRANCH,
@@ -1447,7 +1477,7 @@ describe('planTurnCreates — rows and order', () => {
         updatedAt: 1000,
       },
     ])
-    expect(plan.createdRows).toEqual(createdEntries(plan.creates))
+    expect(plan.createdRows).toEqual(createdEntries(creates(plan)))
     // The report keeps what the model emitted, before clamping.
     expect(plan.report.newLocations[0]).toMatchObject({ name, description })
   })
@@ -1471,7 +1501,7 @@ describe('planTurnCreates — rows and order', () => {
         drops: [],
       },
     })
-    expect(createdEntries(plan.creates).map((e) => e.id)).toEqual([
+    expect(createdEntries(creates(plan)).map((e) => e.id)).toEqual([
       'loc_new_1',
       'loc_new_2',
       'item_new_1',
@@ -1514,7 +1544,7 @@ describe('planTurnCreates — handles', () => {
       newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
       currentLocation: 'new:key',
     })
-    expect(plan.creates).toEqual([])
+    expect(creates(plan)).toEqual([])
     expect(plan.block).toEqual({ currentLocation: 'new:key' })
   })
 })
@@ -1555,10 +1585,10 @@ describe('skipTurnCreates', () => {
       },
       worldTimeDelta: 5,
     })
-    expect(plan.creates).toEqual([])
+    expect(creates(plan)).toEqual([])
     expect(plan.createdRows).toEqual([])
     expect(plan.reusedIds).toEqual([])
-    expect(plan.placements).toEqual([])
+    expect(placements(plan)).toEqual([])
     expect(plan.report).toEqual({
       newLocations: [
         {
@@ -1641,7 +1671,7 @@ describe("planTurnCreates — a create's condition", () => {
       { entities: world(market('active')) },
     )
     // The market is reused (same name and parent): only docks and key are new; its condition stays.
-    expect(createdEntries(plan.creates).map((e) => [e.id, e.state])).toEqual([
+    expect(createdEntries(creates(plan)).map((e) => [e.id, e.state])).toEqual([
       [
         'loc_new_1',
         {
@@ -1651,7 +1681,7 @@ describe("planTurnCreates — a create's condition", () => {
       ],
       ['item_new_1', { at_location_id: null, condition: 'bent at the bit' }],
     ])
-    expect(plan.placements).toEqual([])
+    expect(placements(plan)).toEqual([])
     expect(warnSpy).toHaveBeenCalledWith('classifier.condition_truncated', {
       handle: 'new:docks',
       length: 749,

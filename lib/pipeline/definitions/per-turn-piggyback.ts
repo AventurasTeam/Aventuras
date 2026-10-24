@@ -578,11 +578,7 @@ export async function* piggybackFallbackClassifierPhase(
   }
 
   // After the reply's create, before writes naming them: a reversal of the turn removes them.
-  for (const action of plan.creates) {
-    yield { type: 'delta_emitted', action }
-  }
-  // A placement can name a parent the creates insert, so it follows them.
-  for (const action of plan.placements) {
+  for (const action of plan.structural) {
     yield { type: 'delta_emitted', action }
   }
   yield {

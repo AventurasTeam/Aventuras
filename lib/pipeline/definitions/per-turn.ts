@@ -381,11 +381,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
 
   // Right behind the reply's create and ahead of every write naming them: a regenerate sweeps
   // from that create's log position, so a row created before it would outlive the regenerate.
-  for (const action of fold?.turn.creates ?? []) {
-    yield { type: 'delta_emitted', action }
-  }
-  // A placement can name a parent the creates insert, so it follows them.
-  for (const action of fold?.turn.placements ?? []) {
+  for (const action of fold?.turn.structural ?? []) {
     yield { type: 'delta_emitted', action }
   }
   for (const action of fold?.actions ?? []) {

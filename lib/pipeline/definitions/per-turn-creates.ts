@@ -41,10 +41,12 @@ type CreateEntityAction = Extract<PipelineAction, { kind: 'createEntity' }>
 type PlaceLocationAction = Extract<PipelineAction, { kind: 'placeLocation' }>
 
 export type TurnCreatePlan = PlannedTurn & {
-  /** Insert `createdRows`: parents before children, locations before items. */
-  creates: CreateEntityAction[]
-  /** A reused unplaced place's placement; emitted after `creates`, before every other write. */
-  placements: PlaceLocationAction[]
+  /**
+   * In emission order, before every other write: inserts of `createdRows` (parents before
+   * children, locations before items), then each reused unplaced place's placement, which can
+   * name a parent those inserts create.
+   */
+  structural: readonly (CreateEntityAction | PlaceLocationAction)[]
 }
 
 type LocationFate = { outcome: 'created' | 'reused'; id: string } & (
@@ -502,12 +504,14 @@ export async function planTurnCreates(input: {
   const createdRows = [...places.rows, ...things.rows]
   return {
     block: rewriteHandles(block, ids, things.ids, log),
-    creates: createdRows.map(
-      (entry): CreateEntityAction => ({ kind: 'createEntity', source, payload: { entry } }),
-    ),
+    structural: [
+      ...createdRows.map(
+        (entry): CreateEntityAction => ({ kind: 'createEntity', source, payload: { entry } }),
+      ),
+      ...places.placements,
+    ],
     createdRows,
     reusedIds: places.reusedIds,
-    placements: places.placements,
     report: {
       newLocations: locations.map((e) => locationReport(e, places.fates.get(e.handle))),
       newItems: items.map((e) => itemReport(e, things.ids.get(e.handle))),
@@ -523,10 +527,9 @@ export function skipTurnCreates(block: SubstitutedStateBlock, log: Logger): Turn
   const none = new Map<string, string>()
   return {
     block: rewriteHandles(block, none, none, log),
-    creates: [],
+    structural: [],
     createdRows: [],
     reusedIds: [],
-    placements: [],
     report: {
       newLocations: (block.newLocations ?? []).map((e) => locationReport(e, undefined)),
       newItems: (block.newItems ?? []).map((e) => itemReport(e, undefined)),
