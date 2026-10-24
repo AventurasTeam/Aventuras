@@ -79,14 +79,6 @@ slice-planning gate forces its resolution before that slice is planned.
   comparison and the namesake matcher. Raised 2026-10-10 by the
   partial-name collisions code review.
 
-- **The two `cosine` implementations disagree on bad input.**
-  `lib/retrieval/vector.ts:27` throws on a dimension mismatch and NaN,
-  while `lib/classifier/reconcile.ts` returns 0 for a zero norm
-  (reconciliation now treats zero and NaN vectors as unscored). Also
-  `l2Normalize` (`lib/embedder/local/pooling.ts:9`) passes zero and NaN
-  vectors through unchanged. Raised 2026-10-10 by the partial-name
-  collisions code review.
-
 - **The resolve dialog's Rename body keeps its input names when a row
   is renamed elsewhere.** `RenameBody` in
   `components/compounds/collision-resolve-dialog.tsx` resets only when

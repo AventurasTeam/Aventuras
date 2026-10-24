@@ -1622,6 +1622,21 @@ unless reconciliation catches them.
 Parked 2026-10-24; the signal is the unattributed fallback
 (`classifier.window_head_fallback`) firing often enough to measure.
 
+#### A zero or NaN embedding is stored as it comes
+
+`l2Normalize` (`lib/embedder/local/pooling.ts`) returns a zero vector
+unchanged and turns NaN input into an all-NaN vector, and `embedTexts`
+(`lib/embedder/service.ts`) stores either: nothing on the write path
+enforces the unit norm `lib/retrieval/vector.ts` assumes it does. A
+retrieval pass that scores such a row throws `VectorInvariantError`,
+which the reader shows as an embedder failure with Switch embedder as
+its fix, on every pass that meets the row. Reconciliation is safe:
+`scoreDescriptions` (`lib/classifier/reconcile.ts`) reads a zero or
+NaN vector as unscored. The fix is a write-side guard in `embedTexts`
+that fails the embed on a vector it can't normalize instead of storing
+it. Parked 2026-10-24; the signal is a provider returning zero or NaN
+vectors.
+
 ### UX (parked)
 
 #### Drag-and-drop file import for ImportDialog
