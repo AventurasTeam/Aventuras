@@ -41,7 +41,7 @@ function rowIdOf(placement: PlacePlacement): string {
 }
 
 function StatusTag({ entity }: { entity: Entity }) {
-  // data-model.md → Lifecycle on retirement: UI badges retired places.
+  // A non-active place, staged or retired, carries its status tag, as EntityPicker's rows do.
   if (entity.status === 'active') return null
   return (
     <View className="shrink-0">

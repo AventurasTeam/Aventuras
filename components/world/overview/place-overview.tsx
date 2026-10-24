@@ -38,8 +38,8 @@ function ConditionRegion({
   )
 }
 
-// world.md → Location Overview. data-model.md → LocationState shape: an unplaced place reads
-// `Location unknown`, and a chain whose top place is unplaced ends in it.
+// world.md → Location Overview: no chain for a top-level place, `Location unknown` for an unplaced
+// one. A chain topped by an unplaced place ends in it.
 export function LocationOverviewBody({ entity, entities, onRegionPress }: KindBodyProps) {
   const state = stateOf(entity, 'location')
   const ancestors = locationAncestors(entity.id, entities)
