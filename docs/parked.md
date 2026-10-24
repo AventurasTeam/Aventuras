@@ -1107,7 +1107,7 @@ renders more than one way: Overview's single-reference regions show
 `components/world/overview/overview-parts.tsx`) and the entity picker
 shows "Missing entity". A dangling parent reads as unplaced on Overview,
 whose "Part of" shows `Location unknown` (`realPlacementOf` in
-`lib/world/location-map.ts`), while the Connections parent picker still
+`lib/world/placement.ts`), while the Connections parent picker still
 shows "⚠ Missing entity" for it (`PlacementPicker` in
 `components/world/detail/placement-field.tsx`); no writer leaves one
 any more, since a delete and a reversal mark the place unplaced.
