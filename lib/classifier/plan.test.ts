@@ -1762,6 +1762,22 @@ describe('mentioned places', () => {
       expect(parentDrops).toEqual([{ handle: 'new:varn', parent: 'loc_vdocks', cause: 'cycle' }])
     })
 
+    it('reports the twin of a reuse whose placement looped as left unplaced too', () => {
+      const { planned, handleMap, parentDrops } = buildClassifierActions(
+        placesReply([
+          newPlace('new:a', 'Varn', { parent: 'loc_vdocks' }),
+          newPlace('new:b', 'Varn', { parent: 'loc_vdocks' }),
+        ]),
+        deps([VARN, placeRow('loc_vdocks', 'Varn Docks', 'loc_varn')]),
+      )
+      expect(handleMap.get('new:b')).toBe('loc_varn')
+      expect(placementsOf(planned)).toEqual([])
+      expect(parentDrops).toEqual([
+        { handle: 'new:a', parent: 'loc_vdocks', cause: 'cycle' },
+        { handle: 'new:b', parent: 'loc_vdocks', cause: 'cycle' },
+      ])
+    })
+
     it('drops a placement that would close a loop through one the reply placed earlier', () => {
       const { planned, parentDrops } = buildClassifierActions(
         placesReply([

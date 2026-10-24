@@ -230,12 +230,14 @@ function declaredPlace(place: NewPlace): NewPlace {
   return isTopLevel(place.parent) ? { ...place, parent: TOP_LEVEL } : place
 }
 
+type PlacementLoop = { parent: string; cause: 'cycle' | 'chain-broken' }
+
 // data-model.md → LocationState shape: a machine writer walks a placement first and drops a loop.
 function placementLoop(
   id: string,
   parentId: string,
   parentOf: (id: string) => string | null,
-): { parent: string; cause: 'cycle' | 'chain-broken' } | null {
+): PlacementLoop | null {
   const walk = checkParentChain(id, parentId, parentOf)
   if (walk === 'ok') return null
   return { parent: parentId, cause: walk === 'cycle' ? 'cycle' : 'chain-broken' }
@@ -393,6 +395,9 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const placed: SettledNewPlace[] = []
     // The rows this reply placed, as matching must see them: no longer unplaced.
     const placedRows = new Map<string, Entity>()
+    // By row and parent: the pass keeps no one chain, so another parent's placement walks anew.
+    const loopDrops = new Map<string, PlacementLoop>()
+    const loopKey = (id: string, parentId: string): string => `${id} ${parentId}`
 
     const declared: NewPlace[] = []
     for (const place of newPlacesOf(extraction)) {
@@ -467,7 +472,14 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
               },
               entryId: at(),
             })
-          } else parentDrops.push({ handle: place.handle, ...loop })
+          } else {
+            loopDrops.set(loopKey(id, loop.parent), loop)
+            parentDrops.push({ handle: place.handle, ...loop })
+          }
+        } else if (candidate.kind === 'under') {
+          // A twin of a reuse whose placement looped maps to the same row, left unplaced too.
+          const loop = loopDrops.get(loopKey(id, candidate.parentId))
+          if (loop !== undefined) parentDrops.push({ handle: place.handle, ...loop })
         }
       } else {
         id = newId('loc')
