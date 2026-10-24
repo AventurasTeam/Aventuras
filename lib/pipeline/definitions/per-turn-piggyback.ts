@@ -38,6 +38,7 @@ import type {
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore } from '@/lib/stores'
 
+import { toPipelineError } from '../call-error'
 import { classifierEmbedder } from './description-embedder'
 import { readLastTurns, readStoryPlace } from './entry-reads'
 import { buildGenerationContext } from './generation-context'
@@ -305,7 +306,10 @@ async function generateClassifierState<T extends { worldTimeDelta: number }>(
   const first = await classify()
   if (first.status !== 'ok' || first.value.worldTimeDelta >= 0) return first
   const reroll = await classify()
-  return reroll.status === 'ok' ? reroll : first
+  const chosen = reroll.status === 'ok' ? reroll : first
+  // Each call's retried attempts are reported, whichever result the turn keeps.
+  const retried = reroll.status === 'not-configured' ? [] : reroll.recoverable
+  return { ...chosen, recoverable: [...first.recoverable, ...retried] }
 }
 
 type FallbackReply = z.infer<typeof fallbackClassifierSchema>
@@ -413,7 +417,10 @@ export async function* piggybackFallbackClassifierPhase(
   }
   // Only the turn's regular classifier recurs per turn, so only it caches the system prefix;
   // a failed-piggyback recovery doesn't (piggyback.md → Fallback classifier context).
-  const callOptions: StructuredCallOptions = { cacheSystemPrefix: !outcome?.attempted }
+  const callOptions: StructuredCallOptions = {
+    cacheSystemPrefix: !outcome?.attempted,
+    actionId: ctx.actionId,
+  }
   const result = askForSuggestions
     ? await generateClassifierState(
         prompt,
@@ -429,6 +436,10 @@ export async function* piggybackFallbackClassifierPhase(
         ctx.abortSignal,
         callOptions,
       )
+
+  // generation-pipeline.md → Two retry tiers: one event per retried attempt, however the call ended.
+  for (const attempt of result.status === 'not-configured' ? [] : result.recoverable)
+    yield { type: 'recoverable_error', error: toPipelineError(attempt) }
 
   // A cancelled run discards its writes rather than recording them as a classifier
   // failure. The signal as well as the status: generateClassifierState returns the

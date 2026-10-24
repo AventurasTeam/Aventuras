@@ -189,9 +189,14 @@ async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx)
       turnCaptureSink.recordTargetEntry(run.actionId, event.entryId)
     }
   } else if (event.type === 'recoverable_error') {
+    const { error } = event
     logger.warn(
       'pipeline.recoverable_error',
-      { detail: event.error.detail ?? event.error.kind },
+      {
+        kind: error.kind,
+        ...('reason' in error ? { reason: error.reason } : {}),
+        ...(error.detail !== undefined ? { detail: error.detail } : {}),
+      },
       { actionId: run.actionId },
     )
   }

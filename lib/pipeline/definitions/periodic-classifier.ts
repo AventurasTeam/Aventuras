@@ -300,6 +300,7 @@ export async function* periodicClassifierPhase(
       classifierReplySchema(mentionedPlaces),
       modelConfig,
       bounded.signal,
+      { actionId: ctx.actionId },
     )
   } finally {
     bounded.dispose()

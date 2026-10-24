@@ -223,6 +223,29 @@ describe('generateStructured', () => {
     expect(res).toEqual({ status: 'ok', value: { description: 'A tale.' }, recoverable: [] })
   })
 
+  // observability.md → actionId threading: the model's fetch capture links to the run's action.
+  it("builds the model with the run's action id, and with none outside a run", async () => {
+    vi.mocked(getModel).mockClear()
+    await generateStructured(
+      'wizard-assist',
+      PROMPT,
+      schema,
+      STRUCTURED_CFG,
+      new AbortController().signal,
+      {
+        actionId: 'act_1',
+      },
+    )
+    await generateStructured(
+      'wizard-assist',
+      PROMPT,
+      schema,
+      STRUCTURED_CFG,
+      new AbortController().signal,
+    )
+    expect(vi.mocked(getModel).mock.calls.map((call) => call[2])).toEqual(['act_1', undefined])
+  })
+
   // generation-pipeline.md → Two retry tiers: every arm carries the attempts it retried.
   it('returns the parse retry it recovered from beside the value', async () => {
     vi.mocked(runProviderCall)

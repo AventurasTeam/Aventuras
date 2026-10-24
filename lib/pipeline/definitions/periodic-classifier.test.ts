@@ -469,7 +469,8 @@ describe('periodicClassifierPhase', () => {
   })
 
   // architecture.md → System and user halves.
-  it('sends no cache marker: the call takes no sixth argument', async () => {
+  // observability.md → actionId threading: no cache marker, and the pass's action id.
+  it("sends no cache marker, and the pass's action id", async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 1 })
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
@@ -479,7 +480,7 @@ describe('periodicClassifierPhase', () => {
 
     await drain(h.ctx)
 
-    expect(vi.mocked(generateStructured).mock.calls[0]![5]).toBeUndefined()
+    expect(vi.mocked(generateStructured).mock.calls[0]![5]).toEqual({ actionId: 'a1' })
   })
 
   // classifier.md → Persistence: a system row is no prose to process, and a trailing one's
@@ -2030,7 +2031,10 @@ describe('periodicClassifierPhase via runPipeline', () => {
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
       value: extraction(),
-      recoverable: [{ tier: 'parse', detail: 'Unexpected end of JSON input', attempt: 0 }],
+      recoverable: [
+        { tier: 'parse', detail: 'Unexpected end of JSON input', attempt: 0 },
+        { tier: 'provider', reason: 'timeout' },
+      ],
     })
     const result = await runPipeline(PERIODIC_CLASSIFIER_KIND, {
       storyId: 's1',
@@ -2043,8 +2047,10 @@ describe('periodicClassifierPhase via runPipeline', () => {
     const logged = getDiagnosticsSnapshot().logEntries.filter(
       (e) => e.kind === 'pipeline.recoverable_error',
     )
+    // The reason too: a timeout carries no detail, and logging its kind alone lost why it retried.
     expect(logged.map((e) => [e.level, e.fields, e.actionId])).toEqual([
-      ['warn', { detail: 'Unexpected end of JSON input' }, result.actionId],
+      ['warn', { kind: 'phase-logic', detail: 'Unexpected end of JSON input' }, result.actionId],
+      ['warn', { kind: 'provider', reason: 'timeout' }, result.actionId],
     ])
   })
 

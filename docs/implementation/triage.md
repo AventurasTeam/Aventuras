@@ -212,21 +212,6 @@ slice-planning gate forces its resolution before that slice is planned.
   function. Raised 2026-10-11 by that PR's task reviews and its slice
   review.
 
-- **`generateStructured` doesn't pass the action id to
-  `prepareGeneration`.** In `lib/ai/generate.ts`, `streamText` passes
-  `actionId`, so the narrative's fetch capture links to its action, but
-  the fallback and periodic classifiers and the suggestion refresh, all
-  run phases, go out unattributed, against
-  [`observability.md → actionId threading`](../observability.md#actionid-threading)
-  ("contract-critical"); the wizard runs outside a run and is
-  unattributed by design. Related: `ResolveModelResult.providerType`,
-  `buildCallSettings` and `marksSystemPrefix` type the provider
-  as `ProviderInstance['type']`, which has no `'stub'`, though a runtime
-  row can be one (`ProviderInstanceWithStub` in `lib/ai/types.ts`); only
-  `marksSystemPrefix`'s comment notes it. Predates the system and user
-  halves PR, whose `marksSystemPrefix` copies the existing type. Raised
-  2026-10-11 by its task reviews.
-
 - **The location instructions count retired places.** Two prompt lines
   are gated on `{% if locationMap.size > 0 or locationMapUnplaced.size > 0 %}`,
   which counts retired rows too in either list, and those carry no id:
@@ -796,23 +781,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Reading the reply's creates in that placement view would close it.
   Predates the AI writer map's follow-up; raised 2026-10-24 by its
   re-review.
-
-- **Two structured-call phases never report their retries.**
-  [`generation-pipeline.md → Two retry tiers`](../generation-pipeline.md#two-retry-tiers-both-at-phase-level)
-  says a phase yields a `recoverable_error` per retried attempt however
-  the call resolves. The periodic classifier pass now does; the per-turn
-  fallback classifier (`lib/pipeline/definitions/per-turn-piggyback.ts`,
-  where `generateClassifierState` also drops one call's list when it
-  re-rolls) and the suggestion refresh
-  (`lib/pipeline/definitions/suggestion-refresh.ts`) receive
-  `generateStructured`'s `recoverable` list and never yield it.
-  Pre-existing. Raised 2026-10-23 by the AI writer map's Task 21 review.
-
-- **A provider retry's log loses its reason.**
-  `lib/pipeline/runtime/orchestrator.ts` logs a `recoverable_error` with
-  `detail ?? kind`, so a provider retry without a detail logs
-  `"provider"` and drops its `reason` (`timeout` or `network`).
-  Pre-existing. Raised 2026-10-23 by the AI writer map's Task 21 review.
 
 - **A pass's rename can leave a collision flag with no namesake
   basis.** `renameEntity` (`lib/actions/entities/state-patch-actions.ts`)

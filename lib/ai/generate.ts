@@ -177,6 +177,9 @@ export function parseStructured<T>(raw: string, schema: z.ZodType<T>): T {
 export type StructuredCallOptions = {
   /** Mark the system prefix for caching; honoured on `anthropic` providers only. */
   cacheSystemPrefix?: boolean
+  /** The run's action, so the call's fetch capture links to it (observability.md → actionId
+   *  threading). Absent outside a run, as for the wizard. */
+  actionId?: string
 }
 
 /** generation-pipeline.md → Two retry tiers: `recoverable` holds each retried attempt. */
@@ -203,7 +206,7 @@ export async function generateStructured<T>(
   signal: AbortSignal,
   options?: StructuredCallOptions,
 ): Promise<GenerateStructuredResult<T>> {
-  const resolved = prepareGeneration(target, config)
+  const resolved = prepareGeneration(target, config, options?.actionId)
   if (!resolved.ok) return { status: 'not-configured', kind: resolved.kind }
 
   // z.toJSONSchema throws on unrepresentable schemas (transforms, refinements);

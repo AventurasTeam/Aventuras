@@ -357,7 +357,7 @@ describe('per-turn-piggyback', () => {
         expect.anything(),
         expect.anything(),
         ctx.abortSignal,
-        { cacheSystemPrefix: true },
+        { cacheSystemPrefix: true, actionId: 'act_1' },
       )
 
       // With the narrative fold having written no report, this phase is the only writer:
@@ -850,7 +850,7 @@ describe('per-turn-piggyback', () => {
         expect.anything(),
         expect.anything(),
         ctx.abortSignal,
-        { cacheSystemPrefix: true },
+        { cacheSystemPrefix: true, actionId: 'act_1' },
       )
       expect(events[0]).toEqual({
         type: 'delta_emitted',
@@ -1174,10 +1174,7 @@ describe('per-turn-piggyback', () => {
         transfers: { items: [], stackables: [] },
       }
 
-      async function callOptionsAfter(
-        outcome: PiggybackOutcome | undefined,
-        { worldTimeDeltas = [15], withChips = false } = {},
-      ): Promise<unknown[]> {
+      function seedClearing(withChips: boolean): void {
         currentStoryStore.set({
           storyId: 's1',
           branchId: 'b1',
@@ -1203,13 +1200,9 @@ describe('per-turn-piggyback', () => {
           } as never,
         ])
         entitiesStore.hydrate('b1', [])
-        for (const worldTimeDelta of worldTimeDeltas)
-          generateStructuredMock.mockResolvedValueOnce({
-            status: 'ok',
-            recoverable: [],
-            value: { ...REPORT, worldTimeDelta, ...(withChips ? { suggestions: [] } : {}) },
-          })
+      }
 
+      async function drainPhase(outcome?: PiggybackOutcome): Promise<PhaseEmittedEvent[]> {
         const gen = piggybackFallbackClassifierPhase({
           actionId: 'act_1',
           abortSignal: new AbortController().signal,
@@ -1223,10 +1216,56 @@ describe('per-turn-piggyback', () => {
           storyId: 's1',
           branchId: 'b1',
         })
+        const events: PhaseEmittedEvent[] = []
         let result = await gen.next()
-        while (!result.done) result = await gen.next()
+        while (!result.done) {
+          events.push(result.value)
+          result = await gen.next()
+        }
+        return events
+      }
+
+      async function callOptionsAfter(
+        outcome: PiggybackOutcome | undefined,
+        { worldTimeDeltas = [15], withChips = false } = {},
+      ): Promise<unknown[]> {
+        seedClearing(withChips)
+        for (const worldTimeDelta of worldTimeDeltas)
+          generateStructuredMock.mockResolvedValueOnce({
+            status: 'ok',
+            recoverable: [],
+            value: { ...REPORT, worldTimeDelta, ...(withChips ? { suggestions: [] } : {}) },
+          })
+        await drainPhase(outcome)
         return generateStructuredMock.mock.calls.map((call) => call[5])
       }
+
+      // generation-pipeline.md → Two retry tiers: each call's retried attempts are reported,
+      // the re-rolled first call's included, whichever result the turn keeps.
+      it('reports the retried attempts of both calls when it re-rolls a negative delta', async () => {
+        const first = { tier: 'parse', detail: 'Unexpected end of JSON input', attempt: 0 } as const
+        const second = { tier: 'provider', reason: 'network', detail: '503' } as const
+        seedClearing(false)
+        generateStructuredMock
+          .mockResolvedValueOnce({
+            status: 'ok',
+            value: { ...REPORT, worldTimeDelta: -10 },
+            recoverable: [first],
+          })
+          .mockResolvedValueOnce({
+            status: 'ok',
+            value: { ...REPORT, worldTimeDelta: 15 },
+            recoverable: [second],
+          })
+        const events = await drainPhase()
+        expect(events.filter((e) => e.type === 'recoverable_error')).toEqual([
+          { type: 'recoverable_error', error: { kind: 'phase-logic', detail: first.detail } },
+          {
+            type: 'recoverable_error',
+            error: { kind: 'provider', reason: 'network', detail: '503' },
+          },
+        ])
+      })
 
       // Both schema branches: a recovery that also asks for chips stays unmarked.
       describe.each([
@@ -1238,14 +1277,14 @@ describe('per-turn-piggyback', () => {
           ['a piggyback that never fired', { attempted: false, succeeded: false }],
         ])('marks the regular classifier call after %s', async (_label, outcome) => {
           expect(await callOptionsAfter(outcome, { withChips })).toEqual([
-            { cacheSystemPrefix: true },
+            { cacheSystemPrefix: true, actionId: 'act_1' },
           ])
         })
 
         it('leaves a call recovering from a failed piggyback parse unmarked', async () => {
           expect(
             await callOptionsAfter({ attempted: true, succeeded: false }, { withChips }),
-          ).toEqual([{ cacheSystemPrefix: false }])
+          ).toEqual([{ cacheSystemPrefix: false, actionId: 'act_1' }])
         })
 
         it.each([
@@ -1256,7 +1295,10 @@ describe('per-turn-piggyback', () => {
           async (_label, outcome, cacheSystemPrefix) => {
             expect(
               await callOptionsAfter(outcome, { worldTimeDeltas: [-10, 15], withChips }),
-            ).toEqual([{ cacheSystemPrefix }, { cacheSystemPrefix }])
+            ).toEqual([
+              { cacheSystemPrefix, actionId: 'act_1' },
+              { cacheSystemPrefix, actionId: 'act_1' },
+            ])
           },
         )
       })
@@ -1476,7 +1518,7 @@ describe('per-turn-piggyback', () => {
         fallbackClassifierWithSuggestionsSchema,
         expect.anything(),
         ctx.abortSignal,
-        { cacheSystemPrefix: true },
+        { cacheSystemPrefix: true, actionId: 'act_1' },
       )
       // One delta carries both scene state and chips — a second
       // updateStoryEntryMetadata delta here would mean the fold is patching
@@ -1557,7 +1599,7 @@ describe('per-turn-piggyback', () => {
         fallbackClassifierSchema,
         expect.anything(),
         ctx.abortSignal,
-        { cacheSystemPrefix: false },
+        { cacheSystemPrefix: false, actionId: 'act_1' },
       )
       const created = events[0]
       if (
@@ -1987,7 +2029,7 @@ describe('per-turn-piggyback', () => {
         fallbackClassifierSchema,
         expect.anything(),
         ctx.abortSignal,
-        { cacheSystemPrefix: true },
+        { cacheSystemPrefix: true, actionId: 'act_1' },
       )
       const prompt = generateStructuredMock.mock.calls[0]![1].user
       expect(prompt).not.toContain('Action')

@@ -477,6 +477,7 @@ describe('suggestion-refresh emission phase', () => {
         storyModels: { suggestion: { providerId: 'prov-1', modelId: 'story-model' } },
       }),
       expect.anything(),
+      { actionId: 'act_1' },
     )
     const { system, user } = generateStructuredMock.mock.calls[0]![1]
     // architecture.md → System and user halves: the fixture's tone is empty, so it ends on Genre.
@@ -491,8 +492,9 @@ describe('suggestion-refresh emission phase', () => {
     expect(user).not.toContain('<suggestions>')
   })
 
-  // architecture.md → System and user halves.
-  it('sends no cache marker: the call takes no sixth argument', async () => {
+  // architecture.md → System and user halves: no cache marker. observability.md → actionId
+  // threading: the call is the run's, so its capture links to the run's action.
+  it("sends no cache marker, and the run's action id", async () => {
     openStory()
     hydrate()
     wireAppSettings()
@@ -500,7 +502,27 @@ describe('suggestion-refresh emission phase', () => {
 
     await runEmission()
 
-    expect(generateStructuredMock.mock.calls[0]![5]).toBeUndefined()
+    expect(generateStructuredMock.mock.calls[0]![5]).toEqual({ actionId: 'act_1' })
+  })
+
+  // generation-pipeline.md → Two retry tiers: one event per retried attempt.
+  it('reports each retried attempt', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue({
+      ...okChips([{ categoryRef: 'cat1', text: 'Draw.' }]),
+      recoverable: [{ tier: 'provider', reason: 'network', detail: '503' }],
+    })
+
+    const { events } = await runEmission()
+
+    expect(events.filter((e) => e.type === 'recoverable_error')).toEqual([
+      {
+        type: 'recoverable_error',
+        error: { kind: 'provider', reason: 'network', detail: '503' },
+      },
+    ])
   })
 
   it('threads composer text into the prompt as refresh guidance and persists it', async () => {
