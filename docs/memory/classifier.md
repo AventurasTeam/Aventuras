@@ -753,11 +753,12 @@ faction's standing and agenda, a happening's or a new thread's category
 and icon, a new thread's `resolvedAtTurn` and a new place's condition.
 In the renames, placements, standings, new threads, thread statuses and
 known awareness, a `null` list reads as empty, a `null` field as absent,
-and an enum value is read trimmed and case-folded first, so a `null` source turn leaves the fact
-unattributed and `"Resolved"` lands as `resolved`. An entry there that
-still doesn't fit, a required field missing or an enum value outside
-the list (a status change to `pending`), is dropped alone and logged
-with its list, and the rest of the reply lands. In the older lists, a
+and an enum value is read trimmed and lowercased first, so a `null`
+source turn leaves the fact unattributed and `"Resolved"` lands as
+`resolved`. An entry there that still doesn't fit, a required field
+missing or an enum value outside the list (a status change to
+`pending`), is dropped alone and logged with its list, and the rest of
+the reply lands. In the older lists, a
 required field or an enum the model gets wrong still fails the reply.
 A chained pass that still fails leaves the watermark where it was,
 records the failure in the status, and shows a warning toast,

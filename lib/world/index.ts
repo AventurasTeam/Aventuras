@@ -127,11 +127,11 @@ export {
   mergePlaceRefusal,
   moveHidesStory,
   PLACE_REFUSAL,
+  placementDrop,
   placeSaveConfirm,
   placeSaveRefusal,
   retireCascade,
   retiredPlaceEntered,
-  reusePlacementDrop,
   storyPlaceOf,
 } from './place-rules'
 export type {

@@ -2029,6 +2029,33 @@ describe('mentioned places', () => {
         expect(droppedPlacements).toEqual([])
       })
 
+      // Q29: the twin rule comes first, so a twin maps to the first create's row a placement moved.
+      it('maps a twin to the first row even after a placement between them moved it', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply(
+            [
+              newPlace('new:c1', 'the Cellar', { parent: 'loc_keep', sourceTurn: 't1' }),
+              newPlace('new:c2', 'the Cellar', {
+                parent: 'loc_keep',
+                sourceTurn: 't3',
+                keywords: ['the vault'],
+              }),
+            ],
+            { placements: [placement('loc_cellar', 'loc_inn', 't2')] },
+          ),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(handleMap.get('new:c2')).toBe('loc_cellar')
+        expect(createdPlaces(planned)).toEqual([])
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_keep' }, 'e1'],
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e2'],
+        ])
+        expect(termWritesOn(planned, 'loc_cellar')).toEqual([
+          expect.objectContaining({ entryId: 'e3' }),
+        ])
+      })
+
       // An unattributed fact counts at the window's newest turn, as inTurnOrder sorts it.
       it('counts an unattributed fact at the newest turn: a placement there plans first', () => {
         const unattributed = buildClassifierActions(
@@ -3964,6 +3991,27 @@ describe('placements', () => {
       expect(unresolvedRefs).toEqual([])
     },
   )
+
+  it("reports a parent naming a blank-named new place's handle as unresolved", () => {
+    const places: ClassifierPlacesExtraction = {
+      ...reply({ placements: [{ ref: 'loc_varn', parent: 'new:reach', sourceTurn: 't1' }] }),
+      newPlaces: [
+        {
+          handle: 'new:reach',
+          name: '  ',
+          description: 'x',
+          keywords: [],
+          sourceTurn: 't2',
+        } as NewPlace,
+      ],
+    }
+    const { unresolvedRefs, droppedPlacements } = buildClassifierActions(places, {
+      ...base,
+      entities: [VARN],
+    } as never)
+    expect(unresolvedRefs).toEqual(['new:reach'])
+    expect(droppedPlacements).toEqual([])
+  })
 
   it('reports a parent naming nothing as unresolved, and drops one that is no place', () => {
     const { planned, unresolvedRefs, droppedPlacements } = buildClassifierActions(

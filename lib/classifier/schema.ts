@@ -4,7 +4,7 @@ import { PLOT_ICON_KEYS } from '@/lib/plot'
 
 // No .transform() on a parsed value: z.toJSONSchema (used by generateStructured) throws on one,
 // so the severity clamp into [0, 1] lives in plan.ts. A z.preprocess only reads the reply leniently:
-// the model is shown the schema it feeds.
+// the model is shown the output-mode schema (toJSONSchema's default), which is the one it feeds.
 const severity = z.number().default(0)
 
 /** classifier.md → Mentioned places → Parent: a new place's `parent` for a top-level place. */
@@ -35,7 +35,7 @@ const tolerantList = <T extends z.ZodType>(entry: T) =>
     z.array(z.preprocess(withoutNulls, entry).optional().catch(undefined)).default([]),
   )
 
-// A tolerant list's enum value is read trimmed and case-folded, so "Resolved" lands as resolved.
+// A tolerant list's enum value is read trimmed and lowercased, so "Resolved" lands as resolved.
 const foldedEnum = <T extends z.ZodEnum>(values: T) =>
   z.preprocess((value) => (typeof value === 'string' ? value.trim().toLowerCase() : value), values)
 

@@ -25,10 +25,10 @@ import {
   locationMapView,
   matchNewPlace,
   parentOfLocations,
+  placementDrop,
   placeNewLocation,
   replyMatchView,
   replyParentOf,
-  reusePlacementDrop,
   settlingOrder,
   TOP_LEVEL,
   withPlacement,
@@ -244,7 +244,7 @@ function planLocations(args: {
         // data-model.md → Disabled places: the story the turn found, not the place it walks into.
         const drop =
           candidate.kind === 'under'
-            ? reusePlacementDrop({
+            ? placementDrop({
                 id,
                 parentId: candidate.parentId,
                 places: byId,

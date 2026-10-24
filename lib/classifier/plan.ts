@@ -18,15 +18,13 @@ import {
   characterFactionId,
   flagStillHolds,
   matchNewPlace,
-  moveHidesStory,
   nameBasis,
   parentOfLocations,
-  placementLoop,
+  placementDrop,
   placeNewLocation,
   realPlacementOf,
   replyMatchView,
   replyParentOf,
-  reusePlacementDrop,
   samePlacement,
   settlingOrder,
   stateOf,
@@ -336,7 +334,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   }
 
   const rowById = new Map(entities.map((e) => [e.id, e]))
-  // What this reply creates and where it puts a place, for the placements walk after the creates.
+  // What this reply creates and where it puts a place, which later creates and placements walk.
   const createdPlaces: Pick<Entity, 'id' | 'kind' | 'state'>[] = []
   const placedHere = new Map<string, PlacedPlacement>()
   // Mutable, not a frozen snapshot: rows this pass plans are visible to later
@@ -409,8 +407,6 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   // classifier.md → What the classifier writes → Where a place sits. Judged against this reply's
   // own creates and placements, so a drop happens before the handler sees the fact.
   const realPlacement = realPlacementOf(entities.filter((e) => e.kind === 'location'))
-  const hidesStory = (id: string, parentId: string, parentOf: ParentOf): boolean =>
-    moveHidesStory({ id, parentId, places: rowById, parentOf, story })
   const placementFacts = inTurnOrder(extraction.placements)
   // A new place's handle, which a placement may name before the place settles.
   const placeHandles = new Set(
@@ -452,10 +448,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     if (!placedEarlier && parentOf(id) === parentId) return { kind: 'restated' }
     if (parent.status === 'retired')
       return { kind: 'dropped', drop: { ref: fact.ref, cause: 'retired' } }
-    const loop = placementLoop(id, parentId, parentOf)
-    if (loop !== null) return { kind: 'dropped', drop: { ref: fact.ref, cause: loop.cause } }
-    if (hidesStory(id, parentId, parentOf))
-      return { kind: 'dropped', drop: { ref: fact.ref, cause: 'story-inside' } }
+    const drop = placementDrop({ id, parentId, places: rowById, parentOf, story })
+    if (drop !== null) return { kind: 'dropped', drop: { ref: fact.ref, cause: drop.cause } }
     return { kind: 'place', id, placement: { kind: 'under', parentId } }
   }
   // A mark after a placement this reply sent lands only if that one is refused: keep the view.
@@ -561,7 +555,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         if (match.place && candidate.kind !== 'unplaced') {
           const drop =
             candidate.kind === 'under'
-              ? reusePlacementDrop({
+              ? placementDrop({
                   id,
                   parentId: candidate.parentId,
                   places: rowById,

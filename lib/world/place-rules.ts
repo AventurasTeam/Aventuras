@@ -156,16 +156,14 @@ export function moveHidesStory(args: {
   return gainedDisabled(parentOf(id), parentId, places, parentOf).length > 0
 }
 
-/** Why a machine writer leaves a reused unplaced place unplaced. */
+/** Why a machine writer drops its placement of an existing place. */
 export type PlacementDrop = {
   parent: string
   cause: PlacementLoop['cause'] | typeof PLACE_REFUSAL.storyInside
 }
 
-/** data-model.md → LocationState shape: placing a reused unplaced place, or why not. */
-export function reusePlacementDrop(
-  args: Parameters<typeof moveHidesStory>[0],
-): PlacementDrop | null {
+/** data-model.md → LocationState shape: a machine writer placing an existing place, or why not. */
+export function placementDrop(args: Parameters<typeof moveHidesStory>[0]): PlacementDrop | null {
   const { id, parentId, parentOf } = args
   const loop = placementLoop(id, parentId, parentOf)
   if (loop !== null) return loop
