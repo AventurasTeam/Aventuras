@@ -7,6 +7,7 @@ import type {
   HappeningInvolvement,
   Translation,
 } from '@/lib/db'
+import { compareAge } from '@/lib/list-modules'
 import {
   entityLinkRows,
   mergeLinks,
@@ -30,7 +31,7 @@ export type CollisionSources = {
 }
 
 function isOlder(a: Entity, b: Entity): boolean {
-  return a.createdAt !== b.createdAt ? a.createdAt < b.createdAt : a.id < b.id
+  return compareAge(a, b) < 0
 }
 
 function linksOf(id: string, sources: CollisionSources) {

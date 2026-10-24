@@ -1,7 +1,7 @@
 import type { Lore } from '@/lib/db'
 import { normalizeTerm } from '@/lib/keyword-terms'
 
-import { collate, compareId } from './collate'
+import { collate, compareAge } from './collate'
 import { textIncludes } from './search-text'
 import type { ScopeField } from './types'
 
@@ -26,7 +26,7 @@ export function matchesLoreSearch(lore: Lore, search: string): boolean {
 // world.md → List sort — lore.
 export function compareLore(a: Lore, b: Lore): number {
   if (a.priority !== b.priority) return b.priority - a.priority
-  return collate(a.title, b.title) || a.createdAt - b.createdAt || compareId(a.id, b.id)
+  return collate(a.title, b.title) || compareAge(a, b)
 }
 
 export function queryLore(rows: readonly Lore[], query: { search: string }): Lore[] {

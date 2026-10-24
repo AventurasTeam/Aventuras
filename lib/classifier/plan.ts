@@ -11,6 +11,7 @@ import {
   type Thread,
 } from '@/lib/db'
 import { dedupeTerms, newTerms } from '@/lib/keyword-terms'
+import { compareAge } from '@/lib/list-modules'
 import { boundStateText } from '@/lib/piggyback'
 import { isPlotIconKey } from '@/lib/plot'
 import { oneLine } from '@/lib/text'
@@ -827,7 +828,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
             sameName(r.name) &&
             (row.kind !== 'location' || placesCompared(row.id, id)),
         )
-        .sort(([idA, a], [idB, b]) => a.createdAt - b.createdAt || (idA < idB ? -1 : 1))
+        .sort(([idA, a], [idB, b]) => compareAge({ ...a, id: idA }, { ...b, id: idB }))
       const at = anchorOnce(rename.sourceTurn)
       const proseEntryId = proseSource(rename.sourceTurn)
       const holder = holders[0]

@@ -1,7 +1,7 @@
 import type { Thread, ThreadStatus } from '@/lib/db'
 import { normalizeTerm } from '@/lib/keyword-terms'
 
-import { collate, compareId } from './collate'
+import { collate, compareAge } from './collate'
 import { textIncludes } from './search-text'
 import type { ListGrouping, ListQuery, ScopeField } from './types'
 
@@ -42,7 +42,7 @@ const TIER_RANK: Record<ThreadTier, number> = Object.fromEntries(
 export function compareThreads(a: Thread, b: Thread): number {
   const tierDiff = TIER_RANK[a.status] - TIER_RANK[b.status]
   if (tierDiff !== 0) return tierDiff
-  return collate(a.title, b.title) || a.createdAt - b.createdAt || compareId(a.id, b.id)
+  return collate(a.title, b.title) || compareAge(a, b)
 }
 
 export function queryThreads(rows: readonly Thread[], query: ListQuery<ThreadFilter>): Thread[] {

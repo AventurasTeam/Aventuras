@@ -1,6 +1,6 @@
 import type { CollisionReason, Entity } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
-import { compareId } from '@/lib/list-modules'
+import { compareAge } from '@/lib/list-modules'
 import { flagStillHolds, namesakeBasis } from '@/lib/world'
 
 // Canon's starting ranges (classifier.md -> Disambiguation). Hardcoded: the
@@ -63,8 +63,7 @@ function partnerOrder(a: ScoredNamesake, b: ScoredNamesake): number {
   if (a.inScene !== b.inScene) return a.inScene ? -1 : 1
   if (a.match !== b.match) return a.match === 'exact' ? -1 : 1
   if (a.flagged !== b.flagged) return a.flagged ? 1 : -1
-  if (a.entity.createdAt !== b.entity.createdAt) return a.entity.createdAt - b.entity.createdAt
-  return a.entity.id < b.entity.id ? -1 : a.entity.id > b.entity.id ? 1 : 0
+  return compareAge(a.entity, b.entity)
 }
 
 function absorbs(n: ScoredNamesake): n is ScoredNamesake & { similarity: number } {
@@ -115,12 +114,7 @@ export function decideNewItem(
       (s): s is { entity: Entity; similarity: number } =>
         s.similarity !== null && s.similarity >= TAU_LOW,
     )
-    .sort(
-      (a, b) =>
-        b.similarity - a.similarity ||
-        a.entity.createdAt - b.entity.createdAt ||
-        compareId(a.entity.id, b.entity.id),
-    )
+    .sort((a, b) => b.similarity - a.similarity || compareAge(a.entity, b.entity))
   if (best === undefined) return null
   return { partnerId: best.entity.id, reason: best.similarity >= TAU_HIGH ? 'alike' : 'ambiguous' }
 }
