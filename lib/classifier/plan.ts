@@ -850,7 +850,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         }
         placement = { kind: 'under', parentId }
       }
-      // A mark after a placement this reply sent lands only if that one is refused: the view keeps it.
+      // A mark after a placement this reply sent lands only if that one is refused: keep the view.
       if (placement.kind === 'under' || !placedEarlier) placedHere.set(id, placement)
       planned.push({
         action: {

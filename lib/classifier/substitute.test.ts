@@ -182,7 +182,7 @@ describe('substituteClassifierIds', () => {
     })
   })
 
-  // A handle stands only where a new row's id could: a happening or thread field names a listed one.
+  // A handle stands only where a new row's id can: a happening or thread field names a listed one.
   it("maps a listed happening's and thread's placeholders back though a handle spells them", () => {
     const idMap = new IdBiMap()
     const fire = idMap.allocate(HAP_A)

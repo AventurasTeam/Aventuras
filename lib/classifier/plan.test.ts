@@ -3713,7 +3713,7 @@ describe('placements', () => {
     expect(droppedPlacements).toEqual([])
   })
 
-  // An unplaced place stays one if the handler refuses the placement, so the handler judges the mark.
+  // The place stays unplaced if the handler refuses the placement, so the handler judges the mark.
   it('sends a top-level mark for an unplaced place this reply already placed', () => {
     const { planned, droppedPlacements } = buildClassifierActions(
       reply({
