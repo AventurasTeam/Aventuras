@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { queryApp } from '../harness/db'
+import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
@@ -61,9 +61,7 @@ test.describe('reader — cancel a turn mid-flight', () => {
     await expect(reader.send(app.window)).toBeVisible({ timeout: 20_000 })
 
     // Nothing committed for this turn (user action reversed with it, C6).
-    const branchId = (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
+    const branchId = await currentBranchId(app.window, 'story_hero')
     await expect
       .poll(
         async () =>

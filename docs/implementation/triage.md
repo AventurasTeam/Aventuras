@@ -212,15 +212,6 @@ slice-planning gate forces its resolution before that slice is planned.
   not handed back. Raised 2026-10-22 in the pass failure policy
   slice's branch review.
 
-- **E2E specs inline the current-branch query.** About fifteen specs
-  (`periodic-classifier.spec.ts` five times, `turn.spec.ts`,
-  `reader-*.spec.ts`, the real-provider smoke and others) run
-  `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`
-  through `queryApp` beside `currentBranchId` in `e2e/harness/db.ts`,
-  which does the same. Predates the pass failure policy slice; its
-  slice review's simplifier pass moved only the slice's own copy.
-  Raised 2026-10-23.
-
 - **The Select's segment and radio branches go uncontrolled on an
   `undefined` value.** `components/ui/select.tsx`'s `SegmentBranch` and
   `RadioBranch` hand `value` straight to Radix, whose

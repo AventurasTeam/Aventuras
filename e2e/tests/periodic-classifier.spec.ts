@@ -95,9 +95,7 @@ test.describe('periodic classifier — graph population', () => {
       .poll(() => mock.requests.some((r) => r.agent === 'periodic-classifier'), { timeout: 20_000 })
       .toBe(true)
 
-    const branchId = (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
+    const branchId = await currentBranchId(app.window, 'story_hero')
 
     await expect
       .poll(
@@ -245,9 +243,7 @@ test.describe('periodic classifier — mentioned places', () => {
       .toBe(true)
     expect(mock.requests.some((r) => r.agent === 'periodic-classifier')).toBe(false)
 
-    const branchId = (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
+    const branchId = await currentBranchId(app.window, 'story_hero')
     const placeRow = async (name: string) =>
       (
         await queryApp(
@@ -341,9 +337,7 @@ test.describe('periodic classifier — factions', () => {
   test('a pass creates the faction it names and puts the new character in it', async () => {
     await home.openStory(app.window, 'The Veilstone Courier').click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
-    const branchId = (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
+    const branchId = await currentBranchId(app.window, 'story_hero')
     // Read before the turn moves it; t1 is the first prose row above it: this turn's user_action.
     const [[watermark]] = await queryApp(
       app.window,
@@ -458,9 +452,7 @@ test.describe('periodic classifier — disambiguation seam', () => {
       .poll(() => mock.requests.some((r) => r.agent === 'periodic-classifier'), { timeout: 20_000 })
       .toBe(true)
 
-    const branchId = (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
+    const branchId = await currentBranchId(app.window, 'story_hero')
 
     // A real embed pass runs the reconcile decision; poll rather than assume it
     // has landed by the time the request fired.
@@ -525,9 +517,7 @@ test.describe('periodic classifier — backlog deeper than the reader window', (
   test('classifies from the watermark, not from the oldest entry the reader holds', async () => {
     await home.openStory(app.window, 'The Veilstone Courier').click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
-    const branchId = (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
+    const branchId = await currentBranchId(app.window, 'story_hero')
     const watermark = async () =>
       (
         await queryApp(

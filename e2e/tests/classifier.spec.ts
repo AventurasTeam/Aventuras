@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { queryApp } from '../harness/db'
+import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -69,9 +69,7 @@ test.describe('turn fanning out to the fallback classifier', () => {
       .toBe(true)
 
     // The AI reply still commits despite the extra classifier round-trip.
-    const branchId = (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
+    const branchId = await currentBranchId(app.window, 'story_hero')
     const reply = await queryApp(
       app.window,
       `SELECT kind FROM story_entries WHERE branch_id = ? AND content LIKE '%E2E-CLASSIFIER-TURN%'`,

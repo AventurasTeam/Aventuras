@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { queryApp } from '../harness/db'
+import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -57,9 +57,7 @@ test.describe('reader turn against the mock LLM', () => {
     expect(mock.requests.some((r) => r.streamed)).toBe(true)
 
     // Both the user action and the AI reply are committed to the branch.
-    const branchId = (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
+    const branchId = await currentBranchId(app.window, 'story_hero')
 
     const reply = await queryApp(
       app.window,

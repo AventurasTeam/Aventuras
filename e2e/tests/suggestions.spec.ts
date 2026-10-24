@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 import type { EntryMetadata } from '@/lib/db'
 
-import { queryApp } from '../harness/db'
+import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -32,11 +32,6 @@ import { reader } from '../locators/reader'
 // so a future rename/variant on the real schema fails typecheck here instead
 // of silently drifting until some assertion fails for a confusing reason.
 type PersistedSuggestions = NonNullable<EntryMetadata['nextTurnSuggestions']>
-
-async function currentBranchId(page: Page): Promise<string> {
-  const rows = await queryApp(page, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-  return rows[0]?.[0] as string
-}
 
 // Reads the row the strip anchors to. Mirrors findSuggestionAnchor
 // (lib/piggyback/suggestion-slots.ts): the highest-position AI-authored entry,
@@ -128,7 +123,7 @@ test.describe('next-turn suggestions — narrative (piggyback) fold', () => {
       await expect(app.window.getByText('E2E-SUGGEST-TURN', { exact: false })).toBeVisible({
         timeout: 30_000,
       })
-      branchId = await currentBranchId(app.window)
+      branchId = await currentBranchId(app.window, 'story_hero')
       // That text matches the STREAMING placeholder, which renders while the
       // run is still in flight — the ai_reply row lands at the end of the
       // narrative phase. Without this poll the next step's DB read races the
@@ -287,7 +282,7 @@ test.describe('next-turn suggestions — classifier fold', () => {
     })
     await expect(reader.suggestionChip(app.window, 'Speak', CLASSIFIER_CHIP_SPEAK)).toBeVisible()
 
-    const branchId = await currentBranchId(app.window)
+    const branchId = await currentBranchId(app.window, 'story_hero')
     const { suggestions } = await readAnchorEntry(app.window, branchId)
     expect(suggestions?.source).toBe('classifier')
     expect(suggestions?.items).toEqual([
