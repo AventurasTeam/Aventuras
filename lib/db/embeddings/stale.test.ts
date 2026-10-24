@@ -1,9 +1,9 @@
-import { readFileSync } from 'node:fs'
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
 
 import { getLoadablePath } from 'sqlite-vec'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { applyMigration, migrationTags } from '../__tests__/test-db'
 import { plantVec, seedVec } from '../__tests__/vec-fixtures'
 import type { SqlOp } from '../types'
 import type { VecWrite } from './ops'
@@ -20,23 +20,6 @@ import {
   type EmbeddedFieldRow,
 } from './stale'
 import { ensureVecTablesSql } from './vec-tables'
-
-const MIGRATIONS_DIR = 'lib/db/migrations'
-
-function migrationTags(): string[] {
-  const journal = JSON.parse(readFileSync(`${MIGRATIONS_DIR}/meta/_journal.json`, 'utf8')) as {
-    entries: { idx: number; tag: string }[]
-  }
-  return [...journal.entries].sort((a, b) => a.idx - b.idx).map((e) => e.tag)
-}
-
-function applyMigration(sqlite: DatabaseSync, tag: string): void {
-  const sql = readFileSync(`${MIGRATIONS_DIR}/${tag}.sql`, 'utf8')
-  for (const statement of sql.split('--> statement-breakpoint')) {
-    const trimmed = statement.trim()
-    if (trimmed) sqlite.exec(trimmed)
-  }
-}
 
 function makeDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { allowExtension: true })

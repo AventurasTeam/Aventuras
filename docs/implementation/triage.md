@@ -73,16 +73,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Raised 2026-10-11 in the locations-and-items-from-prose PR; the
   rendering half was closed by the AI writer map.
 
-- **Nine migration tests carry their own copy of two helpers.**
-  `migrationTags` and `applyMigration` are copied byte for byte into the
-  seven migration tests under `lib/db/__tests__/`, plus
-  `lib/db/embeddings/stale.test.ts` and `lib/embedder/service.test.ts`.
-  They belong in `lib/db/__tests__/test-db.ts`, which tests in other
-  modules already import. One `refactor(test):` commit would move them
-  and replace the copies with an import. Raised 2026-10-16 by the
-  mentioned places slice review's simplifier pass, which skipped it as
-  outside that slice.
-
 - **The head turn's membership test is written out four times.**
   `resolveHeadTurn` in `lib/head-turn` is the one definition of the
   head turn, but the "is this entry its tail or origin" test on top of

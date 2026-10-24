@@ -4,23 +4,9 @@ import { DatabaseSync } from 'node:sqlite'
 import { getLoadablePath } from 'sqlite-vec'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-const MIGRATIONS_DIR = 'lib/db/migrations'
+import { applyMigration, MIGRATIONS_DIR, migrationTags } from './test-db'
+
 const TAG = '0014_story_model_overrides_provider'
-
-function migrationTags(): string[] {
-  const journal = JSON.parse(readFileSync(`${MIGRATIONS_DIR}/meta/_journal.json`, 'utf8')) as {
-    entries: { idx: number; tag: string }[]
-  }
-  return [...journal.entries].sort((a, b) => a.idx - b.idx).map((e) => e.tag)
-}
-
-function applyMigration(sqlite: DatabaseSync, tag: string): void {
-  const sql = readFileSync(`${MIGRATIONS_DIR}/${tag}.sql`, 'utf8')
-  for (const statement of sql.split('--> statement-breakpoint')) {
-    const trimmed = statement.trim()
-    if (trimmed) sqlite.exec(trimmed)
-  }
-}
 
 // Every override target as of 0014, hardcoded: a later target never held a bare id.
 const LEGACY_SETTINGS = {

@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
 
 import { getLoadablePath } from 'sqlite-vec'
@@ -18,7 +17,7 @@ import {
   type SqlOp,
   type VecTargetKind,
 } from '@/lib/db'
-import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { applyMigration, createTestDb, migrationTags } from '@/lib/db/__tests__/test-db'
 import { KIND_COLUMNS } from '@/lib/db/embeddings/stale'
 import { logger } from '@/lib/diagnostics'
 
@@ -330,23 +329,6 @@ describe('lazy init', () => {
     expect(embedViaProvider).not.toHaveBeenCalled()
   })
 })
-
-const MIGRATIONS_DIR = 'lib/db/migrations'
-
-function migrationTags(): string[] {
-  const journal = JSON.parse(readFileSync(`${MIGRATIONS_DIR}/meta/_journal.json`, 'utf8')) as {
-    entries: { idx: number; tag: string }[]
-  }
-  return [...journal.entries].sort((a, b) => a.idx - b.idx).map((e) => e.tag)
-}
-
-function applyMigration(sqlite: DatabaseSync, tag: string): void {
-  const sql = readFileSync(`${MIGRATIONS_DIR}/${tag}.sql`, 'utf8')
-  for (const statement of sql.split('--> statement-breakpoint')) {
-    const trimmed = statement.trim()
-    if (trimmed) sqlite.exec(trimmed)
-  }
-}
 
 function makeDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { allowExtension: true })

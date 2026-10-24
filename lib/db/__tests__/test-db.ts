@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
@@ -5,6 +6,23 @@ import { migrate } from 'drizzle-orm/sqlite-proxy/migrator'
 import { getLoadablePath } from 'sqlite-vec'
 
 import { dbSchema } from '../schema'
+
+export const MIGRATIONS_DIR = 'lib/db/migrations'
+
+export function migrationTags(): string[] {
+  const journal = JSON.parse(readFileSync(`${MIGRATIONS_DIR}/meta/_journal.json`, 'utf8')) as {
+    entries: { idx: number; tag: string }[]
+  }
+  return [...journal.entries].sort((a, b) => a.idx - b.idx).map((e) => e.tag)
+}
+
+export function applyMigration(sqlite: DatabaseSync, tag: string): void {
+  const sql = readFileSync(`${MIGRATIONS_DIR}/${tag}.sql`, 'utf8')
+  for (const statement of sql.split('--> statement-breakpoint')) {
+    const trimmed = statement.trim()
+    if (trimmed) sqlite.exec(trimmed)
+  }
+}
 
 // drizzle-orm 0.45.2 ships no node-sqlite driver; sqlite-proxy wraps any
 // SQLite backend via a callback, making node:sqlite usable without a native dep.
@@ -39,7 +57,7 @@ export async function createTestDb() {
   const callback = makeCallback(sqlite)
   const db = drizzle(callback, { schema: dbSchema })
   await migrate(db, (queries) => Promise.resolve(queries.forEach((q) => sqlite.exec(q))), {
-    migrationsFolder: 'lib/db/migrations',
+    migrationsFolder: MIGRATIONS_DIR,
   })
   const runInTransaction = async (ops: { sql: string; params: unknown[] }[]): Promise<void> => {
     try {
