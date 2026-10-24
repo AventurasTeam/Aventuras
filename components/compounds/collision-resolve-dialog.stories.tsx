@@ -1078,6 +1078,41 @@ export const RenameWarnsOfATakenName: Story = {
   },
 }
 
+let renameANow: (() => void) | null = null
+function RowRenamedUnderRenameBody() {
+  const [a, setA] = useState(entityA)
+  useEffect(() => {
+    renameANow = () => setA({ ...entityA, name: 'Kael Vell' })
+    return () => {
+      renameANow = null
+    }
+  }, [])
+  return <ControlledDialog entityA={a} entityB={entityB} onResolve={resolveCapturing} />
+}
+
+// A pass renames A under the open dialog: its untouched input follows, so Save doesn't send the
+// old name back over the pass's, and B keeps the edit typed into it.
+export const RenameRowRenamedWhileOpen: Story = {
+  render: () => <RowRenamedUnderRenameBody />,
+  play: async () => {
+    lastResolution = null
+    await userEvent.click(await screen.findByRole('radio', { name: 'Rename one' }))
+    const inputs = await screen.findAllByRole('textbox')
+    await userEvent.clear(inputs[1])
+    await userEvent.type(inputs[1], 'Jorin')
+    renameANow?.()
+    await waitFor(() => expect(inputs[0]).toHaveValue('Kael Vell'))
+    expect(inputs[1]).toHaveValue('Jorin')
+    await userEvent.click(screen.getByRole('button', { name: 'Save renames' }))
+
+    await waitFor(() => expect(lastResolution).not.toBeNull())
+    expect(lastResolution).toEqual({
+      mode: 'rename',
+      renames: [{ id: 'ent_kael_2', newName: 'Jorin' }],
+    })
+  },
+}
+
 export const RenameSubmitsTrimmedChanges: Story = {
   render: () => (
     <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveCapturing} />

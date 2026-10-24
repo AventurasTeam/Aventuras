@@ -57,13 +57,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **The resolve dialog's Rename body keeps its input names when a row
-  is renamed elsewhere.** `RenameBody` in
-  `components/compounds/collision-resolve-dialog.tsx` resets only when
-  the pair's ids change, so an untouched form then reads as changed and
-  Save could send the old name back. Reasoned, not reproduced; rare.
-  Raised 2026-10-10 by the partial-name collisions code review.
-
 - **The reader's bottom pin ignores scrollbar drags and keyboard
   scrolls.**
   [`reader-document.md → Entry list`](../ui/patterns/reader-document.md#entry-list-fully-rendered-flow-layout)
