@@ -69,7 +69,7 @@ export type DroppedMembership = Pick<Membership, 'character'> & {
   cause: 'retired-faction'
 }
 
-/** A rename to a name another row of the kind holds; `flagged`: this rename raised the flag. */
+/** A rename to a name another row of the kind holds; `flagged`: this rename sent a raise. */
 export type RenameClash = { ref: string; name: string; partnerId: string; flagged: boolean }
 
 /** A write naming a row its list didn't show (data-model.md → Authorship contract). */
@@ -684,7 +684,6 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     }
     const renameClashes: RenameClash[] = []
     const droppedRenames: DroppedRename[] = []
-    const raisedFlags = new Set<string>()
     // Only the stored name rules a rename out: the handler may refuse an earlier planned one.
     const renamed = new Set<string>()
     const planRename = (rename: ClassifierExtraction['renames'][number]): void => {
@@ -754,15 +753,16 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         })
       }
       // One partner per row: a flag that still holds, its keyword landed, keeps its partner; a
-      // dormant one counts as none (classifier.md → Names), as raiseCollisionFlag judges it.
+      // dormant one counts as none (classifier.md → Names), as raiseCollisionFlag judges it. Only
+      // the stored flag rules a raise out: the handler may refuse an earlier planned one, and
+      // no-ops a later one once an earlier one landed.
       const landed = asPlanned(row.id)
       const partnerOf = row.nameCollisionPartnerId
       const holds =
         landed !== undefined &&
         flagStillHolds(landed, partnerOf === null ? undefined : asPlanned(partnerOf))
-      const flagged = !holds && !raisedFlags.has(row.id)
+      const flagged = !holds
       if (flagged) {
-        raisedFlags.add(row.id)
         planned.push({
           action: {
             kind: 'raiseCollisionFlag',

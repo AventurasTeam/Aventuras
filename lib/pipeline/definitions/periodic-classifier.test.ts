@@ -2424,6 +2424,104 @@ describe('periodicClassifierPhase via runPipeline', () => {
     expect([stranger.nameCollisionFlag, stranger.nameCollisionReason]).toEqual(flag)
   })
 
+  // cadence.md → User edits and classifier writes: a clear between the clash turns refuses the
+  // earlier raise, and the later clash's raise, newer than the clear, lands. With no clear the
+  // earlier raise lands and the handler keeps its partner.
+  const ZARA = 'char_44444444-4444-4444-4444-444444444444'
+  it.each([
+    ["lands a later clash's raise past a user clear that refused the earlier one", true, ZARA],
+    ["keeps the earlier clash's partner when no clear refused its raise", false, CHAR_KAEL],
+  ])('%s', async (_label, cleared, partnerId) => {
+    const { db, runInTransaction } = await seedStory()
+    const apply = async (action: PipelineAction, actionId: string) => {
+      const result = await realApplyDeltaAction(
+        { action, actionId, branchId: 'b1' },
+        { db, runInTransaction },
+      )
+      expect(result.status).toBe('ok')
+    }
+    const STRANGER = 'char_33333333-3333-3333-3333-333333333333'
+    const create = (id: string, name: string, flag: Record<string, unknown> = {}): PipelineAction =>
+      ({
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: {
+          entry: {
+            id,
+            branchId: 'b1',
+            kind: 'character',
+            name,
+            description: 'Someone.',
+            keywords: [],
+            status: 'active',
+            injectionMode: 'auto',
+            createdAt: 1,
+            updatedAt: 1,
+            ...flag,
+          },
+        },
+      }) as never
+    const turn = (id: string, position: number): PipelineAction => ({
+      kind: 'createStoryEntry',
+      source: 'ai_classifier',
+      payload: {
+        entry: {
+          id,
+          branchId: 'b1',
+          position,
+          kind: 'ai_reply',
+          content: `turn ${position}`,
+          createdAt: 1,
+        },
+      },
+    })
+    await apply(create(CHAR_KAEL, 'Kael'), 'act_kael')
+    const flagged = {
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: CHAR_KAEL,
+      nameCollisionReason: 'name-taken',
+    }
+    await apply(create(STRANGER, 'the hooded stranger', cleared ? flagged : {}), 'act_stranger')
+    await apply(create(ZARA, 'zara'), 'act_zara')
+    await apply(turn('e1', 1), 'act_e1')
+    if (cleared)
+      await apply(
+        {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: {
+            branchId: 'b1',
+            id: STRANGER,
+            patch: {
+              nameCollisionFlag: 0,
+              nameCollisionPartnerId: null,
+              nameCollisionReason: null,
+            },
+          },
+        },
+        'act_clear',
+      )
+    await apply(turn('e2', 2), 'act_e2')
+
+    registerWithReply({
+      renames: [
+        { ref: 'c2', name: 'Kael', sourceTurn: 't1' },
+        { ref: 'c2', name: 'Zara', sourceTurn: 't2' },
+      ],
+    })
+    expect(await runOutcome({ storyId: 's1', branchId: 'b1', db, runInTransaction })).toBe(
+      'completed',
+    )
+
+    const [stranger] = await db.select().from(entities).where(eq(entities.id, STRANGER))
+    expect(stranger.keywords).toEqual(['Kael', 'Zara'])
+    expect([
+      stranger.nameCollisionFlag,
+      stranger.nameCollisionPartnerId,
+      stranger.nameCollisionReason,
+    ]).toEqual([1, partnerId, 'name-taken'])
+  })
+
   it('commits nothing and keeps its pre-run status when interrupted during the model call', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
     await seedStatus(db, FAILED)

@@ -3366,7 +3366,7 @@ describe('renames', () => {
     expect(renameClashes).toEqual([])
   })
 
-  it("sends a clash's keyword again for a rename restating an earlier clash, raising once", () => {
+  it("sends a clash's keyword and raise again for a rename restating an earlier clash", () => {
     const { planned, renameClashes } = buildClassifierActions(
       reply({
         renames: [
@@ -3380,8 +3380,9 @@ describe('renames', () => {
       ['appendEntityKeywords', 'e1'],
       ['raiseCollisionFlag', 'e1'],
       ['appendEntityKeywords', 'e3'],
+      ['raiseCollisionFlag', 'e3'],
     ])
-    expect(renameClashes.map((c) => c.flagged)).toEqual([true, false])
+    expect(renameClashes.map((c) => c.flagged)).toEqual([true, true])
   })
 
   // The rename keeps the old name as a keyword only if it lands.
@@ -3416,7 +3417,9 @@ describe('renames', () => {
     ])
   })
 
-  it('raises one flag per row in a reply, however many taken names it meets', () => {
+  // The user may clear the flag between the turns, refusing the earlier raise; the handler keeps
+  // the first partner when both land.
+  it("sends each clash's raise while the stored flag doesn't hold", () => {
     const { planned, renameClashes } = buildClassifierActions(
       reply({
         renames: [
@@ -3426,12 +3429,19 @@ describe('renames', () => {
       }),
       deps([STRANGER, KAEL, row('char_mira', 'character', 'Mira')]),
     )
-    expect(kindsOf(planned)).toEqual([
-      'appendEntityKeywords',
-      'raiseCollisionFlag',
-      'appendEntityKeywords',
+    expect(
+      planned.map((p) => [
+        p.action.kind,
+        payloadOf<{ partnerId?: string }>(p).partnerId,
+        p.entryId,
+      ]),
+    ).toEqual([
+      ['appendEntityKeywords', undefined, 'e1'],
+      ['raiseCollisionFlag', 'char_kael', 'e1'],
+      ['appendEntityKeywords', undefined, 'e2'],
+      ['raiseCollisionFlag', 'char_mira', 'e2'],
     ])
-    expect(renameClashes.map((c) => c.flagged)).toEqual([true, false])
+    expect(renameClashes.map((c) => c.flagged)).toEqual([true, true])
   })
 
   // A clash that writes nothing takes no anchor, so it never counts as a window-head fallback.
