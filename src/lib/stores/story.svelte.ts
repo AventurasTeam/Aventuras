@@ -153,6 +153,7 @@ import { clearImageMarkerCache } from '#lib/services/image/index.ts'
 import { GenerationLease } from '#lib/utils/generationLease.ts'
 import { findLiveCharacter, sameBranchScope, type BranchScope } from '#lib/utils/branchScope.ts'
 import {
+  copiedLocationIds,
   isEquipped,
   isInInventory,
   itemLocationId,
@@ -5107,16 +5108,7 @@ class StoryStore {
       }
 
       // Copy locations — remap connection IDs to new location IDs
-      const locationIdMap = new SvelteMap<string, string>()
-      for (const loc of checkpoint.locationsSnapshot) {
-        locationIdMap.set(loc.id, crypto.randomUUID())
-      }
-      // An item may hold the root id of a location the snapshot has as an override.
-      for (const loc of checkpoint.locationsSnapshot) {
-        if (loc.overridesId && !locationIdMap.has(loc.overridesId)) {
-          locationIdMap.set(loc.overridesId, locationIdMap.get(loc.id)!)
-        }
-      }
+      const locationIdMap = copiedLocationIds(checkpoint.locationsSnapshot)
       for (const loc of checkpoint.locationsSnapshot) {
         const newId = locationIdMap.get(loc.id)!
         const branchLoc: Location = {
@@ -5217,17 +5209,7 @@ class StoryStore {
       }
 
       // Copy locations - need to remap connection IDs to new location IDs
-      const locationIdMap = new SvelteMap<string, string>() // old ID -> new ID
-      for (const loc of checkpoint.locationsSnapshot) {
-        const newId = crypto.randomUUID()
-        locationIdMap.set(loc.id, newId)
-      }
-      // An item may hold the root id of a location the snapshot has as an override.
-      for (const loc of checkpoint.locationsSnapshot) {
-        if (loc.overridesId && !locationIdMap.has(loc.overridesId)) {
-          locationIdMap.set(loc.overridesId, locationIdMap.get(loc.id)!)
-        }
-      }
+      const locationIdMap = copiedLocationIds(checkpoint.locationsSnapshot)
       for (const loc of checkpoint.locationsSnapshot) {
         const newId = locationIdMap.get(loc.id)!
         const branchLoc: Location = {

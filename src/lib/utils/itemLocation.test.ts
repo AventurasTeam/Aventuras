@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Item, Location } from '#lib/types/index.ts'
 import {
+  copiedLocationIds,
   isEquipped,
   isInInventory,
   itemLocationLabel,
@@ -332,6 +333,24 @@ describe('normalizeItemLocation', () => {
     expect(normalizeItemLocation(item('a', { location: 'ground' }), locations)).toEqual({})
     const override = location('Crystal Caverns', { id: 'loc-override', overridesId: cave.id })
     expect(normalizeItemLocation(item('a', { location: cave.id }), [override])).toEqual({})
+  })
+})
+
+describe('copiedLocationIds', () => {
+  it("gives each location a new id, and maps an override's root id to the override's copy", () => {
+    const override = location('Crystal Caverns', { id: 'loc-override', overridesId: cave.id })
+    const ids = copiedLocationIds([tavern, override])
+
+    expect(ids.size).toBe(3)
+    expect(new Set([ids.get(tavern.id), ids.get(override.id)]).size).toBe(2)
+    expect(ids.get(cave.id)).toBe(ids.get(override.id))
+  })
+
+  it('keeps the root its own id when the root is copied too', () => {
+    const override = location('Crystal Caverns', { id: 'loc-override', overridesId: cave.id })
+    const ids = copiedLocationIds([cave, override])
+
+    expect(ids.get(cave.id)).not.toBe(ids.get(override.id))
   })
 })
 
