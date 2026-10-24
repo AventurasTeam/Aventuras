@@ -1,4 +1,4 @@
-import { resolveHeadTurn, type TurnEntry } from '@/lib/head-turn'
+import { headTurnEntries, resolveHeadTurn, type TurnEntry } from '@/lib/head-turn'
 
 import type { EditGate } from './reader-document-types'
 
@@ -13,7 +13,7 @@ export function headTurnIdsOf(
 ): ReadonlySet<string> {
   const head = resolveHeadTurn(rows)
   if (head == null || head.tail.id !== tailEntryId) return new Set()
-  return new Set(head.origin == null ? [head.tail.id] : [head.tail.id, head.origin.id])
+  return new Set(headTurnEntries(head).map((entry) => entry.id))
 }
 
 /** The host's two gates as one; the head-reversal gate implies the whole gate, so it closes all. */

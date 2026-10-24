@@ -64,20 +64,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Save could send the old name back. Reasoned, not reproduced; rare.
   Raised 2026-10-10 by the partial-name collisions code review.
 
-- **The head turn's membership test is written out four times.**
-  `resolveHeadTurn` in `lib/head-turn` is the one definition of the
-  head turn, but the "is this entry its tail or origin" test on top of
-  it is restated in `isHeadTurnEntry`
-  (`lib/actions/story-entries/operational.ts`), `resolveInvalidationScope`
-  (`lib/actions/story-entries/classifier-facts.ts`), `headTurnIdsOf`
-  (`components/reader/row-reversal-flags.ts`) and
-  `resolveSaveAndRegenTurn` (`components/reader/save-and-regen.ts`).
-  [`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback)
-  asks for one rule. If they drift, an edit could interrupt a pass and
-  then do a bare write, or the reader could offer an edit the action
-  layer refuses. Raised 2026-10-21 by the gated classifier slice's
-  task reviews.
-
 - **Undo's tooltip names the pass when a refresh blocks it.** With a
   suggestion refresh running beside a pass, `gateReason` follows the
   pill to the pass (`Updating memory. Cancel to edit.`), but the

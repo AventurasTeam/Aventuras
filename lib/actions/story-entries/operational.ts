@@ -3,6 +3,7 @@ import { and, desc, eq, sql, type SQL } from 'drizzle-orm'
 import type { Delta, SqlOp } from '@/lib/db'
 import { deltas, storyEntries } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import { headTurnEntries } from '@/lib/head-turn'
 import { generateId } from '@/lib/ids'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
@@ -93,7 +94,7 @@ function contentEditBlocked(branchId: string, inHeadTurn: boolean): boolean {
 
 async function isHeadTurnEntry(branchId: string, id: string, ctx: DbCtx): Promise<boolean> {
   const head = await loadHeadTurn(branchId, ctx)
-  return head != null && (head.tail.id === id || head.origin?.id === id)
+  return head != null && headTurnEntries(head).some((entry) => entry.id === id)
 }
 
 function inFlightRejection(): StoryEntryRejection {
