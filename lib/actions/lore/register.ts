@@ -6,7 +6,13 @@ import { loreStore } from '@/lib/stores'
 
 import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
 import { deepEqual } from '../delta/delta-encoding'
-import { register, TARGET_NOT_FOUND, undefinedColumn, type ActionHandler } from '../delta/registry'
+import {
+  noopRefusal,
+  register,
+  TARGET_NOT_FOUND,
+  undefinedColumn,
+  type ActionHandler,
+} from '../delta/registry'
 import type { DeltaSource } from '../types'
 
 const cascade = rowCascade('lore')
@@ -125,8 +131,7 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     set[col] = patch[col]
     undoPayload[col] = prior
   }
-  if (Object.keys(set).length === 0)
-    return { status: 'rejected', reason: 'no-op lore patch', code: 'noop' }
+  if (Object.keys(set).length === 0) return noopRefusal('no-op lore patch')
 
   // Embedded-column change flips the flag; see entities/register.ts for the reasoning.
   const [firstField, secondField] = KIND_FIELDS.lore

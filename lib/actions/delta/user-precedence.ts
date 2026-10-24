@@ -216,7 +216,7 @@ const THREAD_STATUS_COLUMNS: readonly string[] = [
 ] satisfies readonly (keyof Thread)[]
 
 /** A user edit wrote a thread's status or resolved-at entry (classifier.md → Threads → The row). */
-export function wroteThreadStatus(edits: readonly Delta[]): boolean {
+function wroteThreadStatus(edits: readonly Delta[]): boolean {
   return THREAD_STATUS_COLUMNS.some((column) => wroteColumn(edits, column))
 }
 

@@ -7,7 +7,7 @@ import { happeningAwarenessStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
 import { missingRef, MISSING_REF } from '../delta/live-refs'
-import { register, type ActionHandler, type HandlerOutcome } from '../delta/registry'
+import { noopRefusal, register, type ActionHandler } from '../delta/registry'
 import {
   proseLogPosition,
   USER_EDITED_SINCE_PROSE,
@@ -44,11 +44,7 @@ declare module '@/lib/actions/action-map' {
   }
 }
 
-const USER_WON: HandlerOutcome = {
-  status: 'rejected',
-  reason: USER_EDITED_SINCE_PROSE,
-  code: 'noop',
-}
+const USER_WON = noopRefusal(USER_EDITED_SINCE_PROSE)
 
 const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
   if (action.kind !== 'upsertHappeningAwareness')
@@ -122,8 +118,7 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
       set.learnedAtEntryId = learnedAt
       undoPayload.learnedAtEntryId = current.learnedAtEntryId
     }
-    if (Object.keys(set).length === 0)
-      return { status: 'rejected', reason: 'awareness unchanged', code: 'noop' }
+    if (Object.keys(set).length === 0) return noopRefusal('awareness unchanged')
     // A field the user wrote after the prose keeps its value; a pair the user created since counts
     // as written whole, since wroteColumn counts a create.
     if (proseEntryId != null) {

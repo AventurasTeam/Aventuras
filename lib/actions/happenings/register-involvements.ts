@@ -5,7 +5,7 @@ import { happeningInvolvements, happeningInvolvementWriteSchema } from '@/lib/db
 import { happeningInvolvementsStore } from '@/lib/stores'
 
 import { missingRef, MISSING_REF } from '../delta/live-refs'
-import { register, type ActionHandler } from '../delta/registry'
+import { noopRefusal, register, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
 declare module '@/lib/actions/action-map' {
@@ -78,8 +78,7 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     return { status: 'rejected', reason: `update target involvement ${bid}:${id} not found` }
   const set = { role: patch.role ?? null }
   // Logged anyway, it would show in History as a "Modified Role" that changed nothing.
-  if (set.role === current.role)
-    return { status: 'rejected', reason: 'involvement unchanged', code: 'noop' }
+  if (set.role === current.role) return noopRefusal('involvement unchanged')
   return {
     status: 'ok',
     targetTable: 'happening_involvements',

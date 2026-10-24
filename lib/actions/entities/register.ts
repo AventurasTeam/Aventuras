@@ -19,6 +19,7 @@ import { cascadedDelete } from '../delta/delete-cascade'
 import { computeUndoPayload, deepEqual } from '../delta/delta-encoding'
 import {
   register,
+  noopRefusal,
   TARGET_NOT_FOUND,
   undefinedColumn,
   type ActionHandler,
@@ -311,8 +312,7 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
       undoPayload[col] = prior
     }
   }
-  if (Object.keys(set).length === 0)
-    return { status: 'rejected', reason: 'no-op entity patch', code: 'noop' }
+  if (Object.keys(set).length === 0) return noopRefusal('no-op entity patch')
 
   // Only KIND_FIELDS is embedded — status/tags/state edits deliberately don't flip the flag.
   // The compare errs dirty on null-vs-'' (compositeText treats them alike): never a stale one.

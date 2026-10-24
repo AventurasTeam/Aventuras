@@ -346,22 +346,5 @@ slice-planning gate forces its resolution before that slice is planned.
   - `hooks/use-story-place.ts` builds a new value on every entries-store
     change; the review stabilised its one consumer
     (`components/world/use-collision-resolve.ts`) instead of the hook.
-  - `components/ui/select.tsx` exports `resolveMode` for the cast
-    editor's reserved `Unknown` slot; dropping the export needs `Select`
-    to take a mode for a wider option list.
-  - Seeded ids use two hashes: the dataset's `canonicalSeedId` and
-    `seedUnplacedPlace`'s UUIDv5 (`e2e/harness/seed.ts`); one hash
-    needs `canonicalSeedId` exported from `lib/db` and a throw where it
-    returns null.
-  - The narrow actions in `lib/actions/entities/state-patch-actions.ts`
-    each repeat a kind check, a branch check and a row load; a shared
-    opening needs typing over every action kind. `setThreadStatus`
-    (`lib/actions/threads/register.ts`) still picks `wroteThreadStatus`
-    by hand where the entity handlers now go through `wroteField`, and
-    the other domains (relationships, threads, happenings, lore) spell
-    their noop refusals out in full.
-  - `buildStatePatchOutcome` merges a state patch without validating
-    the result, so each condition writer bounds its text itself;
-    validating the merged state once would cover every writer.
 
   Raised 2026-10-24 by the AI writer map's slice review.

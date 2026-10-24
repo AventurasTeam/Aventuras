@@ -6,12 +6,14 @@ import { threadsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
 import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
-import { register, TARGET_NOT_FOUND, undefinedColumn, type ActionHandler } from '../delta/registry'
 import {
-  USER_EDITED_SINCE_PROSE,
-  userEditsSinceProse,
-  wroteThreadStatus,
-} from '../delta/user-precedence'
+  noopRefusal,
+  register,
+  TARGET_NOT_FOUND,
+  undefinedColumn,
+  type ActionHandler,
+} from '../delta/registry'
+import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteField } from '../delta/user-precedence'
 import { isUserOriginatedSource, type DeltaSource, type ProseEntryId } from '../types'
 
 const cascade = rowCascade('thread')
@@ -195,19 +197,18 @@ const setStatusHandler: ActionHandler = async (action, branchId, ctx) => {
     .select()
     .from(threads)
     .where(and(eq(threads.branchId, bid), eq(threads.id, id)))
-  if (!current)
-    return {
-      status: 'rejected',
-      reason: `status target threads ${bid}:${id} not found`,
-      code: 'noop',
-    }
-  if (current.status === status)
-    return { status: 'rejected', reason: 'status-unchanged', code: 'noop' }
+  if (!current) return noopRefusal(`status target threads ${bid}:${id} not found`)
+  if (current.status === status) return noopRefusal('status-unchanged')
   if (
     proseEntryId !== null &&
-    wroteThreadStatus(await userEditsSinceProse(ctx, bid, 'threads', id, proseEntryId))
+    wroteField(
+      await userEditsSinceProse(ctx, bid, 'threads', id, proseEntryId),
+      'threads',
+      'status',
+      [],
+    )
   )
-    return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
+    return noopRefusal(USER_EDITED_SINCE_PROSE)
   const set: Partial<Pick<Thread, 'status' | 'resolvedAtEntryId'>> = { status }
   const undoPayload: Record<string, unknown> = { status: current.status }
   // Entry refs are AI-only (data-model.md → Authorship contract): a user's thread keeps both null.
