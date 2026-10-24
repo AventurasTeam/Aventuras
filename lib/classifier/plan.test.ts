@@ -1717,6 +1717,24 @@ describe('mentioned places', () => {
       expect(fellBackCount).toBe(1)
     })
 
+    it('counts one fallback for an unattributed reuse that adds terms and places the row', () => {
+      const { planned, fellBackCount } = buildClassifierActions(
+        placesReply([
+          newPlace('new:varn', 'Varn', {
+            parent: 'loc_reach',
+            keywords: ['the salt town'],
+            sourceTurn: 't9',
+          }),
+        ]),
+        deps([REACH, VARN]),
+      )
+      expect(planned.map((p) => [p.action.kind, p.entryId])).toEqual([
+        ['appendEntityKeywords', 'e3'],
+        ['placeLocation', 'e3'],
+      ])
+      expect(fellBackCount).toBe(1)
+    })
+
     it('places a reused place under a new place the reply creates, after its create', () => {
       const { planned } = buildClassifierActions(
         placesReply([

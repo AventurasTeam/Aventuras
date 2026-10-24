@@ -396,7 +396,9 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       if (match.kind !== 'create') {
         // A reused place keeps its description and its status: a mention doesn't enter it.
         id = match.id
-        appendNewTerms(id, place.keywords, place.sourceTurn)
+        // One fact, one anchor: its terms and its placement count one fallback between them.
+        const at = anchorOnce(place.sourceTurn)
+        appendTerms(id, place.keywords, proseSource(place.sourceTurn), at)
         // `match.place`: an unplaced reused row, or this reply's own create taken over.
         if (match.place && candidate.kind !== 'unplaced') {
           const loop =
@@ -420,7 +422,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
                   proseEntryId: proseSource(place.sourceTurn),
                 },
               },
-              entryId: anchor(place.sourceTurn),
+              entryId: at(),
             })
           } else parentDrops.push({ handle: place.handle, ...loop })
         }
