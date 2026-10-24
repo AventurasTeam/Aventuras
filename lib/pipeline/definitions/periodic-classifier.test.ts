@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   bracketProseReversal,
   classifierWatermarkClampOps,
+  getRollbackCounts,
+  regenerateTurn,
+  rollbackToEntry,
   updateStoryEntryContent,
   type PipelineAction,
 } from '@/lib/actions'
@@ -72,10 +75,11 @@ import {
   PERIODIC_CLASSIFIER_RESOLVES,
   periodicClassifierPhase,
 } from './periodic-classifier'
+import { definePipeline } from '../authoring/define'
 import { __resetRegistry, getPipeline } from '../authoring/registry'
 import { configureDeltaActionPort, type DeltaActionPort } from '../runtime/action-port'
 import { runPipeline, type RunCtx } from '../runtime/orchestrator'
-import type { PhaseContext, Pipeline, TxResult } from '../types'
+import type { PhaseContext, PhaseResult, Pipeline, TxResult } from '../types'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -2586,25 +2590,35 @@ describe('periodicClassifierPhase via runPipeline', () => {
 
   // classifier.md → Threads: a thread these turns open and close lands as its create and its
   // close, each kept by its own turn (generation-pipeline.md → Reverse-replay).
-  describe('a thread these turns open and close, under a prose edit', () => {
+  describe('a thread these turns open and close, under a reversal', () => {
     async function passOpensAndCloses(turns: {
       sourceTurn: string
       resolvedAtTurn: string
     }): Promise<Seeded> {
       const seeded = await seedStory()
       // The head turn is e2's action and e3's reply: an edit to e3 reverses e3's facts alone.
+      // Created through the log, as a rollback and a regenerate sweep from an entry's create.
       const kinds = ['ai_reply', 'user_action', 'ai_reply'] as const
-      for (const [i, kind] of kinds.entries())
-        await seeded.db.insert(storyEntries).values({
+      for (const [i, kind] of kinds.entries()) {
+        const entry = {
           id: `e${i + 1}`,
           branchId: 'b1',
           position: i + 1,
           kind,
           content: `turn ${i + 1}`,
-          chapterId: null,
-          metadata: {},
           createdAt: 1,
-        } as never)
+        }
+        const created = await realApplyDeltaAction(
+          {
+            action: { kind: 'createStoryEntry', source: 'ai_classifier', payload: { entry } },
+            actionId: `act_${entry.id}`,
+            branchId: 'b1',
+          },
+          seeded,
+        )
+        expect(created.status).toBe('ok')
+      }
+      entriesStore.hydrate('b1', await seeded.db.select().from(storyEntries))
       threadsStore.hydrate('b1', [])
       registerWithReply({
         happenings: [],
@@ -2662,6 +2676,63 @@ describe('periodicClassifierPhase via runPipeline', () => {
         status: 'ok',
       })
 
+      expect(await storedThreads(seeded.db)).toEqual([])
+      expect(storeThreads()).toEqual([])
+    })
+
+    const rollbackTo = async (seeded: Seeded, entryId: string) => {
+      const shown = await getRollbackCounts('b1', entryId, seeded)
+      if ('status' in shown) throw new Error(`preview refused: ${shown.reason}`)
+      expect((await rollbackToEntry('b1', entryId, seeded, { expectedCounts: shown })).status).toBe(
+        'ok',
+      )
+    }
+    // A turn that writes nothing stands in for per-turn: the regenerate's sweep reverses the facts.
+    const regenerateE3 = async (seeded: Seeded) => {
+      async function* writeNothing(): AsyncGenerator<never, PhaseResult> {
+        return { status: 'completed' }
+      }
+      definePipeline({
+        kind: PER_TURN_KIND,
+        phases: [{ name: 'narrative', run: writeNothing }],
+        affordance: 'pill-and-banner',
+        gateBehavior: 'hard-gate',
+        concurrencyPolicy: { blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND] },
+      })
+      expect(await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e3', seeded)).toMatchObject({
+        status: 'ran',
+        result: { outcome: 'completed' },
+      })
+    }
+    const reopenedAtE1 = { status: 'active', triggeredAtEntryId: 'e1', resolvedAtEntryId: null }
+
+    it('reopens it when a rollback removes the closing turn and the opening turn stands', async () => {
+      const seeded = await passOpensAndCloses({ sourceTurn: 't1', resolvedAtTurn: 't3' })
+      await rollbackTo(seeded, 'e3')
+      expect(await storedThreads(seeded.db)).toEqual([reopenedAtE1])
+      expect(storeThreads()).toEqual([reopenedAtE1])
+    })
+
+    it('removes it, close and all, when a rollback removes the opening turn', async () => {
+      const seeded = await passOpensAndCloses({ sourceTurn: 't2', resolvedAtTurn: 't3' })
+      await rollbackTo(seeded, 'e2')
+      expect(await storedThreads(seeded.db)).toEqual([])
+      expect(storeThreads()).toEqual([])
+    })
+
+    it('reopens it when the closing turn is regenerated and the opening turn stands', async () => {
+      const seeded = await passOpensAndCloses({ sourceTurn: 't1', resolvedAtTurn: 't3' })
+      await regenerateE3(seeded)
+      expect(await storedThreads(seeded.db)).toEqual([reopenedAtE1])
+      expect(storeThreads()).toEqual([reopenedAtE1])
+    })
+
+    it('removes it, close and all, when the turn that opens and closes it is regenerated', async () => {
+      const seeded = await passOpensAndCloses({ sourceTurn: 't3', resolvedAtTurn: 't3' })
+      expect(await storedThreads(seeded.db)).toEqual([
+        { status: 'resolved', triggeredAtEntryId: 'e3', resolvedAtEntryId: 'e3' },
+      ])
+      await regenerateE3(seeded)
       expect(await storedThreads(seeded.db)).toEqual([])
       expect(storeThreads()).toEqual([])
     })
