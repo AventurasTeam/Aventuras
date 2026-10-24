@@ -53,7 +53,7 @@ export type ParsedTransfers = {
   drops: ItemDrop[]
 }
 
-/** `parent`: a placeholder, a handle or `top` as emitted; an id or `TOP_LEVEL` substituted. */
+/** `parent`: a placeholder, a handle or `top` as emitted; substituted, see SubstitutedStateBlock. */
 export type NewLocationEmission = {
   handle: string
   name: string
@@ -86,8 +86,10 @@ export type ParsedStateBlock = {
 export type NormalizedStateBlock = ParsedStateBlock & { readonly __brand: 'NormalizedStateBlock' }
 
 /**
- * Entity-id placeholders; refs name only ids or declared handles (a create's `parent` may also be
- * `TOP_LEVEL`), a transfer's item only an item. Minted only by `substitutePiggybackIds`.
+ * Placeholders swapped for ids: refs name only ids or declared handles, a transfer's item an item.
+ * A create's `parent` is looser: an id, a declared handle or `TOP_LEVEL`, else an undeclared handle
+ * or an unresolved ref kept raw, which the planner drops as `unresolved`. Minted only by
+ * `substitutePiggybackIds`.
  */
 export type SubstitutedStateBlock = ParsedStateBlock & { readonly __brand: 'SubstitutedStateBlock' }
 

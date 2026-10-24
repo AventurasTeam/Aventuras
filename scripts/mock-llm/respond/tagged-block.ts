@@ -39,7 +39,7 @@ export type NarrativeValue = {
 }
 
 // Dropped, not escaped (ids/enums/keys never hold them): `"` ends a value early in
-// parseAttributes, `<`/`>` end the tag in the entry regexes' `[^>]*`.
+// parseAttributes, `>` ends the tag in every entry pattern, and `<` in the `[^<>]*` ones.
 function attr(value: string | number): string {
   return String(value).replace(/["<>]/g, '')
 }

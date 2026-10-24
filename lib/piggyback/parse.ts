@@ -276,7 +276,8 @@ const XML_ENTITIES = {
   amp: '&',
 } as const
 
-// One pass, so `&amp;lt;` reads `&lt;`, not `<`. Prose fields only: name, description, condition.
+// One pass, so `&amp;lt;` reads `&lt;`, not `<`. A create's name, description and condition only;
+// `<conditions>` text is read raw.
 function decodeEntities(text: string): string {
   return text.replace(
     /&(quot|apos|lt|gt|amp);/g,
