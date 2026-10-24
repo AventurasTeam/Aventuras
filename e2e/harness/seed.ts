@@ -368,8 +368,8 @@ function seedUuid(mnemonic: string): string {
  * since prompts substitute it (docs/testing.md → Fixture + seed contract). Runs before launch.
  */
 export function seedUnplacedPlace(dbPath: string, branchId: string, name: string): string {
-  const mnemonic = `loc_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`
-  const id = `loc_${seedUuid(mnemonic)}`
+  // The raw name, not a slug: two names that slug alike must not share an id.
+  const id = `loc_${seedUuid(`loc:${name}`)}`
   const db = new DatabaseSync(dbPath)
   try {
     db.exec('PRAGMA busy_timeout = 10000')
