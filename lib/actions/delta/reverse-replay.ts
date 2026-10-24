@@ -199,17 +199,14 @@ function undoneColumn(
   if (!isPlainObject(partial) || !isPlainObject(undone)) return undone
   if (!Object.hasOwn(partial, 'parent_location_id') && !Object.hasOwn(partial, 'unplaced'))
     return undone
-  return withPlacement(undone as LocationState, undonePlacement(partial, undone))
+  return withPlacement(undone as LocationState, undonePlacement(partial))
 }
 
-// The encoder records an absent mark as null, so only `true` restores unplaced; any other
-// placement is the parent the undo leaves, a null one top-level.
-function undonePlacement(
-  partial: Record<string, unknown>,
-  undone: Record<string, unknown>,
-): PlacePlacement {
+// The encoder records an absent mark as null, so only `true` restores unplaced. A partial without
+// the parent changed the mark alone, which sits beside a null parent, so the place was top-level.
+function undonePlacement(partial: Record<string, unknown>): PlacePlacement {
   if (partial.unplaced === true) return { kind: 'unplaced' }
-  const parentId = undone.parent_location_id
+  const parentId = partial.parent_location_id
   return typeof parentId === 'string' ? { kind: 'under', parentId } : { kind: 'top' }
 }
 

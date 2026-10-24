@@ -661,6 +661,22 @@ describe('a reversed pass placement and the writes after it', () => {
     expect(await stateOf('loc_p')).toEqual({ parent_location_id: null })
   })
 
+  // The mark alone changed, so the place was top-level before it: the pair restored as one field.
+  it('puts a place a reversed write marked unplaced back at the top over a later machine move', async () => {
+    await act('act_pass', {
+      kind: 'updateEntity',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: 'b1',
+        id: 'loc_p',
+        patch: { state: { parent_location_id: null, unplaced: true } },
+      },
+    })
+    await act('act_later', placeAt('loc_p', { kind: 'under', parentId: 'loc_quarter' }))
+    await reversePass()
+    expect(await stateOf('loc_p')).toEqual({ parent_location_id: null })
+  })
+
   // A later machine write yields to the reversal, the pair restored as one field.
   it('puts a place the pass marked top-level back unplaced over a later machine move', async () => {
     await act('act_pass', placeAt('loc_u', { kind: 'top' }))
