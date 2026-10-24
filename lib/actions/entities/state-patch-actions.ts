@@ -535,7 +535,7 @@ const noopRefusal = (reason: string): HandlerOutcome => ({
 
 /**
  * data-model.md → LocationState shape: parent and `unplaced` flag written as the row's whole state.
- * Refusals are all noops: a machine writer plans the same checks; an unmarked one fails its run.
+ * Refusals past the branch check are noops: a pass plans the same checks; unmarked, one fails it.
  */
 export const placeLocationHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'placeLocation')
