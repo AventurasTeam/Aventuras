@@ -67,7 +67,7 @@ export const characterUpdateSchema = z.object({
     traits: z
       .array(z.string())
       .describe(
-        'Replaces the whole trait list: lasting personality only; only for a character whose current traits are shown',
+        'Replaces the whole trait list: lasting personality only, at most 8; only for a character whose current traits are shown',
       )
       .optional(),
     visualDescriptors: visualDescriptorsSchema
@@ -82,7 +82,7 @@ export const newCharacterSchema = z.object({
   name: z.string().describe("Character's proper name"),
   description: z.string().describe('One sentence: who they are. Always provide it').optional(),
   relationship: z.string().describe('friend, enemy, ally, neutral, or unknown').optional(),
-  traits: z.array(z.string()).describe('Lasting personality traits only').optional(),
+  traits: z.array(z.string()).describe('Lasting personality traits only, at most 8').optional(),
   visualDescriptors: visualDescriptorsSchema
     .describe('Complete visual appearance - ALL categories should be filled')
     .optional(),
