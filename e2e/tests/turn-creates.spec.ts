@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 import { takeTurn, waitForTurnTerminal } from '../flows/turn'
-import { currentBranchId, queryApp, tailMetadata } from '../harness/db'
+import { currentBranchId, entityState, queryApp, tailMetadata } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm, type MockRequest } from '../harness/mock-llm'
@@ -486,14 +486,8 @@ function refusedConditionNarrative(ids: { kael: string; place: string }): string
 </state>`
 }
 
-async function stateOf(page: Page, branchId: string, id: string): Promise<Record<string, unknown>> {
-  const rows = await queryApp(page, `SELECT state FROM entities WHERE branch_id = ? AND id = ?`, [
-    branchId,
-    id,
-  ])
-  const raw = rows[0]?.[0]
-  return typeof raw === 'string' ? (JSON.parse(raw) as Record<string, unknown>) : {}
-}
+const stateOf = async (page: Page, branchId: string, id: string) =>
+  (await entityState(page, branchId, id)) ?? {}
 
 async function nameOf(page: Page, branchId: string, id: string): Promise<string> {
   const rows = await queryApp(page, `SELECT name FROM entities WHERE branch_id = ? AND id = ?`, [

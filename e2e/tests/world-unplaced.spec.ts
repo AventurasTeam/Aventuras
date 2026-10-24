@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 import { openWorld } from '../flows/navigation'
-import { queryApp } from '../harness/db'
+import { entityState } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { suppressNativeUnloadDialogRace } from '../harness/reload'
@@ -17,14 +17,7 @@ const HERO_BRANCH = 'br_hero_main'
 const SALTMERE = 'E2E Saltmere'
 const WHARF = 'E2E Smugglers Wharf'
 
-async function placeState(page: Page, id: string): Promise<unknown> {
-  const rows = await queryApp(page, `SELECT state FROM entities WHERE branch_id = ? AND id = ?`, [
-    HERO_BRANCH,
-    id,
-  ])
-  const raw = rows[0]?.[0]
-  return typeof raw === 'string' ? JSON.parse(raw) : null
-}
+const placeState = (page: Page, id: string) => entityState(page, HERO_BRANCH, id)
 
 async function savePane(page: Page): Promise<void> {
   await saveSession.saveBarSave(page).click()
