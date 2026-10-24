@@ -447,7 +447,9 @@ Maps to [`CharacterState`](../../../data-model.md#characterstate-shape).
 - **`▼ More options`** — tags + faction. Faction picker reads
   currently-authored factions in the wizard's cast list;
   `(no factions yet — add one with + Add)` empty state when none
-  exist. `null` = unaffiliated.
+  exist. `null` = unaffiliated. A faction removed from the cast,
+  including one a resumed draft couldn't load, leaves the character
+  unaffiliated.
 
 **Not in wizard editor** (per the authorship contract,
 classifier-managed per-turn): `current_location_id`,
