@@ -88,13 +88,6 @@ slice-planning gate forces its resolution before that slice is planned.
   dropdown branch maps it to `EMPTY_VALUE`. Raised 2026-10-23 by the AI
   writer map's Task 9 review, whose cast parent picker hit it.
 
-- **The cast parent picker's empty state can mislead.** When every
-  other cast place would close a loop, `parentCandidates`
-  (`components/wizard/cast-editors.tsx`) offers none, and the picker
-  shows `wizard:cast.editor.noLocationsYet`, "(no locations yet — add
-  one with + Add)", although the cast holds places. Predates the AI
-  writer map; raised 2026-10-24 by its slice review.
-
 - **A World E2E spec re-checks the delete dialog's copy.**
   `e2e/tests/world-delete-undo.spec.ts` (≈:187-188) asserts
   `world:delete.awareness` and `world:delete.tailScene` text in the

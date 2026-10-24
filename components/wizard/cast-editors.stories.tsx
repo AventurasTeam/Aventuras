@@ -641,6 +641,25 @@ export const LocationHasNoOtherLocationsYetShowsEmptyState: Story = {
   },
 }
 
+/** Every other place sits under this one, so none can hold it; the empty state says why. */
+export const LocationWithOnlyChildrenSaysWhy: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([
+      locationRow({ id: 'loc-1', name: 'Mornstone Keep' }),
+      locationRow({ id: 'loc-2', name: 'Cellar', parentLocationId: 'loc-1' }),
+    ])
+  },
+  render: () => <LocationEditorDemo id="loc-1" />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'More options' }))
+    expect(
+      await screen.findByText('(every other location sits inside this one)'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('(no locations yet — add one with + Add)')).toBeNull()
+  },
+}
+
 /** No other place: Unknown and Top level still show; once placed, there is nothing to choose. */
 async function expectUnknownThenTopLevelWithNoOtherPlaces(opts: { clearedAsk: boolean }) {
   await userEvent.click(await screen.findByRole('button', { name: 'More options' }))

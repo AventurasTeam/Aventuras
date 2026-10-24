@@ -315,7 +315,11 @@ export function LocationEditor({ row, invalid, cast }: CommonEditorProps<WizardL
             <TagsRow row={row} />
             <PickFromCast
               label={t('wizard:cast.editor.parentLocation')}
-              emptyLabel={t('wizard:cast.editor.noLocationsYet')}
+              emptyLabel={
+                cast.some((r) => r.kind === 'location' && r.id !== row.id)
+                  ? t('wizard:cast.editor.noParentCandidates')
+                  : t('wizard:cast.editor.noLocationsYet')
+              }
               nullLabel={t('wizard:cast.editor.noParent')}
               unknownLabel={t('wizard:cast.editor.parentUnknown')}
               unknown={placement.kind === 'unplaced'}

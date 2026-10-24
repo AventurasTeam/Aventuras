@@ -479,8 +479,10 @@ location itself and any location whose chain of parents already
 leads back to it, so the cast can't loop. Finish still refuses a
 loop as a backstop. The picker offers `Top level` and the cast's
 places; with no place to offer and the parent not unknown, it shows
-its empty-state text instead,
-`(no locations yet — add one with + Add)`. While the parent is unknown
+its empty-state text instead: `(no locations yet — add one with + Add)`
+when the cast holds no other place, and
+`(every other location sits inside this one)` when every other place
+would close a loop. While the parent is unknown
 (an AI-proposed name the wizard couldn't resolve, an imported parent
 dropped for a loop, or a parent removed from the cast, including one a
 resumed draft couldn't load) it also offers `Unknown`, until a parent
