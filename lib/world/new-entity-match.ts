@@ -34,7 +34,7 @@ const sameName = (candidate: PlaceCandidate, entity: Entity): boolean =>
   nameBasis(candidate.name, entity.name) === 'same-name'
 
 /** A row or an earlier create of the reply, as a flag partner. */
-type FlagSide = Pick<Entity, 'id' | 'name' | 'keywords' | 'status'>
+type FlagSide = Pick<Entity, 'id' | 'name' | 'status'> & { keywords: readonly string[] }
 
 /** Flag partner's rank: an exact retired namesake, then a name inside the other, a keyword hit. */
 function partnerRank(candidate: PlaceCandidate, side: FlagSide): number | null {

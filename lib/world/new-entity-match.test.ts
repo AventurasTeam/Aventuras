@@ -552,7 +552,7 @@ describe('matchNewLocation — the unplaced places', () => {
 
 // No create of the reply was placed by a takeover unless a case says so.
 const matchNewPlace = (
-  candidate: { name: string; placement: PlacePlacement },
+  candidate: Parameters<typeof matchInReply>[0],
   settled: readonly SettledNewPlace[],
   view: Parameters<typeof matchInReply>[2],
   placedHere: ReadonlyMap<string, PlacedPlacement> = new Map(),
