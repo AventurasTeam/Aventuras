@@ -24,7 +24,7 @@ export {
 
 // Classification
 export { ClassifierService, type ClassificationContext } from './ClassifierService'
-export { planCharacterChanges, viewsBeforeApply } from './classifierCharacters'
+export { planCharacterChanges, viewsForApply } from './classifierCharacters'
 
 // Memory
 export {

@@ -280,10 +280,12 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
 [inactive]` came back as the name, missed `sameEntityName`, and created a second
   character — four of thirty-eight on a measured 41-chapter save, two carrying the
   subject's own `relationship` verbatim. Name and attributes are now separate lines
-  (`relationship:`, `status:`, `appearance:`), in every list `ClassifierService` renders —
-  characters, locations, items, story beats — and in `WorldStateInjector`'s narrator block,
-  whose prose the classifier also reads. One name per line also holds names a
-  comma-separated list could not: locations and items were CSV until they carried state.
+  (`relationship:`, `status:`, `description:`, `traits:`, `appearance:`), in every list the
+  classifier is shown — characters (`classifierCharacters.ts`), locations, items, story beats
+  (`ClassifierService`) — and in `WorldStateInjector`'s narrator block, whose prose the
+  classifier also reads. A line break inside a character's value is indented under it. One
+  name per line also holds names a comma-separated list could not: locations and items were
+  CSV until they carried state.
 
   **State reaches the classifier only where it can act on it.** `description:`, `traits:` and
   `appearance:` go with a character in the scene, `description:` with the current location, and
@@ -293,9 +295,12 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
 
   For characters the rule is enforced as well as stated: `classifierCharacterView`
   (`services/ai/generation/classifierCharacters.ts`) decides both what is listed and which
-  rewrites `applyClassificationResult` takes, read from the cast as it was before the response is
-  applied. A rewrite of a field that was not listed is dropped and logged, and an empty
-  description, trait list or appearance never erases one. The protagonist's appearance is
+  rewrites `applyClassificationResult` takes. The classifier attaches what it listed to its
+  result (`_shownCharacters`), so a status changed while it ran does not widen the gate. A
+  rewrite of a field that was not listed is dropped and logged, an empty description, trait
+  list or appearance never erases one, and a rewrite equal to the current value writes nothing.
+  A rewritten field drops its translation, which would otherwise be shown in its place; nothing
+  translates it again, so the panel shows the source text. The protagonist's appearance is
   listed, but not their description or traits: those are usually the reader's own setup, and
   the protagonist is in every scene, so every turn would be a chance to rewrite them. Traits
   and descriptions are replaced whole, like appearance; there is no add or remove.

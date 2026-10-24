@@ -151,7 +151,7 @@ import { grammarService } from '#lib/services/grammar.ts'
 import {
   clearTier3SelectionCache,
   planCharacterChanges,
-  viewsBeforeApply,
+  viewsForApply,
 } from '#lib/services/ai/index.ts'
 import { clearImageMarkerCache } from '#lib/services/image/index.ts'
 import { GenerationLease } from '#lib/utils/generationLease.ts'
@@ -3249,7 +3249,7 @@ class StoryStore {
     const recordCtx = entryId ? this.recordContext({ origin: 'classifier', entryId }) : null
     const stateBefore = recordCtx ? cloneState(classifierView(this.trackedState())) : null
 
-    const shownToClassifier = viewsBeforeApply(this.characters)
+    const shownToClassifier = viewsForApply(result._shownCharacters, this.characters)
 
     // Apply character updates
     for (const update of result.entryUpdates.characterUpdates) {
@@ -3306,6 +3306,7 @@ class StoryStore {
           if (Object.keys(charInlineVars).length > 0) {
             changes.metadata = mergeRuntimeVars(existing.metadata, charInlineVars, defsByName)
           }
+          if (Object.keys(changes).length === 0) return
           // COW: ensure entity is owned by current branch before updating
           const { entity: ownedChar } = await this.cowTracked('character', existing)
           await database.updateCharacter(ownedChar.id, changes)
