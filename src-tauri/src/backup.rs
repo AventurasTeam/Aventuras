@@ -228,6 +228,51 @@ fn decode_image(data: &str) -> Result<Vec<u8>, String> {
         .map_err(|e| format!("invalid base64: {e}"))
 }
 
+/// File extension for an image's bytes, from its signature; anything unrecognised is `png`.
+fn image_extension(bytes: &[u8]) -> &'static str {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        "png"
+    } else if bytes.starts_with(b"\xff\xd8\xff") {
+        "jpg"
+    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        "gif"
+    } else if bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        "webp"
+    } else if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {
+        isobmff_extension(bytes)
+    } else {
+        "png"
+    }
+}
+
+/// Checks the major brand and the compatible brands of the `ftyp` box; the minor version is skipped.
+fn isobmff_extension(bytes: &[u8]) -> &'static str {
+    let size = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
+    let end = if size == 0 {
+        bytes.len()
+    } else {
+        size.min(bytes.len())
+    };
+    let compatible = bytes.get(16..end).unwrap_or_default().as_chunks::<4>().0;
+    let brands: Vec<&[u8; 4]> = bytes[8..]
+        .first_chunk()
+        .into_iter()
+        .chain(compatible)
+        .collect();
+    if brands.iter().any(|b| matches!(*b, b"avif" | b"avis")) {
+        "avif"
+    } else if brands.iter().any(|b| {
+        matches!(
+            *b,
+            b"heic" | b"heix" | b"heim" | b"heis" | b"hevc" | b"hevx"
+        )
+    }) {
+        "heic"
+    } else {
+        "png"
+    }
+}
+
 /// Open a read-only connection pool to the live database.
 async fn open_ro_pool(app: &AppHandle) -> Result<SqlitePool, String> {
     let db = db_path(app)?;
@@ -238,7 +283,7 @@ async fn open_ro_pool(app: &AppHandle) -> Result<SqlitePool, String> {
 }
 
 /// Export a story's embedded images to a ZIP. A single ordered query streams the rows so only
-/// one image is decoded/held at a time, and each decoded PNG is written straight into the
+/// one image is decoded/held at a time, and each decoded image is written straight into the
 /// archive on disk. Peak memory is one image.
 ///
 /// Returns the number of images written.
@@ -254,7 +299,7 @@ pub async fn export_images_zip(
 
     let out = open_dest(&app, &dest_path)?;
     let mut zip = ZipWriter::new(out);
-    // PNGs are already compressed — store without re-deflating.
+    // Images are already compressed — store without re-deflating.
     let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
 
     let mut rows = sqlx::query(
@@ -287,7 +332,7 @@ pub async fn export_images_zip(
             }
         };
 
-        let name = format!("image-{:03}.png", written + 1);
+        let name = format!("image-{:03}.{}", written + 1, image_extension(&bytes));
         zip.start_file(&name, stored)
             .map_err(|e| format!("failed to add {name}: {e}"))?;
         zip.write_all(&bytes)
@@ -310,7 +355,7 @@ pub async fn export_images_zip(
     Ok(dest_path)
 }
 
-/// Export a single embedded image as a PNG at `dest_path`, decoding its base64 from SQLite
+/// Export a single embedded image at `dest_path`, decoding its base64 from SQLite
 /// natively. Returns the written path.
 #[tauri::command]
 pub async fn export_single_image(
@@ -518,6 +563,38 @@ mod tests {
     use std::io::Read;
 
     const SQLITE_HEADER: &[u8] = b"SQLite format 3\0";
+
+    fn ftyp(major: &[u8; 4], compatible: &[&[u8; 4]]) -> Vec<u8> {
+        let mut v = ((16 + compatible.len() * 4) as u32).to_be_bytes().to_vec();
+        v.extend_from_slice(b"ftyp");
+        v.extend_from_slice(major);
+        v.extend_from_slice(&[0; 4]);
+        for brand in compatible {
+            v.extend_from_slice(*brand);
+        }
+        v
+    }
+
+    #[test]
+    fn image_extension_follows_the_signature() {
+        assert_eq!(image_extension(b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR"), "png");
+        assert_eq!(image_extension(b"\xff\xd8\xff\xe0\0\x10JFIF"), "jpg");
+        assert_eq!(image_extension(b"GIF87a\x01\0\x01\0"), "gif");
+        assert_eq!(image_extension(b"GIF89a\x01\0\x01\0"), "gif");
+        assert_eq!(image_extension(b"RIFF\x24\0\0\0WEBPVP8 "), "webp");
+        assert_eq!(image_extension(&ftyp(b"avif", &[b"mif1", b"miaf"])), "avif");
+        assert_eq!(image_extension(&ftyp(b"mif1", &[b"miaf", b"avif"])), "avif");
+        assert_eq!(image_extension(&ftyp(b"heic", &[b"mif1"])), "heic");
+    }
+
+    #[test]
+    fn image_extension_falls_back_to_png() {
+        assert_eq!(image_extension(b""), "png");
+        assert_eq!(image_extension(b"<svg xmlns="), "png");
+        assert_eq!(image_extension(b"RIFF\x24\0\0\0WAVEfmt "), "png");
+        assert_eq!(image_extension(&ftyp(b"mp42", &[b"isom"])), "png");
+        assert_eq!(image_extension(b"\0\0\0\x10ftyp"), "png");
+    }
 
     /// Minimal stand-in for a real database file: enough bytes to look like SQLite.
     fn fake_db_bytes(marker: &str) -> Vec<u8> {
