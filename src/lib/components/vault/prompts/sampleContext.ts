@@ -42,8 +42,9 @@ export const runtimeSamples: Record<string, string> = {
   existingItems: 'Enchanted Compass, Shadow Cloak, Moonstone Pendant',
   existingBeats: 'Discovered the hidden map, Met the wandering sage',
   storyBeatTypes: 'discovery, encounter, revelation, conflict, resolution',
-  itemLocationOptions: 'inventory, equipped, location, npc',
-  defaultItemLocation: 'location',
+  itemLocationOptions:
+    'inventory, worn, ground (where the scene is), or the exact name of a listed location',
+  defaultItemLocation: 'inventory',
 
   // Memory Service
   chapterContent: '[Chapter entries to summarize...]',

@@ -74,6 +74,7 @@ Its description is a **whole-value replacement**, so send \`description\` only f
 
 ### Item Updates - what the listed state means:
 Anything not printed under an item is at its default: one of it, not equipped, in {{ protagonistName }}'s inventory. Send \`quantity\`, \`equipped\` or \`location\` only when the passage changes one of them.
+\`location\` is one of: \`inventory\`, \`worn\`, \`ground\` (where the passage ends), or a location name spelled exactly as listed under Locations. A part of a place, such as "the back room", is that place. An item left behind somewhere the scene then moves away from takes that place's name, not \`ground\`.
 
 ### Story Beats - ONLY extract if:
 - A task, quest, or plot thread is introduced or resolved

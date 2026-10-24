@@ -153,6 +153,12 @@ import { clearImageMarkerCache } from '#lib/services/image/index.ts'
 import { GenerationLease } from '#lib/utils/generationLease.ts'
 import { findLiveCharacter, sameBranchScope, type BranchScope } from '#lib/utils/branchScope.ts'
 import {
+  isEquipped,
+  isInInventory,
+  normalizeItemLocation,
+  resolveItemLocation,
+} from '#lib/utils/itemLocation.ts'
+import {
   CLOSING_SNAPSHOT_PREFIX,
   checkpointDeletionBlocker,
   entryNumber,
@@ -379,11 +385,11 @@ class StoryStore {
   }
 
   get inventoryItems(): Item[] {
-    return this.items.filter((i) => i.location === 'inventory')
+    return this.items.filter((i) => isInInventory(i, this.locations))
   }
 
   get equippedItems(): Item[] {
-    return this.items.filter((i) => i.equipped)
+    return this.items.filter((i) => isEquipped(i, this.locations))
   }
 
   get pendingQuests(): StoryBeat[] {
@@ -3418,65 +3424,6 @@ class StoryStore {
       })
     }
 
-    // Apply item updates
-    for (const update of result.entryUpdates.itemUpdates) {
-      await this.wrapUpdate('Update item', update.name, async () => {
-        let existing = this.items.find((i) => sameEntityName(i.name, update.name))
-
-        // If item doesn't exist yet, create it first
-        if (!existing) {
-          const newItemData = result.entryUpdates.newItems.find((ni) =>
-            sameEntityName(ni.name, update.name),
-          )
-          log('Creating item from update (not found):', update.name)
-          const itemMetadata: Record<string, unknown> = { source: 'classifier' }
-          if (newItemData) {
-            const newItemInlineVars = extractInlineCustomVars(
-              newItemData as unknown as Record<string, unknown>,
-              defsByName,
-            )
-            if (Object.keys(newItemInlineVars).length > 0) {
-              Object.assign(itemMetadata, mergeRuntimeVars(null, newItemInlineVars, defsByName))
-            }
-          }
-          const item: Item = {
-            id: crypto.randomUUID(),
-            storyId,
-            name: newItemData?.name ?? update.name,
-            description: newItemData?.description ?? null,
-            quantity: newItemData?.quantity ?? 1,
-            equipped: false,
-            location: newItemData?.location ?? 'inventory',
-            metadata: itemMetadata,
-            branchId: this.currentStory?.currentBranchId ?? null,
-          }
-          await database.addItem(item)
-          this.items = [...this.items, item]
-          existing = item
-        }
-
-        if (existing) {
-          log('Updating item:', update.name, update.changes)
-          const changes: Partial<Item> = {}
-          if (update.changes.quantity !== undefined) changes.quantity = update.changes.quantity
-          if (update.changes.equipped !== undefined) changes.equipped = update.changes.equipped
-          if (update.changes.location) changes.location = update.changes.location
-          // Merge inline runtime variable values into metadata if present
-          const itemInlineVars = extractInlineCustomVars(
-            update.changes as unknown as Record<string, unknown>,
-            defsByName,
-          )
-          if (Object.keys(itemInlineVars).length > 0) {
-            changes.metadata = mergeRuntimeVars(existing.metadata, itemInlineVars, defsByName)
-          }
-          // COW: ensure entity is owned by current branch before updating
-          const { entity: ownedItem } = await this.cowTracked('item', existing)
-          await database.updateItem(ownedItem.id, changes)
-          this.items = this.items.map((i) => (i.id === ownedItem.id ? { ...i, ...changes } : i))
-        }
-      })
-    }
-
     // Apply story beat updates (mark as completed/failed)
     for (const update of result.entryUpdates.storyBeatUpdates) {
       await this.wrapUpdate('Update story beat', update.title, async () => {
@@ -3705,6 +3652,79 @@ class StoryStore {
       })
     }
 
+    // Items after the locations and the scene change, so a place named this turn resolves.
+    const itemWorld = () => ({
+      locations: this.locations,
+      currentLocationId: this.currentLocation?.id ?? null,
+      otherCharacterNames: this.characters
+        .filter((c) => c.relationship !== 'self')
+        .map((c) => c.name),
+    })
+
+    // Apply item updates
+    for (const update of result.entryUpdates.itemUpdates) {
+      await this.wrapUpdate('Update item', update.name, async () => {
+        let existing = this.items.find((i) => sameEntityName(i.name, update.name))
+
+        // If item doesn't exist yet, create it first
+        if (!existing) {
+          const newItemData = result.entryUpdates.newItems.find((ni) =>
+            sameEntityName(ni.name, update.name),
+          )
+          log('Creating item from update (not found):', update.name)
+          const itemMetadata: Record<string, unknown> = { source: 'classifier' }
+          if (newItemData) {
+            const newItemInlineVars = extractInlineCustomVars(
+              newItemData as unknown as Record<string, unknown>,
+              defsByName,
+            )
+            if (Object.keys(newItemInlineVars).length > 0) {
+              Object.assign(itemMetadata, mergeRuntimeVars(null, newItemInlineVars, defsByName))
+            }
+          }
+          const item: Item = {
+            id: crypto.randomUUID(),
+            storyId,
+            name: newItemData?.name ?? update.name,
+            description: newItemData?.description ?? null,
+            quantity: newItemData?.quantity ?? 1,
+            equipped: false,
+            location: 'inventory',
+            ...resolveItemLocation(newItemData ?? {}, itemWorld()),
+            metadata: itemMetadata,
+            branchId: this.currentStory?.currentBranchId ?? null,
+          }
+          await database.addItem(item)
+          this.items = [...this.items, item]
+          existing = item
+        }
+
+        if (existing) {
+          log('Updating item:', update.name, update.changes)
+          const changes: Partial<Item> = {}
+          if (update.changes.quantity !== undefined) changes.quantity = update.changes.quantity
+          const world = itemWorld()
+          Object.assign(
+            changes,
+            normalizeItemLocation(existing, world.locations),
+            resolveItemLocation(update.changes, world, existing),
+          )
+          // Merge inline runtime variable values into metadata if present
+          const itemInlineVars = extractInlineCustomVars(
+            update.changes as unknown as Record<string, unknown>,
+            defsByName,
+          )
+          if (Object.keys(itemInlineVars).length > 0) {
+            changes.metadata = mergeRuntimeVars(existing.metadata, itemInlineVars, defsByName)
+          }
+          // COW: ensure entity is owned by current branch before updating
+          const { entity: ownedItem } = await this.cowTracked('item', existing)
+          await database.updateItem(ownedItem.id, changes)
+          this.items = this.items.map((i) => (i.id === ownedItem.id ? { ...i, ...changes } : i))
+        }
+      })
+    }
+
     // Add new items (check for duplicates)
     for (const newItem of result.entryUpdates.newItems) {
       await this.wrapUpdate('Add item', newItem.name, async () => {
@@ -3726,7 +3746,8 @@ class StoryStore {
             description: newItem.description ?? null,
             quantity: newItem.quantity ?? 1,
             equipped: false,
-            location: newItem.location ?? 'inventory',
+            location: 'inventory',
+            ...resolveItemLocation(newItem, itemWorld()),
             metadata: itemMetadata,
             branchId: this.currentStory?.currentBranchId ?? null,
           }
@@ -5032,6 +5053,12 @@ class StoryStore {
       for (const loc of checkpoint.locationsSnapshot) {
         locationIdMap.set(loc.id, crypto.randomUUID())
       }
+      // An item may hold the root id of a location the snapshot has as an override.
+      for (const loc of checkpoint.locationsSnapshot) {
+        if (loc.overridesId && !locationIdMap.has(loc.overridesId)) {
+          locationIdMap.set(loc.overridesId, locationIdMap.get(loc.id)!)
+        }
+      }
       for (const loc of checkpoint.locationsSnapshot) {
         const newId = locationIdMap.get(loc.id)!
         const branchLoc: Location = {
@@ -5136,6 +5163,12 @@ class StoryStore {
       for (const loc of checkpoint.locationsSnapshot) {
         const newId = crypto.randomUUID()
         locationIdMap.set(loc.id, newId)
+      }
+      // An item may hold the root id of a location the snapshot has as an override.
+      for (const loc of checkpoint.locationsSnapshot) {
+        if (loc.overridesId && !locationIdMap.has(loc.overridesId)) {
+          locationIdMap.set(loc.overridesId, locationIdMap.get(loc.id)!)
+        }
       }
       for (const loc of checkpoint.locationsSnapshot) {
         const newId = locationIdMap.get(loc.id)!
