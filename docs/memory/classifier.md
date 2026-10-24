@@ -463,7 +463,12 @@ place of its name and places it. A partial name or a keyword hit flags
 against the reply's earlier new places as against stored ones, newer
 than any and in the reply's order: a placed one against those under its
 parent, or at the top level, a takeover's included, and an unplaced one
-against those still unplaced.
+against those still unplaced. A new place also matches where the
+reply's placements of its own turn and earlier ones leave the places,
+those first within a turn, counting only a placement the planner keeps:
+a place one of them puts under another parent is no unplaced namesake
+to reuse, and one it puts under the new place's parent is reused there,
+placed once.
 
 **After the turn.** A pass runs after the turn that brought it due, so
 a place the turn created is already a row it matches against, and the

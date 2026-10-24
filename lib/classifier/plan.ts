@@ -32,6 +32,7 @@ import {
   unhiddenLocationView,
   withPlacement,
   type ParentDropCause,
+  type ParentOf,
   type PlacedPlacement,
   type PlacementLoop,
   type PlacePlacement,
@@ -49,6 +50,7 @@ import {
   type NewFaction,
   type NewPlace,
   type NewThreadReply,
+  type Placement,
   type ThreadStatusChange,
 } from './schema'
 import type { ClassifierWindow } from './window'
@@ -373,6 +375,70 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     entryId: string
   }[] = []
 
+  // Facts about one row apply in source-turn order, ties in reply order, so the latest prose wins.
+  const entryPosition = (entryId: string): number =>
+    window.turns.findIndex((t) => t.entryId === entryId)
+  const turnPosition = (turn: string | undefined): number =>
+    entryPosition(window.resolveHandle(turn).entryId)
+  const inTurnOrder = <T extends { sourceTurn?: string }>(facts: readonly T[]): T[] =>
+    facts
+      .map((fact, order) => ({ fact, order, at: turnPosition(fact.sourceTurn) }))
+      .sort((a, b) => a.at - b.at || a.order - b.order)
+      .map(({ fact }) => fact)
+
+  // classifier.md → What the classifier writes → Where a place sits.
+  const realPlacement = realPlacementOf(entities.filter((e) => e.kind === 'location'))
+  const placementFacts = inTurnOrder(extraction.placements)
+  type PlacementJudgment =
+    | { kind: 'place'; id: string; placement: PlacedPlacement }
+    | { kind: 'restated' }
+    | { kind: 'unseen' }
+    | { kind: 'unresolved'; parent: string }
+    | { kind: 'dropped'; drop: DroppedPlacement }
+  // `placedEarlier`: this reply placed the row before. Only the stored placement rules a fact
+  // out otherwise: the handler may refuse one this reply sent.
+  const judgePlacement = (
+    fact: Placement,
+    placedEarlier: boolean,
+    parentOf: ParentOf,
+  ): PlacementJudgment => {
+    const row = rowById.get(fact.ref)
+    if (row === undefined) return { kind: 'unseen' }
+    if (row.kind !== 'location')
+      return { kind: 'dropped', drop: { ref: fact.ref, cause: 'not-a-location' } }
+    const { id } = row
+    if (isTopLevel(fact.parent)) {
+      // Only an unplaced place is marked top-level (data-model.md → Authorship contract).
+      if (realPlacement(id).kind !== 'unplaced')
+        return { kind: 'dropped', drop: { ref: fact.ref, cause: 'not-unplaced' } }
+      return { kind: 'place', id, placement: { kind: 'top' } }
+    }
+    // An ID from Places: a new place's handle names none, its create carrying its own parent.
+    const parentId = fact.parent
+    const parent = rowById.get(parentId)
+    if (parent?.kind !== 'location') {
+      if (parent === undefined && !handleMap.has(parentId))
+        return { kind: 'unresolved', parent: parentId }
+      const cause = parent === undefined ? 'parent-not-listed' : 'parent-not-a-place'
+      return { kind: 'dropped', drop: { ref: fact.ref, parent: parentId, cause } }
+    }
+    if (!placedEarlier && parentOf(id) === parentId) return { kind: 'restated' }
+    if (parent.status === 'retired')
+      return { kind: 'dropped', drop: { ref: fact.ref, cause: 'retired' } }
+    const loop = placementLoop(id, parentId, parentOf)
+    if (loop !== null) return { kind: 'dropped', drop: { ref: fact.ref, cause: loop.cause } }
+    return { kind: 'place', id, placement: { kind: 'under', parentId } }
+  }
+  // A mark after a placement this reply sent lands only if that one is refused: keep the view.
+  const notePlacement = (
+    placements: Map<string, PlacedPlacement>,
+    id: string,
+    placement: PlacedPlacement,
+    placedEarlier: boolean,
+  ): void => {
+    if (placement.kind === 'under' || !placedEarlier) placements.set(id, placement)
+  }
+
   // classifier.md → Mentioned places. After characters and factions, so the handle namespace
   // they share keeps their bindings; before anything that names a place by its handle.
   const planNewPlaces = (): { droppedPlaces: DroppedPlace[]; parentDrops: ParentDrop[] } => {
@@ -399,9 +465,23 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     )
     for (const { handle, name } of duplicates)
       droppedPlaces.push({ handle, name, cause: 'handle-taken' })
+    // What a mention's matching sees: the placements of its turn and earlier, judged as the
+    // placements walk will judge them, over the reply's placements so far.
+    const placementsThrough = (position: number): Map<string, PlacedPlacement> => {
+      const seen = new Map(placedHere)
+      const stored = parentOfLocations([...entities, ...createdPlaces])
+      for (const fact of placementFacts) {
+        if (turnPosition(fact.sourceTurn) > position) break
+        const placedEarlier = seen.has(fact.ref)
+        const judged = judgePlacement(fact, placedEarlier, replyParentOf(seen, stored))
+        if (judged.kind === 'place') notePlacement(seen, judged.id, judged.placement, placedEarlier)
+      }
+      return seen
+    }
     for (const settling of order) {
       const place = settling.emission
-      const parentOf = replyParentOf(placedHere, parentOfLocations([...entities, ...createdPlaces]))
+      const seen = placementsThrough(turnPosition(place.sourceTurn))
+      const parentOf = replyParentOf(seen, parentOfLocations([...entities, ...createdPlaces]))
       const placement = placeNewLocation({
         place: settling,
         resolve: (parent) => handleMap.get(parent) ?? parent,
@@ -416,12 +496,11 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         name: place.name,
         description: place.description.trim(),
       })
-      // Stale hiddenBetween for a row placed here is harmless: a twin match reaches it first.
       const match = matchNewPlace(
         { name: stored.name, placement: candidate, keywords: place.keywords },
         placed,
-        replyMatchView(view, placedHere),
-        placedHere,
+        replyMatchView(view, seen),
+        seen,
       )
 
       let id: string
@@ -605,17 +684,6 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
 
   const { droppedPlaces, parentDrops } = planNewPlaces()
 
-  // Facts about one row apply in source-turn order, ties in reply order, so the latest prose wins.
-  const entryPosition = (entryId: string): number =>
-    window.turns.findIndex((t) => t.entryId === entryId)
-  const turnPosition = (turn: string | undefined): number =>
-    entryPosition(window.resolveHandle(turn).entryId)
-  const inTurnOrder = <T extends { sourceTurn?: string }>(facts: readonly T[]): T[] =>
-    facts
-      .map((fact, order) => ({ fact, order, at: turnPosition(fact.sourceTurn) }))
-      .sort((a, b) => a.at - b.at || a.order - b.order)
-      .map(({ fact }) => fact)
-
   // data-model.md → Authorship contract → Seen before written.
   const unseenRefs: UnseenRef[] = []
 
@@ -780,53 +848,15 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       placedHere,
       parentOfLocations([...entities, ...createdPlaces]),
     )
-    const realPlacement = realPlacementOf(entities.filter((e) => e.kind === 'location'))
-    for (const fact of inTurnOrder(extraction.placements)) {
-      const row = rowById.get(fact.ref)
-      if (row === undefined) {
-        unseenRefs.push({ list: 'placements', ref: fact.ref })
-        continue
-      }
-      if (row.kind !== 'location') {
-        droppedPlacements.push({ ref: fact.ref, cause: 'not-a-location' })
-        continue
-      }
-      const { id } = row
-      // Only the stored placement rules a fact out: the handler may refuse one this reply sent.
-      const placedEarlier = placedHere.has(id)
-      let placement: PlacedPlacement
-      if (isTopLevel(fact.parent)) {
-        // Only an unplaced place is marked top-level (data-model.md → Authorship contract).
-        if (realPlacement(id).kind !== 'unplaced') {
-          droppedPlacements.push({ ref: fact.ref, cause: 'not-unplaced' })
-          continue
-        }
-        placement = { kind: 'top' }
-      } else {
-        // An ID from Places: a new place's handle names none, its create carrying its own parent.
-        const parentId = fact.parent
-        const parent = rowById.get(parentId)
-        if (parent?.kind !== 'location') {
-          if (parent !== undefined || handleMap.has(parentId)) {
-            const cause = parent === undefined ? 'parent-not-listed' : 'parent-not-a-place'
-            droppedPlacements.push({ ref: fact.ref, parent: parentId, cause })
-          } else unresolvedRefs.push(parentId)
-          continue
-        }
-        if (!placedEarlier && placeParentOf(id) === parentId) continue
-        if (parent.status === 'retired') {
-          droppedPlacements.push({ ref: fact.ref, cause: 'retired' })
-          continue
-        }
-        const loop = placementLoop(id, parentId, placeParentOf)
-        if (loop !== null) {
-          droppedPlacements.push({ ref: fact.ref, cause: loop.cause })
-          continue
-        }
-        placement = { kind: 'under', parentId }
-      }
-      // A mark after a placement this reply sent lands only if that one is refused: keep the view.
-      if (placement.kind === 'under' || !placedEarlier) placedHere.set(id, placement)
+    for (const fact of placementFacts) {
+      const placedEarlier = placedHere.has(fact.ref)
+      const judged = judgePlacement(fact, placedEarlier, placeParentOf)
+      if (judged.kind === 'unseen') unseenRefs.push({ list: 'placements', ref: fact.ref })
+      else if (judged.kind === 'unresolved') unresolvedRefs.push(judged.parent)
+      else if (judged.kind === 'dropped') droppedPlacements.push(judged.drop)
+      if (judged.kind !== 'place') continue
+      const { id, placement } = judged
+      notePlacement(placedHere, id, placement, placedEarlier)
       planned.push({
         action: {
           kind: 'placeLocation',

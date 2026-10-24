@@ -944,6 +944,43 @@ slice-planning gate forces its resolution before that slice is planned.
   context rather than more closures. Raised 2026-10-23 by the AI
   writer map's Task 20 review.
 
+  The planner also plans the reply list by list, each list judged
+  against what the earlier lists planned as though it landed, where
+  canon checks a fact against what earlier facts in the reply changed
+  ([`classifier.md → What the classifier writes`](../memory/classifier.md#what-the-classifier-writes)).
+  Two facts about one row, from different turns and in different
+  lists, can then be judged in the wrong order. The AI writer map's
+  slice review fixed one case: a mentioned place's matching now sees
+  the placements of its turn and earlier ones, so the reply no longer
+  folds two places into one. The rest waits for per-row planning in
+  turn order across lists, one queue of each row's facts each judged
+  against the state after the earlier ones (the review's option A),
+  which the split is the moment for:
+  - **A rename against a placement.** Renames plan after every
+    placement, so a turn-1 rename is judged where a turn-3 move leaves
+    the place. When a user edit refuses the move as it lands, the
+    rename has already become a `name-taken` clash, and the flag lands
+    across different parents. Option A fixes it.
+  - **A create against a rename.** Creates plan before renames, so a
+    turn-1 rename of the old mill to "Varn" and a turn-3 mention of a
+    new "Varn" in the same region create a second "Varn" and flag the
+    mill, where successive passes would reuse the renamed mill. Option
+    A fixes it.
+  - **A promote against a retire.** A staged character a turn-3
+    mention promotes is promoted before a turn-1 retire is judged, so
+    the retire becomes plannable: the character is promoted, then
+    retired, where successive passes would only promote it. Option A
+    fixes it.
+  - **Two renames to one name, the first refused.** When a user edit
+    refuses the first rename as it lands, the second, planned as a
+    clash against it, writes only a keyword and its flag is refused,
+    so the revealed name is lost. Option A leaves this one, since
+    canon's two-layer check lets a planned write be refused when it
+    lands; its fix is writing the clash outcome at write time, the
+    alternative to the rename's write-time no-op.
+
+  Raised 2026-10-24 by the AI writer map's slice review.
+
 - **Two structured-call phases never report their retries.**
   [`generation-pipeline.md → Two retry tiers`](../generation-pipeline.md#two-retry-tiers-both-at-phase-level)
   says a phase yields a `recoverable_error` per retried attempt however

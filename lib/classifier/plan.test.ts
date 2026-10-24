@@ -1885,6 +1885,123 @@ describe('mentioned places', () => {
         expect(parentDrops).toEqual([{ handle: 'new:a', parent: 'loc_cdocks', cause: 'cycle' }])
       })
     })
+
+    // classifier.md → Mentioned places: a mention sees the placements of its turn and earlier ones.
+    describe("a mention against this reply's placements", () => {
+      const INN = placeRow('loc_inn', 'the Inn', null)
+      const KEEP = placeRow('loc_keep', 'the Keep', null)
+      const CELLAR = unplacedRow('loc_cellar', 'the Cellar')
+      const placement = (ref: string, parent: string, sourceTurn: string) => ({
+        ref,
+        parent,
+        sourceTurn,
+      })
+      const placedRows = (planned: readonly PlannedWrite[]) =>
+        placementsOf(planned).map((p) => {
+          const { id, placement: at } = payloadOf<{ id: string; placement: unknown }>(p)
+          return [id, at, p.entryId]
+        })
+      const termWritesOn = (planned: readonly PlannedWrite[], id: string) =>
+        planned.filter(
+          (p) => p.action.kind === 'appendEntityKeywords' && payloadOf<{ id: string }>(p).id === id,
+        )
+
+      it('creates the namesake under another parent once an earlier turn placed the place', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply(
+            [newPlace('new:c', 'the Cellar', { parent: 'loc_keep', keywords: ['the vault'] })],
+            { placements: [placement('loc_cellar', 'loc_inn', 't1')] },
+          ),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_new1')
+        expect(createdPlaces(planned)).toEqual([
+          expect.objectContaining({
+            id: 'loc_new1',
+            keywords: ['the vault'],
+            state: { parent_location_id: 'loc_keep' },
+            nameCollisionFlag: 0,
+          }),
+        ])
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e1'],
+        ])
+        expect(termWritesOn(planned, 'loc_cellar')).toEqual([])
+      })
+
+      it('counts a placement of the same turn, the placement first', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply([newPlace('new:c', 'the Cellar', { parent: 'loc_keep' })], {
+            placements: [placement('loc_cellar', 'loc_inn', 't2')],
+          }),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_new1')
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e2'],
+        ])
+      })
+
+      it('reuses the place where an earlier turn put it, placing it once', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply(
+            [newPlace('new:c', 'the Cellar', { parent: 'loc_inn', keywords: ['the vault'] })],
+            { placements: [placement('loc_cellar', 'loc_inn', 't1')] },
+          ),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_cellar')
+        expect(createdPlaces(planned)).toEqual([])
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e1'],
+        ])
+        expect(termWritesOn(planned, 'loc_cellar')).toHaveLength(1)
+      })
+
+      it('places the place for an earlier mention, and a later placement moves it after', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply([newPlace('new:c', 'the Cellar', { parent: 'loc_keep', sourceTurn: 't1' })], {
+            placements: [placement('loc_cellar', 'loc_inn', 't3')],
+          }),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_cellar')
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_keep' }, 'e1'],
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e3'],
+        ])
+      })
+
+      it('ignores an earlier placement the planner drops', () => {
+        const ruin = placeRow('loc_ruin', 'the Ruin', null, { status: 'retired' })
+        const { planned, handleMap, droppedPlacements } = buildClassifierActions(
+          placesReply([newPlace('new:c', 'the Cellar', { parent: 'loc_keep' })], {
+            placements: [placement('loc_cellar', 'loc_ruin', 't1')],
+          }),
+          deps([KEEP, ruin, CELLAR]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_cellar')
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_keep' }, 'e2'],
+        ])
+        expect(droppedPlacements).toEqual([{ ref: 'loc_cellar', cause: 'retired' }])
+      })
+
+      it("judges the mention's own parent against the earlier placements", () => {
+        const { planned, handleMap, parentDrops, droppedPlacements } = buildClassifierActions(
+          placesReply([newPlace('new:c', 'the Cellar', { parent: 'loc_inn' })], {
+            placements: [placement('loc_inn', 'loc_cellar', 't1')],
+          }),
+          deps([INN, CELLAR]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_cellar')
+        expect(parentDrops).toEqual([{ handle: 'new:c', parent: 'loc_inn', cause: 'cycle' }])
+        expect(placedRows(planned)).toEqual([
+          ['loc_inn', { kind: 'under', parentId: 'loc_cellar' }, 'e1'],
+        ])
+        expect(droppedPlacements).toEqual([])
+      })
+    })
   })
 
   describe('flags', () => {

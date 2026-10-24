@@ -130,17 +130,21 @@ export function replyParentOf(placedHere: ReplyPlacements, stored: ParentOf): Pa
   }
 }
 
-/** `view` as matching sees it once this reply's placements land: those rows no longer unplaced. */
+/** `view` as matching sees it once this reply's placements land: those rows a real child there. */
 export function replyMatchView(
   view: LocationMatchView,
   placedHere: ReplyPlacements,
 ): LocationMatchView {
   return {
-    ...view,
     locations: view.locations.map((e) => {
       const at = placedHere.get(e.id)
       return at === undefined ? e : { ...e, state: withPlacement(e.state as LocationState, at) }
     }),
+    hiddenBetween: (id, parentId) => {
+      const at = placedHere.get(id)
+      if (at === undefined) return view.hiddenBetween(id, parentId)
+      return (at.kind === 'under' ? at.parentId : null) === parentId ? 0 : null
+    },
   }
 }
 

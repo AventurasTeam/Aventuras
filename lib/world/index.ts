@@ -8,7 +8,7 @@ export {
   parentOfLocations,
   placementLoop,
 } from './parent-chain'
-export type { PlacementLoop } from './parent-chain'
+export type { ParentOf, PlacementLoop } from './parent-chain'
 export {
   characterDraftFrom,
   characterDraftSchema,
