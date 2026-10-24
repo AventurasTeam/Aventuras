@@ -151,15 +151,6 @@ slice-planning gate forces its resolution before that slice is planned.
   its disabled-controls rule).
   Raised 2026-10-21 by the gated classifier slice's task reviews.
 
-- **The `sseFetch` fixture answers non-streaming calls with SSE.**
-  `lib/actions/turns/__tests__/fixtures.ts` stubs every request with an
-  event stream. The piggyback fallback's non-streaming call gets that
-  body, fails as a retryable JSON error, and costs each per-turn test
-  a 500 ms backoff (`BACKOFF_BASE_MS` in
-  `lib/ai/transport/call-with-retry.ts`), plus a
-  `classifier.piggyback_fallback_failed` warning in the logs. Raised
-  2026-10-21 by the gated classifier slice's task reviews.
-
 - **The reader's bottom pin ignores scrollbar drags and keyboard
   scrolls.**
   [`reader-document.md → Entry list`](../ui/patterns/reader-document.md#entry-list-fully-rendered-flow-layout)
