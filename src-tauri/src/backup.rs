@@ -245,6 +245,22 @@ fn image_extension(bytes: &[u8]) -> &'static str {
     }
 }
 
+/// Earlier entries win, matching `ISOBMFF_BRANDS` in `src/lib/utils/image.ts`.
+const ISOBMFF_BRANDS: &[(&[u8; 4], &str)] = &[
+    (b"avif", "avif"),
+    (b"avis", "avif"),
+    (b"heic", "heic"),
+    (b"heix", "heic"),
+    (b"heim", "heic"),
+    (b"heis", "heic"),
+    (b"hevc", "heic"),
+    (b"hevx", "heic"),
+    (b"hevm", "heic"),
+    (b"hevs", "heic"),
+    (b"mif1", "heif"),
+    (b"msf1", "heif"),
+];
+
 /// Checks the major brand and the compatible brands of the `ftyp` box; the minor version is skipped.
 fn isobmff_extension(bytes: &[u8]) -> &'static str {
     let size = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
@@ -259,18 +275,10 @@ fn isobmff_extension(bytes: &[u8]) -> &'static str {
         .into_iter()
         .chain(compatible)
         .collect();
-    if brands.iter().any(|b| matches!(*b, b"avif" | b"avis")) {
-        "avif"
-    } else if brands.iter().any(|b| {
-        matches!(
-            *b,
-            b"heic" | b"heix" | b"heim" | b"heis" | b"hevc" | b"hevx"
-        )
-    }) {
-        "heic"
-    } else {
-        "png"
-    }
+    ISOBMFF_BRANDS
+        .iter()
+        .find(|(brand, _)| brands.contains(brand))
+        .map_or("png", |&(_, ext)| ext)
 }
 
 /// Open a read-only connection pool to the live database.
@@ -585,6 +593,10 @@ mod tests {
         assert_eq!(image_extension(&ftyp(b"avif", &[b"mif1", b"miaf"])), "avif");
         assert_eq!(image_extension(&ftyp(b"mif1", &[b"miaf", b"avif"])), "avif");
         assert_eq!(image_extension(&ftyp(b"heic", &[b"mif1"])), "heic");
+        assert_eq!(image_extension(&ftyp(b"hevm", &[])), "heic");
+        assert_eq!(image_extension(&ftyp(b"hevs", &[])), "heic");
+        assert_eq!(image_extension(&ftyp(b"mif1", &[b"miaf"])), "heif");
+        assert_eq!(image_extension(&ftyp(b"msf1", &[])), "heif");
     }
 
     #[test]
