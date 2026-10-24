@@ -115,9 +115,10 @@ alias list (the keywords bullet below).
   keywords, as a name the turns use for it, and the pass flags the
   entity (`name-taken`) with the oldest holder as its partner, for the
   user to merge. An entity already flagged keeps its flag and gets the
-  keyword only, unless the flag is dormant (World's pairing rule no
-  longer holds it, the keyword counted): then the pass re-points it at
-  the holder.
+  keyword only. A flag whose partner is gone, or whose pair are no
+  longer namesakes once the keyword is counted (World may still show
+  the latter's strip), counts as no flag: the pass re-points it at the
+  holder.
 - **Where a place sits** — a listed place's parent, when the turns
   place one the Places list shows unplaced or move one; and the
   top-level mark for an unplaced place nothing on the map could
