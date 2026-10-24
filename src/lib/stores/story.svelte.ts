@@ -145,10 +145,14 @@ import {
 } from '#lib/services/generation/index.ts'
 import { createLogger } from '#lib/log.ts'
 import { withUniqueEntryTerms } from '#lib/utils/lorebookTerms.ts'
-import { applyTermChanges, sameEntityName, uniqueTerms } from '#lib/utils/text.ts'
+import { sameEntityName, uniqueTerms } from '#lib/utils/text.ts'
 import { storyDetailsUpdate } from '#lib/utils/storyDetails.ts'
 import { grammarService } from '#lib/services/grammar.ts'
-import { clearTier3SelectionCache } from '#lib/services/ai/index.ts'
+import {
+  clearTier3SelectionCache,
+  planCharacterChanges,
+  viewsForApply,
+} from '#lib/services/ai/index.ts'
 import { clearImageMarkerCache } from '#lib/services/image/index.ts'
 import { GenerationLease } from '#lib/utils/generationLease.ts'
 import { findLiveCharacter, sameBranchScope, type BranchScope } from '#lib/utils/branchScope.ts'
@@ -3245,6 +3249,8 @@ class StoryStore {
     const recordCtx = entryId ? this.recordContext({ origin: 'classifier', entryId }) : null
     const stateBefore = recordCtx ? cloneState(classifierView(this.trackedState())) : null
 
+    const shownToClassifier = viewsForApply(result._shownCharacters, this.characters)
+
     // Apply character updates
     for (const update of result.entryUpdates.characterUpdates) {
       await this.wrapUpdate('Update character', update.name, async () => {
@@ -3286,30 +3292,12 @@ class StoryStore {
 
         if (existing) {
           log('Updating character:', update.name, update.changes)
-          const changes: Partial<Character> = {}
-          if (update.changes.status) changes.status = update.changes.status
-          if (update.changes.relationship) {
-            if (existing.relationship === 'self') {
-              // Preserve protagonist relationship; only set via explicit swap.
-            } else if (update.changes.relationship !== 'self') {
-              changes.relationship = update.changes.relationship
-            }
-          }
-          if (update.changes.newTraits?.length || update.changes.removeTraits?.length) {
-            changes.traits = applyTermChanges(
-              existing.traits,
-              update.changes.newTraits,
-              update.changes.removeTraits,
-            )
-          }
-          // Handle visual descriptor updates for image generation
-          // New format: visualDescriptors is a structured object that replaces entirely
-          if (
-            update.changes.visualDescriptors &&
-            Object.keys(update.changes.visualDescriptors).length > 0
-          ) {
-            changes.visualDescriptors = update.changes.visualDescriptors
-          }
+          const { changes, ignored } = planCharacterChanges(
+            existing,
+            update.changes,
+            shownToClassifier(existing.name),
+          )
+          if (ignored.length > 0) log('Ignored character rewrites:', existing.name, ignored)
           // Merge inline runtime variable values into metadata if present
           const charInlineVars = extractInlineCustomVars(
             update.changes as unknown as Record<string, unknown>,
@@ -3318,6 +3306,7 @@ class StoryStore {
           if (Object.keys(charInlineVars).length > 0) {
             changes.metadata = mergeRuntimeVars(existing.metadata, charInlineVars, defsByName)
           }
+          if (Object.keys(changes).length === 0) return
           // COW: ensure entity is owned by current branch before updating
           const { entity: ownedChar } = await this.cowTracked('character', existing)
           await database.updateCharacter(ownedChar.id, changes)

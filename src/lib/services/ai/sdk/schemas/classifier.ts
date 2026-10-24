@@ -58,19 +58,31 @@ export const characterUpdateSchema = z.object({
       .describe('active=present, inactive=away, deceased=dead')
       .optional(),
     relationship: z.string().describe('New relationship to protagonist').optional(),
-    newTraits: z.array(z.string()).describe('Personality traits to add').optional(),
-    removeTraits: z.array(z.string()).describe('Traits no longer applicable').optional(),
+    description: z
+      .string()
+      .describe(
+        'Replaces the whole description; only for a character whose current description is shown',
+      )
+      .optional(),
+    traits: z
+      .array(z.string())
+      .describe(
+        'Replaces the whole trait list: lasting personality only, at most 8; only for a character whose current traits are shown',
+      )
+      .optional(),
     visualDescriptors: visualDescriptorsSchema
-      .describe('Complete visual appearance - replaces existing descriptors')
+      .describe(
+        'Complete visual appearance - replaces existing descriptors; only for a character whose appearance is shown',
+      )
       .optional(),
   }),
 })
 
 export const newCharacterSchema = z.object({
   name: z.string().describe("Character's proper name"),
-  description: z.string().describe('One sentence description').optional(),
+  description: z.string().describe('One sentence: who they are. Always provide it').optional(),
   relationship: z.string().describe('friend, enemy, ally, neutral, or unknown').optional(),
-  traits: z.array(z.string()).describe('Personality traits').optional(),
+  traits: z.array(z.string()).describe('Lasting personality traits only, at most 8').optional(),
   visualDescriptors: visualDescriptorsSchema
     .describe('Complete visual appearance - ALL categories should be filled')
     .optional(),
@@ -247,4 +259,14 @@ export type ClassificationResult = z.infer<typeof classificationResultSchema> & 
   _error?: string
   /** Set with `_error` when part of a rejected response was recovered and applied. */
   _salvaged?: boolean
+  /** Internal metadata: which fields of each existing character the prompt listed. Not LLM output. */
+  _shownCharacters?: ShownCharacter[]
+}
+
+export interface ShownCharacter {
+  name: string
+  /** `appearance:` was listed, so `visualDescriptors` may be rewritten. */
+  appearance: boolean
+  /** `description:` and `traits:` were listed, so both may be rewritten. */
+  profile: boolean
 }
