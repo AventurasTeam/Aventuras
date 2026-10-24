@@ -385,7 +385,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entity[]',
       category: 'Entities',
       description:
-        "Branch entities other than places (id/kind/name/description/status/keywords), any status, each on one line. A character's `faction` is its faction's id when that names a listed faction, else null. A faction's `standing` is its stored standing on one line, null when blank and on every other kind.",
+        "Branch entities other than places (id/kind/name/description/status/keywords), any status, each on one line. `keywords` leaves out any equal to the row's own name (trimmed, case-folded); the row keeps them. A character's `faction` is its faction's id when that names a listed faction, else null. A faction's `standing` is its stored standing on one line, null when blank and on every other kind.",
       required: true,
     },
     {
@@ -393,7 +393,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: '{ id, name, depth, status, retiredReason, description, keywords }[]',
       category: 'Entities',
       description:
-        "Every place on the branch, whatever its status or injection mode, in tree order: each nested under its parent (`depth` levels deep), children by name. `retiredReason` is set only on a retired place. Unlike the narrator's `locationMap` it hides nothing. An unplaced place, and what lies inside it, is in placesUnplaced instead.",
+        "Every place on the branch, whatever its status or injection mode, in tree order: each nested under its parent (`depth` levels deep), children by name. `retiredReason` is set only on a retired place. Unlike the narrator's `locationMap` it hides nothing. `keywords` leaves out any equal to the place's own name, as on entities. An unplaced place, and what lies inside it, is in placesUnplaced instead.",
       required: true,
     },
     {

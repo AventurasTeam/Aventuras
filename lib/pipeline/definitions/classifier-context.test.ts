@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { WindowTurn } from '@/lib/classifier'
 import type { CharacterRelationship, Entity, Thread } from '@/lib/db'
 import { IdBiMap } from '@/lib/ids'
-import { VARIABLES } from '@/lib/prompts'
+import { renderTemplate, TEMPLATE_IDS, VARIABLES } from '@/lib/prompts'
 
 import { buildClassifierContext } from './classifier-context'
 
@@ -250,6 +250,48 @@ describe('buildClassifierContext', () => {
       idMap: new IdBiMap(),
     })
     expect((context.entities as { keywords: string[] }[])[0].keywords).toEqual(['the Grey Wolf'])
+  })
+
+  // The line already shows the name, so "(also called: …)" leaves out a keyword equal to it under
+  // keyword-term normalization; a keyword that only contains the name still shows.
+  describe("a row's own name among its keywords", () => {
+    const KEEP = 'loc_11111111-1111-1111-1111-111111111111'
+    const build = (entities: Entity[]) =>
+      buildClassifierContext({
+        window: { turns: [] } as never,
+        entities,
+        happenings: [],
+        relationships: [],
+        threads: [],
+        mentionedPlaces: false,
+        idMap: new IdBiMap(),
+      })
+    const kael = {
+      ...character(AEFRE, 'Kael'),
+      keywords: [' KAEL ', "Kael's sister", 'the Grey Wolf'],
+    } as Entity
+    const keep = {
+      ...character(KEEP, 'Ashen Keep'),
+      kind: 'location',
+      state: { parent_location_id: null },
+      keywords: ['ashen keep'],
+    } as Entity
+
+    it('stays on the row and leaves the rendered line', () => {
+      const context = build([kael, keep])
+      expect((context.entities as { keywords: string[] }[])[0].keywords).toEqual([
+        "Kael's sister",
+        'the Grey Wolf',
+      ])
+      expect(kael.keywords).toEqual([' KAEL ', "Kael's sister", 'the Grey Wolf'])
+      const { user } = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+      expect(user).toContain(
+        "- [c1] Kael (character) (also called: Kael's sister, the Grey Wolf)\n",
+      )
+      // A place whose only keyword is its name loses the parenthetical, as with none at all.
+      expect(user).toContain('- [l1] Ashen Keep\n')
+      expect(keep.keywords).toEqual(['ashen keep'])
+    })
   })
 
   // classifier.md → Mentioned places: places leave Known entities for a tree that hides nothing.

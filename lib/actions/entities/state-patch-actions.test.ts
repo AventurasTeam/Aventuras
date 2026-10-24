@@ -1634,6 +1634,19 @@ describe('renameEntity', () => {
     expect(await undoPayloadOf(db, 'act_n')).toEqual({ name: 'the hooded stranger' })
   })
 
+  // classifier.md → What the classifier writes: a keyword write appends and never removes, so a
+  // keyword equal to the new name stays; the pass's prompt leaves it off the line.
+  it('keeps a keyword equal to the new name', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db, { ...STRANGER, keywords: ['Kael', 'the stranger'] })
+    expect((await apply(ctx, rename('Kael'), 'act_n')).status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).keywords).toEqual([
+      'Kael',
+      'the stranger',
+      'the hooded stranger',
+    ])
+  })
+
   it('no-ops on a change of case or surrounding space alone', async () => {
     const { db, ctx } = await setup()
     await seed(ctx, db)

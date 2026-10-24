@@ -1,6 +1,7 @@
 import type { ClassifierWindow } from '@/lib/classifier'
 import type { CharacterRelationship, Entity, Happening, Thread } from '@/lib/db'
 import { substituteIds, type IdBiMap } from '@/lib/ids'
+import { normalizeTerm } from '@/lib/keyword-terms'
 import { blankToNull } from '@/lib/text'
 import { characterFactionId, placeTree, stateOf, type PlaceTreeRow } from '@/lib/world'
 
@@ -16,6 +17,13 @@ type RelationshipFact = {
 const flat = (text: string): string => text.replace(/\s+/g, ' ').trim()
 const oneLine = (text: string | null): string | null =>
   text == null ? null : blankToNull(flat(text))
+
+// The line shows the name, so "also called" leaves out a stored keyword equal to it; the row's
+// keywords stay as stored.
+const aliasesOf = (e: Pick<Entity, 'name' | 'keywords'>): string[] => {
+  const name = normalizeTerm(flat(e.name))
+  return e.keywords.map(flat).filter((term) => normalizeTerm(term) !== name)
+}
 
 // One row can emit two facts, one per non-null perspective; a row whose character
 // has no entity in the snapshot (FK-less, deleted) has no name to inline and is dropped.
@@ -59,7 +67,7 @@ const placeRow = ({ entity: e, depth }: PlaceTreeRow) => ({
   status: e.status,
   retiredReason: e.status === 'retired' ? oneLine(e.retiredReason) : null,
   description: oneLine(e.description),
-  keywords: e.keywords.map(flat),
+  keywords: aliasesOf(e),
 })
 
 // The classifierContext group's one builder. Separate from generationContext
@@ -97,7 +105,7 @@ export function buildClassifierContext(args: {
         name: flat(e.name),
         description: oneLine(e.description),
         status: e.status,
-        keywords: e.keywords.map(flat),
+        keywords: aliasesOf(e),
         faction: factionOf(e),
         // classifier.md → Factions → What the pass sees: a standing change needs the standing.
         standing: e.kind === 'faction' ? oneLine(stateOf(e, 'faction').standing ?? null) : null,
