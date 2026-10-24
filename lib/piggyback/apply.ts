@@ -2,7 +2,7 @@ import type { DeltaSource, PipelineAction } from '@/lib/actions'
 import type { CharacterState, Entity, EntryMetadata } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import { foldStackables } from '@/lib/keyword-terms'
-import { stateAs } from '@/lib/world'
+import { placeModes, stateAs } from '@/lib/world'
 
 import { boundStateText } from './bound-text'
 import { itemMoveActions } from './item-moves'
@@ -59,6 +59,10 @@ export type PiggybackApplied = {
   itemsLanded: number
   dropsLanded: number
   stackablesLanded: number
+  /** Rows the narrator was kept from that this turn's scene now seats: a place it moved into
+   *  that was disabled, or a disabled member it brought in (principles.md → Injection /
+   *  retrieval rules). */
+  seatedDisabled: string[]
 }
 
 type BuildResult = {
@@ -115,6 +119,19 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   const currentLocationId = namedIsLocation ? named : previousMetadata.currentLocationId
 
   const metadata: BuildResult['metadata'] = { sceneEntities, currentLocationId, worldTime }
+  // Judged from where the story stood: a place around it was never disabled for the narrator.
+  const wasDisabled = placeModes(entities, previousMetadata.currentLocationId).isDisabled
+  const seatedDisabled = [
+    ...(currentLocationId !== null &&
+    currentLocationId !== previousMetadata.currentLocationId &&
+    wasDisabled(currentLocationId)
+      ? [currentLocationId]
+      : []),
+    ...sceneEntities.filter(
+      (id) =>
+        !previousMetadata.sceneEntities.includes(id) && byId.get(id)?.injectionMode === 'disabled',
+    ),
+  ]
   if (block.summary !== undefined) metadata.summary = block.summary
   const retrievalQueries = normalizeRetrievalQueries(block.retrievalQueries ?? [])
   if (retrievalQueries.length > 0) metadata.retrievalQueries = retrievalQueries
@@ -303,6 +320,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
       itemsLanded,
       dropsLanded,
       stackablesLanded,
+      seatedDisabled,
     },
   }
 }

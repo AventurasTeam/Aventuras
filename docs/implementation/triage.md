@@ -190,26 +190,6 @@ slice-planning gate forces its resolution before that slice is planned.
   function. Raised 2026-10-11 by that PR's task reviews and its slice
   review.
 
-- **The fallback classifier's roster lists effectively disabled places
-  with ids.** `lib/prompts/bundled/piggyback-fallback-classifier.ts`
-  renders every active and staged entity, so a place disabled by its
-  own mode or an ancestor's reaches the fallback with its id although
-  the map leaves it out, and
-  [`principles.md → Injection / retrieval rules`](../ui/principles.md#injection--retrieval-rules-for-prompt-context)
-  says a disabled row never reaches the prompt. It helps the fallback
-  name a place the prose walked into, but it gives a place disabled as
-  a secret to the extraction call. Decide whether the roster follows
-  the map's effective mode. Predates this change for a place disabled
-  by its own mode. The roster filters on status only
-  (`lib/prompts/filters.ts`), so every entity disabled by its own mode
-  reaches it with its id, characters, items and factions too. Raised
-  2026-10-12 by the retired and disabled places implementation.
-  Since 2026-10-16, `principles.md` says the mode governs what the
-  narrator sees and the periodic classifier sees every row whatever its
-  mode, which the 2026-10-12 design decided for the periodic classifier;
-  the fallback, which extracts but can also move the scene, is the case
-  that rule doesn't settle.
-
 - **Two save-confirm dialogs repeat one shell.** `RowConfirmDialog`
   (`components/compounds/row-save-session-chrome.tsx`) and Story
   Settings' `DefinitionalChangeDialog`

@@ -35,7 +35,7 @@ type BuildReportArgs = {
   /** What apply.ts did with the emitted values. Absent when nothing was applied. */
   applied?: Pick<
     PiggybackApplied,
-    'worldTimeDelta' | 'currentLocationRejected' | 'drops' | 'conditionsRejected'
+    'worldTimeDelta' | 'currentLocationRejected' | 'drops' | 'conditionsRejected' | 'seatedDisabled'
   >
 }
 
@@ -89,6 +89,9 @@ export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateRep
       ? { failedFields: failures.map((f) => ({ field: f.field, detail: f.detail })) }
       : {}),
     ...(droppedRefs.length > 0 ? { droppedRefs: droppedRefs.map((d) => ({ ...d })) } : {}),
+    ...(applied !== undefined && applied.seatedDisabled.length > 0
+      ? { seatedDisabled: [...applied.seatedDisabled] }
+      : {}),
     // Redundant on the happy path; the only inspectable remnant when a parse failed.
     ...(failures.length > 0 && raw !== undefined ? { raw } : {}),
   }

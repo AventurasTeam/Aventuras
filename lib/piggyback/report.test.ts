@@ -44,10 +44,29 @@ describe('buildStateReport', () => {
         currentLocationRejected: false,
         drops: [],
         conditionsRejected: [],
+        seatedDisabled: [],
       },
     })
     expect(report?.worldTimeDelta).toBe(-600)
     expect(report?.worldTimeDeltaApplied).toBe(0)
+  })
+
+  it('records the disabled rows the scene seats, and leaves the field off when there are none', () => {
+    const report = (seatedDisabled: string[]) =>
+      buildStateReport({
+        layer: 'per_turn_classifier',
+        turn: planned({ sceneEntities: ['char_spy'], currentLocation: 'loc_lair' }),
+        failures: [],
+        applied: {
+          worldTimeDelta: 0,
+          currentLocationRejected: false,
+          drops: [],
+          conditionsRejected: [],
+          seatedDisabled,
+        },
+      })
+    expect(report(['loc_lair', 'char_spy'])?.seatedDisabled).toEqual(['loc_lair', 'char_spy'])
+    expect(report([])).not.toHaveProperty('seatedDisabled')
   })
 
   // The headroom clamp is the case `worldTimeDelta < 0` never caught: a positive
@@ -62,6 +81,7 @@ describe('buildStateReport', () => {
         currentLocationRejected: false,
         drops: [],
         conditionsRejected: [],
+        seatedDisabled: [],
       },
     })
     expect(report?.worldTimeDelta).toBe(9_000_000)
@@ -78,6 +98,7 @@ describe('buildStateReport', () => {
         currentLocationRejected: true,
         drops: [],
         conditionsRejected: [],
+        seatedDisabled: [],
       },
     })
     expect(rejected?.currentLocationRejected).toBe(true)
@@ -93,6 +114,7 @@ describe('buildStateReport', () => {
         currentLocationRejected: false,
         drops: [],
         conditionsRejected: [],
+        seatedDisabled: [],
       },
     })
     expect(accepted).not.toHaveProperty('currentLocationRejected')
@@ -155,6 +177,7 @@ describe('buildStateReport', () => {
         currentLocationRejected: false,
         drops: [],
         conditionsRejected: [],
+        seatedDisabled: [],
       },
     })
     expect(report).toEqual({ layer: 'piggyback_tagged_block' })
@@ -350,6 +373,7 @@ describe('buildStateReport — conditions and drops', () => {
         currentLocationRejected: false,
         drops: [],
         conditionsRejected: [0, 2],
+        seatedDisabled: [],
       },
     })
     expect(report?.conditions).toEqual([
@@ -378,6 +402,7 @@ describe('buildStateReport — conditions and drops', () => {
         currentLocationRejected: false,
         drops: [{ id: 'item_a', from: 'char_a', at: 'loc_a' }],
         conditionsRejected: [],
+        seatedDisabled: [],
       },
     })
     expect(report?.transfers).toEqual({
@@ -399,6 +424,7 @@ describe('buildStateReport — conditions and drops', () => {
         currentLocationRejected: false,
         drops: [],
         conditionsRejected: [],
+        seatedDisabled: [],
       },
     })
     expect(report?.transfers).toEqual({ items: [], stackables: [] })

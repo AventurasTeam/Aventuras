@@ -2222,3 +2222,65 @@ describe('buildPiggybackActions — holders read by what they name', () => {
     ).toEqual(balances)
   })
 })
+
+// principles.md → Injection / retrieval rules: the in-scene invariant seats a disabled row once the
+// scene holds it, so the turn records which ones it brought into the narrator's view.
+describe('buildPiggybackActions — disabled rows a turn seats', () => {
+  const place = (id: string, parent: string | null, mode: Entity['injectionMode'] = 'auto') =>
+    mockEntity({
+      id,
+      kind: 'location',
+      name: id,
+      injectionMode: mode,
+      state: { parent_location_id: parent },
+    })
+  const world = (): Entity[] => [
+    mockEntity({ id: 'char_mira' }),
+    mockEntity({ id: 'char_spy', injectionMode: 'disabled' }),
+    place('loc_dock', null),
+    place('loc_lair', null, 'disabled'),
+    place('loc_vault', null, 'disabled'),
+    place('loc_cell', 'loc_vault'),
+  ]
+  const seated = (
+    block: ParsedStateBlock,
+    previous: { sceneEntities: string[]; currentLocationId: string | null } = {
+      sceneEntities: ['char_mira'],
+      currentLocationId: 'loc_dock',
+    },
+  ) =>
+    buildPiggybackActions({
+      log: logger,
+      source: 'per_turn_classifier',
+      entryId: 'entry_2',
+      turn: planned(block),
+      entities: world(),
+      previousMetadata: { ...previous, worldTime: 100 },
+      branchId: 'main',
+    }).applied.seatedDisabled
+
+  it('records a disabled place the scene moves into', () => {
+    expect(seated({ sceneEntities: ['char_mira'], currentLocation: 'loc_lair' })).toEqual([
+      'loc_lair',
+    ])
+  })
+
+  it('records a place disabled through its ancestor', () => {
+    expect(seated({ sceneEntities: ['char_mira'], currentLocation: 'loc_cell' })).toEqual([
+      'loc_cell',
+    ])
+  })
+
+  it('records a disabled member the scene brings in', () => {
+    expect(seated({ sceneEntities: ['char_mira', 'char_spy'] })).toEqual(['char_spy'])
+  })
+
+  it('records nothing the scene already held, nor a place around the story', () => {
+    expect(
+      seated(
+        { sceneEntities: ['char_mira', 'char_spy'], currentLocation: 'loc_cell' },
+        { sceneEntities: ['char_mira', 'char_spy'], currentLocationId: 'loc_vault' },
+      ),
+    ).toEqual([])
+  })
+})
