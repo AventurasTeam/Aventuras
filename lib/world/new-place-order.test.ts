@@ -20,10 +20,19 @@ describe('settlingOrder', () => {
     ).toEqual(['a', 'b'])
   })
 
+  it('settles in list order where parents allow: a create waits for its own parent alone', () => {
+    expect(
+      order(
+        [{ handle: 'a', parent: 'p' }, { handle: 'p', parent: 'loc_port' }, { handle: 'b' }],
+        ['loc_port'],
+      ),
+    ).toEqual(['p', 'a', 'b'])
+  })
+
   it('settles a top-level create at once, as one that names no parent', () => {
     expect(
       order([{ handle: 'b', parent: 'a' }, { handle: 'a', parent: TOP_LEVEL }, { handle: 'c' }]),
-    ).toEqual(['a', 'c', 'b'])
+    ).toEqual(['a', 'b', 'c'])
   })
 
   it('leaves unresolved a create whose parent is neither a declared handle nor a location', () => {

@@ -47,8 +47,9 @@ const namesParent = <E extends NewPlaceDeclaration>(e: E): e is E & { parent: st
   e.parent !== undefined
 
 /**
- * Top-down: a child may precede its parent. No parent or `TOP_LEVEL` settles at once; a parent that
- * never resolves (undeclared handle, non-location id, cycle) unplaces its create; children follow.
+ * Top-down, else in list order: a create waits for its own parent only. No parent or `TOP_LEVEL`
+ * settles at once; a parent that never resolves (undeclared handle, non-location id, cycle)
+ * unplaces its create; children follow.
  */
 export function settlingOrder<E extends NewPlaceDeclaration>(
   creates: readonly E[],
@@ -80,10 +81,9 @@ export function settlingOrder<E extends NewPlaceDeclaration>(
 
   let waiting = unique
   while (waiting.length > 0) {
-    const before = order.length
-    for (const emission of waiting)
-      if (resolvable(emission.parent)) settle({ emission, parentUnresolved: false })
-    if (order.length === before) {
+    const next = waiting.find((e) => resolvable(e.parent))
+    if (next !== undefined) settle({ emission: next, parentUnresolved: false })
+    else {
       // No parent and TOP_LEVEL always settle, so every waiting create names another parent.
       const parented = waiting.filter(namesParent)
       const handles = new Set(waiting.map((e) => e.handle))

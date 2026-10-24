@@ -1932,6 +1932,35 @@ describe('mentioned places', () => {
         expect(placementsOf(planned)).toEqual([])
       })
 
+      // The reply's order decides "earlier", not how it ordered a parent and its child.
+      it('counts a placed namesake listed earlier, though its parent is listed after it', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply([
+            newPlace('new:a', 'the Docks', { parent: 'new:p' }),
+            newPlace('new:p', 'the Pier', { parent: 'loc_port' }),
+            newPlace('new:b', 'the Docks'),
+          ]),
+          deps([
+            placeRow('loc_bay', 'the Bay', null),
+            placeRow('loc_port', 'the Port', null),
+            placeRow('loc_docks', 'the Docks', 'loc_bay'),
+          ]),
+        )
+        expect(
+          createdPlaces(planned).map((e) => [
+            e.id,
+            e.state,
+            e.nameCollisionPartnerId,
+            e.nameCollisionReason,
+          ]),
+        ).toEqual([
+          ['loc_new1', { parent_location_id: 'loc_port' }, null, null],
+          ['loc_new2', { parent_location_id: 'loc_new1' }, null, null],
+          ['loc_new3', { parent_location_id: null, unplaced: true }, 'loc_docks', 'unplaced'],
+        ])
+        expect(handleMap.get('new:b')).toBe('loc_new3')
+      })
+
       it('takes over an unplaced place the reply created earlier, placing it after its create', () => {
         const { planned, handleMap, parentDrops } = buildClassifierActions(
           placesReply([
