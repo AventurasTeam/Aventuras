@@ -95,7 +95,6 @@
 </script>
 
 <ActionModal
-  presentation="sheet"
   bind:open={isOpen}
   onClosed={onClose}
   title="Edit story"

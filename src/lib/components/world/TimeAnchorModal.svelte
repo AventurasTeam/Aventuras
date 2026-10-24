@@ -141,7 +141,6 @@
 </script>
 
 <ActionModal
-  presentation="sheet"
   bind:open
   size="lg"
   title={existing && usableEntry

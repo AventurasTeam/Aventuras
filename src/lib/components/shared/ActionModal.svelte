@@ -7,7 +7,6 @@
   import { onDestroy, untrack, type Component, type Snippet } from 'svelte'
   import { Trash2 } from '@lucide/svelte'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
-  import { createDrawerSwipeGuard } from '#lib/components/ui/drawer/index.ts'
   import { setTextareaUncapped } from '#lib/components/ui/textarea/index.ts'
   import { releaseOrphanScrollLock } from '#lib/utils/scrollLock.ts'
   import { MODAL_CLOSE_TRANSITION_MS } from '#lib/constants/layout.ts'
@@ -60,7 +59,10 @@
     dirty?: boolean
     discardQuestion?: Question
     size?: 'md' | 'lg'
-    /** A tool is a sheet on a phone; a command stays a dialog. See the catalog. */
+    /**
+     * A sheet on a phone, only for a tool with no text field, nothing to lose and an action Cancel
+     * can stop: `vaul` closes a sheet on a handle tap without asking. See the catalog.
+     */
     presentation?: 'sheet' | 'dialog'
   }
 
@@ -89,11 +91,8 @@
   setTextareaUncapped()
 
   let question = $state<'discard' | 'remove' | null>(null)
-  /** What the sheet shows; `open` is what the caller asked for. They part while a sheet returns. */
-  let sheetOpen = $state(untrack(() => open))
-  /** Bumped to remount the modal, so a sheet brought back after a swipe starts from clean. */
-  let modalKey = $state(0)
-  let returning = false
+  /** What the modal shows; a close is routed through `leave` before `open` follows. */
+  let shownOpen = $state(untrack(() => open))
   let wasOpen = untrack(() => open)
   let timer: ReturnType<typeof setTimeout> | null = null
   let frame = $state<HTMLDivElement | null>(null)
@@ -117,10 +116,10 @@
     if (open === wasOpen) return
     wasOpen = open
     if (open) {
-      if (!returning) sheetOpen = true
+      shownOpen = true
       return
     }
-    sheetOpen = false
+    shownOpen = false
     question = null
     // Unmounting skips `vaul`'s own restore, so the lock is released here; see `utils/scrollLock`.
     schedule(() => {
@@ -136,10 +135,9 @@
   })
 
   /**
-   * Focuses the field a caller marked `data-autofocus`, so a phone raises its keyboard while a
-   * sheet is still sliding in, as one rise. iOS WKWebView raises no keyboard for a focus outside a
-   * tap (`KeyboardDisplayRequiresUserAction`): the field is focused there, but the keyboard waits
-   * for the user.
+   * Focuses the field a caller marked `data-autofocus`, so a phone raises its keyboard. iOS
+   * WKWebView raises no keyboard for a focus outside a tap (`KeyboardDisplayRequiresUserAction`):
+   * the field is focused there, but the keyboard waits for the user.
    */
   function focusMarkedField(e: Event) {
     const field = frame?.querySelector<HTMLElement>('[data-autofocus]')
@@ -154,22 +152,6 @@
     else open = false
   }
 
-  /**
-   * Brings back a sheet `vaul` closed on its own, once it is fully out. Reopening it mid-close
-   * leaves its swipe styles and scroll lock behind, over a sheet that cannot be seen.
-   */
-  function returnSheet(ask: boolean) {
-    returning = true
-    schedule(() => {
-      returning = false
-      if (!open) return
-      releaseOrphanScrollLock()
-      modalKey += 1
-      sheetOpen = true
-      if (ask && question === null) question = 'discard'
-    })
-  }
-
   function request(source: CloseSource) {
     const outcome = decideClose(source, {
       busy,
@@ -180,28 +162,13 @@
     if (outcome === 'ask') question = 'discard'
     else if (outcome === 'closeQuestion') question = null
     else if (outcome === 'close') leave()
-    else if (outcome === 'return') returnSheet(false)
-    else if (outcome === 'returnAndAsk') returnSheet(true)
   }
 
-  // Only a sheet's own close reaches here: Escape and outside clicks are intercepted on the content.
+  // Only a sheet's swipe or handle tap reaches here: Escape and outside clicks are intercepted on
+  // the content. A sheet holds nothing to lose, so it leaves without asking.
   function handleOpenChange(next: boolean) {
-    if (next || returning || !open) return
-    request('sheet')
+    if (!next && open) leave()
   }
-
-  // A swipe on a sheet with something to lose stays put and asks, instead of closing.
-  let swipeGuard: ReturnType<typeof createDrawerSwipeGuard> | null = null
-  $effect(() => {
-    const guard = createDrawerSwipeGuard(
-      () => (dirty || question !== null) && !locked,
-      () => {
-        if (question === null) question = 'discard'
-      },
-    )
-    swipeGuard = guard
-    return () => guard.destroy()
-  })
 
   // Ctrl+Enter in any field acts, so a modal whose Enter only moves on still has a key to finish.
   function handleShortcut(e: KeyboardEvent) {
@@ -220,101 +187,95 @@
   }
 </script>
 
-{#key modalKey}
-  <ResponsiveModal.Root
-    bind:open={sheetOpen}
-    dismissible={!locked}
-    sheet={presentation === 'sheet'}
-    onOpenChange={handleOpenChange}
+<ResponsiveModal.Root
+  bind:open={shownOpen}
+  dismissible={!locked}
+  sheet={presentation === 'sheet'}
+  onOpenChange={handleOpenChange}
+>
+  <ResponsiveModal.Content
+    class={cn(
+      'flex max-h-[85dvh] flex-col gap-0 p-0',
+      size === 'lg' ? 'max-w-lg' : 'max-w-md',
+      // Inset from a phone's edges, where the dialog would otherwise run full width.
+      presentation === 'dialog' && 'w-[calc(100%-2rem)] rounded-lg',
+      // Held near the top on a phone when it has a text field, so the keyboard shortening the
+      // screen does not move it; only its bottom edge comes up, and the content scrolls.
+      presentation === 'dialog' &&
+        'max-md:has-[input:not([type=hidden]),textarea]:top-[calc(var(--safe-top)+1rem)] max-md:has-[input:not([type=hidden]),textarea]:translate-y-0',
+    )}
+    onInteractOutside={(e: PointerEvent) => {
+      e.preventDefault()
+      request('outside')
+    }}
+    onEscapeKeydown={(e: KeyboardEvent) => {
+      e.preventDefault()
+      request('escape')
+    }}
+    onOpenAutoFocus={focusMarkedField}
+    onkeydown={handleShortcut}
   >
-    <ResponsiveModal.Content
-      class={cn(
-        'flex max-h-[85dvh] flex-col gap-0 p-0',
-        size === 'lg' ? 'max-w-lg' : 'max-w-md',
-        // Inset from a phone's edges, where the dialog would otherwise run full width.
-        presentation === 'dialog' && 'w-[calc(100%-2rem)] rounded-lg',
-        // Held near the top on a phone when it raises the keyboard, so the shorter screen does not
-        // move it; only its bottom edge comes up, and the content scrolls.
-        presentation === 'dialog' &&
-          'max-md:has-[[data-autofocus]]:top-[calc(var(--safe-top)+1rem)] max-md:has-[[data-autofocus]]:translate-y-0',
-      )}
-      onInteractOutside={(e: PointerEvent) => {
-        e.preventDefault()
-        request('outside')
-      }}
-      onEscapeKeydown={(e: KeyboardEvent) => {
-        e.preventDefault()
-        request('escape')
-      }}
-      onOpenAutoFocus={focusMarkedField}
-      onkeydown={handleShortcut}
-      onpointerup={(e: PointerEvent) => swipeGuard?.release(e)}
-      onpointerout={(e: PointerEvent) => swipeGuard?.release(e)}
-    >
-      <div bind:this={frame} class="flex min-h-0 flex-1 flex-col" inert={question !== null}>
-        <!-- Left-aligned at every width: a title or description that wraps reads badly centred. -->
-        <ResponsiveModal.Header class="border-b px-6 py-4 text-left" closeButton={false}>
-          <ResponsiveModal.Title class={cn('text-left', titleIcon && 'flex items-center gap-2')}>
-            {@render titleIcon?.()}
-            {title}
-          </ResponsiveModal.Title>
-          {#if typeof description === 'string'}
-            <ResponsiveModal.Description class="text-left"
-              >{description}</ResponsiveModal.Description
+    <div bind:this={frame} class="flex min-h-0 flex-1 flex-col" inert={question !== null}>
+      <!-- Left-aligned at every width: a title or description that wraps reads badly centred. -->
+      <ResponsiveModal.Header class="border-b px-6 py-4 text-left" closeButton={false}>
+        <ResponsiveModal.Title class={cn('text-left', titleIcon && 'flex items-center gap-2')}>
+          {@render titleIcon?.()}
+          {title}
+        </ResponsiveModal.Title>
+        {#if typeof description === 'string'}
+          <ResponsiveModal.Description class="text-left">{description}</ResponsiveModal.Description>
+        {:else if description}
+          <ResponsiveModal.Description class="text-left">
+            {@render description()}
+          </ResponsiveModal.Description>
+        {/if}
+      </ResponsiveModal.Header>
+
+      <!-- The one scroller: the buttons scroll with the content, so what they do is read first. -->
+      <div class="min-h-0 flex-1 overflow-y-auto">
+        {#if children}
+          <div class="space-y-3 px-6 py-4">
+            {@render children()}
+          </div>
+        {/if}
+        {#if removal}
+          <div class="px-6 pb-4">
+            <button
+              type="button"
+              class={cn(
+                'flex items-center gap-1.5 text-sm font-medium disabled:opacity-50',
+                FEATURE_COLORS.delete.text,
+              )}
+              disabled={busy}
+              onclick={() => (question = 'remove')}
             >
-          {:else if description}
-            <ResponsiveModal.Description class="text-left">
-              {@render description()}
-            </ResponsiveModal.Description>
-          {/if}
-        </ResponsiveModal.Header>
-
-        <!-- The one scroller: the buttons scroll with the content, so what they do is read first. -->
-        <div class="min-h-0 flex-1 overflow-y-auto">
-          {#if children}
-            <div class="space-y-3 px-6 py-4">
-              {@render children()}
-            </div>
-          {/if}
-          {#if removal}
-            <div class="px-6 pb-4">
-              <button
-                type="button"
-                class={cn(
-                  'flex items-center gap-1.5 text-sm font-medium disabled:opacity-50',
-                  FEATURE_COLORS.delete.text,
-                )}
-                disabled={busy}
-                onclick={() => (question = 'remove')}
-              >
-                <Trash2 class="h-4 w-4" />
-                {removal.label}
-              </button>
-            </div>
-          {/if}
-          <ModalActions
-            label={action.label}
-            icon={action.icon}
-            tone={action.tone}
-            disabled={action.disabled}
-            onConfirm={action.onConfirm}
-            onCancel={() => request('cancel')}
-            {busy}
-            {cancelWhileBusy}
-            {cancelLabel}
-          />
-        </div>
+              <Trash2 class="h-4 w-4" />
+              {removal.label}
+            </button>
+          </div>
+        {/if}
+        <ModalActions
+          label={action.label}
+          icon={action.icon}
+          tone={action.tone}
+          disabled={action.disabled}
+          onConfirm={action.onConfirm}
+          onCancel={() => request('cancel')}
+          {busy}
+          {cancelWhileBusy}
+          {cancelLabel}
+        />
       </div>
+    </div>
 
-      <DiscardConfirm
-        open={question !== null}
-        title={shown.title}
-        description={shown.description}
-        keepLabel={shown.keepLabel}
-        discardLabel={shown.confirmLabel}
-        onCancel={() => answer(false)}
-        onDiscard={() => answer(true)}
-      />
-    </ResponsiveModal.Content>
-  </ResponsiveModal.Root>
-{/key}
+    <DiscardConfirm
+      open={question !== null}
+      title={shown.title}
+      description={shown.description}
+      keepLabel={shown.keepLabel}
+      discardLabel={shown.confirmLabel}
+      onCancel={() => answer(false)}
+      onDiscard={() => answer(true)}
+    />
+  </ResponsiveModal.Content>
+</ResponsiveModal.Root>

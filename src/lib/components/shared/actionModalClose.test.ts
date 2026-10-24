@@ -6,7 +6,7 @@ const OWN_EXITS: CloseSource[] = ['cancel', 'escape', 'outside']
 
 describe('decideClose', () => {
   it('closes an untouched modal on every way out', () => {
-    for (const source of [...OWN_EXITS, 'sheet'] as const) {
+    for (const source of OWN_EXITS) {
       expect(decideClose(source, idle)).toBe('close')
     }
   })
@@ -15,10 +15,6 @@ describe('decideClose', () => {
     for (const source of OWN_EXITS) {
       expect(decideClose(source, { ...idle, dirty: true })).toBe('ask')
     }
-  })
-
-  it('brings back an edited sheet vaul closed, asking', () => {
-    expect(decideClose('sheet', { ...idle, dirty: true })).toBe('returnAndAsk')
   })
 
   it('treats an outside click exactly as Cancel in every state', () => {
@@ -37,13 +33,11 @@ describe('decideClose', () => {
   it('holds a running modal open without asking', () => {
     const busy = { ...idle, busy: true, dirty: true }
     for (const source of OWN_EXITS) expect(decideClose(source, busy)).toBe('ignore')
-    expect(decideClose('sheet', busy)).toBe('return')
   })
 
   it('lets Cancel stop a running action when the modal offers it', () => {
     const running = { ...idle, busy: true, cancelWhileBusy: true }
     expect(decideClose('cancel', running)).toBe('close')
-    expect(decideClose('sheet', running)).toBe('close')
   })
 
   it('closes only the question on Escape or an outside click', () => {
@@ -51,9 +45,5 @@ describe('decideClose', () => {
     expect(decideClose('escape', asking)).toBe('closeQuestion')
     expect(decideClose('outside', asking)).toBe('closeQuestion')
     expect(decideClose('cancel', asking)).toBe('ignore')
-  })
-
-  it('brings back a sheet closed while the question was showing, still asking', () => {
-    expect(decideClose('sheet', { ...idle, questionOpen: true })).toBe('returnAndAsk')
   })
 })

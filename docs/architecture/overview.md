@@ -110,36 +110,17 @@ The one swipe inside a panel that may not bubble up is over the Branches panel's
 could still scroll in the swipe's direction as the gesture starts, it stops the `touchend`, so the
 swipe scrolls the tree and changes no tab and no panel. At the tree's edge the swipe goes through.
 
-## Drawer swipes, and the one place we reach into `vaul`
+## Drawer sheets
 
-A drawer that holds unsaved work has to answer a swipe with a question rather than a close, and
-`vaul` offers no veto: it decides inside its own release handler. `shared/ActionModal.svelte` is
-the one caller: a modal on it passes `dirty`, and the shell wires the guard, the return of a sheet
-`vaul` closed anyway, and the scroll-lock release. `createDrawerSwipeGuard`
-(`ui/drawer/swipe-guard.ts`) takes the one seam there is — `vaul` calls the content's
-`onpointerup` just before it measures the swipe — and, when the caller says the drawer is dirty,
-puts the sheet back at rest so that measurement finds nothing to act on, then animates the settle
-itself.
-
-**On upgrading `vaul-svelte`**, check three things against the new version, because the guard
-copies them rather than importing them (they are internal):
-
-- the release callback still runs before the swipe is measured (`use-drawer-content.svelte.js`),
-- `VELOCITY_THRESHOLD` and the settle transition in `internal/constants.js`, mirrored in the
-  guard, and
-- `closeThreshold`, which the guard reads from `DRAWER_CLOSE_THRESHOLD` and `drawer.svelte`
-  passes to `vaul`; the two must stay one constant.
-
-If the seam closes, the fallback still holds: a dirty drawer that closes anyway comes back as a
-fresh sheet once the old one has released its scroll lock — slower, but not broken.
-
-Two other `vaul` behaviours the callers have to know: it closes a non-dismissible drawer when its
-handle is tapped, and a close driven from our side never reaches its restore, so the scroll lock
-is released by hand (see `utils/scrollLock`). A tap on the handle therefore takes the fallback
-path above: a busy or dirty sheet closes and comes back, asking when it is dirty.
+`vaul` offers no veto over a close: a swipe past `closeThreshold` (0.75, set in `drawer.svelte`) or
+a tap on the handle closes a sheet, even one that is not dismissible. So nothing with unsaved work
+is a sheet: the action modals that hold edits are dialogs on a phone too (see
+[ui-components.md](../development/ui-components.md)), and Escape, an outside click and Android's
+back press reach their guard through bits-ui, which can be vetoed. A close driven from our side
+never reaches `vaul`'s restore, so the scroll lock is released by hand (see `utils/scrollLock`).
 
 Sheets open and close in 180ms, set in `app.css` over `vaul`'s 0.5s animation. Only the open and
-close animations change; a drag's settle keeps `vaul`'s timing, which the guard copies.
+close animations change; a drag's settle keeps `vaul`'s timing.
 
 ## The soft keyboard
 

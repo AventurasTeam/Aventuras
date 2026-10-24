@@ -16,13 +16,14 @@ rest:
   Below it, one scroller holds the body and the two buttons, so the action is reached by reading
   down to it. The header stays pinned. Nothing inside scrolls on its own: an autosizing `Textarea`
   in the body drops its height cap and lets the modal scroll.
-- **Phone.** Below 768px a tool is a bottom sheet with a handle, and a command is a centred dialog
-  inset from the screen's edges (see below). In a sheet, only the handle drags; the content
-  scrolls.
+- **Phone.** Below 768px an action modal is a dialog inset from the screen's edges: centred, or
+  held near the top when it has a text field. Only a tool with no text field is a bottom sheet
+  with a handle (see below), where only the handle drags and the content scrolls.
 - **Buttons.** An outlined Cancel and the action, side by side on a phone and at the trailing edge
   on desktop. The action's icon turns into a spinner while it runs.
-- **Ways out.** Cancel, Escape, a click outside and the handle (drag or tap) all go through one
-  decision, `shared/actionModalClose.ts`, which has its own tests.
+- **Ways out.** Cancel, Escape (which Android's back press sends) and a click outside all go
+  through one decision, `shared/actionModalClose.ts`, which has its own tests. A sheet's swipe or
+  handle tap closes it without asking, which is why a sheet holds nothing to lose.
 - **The busy lock.** While `busy`, no way out closes the modal or asks anything, unless
   `cancelWhileBusy` says Cancel stops the running action.
 
@@ -39,7 +40,7 @@ rest:
 | `titleIcon`                | only for a risk beyond the action itself; see Wording                           |
 | `removal`                  | removing the thing the modal edits; see below                                   |
 | `size`                     | `md` (the default) or `lg`                                                      |
-| `presentation`             | `sheet` for a tool; the default `dialog` for a command; see below               |
+| `presentation`             | `sheet` only for a tool with no text field; see below                           |
 
 ### When to pass `dirty`
 
@@ -73,21 +74,18 @@ running. Use it only to remove the thing the modal edits, never as a general thi
 
 ### Sheet or dialog
 
-On a phone, a **tool** is a sheet and a **command** is a dialog. Pass `presentation="sheet"` for a
-tool; a command keeps the default.
-
-- **A tool** works on something the user opened it for: it edits an object's fields (the story
-  edit dialog, Edit the recorded time, the anchor editor), picks from a list (Manual chapter), or
-  creates a branch or a checkpoint.
-- **A command** asks for a decision: it confirms an operation, warns before one, resolves a
-  question the app raised in the middle of a flow, or takes a single value.
+On a phone an action modal is a **dialog**, unless it is a **tool with no text field and nothing to
+lose**, which is a sheet: Manual chapter, which picks from a list. Pass `presentation="sheet"` for
+that one kind.
 
 A bottom sheet reads as more of the page it rises from, so it suits controls tied to that content,
-and it is dismissed casually. A centred dialog reads as "answer this". A confirmation in a sheet
-looks like a tool, and a tool in a small centred box crowds its fields.
-
-Create branch and Create checkpoint read as commands (a name, then an operation), but are sheets so
-that a later sheet of entry actions on a phone can host their forms as steps.
+and it is dismissed casually. But an editor in a sheet moves with the keyboard: the sheet sits on
+the bottom edge, so it rises when the keyboard opens and drops when the keyboard closes, and a tap
+outside the field closes the keyboard before the discard question can open, in a sheet that has
+just fallen. A dialog with a text field is held near the top of the screen instead, where the
+keyboard only takes height from its bottom edge, and the question opens where the fields were. A
+sheet also cannot be guarded: `vaul` closes it on a handle tap or a swipe with no way to veto, so
+anything with something to lose is a dialog.
 
 **Sheets never stack.** A modal opened from inside another modal, such as a confirmation in
 Settings or the pack question during a sync, is a dialog whatever its kind. A sheet on a sheet
@@ -104,9 +102,8 @@ carries no glyph of that control.
 
 Mark a field `data-autofocus` when it is the first control that decides the action and it is a
 single-line text field: a name to create, a model to add, a time to set. The shell focuses it on
-opening, so a phone raises its keyboard. A sheet rises with the keyboard in one motion. A dialog
-with a marked field sits near the top of a phone's screen, since a centred one would jump when the
-keyboard shortens the screen; a long one loses height from the bottom, and its content scrolls. Mark nothing when the
+opening, so a phone raises its keyboard. The dialog it sits in is already held near the top, so
+the keyboard only takes height from its bottom edge, and the content scrolls. Mark nothing when the
 first such control is a toggle, or when the modal edits a whole record whose fields the user may
 each want or not: Edit story opens with no keyboard. iOS raises no keyboard for this focus, so
 there it waits for a tap.

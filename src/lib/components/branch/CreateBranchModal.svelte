@@ -47,7 +47,6 @@
 
 <!-- Modal for the same reason as the checkpoint form: nothing may change while the branch is cut. -->
 <ActionModal
-  presentation="sheet"
   bind:open
   onCancel={cancel}
   title="Create a branch"

@@ -92,7 +92,6 @@
 {/snippet}
 
 <ActionModal
-  presentation="sheet"
   bind:open
   size="lg"
   title={entry ? `Edit the time of entry ${entryNumber(entry)}` : 'Edit the recorded time'}
