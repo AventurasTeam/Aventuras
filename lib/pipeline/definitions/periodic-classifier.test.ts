@@ -3465,7 +3465,7 @@ describe('periodicClassifierPhase — the writer map', () => {
     expect(logged('classifier.unresolved_refs')).toEqual([])
   })
 
-  it('logs a blank rename and thread, a moved close and each text it cuts, under their keys', async () => {
+  it('logs a blank rename, create and thread, a moved close and each text it cuts, under their keys', async () => {
     clearBuffers()
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
     const FACT_WATCH = 'fact_77777777-7777-7777-7777-777777777777'
@@ -3484,6 +3484,13 @@ describe('periodicClassifierPhase — the writer map', () => {
             sourceTurn: 't1',
             visual: { face: long },
           },
+          { handle: 'new:blank', name: ' ', description: 'x', keywords: [], sourceTurn: 't1' },
+        ],
+        newFactions: [
+          { handle: 'new:ilsa', name: 'The Ferry Guild', description: 'x', keywords: [] },
+        ],
+        happenings: [
+          { title: ' ', sourceTurn: 't2', involvements: [{ ref: 'c1' }], awareness: [] },
         ],
         renames: [{ ref: 'c1', name: ' ', sourceTurn: 't1' }],
         newThreads: [
@@ -3522,8 +3529,15 @@ describe('periodicClassifierPhase — the writer map', () => {
       ['warn', { ref: CHAR_KAEL, cause: 'blank-name' }],
     ])
     expect(logged('classifier.create_dropped')).toEqual([
+      ['warn', { kind: 'character', handle: 'new:blank', name: ' ', cause: 'blank-name' }],
+      [
+        'warn',
+        { kind: 'faction', handle: 'new:ilsa', name: 'The Ferry Guild', cause: 'handle-taken' },
+      ],
       ['warn', { kind: 'thread', sourceTurn: 't1', cause: 'blank-title' }],
+      ['warn', { kind: 'happening', sourceTurn: 't2', cause: 'blank-title' }],
     ])
+    expect(logged('classifier.unresolved_refs')).toEqual([])
     expect(logged('classifier.thread_close_moved')).toEqual([
       ['warn', { title: 'Cross the river', resolvedAtTurn: 't1', sourceTurn: 't2' }],
     ])

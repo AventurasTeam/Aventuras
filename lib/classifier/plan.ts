@@ -73,6 +73,9 @@ export type ParentDrop = {
 /** A newPlaces entry that plans nothing: an earlier entry declared its handle, or it has no name. */
 export type DroppedPlace = { handle: string; name: string; cause: 'handle-taken' | 'blank-name' }
 
+/** A newCharacters or newFactions entry that plans nothing, for a new place's reasons. */
+export type DroppedCreate = DroppedPlace & { kind: ReconciledKind }
+
 /** A membership naming a faction retired before the reply: a misreading of a past membership. */
 export type DroppedMembership = Pick<Membership, 'character'> & {
   faction: NonNullable<Membership['faction']>
@@ -122,6 +125,9 @@ export type DroppedRename = { ref: string; cause: 'blank-name' }
 /** A newThreads entry that creates nothing: its title is blank. */
 export type DroppedThread = { sourceTurn: string | null; cause: 'blank-title' }
 
+/** A happenings entry that creates nothing, its rows with it: its title is blank. */
+export type DroppedHappening = { sourceTurn: string | null; cause: 'blank-title' }
+
 /** A thread these turns open and close, its closing turn before its opening: closed at the open. */
 export type EarlyClose = { title: string; resolvedAtTurn: string; sourceTurn: string | null }
 
@@ -146,6 +152,7 @@ export type PlanResult = {
   fellBackCount: number
   unresolvedRefs: readonly string[]
   droppedPlaces: readonly DroppedPlace[]
+  droppedCreates: readonly DroppedCreate[]
   parentDrops: readonly ParentDrop[]
   droppedMemberships: readonly DroppedMembership[]
   renameClashes: readonly RenameClash[]
@@ -156,6 +163,7 @@ export type PlanResult = {
   droppedRenames: readonly DroppedRename[]
   droppedReturns: readonly DroppedReturn[]
   droppedThreads: readonly DroppedThread[]
+  droppedHappenings: readonly DroppedHappening[]
   earlyCloses: readonly EarlyClose[]
   cutTexts: readonly CutText[]
 }
@@ -651,38 +659,42 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   }
 
   // classifier.md → Disambiguation and → Factions: absorb, promote or create, by the decision.
+  const droppedCreates: DroppedCreate[] = []
   const planNewEntities = (kind: ReconciledKind): void => {
     const { reply, decisions, idPrefix } = RECONCILED_KINDS[kind]
     const decisionOf = deps[decisions]
     for (const candidate of extraction[reply]) {
-      if (nonBlank(candidate.name) == null) {
-        unresolvedRefs.push(candidate.handle)
-        continue
-      }
-      const decision = decisionOf.get(candidate.handle)
-      if (!decision) {
-        unresolvedRefs.push(candidate.handle)
+      const { handle, name } = candidate
+      if (nonBlank(name) == null) {
+        droppedCreates.push({ kind, handle, name, cause: 'blank-name' })
         continue
       }
       // A handle reused for a second row would silently rebind every earlier
       // ref to the later row. Keep the first binding and report the collision.
-      if (handleMap.has(candidate.handle)) {
-        unresolvedRefs.push(candidate.handle)
+      if (handleMap.has(handle)) {
+        droppedCreates.push({ kind, handle, name, cause: 'handle-taken' })
         continue
       }
-      const entryId = anchor(candidate.sourceTurn)
+      const decision = decisionOf.get(handle)
+      if (!decision) {
+        unresolvedRefs.push(handle)
+        continue
+      }
+      // A known mention writes only its new terms, so it anchors only when one writes.
+      const at = anchorOnce(candidate.sourceTurn)
       const proseEntryId = proseSource(candidate.sourceTurn)
       if (decision.kind === 'promote' || decision.kind === 'known') {
-        handleMap.set(candidate.handle, decision.entityId)
+        handleMap.set(handle, decision.entityId)
         mentionTerms.push({
           id: decision.entityId,
           terms: candidate.keywords,
           sourceTurn: candidate.sourceTurn,
           proseEntryId,
-          entryId: () => entryId,
+          entryId: at,
         })
       }
       if (decision.kind === 'known') continue
+      const entryId = at()
       if (decision.kind === 'promote') {
         const promoted = index.get(decision.entityId)
         if (promoted != null) index.set(decision.entityId, { ...promoted, status: 'active' })
@@ -956,10 +968,14 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     return null
   }
 
+  const droppedHappenings: DroppedHappening[] = []
   for (const happening of extraction.happenings) {
     // Its involvements and awareness nest under it, so dropping it strands nothing.
     const title = nonBlank(happening.title)
-    if (title == null) continue
+    if (title == null) {
+      droppedHappenings.push({ sourceTurn: happening.sourceTurn ?? null, cause: 'blank-title' })
+      continue
+    }
     const parentAnchor = anchor(happening.sourceTurn)
     const happeningId = newId('hap')
     const timestamp = now()
@@ -1315,6 +1331,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     fellBackCount,
     unresolvedRefs,
     droppedPlaces,
+    droppedCreates,
     parentDrops,
     droppedMemberships,
     renameClashes,
@@ -1325,6 +1342,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     droppedRenames,
     droppedReturns,
     droppedThreads,
+    droppedHappenings,
     earlyCloses,
     cutTexts,
   }

@@ -390,6 +390,7 @@ export async function* periodicClassifierPhase(
   // The per-turn writer's keys (per-turn-creates.ts).
   for (const drop of plan.droppedPlaces)
     ctx.log.warn('classifier.create_dropped', { kind: 'location', ...drop })
+  for (const drop of plan.droppedCreates) ctx.log.warn('classifier.create_dropped', drop)
   for (const drop of plan.parentDrops) ctx.log.warn('classifier.create_parent_dropped', drop)
   for (const clash of plan.renameClashes) ctx.log.warn('classifier.rename_clash', clash)
   for (const unseen of plan.unseenRefs) ctx.log.warn('classifier.unseen_ref', unseen)
@@ -399,6 +400,8 @@ export async function* periodicClassifierPhase(
   for (const drop of plan.droppedReturns) ctx.log.warn('classifier.return_dropped', drop)
   for (const drop of plan.droppedThreads)
     ctx.log.warn('classifier.create_dropped', { kind: 'thread', ...drop })
+  for (const drop of plan.droppedHappenings)
+    ctx.log.warn('classifier.create_dropped', { kind: 'happening', ...drop })
   for (const moved of plan.earlyCloses) ctx.log.warn('classifier.thread_close_moved', moved)
   for (const { kind, ...cut } of plan.cutTexts) ctx.log.warn(CUT_KEYS[kind], cut)
 

@@ -66,7 +66,8 @@ alias list (the keywords bullet below).
   awareness row may also name a happening Known happenings lists, when
   the turns show a character learning of it ("Kael tells Aria about
   the massacre"); a pair the reply repeats lands at its earliest
-  learning turn.
+  learning turn. A happening with a blank title creates nothing, its
+  involvements and awareness with it, and is logged.
 - **Status transitions** — `entities.status` flips:
   - `staged → active` when prose mentions a staged entity in scene
     (the slow path; see
@@ -230,7 +231,9 @@ temporary handle to the newly-allocated UUID for the rest of that
 reply, outside the idMap. A handle declared twice keeps its first
 declaration, and the later entry plans nothing; across the lists that
 share the namespace, `newCharacters` claim first, then `newFactions`,
-then `newPlaces`.
+then `newPlaces`. An entry of those lists whose name is blank plans
+nothing either, and each entry that plans nothing is logged as a
+dropped create.
 
 This separation keeps the LLM's surface area small (no UUID
 copying) while preserving the existing disambiguation flow below

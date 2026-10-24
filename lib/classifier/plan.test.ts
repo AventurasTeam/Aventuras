@@ -105,6 +105,25 @@ describe('buildClassifierActions', () => {
     expect(anchors).toEqual(['e1', 'e3'])
   })
 
+  it('drops a happening with a blank title, its rows with it, and reports it', () => {
+    const { planned, droppedHappenings } = buildClassifierActions(
+      reply({
+        happenings: [
+          {
+            title: '  ',
+            sourceTurn: 't2',
+            involvements: [{ ref: 'char_a' }],
+            awareness: [{ ref: 'char_a', source: 'saw it', severity: 0.5 }],
+          },
+          { title: 'B', involvements: [], awareness: [] },
+        ],
+      }),
+      base,
+    )
+    expect(planned.map((p) => p.action.kind)).toEqual(['createHappening'])
+    expect(droppedHappenings).toEqual([{ sourceTurn: 't2', cause: 'blank-title' }])
+  })
+
   it('falls back to the window head for an unattributed fact and reports it', () => {
     const { planned, fellBackCount } = buildClassifierActions(
       reply({ happenings: [{ title: 'A', involvements: [], awareness: [] }] }),
@@ -573,7 +592,7 @@ describe('buildClassifierActions', () => {
     })
 
     it('drops a blank-named character even when reconcile decided create', () => {
-      const { planned, unresolvedRefs } = buildClassifierActions(
+      const { planned, unresolvedRefs, droppedCreates } = buildClassifierActions(
         reply({
           newCharacters: [
             { handle: 'h1', name: '  ', description: 'x', keywords: [], sourceTurn: 't1' },
@@ -582,7 +601,10 @@ describe('buildClassifierActions', () => {
         { ...base, decisions: new Map([['h1', { kind: 'create', flag: null }]]) },
       )
       expect(planned).toHaveLength(0)
-      expect(unresolvedRefs).toEqual(['h1'])
+      expect(droppedCreates).toEqual([
+        { kind: 'character', handle: 'h1', name: '  ', cause: 'blank-name' },
+      ])
+      expect(unresolvedRefs).toEqual([])
     })
 
     it('emits nothing for a known decision but still resolves the handle', () => {
@@ -605,7 +627,7 @@ describe('buildClassifierActions', () => {
     // including ones the model wrote for the first character.
     it('keeps the first binding when a handle is reused, and reports the collision', () => {
       const decisions = new Map<string, ReconcileDecision>([['h1', { kind: 'create', flag: null }]])
-      const { planned, handleMap, unresolvedRefs } = buildClassifierActions(
+      const { planned, handleMap, unresolvedRefs, droppedCreates } = buildClassifierActions(
         reply({
           newCharacters: [
             { handle: 'h1', name: 'First', description: 'x', keywords: [], sourceTurn: 't1' },
@@ -623,7 +645,30 @@ describe('buildClassifierActions', () => {
       expect(handleMap.get('h1')).toBe(
         (creates[0].action as { payload: { entry: { id: string } } }).payload.entry.id,
       )
-      expect(unresolvedRefs).toEqual(['h1'])
+      expect(droppedCreates).toEqual([
+        { kind: 'character', handle: 'h1', name: 'Second', cause: 'handle-taken' },
+      ])
+      expect(unresolvedRefs).toEqual([])
+    })
+
+    it('counts no fallback for an unattributed known mention that writes no term', () => {
+      const plan = (keywords: string[]) =>
+        buildClassifierActions(
+          reply({
+            newCharacters: [{ handle: 'h1', name: 'Aria', description: 'x', keywords }],
+          }),
+          {
+            ...base,
+            entities: [entityRow('char_aria', 'active', 'Aria', ['the singer'])],
+            decisions: new Map([['h1', { kind: 'known', entityId: 'char_aria', similarity: 0.9 }]]),
+          },
+        )
+      expect(plan(['the singer'])).toMatchObject({ planned: [], fellBackCount: 0 })
+      const { planned, fellBackCount } = plan(['the singer', 'the bard'])
+      expect(planned.map((p) => [p.action.kind, p.entryId])).toEqual([
+        ['appendEntityKeywords', 'e3'],
+      ])
+      expect(fellBackCount).toBe(1)
     })
   })
 
@@ -2866,7 +2911,7 @@ describe('factions', () => {
     })
 
     it("keeps a handle a new character claimed, ignoring the faction's decision for it", () => {
-      const { planned, handleMap, unresolvedRefs } = buildClassifierActions(
+      const { planned, handleMap, unresolvedRefs, droppedCreates } = buildClassifierActions(
         reply({
           newCharacters: [{ ...circle, name: 'Circe' }],
           newFactions: [circle],
@@ -2876,7 +2921,10 @@ describe('factions', () => {
       expect(planned).toHaveLength(1)
       expect(payloadOf<{ entry: { kind: string } }>(planned[0]).entry.kind).toBe('character')
       expect(handleMap.get('new:circle')).toBe('char_new1')
-      expect(unresolvedRefs).toEqual(['new:circle'])
+      expect(droppedCreates).toEqual([
+        { kind: 'faction', handle: 'new:circle', name: circle.name, cause: 'handle-taken' },
+      ])
+      expect(unresolvedRefs).toEqual([])
     })
 
     it("decides a faction by its own decision, never the character's for its handle", () => {
@@ -2917,12 +2965,15 @@ describe('factions', () => {
     })
 
     it('reports a faction with no decision or a blank name, creating nothing', () => {
-      const { planned, unresolvedRefs } = buildClassifierActions(
+      const { planned, unresolvedRefs, droppedCreates } = buildClassifierActions(
         reply({ newFactions: [circle, { ...circle, handle: 'new:blank', name: '  ' }] }),
         deps([], { factionDecisions: decided(create, 'new:blank') } as never),
       )
       expect(planned).toEqual([])
-      expect(unresolvedRefs).toEqual(['new:circle', 'new:blank'])
+      expect(unresolvedRefs).toEqual(['new:circle'])
+      expect(droppedCreates).toEqual([
+        { kind: 'faction', handle: 'new:blank', name: '  ', cause: 'blank-name' },
+      ])
     })
   })
 

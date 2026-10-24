@@ -702,15 +702,6 @@ slice-planning gate forces its resolution before that slice is planned.
   one with + Add)", although the cast holds places. Predates the AI
   writer map; raised 2026-10-24 by its slice review.
 
-- **Two pass diagnostics that predate the AI writer map.** In
-  `lib/classifier/plan.ts`, a `happenings` entry with a blank title is
-  skipped with no log, while a blank `newThreads` title now logs
-  `classifier.create_dropped`. And a known (absorbed) mention takes its
-  survival anchor before the planner knows whether any of its terms
-  write, so an unattributed one that writes nothing still counts a
-  `classifier.window_head_fallback`. Raised 2026-10-24 by the AI writer
-  map's slice review.
-
 - **A World E2E spec re-checks the delete dialog's copy.**
   `e2e/tests/world-delete-undo.spec.ts` (≈:187-188) asserts
   `world:delete.awareness` and `world:delete.tailScene` text in the
