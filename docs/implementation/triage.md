@@ -78,12 +78,3 @@ slice-planning gate forces its resolution before that slice is planned.
   (density 300), the whole textarea stayed in view, against 149 of
   its 224 px. Raised 2026-10-21 by the gated classifier slice review's
   R1 probe.
-
-- **The AI writer map's code-quality leftovers.** Its slice review's
-  simplifier pass skipped these, each needing a home or a design call
-  outside the slice's files:
-  - `hooks/use-story-place.ts` builds a new value on every entries-store
-    change; the review stabilised its one consumer
-    (`components/world/use-collision-resolve.ts`) instead of the hook.
-
-  Raised 2026-10-24 by the AI writer map's slice review.
