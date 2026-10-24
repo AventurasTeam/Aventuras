@@ -1,17 +1,12 @@
 import type { DeltaSource, PipelineAction } from '@/lib/actions'
-import type { CharacterState, Entity, EntryMetadata, ItemState } from '@/lib/db'
+import type { CharacterState, Entity, EntryMetadata } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import { foldStackables } from '@/lib/keyword-terms'
 
 import { boundStateText } from './bound-text'
+import { itemMoveActions } from './item-moves'
 import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from './scene-tracking'
-import {
-  MAX_RETRIEVAL_QUERIES,
-  type ItemDrop,
-  type ItemTransfer,
-  type PlannedTurn,
-  type ReportedDrop,
-} from './types'
+import { MAX_RETRIEVAL_QUERIES, type PlannedTurn, type ReportedDrop } from './types'
 import { resolvePiggybackWorldTimeDelta } from './world-time'
 
 // Two producers write this field; only the tagged-block parser filters itself (trims,
@@ -45,8 +40,6 @@ type BuildArgs = {
   /** The phase's logger, so a warning carries the run's actionId. */
   log: Logger
 }
-
-type Move = { seq: number; item: ItemTransfer } | { seq: number; drop: ItemDrop }
 
 /** What validation did to the emitted values, for stateReport — so the reader renders the
  *  emitted-vs-applied divergence as fact instead of inferring a cause from it. */
@@ -221,145 +214,23 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     })
   }
 
-  // In the block's order: taken then put down lies at the scene; put down then taken is held.
-  const inventoryPatches = new Map<string, { equipped_items?: string[]; inventory?: string[] }>()
-  const currentInventory = (id: string): { equipped_items: string[]; inventory: string[] } => {
-    const state = byId.get(id)?.state as CharacterState | undefined
-    const pending = inventoryPatches.get(id)
-    return {
-      equipped_items: pending?.equipped_items ?? state?.equipped_items ?? [],
-      inventory: pending?.inventory ?? state?.inventory ?? [],
-    }
-  }
-
-  const release = (holderId: string, itemId: string) => {
-    const cur = currentInventory(holderId)
-    inventoryPatches.set(holderId, {
-      equipped_items: cur.equipped_items.filter((i) => i !== itemId),
-      inventory: cur.inventory.filter((i) => i !== itemId),
-    })
-  }
-  const holds = (holderId: string, itemId: string): boolean => {
-    if (!isCharacter(holderId)) return false
-    const cur = currentInventory(holderId)
-    return cur.equipped_items.includes(itemId) || cur.inventory.includes(itemId)
-  }
-  // Where each item the block moves ends up; a write goes out only where that differs from its row.
-  const positions = new Map<string, string | null>()
-  const storedPosition = (itemId: string): string | null =>
-    (byId.get(itemId)?.state as ItemState | null | undefined)?.at_location_id ?? null
-  const positionOf = (itemId: string): string | null =>
-    positions.has(itemId) ? (positions.get(itemId) ?? null) : storedPosition(itemId)
-
-  // Who holds the item in which slot, and where it lies: all a move can change.
-  const whereIs = (itemId: string): string =>
-    JSON.stringify([
-      positionOf(itemId),
-      entities.flatMap((holder) => {
-        if (!isCharacter(holder.id)) return []
-        const cur = currentInventory(holder.id)
-        return (['equipped_items', 'inventory'] as const)
-          .filter((slot) => cur[slot].includes(itemId))
-          .map((slot) => `${holder.id}:${slot}`)
-      }),
-    ])
-
-  // Whether the move changed who holds the item or where it lies.
-  const take = (item: ItemTransfer): boolean => {
-    const before = whereIs(item.id)
-    const giver = characterOf(item.from)
-    const taker = characterOf(item.to)
-    if (giver !== undefined) release(giver, item.id)
-    if (taker !== undefined) {
-      // data-model.md → ItemState: an item has one position, so taking it moves it from
-      // wherever else it sits, whatever `from` named.
-      for (const holder of entities)
-        if (holder.id !== taker && holds(holder.id, item.id)) release(holder.id, item.id)
-      const cur = currentInventory(taker)
-      const other = item.slot === 'equipped_items' ? 'inventory' : 'equipped_items'
-      inventoryPatches.set(taker, {
-        [other]: cur[other].filter((i) => i !== item.id),
-        [item.slot]: [...cur[item.slot].filter((i) => i !== item.id), item.id],
-      } as { equipped_items: string[]; inventory: string[] })
-      positions.set(item.id, null)
-    }
-    return whereIs(item.id) !== before
-  }
-
-  const drops: ReportedDrop[] = []
-  // Someone who left this turn can still have put it down before going.
-  const nearScene = new Set([...sceneEntities, ...previousMetadata.sceneEntities])
-  // piggyback.md → Trailing block format: a drop lands where the scene is; elsewhere stays prose.
-  const putDown = (drop: ItemDrop) => {
-    if (byId.get(drop.id)?.kind !== 'item') return
-    const holders = entities.filter((holder) => holds(holder.id, drop.id)).map((h) => h.id)
-    if (holders.length > 0 && !holders.some((id) => nearScene.has(id))) {
-      log.warn('classifier.drop_dropped', {
-        entryId,
-        source,
-        itemId: drop.id,
-        reason: 'off_scene',
-        holderIds: holders,
-      })
-      return
-    }
-    const lyingAt = positionOf(drop.id)
-    if (holders.length === 0 && lyingAt !== null && lyingAt !== currentLocationId) {
-      log.warn('classifier.drop_dropped', {
-        entryId,
-        source,
-        itemId: drop.id,
-        reason: 'elsewhere',
-        atLocationId: lyingAt,
-      })
-      return
-    }
-    for (const holderId of holders) release(holderId, drop.id)
-    if (currentLocationId === null)
-      log.warn('classifier.drop_unplaced', { entryId, source, itemId: drop.id })
-    else if (holders.length === 0 && lyingAt === currentLocationId)
-      log.debug('classifier.drop_unchanged', {
-        entryId,
-        source,
-        itemId: drop.id,
-        atLocationId: lyingAt,
-      })
-    positions.set(drop.id, currentLocationId)
-    drops.push({
-      id: drop.id,
-      ...(drop.from !== undefined ? { from: drop.from } : {}),
-      at: currentLocationId,
-    })
-  }
-
-  // `seq` is unchecked producer output; the sort is stable, so a repeated seq keeps list order,
-  // item moves before drops, as keptItemHandles reads a tie.
-  const moves: Move[] = [
-    ...(block.transfers?.items ?? []).map((item) => ({ seq: item.seq, item })),
-    ...(block.transfers?.drops ?? []).map((drop) => ({ seq: drop.seq, drop })),
-  ].sort((a, b) => a.seq - b.seq)
-  let itemsLanded = 0
-  for (const move of moves) {
-    if (!('item' in move)) putDown(move.drop)
-    else if (take(move.item)) itemsLanded += 1
-  }
-  for (const [id, patch] of inventoryPatches) {
-    if (isCharacter(id)) {
-      actions.push({
-        kind: 'updateEntityInventory',
-        source,
-        payload: { branchId, id, ...patch },
-      })
-    }
-  }
-  for (const [id, atLocationId] of positions) {
-    if (byId.get(id)?.kind === 'item' && storedPosition(id) !== atLocationId)
-      actions.push({
-        kind: 'updateItemPosition',
-        source,
-        payload: { branchId, id, atLocationId },
-      })
-  }
+  const {
+    actions: moveActions,
+    drops,
+    itemsLanded,
+  } = itemMoveActions({
+    transfers: block.transfers,
+    entities,
+    byId,
+    // Someone who left this turn can still have put it down before going.
+    nearScene: new Set([...sceneEntities, ...previousMetadata.sceneEntities]),
+    currentLocationId,
+    branchId,
+    entryId,
+    source,
+    log,
+  })
+  actions.push(...moveActions)
 
   // Stackable transfers. Maps, not records: a key is model output, and "constructor" or
   // "__proto__" on a plain object reads or writes the prototype instead of a count.
