@@ -129,6 +129,30 @@ describe('renderStateBlock', () => {
     })
   })
 
+  it('keeps a drop with no seq at the head of its list ahead of the drops listed after it', () => {
+    const raw = renderStateBlock({
+      transfers: {
+        items: [
+          { id: 'i1', slot: 'inventory', to: 'c1', seq: 0 },
+          { id: 'i2', slot: 'inventory', to: 'c1', seq: 5 },
+        ],
+        stackables: [],
+        drops: [{ id: 'i4' }, { id: 'i5', seq: 1 }],
+      },
+    })
+    expect(parseStateBlock(raw).block.transfers).toEqual({
+      items: [
+        { id: 'i1', slot: 'inventory', to: 'c1', seq: 0 },
+        { id: 'i2', slot: 'inventory', to: 'c1', seq: 3 },
+      ],
+      stackables: [],
+      drops: [
+        { id: 'i4', seq: 1 },
+        { id: 'i5', seq: 2 },
+      ],
+    })
+  })
+
   // validate.ts asks no create for a description, and the app's parser reads a missing one as ''.
   it('renders a create with no description, which the parser reads as an empty one', () => {
     const { block, failures, malformedCreates } = parseStateBlock(

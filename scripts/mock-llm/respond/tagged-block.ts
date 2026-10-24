@@ -130,7 +130,8 @@ function orderedRows<T extends { seq?: number }>(
 }
 
 // Block order: `seq`, a move without one right after the one listed before it, a drop with none
-// before it after every item move; a tie keeps the item moves first, then list order.
+// before it after every item move but not after a drop listed below it; a tie keeps the item
+// moves first, then list order.
 function renderTransfers(block: AuthoredStateBlock): string | null {
   const items = block.transfers?.items ?? []
   const drops = block.transfers?.drops ?? []
@@ -144,7 +145,10 @@ function renderTransfers(block: AuthoredStateBlock): string | null {
   )
   const dropRows = orderedRows(
     drops,
-    Math.max(-Infinity, ...itemRows.map((r) => r.order)),
+    Math.min(
+      Math.max(-Infinity, ...itemRows.map((r) => r.order)),
+      drops.find((d) => d.seq !== undefined)?.seq ?? Infinity,
+    ),
     (d) => `    <${DROP_TAG} id="${attr(d.id)}"${holders(undefined, d.from)} />`,
   )
   // Two -Infinity orders subtract to NaN, which sort reads as a tie.
