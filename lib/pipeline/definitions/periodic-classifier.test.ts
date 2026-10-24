@@ -3309,6 +3309,33 @@ describe('periodicClassifierPhase — the writer map', () => {
     ])
   })
 
+  // classifier.md → Failure policy: the schema reads an entry that doesn't fit as a hole.
+  it('drops and logs the entries that did not fit, and lands the rest of the reply', async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction({
+        renames: [undefined],
+        threadStatuses: [
+          undefined,
+          { thread: 'th1', status: 'resolved', sourceTurn: 't2' },
+          undefined,
+        ],
+      }),
+    } as never)
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+    threadsStore.hydrate('b1', [amulet])
+    const { events, result } = await drain(h.ctx)
+    expect(result).toEqual({ status: 'completed' })
+    expect(actionsOf(events, 'setThreadStatus')).toHaveLength(1)
+    expect(logged('classifier.entry_malformed')).toEqual([
+      ['warn', { list: 'renames', count: 1 }],
+      ['warn', { list: 'threadStatuses', count: 2 }],
+    ])
+  })
+
   it('logs each write it drops under its own key', async () => {
     clearBuffers()
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })

@@ -6,6 +6,7 @@ export {
   classifierExtractionWithPlacesSchema,
   classifierReplySchema,
   newPlacesOf,
+  readClassifierReply,
 } from './schema'
 export type {
   ClassifierExtraction,

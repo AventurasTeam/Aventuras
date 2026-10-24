@@ -20,6 +20,16 @@ const icon = tolerated(z.string()).describe(
 
 const sourceTurn = z.string().optional()
 
+const withoutNulls = (value: unknown): unknown =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? Object.fromEntries(Object.entries(value).filter(([, field]) => field !== null))
+    : value
+
+// classifier.md → Failure policy: an entry that doesn't fit reads as a hole, a null field as
+// absent first, so one bad entry drops alone; readClassifierReply removes and counts the holes.
+const tolerantList = <T extends z.ZodType>(entry: T) =>
+  z.array(z.preprocess(withoutNulls, entry).optional().catch(undefined)).default([])
+
 const awareness = z.object({
   /** Character placeholder (c1, ...) or a newCharacters handle. */
   ref: z.string(),
@@ -149,59 +159,51 @@ export const classifierExtractionSchema = z.object({
     )
     .default([]),
   // classifier.md → What the classifier writes: the planner drops an update on an unlisted target.
-  renames: z.array(z.object({ ref: z.string(), name: z.string(), sourceTurn })).default([]),
-  placements: z
-    .array(
-      z.object({
-        ref: z.string(),
-        parent: z
-          .string()
-          .describe(
-            `ID from Places of the place it is now part of, or "${TOP_LEVEL_TOKEN}" for an unplaced place nothing in Places could contain.`,
-          ),
-        sourceTurn,
-      }),
-    )
-    .default([]),
-  standings: z.array(z.object({ ref: z.string(), standing: z.string(), sourceTurn })).default([]),
-  newThreads: z
-    .array(
-      z.object({
-        title: z.string(),
-        description: z.string(),
-        category: tolerated(z.string()),
-        icon,
-        status: z
-          .enum(['pending', 'active', 'resolved', 'failed'])
-          .describe('Resolved or failed only for a thread the turns both open and close.'),
-        sourceTurn,
-        resolvedAtTurn: tolerated(z.string()).describe(
-          'The turn that resolved or failed it, when the turns both open and close it; sourceTurn stays the turn that opened it. Omit otherwise.',
+  renames: tolerantList(z.object({ ref: z.string(), name: z.string(), sourceTurn })),
+  placements: tolerantList(
+    z.object({
+      ref: z.string(),
+      parent: z
+        .string()
+        .describe(
+          `ID from Places of the place it is now part of, or "${TOP_LEVEL_TOKEN}" for an unplaced place nothing in Places could contain.`,
         ),
-      }),
-    )
-    .default([]),
-  threadStatuses: z
-    .array(
-      z.object({
-        thread: z.string(),
-        status: z.enum(['active', 'resolved', 'failed']),
-        sourceTurn,
-      }),
-    )
-    .default([]),
-  knownAwareness: z
-    .array(
-      z.object({
-        happening: z.string(),
-        /** Character placeholder or a newCharacters handle. */
-        ref: z.string(),
-        source: z.string(),
-        severity,
-        learnedAtTurn: z.string().optional(),
-      }),
-    )
-    .default([]),
+      sourceTurn,
+    }),
+  ),
+  standings: tolerantList(z.object({ ref: z.string(), standing: z.string(), sourceTurn })),
+  newThreads: tolerantList(
+    z.object({
+      title: z.string(),
+      description: z.string(),
+      category: tolerated(z.string()),
+      icon,
+      status: z
+        .enum(['pending', 'active', 'resolved', 'failed'])
+        .describe('Resolved or failed only for a thread the turns both open and close.'),
+      sourceTurn,
+      resolvedAtTurn: tolerated(z.string()).describe(
+        'The turn that resolved or failed it, when the turns both open and close it; sourceTurn stays the turn that opened it. Omit otherwise.',
+      ),
+    }),
+  ),
+  threadStatuses: tolerantList(
+    z.object({
+      thread: z.string(),
+      status: z.enum(['active', 'resolved', 'failed']),
+      sourceTurn,
+    }),
+  ),
+  knownAwareness: tolerantList(
+    z.object({
+      happening: z.string(),
+      /** Character placeholder or a newCharacters handle. */
+      ref: z.string(),
+      source: z.string(),
+      severity,
+      learnedAtTurn: z.string().optional(),
+    }),
+  ),
 })
 
 const newPlace = z.object({
@@ -230,8 +232,15 @@ export const classifierExtractionWithPlacesSchema = classifierExtractionSchema.e
   newPlaces: z.array(newPlace).default([]),
 })
 
-export type ClassifierExtraction = z.infer<typeof classifierExtractionSchema>
-export type ClassifierPlacesExtraction = z.infer<typeof classifierExtractionWithPlacesSchema>
+/** A reply as the schema reads it: a tolerant list holds a hole where an entry didn't fit. */
+type ParsedExtraction = z.infer<typeof classifierExtractionSchema>
+type ParsedPlacesExtraction = z.infer<typeof classifierExtractionWithPlacesSchema>
+export type ParsedClassifierReply = ParsedExtraction | ParsedPlacesExtraction
+type WellFormed<T> = {
+  [K in keyof T]: T[K] extends readonly (infer E)[] ? Exclude<E, undefined>[] : T[K]
+}
+export type ClassifierExtraction = WellFormed<ParsedExtraction>
+export type ClassifierPlacesExtraction = WellFormed<ParsedPlacesExtraction>
 export type NewPlace = ClassifierPlacesExtraction['newPlaces'][number]
 export type NewCharacter = ClassifierExtraction['newCharacters'][number]
 export type NewFaction = ClassifierExtraction['newFactions'][number]
@@ -247,8 +256,43 @@ export type KnownAwareness = ClassifierExtraction['knownAwareness'][number]
 export type ClassifierReply = ClassifierExtraction | ClassifierPlacesExtraction
 
 /** The pass reads the setting once, when it builds its prompt; that value picks the schema. */
-export function classifierReplySchema(mentionedPlaces: boolean): z.ZodType<ClassifierReply> {
+export function classifierReplySchema(mentionedPlaces: boolean): z.ZodType<ParsedClassifierReply> {
   return mentionedPlaces ? classifierExtractionWithPlacesSchema : classifierExtractionSchema
+}
+
+/** The lists whose malformed entry drops alone (tolerantList). */
+export type TolerantList =
+  | 'renames'
+  | 'placements'
+  | 'standings'
+  | 'newThreads'
+  | 'threadStatuses'
+  | 'knownAwareness'
+
+/** How many entries of a tolerant list didn't fit. */
+export type MalformedEntries = { list: TolerantList; count: number }
+
+/** A parsed reply without its holes, and each tolerant list's count of them. */
+export function readClassifierReply(parsed: ParsedClassifierReply): {
+  reply: ClassifierReply
+  malformed: MalformedEntries[]
+} {
+  const malformed: MalformedEntries[] = []
+  const present = <T>(list: TolerantList, entries: readonly (T | undefined)[]): T[] => {
+    const kept = entries.filter((entry) => entry !== undefined)
+    if (kept.length < entries.length) malformed.push({ list, count: entries.length - kept.length })
+    return kept
+  }
+  const reply = {
+    ...parsed,
+    renames: present('renames', parsed.renames),
+    placements: present('placements', parsed.placements),
+    standings: present('standings', parsed.standings),
+    newThreads: present('newThreads', parsed.newThreads),
+    threadStatuses: present('threadStatuses', parsed.threadStatuses),
+    knownAwareness: present('knownAwareness', parsed.knownAwareness),
+  }
+  return { reply, malformed }
 }
 
 export function newPlacesOf(reply: ClassifierReply): readonly NewPlace[] {

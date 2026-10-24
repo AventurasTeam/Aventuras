@@ -19,6 +19,7 @@ import {
   nextStatusOnSuccess,
   newPlacesOf,
   PERIODIC_CLASSIFIER_KIND,
+  readClassifierReply,
   RECONCILED_KINDS,
   reconcileNewEntity,
   substituteClassifierIds,
@@ -318,7 +319,8 @@ export async function* periodicClassifierPhase(
     return { status: 'failed', error: failure.error }
   }
 
-  const extraction = result.value
+  const { reply: extraction, malformed } = readClassifierReply(result.value)
+  for (const drop of malformed) ctx.log.warn('classifier.entry_malformed', drop)
   const substituted = substituteClassifierIds(
     extraction,
     idMap,
