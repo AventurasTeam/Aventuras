@@ -9,11 +9,14 @@ const severity = z.number().default(0)
 /** classifier.md → Mentioned places → Parent: a new place's `parent` for a top-level place. */
 export const TOP_LEVEL_TOKEN = 'top-level'
 
+// classifier.md → Failure policy: a failed parse fails the pass, and the Send behind it, so an
+// optional profile or plot field the model sends as null or the wrong type reads as absent.
+const tolerated = <T>(field: z.ZodType<T>) => field.optional().catch(undefined)
+
 // A free string so an off-catalog key still parses; the planner writes no icon for it.
-const icon = z
-  .string()
-  .optional()
-  .describe(`One of: ${PLOT_ICON_KEYS.join(', ')}. Omit when none fits.`)
+const icon = tolerated(z.string()).describe(
+  `One of: ${PLOT_ICON_KEYS.join(', ')}. Omit when none fits.`,
+)
 
 const sourceTurn = z.string().optional()
 
@@ -35,7 +38,7 @@ const happening = z.object({
   /** Free-form anchor for out-of-narrative happenings; mutually exclusive with occurredAtTurn. */
   temporal: z.string().optional(),
   occurredAtTurn: z.string().optional(),
-  category: z.string().optional(),
+  category: tolerated(z.string()),
   icon,
   involvements: z.array(involvement).default([]),
   awareness: z.array(awareness).default([]),
@@ -80,19 +83,19 @@ export const classifierExtractionSchema = z.object({
           ),
         sourceTurn: z.string().optional(),
         // classifier.md → What the classifier writes → First profiles; the planner clamps them.
-        visual: z
-          .object({
-            physique: z.string().optional(),
-            face: z.string().optional(),
-            hair: z.string().optional(),
-            eyes: z.string().optional(),
-            attire: z.string().optional(),
-            distinguishing: z.string().optional(),
-          })
-          .optional(),
-        traits: z.array(z.string()).optional(),
-        drives: z.array(z.string()).optional(),
-        voice: z.string().optional(),
+        visual: tolerated(
+          z.object({
+            physique: tolerated(z.string()),
+            face: tolerated(z.string()),
+            hair: tolerated(z.string()),
+            eyes: tolerated(z.string()),
+            attire: tolerated(z.string()),
+            distinguishing: tolerated(z.string()),
+          }),
+        ),
+        traits: tolerated(z.array(z.string())),
+        drives: tolerated(z.array(z.string())),
+        voice: tolerated(z.string()),
       }),
     )
     .default([]),
@@ -110,8 +113,8 @@ export const classifierExtractionSchema = z.object({
             'Other names, titles or epithets the prose used for this faction alongside its name. Not the name itself.',
           ),
         sourceTurn: z.string().optional(),
-        standing: z.string().optional(),
-        agenda: z.array(z.string()).optional(),
+        standing: tolerated(z.string()),
+        agenda: tolerated(z.array(z.string())),
       }),
     )
     .default([]),
@@ -166,18 +169,15 @@ export const classifierExtractionSchema = z.object({
       z.object({
         title: z.string(),
         description: z.string(),
-        category: z.string().optional(),
+        category: tolerated(z.string()),
         icon,
         status: z
           .enum(['pending', 'active', 'resolved', 'failed'])
           .describe('Resolved or failed only for a thread the turns both open and close.'),
         sourceTurn,
-        resolvedAtTurn: z
-          .string()
-          .optional()
-          .describe(
-            'The turn that resolved or failed it, when the turns both open and close it; sourceTurn stays the turn that opened it. Omit otherwise.',
-          ),
+        resolvedAtTurn: tolerated(z.string()).describe(
+          'The turn that resolved or failed it, when the turns both open and close it; sourceTurn stays the turn that opened it. Omit otherwise.',
+        ),
       }),
     )
     .default([]),
@@ -216,7 +216,7 @@ const newPlace = z.object({
       'Other names, titles or epithets the prose used for this place alongside its name. Not the name itself.',
     ),
   sourceTurn: z.string().optional(),
-  condition: z.string().optional(),
+  condition: tolerated(z.string()),
   parent: z
     .string()
     .optional()

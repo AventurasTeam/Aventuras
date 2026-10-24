@@ -377,6 +377,60 @@ describe('classifierExtractionWithPlacesSchema', () => {
   })
 })
 
+// classifier.md → Failure policy: a reply that fails to parse fails the pass, and the Send behind it.
+describe('optional profile and plot fields the model fills wrongly', () => {
+  const ITEMS = {
+    newCharacters: { handle: 'new:mira', name: 'Mira', description: 'A ferrywoman.' },
+    newFactions: { handle: 'new:circle', name: 'The Iron Circle', description: 'Smiths.' },
+    happenings: { title: 'The ford ambush' },
+    newThreads: { title: 'Recover the relic', description: 'Stolen.', status: 'resolved' },
+    newPlaces: { handle: 'new:varn', name: 'Varn', description: 'A salt town.' },
+  } as const
+  type List = keyof typeof ITEMS
+  const FIELDS: [List, string][] = [
+    ['newCharacters', 'visual'],
+    ['newCharacters', 'traits'],
+    ['newCharacters', 'drives'],
+    ['newCharacters', 'voice'],
+    ['newFactions', 'standing'],
+    ['newFactions', 'agenda'],
+    ['happenings', 'category'],
+    ['happenings', 'icon'],
+    ['newThreads', 'category'],
+    ['newThreads', 'icon'],
+    ['newThreads', 'resolvedAtTurn'],
+    ['newPlaces', 'condition'],
+  ]
+  const parsedItem = (list: List, item: Record<string, unknown>) => {
+    const result = classifierExtractionWithPlacesSchema.safeParse({ [list]: [item] })
+    expect(result.success).toBe(true)
+    return (result.data?.[list] as Record<string, unknown>[] | undefined)?.[0]
+  }
+
+  it.each(FIELDS)('reads a null %s %s as absent, keeping the entry', (list, field) => {
+    const item = parsedItem(list, { ...ITEMS[list], [field]: null })
+    expect(item).toMatchObject(ITEMS[list])
+    expect(item?.[field]).toBeUndefined()
+  })
+
+  it.each(FIELDS)('reads a %s %s of the wrong type as absent', (list, field) => {
+    const wrong = field === 'traits' || field === 'drives' || field === 'agenda' ? 'one' : [1]
+    expect(parsedItem(list, { ...ITEMS[list], [field]: wrong })?.[field]).toBeUndefined()
+  })
+
+  it.each(['physique', 'face', 'hair', 'eyes', 'attire', 'distinguishing'])(
+    "reads a null visual %s as absent, keeping the character's other categories",
+    (key) => {
+      const other = key === 'eyes' ? 'hair' : 'eyes'
+      const item = parsedItem('newCharacters', {
+        ...ITEMS.newCharacters,
+        visual: { [key]: null, [other]: 'grey' },
+      })
+      expect(item?.visual).toEqual({ [other]: 'grey' })
+    },
+  )
+})
+
 describe('classifierReplySchema', () => {
   it('asks for places only with the setting on', () => {
     expect(classifierReplySchema(true)).toBe(classifierExtractionWithPlacesSchema)
