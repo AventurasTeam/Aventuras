@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 
 import { describe, expect, it } from 'vitest'
 
-// Both hunks fail Android-only and CI has no Android lane; `pnpm patch-commit` can drop the
+// Every hunk fails Android-only and CI has no Android lane; `pnpm patch-commit` can drop the
 // added-file hunk with a successful exit, which `ignorePatchFailures: false` cannot catch.
 // See lessons-learned/pnpm-patch-drops-added-files.md.
 const PATCH_PATH = 'patches/onnxruntime-react-native.patch'
@@ -41,5 +41,17 @@ describe('onnxruntime-react-native patch guard', () => {
       gradle,
       'VersionNumber.parse is back — the Android build will fail under Gradle 9',
     ).not.toContain('VersionNumber.parse')
+  })
+
+  // A dynamic version ships whatever Maven serves, and CMake's wildcard links the first of every
+  // version ever extracted: the 2026-10-20 APK shipped a stale 1.28.0 that way.
+  it('the installed build pins the runtime AAR and links that same version', () => {
+    const gradle = readFileSync(`${PKG_DIR}/android/build.gradle`, 'utf8')
+    const cmake = readFileSync(`${PKG_DIR}/android/CMakeLists.txt`, 'utf8')
+    const pinned = /onnxruntime-android:([^@"]+)@aar/.exec(gradle)?.[1]
+    expect(pinned, 'build.gradle no longer pins onnxruntime-android').toBe('1.31.0')
+    expect(cmake.match(/onnxruntime-android-[^/"]*\.aar/g), 'CMakeLists.txt links another').toEqual(
+      ['onnxruntime-android-1.31.0.aar', 'onnxruntime-android-1.31.0.aar'],
+    )
   })
 })
