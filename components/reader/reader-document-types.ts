@@ -43,6 +43,8 @@ export type ReaderSurfaceProps = {
    */
   hasOlder: boolean
   editGate: EditGate
+  /** The tooltip on the row controls `editGate` disables; undefined while it is `open`. */
+  gateReason?: string
   jumpButtonEnabled: boolean
   /** Present when the system entry has a kind-specific fix route (host-derived label). */
   systemFixLabel?: string

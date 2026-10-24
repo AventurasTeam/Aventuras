@@ -42,7 +42,7 @@ import {
   shouldRestoreUserActionAfterHandlingFailure,
 } from '@/components/reader/regenerate-outcome'
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
-import { editGateOf } from '@/components/reader/row-reversal-flags'
+import { editGateOf, rowGateReason } from '@/components/reader/row-reversal-flags'
 import { SceneEditSheet } from '@/components/reader/scene-edit-sheet'
 import { useSceneEditing } from '@/components/reader/scene-editing'
 import {
@@ -75,6 +75,8 @@ import { WorldTimeEditSheet } from '@/components/reader/worldtime-edit-sheet'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import {
   generationGateReason,
+  headReversalGateReason,
+  selectHeadReversalRunKind,
   selectStorySettingsGenerationRunKind,
 } from '@/components/story-settings/generation-run'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -673,6 +675,14 @@ export default function ReaderComposerRoute() {
     selectStorySettingsGenerationRunKind(s.txState, storyId ?? undefined),
   )
   const gateReason = generationGateReason(actionsBlocked, gateRunKind)
+  // Beside a pass the pill names the pass, but a head reversal waits on the run it can't interrupt.
+  const headReversalRunKind = generationStore.useGeneration((s) =>
+    selectHeadReversalRunKind(s.txState, branchId),
+  )
+  const headReversalReason = headReversalGateReason(headReversalBlocked, {
+    headReversal: headReversalRunKind,
+    pill: gateRunKind,
+  })
 
   const runSubmit = useCallback(
     async (content: string, composerMode: string, raw?: { text: string; mode: ComposerMode }) => {
@@ -1321,7 +1331,7 @@ export default function ReaderComposerRoute() {
           id: 'undo',
           label: t('reader:actions.undo'),
           disabled: headReversalBlocked,
-          disabledReason: gateReason,
+          disabledReason: headReversalReason,
           onActivate: () => runUndoRedo('undo'),
         },
         // Absent, not disabled, when the stack is empty — the menu doesn't
@@ -1347,6 +1357,7 @@ export default function ReaderComposerRoute() {
     hasRedo,
     actionsBlocked,
     headReversalBlocked,
+    headReversalReason,
     gateReason,
     runUndoRedo,
     entries.length,
@@ -1385,6 +1396,7 @@ export default function ReaderComposerRoute() {
     branchKey: branchId,
     hasOlder,
     editGate,
+    gateReason: rowGateReason(editGate, { gate: gateReason, headReversal: headReversalReason }),
     jumpButtonEnabled,
     systemFixLabel: fixAction?.label,
     onNearTop: loadOlderEntries,

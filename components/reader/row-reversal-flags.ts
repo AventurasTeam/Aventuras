@@ -26,6 +26,18 @@ export function editGateOf(gates: {
 }
 
 /**
+ * The row controls' tooltip. An `interruptible` gate disables only what the pill's run holds; a
+ * `closed` one holds the head reversals too, so it names the run they can't pass through.
+ */
+export function rowGateReason(
+  editGate: EditGate,
+  reasons: { gate: string | undefined; headReversal: string | undefined },
+): string | undefined {
+  if (editGate === 'open') return undefined
+  return editGate === 'closed' ? reasons.headReversal : reasons.gate
+}
+
+/**
  * principles.md → Edit restrictions during in-flight generation: through an `interruptible` gate,
  * ↻ and × on every row and the head turn's pencil stay live; any other pencil keeps the whole gate.
  */

@@ -52,6 +52,7 @@ type ReaderRowProps = {
   // Split from editBlocked by rowReversalFlags, so the head reversals stay live during a pass.
   editDisabled: boolean
   reversalDisabled: boolean
+  disabledReason?: string
   systemFixLabel?: string
   // Flat primitives rather than the decoration object: a fresh `{…}` per walk
   // would defeat the shallow memo compare the same way a merged row would.
@@ -94,6 +95,7 @@ const ReaderRow = memo(function ReaderRow({
   editBlocked,
   editDisabled,
   reversalDisabled,
+  disabledReason,
   systemFixLabel,
   worldTimeLabel,
   worldTimeRaw,
@@ -141,6 +143,7 @@ const ReaderRow = memo(function ReaderRow({
       meta={row.metadata ?? undefined}
       reasoning={row.metadata?.reasoning}
       disabled={editBlocked}
+      disabledReason={disabledReason}
       editDisabled={editDisabled}
       reversalDisabled={reversalDisabled}
       editing={editing}
@@ -194,6 +197,7 @@ export function ReaderSurface({
   branchKey,
   hasOlder,
   editGate,
+  gateReason,
   jumpButtonEnabled,
   systemFixLabel,
   entityNames,
@@ -564,6 +568,7 @@ export function ReaderSurface({
                 editBlocked={editGate !== 'open'}
                 editDisabled={flags.editDisabled}
                 reversalDisabled={flags.reversalDisabled}
+                disabledReason={gateReason}
                 systemFixLabel={systemFixLabel}
                 worldTimeLabel={decoration?.label}
                 worldTimeRaw={decoration?.raw}

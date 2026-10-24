@@ -409,6 +409,12 @@ so its cancel is the status pill's when it runs alone. Beside a pass or
 a close the pill names and cancels that run, and the refresh's cancel
 is the suggestion strip's ✕.
 
+A disabled control's tooltip names the run it waits on, which is not
+always the pill's. A head reversal passes through a pass or a close, so
+beside one it waits on whatever else holds the gate (a refresh, a
+turn) and names that run. With no such run, as during a pass a failure
+entry's `Retry` started, it names the pill's.
+
 Tooltip copy is principle-owned. Per-screen docs cite, don't
 reinvent.
 

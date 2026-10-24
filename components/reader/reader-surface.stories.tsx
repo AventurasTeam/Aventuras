@@ -373,6 +373,42 @@ export const ClosedGateHoldsEveryRow: Story = {
   },
 }
 
+/** A gated row control is named and titled by the gate's reason; a live one keeps its own name. */
+export const GatedRowControlNamesTheRun: Story = {
+  args: {
+    ...PASS_IN_FLIGHT_ARGS,
+    editGate: 'interruptible',
+    gateReason: t('generationGate.updatingMemory'),
+  },
+  play: async () => {
+    const reason = t('generationGate.updatingMemory')
+    const pencil = await waitFor(() => within(entryRow('p3')).getByRole('button', { name: reason }))
+    expect(pencil).toBeDisabled()
+    expect(pencil.closest('[title]')?.getAttribute('title')).toBe(reason)
+    expect(rowButton('p3', t('reader:entryCard.regenerate'))).not.toBeDisabled()
+    expect(rowButton('p5', t('reader:entryCard.editEntry'))).not.toBeDisabled()
+    expect(within(entryRow('p5')).queryByRole('button', { name: reason })).not.toBeInTheDocument()
+  },
+}
+
+/** A closed gate names the head reversals' blocker on the head turn's controls too. */
+export const ClosedGateNamesItsBlocker: Story = {
+  args: {
+    ...PASS_IN_FLIGHT_ARGS,
+    editGate: 'closed',
+    gateReason: t('generationGate.suggestionRefresh'),
+  },
+  play: async () => {
+    const reason = t('generationGate.suggestionRefresh')
+    const gated = await waitFor(() => {
+      const buttons = within(entryRow('p5')).getAllByRole('button', { name: reason })
+      expect(buttons).toHaveLength(3)
+      return buttons
+    })
+    for (const button of gated) expect(button).toBeDisabled()
+  },
+}
+
 // Enough rows to overflow the 480 px box, so the viewport can shrink under a reader at the bottom.
 const OVERFLOW_ROWS: StoryEntry[] = Array.from({ length: 14 }, (_, i) =>
   entry({

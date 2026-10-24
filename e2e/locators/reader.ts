@@ -62,6 +62,9 @@ export const reader = {
   scroller: (page: Page): Locator => page.locator('[data-entry-row]').first().locator('..'),
   editEntry: (page: Page, entryId: string): Locator =>
     reader.row(page, entryId).getByRole('button', { name: t('reader:entryCard.editEntry') }),
+  // A gated row control takes the gate's reason as its accessible name (IconAction).
+  gatedEntryAction: (page: Page, entryId: string, reason: string): Locator =>
+    reader.row(page, entryId).getByRole('button', { name: reason }),
   deleteEntry: (page: Page, entryId: string): Locator =>
     reader.row(page, entryId).getByRole('button', { name: t('reader:entryCard.deleteEntry') }),
   // The cascade confirm's "Discard and regenerate" also matches a substring

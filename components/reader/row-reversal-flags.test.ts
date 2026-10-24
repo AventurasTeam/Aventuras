@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { editGateOf, headTurnIdsOf, rowReversalFlags } from './row-reversal-flags'
+import { editGateOf, headTurnIdsOf, rowGateReason, rowReversalFlags } from './row-reversal-flags'
 
 function entry(id: string, kind: string) {
   return { id, kind, position: 0 }
@@ -95,5 +95,21 @@ describe('rowReversalFlags', () => {
         editDisabled: false,
         reversalDisabled: false,
       })
+  })
+})
+
+describe('rowGateReason', () => {
+  const reasons = { gate: 'pass reason', headReversal: 'refresh reason' }
+
+  it("names the pill's run while only a pass or a close holds the gate", () => {
+    expect(rowGateReason('interruptible', reasons)).toBe('pass reason')
+  })
+
+  it("names the head reversals' blocker once the gate is closed", () => {
+    expect(rowGateReason('closed', reasons)).toBe('refresh reason')
+  })
+
+  it('names nothing while the gate is open', () => {
+    expect(rowGateReason('open', reasons)).toBeUndefined()
   })
 })

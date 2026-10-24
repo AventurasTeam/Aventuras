@@ -56,9 +56,12 @@ export function isUserEditBlocked(txState: TxState): boolean {
 // this branch is the one a head reversal passes through by interrupting it.
 export function isHeadReversalBlocked(txState: TxState, branchId: string): boolean {
   if (txState.reversalInProgress || txState.pendingTurns.size > 0) return true
-  return [...txState.runs.values()].some(
-    (r) => r.gateBehavior === 'hard-gate' && !(r.interruptible && r.branchId === branchId),
-  )
+  return [...txState.runs.values()].some((r) => runBlocksHeadReversal(r, branchId))
+}
+
+/** Whether this run is one a head reversal on `branchId` can't pass through by interrupting it. */
+export function runBlocksHeadReversal(run: RunState, branchId: string): boolean {
+  return run.gateBehavior === 'hard-gate' && !(run.interruptible && run.branchId === branchId)
 }
 
 // A turn pending on the branch and a reversal hold no run yet (a regenerate's mark spans its

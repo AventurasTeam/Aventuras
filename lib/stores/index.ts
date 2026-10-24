@@ -102,6 +102,7 @@ export {
   isHeadReversalBlocked,
   isStoryBusy,
   isUserEditBlocked,
+  runBlocksHeadReversal,
   selectMemoryRun,
 } from './generation/generation'
 export type {

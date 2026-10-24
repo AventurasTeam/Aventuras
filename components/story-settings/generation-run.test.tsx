@@ -8,6 +8,8 @@ import { generationStore, type RunState, type TxState } from '@/lib/stores'
 
 import {
   generationGateReason,
+  headReversalGateReason,
+  selectHeadReversalRunKind,
   selectStorySettingsGenerationRunKind,
   storyPillPhase,
   storySettingsGenerationPhase,
@@ -217,6 +219,67 @@ describe('generationGateReason', () => {
       'Generation is in flight. Cancel to edit.',
     )
     expect(generationGateReason(true, null)).toBe('Generation is in flight. Cancel to edit.')
+  })
+})
+
+describe('selectHeadReversalRunKind', () => {
+  // principles.md → Disabled controls: beside a pass the refresh's cancel is the strip's ✕.
+  it('names the refresh beside a pass, which the pill passes over for the pass', () => {
+    const both = tx(pass(), run(SUGGESTION_REFRESH_KIND))
+    expect(selectStorySettingsGenerationRunKind(both, 'story-1')).toBe(PERIODIC_CLASSIFIER_KIND)
+    expect(generationGateReason(true, selectHeadReversalRunKind(both, 'branch-1'))).toBe(
+      'Refreshing suggestions. Cancel to edit.',
+    )
+  })
+
+  it("has no run while only this branch's pass holds the gate", () => {
+    expect(selectHeadReversalRunKind(tx(pass()), 'branch-1')).toBeNull()
+  })
+
+  it("names another branch's pass, which a reversal here can't interrupt", () => {
+    expect(selectHeadReversalRunKind(tx(pass({ branchId: 'branch-2' })), 'branch-1')).toBe(
+      PERIODIC_CLASSIFIER_KIND,
+    )
+  })
+
+  it('names a turn over a pass beside it', () => {
+    expect(selectHeadReversalRunKind(tx(pass(), run(PER_TURN_KIND)), 'branch-1')).toBe(
+      PER_TURN_KIND,
+    )
+  })
+
+  it('ignores a run that holds no gate', () => {
+    expect(
+      selectHeadReversalRunKind(tx(run('translation-retry', { gateBehavior: 'no-gate' })), 'b'),
+    ).toBeNull()
+  })
+})
+
+describe('headReversalGateReason', () => {
+  it('names the run a head reversal cannot interrupt over the pill', () => {
+    expect(
+      headReversalGateReason(true, {
+        headReversal: SUGGESTION_REFRESH_KIND,
+        pill: PERIODIC_CLASSIFIER_KIND,
+      }),
+    ).toBe('Refreshing suggestions. Cancel to edit.')
+  })
+
+  // A failure entry's Retry holds head reversals through its dispatch while its own pass, an
+  // interruptible one, is the only run: the pill's Cancel is what ends it.
+  it("falls back to the pill's run when no run holds the head reversals", () => {
+    expect(
+      headReversalGateReason(true, { headReversal: null, pill: PERIODIC_CLASSIFIER_KIND }),
+    ).toBe('Updating memory. Cancel to edit.')
+    expect(headReversalGateReason(true, { headReversal: null, pill: null })).toBe(
+      'Generation is in flight. Cancel to edit.',
+    )
+  })
+
+  it('is undefined while head reversals are open', () => {
+    expect(
+      headReversalGateReason(false, { headReversal: null, pill: PERIODIC_CLASSIFIER_KIND }),
+    ).toBeUndefined()
   })
 })
 

@@ -64,22 +64,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Save could send the old name back. Reasoned, not reproduced; rare.
   Raised 2026-10-10 by the partial-name collisions code review.
 
-- **Undo's tooltip names the pass when a refresh blocks it.** With a
-  suggestion refresh running beside a pass, `gateReason` follows the
-  pill to the pass (`Updating memory. Cancel to edit.`), but the
-  refresh is what blocks a head reversal, so Undo's tooltip names the
-  wrong run and the Cancel it points to doesn't enable Undo. Read, not
-  probed. Raised 2026-10-21 by the gated classifier slice's task
-  reviews.
-
-- **Reader rows show no disabled reason.** `ReaderRow` in
-  `components/reader/reader-surface.tsx` passes no `disabledReason` to
-  `EntryCard`, so during a pass a disabled off-head pencil sits beside
-  a live regenerate and delete with no tooltip
-  ([`principles.md → Affordance loci`](../ui/principles.md#affordance-loci),
-  its disabled-controls rule).
-  Raised 2026-10-21 by the gated classifier slice's task reviews.
-
 - **The reader's bottom pin ignores scrollbar drags and keyboard
   scrolls.**
   [`reader-document.md → Entry list`](../ui/patterns/reader-document.md#entry-list-fully-rendered-flow-layout)
