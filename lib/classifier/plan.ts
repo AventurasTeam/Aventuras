@@ -10,7 +10,7 @@ import {
   type LocationState,
   type Thread,
 } from '@/lib/db'
-import { dedupeTerms, newTerms, normalizeTerm } from '@/lib/keyword-terms'
+import { dedupeTerms, newTerms } from '@/lib/keyword-terms'
 import { boundStateText } from '@/lib/piggyback'
 import { isPlotIconKey } from '@/lib/plot'
 import { oneLine } from '@/lib/text'
@@ -19,6 +19,7 @@ import {
   checkParentChain,
   flagStillHolds,
   matchNewPlace,
+  nameBasis,
   parentOfLocations,
   placeNewLocation,
   realPlacementOf,
@@ -631,15 +632,15 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       const known = index.get(row.id)
       if (current === undefined || known === undefined) return
       const name = clampEmbedded(rename.name.trim(), MAX_EMBEDDED_NAME)
-      const key = normalizeTerm(name)
-      // A case-only change is no reveal, as renameEntity judges it.
-      if (key === '' || key === normalizeTerm(current.name)) return
+      // One name by World's namesake rule, as renameEntity's holder test: case and spacing aside.
+      const sameName = (other: string): boolean => nameBasis(name, other) === 'same-name'
+      if (name === '' || sameName(current.name)) return
       const holders = [...nameRows]
         .filter(
           ([id, r]) =>
             id !== row.id &&
             r.kind === row.kind &&
-            normalizeTerm(r.name) === key &&
+            sameName(r.name) &&
             (row.kind !== 'location' || placesCompared(row.id, id)),
         )
         .sort(([idA, a], [idB, b]) => a.createdAt - b.createdAt || (idA < idB ? -1 : 1))

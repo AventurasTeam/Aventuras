@@ -2916,6 +2916,30 @@ describe('renames', () => {
     expect(fellBackCount).toBe(0)
   })
 
+  // World's namesake rule splits a name on whitespace, and renameEntity refuses by the same rule.
+  it('plans nothing for a rename that changes only the spacing inside the name', () => {
+    const { planned, renameClashes } = buildClassifierActions(
+      reply({ renames: [{ ref: 'char_kael', name: 'Kael \n Stormborn', sourceTurn: 't1' }] }),
+      deps([row('char_kael', 'character', 'Kael Stormborn')]),
+    )
+    expect(planned).toEqual([])
+    expect(renameClashes).toEqual([])
+  })
+
+  it('takes a name spaced apart from the one another row holds as that name', () => {
+    const { planned, renameClashes } = buildClassifierActions(
+      reply({ renames: [{ ref: 'char_stranger', name: 'Kael  Stormborn', sourceTurn: 't1' }] }),
+      deps([STRANGER, row('char_kael', 'character', 'Kael Stormborn', { createdAt: 2 })]),
+    )
+    expect(planned.map((p) => p.action.kind)).toEqual([
+      'appendEntityKeywords',
+      'raiseCollisionFlag',
+    ])
+    expect(renameClashes).toEqual([
+      { ref: 'char_stranger', name: 'Kael  Stormborn', partnerId: 'char_kael', flagged: true },
+    ])
+  })
+
   it('adds a name another row of the kind holds as a keyword and flags the pair name-taken', () => {
     const { planned, renameClashes } = buildClassifierActions(
       reply({ renames: [{ ref: 'char_stranger', name: ' kael ', sourceTurn: 't3' }] }),
