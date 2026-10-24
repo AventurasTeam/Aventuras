@@ -236,13 +236,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `classifier.piggyback_fallback_failed` warning in the logs. Raised
   2026-10-21 by the gated classifier slice's task reviews.
 
-- **Android: keyboard input pops the reader.** On the emulator,
-  `adb input text` leaves touch mode, and with focus on the top bar's
-  back arrow a space presses it, so `router.back()` pops the reader
-  and logs two "GO_BACK was not handled" warnings. Seen before and
-  after the gated classifier's changes, so the branch didn't cause it.
-  Raised 2026-10-21 by the gated classifier slice's task reviews.
-
 - **The reader's bottom pin ignores scrollbar drags and keyboard
   scrolls.**
   [`reader-document.md → Entry list`](../ui/patterns/reader-document.md#entry-list-fully-rendered-flow-layout)
@@ -356,15 +349,6 @@ slice-planning gate forces its resolution before that slice is planned.
   (`components/reader/regenerate-outcome.ts:39`) and the submission is
   not handed back. Raised 2026-10-22 in the pass failure policy
   slice's branch review.
-
-- **A pass bound that expires during a retry backoff reports a
-  timeout.** `callWithRetry` (`lib/ai/transport/call-with-retry.ts`)
-  returns `aborted` when the signal fires in its backoff, and
-  `generateStructured` (`lib/ai/generate.ts`) drops the attempts'
-  recoverable errors, so a pass that met a 503 or 429 near its bound
-  records `timeout after Nms` on the entry and in the status. Only the
-  diagnostic is lost: the pass fails either way. Raised 2026-10-23 by
-  the pass failure policy slice review.
 
 - **The commit-msg hook doesn't check the subject.**
   `scripts/check-commit-msg.sh` counts only the body's lines, while
