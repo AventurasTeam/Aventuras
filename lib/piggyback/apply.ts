@@ -247,8 +247,22 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   const positionOf = (itemId: string): string | null =>
     positions.has(itemId) ? (positions.get(itemId) ?? null) : storedPosition(itemId)
 
-  // Whether the move named a character to give or take it, so it wrote anything.
+  // Who holds the item in which slot, and where it lies: all a move can change.
+  const whereIs = (itemId: string): string =>
+    JSON.stringify([
+      positionOf(itemId),
+      entities.flatMap((holder) => {
+        if (!isCharacter(holder.id)) return []
+        const cur = currentInventory(holder.id)
+        return (['equipped_items', 'inventory'] as const)
+          .filter((slot) => cur[slot].includes(itemId))
+          .map((slot) => `${holder.id}:${slot}`)
+      }),
+    ])
+
+  // Whether the move changed who holds the item or where it lies.
   const take = (item: ItemTransfer): boolean => {
+    const before = whereIs(item.id)
     const giver = characterOf(item.from)
     const taker = characterOf(item.to)
     if (giver !== undefined) release(giver, item.id)
@@ -265,7 +279,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
       } as { equipped_items: string[]; inventory: string[] })
       positions.set(item.id, null)
     }
-    return giver !== undefined || taker !== undefined
+    return whereIs(item.id) !== before
   }
 
   const drops: AppliedDrop[] = []

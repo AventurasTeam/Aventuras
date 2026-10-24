@@ -1332,13 +1332,13 @@ describe('buildPiggybackActions', () => {
         kind: 'location',
         state: { parent_location_id: null },
       })
-      const landed = (block: ParsedStateBlock) => {
+      const landed = (block: ParsedStateBlock, entities: Entity[] = [kael, keep]) => {
         const { applied } = buildPiggybackActions({
           log: logger,
           source: 'per_turn_classifier',
           entryId: 'entry_1',
           turn: planned(block),
-          entities: [kael, keep],
+          entities,
           previousMetadata,
           branchId: 'main',
         })
@@ -1379,6 +1379,54 @@ describe('buildPiggybackActions', () => {
             }),
           }),
         ).toEqual({ visualChanges: 0, items: 2, stackables: 0 })
+      })
+
+      it('counts no release from a character who does not hold the item', () => {
+        expect(
+          landed({
+            transfers: transfers({
+              items: [{ id: 'item_blade', from: 'char_kael', slot: 'inventory', seq: 0 }],
+            }),
+          }),
+        ).toEqual({ visualChanges: 0, items: 0, stackables: 0 })
+      })
+
+      it.each([
+        ['counts no take into the slot that already holds it', 'inventory', 0],
+        ['counts a take that moves it to the other slot', 'equipped_items', 1],
+      ] as const)('%s', (_label, slot, items) => {
+        const holding = mockEntity({
+          id: 'char_kael',
+          state: { ...(kael.state as CharacterState), inventory: ['item_blade'] },
+        })
+        expect(
+          landed(
+            {
+              transfers: transfers({
+                items: [{ id: 'item_blade', to: 'char_kael', slot, seq: 0 }],
+              }),
+            },
+            [holding, keep],
+          ),
+        ).toEqual({ visualChanges: 0, items, stackables: 0 })
+      })
+
+      it('counts a take that lifts it from where its row says it lies', () => {
+        const holding = mockEntity({
+          id: 'char_kael',
+          state: { ...(kael.state as CharacterState), inventory: ['item_blade'] },
+        })
+        const blade = mockEntity({
+          id: 'item_blade',
+          kind: 'item',
+          state: { at_location_id: 'loc_keep' },
+        })
+        const items = [{ id: 'item_blade', to: 'char_kael', slot: 'inventory' as const, seq: 0 }]
+        expect(landed({ transfers: transfers({ items }) }, [holding, keep, blade])).toEqual({
+          visualChanges: 0,
+          items: 1,
+          stackables: 0,
+        })
       })
 
       it('counts a stackable only when a character pays or gains it', () => {
