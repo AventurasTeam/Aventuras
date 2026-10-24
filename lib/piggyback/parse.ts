@@ -134,7 +134,7 @@ function parseVisualChanges(segment: string): VisualChangeNote[] {
 }
 
 // <entity id="...">text</entity> — full-replace condition, one entry per changed place or item
-// (docs/memory/piggyback.md → Trailing block format).
+// (docs/memory/piggyback.md → Trailing block format). A blank one is kept for apply.ts to refuse.
 function parseConditions(segment: string): ConditionChange[] {
   const changes: ConditionChange[] = []
   // No `<` inside, so a self-closed or unclosed entry can't swallow the next one.
@@ -143,9 +143,8 @@ function parseConditions(segment: string): ConditionChange[] {
     const [, attrText, text] = match
     if (attrText === undefined || text === undefined) continue
     const { id } = parseAttributes(attrText)
-    const condition = text.trim()
-    if (!id || condition === '') continue
-    changes.push({ id, text: condition })
+    if (!id) continue
+    changes.push({ id, text: text.trim() })
   }
   assertNotTruncated(segment, changes.length, 'conditions')
   return changes

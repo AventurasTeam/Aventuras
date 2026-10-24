@@ -2571,6 +2571,65 @@ describe('narrative fold — creates', () => {
       { id: MARKET, text: 'half under water', rejected: true },
     ])
   })
+
+  // data-model.md → Entry metadata shape: a blank condition is refused, World keeping the old one.
+  describe('a blank condition', () => {
+    const SWORD = 'item_00000000-0000-4000-8000-0000000000b2'
+    const swordWorld = () => [
+      worldRow({
+        id: HERO,
+        kind: 'character',
+        name: 'Aria',
+        state: {
+          ...emptyEntityState('character'),
+          current_location_id: TOWN,
+          equipped_items: [SWORD],
+        },
+      }),
+      worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }),
+      worldRow({
+        id: SWORD,
+        kind: 'item',
+        name: 'worn sword',
+        state: { at_location_id: null, condition: 'notched near the tip' },
+      }),
+    ]
+    // c1 HERO, l1 TOWN; the sword, the one item, is i1.
+    const blankReply = (siblings: string) =>
+      'Aria wipes the blade.\n<state><world_time_delta>5</world_time_delta>' +
+      `<conditions><entity id="i1"></entity>${siblings}</conditions></state>`
+
+    it('is reported refused alone, failing no field and leaving the row as it was', async () => {
+      await seedTurn(swordWorld())
+      const { events, intermediates } = await foldTurn(blankReply(''))
+      expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: true })
+      await applyEvents(events)
+      const rows = await branchRows()
+      expect(rows.find((r) => r.id === SWORD)?.state).toEqual({
+        at_location_id: null,
+        condition: 'notched near the tip',
+      })
+      const report = replyOf(events).metadata?.stateReport
+      expect(report?.failedFields).toBeUndefined()
+      expect(report?.conditions).toEqual([{ id: SWORD, text: '', rejected: true }])
+    })
+
+    // The sword is the one row this prompt shows with its state, so the sibling names it too.
+    it('is reported refused beside a condition that lands', async () => {
+      await seedTurn(swordWorld())
+      const { events } = await foldTurn(blankReply('<entity id="i1">snapped at the hilt</entity>'))
+      await applyEvents(events)
+      const rows = await branchRows()
+      expect(rows.find((r) => r.id === SWORD)?.state).toEqual({
+        at_location_id: null,
+        condition: 'snapped at the hilt',
+      })
+      expect(replyOf(events).metadata?.stateReport?.conditions).toEqual([
+        { id: SWORD, text: '', rejected: true },
+        { id: SWORD, text: 'snapped at the hilt' },
+      ])
+    })
+  })
 })
 
 // architecture.md → System and user halves. Fixture fills Setting/Genre/Tone and the calendar

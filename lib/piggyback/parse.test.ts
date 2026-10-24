@@ -1094,7 +1094,8 @@ describe('conditions and drops', () => {
     })
   })
 
-  it('reads each condition trimmed, skipping one with no id or no text', () => {
+  // data-model.md → Entry metadata shape: a blank condition is kept for apply.ts to reject.
+  it('reads each condition trimmed, keeping a blank one and skipping one with no id', () => {
     const { block, failures } = parseStateBlock(`<state>
   <conditions>
     <entity id="l1">  burned to the ground  </entity>
@@ -1106,8 +1107,17 @@ describe('conditions and drops', () => {
     expect(failures).toEqual([])
     expect(block.conditions).toEqual([
       { id: 'l1', text: 'burned to the ground' },
+      { id: 'i2', text: '' },
       { id: 'i4', text: 'snapped in two at the hilt' },
     ])
+  })
+
+  it('reads a lone blank condition as an entry, failing no field', () => {
+    const { block, failures } = parseStateBlock(
+      '<state><scene_entities>c1</scene_entities><conditions><entity id="i4"></entity></conditions></state>',
+    )
+    expect(failures).toEqual([])
+    expect(block.conditions).toEqual([{ id: 'i4', text: '' }])
   })
 
   it.each([
