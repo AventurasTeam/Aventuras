@@ -259,4 +259,14 @@ export type ClassificationResult = z.infer<typeof classificationResultSchema> & 
   _error?: string
   /** Set with `_error` when part of a rejected response was recovered and applied. */
   _salvaged?: boolean
+  /** Internal metadata: which fields of each existing character the prompt listed. Not LLM output. */
+  _shownCharacters?: ShownCharacter[]
+}
+
+export interface ShownCharacter {
+  name: string
+  /** `appearance:` was listed, so `visualDescriptors` may be rewritten. */
+  appearance: boolean
+  /** `description:` and `traits:` were listed, so both may be rewritten. */
+  profile: boolean
 }

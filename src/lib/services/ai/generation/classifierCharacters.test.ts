@@ -4,7 +4,8 @@ import {
   classifierCharacterView,
   formatExistingCharacters,
   planCharacterChanges,
-  viewsBeforeApply,
+  shownCharacters,
+  viewsForApply,
   type ClassifierCharacterView,
 } from './classifierCharacters'
 
@@ -46,21 +47,26 @@ describe('classifierCharacterView', () => {
   })
 })
 
-describe('viewsBeforeApply', () => {
-  it('looks a character up by name as the classifier writes it', () => {
-    const views = viewsBeforeApply([character('Tomas', { status: 'inactive' })])
-    expect(views('tomas')).toEqual(HIDDEN)
-  })
-
-  it('treats a name it does not know as created by this response', () => {
-    expect(viewsBeforeApply([])('Newcomer')).toEqual(SHOWN)
-  })
-
-  it('keeps the view the classifier had, not a status changed since', () => {
+describe('viewsForApply', () => {
+  it('uses what the prompt listed, not the status at apply time', () => {
     const tomas = character('Tomas', { status: 'inactive' })
-    const views = viewsBeforeApply([tomas])
+    const shown = shownCharacters([tomas])
     tomas.status = 'active'
+    expect(viewsForApply(shown, [tomas])('tomas')).toEqual(HIDDEN)
+  })
+
+  it('treats a character that exists but was not listed as not shown', () => {
+    expect(viewsForApply([], [character('Tomas')])('Tomas')).toEqual(HIDDEN)
+  })
+
+  it('treats a name nobody had as created by this response', () => {
+    expect(viewsForApply([], [])('Newcomer')).toEqual(SHOWN)
+  })
+
+  it('falls back to the cast before apply when the prompt list is missing', () => {
+    const views = viewsForApply(undefined, [character('Tomas', { status: 'inactive' })])
     expect(views('Tomas')).toEqual(HIDDEN)
+    expect(views('Newcomer')).toEqual(SHOWN)
   })
 })
 
@@ -114,12 +120,19 @@ describe('formatExistingCharacters', () => {
     expect(text).toBe('- Mira\n  status: active')
   })
 
-  it('indents a line break in a description, so it cannot read as a name', () => {
+  it('indents a line break in any value, so it cannot read as a name', () => {
     const text = formatExistingCharacters([
-      character('Mira', { description: 'A pilot.\n- Tomas\nHer brother.' }),
+      character('Mira', {
+        description: 'A pilot.\n- Tomas\nHer brother.',
+        traits: ['wry\n- Ada'],
+        visualDescriptors: { clothing: 'grey coat\n- Ada' },
+      }),
     ])
     expect(text).toBe(
-      '- Mira\n  status: active\n  description: A pilot.\n    - Tomas\n    Her brother.',
+      '- Mira\n  status: active\n' +
+        '  description: A pilot.\n    - Tomas\n    Her brother.\n' +
+        '  traits: wry\n    - Ada\n' +
+        '  appearance: Clothing: grey coat\n    - Ada',
     )
   })
 })
@@ -137,15 +150,35 @@ describe('planCharacterChanges', () => {
       { description: ' A ferry pilot. ', traits: ['wry', ' Wry', 'loyal'] },
       SHOWN,
     )
-    expect(plan).toEqual({
-      changes: { description: 'A ferry pilot.', traits: ['wry', 'loyal'] },
-      ignored: [],
+    expect(plan.changes).toMatchObject({
+      description: 'A ferry pilot.',
+      traits: ['wry', 'loyal'],
+    })
+    expect(plan.ignored).toEqual([])
+  })
+
+  it('drops the translation of every field it rewrites', () => {
+    const plan = planCharacterChanges(
+      mira,
+      {
+        relationship: 'ally',
+        description: 'A ferry pilot.',
+        traits: ['loyal'],
+        visualDescriptors: { hair: 'cropped' },
+      },
+      SHOWN,
+    )
+    expect(plan.changes).toMatchObject({
+      translatedRelationship: null,
+      translatedDescription: null,
+      translatedTraits: null,
+      translatedVisualDescriptors: null,
     })
   })
 
   it('fills a description that was empty', () => {
     const plan = planCharacterChanges(character('Tomas'), { description: 'A smuggler.' }, SHOWN)
-    expect(plan.changes).toEqual({ description: 'A smuggler.' })
+    expect(plan.changes).toEqual({ description: 'A smuggler.', translatedDescription: null })
   })
 
   it('ignores rewrites of what the classifier was not shown', () => {
@@ -169,7 +202,10 @@ describe('planCharacterChanges', () => {
       { description: 'Rewritten.', traits: ['brave'], visualDescriptors: { hair: 'short' } },
       classifierCharacterView(me),
     )
-    expect(plan.changes).toEqual({ visualDescriptors: { hair: 'short' } })
+    expect(plan.changes).toEqual({
+      visualDescriptors: { hair: 'short' },
+      translatedVisualDescriptors: null,
+    })
     expect(plan.ignored).toEqual([
       { field: 'description', reason: 'protagonist' },
       { field: 'traits', reason: 'protagonist' },
@@ -192,22 +228,26 @@ describe('planCharacterChanges', () => {
       { visualDescriptors: { hair: 'cropped', eyes: '' } },
       SHOWN,
     )
-    expect(plan.changes).toEqual({ visualDescriptors: { hair: 'cropped' } })
+    expect(plan.changes.visualDescriptors).toEqual({ hair: 'cropped' })
   })
 
   it('writes nothing for a rewrite equal to the current value', () => {
     const plan = planCharacterChanges(
       mira,
-      { description: 'A ferry pilot with a sore throat.', traits: ['wry', 'patient'] },
+      {
+        description: 'A ferry pilot with a sore throat.',
+        traits: ['Patient', 'wry'],
+        visualDescriptors: { hair: ' silver braid ', eyes: '' },
+      },
       SHOWN,
     )
     expect(plan).toEqual({ changes: {}, ignored: [] })
   })
 
-  it('applies status and relationship as before', () => {
+  it('applies status and relationship whatever the classifier was shown', () => {
     expect(
       planCharacterChanges(mira, { status: 'deceased', relationship: 'rival' }, HIDDEN).changes,
-    ).toEqual({ status: 'deceased', relationship: 'rival' })
+    ).toEqual({ status: 'deceased', relationship: 'rival', translatedRelationship: null })
   })
 
   it("keeps the protagonist's relationship, and gives nobody else 'self'", () => {
