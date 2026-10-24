@@ -93,6 +93,29 @@ export type DroppedPlacement = {
   cause: 'cycle' | 'retired' | 'not-unplaced' | 'chain-broken'
 }
 
+/** A rename that plans nothing: its name is blank. */
+export type DroppedRename = { ref: string; cause: 'blank-name' }
+
+/** A newThreads entry that creates nothing: its title is blank. */
+export type DroppedThread = { sourceTurn: string | null; cause: 'blank-title' }
+
+/** A thread these turns open and close, its closing turn before its opening: closed at the open. */
+export type EarlyClose = { title: string; resolvedAtTurn: string; sourceTurn: string | null }
+
+type CutLengths = { length: number; keptLength: number }
+
+/** A state text cut at a clause to its 500-character bound (piggyback.md → Trailing block format). */
+export type CutText = CutLengths &
+  (
+    | { kind: 'condition'; handle: string }
+    | { kind: 'visual'; handle: string; type: (typeof VISUAL_CATEGORIES)[number] }
+    | {
+        kind: 'standing'
+        /** A new faction's handle, or a listed faction's id. */
+        ref: string
+      }
+  )
+
 export type PlanResult = {
   planned: readonly PlannedWrite[]
   /** Temp handle -> allocated or matched entity id, for refs later in the same reply. */
@@ -107,6 +130,10 @@ export type PlanResult = {
   droppedPlacements: readonly DroppedPlacement[]
   droppedStandings: readonly DroppedStanding[]
   unknownIcons: readonly UnknownIcon[]
+  droppedRenames: readonly DroppedRename[]
+  droppedThreads: readonly DroppedThread[]
+  earlyCloses: readonly EarlyClose[]
+  cutTexts: readonly CutText[]
 }
 
 export type PlanDeps = {
@@ -215,10 +242,17 @@ function placementLoop(
 const MAX_VOICE = 2000
 const MAX_STATE_LIST = 50
 
-// A 500-character field, cut at a clause as a per-turn visual value is (piggyback.md).
-function stateText(text: string | undefined): string | undefined {
+// A 500-character field, cut at a clause as a per-turn visual value is (piggyback.md), the cut
+// reported as the per-turn writer warns one.
+function stateText(
+  text: string | undefined,
+  onCut: (lengths: CutLengths) => void,
+): string | undefined {
   const trimmed = nonBlank(text)
-  return trimmed === undefined ? undefined : boundStateText(trimmed).text
+  if (trimmed === undefined) return undefined
+  const bounded = boundStateText(trimmed)
+  if (bounded.cut) onCut({ length: trimmed.length, keptLength: bounded.text.length })
+  return bounded.text
 }
 
 function stateList(items: readonly string[] | undefined): string[] {
@@ -226,11 +260,13 @@ function stateList(items: readonly string[] | undefined): string[] {
 }
 
 /** classifier.md → What the classifier writes → First profiles: a new character's. */
-function characterProfile(candidate: NewCharacter): CharacterState {
+function characterProfile(candidate: NewCharacter, cutTexts: CutText[]): CharacterState {
   const visual: CharacterState['visual'] = {}
-  for (const key of VISUAL_CATEGORIES) {
-    const text = stateText(candidate.visual?.[key])
-    if (text !== undefined) visual[key] = text
+  for (const type of VISUAL_CATEGORIES) {
+    const text = stateText(candidate.visual?.[type], (cut) =>
+      cutTexts.push({ kind: 'visual', handle: candidate.handle, type, ...cut }),
+    )
+    if (text !== undefined) visual[type] = text
   }
   const voiceText = nonBlank(candidate.voice)
   const voice = voiceText === undefined ? undefined : clampEmbedded(voiceText, MAX_VOICE)
@@ -244,8 +280,10 @@ function characterProfile(candidate: NewCharacter): CharacterState {
 }
 
 /** A new faction's first profile; `{}`, the empty faction state, when the turns gave none. */
-function factionProfile(candidate: NewFaction): FactionState {
-  const standing = stateText(candidate.standing)
+function factionProfile(candidate: NewFaction, cutTexts: CutText[]): FactionState {
+  const standing = stateText(candidate.standing, (cut) =>
+    cutTexts.push({ kind: 'standing', ref: candidate.handle, ...cut }),
+  )
   const agenda = stateList(candidate.agenda)
   return {
     ...(standing === undefined ? {} : { standing }),
@@ -258,6 +296,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   const planned: PlannedWrite[] = []
   const handleMap = new Map<string, string>()
   const unresolvedRefs: string[] = []
+  const cutTexts: CutText[] = []
   let fellBackCount = 0
 
   const anchor = (turn: string | undefined): string => {
@@ -432,7 +471,9 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         const keywords = dedupeTerms(place.keywords)
         const timestamp = now()
         // classifier.md → What the classifier writes → First profiles: a place's condition.
-        const condition = stateText(place.condition)
+        const condition = stateText(place.condition, (cut) =>
+          cutTexts.push({ kind: 'condition', handle: place.handle, ...cut }),
+        )
         const state = withPlacement(
           condition === undefined
             ? { parent_location_id: null }
@@ -545,8 +586,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
               // The loop's kind picks the list, so the cast can't pair the wrong profile.
               state:
                 kind === 'character'
-                  ? characterProfile(candidate as NewCharacter)
-                  : factionProfile(candidate as NewFaction),
+                  ? characterProfile(candidate as NewCharacter, cutTexts)
+                  : factionProfile(candidate as NewFaction, cutTexts),
               nameCollisionFlag: decision.flag == null ? 0 : 1,
               nameCollisionPartnerId: decision.flag?.partnerId ?? null,
               nameCollisionReason: decision.flag?.reason ?? null,
@@ -588,7 +629,10 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   // holds it, one this reply creates or renames included. A keyword write's undo is the whole
   // prior list, so a row's renames, aliases and mention terms plan in turn order: reversing a turn
   // then never writes an earlier turn's terms away (classifier.md → Provenance attribution).
-  const planKeywordWrites = (): RenameClash[] => {
+  const planKeywordWrites = (): {
+    renameClashes: RenameClash[]
+    droppedRenames: DroppedRename[]
+  } => {
     const nameRows = new Map(
       entities.map((e) => [e.id, { kind: e.kind, name: e.name, createdAt: e.createdAt }]),
     )
@@ -623,6 +667,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       }
     }
     const renameClashes: RenameClash[] = []
+    const droppedRenames: DroppedRename[] = []
     const raisedFlags = new Set<string>()
     // Only the stored name rules a rename out: the handler may refuse an earlier planned one.
     const renamed = new Set<string>()
@@ -639,7 +684,11 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       const name = clampEmbedded(rename.name.trim(), MAX_EMBEDDED_NAME)
       // One name by World's namesake rule, as renameEntity's holder test: case and spacing aside.
       const sameName = (other: string): boolean => nameBasis(name, other) === 'same-name'
-      if (name === '' || (!renamed.has(row.id) && sameName(row.name))) return
+      if (name === '') {
+        droppedRenames.push({ ref: rename.ref, cause: 'blank-name' })
+        return
+      }
+      if (!renamed.has(row.id) && sameName(row.name)) return
       const holders = [...nameRows]
         .filter(
           ([id, r]) =>
@@ -728,7 +777,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       } else if ('rename' in fact) planRename(fact.rename)
       else planAlias(fact.alias)
     }
-    return renameClashes
+    return { renameClashes, droppedRenames }
   }
 
   // classifier.md → What the classifier writes → Where a place sits. Planned against this reply's
@@ -817,7 +866,9 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         droppedStandings.push({ faction: fact.ref, cause: 'retired-faction' })
         continue
       }
-      const standing = stateText(fact.standing)
+      const standing = stateText(fact.standing, (cut) =>
+        cutTexts.push({ kind: 'standing', ref: fact.ref, ...cut }),
+      )
       if (standing === undefined) continue
       const stored = stateOf(row, 'faction').standing
       const restated = stored !== undefined && oneLine(standing) === oneLine(stored)
@@ -838,7 +889,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   // Placements first, so a place's rename clash is judged where this reply leaves it; they read
   // no names or keywords, and `name-taken` ignores parents downstream.
   const droppedPlacements = planPlacements()
-  const renameClashes = planKeywordWrites()
+  const { renameClashes, droppedRenames } = planKeywordWrites()
   const droppedStandings = planStandings()
 
   // classifier.md → What the classifier writes → Happenings: an icon from the catalog, or none.
@@ -1118,22 +1169,30 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     },
     entryId,
   })
+  const droppedThreads: DroppedThread[] = []
+  const earlyCloses: EarlyClose[] = []
   // A status change can't precede its thread, so a closing turn before the open closes it there.
   const closingTurnOf = (
     thread: NewThreadReply,
+    title: string,
     openedAt: string,
   ): { entryId: string; proseEntryId: string } => {
-    if (thread.resolvedAtTurn !== undefined) {
-      const closed = window.resolveHandle(thread.resolvedAtTurn)
-      if (closed.fellBack) unresolvedRefs.push(thread.resolvedAtTurn)
+    const { resolvedAtTurn } = thread
+    if (resolvedAtTurn !== undefined) {
+      const closed = window.resolveHandle(resolvedAtTurn)
+      if (closed.fellBack) unresolvedRefs.push(resolvedAtTurn)
       else if (entryPosition(closed.entryId) >= entryPosition(openedAt))
         return { entryId: closed.entryId, proseEntryId: closed.entryId }
+      else earlyCloses.push({ title, resolvedAtTurn, sourceTurn: thread.sourceTurn ?? null })
     }
     return { entryId: openedAt, proseEntryId: proseSource(thread.sourceTurn) }
   }
   for (const thread of extraction.newThreads) {
     const title = nonBlank(thread.title)
-    if (title == null) continue
+    if (title == null) {
+      droppedThreads.push({ sourceTurn: thread.sourceTurn ?? null, cause: 'blank-title' })
+      continue
+    }
     const entryId = anchor(thread.sourceTurn)
     // Opened and closed here: the create and the close are two writes, each kept by its own turn,
     // so reversing the closing turn alone reopens the thread.
@@ -1168,7 +1227,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       entryId,
     })
     if (closedAs !== null) {
-      const closing = closingTurnOf(thread, entryId)
+      const closing = closingTurnOf(thread, title, entryId)
       planned.push(threadStatusWrite(id, closedAs, closing.entryId, closing.proseEntryId))
     }
   }
@@ -1208,5 +1267,9 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     droppedPlacements,
     droppedStandings,
     unknownIcons,
+    droppedRenames,
+    droppedThreads,
+    earlyCloses,
+    cutTexts,
   }
 }

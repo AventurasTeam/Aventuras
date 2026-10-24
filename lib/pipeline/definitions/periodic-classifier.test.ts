@@ -3178,6 +3178,78 @@ describe('periodicClassifierPhase — the writer map', () => {
     expect(logged('classifier.icon_unknown')).toEqual([['warn', { title: 'A', icon: 'rocket' }]])
     expect(logged('classifier.unseen_ref')).toEqual([['warn', { list: 'standings', ref: 'f9' }]])
   })
+
+  it('logs a blank rename and thread, a moved close and each text it cuts, under their keys', async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    const FACT_WATCH = 'fact_77777777-7777-7777-7777-777777777777'
+    const watch = { ...character(FACT_WATCH, 'The Watch'), kind: 'faction' } as Entity
+    const long = `${'a'.repeat(300)}, ${'b'.repeat(300)}`
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction({
+        newCharacters: [
+          {
+            handle: 'new:ilsa',
+            name: 'Ilsa',
+            description: 'A ferrywoman.',
+            keywords: [],
+            sourceTurn: 't1',
+            visual: { face: long },
+          },
+        ],
+        renames: [{ ref: 'c1', name: ' ', sourceTurn: 't1' }],
+        newThreads: [
+          { title: ' ', description: 'x', status: 'active', sourceTurn: 't1' },
+          {
+            title: 'Cross the river',
+            description: 'x',
+            status: 'resolved',
+            sourceTurn: 't2',
+            resolvedAtTurn: 't1',
+          },
+        ],
+        standings: [{ ref: 'f1', standing: long, sourceTurn: 't1' }],
+        newPlaces: [
+          {
+            handle: 'new:ash',
+            name: 'Ash',
+            description: 'A hamlet.',
+            keywords: [],
+            sourceTurn: 't1',
+            parent: 'top-level',
+            condition: long,
+          },
+        ],
+      }),
+    } as never)
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      entities: [kael, watch],
+      mentionedPlaces: true,
+    })
+    threadsStore.hydrate('b1', [])
+    await drain(h.ctx)
+    expect(logged('classifier.rename_dropped')).toEqual([
+      ['warn', { ref: CHAR_KAEL, cause: 'blank-name' }],
+    ])
+    expect(logged('classifier.create_dropped')).toEqual([
+      ['warn', { kind: 'thread', sourceTurn: 't1', cause: 'blank-title' }],
+    ])
+    expect(logged('classifier.thread_close_moved')).toEqual([
+      ['warn', { title: 'Cross the river', resolvedAtTurn: 't1', sourceTurn: 't2' }],
+    ])
+    const cut = { length: 602, keptLength: 300 }
+    expect(logged('classifier.visual_truncated')).toEqual([
+      ['warn', { handle: 'new:ilsa', type: 'face', ...cut }],
+    ])
+    expect(logged('classifier.standing_truncated')).toEqual([['warn', { ref: FACT_WATCH, ...cut }]])
+    expect(logged('classifier.condition_truncated')).toEqual([
+      ['warn', { handle: 'new:ash', ...cut }],
+    ])
+  })
 })
 
 // generation-pipeline.md → Two retry tiers. The real-provider smoke reads the counts off

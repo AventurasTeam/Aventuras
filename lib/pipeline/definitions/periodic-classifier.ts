@@ -22,6 +22,7 @@ import {
   RECONCILED_KINDS,
   reconcileNewEntity,
   substituteClassifierIds,
+  type PlanResult,
   type ReconciledKind,
   type ReconcileDecision,
 } from '@/lib/classifier'
@@ -137,6 +138,13 @@ function passFailure(
       }
   }
 }
+
+// The per-turn writer's keys for a cut condition and visual value (per-turn-creates.ts, apply.ts).
+const CUT_KEYS = {
+  condition: 'classifier.condition_truncated',
+  visual: 'classifier.visual_truncated',
+  standing: 'classifier.standing_truncated',
+} as const satisfies Record<PlanResult['cutTexts'][number]['kind'], string>
 
 type StatusCtx = Pick<PhaseContext, 'db' | 'branchId'>
 
@@ -381,6 +389,11 @@ export async function* periodicClassifierPhase(
   for (const unseen of plan.unseenRefs) ctx.log.warn('classifier.unseen_ref', unseen)
   for (const drop of plan.droppedPlacements) ctx.log.warn('classifier.placement_dropped', drop)
   for (const icon of plan.unknownIcons) ctx.log.warn('classifier.icon_unknown', icon)
+  for (const drop of plan.droppedRenames) ctx.log.warn('classifier.rename_dropped', drop)
+  for (const drop of plan.droppedThreads)
+    ctx.log.warn('classifier.create_dropped', { kind: 'thread', ...drop })
+  for (const moved of plan.earlyCloses) ctx.log.warn('classifier.thread_close_moved', moved)
+  for (const { kind, ...cut } of plan.cutTexts) ctx.log.warn(CUT_KEYS[kind], cut)
 
   // classifier.md → Pipeline framing: a pass cancelled during its writes reverses its own group.
   for (const write of plan.planned) {

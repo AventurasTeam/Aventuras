@@ -1440,8 +1440,8 @@ describe('mentioned places', () => {
 
   // classifier.md → What the classifier writes → First profiles. piggyback.md → Trailing block
   // format: a long value is cut back to a clause boundary.
-  it("cuts a new place's long condition at a clause", () => {
-    const { planned } = buildClassifierActions(
+  it("cuts a new place's long condition at a clause, and reports the cut", () => {
+    const { planned, cutTexts } = buildClassifierActions(
       placesReply([
         newPlace('new:a', 'Ash', {
           parent: 'top-level',
@@ -1454,6 +1454,7 @@ describe('mentioned places', () => {
       parent_location_id: null,
       condition: 'a'.repeat(300),
     })
+    expect(cutTexts).toEqual([{ kind: 'condition', handle: 'new:a', length: 602, keptLength: 300 }])
   })
 
   it("writes a new place's condition into its state, trimmed and bounded", () => {
@@ -2777,8 +2778,8 @@ describe('first profiles', () => {
     expect(stateOf(planned)).toEqual(EMPTY_CHARACTER)
   })
 
-  it('cuts a long visual value at a clause', () => {
-    const { planned } = buildClassifierActions(
+  it('cuts a long visual value at a clause, and reports the cut', () => {
+    const { planned, cutTexts } = buildClassifierActions(
       reply({
         newCharacters: [
           {
@@ -2794,6 +2795,9 @@ describe('first profiles', () => {
       deps({ decisions: decided('new:ilsa') }),
     )
     expect((stateOf(planned) as { visual: { face: string } }).visual.face).toBe('f'.repeat(300))
+    expect(cutTexts).toEqual([
+      { kind: 'visual', handle: 'new:ilsa', type: 'face', length: 602, keptLength: 300 },
+    ])
   })
 
   it("clamps a profile to the state schema's bounds, never splitting a surrogate pair", () => {
@@ -2845,11 +2849,15 @@ describe('first profiles', () => {
       standing: 's'.repeat(500),
       agenda: ['arm the docks'],
     })
+    expect(withProfile.cutTexts).toEqual([
+      { kind: 'standing', ref: 'new:circle', length: 510, keptLength: 500 },
+    ])
     const bare = buildClassifierActions(
       reply({ newFactions: [circle] }),
       deps({ factionDecisions: decided('new:circle') }),
     )
     expect(stateOf(bare.planned)).toEqual({})
+    expect(bare.cutTexts).toEqual([])
   })
 
   it('writes no profile into a row the reconciliation absorbed', () => {
@@ -2940,6 +2948,15 @@ describe('renames', () => {
       deps([STRANGER]),
     )
     expect(planned).toEqual([])
+  })
+
+  it('reports a rename whose name is blank', () => {
+    const { planned, droppedRenames } = buildClassifierActions(
+      reply({ renames: [{ ref: 'char_stranger', name: ' \n ', sourceTurn: 't1' }] }),
+      deps([STRANGER]),
+    )
+    expect(planned).toEqual([])
+    expect(droppedRenames).toEqual([{ ref: 'char_stranger', cause: 'blank-name' }])
   })
 
   // renameEntity compares names under keyword-term normalization: a case-only change is no reveal.
@@ -3771,8 +3788,8 @@ describe('standings', () => {
     ])
   })
 
-  it('cuts a long standing at a clause, as the handler stores it', () => {
-    const { planned } = buildClassifierActions(
+  it('cuts a long standing at a clause, as the handler stores it, and reports the cut', () => {
+    const { planned, cutTexts } = buildClassifierActions(
       reply({
         standings: [
           {
@@ -3785,6 +3802,9 @@ describe('standings', () => {
       deps([faction('fact_watch')]),
     )
     expect(payloadOf<{ standing: string }>(planned[0]).standing).toBe('a'.repeat(300))
+    expect(cutTexts).toEqual([
+      { kind: 'standing', ref: 'fact_watch', length: 602, keptLength: 300 },
+    ])
   })
 
   // The handler compares what it would store: a long restatement of a cut standing writes nothing.
@@ -4097,13 +4117,14 @@ describe('plot writes', () => {
     it.each([['resolved'], ['failed']])(
       'opens it active at its turn and moves it to %s at the closing turn',
       (status) => {
-        const { planned, fellBackCount } = openAndClose({
+        const { planned, fellBackCount, earlyCloses } = openAndClose({
           status,
           sourceTurn: 't1',
           resolvedAtTurn: 't3',
         })
         expect(writes(planned)).toEqual([opened('e1'), closed(status, 'e3')])
         expect(fellBackCount).toBe(0)
+        expect(earlyCloses).toEqual([])
       },
     )
 
@@ -4122,15 +4143,21 @@ describe('plot writes', () => {
       expect(fellBackCount).toBe(0)
     })
 
-    it('never closes it before it opens', () => {
-      const { planned } = openAndClose({ sourceTurn: 't3', resolvedAtTurn: 't1' })
+    it('never closes it before it opens, and reports the closing turn it moved', () => {
+      const { planned, earlyCloses } = openAndClose({ sourceTurn: 't3', resolvedAtTurn: 't1' })
       expect(writes(planned)).toEqual([opened('e3'), closed('resolved', 'e3')])
+      expect(earlyCloses).toEqual([
+        { title: 'Cross the river', resolvedAtTurn: 't1', sourceTurn: 't3' },
+      ])
     })
 
     // An unattributed thread opens at the window head; an earlier closing turn can't precede it.
     it('closes an unattributed thread at the window head it opened on', () => {
-      const { planned } = openAndClose({ resolvedAtTurn: 't2' })
+      const { planned, earlyCloses } = openAndClose({ resolvedAtTurn: 't2' })
       expect(writes(planned)).toEqual([opened('e3'), closed('resolved', 'e3', 'e1')])
+      expect(earlyCloses).toEqual([
+        { title: 'Cross the river', resolvedAtTurn: 't2', sourceTurn: null },
+      ])
     })
 
     it.each([['active'], ['pending']])('ignores a closing turn on a %s thread', (status) => {
@@ -4203,6 +4230,17 @@ describe('plot writes', () => {
       ['thr_a', 'active', undefined, 'e3'],
       ['thr_b', 'resolved', 'e3', 'e3'],
     ])
+  })
+
+  it('reports a new thread whose title is blank, creating nothing for it', () => {
+    const { planned, droppedThreads } = buildClassifierActions(
+      reply({
+        newThreads: [{ title: ' \n', description: 'x', status: 'active', sourceTurn: 't2' }],
+      }),
+      deps(),
+    )
+    expect(planned).toEqual([])
+    expect(droppedThreads).toEqual([{ sourceTurn: 't2', cause: 'blank-title' }])
   })
 
   it("trims a new thread's category, and writes a blank one as none", () => {
