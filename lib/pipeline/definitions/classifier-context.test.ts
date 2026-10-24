@@ -627,3 +627,20 @@ describe('buildClassifierContext — threads', () => {
     expect(idMap.getUuidFor('th2')).toBe(HEIR)
   })
 })
+
+describe('buildClassifierContext — happenings', () => {
+  it('lists each happening by placeholder and title, the title on one line', () => {
+    const context = buildClassifierContext({
+      window: { turns: [] } as never,
+      entities: [],
+      happenings: [
+        { id: 'hap_11111111-1111-1111-1111-111111111111', title: 'The ford\n  ambush ' } as never,
+      ],
+      relationships: [],
+      threads: [],
+      mentionedPlaces: false,
+      idMap: new IdBiMap(),
+    })
+    expect(context.happenings).toEqual([{ id: 'hp1', title: 'The ford ambush' }])
+  })
+})
