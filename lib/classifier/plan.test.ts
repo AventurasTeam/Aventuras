@@ -4268,6 +4268,28 @@ describe('plot writes', () => {
     expect(unseenRefs).toEqual([{ list: 'knownAwareness', ref: 'hp9' }])
   })
 
+  // Create-only, so the earliest learning turn wins: reversing a later one keeps the awareness.
+  it('plans a pair the reply repeats at its earliest learning turn, whatever the reply order', () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        knownAwareness: [
+          { happening: 'hap_fire', ref: 'char_a', source: 'y', severity: 0.5, learnedAtTurn: 't3' },
+          { happening: 'hap_fire', ref: 'char_a', source: 'x', severity: 0.5, learnedAtTurn: 't1' },
+        ],
+      }),
+      deps({ entities: [character('char_a')], happenings: [{ id: 'hap_fire' }] }),
+    )
+    expect(
+      planned.map((p) => {
+        const { learnedAtEntryId, source } = payloadOf<{
+          learnedAtEntryId: string
+          source: string
+        }>(p)
+        return [learnedAtEntryId, source, p.entryId]
+      }),
+    ).toEqual([['e1', 'x', 'e1']])
+  })
+
   // The survival anchor falls back to the newest turn; the prose dates to the oldest.
   it('dates an unattributed learning by the oldest window turn, anchoring it on the head', () => {
     const { planned } = buildClassifierActions(

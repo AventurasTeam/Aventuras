@@ -949,7 +949,12 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   const pairKey = (characterId: string, happeningId: string): string =>
     `${characterId} ${happeningId}`
   const storedPairs = new Set(deps.awareness.map((a) => pairKey(a.characterId, a.happeningId)))
-  for (const known of extraction.knownAwareness) {
+  // In learning-turn order, so a pair the reply repeats lands at its earliest turn.
+  const learnings = extraction.knownAwareness.map((known) => ({
+    sourceTurn: known.learnedAtTurn,
+    known,
+  }))
+  for (const { known } of inTurnOrder(learnings)) {
     // An unknown placeholder passes substituteClassifierIds untouched, so only this check sees it.
     if (!listedHappenings.has(known.happening)) {
       unseenRefs.push({ list: 'knownAwareness', ref: known.happening })
