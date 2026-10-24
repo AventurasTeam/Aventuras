@@ -189,7 +189,7 @@ function planLocations(args: {
   // Where this turn's placements put a reused place, so a later walk and match see it there.
   const placedHere = new Map<string, PlacedPlacement>()
   // A row whose placement was dropped stays unplaced: the kept chain puts every later create below it.
-  const placementDrops = new Map<string, PlacementDrop>()
+  const reuseDrops = new Map<string, PlacementDrop>()
 
   // normalizeCreates already dropped a second declaration of a handle, so none is a duplicate.
   const { order } = settlingOrder(
@@ -261,11 +261,11 @@ function planLocations(args: {
           })
         } else {
           parentDropped = true
-          placementDrops.set(id, drop)
+          reuseDrops.set(id, drop)
           logParentDropped(args.log, emission.handle, drop)
         }
       } else {
-        const drop = placementDrops.get(id)
+        const drop = reuseDrops.get(id)
         if (drop !== undefined) {
           parentDropped = true
           logParentDropped(args.log, emission.handle, drop)

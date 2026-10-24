@@ -973,9 +973,13 @@ slice-planning gate forces its resolution before that slice is planned.
     fixes it.
   - **A new place waiting for a later turn's parent.** New places settle
     in turn order, but each waits for its own parent, so a turn-1 place
-    under a new place of turn 3 settles after it, and matches and is
-    placed against the placements of turns up to its parent's. Option A
-    fixes it.
+    under a new place of turn 3 settles after it. It then matches
+    against the placements of turns up to its parent's and counts later
+    turns' new places as its earlier creates: a turn-1 Cellar under a
+    turn-3 Loft takes over a turn-2 unplaced Cellar, a turn-1 write on a
+    row turn 2 creates, under a parent turn 3 creates. Per-row planning
+    alone doesn't give a turn-1 place a turn-3 parent; the likely fix
+    creates it unplaced at its own turn and places it at its parent's.
   - **A twin across a placement.** Two new places with one name and
     declared parent map to the first before any other match, even when
     a placement of a turn between them moved the first one's row: a

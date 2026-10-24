@@ -502,7 +502,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const view = unhiddenLocationView(entities)
     const placed: SettledNewPlace[] = []
     // By row and parent: the pass keeps no one chain, so another parent's placement walks anew.
-    const placementDrops = new Map<string, PlacementDrop>()
+    const reuseDrops = new Map<string, PlacementDrop>()
     const dropKey = (id: string, parentId: string): string => `${id} ${parentId}`
 
     const declared: NewPlace[] = []
@@ -586,12 +586,12 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
               entryId: at(),
             })
           } else {
-            placementDrops.set(dropKey(id, drop.parent), drop)
+            reuseDrops.set(dropKey(id, drop.parent), drop)
             parentDrops.push({ handle: place.handle, ...drop })
           }
         } else if (candidate.kind === 'under') {
           // A twin of a reuse whose placement was dropped maps to the same row, left unplaced too.
-          const drop = placementDrops.get(dropKey(id, candidate.parentId))
+          const drop = reuseDrops.get(dropKey(id, candidate.parentId))
           if (drop !== undefined) parentDrops.push({ handle: place.handle, ...drop })
         }
       } else {

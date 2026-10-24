@@ -2067,23 +2067,67 @@ describe('mentioned places', () => {
       })
 
       // An unattributed new place counts at the newest turn, as an unattributed placement does.
-      it('settles an unattributed new place at the newest turn', () => {
+      it('settles an unattributed new place at the newest turn, its ties in list order', () => {
         const { planned } = buildClassifierActions(
           placesReply([
             newPlace('new:a', 'Docks', { sourceTurn: undefined }),
-            newPlace('new:b', 'Old Docks', { sourceTurn: 't1' }),
+            newPlace('new:b', 'Old Docks', { sourceTurn: 't2' }),
+            newPlace('new:c', 'New Docks', { sourceTurn: 't3' }),
           ]),
           deps([TOWN]),
         )
-        expect(
-          createdPlaces(planned).map((row) => [
-            row.name,
-            row.nameCollisionPartnerId,
-            row.nameCollisionReason,
+        expect(createdPlaces(planned).map((row) => row.name)).toEqual([
+          'Old Docks',
+          'Docks',
+          'New Docks',
+        ])
+      })
+
+      // A takeover follows turns too: the unplaced create of turn 1 is taken over at turn 3.
+      it("takes over an earlier turn's unplaced create listed after it, at the later turn", () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply([
+            newPlace('new:b', 'the Vault', { parent: 'loc_keep', sourceTurn: 't3' }),
+            newPlace('new:a', 'the Vault', { sourceTurn: 't1' }),
           ]),
-        ).toEqual([
-          ['Old Docks', null, null],
-          ['Docks', 'loc_new1', 'unplaced'],
+          deps([KEEP]),
+        )
+        expect(createdPlaces(planned)).toEqual([
+          expect.objectContaining({
+            id: 'loc_new1',
+            state: { parent_location_id: null, unplaced: true },
+          }),
+        ])
+        expect(handleMap.get('new:b')).toBe('loc_new1')
+        expect(placedRows(planned)).toEqual([
+          ['loc_new1', { kind: 'under', parentId: 'loc_keep' }, 'e3'],
+        ])
+      })
+
+      // A parent that never resolves holds nothing back: the place settles at its own turn.
+      it('settles a new place whose parent never resolves at its own turn', () => {
+        const { planned, handleMap, parentDrops } = buildClassifierActions(
+          placesReply([
+            newPlace('new:a', 'the Vault', {
+              parent: 'loc_nope',
+              sourceTurn: 't1',
+              keywords: ['the strongroom'],
+            }),
+            newPlace('new:b', 'the Vault', { parent: 'loc_keep', sourceTurn: 't3' }),
+          ]),
+          deps([KEEP]),
+        )
+        expect(parentDrops).toEqual([{ handle: 'new:a', parent: 'loc_nope', cause: 'unresolved' }])
+        expect(createdPlaces(planned)).toEqual([
+          expect.objectContaining({
+            id: 'loc_new1',
+            keywords: ['the strongroom'],
+            state: { parent_location_id: null, unplaced: true },
+          }),
+        ])
+        expect(handleMap.get('new:b')).toBe('loc_new1')
+        expect(placedRows(planned)).toEqual([
+          ['loc_new1', { kind: 'under', parentId: 'loc_keep' }, 'e3'],
         ])
       })
 

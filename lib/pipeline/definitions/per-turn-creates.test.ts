@@ -585,7 +585,7 @@ describe('planTurnCreates — parents', () => {
     ])
   })
 
-  it('hangs a place under a cycle member once the cycle is left unplaced', async () => {
+  it('hangs a place under a cycle member, each member settling unplaced in its own place', async () => {
     const plan = await runPlanner({
       newLocations: [
         { handle: 'new:cellar', name: 'Cellar', description: 'damp', parent: 'new:upper' },
@@ -596,8 +596,8 @@ describe('planTurnCreates — parents', () => {
     })
     expect(createdEntries(creates(plan)).map((e) => [e.id, e.name, e.state])).toEqual([
       ['loc_new_1', 'Upper Hall', UNPLACED],
-      ['loc_new_2', 'Lower Hall', UNPLACED],
-      ['loc_new_3', 'Cellar', { parent_location_id: 'loc_new_1' }],
+      ['loc_new_2', 'Cellar', { parent_location_id: 'loc_new_1' }],
+      ['loc_new_3', 'Lower Hall', UNPLACED],
     ])
     expect(plan.report.newLocations.map(dropFlag)).toEqual([undefined, true, true])
   })

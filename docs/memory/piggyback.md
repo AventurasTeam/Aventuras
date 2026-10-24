@@ -346,7 +346,8 @@ it
 the story walking into it through the turn is no reason to drop it.
 Parents resolve top-down, so the child of a new location hangs under
 whatever row that location resolved to; otherwise the creates settle in
-the block's order, each waiting only for its own parent.
+the block's order, each waiting only for its own parent, so one whose
+parent never resolves settles unplaced in its own place.
 
 **Writes.** The creates follow the reply row and precede every other
 write that names them. The narrative fold writes them right after the
