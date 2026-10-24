@@ -25,6 +25,7 @@ import { database } from '#lib/services/database.ts'
 import { ContextBuilder } from '#lib/services/context/index.ts'
 import { settings } from '#lib/stores/settings.svelte.ts'
 import { errMessage } from '#lib/utils/error.ts'
+import { normalizeImageDataUrl } from '#lib/utils/image.ts'
 import { descriptorsToString } from '#lib/utils/visualDescriptors.ts'
 
 /**
@@ -146,7 +147,7 @@ export function createImageTools(context: ImageToolContext) {
   const { characters, generatedImages, generatedPortraitIds, onPendingChange, generateId } = context
 
   const registerImage = (base64: string, imageId = crypto.randomUUID()): string => {
-    generatedImages.set(imageId, `data:image/png;base64,${base64}`)
+    generatedImages.set(imageId, normalizeImageDataUrl(base64)!)
     return imageId
   }
 

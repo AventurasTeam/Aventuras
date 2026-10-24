@@ -44,7 +44,7 @@
   import { SvelteSet } from 'svelte/reactivity'
   import IconRow from '#lib/components/ui/icon-row.svelte'
   import ImageResolutionSelector from '#lib/components/settings/ImageResolutionSelector.svelte'
-  import { defaultImageSpec, type ImageSpec } from '#lib/utils/image.ts'
+  import { defaultImageSpec, normalizeImageDataUrl, type ImageSpec } from '#lib/utils/image.ts'
 
   const imageStyles = [
     { value: 'image-style-soft-anime', label: 'Soft Anime' },
@@ -1122,7 +1122,7 @@
                 <Label>Result Image</Label>
                 <div class="overflow-hidden rounded-lg border bg-black/5">
                   <img
-                    src="data:image/png;base64,{testImageResult}"
+                    src={normalizeImageDataUrl(testImageResult) ?? ''}
                     alt="Generated test"
                     class="mx-auto block h-auto max-w-full"
                   />

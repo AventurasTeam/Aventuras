@@ -436,7 +436,7 @@
         characterName: character.name,
       })
 
-      editPortrait = `data:image/png;base64,${base64}`
+      editPortrait = normalizeImageDataUrl(base64)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to generate portrait'
       log('Portrait generation failed', {

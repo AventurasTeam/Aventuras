@@ -1,4 +1,5 @@
 import { settings } from '#lib/stores/settings.svelte.ts'
+import { normalizeImageDataUrl } from '#lib/utils/image.ts'
 import {
   missingCredential,
   portraitCredentialError,
@@ -104,7 +105,7 @@ export class ImageStore {
         protagonistName: protagonist.name,
       })
 
-      this.protagonistPortrait = `data:image/png;base64,${base64}`
+      this.protagonistPortrait = normalizeImageDataUrl(base64)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to generate portrait'
       log('Protagonist portrait generation failed', {
@@ -166,7 +167,7 @@ export class ImageStore {
         characterName: charName,
       })
 
-      this.supportingCharacterPortraits[charName] = `data:image/png;base64,${base64}`
+      this.supportingCharacterPortraits[charName] = normalizeImageDataUrl(base64)!
       // Force update for reactive map
       this.supportingCharacterPortraits = { ...this.supportingCharacterPortraits }
     } catch (error) {

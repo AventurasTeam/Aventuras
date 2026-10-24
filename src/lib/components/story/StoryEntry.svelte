@@ -16,6 +16,7 @@
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { cn } from '#lib/utils/cn.ts'
+  import { normalizeImageDataUrl } from '#lib/utils/image.ts'
   import { settings } from '#lib/stores/settings.svelte.ts'
   import {
     User,
@@ -975,7 +976,7 @@
       if (isRegenerating) {
         innerHtml += `
           <div class="inline-image-content-wrapper">
-            <img src="data:image/png;base64,${expandedImage.imageData}" alt="${escapeHtml(expandedImage.sourceText)}" class="inline-image-content regenerating-image" />
+            <img src="${normalizeImageDataUrl(expandedImage.imageData)}" alt="${escapeHtml(expandedImage.sourceText)}" class="inline-image-content regenerating-image" />
             <div class="regenerating-overlay">
               <div class="regenerating-content">
                 <svg class="regenerating-spinner" viewBox="0 0 50 50">
@@ -989,7 +990,7 @@
         // Clickable image - opens modal
         innerHtml += `
           <div class="inline-image-content-wrapper clickable-image" data-image-id="${expandedImage.id}">
-            <img src="data:image/png;base64,${expandedImage.imageData}" alt="${escapeHtml(expandedImage.sourceText)}" class="inline-image-content" />
+            <img src="${normalizeImageDataUrl(expandedImage.imageData)}" alt="${escapeHtml(expandedImage.sourceText)}" class="inline-image-content" />
           </div>`
       }
     } else if (expandedImage.status === 'generating') {
@@ -2048,7 +2049,7 @@
                     : 'border-border/50 hover:border-primary/50'}"
                 >
                   <img
-                    src="data:image/png;base64,{img.imageData}"
+                    src={normalizeImageDataUrl(img.imageData) ?? ''}
                     alt="Unplaced illustration"
                     class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
                   />
@@ -2117,7 +2118,7 @@
     <div class="bg-surface-950 relative flex items-center justify-center p-4">
       {#if viewingImage}
         <img
-          src="data:image/png;base64,{viewingImage.imageData}"
+          src={normalizeImageDataUrl(viewingImage.imageData) ?? ''}
           alt={viewingImage.prompt}
           class="max-h-[40vh] max-w-full rounded object-contain sm:max-h-[50vh]"
         />
