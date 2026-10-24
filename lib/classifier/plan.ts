@@ -825,8 +825,10 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     return droppedStandings
   }
 
-  const renameClashes = planKeywordWrites()
+  // Placements first, so a place's rename clash is judged where this reply leaves it; they read
+  // no names or keywords, and `name-taken` ignores parents downstream.
   const droppedPlacements = planPlacements()
+  const renameClashes = planKeywordWrites()
   const droppedStandings = planStandings()
 
   // classifier.md → What the classifier writes → Happenings: an icon from the catalog, or none.

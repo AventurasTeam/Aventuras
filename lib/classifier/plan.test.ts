@@ -3071,6 +3071,21 @@ describe('renames', () => {
       ])
     })
 
+    // A reply that moves the place too is judged where the reply leaves it.
+    it.each([
+      ['clashes once moved beside', 'loc_south', 1],
+      ['renames freely once moved away from', 'loc_north', 0],
+    ])('%s a namesake under %s', (_label, holderParent, clashes) => {
+      const { renameClashes } = buildClassifierActions(
+        reply({
+          placements: [{ ref: 'loc_mill', parent: 'loc_south', sourceTurn: 't1' }],
+          renames: [{ ref: 'loc_mill', name: 'Varn', sourceTurn: 't3' }],
+        }),
+        deps([...PARENTS, MILL, place('loc_varn', 'Varn', under(holderParent), 2)]),
+      )
+      expect(renameClashes).toHaveLength(clashes)
+    })
+
     it("takes the oldest holder the rule pairs, past an older one it doesn't", () => {
       const { renameClashes } = buildClassifierActions(
         renameMill,
