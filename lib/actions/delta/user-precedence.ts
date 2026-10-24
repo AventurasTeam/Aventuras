@@ -1,9 +1,9 @@
 import { and, asc, desc, eq, gt, inArray, or, sql } from 'drizzle-orm'
 
 import { chunked, deltas, type Delta, type Entity, type LocationState, type Thread } from '@/lib/db'
+import { isJsonObject } from '@/lib/json-object'
 
 import { isUserOriginatedSource, type DbCtx } from '../types'
-import { isPlainObject } from './delta-encoding'
 import type { LockedTable } from './row-locks'
 
 /** Noop reason for a classifier write a newer user edit of the same field outranks. */
@@ -153,7 +153,7 @@ function carriesPath(delta: Delta, column: string, path: readonly string[]): boo
   if (!carriesColumn(delta, column)) return false
   let node: unknown = delta.undoPayload?.[column]
   for (const key of path) {
-    if (!isPlainObject(node)) return true
+    if (!isJsonObject(node)) return true
     if (!Object.hasOwn(node, key)) return false
     node = node[key]
   }

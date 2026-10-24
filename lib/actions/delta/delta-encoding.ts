@@ -1,5 +1,7 @@
 import type { ZodType } from 'zod'
 
+import { isJsonObject } from '@/lib/json-object'
+
 // Generic delta encoder. Walks a Zod schema in parallel with values to encode
 // (diff) and decode (apply) op=update undo payloads per
 // docs/data-model.md → Entry mutability & rollback. The schema is required at
@@ -117,10 +119,6 @@ function encodeField(schema: ZodType, cur: unknown, nxt: unknown): unknown {
   return deepEqual(cur, nxt) ? NOCHANGE : cur
 }
 
-export function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 /**
  * `partial` without the paths `blocked` reports, walked by the schema: an array, a leaf, a null or
  * an empty object or record is one path, so an empty restore is kept. A container the pruning
@@ -142,7 +140,7 @@ function pruneNode(
 ): unknown {
   const node = schema && classify(schema)
   const container = node && (node.kind === 'object' || node.kind === 'record')
-  if (!container || !isPlainObject(value) || Object.keys(value).length === 0)
+  if (!container || !isJsonObject(value) || Object.keys(value).length === 0)
     return blocked(path) ? undefined : value
   const kept: Record<string, unknown> = {}
   for (const [key, child] of Object.entries(value)) {

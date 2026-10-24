@@ -1,5 +1,6 @@
 import type { Delta } from '@/lib/db'
 import { t } from '@/lib/i18n'
+import { oneLine } from '@/lib/text'
 
 import {
   HISTORY_LINK_TABLES,
@@ -267,10 +268,8 @@ export type RemovalSummaryTerm =
   | { kind: 'unknown' }
   | { kind: 'named'; name: string }
 
-const collapseSpaces = (text: string) => text.trim().replace(/\s+/g, ' ')
-
 /** `text` as a search compares it: trimmed, lower-cased, each whitespace run one space. */
-export const searchText = (text: string) => collapseSpaces(text).toLocaleLowerCase()
+export const searchText = (text: string) => oneLine(text).toLocaleLowerCase()
 
 /**
  * Whether `needle`, as `searchText` gives it, begins at a word of `text` and may run across
@@ -287,7 +286,7 @@ function typedName(lead: string, tail: string, term: string): string | null {
   const partials = Array.from({ length: tail.length }, (_, i) => escapeRegExp(tail.slice(0, i + 1)))
   const started = tail === '' ? '' : `\\s+(?:${partials.reverse().join('|')})`
   const after = lead === '' || started === '' ? started : `(?:${started})?`
-  return new RegExp(`^${before}(.+?)${after}$`, 'iu').exec(collapseSpaces(term))?.[1] ?? null
+  return new RegExp(`^${before}(.+?)${after}$`, 'iu').exec(oneLine(term))?.[1] ?? null
 }
 
 /**

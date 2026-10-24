@@ -144,7 +144,7 @@ for the placement rule.
     lines print a character's name, a view's kind and a happening's
     title as stored, so a newline in one starts a line the model may
     read as another fact (`classifier-context.ts`); Known entities and
-    Places already collapse theirs with `flat` / `oneLine` (raised
+    Places already collapse theirs with `oneLine` (raised
     2026-10-18 by the classifier factions slice review);
   - the fallback classifier's roster leaves a blank line between its
     active and staged entries;

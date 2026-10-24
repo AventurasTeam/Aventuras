@@ -2,7 +2,7 @@ import type { ClassifierWindow } from '@/lib/classifier'
 import type { CharacterRelationship, Entity, Happening, Thread } from '@/lib/db'
 import { substituteIds, type IdBiMap } from '@/lib/ids'
 import { normalizeTerm } from '@/lib/keyword-terms'
-import { blankToNull } from '@/lib/text'
+import { blankToNull, oneLine } from '@/lib/text'
 import { characterFactionId, placeTree, stateOf, type PlaceTreeRow } from '@/lib/world'
 
 type RelationshipFact = {
@@ -14,15 +14,14 @@ type RelationshipFact = {
 }
 
 // One line per entity and place: stored text spanning several would break the list and the tree.
-const flat = (text: string): string => text.replace(/\s+/g, ' ').trim()
-const oneLine = (text: string | null): string | null =>
-  text == null ? null : blankToNull(flat(text))
+const lineOrNull = (text: string | null): string | null =>
+  text == null ? null : blankToNull(oneLine(text))
 
 // The line shows the name, so "also called" leaves out a stored keyword equal to it; the row's
 // keywords stay as stored.
 const aliasesOf = (e: Pick<Entity, 'name' | 'keywords'>): string[] => {
-  const name = normalizeTerm(flat(e.name))
-  return e.keywords.map(flat).filter((term) => normalizeTerm(term) !== name)
+  const name = normalizeTerm(oneLine(e.name))
+  return e.keywords.map(oneLine).filter((term) => normalizeTerm(term) !== name)
 }
 
 // One row can emit two facts, one per non-null perspective; a row whose character
@@ -62,11 +61,11 @@ function projectRelationships(
 // classifier.md → Mentioned places. Retired places keep their id: a happening can name one.
 const placeRow = ({ entity: e, depth }: PlaceTreeRow) => ({
   id: e.id,
-  name: flat(e.name),
+  name: oneLine(e.name),
   depth,
   status: e.status,
-  retiredReason: e.status === 'retired' ? oneLine(e.retiredReason) : null,
-  description: oneLine(e.description),
+  retiredReason: e.status === 'retired' ? lineOrNull(e.retiredReason) : null,
+  description: lineOrNull(e.description),
   keywords: aliasesOf(e),
 })
 
@@ -102,13 +101,13 @@ export function buildClassifierContext(args: {
       .map((e) => ({
         id: e.id,
         kind: e.kind,
-        name: flat(e.name),
-        description: oneLine(e.description),
+        name: oneLine(e.name),
+        description: lineOrNull(e.description),
         status: e.status,
         keywords: aliasesOf(e),
         faction: factionOf(e),
         // classifier.md → Factions → What the pass sees: a standing change needs the standing.
-        standing: e.kind === 'faction' ? oneLine(stateOf(e, 'faction').standing ?? null) : null,
+        standing: e.kind === 'faction' ? lineOrNull(stateOf(e, 'faction').standing ?? null) : null,
       })),
     places: places.tree.map(placeRow),
     // After the tree, so its places number first; ids kept, so a pass can place one.
@@ -122,8 +121,8 @@ export function buildClassifierContext(args: {
       location:
         t.currentLocationId != null && known.has(t.currentLocationId) ? t.currentLocationId : null,
     })),
-    happenings: happenings.map((h) => ({ id: h.id, title: flat(h.title) })),
-    threads: threads.map((t) => ({ id: t.id, title: flat(t.title), status: t.status })),
+    happenings: happenings.map((h) => ({ id: h.id, title: oneLine(h.title) })),
+    threads: threads.map((t) => ({ id: t.id, title: oneLine(t.title), status: t.status })),
     relationships: projectRelationships(relationships, entities),
     mentionedPlaces,
   }

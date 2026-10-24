@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/searchable-overlay-list'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
+import { oneLine } from '@/lib/text'
 import { type WizardPreset } from '@/lib/wizard'
 
 export type PresetBrowserProps = {
@@ -24,7 +25,7 @@ export type PresetBrowserProps = {
 // collapsed to single spaces — so a phrase the user reads as one line is two lines
 // in the source. Match what is rendered, not what is stored.
 function normalize(text: string): string {
-  return text.replace(/\s+/g, ' ').trim().toLowerCase()
+  return oneLine(text).toLowerCase()
 }
 
 function matches(preset: WizardPreset, query: string): boolean {

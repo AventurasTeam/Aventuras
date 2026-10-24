@@ -2,7 +2,7 @@ import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm'
 
 import type { DbCtx } from '@/lib/db'
 import { chunked, storyEntries } from '@/lib/db'
-import { excerpt, stripMarkup } from '@/lib/text'
+import { excerpt, oneLine, stripMarkup } from '@/lib/text'
 
 import type { EntryIndex, EntryRef } from './types'
 
@@ -42,7 +42,7 @@ function preview(source: SourceHead): { excerpt: string; readFurther: boolean } 
   const prose = stripMarkup(source.head)
   const head = cutMidWord ? dropTrailingPartialWord(prose) : prose
   const text = excerpt(head, ENTRY_EXCERPT_CHARS) ?? ''
-  const filled = Array.from(prose.replace(/\s+/g, ' ').trim()).length > ENTRY_EXCERPT_CHARS
+  const filled = Array.from(oneLine(prose)).length > ENTRY_EXCERPT_CHARS
   // excerpt() collapses whitespace after the truncation cut, so a short result doesn't prove a
   // short source — force the ellipsis excerpt() has no way to know it owes.
   const needsEllipsis = truncated && text !== '' && !text.endsWith('…')

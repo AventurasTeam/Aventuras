@@ -113,16 +113,6 @@ slice-planning gate forces its resolution before that slice is planned.
   mentioned places slice review's simplifier pass, which skipped it as
   outside that slice.
 
-- **Three copies of `isPlainObject`.** `lib/actions/delta/delta-encoding.ts`
-  exports one, which `user-precedence.ts` now shares;
-  `lib/actions/settings/normalize.ts` keeps its own copy inside the same
-  module, and `lib/history/humanize.ts` another. The settings copy can
-  import the delta one today; the History one needs a home every module
-  may import, and `lib/utils.ts` pulls in UI and toast dependencies the
-  delta code shouldn't take. Raised 2026-10-18 by the classifier
-  factions slice review's simplifier pass, which skipped it as outside
-  the slice.
-
 - **Retrieval takes its disabled places beside the scene they derive
   from.** `per-turn-retrieval.ts` computes `disabledPlaceIds` with
   `placeModes` around the scene's location and passes it to
@@ -134,16 +124,6 @@ slice-planning gate forces its resolution before that slice is planned.
   an invariant kept by convention). Older than entity state, so its
   slice review filed it rather than tightening it. Raised 2026-10-20 by
   the entity-state slice review.
-
-- **Five copies of whitespace collapsing.** `lib/text/one-line.ts`
-  exports `oneLine`, which the `one_line` filter and the entity-state
-  mirror share. `classifier-context.ts` keeps its own `flat`,
-  `lib/history/field-labels.ts` its `collapseSpaces`, and
-  `location-map.ts` (a retired reason), `lib/text/excerpt.ts` and
-  `lib/entry-refs/read.ts` inline the same `replace(/\s+/g, ' ')`. Each
-  could call `oneLine`; all sit outside the entity-state slice. Raised
-  2026-10-20 by its slice review's simplifier pass, which skipped it as
-  outside the slice.
 
 - **Test helpers the slices keep re-rolling.** A logger stand-in
   (`{ error: vi.fn(), warn: vi.fn(), debug: vi.fn() }`) is written out

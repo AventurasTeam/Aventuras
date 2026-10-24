@@ -6,6 +6,7 @@ import {
   appSettingsConfigSchema,
   appSettingsDiagnosticsSchema,
 } from '@/lib/db'
+import { isJsonObject } from '@/lib/json-object'
 
 import type { DbCtx } from '../types'
 
@@ -34,10 +35,6 @@ function jsonEqual(a: unknown, b: unknown): boolean {
   return false
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 // Add-only merge: fill object keys present in the parsed (schema-defaulted)
 // shape but absent from storage; never overwrite a stored value or drop a
 // stored key. Keeps a downgrade (older build, unknown newer key) from
@@ -49,7 +46,7 @@ function addMissingDefaults(stored: unknown, parsed: unknown): unknown {
   if (Array.isArray(stored) && Array.isArray(parsed)) {
     return stored.map((item, i) => addMissingDefaults(item, parsed[i]))
   }
-  if (!isPlainObject(stored) || !isPlainObject(parsed)) return stored
+  if (!isJsonObject(stored) || !isJsonObject(parsed)) return stored
   const merged: Record<string, unknown> = { ...stored }
   for (const [key, parsedValue] of Object.entries(parsed)) {
     merged[key] = key in stored ? addMissingDefaults(stored[key], parsedValue) : parsedValue

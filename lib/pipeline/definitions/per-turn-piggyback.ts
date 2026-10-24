@@ -10,6 +10,7 @@ import type {
 } from '@/lib/ai'
 import { inheritedEntryMetadata, type EntryMetadata } from '@/lib/db'
 import { generateId } from '@/lib/ids'
+import { isJsonObject } from '@/lib/json-object'
 import {
   buildPiggybackActions,
   buildStateReport,
@@ -79,15 +80,12 @@ const CREATE_CONDITION_DESCRIPTION =
 const createText = () =>
   z.preprocess((value) => (typeof value === 'string' ? value : ''), z.string())
 
-const isRecord = (value: unknown): value is object =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-
 // A create that isn't an object reads as an empty one, dropped and counted the same way; a lone
 // create reads as a list of one, and any other list that isn't one as none.
 const createList = <T extends z.ZodType>(create: T) =>
   z.preprocess(
-    (value) => (Array.isArray(value) ? value : isRecord(value) ? [value] : undefined),
-    z.array(z.preprocess((value) => (isRecord(value) ? value : {}), create)).optional(),
+    (value) => (Array.isArray(value) ? value : isJsonObject(value) ? [value] : undefined),
+    z.array(z.preprocess((value) => (isJsonObject(value) ? value : {}), create)).optional(),
   )
 
 const withoutNulls = (value: object): object =>
@@ -96,9 +94,9 @@ const withoutNulls = (value: object): object =>
 // Read as a create list is, but an entry the schema can't read drops alone, uncounted, as the tags'
 // parser skips one; a null field reads as absent first.
 function readableEntries(value: unknown, entry: z.ZodType): unknown[] | undefined {
-  const list = Array.isArray(value) ? value : isRecord(value) ? [value] : undefined
+  const list = Array.isArray(value) ? value : isJsonObject(value) ? [value] : undefined
   return list
-    ?.map((item) => (isRecord(item) ? withoutNulls(item) : item))
+    ?.map((item) => (isJsonObject(item) ? withoutNulls(item) : item))
     .filter((item) => entry.safeParse(item).success)
 }
 
@@ -118,7 +116,7 @@ const conditionEntry = z.object({
 // piggyback.md → Trailing block format: put down somewhere else than the scene stays prose. Kept
 // out unlogged: the schema has no logger.
 const namesPlace = (item: unknown): boolean =>
-  isRecord(item) && 'to' in item && typeof item.to === 'string' && item.to.trim() !== ''
+  isJsonObject(item) && 'to' in item && typeof item.to === 'string' && item.to.trim() !== ''
 
 const visualChangeEntry = z.object({
   id: z.string(),

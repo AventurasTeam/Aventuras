@@ -1,7 +1,9 @@
+import { oneLine } from './one-line'
+
 /** A one-line preview: whitespace collapsed, cut at a word boundary, code-point safe. */
 export function excerpt(text: string | null | undefined, maxChars = 120): string | undefined {
   if (text == null) return undefined
-  const collapsed = text.replace(/\s+/g, ' ').trim()
+  const collapsed = oneLine(text)
   if (collapsed === '') return undefined
   // Array.from splits code points, not UTF-16 units — slicing could sever an emoji surrogate pair.
   const chars = Array.from(collapsed)

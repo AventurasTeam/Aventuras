@@ -1,5 +1,5 @@
 import type { Entity } from '@/lib/db'
-import { blankToNull } from '@/lib/text'
+import { blankToNull, oneLine } from '@/lib/text'
 
 import { byName, locationAncestors } from './overview'
 import { parentChainIds, parentOfLocations } from './parent-chain'
@@ -113,7 +113,7 @@ function mapRow(location: Entity, depth: number): LocationMapRow {
         name,
         depth,
         // Each row is one line of the tree: a stored reason may span several.
-        retiredReason: blankToNull((location.retiredReason ?? '').replace(/\s+/g, ' ')),
+        retiredReason: blankToNull(oneLine(location.retiredReason ?? '')),
       }
     : { retired: false, id, name, depth, retiredReason: null }
 }
