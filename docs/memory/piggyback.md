@@ -127,9 +127,14 @@ creates ([New locations and items](#new-locations-and-items)):
   previous scene is the one the turn's user action carries, the scene
   before this turn. A held item's drop whose holders are all out of
   both lists is dropped and logged (`classifier.drop_dropped`,
-  `off_scene`). An item put down somewhere else than the scene, thrown
-  into a river, stays prose. The prompt asks for a drop only for an
-  item still lying there when the turn ends. Tags apply in document
+  `off_scene`). An item nobody holds is put down at the scene when it
+  lies nowhere; one lying at another place is dropped and logged
+  (`classifier.drop_dropped`, `elsewhere`). An item put down somewhere
+  else than the scene, thrown into a river, stays prose. A `<drop>`
+  that names a `to` is that case: it is kept out of the block and
+  logged (`classifier.drop_dropped`, `to_named`), and the fallback's
+  schema leaves out a drop with a `to` too, unlogged. The prompt asks
+  for a drop only for an item still lying there when the turn ends. Tags apply in document
   order and a drop takes the item off every holder, and the fallback
   applies its drops after its item moves, so an item set down and
   picked up again gets its `<item>` move and no drop.
@@ -333,13 +338,16 @@ than failing the turn. A retired parent, which a place pinned `always`
 can still put in the prompt with its id, also creates the location
 unplaced, logged, since nothing active may sit inside a retired place.
 Parents resolve top-down, so the child of a new location hangs under
-whatever row that location resolved to.
+whatever row that location resolved to; otherwise the creates settle in
+the block's order, each waiting only for its own parent.
 
 **Writes.** The creates follow the reply row and precede every other
 write that names them. The narrative fold writes them right after the
 reply's `createStoryEntry`, which carries the scene's metadata, and
 ahead of the promotions, the bookkeeping, the visual changes and the
-transfers; the fallback writes them ahead of its metadata update.
+transfers; the fallback writes them ahead of its metadata update. A
+reused unplaced place's placement comes right after the creates, since
+it can name a parent they create, and before every other write.
 Regenerate reverses the log from the reply's create onward, so a
 create logged before it would outlive a regenerate as an orphan row.
 Logged after it, undoing or regenerating the turn removes the new row
@@ -495,6 +503,11 @@ be total — drop what it cannot read, return what it can, never raise.
 That is a deliberate exception to the rule above, not a property the
 shape confers, and it has to survive anyone later "fixing" the
 inconsistency.
+
+A condition with an id and blank text counts as well formed for that
+rule: it is refused when applied and marked `rejected` in the report,
+so it fails no field. So does a `<drop>` kept out of the block for its
+`to`.
 
 **A bad ref in the two writers.** A transfer's item must name an
 item: an existing item's id, or the handle of a `<new_item>` the block
@@ -720,7 +733,11 @@ transfer with a bad ref, which it drops rather than fails
 ([Parse strategy and failure recovery](#parse-strategy-and-failure-recovery)).
 A create there may omit its description or parent, or give either as
 `null`, which reads as omitted; one with no description is created
-without one, as a self-closed tag is.
+without one, as a self-closed tag is. Its conditions and drops read
+`null`, or any other value that isn't a list, as none, and a lone entry
+as a list of one; an entry it can't read (no id, a condition with no
+text, a drop given as a bare string) drops alone, its `null` fields
+read as absent first.
 
 ## Mode-mixing across a story
 
