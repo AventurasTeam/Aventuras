@@ -681,21 +681,6 @@ slice-planning gate forces its resolution before that slice is planned.
 
   Raised 2026-10-24 by the AI writer map's slice review.
 
-- **The pass's older lists still fail on one malformed entry.**
-  Since the AI writer map, an entry of the lists it added (renames,
-  placements, standings, new threads, thread statuses, known
-  awareness) that doesn't fit is dropped alone and logged
-  ([`classifier.md → Failure policy`](../memory/classifier.md#failure-policy)).
-  The older lists in `lib/classifier/schema.ts` (happenings with their
-  involvements and awareness, relationships, status flips, new
-  characters, new factions, memberships, aliases and new places) still
-  fail the whole reply on one, so the pass and the Send behind it fail
-  until a retry parses: a `statusFlips` entry naming `staged`, or a new
-  character without a description. Wrapping their entries in
-  `tolerantList` would close it, and a blank-named create or a dropped
-  happening then needs the same logging its planner gives the new
-  lists. Raised 2026-10-24 by the AI writer map's slice review.
-
 - **A row placed under a new place reads as unplaced to matching.**
   `matchNewPlace` (`lib/world/new-entity-match.ts`) reads placements
   through `realPlacementOf` over the stored rows only, so a stored row
