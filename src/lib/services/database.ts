@@ -2755,16 +2755,6 @@ class DatabaseService {
     return result.length > 0 ? this.mapEmbeddedImage(result[0]) : null
   }
 
-  /** The first characters of an image's stored value: enough to tell its type, without its pixels. */
-  async getEmbeddedImageHead(id: string): Promise<string | null> {
-    const db = await this.getDb()
-    const result = await db.select<{ head: string | null }[]>(
-      'SELECT substr(image_data, 1, 200) AS head FROM embedded_images WHERE id = ?',
-      [id],
-    )
-    return result[0]?.head ?? null
-  }
-
   async updateEmbeddedImage(id: string, updates: Partial<EmbeddedImage>): Promise<void> {
     const db = await this.getDb()
     const setClauses: string[] = []

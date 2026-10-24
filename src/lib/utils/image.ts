@@ -27,13 +27,6 @@ export function normalizeImageDataUrl(imageData: string | null | undefined): str
   return `data:${sniffImageMime(imageData.slice(0, LABEL_SNIFF_CHARS)) ?? 'image/png'};base64,${imageData}`
 }
 
-/** File extension for an image MIME type; anything unrecognised is PNG. */
-export function imageExtension(mime: string | null | undefined): string {
-  if (mime === 'image/jpeg') return 'jpg'
-  const subtype = /^image\/([a-z0-9]+)/.exec(mime ?? '')?.[1]
-  return subtype === 'apng' || !subtype ? 'png' : subtype
-}
-
 /**
  * Image size is stored as an intent — orientation + size tier — not as pixels.
  *

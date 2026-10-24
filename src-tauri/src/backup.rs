@@ -312,6 +312,15 @@ fn isobmff_extension(bytes: &[u8]) -> Option<&'static str> {
         .map(|&(_, ext)| ext)
 }
 
+/// Extension for the leading characters of a stored image value, which may stop mid-quantum.
+fn extension_from_head(head: &str) -> String {
+    let (label, body) = split_data_url(head);
+    let body = body.trim();
+    let body = body.get(..body.len() - body.len() % 4).unwrap_or_default();
+    let bytes = general_purpose::STANDARD.decode(body).unwrap_or_default();
+    image_extension(&bytes, label)
+}
+
 /// Open a read-only connection pool to the live database.
 async fn open_ro_pool(app: &AppHandle) -> Result<SqlitePool, String> {
     let db = db_path(app)?;
@@ -393,6 +402,26 @@ pub async fn export_images_zip(
         .map_err(|e| format!("failed to finalize archive: {e}"))?;
     pool.close().await;
     Ok(dest_path)
+}
+
+/// The file extension an embedded image should be saved with, named by the same rules as
+/// `export_images_zip`.
+#[tauri::command]
+pub async fn embedded_image_extension(app: AppHandle, image_id: String) -> Result<String, String> {
+    let pool = open_ro_pool(&app).await?;
+    let row =
+        sqlx::query("SELECT substr(image_data, 1, 256) AS head FROM embedded_images WHERE id = ?")
+            .bind(&image_id)
+            .fetch_optional(&pool)
+            .await
+            .map_err(|e| format!("failed to read image {image_id}: {e}"))?;
+    pool.close().await;
+
+    let head = row
+        .and_then(|r| r.get::<Option<String>, _>("head"))
+        .filter(|h| !h.is_empty())
+        .ok_or_else(|| "Invalid image data".to_string())?;
+    Ok(extension_from_head(&head))
 }
 
 /// Export a single embedded image at `dest_path`, decoding its base64 from SQLite
@@ -676,6 +705,19 @@ mod tests {
         assert_eq!(split_data_url("data:;base64,AAAA"), (None, "AAAA"));
         assert_eq!(split_data_url("AAAA"), (None, "AAAA"));
         assert_eq!(split_data_url("AA,AA"), (None, "AA,AA"));
+    }
+
+    #[test]
+    fn extension_from_head_reads_a_truncated_value() {
+        let jpeg = general_purpose::STANDARD.encode(b"\xff\xd8\xff\xe0\0\x10JFIF\0\x01\x01");
+        let cut = &jpeg[..jpeg.len() - 3];
+        assert_eq!(
+            extension_from_head(&format!("data:image/png;base64,{cut}")),
+            "jpg"
+        );
+        assert_eq!(extension_from_head(cut), "jpg");
+        assert_eq!(extension_from_head("data:image/svg+xml;base64,"), "svg");
+        assert_eq!(extension_from_head("é"), "png");
     }
 
     /// Minimal stand-in for a real database file: enough bytes to look like SQLite.
