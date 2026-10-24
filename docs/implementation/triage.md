@@ -980,6 +980,17 @@ slice-planning gate forces its resolution before that slice is planned.
     turn-1 "Attic" inside the Cellar, with a turn-2 move of the Cellar
     under the Attic, leaves two Cellars where successive passes leave
     one. Option A fixes it.
+  - **A twin across a placement.** Two new places with one name and
+    declared parent map to the first before any other match, even when
+    a placement of a turn between them moved the first one's row: a
+    turn-1 "Cellar" under the Keep reuses and places the unplaced
+    cellar, a turn-2 placement moves it under the Inn, and a turn-3
+    "Cellar" under the Keep, carrying "the vault", maps to it. That is a
+    silent mis-merge: the keyword lands on the moved row and the Keep's
+    cellar is never created, where successive passes would create it
+    anew under the Keep. The developer kept the twin rule as settled;
+    a fix needs option A and a twin keyed on where the first one's row
+    sits by then, which reopens the twin of a create a takeover placed.
   - **Two renames to one name, the first refused.** When a user edit
     refuses the first rename as it lands, the second, planned as a
     clash against it, writes only a keyword and its flag is refused,

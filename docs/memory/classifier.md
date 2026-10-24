@@ -472,7 +472,9 @@ land, before any new place of their turn or a later one, a fact with no
 source turn counting at the newest: a new place matches and is written
 where they leave the places, so a place one of them puts under another
 parent is no unplaced namesake to reuse, and one it puts under the new
-place's parent is reused there, placed once.
+place's parent is reused there, placed once. The twin rule above still
+comes first: a new place maps to an earlier one of its name and
+declared parent even after a placement moved that one's row.
 
 **After the turn.** A pass runs after the turn that brought it due, so
 a place the turn created is already a row it matches against, and the
