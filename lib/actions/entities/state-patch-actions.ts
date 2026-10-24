@@ -607,10 +607,7 @@ export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) 
   const kept = newTerms(current.keywords, [current.name]).filter(
     (term) => !removed.has(normalizeTerm(term)),
   )
-  // Keywords leave out the name itself (the prompt's New characters rule).
-  const others = current.keywords.filter((term) => normalizeTerm(term) !== normalizeTerm(name))
-  const changed = kept.length > 0 || others.length !== current.keywords.length
-  const keywords = changed ? { keywords: [...others, ...kept] } : {}
+  const keywords = kept.length > 0 ? { keywords: [...current.keywords, ...kept] } : {}
   // `name` is an embedded field (KIND_FIELDS.entity), so the row re-embeds.
   const columns = { name, ...keywords, embeddingStale: 1 as const }
   return {
@@ -618,7 +615,7 @@ export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) 
     targetTable: 'entities',
     targetId: id,
     op: 'update',
-    undoPayload: { name: current.name, ...(changed ? { keywords: current.keywords } : {}) },
+    undoPayload: { name: current.name, ...(kept.length > 0 ? { keywords: current.keywords } : {}) },
     ops: [
       ctx.db
         .update(entities)
