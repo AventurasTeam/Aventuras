@@ -21,6 +21,7 @@ import {
   substitutePiggybackIds,
   suggestionRefSchema,
   type ParsedTransfers,
+  type PiggybackApplied,
   type SubstitutedStateBlock,
   type TurnCreatesReport,
   VISUAL_CHANGE_TYPES,
@@ -306,20 +307,17 @@ function orderedTransfers(transfers: NonNullable<FallbackReply['transfers']>): P
 }
 
 // A failed fold lands its visual changes, conditions and transfers (bar drops it can't place), so
-// each record stays unless this reply's field has one too: an unrejected condition, a landed drop.
+// each record stays unless something in this reply's field landed too, as apply.ts reports it.
 function withFoldChanges(
   report: StateReport | undefined,
   prior: StateReport | undefined,
+  applied: PiggybackApplied,
 ): StateReport | undefined {
-  const transfers = report?.transfers
   const transfersApplied =
-    transfers !== undefined &&
-    (transfers.items.length > 0 ||
-      transfers.stackables.length > 0 ||
-      (transfers.drops?.length ?? 0) > 0)
+    applied.itemsLanded > 0 || applied.stackablesLanded > 0 || applied.drops.length > 0
   const conditionsApplied = (report?.conditions ?? []).some((c) => c.rejected !== true)
   const carried: Pick<StateReport, 'visualChanges' | 'conditions' | 'transfers'> = {
-    ...((report?.visualChanges?.length ?? 0) === 0 && prior?.visualChanges !== undefined
+    ...(applied.visualChangesLanded === 0 && prior?.visualChanges !== undefined
       ? { visualChanges: prior.visualChanges }
       : {}),
     ...(!conditionsApplied && prior?.conditions !== undefined
@@ -548,6 +546,7 @@ export async function* piggybackFallbackClassifierPhase(
       ...(priorReport?.raw !== undefined ? { raw: priorReport.raw } : {}),
     }),
     priorReport,
+    applied,
   )
 
   const rawSuggestions =

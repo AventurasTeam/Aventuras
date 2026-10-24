@@ -1717,7 +1717,17 @@ describe('per-turn-piggyback', () => {
           },
         } as never,
       ])
-      entitiesStore.hydrate('b1', [])
+      // A character row, so the classifier's changes land: one that writes nothing keeps the fold's.
+      entitiesStore.hydrate('b1', [
+        {
+          id: charUuid,
+          branchId: 'b1',
+          kind: 'character',
+          status: 'active',
+          name: 'Hero',
+          keywords: [],
+        } as never,
+      ])
 
       // Resolvable, so substitution keeps the field and the merge must leave it alone.
       const idMap = new IdBiMap()
@@ -3326,7 +3336,12 @@ describe('per-turn-piggyback', () => {
       }
       const payloads = (
         events: readonly PhaseEmittedEvent[],
-        kind: 'updateEntityCondition' | 'updateEntityInventory' | 'updateItemPosition',
+        kind:
+          | 'updateEntityCondition'
+          | 'updateEntityInventory'
+          | 'updateItemPosition'
+          | 'updateEntityStackables'
+          | 'updateEntityVisualState',
       ) =>
         events.flatMap((e) =>
           e.type === 'delta_emitted' && e.action.kind === kind ? [e.action.payload] : [],
@@ -3591,6 +3606,54 @@ describe('per-turn-piggyback', () => {
           })
           expect(payloads(events, 'updateItemPosition')).toEqual([])
           expect(metadataPatch(events).stateReport?.transfers).toEqual(foldReport.transfers)
+        })
+
+        // A holder isn't kind-checked, so these resolve; naming no character, they write nothing.
+        it.each([
+          [
+            'an item moved to a place',
+            { items: [{ id: 'i1', to: 'l1', slot: 'inventory' }], stackables: [], drops: [] },
+          ],
+          [
+            'a stackable paid to a place',
+            { items: [], stackables: [{ key: 'gold', amount: 5, to: 'l1' }], drops: [] },
+          ],
+        ])("keeps the fold's transfers when its only transfer is %s", async (_label, transfers) => {
+          seedFallbackTurn(
+            [keyHeld(), worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }), keyRow()],
+            foldReport,
+          )
+          const { events } = await fallbackAfterFold({ transfers })
+          expect(payloads(events, 'updateEntityInventory')).toEqual([])
+          expect(payloads(events, 'updateEntityStackables')).toEqual([])
+          expect(metadataPatch(events).stateReport?.transfers).toEqual(foldReport.transfers)
+        })
+
+        const visualFold: NonNullable<EntryMetadata['stateReport']> = {
+          ...foldReport,
+          visualChanges: [{ id: HERO, type: 'attire', text: 'a torn cloak' }],
+        }
+
+        it("keeps the fold's visual changes when its only one names a place", async () => {
+          seedFallbackTurn(fallbackWorld(), visualFold)
+          const { events } = await fallbackAfterFold({
+            visualChanges: [{ id: 'l1', type: 'attire', text: 'weathered stonework' }],
+          })
+          expect(payloads(events, 'updateEntityVisualState')).toEqual([])
+          expect(metadataPatch(events).stateReport?.visualChanges).toEqual(visualFold.visualChanges)
+        })
+
+        it('reports its own visual changes when one of them is written', async () => {
+          seedFallbackTurn(fallbackWorld(), visualFold)
+          const visualChanges = [
+            { id: 'l1', type: 'attire', text: 'weathered stonework' },
+            { id: 'c1', type: 'hair', text: 'shorn short' },
+          ]
+          const { events } = await fallbackAfterFold({ visualChanges })
+          expect(metadataPatch(events).stateReport?.visualChanges).toEqual([
+            { id: TOWN, type: 'attire', text: 'weathered stonework' },
+            { id: HERO, type: 'hair', text: 'shorn short' },
+          ])
         })
 
         // Each part of the transfers check on its own: a move, a stackable or an applied drop.

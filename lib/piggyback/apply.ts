@@ -44,22 +44,28 @@ type AppliedDrop = { id: string; from?: string; at: string | null }
 
 type Move = { seq: number; item: ItemTransfer } | { seq: number; drop: ItemDrop }
 
+/** What validation did to the emitted values, for stateReport — so the reader renders the
+ *  emitted-vs-applied divergence as fact instead of inferring a cause from it. */
+export type PiggybackApplied = {
+  worldTimeDelta: number
+  currentLocationRejected: boolean
+  /** The drops applied, in the block's order, each where it landed: null with no scene place. */
+  drops: AppliedDrop[]
+  /** Positions in `block.conditions` refused, not ids: an id can repeat in one block. */
+  conditionsRejected: number[]
+  // How many of each wrote anything: one naming no character as its target or a party writes none.
+  visualChangesLanded: number
+  itemsLanded: number
+  stackablesLanded: number
+}
+
 type BuildResult = {
   metadata: Pick<
     EntryMetadata,
     'sceneEntities' | 'currentLocationId' | 'worldTime' | 'summary' | 'retrievalQueries'
   >
   actions: PipelineAction[]
-  /** What validation did to the emitted values, for stateReport — so the reader renders
-   *  the emitted-vs-applied divergence as fact instead of inferring a cause from it. */
-  applied: {
-    worldTimeDelta: number
-    currentLocationRejected: boolean
-    /** The drops applied, in the block's order, each where it landed: null with no scene place. */
-    drops: AppliedDrop[]
-    /** Positions in `block.conditions` refused, not ids: an id can repeat in one block. */
-    conditionsRejected: number[]
-  }
+  applied: PiggybackApplied
 }
 
 export function buildPiggybackActions(args: BuildArgs): BuildResult {
@@ -115,6 +121,8 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   // those fields merged onto its state unvalidated (state-patch-actions.ts never
   // parses the merged result against the target's own kind-specific schema).
   const isCharacter = (id: string): boolean => byId.get(id)?.kind === 'character'
+  const characterOf = (id: string | undefined): string | undefined =>
+    id !== undefined && isCharacter(id) ? id : undefined
 
   actions.push(
     ...scenePromotionActions({
@@ -145,8 +153,10 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   )
 
   // Visual changes
+  let visualChangesLanded = 0
   for (const note of block.visualChanges ?? []) {
     if (isCharacter(note.id)) {
+      visualChangesLanded += 1
       const { text, cut } = boundStateText(note.text)
       // The writer is asked for about 60 words; a cut says it overran the 500-character bound.
       if (cut)
@@ -237,21 +247,25 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   const positionOf = (itemId: string): string | null =>
     positions.has(itemId) ? (positions.get(itemId) ?? null) : storedPosition(itemId)
 
-  const take = (item: ItemTransfer) => {
-    if (item.from !== undefined && isCharacter(item.from)) release(item.from, item.id)
-    if (item.to !== undefined && isCharacter(item.to)) {
+  // Whether the move named a character to give or take it, so it wrote anything.
+  const take = (item: ItemTransfer): boolean => {
+    const giver = characterOf(item.from)
+    const taker = characterOf(item.to)
+    if (giver !== undefined) release(giver, item.id)
+    if (taker !== undefined) {
       // data-model.md → ItemState: an item has one position, so taking it moves it from
       // wherever else it sits, whatever `from` named.
       for (const holder of entities)
-        if (holder.id !== item.to && holds(holder.id, item.id)) release(holder.id, item.id)
-      const cur = currentInventory(item.to)
+        if (holder.id !== taker && holds(holder.id, item.id)) release(holder.id, item.id)
+      const cur = currentInventory(taker)
       const other = item.slot === 'equipped_items' ? 'inventory' : 'equipped_items'
-      inventoryPatches.set(item.to, {
+      inventoryPatches.set(taker, {
         [other]: cur[other].filter((i) => i !== item.id),
         [item.slot]: [...cur[item.slot].filter((i) => i !== item.id), item.id],
       } as { equipped_items: string[]; inventory: string[] })
       positions.set(item.id, null)
     }
+    return giver !== undefined || taker !== undefined
   }
 
   const drops: AppliedDrop[] = []
@@ -306,9 +320,10 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     ...(block.transfers?.items ?? []).map((item) => ({ seq: item.seq, item })),
     ...(block.transfers?.drops ?? []).map((drop) => ({ seq: drop.seq, drop })),
   ].sort((a, b) => a.seq - b.seq)
+  let itemsLanded = 0
   for (const move of moves) {
-    if ('item' in move) take(move.item)
-    else putDown(move.drop)
+    if (!('item' in move)) putDown(move.drop)
+    else if (take(move.item)) itemsLanded += 1
   }
   for (const [id, patch] of inventoryPatches) {
     if (isCharacter(id)) {
@@ -339,9 +354,13 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     return foldStackables(state?.stackables)
   }
 
+  let stackablesLanded = 0
   for (const transfer of block.transfers?.stackables ?? []) {
-    if (transfer.from !== undefined && isCharacter(transfer.from)) {
-      const next = currentStackables(transfer.from)
+    const payer = characterOf(transfer.from)
+    const payee = characterOf(transfer.to)
+    if (payer !== undefined || payee !== undefined) stackablesLanded += 1
+    if (payer !== undefined) {
+      const next = currentStackables(payer)
       const balance = next.get(transfer.key) ?? 0
       // data-model.md → Stackable items: the payer clamps at zero while the payee still gains
       // the full amount, so the prose stays true for whoever received it.
@@ -349,7 +368,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
         log.warn('classifier.stackable_shortfall', {
           entryId,
           source,
-          entityId: transfer.from,
+          entityId: payer,
           key: transfer.key,
           amount: transfer.amount,
           balance,
@@ -357,12 +376,12 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
       const remaining = Math.max(0, balance - transfer.amount)
       if (remaining === 0) next.delete(transfer.key)
       else next.set(transfer.key, remaining)
-      stackablePatches.set(transfer.from, next)
+      stackablePatches.set(payer, next)
     }
-    if (transfer.to !== undefined && isCharacter(transfer.to)) {
-      const next = currentStackables(transfer.to)
+    if (payee !== undefined) {
+      const next = currentStackables(payee)
       next.set(transfer.key, (next.get(transfer.key) ?? 0) + transfer.amount)
-      stackablePatches.set(transfer.to, next)
+      stackablePatches.set(payee, next)
     }
   }
   for (const [id, stackables] of stackablePatches) {
@@ -378,6 +397,14 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   return {
     metadata,
     actions,
-    applied: { worldTimeDelta: appliedDelta, currentLocationRejected, drops, conditionsRejected },
+    applied: {
+      worldTimeDelta: appliedDelta,
+      currentLocationRejected,
+      drops,
+      conditionsRejected,
+      visualChangesLanded,
+      itemsLanded,
+      stackablesLanded,
+    },
   }
 }
