@@ -99,47 +99,6 @@ slice-planning gate forces its resolution before that slice is planned.
   its 224 px. Raised 2026-10-21 by the gated classifier slice review's
   R1 probe.
 
-- **A failed-pass entry can lose the turn's text to an occupied
-  draft.** The entry carries the turn's text only when the composer
-  couldn't take it back: the user typed a new draft during Send's owed
-  pass, which can run up to the classifier's timeout (ten minutes
-  unset) with the composer editable
-  ([`reader-composer.md → Custody of the turn's text`](../ui/screens/reader-composer/reader-composer.md#custody-of-the-turns-text)).
-  From there a committed Retry and `Dismiss` both hand it into the
-  still-occupied draft and drop it with the `failedTurnTextDropped`
-  toast, as Custody allows; a Send of the new draft drops it silently
-  in the tail clear, as a turn-failure entry's does today. Only
-  clearing the draft first, then `Dismiss`, keeps it, and nothing says
-  so. A turn-failure entry escapes the Retry half because its Retry
-  resends the stored text. Candidate fixes: keep the entry as a notice
-  when a Retry commits over an occupied draft; or carry a dropped
-  entry's submission onto the next entry. Raised 2026-10-22 in the
-  pass failure policy slice's Task 7 review.
-
-- **A refused Send destroys the earlier failure entry's text.**
-  `runSubmit` drops the system tail before it dispatches
-  (`app/reader-composer/[branchId].tsx`), and `dropSystemTail`'s own
-  comment says a dispatch that then refuses has destroyed the entry's
-  `submission` for nothing unless it puts the entry back. The
-  `aborted` arm restores it; the `rejected` arm (the blocked one,
-  around `:714`) writes a new failure entry for this Send's text
-  instead, so the earlier turn's text, which outlives a restart only
-  on that entry, is gone. The pass-refusal arms do the same: a Send
-  whose owed pass fails, or that meets a held branch, clears the
-  earlier failure entry in the tail drop and writes only this Send's
-  text (`:684-700`). The system entry is a branch singleton, so the
-  earlier entry can't simply be put back beside the new one. Raised
-  2026-10-22 in the pass failure policy slice's Task 7 review.
-
-- **A completed regenerate drops a cleared failure entry's
-  submission.** `runRegenerate` in `app/reader-composer/[branchId].tsx`
-  clears the system tail before dispatching (`:789`); the throw arm
-  hands `dropped.failure.submission` back (`:807`), but on a completed
-  regenerate `planRegenerateOutcome` returns `'none'`
-  (`components/reader/regenerate-outcome.ts:39`) and the submission is
-  not handed back. Raised 2026-10-22 in the pass failure policy
-  slice's branch review.
-
 - **The Select's segment and radio branches go uncontrolled on an
   `undefined` value.** `components/ui/select.tsx`'s `SegmentBranch` and
   `RadioBranch` hand `value` straight to Radix, whose

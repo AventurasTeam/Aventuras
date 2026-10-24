@@ -4,12 +4,79 @@ import type { ComposerMode } from '@/lib/composer-wrap'
 
 import {
   draftSubmission,
+  planCommittedPassRetry,
   planPassFailureCustody,
   planPassRetryCustody,
   readPassFailureCustody,
+  settleCommittedPassRetry,
   settlePassFailureCustody,
   settlePassRetryCustody,
 } from './pass-failure-custody'
+
+describe('planCommittedPassRetry', () => {
+  it('dismisses an entry whose text an empty composer on its branch can take back', () => {
+    expect(
+      planCommittedPassRetry({ entryHasText: true, stillOnBranch: true, draftEmpty: true }),
+    ).toBe('dismiss')
+  })
+
+  // reader-composer.md → Custody of the turn's text: the draft wins, and the entry keeps the text.
+  it('keeps the entry as a notice when the draft is occupied', () => {
+    expect(
+      planCommittedPassRetry({ entryHasText: true, stillOnBranch: true, draftEmpty: false }),
+    ).toBe('keep-notice')
+  })
+
+  it('keeps the entry as a notice when the user left its branch', () => {
+    expect(
+      planCommittedPassRetry({ entryHasText: true, stillOnBranch: false, draftEmpty: true }),
+    ).toBe('keep-notice')
+  })
+
+  it('dismisses an entry with no text, whatever the composer holds', () => {
+    expect(
+      planCommittedPassRetry({ entryHasText: false, stillOnBranch: false, draftEmpty: false }),
+    ).toBe('dismiss')
+  })
+})
+
+describe('settleCommittedPassRetry', () => {
+  const STORED = { content: 'I wade across.', composerMode: 'free' }
+
+  function harness(custody: { stillOnBranch: boolean; draftEmpty: boolean }) {
+    const calls: unknown[] = []
+    return {
+      calls,
+      deps: {
+        custodyNow: () => custody,
+        dismiss: vi.fn(async () => {
+          calls.push('dismiss')
+        }),
+        keepNotice: vi.fn(async (submission: typeof STORED) => {
+          calls.push(['keep', submission])
+        }),
+      },
+    }
+  }
+
+  it('keeps the stored text on a notice when the composer holds a draft', async () => {
+    const h = harness({ stillOnBranch: true, draftEmpty: false })
+    await settleCommittedPassRetry({ ...h.deps, stored: STORED })
+    expect(h.calls).toEqual([['keep', STORED]])
+  })
+
+  it('dismisses into an empty composer', async () => {
+    const h = harness({ stillOnBranch: true, draftEmpty: true })
+    await settleCommittedPassRetry({ ...h.deps, stored: STORED })
+    expect(h.calls).toEqual(['dismiss'])
+  })
+
+  it('dismisses an entry that stores no text', async () => {
+    const h = harness({ stillOnBranch: true, draftEmpty: false })
+    await settleCommittedPassRetry({ ...h.deps, stored: undefined })
+    expect(h.calls).toEqual(['dismiss'])
+  })
+})
 
 describe('planPassFailureCustody', () => {
   it('hands a failed pass back to an empty composer on the same branch', () => {

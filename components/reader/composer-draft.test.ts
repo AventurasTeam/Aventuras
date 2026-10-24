@@ -46,10 +46,11 @@ describe('planSubmissionHandback', () => {
     })
   })
 
-  it('restores into an absent composer', () => {
+  // The route keeps its branch after it unmounts, so only the missing draft says the reader closed;
+  // a restore into it would toast a recovery that never happened.
+  it('claims nothing once the composer is gone', () => {
     expect(planSubmissionHandback({ content: 'I draw the blade' }, undefined)).toEqual({
-      action: 'restore',
-      content: 'I draw the blade',
+      action: 'no-composer',
     })
   })
 

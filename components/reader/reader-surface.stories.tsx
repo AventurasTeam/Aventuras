@@ -7,7 +7,12 @@ import type { StoryEntry, SystemFailureMeta } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
 import { ReaderSurface } from './reader-surface'
-import { describePassFailure, describeTurnFailure, toPassFailureMeta } from './system-entry-actions'
+import {
+  describePassFailure,
+  describeTurnFailure,
+  passResolvedEntry,
+  toPassFailureMeta,
+} from './system-entry-actions'
 
 const NOW = 1752900000000
 
@@ -886,6 +891,16 @@ export const PassFailureHeldTextKept: Story = {
     ).not.toBeInTheDocument()
     expect(within(row).getByRole('button', { name: /Dismiss/ })).toBeVisible()
     expect(within(row).queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument()
+  },
+}
+
+const RESOLVED_PASS = passResolvedEntry({ content: 'I wade in after it.', composerMode: 'free' })
+
+// A Retry committed over an occupied draft: the entry stays to hold the text, Dismiss alone.
+export const PassResolvedTextKept: Story = {
+  args: {
+    rows: passFailureRows(RESOLVED_PASS.content, RESOLVED_PASS.failure),
+    onRetrySystemEntry: undefined,
   },
 }
 

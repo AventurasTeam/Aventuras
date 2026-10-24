@@ -254,7 +254,7 @@ describe('stateReport creates', () => {
 describe('systemFailure', () => {
   const base = { sceneEntities: [], currentLocationId: null, worldTime: 0 }
 
-  it.each(['failed', 'held'] as const)('keeps a pass refusal marked %s', (pass) => {
+  it.each(['failed', 'held', 'resolved'] as const)('keeps a pass entry marked %s', (pass) => {
     const systemFailure = { kind: 'provider', detail: 'timeout: classifier', pass }
     expect(entryMetadataSchema.parse({ ...base, systemFailure })).toEqual({
       ...base,

@@ -512,6 +512,7 @@ chrome blip.
 | **LLM call failed**                                                                                                                                                                                                    | `Retry` · `View details` · `Dismiss`              |
 | **Memory update failed** before the turn, failing the Send ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy))                                                                   | `Retry` · `View details` · `Dismiss`              |
 | **Memory update failed**, branch held (an earlier update couldn't be undone, so Send is refused)                                                                                                                       | `Dismiss`                                         |
+| **Memory updated** on `Retry`, its text kept on the entry ([Custody of the turn's text](#custody-of-the-turns-text))                                                                                                   | `Dismiss`                                         |
 | **Embed call failed** mid-turn (blocking per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle); the composer is not gated — a resubmit re-runs the same blocking sync stage) | `Switch embedder` · `Retry` · `Dismiss`           |
 | **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `View details` · `Dismiss`        |
 | **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `View details` · `Dismiss`        |
@@ -561,15 +562,28 @@ surface via the existing global broken-config banner instead.
 A failure entry carries the submission that produced it
 (`metadata.systemFailure.submission`), and since the turn's
 `user_action` was reverse-replayed with the run, that copy is the only
-one left. It is a convenience for `Retry`, not a vault: **every path
-that destroys the entry hands the submission back to the composer
-draft** — `Dismiss`, a pass entry's `Retry` whose pass commits (it
-clears the entry through `Dismiss`), and the pre-dispatch tail clear on
-a regenerate that then throws. An empty draft receives the text
-verbatim under composer mode `Free`, since the stored content is
-already wrapped and must not be wrapped twice; a non-empty draft wins
-and the user is told the text was dropped rather than losing it
-silently.
+one left. It is a convenience for `Retry`, not a vault.
+
+**A Send supersedes the entry's text.** The user wrote the Send's
+text while the entry and its `Retry` stood, so the entry's text is
+stale: the Send's pre-dispatch tail clear drops it with no hand-back
+and no toast. **Any other dispatch that destroys the entry without
+putting it back hands the submission to the composer draft once its
+own text has settled**: `Dismiss`, and every regenerate outcome but
+the rejection (a completed take, a failed or blocked one, a cancel, a
+throw). A regenerate whose own text is the same, on its new failure
+entry or back in the draft, hands nothing back. An empty draft
+receives the text verbatim under composer mode `Free`, since the
+stored content is already wrapped and must not be wrapped twice; a
+non-empty draft wins and the user is told the text was dropped rather
+than losing it silently. A reader closed under the dispatch has no
+composer to take the text, and nothing claims it was restored.
+
+A pass entry's `Retry` whose pass commits clears the entry through
+`Dismiss` only when the composer can take its text back. Over an
+occupied draft, or once the user has left the branch, the entry stays
+as a notice holding the text, with no `Retry` and copy that says so,
+and its `Dismiss` hands the text back.
 
 A **Memory update failed** entry carries the submission only where
 the composer can't hold the text. A Send refused on a held branch

@@ -145,15 +145,30 @@ export function toPassFailureMeta(
 }
 
 /**
- * A pass-failure entry's Retry: runs the pass alone. A commit clears the entry through `dismiss`;
- * a failure, a throw or a hold rewrites it, a failure as held when its reversal didn't commit; a
- * cancel leaves the entry as it was. A throw from `held`, `dismiss` or `rewrite` propagates.
+ * What a committed Retry leaves when the composer couldn't take its entry's text back: a notice
+ * holding the text, with no Retry and no fix, whose Dismiss hands the text back.
+ */
+export function passResolvedEntry(submission: NonNullable<SystemFailureMeta['submission']>): {
+  content: string
+  failure: SystemFailureMeta
+} {
+  return {
+    content: t('reader:systemEntry.passResolvedTextKept'),
+    failure: { kind: 'orchestrator', submission, pass: 'resolved' },
+  }
+}
+
+/**
+ * A pass-failure entry's Retry: runs the pass alone. A commit settles the entry through
+ * `committed`; a failure, a throw or a hold rewrites it, a failure as held when its reversal didn't
+ * commit; a cancel leaves the entry as it was. A throw from `held`, `committed` or `rewrite`
+ * propagates.
  */
 export async function retryPassEntry(deps: {
   runPass: () => Promise<TxResult | RejectedStart>
   /** Read once the pass ended: whether the branch is held `running`. */
   held: () => Promise<boolean>
-  dismiss: () => Promise<void>
+  committed: () => Promise<void>
   rewrite: (refusal: PassRefusal) => Promise<void>
   notify: (message: string) => void
 }): Promise<void> {
@@ -164,7 +179,7 @@ export async function retryPassEntry(deps: {
     const detail = err instanceof Error ? err.message : String(err)
     return deps.rewrite({ held: false, error: { kind: 'orchestrator', detail } })
   }
-  if (result.outcome === 'completed') return deps.dismiss()
+  if (result.outcome === 'completed') return deps.committed()
   if (result.outcome === 'failed')
     return deps.rewrite((await deps.held()) ? { held: true } : { held: false, error: result.error })
   if (result.outcome !== 'rejected') return
@@ -227,10 +242,10 @@ export function useSystemEntryActions(
     leaveStory,
   )
   const embedderFix = useEmbedderFixAction(failure?.kind === 'embedder' ? storyId : null)
-  // A held branch can't run a pass, so its entry offers Dismiss alone. The two fix gates are
-  // kind-exclusive, so the `??` order carries no meaning.
+  // A held branch can't run a pass, and a resolved entry's pass has run, so either offers Dismiss
+  // alone. The two fix gates are kind-exclusive, so the `??` order carries no meaning.
   return {
-    onRetry: failure?.pass === 'held' ? undefined : onRetry,
+    onRetry: failure?.pass === 'held' || failure?.pass === 'resolved' ? undefined : onRetry,
     fixAction: embedderFix ?? configFix,
   }
 }

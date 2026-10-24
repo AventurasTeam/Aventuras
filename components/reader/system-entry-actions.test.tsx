@@ -18,6 +18,7 @@ import {
   describePassFailure,
   describeTurnFailure,
   dismissSystemEntry,
+  passResolvedEntry,
   retryPassEntry,
   toPassFailureMeta,
   toSystemFailureMeta,
@@ -328,6 +329,31 @@ describe('toPassFailureMeta', () => {
   })
 })
 
+describe('passResolvedEntry', () => {
+  const SUBMISSION = { content: 'I wait.', composerMode: 'free' }
+
+  it('keeps the text under the resolved marker, through the persisted schema', () => {
+    const { failure } = passResolvedEntry(SUBMISSION)
+    const parsed = entryMetadataSchema.parse({
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: 0,
+      systemFailure: failure,
+    })
+    expect(parsed.systemFailure).toEqual({
+      kind: 'orchestrator',
+      submission: SUBMISSION,
+      pass: 'resolved',
+    })
+  })
+
+  it('says where the text went and how to get it back', () => {
+    const key = 'reader:systemEntry.passResolvedTextKept'
+    expect(hasCopy(key)).toBe(true)
+    expect(passResolvedEntry(SUBMISSION).content).toBe(t(key))
+  })
+})
+
 describe('retryPassEntry', () => {
   const ran = { runId: 'run_pass', actionId: 'act_pass' }
 
@@ -336,8 +362,8 @@ describe('retryPassEntry', () => {
     const rewrite = vi.fn(async (_refusal: PassRefusal) => {
       calls.push('rewrite')
     })
-    const dismiss = vi.fn(async () => {
-      calls.push('dismiss')
+    const committed = vi.fn(async () => {
+      calls.push('committed')
     })
     const notify = vi.fn((_message: string) => {
       calls.push('notify')
@@ -346,14 +372,14 @@ describe('retryPassEntry', () => {
       result instanceof Error ? Promise.reject(result) : Promise.resolve(result),
     )
     const held = vi.fn(async () => heldAfter)
-    return { calls, rewrite, notify, runPass, deps: { runPass, held, dismiss, rewrite, notify } }
+    return { calls, rewrite, notify, runPass, deps: { runPass, held, committed, rewrite, notify } }
   }
 
-  it('clears the entry once the pass commits, sending nothing', async () => {
+  it('settles the entry once the pass commits, sending nothing', async () => {
     const h = harness({ ...ran, outcome: 'completed' })
     await retryPassEntry(h.deps)
     expect(h.runPass).toHaveBeenCalledTimes(1)
-    expect(h.calls).toEqual(['dismiss'])
+    expect(h.calls).toEqual(['committed'])
   })
 
   it('rewrites the entry with the new cause when the pass fails again', async () => {
@@ -408,10 +434,10 @@ describe('retryPassEntry', () => {
   })
 
   // The pass committed, so its failure copy would be wrong: the throw goes to the caller.
-  it('lets a throw from the clear through without rewriting the entry', async () => {
+  it('lets a throw from the settle through without rewriting the entry', async () => {
     const h = harness({ ...ran, outcome: 'completed' })
-    const dismiss = vi.fn(() => Promise.reject(new Error('reload failed')))
-    await expect(retryPassEntry({ ...h.deps, dismiss })).rejects.toThrow('reload failed')
+    const committed = vi.fn(() => Promise.reject(new Error('reload failed')))
+    await expect(retryPassEntry({ ...h.deps, committed })).rejects.toThrow('reload failed')
     expect(h.rewrite).not.toHaveBeenCalled()
   })
 })
@@ -596,6 +622,15 @@ describe('useSystemEntryActions', () => {
   // A held branch can't run a pass: its entry offers Dismiss alone.
   it('offers no Retry on a held pass entry', () => {
     expect(actionsFor({ kind: 'orchestrator', pass: 'held' }).onRetry).toBeUndefined()
+  })
+
+  // Its pass has run; the entry only holds a text the composer couldn't take back.
+  it('offers Dismiss alone on a resolved pass entry', () => {
+    const actions = actionsFor(
+      passResolvedEntry({ content: 'I wade in.', composerMode: 'free' }).failure,
+    )
+    expect(actions.onRetry).toBeUndefined()
+    expect(actions.fixAction).toBeUndefined()
   })
 
   it('keeps Retry on a failed pass entry and on a turn failure', () => {

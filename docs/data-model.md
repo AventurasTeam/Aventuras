@@ -2039,7 +2039,7 @@ story_entries.metadata: {
       content: string
       composerMode: string
     }
-    pass?: 'failed' | 'held'        // a pass-failure entry: its Retry runs the pass alone; held has no Retry
+    pass?: 'failed' | 'held' | 'resolved'  // a pass-failure entry: its Retry runs the pass alone; held has no Retry; resolved is what a committed Retry leaves when the composer couldn't take the submission back, a notice holding it with no Retry
   }
 }
 ```

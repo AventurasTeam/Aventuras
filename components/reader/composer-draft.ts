@@ -18,13 +18,17 @@ export type SubmissionHandback =
   | { action: 'none' }
   | { action: 'restore'; content: string }
   | { action: 'keep-draft' }
+  /** The reader closed under the caller's awaits: nothing can take the text, nor claim it did. */
+  | { action: 'no-composer' }
 
 export function planSubmissionHandback(
   submission: { content: string } | undefined,
+  /** The mounted composer's draft; undefined once the reader has unmounted. */
   draft: { text: string } | undefined,
 ): SubmissionHandback {
   // Unreachable through the send gate; restoring it would announce an empty recovery.
   if (submission === undefined || submission.content.trim().length === 0) return { action: 'none' }
+  if (draft === undefined) return { action: 'no-composer' }
   if (!isDraftEmpty(draft)) return { action: 'keep-draft' }
   return { action: 'restore', content: submission.content }
 }
