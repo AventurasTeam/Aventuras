@@ -1281,6 +1281,18 @@ folds the system half into the start of the user message. Parked
 2026-10-11; the signal is a report of a model failing on the system
 role.
 
+#### Unicode case folding for names and terms
+
+Names, keyword terms and stackable keys compare lowercased
+(`normalizeTerm` in `lib/keyword-terms.ts`, `toLowerCase()`), not case
+folded, so `Strauß` and `STRAUSS` don't match. Full folding needs a
+fold table, since JavaScript has none built in, and would change stored
+stackable keys and the namesake haystack together. Default folding
+wouldn't match Turkish `İzmir` to `izmir` either; only a
+Turkish-specific fold does. Parked 2026-10-24; the signal is a story
+whose names or terms differ only by a folding pair and get treated as
+different things.
+
 ### Memory pipeline (parked)
 
 Subsystem-scoped deferrals for the memory pipeline (retrieval,

@@ -858,9 +858,11 @@ commit policy.
 **Dedupe.** Case-insensitive
 (`array.some(t => t.toLowerCase() === typed.toLowerCase())`). On
 dedupe-rejection, **input clears anyway** — the user already has
-that tag, no error surface needed. `toLowerCase()` (ASCII case fold)
-is sufficient for v1; Unicode case folding via `toLocaleLowerCase()`
-is a one-line upgrade if drift surfaces.
+that tag, no error surface needed. `toLowerCase()` is sufficient for
+v1: it lowercases all of Unicode but doesn't fold, so `Strauß` and
+`STRAUSS` stay distinct, as they do for names and keyword terms
+everywhere
+([`parked.md → Unicode case folding for names and terms`](../../parked.md#unicode-case-folding-for-names-and-terms)).
 
 **Caps.** `maxCount` reached → input visually disabled, commits
 become noops (chip × still works). `maxTagLength` → underlying

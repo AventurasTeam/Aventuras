@@ -72,13 +72,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **Keyword-term comparison lowercases instead of case-folding.**
-  `normalizeTerm` (`lib/keyword-terms.ts`) uses `toLowerCase()` while
-  canon says "case-folded", so "Strauß" and "STRAUSS", or Turkish "İ"
-  and "i", don't match. Pre-existing; it affects every keyword-term
-  comparison and the namesake matcher. Raised 2026-10-10 by the
-  partial-name collisions code review.
-
 - **The resolve dialog's Rename body keeps its input names when a row
   is renamed elsewhere.** `RenameBody` in
   `components/compounds/collision-resolve-dialog.tsx` resets only when
