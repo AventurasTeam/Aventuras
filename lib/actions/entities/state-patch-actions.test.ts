@@ -2094,6 +2094,21 @@ describe('raiseCollisionFlag', () => {
     expect(await flagOf(db)).toEqual([0, null, null])
   })
 
+  // The three columns are one field: a re-point of the partner alone shields the flag too.
+  it('keeps a dormant flag the user re-pointed after the prose', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values({ ...CHAR, id: 'char_3', status: 'active', name: 'Zed' })
+    await seed(ctx, db, {
+      ...STRANGER,
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_gone',
+      nameCollisionReason: 'distinct',
+    })
+    await apply(ctx, userPatch({ nameCollisionPartnerId: 'char_3' }), 'act_u')
+    expect(await apply(ctx, raise(), 'act_f')).toEqual(userWonOver)
+    expect(await flagOf(db)).toEqual([1, 'char_3', 'distinct'])
+  })
+
   it('raises past a later edit of the description', async () => {
     const { db, ctx } = await setup()
     await seed(ctx, db)
