@@ -178,8 +178,7 @@ _Reconcile_ button, which opens a reconciliation on that range.
 Open _Reconcile_ from the Timeline panel, or from a finding. The stretch between two neighbouring
 reference points is called a **range**, and one is reconciled at a time. The range selector lists
 them all. _Go to next range_ moves on once you're done with one. The Reconcile button opens on the
-last range, since that's usually where you go when you notice drift in an ongoing story. The other
-ranges matter mostly the first time you go through a story and rebuild its whole broken timeline.
+first range, and a finding's _Reconcile_ button opens on the range holding it.
 
 Note that every range **includes** the entry at its end but **excludes** the entry at its start.
 So a fork point entry always belongs to the range **before** it, while its ending is where the next

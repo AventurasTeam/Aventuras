@@ -106,10 +106,8 @@
 
   const ranges = $derived(story.timeRanges)
 
-  // Opens on the story's end. A reader notices the clock has drifted while it is still drifting,
-  // and reconciles the range they are living in; walking the whole story is a once-per-story
-  // event. Only on opening, so that applying does not drag the selection back off the range
-  // the reader moved to.
+  // Opens on the first range, in story order, unless asked for the one holding an entry. Only on
+  // opening, so that applying does not drag the selection back off the range the reader moved to.
   let wasOpen = false
   $effect(() => {
     if (open === wasOpen) return
@@ -118,7 +116,7 @@
     const list = untrack(() => ranges)
     const asked = untrack(() => focusEntryId)
     const holding = asked ? list.findIndex((candidate) => candidate.entryIds.includes(asked)) : -1
-    selectedIndex = holding === -1 ? Math.max(0, list.length - 1) : holding
+    selectedIndex = Math.max(0, holding)
   })
   const range = $derived<SelectableRange | undefined>(ranges[selectedIndex])
   const hasNextRange = $derived(selectedIndex + 1 < ranges.length)
