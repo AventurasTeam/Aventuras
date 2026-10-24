@@ -150,9 +150,11 @@
     return !!boundary && canRestate(which, byId.get(boundary.entryId))
   }
 
-  function openEditor(which: 'from' | 'to') {
+  async function openEditor(which: 'from' | 'to') {
     const boundary = boundaryOf(which)
     if (!boundary) return
+    // One editor at a time: opening the other end replaces what this one holds.
+    if (editorChanged && !(await askToDiscard('Discard the time you typed?'))) return
     const seed = drafts[which]?.time ?? boundary.time
     draftTimeText = seed ? formatStoryTime(seed) : ''
     const draftedNote = drafts[which]?.note
