@@ -88,8 +88,9 @@ The reader may restate either boundary for one reconciliation (`BoundaryDrafts`,
 `restateBoundaries`). A restated earlier boundary moves only the baseline: its entry stays as it is,
 and the mismatch with it is the leading join. A restated later boundary is the target, and applying
 writes it to that entry's ending; an action has no ending to write, so only the earlier boundary may
-name one (`canRestate`). A restatement is an input like a weight, never a stored anchor, and the
-fingerprint keeps comparing the stored boundaries.
+name one (`canRestate`). A restatement is an input like a weight: an Assert is never stored, and an
+Edit updates the existing anchor when the reconciliation is applied. The fingerprint keeps comparing
+the stored boundaries.
 
 The range is weighed as alternating entry durations and the intervals between them,
 `[d0, g0, d1, g1, … dN-1]`:

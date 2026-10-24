@@ -201,7 +201,10 @@ What a restated time does depends on the end:
 
 - **Start.** The range begins at the new time. The entry at the start belongs to the range before
   this one, so it isn't touched: if its recorded ending now differs, a gap or an overlap opens
-  just before the range, and the screen says so. Reconciling the range before this one closes it.
+  just before the range, and the screen says so. An assertion isn't stored, so reconciling the
+  range before this one won't close that gap on its own: assert the same time as its End, or
+  anchor the entry. At the story's first entry, which belongs to no range, edit its times in place
+  instead.
 - **End.** The range is fitted to the new time, and applying ends the entry at the end there. Its
   start comes out of the weights, like every other entry's.
 

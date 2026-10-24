@@ -170,11 +170,19 @@
   function setDraft() {
     const boundary = editing ? boundaryOf(editing) : undefined
     if (!editing || !boundary || !draftTime) return
-    drafts = {
-      ...drafts,
-      [editing]: story.timeAnchorFor(boundary.entryId)
-        ? { kind: 'edit', time: draftTime, note: draftNote.trim() || null }
-        : { kind: 'assert', time: draftTime },
+    const anchor = story.timeAnchorFor(boundary.entryId)
+    const note = draftNote.trim() || null
+    const unchanged =
+      sameInstant(draftTime, boundary.time) && (!anchor || note === (anchor.note ?? null))
+    if (unchanged) {
+      revertDraft(editing)
+    } else {
+      drafts = {
+        ...drafts,
+        [editing]: anchor
+          ? { kind: 'edit', time: draftTime, note }
+          : { kind: 'assert', time: draftTime },
+      }
     }
     closeEditor()
   }
@@ -541,22 +549,28 @@
       [...Object.values(supplied), ...Object.values(gapWeights)].some((text) => text.trim() !== ''),
   )
 
-  /** A question already on screen answers for every close attempt made while it is up. */
+  /** A question already on screen answers for every attempt made while it is up. */
   let asking = false
+
+  async function askToDiscard(message: string): Promise<boolean> {
+    if (asking) return false
+    asking = true
+    try {
+      return await ask(message, { title: 'Discard Changes', kind: 'warning' })
+    } finally {
+      asking = false
+    }
+  }
 
   /** The one question before discarding what was typed. */
   async function confirmDiscard(): Promise<boolean> {
     if (!unapplied) return true
-    if (asking) return false
-    asking = true
-    try {
-      return await ask('Discard the boundaries and weights you have set for this range?', {
-        title: 'Discard Changes',
-        kind: 'warning',
-      })
-    } finally {
-      asking = false
-    }
+    return askToDiscard('Discard the boundaries and weights you have set for this range?')
+  }
+
+  /** Escape on an open editor closes it, asking first when something was typed. */
+  async function escapeEditor() {
+    if (!editorChanged || (await askToDiscard('Discard the time you typed?'))) closeEditor()
   }
 
   /** Every way of closing the screen comes through here. */
@@ -836,7 +850,7 @@
     }}
     onEscapeKeydown={(event: KeyboardEvent) => {
       event.preventDefault()
-      if (editing) closeEditor()
+      if (editing) void escapeEditor()
       else void requestClose()
     }}
     onInteractOutside={(event: PointerEvent) => {
@@ -912,7 +926,10 @@
             {#if appliedMessage && hasNextRange}
               <Button onclick={goToNextRange}>Go to next range</Button>
             {:else}
-              <Button disabled={preview?.status !== 'ok' || applying} onclick={apply}>
+              <Button
+                disabled={preview?.status !== 'ok' || applying || editorChanged}
+                onclick={apply}
+              >
                 {applying ? 'Applying…' : 'Apply changes'}
               </Button>
             {/if}
@@ -997,7 +1014,7 @@
         {@render anchorRow('Start', 'from')}
         <div class="border-border/60 my-1 border-t"></div>
         {@render anchorRow('End', 'to')}
-        {#if forkWarning > 0}
+        {#if forkWarning > 0 && !isRefused}
           <p class="mt-1 flex items-start gap-1 text-amber-700 dark:text-amber-500">
             <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0" />
             <span>
@@ -1088,7 +1105,8 @@
 
         <p class="text-muted-foreground">
           {#if anchor}
-            The anchor is stored with this time when the range is applied.
+            The anchor's time and note are saved when the range is applied, and only then. Closing
+            the screen first, or leaving a range that cannot be applied, discards them.
           {:else if which === 'from'}
             For this reconciliation only: the range starts here, and the entry itself is left as it
             is. Nothing is stored as an anchor.
@@ -1127,6 +1145,9 @@
           </label>
         {/if}
 
+        {#if editorChanged}
+          <p class="text-muted-foreground">Set or cancel this time before applying the range.</p>
+        {/if}
         <div class="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" class="h-6 text-[11px]" onclick={closeEditor}>
             Cancel
@@ -1175,14 +1196,21 @@
   {#if resolved && preview?.status === 'ok'}
     <div class="text-muted-foreground space-y-1 text-xs">
       {#if preview.result.leadingJoin.differenceMinutes !== 0}
+        {@const startId = preview.range.from.entryId}
         <p>
           The entry before this range still ends at
           {stamp(preview.result.leadingJoin.neighbourTime)}, so it will
           {preview.result.leadingJoin.differenceMinutes > 0 ? 'overlap' : 'leave a gap before'} the new
           start.
-          {#if preview.range.from.index === 0}
-            It is the story's first entry, which belongs to no range, so this join stays open and
-            the anomalies keep reporting it.
+          {#if preview.range.from.index === 0 && isAction(startId)}
+            It is the story's first entry, which belongs to no range, and a player action has no
+            times to edit, so this join stays open.
+          {:else if preview.range.from.index === 0}
+            It is the story's first entry, which belongs to no range: edit its times in place to
+            close this join.
+          {:else if drafts.from?.kind === 'assert'}
+            An assertion is not stored, so reconciling the range before this one leaves the gap.
+            Assert the same time as its End, or anchor entry {entryNumber(startId)}, to close it.
           {:else}
             Reconcile the range before this one to close it.
           {/if}
@@ -1511,7 +1539,11 @@
         {#if appliedMessage && hasNextRange}
           <Button class="flex-1" onclick={goToNextRange}>Go to next range</Button>
         {:else}
-          <Button class="flex-1" disabled={preview?.status !== 'ok' || applying} onclick={apply}>
+          <Button
+            class="flex-1"
+            disabled={preview?.status !== 'ok' || applying || editorChanged}
+            onclick={apply}
+          >
             {applying ? 'Applying…' : 'Apply changes'}
           </Button>
         {/if}
