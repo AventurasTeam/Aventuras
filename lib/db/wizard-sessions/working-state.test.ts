@@ -129,6 +129,7 @@ describe('cast drafts', () => {
       kind: 'location',
       parentLocationId: null,
       unresolvedParentLocationName: '',
+      parentUnknown: false,
       condition: '',
     })
     expect(emptyCastDraft('item', 'item_1')).toMatchObject({ kind: 'item', condition: '' })

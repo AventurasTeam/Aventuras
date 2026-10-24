@@ -132,6 +132,18 @@ export const world = {
     page.getByRole('button', { name: t('world:detail.namePlaceholder'), exact: true }),
   nameInput: (page: Page): Locator => page.getByPlaceholder(t('world:detail.namePlaceholder')),
 
+  // Always holds a value, so the button reads "Part of: <value>" (common:picker.fieldLabel).
+  placementPicker: (page: Page, value: string): Locator =>
+    page.getByRole('button', {
+      name: t('picker.fieldLabel', { label: t('world:fields.parentLocation'), value }),
+      exact: true,
+    }),
+  // Not exact: a place row's name also carries its kind icon's label.
+  placementOption: (page: Page, name: string): Locator => page.getByRole('option', { name }),
+  // Visible only: the reader's peek drawer can hold an Overview hidden under World.
+  locationUnknown: (page: Page): Locator =>
+    page.getByText(t('world:overview.locationUnknown'), { exact: true }).filter({ visible: true }),
+
   moreActions: (page: Page): Locator =>
     page.getByRole('button', { name: t('world:detail.menu.label'), exact: true }),
   menuItem: (

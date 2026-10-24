@@ -120,7 +120,7 @@ export function placeRefusalText(refusal: PlaceSaveRefusal): string {
 const REFUSAL_TAB: Record<PlaceSaveRefusal['field'], EntityTab> = {
   status: 'settings',
   injectionMode: 'settings',
-  parentLocationId: 'connections',
+  placement: 'connections',
   currentLocationId: 'connections',
   atLocationId: 'connections',
 }
@@ -242,7 +242,7 @@ const CHARACTER_LABEL: Record<keyof CharacterDraft, () => string> = {
 
 const LOCATION_LABEL: Record<keyof LocationDraft, () => string> = {
   ...BASE_LABEL,
-  parentLocationId: () => t('world:fields.parentLocation'),
+  placement: () => t('world:fields.parentLocation'),
   condition: () => t('world:fields.condition'),
 }
 

@@ -122,7 +122,7 @@ describe('characterDraftFrom', () => {
     })
   })
 
-  it('starts a location create from the literal schema defaults', () => {
+  it('starts a location create from the literal schema defaults, unplaced', () => {
     expect(locationDraftFrom(null)).toEqual({
       name: '',
       description: '',
@@ -132,20 +132,33 @@ describe('characterDraftFrom', () => {
       keywords: [],
       tags: [],
       priority: 0,
-      parentLocationId: null,
+      placement: { kind: 'unplaced' },
       condition: '',
     })
   })
 
   it('reads a null stored state as the empty state', () => {
     expect(locationDraftFrom({ ...KAEL, kind: 'location', state: null })).toMatchObject({
-      parentLocationId: null,
+      placement: { kind: 'top' },
       condition: '',
     })
     expect(factionDraftFrom({ ...KAEL, kind: 'faction', state: null })).toMatchObject({
       standing: '',
       agenda: [],
     })
+  })
+
+  it('reads each stored placement of a location', () => {
+    const placementOfRow = (state: Entity['state']) =>
+      locationDraftFrom({ ...KAEL, kind: 'location', state }).placement
+    expect(placementOfRow({ parent_location_id: null, unplaced: true })).toEqual({
+      kind: 'unplaced',
+    })
+    expect(placementOfRow({ parent_location_id: 'loc_vale' })).toEqual({
+      kind: 'under',
+      parentId: 'loc_vale',
+    })
+    expect(placementOfRow({ parent_location_id: null })).toEqual({ kind: 'top' })
   })
 
   it('reads a location and an item position and condition', () => {
@@ -155,7 +168,7 @@ describe('characterDraftFrom', () => {
         kind: 'location',
         state: { parent_location_id: 'loc_vale', condition: 'flooded' },
       }),
-    ).toMatchObject({ parentLocationId: 'loc_vale', condition: 'flooded' })
+    ).toMatchObject({ placement: { kind: 'under', parentId: 'loc_vale' }, condition: 'flooded' })
     expect(
       itemDraftFrom({
         ...KAEL,
@@ -163,6 +176,22 @@ describe('characterDraftFrom', () => {
         state: { at_location_id: 'loc_hollow', condition: 'chipped' },
       }),
     ).toMatchObject({ atLocationId: 'loc_hollow', condition: 'chipped' })
+  })
+
+  it('accepts each placement and refuses a parent placement with no parent', () => {
+    const draft = { ...locationDraftFrom(null), name: 'Varn' }
+    for (const placement of [
+      { kind: 'unplaced' },
+      { kind: 'top' },
+      { kind: 'under', parentId: 'loc_vale' },
+    ])
+      expect(locationDraftSchema.safeParse({ ...draft, placement }).success).toBe(true)
+    expect(locationDraftSchema.safeParse({ ...draft, placement: { kind: 'under' } }).success).toBe(
+      false,
+    )
+    expect(
+      locationDraftSchema.safeParse({ ...draft, placement: { kind: 'nowhere' } }).success,
+    ).toBe(false)
   })
 })
 

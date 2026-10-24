@@ -110,6 +110,10 @@ describe('lastSeenLine', () => {
 })
 
 describe('labels and issues', () => {
+  it("labels a place's placement as its parent field", () => {
+    expect(entityFieldLabel('location', 'placement')).toBe('Part of')
+  })
+
   it("labels every draft field of every kind with its own kind's map", () => {
     const fields = [
       ...Object.keys(characterDraftFrom(null, [])).map((f) => ['character', f] as const),
@@ -213,7 +217,7 @@ describe('placeRefusalNotice', () => {
     expect(
       placeRefusalNotice({
         code: 'story-inside',
-        field: 'parentLocationId',
+        field: 'placement',
         place: VELLIS,
         story: ANCHOR,
       }),
@@ -221,9 +225,9 @@ describe('placeRefusalNotice', () => {
     expect(placeRefusalNotice({ code: 'retired-parent', field: 'status', parent: VELLIS })).toBe(
       'Settings: Port Vellis is retired. Bring it back first.',
     )
-    expect(
-      placeRefusalNotice({ code: 'retired-parent', field: 'parentLocationId', parent: VELLIS }),
-    ).toBe('Connections: Port Vellis is retired. Bring it back first.')
+    expect(placeRefusalNotice({ code: 'retired-parent', field: 'placement', parent: VELLIS })).toBe(
+      'Connections: Port Vellis is retired. Bring it back first.',
+    )
     expect(
       placeRefusalNotice({ code: 'retired-place', field: 'currentLocationId', place: VELLIS }),
     ).toBe('Connections: Port Vellis is retired, so nothing can enter it.')

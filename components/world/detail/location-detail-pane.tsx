@@ -26,8 +26,8 @@ const resolver = zodResolver(locationDraftSchema)
 const fieldLabel = (field: string) => entityFieldLabel('location', field)
 // data-model.md → LocationState: a handler parent-chain refusal is a form error on the parent.
 const FIELD_ERRORS = {
-  [PARENT_CYCLE]: { field: 'parentLocationId', message: WORLD_ISSUE.parentCycle },
-  [PARENT_CHAIN_BROKEN]: { field: 'parentLocationId', message: WORLD_ISSUE.parentChainBroken },
+  [PARENT_CYCLE]: { field: 'placement', message: WORLD_ISSUE.parentCycle },
+  [PARENT_CHAIN_BROKEN]: { field: 'placement', message: WORLD_ISSUE.parentChainBroken },
 } as const
 
 export function LocationDetailPane({
@@ -105,6 +105,7 @@ export function LocationDetailPane({
           control={control}
           selfId={row?.id ?? null}
           entities={data.entities}
+          offerUnknown={values.placement.kind === 'unplaced'}
           onOpenEntity={onOpenEntity}
           {...gate}
         />

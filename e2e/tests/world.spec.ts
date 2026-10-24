@@ -461,12 +461,15 @@ test.describe.serial('World panel', () => {
     await world.nameInput(page).press('Enter')
     await saveSession.saveBarSave(page).click()
     await expect(saveSession.saveBarSave(page)).toHaveCount(0)
-    expect(
-      await queryApp(page, `SELECT kind, state FROM entities WHERE branch_id = ? AND name = ?`, [
-        branchId,
-        'E2E Salt Wells',
-      ]),
-    ).toEqual([['location', JSON.stringify({ parent_location_id: null })]])
+    const created = await queryApp(
+      page,
+      `SELECT kind, state FROM entities WHERE branch_id = ? AND name = ?`,
+      [branchId, 'E2E Salt Wells'],
+    )
+    // world.md → Overview: a place created in World starts Unknown until the user places it.
+    expect(created.map(([kind, state]) => [kind, JSON.parse(state as string)])).toEqual([
+      ['location', { parent_location_id: null, unplaced: true }],
+    ])
     await expect(world.subHeader(page)).toContainText('E2E Salt Wells')
   })
 

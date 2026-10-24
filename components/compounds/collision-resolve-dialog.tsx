@@ -83,6 +83,12 @@ const OVERLAP_NOTES = [
   ['holdersLosingItem', 'holdersLosingItem'],
 ] as const satisfies readonly (readonly [string, keyof RelationCounts['overlap']])[]
 
+// merge-links.ts → canonicalPlacement: whether the unplaced canonical takes the duplicate's place.
+const PLACEMENT_NOTE = {
+  'takes-loser': 'collisionDialog.summary.canonicalTakesPlacement',
+  'stays-unplaced': 'collisionDialog.summary.canonicalStaysUnplaced',
+} as const satisfies Record<NonNullable<RelationCounts['overlap']['canonicalPlacement']>, string>
+
 const RENAME_ISSUE_TEXT: Record<RenameIssue, () => string> = {
   [RENAME_ISSUE.emptyName]: () => t('collisionDialog.renameIssue.emptyName'),
   [RENAME_ISSUE.unchanged]: () => t('collisionDialog.renameHelp'),
@@ -591,6 +597,11 @@ function MergeBody({
         {counts.overlap.canonicalRefs > 0 ? (
           <Text size="xs" variant="muted">
             {t('collisionDialog.summary.canonicalRefs', { name: canonical.name })}
+          </Text>
+        ) : null}
+        {counts.overlap.canonicalPlacement != null ? (
+          <Text size="xs" variant="muted">
+            {t(PLACEMENT_NOTE[counts.overlap.canonicalPlacement], { name: canonical.name })}
           </Text>
         ) : null}
       </View>

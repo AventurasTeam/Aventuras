@@ -82,7 +82,7 @@ const REF_FIELDS: {
     kind: 'location',
     state: { parent_location_id: 'old' },
     rewritten: { parent_location_id: 'new' },
-    cleared: { parent_location_id: null },
+    cleared: { parent_location_id: null, unplaced: true },
   },
   {
     field: 'at_location_id',

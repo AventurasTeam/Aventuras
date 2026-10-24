@@ -25,6 +25,7 @@ import {
   translationsStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
+import { storyPlaceOf, type StoryPlace } from '@/lib/world'
 
 import {
   collisionResolveProp,
@@ -33,6 +34,8 @@ import {
 } from './use-collision-resolve'
 
 const resolveCollision = vi.hoisted(() => vi.fn())
+const NOWHERE = storyPlaceOf({ tail: null, sceneSource: null })
+
 vi.mock('@/lib/actions', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   resolveCollision,
@@ -133,7 +136,7 @@ function translation(id: string, targetId: string): Translation {
 
 // The flagged (newer) row asks, as the strip does; the pair must still come back older first.
 function openPair(guard: (proceed: () => void) => void = run) {
-  const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, guard))
+  const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, guard, NOWHERE))
   act(() => result.current.request(NEWER.id, OLDER.id))
   return result
 }
@@ -203,7 +206,7 @@ describe('useCollisionResolve → opening', () => {
     let renders = 0
     renderHook(() => {
       renders += 1
-      return useCollisionResolve(BRANCH, ctx, run)
+      return useCollisionResolve(BRANCH, ctx, run, NOWHERE)
     })
     const settled = renders
 
@@ -230,6 +233,49 @@ describe('useCollisionResolve → opening', () => {
 
     expect(openedPair(result).sides[1].relationCounts.awarenessRows).toBe(1)
     expect(openedPair(result).sides[1].relationCounts.translationRows).toBe(1)
+  })
+
+  it('passes the story to the summary: an unplaced canonical holding it stays unplaced under a disabled place', () => {
+    const harbor = makeEntity({
+      id: 'loc_harbor',
+      kind: 'location',
+      name: 'Harbor',
+      state: { parent_location_id: null, unplaced: true },
+      createdAt: 1_000,
+    })
+    const dark = makeEntity({
+      id: 'loc_dark',
+      kind: 'location',
+      name: 'Dark Wing',
+      injectionMode: 'disabled',
+      state: { parent_location_id: null },
+    })
+    const twin = makeEntity({
+      id: 'loc_harbor_2',
+      kind: 'location',
+      name: 'Harbor',
+      state: { parent_location_id: 'loc_dark' },
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: harbor.id,
+      nameCollisionReason: 'alike',
+      createdAt: 2_000,
+    })
+    act(() => entitiesStore.hydrate(BRANCH, [harbor, dark, twin]))
+    const placementWith = (story: StoryPlace) => {
+      const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run, story))
+      act(() => result.current.request(twin.id, harbor.id))
+      return openedPair(result).sides[1].relationCounts.overlap.canonicalPlacement
+    }
+
+    expect(placementWith(NOWHERE)).toBe('takes-loser')
+    expect(
+      placementWith(
+        storyPlaceOf({
+          tail: { metadata: { currentLocationId: harbor.id } },
+          sceneSource: { metadata: { currentLocationId: harbor.id } },
+        }),
+      ),
+    ).toBe('stays-unplaced')
   })
 
   it('closes once a row of the pair is gone, and stays closed when an undo brings it back', () => {
@@ -286,7 +332,7 @@ describe('useCollisionResolve → opening', () => {
       createdAt: 500,
     })
     entitiesStore.hydrate(BRANCH, [OLDER, harbor, { ...NEWER, nameCollisionPartnerId: harbor.id }])
-    const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run))
+    const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run, NOWHERE))
 
     act(() => result.current.request(NEWER.id, harbor.id))
 
@@ -317,7 +363,7 @@ describe('useCollisionResolve → the shared parent', () => {
   // The strip asks from the flagged (newer) row.
   function openPlaces(rows: Entity[]): CollisionDialogPair {
     entitiesStore.hydrate(BRANCH, rows)
-    const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run))
+    const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run, NOWHERE))
     act(() => result.current.request('loc_stalls', 'loc_market'))
     return openedPair(result)
   }

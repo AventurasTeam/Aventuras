@@ -576,7 +576,7 @@ export type SelectProps = {
   tailAction?: { label: string; onPress: () => void }
 }
 
-function resolveMode(
+export function resolveMode(
   options: SelectOption[],
   explicit: SelectMode | undefined,
   tier: ReturnType<typeof useTier>,

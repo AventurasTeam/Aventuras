@@ -228,7 +228,9 @@
       "holdersLosingItem_one": "1 holder loses this item: {{name}} is already held or placed.",
       "holdersLosingItem_other": "{{count}} holders lose this item: {{name}} is already held or placed.",
       "joiningRelationship": "The relationship between the two is dropped.",
-      "canonicalRefs": "{{name}} sits under this location: the merge clears that parent, since a place can't contain itself."
+      "canonicalRefs": "{{name}} sits under this location: it loses that parent and becomes unplaced, since a place can't contain itself.",
+      "canonicalTakesPlacement": "{{name}} has no known location: it takes this location's place on the map.",
+      "canonicalStaysUnplaced": "{{name}} has no known location and stays unplaced: this location's own place is unknown, retired, inside {{name}}, or inside a disabled place while the story is in {{name}}."
     },
     "mergeConfirm": {
       "older": "Merge into the older {{name}}",

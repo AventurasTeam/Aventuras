@@ -382,7 +382,11 @@ under a rule per kind:
     unplaced place of exactly its name, and places it there. A create
     with no parent is compared by exact name with the unplaced places
     and every placed one: one match is reused, several create it
-    unplaced with `name_collision_flag = 1`.
+    unplaced with `name_collision_flag = 1` and the reason `unplaced`,
+    the partner an unplaced match first, then the older, then by id. An
+    exact retired namesake alone flags it the same way, and a partial
+    name flags it only against another unplaced place, since those
+    stand in for its siblings.
 - **An item** is never reused: a "sword" picked up while another exists
   elsewhere is usually a different sword. Only its exact namesakes
   anywhere on the branch are compared, by embedding the descriptions as

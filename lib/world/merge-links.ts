@@ -13,6 +13,9 @@ import {
   stateWithRefRewritten,
   type EntityLinkRows,
 } from './entity-refs'
+import { realPlacementOf } from './location-map'
+import { checkParentChain, parentOfLocations } from './parent-chain'
+import { adoptionHidesStory, type StoryPlace } from './place-rules'
 
 export type MergeLinkInput = {
   branchId: string
@@ -26,6 +29,8 @@ export type MergeLinkInput = {
   awareness: readonly HappeningAwareness[]
   involvements: readonly HappeningInvolvement[]
   relationships: readonly CharacterRelationship[]
+  /** Where the story is, for a place adoption the story-inside rule would refuse. */
+  story: StoryPlace
 }
 
 /** What a merge drops instead of moving it to the canonical. */
@@ -46,6 +51,11 @@ export type MergeOverlap = {
   holdersLosingItem: number
   /** 1 when the canonical's state names the loser (a location under it): that ref is cleared. */
   canonicalRefs: number
+  /**
+   * Only for an unplaced canonical place: takes the loser's placement, or stays unplaced when that
+   * place is unknown, retired, loops, or would put the canonical's story in a disabled place.
+   */
+  canonicalPlacement?: 'takes-loser' | 'stays-unplaced'
 }
 
 /** A relationship the canonical takes from the loser: the other end and the merged views. */
@@ -73,6 +83,42 @@ export type MergeLinks = {
 /** The canonical's state with its refs to the loser cleared, since it can't point at itself. */
 export function canonicalRefsCleared(canonical: Entity, loserId: string): EntityState | null {
   return stateWithRefRewritten(canonical, loserId, canonical.id)
+}
+
+export type CanonicalPlacement =
+  | { outcome: 'takes-loser'; placement: { kind: 'under'; parentId: string } | { kind: 'top' } }
+  | { outcome: 'stays-unplaced' }
+
+const STAYS_UNPLACED: CanonicalPlacement = { outcome: 'stays-unplaced' }
+
+/**
+ * world.md → Merge: an unplaced canonical takes the loser's placement unless that parent is
+ * retired, its chain loops or is broken, or the story would land in a disabled place. Null unless
+ * the canonical is an unplaced place; a stored parent naming no place counts as unplaced.
+ */
+export function canonicalPlacementOf(
+  input: Pick<MergeLinkInput, 'canonical' | 'loser' | 'branchEntities' | 'story'>,
+): CanonicalPlacement | null {
+  const { canonical, loser, branchEntities } = input
+  if (canonical.kind !== 'location' || loser.kind !== 'location') return null
+  const locations = branchEntities.filter((e) => e.kind === 'location')
+  const placementIn = realPlacementOf(locations)
+  if (placementIn(canonical.id).kind !== 'unplaced') return null
+  const taken = placementIn(loser.id)
+  if (taken.kind === 'top') return { outcome: 'takes-loser', placement: taken }
+  if (taken.kind === 'unplaced') return STAYS_UNPLACED
+  const parent = locations.find((e) => e.id === taken.parentId)
+  if (parent == null || parent.status === 'retired') return STAYS_UNPLACED
+  if (checkParentChain(canonical.id, taken.parentId, parentOfLocations(locations)) !== 'ok')
+    return STAYS_UNPLACED
+  const hides = adoptionHidesStory({
+    canonical,
+    loser,
+    parentId: taken.parentId,
+    branchEntities,
+    story: input.story,
+  })
+  return hides ? STAYS_UNPLACED : { outcome: 'takes-loser', placement: taken }
 }
 
 /** A relationship row seen from `id`: the other end, `id`'s view of it, and its view of `id`. */
@@ -110,6 +156,7 @@ function relationshipCopies(
 /** world.md → Merge: the loser's links a merge re-creates on the canonical, and those it drops. */
 export function mergeLinks(input: MergeLinkInput): MergeLinks {
   const { branchId, canonical, loser } = input
+  const placement = canonicalPlacementOf(input)
   const linksOf = (id: string) =>
     entityLinkRows({
       branchId,
@@ -154,6 +201,7 @@ export function mergeLinks(input: MergeLinkInput): MergeLinks {
       relationships: relationships.overlap,
       holdersLosingItem: holdersLosingItem(loser, canonical, input.branchEntities),
       canonicalRefs: canonicalRefsCleared(canonical, loser.id) == null ? 0 : 1,
+      ...(placement == null ? {} : { canonicalPlacement: placement.outcome }),
     },
   }
 }

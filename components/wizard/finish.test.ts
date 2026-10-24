@@ -607,6 +607,7 @@ describe('finishWizard', () => {
     expect(entityRows.find((r) => r.id === LEAD_ID)?.state).toMatchObject({ faction_id: null })
     expect(entityRows.find((r) => r.id === LOCATION_ID)?.state).toEqual({
       parent_location_id: null,
+      unplaced: true,
     })
   })
 
@@ -639,7 +640,45 @@ describe('finishWizard', () => {
     const entityRows = await db.select().from(entities)
     expect(entityRows.find((r) => r.id === LOCATION_ID)?.state).toEqual({
       parent_location_id: null,
+      unplaced: true,
     })
+  })
+
+  it('lands a location unplaced when its parent is unknown, and top-level when none was asked for', async () => {
+    const { db, ctx } = await setup()
+    const ASKED_ID = 'loc_99999999-9999-9999-9999-999999999991'
+    const LOOPED_ID = 'loc_99999999-9999-9999-9999-999999999992'
+
+    const result = await finishWizard(
+      makeState({
+        title: 'Unknown Parents',
+        cast: [
+          { ...emptyCastDraft('location', LOCATION_ID), name: 'The Salt Wells' },
+          {
+            ...emptyCastDraft('location', ASKED_ID),
+            name: 'The Undercroft',
+            unresolvedParentLocationName: 'Mornstone Keep',
+          },
+          { ...emptyCastDraft('location', LOOPED_ID), name: 'Lower', parentUnknown: true },
+        ],
+        opening: { content: 'Once.' },
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      2950,
+    )
+
+    expect(result.status).toBe('ok')
+    const rows = await db.select().from(entities)
+    const stateOf = (id: string) => rows.find((r) => r.id === id)?.state
+    expect(stateOf(LOCATION_ID)).toEqual({ parent_location_id: null })
+    expect(stateOf(ASKED_ID)).toEqual({ parent_location_id: null, unplaced: true })
+    expect(stateOf(LOOPED_ID)).toEqual({ parent_location_id: null, unplaced: true })
+    for (const row of rows) {
+      expect(entityStateSchemaForKind(row.kind).safeParse(row.state).success).toBe(true)
+    }
   })
 
   it('refuses a location hierarchy that loops, before anything is written', async () => {

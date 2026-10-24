@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, screen, spyOn, userEvent, waitFor, within } from 'storybook/test'
 
 import {
   emptyCastDraft,
@@ -350,7 +350,7 @@ export const Location: Story = {
     await waitFor(() =>
       expect((castRowById('loc-1') as WizardLocationDraft).parentLocationId).toBe('loc-2'),
     )
-    await userEvent.click(screen.getByRole('radio', { name: 'None' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Top level' }))
     await waitFor(() =>
       expect((castRowById('loc-1') as WizardLocationDraft).parentLocationId).toBeNull(),
     )
@@ -359,6 +359,186 @@ export const Location: Story = {
     await waitFor(() =>
       expect((castRowById('loc-1') as WizardLocationDraft).condition).toBe('Recently besieged'),
     )
+  },
+}
+
+const parentOf = (id: string) => castRowById(id) as WizardLocationDraft
+
+/** Segmented picker: Unknown is selected until Top level is picked; the control keeps its shape. */
+async function expectSegmentUnknownThenTopLevel(opts: { clearedAsk: boolean }) {
+  // A group whose value flips between undefined and a pick warns "controlled"/"uncontrolled".
+  const warn = spyOn(console, 'warn')
+  const error = spyOn(console, 'error')
+  try {
+    await userEvent.click(await screen.findByRole('button', { name: 'More options' }))
+    const unknown = await screen.findByRole('radio', { name: 'Unknown' })
+    const topLevel = screen.getByRole('radio', { name: 'Top level' })
+    await expect(unknown).toHaveAttribute('aria-checked', 'true')
+    await expect(topLevel).toHaveAttribute('aria-checked', 'false')
+
+    // Unknown is the current value, so choosing it changes nothing.
+    await userEvent.click(unknown)
+    expect(parentOf('loc-1')).toMatchObject({ parentLocationId: null })
+    expect(
+      parentOf('loc-1').parentUnknown || parentOf('loc-1').unresolvedParentLocationName,
+    ).toBeTruthy()
+
+    await userEvent.click(topLevel)
+    await waitFor(() => expect(screen.queryByRole('radio', { name: 'Unknown' })).toBeNull())
+    expect(parentOf('loc-1')).toMatchObject({
+      parentLocationId: null,
+      parentUnknown: false,
+      ...(opts.clearedAsk ? { unresolvedParentLocationName: '' } : {}),
+    })
+    await expect(screen.getByRole('radio', { name: 'Top level' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    expect(screen.queryByRole('button', { name: 'Parent location' })).toBeNull()
+    const text = (call: unknown[]) => String(call[0])
+    expect(warn.mock.calls.map(text).filter((m) => /controlled/.test(m))).toEqual([])
+    expect(error.mock.calls.map(text).filter((m) => /controlled/.test(m))).toEqual([])
+  } finally {
+    warn.mockRestore()
+    error.mockRestore()
+  }
+}
+
+/** An import's unknown parent reads as the selected Unknown option; picking Top level drops it. */
+export const LocationUnknownParentPicksTopLevel: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([
+      locationRow({ id: 'loc-1', name: 'Lower', parentUnknown: true }),
+      locationRow({ id: 'loc-2', name: 'Upper' }),
+    ])
+  },
+  render: () => <LocationEditorDemo id="loc-1" />,
+  play: () => expectSegmentUnknownThenTopLevel({ clearedAsk: false }),
+}
+
+/** An import's unmatched parent name reads Unknown too; picking Top level clears the ask. */
+export const LocationUnresolvedParentPicksTopLevel: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([
+      locationRow({ id: 'loc-1', name: 'Lower', unresolvedParentLocationName: 'Mornstone Keep' }),
+      locationRow({ id: 'loc-2', name: 'Upper' }),
+    ])
+  },
+  render: () => <LocationEditorDemo id="loc-1" />,
+  play: () => expectSegmentUnknownThenTopLevel({ clearedAsk: true }),
+}
+
+const optionNamed = (name: string) => screen.findByRole('option', { name })
+
+/** Dropdown picker: Unknown is selected until a parent is picked; the control stays controlled. */
+export const LocationUnknownParentDropdown: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([
+      locationRow({ id: 'loc-1', name: 'Lower', parentUnknown: true }),
+      locationRow({ id: 'loc-2', name: 'Upper' }),
+      locationRow({ id: 'loc-3', name: 'Middle' }),
+      locationRow({ id: 'loc-4', name: 'Outer' }),
+    ])
+  },
+  render: () => <LocationEditorDemo id="loc-1" />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'More options' }))
+    const trigger = await screen.findByRole('button', { name: 'Parent location' })
+    await expect(trigger).toHaveTextContent('Unknown')
+
+    await userEvent.click(trigger)
+    await expect(await optionNamed('Unknown')).toBeInTheDocument()
+    await userEvent.click(await optionNamed('Upper'))
+    await waitFor(() => expect(parentOf('loc-1')).toMatchObject({ parentLocationId: 'loc-2' }))
+    expect(parentOf('loc-1').parentUnknown).toBe(false)
+    await waitFor(() => expect(trigger).toHaveTextContent('Upper'))
+
+    // The pick removed Unknown from the list, and the control is still a dropdown.
+    await userEvent.click(trigger)
+    await expect(await optionNamed('Top level')).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Unknown' })).toBeNull()
+    await userEvent.keyboard('{Escape}')
+
+    // The picked parent leaves the cast: the row is unknown again and the control still controlled.
+    wizardStore.removeCast('loc-2')
+    await waitFor(() => expect(trigger).toHaveTextContent('Unknown'))
+    expect(parentOf('loc-1')).toMatchObject({ parentLocationId: null, parentUnknown: true })
+  },
+}
+
+/** Two other places and Unknown make a dropdown; dropping Unknown must not flip it to a segment. */
+export const LocationUnknownParentKeepsItsShape: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([
+      locationRow({ id: 'loc-1', name: 'Lower', parentUnknown: true }),
+      locationRow({ id: 'loc-2', name: 'Upper' }),
+      locationRow({ id: 'loc-3', name: 'Middle' }),
+    ])
+  },
+  render: () => <LocationEditorDemo id="loc-1" />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'More options' }))
+    const trigger = await screen.findByRole('button', { name: 'Parent location' })
+    expect(screen.queryByRole('radio', { name: 'Top level' })).toBeNull()
+
+    await userEvent.click(trigger)
+    await userEvent.click(await optionNamed('Top level'))
+    await waitFor(() => expect(parentOf('loc-1').parentUnknown).toBe(false))
+    await waitFor(() => expect(trigger).toHaveTextContent('Top level'))
+    expect(screen.queryByRole('radio', { name: 'Top level' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Parent location' })).toBe(trigger)
+  },
+}
+
+/** A row that is never unknown keeps Select's density rule: two other places stay a segment. */
+export const LocationNeverUnknownStaysSegment: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([
+      locationRow({ id: 'loc-1', name: 'Lower' }),
+      locationRow({ id: 'loc-2', name: 'Upper' }),
+      locationRow({ id: 'loc-3', name: 'Middle' }),
+    ])
+  },
+  render: () => <LocationEditorDemo id="loc-1" />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'More options' }))
+    await expect(await screen.findByRole('radio', { name: 'Top level' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Parent location' })).toBeNull()
+    expect(screen.queryByRole('radio', { name: 'Unknown' })).toBeNull()
+  },
+}
+
+/** Going unknown mid-session reserves the Unknown slot, so the dropdown never becomes a segment. */
+export const LocationGoesUnknownKeepsItsShape: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([
+      locationRow({ id: 'loc-1', name: 'Lower', parentLocationId: 'loc-2' }),
+      locationRow({ id: 'loc-2', name: 'Upper' }),
+      locationRow({ id: 'loc-3', name: 'Middle' }),
+      locationRow({ id: 'loc-4', name: 'Outer' }),
+    ])
+  },
+  render: () => <LocationEditorDemo id="loc-1" />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'More options' }))
+    const trigger = await screen.findByRole('button', { name: 'Parent location' })
+    await expect(trigger).toHaveTextContent('Upper')
+
+    wizardStore.removeCast('loc-2')
+    await waitFor(() => expect(trigger).toHaveTextContent('Unknown'))
+
+    await userEvent.click(trigger)
+    await userEvent.click(await optionNamed('Middle'))
+    await waitFor(() => expect(parentOf('loc-1')).toMatchObject({ parentLocationId: 'loc-3' }))
+    await waitFor(() => expect(trigger).toHaveTextContent('Middle'))
+    expect(screen.queryByRole('radio', { name: 'Top level' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Parent location' })).toBe(trigger)
   },
 }
 
@@ -372,6 +552,45 @@ export const LocationHasNoOtherLocationsYetShowsEmptyState: Story = {
     await userEvent.click(await screen.findByRole('button', { name: 'More options' }))
     expect(await screen.findByText('(no locations yet — add one with + Add)')).toBeInTheDocument()
   },
+}
+
+/** No other place: Unknown and Top level still show; once placed, there is nothing to choose. */
+async function expectUnknownThenTopLevelWithNoOtherPlaces(opts: { clearedAsk: boolean }) {
+  await userEvent.click(await screen.findByRole('button', { name: 'More options' }))
+  await expect(await screen.findByRole('radio', { name: 'Unknown' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+  expect(screen.queryByText('(no locations yet — add one with + Add)')).toBeNull()
+
+  await userEvent.click(screen.getByRole('radio', { name: 'Top level' }))
+  expect(parentOf('loc-1')).toMatchObject({
+    parentLocationId: null,
+    parentUnknown: false,
+    ...(opts.clearedAsk ? { unresolvedParentLocationName: '' } : {}),
+  })
+  expect(await screen.findByText('(no locations yet — add one with + Add)')).toBeInTheDocument()
+  expect(screen.queryByRole('radio', { name: 'Unknown' })).toBeNull()
+}
+
+export const LocationUnresolvedParentWithNoOtherLocationsPicksTopLevel: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([
+      locationRow({ id: 'loc-1', name: 'Lower', unresolvedParentLocationName: 'Mornstone Keep' }),
+    ])
+  },
+  render: () => <LocationEditorDemo id="loc-1" />,
+  play: () => expectUnknownThenTopLevelWithNoOtherPlaces({ clearedAsk: true }),
+}
+
+export const LocationUnknownParentWithNoOtherLocationsPicksTopLevel: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([locationRow({ id: 'loc-1', name: 'Lower', parentUnknown: true })])
+  },
+  render: () => <LocationEditorDemo id="loc-1" />,
+  play: () => expectUnknownThenTopLevelWithNoOtherPlaces({ clearedAsk: false }),
 }
 
 export const Item: Story = {

@@ -9,6 +9,7 @@ import type {
 } from '@/lib/db'
 
 import { heldItems, stateOf } from './entity-draft'
+import { withPlacement } from './placement'
 
 type Held = Pick<CharacterState, 'equipped_items' | 'inventory'>
 
@@ -74,7 +75,12 @@ export function stateWithRefRewritten(
     }
     case 'location': {
       const current = stateOf(entity, 'location')
-      return current.parent_location_id === fromId ? { ...current, parent_location_id: to } : null
+      if (current.parent_location_id !== fromId) return null
+      // data-model.md → LocationState shape: a cleared parent alone would mean top-level.
+      return withPlacement(
+        current,
+        to == null ? { kind: 'unplaced' } : { kind: 'under', parentId: to },
+      )
     }
     case 'item': {
       const current = stateOf(entity, 'item')

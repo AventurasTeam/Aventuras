@@ -15,6 +15,7 @@ import {
 } from '@/lib/world'
 
 import { RefField, type Gate } from '../detail/fields'
+import { PlacementField } from '../detail/placement-field'
 import { RelationshipsEditor } from '../detail/relationships-editor'
 import { Section } from '../detail/section'
 import { EntityLink } from '../overview/overview-parts'
@@ -122,12 +123,15 @@ export function LocationConnections({
   control,
   selfId,
   entities,
+  offerUnknown,
   onOpenEntity,
   blocked,
   blockedReason,
 }: Shared &
   Gate & {
     control: Control<LocationDraft>
+    /** world.md → Overview: the saved place is unplaced, so its picker still offers `Unknown`. */
+    offerUnknown: boolean
     onOpenEntity: (id: string) => void
   }) {
   // A retired place may sit inside another retired one, so only an unretired place loses them.
@@ -139,14 +143,11 @@ export function LocationConnections({
   return (
     <View className="gap-6">
       <Section title={t('world:sections.compositional')}>
-        <RefField
+        <PlacementField
           control={control}
-          name="parentLocationId"
-          label={t('world:fields.parentLocation')}
-          placeholder={t('world:fields.parentPlaceholder')}
           entities={entities}
-          kinds={LOCATION}
           excludeIds={excluded}
+          offerUnknown={offerUnknown}
           testID="parent-location"
           onOpenEntity={onOpenEntity}
           blocked={blocked}

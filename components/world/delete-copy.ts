@@ -18,6 +18,8 @@ export function entityDeleteCopy(row: Entity, impact: EntityDeleteImpact): Delet
     impacts.push(t('world:delete.references', { count: impact.references }))
   if (impact.unplacedItems > 0)
     impacts.push(t('world:delete.unplacedItems', { count: impact.unplacedItems }))
+  if (impact.unplacedPlaces > 0)
+    impacts.push(t('world:delete.unplacedPlaces', { count: impact.unplacedPlaces }))
   if (impact.tailScene) impacts.push(t('world:delete.tailScene'))
   return {
     title: t('world:delete.entityTitle', { name: row.name }),

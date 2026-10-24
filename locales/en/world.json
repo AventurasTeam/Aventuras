@@ -169,6 +169,8 @@
     "references_other": "{{count}} other entities lose their link to it",
     "unplacedItems_one": "{{count}} item will have no position",
     "unplacedItems_other": "{{count}} items will have no position",
+    "unplacedPlaces_one": "{{count}} place will have no known location",
+    "unplacedPlaces_other": "{{count}} places will have no known location",
     "tailScene": "Removed from the current scene",
     "confirm": {
       "character": "Delete character",
@@ -231,7 +233,6 @@
     "faction": "Faction",
     "factionPlaceholder": "Pick a faction",
     "parentLocation": "Part of",
-    "parentPlaceholder": "Pick a parent location",
     "atLocation": "At location",
     "stackables": "Quantities",
     "equipped": "Equipped",
@@ -348,6 +349,7 @@
     "agenda": "Agenda",
     "partOf": "Part of",
     "within": "in",
+    "locationUnknown": "Location unknown",
     "charactersHere": "Characters here",
     "itemsHere": "Items here",
     "position": "Position",
@@ -382,6 +384,8 @@
   },
   "connections": {
     "none": "None",
+    "placementUnknown": "Unknown",
+    "placementTopLevel": "Top level",
     "lastSeenNever": "Not seen yet",
     "lastSeenUnknown": "Seen earlier in the story",
     "entry": "entry #{{position}}",

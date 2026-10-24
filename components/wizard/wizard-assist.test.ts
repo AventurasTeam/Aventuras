@@ -547,6 +547,23 @@ describe('wizardTemplateContext', () => {
     }
   })
 
+  it('keeps the wizard-only parentUnknown marker off a location row', () => {
+    const state = {
+      ...emptyWorkingState(),
+      cast: [
+        {
+          ...emptyCastDraft('location', 'loc_1'),
+          name: 'Lower',
+          parentLocationId: null,
+          parentUnknown: true,
+        },
+      ],
+    }
+    const [castRow] = wizardTemplateContext(state, '').cast as Record<string, unknown>[]
+    expect(castRow).not.toHaveProperty('parentUnknown')
+    expect(castRow).toMatchObject({ id: 'loc_1', kind: 'location', parentLocationId: null })
+  })
+
   it('drops tags from cast and lore rows, keeping every other field', () => {
     const state = {
       ...emptyWorkingState(),

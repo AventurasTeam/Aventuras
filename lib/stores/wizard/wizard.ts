@@ -192,7 +192,7 @@ const store = createStore<WizardState>()((set) => {
           .map((r) => {
             if (r.kind === 'character' && r.factionId === id) return { ...r, factionId: null }
             if (r.kind === 'location' && r.parentLocationId === id)
-              return { ...r, parentLocationId: null }
+              return { ...r, parentLocationId: null, parentUnknown: true }
             return r
           })
         return {

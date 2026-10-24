@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   emptyEntityState,
   entityStateSchemaForKind,
+  type CollisionReason,
   type Entity,
   type EntityKind,
   type EntityState,
@@ -268,7 +269,7 @@ describe('entityDeleteActions — collision flags naming it', () => {
       payload: {
         branchId: 'b1',
         id: 'loc_b',
-        patch: { state: { parent_location_id: null }, ...FLAG_CLEAR },
+        patch: { state: { parent_location_id: null, unplaced: true }, ...FLAG_CLEAR },
       },
     })
     expect(plan.actions).toHaveLength(2)
@@ -305,5 +306,101 @@ describe('entityDeleteActions — collision flags naming it', () => {
         tail: null,
       }).actions,
     ).toStrictEqual([deleteOf('char_x')])
+  })
+})
+
+// world.md → Delete: the places inside a deleted location are left unplaced, not top-level.
+describe('entityDeleteActions — the places inside', () => {
+  const place = (
+    id: string,
+    name: string,
+    state: Partial<EntityState> = {},
+    flag: { partnerId: string; reason: CollisionReason } | null = null,
+  ): Entity => ({
+    ...entity(id, 'location', state),
+    name,
+    ...(flag == null
+      ? {}
+      : {
+          nameCollisionFlag: 1,
+          nameCollisionPartnerId: flag.partnerId,
+          nameCollisionReason: flag.reason,
+        }),
+  })
+  const updateOf = (id: string, patch: Record<string, unknown>) => ({
+    kind: 'updateEntity',
+    source: 'user_edit',
+    payload: { branchId: 'b1', id, patch },
+  })
+  const deleteOf = (id: string) => ({
+    kind: 'deleteEntity',
+    source: 'user_edit',
+    payload: { branchId: 'b1', id },
+  })
+  const target = place('loc_1', 'The Old Quarter')
+
+  it('marks each place inside unplaced, keeping its other keys, and counts them', () => {
+    const inn = place('loc_2', 'The Inn', { parent_location_id: 'loc_1', condition: 'smoky' })
+    const yard = place('loc_3', 'The Yard', { parent_location_id: 'loc_1' })
+    const elsewhere = place('loc_4', 'The Pier', { parent_location_id: 'loc_9' })
+    const plan = entityDeleteActions({
+      branchId: 'b1',
+      target,
+      branchEntities: [target, inn, yard, elsewhere],
+      tail: null,
+    })
+    expect(plan.actions).toStrictEqual([
+      updateOf('loc_2', {
+        state: { parent_location_id: null, unplaced: true, condition: 'smoky' },
+      }),
+      updateOf('loc_3', { state: { parent_location_id: null, unplaced: true } }),
+      deleteOf('loc_1'),
+    ])
+    expect(plan.unplacedPlaces).toBe(2)
+    expect(plan.unplacedItems).toBe(0)
+  })
+
+  it('clears a same-parent flag between two places it unplaces, in the flagged row’s patch', () => {
+    const inn = place('loc_2', 'The Inn', { parent_location_id: 'loc_1' })
+    const innYard = place(
+      'loc_3',
+      'The Inn Yard',
+      { parent_location_id: 'loc_1' },
+      { partnerId: 'loc_2', reason: 'same-parent' },
+    )
+    expect(
+      entityDeleteActions({
+        branchId: 'b1',
+        target,
+        branchEntities: [target, inn, innYard],
+        tail: null,
+      }).actions,
+    ).toStrictEqual([
+      updateOf('loc_2', { state: { parent_location_id: null, unplaced: true } }),
+      updateOf('loc_3', { state: { parent_location_id: null, unplaced: true }, ...FLAG_CLEAR }),
+      deleteOf('loc_1'),
+    ])
+  })
+
+  it('keeps a flag between them for another reason: they are still namesakes', () => {
+    const inn = place('loc_2', 'The Inn', { parent_location_id: 'loc_1' })
+    const innYard = place(
+      'loc_3',
+      'The Inn Yard',
+      { parent_location_id: 'loc_1' },
+      { partnerId: 'loc_2', reason: 'distinct' },
+    )
+    expect(
+      entityDeleteActions({
+        branchId: 'b1',
+        target,
+        branchEntities: [target, inn, innYard],
+        tail: null,
+      }).actions,
+    ).toStrictEqual([
+      updateOf('loc_2', { state: { parent_location_id: null, unplaced: true } }),
+      updateOf('loc_3', { state: { parent_location_id: null, unplaced: true } }),
+      deleteOf('loc_1'),
+    ])
   })
 })

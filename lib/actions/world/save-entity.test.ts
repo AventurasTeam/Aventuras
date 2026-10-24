@@ -185,7 +185,7 @@ describe('saveEntity', () => {
     expect(restored.state).toEqual(row.state)
   })
 
-  it('creates a location with a generated id and an empty location state', async () => {
+  it('creates a location with a generated id, unplaced', async () => {
     const { db, ctx } = await setup()
     const result = await saveEntity(
       {
@@ -200,7 +200,7 @@ describe('saveEntity', () => {
     if (result.status !== 'ok') return
     expect(result.id).toMatch(ID_PATTERN)
     expect(result.id.startsWith('loc_')).toBe(true)
-    expect((await rowOf(db, result.id)).state).toEqual({ parent_location_id: null })
+    expect((await rowOf(db, result.id)).state).toEqual({ parent_location_id: null, unplaced: true })
   })
 
   it('surfaces the handler parent-cycle refusal by code and writes nothing', async () => {
@@ -212,7 +212,7 @@ describe('saveEntity', () => {
         kind: 'location',
         branchId: 'br_1',
         row,
-        draft: { ...locationDraftFrom(row), parentLocationId: 'loc_b' },
+        draft: { ...locationDraftFrom(row), placement: { kind: 'under', parentId: 'loc_b' } },
       },
       ctx,
     )
@@ -222,6 +222,37 @@ describe('saveEntity', () => {
       code: 'parent-cycle',
     })
     expect(await deltaRows(db)).toHaveLength(0)
+  })
+
+  it('places an unplaced place under a parent without the flag, and undo puts it back', async () => {
+    const { db, ctx } = await setup()
+    await db
+      .insert(entities)
+      .values([
+        loc('loc_a', null),
+        { ...loc('loc_u', null), state: { parent_location_id: null, unplaced: true } },
+      ])
+    const row = await rowOf(db, 'loc_u')
+    const result = await saveEntity(
+      {
+        kind: 'location',
+        branchId: 'br_1',
+        row,
+        draft: { ...locationDraftFrom(row), placement: { kind: 'under', parentId: 'loc_a' } },
+      },
+      ctx,
+    )
+    expect(result).toEqual({ status: 'ok', id: 'loc_u' })
+    expect((await rowOf(db, 'loc_u')).state).toStrictEqual({ parent_location_id: 'loc_a' })
+    const rows = await deltaRows(db)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].undoPayload).toEqual({ state: { parent_location_id: null, unplaced: true } })
+
+    expect(await reverseReplayDeltas(rows[0].actionId, ctx)).toBe(1)
+    expect((await rowOf(db, 'loc_u')).state).toStrictEqual({
+      parent_location_id: null,
+      unplaced: true,
+    })
   })
 
   it('saves a relationship with both views as one action and one ordered row', async () => {

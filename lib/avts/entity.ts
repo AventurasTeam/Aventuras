@@ -21,7 +21,7 @@ export type CharacterImportState = Omit<
   CharacterState,
   'current_location_id' | 'equipped_items' | 'inventory' | 'faction_id' | 'lastSeenAt'
 >
-export type LocationImportState = Omit<LocationState, 'parent_location_id'>
+export type LocationImportState = Omit<LocationState, 'parent_location_id' | 'unplaced'>
 export type ItemImportState = Omit<ItemState, 'at_location_id'>
 export type FactionImportState = FactionState
 
@@ -106,7 +106,7 @@ const characterImportState = characterState
     drives: characterState.shape.drives.default([]),
     stackables: stackablesField,
   })
-const locationImportState = locationState.omit({ parent_location_id: true })
+const locationImportState = locationState.omit({ parent_location_id: true, unplaced: true })
 const itemImportState = itemState.omit({ at_location_id: true })
 
 // A stored entity may carry a null state, and the raw JSON viewer shows it that way.
@@ -201,7 +201,7 @@ function portableEntity(row: Entity): EntityImport {
       return { kind: 'character', ...base, state }
     }
     case 'location': {
-      const { parent_location_id, ...state } = stateOf(row, 'location')
+      const { parent_location_id, unplaced, ...state } = stateOf(row, 'location')
       return { kind: 'location', ...base, state }
     }
     case 'item': {

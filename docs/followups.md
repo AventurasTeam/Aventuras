@@ -70,8 +70,7 @@ for the placement rule.
     location map, `placeModes`, the state view, World, the merge
     rules);
   - the collision reasons the enum lacks, which the CHECK requires: a
-    pass's rename clash, a flag chapter close raises, and a
-    cross-parent unplaced match;
+    pass's rename clash and a flag chapter close raises;
   - the awareness upsert's user-precedence check, which a pass's
     awareness of listed happenings reaches first;
   - the `stateReport` additions;

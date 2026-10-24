@@ -25,7 +25,7 @@ import {
   happeningsStore,
   translationsStore,
 } from '@/lib/stores'
-import { collisionPairOf, entityMergeActions } from '@/lib/world'
+import { collisionPairOf, entityMergeActions, storyPlaceOf } from '@/lib/world'
 
 import { collisionPair, type CollisionSources } from './collision-summary'
 
@@ -164,6 +164,7 @@ function sources(): CollisionSources {
     involvements: [...happeningInvolvementsStore.getInvolvements().values()],
     relationships: [...characterRelationshipsStore.getRelationshipRows().values()],
     translations: [...translationsStore.getTranslations().values()],
+    story: storyPlaceOf({ tail: null, sceneSource: null }),
   }
 }
 
@@ -297,6 +298,32 @@ describe('collisionPair', () => {
     expect(dbCount(SQL.danglingLinks, 'char_b', 'char_a')).toBe(3)
   })
 
+  // The unplaced Harbor takes the duplicate's place unless that hides the story inside it.
+  it.each([
+    ['nowhere', null, 'takes-loser'],
+    ['in the unplaced Harbor', 'loc_a', 'stays-unplaced'],
+  ] as const)(
+    'a duplicate under a disabled place, with the story %s, gives the canonical %s',
+    (_where, at, placement) => {
+      const base = sources()
+      const harbor = base.entities.find((e) => e.id === 'loc_a')!
+      const twin = base.entities.find((e) => e.id === 'loc_b')!
+      const dark = { ...harbor, id: 'loc_d', name: 'Dark Wing', injectionMode: 'disabled' as const }
+      const entities = [
+        ...base.entities.filter((e) => e.id !== 'loc_a' && e.id !== 'loc_b'),
+        { ...harbor, state: { parent_location_id: null, unplaced: true as const } },
+        { ...twin, state: { parent_location_id: 'loc_d' } },
+        { ...dark, state: { parent_location_id: null } },
+      ]
+      const story = storyPlaceOf({
+        tail: { metadata: { currentLocationId: at } },
+        sceneSource: { metadata: { currentLocationId: at } },
+      })
+      const sides = collisionPair(['loc_a', 'loc_b'], { ...base, entities, story })!
+      expect(sides[1].relationCounts.overlap.canonicalPlacement).toBe(placement)
+    },
+  )
+
   it.each([
     ['char_a', 'char_b'],
     ['loc_a', 'loc_b'],
@@ -390,6 +417,7 @@ describe('collisionPair', () => {
         awareness: src.awareness,
         involvements: src.involvements,
         relationships: src.relationships,
+        story: src.story,
         tail: null,
         newId: (prefix) => `${prefix}_new`,
       })

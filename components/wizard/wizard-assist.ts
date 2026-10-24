@@ -93,6 +93,14 @@ function withoutTags<T extends { tags: readonly string[] }>(row: T): Record<stri
   return rest
 }
 
+// `parentUnknown` is wizard bookkeeping for Finish's placement, not a documented variable.
+function castRowForTemplate(row: WizardWorkingState['cast'][number]): Record<string, unknown> {
+  const { tags, ...rest } = row
+  if (rest.kind !== 'location') return rest
+  const { parentUnknown, ...location } = rest
+  return location
+}
+
 /**
  * The exact variables templateContextMap documents for the `wizard` group.
  * Projected, not spread: the working state also carries `step` and
@@ -108,7 +116,7 @@ export function wizardTemplateContext(
     leadEntityId: state.leadEntityId,
     opening: state.opening,
     lore: state.lore.map(withoutTags),
-    cast: state.cast.map(withoutTags),
+    cast: state.cast.map(castRowForTemplate),
     guidance,
     ...extra,
   }

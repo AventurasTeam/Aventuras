@@ -14,6 +14,7 @@ export type EntityDeleteImpact = {
   relationships: number
   references: number
   unplacedItems: number
+  unplacedPlaces: number
   tailScene: boolean
 }
 
@@ -54,6 +55,7 @@ export function entityDeleteImpact({
     relationships: links.relationships.length,
     references: plan.references,
     unplacedItems: plan.unplacedItems,
+    unplacedPlaces: plan.unplacedPlaces,
     tailScene: plan.tailScene,
   }
 }

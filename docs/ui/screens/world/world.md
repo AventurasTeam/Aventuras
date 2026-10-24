@@ -1014,6 +1014,7 @@ flagged:
 | `in-scene`    | Their descriptions differ, but "Kael Stormborn" was in the scene where "Kael" first appeared. |
 | `no-signal`   | Their descriptions couldn't be compared.                                                      |
 | `same-parent` | Both are in "The Rusty Anchor". (At the root: Both are top-level places.)                     |
+| `unplaced`    | "Varn" was created with no known location, so it may be "Varn".                               |
 
 When the two are namesakes only through a keyword, a basis line
 names it, read from the current keywords:
@@ -1151,8 +1152,13 @@ non-canonical's counts:
   rewritten to canonical. A ref between the two rows doesn't
   count: it collapses rather than moves, and when it is the
   canonical's (a location parented under the non-canonical) a
-  footnote says the canonical loses it and becomes unplaced. A holder of a
-  non-canonical item drops it instead when the canonical item
+  footnote says the canonical loses it and becomes unplaced.
+  A canonical already unplaced before the merge takes the
+  non-canonical's placement instead, unless that parent is retired,
+  would put the canonical inside itself, or would put the story
+  inside a disabled place; it then stays unplaced, and the footnote
+  says which.
+  A holder of a non-canonical item drops it instead when the canonical item
   already has a position ([Reversibility](#reversibility)), and
   still counts here.
 - `Embeddings: <0|1>` vec0 row from non-canonical dropped (the

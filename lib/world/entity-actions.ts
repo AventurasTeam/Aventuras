@@ -29,7 +29,7 @@ import {
   type RelationshipLink,
 } from './entity-draft'
 import { retireCascade } from './place-rules'
-import { samePlacement, withPlacement, type PlacePlacement } from './placement'
+import { placementOf, samePlacement, withPlacement } from './placement'
 
 export type EntitySaveInput =
   | {
@@ -174,13 +174,8 @@ function characterState(current: CharacterState, draft: CharacterDraft): Charact
 function locationState(current: LocationState, draft: LocationDraft): LocationState | null {
   let next: LocationState = { ...current }
   let changed = false
-  if (draft.parentLocationId !== (current.parent_location_id ?? null)) {
-    next = withPlacement(
-      next,
-      draft.parentLocationId === null
-        ? { kind: 'top' }
-        : { kind: 'under', parentId: draft.parentLocationId },
-    )
+  if (!samePlacement(draft.placement, placementOf({ state: current }))) {
+    next = withPlacement(next, draft.placement)
     changed = true
   }
   if (writeText(next, 'condition', draft.condition)) changed = true
@@ -387,13 +382,7 @@ export function entityActions(args: EntityActionArgs): PipelineAction[] {
   }
   if (row == null || columns == null) return actions
   const before = pairSideOf(row)
-  // A null draft parent reads as top-level.
-  const placement: PlacePlacement =
-    args.kind !== 'location'
-      ? before.placement
-      : args.draft.parentLocationId === null
-        ? { kind: 'top' }
-        : { kind: 'under', parentId: args.draft.parentLocationId }
+  const placement = args.kind === 'location' ? args.draft.placement : before.placement
   if (columns.name === undefined && samePlacement(placement, before.placement)) return actions
   const saved: PairSide = {
     name: columns.name ?? row.name,

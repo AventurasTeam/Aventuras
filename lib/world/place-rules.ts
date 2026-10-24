@@ -7,6 +7,7 @@ import { stateOf, type CharacterDraft, type ItemDraft, type LocationDraft } from
 import { byName } from './overview'
 import { parentChainIds, parentIdOf, parentOfLocations, type ParentOf } from './parent-chain'
 import { placeModes } from './place-modes'
+import { placementOf, samePlacement, type PlacePlacement } from './placement'
 
 /** data-model.md → LocationState shape, world.md → Merge: the codes a place rule refuses with. */
 export const PLACE_REFUSAL = {
@@ -25,13 +26,13 @@ type FieldOf<Draft, K extends keyof Draft & string> = K
 export type PlaceSaveRefusal =
   | {
       code: typeof PLACE_REFUSAL.storyInside
-      field: FieldOf<LocationDraft, 'status' | 'injectionMode' | 'parentLocationId'>
+      field: FieldOf<LocationDraft, 'status' | 'injectionMode' | 'placement'>
       place: NamedPlace
       story: NamedPlace
     }
   | {
       code: typeof PLACE_REFUSAL.retiredParent
-      field: FieldOf<LocationDraft, 'status' | 'parentLocationId'>
+      field: FieldOf<LocationDraft, 'status' | 'placement'>
       parent: NamedPlace
     }
   | {
@@ -83,6 +84,9 @@ function storyLocations(story: StoryPlace): string[] {
 }
 
 const namedOf = (e: Pick<Entity, 'id' | 'name'>): NamedPlace => ({ id: e.id, name: e.name })
+
+const parentIdIn = (placement: PlacePlacement): string | null =>
+  placement.kind === 'under' ? placement.parentId : null
 
 /** The places inside `id`, by its stored parents; a looping chain stops at the repeat. */
 function descendantsOf(id: string, entities: readonly Entity[], parentOf: ParentOf): Entity[] {
@@ -143,6 +147,8 @@ type LocationSave = {
   entities: readonly Entity[]
   byId: ReadonlyMap<string, Entity>
   parentOf: ParentOf
+  /** The parent the draft names; null for a top-level or an unplaced place. */
+  parentId: string | null
   parentChanged: boolean
   /** The new parent chain runs through the place itself: the handler refuses it as a cycle. */
   loops: boolean
@@ -151,7 +157,7 @@ type LocationSave = {
 function locationSave(args: PlaceSaveArgs & { kind: 'location' }): LocationSave {
   const entities = args.branchEntities
   const parentOf = parentOfLocations(entities)
-  const parentId = args.draft.parentLocationId
+  const parentId = parentIdIn(args.draft.placement)
   // A create's place has no id yet, nothing inside it, and so no loop through it.
   const id = args.row?.id ?? ''
   return {
@@ -161,13 +167,14 @@ function locationSave(args: PlaceSaveArgs & { kind: 'location' }): LocationSave 
     entities,
     byId: new Map(entities.map((e) => [e.id, e])),
     parentOf,
-    parentChanged: args.row == null || parentId !== parentIdOf(args.row),
+    parentId,
+    parentChanged: args.row == null || !samePlacement(args.draft.placement, placementOf(args.row)),
     loops: parentId != null && (parentId === id || parentChainIds(parentId, parentOf).includes(id)),
   }
 }
 
 function locationRefusal(save: LocationSave, storyPlace: StoryPlace): PlaceSaveRefusal | null {
-  const { self, draft, row, byId, parentOf, parentChanged, loops } = save
+  const { self, draft, row, byId, parentOf, parentId, parentChanged, loops } = save
   const wasStatus = row?.status ?? null
   const story =
     row == null
@@ -183,20 +190,20 @@ function locationRefusal(save: LocationSave, storyPlace: StoryPlace): PlaceSaveR
 
   if (wasStatus !== 'retired' && draft.status === 'retired' && inside) return storyRefusal('status')
   if (!loops && draft.status !== 'retired') {
-    const parent = draft.parentLocationId == null ? undefined : byId.get(draft.parentLocationId)
+    const parent = parentId == null ? undefined : byId.get(parentId)
     const bringsBack = wasStatus === 'retired'
     if (parent?.kind === 'location' && parent.status === 'retired' && (parentChanged || bringsBack))
       return {
         code: PLACE_REFUSAL.retiredParent,
-        field: parentChanged ? 'parentLocationId' : 'status',
+        field: parentChanged ? 'placement' : 'status',
         parent: namedOf(parent),
       }
   }
   if (!inside) return null
   if (row.injectionMode !== 'disabled' && draft.injectionMode === 'disabled')
     return storyRefusal('injectionMode')
-  if (!loops && gainedDisabled(parentIdOf(row), draft.parentLocationId, byId, parentOf).length > 0)
-    return storyRefusal('parentLocationId')
+  if (!loops && gainedDisabled(parentIdOf(row), parentId, byId, parentOf).length > 0)
+    return storyRefusal('placement')
   return null
 }
 
@@ -305,7 +312,7 @@ export function placeSaveConfirm(args: PlaceSaveArgs): PlaceSaveConfirm | null {
   }
 
   let move: MovePart | null = null
-  const parentId = draft.parentLocationId
+  const parentId = save.parentId
   const gained = save.loops ? [] : gainedDisabled(parentIdOf(row), parentId, byId, parentOf)
   if (parentId != null && gained.length > 0) {
     const regionId = [parentId, ...parentChainIds(parentId, parentOf)].find((id) =>
@@ -387,6 +394,30 @@ function storyGainsDisabled(
     parentOf,
   )
   return [...after].some((id) => !before.has(id))
+}
+
+/**
+ * Whether the canonical adopting `parentId` would put the story inside a disabled place it wasn't
+ * in: the `story-inside` merge rule on the adoption alone, so the merged mode is read as `auto`.
+ */
+export function adoptionHidesStory(args: {
+  canonical: Entity
+  loser: Entity
+  parentId: string
+  branchEntities: readonly Entity[]
+  story: StoryPlace
+}): boolean {
+  const { canonical, loser, parentId, branchEntities } = args
+  const merged: MergedPlace = {
+    status: canonical.status,
+    injectionMode: 'auto',
+    parentId,
+  }
+  const parentOf = parentOfLocations(branchEntities)
+  const byId = new Map(branchEntities.map((e) => [e.id, e]))
+  return storyLocations(args.story).some((at) =>
+    storyGainsDisabled(at, { canonical, loser }, merged, byId, parentOf),
+  )
 }
 
 /**

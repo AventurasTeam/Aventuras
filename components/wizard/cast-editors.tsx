@@ -1,4 +1,5 @@
 import { Star } from 'lucide-react-native'
+import { useState } from 'react'
 import { View } from 'react-native'
 
 import { EmbedWindowTextarea } from '@/components/compounds/embed-window-textarea'
@@ -13,7 +14,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
-import { Select, type SelectOption } from '@/components/ui/select'
+import { resolveMode, Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import type {
@@ -40,6 +41,8 @@ const STATUS_OPTIONS: SelectOption[] = [
 const VISUAL_FIELDS = ['physique', 'face', 'hair', 'eyes', 'attire', 'distinguishing'] as const
 
 const NULL_CAST_REF = '__none__'
+// Never a row id and never reported: the Unknown option is only offered while it is the value.
+const UNKNOWN_CAST_REF = '__unknown__'
 
 function handleStatusChange(id: string, status: 'active' | 'staged') {
   if (wizardStore.setCastStatus(id, status)) {
@@ -123,6 +126,13 @@ type PickFromCastProps = {
   candidates: readonly { id: string; name: string }[]
   value: string | null
   onChange: (value: string | null) => void
+  /**
+   * Label of an Unknown option, for a row whose null `value` can mean "not known" (an import's
+   * unresolved parent). Offered and selected only while `unknown`; never reaches `onChange`. Once
+   * offered, the mode keeps counting its slot so the pick removing it can't reshape the control.
+   */
+  unknownLabel?: string
+  unknown?: boolean
 }
 
 function PickFromCast({
@@ -132,8 +142,14 @@ function PickFromCast({
   candidates,
   value,
   onChange,
+  unknownLabel,
+  unknown = false,
 }: PickFromCastProps) {
-  if (candidates.length === 0) {
+  const tier = useTier()
+  const offered = unknownLabel != null && unknown && value == null
+  const [reserveUnknown, setReserveUnknown] = useState(offered)
+  if (offered && !reserveUnknown) setReserveUnknown(true)
+  if (candidates.length === 0 && !offered) {
     return (
       <FormRow label={label}>
         <Text variant="muted" size="sm">
@@ -142,16 +158,28 @@ function PickFromCast({
       </FormRow>
     )
   }
+  const unknownOption: SelectOption | null =
+    unknownLabel == null ? null : { value: UNKNOWN_CAST_REF, label: unknownLabel }
   const options: SelectOption[] = [
+    ...(offered && unknownOption != null ? [unknownOption] : []),
     { value: NULL_CAST_REF, label: nullLabel },
     ...candidates.map((c) => ({ value: c.id, label: c.name.trim() || t('wizard:cast.unnamed') })),
   ]
+  const mode = resolveMode(
+    unknownOption == null || !reserveUnknown || offered ? options : [unknownOption, ...options],
+    undefined,
+    tier,
+  )
   return (
     <FormRow label={label}>
       <Select
         options={options}
-        value={value ?? NULL_CAST_REF}
-        onValueChange={(next) => onChange(next === NULL_CAST_REF ? null : next)}
+        mode={mode}
+        value={offered ? UNKNOWN_CAST_REF : (value ?? NULL_CAST_REF)}
+        onValueChange={(next) => {
+          if (next === UNKNOWN_CAST_REF) return
+          onChange(next === NULL_CAST_REF ? null : next)
+        }}
         label={label}
       />
     </FormRow>
@@ -284,10 +312,16 @@ export function LocationEditor({ row, invalid, cast }: CommonEditorProps<WizardL
               label={t('wizard:cast.editor.parentLocation')}
               emptyLabel={t('wizard:cast.editor.noLocationsYet')}
               nullLabel={t('wizard:cast.editor.noParent')}
+              unknownLabel={t('wizard:cast.editor.parentUnknown')}
+              unknown={row.parentUnknown || row.unresolvedParentLocationName.trim() !== ''}
               candidates={locationCandidates}
               value={row.parentLocationId}
               onChange={(parentLocationId) =>
-                wizardStore.patchCast(row, { parentLocationId, unresolvedParentLocationName: '' })
+                wizardStore.patchCast(row, {
+                  parentLocationId,
+                  unresolvedParentLocationName: '',
+                  parentUnknown: false,
+                })
               }
             />
             <FormRow label={t('wizard:cast.editor.condition')}>

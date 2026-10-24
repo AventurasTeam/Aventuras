@@ -293,9 +293,10 @@ describe('cast mutators', () => {
     const cast = wizardStore.getWizard().state.cast
     const by = (id: string) => cast.find((r) => r.id === id)
     expect(by(orphaned)).toMatchObject({ factionId: null })
-    expect(by(childOrphaned)).toMatchObject({ parentLocationId: null })
+    expect(by(childOrphaned)).toMatchObject({ parentLocationId: null, parentUnknown: true })
     expect(by(attached)).toMatchObject({ factionId: keeperFac })
     expect(by(childAttached)).toMatchObject({ parentLocationId: keeperLoc })
+    expect(by(childAttached)).toMatchObject({ parentUnknown: false })
     expect(by(attached), 'untouched rows keep identity').toBe(attachedBefore)
   })
 })

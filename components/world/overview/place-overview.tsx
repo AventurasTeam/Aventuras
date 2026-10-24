@@ -1,6 +1,13 @@
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
-import { charactersAt, holdersOf, itemsAt, locationAncestors, stateOf } from '@/lib/world'
+import {
+  charactersAt,
+  holdersOf,
+  itemsAt,
+  locationAncestors,
+  realPlacementOf,
+  stateOf,
+} from '@/lib/world'
 
 import {
   DerivedNamesRegion,
@@ -31,20 +38,39 @@ function ConditionRegion({
   )
 }
 
-// world.md → Location Overview.
+// world.md → Location Overview. data-model.md → LocationState shape: an unplaced place reads
+// `Location unknown`, and a chain whose top place is unplaced ends in it.
 export function LocationOverviewBody({ entity, entities, onRegionPress }: KindBodyProps) {
   const state = stateOf(entity, 'location')
   const ancestors = locationAncestors(entity.id, entities)
+  const top = ancestors.at(-1) ?? entity
+  const placementIn = realPlacementOf(entities.filter((e) => e.kind === 'location'))
+  const unknown = placementIn(top.id).kind === 'unplaced'
   return (
     <>
-      <NamesRegion
-        label={t('world:overview.partOf')}
-        tab="connections"
-        onRegionPress={onRegionPress}
-        targets={ancestors}
-        joiner={` ${t('world:overview.within')} `}
-        testID="overview-part-of"
-      />
+      {unknown && ancestors.length === 0 ? (
+        <Region
+          label={t('world:overview.partOf')}
+          tab="connections"
+          onRegionPress={onRegionPress}
+          empty={false}
+          testID="overview-part-of"
+        >
+          <Text size="sm" variant="muted">
+            {t('world:overview.locationUnknown')}
+          </Text>
+        </Region>
+      ) : (
+        <NamesRegion
+          label={t('world:overview.partOf')}
+          tab="connections"
+          onRegionPress={onRegionPress}
+          targets={ancestors}
+          joiner={` ${t('world:overview.within')} `}
+          meta={unknown ? t('world:overview.locationUnknown') : undefined}
+          testID="overview-part-of"
+        />
+      )}
       <ConditionRegion condition={state.condition} onRegionPress={onRegionPress} />
       <DerivedNamesRegion
         label={t('world:overview.charactersHere')}

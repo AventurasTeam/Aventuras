@@ -1,7 +1,8 @@
 import type { PipelineAction } from '@/lib/actions'
 import type { Entity, StoryEntry } from '@/lib/db'
 
-import { flagsNaming, withFlagClears } from './collision-flags'
+import { brokenFlags, flagsNaming, withFlagClears } from './collision-flags'
+import { pairSideOf, type PairSide } from './collision-pair'
 import { stateOf } from './entity-draft'
 import { heldElsewhere, stateWithRefRewritten, unheldItemsWithout } from './entity-refs'
 
@@ -40,6 +41,8 @@ export type EntityDeletePlan = {
   references: number
   /** Items the delete leaves with neither a location nor a holder (data-model.md → ItemState). */
   unplacedItems: number
+  /** Places inside the target, which the delete leaves unplaced (world.md → Delete). */
+  unplacedPlaces: number
   /** Whether the tail's scene named the target. */
   tailScene: boolean
 }
@@ -100,6 +103,8 @@ export function entityDeleteActions({
   tail,
 }: EntityDeleteInput): EntityDeletePlan {
   const updates: PipelineAction[] = []
+  // The places inside the target as the pair rule reads them once the delete unplaces them.
+  const unplaced = new Map<string, PairSide>()
   for (const other of branchEntities) {
     if (other.id === target.id) continue
     const state = stateWithRefRewritten(other, target.id, null)
@@ -109,16 +114,23 @@ export function entityDeleteActions({
       source: 'user_edit',
       payload: { branchId, id: other.id, patch: { state } },
     })
+    if (other.kind === 'location') unplaced.set(other.id, pairSideOf({ ...other, state }))
   }
   const tailDrop = tailSceneActions(branchId, tail, target.id, null)
   const naming = flagsNaming(branchEntities, new Set([target.id]))
+  // world.md → Surfacing: two places the delete unplaces no longer share a parent.
+  const split = brokenFlags({
+    entities: branchEntities.filter((e) => e.id !== target.id),
+    after: unplaced,
+  })
   return {
     actions: [
-      ...withFlagClears([...updates, ...tailDrop], branchId, naming),
+      ...withFlagClears([...updates, ...tailDrop], branchId, [...naming, ...split]),
       { kind: 'deleteEntity', source: 'user_edit', payload: { branchId, id: target.id } },
     ],
     references: updates.length,
     unplacedItems: unplacedItems(target, branchEntities),
+    unplacedPlaces: unplaced.size,
     tailScene: tailDrop.length > 0,
   }
 }
