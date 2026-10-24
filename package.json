@@ -25,7 +25,7 @@
     "test:e2e": "tsx scripts/e2e.ts --project=dev",
     "test:e2e:packaged": "tsx scripts/e2e.ts --project=packaged",
     "coverage:lib": "vitest run --project unit --coverage",
-    "electron:compile": "tsc -p electron/tsconfig.json",
+    "electron:compile": "node -e \"require('node:fs').rmSync('electron/dist', { recursive: true, force: true })\" && tsc -p electron/tsconfig.json",
     "electron:start": "electron electron/dist/main.js",
     "desktop": "tsx scripts/desktop.ts",
     "dev:slot": "tsx scripts/dev-slot/cli.ts",
@@ -193,48 +193,6 @@
     "vite": "^8.0.9",
     "vitest": "^4.1.5",
     "wait-on": "^9.0.5"
-  },
-  "build": {
-    "appId": "com.aventuras.app",
-    "productName": "Aventuras",
-    "directories": {
-      "output": "release",
-      "buildResources": "assets"
-    },
-    "files": [
-      "electron/dist/**/*",
-      "dist/**/*",
-      "package.json"
-    ],
-    "asarUnpack": [
-      "**/node_modules/sqlite-vec-*/**",
-      "**/node_modules/onnxruntime-node/**",
-      "**/node_modules/sharp/**",
-      "**/node_modules/@img/**"
-    ],
-    "extraResources": [
-      {
-        "from": "lib/db/migrations",
-        "to": "migrations"
-      }
-    ],
-    "extraMetadata": {
-      "main": "electron/dist/main.js"
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Utility"
-    },
-    "mac": {
-      "target": "dmg",
-      "category": "public.app-category.utilities"
-    },
-    "win": {
-      "target": "nsis"
-    }
   },
   "private": true,
   "remarkConfig": {

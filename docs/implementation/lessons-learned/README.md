@@ -168,6 +168,11 @@ slice plans when relevant.
   — the CPU memory arena SIGTRAPs the process with no JS error,
   and config-driven external-data fetch hangs forever; neither
   reproduces under `ELECTRON_RUN_AS_NODE`.
+- [electron-builder packs every production dependency](./electron-builder-packs-every-dependency.md)
+  — local Android build output ships in the Linux packages; exclusions
+  must be `files` negations in a complete per-platform list, the
+  `package.json` key shadows the config file, and typing the config
+  breaks the app's typecheck.
 
 ### Testing / module graph
 
