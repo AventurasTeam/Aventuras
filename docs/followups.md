@@ -120,8 +120,10 @@ for the placement rule.
   [system and user halves](./architecture.md#system-and-user-halves)
   moved today's prompts into the new shape without rewriting them, and
   the content still needs writing: the narrator's standing instructions
-  (its role, the story's mode and lead), which today are one
-  output-format line; the wizard's system halves, empty because each
+  (its role, the story's mode and lead, and the narration person, which
+  [`data-model.md`](./data-model.md) says governs how the AI writes
+  prose but no bundled template renders, the wizard's opening
+  included), which today are one output-format line; the wizard's system halves, empty because each
   shared context macro mixes the output contract with grounding that
   changes as the user fills the wizard in, so each splits into a
   contract macro and a grounding macro; and the blocks the split left in
