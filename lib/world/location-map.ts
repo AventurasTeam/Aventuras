@@ -17,7 +17,10 @@ export type PlaceTreeRow = { entity: Entity; depth: number }
  * Where the map hangs a place, listed or not, and how many left-out places lie in between.
  * `unplaced`: with no listed ancestor, it hangs at the root of the Unplaced group, not the map's.
  */
-export type MapAnchor = { parentId: string | null; hidden: number; unplaced: boolean }
+export type MapAnchor = { hidden: number } & (
+  | { parentId: string; unplaced: false }
+  | { parentId: null; unplaced: boolean }
+)
 
 export type LocationMapView = {
   rows: LocationMapRow[]
