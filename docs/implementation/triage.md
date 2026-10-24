@@ -1009,3 +1009,10 @@ slice-planning gate forces its resolution before that slice is planned.
   parent as `Unknown` through `castPlacement`; the faction picker has no
   equivalent. Predates the AI writer map; raised 2026-10-24 by its
   slice review.
+
+- **The cast parent picker's empty state can mislead.** When every
+  other cast place would close a loop, `parentCandidates`
+  (`components/wizard/cast-editors.tsx`) offers none, and the picker
+  shows `wizard:cast.editor.noLocationsYet`, "(no locations yet — add
+  one with + Add)", although the cast holds places. Predates the AI
+  writer map; raised 2026-10-24 by its slice review.
