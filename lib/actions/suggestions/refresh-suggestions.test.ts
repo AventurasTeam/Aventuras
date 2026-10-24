@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { generateStructured } from '@/lib/ai'
 import {
   APP_SETTINGS_DEFAULTS,
   deltas,
@@ -24,7 +25,9 @@ import { refreshSuggestions } from './refresh-suggestions'
 import { undoLastAction } from '../story-entries/undo'
 import type { DbCtx } from '../types'
 
-const { generateStructuredMock } = vi.hoisted(() => ({ generateStructuredMock: vi.fn() }))
+const { generateStructuredMock } = vi.hoisted(() => ({
+  generateStructuredMock: vi.fn<typeof generateStructured>(),
+}))
 
 vi.mock('@/lib/ai', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
@@ -134,6 +137,7 @@ describe('refreshSuggestions', () => {
     wireAppSettings()
     generateStructuredMock.mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: { suggestions: [{ categoryRef: 'cat1', text: 'Draw the blade.' }] },
     })
 
@@ -178,6 +182,7 @@ describe('refreshSuggestions', () => {
     wireAppSettings()
     generateStructuredMock.mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: { suggestions: [{ categoryRef: 'cat1', text: 'Draw the blade.' }] },
     })
     const ids = { storyId: 's1', branchId: 'b1' }
@@ -210,7 +215,11 @@ describe('refreshSuggestions', () => {
     })
     generateStructuredMock.mockImplementation(async () => {
       await gate
-      return { status: 'ok', value: { suggestions: [{ categoryRef: 'cat1', text: 'Draw.' }] } }
+      return {
+        status: 'ok',
+        recoverable: [],
+        value: { suggestions: [{ categoryRef: 'cat1', text: 'Draw.' }] },
+      }
     })
     const inflight = refreshSuggestions(
       { storyId: 's1', branchId: 'b1' },
@@ -270,7 +279,11 @@ describe('refreshSuggestions', () => {
     // and not about an unusable emission (which now fails the run).
     generateStructuredMock.mockImplementation(async () => {
       await gate
-      return { status: 'ok', value: { suggestions: [{ categoryRef: 'cat1', text: 'Draw.' }] } }
+      return {
+        status: 'ok',
+        recoverable: [],
+        value: { suggestions: [{ categoryRef: 'cat1', text: 'Draw.' }] },
+      }
     })
 
     const inflight = refreshSuggestions(
@@ -300,6 +313,7 @@ describe('refreshSuggestions', () => {
     wireAppSettings()
     generateStructuredMock.mockResolvedValue({
       status: 'ok',
+      recoverable: [],
       value: { suggestions: [{ categoryRef: 'cat1', text: 'Draw.' }] },
     })
     generationStore.setReversalInProgress(true)
