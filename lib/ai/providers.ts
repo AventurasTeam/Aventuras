@@ -8,6 +8,20 @@ import { type ProviderInstanceWithStub } from './types'
 
 type AnthropicModelId = Parameters<AnthropicProvider>[0]
 
+// Anthropic's CORS preflight refuses a browser origin without this header, and the desktop
+// renderer calls it directly. Its warning is about a key exposed to a public page's visitors; this
+// key is the user's own and already in renderer memory. A custom endpoint answers its own CORS.
+const BROWSER_ACCESS_HEADER = { 'anthropic-dangerous-direct-browser-access': 'true' }
+
+function isAnthropicHost(endpoint: string | undefined): boolean {
+  if (endpoint === undefined) return true
+  try {
+    return new URL(endpoint).host === 'api.anthropic.com'
+  } catch {
+    return false
+  }
+}
+
 export function createProviderModel(
   provider: ProviderInstanceWithStub,
   modelId: string,
@@ -18,6 +32,7 @@ export function createProviderModel(
       const anthropic = createAnthropic({
         apiKey: provider.apiKey,
         ...(provider.endpoint !== undefined ? { baseURL: provider.endpoint } : {}),
+        ...(isAnthropicHost(provider.endpoint) ? { headers: BROWSER_ACCESS_HEADER } : {}),
         fetch: createFetchWithCapture({
           source: `provider:${provider.id}`,
           actionId,

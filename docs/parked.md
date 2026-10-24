@@ -3310,3 +3310,15 @@ each handler catches its own failure, so none can reject unhandled.
 Declined by the developer on that cost for no real hit; `return-await`
 was not probed. The signal to revisit is a shipped bug from a dropped
 `await`.
+
+#### AI SDK v7 migration
+
+`@ai-sdk/anthropic` 4.x belongs to the AI SDK's v7 line, so moving to it
+means moving `ai` and `@ai-sdk/openai-compatible` to their v7 releases
+too: an SDK migration, not a one-package bump. The 4.0.0 changelog also
+makes the package ESM-only and drops `cacheCreationInputTokens` from
+`providerMetadata`, which the app doesn't read. The 3.x line the app is
+on still gets releases under the `ai-v6` dist-tag, and neither line
+sends Anthropic's browser-access header, which the app now sets itself.
+Parked 2026-10-24; the signal is a v7-only feature or fix the app needs,
+or the `ai-v6` line going unmaintained.
