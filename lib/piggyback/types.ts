@@ -53,7 +53,7 @@ export type ParsedTransfers = {
   drops: ItemDrop[]
 }
 
-/** `parent`: a placeholder, a handle or `top` as emitted; substituted, see SubstitutedStateBlock. */
+/** `parent`: a placeholder, handle or `top` as emitted; substituted, see SubstitutedStateBlock. */
 export type NewLocationEmission = {
   handle: string
   name: string
@@ -87,9 +87,8 @@ export type NormalizedStateBlock = ParsedStateBlock & { readonly __brand: 'Norma
 
 /**
  * Placeholders swapped for ids: refs name only ids or declared handles, a transfer's item an item.
- * A create's `parent` is looser: an id, a declared handle or `TOP_LEVEL`, else an undeclared handle
- * or an unresolved ref kept raw, which the planner drops as `unresolved`. Minted only by
- * `substitutePiggybackIds`.
+ * A create's `parent` may also be `TOP_LEVEL` or a raw undeclared/unresolved ref, which the planner
+ * drops as `unresolved`. Minted only by `substitutePiggybackIds`.
  */
 export type SubstitutedStateBlock = ParsedStateBlock & { readonly __brand: 'SubstitutedStateBlock' }
 
@@ -112,7 +111,6 @@ type StateReport = NonNullable<EntryMetadata['stateReport']>
 /** A `<new_location>`'s outcome; `parent`: id, `top`, as emitted if dropped, none if unplaced. */
 export type NewLocationReport = NonNullable<StateReport['newLocations']>[number]
 export type NewItemReport = NonNullable<StateReport['newItems']>[number]
-/** A drop as the entry's state report records it. */
 export type ReportedDrop = NonNullable<NonNullable<StateReport['transfers']>['drops']>[number]
 export type TurnCreatesReport = { newLocations: NewLocationReport[]; newItems: NewItemReport[] }
 

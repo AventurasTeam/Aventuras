@@ -107,7 +107,7 @@ export function replyParentOf(placedHere: ReplyPlacements, stored: ParentOf): Pa
   }
 }
 
-/** `view` as matching must see it once this reply's placements land: those rows no longer unplaced. */
+/** `view` as matching sees it once this reply's placements land: those rows no longer unplaced. */
 export function replyMatchView(
   view: LocationMatchView,
   placedHere: ReplyPlacements,

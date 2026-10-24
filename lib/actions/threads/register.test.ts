@@ -641,8 +641,7 @@ describe('setThreadStatus', () => {
   })
 })
 
-// generation-pipeline.md → Reverse-replay: a status and its entry ref restore as one field, so a
-// reversed status change can't leave a thread active beside a later pass's ref.
+// generation-pipeline.md → Reverse-replay: a status and its entry ref restore as one field.
 describe("a thread's status and entry ref through a rollback", () => {
   afterEach(() => {
     entriesStore.__reset()

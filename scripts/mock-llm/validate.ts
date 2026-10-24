@@ -13,9 +13,8 @@ const createFields = {
   condition: z.string().optional(),
 }
 
-// ParsedStateBlock as authored in the UI, or parsed back from a served reply (its moves carry
-// `seq`). Every field optional: the renderer omits what is absent, and an inner tag with nothing
-// in it is a parse failure for the app, not "nothing to report".
+// ParsedStateBlock as authored, or parsed back from a served reply (moves carry `seq`). Every field
+// optional: the renderer omits what is absent, and an empty inner tag is a parse failure.
 const stateBlockSchema = z.object({
   sceneEntities: z.array(z.string()).optional(),
   newLocations: z.array(z.object({ ...createFields, parent: z.string().optional() })).optional(),

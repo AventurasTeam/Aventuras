@@ -25,7 +25,7 @@ import {
 /** A move as the mock's UI authors it (validate.ts), with no order: list order stands in. */
 type AuthoredMove<T extends { seq: number }> = Omit<T, 'seq'> & { seq?: number }
 
-/** A create as authored: validate.ts asks for no description, which the app's parser reads as ''. */
+/** A create as authored: validate.ts asks for no description, which the parser reads as ''. */
 type AuthoredCreate<T extends { description: string }> = Omit<T, 'description'> & {
   description?: string
 }
@@ -116,7 +116,7 @@ function renderNewItems(block: AuthoredStateBlock): string[] {
   })
 }
 
-// A move with no `seq` takes the one listed before it in its own list, or `first` at the list's head.
+// A move with no `seq` takes the one listed before it in its list, or `first` at the list's head.
 function orderedRows<T extends { seq?: number }>(
   moves: readonly T[],
   first: number,
@@ -129,9 +129,8 @@ function orderedRows<T extends { seq?: number }>(
   })
 }
 
-// Block order: `seq`, a move without one right after the one listed before it, a drop with none
-// before it after every item move but not after a drop listed below it; a tie keeps the item
-// moves first, then list order.
+// Block order is `seq`; a drop at its list's head follows every item move, but not a drop listed
+// below it. A tie keeps the item moves first, then list order.
 function renderTransfers(block: AuthoredStateBlock): string | null {
   const items = block.transfers?.items ?? []
   const drops = block.transfers?.drops ?? []

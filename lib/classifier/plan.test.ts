@@ -3618,7 +3618,6 @@ describe('placements', () => {
   })
 
   // The schema's parent is an ID from Places or top-level: a new place is placed by its own create.
-  // Q15: a placement's parent is a listed place, its create carrying a new place's own parent.
   it("drops and reports a placement whose parent is a new place's handle", () => {
     const places: ClassifierPlacesExtraction = {
       ...reply({ placements: [{ ref: 'loc_varn', parent: 'new:reach', sourceTurn: 't2' }] }),

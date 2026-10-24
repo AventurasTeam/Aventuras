@@ -2273,8 +2273,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
     })
   })
 
-  // cadence.md → User edits and classifier writes: a user edit between the turns refuses the
-  // earlier turn's standing, and the later turn's restatement, newer than the edit, lands.
+  // cadence.md → User edits and classifier writes.
   it("lands a later turn's restated standing past a user edit that refused the earlier one", async () => {
     const { db, runInTransaction } = await seedStory()
     const apply = async (action: PipelineAction, actionId: string) => {
@@ -2424,9 +2423,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
     expect([stranger.nameCollisionFlag, stranger.nameCollisionReason]).toEqual(flag)
   })
 
-  // cadence.md → User edits and classifier writes: a clear between the clash turns refuses the
-  // earlier raise, and the later clash's raise, newer than the clear, lands. With no clear the
-  // earlier raise lands and the handler keeps its partner.
+  // cadence.md → User edits and classifier writes.
   const ZARA = 'char_44444444-4444-4444-4444-444444444444'
   it.each([
     ["lands a later clash's raise past a user clear that refused the earlier one", true, ZARA],

@@ -1233,7 +1233,7 @@ describe('conditions and drops', () => {
     })
   })
 
-  // piggyback.md → Trailing block format: an item put down somewhere else than the scene stays prose.
+  // piggyback.md → Trailing block format: a drop away from the scene stays prose.
   it('drops a drop that names a place, reporting it, and leaves it no place in the order', () => {
     const { block, failures, dropsElsewhere } = parseStateBlock(`<state>
   <transfers>

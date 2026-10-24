@@ -1717,7 +1717,7 @@ describe('per-turn-piggyback', () => {
           },
         } as never,
       ])
-      // A character row, so the classifier's changes land: one that writes nothing keeps the fold's.
+      // A character row, so classifier changes land: one that writes nothing keeps the fold's.
       entitiesStore.hydrate('b1', [
         {
           id: charUuid,

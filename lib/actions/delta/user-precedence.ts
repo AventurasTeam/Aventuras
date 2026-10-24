@@ -194,10 +194,8 @@ const COLLISION_FLAG_COLUMNS: readonly string[] = [
   'nameCollisionReason',
 ] satisfies readonly (keyof Entity)[]
 
-/**
- * A user edit wrote an entity's collision flag, partner or reason, which the table's CHECK holds
- * together (edge-cases.md → Schema).
- */
+/** A user edit wrote an entity's collision flag, partner or reason, which the table's CHECK holds
+ *  together (edge-cases.md → Schema). */
 function wroteCollisionFlag(edits: readonly Delta[]): boolean {
   return COLLISION_FLAG_COLUMNS.some((column) => wroteColumn(edits, column))
 }
@@ -222,11 +220,8 @@ export function wroteThreadStatus(edits: readonly Delta[]): boolean {
   return THREAD_STATUS_COLUMNS.some((column) => wroteColumn(edits, column))
 }
 
-/**
- * wrotePath, but a place's parent and unplaced mark, an entity's collision columns, an entity's
- * status and retired reason, and a thread's status and entry ref each count as one field
- * (generation-pipeline.md → Reverse-replay).
- */
+/** wrotePath, but each column group above (placement, collision flag, retirement, thread status)
+ *  counts as one field (generation-pipeline.md → Reverse-replay). */
 export function wroteField(
   edits: readonly Delta[],
   table: string,

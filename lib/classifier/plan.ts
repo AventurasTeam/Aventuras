@@ -109,7 +109,7 @@ export type EarlyClose = { title: string; resolvedAtTurn: string; sourceTurn: st
 
 type CutLengths = { length: number; keptLength: number }
 
-/** A state text cut at a clause to its 500-character bound (piggyback.md → Trailing block format). */
+/** A state text cut at a clause to the 500-char bound (piggyback.md → Trailing block format). */
 export type CutText = CutLengths &
   (
     | { kind: 'condition'; handle: string }
@@ -237,8 +237,7 @@ function declaredPlace(place: NewPlace): NewPlace {
 const MAX_VOICE = 2000
 const MAX_STATE_LIST = 50
 
-// A 500-character field, cut at a clause as a per-turn visual value is (piggyback.md), the cut
-// reported as the per-turn writer warns one.
+// Cut and reported as the per-turn writer does (piggyback.md → Trailing block format).
 function stateText(
   text: string | undefined,
   onCut: (lengths: CutLengths) => void,
@@ -731,10 +730,9 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
           entryId: at(),
         })
       }
-      // One partner per row: a flag that still holds, its keyword landed, keeps its partner; a
-      // dormant one counts as none (classifier.md → Names), as raiseCollisionFlag judges it. Only
-      // the stored flag rules a raise out: the handler may refuse an earlier planned one, and
-      // no-ops a later one once an earlier one landed.
+      // A flag that still holds keeps its partner, a dormant one counts as none (classifier.md →
+      // Names). Only the stored flag rules a raise out: the handler may refuse an earlier planned
+      // one, and no-ops a later one once an earlier landed.
       const landed = asPlanned(row.id)
       const partnerOf = row.nameCollisionPartnerId
       const holds =
@@ -753,8 +751,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       }
       renameClashes.push({ ref: rename.ref, name, partnerId, flagged })
     }
-    // Index is keyed by row id, so a handle this reply declares misses: its row already carries
-    // its keywords.
+    // `index` is keyed by row id, so a handle this reply declares misses: its row has the keywords.
     const planAlias = (alias: ClassifierExtraction['aliases'][number]): void => {
       if (!index.has(alias.ref)) unresolvedRefs.push(alias.ref)
       else appendNewTerms(alias.ref, alias.terms, alias.sourceTurn)
@@ -776,8 +773,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   }
 
   // classifier.md → What the classifier writes → Where a place sits. Planned against this reply's
-  // own creates and placements; a loop, a broken chain or a retired parent is dropped before the
-  // handler sees it.
+  // own creates and placements, so a drop happens before the handler sees the fact.
   const planPlacements = (): DroppedPlacement[] => {
     const droppedPlacements: DroppedPlacement[] = []
     const placeParentOf = replyParentOf(

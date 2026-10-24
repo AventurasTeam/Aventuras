@@ -48,8 +48,7 @@ const namesParent = <E extends NewPlaceDeclaration>(e: E): e is E & { parent: st
 
 /**
  * Top-down, else in list order: a create waits for its own parent only. No parent or `TOP_LEVEL`
- * settles at once; a parent that never resolves (undeclared handle, non-location id, cycle)
- * unplaces its create; children follow.
+ * settles at once; an unresolvable parent (undeclared handle, non-location id, cycle) unplaces it.
  */
 export function settlingOrder<E extends NewPlaceDeclaration>(
   creates: readonly E[],

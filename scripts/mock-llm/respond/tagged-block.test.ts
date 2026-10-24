@@ -153,7 +153,7 @@ describe('renderStateBlock', () => {
     })
   })
 
-  // validate.ts asks no create for a description, and the app's parser reads a missing one as ''.
+  // validate.ts leaves a create's description optional.
   it('renders a create with no description, which the parser reads as an empty one', () => {
     const { block, failures, malformedCreates } = parseStateBlock(
       renderStateBlock({

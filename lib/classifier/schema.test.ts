@@ -377,7 +377,7 @@ describe('classifierExtractionWithPlacesSchema', () => {
   })
 })
 
-// classifier.md → Failure policy: a reply that fails to parse fails the pass, and the Send behind it.
+// classifier.md → Failure policy: a failed parse fails the pass, so these read as absent.
 describe('optional profile and plot fields the model fills wrongly', () => {
   const ITEMS = {
     newCharacters: { handle: 'new:mira', name: 'Mira', description: 'A ferrywoman.' },

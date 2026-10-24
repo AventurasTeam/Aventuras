@@ -43,11 +43,8 @@ type CreateEntityAction = Extract<PipelineAction, { kind: 'createEntity' }>
 type PlaceLocationAction = Extract<PipelineAction, { kind: 'placeLocation' }>
 
 export type TurnCreatePlan = PlannedTurn & {
-  /**
-   * In emission order, before every other write: inserts of `createdRows` (parents before
-   * children, locations before items), then each reused unplaced place's placement, which can
-   * name a parent those inserts create.
-   */
+  /** Before every other write, in order: `createdRows` inserts (parents before children, locations
+   *  before items), then reused unplaced places' placements, which may name a created parent. */
   structural: readonly (CreateEntityAction | PlaceLocationAction)[]
 }
 

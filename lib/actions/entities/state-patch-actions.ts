@@ -220,7 +220,6 @@ function stateWriteOutcome(
   return columnsWriteOutcome(branchId, id, { state: next as EntityState }, undoPayload, ctx)
 }
 
-/** Writes `columns` on the row, the store patched alike; the undo puts back `undoPayload`. */
 function columnsWriteOutcome(
   branchId: string,
   id: string,

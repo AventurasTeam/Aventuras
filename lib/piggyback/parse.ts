@@ -133,8 +133,7 @@ function parseVisualChanges(segment: string): VisualChangeNote[] {
   return notes
 }
 
-// <entity id="...">text</entity> — full-replace condition, one entry per changed place or item
-// (docs/memory/piggyback.md → Trailing block format). A blank one is kept for apply.ts to refuse.
+// piggyback.md → Trailing block format. A blank condition is kept for apply.ts to refuse.
 function parseConditions(segment: string): ConditionChange[] {
   const changes: ConditionChange[] = []
   // No `<` inside, so a self-closed or unclosed entry can't swallow the next one.

@@ -2385,8 +2385,7 @@ describe('narrative fold — creates', () => {
       })
     })
 
-    // piggyback.md → Trailing block format: an item put down somewhere else than the scene stays
-    // prose, whether its `to` names a listed place or nothing.
+    // piggyback.md → Trailing block format: a drop away from the scene stays prose.
     it.each([
       ['a listed place', 'l2'],
       ['nothing', 'l99'],
