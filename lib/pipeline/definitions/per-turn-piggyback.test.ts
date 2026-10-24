@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
-import type { PromptHalves } from '@/lib/ai'
+import type { generateStructured, PromptHalves } from '@/lib/ai'
 import {
   APP_SETTINGS_DEFAULTS,
   emptyEntityState,
@@ -65,7 +65,7 @@ const SUGGESTION_CATEGORIES = [
 ]
 
 const { generateStructuredMock } = vi.hoisted(() => ({
-  generateStructuredMock: vi.fn(),
+  generateStructuredMock: vi.fn<typeof generateStructured>(),
 }))
 
 vi.mock('@/lib/ai', async (importOriginal) => {
@@ -322,7 +322,11 @@ describe('per-turn-piggyback', () => {
       ])
       entitiesStore.hydrate('b1', [])
 
-      generateStructuredMock.mockResolvedValueOnce({ status: 'failed', detail: 'LLM error' })
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'failed',
+        recoverable: [],
+        detail: 'LLM error',
+      })
 
       const ctx = {
         actionId: 'act_1',
@@ -405,7 +409,11 @@ describe('per-turn-piggyback', () => {
       ])
       entitiesStore.hydrate('b1', [])
 
-      generateStructuredMock.mockResolvedValueOnce({ status: 'failed', detail: 'LLM error' })
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'failed',
+        recoverable: [],
+        detail: 'LLM error',
+      })
 
       const gen = piggybackFallbackClassifierPhase({
         actionId: 'act_1',
@@ -465,7 +473,7 @@ describe('per-turn-piggyback', () => {
       ])
       entitiesStore.hydrate('b1', [])
 
-      generateStructuredMock.mockResolvedValueOnce({ status: 'aborted' })
+      generateStructuredMock.mockResolvedValueOnce({ status: 'aborted', recoverable: [] })
 
       const gen = piggybackFallbackClassifierPhase({
         actionId: 'act_1',
@@ -519,7 +527,11 @@ describe('per-turn-piggyback', () => {
         } as never,
       ])
       entitiesStore.hydrate('b1', [])
-      generateStructuredMock.mockResolvedValueOnce({ status: 'failed', detail: 'LLM error' })
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'failed',
+        recoverable: [],
+        detail: 'LLM error',
+      })
 
       const ctx = {
         actionId: 'act_1',
@@ -534,7 +546,7 @@ describe('per-turn-piggyback', () => {
 
       await piggybackFallbackClassifierPhase(ctx).next()
 
-      const prompt = (generateStructuredMock.mock.calls.at(-1)?.[1] as PromptHalves).user
+      const prompt = generateStructuredMock.mock.calls.at(-1)![1].user
       expect(prompt).toContain('I put the sword away.')
       expect(prompt).toContain('The blade slides home.')
     })
@@ -573,6 +585,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -596,7 +609,7 @@ describe('per-turn-piggyback', () => {
       const gen = piggybackFallbackClassifierPhase(ctx)
       const first = await gen.next()
 
-      const prompt = (generateStructuredMock.mock.calls.at(-1)?.[1] as PromptHalves).user
+      const prompt = generateStructuredMock.mock.calls.at(-1)![1].user
       expect(prompt).toContain('The blade slides home.')
       expect(first.value).toEqual({
         type: 'delta_emitted',
@@ -640,6 +653,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -724,7 +738,7 @@ describe('per-turn-piggyback', () => {
         transfers: { items: [], stackables: [] },
         retrievalQueries: ['House Eldrin sigil'],
       })
-      generateStructuredMock.mockResolvedValueOnce({ status: 'ok', value })
+      generateStructuredMock.mockResolvedValueOnce({ status: 'ok', recoverable: [], value })
 
       const ctx = {
         actionId: 'act_1',
@@ -801,6 +815,7 @@ describe('per-turn-piggyback', () => {
       // narrative model — it emits 'c1' back, never heroId directly.
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: ['c1'],
           currentLocation: undefined,
@@ -885,6 +900,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: ['c1'],
           currentLocation: undefined,
@@ -958,6 +974,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: ['c1'],
           currentLocation: undefined,
@@ -1027,6 +1044,7 @@ describe('per-turn-piggyback', () => {
       generateStructuredMock
         .mockResolvedValueOnce({
           status: 'ok',
+          recoverable: [],
           value: {
             sceneEntities: [],
             currentLocation: undefined,
@@ -1037,6 +1055,7 @@ describe('per-turn-piggyback', () => {
         })
         .mockResolvedValueOnce({
           status: 'ok',
+          recoverable: [],
           value: {
             sceneEntities: [],
             currentLocation: undefined,
@@ -1099,6 +1118,7 @@ describe('per-turn-piggyback', () => {
       generateStructuredMock
         .mockResolvedValueOnce({
           status: 'ok',
+          recoverable: [],
           value: {
             sceneEntities: [],
             currentLocation: undefined,
@@ -1109,6 +1129,7 @@ describe('per-turn-piggyback', () => {
         })
         .mockResolvedValueOnce({
           status: 'failed',
+          recoverable: [],
           detail: 'provider timeout on reroll',
         })
 
@@ -1185,6 +1206,7 @@ describe('per-turn-piggyback', () => {
         for (const worldTimeDelta of worldTimeDeltas)
           generateStructuredMock.mockResolvedValueOnce({
             status: 'ok',
+            recoverable: [],
             value: { ...REPORT, worldTimeDelta, ...(withChips ? { suggestions: [] } : {}) },
           })
 
@@ -1321,7 +1343,11 @@ describe('per-turn-piggyback', () => {
         const intermediates: Record<string, unknown> = { idMap: new IdBiMap() }
         if (over.retrieval) intermediates[RETRIEVAL_INTERMEDIATE_KEY] = over.retrieval
 
-        generateStructuredMock.mockResolvedValueOnce({ status: 'failed', detail: 'LLM error' })
+        generateStructuredMock.mockResolvedValueOnce({
+          status: 'failed',
+          recoverable: [],
+          detail: 'LLM error',
+        })
         await piggybackFallbackClassifierPhase({
           actionId: 'act_1',
           abortSignal: new AbortController().signal,
@@ -1336,7 +1362,7 @@ describe('per-turn-piggyback', () => {
         // A phase that grew a yield before the render would otherwise surface as a
         // TypeError inside toContain rather than as a failed expectation.
         expect(generateStructuredMock).toHaveBeenCalledOnce()
-        return generateStructuredMock.mock.calls[0]![1] as PromptHalves
+        return generateStructuredMock.mock.calls[0]![1]
       }
 
       it('renders the memory blocks, in-scene and location sections, and the calendar', async () => {
@@ -1410,6 +1436,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -1490,6 +1517,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -1571,6 +1599,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -1653,6 +1682,7 @@ describe('per-turn-piggyback', () => {
       // than defaulting to empty.
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: { sceneEntities: [], currentLocation: undefined, worldTimeDelta: 60 },
       })
 
@@ -1736,6 +1766,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -1817,6 +1848,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -1920,6 +1952,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -1956,7 +1989,7 @@ describe('per-turn-piggyback', () => {
         ctx.abortSignal,
         { cacheSystemPrefix: true },
       )
-      const prompt = (generateStructuredMock.mock.calls[0]?.[1] as PromptHalves).user
+      const prompt = generateStructuredMock.mock.calls[0]![1].user
       expect(prompt).not.toContain('Action')
       const created = events[0]
       if (
@@ -1994,6 +2027,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -2020,7 +2054,7 @@ describe('per-turn-piggyback', () => {
         result = await gen.next()
       }
 
-      const prompt = (generateStructuredMock.mock.calls[0]?.[1] as PromptHalves).user
+      const prompt = generateStructuredMock.mock.calls[0]![1].user
       expect(prompt).toContain('exactly 2 distinct entries')
       expect(prompt).toContain('id "cat1" = Action — use it for: act')
       expect(prompt).toContain('id "cat2" = Dialogue — use it for: say')
@@ -2045,6 +2079,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -2106,6 +2141,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -2172,6 +2208,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -2228,6 +2265,7 @@ describe('per-turn-piggyback', () => {
       // is even constructed — there is no blockFound signal on this path.
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -2273,6 +2311,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -2422,7 +2461,7 @@ describe('per-turn-piggyback', () => {
       value: unknown,
       over: { intermediates?: Record<string, unknown>; log?: Logger; signal?: AbortSignal } = {},
     ) {
-      generateStructuredMock.mockResolvedValueOnce({ status: 'ok', value })
+      generateStructuredMock.mockResolvedValueOnce({ status: 'ok', recoverable: [], value })
       const idMap = new IdBiMap()
       for (const id of [HERO, TOWN, MARKET]) idMap.allocate(id)
       const gen = piggybackFallbackClassifierPhase({

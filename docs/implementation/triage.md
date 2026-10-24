@@ -227,18 +227,6 @@ slice-planning gate forces its resolution before that slice is planned.
   halves PR, whose `marksSystemPrefix` copies the existing type. Raised
   2026-10-11 by its task reviews.
 
-- **The prompt-halves tests repeat a few test-side pieces.** The JSON
-  contract's closing line is spelled out in `lib/ai/prompt-schema.test.ts`,
-  `lib/ai/request-shape.test.ts` and `scripts/mock-llm/server.test.ts`,
-  and the pipeline tests read a mocked call's prompt through 11
-  `as PromptHalves` casts (`per-turn-piggyback.test.ts`,
-  `per-turn.test.ts`, `suggestion-refresh.test.ts`) because each declares
-  its `generateStructuredMock` as a bare `vi.fn()`. A shared test-helpers
-  module (test-side, so no test derives its expectation from the code)
-  and typed mocks would remove both, but the first has no home yet and
-  the second touches older mock declarations. Raised 2026-10-11 by the
-  system and user halves PR's slice review (simplifier pass).
-
 - **The location instructions count retired places.** Two prompt lines
   are gated on `{% if locationMap.size > 0 or locationMapUnplaced.size > 0 %}`,
   which counts retired rows too in either list, and those carry no id:

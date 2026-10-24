@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { PromptHalves } from '@/lib/ai'
+import type { generateStructured } from '@/lib/ai'
 import { APP_SETTINGS_DEFAULTS, STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 import { runPreflight } from '@/lib/pipeline/runtime/preflight'
@@ -64,7 +64,9 @@ const provider = {
   favoriteModelIds: [],
 }
 
-const { generateStructuredMock } = vi.hoisted(() => ({ generateStructuredMock: vi.fn() }))
+const { generateStructuredMock } = vi.hoisted(() => ({
+  generateStructuredMock: vi.fn<typeof generateStructured>(),
+}))
 
 vi.mock('@/lib/ai', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
@@ -161,7 +163,7 @@ async function runEmission(inputs: unknown = DEFAULT_INPUT, abortSignal?: AbortS
 }
 
 function okChips(suggestions: { categoryRef: string; text: string }[]) {
-  return { status: 'ok', value: { suggestions } }
+  return { status: 'ok' as const, value: { suggestions }, recoverable: [] }
 }
 
 let phaseDb: PhaseDb
@@ -455,7 +457,7 @@ describe('suggestion-refresh emission phase', () => {
     const { events } = await runEmission()
 
     expect(events[0]).toMatchObject({ entryId: 'entry-1' })
-    const prompt = (generateStructuredMock.mock.calls[0]?.[1] as PromptHalves).user
+    const prompt = generateStructuredMock.mock.calls[0]![1].user
     expect(prompt).not.toContain('THE TURN FAILED.')
   })
 
@@ -476,7 +478,7 @@ describe('suggestion-refresh emission phase', () => {
       }),
       expect.anything(),
     )
-    const { system, user } = generateStructuredMock.mock.calls[0]?.[1] as PromptHalves
+    const { system, user } = generateStructuredMock.mock.calls[0]![1]
     // architecture.md → System and user halves: the fixture's tone is empty, so it ends on Genre.
     expect(system).toBe('# Setting\nA keep on a hill.\n\n# Genre\nHigh fantasy.')
     expect(user).not.toContain('A keep on a hill.')
@@ -511,7 +513,7 @@ describe('suggestion-refresh emission phase', () => {
       refreshGuidance: 'I want to sneak around the back',
     })
 
-    const prompt = (generateStructuredMock.mock.calls[0]?.[1] as PromptHalves).user
+    const prompt = generateStructuredMock.mock.calls[0]![1].user
     expect(prompt).toContain('I want to sneak around the back')
     expect(events[0]).toMatchObject({
       action: {
@@ -534,7 +536,7 @@ describe('suggestion-refresh emission phase', () => {
 
     const { events } = await runEmission({ refreshGuidance: '   ' })
 
-    const prompt = (generateStructuredMock.mock.calls[0]?.[1] as PromptHalves).user
+    const prompt = generateStructuredMock.mock.calls[0]![1].user
     expect(prompt).not.toContain('already started writing')
     const event = events[0]
     if (
@@ -757,7 +759,7 @@ describe('suggestion-refresh emission phase', () => {
     openStory()
     hydrate()
     wireAppSettings()
-    generateStructuredMock.mockResolvedValue({ status: 'aborted' })
+    generateStructuredMock.mockResolvedValue({ status: 'aborted', recoverable: [] })
 
     const { events, result } = await runEmission()
 
@@ -792,7 +794,7 @@ describe('suggestion-refresh emission phase', () => {
     openStory()
     hydrate()
     wireAppSettings()
-    generateStructuredMock.mockResolvedValue({ status: 'failed', detail: 'boom' })
+    generateStructuredMock.mockResolvedValue({ status: 'failed', recoverable: [], detail: 'boom' })
 
     const { events, result } = await runEmission()
 
@@ -817,7 +819,7 @@ describe('suggestion-refresh emission phase', () => {
     // No caller-supplied target to truncate at any more: the anchor is the tail
     // by construction, so the whole branch is the window and recency windowing
     // is the template's `recent` filter.
-    const prompt = (generateStructuredMock.mock.calls[0]?.[1] as PromptHalves).user
+    const prompt = generateStructuredMock.mock.calls[0]![1].user
     expect(prompt).toContain('The gate groans open.')
     expect(prompt).toContain('THE LATEST TURN.')
     expect(events[0]).toMatchObject({ entryId: 'entry-2' })

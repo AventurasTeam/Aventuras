@@ -5,7 +5,7 @@ import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { reverseAndPruneDeltaRows } from '@/lib/actions/delta/reverse-replay'
 import { resolveSweep } from '@/lib/actions/story-entries/operational'
 import { undoLastAction } from '@/lib/actions/story-entries/undo'
-import type { PromptHalves } from '@/lib/ai'
+import type { generateStructured, streamText } from '@/lib/ai'
 import {
   APP_SETTINGS_DEFAULTS,
   deltas,
@@ -35,9 +35,10 @@ import { getPipeline } from '../authoring/registry'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
 const { streamTextMock, renderTemplateMock, generateStructuredMock } = vi.hoisted(() => ({
-  streamTextMock: vi.fn(),
+  // Typed by its parameters only: the fake streams below stand in for the SDK's result shape.
+  streamTextMock: vi.fn<(...args: Parameters<typeof streamText>) => unknown>(),
   renderTemplateMock: vi.fn(),
-  generateStructuredMock: vi.fn(),
+  generateStructuredMock: vi.fn<typeof generateStructured>(),
 }))
 
 vi.mock('@/lib/ai', async (importOriginal) => {
@@ -1239,7 +1240,7 @@ async function runNarrativeWith(opts: {
     throw new Error('expected a createStoryEntry delta')
   const { metadata } = created.action.payload.entry
   if (!metadata) throw new Error('expected entry metadata')
-  const halves = streamTextMock.mock.calls.at(-1)?.[1]?.prompt as PromptHalves
+  const halves = streamTextMock.mock.calls.at(-1)![1].prompt
   return {
     events,
     metadata,
@@ -2025,6 +2026,7 @@ describe('narrative fold — creates', () => {
 
     generateStructuredMock.mockResolvedValueOnce({
       status: 'ok',
+      recoverable: [],
       value: fallbackClassifierSchema.parse({ sceneEntities: ['c1'], worldTimeDelta: 30 }),
     })
     const fallback = await drain(phaseAt(3)(phaseCtx(intermediates)))
@@ -2180,6 +2182,7 @@ describe('narrative fold — creates', () => {
     await applyEvents(fold.events)
     generateStructuredMock.mockResolvedValueOnce({
       status: 'ok',
+      recoverable: [],
       value: fallbackClassifierSchema.parse({
         sceneEntities: ['c1'],
         newLocations: [
@@ -2264,6 +2267,7 @@ describe('narrative fold — creates', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: fallbackClassifierSchema.parse({
           sceneEntities: ['c1'],
           worldTimeDelta: 30,
@@ -2331,7 +2335,7 @@ describe('narrative fold — creates', () => {
 
     async function fallbackReplies(
       fold: { intermediates: Record<string, unknown> },
-      reply: unknown,
+      reply: Awaited<ReturnType<typeof generateStructuredMock>>,
     ) {
       generateStructuredMock.mockResolvedValueOnce(reply)
       const fallback = await drain(phaseAt(3)(phaseCtx(fold.intermediates)))
@@ -2356,6 +2360,7 @@ describe('narrative fold — creates', () => {
 
       const events = await fallbackReplies(fold, {
         status: 'ok',
+        recoverable: [],
         value: fallbackClassifierSchema.parse({
           sceneEntities: ['c1'],
           newLocations: [
@@ -2390,11 +2395,15 @@ describe('narrative fold — creates', () => {
       [
         'a fallback reply without the drop',
         {
-          status: 'ok',
+          status: 'ok' as const,
           value: fallbackClassifierSchema.parse({ sceneEntities: ['c1'], worldTimeDelta: 30 }),
+          recoverable: [],
         },
       ],
-      ['a failed fallback call', { status: 'failed', detail: 'LLM error' }],
+      [
+        'a failed fallback call',
+        { status: 'failed' as const, detail: 'LLM error', recoverable: [] },
+      ],
     ])(
       'a failed fold leaves the item held after %s, with no drop on the record',
       async (_label, reply) => {
@@ -2410,7 +2419,8 @@ describe('narrative fold — creates', () => {
     )
 
     const docksFallback = {
-      status: 'ok',
+      status: 'ok' as const,
+      recoverable: [],
       value: fallbackClassifierSchema.parse({
         sceneEntities: ['c1'],
         newLocations: [
