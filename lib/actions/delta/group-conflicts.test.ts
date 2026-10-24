@@ -105,7 +105,12 @@ describe('applyDeltaActionGroup — a delete and a write naming what it removes'
       {
         kind: 'upsertHappeningAwareness',
         source: 'user_edit',
-        payload: { branchId: 'b1', happeningId: 'hap_1', characterId: 'char_keep' },
+        payload: {
+          branchId: 'b1',
+          happeningId: 'hap_1',
+          characterId: 'char_keep',
+          proseEntryId: null,
+        },
       },
       {
         kind: 'deleteHappeningAwareness',
@@ -149,7 +154,12 @@ describe('applyDeltaActionGroup — a delete and a write naming what it removes'
       {
         kind: 'upsertHappeningAwareness',
         source: 'user_edit',
-        payload: { branchId: 'b1', happeningId: 'hap_1', characterId: 'char_keep' },
+        payload: {
+          branchId: 'b1',
+          happeningId: 'hap_1',
+          characterId: 'char_keep',
+          proseEntryId: null,
+        },
       },
     ])
 

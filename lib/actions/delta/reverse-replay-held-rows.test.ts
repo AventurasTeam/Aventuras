@@ -185,7 +185,7 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
     await act('act_pass', {
       kind: 'upsertHappeningAwareness',
       source: 'periodic_classifier',
-      payload: { branchId: 'b1', happeningId: 'hap_1', characterId: 'char_x' },
+      payload: { branchId: 'b1', happeningId: 'hap_1', characterId: 'char_x', proseEntryId: null },
     })
     await act('act_del', deleteHappening('hap_1'))
     expect((await payloadOf('act_del')).awareness).toHaveLength(1)

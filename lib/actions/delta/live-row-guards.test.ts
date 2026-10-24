@@ -75,7 +75,12 @@ describe('link writers refuse a row that is gone', () => {
       action: {
         kind: 'upsertHappeningAwareness' as const,
         source: 'periodic_classifier' as const,
-        payload: { branchId: 'b1', characterId: 'char_gone', happeningId: 'hap_1' },
+        payload: {
+          branchId: 'b1',
+          characterId: 'char_gone',
+          happeningId: 'hap_1',
+          proseEntryId: null,
+        },
       },
     },
     {
@@ -84,7 +89,12 @@ describe('link writers refuse a row that is gone', () => {
       action: {
         kind: 'upsertHappeningAwareness' as const,
         source: 'periodic_classifier' as const,
-        payload: { branchId: 'b1', characterId: 'char_a', happeningId: 'hap_gone' },
+        payload: {
+          branchId: 'b1',
+          characterId: 'char_a',
+          happeningId: 'hap_gone',
+          proseEntryId: null,
+        },
       },
     },
     {
@@ -279,7 +289,12 @@ describe('a row the same group creates counts as present', () => {
         {
           kind: 'upsertHappeningAwareness',
           source: 'user_edit',
-          payload: { branchId: 'b1', characterId: 'char_b', happeningId: 'hap_new' },
+          payload: {
+            branchId: 'b1',
+            characterId: 'char_b',
+            happeningId: 'hap_new',
+            proseEntryId: null,
+          },
         },
       ],
       { actionId: 'act_2', branchId: 'b1' },

@@ -707,7 +707,7 @@ describe('undo and redo carry the reversal closure', () => {
     await act(ctx, 'act_pass', {
       kind: 'upsertHappeningAwareness',
       source: 'periodic_classifier',
-      payload: { branchId: 'b1', happeningId: 'hap_1', characterId: 'char_e' },
+      payload: { branchId: 'b1', happeningId: 'hap_1', characterId: 'char_e', proseEntryId: null },
     })
     await act(ctx, 'act_pass', {
       kind: 'upsertCharacterRelationship',

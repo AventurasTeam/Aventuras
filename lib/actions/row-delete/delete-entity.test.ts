@@ -290,7 +290,12 @@ describe('deleteEntityRow — C3 acceptance', () => {
         action: {
           kind: 'upsertHappeningAwareness',
           source: 'periodic_classifier',
-          payload: { branchId: 'b1', characterId: 'char_x', happeningId: 'hap_1' },
+          payload: {
+            branchId: 'b1',
+            characterId: 'char_x',
+            happeningId: 'hap_1',
+            proseEntryId: null,
+          },
         },
         actionId: 'act_pass',
         branchId: 'b1',

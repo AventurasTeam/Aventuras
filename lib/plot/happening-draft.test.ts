@@ -192,6 +192,7 @@ describe('happeningActions', () => {
           characterId: 'char_mira',
           happeningId: 'hap_1',
           decayResistance: 0.9,
+          proseEntryId: null,
         },
       },
     ])
@@ -233,6 +234,7 @@ describe('happeningActions', () => {
           happeningId: 'hap_1',
           learnedAtEntryId: 'e_11',
           decayResistance: 0.6,
+          proseEntryId: null,
         },
       },
       {
@@ -244,6 +246,7 @@ describe('happeningActions', () => {
           happeningId: 'hap_1',
           learnedAtEntryId: 'e_3',
           decayResistance: 0.2,
+          proseEntryId: null,
         },
       },
     ])
@@ -301,6 +304,7 @@ describe('happeningActions', () => {
           characterId: 'char_mira',
           happeningId: 'hap_1',
           decayResistance: 0.1,
+          proseEntryId: null,
         },
       },
     ])

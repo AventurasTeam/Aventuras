@@ -124,7 +124,7 @@ describe('undoing a delete whose link names a row a later reversal removed', () 
     await pass({
       kind: 'upsertHappeningAwareness',
       source: 'periodic_classifier',
-      payload: { branchId: 'b1', happeningId: 'hap_p', characterId: 'char_x' },
+      payload: { branchId: 'b1', happeningId: 'hap_p', characterId: 'char_x', proseEntryId: null },
     })
     expect(await deleteEntityRow('b1', 'char_x', ctx)).toEqual({ status: 'ok' })
 

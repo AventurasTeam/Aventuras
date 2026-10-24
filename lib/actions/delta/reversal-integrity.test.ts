@@ -135,7 +135,7 @@ const involve = (id: string, happeningId: string, entityId: string): PipelineAct
 const aware = (happeningId: string, characterId: string): PipelineAction => ({
   kind: 'upsertHappeningAwareness',
   source: 'periodic_classifier',
-  payload: { branchId: 'b1', happeningId, characterId },
+  payload: { branchId: 'b1', happeningId, characterId, proseEntryId: null },
 })
 
 const relate = (

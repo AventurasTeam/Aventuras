@@ -348,7 +348,7 @@ const aware = (
 ): PipelineAction => ({
   kind: 'upsertHappeningAwareness',
   source: 'user_edit',
-  payload: { branchId: BRANCH, characterId, happeningId, ...fields },
+  payload: { branchId: BRANCH, characterId, happeningId, proseEntryId: null, ...fields },
 })
 
 const unaware = (id: string): PipelineAction => ({
