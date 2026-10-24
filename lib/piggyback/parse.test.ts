@@ -1342,3 +1342,62 @@ describe('conditions and drops', () => {
     ])
   })
 })
+
+// No `<` inside an entry's attributes or text, as conditions and moves already read: a malformed
+// entry drops alone instead of swallowing the next one, and an unclosed opener can't make the
+// scan run to the end of the segment.
+describe('an entry that never closes swallows nothing', () => {
+  it('keeps the next visual change whole after a self-closed one', () => {
+    const { block } = parseStateBlock(
+      '<state><visual_changes><entity id="c1" type="attire"/><entity id="c2" type="hair">wet hair</entity></visual_changes></state>',
+    )
+    expect(block.visualChanges).toEqual([{ id: 'c2', type: 'hair', text: 'wet hair' }])
+  })
+
+  it('keeps the next stackable whole after one missing its `>`', () => {
+    const { block } = parseStateBlock(
+      '<state><transfers><stackable key="gold" amount="5" from="c1"<stackable key="silver" amount="3" to="c2" /></transfers></state>',
+    )
+    expect(block.transfers?.stackables).toEqual([{ key: 'silver', amount: 3, to: 'c2' }])
+  })
+
+  it('keeps the next retrieval query whole after an unclosed one', () => {
+    const { block } = parseStateBlock(
+      '<state><scene_entities>c1</scene_entities><retrieval_queries><query>the old bell<query>who rang it</query></retrieval_queries></state>',
+    )
+    expect(block.retrievalQueries).toEqual(['who rang it'])
+  })
+
+  it('keeps the next suggestion whole after an unclosed one', () => {
+    const { items } = parseSuggestionsBlock(
+      '<suggestions><item category="cat1">Ask the bell-ringer<item category="cat2">Climb the tower</item></suggestions>',
+    )
+    expect(items).toEqual([{ categoryRef: 'cat2', text: 'Climb the tower' }])
+  })
+
+  it('scans 20,000 unclosed visual openers without running to the segment end each time', () => {
+    const openers = '<entity id="c1" type="hair">'.repeat(20_000)
+    const started = performance.now()
+    parseStateBlock(
+      `<state><scene_entities>c1</scene_entities><visual_changes>${openers}</visual_changes></state>`,
+    )
+    // Quadratic, this took about 800 ms; linear, a few ms. A generous bound keeps CI from flaking.
+    expect(performance.now() - started).toBeLessThan(250)
+  })
+})
+
+describe('a create name with a numeric character reference', () => {
+  it('decodes decimal and hex references as it does the named five', () => {
+    const { block } = parseStateBlock(
+      '<state><scene_entities>c1</scene_entities><new_location handle="new:inn" name="O&#39;Malley&#x27;s &amp; Sons">an inn</new_location><current_location>new:inn</current_location></state>',
+    )
+    expect(block.newLocations?.[0]?.name).toBe("O'Malley's & Sons")
+  })
+
+  it('leaves an unknown named entity as written', () => {
+    const { block } = parseStateBlock(
+      '<state><scene_entities>c1</scene_entities><new_location handle="new:inn" name="the &QUOT;Bell&QUOT;">an inn</new_location><current_location>new:inn</current_location></state>',
+    )
+    expect(block.newLocations?.[0]?.name).toBe('the &QUOT;Bell&QUOT;')
+  })
+})

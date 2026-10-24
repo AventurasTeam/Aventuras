@@ -124,13 +124,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Raised 2026-10-11 in the locations-and-items-from-prose PR; the
   rendering half was closed by the AI writer map.
 
-- **The `<entity …>` pattern in the state parser scans to the end of
-  the segment per unclosed opener.** `lib/piggyback/parse.ts`
-  (~line 116) takes about 840 ms on 20,000 unclosed `<entity ` openers;
-  the create pattern already bounds its spans (`[^<>]`), and the same
-  fix applies here. Raised 2026-10-11 in the
-  locations-and-items-from-prose PR.
-
 - **The narrative person never reaches a prompt.**
   `definition.narration` (first, second or third person) is in the
   generation context, but no bundled template renders it, the per-turn
@@ -700,17 +693,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `inheritedEntryMetadata`; `EntityMergeInput` now carries both, and
   they can name different places. Predates the AI writer map; raised
   2026-10-23 by its merge-adoption review.
-
-- **Two trailing-block parsers can swallow the next tag.**
-  `lib/piggyback/parse.ts`'s `parseVisualChanges` reads
-  `<entity\s+([^>]*)>([\s\S]*?)</entity>`, so a self-closed or
-  unclosed entry runs into the next one, and the stackable pattern's
-  `[^>]*` reads the next tag into a stackable missing its `>`. The AI
-  writer map hardened its own conditions and moves with `[^<>]`; these
-  two predate it. Separately, `decodeEntities` handles only the five
-  named entities, so a numeric reference (`&#39;`) stays literal in a
-  name or description. Raised 2026-10-23 by the AI writer map's Task 11
-  review.
 
 - **Undoing a take or a drop after a World move leaves the item held
   and placed.** Reverse-replay keeps a field the user wrote since, so
