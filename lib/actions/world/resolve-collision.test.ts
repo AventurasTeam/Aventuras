@@ -1447,10 +1447,15 @@ describe('resolveCollision — refusals', () => {
 })
 
 describe('resolveCollision — pairs by the stored partner', () => {
-  it('resolves a pair whose names stopped matching while the flag still names the other', async () => {
+  // world.md → Surfacing: a flag whose pair stopped being namesakes is dormant, so no pair.
+  it('refuses not-found for a pair whose names stopped matching though the flag names the other', async () => {
     entitiesStore.patch('b1', { op: 'update', id: 'char_b', columns: { name: 'Bran' } })
 
-    expect(await resolveCollision('b1', KEEP_A_B, ctx)).toEqual({ status: 'ok' })
-    expect((await entityRow('char_b'))?.nameCollisionFlag).toBe(0)
+    expect(await resolveCollision('b1', KEEP_A_B, ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'not-found',
+      reason: 'the two rows are no longer flagged as a pair',
+    })
+    expect((await entityRow('char_b'))?.nameCollisionFlag).toBe(1)
   })
 })

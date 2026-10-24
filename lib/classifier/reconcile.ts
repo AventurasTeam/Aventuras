@@ -1,7 +1,7 @@
 import type { CollisionReason, Entity } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import { compareId } from '@/lib/list-modules'
-import { namesakeBasis } from '@/lib/world'
+import { flagStillHolds, namesakeBasis } from '@/lib/world'
 
 // Canon's starting ranges (classifier.md -> Disambiguation). Hardcoded: the
 // tuning surface is parked until the M7.5 probe work.
@@ -27,6 +27,8 @@ export type ScoredNamesake = {
   /** Cosine against the candidate; null when unscored. */
   similarity: number | null
   inScene: boolean
+  /** A live flag (world.md → Surfacing): a dormant one counts as none. */
+  flagged: boolean
 }
 
 export type EmbedDescriptions = (
@@ -48,7 +50,7 @@ export function cosine(a: Float32Array, b: Float32Array): number {
   return Math.round((dot / (Math.sqrt(na) * Math.sqrt(nb))) * 1e6) / 1e6
 }
 
-// classifier.md -> Partner and reason: score (unscored last), in scene, exact, unflagged,
+// classifier.md -> Partner and reason: score (unscored last), in scene, exact, no live flag,
 // older, id.
 function partnerOrder(a: ScoredNamesake, b: ScoredNamesake): number {
   if (a.similarity !== b.similarity) {
@@ -58,8 +60,7 @@ function partnerOrder(a: ScoredNamesake, b: ScoredNamesake): number {
   }
   if (a.inScene !== b.inScene) return a.inScene ? -1 : 1
   if (a.match !== b.match) return a.match === 'exact' ? -1 : 1
-  if (a.entity.nameCollisionFlag !== b.entity.nameCollisionFlag)
-    return a.entity.nameCollisionFlag - b.entity.nameCollisionFlag
+  if (a.flagged !== b.flagged) return a.flagged ? 1 : -1
   if (a.entity.createdAt !== b.entity.createdAt) return a.entity.createdAt - b.entity.createdAt
   return a.entity.id < b.entity.id ? -1 : a.entity.id > b.entity.id ? 1 : 0
 }
@@ -189,11 +190,18 @@ export async function reconcileNewEntity(
   candidate: { name: string; description: string; keywords: readonly string[] },
   deps: ReconcileDeps,
 ): Promise<ReconcileDecision> {
+  const byId = new Map(deps.entities.map((e) => [e.id, e]))
   const matched: Omit<ScoredNamesake, 'similarity' | 'inScene'>[] = []
   for (const entity of deps.entities) {
     if (entity.kind !== deps.kind) continue
     const basis = namesakeBasis(candidate, entity)?.basis
-    if (basis != null) matched.push({ entity, match: basis === 'same-name' ? 'exact' : 'partial' })
+    if (basis == null) continue
+    const partnerId = entity.nameCollisionPartnerId
+    matched.push({
+      entity,
+      match: basis === 'same-name' ? 'exact' : 'partial',
+      flagged: flagStillHolds(entity, partnerId == null ? undefined : byId.get(partnerId)),
+    })
   }
   if (matched.length === 0) return { kind: 'create', flag: null }
 

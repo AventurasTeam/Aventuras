@@ -1,7 +1,13 @@
 import type { FlagClearPatch, PipelineAction } from '@/lib/actions'
 import type { Entity, EntityKind } from '@/lib/db'
 
-import { pairSideOf, stillPaired, type CollisionPair, type PairSide } from './collision-pair'
+import {
+  flagStillHolds,
+  pairSideOf,
+  stillPaired,
+  type CollisionPair,
+  type PairSide,
+} from './collision-pair'
 import { nameBasis } from './namesakes'
 
 type EntityUpdate = Extract<PipelineAction, { kind: 'updateEntity' }>
@@ -70,16 +76,17 @@ export function brokenFlags(input: {
 }
 
 /**
- * The pair's flagged rows whose partner is the other row or gone from `entities` (world.md → Keep
- * as distinct). A flag naming a live third row is its own question and stays.
+ * The pair's flagged rows whose partner is the other row, or whose flag is dormant among
+ * `entities` (world.md → Keep as distinct). A live flag naming a third row is its own question.
  */
 export function pairFlagsToClear(pair: CollisionPair, entities: readonly Entity[]): string[] {
-  const ids = new Set(entities.map((e) => e.id))
+  const byId = new Map(entities.map((e) => [e.id, e]))
   return pair
     .filter((row, index) => {
       const partner = row.nameCollisionPartnerId
       if (row.nameCollisionFlag !== 1) return false
-      return partner == null || partner === pair[1 - index].id || !ids.has(partner)
+      if (partner === pair[1 - index].id) return true
+      return !flagStillHolds(row, partner == null ? undefined : byId.get(partner))
     })
     .map((row) => row.id)
 }

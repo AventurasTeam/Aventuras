@@ -72,12 +72,15 @@ describe('deriveCollisions', () => {
     ])
   })
 
-  it('still pairs a flag whose partner is no longer its namesake', () => {
+  // world.md → Surfacing: the strip, the pill's count and the badge all read this map.
+  it('leaves a flag dormant once its pair are no longer namesakes, keywords included', () => {
     const map = deriveCollisions([
       entity('mira', 'Mira'),
       entity('kael', 'Kael', flaggedWith('mira', 2)),
+      entity('wolf', 'the Grey Wolf', { keywords: ['Aric'] }),
+      entity('aric', 'Aric', flaggedWith('wolf', 3)),
     ])
-    expect(map.get('kael')).toEqual({ otherId: 'mira', otherName: 'Mira' })
+    expect([...map.keys()]).toEqual(['aric'])
   })
 
   it.each([

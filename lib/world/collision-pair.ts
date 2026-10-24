@@ -54,10 +54,10 @@ export function stillPaired(reason: CollisionReason, a: PairSide, b: PairSide): 
 }
 
 /**
- * classifier.md → Names: the row's flag names `partner` (undefined when gone) and the pair still
- * holds under `stillPaired`. A flag that fails it is dormant and counts as none.
+ * world.md → Surfacing, the one test of a live flag: it names `partner` (undefined when gone) and
+ * the two still pair under `stillPaired`. A flag that fails it is dormant and counts as none.
  */
-export function flagStillHolds(row: Entity, partner: Entity | undefined): boolean {
+export function flagStillHolds(row: Entity, partner: Entity | undefined): row is FlaggedEntity {
   return (
     row.nameCollisionFlag === 1 &&
     row.nameCollisionReason != null &&
@@ -66,22 +66,10 @@ export function flagStillHolds(row: Entity, partner: Entity | undefined): boolea
   )
 }
 
-function flagNames(row: Entity, other: Entity): row is FlaggedEntity {
-  return (
-    row.nameCollisionFlag === 1 &&
-    row.nameCollisionPartnerId === other.id &&
-    row.nameCollisionReason != null &&
-    sharesRequiredParent(row.nameCollisionReason, pairSideOf(row), pairSideOf(other))
-  )
-}
-
-/**
- * The row whose flag names the other and holds (a `same-parent` flag only while the two share a
- * parent), `first` preferred; null when neither does. Names are not re-checked here.
- */
+/** The row whose flag names the other and holds, `first` preferred; null when neither does. */
 export function flaggedSideOf(first: Entity, second: Entity): FlaggedEntity | null {
-  if (flagNames(first, second)) return first
-  if (flagNames(second, first)) return second
+  if (flagStillHolds(first, second)) return first
+  if (flagStillHolds(second, first)) return second
   return null
 }
 

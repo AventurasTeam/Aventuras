@@ -128,12 +128,11 @@ alias list (the keywords bullet below).
   stand when it lands, since a write the pass counted on may have been
   refused by then: a holder found only then leaves the rename unwritten,
   with no keyword and no flag. An entity already flagged keeps its flag
-  and gets the keyword only. A flag whose partner is gone, whose pair
-  are no longer namesakes once the keyword is counted (World may still
-  show the latter's strip), or whose `same-parent` pair no longer share
-  a parent
-  ([`world.md → Surfacing`](../ui/screens/world/world.md#surfacing))
-  counts as no flag: the pass re-points it at the holder.
+  and gets the keyword only. A dormant flag
+  ([`world.md → Surfacing`](../ui/screens/world/world.md#surfacing)),
+  its partner gone, its pair no longer namesakes once the keyword is
+  counted, or a `same-parent` pair no longer sharing a parent, counts
+  as no flag: the pass re-points it at the holder.
 - **Where a place sits** — a listed place's parent, when the turns
   place one the Places list shows unplaced or move one; and the
   top-level mark for an unplaced place nothing on the map could
@@ -334,7 +333,8 @@ description stays, per the first-introduction rule above.
 first of the namesakes that qualified to flag it (every exact one, and
 a partial one under the third row's conditions), ordered by score with
 the unscored last, then in-scene first, then exact before partial, then
-unflagged, older and by id. `name_collision_reason` records why, read
+without a live flag (a [dormant](../ui/screens/world/world.md#surfacing)
+one counts as none), older and by id. `name_collision_reason` records why, read
 from that partner:
 
 | Reason      | Partner                              |

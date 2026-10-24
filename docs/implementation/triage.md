@@ -101,14 +101,6 @@ slice-planning gate forces its resolution before that slice is planned.
   holds the branch. Raised 2026-10-11 in the
   locations-and-items-from-prose PR.
 
-- **The classifier's partner tiebreak counts a split `same-parent`
-  flag as flagged.** `lib/classifier/reconcile.ts` (~line 53) reads the
-  raw `nameCollisionFlag`, so a flag that no longer pairs still sorts
-  after an unflagged namesake. Canon question: whether
-  [`classifier.md`](../memory/classifier.md)'s "unflagged" means "has
-  no flag that pairs". Raised 2026-10-11 in the
-  locations-and-items-from-prose PR.
-
 - **A cancel after the last abort check still returns `completed`.**
   In `lib/pipeline/definitions/per-turn.ts` (~line 322) a cancel
   landing during the position SELECT or the yields leaves the phase
@@ -695,17 +687,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Reading the reply's creates in that placement view would close it.
   Predates the AI writer map's follow-up; raised 2026-10-24 by its
   re-review.
-
-- **A pass's rename can leave a collision flag with no namesake
-  basis.** `renameEntity` (`lib/actions/entities/state-patch-actions.ts`)
-  writes no flag columns, and
-  [`world.md → Surfacing`](../ui/screens/world/world.md#surfacing)'s
-  rule for keeping flags consistent lists only user writes. A row flagged against a namesake
-  that a pass then renames to an unrelated name keeps its old name as a
-  keyword, but the namesake match is exact (`lib/world/namesakes.ts`),
-  so the pair stops being namesakes while World still shows the strip.
-  Reasoned from the code, not run. Raised 2026-10-24 by the AI writer
-  map's Task 22 review.
 
 - **A keyword write's undo restores the whole prior list.**
   `appendEntityKeywords` and `renameEntity`
