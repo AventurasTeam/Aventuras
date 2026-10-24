@@ -9,6 +9,8 @@ import {
   TRAILING_ROOT_TAGS,
   type ItemDrop,
   type ItemTransfer,
+  type NewItemEmission,
+  type NewLocationEmission,
   type ParsedStateBlock,
   type StackableTransfer,
   type SuggestionRef,
@@ -23,8 +25,18 @@ import {
 /** A move as the mock's UI authors it (validate.ts), with no order: list order stands in. */
 type AuthoredMove<T extends { seq: number }> = Omit<T, 'seq'> & { seq?: number }
 
+/** A create as authored: validate.ts asks for no description, which the app's parser reads as ''. */
+type AuthoredCreate<T extends { description: string }> = Omit<T, 'description'> & {
+  description?: string
+}
+
 /** A block as authored, or as parsed back from a served reply ("Save reply as response"). */
-export type AuthoredStateBlock = Omit<ParsedStateBlock, 'transfers'> & {
+export type AuthoredStateBlock = Omit<
+  ParsedStateBlock,
+  'transfers' | 'newLocations' | 'newItems'
+> & {
+  newLocations?: AuthoredCreate<NewLocationEmission>[]
+  newItems?: AuthoredCreate<NewItemEmission>[]
   transfers?: {
     items: AuthoredMove<ItemTransfer>[]
     stackables: StackableTransfer[]
@@ -92,7 +104,7 @@ function renderNewLocations(block: AuthoredStateBlock): string[] {
   return (block.newLocations ?? []).map((c) => {
     const parent = c.parent !== undefined ? ` parent="${attr(c.parent)}"` : ''
     const condition = c.condition !== undefined ? ` condition="${escaped(c.condition)}"` : ''
-    return `  <${name} handle="${attr(c.handle)}"${parent} name="${escaped(c.name)}"${condition}>${escaped(c.description)}</${name}>`
+    return `  <${name} handle="${attr(c.handle)}"${parent} name="${escaped(c.name)}"${condition}>${escaped(c.description ?? '')}</${name}>`
   })
 }
 
@@ -100,7 +112,7 @@ function renderNewItems(block: AuthoredStateBlock): string[] {
   const name = STATE_CREATE_TAGS.newItem
   return (block.newItems ?? []).map((c) => {
     const condition = c.condition !== undefined ? ` condition="${escaped(c.condition)}"` : ''
-    return `  <${name} handle="${attr(c.handle)}" name="${escaped(c.name)}"${condition}>${escaped(c.description)}</${name}>`
+    return `  <${name} handle="${attr(c.handle)}" name="${escaped(c.name)}"${condition}>${escaped(c.description ?? '')}</${name}>`
   })
 }
 

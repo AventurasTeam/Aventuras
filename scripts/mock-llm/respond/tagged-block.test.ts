@@ -78,6 +78,24 @@ describe('renderStateBlock', () => {
     })
   })
 
+  // validate.ts asks no create for a description, and the app's parser reads a missing one as ''.
+  it('renders a create with no description, which the parser reads as an empty one', () => {
+    const { block, failures, malformedCreates } = parseStateBlock(
+      renderStateBlock({
+        newLocations: [{ handle: 'new:docks', name: 'the docks' }],
+        currentLocation: 'new:docks',
+        newItems: [{ handle: 'new:key', name: 'key' }],
+        transfers: { items: [{ id: 'new:key', slot: 'inventory', to: 'c1' }], stackables: [] },
+      }),
+    )
+    expect(failures).toEqual([])
+    expect(malformedCreates).toBe(0)
+    expect(block.newLocations).toEqual([
+      { handle: 'new:docks', name: 'the docks', description: '' },
+    ])
+    expect(block.newItems).toEqual([{ handle: 'new:key', name: 'key', description: '' }])
+  })
+
   // The parser's text pattern is `[^<]*`, so an angle bracket typed into a condition would fail it.
   it('drops angle brackets from a condition so the field still parses', () => {
     const { block, failures } = parseStateBlock(

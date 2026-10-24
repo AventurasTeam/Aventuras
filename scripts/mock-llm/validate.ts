@@ -5,16 +5,27 @@ import { suggestionRefSchema, VISUAL_CHANGE_TYPES } from '@/lib/piggyback'
 import { NARRATIVE_LANE } from './routing'
 import { findShapeByName } from './shapes'
 
-// ParsedStateBlock as authored in the UI. Every field optional: the renderer
-// omits what is absent, and an inner tag with nothing in it is a parse failure
-// for the app, not "nothing to report".
+// A create's description may be left out, as the app's parser reads a missing one as ''.
+const createFields = {
+  handle: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  condition: z.string().optional(),
+}
+
+// ParsedStateBlock as authored in the UI, or parsed back from a served reply (its moves carry
+// `seq`). Every field optional: the renderer omits what is absent, and an inner tag with nothing
+// in it is a parse failure for the app, not "nothing to report".
 const stateBlockSchema = z.object({
   sceneEntities: z.array(z.string()).optional(),
+  newLocations: z.array(z.object({ ...createFields, parent: z.string().optional() })).optional(),
   currentLocation: z.string().optional(),
   worldTimeDelta: z.number().optional(),
   visualChanges: z
     .array(z.object({ id: z.string(), type: z.enum(VISUAL_CHANGE_TYPES), text: z.string() }))
     .optional(),
+  conditions: z.array(z.object({ id: z.string(), text: z.string() })).optional(),
+  newItems: z.array(z.object(createFields)).optional(),
   transfers: z
     .object({
       items: z.array(
@@ -23,6 +34,7 @@ const stateBlockSchema = z.object({
           slot: z.enum(['equipped_items', 'inventory']),
           to: z.string().optional(),
           from: z.string().optional(),
+          seq: z.number().optional(),
         }),
       ),
       stackables: z.array(
@@ -33,9 +45,15 @@ const stateBlockSchema = z.object({
           from: z.string().optional(),
         }),
       ),
+      drops: z
+        .array(
+          z.object({ id: z.string(), from: z.string().optional(), seq: z.number().optional() }),
+        )
+        .optional(),
     })
     .optional(),
   summary: z.string().optional(),
+  retrievalQueries: z.array(z.string()).optional(),
 })
 
 export const narrativeValueSchema = z.object({
