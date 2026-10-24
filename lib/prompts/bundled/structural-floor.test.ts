@@ -116,7 +116,7 @@ describe('non-structural rows reach the prompt only by winning budget', () => {
         },
       ],
     })
-    expect(out).toContain('# Elsewhere in the world')
+    expect(out).toContain('# The wider world')
     expect(out).toContain('Mira (available to introduce): A courier who owes the guild.')
   })
 })

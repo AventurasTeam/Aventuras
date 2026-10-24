@@ -202,7 +202,7 @@ describe('bundled piggyback fallback classifier template', () => {
   it("brackets the memory blocks' entity ids, without the tagged-block instructions", () => {
     const prompt = render(context())
 
-    expect(prompt).toContain('# Elsewhere in the world')
+    expect(prompt).toContain('# The wider world')
     // The whole line, not a substring: it has to lead with the id.
     expect(prompt.split('\n').find((l) => l.includes('Mora'))).toBe(
       '[c7] Mora (not in the scene): last seen at the ford.',
@@ -237,7 +237,7 @@ describe('bundled piggyback fallback classifier template', () => {
         '# In scene',
         '# Current location',
         '# Places',
-        '# Elsewhere in the world',
+        '# The wider world',
         '# Relevant lore',
         '# What has happened',
         '# Active threads',

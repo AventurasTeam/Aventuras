@@ -1231,9 +1231,15 @@ location, and the row's `Location:` line says so
 ([`architecture.md → Entity state on the template surface`](../architecture.md#entity-state-on-the-template-surface)),
 which "currently elsewhere" would contradict.
 
-An active faction carries no framing: it is never in a scene, so
-"not in the scene" says nothing about it. A staged one keeps
-"available to introduce".
+An active faction or place carries no framing. A faction is never in
+a scene, so "not in the scene" says nothing about it, and a place
+isn't either: the scene stands at its current location, which has its
+own block, and a place it stands inside (an ancestor named in that
+block's head) would read as elsewhere while the scene is in it. A row's
+`Part of:` line and the location map already place it. A staged
+faction or place keeps "available to introduce". The block's header,
+`The wider world`, makes no claim about where its rows are, since a
+ranked row can be the region around the scene.
 
 Active off-scene and staged compete for the entity-type token budget.
 Embedding similarity to the current scene digest determines which
@@ -2071,13 +2077,13 @@ Per-type overhead is a small constant for the Liquid macro / block
 wrapping — measured empirically against the shipped macro, constant in
 code thereafter:
 
-| Type         | Overhead | What the constant covers                         |
-| ------------ | -------- | ------------------------------------------------ |
-| `entities`   | 11       | `# Elsewhere in the world` plus the bracketed id |
-| `lore`       | 4        | `# Relevant lore`                                |
-| `happenings` | 5        | `# What has happened`                            |
-| `threads`    | 4        | `# Background threads`                           |
-| `chapters`   | 4        | `# Earlier chapters`                             |
+| Type         | Overhead | What the constant covers                  |
+| ------------ | -------- | ----------------------------------------- |
+| `entities`   | 9        | `# The wider world` plus the bracketed id |
+| `lore`       | 4        | `# Relevant lore`                         |
+| `happenings` | 5        | `# What has happened`                     |
+| `threads`    | 4        | `# Background threads`                    |
+| `chapters`   | 4        | `# Earlier chapters`                      |
 
 Three rules hold those numbers in place:
 

@@ -19,12 +19,15 @@ import type { MeasuredEntity } from './types'
 export const HELD_ITEM_ID_STAND_IN = 'i00'
 
 /**
- * retrieval.md → Three-sub-pool entity model. No framing for a retired row, nor an active faction
- * (never in a scene). The memory-blocks macro repeats these words; memory-blocks.test.ts pins it.
+ * retrieval.md → Three-sub-pool entity model. No framing for a retired row, nor for an active
+ * faction or place: neither is ever in a scene, and a place the scene stands inside would read as
+ * elsewhere. The memory-blocks macro repeats these words; memory-blocks.test.ts pins it.
  */
 export function entityFraming(kind: EntityKind, status: EntityRow['status']): string | null {
   if (status === 'staged') return 'available to introduce'
-  return status === 'active' && kind !== 'faction' ? 'not in the scene' : null
+  return status === 'active' && kind !== 'faction' && kind !== 'location'
+    ? 'not in the scene'
+    : null
 }
 
 // A blank field must not leave its separator behind: "Mira: " reads to the model as

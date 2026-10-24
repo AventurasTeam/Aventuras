@@ -123,26 +123,6 @@ slice-planning gate forces its resolution before that slice is planned.
   factions slice review's simplifier pass, which skipped it as outside
   the slice.
 
-- **An ancestor of the current location is framed "not in the scene".**
-  The floor seats the current location alone. Its ancestors appear only
-  by name in its head ("The Drowned Market — in Veil's Hollow", from
-  `currentLocationChain`), and `filterEntityPool` keeps them in the
-  ranked pool (`lib/retrieval/pools.ts`). A ranked or `always` ancestor
-  then renders in the memory blocks as "Veil's Hollow (not in the
-  scene): …" while the scene stands inside it. In the dev seed, a scene
-  at the Drowned Market would show it: Veil's Hollow is `always`. The
-  words are
-  [`retrieval.md → Three-sub-pool entity model`](../memory/retrieval.md#three-sub-pool-entity-model)'s,
-  and the old "currently elsewhere" was as wrong. Both obvious fixes
-  reach the ranker's mirror, which must keep rendering exactly what it
-  measures: seat the chain on the
-  [structural floor](../memory/retrieval.md#structural-floor--always-inject)
-  and render it outside the memory blocks, since a seated row still
-  takes the memory blocks' framing (Veil's Hollow, `always`, is seated
-  already), or give an ancestor its own framing, which makes
-  `entityFraming` read the scene. Raised 2026-10-19 by the entity-state
-  smoke check.
-
 - **Retrieval takes its disabled places beside the scene they derive
   from.** `per-turn-retrieval.ts` computes `disabledPlaceIds` with
   `placeModes` around the scene's location and passes it to

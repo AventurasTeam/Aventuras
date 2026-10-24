@@ -211,7 +211,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
       retrievedEntities: [rankedRow('char_2', 'Mira')],
     }).user
 
-    const blocks = withMemory.indexOf('# Elsewhere in the world')
+    const blocks = withMemory.indexOf('# The wider world')
     const places = withMemory.indexOf('# Places')
     expect(blocks).toBeGreaterThan(-1)
     expect(places).toBeGreaterThan(-1)
@@ -238,7 +238,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
       ...m2Context,
       retrievedEntities: [rankedRow('char_2', 'Lord Eldrin', 'staged', 'An exiled noble.')],
     }).user
-    expect(rendered).toContain('# Elsewhere in the world')
+    expect(rendered).toContain('# The wider world')
     expect(rendered).toContain('[char_2] Lord Eldrin (available to introduce): An exiled noble.')
     expect(rendered).toContain(
       'include their ID (without brackets) in the trailing <scene_entities> block',
@@ -262,7 +262,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
         },
       ],
     }).user
-    expect(rendered).not.toContain('# Elsewhere in the world')
+    expect(rendered).not.toContain('# The wider world')
     expect(rendered).not.toContain('Lord Eldrin')
     // The instruction has no referent without the block, so it must go too.
     expect(rendered).not.toContain('enters the scene, include their ID')
@@ -283,7 +283,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
         },
       ],
     }).user
-    expect(rendered).toContain('# Elsewhere in the world')
+    expect(rendered).toContain('# The wider world')
     expect(rendered).toContain('[char_3] Old Sesk: A ferryman long dead.')
     // The bracketed id is meaningless without the instruction that explains it,
     // and the pinned half of the guard is the only thing keeping it here.
@@ -525,7 +525,7 @@ describe('bundled per-turn template — piggybackFires gating', () => {
     const { system, user } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, contextWithEverything)
     expect(user).toContain('## Aria')
     expect(user).not.toContain('## Aria [char_1]')
-    expect(user).toContain('# Elsewhere in the world')
+    expect(user).toContain('# The wider world')
     expect(user).toContain('Lord Eldrin (available to introduce): An exiled noble.')
     expect(user).not.toContain('[char_2]')
     expect(user).not.toContain(
@@ -678,7 +678,7 @@ describe('bundled per-turn template — the location map and item lines', () => 
     const places = rendered.indexOf('# Places')
     expect(location).toBeGreaterThan(-1)
     expect(location).toBeLessThan(places)
-    expect(places).toBeLessThan(rendered.indexOf('# Elsewhere in the world'))
+    expect(places).toBeLessThan(rendered.indexOf('# The wider world'))
   })
 
   it('renders the current location with its chain of listed ancestors, nearest first', () => {
@@ -1113,7 +1113,7 @@ describe('bundled per-turn template — system and user halves', () => {
       '# In scene',
       '# Current location',
       '# Places',
-      '# Elsewhere in the world',
+      '# The wider world',
       '# Story so far',
     ])
     for (const perCall of [

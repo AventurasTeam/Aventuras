@@ -22,7 +22,7 @@ export const RANKER_DEFAULTS = {
   minScoreThreshold: 0.15,
   chapterBoost: 1.3,
   preFilterTopN: 200,
-  typeOverhead: { entities: 11, lore: 4, happenings: 5, threads: 4, chapters: 4 },
+  typeOverhead: { entities: 9, lore: 4, happenings: 5, threads: 4, chapters: 4 },
 } as const satisfies RankerParams
 
 /**

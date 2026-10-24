@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`memory-blocks macro — row content > matches the recorded snapshot with every block populated 1`] = `
-"# Elsewhere in the world
+"# The wider world
 
 [char_9] Old Sesk: A ferryman long dead.
 
