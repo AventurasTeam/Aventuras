@@ -673,21 +673,6 @@ slice-planning gate forces its resolution before that slice is planned.
 
   Raised 2026-10-24 by the AI writer map's slice review.
 
-- **A row placed under a new place reads as unplaced to matching.**
-  `matchNewPlace` (`lib/world/new-entity-match.ts`) reads placements
-  through `realPlacementOf` over the stored rows only, so a stored row
-  this reply places under a place it creates looks unplaced (its parent
-  names no stored place), and a later new place of its name reuses it
-  and moves it. A reply with "Cellar" under the Inn at turn 2, then "the
-  Old Cellar" under that new Cellar and "the Old Cellar" under the Inn
-  at turn 3, places the stored unplaced Old Cellar under the new Cellar;
-  the second "the Old Cellar" then reuses it, adding its keywords and
-  moving it under the Inn, where successive passes create a second Old
-  Cellar flagged `same-parent`.
-  Reading the reply's creates in that placement view would close it.
-  Predates the AI writer map's follow-up; raised 2026-10-24 by its
-  re-review.
-
 - **A keyword write's undo restores the whole prior list.**
   `appendEntityKeywords` and `renameEntity`
   (`lib/actions/entities/state-patch-actions.ts`) store the row's

@@ -222,7 +222,14 @@ export function matchNewPlace(
     if (!stored.has(p.id) && !created.has(p.id))
       created.set(p.id, { ...p, placement: placedHere.get(p.id) ?? p.placement })
   const creates = [...created.values()]
-  const placementAt = realPlacementOf(view.locations)
+  // A row this reply placed under one of its creates is placed, not unplaced.
+  const placementAt = realPlacementOf([
+    ...view.locations,
+    ...creates.map((p) => ({
+      id: p.id,
+      state: withPlacement({ parent_location_id: null }, p.placement),
+    })),
+  ])
 
   const { placement } = candidate
   if (placement.kind === 'unplaced') {
