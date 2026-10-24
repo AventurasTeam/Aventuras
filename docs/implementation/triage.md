@@ -102,26 +102,6 @@ slice-planning gate forces its resolution before that slice is planned.
   told which person to write in. Raised 2026-10-11 by the system and
   user prompt halves design.
 
-- **The registry describes `piggybackFires` as per-turn.**
-  `lib/prompts/templateContextMap.ts` says "True when this turn
-  expects…", but the value is settings-derived (`piggybackMode` and the
-  narrative model's `taggedBlockReliable`, `resolvePiggybackFires` in
-  `lib/pipeline/definitions/per-turn-piggyback.ts`), which is why the
-  narrative's system half may read it. The bundled stability test
-  (`lib/prompts/bundled/system-half-stability.test.ts`) treats it as
-  story-fixed. Canon's "unless the user edits the story"
-  ([`architecture.md → System and user halves`](../architecture.md#system-and-user-halves))
-  is also narrower than the truth: the value follows whichever narrative
-  model resolves, so reassigning the narrative model in App Settings
-  changes the system half without a story edit, as a capability override
-  will once one exists. And
-  [`→ Structured output`](../architecture.md#structured-output--the-json-contract-is-not-pack-content)
-  calls the contract "fixed per call site", but the fallback classifier
-  switches between its plain and with-chips schemas with
-  `askForSuggestions`, inside its marked system block, so a turn that
-  flips it misses the cache. Reword all three. Raised 2026-10-11 by the
-  system and user halves PR's Task 9 review and its slice review.
-
 - **Two save-confirm dialogs repeat one shell.** `RowConfirmDialog`
   (`components/compounds/row-save-session-chrome.tsx`) and Story
   Settings' `DefinitionalChangeDialog`

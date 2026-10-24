@@ -344,7 +344,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'boolean',
       category: 'Generation Results',
       description:
-        'True when this turn expects the tagged trailing block to actually be used (piggybackMode on + resolved narrative model capability-flagged reliable). False means the per-turn fallback classifier will redo extraction from scratch, so state-emission instructions are omitted.',
+        "True when the story's settings have the narrative model emit the tagged trailing block: piggybackMode on, and the narrative model it resolves to capability-flagged reliable. Fixed by those settings, not by the turn, so a system half may read it; it changes when either does, reassigning the narrative model included. False means the per-turn fallback classifier extracts the turn's state, so state-emission instructions are omitted.",
       required: true,
     },
     {

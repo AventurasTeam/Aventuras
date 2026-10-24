@@ -6,7 +6,8 @@ import { templateGlobals, type TemplateHalf } from '../engine'
 import { bundledPack, loadPack, renderTemplate, TEMPLATE_IDS, type TemplateId } from '../index'
 
 // architecture.md → System and user halves: a system half must render byte-identically from call
-// to call unless the user edits the story, so it may read only what the story or its settings fix.
+// to call unless the user changes what it reads, so it may read only what the story or the
+// settings it resolves through fix (piggybackFires follows the narrative model's assignment).
 const STABLE_SYSTEM_VARIABLES: readonly string[] = [
   'definition',
   'calendarVocabulary',
