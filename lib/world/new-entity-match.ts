@@ -48,7 +48,7 @@ function partnerRank(candidate: PlaceCandidate, side: FlagSide): number | null {
   return null
 }
 
-/** `rows` oldest first; the reply's `creates` count as newer than every row, in reply order. */
+/** Rows rank by age; the reply's `creates` after every row, in the order they settled. */
 function flagPartner(
   candidate: PlaceCandidate,
   rows: readonly Entity[],

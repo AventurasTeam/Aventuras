@@ -7,7 +7,6 @@ import { storyPlaceOf, type StoryPlace } from '@/lib/world'
 
 const LAST_TURNS = 2
 
-// The branch's latest entry the filter keeps, below `before` when given.
 async function latestEntry(
   db: DbCtx['db'],
   branchId: string,

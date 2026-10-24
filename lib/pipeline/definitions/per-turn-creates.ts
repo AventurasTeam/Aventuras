@@ -24,18 +24,17 @@ import {
   itemNamesakes,
   locationMapView,
   matchNewPlace,
-  moveHidesStory,
   parentOfLocations,
-  placementLoop,
   placeNewLocation,
   replyMatchView,
   replyParentOf,
+  reusePlacementDrop,
   settlingOrder,
   TOP_LEVEL,
   withPlacement,
   type ParentDropCause,
-  type ParentOf,
   type PlacedPlacement,
+  type PlacementDrop,
   type PlacePlacement,
   type SettledNewPlace,
   type StoryPlace,
@@ -112,7 +111,7 @@ function logDropped(
 }
 
 /** Why a create's parent, or a reused place's placement, was left out. */
-type ParentDrop = { parent: string; cause: ParentDropCause | 'cycle' | 'story-inside' }
+type ParentDrop = { parent: string; cause: ParentDropCause | PlacementDrop['cause'] }
 
 function logParentDropped(log: Logger, handle: string, drop: ParentDrop): void {
   log.warn('classifier.create_parent_dropped', { handle, parent: drop.parent, cause: drop.cause })
@@ -190,13 +189,7 @@ function planLocations(args: {
   // Where this turn's placements put a reused place, so a later walk and match see it there.
   const placedHere = new Map<string, PlacedPlacement>()
   // A row whose placement was dropped stays unplaced: the kept chain puts every later create below it.
-  const placementDrops = new Map<string, ParentDrop>()
-  // data-model.md → Disabled places: the story the turn found, not the place it walks into.
-  const placementDrop = (id: string, parentId: string, parentOf: ParentOf): ParentDrop | null =>
-    placementLoop(id, parentId, parentOf) ??
-    (moveHidesStory({ id, parentId, places: byId, parentOf, story: args.story })
-      ? { parent: parentId, cause: 'story-inside' }
-      : null)
+  const placementDrops = new Map<string, PlacementDrop>()
 
   // normalizeCreates already dropped a second declaration of a handle, so none is a duplicate.
   const { order } = settlingOrder(
@@ -248,8 +241,17 @@ function planLocations(args: {
       // data-model.md → Authorship contract: the writer places only an unplaced place it reuses:
       // a row, or this block's own create taken over.
       if (match.place && candidate.kind !== 'unplaced') {
+        // data-model.md → Disabled places: the story the turn found, not the place it walks into.
         const drop =
-          candidate.kind === 'under' ? placementDrop(id, candidate.parentId, parentOf) : null
+          candidate.kind === 'under'
+            ? reusePlacementDrop({
+                id,
+                parentId: candidate.parentId,
+                places: byId,
+                parentOf,
+                story: args.story,
+              })
+            : null
         if (drop === null) {
           placedHere.set(id, candidate)
           placements.push({

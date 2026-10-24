@@ -5,7 +5,14 @@ import { blankToNull } from '@/lib/text'
 import type { EntitySaveInput } from './entity-actions'
 import { stateOf, type CharacterDraft, type ItemDraft, type LocationDraft } from './entity-draft'
 import { byName } from './overview'
-import { parentChainIds, parentIdOf, parentOfLocations, type ParentOf } from './parent-chain'
+import {
+  parentChainIds,
+  parentIdOf,
+  parentOfLocations,
+  placementLoop,
+  type ParentOf,
+  type PlacementLoop,
+} from './parent-chain'
 import { placeModes } from './place-modes'
 import { placementOf, samePlacement, type PlacePlacement } from './placement'
 
@@ -147,6 +154,22 @@ export function moveHidesStory(args: {
   const { id, parentId, places, parentOf, story } = args
   if (!storyLocations(story).some((at) => holdsStory(id, at, parentOf))) return false
   return gainedDisabled(parentOf(id), parentId, places, parentOf).length > 0
+}
+
+/** Why a machine writer leaves a reused unplaced place unplaced. */
+export type PlacementDrop = {
+  parent: string
+  cause: PlacementLoop['cause'] | typeof PLACE_REFUSAL.storyInside
+}
+
+/** data-model.md → LocationState shape: placing a reused unplaced place, or why not. */
+export function reusePlacementDrop(
+  args: Parameters<typeof moveHidesStory>[0],
+): PlacementDrop | null {
+  const { id, parentId, parentOf } = args
+  const loop = placementLoop(id, parentId, parentOf)
+  if (loop !== null) return loop
+  return moveHidesStory(args) ? { parent: parentId, cause: PLACE_REFUSAL.storyInside } : null
 }
 
 /** A retired location the value enters, when it changed; null otherwise. */

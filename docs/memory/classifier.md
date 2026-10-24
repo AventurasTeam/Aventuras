@@ -465,14 +465,14 @@ match mapping it there and several flagging it `unplaced`; a placed
 one the stored places would create takes over an earlier unplaced new
 place of its name and places it. A partial name or a keyword hit flags
 against the reply's earlier new places as against stored ones, newer
-than any and in the reply's order: a placed one against those under its
-parent, or at the top level, a takeover's included, and an unplaced one
-against those still unplaced. A new place also matches where the
-reply's placements of its own turn and earlier ones leave the places,
-those first within a turn, counting only a placement the planner keeps:
-a place one of them puts under another parent is no unplaced namesake
-to reuse, and one it puts under the new place's parent is reused there,
-placed once.
+than any and in the order they settle: a placed one against those under
+its parent, or at the top level, a takeover's included, and an unplaced
+one against those still unplaced. The reply's placements plan, and
+land, before any new place of their turn or a later one, a fact with no
+source turn counting at the newest: a new place matches and is written
+where they leave the places, so a place one of them puts under another
+parent is no unplaced namesake to reuse, and one it puts under the new
+place's parent is reused there, placed once.
 
 **After the turn.** A pass runs after the turn that brought it due, so
 a place the turn created is already a row it matches against, and the
@@ -750,8 +750,8 @@ character's visual categories, traits, drives and voice, a new
 faction's standing and agenda, a happening's or a new thread's category
 and icon, a new thread's `resolvedAtTurn` and a new place's condition.
 In the renames, placements, standings, new threads, thread statuses and
-known awareness, a `null` reads as absent and an enum value is read
-trimmed and case-folded first, so a `null` source turn leaves the fact
+known awareness, a `null` list reads as empty, a `null` field as absent,
+and an enum value is read trimmed and case-folded first, so a `null` source turn leaves the fact
 unattributed and `"Resolved"` lands as `resolved`. An entry there that
 still doesn't fit, a required field missing or an enum value outside
 the list (a status change to `pending`), is dropped alone and logged

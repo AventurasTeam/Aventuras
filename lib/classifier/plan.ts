@@ -26,6 +26,7 @@ import {
   realPlacementOf,
   replyMatchView,
   replyParentOf,
+  reusePlacementDrop,
   samePlacement,
   settlingOrder,
   stateOf,
@@ -35,6 +36,7 @@ import {
   type ParentDropCause,
   type ParentOf,
   type PlacedPlacement,
+  type PlacementDrop,
   type PlacePlacement,
   type SettledNewPlace,
   type StoryPlace,
@@ -67,7 +69,7 @@ export type PlannedWrite = { action: PipelineAction; entryId: string }
 export type ParentDrop = {
   handle: string
   parent: string
-  cause: ParentDropCause | 'cycle' | 'story-inside'
+  cause: ParentDropCause | PlacementDrop['cause']
 }
 
 /** A newPlaces entry that plans nothing: an earlier entry declared its handle, or it has no name. */
@@ -404,11 +406,16 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       .sort((a, b) => a.at - b.at || a.order - b.order)
       .map(({ fact }) => fact)
 
-  // classifier.md → What the classifier writes → Where a place sits.
+  // classifier.md → What the classifier writes → Where a place sits. Judged against this reply's
+  // own creates and placements, so a drop happens before the handler sees the fact.
   const realPlacement = realPlacementOf(entities.filter((e) => e.kind === 'location'))
   const hidesStory = (id: string, parentId: string, parentOf: ParentOf): boolean =>
     moveHidesStory({ id, parentId, places: rowById, parentOf, story })
   const placementFacts = inTurnOrder(extraction.placements)
+  // A new place's handle, which a placement may name before the place settles.
+  const placeHandles = new Set(
+    newPlacesOf(extraction).flatMap((p) => (nonBlank(p.name) == null ? [] : [p.handle])),
+  )
   type PlacementJudgment =
     | { kind: 'place'; id: string; placement: PlacedPlacement }
     | { kind: 'restated' }
@@ -437,7 +444,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const parentId = fact.parent
     const parent = rowById.get(parentId)
     if (parent?.kind !== 'location') {
-      if (parent === undefined && !handleMap.has(parentId))
+      if (parent === undefined && !handleMap.has(parentId) && !placeHandles.has(parentId))
         return { kind: 'unresolved', parent: parentId }
       const cause = parent === undefined ? 'parent-not-listed' : 'parent-not-a-place'
       return { kind: 'dropped', drop: { ref: fact.ref, parent: parentId, cause } }
@@ -461,6 +468,37 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     if (placement.kind === 'under' || !placedEarlier) placements.set(id, placement)
   }
 
+  // data-model.md → Authorship contract → Seen before written.
+  const unseenRefs: UnseenRef[] = []
+
+  // Each placement plans, and so writes, before any new place of its turn or a later one: a new
+  // place matches and is checked where the placements ahead of it leave the places, as they land.
+  const droppedPlacements: DroppedPlacement[] = []
+  let placementsPlanned = 0
+  const planPlacementsThrough = (position: number): void => {
+    for (; placementsPlanned < placementFacts.length; placementsPlanned++) {
+      const fact = placementFacts[placementsPlanned]
+      if (turnPosition(fact.sourceTurn) > position) return
+      const placedEarlier = placedHere.has(fact.ref)
+      const parentOf = replyParentOf(placedHere, parentOfLocations([...entities, ...createdPlaces]))
+      const judged = judgePlacement(fact, placedEarlier, parentOf)
+      if (judged.kind === 'unseen') unseenRefs.push({ list: 'placements', ref: fact.ref })
+      else if (judged.kind === 'unresolved') unresolvedRefs.push(judged.parent)
+      else if (judged.kind === 'dropped') droppedPlacements.push(judged.drop)
+      if (judged.kind !== 'place') continue
+      const { id, placement } = judged
+      notePlacement(placedHere, id, placement, placedEarlier)
+      planned.push({
+        action: {
+          kind: 'placeLocation',
+          source: SOURCE,
+          payload: { branchId, id, placement, proseEntryId: proseSource(fact.sourceTurn) },
+        },
+        entryId: anchor(fact.sourceTurn),
+      })
+    }
+  }
+
   // classifier.md → Mentioned places. After characters and factions, so the handle namespace
   // they share keeps their bindings; before anything that names a place by its handle.
   const planNewPlaces = (): { droppedPlaces: DroppedPlace[]; parentDrops: ParentDrop[] } => {
@@ -470,7 +508,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const view = unhiddenLocationView(entities)
     const placed: SettledNewPlace[] = []
     // By row and parent: the pass keeps no one chain, so another parent's placement walks anew.
-    const placementDrops = new Map<string, Omit<ParentDrop, 'handle'>>()
+    const placementDrops = new Map<string, PlacementDrop>()
     const dropKey = (id: string, parentId: string): string => `${id} ${parentId}`
 
     const declared: NewPlace[] = []
@@ -487,32 +525,10 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     )
     for (const { handle, name } of duplicates)
       droppedPlaces.push({ handle, name, cause: 'handle-taken' })
-    const reusePlacementDrop = (
-      id: string,
-      parentId: string,
-      parentOf: ParentOf,
-    ): Omit<ParentDrop, 'handle'> | null => {
-      const loop = placementLoop(id, parentId, parentOf)
-      if (loop !== null) return loop
-      return hidesStory(id, parentId, parentOf) ? { parent: parentId, cause: 'story-inside' } : null
-    }
-    // What a mention's matching sees: the placements of its turn and earlier, judged as the
-    // placements walk will judge them, over the reply's placements so far.
-    const placementsThrough = (position: number): Map<string, PlacedPlacement> => {
-      const seen = new Map(placedHere)
-      const stored = parentOfLocations([...entities, ...createdPlaces])
-      for (const fact of placementFacts) {
-        if (turnPosition(fact.sourceTurn) > position) break
-        const placedEarlier = seen.has(fact.ref)
-        const judged = judgePlacement(fact, placedEarlier, replyParentOf(seen, stored))
-        if (judged.kind === 'place') notePlacement(seen, judged.id, judged.placement, placedEarlier)
-      }
-      return seen
-    }
     for (const settling of order) {
       const place = settling.emission
-      const seen = placementsThrough(turnPosition(place.sourceTurn))
-      const parentOf = replyParentOf(seen, parentOfLocations([...entities, ...createdPlaces]))
+      planPlacementsThrough(turnPosition(place.sourceTurn))
+      const parentOf = replyParentOf(placedHere, parentOfLocations([...entities, ...createdPlaces]))
       const placement = placeNewLocation({
         place: settling,
         resolve: (parent) => handleMap.get(parent) ?? parent,
@@ -530,8 +546,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       const match = matchNewPlace(
         { name: stored.name, placement: candidate, keywords: place.keywords },
         placed,
-        replyMatchView(view, seen),
-        seen,
+        replyMatchView(view, placedHere),
+        placedHere,
       )
 
       let id: string
@@ -544,7 +560,15 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         // `match.place`: an unplaced reused row, or this reply's own create taken over.
         if (match.place && candidate.kind !== 'unplaced') {
           const drop =
-            candidate.kind === 'under' ? reusePlacementDrop(id, candidate.parentId, parentOf) : null
+            candidate.kind === 'under'
+              ? reusePlacementDrop({
+                  id,
+                  parentId: candidate.parentId,
+                  places: rowById,
+                  parentOf,
+                  story,
+                })
+              : null
           if (drop === null) {
             placedHere.set(id, candidate)
             planned.push({
@@ -715,9 +739,6 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
 
   const { droppedPlaces, parentDrops } = planNewPlaces()
 
-  // data-model.md → Authorship contract → Seen before written.
-  const unseenRefs: UnseenRef[] = []
-
   // classifier.md → What the classifier writes → Names. A name is taken when a row of the kind
   // holds it, one this reply creates or renames included. A keyword write's undo is the whole
   // prior list, so a row's renames, aliases and mention terms plan in turn order: reversing a turn
@@ -871,35 +892,6 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     return { renameClashes, droppedRenames }
   }
 
-  // classifier.md → What the classifier writes → Where a place sits. Planned against this reply's
-  // own creates and placements, so a drop happens before the handler sees the fact.
-  const planPlacements = (): DroppedPlacement[] => {
-    const droppedPlacements: DroppedPlacement[] = []
-    const placeParentOf = replyParentOf(
-      placedHere,
-      parentOfLocations([...entities, ...createdPlaces]),
-    )
-    for (const fact of placementFacts) {
-      const placedEarlier = placedHere.has(fact.ref)
-      const judged = judgePlacement(fact, placedEarlier, placeParentOf)
-      if (judged.kind === 'unseen') unseenRefs.push({ list: 'placements', ref: fact.ref })
-      else if (judged.kind === 'unresolved') unresolvedRefs.push(judged.parent)
-      else if (judged.kind === 'dropped') droppedPlacements.push(judged.drop)
-      if (judged.kind !== 'place') continue
-      const { id, placement } = judged
-      notePlacement(placedHere, id, placement, placedEarlier)
-      planned.push({
-        action: {
-          kind: 'placeLocation',
-          source: SOURCE,
-          payload: { branchId, id, placement, proseEntryId: proseSource(fact.sourceTurn) },
-        },
-        entryId: anchor(fact.sourceTurn),
-      })
-    }
-    return droppedPlacements
-  }
-
   // classifier.md → Factions: a listed faction's standing, on a change. Bounded as the handler
   // bounds it, so a restatement compares what it would store, on one line as the prompt shows it.
   const planStandings = (): DroppedStanding[] => {
@@ -943,7 +935,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
 
   // Placements first, so a place's rename clash is judged where this reply leaves it; they read
   // no names or keywords, and `name-taken` ignores parents downstream.
-  const droppedPlacements = planPlacements()
+  planPlacementsThrough(Number.POSITIVE_INFINITY)
   const { renameClashes, droppedRenames } = planKeywordWrites()
   const droppedStandings = planStandings()
 

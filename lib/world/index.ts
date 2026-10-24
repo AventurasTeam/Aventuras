@@ -131,6 +131,7 @@ export {
   placeSaveRefusal,
   retireCascade,
   retiredPlaceEntered,
+  reusePlacementDrop,
   storyPlaceOf,
 } from './place-rules'
 export type {
@@ -138,6 +139,7 @@ export type {
   NamedPlace,
   PlaceSaveConfirm,
   PlaceSaveRefusal,
+  PlacementDrop,
   StoryPlace,
 } from './place-rules'
 export { itemNamesakes, matchNewPlace, replyMatchView, replyParentOf } from './new-entity-match'

@@ -971,6 +971,15 @@ slice-planning gate forces its resolution before that slice is planned.
     the retire becomes plannable: the character is promoted, then
     retired, where successive passes would only promote it. Option A
     fixes it.
+  - **A new place settling out of turn order.** New places settle in the
+    reply's list order, each waiting for its own parent, not in turn
+    order, so one of an earlier turn can settle after one of a later
+    turn. The placements planned ahead of the later one then land before
+    it too, and it matches and is placed against placements of turns
+    after its own: a turn-3 "Cellar" under the Keep listed before a
+    turn-1 "Attic" inside the Cellar, with a turn-2 move of the Cellar
+    under the Attic, leaves two Cellars where successive passes leave
+    one. Option A fixes it.
   - **Two renames to one name, the first refused.** When a user edit
     refuses the first rename as it lands, the second, planned as a
     clash against it, writes only a keyword and its flag is refused,
