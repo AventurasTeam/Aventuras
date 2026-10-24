@@ -2269,6 +2269,84 @@ describe('periodicClassifierPhase via runPipeline', () => {
     })
   })
 
+  // cadence.md → User edits and classifier writes: a user edit between the turns refuses the
+  // earlier turn's standing, and the later turn's restatement, newer than the edit, lands.
+  it("lands a later turn's restated standing past a user edit that refused the earlier one", async () => {
+    const { db, runInTransaction } = await seedStory()
+    const apply = async (action: PipelineAction, actionId: string) => {
+      const result = await realApplyDeltaAction(
+        { action, actionId, branchId: 'b1' },
+        { db, runInTransaction },
+      )
+      expect(result.status).toBe('ok')
+    }
+    const WATCH = 'fact_77777777-7777-7777-7777-777777777777'
+    const turn = (id: string, position: number): PipelineAction => ({
+      kind: 'createStoryEntry',
+      source: 'ai_classifier',
+      payload: {
+        entry: {
+          id,
+          branchId: 'b1',
+          position,
+          kind: 'ai_reply',
+          content: `turn ${position}`,
+          createdAt: 1,
+        },
+      },
+    })
+    await apply(
+      {
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: {
+          entry: {
+            id: WATCH,
+            branchId: 'b1',
+            kind: 'faction',
+            name: 'The Watch',
+            description: 'The city guard.',
+            status: 'active',
+            injectionMode: 'auto',
+            state: { standing: 'wary allies' },
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      },
+      'act_watch',
+    )
+    await apply(turn('e1', 1), 'act_e1')
+    await apply(
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: WATCH, patch: { state: { standing: 'sworn enemies' } } },
+      },
+      'act_user',
+    )
+    await apply(turn('e2', 2), 'act_e2')
+
+    registerWithReply({
+      happenings: [],
+      standings: [
+        { ref: 'f1', standing: 'at war', sourceTurn: 't1' },
+        { ref: 'f1', standing: 'at war', sourceTurn: 't2' },
+      ],
+    })
+    expect(await runOutcome({ storyId: 's1', branchId: 'b1', db, runInTransaction })).toBe(
+      'completed',
+    )
+
+    const [watch] = await db.select().from(entities).where(eq(entities.id, WATCH))
+    expect(watch.state).toEqual({ standing: 'at war' })
+    const writes = await db
+      .select({ entryId: deltas.entryId })
+      .from(deltas)
+      .where(eq(deltas.source, 'periodic_classifier'))
+    expect(writes).toEqual([{ entryId: 'e2' }])
+  })
+
   // classifier.md → Names: a rename clash's keyword lands first, and its raise needs the pair to
   // be namesakes as the rows stand, so a keyword the user removed after the prose leaves no flag.
   it.each([

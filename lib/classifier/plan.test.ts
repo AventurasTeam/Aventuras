@@ -843,8 +843,8 @@ describe('entity keywords', () => {
     expect(planned).toEqual([])
   })
 
-  // The keyword index updates on each append, not only from the pass's opening snapshot.
-  it("filters a second candidate against the first candidate's keywords in the same reply", () => {
+  // Against the stored row, not the first candidate's write: the handler may refuse that one.
+  it("filters a second candidate against the stored row, not the first candidate's terms", () => {
     const { planned } = buildClassifierActions(
       reply({
         newCharacters: [
@@ -873,12 +873,15 @@ describe('entity keywords', () => {
     )
     const appends = planned.filter((p) => p.action.kind === 'appendEntityKeywords')
     expect(appends).toHaveLength(2)
-    expect(payloadOf<{ keywords: string[] }>(appends[1]).keywords).toEqual(['the innkeeper'])
+    expect(payloadOf<{ keywords: string[] }>(appends[1]).keywords).toEqual([
+      'The Grey Wolf',
+      'the innkeeper',
+    ])
   })
 
   // Reconciliation decides every namesake against the same snapshot status (reconcile.ts):
   // two candidates for one staged entity always agree — never split 'promote' vs 'known'.
-  it('plans a repeated promote for a staged entity reconciliation decides promote twice, filtering the second append against the first', () => {
+  it('plans a repeated promote for a staged entity reconciliation decides promote twice, filtering each append against the stored row', () => {
     const { planned } = buildClassifierActions(
       reply({
         newCharacters: [
@@ -912,7 +915,10 @@ describe('entity keywords', () => {
       'appendEntityKeywords',
       'appendEntityKeywords',
     ])
-    expect(payloadOf<{ keywords: string[] }>(planned[3]).keywords).toEqual(['the innkeeper'])
+    expect(payloadOf<{ keywords: string[] }>(planned[3]).keywords).toEqual([
+      'the grey wolf',
+      'the innkeeper',
+    ])
   })
 
   // Two guarded writes: a promotion the user pre-empted no-ops while the aliases still land.
@@ -1054,7 +1060,23 @@ describe('alias list', () => {
     expect(fellBackCount).toBe(1)
   })
 
-  it('de-duplicates two entries for one entity against each other', () => {
+  // cadence.md → User edits and classifier writes: the handler may refuse a term the user removed
+  // after the earlier entry's prose, and the later turn's prose can be newer than that edit.
+  it('keeps an alias restating an earlier planned one, so a refused write cannot hide it', () => {
+    const { planned } = buildClassifierActions(
+      aliasReply([
+        { ref: 'char_kael', terms: ['the rider'], sourceTurn: 't1' },
+        { ref: 'char_kael', terms: ['the rider'], sourceTurn: 't3' },
+      ]),
+      { ...base, entities: [kael] },
+    )
+    expect(planned).toEqual([
+      appendOf('char_kael', ['the rider'], 'e1'),
+      appendOf('char_kael', ['the rider'], 'e3'),
+    ])
+  })
+
+  it('filters each entry against the stored row alone', () => {
     const { planned } = buildClassifierActions(
       aliasReply([
         { ref: 'char_kael', terms: ['the Grey Wolf'], sourceTurn: 't1' },
@@ -1068,11 +1090,11 @@ describe('alias list', () => {
     )
     expect(planned).toEqual([
       appendOf('char_kael', ['the Grey Wolf'], 'e1'),
-      appendOf('char_kael', ['the rider'], 'e3'),
+      appendOf('char_kael', ['the grey wolf', 'the rider'], 'e3'),
     ])
   })
 
-  it('de-duplicates against keywords an absorb in the same reply appended', () => {
+  it('sends again a term an absorb in the same reply appended', () => {
     const { planned } = buildClassifierActions(
       aliasReply(
         [{ ref: 'char_kael', terms: ['the grey wolf', 'the rider'], sourceTurn: 't2' }],
@@ -1094,7 +1116,7 @@ describe('alias list', () => {
     )
     expect(planned).toEqual([
       appendOf('char_kael', ['the Grey Wolf'], 'e1'),
-      appendOf('char_kael', ['the rider'], 'e2'),
+      appendOf('char_kael', ['the grey wolf', 'the rider'], 'e2'),
     ])
   })
 })
@@ -3028,7 +3050,8 @@ describe('renames', () => {
     ])
   })
 
-  it("keeps a clash's keyword for the rest of the reply", () => {
+  // The handler may refuse the clash's keyword, a term the user removed after its prose.
+  it("sends an alias naming a clash's keyword again, at its own turn", () => {
     const { planned } = buildClassifierActions(
       reply({
         renames: [{ ref: 'char_stranger', name: 'Kael', sourceTurn: 't1' }],
@@ -3036,7 +3059,11 @@ describe('renames', () => {
       }),
       deps([STRANGER, KAEL]),
     )
-    expect(kindsOf(planned)).toEqual(['appendEntityKeywords', 'raiseCollisionFlag'])
+    expect(planned.map((p) => [p.action.kind, p.entryId])).toEqual([
+      ['appendEntityKeywords', 'e1'],
+      ['raiseCollisionFlag', 'e1'],
+      ['appendEntityKeywords', 'e2'],
+    ])
   })
 
   it('only adds the keyword to a row already flagged, keeping its partner', () => {
@@ -3259,7 +3286,54 @@ describe('renames', () => {
     ])
   })
 
-  it("keeps the old name as the row's keyword for the rest of the reply", () => {
+  // cadence.md → User edits and classifier writes: the handler may refuse the earlier one, and the
+  // later turn's prose can be newer than the user's edit.
+  it('keeps a rename restating an earlier planned one, or the stored name after it', () => {
+    const { planned, renameClashes } = buildClassifierActions(
+      reply({
+        renames: [
+          { ref: 'char_stranger', name: 'Corvin', sourceTurn: 't1' },
+          { ref: 'char_stranger', name: 'Corvin', sourceTurn: 't3' },
+          { ref: 'char_kael', name: 'Mira', sourceTurn: 't1' },
+          { ref: 'char_kael', name: 'kael', sourceTurn: 't3' },
+        ],
+      }),
+      deps([STRANGER, KAEL]),
+    )
+    expect(
+      planned.map((p) => {
+        const { id, name } = payloadOf<{ id: string; name: string }>(p)
+        return [p.action.kind, id, name, p.entryId]
+      }),
+    ).toEqual([
+      ['renameEntity', 'char_stranger', 'Corvin', 'e1'],
+      ['renameEntity', 'char_kael', 'Mira', 'e1'],
+      ['renameEntity', 'char_stranger', 'Corvin', 'e3'],
+      ['renameEntity', 'char_kael', 'kael', 'e3'],
+    ])
+    expect(renameClashes).toEqual([])
+  })
+
+  it("sends a clash's keyword again for a rename restating an earlier clash, raising once", () => {
+    const { planned, renameClashes } = buildClassifierActions(
+      reply({
+        renames: [
+          { ref: 'char_stranger', name: 'Kael', sourceTurn: 't1' },
+          { ref: 'char_stranger', name: 'Kael', sourceTurn: 't3' },
+        ],
+      }),
+      deps([STRANGER, KAEL]),
+    )
+    expect(planned.map((p) => [p.action.kind, p.entryId])).toEqual([
+      ['appendEntityKeywords', 'e1'],
+      ['raiseCollisionFlag', 'e1'],
+      ['appendEntityKeywords', 'e3'],
+    ])
+    expect(renameClashes.map((c) => c.flagged)).toEqual([true, false])
+  })
+
+  // The rename keeps the old name as a keyword only if it lands.
+  it('sends an alias naming the old name a rename earlier in the reply keeps', () => {
     const { planned } = buildClassifierActions(
       reply({
         renames: [{ ref: 'char_stranger', name: 'Corvin Vale', sourceTurn: 't1' }],
@@ -3267,7 +3341,7 @@ describe('renames', () => {
       }),
       deps([STRANGER]),
     )
-    expect(kindsOf(planned)).toEqual(['renameEntity'])
+    expect(kindsOf(planned)).toEqual(['renameEntity', 'appendEntityKeywords'])
   })
 
   it('drops and reports a rename of a row the prompt never listed', () => {
@@ -3545,7 +3619,41 @@ describe('placements', () => {
     )
   })
 
-  it('drops a top-level mark for a place this reply already placed', () => {
+  // cadence.md → User edits and classifier writes: the handler may refuse the earlier one, and the
+  // later turn's prose can be newer than the user's edit.
+  it('keeps a placement restating an earlier planned one, or the stored one after it', () => {
+    const { planned, droppedPlacements } = buildClassifierActions(
+      reply({
+        placements: [
+          { ref: 'loc_varn', parent: 'loc_reach', sourceTurn: 't1' },
+          { ref: 'loc_varn', parent: 'loc_reach', sourceTurn: 't3' },
+          { ref: 'loc_ash', parent: 'top-level', sourceTurn: 't1' },
+          { ref: 'loc_ash', parent: 'top-level', sourceTurn: 't3' },
+          { ref: 'loc_inn', parent: 'loc_reach', sourceTurn: 't1' },
+          { ref: 'loc_inn', parent: 'loc_town', sourceTurn: 't3' },
+        ],
+      }),
+      deps([
+        REACH,
+        VARN,
+        unplaced('loc_ash'),
+        place('loc_town', null),
+        place('loc_inn', 'loc_town'),
+      ]),
+    )
+    expect(planned.map((p) => [payloadOf<{ id: string }>(p).id, p.entryId])).toEqual([
+      ['loc_varn', 'e1'],
+      ['loc_ash', 'e1'],
+      ['loc_inn', 'e1'],
+      ['loc_varn', 'e3'],
+      ['loc_ash', 'e3'],
+      ['loc_inn', 'e3'],
+    ])
+    expect(droppedPlacements).toEqual([])
+  })
+
+  // An unplaced place stays one if the handler refuses the placement, so the handler judges the mark.
+  it('sends a top-level mark for an unplaced place this reply already placed', () => {
     const { planned, droppedPlacements } = buildClassifierActions(
       reply({
         placements: [
@@ -3557,8 +3665,25 @@ describe('placements', () => {
     )
     expect(placementsOf(planned)).toEqual([
       expect.objectContaining({ placement: { kind: 'under', parentId: 'loc_reach' } }),
+      expect.objectContaining({ placement: { kind: 'top' } }),
     ])
-    expect(droppedPlacements).toEqual([{ ref: 'loc_varn', cause: 'not-unplaced' }])
+    expect(droppedPlacements).toEqual([])
+  })
+
+  it('judges a later rename of the place where its earlier placement, not the mark, leaves it', () => {
+    const { renameClashes } = buildClassifierActions(
+      reply({
+        placements: [
+          { ref: 'loc_varn', parent: 'loc_reach', sourceTurn: 't1' },
+          { ref: 'loc_varn', parent: 'top-level', sourceTurn: 't2' },
+        ],
+        renames: [{ ref: 'loc_varn', name: 'Mill', sourceTurn: 't3' }],
+      }),
+      deps([REACH, VARN, place('loc_mill', 'loc_reach', { name: 'Mill' })]),
+    )
+    expect(renameClashes).toEqual([
+      { ref: 'loc_varn', name: 'Mill', partnerId: 'loc_mill', flagged: true },
+    ])
   })
 })
 
@@ -3726,17 +3851,31 @@ describe('standings', () => {
     expect(unseenRefs).toEqual([{ list: 'standings', ref: 'f9' }])
   })
 
-  it('plans one write for a standing the reply repeats', () => {
+  // cadence.md → User edits and classifier writes: the handler may refuse the earlier one, and the
+  // later turn's prose can be newer than the user's edit.
+  it('keeps a standing restating an earlier planned one, or the stored one after it', () => {
     const { planned } = buildClassifierActions(
       reply({
         standings: [
           { ref: 'fact_watch', standing: 'at war', sourceTurn: 't1' },
-          { ref: 'fact_watch', standing: ' at war ', sourceTurn: 't2' },
+          { ref: 'fact_watch', standing: ' at war ', sourceTurn: 't3' },
+          { ref: 'fact_guild', standing: 'at war', sourceTurn: 't1' },
+          { ref: 'fact_guild', standing: 'neutral', sourceTurn: 't3' },
         ],
       }),
-      deps([faction('fact_watch', 'wary allies')]),
+      deps([faction('fact_watch', 'wary allies'), faction('fact_guild', 'neutral')]),
     )
-    expect(planned.map((p) => payloadOf<{ standing: string }>(p).standing)).toEqual(['at war'])
+    expect(
+      planned.map((p) => {
+        const { id, standing } = payloadOf<{ id: string; standing: string }>(p)
+        return [id, standing, p.entryId]
+      }),
+    ).toEqual([
+      ['fact_watch', 'at war', 'e1'],
+      ['fact_guild', 'at war', 'e1'],
+      ['fact_watch', 'at war', 'e3'],
+      ['fact_guild', 'neutral', 'e3'],
+    ])
   })
 })
 
@@ -4017,14 +4156,16 @@ describe('plot writes', () => {
     ])
   })
 
-  it("judges each status change against the status the reply's earlier ones left", () => {
+  // cadence.md → User edits and classifier writes: the handler may refuse an earlier change, so
+  // only the stored status rules a change out, until the reply sends one for the thread.
+  it('judges a status change against the stored status, keeping one restating an earlier one', () => {
     const { planned } = buildClassifierActions(
       reply({
         threadStatuses: [
           { thread: 'thr_a', status: 'resolved', sourceTurn: 't1' },
-          { thread: 'thr_a', status: 'active', sourceTurn: 't2' },
+          { thread: 'thr_a', status: 'active', sourceTurn: 't3' },
           { thread: 'thr_b', status: 'resolved', sourceTurn: 't1' },
-          { thread: 'thr_b', status: 'resolved', sourceTurn: 't2' },
+          { thread: 'thr_b', status: 'resolved', sourceTurn: 't3' },
         ],
       }),
       deps({ threads: [thread('thr_a', 'active'), thread('thr_b', 'active')] }),
@@ -4041,7 +4182,8 @@ describe('plot writes', () => {
     ).toEqual([
       ['thr_a', 'resolved', 'e1', 'e1'],
       ['thr_b', 'resolved', 'e1', 'e1'],
-      ['thr_a', 'active', undefined, 'e2'],
+      ['thr_a', 'active', undefined, 'e3'],
+      ['thr_b', 'resolved', 'e3', 'e3'],
     ])
   })
 

@@ -304,7 +304,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     return id
   }
 
-  // New terms only, so a term the row already holds plans no write.
+  // Only a term the stored row holds plans no write: the handler may refuse an earlier write of
+  // this reply that sent one. A row this reply creates has no user edit to yield to.
   const appendTerms = (
     id: string,
     terms: readonly string[],
@@ -313,9 +314,9 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   ): void => {
     const row = index.get(id)
     if (row == null) return
-    const added = newTerms(row.keywords, terms)
+    const added = newTerms(rowById.get(id)?.keywords ?? row.keywords, terms)
     if (added.length === 0) return
-    index.set(id, { ...row, keywords: [...row.keywords, ...added] })
+    index.set(id, { ...row, keywords: [...row.keywords, ...newTerms(row.keywords, added)] })
     planned.push({
       action: {
         kind: 'appendEntityKeywords',
@@ -621,6 +622,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     }
     const renameClashes: RenameClash[] = []
     const raisedFlags = new Set<string>()
+    // Only the stored name rules a rename out: the handler may refuse an earlier planned one.
+    const renamed = new Set<string>()
     const planRename = (rename: ClassifierExtraction['renames'][number]): void => {
       const row = rowById.get(rename.ref)
       if (row === undefined) {
@@ -634,7 +637,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       const name = clampEmbedded(rename.name.trim(), MAX_EMBEDDED_NAME)
       // One name by World's namesake rule, as renameEntity's holder test: case and spacing aside.
       const sameName = (other: string): boolean => nameBasis(name, other) === 'same-name'
-      if (name === '' || sameName(current.name)) return
+      if (name === '' || (!renamed.has(row.id) && sameName(row.name))) return
       const holders = [...nameRows]
         .filter(
           ([id, r]) =>
@@ -648,8 +651,9 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       const proseEntryId = proseSource(rename.sourceTurn)
       const holder = holders[0]
       if (holder === undefined) {
+        renamed.add(row.id)
         nameRows.set(row.id, { ...current, name })
-        // renameEntity keeps the old name as a keyword, so a later alias of it plans nothing.
+        // renameEntity keeps the old name as a keyword, which World's pairing rule reads.
         index.set(row.id, {
           ...known,
           keywords: [...known.keywords, ...newTerms(known.keywords, [current.name])],
@@ -666,10 +670,13 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       }
       const [partnerId] = holder
       // The revealed name is one the prose used for it, so the pair stays namesakes (world.md →
-      // Surfacing) and the user merges them.
-      const added = newTerms(known.keywords, [name])
+      // Surfacing) and the user merges them. Judged against the stored row, as appendTerms is.
+      const added = newTerms(row.keywords, [name])
       if (added.length > 0) {
-        index.set(row.id, { ...known, keywords: [...known.keywords, ...added] })
+        index.set(row.id, {
+          ...known,
+          keywords: [...known.keywords, ...newTerms(known.keywords, added)],
+        })
         planned.push({
           action: {
             kind: 'appendEntityKeywords',
@@ -701,7 +708,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       renameClashes.push({ ref: rename.ref, name, partnerId, flagged })
     }
     // Index is keyed by row id, so a handle this reply declares misses: its row already carries
-    // its keywords. newTerms drops a term the snapshot or an earlier write in this reply holds.
+    // its keywords.
     const planAlias = (alias: ClassifierExtraction['aliases'][number]): void => {
       if (!index.has(alias.ref)) unresolvedRefs.push(alias.ref)
       else appendNewTerms(alias.ref, alias.terms, alias.sourceTurn)
@@ -743,10 +750,12 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         continue
       }
       const { id } = row
+      // Only the stored placement rules a fact out: the handler may refuse one this reply sent.
+      const placedEarlier = placedHere.has(id)
       let placement: PlacedPlacement
       if (isTopLevel(fact.parent)) {
         // Only an unplaced place is marked top-level (data-model.md → Authorship contract).
-        if (placedHere.has(id) || realPlacement(id).kind !== 'unplaced') {
+        if (realPlacement(id).kind !== 'unplaced') {
           droppedPlacements.push({ ref: fact.ref, cause: 'not-unplaced' })
           continue
         }
@@ -759,7 +768,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
           unresolvedRefs.push(fact.parent)
           continue
         }
-        if (placeParentOf(id) === parentId) continue
+        if (!placedEarlier && placeParentOf(id) === parentId) continue
         if (parent.status === 'retired') {
           droppedPlacements.push({ ref: fact.ref, cause: 'retired' })
           continue
@@ -771,7 +780,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         }
         placement = { kind: 'under', parentId }
       }
-      placedHere.set(id, placement)
+      // A mark after a placement this reply sent lands only if that one is refused: the view keeps it.
+      if (placement.kind === 'under' || !placedEarlier) placedHere.set(id, placement)
       planned.push({
         action: {
           kind: 'placeLocation',
@@ -788,7 +798,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   // bounds it, so a restatement compares what it would store, on one line as the prompt shows it.
   const planStandings = (): DroppedStanding[] => {
     const droppedStandings: DroppedStanding[] = []
-    const standingOf = new Map<string, string | undefined>()
+    // Only the stored standing rules a fact out: the handler may refuse an earlier planned one.
+    const sentFor = new Set<string>()
     for (const fact of inTurnOrder(extraction.standings)) {
       const row = rowById.get(fact.ref)
       if (row === undefined) {
@@ -805,15 +816,11 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         continue
       }
       const standing = stateText(fact.standing)
-      const current = standingOf.has(row.id)
-        ? standingOf.get(row.id)
-        : stateOf(row, 'faction').standing
-      if (
-        standing === undefined ||
-        (current !== undefined && oneLine(standing) === oneLine(current))
-      )
-        continue
-      standingOf.set(row.id, standing)
+      if (standing === undefined) continue
+      const stored = stateOf(row, 'faction').standing
+      const restated = stored !== undefined && oneLine(standing) === oneLine(stored)
+      if (restated && !sentFor.has(row.id)) continue
+      sentFor.add(row.id)
       planned.push({
         action: {
           kind: 'setFactionStanding',
@@ -1158,17 +1165,19 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       planned.push(threadStatusWrite(id, closedAs, closing.entryId, closing.proseEntryId))
     }
   }
-  const threadStatusOf = new Map<string, Thread['status']>(
+  const storedStatusOf = new Map<string, Thread['status']>(
     deps.threads.map((t) => [t.id, t.status]),
   )
+  // Only the stored status rules a change out: the handler may refuse an earlier planned one.
+  const statusSentFor = new Set<string>()
   for (const change of inTurnOrder(extraction.threadStatuses)) {
-    const current = threadStatusOf.get(change.thread)
-    if (current === undefined) {
+    const stored = storedStatusOf.get(change.thread)
+    if (stored === undefined) {
       unseenRefs.push({ list: 'threadStatuses', ref: change.thread })
       continue
     }
-    if (current === change.status) continue
-    threadStatusOf.set(change.thread, change.status)
+    if (stored === change.status && !statusSentFor.has(change.thread)) continue
+    statusSentFor.add(change.thread)
     planned.push(
       threadStatusWrite(
         change.thread,
