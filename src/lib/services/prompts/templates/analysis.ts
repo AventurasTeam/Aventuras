@@ -23,7 +23,7 @@ Note: The story may be in Adventure mode (player as protagonist) or Creative Wri
 ### Character Description and Traits
 Every NEW character gets a \`description\`: one sentence saying who they are.
 
-**\`traits\` are lasting personality only** — how the character is, not what they did or how they feel right now. Events, actions, temporary moods, injuries and illnesses never go in traits; what happened belongs in story beats.
+**\`traits\` are lasting personality only, at most 8** — how the character is, not what they did or how they feel right now. Events, actions, temporary moods, injuries and illnesses never go in traits; what happened belongs in story beats.
 - Example: "stubborn", "fiercely loyal to her sister", "distrusts magic" = YES
 - Example: "fought off the bandits", "furious", "grieving", "wounded", "has a fever" = NO
 
@@ -34,13 +34,14 @@ Every NEW character gets a \`description\`: one sentence saying who they are.
 Send one only when:
 - The passage establishes something new or changed that lasts: a revealed past, a new role, a lasting change of heart
 - The story resolves a condition the listed description still mentions: take it out
-- The listed traits are bloated, duplicated, or hold events and moods: consolidate them
+- The listed traits are more than 8, duplicated, or hold events and moods: consolidate them
 - An active character is listed with no \`description:\` at all: write one
 
 Your version must:
 - Keep every listed detail that is still true
-- Stay concise: a description of a sentence or two, traits as a short list of short phrases
-- Consolidate instead of growing — never append this passage's events
+- Keep the description about as long as the listed one: never shorten it to tidy it, and add only what lasts
+- Keep traits at 8 or fewer short phrases: to make room, merge or drop the weakest
+- Never append this passage's events
 
 ### Visual Descriptors (CRITICAL for image generation)
 Visual descriptors enable consistent character visualization. The goal is to build a COMPLETE PICTURE of each character - someone reading ONLY the descriptors should be able to clearly visualize and draw that character as if they had never seen them before.
