@@ -992,7 +992,11 @@ composer chrome sits below the entries.
 **Disengage.** Any user-initiated scroll upward during a stream →
 disengaged for the rest of the stream. Detection: track `scrollTop`
 set by autoscroll programmatically; if a `scroll` event reports a
-different value, it's user-initiated.
+different value, it's user-initiated. A move inside the ~80px band
+would be re-pinned by the next chunk before it could leave it, so an
+upward gesture disengages at once: a wheel up, a touch drag, a press
+on the reader's scrollbar, or an upward scroll key (Arrow Up, Page
+Up, Home, Shift+Space) outside a text field.
 
 **Re-engage (auto).** User scrolls back to within ~80px of bottom
 while still in the same stream → autoscroll re-engages. Viewport
@@ -1003,8 +1007,8 @@ re-evaluates the engage condition fresh. An engaged end holds the
 bottom while the reply settles: the committed row replaces the
 streaming card and lays out taller (its footer arrives with it), so
 the viewport re-asserts the bottom each frame until the content
-height holds, and a wheel or touch gesture hands control back. A
-disengaged end moves nothing.
+height holds, and any of those gestures, or a wheel down, hands
+control back. A disengaged end moves nothing.
 
 **Layout shifts during a stream.**
 

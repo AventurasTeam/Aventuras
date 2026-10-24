@@ -10,6 +10,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type PointerEvent,
   type Ref,
   type UIEvent,
   type WheelEvent,
@@ -24,7 +25,12 @@ import { useTier } from '@/hooks/use-tier'
 import type { Tier } from '@/hooks/use-tier'
 import type { CalendarFrame } from '@/lib/calendar'
 import type { StoryEntry } from '@/lib/db'
-import { computeScrollMetrics, createAutoscrollMachine } from '@/lib/reader-scroll'
+import {
+  computeScrollMetrics,
+  createAutoscrollMachine,
+  isScrollbarPress,
+  isUpwardScrollKey,
+} from '@/lib/reader-scroll'
 
 import type { EditResult, ReaderSurfaceHandle, ReaderSurfaceProps } from './reader-document-types'
 import { headTurnIdsOf, rowReversalFlags } from './row-reversal-flags'
@@ -42,6 +48,16 @@ const NEAR_TOP_IDLE_MS = 150
 // small enough to keep fully laid out — real heights make landing, prepend
 // compensation, and scrolling exact.
 const ROW_FRAME_CLASS = 'mx-auto w-full max-w-[860px] px-7 py-2'
+
+// A key typed into a field moves its caret, not the reader.
+function isEditableTarget(target: Node): boolean {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  )
+}
 
 type ReaderRowProps = {
   row: StoryEntry
@@ -248,7 +264,7 @@ export function ReaderSurface({
   }, [branchKey])
   // Bottom pin: late layout (font swaps, image decode) can still grow content
   // after a scrollTop write, so re-assert per frame until the scroll height
-  // settles. A wheel or touch drag breaks it.
+  // settles. A wheel, touch drag, scrollbar press or upward scroll key breaks it.
   const pinRafRef = useRef(0)
   const stopBottomPin = useCallback(() => {
     pinActiveRef.current = false
@@ -408,6 +424,39 @@ export function ReaderSurface({
     [stopBottomPin],
   )
 
+  // A scrollbar press or an upward scroll key moves the view less than the at-bottom band, so
+  // without this the bottom pin or the next chunk's re-pin pulls it straight back.
+  const interruptByGesture = useCallback(() => {
+    stopBottomPin()
+    anchorHoldActiveRef.current = false
+    autoscrollRef.current.userInterrupted()
+  }, [stopBottomPin])
+  const handlePointerDown = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      const el = event.currentTarget
+      const press = { onScroller: event.target === el, offsetX: event.nativeEvent.offsetX }
+      if (isScrollbarPress({ ...press, clientWidth: el.clientWidth })) interruptByGesture()
+    },
+    [interruptByGesture],
+  )
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el == null) return
+    const doc = el.ownerDocument
+    // On the document, not the scroller: with nothing focused the key lands on the body yet still
+    // scrolls the scroller last pressed.
+    const onKeyDown = (event: KeyboardEvent) => {
+      // A reader left mounted under another screen isn't laid out, and the key isn't its.
+      if (event.defaultPrevented || !isUpwardScrollKey(event) || el.getClientRects().length === 0)
+        return
+      const target = event.target
+      if (!(target instanceof Node) || isEditableTarget(target)) return
+      if (target === doc.body || el.contains(target)) interruptByGesture()
+    }
+    doc.addEventListener('keydown', onKeyDown)
+    return () => doc.removeEventListener('keydown', onKeyDown)
+  }, [interruptByGesture])
+
   // Touch drags interrupt like native drag-begin did — keyed off the first
   // touchmove, not touchstart, so plain taps can't disengage a pinned stream.
   const handleTouchStart = useCallback(() => {
@@ -541,6 +590,7 @@ export function ReaderSurface({
         className="h-full overflow-y-auto [overflow-anchor:none]"
         onScroll={handleScroll}
         onWheel={handleWheel}
+        onPointerDown={handlePointerDown}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}

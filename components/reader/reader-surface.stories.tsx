@@ -770,6 +770,59 @@ export const StreamEndSettleBrokenByTouch: Story = {
   },
 }
 
+/** An upward scroll key during the settle hands the position back to the user. */
+export const StreamEndSettleBrokenByPageUp: Story = {
+  render: (args) => <StreamEndHarness {...args} />,
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await endStream()
+    expect(entryRow('reply')).toBeInstanceOf(HTMLElement)
+    expect(document.querySelector('[data-grown="false"]')).toBeInstanceOf(HTMLElement)
+    // A dispatched key scrolls nothing, so the play makes the move the key would.
+    scroller.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageUp', bubbles: true }))
+    scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight - 100
+    const scrollTop = scroller.scrollTop
+    await replyGrown()
+    expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
+// A stream whose next chunk lands on a button press, so the play can move between chunks.
+function StreamChunksHarness(props: ComponentProps<typeof ReaderSurface>) {
+  const [chunks, setChunks] = useState(1)
+  const content = Array.from({ length: chunks }, () => REPLY_TEXT).join('\n\n')
+  return (
+    <div style={{ display: 'flex', height: '100%', flexDirection: 'column' }}>
+      <button type="button" onClick={() => setChunks((n) => n + 1)}>
+        Next chunk
+      </button>
+      <div style={{ minHeight: 0, flex: 1 }}>
+        <ReaderSurface {...props} rows={OVERFLOW_ROWS} streaming={{ content, reasoning: '' }} />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * reader-composer.md → Autoscroll: an upward scroll key disengages an engaged stream, though its
+ * move stays inside the at-bottom band the next chunk's re-pin would otherwise pull it out of.
+ */
+export const StreamFollowBrokenByArrowUp: Story = {
+  render: (args) => <StreamChunksHarness {...args} />,
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    scroller.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }))
+    await scrollToDistance(scroller, 40)
+    const heightBefore = scroller.scrollHeight
+    screen.getByRole('button', { name: 'Next chunk' }).click()
+    await waitFor(() => expect(scroller.scrollHeight).toBeGreaterThan(heightBefore))
+    await nextFrame()
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(40)
+  },
+}
+
 export const OlderBoundaryShimmer: Story = {
   args: { hasOlder: true },
 }
