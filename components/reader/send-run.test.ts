@@ -354,7 +354,13 @@ describe('abortedBeforeTurn', () => {
 
   it('holds for no Send that ran or was refused', () => {
     expect(abortedBeforeTurn({ ...ran, outcome: 'completed' })).toBe(false)
-    expect(abortedBeforeTurn({ ...ran, outcome: 'failed' })).toBe(false)
+    expect(
+      abortedBeforeTurn({
+        ...ran,
+        outcome: 'failed',
+        error: { kind: 'orchestrator', detail: 'x' },
+      }),
+    ).toBe(false)
     expect(abortedBeforeTurn({ outcome: 'rejected', blockedBy: 'turn', converged: true })).toBe(
       false,
     )

@@ -448,15 +448,6 @@ slice-planning gate forces its resolution before that slice is planned.
   diagnostic is lost: the pass fails either way. Raised 2026-10-23 by
   the pass failure policy slice review.
 
-- **`TxResult` lets a `failed` outcome carry no error.** `TxResult`
-  (`lib/pipeline/types.ts`) has an optional `error` on every outcome,
-  though every failed run sets one, so readers such as `passRefusalOf`
-  (`components/reader/send-run.ts`) carry `PipelineError | undefined`.
-  A union with `{ outcome: 'failed'; error: PipelineError }` would make
-  it required
-  ([`code-conventions.md → Type design`](../code-conventions.md#type-design)).
-  Raised 2026-10-23 by the pass failure policy slice review.
-
 - **The commit-msg hook doesn't check the subject.**
   `scripts/check-commit-msg.sh` counts only the body's lines, while
   `CLAUDE.md` caps the subject at 72 characters. Four of the pass
