@@ -739,28 +739,6 @@ slice-planning gate forces its resolution before that slice is planned.
   name or description. Raised 2026-10-23 by the AI writer map's Task 11
   review.
 
-- **A fallback field hides the fold's landed write.** Expected on a
-  fallback turn that adds a write of its own to a field the fold also
-  wrote; reasoned from the code, not run end to end. `withFoldChanges`
-  in `lib/pipeline/definitions/per-turn-piggyback.ts` keeps the fold's
-  record per field, so when the fallback lands a condition, an item
-  move, a stackable or a drop beside the fold's, the field is the
-  fallback's and the fold's landed write drops off the report and the
-  entry card, though World keeps it. The fallback is steered away from
-  re-emitting the fold's rows: the orchestrator applies each delta as
-  it is emitted (`handleEvent` in `lib/pipeline/runtime/orchestrator.ts`),
-  the fallback's working set reads those stores
-  (`lib/pipeline/definitions/working-set.ts`), and both prompts say
-  never to restate an unchanged condition and to drop only an item
-  someone still holds. The whole-field behaviour is pinned by the
-  "reports its own transfers when it has an applied drop" case in
-  `per-turn-piggyback.test.ts`. How often the fallback fires is
-  unmeasured. A per-row merge would cover it but mixes the two writers
-  in one field, and the carry-over rule itself isn't in canon yet
-  ([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape),
-  "One report, two possible writers"). Raised 2026-10-23 by the AI
-  writer map's Q18 and Q19.
-
 - **Undoing a take or a drop after a World move leaves the item held
   and placed.** Reverse-replay keeps a field the user wrote since, so
   undoing a turn's `<item>` or `<drop>` after the user moved the item

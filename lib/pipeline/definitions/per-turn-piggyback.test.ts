@@ -6,6 +6,7 @@ import {
   APP_SETTINGS_DEFAULTS,
   emptyEntityState,
   STORY_SETTINGS_DEFAULTS,
+  type CharacterState,
   type Entity,
   type EntryMetadata,
   type StoryEntry,
@@ -3710,6 +3711,22 @@ describe('per-turn-piggyback', () => {
           visualChanges: [{ id: HERO, type: 'attire', text: 'a torn cloak' }],
         }
 
+        it("keeps the fold's visual changes when its one restates the stored value", async () => {
+          const world = fallbackWorld()
+          world[0] = {
+            ...world[0],
+            state: {
+              ...(world[0].state as CharacterState),
+              visual: { ...(world[0].state as CharacterState).visual, hair: 'shorn short' },
+            },
+          }
+          seedFallbackTurn(world, visualFold)
+          const { events } = await fallbackAfterFold({
+            visualChanges: [{ id: 'c1', type: 'hair', text: 'shorn short' }],
+          })
+          expect(metadataPatch(events).stateReport?.visualChanges).toEqual(visualFold.visualChanges)
+        })
+
         it("keeps the fold's visual changes when its only one names a place", async () => {
           seedFallbackTurn(fallbackWorld(), visualFold)
           const { events } = await fallbackAfterFold({
@@ -3742,7 +3759,8 @@ describe('per-turn-piggyback', () => {
           ])
         })
 
-        // Each part of the transfers check on its own: a move, a stackable or an applied drop.
+        // Each list carries over on its own (data-model.md → Entry metadata shape), so the
+        // fallback's own landed list never hides the fold's landed lamp move.
         it.each([
           [
             'an item move',
@@ -3752,20 +3770,63 @@ describe('per-turn-piggyback', () => {
           [
             'a stackable',
             { items: [], stackables: [{ key: 'gold', amount: 5, to: 'c1' }], drops: [] },
-            { items: [], stackables: [{ key: 'gold', amount: 5, to: HERO }] },
+            {
+              items: [{ id: LAMP, to: HERO, slot: 'inventory' }],
+              stackables: [{ key: 'gold', amount: 5, to: HERO }],
+            },
           ],
           [
             'an applied drop',
             { items: [], stackables: [], drops: [{ id: 'i1', from: 'c1' }] },
-            { items: [], stackables: [], drops: [{ id: OLD_KEY, from: HERO, at: TOWN }] },
+            {
+              items: [{ id: LAMP, to: HERO, slot: 'inventory' }],
+              stackables: [],
+              drops: [{ id: OLD_KEY, from: HERO, at: TOWN }],
+            },
           ],
-        ])('reports its own transfers when it has %s', async (_label, transfers, reported) => {
+        ])(
+          'reports its own %s beside the fold’s other lists',
+          async (_label, transfers, reported) => {
+            seedFallbackTurn(
+              [keyHeld(), worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }), keyRow()],
+              foldReport,
+            )
+            const { events } = await fallbackAfterFold({ transfers })
+            expect(metadataPatch(events).stateReport?.transfers).toEqual(reported)
+          },
+        )
+
+        // Restating what World already stores changes nothing, so the fold's record stays.
+        it("keeps the fold's transfers when its drop names an item already lying here", async () => {
           seedFallbackTurn(
-            [keyHeld(), worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }), keyRow()],
+            [...fallbackWorld(), worldRow({ ...keyRow(), state: { at_location_id: TOWN } })],
             foldReport,
           )
-          const { events } = await fallbackAfterFold({ transfers })
-          expect(metadataPatch(events).stateReport?.transfers).toEqual(reported)
+          const { events } = await fallbackAfterFold({
+            transfers: { items: [], stackables: [], drops: [{ id: 'i1' }] },
+          })
+          expect(metadataPatch(events).stateReport?.transfers).toEqual(foldReport.transfers)
+        })
+
+        it("keeps the fold's conditions when its condition restates the stored one", async () => {
+          seedFallbackTurn(
+            [
+              keyHeld(),
+              worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }),
+              worldRow({
+                ...keyRow(),
+                state: { at_location_id: null, condition: 'bent at the bit' },
+              }),
+            ],
+            foldReport,
+          )
+          const { events } = await fallbackAfterFold({
+            conditions: [{ id: 'i1', text: 'bent at the bit' }],
+          })
+          const { stateReport } = metadataPatch(events)
+          // Not refused: the write goes out and the report keeps no `rejected` mark for it.
+          expect(payloads(events, 'updateEntityCondition')).toHaveLength(1)
+          expect(stateReport?.conditions).toEqual(foldReport.conditions)
         })
       })
     })

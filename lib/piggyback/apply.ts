@@ -1,5 +1,5 @@
 import type { DeltaSource, PipelineAction } from '@/lib/actions'
-import type { CharacterState, Entity, EntryMetadata } from '@/lib/db'
+import type { CharacterState, Entity, EntryMetadata, ItemState, LocationState } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import { foldStackables } from '@/lib/keyword-terms'
 
@@ -50,9 +50,13 @@ export type PiggybackApplied = {
   drops: ReportedDrop[]
   /** Positions in `block.conditions` refused, not ids: an id can repeat in one block. */
   conditionsRejected: number[]
-  // How many of each wrote anything: one naming no character as its target or a party writes none.
+  // How many of each changed what World stores: one naming no character as its target or a party
+  // writes none, and one restating the stored value changes nothing. The fallback's report carries
+  // a failed fold's record over per list on these (data-model.md → Entry metadata shape).
   visualChangesLanded: number
+  conditionsLanded: number
   itemsLanded: number
+  dropsLanded: number
   stackablesLanded: number
 }
 
@@ -153,8 +157,11 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   let visualChangesLanded = 0
   for (const note of block.visualChanges ?? []) {
     if (isCharacter(note.id)) {
-      visualChangesLanded += 1
       const { text, cut } = boundStateText(note.text)
+      const stored = (byId.get(note.id)?.state as CharacterState | null | undefined)?.visual?.[
+        note.type
+      ]
+      if (text !== stored) visualChangesLanded += 1
       // The writer is asked for about 60 words; a cut says it overran the 500-character bound.
       if (cut)
         log.warn('classifier.visual_truncated', {
@@ -179,6 +186,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
 
   // data-model.md → Authorship contract (seen before written): only shown places and items.
   const conditionsRejected: number[] = []
+  let conditionsLanded = 0
   for (const [position, change] of (block.conditions ?? []).entries()) {
     const condition = change.text.trim()
     if (condition === '') {
@@ -199,6 +207,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
       continue
     }
     const { text, cut } = boundStateText(condition)
+    if (text !== (row.state as ItemState | LocationState | null)?.condition) conditionsLanded += 1
     if (cut)
       log.warn('classifier.condition_truncated', {
         entryId,
@@ -218,6 +227,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     actions: moveActions,
     drops,
     itemsLanded,
+    dropsLanded,
   } = itemMoveActions({
     transfers: block.transfers,
     entities,
@@ -292,7 +302,9 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
       drops,
       conditionsRejected,
       visualChangesLanded,
+      conditionsLanded,
       itemsLanded,
+      dropsLanded,
       stackablesLanded,
     },
   }

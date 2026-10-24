@@ -2130,7 +2130,13 @@ fallback must therefore write `stateReport` explicitly, including when
 its own call fails: returning silently leaves a row that reported
 nothing, which is not distinguishable from a turn where nothing
 changed. Inheriting the report through a `{ ...tail.metadata }` spread
-would instead leave a `layer` that lies.
+would instead leave a `layer` that lies. A failed fold has already
+landed its visual changes, conditions and transfers, so the fallback's
+report keeps the fold's record of each list (visual changes,
+conditions, item moves, stackables and drops, each on its own) unless
+the fallback's entries in that list changed what World stores;
+restating a stored value changes nothing. The two writers' rows never
+share one list.
 
 **`content` stores prose only.** The model's trailing `<state>` and
 `<suggestions>` blocks are parsed and stripped at write time; the raw

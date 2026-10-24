@@ -321,24 +321,40 @@ function orderedTransfers(transfers: NonNullable<FallbackReply['transfers']>): P
   }
 }
 
+type ReportedTransfers = NonNullable<StateReport['transfers']>
+
+// Item moves, stackables and drops each carry over on their own, so a fallback drop doesn't hide
+// the fold's landed move; rows from the two writers never share one list.
+function carriedTransfers(
+  own: ReportedTransfers | undefined,
+  prior: ReportedTransfers,
+  applied: PiggybackApplied,
+): ReportedTransfers {
+  const drops = applied.dropsLanded > 0 ? own?.drops : prior.drops
+  return {
+    items: applied.itemsLanded > 0 ? (own?.items ?? []) : prior.items,
+    stackables: applied.stackablesLanded > 0 ? (own?.stackables ?? []) : prior.stackables,
+    ...(drops !== undefined ? { drops } : {}),
+  }
+}
+
 // A failed fold lands its visual changes, conditions and transfers (bar drops it can't place), so
-// each record stays unless something in this reply's field landed too, as apply.ts reports it.
+// each record stays unless something in this reply's list changed World too, as apply.ts counts it.
 function withFoldChanges(
   report: StateReport | undefined,
   prior: StateReport | undefined,
   applied: PiggybackApplied,
 ): StateReport | undefined {
-  const transfersApplied =
-    applied.itemsLanded > 0 || applied.stackablesLanded > 0 || applied.drops.length > 0
-  const conditionsApplied = (report?.conditions ?? []).some((c) => c.rejected !== true)
   const carried: Pick<StateReport, 'visualChanges' | 'conditions' | 'transfers'> = {
     ...(applied.visualChangesLanded === 0 && prior?.visualChanges !== undefined
       ? { visualChanges: prior.visualChanges }
       : {}),
-    ...(!conditionsApplied && prior?.conditions !== undefined
+    ...(applied.conditionsLanded === 0 && prior?.conditions !== undefined
       ? { conditions: prior.conditions }
       : {}),
-    ...(!transfersApplied && prior?.transfers !== undefined ? { transfers: prior.transfers } : {}),
+    ...(prior?.transfers !== undefined
+      ? { transfers: carriedTransfers(report?.transfers, prior.transfers, applied) }
+      : {}),
   }
   if (Object.keys(carried).length === 0) return report
   return { ...(report ?? { layer: 'per_turn_classifier' as const }), ...carried }

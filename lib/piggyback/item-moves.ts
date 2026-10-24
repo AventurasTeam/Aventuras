@@ -20,7 +20,13 @@ type ItemMoveArgs = {
   log: Logger
 }
 
-type ItemMoves = { actions: PipelineAction[]; drops: ReportedDrop[]; itemsLanded: number }
+type ItemMoves = {
+  actions: PipelineAction[]
+  drops: ReportedDrop[]
+  itemsLanded: number
+  /** Drops that moved their item: one already lying where the scene is changes nothing. */
+  dropsLanded: number
+}
 
 /** In the block's order: taken then put down lies at the scene; put down then taken is held. */
 export function itemMoveActions(args: ItemMoveArgs): ItemMoves {
@@ -95,6 +101,7 @@ export function itemMoveActions(args: ItemMoveArgs): ItemMoves {
   }
 
   const drops: ReportedDrop[] = []
+  let dropsLanded = 0
   // piggyback.md → Trailing block format: a drop lands where the scene is; elsewhere stays prose.
   const putDown = (drop: ItemDrop) => {
     if (byId.get(drop.id)?.kind !== 'item') return
@@ -120,6 +127,7 @@ export function itemMoveActions(args: ItemMoveArgs): ItemMoves {
       })
       return
     }
+    const before = whereIs(drop.id)
     for (const holderId of holders) release(holderId, drop.id)
     if (currentLocationId === null)
       log.warn('classifier.drop_unplaced', { entryId, source, itemId: drop.id })
@@ -131,6 +139,7 @@ export function itemMoveActions(args: ItemMoveArgs): ItemMoves {
         atLocationId: lyingAt,
       })
     positions.set(drop.id, currentLocationId)
+    if (whereIs(drop.id) !== before) dropsLanded += 1
     drops.push({
       id: drop.id,
       ...(drop.from !== undefined ? { from: drop.from } : {}),
@@ -168,5 +177,5 @@ export function itemMoveActions(args: ItemMoveArgs): ItemMoves {
         payload: { branchId, id, atLocationId },
       })
   }
-  return { actions, drops, itemsLanded }
+  return { actions, drops, itemsLanded, dropsLanded }
 }
