@@ -230,14 +230,14 @@ function clampEmbedded(text: string, limit: number): string {
 }
 
 /**
- * A candidate character as its row will store it.
+ * A new row's embedded name and description as the row will store them, whatever its kind.
  *
  * Layer B decides against the stored row (reconcile.ts), so an unclamped candidate is
  * measured against text that will never exist: an unbounded name stops matching the row
  * it created, an unbounded description can carry a genuine match out of TAU_HIGH. Both
  * bounds live here so write path and reconcile key cannot be given one without the other.
  */
-export function clampEmbeddedCharacter(candidate: { name: string; description: string }): {
+export function clampEmbeddedText(candidate: { name: string; description: string }): {
   name: string
   description: string
 } {
@@ -546,7 +546,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         parentDrops.push({ handle: place.handle, parent: placement.parent, cause: placement.cause })
       const candidate = placement.kind === 'kept' ? placement.placement : UNPLACED
 
-      const stored = clampEmbeddedCharacter({
+      const stored = clampEmbeddedText({
         name: place.name,
         description: place.description.trim(),
       })
@@ -709,7 +709,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       const id = newId(idPrefix)
       const timestamp = now()
       const keywords = dedupeTerms(candidate.keywords)
-      const stored = clampEmbeddedCharacter(candidate)
+      const stored = clampEmbeddedText(candidate)
       handleMap.set(candidate.handle, id)
       index.set(id, { kind, status: 'active', keywords })
       planned.push({

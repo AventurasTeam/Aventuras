@@ -3,12 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { Entity } from '@/lib/db'
 import { storyPlaceOf } from '@/lib/world'
 
-import {
-  buildClassifierActions,
-  clampEmbeddedCharacter,
-  type PlanDeps,
-  type PlannedWrite,
-} from './plan'
+import { buildClassifierActions, clampEmbeddedText, type PlanDeps, type PlannedWrite } from './plan'
 import type { ReconcileDecision } from './reconcile'
 import type { ClassifierExtraction, ClassifierPlacesExtraction, NewPlace } from './schema'
 import { buildClassifierWindow } from './window'
@@ -1315,14 +1310,12 @@ describe('embedded-column bounds', () => {
   // surrogate, which renders as a replacement character wherever the name is shown.
   it('backs off a cut that would split a surrogate pair', () => {
     const name = 'A'.repeat(119) + '\u{1F409}' + 'B'.repeat(40)
-    expect(clampEmbeddedCharacter({ name, description: '' }).name).toBe('A'.repeat(119))
+    expect(clampEmbeddedText({ name, description: '' }).name).toBe('A'.repeat(119))
   })
 
   it('keeps an astral character the cut clears whole', () => {
     const name = 'A'.repeat(118) + '\u{1F409}' + 'B'.repeat(40)
-    expect(clampEmbeddedCharacter({ name, description: '' }).name).toBe(
-      'A'.repeat(118) + '\u{1F409}',
-    )
+    expect(clampEmbeddedText({ name, description: '' }).name).toBe('A'.repeat(118) + '\u{1F409}')
   })
 
   it('cuts an over-long character description at 1200 characters', () => {
@@ -1523,9 +1516,7 @@ describe('mentioned places', () => {
       deps([]),
     )
     const [ash, birch] = createdPlaces(planned)
-    expect(ash.description).toBe(
-      clampEmbeddedCharacter({ name: 'Ash', description: long }).description,
-    )
+    expect(ash.description).toBe(clampEmbeddedText({ name: 'Ash', description: long }).description)
     expect(birch.description).toBeNull()
   })
 

@@ -222,14 +222,6 @@ slice-planning gate forces its resolution before that slice is planned.
   mentioned places slice review's simplifier pass, which skipped it as
   outside that slice.
 
-- **`clampEmbeddedCharacter` clamps places and items too.** The helper
-  in `lib/classifier/plan.ts` bounds the embedded name and description
-  of any new row: the per-turn writer already used it for places and
-  items, and the periodic classifier now uses it for mentioned places.
-  A neutral name such as `clampEmbeddedText` would stop it misleading.
-  Rename only. Raised 2026-10-16 by the mentioned places slice review's
-  simplifier pass.
-
 - **Three copies of `isPlainObject`.** `lib/actions/delta/delta-encoding.ts`
   exports one, which `user-precedence.ts` now shares;
   `lib/actions/settings/normalize.ts` keeps its own copy inside the same

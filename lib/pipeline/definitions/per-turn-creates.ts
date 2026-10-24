@@ -1,6 +1,6 @@
 import type { PipelineAction } from '@/lib/actions'
 import {
-  clampEmbeddedCharacter,
+  clampEmbeddedText,
   decideNewItem,
   scoreDescriptions,
   type EmbedDescriptions,
@@ -67,7 +67,7 @@ type RowShape = { kind: 'location'; state: LocationState } | { kind: 'item'; sta
 
 // piggyback.md → Creating a place or an item: the bounds a classifier character create uses.
 function storedText(emission: StoredText): StoredText {
-  return clampEmbeddedCharacter({ name: emission.name, description: emission.description.trim() })
+  return clampEmbeddedText({ name: emission.name, description: emission.description.trim() })
 }
 
 function newRow(args: {

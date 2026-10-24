@@ -12,7 +12,7 @@ import {
   buildClassifierActions,
   buildClassifierWindow,
   classifierReplySchema,
-  clampEmbeddedCharacter,
+  clampEmbeddedText,
   IDLE_STATUS_JSON,
   nextStatusOnFailure,
   nextStatusOnStart,
@@ -352,7 +352,7 @@ export async function* periodicClassifierPhase(
       if (decided.has(candidate.handle) || claimed.has(candidate.handle)) continue
       // Reconcile the clamped row, not the raw reply: plan.ts bounds both embedded
       // fields, so a key built from an unbounded one measures text no row holds.
-      const stored = clampEmbeddedCharacter(candidate)
+      const stored = clampEmbeddedText(candidate)
       // The planner drops a blank name, yet its keywords can still name a row: reconciling
       // it would spend an embed call on a decision nothing reads.
       if (stored.name === '') continue
