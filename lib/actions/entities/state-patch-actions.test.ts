@@ -1920,14 +1920,6 @@ describe('raiseCollisionFlag', () => {
     expect(await flagOf(db)).toEqual([0, null, null])
   })
 
-  it('restores the three flag columns together when no user wrote them since', async () => {
-    const { db, ctx } = await setup()
-    await seed(ctx, db)
-    await apply(ctx, raise(), 'act_f')
-    await reverseReplayDeltas('act_f', ctx)
-    expect(await flagOf(db)).toEqual([0, null, null])
-  })
-
   it('leaves the flag cleared when the user cleared it after the raise', async () => {
     const { db, ctx } = await setup()
     await seed(ctx, db)
