@@ -88,16 +88,6 @@ slice-planning gate forces its resolution before that slice is planned.
   dropdown branch maps it to `EMPTY_VALUE`. Raised 2026-10-23 by the AI
   writer map's Task 9 review, whose cast parent picker hit it.
 
-- **The wizard's pack context exposes undocumented cast fields.**
-  `components/wizard/wizard-assist.ts`'s cast projection passes
-  `unresolvedParentLocationName` and `unresolvedFactionName` to
-  user-authored pack templates, while the documented surface
-  (`lib/prompts/templateContextMap.ts`) lists only
-  `parentLocationId` / `condition` for locations; the file's own rule is
-  that anything a pack can reach can't be withdrawn later. Raised
-  2026-10-23 by the AI writer map's Task 9 review, which kept the new
-  `parentUnknown` out of the same projection.
-
 - **A cast row's unresolved faction can't be cleared with no
   candidates.** `components/wizard/cast-editors.tsx`'s `PickFromCast`
   renders its empty-state text when the cast holds no other row of the
