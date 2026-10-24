@@ -383,14 +383,14 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   const appendNewTerms = (id: string, terms: readonly string[], sourceTurn?: string): void =>
     appendTerms(id, terms, proseSource(sourceTurn), () => anchor(sourceTurn))
 
-  // A known or promoted mention's new keywords, written in turn order with the row's other
-  // keyword writes (planKeywordWrites).
+  // A known or promoted mention's, or a reused place's, new keywords, written in turn order with
+  // the row's other keyword writes (planKeywordWrites).
   const mentionTerms: {
     id: string
     terms: readonly string[]
     sourceTurn?: string
     proseEntryId: string
-    entryId: string
+    entryId: () => string
   }[] = []
 
   // Facts about one row apply in source-turn order, ties in reply order, so the latest prose wins.
@@ -557,7 +557,13 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         id = match.id
         // One fact, one anchor: its terms and its placement count one fallback between them.
         const at = anchorOnce(place.sourceTurn)
-        appendTerms(id, place.keywords, proseSource(place.sourceTurn), at)
+        mentionTerms.push({
+          id,
+          terms: place.keywords,
+          sourceTurn: place.sourceTurn,
+          proseEntryId: proseSource(place.sourceTurn),
+          entryId: at,
+        })
         // `match.place`: an unplaced reused row, or this reply's own create taken over.
         if (match.place && candidate.kind !== 'unplaced') {
           const drop =
@@ -673,7 +679,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
           terms: candidate.keywords,
           sourceTurn: candidate.sourceTurn,
           proseEntryId,
-          entryId,
+          entryId: () => entryId,
         })
       }
       if (decision.kind === 'known') continue
@@ -742,8 +748,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
 
   // classifier.md → What the classifier writes → Names. A name is taken when a row of the kind
   // holds it, one this reply creates or renames included. A keyword write's undo is the whole
-  // prior list, so a row's renames, aliases and mention terms plan in turn order: reversing a turn
-  // then never writes an earlier turn's terms away (classifier.md → Provenance attribution).
+  // prior list, so a row's renames, aliases, mention and reuse terms plan in turn order: reversing
+  // a turn then never writes an earlier turn's terms away (classifier.md → Provenance attribution).
   const planKeywordWrites = (): {
     renameClashes: RenameClash[]
     droppedRenames: DroppedRename[]
@@ -886,7 +892,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     for (const fact of inTurnOrder(facts)) {
       if ('mention' in fact) {
         const { id, terms, proseEntryId, entryId } = fact.mention
-        appendTerms(id, terms, proseEntryId, () => entryId)
+        appendTerms(id, terms, proseEntryId, entryId)
       } else if ('rename' in fact) planRename(fact.rename)
       else planAlias(fact.alias)
     }

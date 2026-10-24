@@ -1737,10 +1737,33 @@ describe('mentioned places', () => {
         deps([REACH, VARN]),
       )
       expect(planned.map((p) => [p.action.kind, p.entryId])).toEqual([
-        ['appendEntityKeywords', 'e3'],
         ['placeLocation', 'e3'],
+        ['appendEntityKeywords', 'e3'],
       ])
       expect(fellBackCount).toBe(1)
+    })
+
+    // A keyword write's undo is the whole prior list, so a reuse's terms plan in turn order too.
+    it("plans a reused place's terms in turn order with an earlier turn's alias of it", () => {
+      const { planned } = buildClassifierActions(
+        placesReply(
+          [
+            newPlace('new:mill', 'The Old Mill', {
+              parent: 'loc_town',
+              keywords: ['the grinding house'],
+              sourceTurn: 't3',
+            }),
+          ],
+          { aliases: [{ ref: 'loc_mill', terms: ['the wheelhouse'], sourceTurn: 't1' }] },
+        ),
+        deps([TOWN, MILL]),
+      )
+      expect(
+        planned.map((p) => [p.entryId, payloadOf<{ keywords: string[] }>(p).keywords]),
+      ).toEqual([
+        ['e1', ['the wheelhouse']],
+        ['e3', ['the grinding house']],
+      ])
     })
 
     it('places a reused place under a new place the reply creates, after its create', () => {
