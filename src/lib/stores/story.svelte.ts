@@ -1933,6 +1933,10 @@ class StoryStore {
       // Every kind of boundary, not just anchors: a branch forked inside the range while the
       // preview is open splits it the same way an anchor does.
       boundaryEntryIds: this.timeBoundaries.map((boundary) => boundary.entryId),
+      endpointAnchors: {
+        from: this.timeAnchorFor(range.from.entryId),
+        to: this.timeAnchorFor(range.to.entryId),
+      },
     })
   }
 

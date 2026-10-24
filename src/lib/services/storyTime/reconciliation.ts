@@ -131,8 +131,10 @@ export function fingerprintPreview(input: {
   to: Boundary
   rangeEntries: StoryEntry[]
   boundaryEntryIds: string[]
+  /** The endpoints' anchors: an edited one is written whole, so its note must not have moved. */
+  endpointAnchors?: { from?: TimeAnchor; to?: TimeAnchor }
 }): string {
-  const { storyId, branchId, from, to, rangeEntries, boundaryEntryIds } = input
+  const { storyId, branchId, from, to, rangeEntries, boundaryEntryIds, endpointAnchors } = input
   const stamp = (time: TimeTracker | null) => (time ? String(toMinutes(time)) : 'none')
   const inRange = new Set(rangeEntries.map((entry) => entry.id))
 
@@ -145,6 +147,9 @@ export function fingerprintPreview(input: {
     // Excludes the later boundary, which is a boundary by definition: it bounds the range
     // rather than sitting inside it.
     boundariesInside: boundaryEntryIds.filter((id) => inRange.has(id) && id !== to.entryId).sort(),
+    anchors: [endpointAnchors?.from, endpointAnchors?.to].map((anchor) =>
+      anchor ? [anchor.id, anchor.note] : null,
+    ),
   })
 }
 

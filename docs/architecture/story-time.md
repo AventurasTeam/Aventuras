@@ -122,8 +122,9 @@ same transaction (`plan.anchors`); one that was not anchored is stored nowhere.
 commit. The store refuses while a generation holds the story (`assertNotBusy`), re-resolves the
 range from the current boundaries, recomputes the preview with the reader's weights, and applies
 only when its fingerprint matches the one the reader saw; otherwise the screen refreshes. The
-fingerprint covers the endpoints and their times, the entries in the range and their endings, and
-any boundary that appeared inside the range.
+fingerprint covers the endpoints and their times, the note of an anchor on either endpoint (an
+edited anchor is written whole), the entries in the range and their endings, and any boundary that
+appeared inside the range.
 
 ## Editing one entry
 

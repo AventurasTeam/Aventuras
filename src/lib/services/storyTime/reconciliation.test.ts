@@ -189,6 +189,20 @@ describe('fingerprintPreview', () => {
     expect(withInner).not.toBe(fingerprintPreview(base))
   })
 
+  it("changes when an endpoint anchor's note changes, though its time does not", () => {
+    const anchorOn = (note: string | null): TimeAnchor => ({
+      id: 'a-C',
+      storyId: 's1',
+      entryId: 'C',
+      assertedTime: t(9),
+      note,
+      createdAt: 0,
+    })
+    const before = fingerprintPreview({ ...base, endpointAnchors: { to: anchorOn('dawn') } })
+    const after = fingerprintPreview({ ...base, endpointAnchors: { to: anchorOn('dusk') } })
+    expect(after).not.toBe(before)
+  })
+
   it('does not change because the later boundary is itself anchored', () => {
     expect(fingerprintPreview({ ...base, boundaryEntryIds: ['C'] })).toBe(
       fingerprintPreview({ ...base, boundaryEntryIds: ['C'] }),
