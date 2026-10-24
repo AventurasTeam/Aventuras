@@ -1896,7 +1896,7 @@ describe('raiseCollisionFlag', () => {
     expect(await apply(ctx, raise('char_1'), 'act_f')).toEqual(noopBecause('partner-is-self'))
   })
 
-  // world.md → Surfacing: World clears a flag whose pair no longer holds, so none is raised on one.
+  // world.md → Surfacing: a flag needs a namesake pair, so none is raised on a pair without one.
   it('no-ops on a pair that share no name, as when the user removed the keyword', async () => {
     const { db, ctx } = await setup()
     await seed(ctx, db, { ...STRANGER, keywords: ['the hood'] })
