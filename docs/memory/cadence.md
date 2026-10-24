@@ -192,8 +192,8 @@ Writes that can still meet serialize per row: a user write against an
 undo or redo, or against a reversal. Each action writes only the
 columns it changes but computes them from a read of the row, so every
 delta-logged write to an existing `entities` or `threads` row, and every
-reversal of one, serializes on a lock keyed by that row: one writer's read and
-commit never straddle another's. `character_relationships` writes
+reversal of one, serializes on a lock keyed by that row: one writer's
+read and commit never straddle another's. `character_relationships` writes
 serialize on one key per branch, since a delete names a row id, not a
 pair. Involvement and awareness writes and a happening delete
 serialize on one per-branch `happening_links` key, for the same reason.

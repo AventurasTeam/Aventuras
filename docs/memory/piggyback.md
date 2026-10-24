@@ -134,8 +134,9 @@ creates ([New locations and items](#new-locations-and-items)):
   that names a `to` is that case: it is kept out of the block and
   logged (`classifier.drop_dropped`, `to_named`), and the fallback's
   schema leaves out a drop with a `to` too, unlogged. The prompt asks
-  for a drop only for an item still lying there when the turn ends. Tags apply in document
-  order and a drop takes the item off every holder, and the fallback
+  for a drop only for an item still lying there when the turn ends.
+  Tags apply in document order and a drop takes the item off every
+  holder, and the fallback
   applies its drops after its item moves, so an item set down and
   picked up again gets its `<item>` move and no drop.
 - `<stackable key="..." amount="..." to="..." from="..." />` moves a

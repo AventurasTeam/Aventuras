@@ -416,8 +416,9 @@ another chains behind it, and checks the rows the passes write.
 
 `pnpm probe:classifier` (`scripts/classifier-parse-probe.ts`) is no
 test: it renders the real pass prompt from a branch of the dev slot's
-database, opened read-only (`AVENTURAS_DB_PATH` names another,
-`PROBE_BRANCH_ID` another branch than `br_hero_main`), and sends it
+database, opened read-only (`AVENTURAS_DB_PATH` picks another
+database, `PROBE_BRANCH_ID` a branch other than `br_hero_main`), and
+sends it
 `PROBE_RUNS` times, 20 by default. It prints each run's outcome with
 its parse and provider retries and its first parse failure by field
 path, then the first-attempt parse rate.

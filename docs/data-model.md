@@ -817,13 +817,14 @@ fail the whole run (see the run state transitions in
 [`generation-pipeline.md → Transaction lifecycle`](./generation-pipeline.md#transaction-lifecycle)),
 and neither the phase nor the LLM retry tier can recover it — the retry
 finishes before any write is emitted, and a phase never sees a write's
-result. A placement's rejection never fails the run: `placeLocation`, which
-a machine writer uses to place or move an existing place, refuses a
-cycle, a broken chain or a retired parent as a no-op, so a planner slip
-there is a logged skip. The machine paths that write `parent_location_id` are the
-per-turn writer creating a location or placing an unplaced one it
-reuses, the periodic classifier creating a mentioned place or moving
-one the prose places, and chapter close; a create whose parent fails
+result. A placement's rejection never fails the run: `placeLocation`,
+which a machine writer uses to place or move an existing place,
+refuses a cycle, a broken chain or a retired parent as a no-op, so a
+planner slip there is a logged skip. The machine paths that write
+`parent_location_id` are the per-turn writer creating a location or
+placing an unplaced one it reuses, the periodic classifier creating a
+mentioned place or moving one the prose places, and chapter close; a
+create whose parent fails
 the walk lands unplaced, and a move that fails it is dropped
 ([`piggyback.md → New locations and items`](./memory/piggyback.md#new-locations-and-items),
 [`classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)).
