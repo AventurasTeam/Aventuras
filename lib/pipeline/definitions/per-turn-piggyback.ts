@@ -556,6 +556,7 @@ export async function* piggybackFallbackClassifierPhase(
     now: () => Date.now(),
     newId: (prefix) => generateId(prefix),
     log: ctx.log,
+    signal: ctx.abortSignal,
   })
   // Matching an item can await an embed call; a cancel during it discards this phase's writes.
   if (ctx.abortSignal.aborted) return { status: 'aborted' }

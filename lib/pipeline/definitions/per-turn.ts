@@ -287,6 +287,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
           now: () => Date.now(),
           newId: (prefix) => generateId(prefix),
           log: ctx.log,
+          signal: ctx.abortSignal,
         })
       : skipFailedFold(resolvedBlock, parseFailures, entryId, ctx.log)
     // Matching an item can await an embed call; a cancel during it discards the reply.

@@ -3044,6 +3044,20 @@ describe('per-turn-piggyback', () => {
       })
     })
 
+    // A cancel during an item's match embed must end it rather than wait out a slow provider.
+    it("hands the run's signal to the create planner, so a cancel ends an item's match embed", async () => {
+      const creates = await import('./per-turn-creates')
+      const planSpy = vi.spyOn(creates, 'planTurnCreates')
+      seedFallbackTurn()
+      const controller = new AbortController()
+      await runFallback(
+        fallbackClassifierSchema.parse({ sceneEntities: ['c1'], worldTimeDelta: 10 }),
+        { signal: controller.signal },
+      )
+      expect(planSpy).toHaveBeenCalledWith(expect.objectContaining({ signal: controller.signal }))
+      planSpy.mockRestore()
+    })
+
     // One hallucinated id costs only itself: the rest of the scene still lands, the previous
     // place stays, and both drops are recorded for the reader, not in failedFields.
     it('keeps the rest of the scene and the previous place over one unknown id', async () => {

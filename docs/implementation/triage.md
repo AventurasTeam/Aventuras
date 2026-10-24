@@ -86,15 +86,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Save could send the old name back. Reasoned, not reproduced; rare.
   Raised 2026-10-10 by the partial-name collisions code review.
 
-- **The item-match embed in the per-turn writers can't be cancelled.**
-  `planTurnCreates` (`lib/pipeline/definitions/per-turn-creates.ts`)
-  now takes an optional `signal` that reaches the item-match embed, but
-  neither caller passes `ctx.abortSignal` (`per-turn.ts` and
-  `per-turn-piggyback.ts`), so a cancel during a slow provider embed
-  still takes effect only once it settles, while the hard gate holds
-  the branch. Raised 2026-10-11 in the locations-and-items-from-prose
-  PR; narrowed 2026-10-24 by the triage pass.
-
 - **A cancel after the last abort check still returns `completed`.**
   In `lib/pipeline/definitions/per-turn.ts` (~line 322) a cancel
   landing during the position SELECT or the yields leaves the phase
