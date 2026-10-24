@@ -821,6 +821,47 @@ describe('planTurnCreates — unplaced places', () => {
     })
   })
 
+  it('reports a twin of a reuse whose placement looped as dropped, as the row stays unplaced', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn')
+    const plan = await runPlanner(
+      {
+        newLocations: [
+          { handle: 'new:a', name: 'Varn', description: 'a salt town', parent: VARN_DOCKS },
+          { handle: 'new:b', name: 'Varn Docks', description: 'the quays', parent: 'new:a' },
+          { handle: 'new:c', name: 'Varn', description: 'the town', parent: 'new:b' },
+        ],
+        currentLocation: 'new:c',
+      },
+      {
+        entities: world(
+          unplacedPlace(VARN, 'Varn'),
+          row({
+            id: VARN_DOCKS,
+            kind: 'location',
+            name: 'Varn Docks',
+            state: { parent_location_id: VARN },
+          }),
+        ),
+      },
+    )
+    expect(plan.creates).toEqual([])
+    expect(plan.placements).toEqual([])
+    expect(plan.report.newLocations[2]).toEqual({
+      handle: 'new:c',
+      name: 'Varn',
+      description: 'the town',
+      parent: 'new:b',
+      outcome: 'reused',
+      id: VARN,
+      parentDropped: true,
+    })
+    expect(warnSpy).toHaveBeenCalledWith('classifier.create_parent_dropped', {
+      handle: 'new:c',
+      parent: VARN_DOCKS,
+      cause: 'cycle',
+    })
+  })
+
   it('drops a placement that would close a loop through one placed earlier in the block', async () => {
     const warnSpy = vi.spyOn(logger, 'warn')
     const plan = await runPlanner(

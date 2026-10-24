@@ -47,13 +47,16 @@ export type TurnCreatePlan = PlannedTurn & {
   placements: PlaceLocationAction[]
 }
 
-type LocationFate = {
-  outcome: 'created' | 'reused'
-  id: string
-  /** The create's settled placement, unplaced if its parent dropped; a reused row keeps its own. */
-  placement: PlacePlacement
-  parentDropped: boolean
-}
+type LocationFate = { outcome: 'created' | 'reused'; id: string } & (
+  | { parentDropped: true }
+  | {
+      parentDropped: false
+      /** Where the planner settled the create; a reused row keeps its own. */
+      placement: PlacePlacement
+    }
+)
+
+type PlacementLoop = { parent: string; cause: 'cycle' | 'chain-broken' }
 
 // piggyback.md → Parent: a parent the planner can't use leaves the place unplaced.
 const UNPLACED: PlacePlacement = { kind: 'unplaced' }
@@ -120,7 +123,7 @@ function placementLoop(
   id: string,
   parentId: string,
   parentOf: (id: string) => string | null,
-): { parent: string; cause: 'cycle' | 'chain-broken' } | null {
+): PlacementLoop | null {
   const walk = checkParentChain(id, parentId, parentOf)
   if (walk === 'ok') return null
   return { parent: parentId, cause: walk === 'cycle' ? 'cycle' : 'chain-broken' }
@@ -198,6 +201,8 @@ function planLocations(args: {
   const placedHere = new Map<string, PlacedPlacement>()
   // The rows this turn placed, as matching must see them: no longer unplaced.
   const placedRows = new Map<string, Entity>()
+  // A row whose placement looped stays unplaced: the kept chain puts every later create below it.
+  const loopDrops = new Map<string, PlacementLoop>()
 
   // normalizeCreates already dropped a second declaration of a handle, so none is a duplicate.
   const { order } = settlingOrder(
@@ -268,16 +273,24 @@ function planLocations(args: {
           })
         } else {
           parentDropped = true
+          loopDrops.set(id, loop)
+          logParentDropped(args.log, emission.handle, loop)
+        }
+      } else {
+        const loop = loopDrops.get(id)
+        if (loop !== undefined) {
+          parentDropped = true
           logParentDropped(args.log, emission.handle, loop)
         }
       }
     }
-    fates.set(emission.handle, {
-      outcome: match.kind === 'create' ? 'created' : 'reused',
-      id,
-      placement: candidate,
-      parentDropped,
-    })
+    const outcome = match.kind === 'create' ? 'created' : 'reused'
+    fates.set(
+      emission.handle,
+      parentDropped
+        ? { outcome, id, parentDropped: true }
+        : { outcome, id, parentDropped: false, placement: candidate },
+    )
     placed.push({ name: text.name, placement: candidate, id })
   }
   return { fates, rows, reusedIds: [...reused], placements }
