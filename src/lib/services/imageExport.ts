@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { resolveSaveTarget } from './exportTarget'
+import { database } from '#lib/services/database.ts'
+import { imageExtension, normalizeImageDataUrl } from '#lib/utils/image.ts'
 import type { EmbeddedImageMeta } from '#lib/types/index.ts'
 
 /**
@@ -21,8 +23,10 @@ class ImageExportService {
 
   async exportSingleImage(storyTitle: string, image: EmbeddedImageMeta): Promise<boolean> {
     try {
-      const target = await resolveSaveTarget(`${storyTitle}-image.png`, [
-        { name: 'PNG Image', extensions: ['png'] },
+      const head = normalizeImageDataUrl(await database.getEmbeddedImageHead(image.id))
+      const ext = imageExtension(head && /^data:([^;,]+)/.exec(head)?.[1])
+      const target = await resolveSaveTarget(`${storyTitle}-image.${ext}`, [
+        { name: `${ext.toUpperCase()} Image`, extensions: [ext] },
       ])
       if (!target) return false
 

@@ -7,6 +7,7 @@ import {
   specToRatioString,
   expectedPixels,
   normalizeImageDataUrl,
+  imageExtension,
   sniffImageMime,
   bytesToBase64,
   base64ToBytes,
@@ -222,6 +223,24 @@ describe('normalizeImageDataUrl', () => {
       const url = 'data:image/svg+xml,%3Csvg%2F%3E'
       expect(normalizeImageDataUrl(url)).toBe(url)
     })
+  })
+})
+
+describe('imageExtension', () => {
+  it.each([
+    ['image/png', 'png'],
+    ['image/jpeg', 'jpg'],
+    ['image/webp', 'webp'],
+    ['image/gif', 'gif'],
+    ['image/avif', 'avif'],
+    ['image/heic-sequence', 'heic'],
+    ['image/svg+xml', 'svg'],
+    ['image/apng', 'png'],
+    ['text/plain', 'png'],
+    [null, 'png'],
+    [undefined, 'png'],
+  ])('maps %s to %s', (mime, ext) => {
+    expect(imageExtension(mime)).toBe(ext)
   })
 })
 
