@@ -2943,6 +2943,38 @@ describe('renames', () => {
     ])
   })
 
+  // Within one turn a row's keyword writes keep the reply's step order: a mention's terms, then
+  // the rename, then an alias.
+  it("plans one turn's mention terms, rename and alias of a row in that order", () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        newCharacters: [
+          {
+            handle: 'new:corvin',
+            name: 'Corvin',
+            description: 'x',
+            keywords: ['Corvin', 'the cloaked man'],
+            sourceTurn: 't2',
+          },
+        ],
+        aliases: [{ ref: 'char_stranger', terms: ['the fence'], sourceTurn: 't2' }],
+        renames: [{ ref: 'char_stranger', name: 'Corvin', sourceTurn: 't2' }],
+      }),
+      deps([STRANGER], {
+        decisions: new Map([
+          ['new:corvin', { kind: 'known', entityId: 'char_stranger', similarity: 0.9 }],
+        ]),
+      }),
+    )
+    expect(
+      planned.map((p) => [p.action.kind, payloadOf<{ keywords?: string[] }>(p).keywords]),
+    ).toEqual([
+      ['appendEntityKeywords', ['Corvin', 'the cloaked man']],
+      ['renameEntity', undefined],
+      ['appendEntityKeywords', ['the fence']],
+    ])
+  })
+
   it("keeps a clash's keyword for the rest of the reply", () => {
     const { planned } = buildClassifierActions(
       reply({
