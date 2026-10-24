@@ -735,19 +735,6 @@ slice-planning gate forces its resolution before that slice is planned.
   unusable place would hold drops back on the common, usable-place cut
   too. Raised 2026-10-23 by the AI writer map's Q21 review.
 
-- **A stackable may move twice on a fallback turn.** A possible data
-  error, not a display one: worth a look soon. Pre-existing on `main`;
-  reasoned from the code, not run. A narrative fold whose block failed
-  another field still applies its transfers
-  (`lib/pipeline/definitions/per-turn.ts`), and a stackable transfer
-  adds rather than replaces. The fallback then fires, sees the
-  post-fold balance, and may re-emit the same transfer from the prose,
-  so the amount moves a second time. Conditions, visual changes, item
-  moves and drops are idempotent, so a repeat of those is harmless, and
-  a failed fold that can't use its own place holds its drops back for
-  the fallback.
-  Raised 2026-10-23 by the AI writer map's Q19.
-
 - **An unattributed pass fact isn't always re-derivable.**
   [`classifier.md → Provenance attribution`](../memory/classifier.md#provenance-attribution)
   says a fact that falls back to the window head "reverses on any

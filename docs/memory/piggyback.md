@@ -460,9 +460,15 @@ JSON.
 If a top-level tag parses, its fields are used. If a tag is missing
 or its content doesn't parse, that field is skipped for this turn —
 per-field best-effort, one failing tag never blocks another. There
-are three exceptions. A failing field keeps the block's own creates
+are four exceptions. A failing field keeps the block's own creates
 from landing
 ([Creating a place or an item](#creating-a-place-or-an-item)). It
+keeps the block's stackables from landing as well, since an amount
+adds rather than replaces and the fallback, which reads the store
+after the fold, would move it a second time: they're logged
+(`classifier.stackables_held`) and the report lists none of them, so
+the fallback alone moves them, and nothing moves when it leaves one out
+or fails too. It
 keeps the block's drops from landing too when the block's own place
 can't be used: its `<current_location>` names a place the block
 creates, which a failed block doesn't create, or the
@@ -473,7 +479,7 @@ and stays held when the fallback leaves the drop out or fails too. A
 place that can't be entered (an item's id, a retired place) doesn't
 count: it keeps the previous location on any block, as below, and the
 drops land there, as they do wherever a failed block's place stands.
-The fallback's transfers are the third: there a transfer with a bad
+The fallback's entries are the fourth: there an entry with a bad
 ref drops alone and the rest of the field applies, as below.
 
 An empty `<state>` counts as a missing one, since no turn has no

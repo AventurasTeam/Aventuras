@@ -2230,6 +2230,53 @@ describe('narrative fold — creates', () => {
     expect(await storedEntry(USER_ACTION_ID)).toBeDefined()
   })
 
+  // piggyback.md → Parse strategy and failure recovery: stackables add, so a failed fold holds its
+  // back for the fallback, which would otherwise move the same amount a second time.
+  describe('a failed fold with a stackable', () => {
+    const goldReply =
+      'Aria pockets the purse.\n<state><scene_entities>c1</scene_entities>' +
+      '<transfers><stackable key="gold" amount="10" to="c1" /></transfers>' +
+      '<world_time_delta>soon</world_time_delta></state>'
+
+    it('moves the gold once, through the fallback', async () => {
+      await seedTurn([
+        worldRow({
+          id: HERO,
+          kind: 'character',
+          name: 'Aria',
+          state: { ...emptyEntityState('character'), current_location_id: TOWN },
+        }),
+        worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }),
+      ])
+      const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+      const fold = await foldTurn(goldReply, { log })
+      expect(fold.intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: false })
+      expect(
+        fold.events.filter(
+          (e) => e.type === 'delta_emitted' && e.action.kind === 'updateEntityStackables',
+        ),
+      ).toEqual([])
+      expect(log.debug).toHaveBeenCalledWith('classifier.stackables_held', {
+        entryId: replyOf(fold.events).id,
+        keys: ['gold'],
+      })
+      await applyEvents(fold.events)
+
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'ok',
+        value: fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          worldTimeDelta: 30,
+          transfers: { items: [], stackables: [{ key: 'gold', amount: 10, to: 'c1' }], drops: [] },
+        }),
+      })
+      const fallback = await drain(phaseAt(3)(phaseCtx(fold.intermediates)))
+      await applyEvents(fallback.events)
+      const hero = (await branchRows()).find((r) => r.id === HERO)
+      expect(hero?.state).toMatchObject({ stackables: { gold: 10 } })
+    })
+  })
+
   // piggyback.md → Parse strategy and failure recovery: a failed fold that can't use its own place
   // holds its drops back, so the item is still held when the fallback puts it down there.
   describe('a fold with a drop', () => {
