@@ -503,7 +503,7 @@ describe('matchNewLocation — the unplaced places', () => {
         placed({ name: 'The Drowned Market', placement: UNPLACED }, [
           EASTGATE,
           retired,
-          MARKET_ELSEWHERE,
+          { ...MARKET_ELSEWHERE, createdAt: 9 },
         ]),
       ).toEqual(reuse('loc_m2'))
     })
