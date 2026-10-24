@@ -205,6 +205,19 @@ export function itemLocationId(id: string, locations: readonly Location[]): stri
   return location ? storedId(location) : id
 }
 
+/**
+ * A new id for each copied location, by old id. An override's root id maps to the override's
+ * copy too, since that is the id its items hold.
+ */
+export function copiedLocationIds(locations: readonly Location[]): Map<string, string> {
+  const ids = new Map<string, string>()
+  for (const loc of locations) ids.set(loc.id, crypto.randomUUID())
+  for (const loc of locations) {
+    if (loc.overridesId && !ids.has(loc.overridesId)) ids.set(loc.overridesId, ids.get(loc.id)!)
+  }
+  return ids
+}
+
 /** Items placed at any of `locationIds`, by id or by a legacy name. */
 export function itemsAt<T extends Item>(
   items: readonly T[],
