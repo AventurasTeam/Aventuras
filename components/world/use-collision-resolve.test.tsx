@@ -235,16 +235,14 @@ describe('useCollisionResolve → opening', () => {
     expect(openedPair(result).sides[1].relationCounts.translationRows).toBe(1)
   })
 
-  it('keeps the open pair while the story is rebuilt in place, and re-derives it once the story moves', () => {
+  // Rebuilt in place, the story keeps its identity in useStoryPlace, which owns that stability.
+  it('re-derives the open pair once the story moves', () => {
     const { result, rerender } = renderHook(
       ({ story }: { story: StoryPlace }) => useCollisionResolve(BRANCH, ctx, run, story),
       { initialProps: { story: NOWHERE } },
     )
     act(() => result.current.request(NEWER.id, OLDER.id))
     const opened = openedPair(result)
-
-    rerender({ story: storyPlaceOf({ tail: null, sceneSource: null }) })
-    expect(result.current.pair).toBe(opened)
 
     const at = { metadata: { currentLocationId: 'loc_harbor' } }
     rerender({ story: storyPlaceOf({ tail: at, sceneSource: null }) })

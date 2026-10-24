@@ -142,9 +142,6 @@ export function useCollisionResolve(
     requestedRef.current = next
     setRequestedState(next)
   }, [])
-  // useStoryPlace rebuilds its value on every entries patch; rebuild the pair only once it moves.
-  const [storyAt, setStoryAt] = useState(story)
-  if (story.tail !== storyAt.tail || story.scene !== storyAt.scene) setStoryAt(story)
   const open = requested != null
   // Subscribed only while open, so a closed dialog doesn't re-render the route on every link patch.
   const entityRows = entitiesStore.useEntities((rows) => (open ? rows : null))
@@ -181,7 +178,7 @@ export function useCollisionResolve(
       involvements: inBranch(involvementRows, branchId),
       relationships: inBranch(relationshipRows, branchId),
       translations: inBranch(translationRows, branchId),
-      story: storyAt,
+      story,
     })
     if (sides == null) return null
     const parentName = sharedParentName(flagged, entities)
@@ -200,7 +197,7 @@ export function useCollisionResolve(
     involvementRows,
     relationshipRows,
     translationRows,
-    storyAt,
+    story,
   ])
 
   useEffect(() => {
