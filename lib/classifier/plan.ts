@@ -504,7 +504,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         })
       }
       handleMap.set(place.handle, id)
-      placed.push({ name: stored.name, placement: candidate, id })
+      placed.push({ name: stored.name, placement: candidate, id, keywords: place.keywords })
     }
     return { droppedPlaces, parentDrops }
   }

@@ -1232,7 +1232,8 @@ describe('planTurnCreates — matching', () => {
     })
   })
 
-  it("doesn't compare two new places with each other", async () => {
+  // piggyback.md → Matching before creating: one block flags what two turns would.
+  it('flags the second of two unplaced new places with a partial name, unplaced', async () => {
     const plan = await runPlanner({
       newLocations: [
         { handle: 'new:a', name: 'Hall', description: 'a hall', parent: 'new:b' },
@@ -1240,9 +1241,15 @@ describe('planTurnCreates — matching', () => {
       ],
       currentLocation: 'new:a',
     })
-    expect(createdEntries(creates(plan)).map((e) => [e.name, e.nameCollisionFlag])).toEqual([
-      ['Hall', 0],
-      ['Great Hall', 0],
+    expect(
+      createdEntries(creates(plan)).map((e) => [
+        e.name,
+        e.nameCollisionPartnerId,
+        e.nameCollisionReason,
+      ]),
+    ).toEqual([
+      ['Hall', null, null],
+      ['Great Hall', 'loc_new_1', 'unplaced'],
     ])
   })
 

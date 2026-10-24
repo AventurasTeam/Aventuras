@@ -429,7 +429,12 @@ under a rule per kind:
   as stored places, newer than any, so one match maps it there and
   several create it flagged `unplaced`; a create under a parent, or
   top-level, that would otherwise be created takes over an earlier
-  unplaced create of its name and places it there.
+  unplaced create of its name and places it there. A partial name or a
+  keyword hit flags against the earlier creates as against stored
+  places, newer than any and in the block's order: a create under a
+  parent, or top-level, against the earlier creates that sit there, a
+  takeover's included, and a create with no parent against those still
+  unplaced.
 
 World pairs, explains and resolves these flags as it does a
 character's

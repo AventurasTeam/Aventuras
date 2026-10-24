@@ -459,7 +459,11 @@ as successive passes' would: an unplaced one counts the reply's
 earlier new places of its name as stored places, newer than any, one
 match mapping it there and several flagging it `unplaced`; a placed
 one the stored places would create takes over an earlier unplaced new
-place of its name and places it.
+place of its name and places it. A partial name or a keyword hit flags
+against the reply's earlier new places as against stored ones, newer
+than any and in the reply's order: a placed one against those under its
+parent, or at the top level, a takeover's included, and an unplaced one
+against those still unplaced.
 
 **After the turn.** A pass runs after the turn that brought it due, so
 a place the turn created is already a row it matches against, and the

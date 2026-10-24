@@ -1971,6 +1971,37 @@ describe('mentioned places', () => {
       })
     })
 
+    // classifier.md → Mentioned places: one reply flags what two would.
+    it('flags a partial name or a keyword hit on an earlier place of the reply, under one parent or unplaced', () => {
+      const flagsOf = (planned: readonly PlannedWrite[]) =>
+        createdPlaces(planned).map((row) => [
+          row.name,
+          row.nameCollisionPartnerId,
+          row.nameCollisionReason,
+        ])
+      const placed = buildClassifierActions(
+        placesReply([
+          newPlace('new:a', 'Docks', { parent: 'loc_town', keywords: ['the wharf'] }),
+          newPlace('new:b', 'Old Docks', { parent: 'loc_town' }),
+          newPlace('new:c', 'The Wharf', { parent: 'loc_town' }),
+        ]),
+        deps([TOWN]),
+      )
+      expect(flagsOf(placed.planned)).toEqual([
+        ['Docks', null, null],
+        ['Old Docks', 'loc_new1', 'same-parent'],
+        ['The Wharf', 'loc_new1', 'same-parent'],
+      ])
+      const unplaced = buildClassifierActions(
+        placesReply([newPlace('new:a', 'Docks'), newPlace('new:b', 'Old Docks')]),
+        deps([TOWN]),
+      )
+      expect(flagsOf(unplaced.planned)).toEqual([
+        ['Docks', null, null],
+        ['Old Docks', 'loc_new1', 'unplaced'],
+      ])
+    })
+
     // A reply's creates match as successive replies' would, so one place is one row either way.
     describe('an unplaced place and a placed namesake', () => {
       const KEEP = placeRow('loc_keep', 'the Keep', null)
