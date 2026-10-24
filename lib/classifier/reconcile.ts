@@ -8,11 +8,11 @@ import { namesakeBasis } from '@/lib/world'
 export const TAU_HIGH = 0.75
 export const TAU_LOW = 0.5
 
-/**
- * classifier.md → Partner and reason. Place matching alone sets `same-parent` and `unplaced`, and a
- * pass's rename clash `name-taken`.
- */
-type ClassifierFlagReason = Exclude<CollisionReason, 'same-parent' | 'unplaced' | 'name-taken'>
+/** classifier.md → Partner and reason: the reasons the decision table gives, and no others. */
+type ClassifierFlagReason = Extract<
+  CollisionReason,
+  'alike' | 'ambiguous' | 'distinct' | 'in-scene' | 'no-signal'
+>
 
 export type ReconcileDecision =
   | { kind: 'create'; flag: null }
