@@ -64,15 +64,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Save could send the old name back. Reasoned, not reproduced; rare.
   Raised 2026-10-10 by the partial-name collisions code review.
 
-- **The mock LLM's validator doesn't check the newer state fields.**
-  `scripts/mock-llm/respond/tagged-block.ts` renders every field the
-  parser reads, but `stateBlockSchema` in `scripts/mock-llm/validate.ts`
-  knows nothing of creates, conditions, drops or retrieval queries, so
-  a malformed authored one passes validation and fails the app's
-  parser at serve time (a drop with no id renders `id="undefined"`).
-  Raised 2026-10-11 in the locations-and-items-from-prose PR; the
-  rendering half was closed by the AI writer map.
-
 - **The head turn's membership test is written out four times.**
   `resolveHeadTurn` in `lib/head-turn` is the one definition of the
   head turn, but the "is this entry its tail or origin" test on top of
