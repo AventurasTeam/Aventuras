@@ -105,6 +105,9 @@ export const world = {
 
   description: (page: Page): Locator =>
     page.getByRole('textbox', { name: t('world:fields.description'), exact: true }),
+  // A faction's Identity field (identity-tab.tsx).
+  standingField: (page: Page): Locator =>
+    page.getByRole('textbox', { name: t('world:fields.standing'), exact: true }),
   visualField: (page: Page, key: 'hair' | 'face' | 'eyes'): Locator =>
     page.getByRole('textbox', { name: t(`world:fields.visual.${key}`), exact: true }),
   // TagInput's inner text input carries the field label as its accessible name.

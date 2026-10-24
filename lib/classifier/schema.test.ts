@@ -8,6 +8,15 @@ import {
   newPlacesOf,
 } from './schema'
 
+type JsonNode = {
+  properties?: Record<string, JsonNode>
+  items?: JsonNode
+  description?: string
+}
+const jsonOf = (schema: z.ZodType) => z.toJSONSchema(schema) as JsonNode
+const itemFields = (list: string) =>
+  jsonOf(classifierExtractionSchema).properties?.[list]?.items?.properties ?? {}
+
 describe('classifierExtractionSchema', () => {
   it('defaults every collection so a sparse reply still parses', () => {
     expect(classifierExtractionSchema.parse({})).toEqual({
@@ -18,6 +27,12 @@ describe('classifierExtractionSchema', () => {
       newFactions: [],
       memberships: [],
       aliases: [],
+      renames: [],
+      placements: [],
+      standings: [],
+      newThreads: [],
+      threadStatuses: [],
+      knownAwareness: [],
     })
   })
 
@@ -129,6 +144,191 @@ describe('classifierExtractionSchema', () => {
   })
 })
 
+// classifier.md → What the classifier writes: first profiles, and updates to listed rows.
+describe('classifierExtractionSchema — the writer map', () => {
+  it("parses a new character's and a new faction's first profile, every part optional", () => {
+    const parsed = classifierExtractionSchema.parse({
+      newCharacters: [
+        {
+          handle: 'new:mira',
+          name: 'Mira',
+          description: 'A ferrywoman.',
+          visual: { hair: 'salt-white braid', attire: 'oilskin coat' },
+          traits: ['wary'],
+          drives: ['keep the ferry running'],
+          voice: 'clipped, dry',
+        },
+        { handle: 'new:bren', name: 'Bren', description: 'A boy.' },
+      ],
+      newFactions: [
+        {
+          handle: 'new:circle',
+          name: 'The Iron Circle',
+          description: 'Smiths.',
+          standing: 'outlawed',
+          agenda: ['take the mines'],
+        },
+      ],
+    })
+    expect(parsed.newCharacters[0]).toMatchObject({
+      visual: { hair: 'salt-white braid', attire: 'oilskin coat' },
+      traits: ['wary'],
+      drives: ['keep the ferry running'],
+      voice: 'clipped, dry',
+    })
+    expect(parsed.newCharacters[1]).toEqual({
+      handle: 'new:bren',
+      name: 'Bren',
+      description: 'A boy.',
+      keywords: [],
+    })
+    expect(parsed.newFactions[0]).toMatchObject({
+      standing: 'outlawed',
+      agenda: ['take the mines'],
+    })
+  })
+
+  it("parses a happening's category and icon, and keeps an icon outside the catalog", () => {
+    const parsed = classifierExtractionSchema.parse({
+      happenings: [
+        { title: 'The ford ambush', category: 'battle', icon: 'swords' },
+        { title: 'A lamp lit', icon: 'lantern' },
+      ],
+    })
+    expect(parsed.happenings.map((h) => [h.category, h.icon])).toEqual([
+      ['battle', 'swords'],
+      [undefined, 'lantern'],
+    ])
+  })
+
+  // Free string: an off-catalog key still parses (the planner drops it); description lists keys.
+  it("lists the catalog's keys in the icon's description, on happenings and new threads", () => {
+    const expected =
+      'One of: sparkles, eye, handshake, door, swords, flame, mask, scroll, key, skull, crown, map, heart, shield, coins, book. Omit when none fits.'
+    expect(itemFields('happenings').icon?.description).toBe(expected)
+    expect(itemFields('newThreads').icon?.description).toBe(expected)
+  })
+
+  it('parses renames, placements and standings of listed rows', () => {
+    const parsed = classifierExtractionSchema.parse({
+      renames: [{ ref: 'c1', name: 'Mira', sourceTurn: 't2' }],
+      placements: [
+        { ref: 'l2', parent: 'l1', sourceTurn: 't1' },
+        { ref: 'l3', parent: 'top-level' },
+      ],
+      standings: [{ ref: 'f1', standing: 'at war with the crown', sourceTurn: 't3' }],
+    })
+    expect(parsed.renames).toEqual([{ ref: 'c1', name: 'Mira', sourceTurn: 't2' }])
+    expect(parsed.placements).toEqual([
+      { ref: 'l2', parent: 'l1', sourceTurn: 't1' },
+      { ref: 'l3', parent: 'top-level' },
+    ])
+    expect(parsed.standings).toEqual([
+      { ref: 'f1', standing: 'at war with the crown', sourceTurn: 't3' },
+    ])
+  })
+
+  // Required-vs-optional reaches the model as the prompt's TS block, so each key is pinned.
+  const REQUIRED_KEYS = {
+    renames: { item: { ref: 'c1', name: 'Mira' }, keys: ['ref', 'name'] },
+    placements: { item: { ref: 'l2', parent: 'l1' }, keys: ['ref', 'parent'] },
+    standings: { item: { ref: 'f1', standing: 'outlawed' }, keys: ['ref', 'standing'] },
+    newThreads: {
+      item: { title: 'Recover the relic', description: 'Stolen.', status: 'active' },
+      keys: ['title', 'description', 'status'],
+    },
+    threadStatuses: { item: { thread: 'th1', status: 'resolved' }, keys: ['thread', 'status'] },
+    knownAwareness: {
+      item: { happening: 'hp1', ref: 'c2', source: 'told by Jorin' },
+      keys: ['happening', 'ref', 'source'],
+    },
+  } as const
+
+  it.each(Object.entries(REQUIRED_KEYS))(
+    'takes a %s entry whole and refuses it missing any required key',
+    (list, { item, keys }) => {
+      expect(classifierExtractionSchema.safeParse({ [list]: [item] }).success, 'whole').toBe(true)
+      for (const key of keys) {
+        const { [key as keyof typeof item]: _dropped, ...rest } = item
+        expect(classifierExtractionSchema.safeParse({ [list]: [rest] }).success, key).toBe(false)
+      }
+    },
+  )
+
+  it("tells the model a placement's parent may be the top-level token", () => {
+    expect(itemFields('placements').parent?.description).toContain(
+      'or "top-level" for an unplaced place',
+    )
+  })
+
+  // classifier.md → Threads → What it emits: opened and closed in one window arrives already
+  // resolved or failed, since no later pass sees the closing turn.
+  it('takes a new thread in any of the four statuses, and a status change never to pending', () => {
+    const thread = { title: 'Recover the relic', description: 'Stolen at the ford.' }
+    expect(
+      classifierExtractionSchema
+        .parse({
+          newThreads: (['pending', 'active', 'resolved', 'failed'] as const).map((status) => ({
+            ...thread,
+            status,
+          })),
+        })
+        .newThreads.map((t) => t.status),
+    ).toEqual(['pending', 'active', 'resolved', 'failed'])
+    expect(
+      classifierExtractionSchema.parse({
+        newThreads: [{ ...thread, status: 'resolved', sourceTurn: 't1', resolvedAtTurn: 't4' }],
+      }).newThreads,
+    ).toEqual([{ ...thread, status: 'resolved', sourceTurn: 't1', resolvedAtTurn: 't4' }])
+    expect(
+      classifierExtractionSchema.safeParse({ newThreads: [{ ...thread, status: 'paused' }] })
+        .success,
+    ).toBe(false)
+    expect(
+      classifierExtractionSchema
+        .parse({
+          threadStatuses: [
+            { thread: 'th1', status: 'resolved' },
+            { thread: 'th2', status: 'failed' },
+            { thread: 'th3', status: 'active' },
+          ],
+        })
+        .threadStatuses.map((t) => t.status),
+    ).toEqual(['resolved', 'failed', 'active'])
+    expect(
+      classifierExtractionSchema.safeParse({
+        threadStatuses: [{ thread: 'th1', status: 'pending' }],
+      }).success,
+    ).toBe(false)
+  })
+
+  it('tells the model when a new thread may be resolved or failed, and which turn is which', () => {
+    const fields = itemFields('newThreads')
+    expect(fields.status?.description).toContain('only for a thread the turns both open and close')
+    expect(fields.resolvedAtTurn?.description).toContain('when the turns both open and close it')
+    expect(fields.resolvedAtTurn?.description).toContain('sourceTurn stays the turn that opened it')
+  })
+
+  // The schema block ends the system message, before the turns: "these turns" has no referent.
+  it.each([
+    ['classifierExtractionSchema', classifierExtractionSchema],
+    ['classifierExtractionWithPlacesSchema', classifierExtractionWithPlacesSchema],
+  ])('never says "these turns" in the %s block', (_name, schema) => {
+    expect(JSON.stringify(z.toJSONSchema(schema))).not.toMatch(/these turns/i)
+  })
+
+  it('parses awareness of a listed happening, defaulting its severity to 0', () => {
+    const parsed = classifierExtractionSchema.parse({
+      knownAwareness: [
+        { happening: 'hp1', ref: 'c2', source: 'told by Jorin', learnedAtTurn: 't2' },
+      ],
+    })
+    expect(parsed.knownAwareness).toEqual([
+      { happening: 'hp1', ref: 'c2', source: 'told by Jorin', severity: 0, learnedAtTurn: 't2' },
+    ])
+  })
+})
+
 describe('classifierExtractionWithPlacesSchema', () => {
   const place = { handle: 'new:varn', name: 'Varn', description: 'A salt town.', sourceTurn: 't1' }
 
@@ -144,6 +344,13 @@ describe('classifierExtractionWithPlacesSchema', () => {
       { ...place, handle: 'new:inn', parent: 'new:varn', keywords: ['the inn'] },
     ])
     expect(classifierExtractionWithPlacesSchema.parse({}).newPlaces).toEqual([])
+  })
+
+  it("parses a new place's condition", () => {
+    const parsed = classifierExtractionWithPlacesSchema.parse({
+      newPlaces: [{ ...place, condition: 'half flooded' }],
+    })
+    expect(parsed.newPlaces[0].condition).toBe('half flooded')
   })
 
   // The setting off sends the base schema, so a reply's places never reach the planner.

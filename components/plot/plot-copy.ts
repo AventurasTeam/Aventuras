@@ -7,9 +7,13 @@ import type { SelectOption } from '@/components/ui/select'
 import { PLOT_REJECTION, type ImportRejectionCode, type PlotSaveResult } from '@/lib/actions'
 import { t } from '@/lib/i18n'
 import type { PlotKind } from '@/lib/list-modules'
-import { isPlotIssue, type HappeningDraft, type PlotIssue, type ThreadDraft } from '@/lib/plot'
-
-import { PLOT_ICON_KEYS } from './plot-icon'
+import {
+  isPlotIssue,
+  PLOT_ICON_KEYS,
+  type HappeningDraft,
+  type PlotIssue,
+  type ThreadDraft,
+} from '@/lib/plot'
 
 /** A draft-schema issue message (a key) → its text; unknown messages pass through. */
 export function validationText(message: string): string {

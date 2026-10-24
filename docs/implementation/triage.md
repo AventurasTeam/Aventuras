@@ -938,3 +938,66 @@ slice-planning gate forces its resolution before that slice is planned.
   a failed fold that can't use its own place holds its drops back for
   the fallback.
   Raised 2026-10-23 by the AI writer map's Q19.
+
+- **An unattributed pass fact isn't always re-derivable.**
+  [`memory/classifier.md`](../memory/classifier.md)'s provenance list
+  says a fact that falls back to the window head "reverses on any
+  reversal into its window (re-derivable)". When its real source turn
+  sits below the reversal point, the watermark clamps to that point
+  minus one ([`data-model.md`](../data-model.md), the watermark
+  clamp), so the source turn is never re-read and the fact is lost.
+  Since the AI writer map, an unattributed thread a pass opens and
+  closes is one such fact. Raised 2026-10-23 by the AI writer map's
+  Task 20 review.
+
+- **`buildClassifierActions` has outgrown one function.**
+  `lib/classifier/plan.ts`'s planner runs about 900 lines; its thread
+  and awareness blocks share about ten of the planner's locals
+  (`anchor`, `proseSource`, `entryPosition`, `inTurnOrder`, `iconOf`,
+  the drop lists, `planned`), so a split wants a shared planner
+  context rather than more closures. Raised 2026-10-23 by the AI
+  writer map's Task 20 review.
+
+- **Two structured-call phases never report their retries.**
+  [`generation-pipeline.md → Two retry tiers`](../generation-pipeline.md#two-retry-tiers-both-at-phase-level)
+  says a phase yields a `recoverable_error` per retried attempt however
+  the call resolves. The periodic classifier pass now does; the per-turn
+  fallback classifier (`lib/pipeline/definitions/per-turn-piggyback.ts`,
+  where `generateClassifierState` also drops one call's list when it
+  re-rolls) and the suggestion refresh
+  (`lib/pipeline/definitions/suggestion-refresh.ts`) receive
+  `generateStructured`'s `recoverable` list and never yield it.
+  Pre-existing. Raised 2026-10-23 by the AI writer map's Task 21 review.
+
+- **A provider retry's log loses its reason.**
+  `lib/pipeline/runtime/orchestrator.ts` logs a `recoverable_error` with
+  `detail ?? kind`, so a provider retry without a detail logs
+  `"provider"` and drops its `reason` (`timeout` or `network`).
+  Pre-existing. Raised 2026-10-23 by the AI writer map's Task 21 review.
+
+- **A pass's rename can leave a collision flag with no namesake
+  basis.** `renameEntity` (`lib/actions/entities/state-patch-actions.ts`)
+  writes no flag columns, and
+  [`world.md`](../ui/screens/world/world.md)'s rule for keeping flags
+  consistent lists only user writes. A row flagged against a namesake
+  that a pass then renames to an unrelated name keeps its old name as a
+  keyword, but the namesake match is exact (`lib/world/namesakes.ts`),
+  so the pair stops being namesakes while World still shows the strip.
+  Reasoned from the code, not run. Raised 2026-10-24 by the AI writer
+  map's Task 22 review.
+
+- **A keyword write's undo restores the whole prior list.**
+  `appendEntityKeywords` and `renameEntity`
+  (`lib/actions/entities/state-patch-actions.ts`) store the row's
+  pre-write keywords as undo, so reversing a write that landed after
+  another turn's keyword write takes that turn's terms away too, and
+  the watermark clamp means that turn is never re-read
+  ([`classifier.md → Provenance attribution`](../memory/classifier.md#provenance-attribution)
+  says reversal spares facts about surviving turns). Within one reply
+  the planner now orders a row's renames, aliases and known or promoted
+  mention terms by turn, which closes the common case. The general fix
+  is an undo that removes only the terms its own write added. It would
+  also cover writes from different replies landing out of turn order,
+  and a reused place's keywords in the same reply (`planNewPlaces`
+  still appends those at the match, before the turn-ordered writes).
+  Raised 2026-10-24 by the AI writer map's branch review (Q25).

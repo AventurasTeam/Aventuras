@@ -565,8 +565,8 @@ function undoDelete(walk: UndoWalk, target: UndoTarget, liveLinks: LiveLinkFilte
   }
 }
 
-// A schema-backed column yields sub-field by sub-field, as its undo payload records them; a
-// place's parent and unplaced mark yield together.
+// A schema-backed column yields sub-field by sub-field, as its undo payload records them; the
+// column groups `wroteField` counts as one field yield together.
 function restorablePayload(
   entry: TableEntry,
   table: string,
@@ -577,7 +577,7 @@ function restorablePayload(
   for (const [col, partial] of Object.entries(payload)) {
     if (isPayloadMetaKey(col)) continue
     if (!Object.hasOwn(entry.columnSchemas, col)) {
-      if (!wroteColumn(userEdits, col)) restorable[col] = partial
+      if (!wroteField(userEdits, table, col, [])) restorable[col] = partial
       continue
     }
     const kept = pruneUndoPartial(entry.columnSchemas[col], partial, (path) =>

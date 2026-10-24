@@ -33,6 +33,12 @@ describe('E2E harness examples', () => {
       newCharacters: [],
       newFactions: [],
       memberships: [],
+      renames: [],
+      placements: [],
+      standings: [],
+      newThreads: [],
+      threadStatuses: [],
+      knownAwareness: [],
     })
     expect(EXAMPLES['periodic-classifier-places']).toEqual({
       happenings: [],
@@ -41,6 +47,12 @@ describe('E2E harness examples', () => {
       newCharacters: [],
       newFactions: [],
       memberships: [],
+      renames: [],
+      placements: [],
+      standings: [],
+      newThreads: [],
+      threadStatuses: [],
+      knownAwareness: [],
       newPlaces: [],
     })
   })

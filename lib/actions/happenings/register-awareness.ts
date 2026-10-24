@@ -7,8 +7,15 @@ import { happeningAwarenessStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
 import { missingRef, MISSING_REF } from '../delta/live-refs'
-import { register, type ActionHandler } from '../delta/registry'
-import { isUserOriginatedSource, type DeltaSource } from '../types'
+import { register, type ActionHandler, type HandlerOutcome } from '../delta/registry'
+import {
+  proseLogPosition,
+  USER_EDITED_SINCE_PROSE,
+  userDeletedAwarenessSince,
+  userEditsSinceProse,
+  wroteColumn,
+} from '../delta/user-precedence'
+import { isUserOriginatedSource, type DeltaSource, type ProseEntryId } from '../types'
 
 type AwarenessUpsertPayload = {
   branchId: string
@@ -19,6 +26,11 @@ type AwarenessUpsertPayload = {
   source?: string | null
   /** Honored only on a user-source create; an invalid value rejects the action regardless. */
   retrievalCount?: number
+  /**
+   * A pass's source entry (cadence.md → User edits and classifier writes): user writes after it
+   * stand. Absent or null checks nothing, as for a user write.
+   */
+  proseEntryId?: ProseEntryId
 }
 
 declare module '@/lib/actions/action-map' {
@@ -32,6 +44,12 @@ declare module '@/lib/actions/action-map' {
   }
 }
 
+const USER_WON: HandlerOutcome = {
+  status: 'rejected',
+  reason: USER_EDITED_SINCE_PROSE,
+  code: 'noop',
+}
+
 const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
   if (action.kind !== 'upsertHappeningAwareness')
     throw new Error(`handler/kind mismatch: ${action.kind}`)
@@ -43,6 +61,7 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
     decayResistance,
     source,
     retrievalCount,
+    proseEntryId,
   } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
@@ -105,6 +124,23 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
     }
     if (Object.keys(set).length === 0)
       return { status: 'rejected', reason: 'awareness unchanged', code: 'noop' }
+    // A field the user wrote after the prose keeps its value; a pair the user created since counts
+    // as written whole, since wroteColumn counts a create.
+    if (proseEntryId != null) {
+      const edits = await userEditsSinceProse(
+        ctx,
+        bid,
+        'happening_awareness',
+        current.id,
+        proseEntryId,
+      )
+      for (const field of Object.keys(set)) {
+        if (!wroteColumn(edits, field)) continue
+        delete set[field]
+        delete undoPayload[field]
+      }
+      if (Object.keys(set).length === 0) return USER_WON
+    }
     return {
       status: 'ok',
       targetTable: 'happening_awareness',
@@ -127,6 +163,17 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
     { table: 'entities', id: characterId },
   ] as const
   if (await missingRef(ctx, bid, refs, group)) return MISSING_REF
+  if (
+    proseEntryId != null &&
+    (await userDeletedAwarenessSince(
+      ctx,
+      bid,
+      characterId,
+      happeningId,
+      await proseLogPosition(ctx, bid, proseEntryId),
+    ))
+  )
+    return USER_WON
 
   const row: HappeningAwareness = {
     id: generateId('haw'),

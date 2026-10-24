@@ -180,6 +180,7 @@ test.describe('periodic classifier — real provider smoke', () => {
     const classifierStatus = async (): Promise<{
       state: string
       processedThrough: number | null
+      lastError: string | null
     }> =>
       JSON.parse(
         (
@@ -233,6 +234,36 @@ test.describe('periodic classifier — real provider smoke', () => {
         })
         .not.toBeNull()
 
+    // The pass's debug line (periodic-classifier.ts), as Playwright renders a console object.
+    const PASS_COMPLETED =
+      /^classifier\.pass_completed \{parseRetries: (\d+), providerRetries: (\d+), writes: (\d+)\}/
+    let logCursor = 0
+    // Passes never overlap, so console lines since the last settle are this pass's. The text has no
+    // run id: a failed pass's count is every recoverable_error line since, turn retries included.
+    const passRetries = async (outcome: string | null): Promise<string> => {
+      const from = logCursor
+      const completed = () =>
+        logs
+          .slice(from)
+          .map((l) => PASS_COMPLETED.exec(l.text))
+          .find((m) => m !== null)
+      if (outcome === 'completed')
+        await expect
+          .poll(() => completed() !== undefined, {
+            timeout: STATUS_SETTLE_MS,
+            message: 'the completed pass logged no classifier.pass_completed',
+          })
+          .toBe(true)
+      const counts = completed()
+      const retried = logs
+        .slice(from)
+        .filter((l) => l.text.startsWith('pipeline.recoverable_error')).length
+      logCursor = logs.length
+      return counts == null
+        ? `${retried} retried attempts`
+        : `${counts[1]} parse / ${counts[2]} provider retries, ${counts[3]} writes`
+    }
+
     let passCount = 0
     // Writes the pass's ### passes line as it settles, so a later throw keeps it. A null watermark
     // is one the spec couldn't attribute to this pass.
@@ -243,6 +274,7 @@ test.describe('periodic classifier — real provider smoke', () => {
       to: number | null,
     ): Promise<string | null> => {
       const [, , startedAt, finishedAt, outcome] = await runAt(rowid)
+      const settled = await classifierStatus()
       const entries =
         from === null || to === null
           ? '?'
@@ -251,10 +283,17 @@ test.describe('periodic classifier — real provider smoke', () => {
                WHERE branch_id = ? AND kind <> 'system' AND position > ? AND position <= ?`,
               [branchId, from, to],
             )
+      // A missing pass_completed line must not cost the pass its timing and watermark line.
+      const retries = await passRetries(outcome).catch(() => {
+        logCursor = logs.length
+        return 'retries: no pass_completed line'
+      })
       process.stdout.write(
         `pass ${++passCount} (${label}): ${outcome} after ` +
           `${(((finishedAt ?? startedAt) - startedAt) / 1000).toFixed(1)} s, ` +
-          `watermark ${from ?? '?'} -> ${to ?? '?'}, ${entries} entries classified\n`,
+          `watermark ${from ?? '?'} -> ${to ?? '?'}, ${entries} entries classified, ` +
+          `${retries}` +
+          `${outcome === 'failed' ? `, lastError: ${settled.lastError}` : ''}\n`,
       )
       return outcome
     }

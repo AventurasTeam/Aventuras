@@ -39,6 +39,7 @@ const entityRow = rowLock('entities')
 const relationships = rowLock('character_relationships')
 // Involvements, awareness and happenings share one per-branch key (row-locks.ts).
 const happeningLinks = rowLock('happening_involvements')
+const threadRow = rowLock('threads')
 // C3: an entity delete cascades both link families, so it holds their writers off too.
 const entityDelete = (p: { branchId: string; id: string }) => [
   entityRow(p),
@@ -64,6 +65,10 @@ const LOCK_KEY: { [K in ProductionKind]: LockKey<K> } = {
   appendEntityKeywords: entityRow,
   retireEntity: entityRow,
   setCharacterFaction: entityRow,
+  renameEntity: entityRow,
+  raiseCollisionFlag: entityRow,
+  setFactionStanding: entityRow,
+  returnFromRetirement: entityRow,
   placeLocation: entityRow,
   upsertCharacterRelationship: relationships,
   deleteCharacterRelationship: relationships,
@@ -71,8 +76,9 @@ const LOCK_KEY: { [K in ProductionKind]: LockKey<K> } = {
   updateLore: null,
   deleteLore: null,
   createThread: null,
-  updateThread: null,
-  deleteThread: null,
+  updateThread: threadRow,
+  deleteThread: threadRow,
+  setThreadStatus: threadRow,
   createHappening: null,
   updateHappening: null,
   deleteHappening: happeningLinks,

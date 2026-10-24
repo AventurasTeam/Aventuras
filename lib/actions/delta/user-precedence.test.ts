@@ -225,6 +225,57 @@ describe('wroteField', () => {
     expect(wroteField(markedTop, 'other_table', 'state', ['parent_location_id'])).toBe(false)
     expect(wroteField(moved, 'entities', 'description', ['parent_location_id'])).toBe(false)
   })
+
+  // data-model.md → Authorship contract: flag, partner and reason hold together (the table's CHECK).
+  it.each([['nameCollisionFlag'], ['nameCollisionPartnerId'], ['nameCollisionReason']])(
+    "reads a user write to any of a row's collision-flag columns as a write to %s",
+    (column) => {
+      const repointed = [update({ nameCollisionPartnerId: 'char_old' })]
+      const cleared = [update({ nameCollisionFlag: 1 })]
+      expect(wroteField(repointed, 'entities', column, [])).toBe(true)
+      expect(wroteField(cleared, 'entities', column, [])).toBe(true)
+      expect(wroteField([update({ description: 'x' })], 'entities', column, [])).toBe(false)
+    },
+  )
+
+  it('reads the flag columns together only on an entity', () => {
+    const cleared = [update({ nameCollisionFlag: 1 })]
+    expect(wroteField(cleared, 'other_table', 'nameCollisionReason', [])).toBe(false)
+  })
+
+  // classifier.md → Threads → The row: the entry ref says where a resolved or failed status ended.
+  it.each([['status'], ['resolvedAtEntryId']])(
+    "reads a user write to a thread's status or its entry ref as a write to %s",
+    (column) => {
+      const failed = [update({ status: 'active' })]
+      const reopened = [update({ resolvedAtEntryId: 'e_old' })]
+      expect(wroteField(failed, 'threads', column, [])).toBe(true)
+      expect(wroteField(reopened, 'threads', column, [])).toBe(true)
+      expect(wroteField([update({ title: 'x' })], 'threads', column, [])).toBe(false)
+    },
+  )
+
+  // data-model.md → Authorship contract: an entity's status and retired reason are one field row.
+  it.each([['status'], ['retiredReason']])(
+    "reads a user write to an entity's status or retired reason as a write to %s",
+    (column) => {
+      const revived = [update({ status: 'retired' })]
+      const reworded = [update({ retiredReason: 'drowned' })]
+      expect(wroteField(revived, 'entities', column, [])).toBe(true)
+      expect(wroteField(reworded, 'entities', column, [])).toBe(true)
+      expect(wroteField([update({ description: 'x' })], 'entities', column, [])).toBe(false)
+    },
+  )
+
+  it("reads an entity's status and retired reason together only on an entity", () => {
+    expect(wroteField([update({ retiredReason: 'drowned' })], 'threads', 'status', [])).toBe(false)
+  })
+
+  it("reads a thread's status and entry ref together only on a thread", () => {
+    const failed = [update({ status: 'active' })]
+    expect(wroteField(failed, 'entities', 'resolvedAtEntryId', [])).toBe(false)
+    expect(wroteField(failed, 'threads', 'triggeredAtEntryId', [])).toBe(false)
+  })
 })
 
 describe('userDeletedPairSince', () => {

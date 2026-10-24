@@ -9,6 +9,8 @@ export const PLACEHOLDER_FIELDS = [
   'parent',
   'character',
   'faction',
+  'happening',
+  'thread',
 ] as const
 
 /**

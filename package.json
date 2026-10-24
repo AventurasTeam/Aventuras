@@ -46,6 +46,7 @@
     "db:check:format": "tsx scripts/check-migrations-format.ts",
     "db:seed": "tsx scripts/seed/index.ts",
     "mock": "tsx scripts/mock-llm/index.ts",
+    "probe:classifier": "tsx scripts/classifier-parse-probe.ts",
     "db:studio:desktop": "drizzle-kit studio --config drizzle.studio.config.ts"
   },
   "dependencies": {

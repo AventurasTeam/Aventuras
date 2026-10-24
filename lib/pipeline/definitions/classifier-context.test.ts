@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import type { WindowTurn } from '@/lib/classifier'
-import type { CharacterRelationship, Entity } from '@/lib/db'
+import type { CharacterRelationship, Entity, Thread } from '@/lib/db'
 import { IdBiMap } from '@/lib/ids'
-import { VARIABLES } from '@/lib/prompts'
+import { renderTemplate, TEMPLATE_IDS, VARIABLES } from '@/lib/prompts'
 
 import { buildClassifierContext } from './classifier-context'
 
@@ -24,6 +24,7 @@ describe('buildClassifierContext', () => {
       entities: [],
       happenings: [],
       relationships: [],
+      threads: [],
       mentionedPlaces: false,
       idMap: new IdBiMap(),
     })
@@ -60,12 +61,13 @@ describe('buildClassifierContext', () => {
       ],
       happenings: [],
       relationships: [],
+      threads: [],
       mentionedPlaces: false,
       idMap: new IdBiMap(),
     })
     const [entity] = context.entities as Record<string, unknown>[]
     expect(Object.keys(entity).sort()).toEqual(
-      ['description', 'faction', 'id', 'keywords', 'kind', 'name', 'status'].sort(),
+      ['description', 'faction', 'id', 'keywords', 'kind', 'name', 'standing', 'status'].sort(),
     )
   })
 
@@ -89,6 +91,7 @@ describe('buildClassifierContext', () => {
         { id: 'hap_22222222-2222-2222-2222-222222222222', title: 'The ford ambush' } as never,
       ],
       relationships: [],
+      threads: [],
       mentionedPlaces: false,
       idMap,
     })
@@ -104,6 +107,7 @@ describe('buildClassifierContext', () => {
       entities: [],
       happenings: [],
       relationships: [],
+      threads: [],
       mentionedPlaces: false,
       idMap: new IdBiMap(),
     })
@@ -152,6 +156,7 @@ describe('buildClassifierContext', () => {
         relationship('rel_11111111-1111-1111-1111-111111111111', AEFRE, BAEL, 'sister', null),
         relationship('rel_22222222-2222-2222-2222-222222222222', CORA, DEZ, 'ally', 'rival'),
       ],
+      threads: [],
       mentionedPlaces: false,
       idMap: new IdBiMap(),
     })
@@ -171,6 +176,7 @@ describe('buildClassifierContext', () => {
       relationships: [
         relationship('rel_11111111-1111-1111-1111-111111111111', AEFRE, BAEL, 'sister', null),
       ],
+      threads: [],
       mentionedPlaces: false,
       idMap: new IdBiMap(),
     })
@@ -201,6 +207,7 @@ describe('buildClassifierContext', () => {
         entities: [character(AEFRE, 'Aefre'), character(BAEL, 'Bael'), location(FORD, 'The ford')],
         happenings: [],
         relationships: [],
+        threads: [],
         mentionedPlaces: false,
         idMap: new IdBiMap(),
       })
@@ -220,6 +227,7 @@ describe('buildClassifierContext', () => {
         entities: [character(AEFRE, 'Aefre')],
         happenings: [],
         relationships: [],
+        threads: [],
         mentionedPlaces: false,
         idMap,
       })
@@ -237,10 +245,53 @@ describe('buildClassifierContext', () => {
       entities: [{ ...character(AEFRE, 'Aefre'), keywords: ['the Grey Wolf'] } as Entity],
       happenings: [],
       relationships: [],
+      threads: [],
       mentionedPlaces: false,
       idMap: new IdBiMap(),
     })
     expect((context.entities as { keywords: string[] }[])[0].keywords).toEqual(['the Grey Wolf'])
+  })
+
+  // The line already shows the name, so "(also called: …)" leaves out a keyword equal to it under
+  // keyword-term normalization; a keyword that only contains the name still shows.
+  describe("a row's own name among its keywords", () => {
+    const KEEP = 'loc_11111111-1111-1111-1111-111111111111'
+    const build = (entities: Entity[]) =>
+      buildClassifierContext({
+        window: { turns: [] } as never,
+        entities,
+        happenings: [],
+        relationships: [],
+        threads: [],
+        mentionedPlaces: false,
+        idMap: new IdBiMap(),
+      })
+    const kael = {
+      ...character(AEFRE, 'Kael'),
+      keywords: [' KAEL ', "Kael's sister", 'the Grey Wolf'],
+    } as Entity
+    const keep = {
+      ...character(KEEP, 'Ashen Keep'),
+      kind: 'location',
+      state: { parent_location_id: null },
+      keywords: ['ashen keep'],
+    } as Entity
+
+    it('stays on the row and leaves the rendered line', () => {
+      const context = build([kael, keep])
+      expect((context.entities as { keywords: string[] }[])[0].keywords).toEqual([
+        "Kael's sister",
+        'the Grey Wolf',
+      ])
+      expect(kael.keywords).toEqual([' KAEL ', "Kael's sister", 'the Grey Wolf'])
+      const { user } = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+      expect(user).toContain(
+        "- [c1] Kael (character) (also called: Kael's sister, the Grey Wolf)\n",
+      )
+      // A place whose only keyword is its name loses the parenthetical, as with none at all.
+      expect(user).toContain('- [l1] Ashen Keep\n')
+      expect(keep.keywords).toEqual(['ashen keep'])
+    })
   })
 
   // classifier.md → Mentioned places: places leave Known entities for a tree that hides nothing.
@@ -270,6 +321,7 @@ describe('buildClassifierContext', () => {
         entities,
         happenings: [],
         relationships: [],
+        threads: [],
         mentionedPlaces,
         idMap,
       })
@@ -390,6 +442,7 @@ describe('buildClassifierContext', () => {
         ],
         happenings: [],
         relationships: [],
+        threads: [],
         mentionedPlaces: false,
         idMap,
       })
@@ -430,6 +483,7 @@ describe('buildClassifierContext — factions', () => {
       entities,
       happenings: [],
       relationships: [],
+      threads: [],
       mentionedPlaces: false,
       idMap,
     }).entities as { id: string; faction: string | null }[]
@@ -471,6 +525,7 @@ describe('buildClassifierContext — factions', () => {
       ],
       happenings: [],
       relationships: [],
+      threads: [],
       mentionedPlaces: false,
       idMap: new IdBiMap(),
     }).entities as Record<string, unknown>[]
@@ -479,5 +534,96 @@ describe('buildClassifierContext — factions', () => {
       description: 'A courier. Hunted.',
       keywords: ['the wolf'],
     })
+  })
+})
+
+// classifier.md → Factions → What the pass sees: each faction with its standing.
+describe('buildClassifierContext — standing', () => {
+  const CIRCLE = 'fact_33333333-3333-3333-3333-333333333333'
+  const KAEL = 'char_11111111-1111-1111-1111-111111111111'
+  const row = (id: string, kind: Entity['kind'], state: unknown) =>
+    ({
+      id,
+      kind,
+      name: id,
+      description: null,
+      status: 'active',
+      keywords: [],
+      state,
+    }) as unknown as Entity
+  const standingOf = (entity: Entity) =>
+    (
+      buildClassifierContext({
+        window: { turns: [] } as never,
+        entities: [entity],
+        happenings: [],
+        relationships: [],
+        threads: [],
+        mentionedPlaces: false,
+        idMap: new IdBiMap(),
+      }).entities as { standing: string | null }[]
+    )[0].standing
+
+  it("carries a faction's standing on one line", () => {
+    expect(standingOf(row(CIRCLE, 'faction', { standing: 'at war\n  with the crown' }))).toBe(
+      'at war with the crown',
+    )
+  })
+
+  it.each([
+    ['a blank standing', row(CIRCLE, 'faction', { standing: '  ' })],
+    ['no standing', row(CIRCLE, 'faction', { agenda: [] })],
+    ['a null state', row(CIRCLE, 'faction', null)],
+    ['another kind, whatever its state holds', row(KAEL, 'character', { standing: 'leaked' })],
+  ])('carries none for %s', (_label, entity) => {
+    expect(standingOf(entity)).toBeNull()
+  })
+})
+
+// classifier.md → Threads → What the pass sees: every thread by id, title and status.
+describe('buildClassifierContext — threads', () => {
+  const RELIC = 'thr_11111111-1111-1111-1111-111111111111'
+  const HEIR = 'thr_22222222-2222-2222-2222-222222222222'
+  const thread = (id: string, title: string, over: Partial<Thread> = {}): Thread => ({
+    id,
+    branchId: 'b1',
+    title,
+    description: 'Long prose the pass never reads.',
+    category: 'quest',
+    icon: 'key',
+    status: 'active',
+    injectionMode: 'auto',
+    triggeredAtEntryId: null,
+    resolvedAtEntryId: null,
+    embeddingStale: 0,
+    createdAt: 1,
+    updatedAt: 1,
+    ...over,
+  })
+
+  it("lists every thread by placeholder, title and status, the user's included", () => {
+    const idMap = new IdBiMap()
+    const context = buildClassifierContext({
+      window: { turns: [] } as never,
+      entities: [],
+      happenings: [],
+      relationships: [],
+      threads: [
+        thread(RELIC, 'Recover\n  the relic', {
+          triggeredAtEntryId: 'entry_1',
+          resolvedAtEntryId: 'entry_2',
+          status: 'resolved',
+        }),
+        thread(HEIR, 'Find the heir', { status: 'pending' }),
+      ],
+      mentionedPlaces: false,
+      idMap,
+    })
+    // No entry refs: entry_* is not substitutable, so they would reach the prompt raw.
+    expect(context.threads).toEqual([
+      { id: 'th1', title: 'Recover the relic', status: 'resolved' },
+      { id: 'th2', title: 'Find the heir', status: 'pending' },
+    ])
+    expect(idMap.getUuidFor('th2')).toBe(HEIR)
   })
 })

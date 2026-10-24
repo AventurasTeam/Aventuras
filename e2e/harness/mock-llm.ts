@@ -46,6 +46,12 @@ export const EXAMPLES: Record<string, unknown> = {
     newCharacters: [],
     newFactions: [],
     memberships: [],
+    renames: [],
+    placements: [],
+    standings: [],
+    newThreads: [],
+    threadStatuses: [],
+    knownAwareness: [],
   },
   // The same agent with the story's classifierMentionedPlaces on: the schema grows `newPlaces`,
   // so the injected TS block no longer matches the base entry. Inert for the same reason.
@@ -56,6 +62,12 @@ export const EXAMPLES: Record<string, unknown> = {
     newCharacters: [],
     newFactions: [],
     memberships: [],
+    renames: [],
+    placements: [],
+    standings: [],
+    newThreads: [],
+    threadStatuses: [],
+    knownAwareness: [],
     newPlaces: [],
   },
   // Same logical agent as per-turn-classifier, second reply shape: the
@@ -200,6 +212,11 @@ function promptText(body: Record<string, unknown>): string {
       return ''
     })
     .join('\n')
+}
+
+/** A recorded request's prompt as the mock matched it: every message's text, in order. */
+export function promptOf(request: MockRequest): string {
+  return promptText(request.body)
 }
 
 function readBody(req: IncomingMessage): Promise<string> {

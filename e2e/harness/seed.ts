@@ -370,6 +370,32 @@ export function seedUnplacedPlace(dbPath: string, branchId: string, name: string
   return id
 }
 
+/**
+ * Retire a seeded character before launch, as a fixture row rather than a user edit: no delta
+ * records it, so no write a pass makes later is weighed against it. The fixture retires nobody.
+ */
+export function retireSeededCharacter(
+  dbPath: string,
+  branchId: string,
+  name: string,
+  reason: string,
+): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    db.exec('PRAGMA busy_timeout = 10000')
+    const { changes } = db
+      .prepare(
+        `UPDATE entities SET status = 'retired', retired_reason = ?
+         WHERE branch_id = ? AND kind = 'character' AND name = ?`,
+      )
+      .run(reason, branchId, name)
+    if (Number(changes) !== 1)
+      throw new Error(`expected one character named ${name} on ${branchId}, retired ${changes}`)
+  } finally {
+    db.close()
+  }
+}
+
 /** Strip the `classifier` agent assignment so the pass fails pre-flight. Runs before launch. */
 export function unassignClassifierAgent(dbPath: string): void {
   const db = new DatabaseSync(dbPath)

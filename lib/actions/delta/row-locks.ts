@@ -7,9 +7,9 @@ export type RowLockKey = string & { readonly __brand: 'RowLockKey' }
 
 const mint = (key: string) => key as RowLockKey
 
-// Entities lock per row; relationships and happening links per branch, since a delete names a
-// row id, not a pair or a happening. A happening's own row shares the links key so its delete's
-// child read and commit can't straddle a link write (C3).
+// Entities and threads lock per row; relationships and happening links per branch, since a delete
+// names a row id, not a pair or a happening. A happening's own row shares the links key so its
+// delete's child read and commit can't straddle a link write (C3).
 const happeningLinks = (row: Pick<RowRef, 'branchId'>) => mint(`happening_links:${row.branchId}`)
 
 const LOCK_BY_TABLE = {
@@ -19,6 +19,7 @@ const LOCK_BY_TABLE = {
   happenings: happeningLinks,
   happening_involvements: happeningLinks,
   happening_awareness: happeningLinks,
+  threads: (row: RowRef) => mint(`threads:${row.branchId}:${row.id}`),
 }
 
 export type LockedTable = keyof typeof LOCK_BY_TABLE

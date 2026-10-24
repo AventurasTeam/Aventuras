@@ -47,10 +47,14 @@ const signal = new AbortController().signal
 // A generate seam returning a fixed raw model reply — the cast sidesteps the
 // generic signature of the real generateStructured.
 function okGenerate(value: unknown): WizardAssistDeps['generate'] {
-  return (async () => ({ status: 'ok', value })) as WizardAssistDeps['generate']
+  return (async () => ({ status: 'ok', recoverable: [], value })) as WizardAssistDeps['generate']
 }
 function failGenerate(detail: string): WizardAssistDeps['generate'] {
-  return (async () => ({ status: 'failed', detail })) as WizardAssistDeps['generate']
+  return (async () => ({
+    status: 'failed',
+    recoverable: [],
+    detail,
+  })) as WizardAssistDeps['generate']
 }
 function deps(value: unknown): WizardAssistDeps {
   return { resolveConfig: () => CONFIGURED, generate: okGenerate(value) }
@@ -73,6 +77,7 @@ function echoGenerate(
     const active = wizardStore.getWizard().state.cast.filter((r) => r.status === 'active')
     return {
       status: 'ok',
+      recoverable: [],
       value: reply(Object.fromEntries(active.map((row, i) => [row.id, rendered[i]]))),
     }
   }) as WizardAssistDeps['generate']
@@ -183,7 +188,7 @@ describe('runOpeningAssist', () => {
       resolveConfig: () => CONFIGURED,
       generate: failGenerate('boom'),
     })
-    expect(res).toEqual({ status: 'failed', detail: 'boom' })
+    expect(res).toEqual({ status: 'failed', recoverable: [], detail: 'boom' })
   })
 })
 
@@ -209,11 +214,11 @@ describe('runLoreAssist', () => {
     const lore = [{ title: 'The Old Empire', body: 'Fell.', category: 'history' }]
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
       capturedPrompt = prompt.user
-      return { status: 'ok', value: { lore } }
+      return { status: 'ok', recoverable: [], value: { lore } }
     }) as WizardAssistDeps['generate']
 
     const res = await runLoreAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
-    expect(res).toEqual({ status: 'ok', value: { lore } })
+    expect(res).toEqual({ status: 'ok', recoverable: [], value: { lore } })
     expect(capturedPrompt).toContain("Suggest five reference entries for this story's world")
     // Nothing on screen yet, so the exclusion block must not render at all.
     expect(capturedPrompt).not.toContain('Already written')
@@ -223,7 +228,7 @@ describe('runLoreAssist', () => {
     let capturedPrompt = ''
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
       capturedPrompt = prompt.user
-      return { status: 'ok', value: { lore: [] } }
+      return { status: 'ok', recoverable: [], value: { lore: [] } }
     }) as WizardAssistDeps['generate']
 
     await runLoreAssist('', signal, { resolveConfig: () => CONFIGURED, generate }, [
@@ -252,11 +257,11 @@ describe('runCastAssist', () => {
     ) => {
       capturedPrompt = prompt.user
       capturedSignal = sig as AbortSignal
-      return { status: 'ok', value: { entities } }
+      return { status: 'ok', recoverable: [], value: { entities } }
     }) as WizardAssistDeps['generate']
 
     const res = await runCastAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
-    expect(res).toEqual({ status: 'ok', value: { entities } })
+    expect(res).toEqual({ status: 'ok', recoverable: [], value: { entities } })
     expect(capturedPrompt).toContain('Suggest five cast entries')
     // Nothing on screen yet, so the exclusion block must not render at all.
     expect(capturedPrompt).not.toContain('Already in the cast')
@@ -272,7 +277,7 @@ describe('runCastAssist', () => {
     wizardStore.patchCast(row, { name: 'Rook' })
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
       capturedPrompt = prompt.user
-      return { status: 'ok', value: { entities: [] } }
+      return { status: 'ok', recoverable: [], value: { entities: [] } }
     }) as WizardAssistDeps['generate']
 
     await runCastAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
@@ -284,7 +289,7 @@ describe('runCastAssist', () => {
     let capturedPrompt = ''
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
       capturedPrompt = prompt.user
-      return { status: 'ok', value: { entities: [] } }
+      return { status: 'ok', recoverable: [], value: { entities: [] } }
     }) as WizardAssistDeps['generate']
 
     const res = await runCastAssist(
@@ -309,6 +314,7 @@ describe('refineOpeningAssist', () => {
       capturedPrompt = prompt.user
       return {
         status: 'ok',
+        recoverable: [],
         value: { prose: 'Revised.', sceneEntities: [], currentLocationId: null, worldTime: 0 },
       }
     }) as WizardAssistDeps['generate']
@@ -332,7 +338,7 @@ describe('refineDescriptionAssist', () => {
     let capturedPrompt = ''
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
       capturedPrompt = prompt.user
-      return { status: 'ok', value: { description: 'A darker tale.' } }
+      return { status: 'ok', recoverable: [], value: { description: 'A darker tale.' } }
     }) as WizardAssistDeps['generate']
 
     const res = await refineDescriptionAssist(
@@ -355,11 +361,11 @@ describe('runGenreAssist', () => {
     const value = { label: 'Hard sci-fi', promptBody: 'Rigorous futures.' }
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
       capturedPrompt = prompt.user
-      return { status: 'ok', value }
+      return { status: 'ok', recoverable: [], value }
     }) as WizardAssistDeps['generate']
 
     const res = await runGenreAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
-    expect(res).toEqual({ status: 'ok', value })
+    expect(res).toEqual({ status: 'ok', recoverable: [], value })
     expect(capturedPrompt).toContain('Suggest a genre for this story')
   })
 
@@ -368,7 +374,11 @@ describe('runGenreAssist', () => {
     let captured: PromptHalves | undefined
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
       captured = prompt
-      return { status: 'ok', value: { label: 'Hard sci-fi', promptBody: 'Rigorous futures.' } }
+      return {
+        status: 'ok',
+        recoverable: [],
+        value: { label: 'Hard sci-fi', promptBody: 'Rigorous futures.' },
+      }
     }) as WizardAssistDeps['generate']
 
     await runGenreAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
@@ -382,7 +392,11 @@ describe('runGenreAssist', () => {
     let args: unknown[] = []
     const generate: WizardAssistDeps['generate'] = (async (...received: unknown[]) => {
       args = received
-      return { status: 'ok', value: { label: 'Hard sci-fi', promptBody: 'Rigorous futures.' } }
+      return {
+        status: 'ok',
+        recoverable: [],
+        value: { label: 'Hard sci-fi', promptBody: 'Rigorous futures.' },
+      }
     }) as WizardAssistDeps['generate']
 
     await runGenreAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
@@ -400,11 +414,11 @@ describe('runToneAssist', () => {
     const value = { label: 'Grim and unsparing', promptBody: 'Consequences land and stay.' }
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
       capturedPrompt = prompt.user
-      return { status: 'ok', value }
+      return { status: 'ok', recoverable: [], value }
     }) as WizardAssistDeps['generate']
 
     const res = await runToneAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
-    expect(res).toEqual({ status: 'ok', value })
+    expect(res).toEqual({ status: 'ok', recoverable: [], value })
     expect(capturedPrompt).toContain('Suggest a tone for this story')
   })
 })
@@ -417,11 +431,11 @@ describe('runSettingAssist', () => {
     const value = { setting: 'A drowned coast, centuries after the flood.' }
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
       capturedPrompt = prompt.user
-      return { status: 'ok', value }
+      return { status: 'ok', recoverable: [], value }
     }) as WizardAssistDeps['generate']
 
     const res = await runSettingAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
-    expect(res).toEqual({ status: 'ok', value })
+    expect(res).toEqual({ status: 'ok', recoverable: [], value })
     expect(capturedPrompt).toContain('Suggest a setting for this story')
   })
 })
@@ -433,7 +447,11 @@ describe('refineGenreAssist', () => {
     let capturedPrompt = ''
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
       capturedPrompt = prompt.user
-      return { status: 'ok', value: { label: 'Grimdark sci-fi', promptBody: 'Even darker.' } }
+      return {
+        status: 'ok',
+        recoverable: [],
+        value: { label: 'Grimdark sci-fi', promptBody: 'Even darker.' },
+      }
     }) as WizardAssistDeps['generate']
 
     const res = await refineGenreAssist(
@@ -465,7 +483,11 @@ describe('refineToneAssist', () => {
     let capturedPrompt = ''
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
       capturedPrompt = prompt.user
-      return { status: 'ok', value: { label: 'Bleaker', promptBody: 'No mercy at all.' } }
+      return {
+        status: 'ok',
+        recoverable: [],
+        value: { label: 'Bleaker', promptBody: 'No mercy at all.' },
+      }
     }) as WizardAssistDeps['generate']
 
     const res = await refineToneAssist(
@@ -494,7 +516,11 @@ describe('refineSettingAssist', () => {
     let capturedPrompt = ''
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
       capturedPrompt = prompt.user
-      return { status: 'ok', value: { setting: 'A drowned coast, now storm-wracked.' } }
+      return {
+        status: 'ok',
+        recoverable: [],
+        value: { setting: 'A drowned coast, now storm-wracked.' },
+      }
     }) as WizardAssistDeps['generate']
 
     const res = await refineSettingAssist(

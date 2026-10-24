@@ -1516,7 +1516,11 @@ write left in the log targets a row that is gone. The prune passes
 over deletes: the pair's own delete is already pruned as its holder,
 and a delete that captured it still holds other rows. CTRL-Z and redo
 refuse such a reversal instead (below). Restoring column by column
-assumes no other constraint spans a row's columns:
+assumes no other constraint spans a row's columns. The collision flag's
+three columns (flag, partner and reason) are the exception: they are
+restored and kept as one field, as are a place's parent and its
+unplaced mark, an entity's status and its `retired_reason`, and a
+thread's status and its `resolved_at_entry_id`.
 `happenings_mutual_excl` would break if a machine write ever updated a
 happening.
 

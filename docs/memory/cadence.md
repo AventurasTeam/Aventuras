@@ -254,9 +254,11 @@ rows, threads and lore:
   check is per field: the undo payload holds only the fields an update
   changed, so an edit to a character's traits does not shield its
   faction.
-- A status the user wrote after the prose stands: promotion and
-  retirement no-op. The scene editor's staged-to-active promotion of an
-  entity it brings into the scene is a user status write too.
+- A status the user wrote after the prose stands: promotion,
+  retirement and a return no-op. A status and its `retired_reason`
+  are one field, so an edit to the reason alone counts. The scene
+  editor's staged-to-active promotion of an entity it brings into the
+  scene is a user status write too.
 - An alias the user removed after the prose stays removed. The same
   write's other new aliases still land.
 - A faction the user set or cleared after the prose stands: the

@@ -220,7 +220,76 @@ describe('generateStructured', () => {
       STRUCTURED_CFG,
       new AbortController().signal,
     )
-    expect(res).toEqual({ status: 'ok', value: { description: 'A tale.' } })
+    expect(res).toEqual({ status: 'ok', value: { description: 'A tale.' }, recoverable: [] })
+  })
+
+  // generation-pipeline.md → Two retry tiers: every arm carries the attempts it retried.
+  it('returns the parse retry it recovered from beside the value', async () => {
+    vi.mocked(runProviderCall)
+      .mockResolvedValueOnce({ text: 'not json <<<' } as never)
+      .mockResolvedValueOnce({ text: '{"description":"A tale."}' } as never)
+    const res = await generateStructured(
+      'wizard-assist',
+      PROMPT,
+      schema,
+      STRUCTURED_CFG,
+      new AbortController().signal,
+    )
+    expect(res).toEqual({
+      status: 'ok',
+      value: { description: 'A tale.' },
+      recoverable: [{ tier: 'parse', detail: expect.any(String), attempt: 0 }],
+    })
+  })
+
+  it('returns the attempts it retried before failing', async () => {
+    vi.mocked(runProviderCall).mockResolvedValue({ text: 'not json <<<' } as never)
+    const res = await generateStructured(
+      'wizard-assist',
+      PROMPT,
+      schema,
+      STRUCTURED_CFG,
+      new AbortController().signal,
+    )
+    expect(res).toEqual({
+      status: 'failed',
+      detail: expect.any(String),
+      recoverable: [{ tier: 'parse', detail: expect.any(String), attempt: 0 }],
+    })
+  })
+
+  it('returns an aborted call with the attempts it retried, none before its first', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const res = await generateStructured(
+      'wizard-assist',
+      PROMPT,
+      schema,
+      STRUCTURED_CFG,
+      controller.signal,
+    )
+    expect(res).toEqual({ status: 'aborted', recoverable: [] })
+  })
+
+  it('returns the parse retry a call recovered from before it was aborted mid-flight', async () => {
+    const controller = new AbortController()
+    vi.mocked(runProviderCall)
+      .mockResolvedValueOnce({ text: 'not json <<<' } as never)
+      .mockImplementationOnce(async () => {
+        controller.abort()
+        throw new Error('aborted')
+      })
+    const res = await generateStructured(
+      'wizard-assist',
+      PROMPT,
+      schema,
+      STRUCTURED_CFG,
+      controller.signal,
+    )
+    expect(res).toEqual({
+      status: 'aborted',
+      recoverable: [{ tier: 'parse', detail: expect.any(String), attempt: 0 }],
+    })
   })
 
   async function sentProviderCall(prompt: PromptHalves) {
@@ -304,7 +373,7 @@ describe('generateStructured', () => {
       STRUCTURED_CFG,
       new AbortController().signal,
     )
-    expect(res.status).toBe('failed')
+    expect(res).toEqual({ status: 'failed', detail: expect.any(String), recoverable: [] })
   })
 })
 

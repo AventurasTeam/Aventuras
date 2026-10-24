@@ -23,13 +23,14 @@ import { View } from 'react-native'
 
 import { Icon } from '@/components/ui/icon'
 import type { PlotKind } from '@/lib/list-modules'
+import { isPlotIconKey, type PlotIconKey } from '@/lib/plot'
 import { cn } from '@/lib/utils'
 
 /**
- * The preset catalog `threads.icon` / `happenings.icon` key into (data-model.md → threads):
- * stable strings, not Lucide names; unknown keys fall back per kind and survive a save.
+ * The glyph for each catalog key (`lib/plot`'s `PLOT_ICON_KEYS`); unknown keys fall back per kind
+ * and survive a save. Keyed by `PlotIconKey`, so a key on one side only fails to compile.
  */
-export const PLOT_ICONS: Readonly<Record<string, LucideIcon>> = {
+export const PLOT_ICONS: Readonly<Record<PlotIconKey, LucideIcon>> = {
   sparkles: Sparkles,
   eye: Eye,
   handshake: Handshake,
@@ -48,14 +49,11 @@ export const PLOT_ICONS: Readonly<Record<string, LucideIcon>> = {
   book: BookOpen,
 }
 
-export const PLOT_ICON_KEYS: readonly string[] = Object.keys(PLOT_ICONS)
-
 // detail-pane.tsx names ◇ for threads; Zap keeps happenings distinct from the CK ⊙ marker.
 const FALLBACK: Record<PlotKind, LucideIcon> = { thread: Diamond, happening: Zap }
 
 export function plotIconGlyph(kind: PlotKind, icon: string | null | undefined): LucideIcon {
-  // Own keys only: a stored key such as `constructor` must fall back, not resolve to Object's.
-  return icon != null && Object.hasOwn(PLOT_ICONS, icon) ? PLOT_ICONS[icon] : FALLBACK[kind]
+  return icon != null && isPlotIconKey(icon) ? PLOT_ICONS[icon] : FALLBACK[kind]
 }
 
 type PlotIconProps = { kind: PlotKind; icon: string | null | undefined; className?: string }

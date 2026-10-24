@@ -11,7 +11,10 @@ import { registerHappenings } from './register-happenings'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
+import { USER_EDITED_SINCE_PROSE } from '../delta/user-precedence'
 import { registerEntities } from '../entities/register'
+import { registerStoryEntries } from '../story-entries/register'
+import type { DeltaSource, PipelineAction } from '../types'
 
 const BRANCH = 'br_1'
 const OTHER_BRANCH = 'br_2'
@@ -734,4 +737,213 @@ describe('upsertHappeningAwareness retrievalCount', () => {
       expect(await db.select().from(deltas)).toEqual([])
     },
   )
+})
+
+// cadence.md → User edits and classifier writes: what the user wrote after the prose stands.
+describe('upsertHappeningAwareness under user precedence', () => {
+  const PROSE = 'e_prose'
+  const userWon = { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
+
+  async function setupWithProse(rows: HappeningAwareness[] = []) {
+    const harness = await setup(rows)
+    registerStoryEntries()
+    await harness.db.insert(entities).values({
+      id: 'char_b',
+      branchId: BRANCH,
+      kind: 'character',
+      name: 'Bren',
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await harness.db
+      .insert(happenings)
+      .values({ id: 'hap_2', branchId: BRANCH, title: 'The flood', createdAt: 1, updatedAt: 1 })
+    return harness
+  }
+  type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
+  const run = (ctx: Ctx, action: PipelineAction, actionId: string) =>
+    applyDeltaAction({ action, actionId, branchId: BRANCH }, ctx)
+  const writeProse = (ctx: Ctx) =>
+    run(
+      ctx,
+      {
+        kind: 'createStoryEntry',
+        source: 'ai_classifier',
+        payload: {
+          entry: {
+            id: PROSE,
+            branchId: BRANCH,
+            position: 1,
+            kind: 'ai_reply',
+            content: 'Jorin tells Aria about the fire.',
+            createdAt: 1,
+          },
+        },
+      },
+      'act_prose',
+    )
+  const upsert = (
+    source: DeltaSource,
+    fields: { source?: string; decayResistance?: number; proseEntryId?: string | null },
+    characterId = 'char_a',
+  ): PipelineAction => ({
+    kind: 'upsertHappeningAwareness',
+    source,
+    payload: { branchId: BRANCH, characterId, happeningId: 'hap_1', ...fields },
+  })
+  const passLearns = (characterId = 'char_a') =>
+    upsert(
+      'periodic_classifier',
+      { source: 'told by Jorin', decayResistance: 0.8, proseEntryId: PROSE },
+      characterId,
+    )
+  // A pass wrote it before the prose: no user delta stands on it.
+  const PASS_ROW: HappeningAwareness = {
+    id: 'haw_1',
+    branchId: BRANCH,
+    happeningId: 'hap_1',
+    characterId: 'char_a',
+    learnedAtEntryId: null,
+    decayResistance: 0.2,
+    retrievalCount: 0,
+    source: 'overheard',
+  }
+  const pair = async (db: Awaited<ReturnType<typeof setup>>['db'], characterId = 'char_a') =>
+    (await awarenessRows(db, characterId, 'hap_1'))[0]
+
+  it('merges into a pair the user left alone since the prose', async () => {
+    const { db, ctx } = await setupWithProse([PASS_ROW])
+    await writeProse(ctx)
+    expect((await run(ctx, passLearns(), 'act_p')).status).toBe('ok')
+    expect(await pair(db)).toMatchObject({ source: 'told by Jorin', decayResistance: 0.8 })
+  })
+
+  it('keeps a source the user wrote after the prose, and merges the severity', async () => {
+    const { db, ctx } = await setupWithProse([PASS_ROW])
+    await writeProse(ctx)
+    await run(ctx, upsert('user_edit', { source: 'saw the smoke' }), 'act_u')
+    expect((await run(ctx, passLearns(), 'act_p')).status).toBe('ok')
+    expect(await pair(db)).toMatchObject({ source: 'saw the smoke', decayResistance: 0.8 })
+    const [logged] = await db.select().from(deltas).where(eq(deltas.actionId, 'act_p'))
+    expect(logged.undoPayload).toEqual({ decayResistance: 0.2 })
+  })
+
+  it('keeps a severity the user wrote after the prose, and merges the source', async () => {
+    const { db, ctx } = await setupWithProse([PASS_ROW])
+    await writeProse(ctx)
+    await run(ctx, upsert('user_edit', { decayResistance: 0.5 }), 'act_u')
+    expect((await run(ctx, passLearns(), 'act_p')).status).toBe('ok')
+    expect(await pair(db)).toMatchObject({ source: 'told by Jorin', decayResistance: 0.5 })
+  })
+
+  it('no-ops when the user wrote both fields after the prose', async () => {
+    const { db, ctx } = await setupWithProse([PASS_ROW])
+    await writeProse(ctx)
+    await run(ctx, upsert('user_edit', { source: 'saw the smoke', decayResistance: 0.5 }), 'act_u')
+    expect(await run(ctx, passLearns(), 'act_p')).toEqual(userWon)
+    expect(await pair(db)).toMatchObject({ source: 'saw the smoke', decayResistance: 0.5 })
+    expect(await db.select().from(deltas).where(eq(deltas.actionId, 'act_p'))).toEqual([])
+  })
+
+  it('merges over fields the user wrote before the prose', async () => {
+    const { db, ctx } = await setupWithProse([PASS_ROW])
+    await run(ctx, upsert('user_edit', { source: 'saw the smoke', decayResistance: 0.5 }), 'act_u')
+    await writeProse(ctx)
+    expect((await run(ctx, passLearns(), 'act_p')).status).toBe('ok')
+    expect(await pair(db)).toMatchObject({ source: 'told by Jorin', decayResistance: 0.8 })
+  })
+
+  it('never writes into a pair the user created after the prose', async () => {
+    const { db, ctx } = await setupWithProse()
+    await writeProse(ctx)
+    await run(ctx, upsert('user_edit', { source: 'saw the smoke' }), 'act_u')
+    expect(await run(ctx, passLearns(), 'act_p')).toEqual(userWon)
+    expect(await pair(db)).toMatchObject({ source: 'saw the smoke', decayResistance: null })
+  })
+
+  it('leaves a pair the user deleted after the prose deleted', async () => {
+    const { db, ctx } = await setupWithProse([PASS_ROW])
+    await writeProse(ctx)
+    await run(
+      ctx,
+      {
+        kind: 'deleteHappeningAwareness',
+        source: 'user_edit',
+        payload: { branchId: BRANCH, id: 'haw_1' },
+      },
+      'act_d',
+    )
+    expect(await run(ctx, passLearns(), 'act_p')).toEqual(userWon)
+    expect(await awarenessRows(db, 'char_a', 'hap_1')).toEqual([])
+  })
+
+  it('re-creates a pair the user deleted before the prose', async () => {
+    const { db, ctx } = await setupWithProse([PASS_ROW])
+    await run(
+      ctx,
+      {
+        kind: 'deleteHappeningAwareness',
+        source: 'user_edit',
+        payload: { branchId: BRANCH, id: 'haw_1' },
+      },
+      'act_d',
+    )
+    await writeProse(ctx)
+    expect((await run(ctx, passLearns(), 'act_p')).status).toBe('ok')
+    expect(await pair(db)).toMatchObject({ source: 'told by Jorin', decayResistance: 0.8 })
+  })
+
+  it("creates a pair when the user deleted another character's", async () => {
+    const { db, ctx } = await setupWithProse([PASS_ROW])
+    await writeProse(ctx)
+    await run(
+      ctx,
+      {
+        kind: 'deleteHappeningAwareness',
+        source: 'user_edit',
+        payload: { branchId: BRANCH, id: 'haw_1' },
+      },
+      'act_d',
+    )
+    expect((await run(ctx, passLearns('char_b'), 'act_p')).status).toBe('ok')
+    expect(await pair(db, 'char_b')).toMatchObject({ source: 'told by Jorin' })
+  })
+
+  it("creates a pair when the user deleted the character's pair for another happening", async () => {
+    const { db, ctx } = await setupWithProse()
+    const otherPair: HappeningAwareness = { ...PASS_ROW, id: 'haw_2', happeningId: 'hap_2' }
+    await db.insert(happeningAwareness).values(otherPair)
+    happeningAwarenessStore.hydrate(BRANCH, [otherPair])
+    await writeProse(ctx)
+    await run(
+      ctx,
+      {
+        kind: 'deleteHappeningAwareness',
+        source: 'user_edit',
+        payload: { branchId: BRANCH, id: 'haw_2' },
+      },
+      'act_d',
+    )
+    expect((await run(ctx, passLearns(), 'act_p')).status).toBe('ok')
+    expect(await pair(db)).toMatchObject({ source: 'told by Jorin' })
+  })
+
+  // A user's own write, and a pipeline write that names no prose, checks nothing.
+  it("merges over the user's later edits when the upsert names no prose", async () => {
+    const { db, ctx } = await setupWithProse([PASS_ROW])
+    await writeProse(ctx)
+    await run(ctx, upsert('user_edit', { source: 'saw the smoke' }), 'act_u')
+    expect(
+      (
+        await run(
+          ctx,
+          upsert('periodic_classifier', { source: 'told by Jorin', decayResistance: 0.8 }),
+          'act_p',
+        )
+      ).status,
+    ).toBe('ok')
+    expect(await pair(db)).toMatchObject({ source: 'told by Jorin', decayResistance: 0.8 })
+  })
 })

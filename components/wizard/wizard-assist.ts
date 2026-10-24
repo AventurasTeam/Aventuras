@@ -203,7 +203,11 @@ async function openingCall(
     extra,
   )
   if (result.status !== 'ok') return result
-  return { status: 'ok', value: resolveOpening(result.value, idMap, deps) }
+  return {
+    status: 'ok',
+    value: resolveOpening(result.value, idMap, deps),
+    recoverable: result.recoverable,
+  }
 }
 
 export function runOpeningAssist(

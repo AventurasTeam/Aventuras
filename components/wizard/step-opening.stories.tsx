@@ -19,6 +19,7 @@ const MODEL_ID = 'gpt-4o-mini'
 function okRun<T>(value: T) {
   return async (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => ({
     status: 'ok',
+    recoverable: [],
     value,
   })
 }

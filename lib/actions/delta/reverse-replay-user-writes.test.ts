@@ -223,12 +223,17 @@ describe('reversing a machine write under a later user write', () => {
   it('still reverses the columns of its own the user did not write since', async () => {
     const { db, ctx } = await setup()
     await createKael(ctx)
-    await apply(ctx, retire, 'act_c')
-    await apply(ctx, userPatch({ status: 'active' }), 'act_u')
+    const rename: PipelineAction = {
+      kind: 'renameEntity',
+      source: 'periodic_classifier',
+      payload: { branchId: 'b1', id: 'char_kael', name: 'Corvin', proseEntryId: null },
+    }
+    await apply(ctx, rename, 'act_c')
+    await apply(ctx, userPatch({ name: 'Corvin Vale' }), 'act_u')
 
     await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
-    expect(await kael(db)).toMatchObject({ status: 'active', retiredReason: null })
+    expect(await kael(db)).toMatchObject({ name: 'Corvin Vale', keywords: ['the knight'] })
   })
 
   it('still reverses a column the later user edit left alone', async () => {

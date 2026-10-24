@@ -106,10 +106,19 @@ alias list (the keywords bullet below).
   ([`data-model.md → Authorship contract`](../data-model.md#authorship-contract)).
 - **Names** — a listed entity's name, when the turns establish it as
   the entity's own: a reveal ("the hooded stranger is Kael"), not an
-  alias, a title or a disguise, which go to its keywords. The old name
-  joins the keywords, so retrieval still finds it. A name another row
-  of the kind already holds isn't written: the pass flags the entity
-  with that row as its partner, for the user to merge.
+  alias, a title, a disguise, or a shortened or fuller form of its
+  name, which go to its keywords. On a rename the old name joins the
+  keywords, so retrieval still finds it. A name another row of the
+  kind already holds isn't written (for a place, a place it is
+  compared with: a real sibling, or any place when either is
+  unplaced): the name joins the entity's
+  keywords, as a name the turns use for it, and the pass flags the
+  entity (`name-taken`) with the oldest holder as its partner, for the
+  user to merge. An entity already flagged keeps its flag and gets the
+  keyword only. A flag whose partner is gone, or whose pair are no
+  longer namesakes once the keyword is counted (World may still show
+  the latter's strip), counts as no flag: the pass re-points it at the
+  holder.
 - **Where a place sits** — a listed place's parent, when the turns
   place one the Places list shows unplaced or move one; and the
   top-level mark for an unplaced place nothing on the map could
@@ -189,8 +198,9 @@ output are **placeholders** (`c1`, `l1`, `hp1`, …), not the
 underlying `char_<uuid>` / `loc_<uuid>` / etc. forms — the
 substitution layer swaps both directions
 (see [`generation-pipeline.md → ID placeholder substitution`](../generation-pipeline.md#id-placeholder-substitution)).
-The placeholder universe shown to the classifier covers entities
-in the prompt's structured entity/lore/happening/relationship lists.
+The placeholder universe shown to the classifier covers the rows
+in the prompt's structured entity, place, happening, thread and
+relationship lists.
 
 When the classifier creates a brand-new entity, it emits the
 entity as a **full object with no `id` field** — name, description,
@@ -319,9 +329,12 @@ The per-turn writer and a pass creating a mentioned place add two more
 reasons: `same-parent`, for a location created beside a similarly
 named sibling, and `unplaced`, for an unplaced one created while places
 elsewhere share its name. The per-turn writer gives an item's exact
-namesake `alike` or `ambiguous` by the same bands. World pairs a
-flagged row with its partner and states the reason in the resolve
-dialog
+namesake `alike` or `ambiguous` by the same bands. A pass whose rename
+meets a name another row of the kind holds flags the entity
+`name-taken`, with the oldest such row as its partner
+([What the classifier writes](#what-the-classifier-writes)). World
+pairs a flagged row with its partner and states the reason in the
+resolve dialog
 ([`world.md → Collision review and entity merge`](../ui/screens/world/world.md#collision-review-and-entity-merge)).
 
 Thresholds (`τ_high`, `τ_low`) are tunable. Defaults TBD empirically
@@ -457,7 +470,11 @@ share, a name, a description, keywords, a `sourceTurn`, and the
 carries its traits; chapter close revises them over the chapter
 ([`data-model.md → Authorship contract`](../data-model.md#authorship-contract)).
 A `standings` entry names a listed faction, its new standing and a
-`sourceTurn`, emitted only when the turns change it.
+`sourceTurn`, emitted only when the turns change it. One naming a
+faction retired as the rows stood before the reply is dropped and
+logged, as a membership is (a pass never returns a faction, so no reply
+brings one back); a faction the reply itself retires keeps the
+standings from its turns.
 The handle stands wherever a listed faction's id would: in a
 happening's involvements and in a membership. A `memberships` entry
 has a character (an id or a new character's handle), a faction (an id,
@@ -546,10 +563,12 @@ id, title and status, the user's included.
 **What it emits.** A `newThreads` entry has a title, a description, a
 free-form category, an icon from the catalog, a status and a
 `sourceTurn`: `pending` when the story knows of the thread but no one
-pursues it, `active` when someone does. A `threadStatuses` entry names
-a listed thread, its new status and a `sourceTurn`: `active` when it is
-taken up, `resolved` when it is achieved, `failed` when it is made
-impossible. The rule:
+pursues it, `active` when someone does. A thread the turns both open
+and close arrives as `resolved` or `failed`, with `resolvedAtTurn` the
+turn that closed it; `sourceTurn` stays the turn that opened it. A
+`threadStatuses` entry names a listed thread, its new status and a
+`sourceTurn`: `active` when it is taken up, `resolved` when it is
+achieved, `failed` when it is made impossible. The rule:
 
 > Add a thread when the turns set up something the story will follow
 > past the current scene: a goal a character commits to, a quest given,
@@ -561,8 +580,15 @@ impossible. The rule:
 **The row.** Mode `auto`, `triggered_at_entry_id` its `sourceTurn`,
 landing `embedding_stale = 1` with `sourceTurn` as its survival anchor.
 A change to `resolved` or `failed` sets `resolved_at_entry_id` to its
-`sourceTurn`; one back to `pending` or `active` clears it. A status the
-user wrote after the change's prose stands
+`sourceTurn`; one back to `pending` or `active` clears it, and so does
+any change of status the user makes. A thread a reply both opens and
+closes is written as two changes, each kept by its own turn: the
+create, `active`, at its opening turn, and the status change at its
+closing turn (the opening turn when `resolvedAtTurn` is missing,
+names no turn of the window, or an earlier one). So reversing the
+closing turn while the opening survives leaves the thread `active`,
+`resolved_at_entry_id` cleared. A status the user wrote after the
+change's prose stands
 ([`cadence.md → User edits and classifier writes`](./cadence.md#user-edits-and-classifier-writes)).
 
 **The cost.** An active thread is injected every turn, outside the

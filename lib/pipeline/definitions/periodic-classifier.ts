@@ -40,7 +40,9 @@ import {
   characterRelationshipsStore,
   currentStoryStore,
   entitiesStore,
+  happeningAwarenessStore,
   happeningsStore,
+  threadsStore,
   type OpenStory,
 } from '@/lib/stores'
 
@@ -50,6 +52,7 @@ import { readClassifierStatus } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
+import { toPipelineError } from '../call-error'
 import type {
   PhaseContext,
   PhaseEmittedEvent,
@@ -242,18 +245,25 @@ export async function* periodicClassifierPhase(
   const relationships = [...characterRelationshipsStore.getRelationshipRows().values()].filter(
     (r) => r.branchId === ctx.branchId,
   )
+  const threads = [...threadsStore.getThreads().values()].filter((t) => t.branchId === ctx.branchId)
   // classifier.md → Mentioned places: read once, so prompt and reply schema agree.
   const mentionedPlaces = open.settings.classifierMentionedPlaces
+  const happenings = [...happeningsStore.getHappenings().values()].filter(
+    (h) => h.branchId === ctx.branchId,
+  )
+  // The stored pairs a listed happening's awareness skips (plan.ts → knownAwareness).
+  const awareness = [...happeningAwarenessStore.getAwareness().values()].filter(
+    (a) => a.branchId === ctx.branchId,
+  )
   const idMap = new IdBiMap()
   const prompt = renderTemplate(
     TEMPLATE_IDS.periodicClassifier,
     buildClassifierContext({
       window,
       entities,
-      happenings: [...happeningsStore.getHappenings().values()].filter(
-        (h) => h.branchId === ctx.branchId,
-      ),
+      happenings,
       relationships,
+      threads,
       mentionedPlaces,
       idMap,
     }),
@@ -283,6 +293,10 @@ export async function* periodicClassifierPhase(
   } finally {
     bounded.dispose()
   }
+  // generation-pipeline.md → Two retry tiers: one event per retried attempt, however the call ended.
+  const retried = result.status === 'not-configured' ? [] : result.recoverable
+  for (const attempt of retried)
+    yield { type: 'recoverable_error', error: toPipelineError(attempt) }
   // An interrupt leaves the watermark; onInterrupt restores the pre-run status.
   if (result.status === 'aborted' && !bounded.expired()) return { status: 'aborted' }
   if (result.status !== 'ok') {
@@ -349,16 +363,24 @@ export async function* periodicClassifierPhase(
     factionDecisions,
     now: () => Date.now(),
     newId: (kind) => generateId(kind),
+    threads,
+    happenings,
+    awareness,
   })
   if (plan.fellBackCount > 0)
     ctx.log.warn('classifier.window_head_fallback', { count: plan.fellBackCount })
   if (plan.unresolvedRefs.length > 0)
     ctx.log.warn('classifier.unresolved_refs', { refs: plan.unresolvedRefs })
   for (const drop of plan.droppedMemberships) ctx.log.warn('classifier.membership_dropped', drop)
+  for (const drop of plan.droppedStandings) ctx.log.warn('classifier.standing_dropped', drop)
   // The per-turn writer's keys (per-turn-creates.ts).
   for (const drop of plan.droppedPlaces)
     ctx.log.warn('classifier.create_dropped', { kind: 'location', ...drop })
   for (const drop of plan.parentDrops) ctx.log.warn('classifier.create_parent_dropped', drop)
+  for (const clash of plan.renameClashes) ctx.log.warn('classifier.rename_clash', clash)
+  for (const unseen of plan.unseenRefs) ctx.log.warn('classifier.unseen_ref', unseen)
+  for (const drop of plan.droppedPlacements) ctx.log.warn('classifier.placement_dropped', drop)
+  for (const icon of plan.unknownIcons) ctx.log.warn('classifier.icon_unknown', icon)
 
   // classifier.md → Pipeline framing: a pass cancelled during its writes reverses its own group.
   for (const write of plan.planned) {
@@ -369,6 +391,12 @@ export async function* periodicClassifierPhase(
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
 
   await writeSuccess(ctx, status, window.coversThrough)
+  // The smoke's regex parses this line: keep its field names and order.
+  ctx.log.debug('classifier.pass_completed', {
+    parseRetries: retried.filter((e) => e.tier === 'parse').length,
+    providerRetries: retried.filter((e) => e.tier === 'provider').length,
+    writes: plan.planned.length,
+  })
   return { status: 'completed' }
 }
 

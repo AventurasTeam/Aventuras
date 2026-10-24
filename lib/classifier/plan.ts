@@ -1,13 +1,30 @@
 import type { PipelineAction } from '@/lib/actions'
-import type { Entity, LocationState } from '@/lib/db'
-import { dedupeTerms, newTerms } from '@/lib/keyword-terms'
+import {
+  emptyEntityState,
+  VISUAL_CATEGORIES,
+  type CharacterState,
+  type Entity,
+  type FactionState,
+  type Happening,
+  type HappeningAwareness,
+  type LocationState,
+  type Thread,
+} from '@/lib/db'
+import { dedupeTerms, newTerms, normalizeTerm } from '@/lib/keyword-terms'
+import { boundStateText } from '@/lib/piggyback'
+import { isPlotIconKey } from '@/lib/plot'
+import { oneLine } from '@/lib/text'
 import {
   characterFactionId,
   checkParentChain,
+  flagStillHolds,
   matchNewPlace,
   parentOfLocations,
   placeNewLocation,
+  realPlacementOf,
+  samePlacement,
   settlingOrder,
+  stateOf,
   TOP_LEVEL,
   unhiddenLocationView,
   withPlacement,
@@ -23,7 +40,11 @@ import {
   type ClassifierExtraction,
   type ClassifierReply,
   type Membership,
+  type NewCharacter,
+  type NewFaction,
   type NewPlace,
+  type NewThreadReply,
+  type ThreadStatusChange,
 } from './schema'
 import type { ClassifierWindow } from './window'
 
@@ -45,6 +66,27 @@ export type DroppedMembership = Pick<Membership, 'character'> & {
   cause: 'retired-faction'
 }
 
+/** A rename to a name another row of the kind holds; `flagged`: this rename raised the flag. */
+export type RenameClash = { ref: string; name: string; partnerId: string; flagged: boolean }
+
+/** A write naming a row its list didn't show (data-model.md → Authorship contract). */
+export type UnseenRef = {
+  list: 'renames' | 'placements' | 'standings' | 'threadStatuses' | 'knownAwareness'
+  ref: string
+}
+
+/** A standing naming a faction retired before the reply, dropped as memberships are. */
+export type DroppedStanding = { faction: string; cause: 'retired-faction' }
+
+/** A happening's or a new thread's icon the catalog lacks: written as none. */
+export type UnknownIcon = { title: string; icon: string }
+
+/** A placement that plans nothing: a loop, a retired parent, or top-level marking a placed one. */
+export type DroppedPlacement = {
+  ref: string
+  cause: 'cycle' | 'retired' | 'not-unplaced' | 'chain-broken'
+}
+
 export type PlanResult = {
   planned: readonly PlannedWrite[]
   /** Temp handle -> allocated or matched entity id, for refs later in the same reply. */
@@ -54,6 +96,11 @@ export type PlanResult = {
   droppedPlaces: readonly DroppedPlace[]
   parentDrops: readonly ParentDrop[]
   droppedMemberships: readonly DroppedMembership[]
+  renameClashes: readonly RenameClash[]
+  unseenRefs: readonly UnseenRef[]
+  droppedPlacements: readonly DroppedPlacement[]
+  droppedStandings: readonly DroppedStanding[]
+  unknownIcons: readonly UnknownIcon[]
 }
 
 export type PlanDeps = {
@@ -68,14 +115,19 @@ export type PlanDeps = {
   // 'haw' is absent on purpose: the upsertHappeningAwareness handler in
   // lib/actions/happenings/register-awareness.ts allocates the awareness id
   // itself, so the planner must not.
-  newId: (kind: 'hap' | 'char' | 'fact' | 'hinv' | 'loc') => string
+  newId: (kind: 'hap' | 'char' | 'fact' | 'hinv' | 'loc' | 'thr') => string
+  threads: readonly Thread[]
+  /** The happenings the prompt listed: the same set the phase passes to buildClassifierContext. */
+  happenings: readonly Pick<Happening, 'id'>[]
+  /** The branch's stored pairs; a listed happening's stored pair plans nothing. */
+  awareness: readonly Pick<HappeningAwareness, 'characterId' | 'happeningId'>[]
 }
 
 const SOURCE = 'periodic_classifier' as const
 
 /**
- * A kind's reply field, decision map and id prefix. NewCharacter and NewFaction share one shape, so
- * a hand-made pairing of them compiles swapped.
+ * A kind's reply field, decision map and id prefix. NewCharacter and NewFaction differ only in
+ * optional fields, so a hand-made pairing of them still compiles swapped.
  */
 export const RECONCILED_KINDS = {
   character: { reply: 'newCharacters', decisions: 'decisions', idPrefix: 'char' },
@@ -133,11 +185,12 @@ export function clampEmbeddedCharacter(candidate: { name: string; description: s
 // classifier.md → Mentioned places → Parent: a parent the planner can't use leaves it unplaced.
 const UNPLACED: PlacePlacement = { kind: 'unplaced' }
 
+const isTopLevel = (parent: string | undefined): boolean =>
+  parent?.trim().toLowerCase() === TOP_LEVEL_TOKEN
+
 // The schema's "top-level" is the shared placement helpers' TOP_LEVEL.
 function declaredPlace(place: NewPlace): NewPlace {
-  return place.parent?.trim().toLowerCase() === TOP_LEVEL_TOKEN
-    ? { ...place, parent: TOP_LEVEL }
-    : place
+  return isTopLevel(place.parent) ? { ...place, parent: TOP_LEVEL } : place
 }
 
 // data-model.md → LocationState shape: a machine writer walks a placement first and drops a loop.
@@ -149,6 +202,49 @@ function placementLoop(
   const walk = checkParentChain(id, parentId, parentOf)
   if (walk === 'ok') return null
   return { parent: parentId, cause: walk === 'cycle' ? 'cycle' : 'chain-broken' }
+}
+
+// data-model.md → Soft caps + compaction discipline: the Zod degradation bounds a create's state
+// must pass, else the handler refuses the row and the pass fails. The soft caps are the prompt's.
+const MAX_VOICE = 2000
+const MAX_STATE_LIST = 50
+
+// A 500-character field, cut at a clause as a per-turn visual value is (piggyback.md).
+function stateText(text: string | undefined): string | undefined {
+  const trimmed = nonBlank(text)
+  return trimmed === undefined ? undefined : boundStateText(trimmed).text
+}
+
+function stateList(items: readonly string[] | undefined): string[] {
+  return dedupeTerms(items ?? []).slice(0, MAX_STATE_LIST)
+}
+
+/** classifier.md → What the classifier writes → First profiles: a new character's. */
+function characterProfile(candidate: NewCharacter): CharacterState {
+  const visual: CharacterState['visual'] = {}
+  for (const key of VISUAL_CATEGORIES) {
+    const text = stateText(candidate.visual?.[key])
+    if (text !== undefined) visual[key] = text
+  }
+  const voiceText = nonBlank(candidate.voice)
+  const voice = voiceText === undefined ? undefined : clampEmbedded(voiceText, MAX_VOICE)
+  return {
+    ...emptyEntityState('character'),
+    visual,
+    traits: stateList(candidate.traits),
+    drives: stateList(candidate.drives),
+    ...(voice === undefined ? {} : { voice }),
+  }
+}
+
+/** A new faction's first profile; `{}`, the empty faction state, when the turns gave none. */
+function factionProfile(candidate: NewFaction): FactionState {
+  const standing = stateText(candidate.standing)
+  const agenda = stateList(candidate.agenda)
+  return {
+    ...(standing === undefined ? {} : { standing }),
+    ...(agenda.length === 0 ? {} : { agenda }),
+  }
 }
 
 export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDeps): PlanResult {
@@ -164,6 +260,12 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     return entryId
   }
 
+  // One anchor per fact, taken only when the fact writes, so a no-op never counts as a fallback.
+  const anchorOnce = (turn: string | undefined): (() => string) => {
+    let entryId: string | undefined
+    return () => (entryId ??= anchor(turn))
+  }
+
   // An unattributed fact's prose dates to the window's oldest turn while its survival
   // anchor stays the newest: dating the prose too late would outrank the user's edits.
   const oldestEntryId = window.turns[0]?.entryId ?? ''
@@ -173,6 +275,9 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   }
 
   const rowById = new Map(entities.map((e) => [e.id, e]))
+  // What this reply creates and where it puts a place, for the placements walk after the creates.
+  const createdPlaces: Pick<Entity, 'id' | 'kind' | 'state'>[] = []
+  const placedParents = new Map<string, string | null>()
   // Mutable, not a frozen snapshot: rows this pass plans are visible to later
   // facts in the same reply, so the flip guards read post-plan status and a ref
   // to a just-created character resolves.
@@ -194,8 +299,12 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   }
 
   // New terms only, so a term the row already holds plans no write.
-  // Anchored only when it writes, so a no-op never counts as a window-head fallback.
-  const appendNewTerms = (id: string, terms: readonly string[], sourceTurn?: string): void => {
+  const appendTerms = (
+    id: string,
+    terms: readonly string[],
+    proseEntryId: string,
+    entryId: () => string,
+  ): void => {
     const row = index.get(id)
     if (row == null) return
     const added = newTerms(row.keywords, terms)
@@ -205,11 +314,24 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       action: {
         kind: 'appendEntityKeywords',
         source: SOURCE,
-        payload: { branchId, id, keywords: added, proseEntryId: proseSource(sourceTurn) },
+        payload: { branchId, id, keywords: added, proseEntryId },
       },
-      entryId: anchor(sourceTurn),
+      entryId: entryId(),
     })
   }
+  // Anchored only when it writes, so a no-op never counts as a window-head fallback.
+  const appendNewTerms = (id: string, terms: readonly string[], sourceTurn?: string): void =>
+    appendTerms(id, terms, proseSource(sourceTurn), () => anchor(sourceTurn))
+
+  // A known or promoted mention's new keywords, written in turn order with the row's other
+  // keyword writes (planKeywordWrites).
+  const mentionTerms: {
+    id: string
+    terms: readonly string[]
+    sourceTurn?: string
+    proseEntryId: string
+    entryId: string
+  }[] = []
 
   // classifier.md → Mentioned places. After characters and factions, so the handle namespace
   // they share keeps their bindings; before anything that names a place by its handle.
@@ -218,10 +340,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const parentDrops: ParentDrop[] = []
     // The pass saw every place, so matching is over real children: nothing is hidden.
     const view = unhiddenLocationView(entities)
-    const created: Pick<Entity, 'id' | 'kind' | 'state'>[] = []
     const placed: SettledNewPlace[] = []
-    // Where this reply's placements put a reused place, so a later walk sees it there.
-    const placedParents = new Map<string, string | null>()
     // The rows this reply placed, as matching must see them: no longer unplaced.
     const placedRows = new Map<string, Entity>()
 
@@ -241,7 +360,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       droppedPlaces.push({ handle, name, cause: 'handle-taken' })
     for (const settling of order) {
       const place = settling.emission
-      const storedParentOf = parentOfLocations([...entities, ...created])
+      const storedParentOf = parentOfLocations([...entities, ...createdPlaces])
       const parentOf = (id: string): string | null =>
         placedParents.has(id) ? (placedParents.get(id) ?? null) : storedParentOf(id)
       const placement = placeNewLocation({
@@ -305,9 +424,16 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         const { flag } = match
         const keywords = dedupeTerms(place.keywords)
         const timestamp = now()
-        const state = withPlacement({ parent_location_id: null }, candidate)
+        // classifier.md → What the classifier writes → First profiles: a place's condition.
+        const condition = stateText(place.condition)
+        const state = withPlacement(
+          condition === undefined
+            ? { parent_location_id: null }
+            : { parent_location_id: null, condition },
+          candidate,
+        )
         index.set(id, { kind: 'location', status: 'active', keywords })
-        created.push({ id, kind: 'location', state })
+        createdPlaces.push({ id, kind: 'location', state })
         planned.push({
           action: {
             kind: 'createEntity',
@@ -364,16 +490,20 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       const entryId = anchor(candidate.sourceTurn)
       const proseEntryId = proseSource(candidate.sourceTurn)
       // New terms only, so a term the row already holds plans no write.
-      if (decision.kind === 'promote') {
+      if (decision.kind === 'promote' || decision.kind === 'known') {
         handleMap.set(candidate.handle, decision.entityId)
+        mentionTerms.push({
+          id: decision.entityId,
+          terms: candidate.keywords,
+          sourceTurn: candidate.sourceTurn,
+          proseEntryId,
+          entryId,
+        })
+      }
+      if (decision.kind === 'known') continue
+      if (decision.kind === 'promote') {
         const promoted = index.get(decision.entityId)
-        const added = newTerms(promoted?.keywords ?? [], candidate.keywords)
-        if (promoted != null)
-          index.set(decision.entityId, {
-            ...promoted,
-            status: 'active',
-            keywords: [...promoted.keywords, ...added],
-          })
+        if (promoted != null) index.set(decision.entityId, { ...promoted, status: 'active' })
         planned.push({
           action: {
             kind: 'promoteStagedEntity',
@@ -382,33 +512,6 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
           },
           entryId,
         })
-        if (added.length > 0)
-          planned.push({
-            action: {
-              kind: 'appendEntityKeywords',
-              source: SOURCE,
-              payload: { branchId, id: decision.entityId, keywords: added, proseEntryId },
-            },
-            entryId,
-          })
-        continue
-      }
-      if (decision.kind === 'known') {
-        handleMap.set(candidate.handle, decision.entityId)
-        const known = index.get(decision.entityId)
-        const added = newTerms(known?.keywords ?? [], candidate.keywords)
-        if (added.length > 0) {
-          if (known != null)
-            index.set(decision.entityId, { ...known, keywords: [...known.keywords, ...added] })
-          planned.push({
-            action: {
-              kind: 'appendEntityKeywords',
-              source: SOURCE,
-              payload: { branchId, id: decision.entityId, keywords: added, proseEntryId },
-            },
-            entryId,
-          })
-        }
         continue
       }
       const id = newId(idPrefix)
@@ -433,6 +536,11 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
               keywords,
               status: 'active',
               injectionMode: 'auto',
+              // The loop's kind picks the list, so the cast can't pair the wrong profile.
+              state:
+                kind === 'character'
+                  ? characterProfile(candidate as NewCharacter)
+                  : factionProfile(candidate as NewFaction),
               nameCollisionFlag: decision.flag == null ? 0 : 1,
               nameCollisionPartnerId: decision.flag?.partnerId ?? null,
               nameCollisionReason: decision.flag?.reason ?? null,
@@ -456,11 +564,281 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
 
   const { droppedPlaces, parentDrops } = planNewPlaces()
 
-  // Index is keyed by row id, so a handle this reply declares misses: its row already carries its
-  // keywords. newTerms drops a term the snapshot or an earlier write in this reply holds.
-  for (const alias of extraction.aliases) {
-    if (!index.has(alias.ref)) unresolvedRefs.push(alias.ref)
-    else appendNewTerms(alias.ref, alias.terms, alias.sourceTurn)
+  // Facts about one row apply in source-turn order, ties in reply order, so the latest prose wins.
+  const entryPosition = (entryId: string): number =>
+    window.turns.findIndex((t) => t.entryId === entryId)
+  const turnPosition = (turn: string | undefined): number =>
+    entryPosition(window.resolveHandle(turn).entryId)
+  const inTurnOrder = <T extends { sourceTurn?: string }>(facts: readonly T[]): T[] =>
+    facts
+      .map((fact, order) => ({ fact, order, at: turnPosition(fact.sourceTurn) }))
+      .sort((a, b) => a.at - b.at || a.order - b.order)
+      .map(({ fact }) => fact)
+
+  // data-model.md → Authorship contract → Seen before written.
+  const unseenRefs: UnseenRef[] = []
+
+  // classifier.md → What the classifier writes → Names. A name is taken when a row of the kind
+  // holds it, one this reply creates or renames included. A keyword write's undo is the whole
+  // prior list, so a row's renames, aliases and mention terms plan in turn order: reversing a turn
+  // then never writes an earlier turn's terms away (classifier.md → Provenance attribution).
+  const planKeywordWrites = (): RenameClash[] => {
+    const nameRows = new Map(
+      entities.map((e) => [e.id, { kind: e.kind, name: e.name, createdAt: e.createdAt }]),
+    )
+    for (const { action } of planned)
+      if (action.kind === 'createEntity') {
+        const { entry } = action.payload
+        nameRows.set(entry.id, { kind: entry.kind, name: entry.name, createdAt: entry.createdAt })
+      }
+    // piggyback.md → Matching before creating: a place is compared with its real siblings, the top
+    // level counting as one parent, and with every place when either is unplaced.
+    const storedPlacement = realPlacementOf([
+      ...entities.filter((e) => e.kind === 'location'),
+      ...createdPlaces,
+    ])
+    const placementAt = (id: string): PlacePlacement => {
+      if (!placedParents.has(id)) return storedPlacement(id)
+      const parentId = placedParents.get(id) ?? null
+      return parentId === null ? { kind: 'top' } : { kind: 'under', parentId }
+    }
+    const placesCompared = (a: string, b: string): boolean => {
+      const [first, second] = [placementAt(a), placementAt(b)]
+      return first.kind === 'unplaced' || second.kind === 'unplaced' || samePlacement(first, second)
+    }
+    // A listed row as this reply's planned writes leave it, for World's pairing rule.
+    const asPlanned = (id: string): Entity | undefined => {
+      const stored = rowById.get(id)
+      if (stored === undefined) return undefined
+      const placed = stored.kind === 'location' && placedParents.has(id)
+      return {
+        ...stored,
+        name: nameRows.get(id)?.name ?? stored.name,
+        keywords: index.get(id)?.keywords ?? stored.keywords,
+        state: placed
+          ? withPlacement(stored.state as LocationState, placementAt(id))
+          : stored.state,
+      }
+    }
+    const renameClashes: RenameClash[] = []
+    const raisedFlags = new Set<string>()
+    const planRename = (rename: ClassifierExtraction['renames'][number]): void => {
+      const row = rowById.get(rename.ref)
+      if (row === undefined) {
+        unseenRefs.push({ list: 'renames', ref: rename.ref })
+        return
+      }
+      // Both hold every listed row; the check narrows their lookups.
+      const current = nameRows.get(row.id)
+      const known = index.get(row.id)
+      if (current === undefined || known === undefined) return
+      const name = clampEmbedded(rename.name.trim(), MAX_EMBEDDED_NAME)
+      const key = normalizeTerm(name)
+      // A case-only change is no reveal, as renameEntity judges it.
+      if (key === '' || key === normalizeTerm(current.name)) return
+      const holders = [...nameRows]
+        .filter(
+          ([id, r]) =>
+            id !== row.id &&
+            r.kind === row.kind &&
+            normalizeTerm(r.name) === key &&
+            (row.kind !== 'location' || placesCompared(row.id, id)),
+        )
+        .sort(([idA, a], [idB, b]) => a.createdAt - b.createdAt || (idA < idB ? -1 : 1))
+      const at = anchorOnce(rename.sourceTurn)
+      const proseEntryId = proseSource(rename.sourceTurn)
+      const holder = holders[0]
+      if (holder === undefined) {
+        nameRows.set(row.id, { ...current, name })
+        // renameEntity keeps the old name as a keyword, so a later alias of it plans nothing.
+        index.set(row.id, {
+          ...known,
+          keywords: [...known.keywords, ...newTerms(known.keywords, [current.name])],
+        })
+        planned.push({
+          action: {
+            kind: 'renameEntity',
+            source: SOURCE,
+            payload: { branchId, id: row.id, name, proseEntryId },
+          },
+          entryId: at(),
+        })
+        return
+      }
+      const [partnerId] = holder
+      // The revealed name is one the prose used for it, so the pair stays namesakes (world.md →
+      // Surfacing) and the user merges them.
+      const added = newTerms(known.keywords, [name])
+      if (added.length > 0) {
+        index.set(row.id, { ...known, keywords: [...known.keywords, ...added] })
+        planned.push({
+          action: {
+            kind: 'appendEntityKeywords',
+            source: SOURCE,
+            payload: { branchId, id: row.id, keywords: added, proseEntryId },
+          },
+          entryId: at(),
+        })
+      }
+      // One partner per row: a flag that still holds, its keyword landed, keeps its partner; a
+      // dormant one counts as none (classifier.md → Names), as raiseCollisionFlag judges it.
+      const landed = asPlanned(row.id)
+      const partnerOf = row.nameCollisionPartnerId
+      const holds =
+        landed !== undefined &&
+        flagStillHolds(landed, partnerOf === null ? undefined : asPlanned(partnerOf))
+      const flagged = !holds && !raisedFlags.has(row.id)
+      if (flagged) {
+        raisedFlags.add(row.id)
+        planned.push({
+          action: {
+            kind: 'raiseCollisionFlag',
+            source: SOURCE,
+            payload: { branchId, id: row.id, partnerId, reason: 'name-taken', proseEntryId },
+          },
+          entryId: at(),
+        })
+      }
+      renameClashes.push({ ref: rename.ref, name, partnerId, flagged })
+    }
+    // Index is keyed by row id, so a handle this reply declares misses: its row already carries
+    // its keywords. newTerms drops a term the snapshot or an earlier write in this reply holds.
+    const planAlias = (alias: ClassifierExtraction['aliases'][number]): void => {
+      if (!index.has(alias.ref)) unresolvedRefs.push(alias.ref)
+      else appendNewTerms(alias.ref, alias.terms, alias.sourceTurn)
+    }
+    // Ties keep this order: a mention's terms, then a rename, then an alias.
+    const facts = [
+      ...mentionTerms.map((mention) => ({ sourceTurn: mention.sourceTurn, mention })),
+      ...extraction.renames.map((rename) => ({ sourceTurn: rename.sourceTurn, rename })),
+      ...extraction.aliases.map((alias) => ({ sourceTurn: alias.sourceTurn, alias })),
+    ]
+    for (const fact of inTurnOrder(facts)) {
+      if ('mention' in fact) {
+        const { id, terms, proseEntryId, entryId } = fact.mention
+        appendTerms(id, terms, proseEntryId, () => entryId)
+      } else if ('rename' in fact) planRename(fact.rename)
+      else planAlias(fact.alias)
+    }
+    return renameClashes
+  }
+
+  // classifier.md → What the classifier writes → Where a place sits. Planned against this reply's
+  // own creates and placements; a loop or a retired parent is dropped before the handler sees it.
+  const planPlacements = (): DroppedPlacement[] => {
+    const droppedPlacements: DroppedPlacement[] = []
+    const parentOfRows = parentOfLocations([...entities, ...createdPlaces])
+    const placeParentOf = (id: string): string | null =>
+      placedParents.has(id) ? (placedParents.get(id) ?? null) : parentOfRows(id)
+    const realPlacement = realPlacementOf(entities.filter((e) => e.kind === 'location'))
+    for (const fact of inTurnOrder(extraction.placements)) {
+      const row = rowById.get(fact.ref)
+      if (row === undefined) {
+        unseenRefs.push({ list: 'placements', ref: fact.ref })
+        continue
+      }
+      if (row.kind !== 'location') {
+        unresolvedRefs.push(fact.ref)
+        continue
+      }
+      const { id } = row
+      let placement: { kind: 'under'; parentId: string } | { kind: 'top' }
+      if (isTopLevel(fact.parent)) {
+        // Only an unplaced place is marked top-level (data-model.md → Authorship contract).
+        if (placedParents.has(id) || realPlacement(id).kind !== 'unplaced') {
+          droppedPlacements.push({ ref: fact.ref, cause: 'not-unplaced' })
+          continue
+        }
+        placement = { kind: 'top' }
+      } else {
+        // An ID from Places: a new place's handle names none, its create carrying its own parent.
+        const parentId = fact.parent
+        const parent = rowById.get(parentId)
+        if (parent?.kind !== 'location') {
+          unresolvedRefs.push(fact.parent)
+          continue
+        }
+        if (placeParentOf(id) === parentId) continue
+        if (parent.status === 'retired') {
+          droppedPlacements.push({ ref: fact.ref, cause: 'retired' })
+          continue
+        }
+        const loop = placementLoop(id, parentId, placeParentOf)
+        if (loop !== null) {
+          droppedPlacements.push({ ref: fact.ref, cause: loop.cause })
+          continue
+        }
+        placement = { kind: 'under', parentId }
+      }
+      placedParents.set(id, placement.kind === 'under' ? placement.parentId : null)
+      planned.push({
+        action: {
+          kind: 'placeLocation',
+          source: SOURCE,
+          payload: { branchId, id, placement, proseEntryId: proseSource(fact.sourceTurn) },
+        },
+        entryId: anchor(fact.sourceTurn),
+      })
+    }
+    return droppedPlacements
+  }
+
+  // classifier.md → Factions: a listed faction's standing, on a change. Bounded as the handler
+  // bounds it, so a restatement compares what it would store, on one line as the prompt shows it.
+  const planStandings = (): DroppedStanding[] => {
+    const droppedStandings: DroppedStanding[] = []
+    const standingOf = new Map<string, string | undefined>()
+    for (const fact of inTurnOrder(extraction.standings)) {
+      const row = rowById.get(fact.ref)
+      if (row === undefined) {
+        unseenRefs.push({ list: 'standings', ref: fact.ref })
+        continue
+      }
+      if (row.kind !== 'faction') {
+        unresolvedRefs.push(fact.ref)
+        continue
+      }
+      // The pre-reply row, so a faction this reply retires keeps the standings from its turns.
+      if (row.status === 'retired') {
+        droppedStandings.push({ faction: fact.ref, cause: 'retired-faction' })
+        continue
+      }
+      const standing = stateText(fact.standing)
+      const current = standingOf.has(row.id)
+        ? standingOf.get(row.id)
+        : stateOf(row, 'faction').standing
+      if (
+        standing === undefined ||
+        (current !== undefined && oneLine(standing) === oneLine(current))
+      )
+        continue
+      standingOf.set(row.id, standing)
+      planned.push({
+        action: {
+          kind: 'setFactionStanding',
+          source: SOURCE,
+          payload: { branchId, id: row.id, standing, proseEntryId: proseSource(fact.sourceTurn) },
+        },
+        entryId: anchor(fact.sourceTurn),
+      })
+    }
+    return droppedStandings
+  }
+
+  // Placements first, so a place's rename clash is judged where this reply leaves it; they read
+  // no names or keywords, and `name-taken` ignores parents downstream.
+  const droppedPlacements = planPlacements()
+  const renameClashes = planKeywordWrites()
+  const droppedStandings = planStandings()
+
+  // classifier.md → What the classifier writes → Happenings: an icon from the catalog, or none.
+  const unknownIcons: UnknownIcon[] = []
+  const iconOf = (icon: string | undefined, title: string): string | null => {
+    const key = nonBlank(icon)?.toLowerCase()
+    if (key === undefined) return null
+    if (isPlotIconKey(key)) return key
+    unknownIcons.push({ title, icon: key })
+    return null
   }
 
   for (const happening of extraction.happenings) {
@@ -491,6 +869,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
             branchId,
             title: clampEmbedded(title, MAX_EMBEDDED_NAME),
             description: description == null ? null : clampEmbedded(description, MAX_EMBEDDED_BODY),
+            category: nonBlank(happening.category) ?? null,
+            icon: iconOf(happening.icon, title),
             // Mutually exclusive per the table CHECK: an entry ref wins.
             temporal: occurredAtEntryId == null ? (nonBlank(happening.temporal) ?? null) : null,
             occurredAtEntryId,
@@ -547,11 +927,48 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
             decayResistance: Math.min(1, Math.max(0, row.severity)),
             // Undefined, not null: a blank re-emit must leave an existing source alone.
             source: nonBlank(row.source),
+            proseEntryId: proseSource(happening.sourceTurn),
           },
         },
         entryId: learnedEntryId,
       })
     }
+  }
+
+  // classifier.md → What the classifier writes → Happenings. Create-only: the upsert would merge a
+  // stored pair's source and decay resistance, which chapter close tunes.
+  const listedHappenings = new Set(deps.happenings.map((h) => h.id))
+  const pairKey = (characterId: string, happeningId: string): string =>
+    `${characterId} ${happeningId}`
+  const storedPairs = new Set(deps.awareness.map((a) => pairKey(a.characterId, a.happeningId)))
+  for (const known of extraction.knownAwareness) {
+    // An unknown placeholder passes substituteClassifierIds untouched, so only this check sees it.
+    if (!listedHappenings.has(known.happening)) {
+      unseenRefs.push({ list: 'knownAwareness', ref: known.happening })
+      continue
+    }
+    const characterId = resolveRef(known.ref, 'character')
+    if (characterId == null) continue
+    const pair = pairKey(characterId, known.happening)
+    if (storedPairs.has(pair)) continue
+    storedPairs.add(pair)
+    const learnedEntryId = anchor(known.learnedAtTurn)
+    planned.push({
+      action: {
+        kind: 'upsertHappeningAwareness',
+        source: SOURCE,
+        payload: {
+          branchId,
+          characterId,
+          happeningId: known.happening,
+          learnedAtEntryId: learnedEntryId,
+          decayResistance: Math.min(1, Math.max(0, known.severity)),
+          source: nonBlank(known.source),
+          proseEntryId: proseSource(known.learnedAtTurn),
+        },
+      },
+      entryId: learnedEntryId,
+    })
   }
 
   for (const relationship of extraction.relationships) {
@@ -589,14 +1006,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const row = rowById.get(id)
     return row == null ? null : characterFactionId(row)
   }
-  const turnPosition = (turn: string | undefined): number => {
-    const { entryId } = window.resolveHandle(turn)
-    return window.turns.findIndex((t) => t.entryId === entryId)
-  }
-  const memberships = extraction.memberships
-    .map((fact, order) => ({ fact, order, at: turnPosition(fact.sourceTurn) }))
-    .sort((a, b) => a.at - b.at || a.order - b.order)
-  for (const { fact } of memberships) {
+  for (const fact of inTurnOrder(extraction.memberships)) {
     const characterId = resolveRef(fact.character, 'character')
     if (characterId == null) continue
     let factionId: string | null = null
@@ -629,14 +1039,20 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     })
   }
 
-  for (const flip of extraction.statusFlips) {
+  for (const flip of inTurnOrder(extraction.statusFlips)) {
     const id = resolveRef(flip.ref)
     if (id == null) continue
     const current = index.get(id)
     if (current == null) continue
-    // Monotonic staged->active (the other writer may have landed it already) and
-    // hard-finality retirement only; retired->active is user-only in v1.
-    if (flip.to === 'active' && current.status !== 'staged') continue
+    // classifier.md → What the classifier writes → Status transitions: only a character returns.
+    const returning = flip.to === 'active' && current.status === 'retired'
+    if (returning && current.kind !== 'character') {
+      unresolvedRefs.push(flip.ref)
+      continue
+    }
+    // Monotonic staged->active (the other writer may have landed it already), a return, and
+    // hard-finality retirement only.
+    if (flip.to === 'active' && current.status !== 'staged' && !returning) continue
     if (flip.to === 'retired' && current.status !== 'active') continue
     // A destroyed place stays active, its destruction a condition: only the user retires one.
     if (flip.to === 'retired' && current.kind === 'location') continue
@@ -655,13 +1071,114 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
                 proseEntryId,
               },
             }
-          : {
-              kind: 'promoteStagedEntity',
-              source: SOURCE,
-              payload: { branchId, id, proseEntryId },
-            },
+          : returning
+            ? {
+                kind: 'returnFromRetirement',
+                source: SOURCE,
+                payload: { branchId, id, proseEntryId },
+              }
+            : {
+                kind: 'promoteStagedEntity',
+                source: SOURCE,
+                payload: { branchId, id, proseEntryId },
+              },
       entryId: anchor(flip.sourceTurn),
     })
+  }
+
+  // classifier.md → Threads.
+  const threadStatusWrite = (
+    id: string,
+    status: ThreadStatusChange['status'],
+    entryId: string,
+    proseEntryId: string,
+  ): PlannedWrite => ({
+    action: {
+      kind: 'setThreadStatus',
+      source: SOURCE,
+      payload: {
+        branchId,
+        id,
+        status,
+        resolvedAtEntryId: status === 'active' ? null : entryId,
+        proseEntryId,
+      },
+    },
+    entryId,
+  })
+  // A status change can't precede its thread, so a closing turn before the open closes it there.
+  const closingTurnOf = (
+    thread: NewThreadReply,
+    openedAt: string,
+  ): { entryId: string; proseEntryId: string } => {
+    if (thread.resolvedAtTurn !== undefined) {
+      const closed = window.resolveHandle(thread.resolvedAtTurn)
+      if (closed.fellBack) unresolvedRefs.push(thread.resolvedAtTurn)
+      else if (entryPosition(closed.entryId) >= entryPosition(openedAt))
+        return { entryId: closed.entryId, proseEntryId: closed.entryId }
+    }
+    return { entryId: openedAt, proseEntryId: proseSource(thread.sourceTurn) }
+  }
+  for (const thread of extraction.newThreads) {
+    const title = nonBlank(thread.title)
+    if (title == null) continue
+    const entryId = anchor(thread.sourceTurn)
+    // Opened and closed here: the create and the close are two writes, each kept by its own turn,
+    // so reversing the closing turn alone reopens the thread.
+    const closedAs =
+      thread.status === 'resolved' || thread.status === 'failed' ? thread.status : null
+    const id = newId('thr')
+    const description = nonBlank(thread.description)
+    const timestamp = now()
+    planned.push({
+      action: {
+        kind: 'createThread',
+        source: SOURCE,
+        payload: {
+          entry: {
+            id,
+            branchId,
+            title: clampEmbedded(title, MAX_EMBEDDED_NAME),
+            description: description == null ? null : clampEmbedded(description, MAX_EMBEDDED_BODY),
+            category: nonBlank(thread.category) ?? null,
+            icon: iconOf(thread.icon, title),
+            status: closedAs === null ? thread.status : 'active',
+            injectionMode: 'auto',
+            // Non-null on every thread a pass creates: setThreadStatus resolves only those.
+            triggeredAtEntryId: entryId,
+            resolvedAtEntryId: null,
+            embeddingStale: 1,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          },
+        },
+      },
+      entryId,
+    })
+    if (closedAs !== null) {
+      const closing = closingTurnOf(thread, entryId)
+      planned.push(threadStatusWrite(id, closedAs, closing.entryId, closing.proseEntryId))
+    }
+  }
+  const threadStatusOf = new Map<string, Thread['status']>(
+    deps.threads.map((t) => [t.id, t.status]),
+  )
+  for (const change of inTurnOrder(extraction.threadStatuses)) {
+    const current = threadStatusOf.get(change.thread)
+    if (current === undefined) {
+      unseenRefs.push({ list: 'threadStatuses', ref: change.thread })
+      continue
+    }
+    if (current === change.status) continue
+    threadStatusOf.set(change.thread, change.status)
+    planned.push(
+      threadStatusWrite(
+        change.thread,
+        change.status,
+        anchor(change.sourceTurn),
+        proseSource(change.sourceTurn),
+      ),
+    )
   }
 
   return {
@@ -672,5 +1189,10 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     droppedPlaces,
     parentDrops,
     droppedMemberships,
+    renameClashes,
+    unseenRefs,
+    droppedPlacements,
+    droppedStandings,
+    unknownIcons,
   }
 }

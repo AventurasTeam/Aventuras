@@ -7,7 +7,12 @@ import { threadsStore } from '@/lib/stores'
 import { nullifyRef } from '../coerce'
 import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
 import { register, TARGET_NOT_FOUND, undefinedColumn, type ActionHandler } from '../delta/registry'
-import type { DeltaSource } from '../types'
+import {
+  USER_EDITED_SINCE_PROSE,
+  userEditsSinceProse,
+  wroteThreadStatus,
+} from '../delta/user-precedence'
+import { isUserOriginatedSource, type DeltaSource, type ProseEntryId } from '../types'
 
 const cascade = rowCascade('thread')
 
@@ -30,6 +35,18 @@ declare module '@/lib/actions/action-map' {
       payload: { branchId: string; id: string; patch: ThreadUpdatePatch }
     }
     deleteThread: { source: DeltaSource; payload: { branchId: string; id: string } }
+    setThreadStatus: {
+      source: DeltaSource
+      payload: {
+        branchId: string
+        id: string
+        /** classifier.md → Threads: a pass moves a thread to these; `pending` is a create's only. */
+        status: 'active' | 'resolved' | 'failed'
+        /** The change's source turn; written only on resolved or failed, to a pass's thread. */
+        resolvedAtEntryId: string | null
+        proseEntryId: ProseEntryId
+      }
+    }
   }
 }
 
@@ -121,6 +138,17 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     // No columnSchemas registered: scalar/nullable columns take the whole prior value as undo.
     undoPayload[col] = current[col as keyof Thread]
   }
+  // The ref is the pass's claim of where its status ended; a user's status change retracts it.
+  if (
+    isUserOriginatedSource(action.source) &&
+    !('resolvedAtEntryId' in patch) &&
+    'status' in set &&
+    set.status !== current.status &&
+    current.resolvedAtEntryId !== null
+  ) {
+    set.resolvedAtEntryId = null
+    undoPayload.resolvedAtEntryId = current.resolvedAtEntryId
+  }
   // A patch that parsed but touched no updatable column would reach Drizzle's
   // .set({}) and throw "No values to set" — reject instead.
   if (Object.keys(set).length === 0)
@@ -138,6 +166,56 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     set.embeddingStale = 1
   }
 
+  return {
+    status: 'ok',
+    targetTable: 'threads',
+    targetId: id,
+    op: 'update',
+    undoPayload,
+    ops: [
+      ctx.db
+        .update(threads)
+        .set(set)
+        .where(and(eq(threads.branchId, bid), eq(threads.id, id)))
+        .toSQL(),
+    ],
+    patch: { op: 'update', id, columns: set },
+  }
+}
+
+const setStatusHandler: ActionHandler = async (action, branchId, ctx) => {
+  if (action.kind !== 'setThreadStatus')
+    throw new Error(`handler/kind mismatch: expected 'setThreadStatus', got '${action.kind}'`)
+  const { branchId: bid, id, status, resolvedAtEntryId, proseEntryId } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  const [current] = await ctx.db
+    .select()
+    .from(threads)
+    .where(and(eq(threads.branchId, bid), eq(threads.id, id)))
+  if (!current)
+    return {
+      status: 'rejected',
+      reason: `status target threads ${bid}:${id} not found`,
+      code: 'noop',
+    }
+  if (current.status === status)
+    return { status: 'rejected', reason: 'status-unchanged', code: 'noop' }
+  if (
+    proseEntryId !== null &&
+    wroteThreadStatus(await userEditsSinceProse(ctx, bid, 'threads', id, proseEntryId))
+  )
+    return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
+  const set: Partial<Pick<Thread, 'status' | 'resolvedAtEntryId'>> = { status }
+  const undoPayload: Record<string, unknown> = { status: current.status }
+  // Entry refs are AI-only (data-model.md → Authorship contract): a user's thread keeps both null.
+  if (current.triggeredAtEntryId !== null) {
+    const resolvedAt = status === 'active' ? null : nullifyRef(resolvedAtEntryId)
+    if (resolvedAt !== current.resolvedAtEntryId) {
+      set.resolvedAtEntryId = resolvedAt
+      undoPayload.resolvedAtEntryId = current.resolvedAtEntryId
+    }
+  }
   return {
     status: 'ok',
     targetTable: 'threads',
@@ -190,6 +268,7 @@ export function registerThreads(): void {
       createThread: createHandler,
       updateThread: updateHandler,
       deleteThread: deleteHandler,
+      setThreadStatus: setStatusHandler,
     },
     patcher: (branchId, p) => threadsStore.patch(branchId, p),
     cascade,

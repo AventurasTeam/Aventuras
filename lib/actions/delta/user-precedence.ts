@@ -186,9 +186,38 @@ export function wrotePlacement(edits: readonly Delta[]): boolean {
 
 const PLACEMENT_PATHS: readonly string[] = ['parent_location_id', 'unplaced']
 
+const COLLISION_FLAG_COLUMNS: readonly string[] = [
+  'nameCollisionFlag',
+  'nameCollisionPartnerId',
+  'nameCollisionReason',
+]
+
 /**
- * wrotePath, judging a place's parent and its unplaced mark as one field: a user write to either
- * keeps both (cadence.md → User edits and classifier writes).
+ * A user edit wrote an entity's collision flag, partner or reason, which the table's CHECK holds
+ * together (data-model.md → Authorship contract).
+ */
+export function wroteCollisionFlag(edits: readonly Delta[]): boolean {
+  return COLLISION_FLAG_COLUMNS.some((column) => wroteColumn(edits, column))
+}
+
+const RETIREMENT_COLUMNS: readonly string[] = ['status', 'retiredReason']
+
+/** A user edit wrote an entity's status or retired reason (data-model.md → Authorship contract). */
+export function wroteRetirement(edits: readonly Delta[]): boolean {
+  return RETIREMENT_COLUMNS.some((column) => wroteColumn(edits, column))
+}
+
+const THREAD_STATUS_COLUMNS: readonly string[] = ['status', 'resolvedAtEntryId']
+
+/** A user edit wrote a thread's status or resolved-at entry (classifier.md → Threads → The row). */
+export function wroteThreadStatus(edits: readonly Delta[]): boolean {
+  return THREAD_STATUS_COLUMNS.some((column) => wroteColumn(edits, column))
+}
+
+/**
+ * wrotePath, but a place's parent and unplaced mark, an entity's collision columns, an entity's
+ * status and retired reason, and a thread's status and entry ref each count as one field
+ * (cadence.md → User edits and classifier writes).
  */
 export function wroteField(
   edits: readonly Delta[],
@@ -196,24 +225,26 @@ export function wroteField(
   column: string,
   path: readonly string[],
 ): boolean {
-  const placement =
-    table === 'entities' &&
-    column === 'state' &&
-    path.length === 1 &&
-    PLACEMENT_PATHS.includes(path[0])
-  return placement ? wrotePlacement(edits) : wrotePath(edits, column, path)
+  if (table === 'entities') {
+    if (column === 'state' && path.length === 1 && PLACEMENT_PATHS.includes(path[0]))
+      return wrotePlacement(edits)
+    if (path.length === 0 && COLLISION_FLAG_COLUMNS.includes(column))
+      return wroteCollisionFlag(edits)
+    if (path.length === 0 && RETIREMENT_COLUMNS.includes(column)) return wroteRetirement(edits)
+  }
+  if (table === 'threads' && THREAD_STATUS_COLUMNS.includes(column)) return wroteThreadStatus(edits)
+  return wrotePath(edits, column, path)
 }
 
-/** Whether the user deleted a `character_relationships` row for this pair after `since`. */
-export async function userDeletedPairSince(
+// By natural key, not row id: a pair re-created after the delete is a new row. A delete's undo
+// payload is the whole row, so it still names the key.
+async function userDeletedRowSince(
   ctx: DbCtx,
   branchId: string,
-  aId: string,
-  bId: string,
+  table: 'character_relationships' | 'happening_awareness',
+  key: Readonly<Record<string, string>>,
   since: number,
 ): Promise<boolean> {
-  // By pair, not row id: a pair re-created after the delete is a new row. A delete's
-  // undo payload is the whole row, so it still names the pair.
   const [hit] = await ctx.db
     .select({ id: deltas.id })
     .from(deltas)
@@ -221,13 +252,43 @@ export async function userDeletedPairSince(
       and(
         eq(deltas.branchId, branchId),
         gt(deltas.logPosition, since),
-        eq(deltas.targetTable, 'character_relationships'),
+        eq(deltas.targetTable, table),
         eq(deltas.op, 'delete'),
         eq(deltas.source, 'user_edit'),
-        sql`json_extract(${deltas.undoPayload}, '$.aId') = ${aId}`,
-        sql`json_extract(${deltas.undoPayload}, '$.bId') = ${bId}`,
+        ...Object.entries(key).map(
+          ([column, value]) =>
+            sql`json_extract(${deltas.undoPayload}, ${`$.${column}`}) = ${value}`,
+        ),
       ),
     )
     .limit(1)
   return hit !== undefined
+}
+
+/** Whether the user deleted a `character_relationships` row for this pair after `since`. */
+export function userDeletedPairSince(
+  ctx: DbCtx,
+  branchId: string,
+  aId: string,
+  bId: string,
+  since: number,
+): Promise<boolean> {
+  return userDeletedRowSince(ctx, branchId, 'character_relationships', { aId, bId }, since)
+}
+
+/** Whether the user deleted the character's awareness row for the happening after `since`. */
+export function userDeletedAwarenessSince(
+  ctx: DbCtx,
+  branchId: string,
+  characterId: string,
+  happeningId: string,
+  since: number,
+): Promise<boolean> {
+  return userDeletedRowSince(
+    ctx,
+    branchId,
+    'happening_awareness',
+    { characterId, happeningId },
+    since,
+  )
 }

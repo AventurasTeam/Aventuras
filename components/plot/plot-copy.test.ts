@@ -11,8 +11,11 @@ import {
   saveRejectionText,
 } from './plot-copy'
 
-// The real catalog pulls lucide-react-native, which node can't parse.
-vi.mock('./plot-icon', () => ({ PLOT_ICON_KEYS: ['sparkles', 'eye'] }))
+// A two-key catalog keeps the option lists short; the rest of lib/plot stays real.
+vi.mock('@/lib/plot', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  PLOT_ICON_KEYS: ['sparkles', 'eye'],
+}))
 
 describe('plot icon options', () => {
   it('never offers an empty value, which Radix Select refuses', () => {
