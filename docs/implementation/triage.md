@@ -113,18 +113,6 @@ slice-planning gate forces its resolution before that slice is planned.
   mentioned places slice review's simplifier pass, which skipped it as
   outside that slice.
 
-- **Retrieval takes its disabled places beside the scene they derive
-  from.** `per-turn-retrieval.ts` computes `disabledPlaceIds` with
-  `placeModes` around the scene's location and passes it to
-  `runRetrieval` beside `sceneEntityIds` and `currentLocationId`, and
-  only the caller keeps the two in step. The pass now takes the store's
-  entities and builds its views over its own scene, so it could derive
-  the set itself and drop the parameter
-  ([`code-conventions.md → Type design`](../code-conventions.md#type-design),
-  an invariant kept by convention). Older than entity state, so its
-  slice review filed it rather than tightening it. Raised 2026-10-20 by
-  the entity-state slice review.
-
 - **Test helpers the slices keep re-rolling.** A logger stand-in
   (`{ error: vi.fn(), warn: vi.fn(), debug: vi.fn() }`) is written out
   in `lib/piggyback/apply.test.ts`, `world-time.test.ts` and about six

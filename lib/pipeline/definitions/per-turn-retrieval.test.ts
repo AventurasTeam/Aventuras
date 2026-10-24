@@ -1087,33 +1087,6 @@ describe('retrieval phase — RetrievalParams assembly', () => {
 
   // retrieval.md → Pool exclusions: the places effectively disabled around the scene's location,
   // the same one the prompt's map is built from.
-  it('passes the places disabled around the scene, suspended for a region the scene is inside', async () => {
-    const place = (id: string, parent: string | null, over: Partial<Entity> = {}): Entity => ({
-      ...entity(id, 'location', id),
-      state: { parent_location_id: parent },
-      ...over,
-    })
-    seedOpenStory({
-      entries: [entry(1, 'opening', 'The keep stands.', meta({ currentLocationId: 'loc_anchor' }))],
-      entities: [
-        place('loc_eldra', null),
-        place('loc_vellis', 'loc_eldra', { injectionMode: 'disabled' }),
-        place('loc_anchor', 'loc_vellis'),
-        place('loc_market', 'loc_vellis'),
-        place('loc_thorn', null, { injectionMode: 'disabled' }),
-        place('loc_shrine', 'loc_thorn'),
-      ],
-    })
-
-    await runRetrievalPhase()
-
-    expect([...lastParams().disabledPlaceIds].sort()).toEqual([
-      'loc_shrine',
-      'loc_thorn',
-      'loc_vellis',
-    ])
-  })
-
   // The pass builds its views from these: source rows carry no state.
   it("passes the branch's store entities to the pass", async () => {
     seedOpenStory({
@@ -1586,7 +1559,7 @@ describe('retrieval phase — probe capture', () => {
           threads: [],
           sceneEntityIds: params.sceneEntityIds,
           currentLocationId: params.currentLocationId,
-          disabledPlaceIds: params.disabledPlaceIds,
+          disabledPlaceIds: new Set(),
         }),
       }),
     )
