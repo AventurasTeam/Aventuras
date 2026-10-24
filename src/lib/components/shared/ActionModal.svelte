@@ -10,7 +10,7 @@
   import { createDrawerSwipeGuard } from '#lib/components/ui/drawer/index.ts'
   import { setTextareaUncapped } from '#lib/components/ui/textarea/index.ts'
   import { releaseOrphanScrollLock } from '#lib/utils/scrollLock.ts'
-  import { MODAL_CLOSE_TRANSITION_MS, SHEET_OPEN_TRANSITION_MS } from '#lib/constants/layout.ts'
+  import { MODAL_CLOSE_TRANSITION_MS } from '#lib/constants/layout.ts'
   import { cn } from '#lib/utils/cn.ts'
   import ModalActions from './ModalActions.svelte'
   import DiscardConfirm from './DiscardConfirm.svelte'
@@ -99,7 +99,6 @@
   let returning = false
   let wasOpen = untrack(() => open)
   let timer: ReturnType<typeof setTimeout> | null = null
-  let focusTimer: ReturnType<typeof setTimeout> | null = null
   let frame = $state<HTMLDivElement | null>(null)
 
   const locked = $derived(busy && !cancelWhileBusy)
@@ -136,29 +135,20 @@
   // A pending timer would otherwise act on whichever modal has taken this one's place.
   onDestroy(() => {
     if (timer) clearTimeout(timer)
-    if (focusTimer) clearTimeout(focusTimer)
     releaseOrphanScrollLock()
   })
 
   /**
-   * Focuses the field a caller marked `data-autofocus`, so a phone raises its keyboard. A sheet
-   * waits for its slide, which a keyboard rising midway would shift. iOS WKWebView raises no
-   * keyboard for a focus outside a tap (`KeyboardDisplayRequiresUserAction`): the field is
-   * focused there, but the keyboard waits for the user.
+   * Focuses the field a caller marked `data-autofocus`, so a phone raises its keyboard while a
+   * sheet is still sliding in, as one rise. iOS WKWebView raises no keyboard for a focus outside a
+   * tap (`KeyboardDisplayRequiresUserAction`): the field is focused there, but the keyboard waits
+   * for the user.
    */
   function focusMarkedField(e: Event) {
     const field = frame?.querySelector<HTMLElement>('[data-autofocus]')
     if (!field) return
     e.preventDefault()
-    if (presentation === 'dialog') {
-      field.focus()
-      return
-    }
-    if (focusTimer) clearTimeout(focusTimer)
-    focusTimer = setTimeout(() => {
-      focusTimer = null
-      if (field.isConnected) field.focus({ preventScroll: true })
-    }, SHEET_OPEN_TRANSITION_MS)
+    field.focus({ preventScroll: true })
   }
 
   function leave() {
@@ -246,6 +236,10 @@
         size === 'lg' ? 'max-w-lg' : 'max-w-md',
         // Inset from a phone's edges, where the dialog would otherwise run full width.
         presentation === 'dialog' && 'w-[calc(100%-2rem)] rounded-lg',
+        // Held near the top on a phone when it raises the keyboard, so the shorter screen does not
+        // move it; only its bottom edge comes up, and the content scrolls.
+        presentation === 'dialog' &&
+          'max-md:has-[[data-autofocus]]:top-[calc(var(--safe-top)+1rem)] max-md:has-[[data-autofocus]]:translate-y-0',
       )}
       onInteractOutside={(e: PointerEvent) => {
         e.preventDefault()

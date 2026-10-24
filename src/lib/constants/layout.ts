@@ -11,6 +11,3 @@ export const MAX_SIDEBAR_RATIO = 0.6
  * lock — waits the same amount everywhere.
  */
 export const MODAL_CLOSE_TRANSITION_MS = 500
-
-/** How long a sheet takes to slide in; matches the override in `app.css`. */
-export const SHEET_OPEN_TRANSITION_MS = 180

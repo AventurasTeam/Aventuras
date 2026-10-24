@@ -105,7 +105,9 @@ carries no glyph of that control.
 
 Mark a field `data-autofocus` when it is the first control that decides the action and it is a
 single-line text field: a name to create, a model to add, a time to set. The shell focuses it on
-opening, so a phone raises its keyboard; a sheet waits until it has slid in. Mark nothing when the
+opening, so a phone raises its keyboard. A sheet rises with the keyboard in one motion. A dialog
+with a marked field sits near the top of a phone's screen, since a centred one would jump when the
+keyboard shortens the screen; a long one loses height from the bottom, and its content scrolls. Mark nothing when the
 first such control is a toggle, or when the modal edits a whole record whose fields the user may
 each want or not: Edit story opens with no keyboard. iOS raises no keyboard for this focus, so
 there it waits for a tap.
