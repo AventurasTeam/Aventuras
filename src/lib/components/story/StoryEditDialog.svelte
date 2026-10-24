@@ -7,6 +7,7 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import ActionModal from '#lib/components/shared/ActionModal.svelte'
+  import ExplanationFold from '#lib/components/shared/ExplanationFold.svelte'
   import { ChevronDown, Check } from '@lucide/svelte'
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
   import { Label } from '#lib/components/ui/label/index.ts'
@@ -98,7 +99,6 @@
   bind:open={isOpen}
   onClosed={onClose}
   title="Edit story"
-  description="Genre and description are used when generating every new entry in this story. Old entries are not affected."
   action={{ label: 'Save', disabled: !canSave, onConfirm: () => void save() }}
   busy={saving}
   {dirty}
@@ -108,6 +108,12 @@
   }}
   size="lg"
 >
+  <ExplanationFold id="story_edit_help" summary="How these are used">
+    <p>
+      Genre and description are used when generating every new entry in this story. Old entries are
+      not affected.
+    </p>
+  </ExplanationFold>
   <div class="space-y-1.5">
     <Label for="story-edit-title">Title</Label>
     <Textarea

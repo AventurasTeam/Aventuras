@@ -96,6 +96,7 @@
   let wasOpen = untrack(() => open)
   let timer: ReturnType<typeof setTimeout> | null = null
   let frame = $state<HTMLDivElement | null>(null)
+  const FOCUSABLE = 'input:not([type=hidden]), textarea, select, button, [href], [tabindex="0"]'
 
   const locked = $derived(busy && !cancelWhileBusy)
   const shown = $derived(
@@ -137,13 +138,21 @@
   /**
    * Focuses the field a caller marked `data-autofocus`, so a phone raises its keyboard. iOS
    * WKWebView raises no keyboard for a focus outside a tap (`KeyboardDisplayRequiresUserAction`):
-   * the field is focused there, but the keyboard waits for the user.
+   * the field is focused there, but the keyboard waits for the user. An unmarked text field is
+   * never focused, as bits-ui would when it comes first, so the modal itself takes the focus.
    */
   function focusMarkedField(e: Event) {
-    const field = frame?.querySelector<HTMLElement>('[data-autofocus]')
-    if (!field) return
-    e.preventDefault()
-    field.focus({ preventScroll: true })
+    const marked = frame?.querySelector<HTMLElement>('[data-autofocus]')
+    if (marked) {
+      e.preventDefault()
+      marked.focus({ preventScroll: true })
+      return
+    }
+    const first = frame?.querySelector(FOCUSABLE)
+    if (first instanceof HTMLInputElement || first instanceof HTMLTextAreaElement) {
+      e.preventDefault()
+      frame?.focus({ preventScroll: true })
+    }
   }
 
   function leave() {
@@ -215,7 +224,12 @@
     onOpenAutoFocus={focusMarkedField}
     onkeydown={handleShortcut}
   >
-    <div bind:this={frame} class="flex min-h-0 flex-1 flex-col" inert={question !== null}>
+    <div
+      bind:this={frame}
+      tabindex="-1"
+      class="flex min-h-0 flex-1 flex-col outline-none"
+      inert={question !== null}
+    >
       <!-- Left-aligned at every width: a title or description that wraps reads badly centred. -->
       <ResponsiveModal.Header class="border-b px-6 py-4 text-left" closeButton={false}>
         <ResponsiveModal.Title class={cn('text-left', titleIcon && 'flex items-center gap-2')}>

@@ -105,7 +105,8 @@ single-line text field: a name to create, a model to add, a time to set. The she
 opening, so a phone raises its keyboard. The dialog it sits in is already held near the top, so
 the keyboard only takes height from its bottom edge, and the content scrolls. Mark nothing when the
 first such control is a toggle, or when the modal edits a whole record whose fields the user may
-each want or not: Edit story opens with no keyboard. iOS raises no keyboard for this focus, so
+each want or not: Edit story opens with no keyboard. An unmarked text field is never focused on
+opening, even when it comes first, where bits-ui would focus it; the modal takes the focus itself. iOS raises no keyboard for this focus, so
 there it waits for a tap.
 
 Enter in a single-line field moves to the next text field, with `enterkeyhint="next"`. In the
