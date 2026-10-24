@@ -219,12 +219,6 @@ slice-planning gate forces its resolution before that slice is planned.
   not handed back. Raised 2026-10-22 in the pass failure policy
   slice's branch review.
 
-- **The commit-msg hook doesn't check the subject.**
-  `scripts/check-commit-msg.sh` counts only the body's lines, while
-  `CLAUDE.md` caps the subject at 72 characters. Four of the pass
-  failure policy slice's commits ran 73 to 75 (`28950818`, `042c011c`,
-  `0f8086c0`, `21ae1f2f`). Raised 2026-10-23 by its slice review.
-
 - **The embed-failure spec builds its system-entry selectors inline.**
   `e2e/tests/retrieval-embed-failure.spec.ts` (~:104, :108) calls
   `getByText(t('reader:systemEntry.failure.embed'))` and the
