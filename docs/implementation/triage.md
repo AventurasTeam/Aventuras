@@ -180,16 +180,6 @@ slice-planning gate forces its resolution before that slice is planned.
   module boundary objects to. Raised 2026-10-20 by the entity-state
   slice review's simplifier pass, which skipped them for want of one.
 
-- **Era flips have no writer.** Canon has the user create a flip from
-  the reader's entry card ("Flip era") and the wizard's era picker
-  write one at world time 0
-  ([`data-model.md → Authorship contract`](../data-model.md#authorship-contract)),
-  but nothing dispatches a `branch_era_flips` write: the entry card's
-  `onFlipEra` prop is unwired, and the wizard's Finish steps
-  (`wizard.md`) omit the flip its era picker promises. Found 2026-10-20
-  by the AI writers design's inventory; not reproduced in the running
-  app.
-
 - **The head turn's membership test is written out four times.**
   `resolveHeadTurn` in `lib/head-turn` is the one definition of the
   head turn, but the "is this entry its tail or origin" test on top of
