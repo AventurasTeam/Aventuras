@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import type { Chapter, StoryEntry, TimeTracker } from '#lib/types/index.ts'
+import type { Chapter, StoryEntry, TimeAnchor, TimeTracker } from '#lib/types/index.ts'
 import type { Checkpoint } from '#lib/types/index.ts'
 import {
   planReconciliation,
@@ -189,6 +189,20 @@ describe('fingerprintPreview', () => {
     expect(withInner).not.toBe(fingerprintPreview(base))
   })
 
+  it("changes when an endpoint anchor's note changes, though its time does not", () => {
+    const anchorOn = (note: string | null): TimeAnchor => ({
+      id: 'a-C',
+      storyId: 's1',
+      entryId: 'C',
+      assertedTime: t(9),
+      note,
+      createdAt: 0,
+    })
+    const before = fingerprintPreview({ ...base, endpointAnchors: { to: anchorOn('dawn') } })
+    const after = fingerprintPreview({ ...base, endpointAnchors: { to: anchorOn('dusk') } })
+    expect(after).not.toBe(before)
+  })
+
   it('does not change because the later boundary is itself anchored', () => {
     expect(fingerprintPreview({ ...base, boundaryEntryIds: ['C'] })).toBe(
       fingerprintPreview({ ...base, boundaryEntryIds: ['C'] }),
@@ -274,5 +288,56 @@ describe('planReconciliation: world-state snapshots', () => {
     expect(
       reconciliationStatements(plan, entries).some((s) => s.sql.includes('world_state_snapshots')),
     ).toBe(false)
+  })
+})
+
+describe('reconciliationStatements: an anchor edited for the reconciliation', () => {
+  const entries = [entry('A', t(0), t(1)), entry('B', t(1), t(2)), entry('C', t(2), t(3))]
+  const anchorOn = (entryId: string): TimeAnchor => ({
+    id: `a-${entryId}`,
+    storyId: 's1',
+    entryId,
+    assertedTime: t(5),
+    note: 'dawn',
+    createdAt: 4,
+  })
+  const anchorStatements = (statements: { sql: string; params?: unknown[] }[]) =>
+    statements.filter((statement) => statement.sql.includes('time_anchors'))
+
+  it('stores the anchor once, in the same unit', () => {
+    const plan = planReconciliation({
+      entries,
+      chapters: [],
+      times: [reconciled('B', t(1), t(3)), reconciled('C', t(3), t(5))],
+      anchors: [anchorOn('C')],
+    })
+    const stored = anchorStatements(reconciliationStatements(plan, entries))
+    expect(stored).toHaveLength(1)
+    expect(stored[0].params).toEqual(['a-C', 's1', 'C', JSON.stringify(t(5)), 'dawn', 4])
+  })
+
+  it('stores no anchor when none was edited', () => {
+    const plan = planReconciliation({
+      entries,
+      chapters: [],
+      times: [reconciled('B', t(1), t(3)), reconciled('C', t(3), t(5))],
+    })
+    expect(anchorStatements(reconciliationStatements(plan, entries))).toEqual([])
+  })
+
+  it('writes nothing else at an earlier boundary whose anchor was edited', () => {
+    const plan = planReconciliation({
+      entries,
+      chapters: [],
+      times: [reconciled('B', t(5), t(6)), reconciled('C', t(6), t(7))],
+      checkpoints: [checkpoint('cp', 'A', t(1))],
+      anchors: [anchorOn('A')],
+    })
+    const statements = reconciliationStatements(plan, entries)
+    const namingA = statements.filter(
+      (statement) => !statement.sql.includes('time_anchors') && statement.params?.includes('A'),
+    )
+    expect(namingA).toEqual([])
+    expect(plan.checkpointClocks).toEqual([])
   })
 })
