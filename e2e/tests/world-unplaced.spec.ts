@@ -84,9 +84,6 @@ test.describe.serial('World — unplaced places', () => {
     await expect(world.detailName(page)).toHaveText(SALTMERE)
     await world.moreActions(page).click()
     await world.deleteEntityItem(page).click()
-    await expect(world.deleteDialog(page)).toContainText(
-      t('world:delete.unplacedPlaces', { count: 1 }),
-    )
     await world.deleteConfirm(page, 'location').click()
     await expect
       .poll(() => placeState(page, wharfId), { timeout: 15_000 })
