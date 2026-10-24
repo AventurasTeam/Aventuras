@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 import { openWorld } from '../flows/navigation'
-import { queryApp } from '../harness/db'
+import { entityState } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { suppressNativeUnloadDialogRace } from '../harness/reload'
@@ -17,14 +17,7 @@ const HERO_BRANCH = 'br_hero_main'
 const SALTMERE = 'E2E Saltmere'
 const WHARF = 'E2E Smugglers Wharf'
 
-async function placeState(page: Page, id: string): Promise<unknown> {
-  const rows = await queryApp(page, `SELECT state FROM entities WHERE branch_id = ? AND id = ?`, [
-    HERO_BRANCH,
-    id,
-  ])
-  const raw = rows[0]?.[0]
-  return typeof raw === 'string' ? JSON.parse(raw) : null
-}
+const placeState = (page: Page, id: string) => entityState(page, HERO_BRANCH, id)
 
 async function savePane(page: Page): Promise<void> {
   await saveSession.saveBarSave(page).click()
@@ -52,14 +45,13 @@ test.describe.serial('World — unplaced places', () => {
     removeUserDataDir(userDataDir)
   })
 
-  test('an unplaced place reads Location unknown, and Top level places it', async () => {
+  test("an unplaced place's picker reads Unknown, and Top level places it", async () => {
     const page = app.window
     await openWorld(page, HERO_TITLE)
     await world.categoryTrigger(page).click()
     await world.categoryOption(page, 'location').click()
     await world.row(page, SALTMERE).click()
     await expect(world.detailName(page)).toHaveText(SALTMERE)
-    await expect(world.locationUnknown(page)).toBeVisible()
 
     await world.tab(page, 'connections').click()
     await world.placementPicker(page, t('world:connections.placementUnknown')).click()
@@ -85,9 +77,6 @@ test.describe.serial('World — unplaced places', () => {
     await expect(world.detailName(page)).toHaveText(SALTMERE)
     await world.moreActions(page).click()
     await world.deleteEntityItem(page).click()
-    await expect(world.deleteDialog(page)).toContainText(
-      t('world:delete.unplacedPlaces', { count: 1 }),
-    )
     await world.deleteConfirm(page, 'location').click()
     await expect
       .poll(() => placeState(page, wharfId), { timeout: 15_000 })

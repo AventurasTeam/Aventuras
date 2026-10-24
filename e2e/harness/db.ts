@@ -64,6 +64,20 @@ export async function tailMetadata(page: Page, branchId: string): Promise<EntryM
   return raw ? (JSON.parse(raw) as EntryMetadata) : null
 }
 
+/** An entity's parsed `state`; null when the row is gone. */
+export async function entityState(
+  page: Page,
+  branchId: string,
+  id: string,
+): Promise<Record<string, unknown> | null> {
+  const rows = await queryApp(page, `SELECT state FROM entities WHERE branch_id = ? AND id = ?`, [
+    branchId,
+    id,
+  ])
+  const raw = rows[0]?.[0]
+  return typeof raw === 'string' ? (JSON.parse(raw) as Record<string, unknown>) : null
+}
+
 // The migrations' 384 family plus an 8-dim one seedVectors creates, so a sweep "in every dim
 // family" is checked across more than the one a fresh DB has.
 export const SEEDED_VEC_DIMS = [384, 8] as const

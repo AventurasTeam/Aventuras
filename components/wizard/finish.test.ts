@@ -614,9 +614,8 @@ describe('finishWizard', () => {
   it('drops a location that names itself as its own parent', async () => {
     const { db, ctx } = await setup()
 
-    // Both authoring paths reject a self-parent (the editor's candidate list
-    // excludes self, cast-import.ts excludes selfId), so this shape only
-    // arrives on a corrupt working state — which is what castRef must survive.
+    // Both authoring paths reject a self-parent (editor candidates, cast-import selfId), so only a
+    // corrupt working state carries one — which castPlacement must survive.
     const result = await finishWizard(
       makeState({
         title: 'Self-Parented',

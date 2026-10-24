@@ -9,30 +9,34 @@ import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
-type PickerFieldProps = TriggerProps & {
-  /** The committed value's rendering; shown only while `hasValue`. */
-  children: ReactElement | null
-  /**
-   * Distinct from `children`: a dangling value (id with no matching row) still counts
-   * as "set" and renders content, not the placeholder.
-   */
-  hasValue: boolean
-  /** Plain-text form of the value, folded into the accessible name alongside `label`. */
-  valueText?: string
-  placeholder: string
-  label: string
-  /** Renders a `×` beside a set value that clears without opening the overlay. */
-  onClear?: () => void
-  /** Renders a named `↗` before the `×`; kept in layout, hidden while `onOpen` is unset. */
-  openLabel?: string
-  /** Opens the value elsewhere (not the overlay). */
-  onOpen?: () => void
-  disabled?: boolean
-  disabledReason?: string
-  'aria-invalid'?: boolean | 'true' | 'false'
-  testID?: string
-  className?: string
-}
+type ValueState =
+  | {
+      /** Distinct from `children`: a dangling value (id, no matching row) still counts as "set". */
+      hasValue: boolean
+      placeholder: string
+    }
+  /** A field that always holds a value never shows a placeholder. */
+  | { hasValue: true; placeholder?: never }
+
+type PickerFieldProps = TriggerProps &
+  ValueState & {
+    /** The committed value's rendering; shown only while `hasValue`. */
+    children: ReactElement | null
+    /** Plain-text form of the value, folded into the accessible name alongside `label`. */
+    valueText?: string
+    label: string
+    /** Renders a `×` beside a set value that clears without opening the overlay. */
+    onClear?: () => void
+    /** Renders a named `↗` before the `×`; kept in layout, hidden while `onOpen` is unset. */
+    openLabel?: string
+    /** Opens the value elsewhere (not the overlay). */
+    onOpen?: () => void
+    disabled?: boolean
+    disabledReason?: string
+    'aria-invalid'?: boolean | 'true' | 'false'
+    testID?: string
+    className?: string
+  }
 
 // `renderTrigger`'s child sits under `PopoverPrimitive.Trigger asChild`, which composes its
 // own ref/handlers onto top-level props (lessons-learned/aschild-slot-props.md) — hence the merge.

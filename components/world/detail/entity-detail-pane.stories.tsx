@@ -1112,9 +1112,9 @@ export const LocationSparse: Story = {
     row: makeEntity({ id: 'loc_new', kind: 'location', name: 'Unmapped cove' }),
   },
   play: async () => {
-    await expectEmptyRegion('overview-part-of')
     await expectEmptyRegion('overview-condition')
     await expectEmptyRegion('overview-characters-here', 'None')
+    await expect(screen.queryByTestId('overview-part-of')).toBeNull()
   },
 }
 
@@ -1612,6 +1612,18 @@ export const PlacementPickerTopLevel: Story = {
       kind: 'location',
       draft: expect.objectContaining({ placement: { kind: 'top' } }),
     })
+  },
+}
+
+/** The parent picker searches places, and says so when nothing matches. */
+export const PlacementPickerSearchesPlaces: Story = {
+  args: { kind: 'location', row: VARN, entities: WITH_VARN },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await userEvent.click(await screen.findByRole('button', { name: 'Part of: Unknown' }, WAIT))
+    const search = await screen.findByPlaceholderText('Search places…', {}, WAIT)
+    await userEvent.type(search, 'zzz')
+    await expect(await screen.findByText('No matching places.', {}, WAIT)).toBeVisible()
   },
 }
 

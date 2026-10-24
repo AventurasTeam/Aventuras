@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { emptyCastDraft } from '@/lib/db'
+import { emptyCastDraft, type WizardLocationDraft } from '@/lib/db'
 
 import {
   activeLead,
   canSetLead,
+  castPlacement,
   castRowErrors,
   castStepValid,
   invalidCastRowIds,
@@ -71,5 +72,41 @@ describe('parentCandidates', () => {
   it('keeps the current parent listed even when a stored loop runs through it', () => {
     const cast = [place('a', 'b'), place('b', 'a')]
     expect(parentCandidates(cast[0], cast).map((r) => r.id)).toEqual(['b'])
+  })
+})
+
+describe('castPlacement', () => {
+  const place = (id: string, patch: Partial<WizardLocationDraft> = {}): WizardLocationDraft => ({
+    ...emptyCastDraft('location', id),
+    name: id,
+    ...patch,
+  })
+
+  it('sits under a parent that names another cast location', () => {
+    const cast = [place('city'), place('market', { parentLocationId: 'city' })]
+    expect(castPlacement(cast[1], cast)).toEqual({ kind: 'under', parentId: 'city' })
+  })
+
+  it('is top-level when no parent was picked or asked for', () => {
+    expect(castPlacement(place('city'), [place('city')])).toEqual({ kind: 'top' })
+  })
+
+  it('is unplaced for an unknown, unresolved, missing, self or non-location parent', () => {
+    const lead = { ...emptyCastDraft('character', 'lead'), name: 'Aria' }
+    const rows = [
+      place('a', { parentUnknown: true }),
+      place('b', { unresolvedParentLocationName: 'Mornstone Keep' }),
+      place('c', { parentLocationId: 'gone' }),
+      place('d', { parentLocationId: 'd' }),
+      place('e', { parentLocationId: 'lead' }),
+    ]
+    const cast = [...rows, lead]
+    for (const row of rows) expect(castPlacement(row, cast)).toEqual({ kind: 'unplaced' })
+  })
+
+  it('treats a blank unresolved name as no ask', () => {
+    expect(castPlacement(place('a', { unresolvedParentLocationName: '  ' }), [])).toEqual({
+      kind: 'top',
+    })
   })
 })

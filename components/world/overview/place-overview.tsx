@@ -1,4 +1,5 @@
 import { Text } from '@/components/ui/text'
+import type { Entity } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import {
   charactersAt,
@@ -38,8 +39,45 @@ function ConditionRegion({
   )
 }
 
-// world.md → Location Overview. data-model.md → LocationState shape: an unplaced place reads
-// `Location unknown`, and a chain whose top place is unplaced ends in it.
+// A chain ends in `Location unknown` when its top is unplaced; an unplaced place shows only that.
+function PartOfRegion({
+  ancestors,
+  unknown,
+  onRegionPress,
+}: {
+  ancestors: readonly Entity[]
+  unknown: boolean
+  onRegionPress: KindBodyProps['onRegionPress']
+}) {
+  if (ancestors.length > 0)
+    return (
+      <NamesRegion
+        label={t('world:overview.partOf')}
+        tab="connections"
+        onRegionPress={onRegionPress}
+        targets={ancestors}
+        joiner={` ${t('world:overview.within')} `}
+        meta={unknown ? t('world:overview.locationUnknown') : undefined}
+        testID="overview-part-of"
+      />
+    )
+  if (!unknown) return null
+  return (
+    <Region
+      label={t('world:overview.partOf')}
+      tab="connections"
+      onRegionPress={onRegionPress}
+      empty={false}
+      testID="overview-part-of"
+    >
+      <Text size="sm" variant="muted">
+        {t('world:overview.locationUnknown')}
+      </Text>
+    </Region>
+  )
+}
+
+// world.md → Location Overview.
 export function LocationOverviewBody({ entity, entities, onRegionPress }: KindBodyProps) {
   const state = stateOf(entity, 'location')
   const ancestors = locationAncestors(entity.id, entities)
@@ -48,29 +86,7 @@ export function LocationOverviewBody({ entity, entities, onRegionPress }: KindBo
   const unknown = placementIn(top.id).kind === 'unplaced'
   return (
     <>
-      {unknown && ancestors.length === 0 ? (
-        <Region
-          label={t('world:overview.partOf')}
-          tab="connections"
-          onRegionPress={onRegionPress}
-          empty={false}
-          testID="overview-part-of"
-        >
-          <Text size="sm" variant="muted">
-            {t('world:overview.locationUnknown')}
-          </Text>
-        </Region>
-      ) : (
-        <NamesRegion
-          label={t('world:overview.partOf')}
-          tab="connections"
-          onRegionPress={onRegionPress}
-          targets={ancestors}
-          joiner={` ${t('world:overview.within')} `}
-          meta={unknown ? t('world:overview.locationUnknown') : undefined}
-          testID="overview-part-of"
-        />
-      )}
+      <PartOfRegion ancestors={ancestors} unknown={unknown} onRegionPress={onRegionPress} />
       <ConditionRegion condition={state.condition} onRegionPress={onRegionPress} />
       <DerivedNamesRegion
         label={t('world:overview.charactersHere')}

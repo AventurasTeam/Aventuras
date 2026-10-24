@@ -386,6 +386,8 @@
     "none": "None",
     "placementUnknown": "Unknown",
     "placementTopLevel": "Top level",
+    "placementSearch": "Search places…",
+    "placementNoResults": "No matching places.",
     "lastSeenNever": "Not seen yet",
     "lastSeenUnknown": "Seen earlier in the story",
     "entry": "entry #{{position}}",

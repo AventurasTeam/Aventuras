@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -351,12 +351,25 @@ export function parkClassifierWatermarkAtLastReply(dbPath: string, branchId: str
   }
 }
 
+// Any fixed UUID works: it only keeps a seeded id stable from run to run.
+const SEED_ID_NAMESPACE = Buffer.from('6f1c2d9e5b7a4c3e8d2f1a0b9c8e7d6f', 'hex')
+
+// RFC 9562 UUIDv5 of `mnemonic`.
+function seedUuid(mnemonic: string): string {
+  const bytes = createHash('sha1').update(SEED_ID_NAMESPACE).update(mnemonic).digest()
+  bytes[6] = (bytes[6] & 0x0f) | 0x50
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = bytes.subarray(0, 16).toString('hex')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
 /**
- * Insert an unplaced location (data-model.md → LocationState shape); its id is a real `loc_<uuid>`,
+ * Insert an unplaced location (data-model.md → LocationState shape) with a real `loc_<uuid>` id,
  * since prompts substitute it (docs/testing.md → Fixture + seed contract). Runs before launch.
  */
 export function seedUnplacedPlace(dbPath: string, branchId: string, name: string): string {
-  const id = `loc_${randomUUID()}`
+  // The raw name, not a slug: two names that slug alike must not share an id.
+  const id = `loc_${seedUuid(`loc:${name}`)}`
   const db = new DatabaseSync(dbPath)
   try {
     db.exec('PRAGMA busy_timeout = 10000')

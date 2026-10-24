@@ -41,7 +41,7 @@ function rowIdOf(placement: PlacePlacement): string {
 }
 
 function StatusTag({ entity }: { entity: Entity }) {
-  // data-model.md → Lifecycle on retirement: UI badges retired places.
+  // Parity with EntityPicker's rows.
   if (entity.status === 'active') return null
   return (
     <View className="shrink-0">
@@ -195,7 +195,7 @@ export function PlacementPicker({
   return (
     <SearchableOverlayList<PlacementRow>
       searchPlacement="in-overlay"
-      searchPlaceholder={t('picker.entitySearch')}
+      searchPlaceholder={t('world:connections.placementSearch')}
       onQueryChange={setQuery}
       sections={sections}
       open={open}
@@ -210,7 +210,6 @@ export function PlacementPicker({
           {...trigger}
           hasValue
           valueText={valueText}
-          placeholder={CHOICE_LABEL.unplaced()}
           label={label}
           disabled={disabled}
           disabledReason={disabledReason}
@@ -223,9 +222,10 @@ export function PlacementPicker({
         </PickerField>
       )}
       renderRow={(row) => <PlacementRowView row={row.data} />}
-      renderEmpty={(activeQuery) => (
+      // Top level is always on offer, so the list is only ever empty under a query.
+      renderEmpty={() => (
         <Text size="sm" variant="muted" className="p-3">
-          {activeQuery ? t('picker.entityNoResults') : t('picker.entityNone')}
+          {t('world:connections.placementNoResults')}
         </Text>
       )}
       onActivate={handleActivate}

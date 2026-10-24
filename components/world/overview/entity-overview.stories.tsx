@@ -298,6 +298,16 @@ export const LocationRegionRouting: Story = {
   },
 }
 
+/** world.md → Location Overview: a top-level place has no parent chain. */
+export const LocationTopLevelHasNoChain: Story = {
+  args: { entity: HOLLOW },
+  play: async () => {
+    await expect(await screen.findByTestId('overview-condition', {}, WAIT)).toBeVisible()
+    await expect(screen.queryByTestId('overview-part-of')).toBeNull()
+    await expect(screen.queryByText('Part of')).toBeNull()
+  },
+}
+
 /** world.md → Overview: an unplaced place reads `Location unknown` where its chain would be. */
 export const LocationUnplaced: Story = {
   args: { entity: VARN },

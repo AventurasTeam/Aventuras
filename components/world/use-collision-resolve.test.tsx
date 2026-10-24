@@ -235,6 +235,26 @@ describe('useCollisionResolve → opening', () => {
     expect(openedPair(result).sides[1].relationCounts.translationRows).toBe(1)
   })
 
+  it('keeps the open pair while the story is rebuilt in place, and re-derives it once the story moves', () => {
+    const { result, rerender } = renderHook(
+      ({ story }: { story: StoryPlace }) => useCollisionResolve(BRANCH, ctx, run, story),
+      { initialProps: { story: NOWHERE } },
+    )
+    act(() => result.current.request(NEWER.id, OLDER.id))
+    const opened = openedPair(result)
+
+    rerender({ story: storyPlaceOf({ tail: null, sceneSource: null }) })
+    expect(result.current.pair).toBe(opened)
+
+    const at = { metadata: { currentLocationId: 'loc_harbor' } }
+    rerender({ story: storyPlaceOf({ tail: at, sceneSource: null }) })
+    const tailMoved = result.current.pair
+    expect(tailMoved).not.toBe(opened)
+
+    rerender({ story: storyPlaceOf({ tail: at, sceneSource: at }) })
+    expect(result.current.pair).not.toBe(tailMoved)
+  })
+
   it('passes the story to the summary: an unplaced canonical holding it stays unplaced under a disabled place', () => {
     const harbor = makeEntity({
       id: 'loc_harbor',

@@ -31,7 +31,7 @@ import { cn } from '@/lib/utils'
 import { CAST_SOFT_CAPS } from '@/lib/wizard'
 
 import { FIELD_MAX, VOICE_MAX } from './cast-import'
-import { canSetLead, parentCandidates } from './step-cast-logic'
+import { canSetLead, castPlacement, parentCandidates } from './step-cast-logic'
 
 const STATUS_OPTIONS: SelectOption[] = [
   { value: 'active', label: t('wizard:cast.editor.statusActive') },
@@ -127,9 +127,8 @@ type PickFromCastProps = {
   value: string | null
   onChange: (value: string | null) => void
   /**
-   * Label of an Unknown option, for a row whose null `value` can mean "not known" (an import's
-   * unresolved parent). Offered and selected only while `unknown`; never reaches `onChange`. Once
-   * offered, the mode keeps counting its slot so the pick removing it can't reshape the control.
+   * Unknown option label: offered and selected only while `unknown`; never reaches `onChange`.
+   * Once offered, the mode keeps counting its slot, so removing it can't reshape the control.
    */
   unknownLabel?: string
   unknown?: boolean
@@ -146,7 +145,7 @@ function PickFromCast({
   unknown = false,
 }: PickFromCastProps) {
   const tier = useTier()
-  const offered = unknownLabel != null && unknown && value == null
+  const offered = unknownLabel != null && unknown
   const [reserveUnknown, setReserveUnknown] = useState(offered)
   if (offered && !reserveUnknown) setReserveUnknown(true)
   if (candidates.length === 0 && !offered) {
@@ -297,6 +296,7 @@ export function CharacterEditor({
 
 export function LocationEditor({ row, invalid, cast }: CommonEditorProps<WizardLocationDraft>) {
   const locationCandidates = parentCandidates(row, cast)
+  const placement = castPlacement(row, cast)
   return (
     <>
       <NameStatusRow row={row} invalid={invalid} />
@@ -313,9 +313,9 @@ export function LocationEditor({ row, invalid, cast }: CommonEditorProps<WizardL
               emptyLabel={t('wizard:cast.editor.noLocationsYet')}
               nullLabel={t('wizard:cast.editor.noParent')}
               unknownLabel={t('wizard:cast.editor.parentUnknown')}
-              unknown={row.parentUnknown || row.unresolvedParentLocationName.trim() !== ''}
+              unknown={placement.kind === 'unplaced'}
               candidates={locationCandidates}
-              value={row.parentLocationId}
+              value={placement.kind === 'under' ? placement.parentId : null}
               onChange={(parentLocationId) =>
                 wizardStore.patchCast(row, {
                   parentLocationId,

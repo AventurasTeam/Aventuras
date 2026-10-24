@@ -95,10 +95,9 @@ function withoutTags<T extends { tags: readonly string[] }>(row: T): Record<stri
 
 // `parentUnknown` is wizard bookkeeping for Finish's placement, not a documented variable.
 function castRowForTemplate(row: WizardWorkingState['cast'][number]): Record<string, unknown> {
-  const { tags, ...rest } = row
-  if (rest.kind !== 'location') return rest
-  const { parentUnknown, ...location } = rest
-  return location
+  if (row.kind !== 'location') return withoutTags(row)
+  const { parentUnknown, ...location } = row
+  return withoutTags(location)
 }
 
 /**

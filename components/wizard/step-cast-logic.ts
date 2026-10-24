@@ -1,5 +1,5 @@
 import type { WizardCastDraft, WizardCharacterDraft, WizardLocationDraft } from '@/lib/db'
-import { checkParentChain } from '@/lib/world'
+import { checkParentChain, type PlacePlacement } from '@/lib/world'
 
 /**
  * Single-member today, and callers lean on that: both the compact row and the
@@ -67,4 +67,24 @@ export function parentCandidates(
       r.id !== row.id &&
       (r.id === row.parentLocationId || checkParentChain(row.id, r.id, parentOf) === 'ok'),
   )
+}
+
+/**
+ * Where `row` lands at Finish, and so what its parent picker selects (wizard.md → Location editor):
+ * under the cast location it names, top-level if no parent was picked or asked for, else unplaced.
+ */
+export function castPlacement(
+  row: WizardLocationDraft,
+  cast: readonly WizardCastDraft[],
+): PlacePlacement {
+  const parentId = row.parentLocationId
+  if (
+    parentId != null &&
+    parentId !== row.id &&
+    cast.some((r) => r.id === parentId && r.kind === 'location')
+  )
+    return { kind: 'under', parentId }
+  const unknown =
+    parentId != null || row.parentUnknown || row.unresolvedParentLocationName.trim() !== ''
+  return unknown ? { kind: 'unplaced' } : { kind: 'top' }
 }

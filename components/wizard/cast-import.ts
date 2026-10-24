@@ -43,10 +43,8 @@ export function pendingCastRef(
   row: WizardCastDraft,
   cast: readonly WizardCastDraft[],
 ): { field: 'faction' | 'parentLocation'; wantedName: string; resolvableId: string | null } | null {
-  // Kind and self-exclusion only, matching resolveCastImports and the editor's
-  // pickers. Status is deliberately not a filter: the pickers offer a staged
-  // target and finish.ts's castRef commits the pointer, so calling it missing
-  // would be false. Self is the one exclusion all three agree on.
+  // Kind and self-exclusion only, as in resolveCastImports and the pickers. Status isn't a filter:
+  // they offer a staged target and Finish commits it (castRef, castPlacement); "missing" is false.
   const match = (kind: WizardCastDraft['kind'], wanted: string): string | null =>
     cast.find((r) => r.id !== row.id && r.kind === kind && norm(r.name) === norm(wanted))?.id ??
     null
@@ -109,11 +107,8 @@ export function resolveCastImports(
     if (key.length > 0) idByKey.set(`${suggestion.kind}:${key}`, id)
   }
 
-  // Excludes selfId: idByKey is indexed before refs resolve (above), so a
-  // suggested location naming itself as parent_location_name would otherwise
-  // bind to its own freshly-minted id (finish.ts's castRef self-exclusion
-  // guards this at commit time; resolving it here means the store never
-  // carries the dangling self-pointer in the first place).
+  // Excludes selfId: idByKey is indexed before refs resolve, so a location naming itself as parent
+  // would bind to its own minted id. castPlacement guards it at Finish; this keeps the store clean.
   const unresolved: UnresolvedCastRef[] = []
   // Names that resolved to nothing, keyed by importing row id, so the row carries
   // the ask forward for the list to re-check against a cast still being edited.
