@@ -269,6 +269,17 @@ membership, link rows, threads and lore:
   one field, so an edit to any of them counts, a merge's re-point
   included.
 
+A pass plans a standing, a thread status, a placement, a rename, a
+keyword append and a membership against the stored row, not against
+what an earlier fact of the same reply planned: one that restates the
+stored value plans nothing unless an earlier fact for that row was
+sent, and one that restates an earlier fact's value is still sent,
+since user precedence may refuse the earlier write and the later turn
+is newer prose. The handler no-ops a write whose value is already
+written. A status transition is the exception, judged against the
+reply's view
+([`classifier.md → What the classifier writes`](./classifier.md#what-the-classifier-writes)).
+
 Undoing the user's edit removes its delta, which lifts the protection
 for any pass that reads the prose afterwards. A pass the edit already
 blocked has advanced its watermark past that prose, so the undo leaves
