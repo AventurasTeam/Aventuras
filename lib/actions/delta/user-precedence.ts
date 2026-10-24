@@ -174,7 +174,8 @@ export function wroteColumn(edits: readonly Delta[], column: string): boolean {
   return wrotePath(edits, column, [])
 }
 
-const PLACEMENT_PATHS: readonly string[] = [
+/** A place's parent and unplaced mark: one field to user precedence and to an undo alike. */
+export const PLACEMENT_PATHS: readonly string[] = [
   'parent_location_id',
   'unplaced',
 ] satisfies readonly (keyof LocationState)[]

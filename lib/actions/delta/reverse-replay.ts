@@ -33,7 +33,7 @@ import {
   type ReversalSet,
   type RowRef,
 } from './row-closure'
-import { userEditsOutliving, wroteColumn, wroteField } from './user-precedence'
+import { PLACEMENT_PATHS, userEditsOutliving, wroteColumn, wroteField } from './user-precedence'
 
 export {
   DeltaReplayError,
@@ -191,8 +191,7 @@ function undoneColumn(entry: TableEntry, col: string, partial: unknown, current:
   const undone = undoneValue(entry.columnSchemas[col], partial, current)
   if (entry.table !== 'entities' || col !== 'state') return undone
   if (!isPlainObject(partial) || !isPlainObject(undone)) return undone
-  if (!Object.hasOwn(partial, 'parent_location_id') && !Object.hasOwn(partial, 'unplaced'))
-    return undone
+  if (!PLACEMENT_PATHS.some((key) => Object.hasOwn(partial, key))) return undone
   return withPlacement(undone as LocationState, undonePlacement(partial))
 }
 
