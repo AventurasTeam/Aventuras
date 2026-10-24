@@ -334,7 +334,12 @@ export async function* periodicClassifierPhase(
     ]),
   )
 
-  const deps = { entities, embedDescriptions: classifierEmbedder(), log: ctx.log }
+  const deps = {
+    entities,
+    embedDescriptions: classifierEmbedder(),
+    log: ctx.log,
+    signal: ctx.abortSignal,
+  }
   const reconcile = async (
     kind: ReconciledKind,
     // A handle a character already claimed plans nothing as a faction (plan.ts).

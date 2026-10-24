@@ -95,11 +95,13 @@ slice-planning gate forces its resolution before that slice is planned.
   Raised 2026-10-10 by the partial-name collisions code review.
 
 - **The item-match embed in the per-turn writers can't be cancelled.**
-  `EmbedDescriptions` takes no abort signal, though `embedTexts`
-  (`lib/embedder/service.ts`) accepts one, so a cancel during a slow
-  provider embed takes effect only once it settles, while the hard gate
-  holds the branch. Raised 2026-10-11 in the
-  locations-and-items-from-prose PR.
+  `planTurnCreates` (`lib/pipeline/definitions/per-turn-creates.ts`)
+  now takes an optional `signal` that reaches the item-match embed, but
+  neither caller passes `ctx.abortSignal` (`per-turn.ts` and
+  `per-turn-piggyback.ts`), so a cancel during a slow provider embed
+  still takes effect only once it settles, while the hard gate holds
+  the branch. Raised 2026-10-11 in the locations-and-items-from-prose
+  PR; narrowed 2026-10-24 by the triage pass.
 
 - **A cancel after the last abort check still returns `completed`.**
   In `lib/pipeline/definitions/per-turn.ts` (~line 322) a cancel
@@ -488,15 +490,6 @@ slice-planning gate forces its resolution before that slice is planned.
   (`components/reader/regenerate-outcome.ts:39`) and the submission is
   not handed back. Raised 2026-10-22 in the pass failure policy
   slice's branch review.
-
-- **Reconcile's description embeds are neither bounded nor
-  cancellable.** `EmbedDescriptions` (`lib/classifier/reconcile.ts`)
-  takes no signal, so the pass's bound and its Cancel don't reach
-  `embedClassifierDescriptions` (`lib/embedder-swap/app-deps.ts`)
-  between the structured call and the writes: a hung remote embedder
-  holds the pass, and the gate, until it returns. Predates the pass
-  failure policy slice, which noted it as a monitor item; raised
-  2026-10-23 by its slice review.
 
 - **A pass bound that expires during a retry backoff reports a
   timeout.** `callWithRetry` (`lib/ai/transport/call-with-retry.ts`)

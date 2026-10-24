@@ -1188,6 +1188,19 @@ code before it moved; resolve with the slice it names.
   (`passFailure`, e.g. `timeout after 600000ms`). The panel slice picks
   one form. Predates the pass failure policy slice; raised 2026-10-23
   by its slice review.
+- **M7.1 — Embed calls have no timeout of their own.** Reconcile's
+  description embeds (`scoreDescriptions` in
+  `lib/classifier/reconcile.ts`, through `embedClassifierDescriptions`
+  in `lib/embedder-swap/app-deps.ts`) and retrieval's embeds end on a
+  cancel but nothing bounds them:
+  [`classifier.md → Failure policy`](../memory/classifier.md#failure-policy)
+  bounds only the pass's structured call, so a hung remote embedder
+  holds the pass, and the gate, until it returns or the user cancels.
+  Options: extend the pass bound over reconcile, one deadline for the
+  call and its matching, or an embed timeout read from the embedder
+  profile, which the embedder settings would carry. Raised 2026-10-23
+  by the pass failure policy slice review; routed by the 2026-10-24
+  triage pass.
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware

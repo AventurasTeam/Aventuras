@@ -31,8 +31,10 @@ export type ScoredNamesake = {
   flagged: boolean
 }
 
+/** `signal`: the run's, so a cancel ends a slow embed instead of waiting it out. */
 export type EmbedDescriptions = (
   texts: string[],
+  signal?: AbortSignal,
 ) => Promise<{ vectors: Float32Array[]; dim: number }>
 
 /** Cosine similarity in [-1, 1], rounded to 6 decimals to absorb Float32Array storage noise. */
@@ -138,6 +140,7 @@ export async function scoreDescriptions(
   embed: EmbedDescriptions,
   /** The run's, so a failed embed's warn carries its actionId. */
   log: Pick<Logger, 'warn'>,
+  signal?: AbortSignal,
 ): Promise<(number | null)[]> {
   const unscored = descriptions.map(() => null)
   if (!hasText(candidate)) return unscored
@@ -145,12 +148,14 @@ export async function scoreDescriptions(
   if (sent.length === 0) return unscored
   let vectors: Float32Array[]
   try {
-    vectors = (await embed([candidate, ...sent.map((s) => s.text)])).vectors
+    vectors = (await embed([candidate, ...sent.map((s) => s.text)], signal)).vectors
   } catch (e) {
-    // Matching degrades to unscored rather than failing its caller, so only the log shows it.
-    log.warn('classifier.description_embed_failed', {
-      error: e instanceof Error ? e.message : String(e),
-    })
+    // Matching degrades to unscored rather than failing its caller, so only the log shows it. A
+    // cancel is no embedder fault; its caller sees the abort and discards the decision.
+    if (signal?.aborted !== true)
+      log.warn('classifier.description_embed_failed', {
+        error: e instanceof Error ? e.message : String(e),
+      })
     return unscored
   }
   // A short reply or a dim mismatch mid embedder-swap would otherwise be scored on
@@ -172,6 +177,7 @@ type ReconcileDeps = {
   entities: readonly Entity[]
   embedDescriptions: EmbedDescriptions
   log: Pick<Logger, 'warn'>
+  signal?: AbortSignal
 } & (
   | {
       kind: 'character'
@@ -210,6 +216,7 @@ export async function reconcileNewEntity(
     matched.map((m) => m.entity.description),
     deps.embedDescriptions,
     deps.log,
+    deps.signal,
   )
   return decideReconcile(
     matched.map((m, i) => ({

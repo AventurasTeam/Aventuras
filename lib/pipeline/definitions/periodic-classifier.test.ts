@@ -794,6 +794,51 @@ describe('periodicClassifierPhase', () => {
     expect(embedder).toHaveBeenCalledTimes(1)
   })
 
+  // An embed that settles only when the run's signal aborts: Cancel reaches it.
+  it('returns aborted on a cancel during a reconcile embed, the embed ended and unwarned', async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    const controller = new AbortController()
+    const embedder = vi.fn(
+      (_texts: string[], signal?: AbortSignal) =>
+        new Promise<never>((_resolve, reject) => {
+          if (signal === undefined) return reject(new Error('no signal'))
+          signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+          controller.abort()
+        }),
+    )
+    configureClassifierEmbedder(embedder)
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction({
+        newCharacters: [{ handle: 'nc1', name: 'Kael', description: 'A courier.', keywords: [] }],
+      }),
+    })
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'Kael, described.',
+      keywords: [],
+      state: null,
+      createdAt: 1,
+    } as unknown as Entity
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael] })
+    h.ctx.abortSignal = controller.signal
+    const { events, result } = await drain(h.ctx)
+    expect(result).toEqual({ status: 'aborted' })
+    expect(events).toEqual([])
+    expect(embedder).toHaveBeenCalledOnce()
+    expect(
+      getDiagnosticsSnapshot().logEntries.filter(
+        (e) => e.kind === 'classifier.description_embed_failed',
+      ),
+    ).toEqual([])
+  })
+
   // classifier.md → Failure policy: a never-answering provider expires as a failure, not an abort.
   describe('the bound on the call', () => {
     // Resolves with the fake-clock ms in flight when its signal aborts: the bound the phase armed.
@@ -1180,7 +1225,10 @@ describe('periodicClassifierPhase', () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [staged] })
     const { events } = await drain(h.ctx)
 
-    expect(embedder).toHaveBeenCalledWith(['The courier from the ford.', 'A courier.'])
+    expect(embedder).toHaveBeenCalledWith(
+      ['The courier from the ford.', 'A courier.'],
+      h.ctx.abortSignal,
+    )
     const actions = events.map((e) => (e as { action: { kind: string; payload: unknown } }).action)
     // Promote, not create: the namesake exists and the descriptions match.
     expect(actions.map((a) => a.kind)).toEqual([

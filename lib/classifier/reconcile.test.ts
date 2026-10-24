@@ -377,7 +377,10 @@ describe('reconcileNewEntity', () => {
     })
     expect(decision).toMatchObject({ kind: 'known', entityId: 'char_real' })
     expect(embed).toHaveBeenCalledTimes(1)
-    expect(embed).toHaveBeenCalledWith(['The keeper, ink on his hands.', 'A blacksmith.', KEEPER])
+    expect(embed).toHaveBeenCalledWith(
+      ['The keeper, ink on his hands.', 'A blacksmith.', KEEPER],
+      undefined,
+    )
   })
 
   it('leaves a namesake with a blank description unscored, and out of the call', async () => {
@@ -393,7 +396,7 @@ describe('reconcileNewEntity', () => {
       log: logger,
       scene: null,
     })
-    expect(embed).toHaveBeenCalledWith(['The keeper, ink on his hands.', KEEPER])
+    expect(embed).toHaveBeenCalledWith(['The keeper, ink on his hands.', KEEPER], undefined)
     // The one scored row ranks ahead of the older unscored ones.
     expect(decision).toEqual(flagOf('char_kept', 'distinct'))
   })
@@ -583,7 +586,7 @@ describe('scoreDescriptions', () => {
       0.8,
       null,
     ])
-    expect(embed).toHaveBeenCalledWith(['The keeper.', KEEPER])
+    expect(embed).toHaveBeenCalledWith(['The keeper.', KEEPER], undefined)
   })
 
   it('makes no call for a blank candidate', async () => {
@@ -638,6 +641,30 @@ describe('a description embed that throws', () => {
     expect(warned()).toEqual([
       { level: 'warn', actionId: 'act_pass', fields: { error: 'embedder offline' } },
     ])
+  })
+
+  // A cancel is no embedder fault: the embed ends with it and nothing warns.
+  it("ends an embed when the caller's signal aborts, unscored and unwarned", async () => {
+    const controller = new AbortController()
+    const embed = vi.fn<EmbedDescriptions>(
+      (_texts, signal) =>
+        new Promise((_resolve, reject) => {
+          if (signal === undefined) return reject(new Error('no signal'))
+          signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+          controller.abort()
+        }),
+    )
+    const decision = await reconcileNewEntity(candidate(), {
+      kind: 'character',
+      entities: [row()],
+      embedDescriptions: embed,
+      log: makeLogger('act_pass'),
+      scene: null,
+      signal: controller.signal,
+    })
+    expect(embed).toHaveBeenCalledWith(expect.any(Array), controller.signal)
+    expect(decision).toEqual(flagOf('char_1', 'no-signal'))
+    expect(warned()).toEqual([])
   })
 })
 
