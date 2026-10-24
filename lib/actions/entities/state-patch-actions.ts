@@ -221,21 +221,31 @@ function stateWriteOutcome(
     // user's whole turn (orchestrator handleEvent).
     return noopRefusal(`no-op state patch for entities ${branchId}:${id}`)
   }
+  return columnsWriteOutcome(branchId, id, { state: next as EntityState }, undoPayload, ctx)
+}
 
+/** Writes `columns` on the row, the store patched alike; the undo puts back `undoPayload`. */
+function columnsWriteOutcome(
+  branchId: string,
+  id: string,
+  columns: Partial<Entity>,
+  undoPayload: Record<string, unknown>,
+  ctx: DbCtx,
+): HandlerOutcome {
   return {
-    status: 'ok' as const,
+    status: 'ok',
     targetTable: 'entities',
     targetId: id,
-    op: 'update' as const,
+    op: 'update',
     undoPayload,
     ops: [
       ctx.db
         .update(entities)
-        .set({ state: next as EntityState })
+        .set(columns)
         .where(and(eq(entities.branchId, branchId), eq(entities.id, id)))
         .toSQL(),
     ],
-    patch: { op: 'update' as const, id, columns: { state: next } },
+    patch: { op: 'update', id, columns },
   }
 }
 
@@ -376,21 +386,7 @@ export const promoteStagedEntityHandler: ActionHandler = async (action, branchId
     return noopRefusal('not-staged')
   if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'status'))
     return noopRefusal(USER_EDITED_SINCE_PROSE)
-  return {
-    status: 'ok',
-    targetTable: 'entities',
-    targetId: id,
-    op: 'update',
-    undoPayload: { status: current.status },
-    ops: [
-      ctx.db
-        .update(entities)
-        .set({ status: 'active' })
-        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
-        .toSQL(),
-    ],
-    patch: { op: 'update', id, columns: { status: 'active' } },
-  }
+  return columnsWriteOutcome(bid, id, { status: 'active' }, { status: current.status }, ctx)
 }
 
 /**
@@ -413,21 +409,7 @@ export const appendEntityKeywordsHandler: ActionHandler = async (action, branchI
     if (added.length === 0) return noopRefusal(USER_EDITED_SINCE_PROSE)
   }
   const next = [...current.keywords, ...added]
-  return {
-    status: 'ok',
-    targetTable: 'entities',
-    targetId: id,
-    op: 'update',
-    undoPayload: { keywords: current.keywords },
-    ops: [
-      ctx.db
-        .update(entities)
-        .set({ keywords: next })
-        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
-        .toSQL(),
-    ],
-    patch: { op: 'update', id, columns: { keywords: next } },
-  }
+  return columnsWriteOutcome(bid, id, { keywords: next }, { keywords: current.keywords }, ctx)
 }
 
 /** active → retired only, checked as the write lands, so a user-moved row keeps its status. */
@@ -444,22 +426,13 @@ export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) 
   if (current.kind === 'location') return noopRefusal('location')
   if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'status'))
     return noopRefusal(USER_EDITED_SINCE_PROSE)
-  const columns = { status: 'retired' as const, retiredReason }
-  return {
-    status: 'ok',
-    targetTable: 'entities',
-    targetId: id,
-    op: 'update',
-    undoPayload: { status: current.status, retiredReason: current.retiredReason },
-    ops: [
-      ctx.db
-        .update(entities)
-        .set(columns)
-        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
-        .toSQL(),
-    ],
-    patch: { op: 'update', id, columns },
-  }
+  return columnsWriteOutcome(
+    bid,
+    id,
+    { status: 'retired', retiredReason },
+    { status: current.status, retiredReason: current.retiredReason },
+    ctx,
+  )
 }
 
 async function isFaction(
@@ -584,22 +557,13 @@ export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) 
   )
   const keywords = kept.length > 0 ? { keywords: [...current.keywords, ...kept] } : {}
   // `name` is an embedded field (KIND_FIELDS.entity), so the row re-embeds.
-  const columns = { name, ...keywords, embeddingStale: 1 as const }
-  return {
-    status: 'ok',
-    targetTable: 'entities',
-    targetId: id,
-    op: 'update',
-    undoPayload: { name: current.name, ...(kept.length > 0 ? { keywords: current.keywords } : {}) },
-    ops: [
-      ctx.db
-        .update(entities)
-        .set(columns)
-        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
-        .toSQL(),
-    ],
-    patch: { op: 'update', id, columns },
-  }
+  return columnsWriteOutcome(
+    bid,
+    id,
+    { name, ...keywords, embeddingStale: 1 },
+    { name: current.name, ...(kept.length > 0 ? { keywords: current.keywords } : {}) },
+    ctx,
+  )
 }
 
 /**
@@ -631,30 +595,17 @@ export const raiseCollisionFlagHandler: ActionHandler = async (action, branchId,
   // A user's clear stands against older prose; newer prose may raise the flag again.
   if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'nameCollisionFlag'))
     return noopRefusal(USER_EDITED_SINCE_PROSE)
-  const columns = {
-    nameCollisionFlag: 1 as const,
-    nameCollisionPartnerId: partnerId,
-    nameCollisionReason: reason,
-  }
-  return {
-    status: 'ok',
-    targetTable: 'entities',
-    targetId: id,
-    op: 'update',
-    undoPayload: {
+  return columnsWriteOutcome(
+    bid,
+    id,
+    { nameCollisionFlag: 1, nameCollisionPartnerId: partnerId, nameCollisionReason: reason },
+    {
       nameCollisionFlag: current.nameCollisionFlag,
       nameCollisionPartnerId: current.nameCollisionPartnerId,
       nameCollisionReason: current.nameCollisionReason,
     },
-    ops: [
-      ctx.db
-        .update(entities)
-        .set(columns)
-        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
-        .toSQL(),
-    ],
-    patch: { op: 'update', id, columns },
-  }
+    ctx,
+  )
 }
 
 /** classifier.md → Factions: `state.standing` alone, cut to the schema's 500 as a condition is. */
@@ -690,20 +641,11 @@ export const returnFromRetirementHandler: ActionHandler = async (action, branchI
   if (current.status !== 'retired') return noopRefusal('not-retired')
   if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'status'))
     return noopRefusal(USER_EDITED_SINCE_PROSE)
-  const columns = { status: 'active' as const, retiredReason: null }
-  return {
-    status: 'ok',
-    targetTable: 'entities',
-    targetId: id,
-    op: 'update',
-    undoPayload: { status: current.status, retiredReason: current.retiredReason },
-    ops: [
-      ctx.db
-        .update(entities)
-        .set(columns)
-        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
-        .toSQL(),
-    ],
-    patch: { op: 'update', id, columns },
-  }
+  return columnsWriteOutcome(
+    bid,
+    id,
+    { status: 'active', retiredReason: null },
+    { status: current.status, retiredReason: current.retiredReason },
+    ctx,
+  )
 }
