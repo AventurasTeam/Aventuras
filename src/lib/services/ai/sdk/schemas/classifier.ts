@@ -58,19 +58,31 @@ export const characterUpdateSchema = z.object({
       .describe('active=present, inactive=away, deceased=dead')
       .optional(),
     relationship: z.string().describe('New relationship to protagonist').optional(),
-    newTraits: z.array(z.string()).describe('Personality traits to add').optional(),
-    removeTraits: z.array(z.string()).describe('Traits no longer applicable').optional(),
+    description: z
+      .string()
+      .describe(
+        'Replaces the whole description; only for a character whose current description is shown',
+      )
+      .optional(),
+    traits: z
+      .array(z.string())
+      .describe(
+        'Replaces the whole trait list: lasting personality only; only for a character whose current traits are shown',
+      )
+      .optional(),
     visualDescriptors: visualDescriptorsSchema
-      .describe('Complete visual appearance - replaces existing descriptors')
+      .describe(
+        'Complete visual appearance - replaces existing descriptors; only for a character whose appearance is shown',
+      )
       .optional(),
   }),
 })
 
 export const newCharacterSchema = z.object({
   name: z.string().describe("Character's proper name"),
-  description: z.string().describe('One sentence description').optional(),
+  description: z.string().describe('One sentence: who they are. Always provide it').optional(),
   relationship: z.string().describe('friend, enemy, ally, neutral, or unknown').optional(),
-  traits: z.array(z.string()).describe('Personality traits').optional(),
+  traits: z.array(z.string()).describe('Lasting personality traits only').optional(),
   visualDescriptors: visualDescriptorsSchema
     .describe('Complete visual appearance - ALL categories should be filled')
     .optional(),
