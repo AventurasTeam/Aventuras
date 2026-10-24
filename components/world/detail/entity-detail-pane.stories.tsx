@@ -1112,9 +1112,9 @@ export const LocationSparse: Story = {
     row: makeEntity({ id: 'loc_new', kind: 'location', name: 'Unmapped cove' }),
   },
   play: async () => {
-    await expectEmptyRegion('overview-part-of')
     await expectEmptyRegion('overview-condition')
     await expectEmptyRegion('overview-characters-here', 'None')
+    await expect(screen.queryByTestId('overview-part-of')).toBeNull()
   },
 }
 

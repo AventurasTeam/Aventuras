@@ -48,7 +48,17 @@ export function LocationOverviewBody({ entity, entities, onRegionPress }: KindBo
   const unknown = placementIn(top.id).kind === 'unplaced'
   return (
     <>
-      {unknown && ancestors.length === 0 ? (
+      {ancestors.length > 0 ? (
+        <NamesRegion
+          label={t('world:overview.partOf')}
+          tab="connections"
+          onRegionPress={onRegionPress}
+          targets={ancestors}
+          joiner={` ${t('world:overview.within')} `}
+          meta={unknown ? t('world:overview.locationUnknown') : undefined}
+          testID="overview-part-of"
+        />
+      ) : unknown ? (
         <Region
           label={t('world:overview.partOf')}
           tab="connections"
@@ -60,17 +70,7 @@ export function LocationOverviewBody({ entity, entities, onRegionPress }: KindBo
             {t('world:overview.locationUnknown')}
           </Text>
         </Region>
-      ) : (
-        <NamesRegion
-          label={t('world:overview.partOf')}
-          tab="connections"
-          onRegionPress={onRegionPress}
-          targets={ancestors}
-          joiner={` ${t('world:overview.within')} `}
-          meta={unknown ? t('world:overview.locationUnknown') : undefined}
-          testID="overview-part-of"
-        />
-      )}
+      ) : null}
       <ConditionRegion condition={state.condition} onRegionPress={onRegionPress} />
       <DerivedNamesRegion
         label={t('world:overview.charactersHere')}
