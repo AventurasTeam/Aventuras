@@ -198,7 +198,7 @@ const COLLISION_FLAG_COLUMNS: readonly string[] = [
  * A user edit wrote an entity's collision flag, partner or reason, which the table's CHECK holds
  * together (edge-cases.md → Schema).
  */
-export function wroteCollisionFlag(edits: readonly Delta[]): boolean {
+function wroteCollisionFlag(edits: readonly Delta[]): boolean {
   return COLLISION_FLAG_COLUMNS.some((column) => wroteColumn(edits, column))
 }
 
@@ -208,7 +208,7 @@ const RETIREMENT_COLUMNS: readonly string[] = [
 ] satisfies readonly (keyof Entity)[]
 
 /** A user edit wrote an entity's status or retired reason (data-model.md → Authorship contract). */
-export function wroteRetirement(edits: readonly Delta[]): boolean {
+function wroteRetirement(edits: readonly Delta[]): boolean {
   return RETIREMENT_COLUMNS.some((column) => wroteColumn(edits, column))
 }
 
