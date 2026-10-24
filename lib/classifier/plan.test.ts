@@ -1416,8 +1416,8 @@ describe('mentioned places', () => {
     expect(parentDrops).toEqual([])
   })
 
-  // classifier.md → What the classifier writes → First profiles. piggyback.md → visuals: a long
-  // value is cut back to a clause boundary.
+  // classifier.md → What the classifier writes → First profiles. piggyback.md → Trailing block
+  // format: a long value is cut back to a clause boundary.
   it("cuts a new place's long condition at a clause", () => {
     const { planned } = buildClassifierActions(
       placesReply([

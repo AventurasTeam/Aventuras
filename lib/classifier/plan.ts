@@ -55,7 +55,7 @@ export type PlannedWrite = { action: PipelineAction; entryId: string }
 
 /**
  * A new place left unplaced although it named a parent, or a reused unplaced place left so because
- * placing it would close a loop.
+ * placing it would close a loop or hang it below a broken chain.
  */
 export type ParentDrop = { handle: string; parent: string; cause: ParentDropCause | 'cycle' }
 
@@ -83,7 +83,10 @@ export type DroppedStanding = { faction: string; cause: 'retired-faction' }
 /** A happening's or a new thread's icon the catalog lacks: written as none. */
 export type UnknownIcon = { title: string; icon: string }
 
-/** A placement that plans nothing: a loop, a retired parent, or top-level marking a placed one. */
+/**
+ * A placement that plans nothing: a loop, a broken chain above its parent, a retired parent, or
+ * top-level marking a placed one.
+ */
 export type DroppedPlacement = {
   ref: string
   cause: 'cycle' | 'retired' | 'not-unplaced' | 'chain-broken'
@@ -489,7 +492,6 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       }
       const entryId = anchor(candidate.sourceTurn)
       const proseEntryId = proseSource(candidate.sourceTurn)
-      // New terms only, so a term the row already holds plans no write.
       if (decision.kind === 'promote' || decision.kind === 'known') {
         handleMap.set(candidate.handle, decision.entityId)
         mentionTerms.push({
@@ -720,7 +722,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   }
 
   // classifier.md → What the classifier writes → Where a place sits. Planned against this reply's
-  // own creates and placements; a loop or a retired parent is dropped before the handler sees it.
+  // own creates and placements; a loop, a broken chain or a retired parent is dropped before the
+  // handler sees it.
   const planPlacements = (): DroppedPlacement[] => {
     const droppedPlacements: DroppedPlacement[] = []
     const placeParentOf = replyParentOf(
