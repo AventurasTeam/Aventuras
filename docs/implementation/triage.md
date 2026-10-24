@@ -1041,3 +1041,32 @@ slice-planning gate forces its resolution before that slice is planned.
   ([`testing.md → Test taxonomy`](../testing.md#test-taxonomy): E2E "does not re-verify
   rendering"). The AI writer map dropped the same kind of check from
   its own specs. Predates it; raised 2026-10-24 by its slice review.
+
+- **The AI writer map's code-quality leftovers.** Its slice review's
+  simplifier pass skipped these, each needing a home or a design call
+  outside the slice's files:
+  - `hooks/use-story-place.ts` builds a new value on every entries-store
+    change; the review stabilised its one consumer
+    (`components/world/use-collision-resolve.ts`) instead of the hook.
+  - `PlacementPicker` (`components/world/detail/placement-field.tsx`)
+    copies `EntityPicker`'s row markup; sharing it means exporting a
+    row component from `components/compounds/entity-picker.tsx`.
+  - `components/ui/select.tsx` exports `resolveMode` for the cast
+    editor's reserved `Unknown` slot; dropping the export needs `Select`
+    to take a mode for a wider option list.
+  - Seeded ids use two hashes: the dataset's `canonicalSeedId` and
+    `seedUnplacedPlace`'s UUIDv5 (`e2e/harness/seed.ts`); one hash
+    needs `canonicalSeedId` exported from `lib/db` and a throw where it
+    returns null.
+  - The narrow actions in `lib/actions/entities/state-patch-actions.ts`
+    each repeat a kind check, a branch check and a row load; a shared
+    opening needs typing over every action kind. `setThreadStatus`
+    (`lib/actions/threads/register.ts`) still picks `wroteThreadStatus`
+    by hand where the entity handlers now go through `wroteField`, and
+    the other domains (relationships, threads, happenings, lore) spell
+    their noop refusals out in full.
+  - `buildStatePatchOutcome` merges a state patch without validating
+    the result, so each condition writer bounds its text itself;
+    validating the merged state once would cover every writer.
+
+  Raised 2026-10-24 by the AI writer map's slice review.
