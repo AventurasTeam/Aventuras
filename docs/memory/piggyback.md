@@ -338,9 +338,16 @@ already broken above it creates the location unplaced, logged, rather
 than failing the turn. A retired parent, which a place pinned `always`
 can still put in the prompt with its id, also creates the location
 unplaced, logged, since nothing active may sit inside a retired place.
+A reused unplaced place's placement is dropped instead, the place left
+unplaced, logged, when its parent would close a loop through it or
+would put a disabled place around the story's place as the turn found
+it
+([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape));
+the story walking into it through the turn is no reason to drop it.
 Parents resolve top-down, so the child of a new location hangs under
 whatever row that location resolved to; otherwise the creates settle in
-the block's order, each waiting only for its own parent.
+the block's order, each waiting only for its own parent, so one whose
+parent never resolves settles unplaced in its own place.
 
 **Writes.** The creates follow the reply row and precede every other
 write that names them. The narrative fold writes them right after the
@@ -429,7 +436,11 @@ under a rule per kind:
   as stored places, newer than any, so one match maps it there and
   several create it flagged `unplaced`; a create under a parent, or
   top-level, that would otherwise be created takes over an earlier
-  unplaced create of its name and places it there.
+  unplaced create of its name and places it there. A partial name
+  flags against the earlier creates as against stored places, newer
+  than any and in the order they settle: a create under a parent, or
+  top-level, against the earlier creates that sit there, a takeover's
+  included, and a create with no parent against those still unplaced.
 
 World pairs, explains and resolves these flags as it does a
 character's

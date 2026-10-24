@@ -142,7 +142,10 @@ alias list (the keywords bullet below).
   A parent that would close a cycle or sits below a broken chain,
   names a retired place, or is no listed place (a row of another kind,
   or a handle the reply declares, whose create carries its own parent)
-  is dropped and logged.
+  is dropped and logged; so is one that would put a disabled place
+  around the story's place (`story-inside`), as World refuses that
+  move
+  ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
 - **A faction's standing** — when the turns establish a change in a
   listed faction's position: it declares war, is outlawed, comes to
   power.
@@ -412,9 +415,11 @@ that name it
 
 **Parent.** Parents resolve top-down, so the child of a new place hangs
 under whatever row that place resolved to; otherwise the places settle
-in the reply's order, each waiting only for its own parent. A place
-whose parent the
-turns don't give is top-level when nothing on the map could contain it,
+in turn order, ties in the reply's order and a place with no source
+turn counting at the newest, each waiting only for its own parent, so
+one whose parent never resolves settles unplaced at its own turn. A
+place whose parent the turns don't give is top-level when nothing on
+the map could contain it,
 and unplaced when something could and the turns don't say which; when
 unsure, unplaced
 ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
@@ -450,16 +455,28 @@ only against another unplaced place. A reused place keeps its
 description and its status, since a mention doesn't enter a staged
 place, gains the entry's new keywords, takes the parent the entry gave
 when it was unplaced, and stands for the handle in the rest of the
-reply. A parent that would close a loop or sits below a broken chain
-leaves it unplaced, and each entry that maps onto it with that parent
-is logged as left unplaced. Two new places with one name and parent,
+reply. A parent that would close a loop, sits below a broken chain or
+would put a disabled place around the story's place leaves it
+unplaced, and each entry that maps onto it with that parent is logged
+as left unplaced. Two new places with one name and parent,
 or both with none, map to the first before any other match. Otherwise
 the reply's places match
 as successive passes' would: an unplaced one counts the reply's
 earlier new places of its name as stored places, newer than any, one
 match mapping it there and several flagging it `unplaced`; a placed
 one the stored places would create takes over an earlier unplaced new
-place of its name and places it.
+place of its name and places it. A partial name or a keyword hit flags
+against the reply's earlier new places as against stored ones, newer
+than any and in the order they settle: a placed one against those under
+its parent, or at the top level, a takeover's included, and an unplaced
+one against those still unplaced. The reply's placements plan, and
+land, before any new place of their turn or a later one, a fact with no
+source turn counting at the newest: a new place matches and is written
+where they leave the places, so a place one of them puts under another
+parent is no unplaced namesake to reuse, and one it puts under the new
+place's parent is reused there, placed once. The twin rule above still
+comes first: a new place maps to an earlier one of its name and
+declared parent even after a placement moved that one's row.
 
 **After the turn.** A pass runs after the turn that brought it due, so
 a place the turn created is already a row it matches against, and the
@@ -735,8 +752,16 @@ optional profile and plot fields never fail the parse: sent as `null`
 or the wrong type, they read as absent. They are a new
 character's visual categories, traits, drives and voice, a new
 faction's standing and agenda, a happening's or a new thread's category
-and icon, a new thread's `resolvedAtTurn` and a new place's condition;
-a required field or an enum the model gets wrong still fails the reply.
+and icon, a new thread's `resolvedAtTurn` and a new place's condition.
+In the renames, placements, standings, new threads, thread statuses and
+known awareness, a `null` list reads as empty, a `null` field as absent,
+and an enum value is read trimmed and lowercased first, so a `null`
+source turn leaves the fact unattributed and `"Resolved"` lands as
+`resolved`. An entry there that still doesn't fit, a required field
+missing or an enum value outside the list (a status change to
+`pending`), is dropped alone and logged with its list, and the rest of
+the reply lands. In the older lists, a
+required field or an enum the model gets wrong still fails the reply.
 A chained pass that still fails leaves the watermark where it was,
 records the failure in the status, and shows a warning toast,
 `Memory update failed. It runs again before your next turn.` Nothing

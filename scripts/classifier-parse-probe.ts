@@ -5,7 +5,7 @@ import { and, asc, eq, gt } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 
 import { generateStructured, type CallRetryError, type ResolveModelConfig } from '@/lib/ai'
-import { buildClassifierWindow, classifierReplySchema } from '@/lib/classifier'
+import { buildClassifierWindow, classifierReplySchema, readClassifierReply } from '@/lib/classifier'
 import {
   branches,
   characterRelationships,
@@ -111,6 +111,8 @@ type Outcome = {
   status: 'ok' | 'failed' | 'aborted'
   recoverable: readonly CallRetryError[]
   detail?: string
+  /** Entries a tolerant list dropped from a reply that parsed, by list. */
+  dropped?: string
 }
 
 type ParseRetryError = Extract<CallRetryError, { tier: 'parse' }>
@@ -212,10 +214,14 @@ async function main(): Promise<void> {
     )
     if (result.status === 'not-configured')
       throw new Error(`[probe] the classifier target did not resolve: ${result.kind}`)
+    const malformed = result.status === 'ok' ? readClassifierReply(result.value).malformed : []
     const outcome: Outcome = {
       status: result.status,
       recoverable: result.recoverable,
       ...(result.status === 'failed' ? { detail: result.detail } : {}),
+      ...(malformed.length > 0
+        ? { dropped: malformed.map(({ list, count }) => `${list} ${count}`).join(', ') }
+        : {}),
     }
     outcomes.push(outcome)
     console.log(
@@ -223,6 +229,8 @@ async function main(): Promise<void> {
         `${parseRetries(outcome)} parse / ${providerRetries(outcome)} provider retries` +
         (outcome.detail ? ` — ${oneLine(outcome.detail)}` : ''),
     )
+    if (outcome.dropped != null)
+      console.log(`[probe]   dropped entries that didn't fit: ${outcome.dropped}`)
     const firstParse = outcome.recoverable.find((e): e is ParseRetryError => e.tier === 'parse')
     if (firstParse != null)
       console.log(`[probe]   first parse failure: ${oneLine(parseFailureText(firstParse.detail))}`)
@@ -240,6 +248,7 @@ async function main(): Promise<void> {
       `(${((100 * firstAttempt) / RUNS).toFixed(0)}%; a failed or aborted run counts as no success), ` +
       `ok after a parse retry ${afterRetry}, failed after a parse retry ${failedAfterParseRetry.length}, ` +
       `failed with no parse retry ${failedOther.length}, aborted ${aborted.length}, ` +
+      `ok with dropped entries ${outcomes.filter((o) => o.dropped != null).length}, ` +
       `provider retries ${outcomes.reduce((n, o) => n + providerRetries(o), 0)}`,
   )
 }

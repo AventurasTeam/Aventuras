@@ -25,7 +25,7 @@ import {
   locationMapView,
   matchNewPlace,
   parentOfLocations,
-  placementLoop,
+  placementDrop,
   placeNewLocation,
   replyMatchView,
   replyParentOf,
@@ -34,9 +34,10 @@ import {
   withPlacement,
   type ParentDropCause,
   type PlacedPlacement,
-  type PlacementLoop,
+  type PlacementDrop,
   type PlacePlacement,
   type SettledNewPlace,
+  type StoryPlace,
 } from '@/lib/world'
 
 type CreateEntityAction = Extract<PipelineAction, { kind: 'createEntity' }>
@@ -109,11 +110,10 @@ function logDropped(
   log.debug('classifier.create_dropped', { kind, handle: emission.handle, name: emission.name })
 }
 
-function logParentDropped(
-  log: Logger,
-  handle: string,
-  drop: { parent: string; cause: ParentDropCause | 'cycle' },
-): void {
+/** Why a create's parent, or a reused place's placement, was left out. */
+type ParentDrop = { parent: string; cause: ParentDropCause | PlacementDrop['cause'] }
+
+function logParentDropped(log: Logger, handle: string, drop: ParentDrop): void {
   log.warn('classifier.create_parent_dropped', { handle, parent: drop.parent, cause: drop.cause })
 }
 
@@ -167,6 +167,7 @@ function planLocations(args: {
   entities: readonly Entity[]
   byId: ReadonlyMap<string, Entity>
   mapCurrentLocationId: string | null
+  story: StoryPlace
   branchId: string
   source: PlaceLocationAction['source']
   now: () => number
@@ -187,8 +188,8 @@ function planLocations(args: {
   const placements: PlaceLocationAction[] = []
   // Where this turn's placements put a reused place, so a later walk and match see it there.
   const placedHere = new Map<string, PlacedPlacement>()
-  // A row whose placement looped stays unplaced: the kept chain puts every later create below it.
-  const loopDrops = new Map<string, PlacementLoop>()
+  // A row whose placement was dropped stays unplaced: the kept chain puts every later create below it.
+  const reuseDrops = new Map<string, PlacementDrop>()
 
   // normalizeCreates already dropped a second declaration of a handle, so none is a duplicate.
   const { order } = settlingOrder(
@@ -240,9 +241,18 @@ function planLocations(args: {
       // data-model.md → Authorship contract: the writer places only an unplaced place it reuses:
       // a row, or this block's own create taken over.
       if (match.place && candidate.kind !== 'unplaced') {
-        const loop =
-          candidate.kind === 'under' ? placementLoop(id, candidate.parentId, parentOf) : null
-        if (loop === null) {
+        // data-model.md → Disabled places: the story the turn found, not the place it walks into.
+        const drop =
+          candidate.kind === 'under'
+            ? placementDrop({
+                id,
+                parentId: candidate.parentId,
+                places: byId,
+                parentOf,
+                story: args.story,
+              })
+            : null
+        if (drop === null) {
           placedHere.set(id, candidate)
           placements.push({
             kind: 'placeLocation',
@@ -251,14 +261,14 @@ function planLocations(args: {
           })
         } else {
           parentDropped = true
-          loopDrops.set(id, loop)
-          logParentDropped(args.log, emission.handle, loop)
+          reuseDrops.set(id, drop)
+          logParentDropped(args.log, emission.handle, drop)
         }
       } else {
-        const loop = loopDrops.get(id)
-        if (loop !== undefined) {
+        const drop = reuseDrops.get(id)
+        if (drop !== undefined) {
           parentDropped = true
-          logParentDropped(args.log, emission.handle, loop)
+          logParentDropped(args.log, emission.handle, drop)
         }
       }
     }
@@ -431,6 +441,8 @@ export async function planTurnCreates(input: {
   entities: readonly Entity[]
   /** The location the prompt's `# Places` map was built around, so reuse sees what it showed. */
   mapCurrentLocationId: string | null
+  /** Where the story was before this turn's reply (data-model.md → Disabled places). */
+  story: StoryPlace
   branchId: string
   source: 'piggyback_tagged_block' | 'per_turn_classifier'
   embed: EmbedDescriptions
@@ -439,7 +451,8 @@ export async function planTurnCreates(input: {
   /** The phase's logger, so a dropped create's entry carries the action. */
   log: Logger
 }): Promise<TurnCreatePlan> {
-  const { block, entities, mapCurrentLocationId, branchId, source, embed, now, newId, log } = input
+  const { block, entities, mapCurrentLocationId, story, branchId, source, embed, now, newId, log } =
+    input
   const byId = new Map(entities.map((e) => [e.id, e]))
   const locations = block.newLocations ?? []
   const items = block.newItems ?? []
@@ -458,6 +471,7 @@ export async function planTurnCreates(input: {
     entities,
     byId,
     mapCurrentLocationId,
+    story,
     branchId,
     source,
     now,

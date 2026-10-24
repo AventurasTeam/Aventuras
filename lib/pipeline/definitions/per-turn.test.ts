@@ -1563,7 +1563,10 @@ describe('narrative fold — creates', () => {
   ]
 
   // An opening, then this turn's user_action committed under TURN_ACTION, as submitTurn does.
-  async function seedTurn(world: Entity[] = baseWorld()): Promise<void> {
+  async function seedTurn(
+    world: Entity[] = baseWorld(),
+    actionScene: EntryMetadata = SCENE,
+  ): Promise<void> {
     currentStoryStore.set({
       storyId: 's1',
       branchId: 'b1',
@@ -1619,7 +1622,7 @@ describe('narrative fold — creates', () => {
               kind: 'user_action',
               content: 'I go down to the water.',
               chapterId: null,
-              metadata: SCENE,
+              metadata: actionScene,
               createdAt: 2,
             },
           },
@@ -1864,6 +1867,21 @@ describe('narrative fold — creates', () => {
       parent_location_id: null,
       unplaced: true,
     })
+  })
+
+  // data-model.md → Disabled places: a user_action tail can stand in another place than the scene.
+  it('leaves a reused place unplaced when the story was in it before the turn', async () => {
+    const world = baseWorld().map((e) =>
+      e.id === TOWN ? { ...e, injectionMode: 'disabled' as const } : e,
+    )
+    await seedTurn([...world, unplacedDocks()], { ...SCENE, currentLocationId: UNPLACED_DOCKS })
+    const { events } = await foldTurn(CREATE_REPLY)
+    expect(
+      events.flatMap((e) => (e.type === 'delta_emitted' ? [e.action.kind] : [])),
+    ).not.toContain('placeLocation')
+    expect(replyOf(events).metadata?.stateReport?.newLocations).toEqual([
+      expect.objectContaining({ outcome: 'reused', id: UNPLACED_DOCKS, parentDropped: true }),
+    ])
   })
 
   // piggyback.md → Parent: `top` makes a place top-level, and no parent leaves it unplaced.

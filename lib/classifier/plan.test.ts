@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Entity } from '@/lib/db'
+import { storyPlaceOf } from '@/lib/world'
 
 import { buildClassifierActions, clampEmbeddedCharacter, type PlannedWrite } from './plan'
 import type { ReconcileDecision } from './reconcile'
@@ -63,7 +64,12 @@ const base = {
   threads: [],
   happenings: [],
   awareness: [],
+  story: storyPlaceOf({ tail: null, sceneSource: null }),
 }
+
+// data-model.md → The story's place: the tail's and the scene source's location.
+const storyAt = (locationId: string) =>
+  storyPlaceOf({ tail: null, sceneSource: { metadata: { currentLocationId: locationId } } })
 
 // The reply schema defaults every list to []: a case names only the lists it fills.
 const reply = (over: Partial<ClassifierPlacesExtraction> = {}): ClassifierPlacesExtraction => ({
@@ -1762,6 +1768,27 @@ describe('mentioned places', () => {
       expect(parentDrops).toEqual([{ handle: 'new:varn', parent: 'loc_vdocks', cause: 'cycle' }])
     })
 
+    // data-model.md → Disabled places: a mention's placement refuses as a placements entry does.
+    it('keeps a reuse unplaced when placing it would put a disabled place around the story', () => {
+      const thorn = placeRow('loc_thorn', 'Thornwood', null, { injectionMode: 'disabled' })
+      const crypt = placeRow('loc_crypt', 'the Crypt', 'loc_varn')
+      const { planned, handleMap, parentDrops } = buildClassifierActions(
+        placesReply([
+          newPlace('new:a', 'Varn', { parent: 'loc_thorn', keywords: ['the salt town'] }),
+          newPlace('new:b', 'Varn', { parent: 'loc_thorn' }),
+        ]),
+        deps([VARN, thorn, crypt], { story: storyAt('loc_crypt') }),
+      )
+      expect(handleMap.get('new:a')).toBe('loc_varn')
+      expect(handleMap.get('new:b')).toBe('loc_varn')
+      expect(placementsOf(planned)).toEqual([])
+      expect(planned.map((p) => p.action.kind)).toEqual(['appendEntityKeywords'])
+      expect(parentDrops).toEqual([
+        { handle: 'new:a', parent: 'loc_thorn', cause: 'story-inside' },
+        { handle: 'new:b', parent: 'loc_thorn', cause: 'story-inside' },
+      ])
+    })
+
     it('reports the twin of a reuse whose placement looped as left unplaced too', () => {
       const { planned, handleMap, parentDrops } = buildClassifierActions(
         placesReply([
@@ -1885,6 +1912,334 @@ describe('mentioned places', () => {
         expect(parentDrops).toEqual([{ handle: 'new:a', parent: 'loc_cdocks', cause: 'cycle' }])
       })
     })
+
+    // classifier.md → Mentioned places: a mention sees the placements of its turn and earlier ones.
+    describe("a mention against this reply's placements", () => {
+      const INN = placeRow('loc_inn', 'the Inn', null)
+      const KEEP = placeRow('loc_keep', 'the Keep', null)
+      const CELLAR = unplacedRow('loc_cellar', 'the Cellar')
+      const placement = (ref: string, parent: string, sourceTurn: string) => ({
+        ref,
+        parent,
+        sourceTurn,
+      })
+      const placedRows = (planned: readonly PlannedWrite[]) =>
+        placementsOf(planned).map((p) => {
+          const { id, placement: at } = payloadOf<{ id: string; placement: unknown }>(p)
+          return [id, at, p.entryId]
+        })
+      const termWritesOn = (planned: readonly PlannedWrite[], id: string) =>
+        planned.filter(
+          (p) => p.action.kind === 'appendEntityKeywords' && payloadOf<{ id: string }>(p).id === id,
+        )
+
+      it('creates the namesake under another parent once an earlier turn placed the place', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply(
+            [newPlace('new:c', 'the Cellar', { parent: 'loc_keep', keywords: ['the vault'] })],
+            { placements: [placement('loc_cellar', 'loc_inn', 't1')] },
+          ),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_new1')
+        expect(createdPlaces(planned)).toEqual([
+          expect.objectContaining({
+            id: 'loc_new1',
+            keywords: ['the vault'],
+            state: { parent_location_id: 'loc_keep' },
+            nameCollisionFlag: 0,
+          }),
+        ])
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e1'],
+        ])
+        expect(termWritesOn(planned, 'loc_cellar')).toEqual([])
+      })
+
+      it('counts a placement of the same turn, the placement first', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply([newPlace('new:c', 'the Cellar', { parent: 'loc_keep' })], {
+            placements: [placement('loc_cellar', 'loc_inn', 't2')],
+          }),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_new1')
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e2'],
+        ])
+      })
+
+      it('reuses the place where an earlier turn put it, placing it once', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply(
+            [newPlace('new:c', 'the Cellar', { parent: 'loc_inn', keywords: ['the vault'] })],
+            { placements: [placement('loc_cellar', 'loc_inn', 't1')] },
+          ),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_cellar')
+        expect(createdPlaces(planned)).toEqual([])
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e1'],
+        ])
+        expect(termWritesOn(planned, 'loc_cellar')).toHaveLength(1)
+      })
+
+      it('places the place for an earlier mention, and a later placement moves it after', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply([newPlace('new:c', 'the Cellar', { parent: 'loc_keep', sourceTurn: 't1' })], {
+            placements: [placement('loc_cellar', 'loc_inn', 't3')],
+          }),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_cellar')
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_keep' }, 'e1'],
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e3'],
+        ])
+      })
+
+      it('ignores an earlier placement the planner drops', () => {
+        const ruin = placeRow('loc_ruin', 'the Ruin', null, { status: 'retired' })
+        const { planned, handleMap, droppedPlacements } = buildClassifierActions(
+          placesReply([newPlace('new:c', 'the Cellar', { parent: 'loc_keep' })], {
+            placements: [placement('loc_cellar', 'loc_ruin', 't1')],
+          }),
+          deps([KEEP, ruin, CELLAR]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_cellar')
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_keep' }, 'e2'],
+        ])
+        expect(droppedPlacements).toEqual([{ ref: 'loc_cellar', cause: 'retired' }])
+      })
+
+      it("judges the mention's own parent against the earlier placements", () => {
+        const { planned, handleMap, parentDrops, droppedPlacements } = buildClassifierActions(
+          placesReply([newPlace('new:c', 'the Cellar', { parent: 'loc_inn' })], {
+            placements: [placement('loc_inn', 'loc_cellar', 't1')],
+          }),
+          deps([INN, CELLAR]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_cellar')
+        expect(parentDrops).toEqual([{ handle: 'new:c', parent: 'loc_inn', cause: 'cycle' }])
+        expect(placedRows(planned)).toEqual([
+          ['loc_inn', { kind: 'under', parentId: 'loc_cellar' }, 'e1'],
+        ])
+        expect(droppedPlacements).toEqual([])
+      })
+
+      // Q30: new places settle in turn order, ties in list order, so the list's order can't decide.
+      it.each([
+        ['the later turn listed first', ['loft', 'cellar']],
+        ['in turn order', ['cellar', 'loft']],
+      ])('settles new places in turn order, %s', (_label, listed) => {
+        const BARN = placeRow('loc_barn', 'the Barn', null)
+        const entries = {
+          loft: newPlace('new:loft', 'the Loft', { parent: 'loc_barn', sourceTurn: 't3' }),
+          cellar: newPlace('new:c', 'the Cellar', { parent: 'loc_keep', sourceTurn: 't1' }),
+        }
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply(
+            listed.map((key) => entries[key as keyof typeof entries]),
+            { placements: [placement('loc_cellar', 'loc_inn', 't3')] },
+          ),
+          deps([INN, KEEP, CELLAR, BARN]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_cellar')
+        expect(createdPlaces(planned).map((e) => e.name)).toEqual(['the Loft'])
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_keep' }, 'e1'],
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e3'],
+        ])
+      })
+
+      it("keeps a repeated handle's first declaration in the reply's order, whatever its turn", () => {
+        const { handleMap, droppedPlaces } = buildClassifierActions(
+          placesReply([
+            newPlace('new:x', 'Saltmere', { sourceTurn: 't3' }),
+            newPlace('new:x', 'Ashfall', { sourceTurn: 't1' }),
+          ]),
+          deps([TOWN]),
+        )
+        expect(droppedPlaces).toEqual([{ handle: 'new:x', name: 'Ashfall', cause: 'handle-taken' }])
+        expect(handleMap.get('new:x')).toBe('loc_new1')
+      })
+
+      // An unattributed new place counts at the newest turn, as an unattributed placement does.
+      it('settles an unattributed new place at the newest turn, its ties in list order', () => {
+        const { planned } = buildClassifierActions(
+          placesReply([
+            newPlace('new:a', 'Docks', { sourceTurn: undefined }),
+            newPlace('new:b', 'Old Docks', { sourceTurn: 't2' }),
+            newPlace('new:c', 'New Docks', { sourceTurn: 't3' }),
+          ]),
+          deps([TOWN]),
+        )
+        expect(createdPlaces(planned).map((row) => row.name)).toEqual([
+          'Old Docks',
+          'Docks',
+          'New Docks',
+        ])
+      })
+
+      // A takeover follows turns too: the unplaced create of turn 1 is taken over at turn 3.
+      it("takes over an earlier turn's unplaced create listed after it, at the later turn", () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply([
+            newPlace('new:b', 'the Vault', { parent: 'loc_keep', sourceTurn: 't3' }),
+            newPlace('new:a', 'the Vault', { sourceTurn: 't1' }),
+          ]),
+          deps([KEEP]),
+        )
+        expect(createdPlaces(planned)).toEqual([
+          expect.objectContaining({
+            id: 'loc_new1',
+            state: { parent_location_id: null, unplaced: true },
+          }),
+        ])
+        expect(handleMap.get('new:b')).toBe('loc_new1')
+        expect(placedRows(planned)).toEqual([
+          ['loc_new1', { kind: 'under', parentId: 'loc_keep' }, 'e3'],
+        ])
+      })
+
+      // A parent that never resolves holds nothing back: the place settles at its own turn.
+      it('settles a new place whose parent never resolves at its own turn', () => {
+        const { planned, handleMap, parentDrops } = buildClassifierActions(
+          placesReply([
+            newPlace('new:a', 'the Vault', {
+              parent: 'loc_nope',
+              sourceTurn: 't1',
+              keywords: ['the strongroom'],
+            }),
+            newPlace('new:b', 'the Vault', { parent: 'loc_keep', sourceTurn: 't3' }),
+          ]),
+          deps([KEEP]),
+        )
+        expect(parentDrops).toEqual([{ handle: 'new:a', parent: 'loc_nope', cause: 'unresolved' }])
+        expect(createdPlaces(planned)).toEqual([
+          expect.objectContaining({
+            id: 'loc_new1',
+            keywords: ['the strongroom'],
+            state: { parent_location_id: null, unplaced: true },
+          }),
+        ])
+        expect(handleMap.get('new:b')).toBe('loc_new1')
+        expect(placedRows(planned)).toEqual([
+          ['loc_new1', { kind: 'under', parentId: 'loc_keep' }, 'e3'],
+        ])
+      })
+
+      // Q29: the twin rule comes first, so a twin maps to the first create's row a placement moved.
+      it('maps a twin to the first row even after a placement between them moved it', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply(
+            [
+              newPlace('new:c1', 'the Cellar', { parent: 'loc_keep', sourceTurn: 't1' }),
+              newPlace('new:c2', 'the Cellar', {
+                parent: 'loc_keep',
+                sourceTurn: 't3',
+                keywords: ['the vault'],
+              }),
+            ],
+            { placements: [placement('loc_cellar', 'loc_inn', 't2')] },
+          ),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(handleMap.get('new:c2')).toBe('loc_cellar')
+        expect(createdPlaces(planned)).toEqual([])
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_keep' }, 'e1'],
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e2'],
+        ])
+        expect(termWritesOn(planned, 'loc_cellar')).toEqual([
+          expect.objectContaining({ entryId: 'e3' }),
+        ])
+      })
+
+      // An unattributed fact counts at the window's newest turn, as inTurnOrder sorts it.
+      it('counts an unattributed fact at the newest turn: a placement there plans first', () => {
+        const unattributed = buildClassifierActions(
+          placesReply(
+            [newPlace('new:c', 'the Cellar', { parent: 'loc_keep', sourceTurn: undefined })],
+            {
+              placements: [{ ref: 'loc_cellar', parent: 'loc_inn' }],
+            },
+          ),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(unattributed.handleMap.get('new:c')).toBe('loc_new1')
+        const earlierMention = buildClassifierActions(
+          placesReply([newPlace('new:c', 'the Cellar', { parent: 'loc_keep', sourceTurn: 't1' })], {
+            placements: [{ ref: 'loc_cellar', parent: 'loc_inn' }],
+          }),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(earlierMention.handleMap.get('new:c')).toBe('loc_cellar')
+        expect(placedRows(earlierMention.planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_keep' }, 'e1'],
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e3'],
+        ])
+      })
+
+      // The handlers judge each write against the writes before it, so a mention's writes follow
+      // the placements it was matched and checked against.
+      describe('writes after the placements it was judged against', () => {
+        const writesOf = (planned: readonly PlannedWrite[]) =>
+          planned.map((p) => {
+            const payload = payloadOf<{ id?: string; entry?: { id: string } }>(p)
+            return [p.action.kind, payload.id ?? payload.entry?.id, p.entryId]
+          })
+
+        it('places a mention under a place an earlier placement moved out of it', () => {
+          const attic = placeRow('loc_attic', 'the Attic', 'loc_cellar')
+          const { planned, parentDrops } = buildClassifierActions(
+            placesReply([newPlace('new:c', 'the Cellar', { parent: 'loc_attic' })], {
+              placements: [placement('loc_attic', 'loc_inn', 't1')],
+            }),
+            deps([INN, CELLAR, attic]),
+          )
+          expect(parentDrops).toEqual([])
+          expect(writesOf(planned)).toEqual([
+            ['placeLocation', 'loc_attic', 'e1'],
+            ['placeLocation', 'loc_cellar', 'e2'],
+          ])
+        })
+
+        it('places a mention in a disabled region once an earlier placement took the story out', () => {
+          const thorn = placeRow('loc_thorn', 'Thornwood', null, { injectionMode: 'disabled' })
+          const crypt = placeRow('loc_crypt', 'the Crypt', 'loc_cellar')
+          const { planned, parentDrops } = buildClassifierActions(
+            placesReply([newPlace('new:c', 'the Cellar', { parent: 'loc_thorn' })], {
+              placements: [placement('loc_crypt', 'loc_inn', 't1')],
+            }),
+            deps([INN, CELLAR, thorn, crypt], { story: storyAt('loc_crypt') }),
+          )
+          expect(parentDrops).toEqual([])
+          expect(writesOf(planned)).toEqual([
+            ['placeLocation', 'loc_crypt', 'e1'],
+            ['placeLocation', 'loc_cellar', 'e2'],
+          ])
+        })
+
+        it('creates under a chain an earlier placement mended, after the placement', () => {
+          const arch = placeRow('loc_a', 'Arch', 'loc_b')
+          const bastion = placeRow('loc_b', 'Bastion', 'loc_a')
+          const { planned, parentDrops } = buildClassifierActions(
+            placesReply([newPlace('new:h', 'the Hall', { parent: 'loc_b' })], {
+              placements: [placement('loc_a', 'loc_inn', 't1')],
+            }),
+            deps([INN, arch, bastion]),
+          )
+          expect(parentDrops).toEqual([])
+          expect(writesOf(planned)).toEqual([
+            ['placeLocation', 'loc_a', 'e1'],
+            ['createEntity', 'loc_new1', 'e2'],
+          ])
+        })
+      })
+    })
   })
 
   describe('flags', () => {
@@ -1969,6 +2324,37 @@ describe('mentioned places', () => {
         },
         entryId: 'e3',
       })
+    })
+
+    // classifier.md → Mentioned places: one reply flags what two would.
+    it('flags a partial name or a keyword hit on an earlier place of the reply, under one parent or unplaced', () => {
+      const flagsOf = (planned: readonly PlannedWrite[]) =>
+        createdPlaces(planned).map((row) => [
+          row.name,
+          row.nameCollisionPartnerId,
+          row.nameCollisionReason,
+        ])
+      const placed = buildClassifierActions(
+        placesReply([
+          newPlace('new:a', 'Docks', { parent: 'loc_town', keywords: ['the wharf'] }),
+          newPlace('new:b', 'Old Docks', { parent: 'loc_town' }),
+          newPlace('new:c', 'The Wharf', { parent: 'loc_town' }),
+        ]),
+        deps([TOWN]),
+      )
+      expect(flagsOf(placed.planned)).toEqual([
+        ['Docks', null, null],
+        ['Old Docks', 'loc_new1', 'same-parent'],
+        ['The Wharf', 'loc_new1', 'same-parent'],
+      ])
+      const unplaced = buildClassifierActions(
+        placesReply([newPlace('new:a', 'Docks'), newPlace('new:b', 'Old Docks')]),
+        deps([TOWN]),
+      )
+      expect(flagsOf(unplaced.planned)).toEqual([
+        ['Docks', null, null],
+        ['Old Docks', 'loc_new1', 'unplaced'],
+      ])
     })
 
     // A reply's creates match as successive replies' would, so one place is one row either way.
@@ -3540,6 +3926,65 @@ describe('placements', () => {
     ])
   })
 
+  // data-model.md → Disabled places: a pass's move refuses where World's Save would.
+  describe('around the story', () => {
+    const THORN = place('loc_thorn', null, { injectionMode: 'disabled' })
+    const CRYPT = place('loc_crypt', 'loc_reach')
+    const storyDeps = (entities: Entity[], story = storyAt('loc_crypt')) =>
+      ({ ...base, entities, story }) as never
+
+    it('drops a move that puts a disabled place around the story', () => {
+      const { planned, droppedPlacements } = buildClassifierActions(
+        reply({ placements: [{ ref: 'loc_reach', parent: 'loc_thorn', sourceTurn: 't2' }] }),
+        storyDeps([REACH, THORN, CRYPT]),
+      )
+      expect(planned).toEqual([])
+      expect(droppedPlacements).toEqual([{ ref: 'loc_reach', cause: 'story-inside' }])
+    })
+
+    it('drops placing an unplaced place that holds the story in a disabled region', () => {
+      const { planned, droppedPlacements } = buildClassifierActions(
+        reply({ placements: [{ ref: 'loc_varn', parent: 'loc_thorn', sourceTurn: 't2' }] }),
+        storyDeps([VARN, THORN], storyAt('loc_varn')),
+      )
+      expect(planned).toEqual([])
+      expect(droppedPlacements).toEqual([{ ref: 'loc_varn', cause: 'story-inside' }])
+    })
+
+    it('plans the move when the story is outside the place', () => {
+      const { planned, droppedPlacements } = buildClassifierActions(
+        reply({ placements: [{ ref: 'loc_reach', parent: 'loc_thorn', sourceTurn: 't2' }] }),
+        storyDeps([REACH, THORN, CRYPT, VARN], storyAt('loc_varn')),
+      )
+      expect(placementsOf(planned)).toEqual([
+        expect.objectContaining({
+          id: 'loc_reach',
+          placement: { kind: 'under', parentId: 'loc_thorn' },
+        }),
+      ])
+      expect(droppedPlacements).toEqual([])
+    })
+
+    it("judges the story against this reply's earlier placements", () => {
+      const { planned, droppedPlacements } = buildClassifierActions(
+        reply({
+          placements: [
+            { ref: 'loc_varn', parent: 'loc_reach', sourceTurn: 't1' },
+            { ref: 'loc_reach', parent: 'loc_thorn', sourceTurn: 't2' },
+          ],
+        }),
+        storyDeps([REACH, THORN, VARN], storyAt('loc_varn')),
+      )
+      expect(placementsOf(planned)).toEqual([
+        expect.objectContaining({
+          id: 'loc_varn',
+          placement: { kind: 'under', parentId: 'loc_reach' },
+        }),
+      ])
+      expect(droppedPlacements).toEqual([{ ref: 'loc_reach', cause: 'story-inside' }])
+    })
+  })
+
   it('marks top-level a place whose stored parent names no place', () => {
     const { planned } = buildClassifierActions(
       reply({ placements: [{ ref: 'loc_orphan', parent: 'top-level', sourceTurn: 't1' }] }),
@@ -3618,29 +4063,56 @@ describe('placements', () => {
   })
 
   // The schema's parent is an ID from Places or top-level: a new place is placed by its own create.
-  it("drops and reports a placement whose parent is a new place's handle", () => {
+  // Either side of the new place's turn: a placement may plan before the place settles.
+  it.each(['t2', 't1'])(
+    "drops and reports a placement at %s whose parent is a new place's handle",
+    (placementTurn) => {
+      const places: ClassifierPlacesExtraction = {
+        ...reply({
+          placements: [{ ref: 'loc_varn', parent: 'new:reach', sourceTurn: placementTurn }],
+        }),
+        newPlaces: [
+          {
+            handle: 'new:reach',
+            name: 'the Eastern Reach',
+            description: 'x',
+            keywords: [],
+            sourceTurn: placementTurn === 't2' ? 't1' : 't2',
+          } as NewPlace,
+        ],
+      }
+      const { planned, unresolvedRefs, droppedPlacements } = buildClassifierActions(places, {
+        ...base,
+        entities: [VARN],
+        newId: () => 'loc_new1',
+      } as never)
+      expect(kindsOf(planned)).toEqual(['createEntity'])
+      expect(droppedPlacements).toEqual([
+        { ref: 'loc_varn', parent: 'new:reach', cause: 'parent-not-listed' },
+      ])
+      expect(unresolvedRefs).toEqual([])
+    },
+  )
+
+  it("reports a parent naming a blank-named new place's handle as unresolved", () => {
     const places: ClassifierPlacesExtraction = {
-      ...reply({ placements: [{ ref: 'loc_varn', parent: 'new:reach', sourceTurn: 't2' }] }),
+      ...reply({ placements: [{ ref: 'loc_varn', parent: 'new:reach', sourceTurn: 't1' }] }),
       newPlaces: [
         {
           handle: 'new:reach',
-          name: 'the Eastern Reach',
+          name: '  ',
           description: 'x',
           keywords: [],
-          sourceTurn: 't1',
+          sourceTurn: 't2',
         } as NewPlace,
       ],
     }
-    const { planned, unresolvedRefs, droppedPlacements } = buildClassifierActions(places, {
+    const { unresolvedRefs, droppedPlacements } = buildClassifierActions(places, {
       ...base,
       entities: [VARN],
-      newId: () => 'loc_new1',
     } as never)
-    expect(kindsOf(planned)).toEqual(['createEntity'])
-    expect(droppedPlacements).toEqual([
-      { ref: 'loc_varn', parent: 'new:reach', cause: 'parent-not-listed' },
-    ])
-    expect(unresolvedRefs).toEqual([])
+    expect(unresolvedRefs).toEqual(['new:reach'])
+    expect(droppedPlacements).toEqual([])
   })
 
   it('reports a parent naming nothing as unresolved, and drops one that is no place', () => {

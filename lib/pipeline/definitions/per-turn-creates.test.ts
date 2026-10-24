@@ -9,7 +9,7 @@ import {
   type ParsedStateBlock,
   type SubstitutedStateBlock,
 } from '@/lib/piggyback'
-import type { PlacedPlacement } from '@/lib/world'
+import { storyPlaceOf, type PlacedPlacement, type StoryPlace } from '@/lib/world'
 
 import { planTurnCreates, skipTurnCreates, type TurnCreatePlan } from './per-turn-creates'
 
@@ -82,6 +82,10 @@ const noEmbed: EmbedDescriptions = async () => ({ vectors: [], dim: 0 })
 // Cast, not substituted: these blocks are built already holding ids and normalized creates.
 const assumeSubstituted = (block: ParsedStateBlock) => block as SubstitutedStateBlock
 
+// data-model.md → The story's place before the turn: the tail's and the scene source's.
+const storyAt = (locationId: string) =>
+  storyPlaceOf({ tail: null, sceneSource: { metadata: { currentLocationId: locationId } } })
+
 const dropFlag = (r: NewLocationReport) => ('parentDropped' in r ? r.parentDropped : undefined)
 
 function runPlanner(
@@ -91,6 +95,7 @@ function runPlanner(
     embed?: EmbedDescriptions
     source?: 'piggyback_tagged_block' | 'per_turn_classifier'
     mapCurrentLocationId?: string | null
+    story?: StoryPlace
     log?: Logger
   } = {},
 ) {
@@ -100,6 +105,7 @@ function runPlanner(
     block: assumeSubstituted(block),
     entities: opts.entities ?? world(),
     mapCurrentLocationId: opts.mapCurrentLocationId ?? null,
+    story: opts.story ?? storyPlaceOf({ tail: null, sceneSource: null }),
     branchId: BRANCH,
     source: opts.source ?? 'piggyback_tagged_block',
     embed: opts.embed ?? noEmbed,
@@ -579,7 +585,7 @@ describe('planTurnCreates — parents', () => {
     ])
   })
 
-  it('hangs a place under a cycle member once the cycle is left unplaced', async () => {
+  it('hangs a place under a cycle member, each member settling unplaced in its own place', async () => {
     const plan = await runPlanner({
       newLocations: [
         { handle: 'new:cellar', name: 'Cellar', description: 'damp', parent: 'new:upper' },
@@ -590,8 +596,8 @@ describe('planTurnCreates — parents', () => {
     })
     expect(createdEntries(creates(plan)).map((e) => [e.id, e.name, e.state])).toEqual([
       ['loc_new_1', 'Upper Hall', UNPLACED],
-      ['loc_new_2', 'Lower Hall', UNPLACED],
-      ['loc_new_3', 'Cellar', { parent_location_id: 'loc_new_1' }],
+      ['loc_new_2', 'Cellar', { parent_location_id: 'loc_new_1' }],
+      ['loc_new_3', 'Lower Hall', UNPLACED],
     ])
     expect(plan.report.newLocations.map(dropFlag)).toEqual([undefined, true, true])
   })
@@ -1232,7 +1238,8 @@ describe('planTurnCreates — matching', () => {
     })
   })
 
-  it("doesn't compare two new places with each other", async () => {
+  // piggyback.md → Matching before creating: one block flags what two turns would.
+  it('flags the second of two unplaced new places with a partial name, unplaced', async () => {
     const plan = await runPlanner({
       newLocations: [
         { handle: 'new:a', name: 'Hall', description: 'a hall', parent: 'new:b' },
@@ -1240,9 +1247,15 @@ describe('planTurnCreates — matching', () => {
       ],
       currentLocation: 'new:a',
     })
-    expect(createdEntries(creates(plan)).map((e) => [e.name, e.nameCollisionFlag])).toEqual([
-      ['Hall', 0],
-      ['Great Hall', 0],
+    expect(
+      createdEntries(creates(plan)).map((e) => [
+        e.name,
+        e.nameCollisionPartnerId,
+        e.nameCollisionReason,
+      ]),
+    ).toEqual([
+      ['Hall', null, null],
+      ['Great Hall', 'loc_new_1', 'unplaced'],
     ])
   })
 
@@ -1770,5 +1783,76 @@ describe('planner input', () => {
         log: logger,
       })
     expect([skip, plan].map((call) => typeof call)).toEqual(['function', 'function'])
+  })
+})
+
+// data-model.md → Disabled places: a reused place's placement around the story the turn found.
+describe('planTurnCreates — a disabled place around the story', () => {
+  const FOREST = 'loc_00000000-0000-4000-8000-0000000000ab'
+  const KEEP = 'loc_00000000-0000-4000-8000-0000000000ac'
+  const CRYPT = 'loc_00000000-0000-4000-8000-0000000000ad'
+  const forest = row({ id: FOREST, kind: 'location', name: 'Thornwood', injectionMode: 'disabled' })
+  const keep = unplacedPlace(KEEP, 'the Keep')
+  const crypt = row({
+    id: CRYPT,
+    kind: 'location',
+    name: 'the Crypt',
+    state: { parent_location_id: KEEP },
+  })
+  const keepInForest: ParsedStateBlock = {
+    newLocations: [
+      { handle: 'new:keep', name: 'the Keep', description: 'stone walls', parent: FOREST },
+    ],
+    currentLocation: 'new:keep',
+  }
+
+  it('leaves a reused place unplaced when the story was already in it, logged', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn')
+    for (const before of [KEEP, CRYPT]) {
+      warnSpy.mockClear()
+      const plan = await runPlanner(keepInForest, {
+        entities: world(forest, keep, crypt),
+        story: storyAt(before),
+      })
+      expect(placements(plan), before).toEqual([])
+      expect(plan.report.newLocations, before).toEqual([
+        expect.objectContaining({
+          outcome: 'reused',
+          id: KEEP,
+          parent: FOREST,
+          parentDropped: true,
+        }),
+      ])
+      expect(warnSpy).toHaveBeenCalledWith('classifier.create_parent_dropped', {
+        handle: 'new:keep',
+        parent: FOREST,
+        cause: 'story-inside',
+      })
+    }
+  })
+
+  it('places it when the story walks in through the turn', async () => {
+    const plan = await runPlanner(keepInForest, {
+      entities: world(forest, keep, crypt),
+      story: storyAt(PORT),
+    })
+    expect(placements(plan).map((p) => [p.payload.id, p.payload.placement])).toEqual([
+      [KEEP, { kind: 'under', parentId: FOREST }],
+    ])
+  })
+
+  it('creates a place under the region whatever the story', async () => {
+    const plan = await runPlanner(
+      {
+        newLocations: [
+          { handle: 'new:glade', name: 'the Glade', description: 'ferns', parent: FOREST },
+        ],
+        currentLocation: 'new:glade',
+      },
+      { entities: world(forest), story: storyAt(PORT) },
+    )
+    expect(createdEntries(creates(plan)).map((e) => e.state)).toEqual([
+      { parent_location_id: FOREST },
+    ])
   })
 })

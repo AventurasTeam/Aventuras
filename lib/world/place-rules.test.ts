@@ -10,9 +10,11 @@ import {
   locationDraftFrom,
   type LocationDraft,
 } from './entity-draft'
+import { parentOfLocations, type ParentOf } from './parent-chain'
 import {
   mergedPlaceOf,
   mergePlaceRefusal,
+  moveHidesStory,
   placeSaveConfirm,
   placeSaveRefusal,
   retireCascade,
@@ -415,6 +417,78 @@ describe('placeSaveRefusal — moving a place into a disabled region', () => {
         }),
       ),
     ).toBeNull()
+  })
+})
+
+// data-model.md → Disabled places: a machine writer's move, judged as World's Save judges it.
+describe('moveHidesStory', () => {
+  const DISABLED_THORN = { ...THORNWOOD, injectionMode: 'disabled' as const }
+  const world = [ELDRA, VELLIS, ANCHOR, BACK_ROOM, MARKET, DISABLED_THORN]
+  const hides = (
+    id: string,
+    parentId: string,
+    {
+      entities = world,
+      story = storyAt('loc_back'),
+      parentOf = parentOfLocations(entities),
+    }: { entities?: readonly Entity[]; story?: StoryPlace; parentOf?: ParentOf } = {},
+  ) =>
+    moveHidesStory({
+      id,
+      parentId,
+      places: new Map(entities.map((e) => [e.id, e])),
+      parentOf,
+      story,
+    })
+
+  it("hides the story when the story's place, or one holding it, moves into a disabled region", () => {
+    expect(hides('loc_back', 'loc_thorn')).toBe(true)
+    expect(hides('loc_anchor', 'loc_thorn')).toBe(true)
+    const shrine = place('loc_shrine', 'Shrine', 'loc_thorn')
+    expect(hides('loc_anchor', 'loc_shrine', { entities: [...world, shrine] })).toBe(true)
+  })
+
+  it('hides the story when an unplaced place holding it is placed in a disabled region', () => {
+    const cellar = place('loc_cellar', 'Cellar', null, {
+      state: { parent_location_id: null, unplaced: true },
+    })
+    const crypt = place('loc_crypt', 'Crypt', 'loc_cellar')
+    expect(
+      hides('loc_cellar', 'loc_thorn', {
+        entities: [...world, cellar, crypt],
+        story: storyAt('loc_crypt'),
+      }),
+    ).toBe(true)
+  })
+
+  it('reads the tail when it names another place than the scene', () => {
+    expect(hides('loc_market', 'loc_thorn', { story: storyAt('loc_back', 'loc_market') })).toBe(
+      true,
+    )
+  })
+
+  it('leaves a place the story is outside, an enabled parent, or a region the story is already in', () => {
+    expect(hides('loc_market', 'loc_thorn')).toBe(false)
+    expect(hides('loc_anchor', 'loc_eldra')).toBe(false)
+    const disabledVellis = { ...VELLIS, injectionMode: 'disabled' as const }
+    expect(
+      hides('loc_back', 'loc_market', {
+        entities: [ELDRA, disabledVellis, ANCHOR, BACK_ROOM, MARKET],
+      }),
+    ).toBe(false)
+    expect(hides('loc_back', 'loc_thorn', { story: storyAt(null) })).toBe(false)
+  })
+
+  it('walks the chains the caller gives, not the stored parents', () => {
+    const inReply: ParentOf = (id) =>
+      id === 'loc_market' ? 'loc_back' : parentOfLocations(world)(id)
+    expect(
+      hides('loc_market', 'loc_thorn', { parentOf: inReply, story: storyAt('loc_market') }),
+    ).toBe(true)
+    expect(
+      hides('loc_anchor', 'loc_thorn', { parentOf: inReply, story: storyAt('loc_market') }),
+    ).toBe(true)
+    expect(hides('loc_anchor', 'loc_thorn', { story: storyAt('loc_market') })).toBe(false)
   })
 })
 

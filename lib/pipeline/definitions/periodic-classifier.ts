@@ -19,6 +19,7 @@ import {
   nextStatusOnSuccess,
   newPlacesOf,
   PERIODIC_CLASSIFIER_KIND,
+  readClassifierReply,
   RECONCILED_KINDS,
   reconcileNewEntity,
   substituteClassifierIds,
@@ -49,6 +50,7 @@ import {
 
 import { buildClassifierContext } from './classifier-context'
 import { classifierEmbedder } from './description-embedder'
+import { readStoryPlace } from './entry-reads'
 import { readClassifierStatus } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import { definePipeline } from '../authoring/define'
@@ -263,6 +265,7 @@ export async function* periodicClassifierPhase(
   const awareness = [...happeningAwarenessStore.getAwareness().values()].filter(
     (a) => a.branchId === ctx.branchId,
   )
+  const story = await readStoryPlace(ctx.db, ctx.branchId)
   const idMap = new IdBiMap()
   const prompt = renderTemplate(
     TEMPLATE_IDS.periodicClassifier,
@@ -318,7 +321,8 @@ export async function* periodicClassifierPhase(
     return { status: 'failed', error: failure.error }
   }
 
-  const extraction = result.value
+  const { reply: extraction, malformed } = readClassifierReply(result.value)
+  for (const drop of malformed) ctx.log.warn('classifier.entry_malformed', drop)
   const substituted = substituteClassifierIds(
     extraction,
     idMap,
@@ -374,6 +378,7 @@ export async function* periodicClassifierPhase(
     threads,
     happenings,
     awareness,
+    story,
   })
   if (plan.fellBackCount > 0)
     ctx.log.warn('classifier.window_head_fallback', { count: plan.fellBackCount })

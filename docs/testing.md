@@ -420,8 +420,9 @@ database, opened read-only (`AVENTURAS_DB_PATH` picks another
 database, `PROBE_BRANCH_ID` a branch other than `br_hero_main`), and
 sends it
 `PROBE_RUNS` times, 20 by default. It prints each run's outcome with
-its parse and provider retries and its first parse failure by field
-path, then the first-attempt parse rate.
+its parse and provider retries, its first parse failure by field path
+and the entries a reply that parsed dropped for not fitting, by list,
+then the first-attempt parse rate.
 
 ## Selector strategy
 

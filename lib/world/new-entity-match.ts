@@ -33,32 +33,46 @@ function byAge(a: Entity, b: Entity): number {
 const sameName = (candidate: PlaceCandidate, entity: Entity): boolean =>
   nameBasis(candidate.name, entity.name) === 'same-name'
 
+/** A row or an earlier create of the reply, as a flag partner. */
+type FlagSide = Pick<Entity, 'id' | 'name' | 'status'> & { keywords: readonly string[] }
+
 /** Flag partner's rank: an exact retired namesake, then a name inside the other, a keyword hit. */
-function partnerRank(candidate: PlaceCandidate, entity: Entity): number | null {
+function partnerRank(candidate: PlaceCandidate, side: FlagSide): number | null {
   const basis = namesakeBasis(
     { name: candidate.name, keywords: candidate.keywords ?? [] },
-    entity,
+    side,
   )?.basis
-  if (basis === 'same-name' && entity.status === 'retired') return 0
+  if (basis === 'same-name' && side.status === 'retired') return 0
   if (basis === 'contained') return 1
   if (basis === 'keyword') return 2
   return null
 }
 
+/** Rows rank by age; the reply's `creates` after every row, in the order they settled. */
 function flagPartner(
   candidate: PlaceCandidate,
-  among: readonly Entity[],
+  rows: readonly Entity[],
+  creates: readonly SettledNewPlace[],
   reason: PlaceFlagReason,
 ): PlaceMatch {
+  const among: FlagSide[] = [
+    ...[...rows].sort(byAge),
+    ...creates.map((p) => ({
+      id: p.id,
+      name: p.name,
+      keywords: p.keywords ?? [],
+      status: 'active' as const,
+    })),
+  ]
   const [partner] = among
-    .flatMap((entity) => {
-      const rank = partnerRank(candidate, entity)
-      return rank === null ? [] : [{ entity, rank }]
+    .flatMap((side) => {
+      const rank = partnerRank(candidate, side)
+      return rank === null ? [] : [{ side, rank }]
     })
-    .sort((a, b) => a.rank - b.rank || byAge(a.entity, b.entity))
+    .sort((a, b) => a.rank - b.rank)
   return {
     kind: 'create',
-    flag: partner === undefined ? null : { partnerId: partner.entity.id, reason },
+    flag: partner === undefined ? null : { partnerId: partner.side.id, reason },
   }
 }
 
@@ -67,6 +81,7 @@ function matchPlaced(
   parentId: string | null,
   view: LocationMatchView,
   placementAt: PlacementAt,
+  creates: readonly SettledNewPlace[],
 ): PlaceMatch {
   const { locations } = view
   const [reused] = locations
@@ -88,12 +103,20 @@ function matchPlaced(
     .sort(byAge)
   if (unplaced !== undefined) return { kind: 'reuse', id: unplaced.id, place: true }
 
-  const siblings = locations.filter((e) => samePlacement(placementAt(e.id), candidate.placement))
-  return flagPartner(candidate, siblings, SAME_PARENT)
+  const beside = (placement: PlacePlacement) => samePlacement(placement, candidate.placement)
+  const siblings = locations.filter((e) => beside(placementAt(e.id)))
+  const createdBeside = creates.filter((p) => beside(p.placement))
+  return flagPartner(candidate, siblings, createdBeside, SAME_PARENT)
 }
 
 /** A reply's new place: the placement its parent gave, unplaced if dropped, and its row's id. */
-export type SettledNewPlace = { name: string; placement: PlacePlacement; id: string }
+export type SettledNewPlace = {
+  name: string
+  placement: PlacePlacement
+  id: string
+  /** A create's keywords, which a later create's partial match reads. */
+  keywords?: readonly string[]
+}
 
 /** Where this reply's placements put a place. */
 export type ReplyPlacements = ReadonlyMap<string, PlacedPlacement>
@@ -107,31 +130,36 @@ export function replyParentOf(placedHere: ReplyPlacements, stored: ParentOf): Pa
   }
 }
 
-/** `view` as matching sees it once this reply's placements land: those rows no longer unplaced. */
+/** `view` as matching sees it once this reply's placements land: those rows a real child there. */
 export function replyMatchView(
   view: LocationMatchView,
   placedHere: ReplyPlacements,
 ): LocationMatchView {
   return {
-    ...view,
     locations: view.locations.map((e) => {
       const at = placedHere.get(e.id)
       return at === undefined ? e : { ...e, state: withPlacement(e.state as LocationState, at) }
     }),
+    hiddenBetween: (id, parentId) => {
+      const at = placedHere.get(id)
+      if (at === undefined) return view.hiddenBetween(id, parentId)
+      return (at.kind === 'under' ? at.parentId : null) === parentId ? 0 : null
+    },
   }
 }
 
 // data-model.md → LocationState shape: compared by exact name with every place, placed or not.
-// `earlier`: this reply's own creates of the name, newer than every row as a later reply's are.
+// `creates`: this reply's own, newer than every row as a later reply's are.
 function matchUnplaced(
   candidate: PlaceCandidate,
   view: LocationMatchView,
   placementAt: PlacementAt,
-  earlier: readonly SettledNewPlace[],
+  creates: readonly SettledNewPlace[],
 ): PlaceMatch {
   const { locations } = view
   const exact = locations.filter((e) => sameName(candidate, e))
   const live = exact.filter((e) => e.status !== 'retired')
+  const earlier = creates.filter((p) => nameBasis(p.name, candidate.name) === 'same-name')
   const liveCount = live.length + earlier.length
   const namesakes = [
     ...(liveCount > 0 ? live : exact)
@@ -147,7 +175,8 @@ function matchUnplaced(
 
   // A partial name elsewhere on the map doesn't flag: the unplaced places stand in for siblings.
   const unplaced = locations.filter((e) => placementAt(e.id).kind === 'unplaced')
-  return flagPartner(candidate, unplaced, UNPLACED)
+  const createdUnplaced = creates.filter((p) => p.placement.kind === 'unplaced')
+  return flagPartner(candidate, unplaced, createdUnplaced, UNPLACED)
 }
 
 /**
@@ -159,9 +188,9 @@ export function matchNewLocation(candidate: PlaceCandidate, view: LocationMatchV
   const { placement } = candidate
   switch (placement.kind) {
     case 'under':
-      return matchPlaced(candidate, placement.parentId, view, placementAt)
+      return matchPlaced(candidate, placement.parentId, view, placementAt, [])
     case 'top':
-      return matchPlaced(candidate, null, view, placementAt)
+      return matchPlaced(candidate, null, view, placementAt, [])
     case 'unplaced':
       return matchUnplaced(candidate, view, placementAt, [])
   }
@@ -180,27 +209,32 @@ export function matchNewPlace(
   view: LocationMatchView,
   placedHere: ReplyPlacements,
 ): ReplyPlaceMatch {
-  const named = settled.filter((p) => nameBasis(p.name, candidate.name) === 'same-name')
-  const twin = named.find((p) => samePlacement(p.placement, candidate.placement))
+  const sameAsCandidate = (p: SettledNewPlace) => nameBasis(p.name, candidate.name) === 'same-name'
+  const twin = settled.find(
+    (p) => sameAsCandidate(p) && samePlacement(p.placement, candidate.placement),
+  )
   if (twin !== undefined) return { kind: 'twin', id: twin.id, place: false }
 
   const stored = new Set(view.locations.map((e) => e.id))
   const created = new Map<string, SettledNewPlace>()
   // A create's first entry is its own: it sits there unless a takeover placed it since.
-  for (const p of named)
+  for (const p of settled)
     if (!stored.has(p.id) && !created.has(p.id))
       created.set(p.id, { ...p, placement: placedHere.get(p.id) ?? p.placement })
-  const earlier = [...created.values()]
+  const creates = [...created.values()]
+  const placementAt = realPlacementOf(view.locations)
 
-  if (candidate.placement.kind === 'unplaced') {
-    const match = matchUnplaced(candidate, view, realPlacementOf(view.locations), earlier)
+  const { placement } = candidate
+  if (placement.kind === 'unplaced') {
+    const match = matchUnplaced(candidate, view, placementAt, creates)
     return match.kind === 'reuse' && created.has(match.id)
       ? { kind: 'twin', id: match.id, place: false }
       : match
   }
-  const match = matchNewLocation(candidate, view)
+  const parentId = placement.kind === 'under' ? placement.parentId : null
+  const match = matchPlaced(candidate, parentId, view, placementAt, creates)
   if (match.kind !== 'create') return match
-  const taken = earlier.find((p) => p.placement.kind === 'unplaced')
+  const taken = creates.find((p) => sameAsCandidate(p) && p.placement.kind === 'unplaced')
   return taken === undefined ? match : { kind: 'twin', id: taken.id, place: true }
 }
 

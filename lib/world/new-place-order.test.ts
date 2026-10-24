@@ -35,27 +35,20 @@ describe('settlingOrder', () => {
     ).toEqual(['a', 'b', 'c'])
   })
 
-  it('leaves unresolved a create whose parent is neither a declared handle nor a location', () => {
-    expect(order([{ handle: 'a', parent: 'loc_gone' }])).toEqual(['a!'])
+  // Its parent never resolves, so it waits for nothing and keeps its place in the list.
+  it('leaves unresolved, in its own place, a create whose parent is no handle or location', () => {
+    expect(order([{ handle: 'a', parent: 'loc_gone' }, { handle: 'b' }])).toEqual(['a!', 'b'])
   })
 
-  it('leaves both sides of a handle cycle unresolved, then settles what hangs off it', () => {
+  it('leaves both sides of a handle cycle unresolved in their own places', () => {
     expect(
       order([
         { handle: 'a', parent: 'b' },
-        { handle: 'b', parent: 'a' },
         { handle: 'c', parent: 'a' },
+        { handle: 'd' },
+        { handle: 'b', parent: 'a' },
       ]),
-    ).toEqual(['a!', 'b!', 'c'])
-  })
-
-  it('keeps the first of two creates declaring one handle, and returns the other', () => {
-    const first = { handle: 'new:a', parent: 'loc_missing' }
-    const second = { handle: 'new:a' }
-    expect(settlingOrder([first, second], () => false)).toEqual({
-      order: [{ emission: first, parentUnresolved: true }],
-      duplicates: [second],
-    })
+    ).toEqual(['a!', 'c', 'd', 'b!'])
   })
 
   it('waits for a declared handle even when its string is also a location id', () => {

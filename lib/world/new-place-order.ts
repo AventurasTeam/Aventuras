@@ -17,11 +17,7 @@ export type SettlingPlace<E extends NewPlaceDeclaration> =
   | { emission: E; parentUnresolved: false }
   | { emission: E & { parent: string }; parentUnresolved: true }
 
-export type SettlingOrder<E extends NewPlaceDeclaration> = {
-  order: SettlingPlace<E>[]
-  /** Creates declaring a handle an earlier create declared: the first declaration keeps it. */
-  duplicates: E[]
-}
+export type SettlingOrder<E extends NewPlaceDeclaration> = { order: SettlingPlace<E>[] }
 
 /** Why a new place landed unplaced although it named a parent (piggyback.md → Parent). */
 export type ParentDropCause = 'unresolved' | 'retired' | 'chain-broken'
@@ -31,8 +27,10 @@ export type NewPlacement =
   | { kind: 'kept'; placement: PlacePlacement }
   | { kind: 'dropped'; cause: ParentDropCause; parent: string }
 
-function inHandleCycle(create: NewPlaceDeclaration, waiting: readonly NewPlaceDeclaration[]) {
-  const parentOf = new Map(waiting.map((e) => [e.handle, e.parent]))
+function inHandleCycle(
+  create: NewPlaceDeclaration,
+  parentOf: ReadonlyMap<string, string | undefined>,
+) {
   const seen = new Set<string>()
   let at = create.parent
   while (at !== undefined && !seen.has(at)) {
@@ -47,53 +45,45 @@ const namesParent = <E extends NewPlaceDeclaration>(e: E): e is E & { parent: st
   e.parent !== undefined
 
 /**
- * Top-down, else in list order: a create waits for its own parent only. No parent or `TOP_LEVEL`
- * settles at once; an unresolvable parent (undeclared handle, non-location id, cycle) unplaces it.
+ * Top-down, else in list order: a create waits for its own parent only, so one whose parent never
+ * resolves (an undeclared handle, a non-location id, a handle cycle) settles unplaced in its own
+ * place. Handles are unique: each caller drops a repeated one first.
  */
 export function settlingOrder<E extends NewPlaceDeclaration>(
   creates: readonly E[],
   isLocationId: (id: string) => boolean,
 ): SettlingOrder<E> {
-  const declared = new Set<string>()
-  const unique: E[] = []
-  const duplicates: E[] = []
-  for (const create of creates) {
-    if (declared.has(create.handle)) {
-      duplicates.push(create)
-    } else {
-      declared.add(create.handle)
-      unique.push(create)
-    }
-  }
-
+  const declared = new Set(creates.map((create) => create.handle))
+  const parentOf = new Map(creates.map((create) => [create.handle, create.parent]))
+  const cyclic = new Set(
+    creates.filter((create) => inHandleCycle(create, parentOf)).map((create) => create.handle),
+  )
   const order: SettlingPlace<E>[] = []
   const settled = new Set<string>()
-  const settle = (place: SettlingPlace<E>) => {
-    order.push(place)
-    settled.add(place.emission.handle)
-  }
   const resolvable = (parent: string | undefined) =>
     parent === undefined ||
     parent === TOP_LEVEL ||
     settled.has(parent) ||
     (!declared.has(parent) && isLocationId(parent))
+  const neverResolves = (create: E): create is E & { parent: string } =>
+    namesParent(create) &&
+    create.parent !== TOP_LEVEL &&
+    (cyclic.has(create.handle) || (!declared.has(create.parent) && !isLocationId(create.parent)))
 
-  let waiting = unique
+  let waiting = creates
   while (waiting.length > 0) {
-    const next = waiting.find((e) => resolvable(e.parent))
-    if (next !== undefined) settle({ emission: next, parentUnresolved: false })
-    else {
-      // No parent and TOP_LEVEL always settle, so every waiting create names another parent.
-      const parented = waiting.filter(namesParent)
-      const handles = new Set(waiting.map((e) => e.handle))
-      const orphans = parented.filter((e) => !handles.has(e.parent))
-      // No orphan: every waiting create is in a handle cycle or hangs off one.
-      const stuck = orphans.length > 0 ? orphans : parented.filter((e) => inHandleCycle(e, waiting))
-      for (const emission of stuck) settle({ emission, parentUnresolved: true })
-    }
+    const next = waiting.find((e) => resolvable(e.parent) || neverResolves(e))
+    // Every waiting create hangs off one that settles, so one always can.
+    if (next === undefined) throw new Error('settlingOrder: no create can settle')
+    order.push(
+      neverResolves(next)
+        ? { emission: next, parentUnresolved: true }
+        : { emission: next, parentUnresolved: false },
+    )
+    settled.add(next.handle)
     waiting = waiting.filter((e) => !settled.has(e.handle))
   }
-  return { order, duplicates }
+  return { order }
 }
 
 /**

@@ -2383,6 +2383,7 @@ describe('per-turn-piggyback', () => {
     function seedFallbackTurn(
       world: Entity[] = fallbackWorld(),
       foldReport?: NonNullable<EntryMetadata['stateReport']>,
+      before: EntryMetadata = SCENE,
     ): void {
       currentStoryStore.set({
         storyId: 's1',
@@ -2398,7 +2399,7 @@ describe('per-turn-piggyback', () => {
           kind: 'ai_reply',
           content: 'The tide is out at Saltmere.',
           chapterId: null,
-          metadata: SCENE,
+          metadata: before,
           createdAt: 1,
         },
         {
@@ -2577,6 +2578,34 @@ describe('per-turn-piggyback', () => {
         },
       })
       expect(metadataPatch(events).currentLocationId).toBe(DOCKS_ROW)
+    })
+
+    // data-model.md → Disabled places: judged by the rows below the reply, the place the turn found.
+    it('leaves a reused place unplaced when the story was in it before the reply', async () => {
+      const DOCKS_ROW = 'loc_00000000-0000-4000-8000-0000000000a3'
+      const world = fallbackWorld().map((e) =>
+        e.id === TOWN ? { ...e, injectionMode: 'disabled' as const } : e,
+      )
+      seedFallbackTurn(
+        [
+          ...world,
+          worldRow({
+            id: DOCKS_ROW,
+            kind: 'location',
+            name: 'Smuggler Docks',
+            state: { parent_location_id: null, unplaced: true },
+          }),
+        ],
+        undefined,
+        { ...SCENE, currentLocationId: DOCKS_ROW },
+      )
+      const { events } = await runFallback(docksAndKey())
+      expect(
+        events.flatMap((e) => (e.type === 'delta_emitted' ? [e.action.kind] : [])),
+      ).not.toContain('placeLocation')
+      expect(metadataPatch(events).stateReport?.newLocations).toEqual([
+        expect.objectContaining({ outcome: 'reused', id: DOCKS_ROW, parentDropped: true }),
+      ])
     })
 
     it('creates a place whose parent is "top" at the top level', async () => {

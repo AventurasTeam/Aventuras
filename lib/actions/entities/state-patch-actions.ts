@@ -16,8 +16,10 @@ import { entitiesStore } from '@/lib/stores'
 import {
   characterFactionId,
   flagStillHolds,
+  moveHidesStory,
   nameBasis,
   pairSideOf,
+  parentOfLocations,
   PLACE_REFUSAL,
   placementOf,
   realPlacementOf,
@@ -37,6 +39,7 @@ import {
 import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteField } from '../delta/user-precedence'
 import type { DbCtx, DeltaSource, ProseEntryId } from '../types'
 import { branchPlaces, parentChainRefusal } from './parent-chain-check'
+import { loadStoryPlace } from '../story-entries/story-place'
 
 declare module '@/lib/actions/action-map' {
   interface PipelineActionMap {
@@ -487,6 +490,19 @@ export const placeLocationHandler: ActionHandler = async (action, branchId, ctx)
     if (parent.status === 'retired') return noopRefusal(PLACE_REFUSAL.retiredParent)
     const refused = parentChainRefusal(bid, id, placement.parentId, places)
     if (refused !== null) return noopRefusal(refused)
+    // data-model.md → Disabled places. The per-turn writer's planner judges its own: its turn's
+    // location lands beside it, so the story's place read here would already be the one walked into.
+    if (
+      action.source === 'periodic_classifier' &&
+      moveHidesStory({
+        id,
+        parentId: placement.parentId,
+        places: new Map(places.map((p) => [p.id, p])),
+        parentOf: parentOfLocations(places),
+        story: await loadStoryPlace(bid, ctx),
+      })
+    )
+      return noopRefusal(PLACE_REFUSAL.storyInside)
   }
   if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'state', ['parent_location_id']))
     return noopRefusal(USER_EDITED_SINCE_PROSE)

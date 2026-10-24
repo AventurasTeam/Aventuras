@@ -819,8 +819,9 @@ and neither the phase nor the LLM retry tier can recover it — the retry
 finishes before any write is emitted, and a phase never sees a write's
 result. A placement's rejection never fails the run: `placeLocation`,
 which a machine writer uses to place or move an existing place,
-refuses a cycle, a broken chain or a retired parent as a no-op, so a
-planner slip there is a logged skip. The machine paths that write
+refuses a cycle, a broken chain, a retired parent or, for a pass, a
+disabled place around the story (Disabled places, below) as a no-op,
+so a planner slip there is a logged skip. The machine paths that write
 `parent_location_id` are the per-turn writer creating a location or
 placing an unplaced one it reuses, the periodic classifier creating a
 mentioned place or moving one the prose places, and chapter close; a
@@ -896,7 +897,18 @@ characters and items at a place are unaffected. Disabling a place, or
 moving one into a disabled region, refuses while the tail scene is in
 it or inside it (`story-inside`): a disabled region the story enters is
 one the model walked into through the prose, never one disabled around
-it.
+it. That binds the machine writers too, judged on the story's place,
+the tail's and the scene's. A pass's placement that would put a
+disabled place around it is dropped and logged, and `placeLocation`
+refuses one from a pass that gets past its planner as a no-op
+([`classifier.md → What the classifier writes`](./memory/classifier.md#what-the-classifier-writes)).
+The per-turn writer places only an unplaced place it reuses, always on
+its turn's own location chain, so it judges the story's place as the
+turn found it: a placement around a story already in the place or
+inside it is dropped, logged, and one the story walks into through the
+turn lands
+([`piggyback.md → Creating a place or an item`](./memory/piggyback.md#creating-a-place-or-an-item)).
+A new place is never checked, since nothing is in it yet.
 
 **The story's place.** The tail scene above is the location the next
 prompt's map is built around, read off the latest `ai_reply` or

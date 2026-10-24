@@ -552,7 +552,7 @@ describe('matchNewLocation — the unplaced places', () => {
 
 // No create of the reply was placed by a takeover unless a case says so.
 const matchNewPlace = (
-  candidate: { name: string; placement: PlacePlacement },
+  candidate: Parameters<typeof matchInReply>[0],
   settled: readonly SettledNewPlace[],
   view: Parameters<typeof matchInReply>[2],
   placedHere: ReadonlyMap<string, PlacedPlacement> = new Map(),
@@ -727,6 +727,110 @@ describe('matchNewPlace', () => {
         expect(
           matchNewPlace({ name: 'Ashfall', placement: TOP }, earlier, view, placedHere),
         ).toEqual(PLAIN)
+      })
+    })
+
+    describe("a partial name or a keyword hit on the reply's earlier creates", () => {
+      const docks = { name: 'Docks', placement: under('loc_town'), id: 'loc_new1' }
+
+      it('flags a placed place against an earlier create beside it, same-parent', () => {
+        expect(
+          matchNewPlace({ name: 'Old Docks', placement: under('loc_town') }, [docks], view),
+        ).toEqual(flaggedWith('loc_new1'))
+        expect(
+          matchNewPlace(
+            { name: 'Old Docks', placement: TOP },
+            [{ ...docks, placement: TOP }],
+            view,
+          ),
+        ).toEqual(flaggedWith('loc_new1'))
+      })
+
+      it("flags a keyword hit either way: the earlier create's keywords, or the place's own", () => {
+        const wharf = { ...docks, keywords: ['the Wharf'] }
+        expect(
+          matchNewPlace({ name: 'The Wharf', placement: under('loc_town') }, [wharf], view),
+        ).toEqual(flaggedWith('loc_new1'))
+        expect(
+          matchNewPlace(
+            { name: 'Harbour', placement: under('loc_town'), keywords: ['docks'] },
+            [docks],
+            view,
+          ),
+        ).toEqual(flaggedWith('loc_new1'))
+      })
+
+      it('flags an unplaced place against an earlier unplaced create, unplaced', () => {
+        expect(
+          matchNewPlace(
+            { name: 'Old Docks', placement: UNPLACED },
+            [{ ...docks, placement: UNPLACED }],
+            view,
+          ),
+        ).toEqual(flaggedWith('loc_new1', 'unplaced'))
+      })
+
+      it('compares no earlier create placed elsewhere', () => {
+        expect(matchNewPlace({ name: 'Old Docks', placement: TOP }, [docks], view)).toEqual(PLAIN)
+        expect(matchNewPlace({ name: 'Old Docks', placement: UNPLACED }, [docks], view)).toEqual(
+          PLAIN,
+        )
+        expect(
+          matchNewPlace(
+            { name: 'Old Docks', placement: under('loc_town') },
+            [{ ...docks, placement: UNPLACED }],
+            view,
+          ),
+        ).toEqual(PLAIN)
+      })
+
+      it('reads an earlier create where a takeover put it', () => {
+        const takenOver = [
+          { name: 'Docks', placement: UNPLACED, id: 'loc_new1' },
+          { name: 'Docks', placement: under('loc_town'), id: 'loc_new1' },
+        ]
+        const placedHere = new Map([['loc_new1', under('loc_town')]])
+        expect(
+          matchNewPlace(
+            { name: 'Old Docks', placement: under('loc_town') },
+            takenOver,
+            view,
+            placedHere,
+          ),
+        ).toEqual(flaggedWith('loc_new1'))
+        expect(
+          matchNewPlace({ name: 'Old Docks', placement: UNPLACED }, takenOver, view, placedHere),
+        ).toEqual(PLAIN)
+      })
+
+      // An earlier create is newer than every row, as a later reply's would be.
+      it('pairs by rank first, then a row before a create, then creates in reply order', () => {
+        const yard = { name: 'Inn Yard', placement: under('loc_town'), id: 'loc_new1' }
+        const stables = { name: 'Inn Stables', placement: under('loc_town'), id: 'loc_new2' }
+        expect(
+          matchNewPlace({ name: 'Inn', placement: under('loc_town') }, [yard, stables], view),
+        ).toEqual(flaggedWith('loc_inn'))
+        expect(
+          matchNewPlace(
+            { name: 'Inn', placement: UNPLACED },
+            [
+              { ...stables, placement: UNPLACED },
+              { ...yard, placement: UNPLACED },
+            ],
+            view,
+          ),
+        ).toEqual(flaggedWith('loc_new2', 'unplaced'))
+        const keywordRow = unhiddenLocationView([
+          place('loc_town', 'Varn', null),
+          place('loc_quay', 'Quay', 'loc_town', { keywords: ['Docks'] }),
+        ])
+        expect(
+          matchNewPlace(
+            { name: 'Docks', placement: under('loc_town') },
+            [{ ...docks, name: 'Old Docks' }],
+            keywordRow,
+          ),
+        ).toEqual(flaggedWith('loc_new1'))
       })
     })
 

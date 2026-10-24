@@ -6,7 +6,7 @@ import { checkParentChain, PARENT_CHAIN_BROKEN, PARENT_CYCLE, parentOfLocations 
 
 import type { DbCtx } from '../types'
 
-type PlaceRow = Pick<Entity, 'id' | 'kind' | 'state' | 'status'>
+type PlaceRow = Pick<Entity, 'id' | 'kind' | 'state' | 'status' | 'injectionMode'>
 
 /** The branch's places, as the pre-commit walk reads them. */
 export async function branchPlaces(ctx: DbCtx, branchId: string): Promise<PlaceRow[]> {
@@ -16,6 +16,7 @@ export async function branchPlaces(ctx: DbCtx, branchId: string): Promise<PlaceR
       kind: entities.kind,
       state: entities.state,
       status: entities.status,
+      injectionMode: entities.injectionMode,
     })
     .from(entities)
     .where(and(eq(entities.branchId, branchId), eq(entities.kind, 'location')))

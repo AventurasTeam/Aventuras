@@ -8,7 +8,7 @@ export {
   parentOfLocations,
   placementLoop,
 } from './parent-chain'
-export type { PlacementLoop } from './parent-chain'
+export type { ParentOf, PlacementLoop } from './parent-chain'
 export {
   characterDraftFrom,
   characterDraftSchema,
@@ -125,7 +125,9 @@ export { isUnplaced, placementOf, realPlacementOf, samePlacement, withPlacement 
 export type { PlacedPlacement, PlacePlacement } from './placement'
 export {
   mergePlaceRefusal,
+  moveHidesStory,
   PLACE_REFUSAL,
+  placementDrop,
   placeSaveConfirm,
   placeSaveRefusal,
   retireCascade,
@@ -137,6 +139,7 @@ export type {
   NamedPlace,
   PlaceSaveConfirm,
   PlaceSaveRefusal,
+  PlacementDrop,
   StoryPlace,
 } from './place-rules'
 export { itemNamesakes, matchNewPlace, replyMatchView, replyParentOf } from './new-entity-match'

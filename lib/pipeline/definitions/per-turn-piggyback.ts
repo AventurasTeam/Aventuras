@@ -37,7 +37,7 @@ import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore } from '@/lib/stores'
 
 import { classifierEmbedder } from './description-embedder'
-import { readLastTurns } from './entry-reads'
+import { readLastTurns, readStoryPlace } from './entry-reads'
 import { buildGenerationContext } from './generation-context'
 import { planTurnCreates } from './per-turn-creates'
 import { loadPerTurnWorkingSet } from './working-set'
@@ -496,6 +496,8 @@ export async function* piggybackFallbackClassifierPhase(
     block: resolvedBlock,
     entities,
     mapCurrentLocationId: load.mapCurrentLocationId,
+    // Below the reply, which a failed fold may already have given this turn's location.
+    story: await readStoryPlace(ctx.db, ctx.branchId, tail.position),
     branchId: ctx.branchId,
     source: 'per_turn_classifier',
     embed: classifierEmbedder(),
