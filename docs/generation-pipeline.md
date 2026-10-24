@@ -370,7 +370,11 @@ to a single LLM call.
 3. Liquid templates render against placeholder-bearing context
    — pack authors read `entity.id` and get the placeholder
 4. LLM call streams; emits placeholders in structured output (names in prose)
-5. parseAndSubstitute(rawOutput, idMap) — reverse swap
+5. Reverse swap, placeholders → UUIDs, field by field, each caller with
+   its own rule for a ref that doesn't resolve: the per-turn writers'
+   substitutePiggybackIds, the periodic classifier's
+   substituteClassifierIds, and parseAndSubstitute for the wizard's
+   opening refs
 6. Action layer receives UUIDs as it always does
 ```
 
