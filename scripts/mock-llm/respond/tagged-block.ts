@@ -116,23 +116,39 @@ function renderNewItems(block: AuthoredStateBlock): string[] {
   })
 }
 
-// Block order: a parsed block's `seq`, else list order with the drops after the item moves.
+// A move with no `seq` takes the one listed before it in its own list, or `first` at the list's head.
+function orderedRows<T extends { seq?: number }>(
+  moves: readonly T[],
+  first: number,
+  row: (move: T) => string,
+): { order: number; row: string }[] {
+  let order = first
+  return moves.map((move) => {
+    order = move.seq ?? order
+    return { order, row: row(move) }
+  })
+}
+
+// Block order: `seq`, a move without one right after the one listed before it, a drop with none
+// before it after every item move; a tie keeps the item moves first, then list order.
 function renderTransfers(block: AuthoredStateBlock): string | null {
   const items = block.transfers?.items ?? []
   const drops = block.transfers?.drops ?? []
   const stackables = block.transfers?.stackables ?? []
   const holders = (to: string | undefined, from: string | undefined) =>
     `${to !== undefined ? ` to="${attr(to)}"` : ''}${from !== undefined ? ` from="${attr(from)}"` : ''}`
-  const moves = [
-    ...items.map((i, n) => ({
-      order: i.seq ?? n,
-      row: `    <item id="${attr(i.id)}" slot="${attr(i.slot)}"${holders(i.to, i.from)} />`,
-    })),
-    ...drops.map((d, n) => ({
-      order: d.seq ?? items.length + n,
-      row: `    <${DROP_TAG} id="${attr(d.id)}"${holders(undefined, d.from)} />`,
-    })),
-  ].sort((a, b) => a.order - b.order)
+  const itemRows = orderedRows(
+    items,
+    -Infinity,
+    (i) => `    <item id="${attr(i.id)}" slot="${attr(i.slot)}"${holders(i.to, i.from)} />`,
+  )
+  const dropRows = orderedRows(
+    drops,
+    Math.max(-Infinity, ...itemRows.map((r) => r.order)),
+    (d) => `    <${DROP_TAG} id="${attr(d.id)}"${holders(undefined, d.from)} />`,
+  )
+  // Two -Infinity orders subtract to NaN, which sort reads as a tie.
+  const moves = [...itemRows, ...dropRows].sort((a, b) => a.order - b.order)
   return list(STATE_TAGS.transfers, [
     ...moves.map((m) => m.row),
     ...stackables.map(

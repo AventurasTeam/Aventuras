@@ -78,6 +78,57 @@ describe('renderStateBlock', () => {
     })
   })
 
+  // A saved reply edited by hand mixes the parser's numbering with moves added without one.
+  it('renders a move with no seq after the one listed before it in its own list', () => {
+    const raw = renderStateBlock({
+      transfers: {
+        items: [
+          { id: 'i1', slot: 'inventory', to: 'c1', seq: 0 },
+          { id: 'i2', slot: 'inventory', to: 'c1', seq: 3 },
+          { id: 'i3', slot: 'inventory', to: 'c1' },
+        ],
+        stackables: [],
+        drops: [
+          { id: 'i4', seq: 1 },
+          { id: 'i5', seq: 2 },
+        ],
+      },
+    })
+    expect(parseStateBlock(raw).block.transfers).toEqual({
+      items: [
+        { id: 'i1', slot: 'inventory', to: 'c1', seq: 0 },
+        { id: 'i2', slot: 'inventory', to: 'c1', seq: 3 },
+        { id: 'i3', slot: 'inventory', to: 'c1', seq: 4 },
+      ],
+      stackables: [],
+      drops: [
+        { id: 'i4', seq: 1 },
+        { id: 'i5', seq: 2 },
+      ],
+    })
+  })
+
+  it('puts a drop with no seq and none listed before it after every item move', () => {
+    const raw = renderStateBlock({
+      transfers: {
+        items: [
+          { id: 'i1', slot: 'inventory', to: 'c1', seq: 0 },
+          { id: 'i2', slot: 'inventory', to: 'c1', seq: 5 },
+        ],
+        stackables: [],
+        drops: [{ id: 'i4' }],
+      },
+    })
+    expect(parseStateBlock(raw).block.transfers).toEqual({
+      items: [
+        { id: 'i1', slot: 'inventory', to: 'c1', seq: 0 },
+        { id: 'i2', slot: 'inventory', to: 'c1', seq: 1 },
+      ],
+      stackables: [],
+      drops: [{ id: 'i4', seq: 2 }],
+    })
+  })
+
   // validate.ts asks no create for a description, and the app's parser reads a missing one as ''.
   it('renders a create with no description, which the parser reads as an empty one', () => {
     const { block, failures, malformedCreates } = parseStateBlock(
