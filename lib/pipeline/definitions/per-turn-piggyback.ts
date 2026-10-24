@@ -13,6 +13,7 @@ import { generateId } from '@/lib/ids'
 import {
   buildPiggybackActions,
   buildStateReport,
+  isDroppedRefField,
   MAX_RETRIEVAL_QUERIES,
   normalizeCreates,
   normalizeStackableTransfer,
@@ -20,6 +21,7 @@ import {
   resolveSuggestionItems,
   substitutePiggybackIds,
   suggestionRefSchema,
+  type DroppedRef,
   type ParsedTransfers,
   type PiggybackApplied,
   type SubstitutedStateBlock,
@@ -475,14 +477,24 @@ export async function* piggybackFallbackClassifierPhase(
       layer: 'per_turn_classifier',
     })
   }
-  // Nothing rereads this reply, so a transfer with a bad ref drops alone.
+  // Nothing rereads this reply, so an entry with a bad ref drops alone, recorded in the report.
   const {
     block: substituted,
     failures,
-    droppedTransfers,
+    droppedRefs: refDrops,
   } = substitutePiggybackIds(normalized.block, idMap, { entities, badRef: 'drop' })
-  for (const dropped of droppedTransfers) {
-    ctx.log.warn('classifier.transfer_dropped', { entryId: tail.id, ...dropped })
+  // failedFields describes the narrative's attempt (data-model.md → Entry metadata shape), so this
+  // reply's own field failures are recorded with its dropped refs.
+  const droppedRefs: DroppedRef[] = [
+    ...refDrops,
+    ...failures.flatMap((f): DroppedRef[] =>
+      isDroppedRefField(f.field)
+        ? [{ field: f.field, reason: 'unreadable', detail: f.detail }]
+        : [],
+    ),
+  ]
+  for (const dropped of refDrops) {
+    ctx.log.warn('classifier.ref_dropped', { entryId: tail.id, ...dropped })
   }
   // The schema can't reject one bad stackable without failing the whole call, so the
   // transfers parseTransfers would drop are dropped here, before the actions and report.
@@ -553,10 +565,8 @@ export async function* piggybackFallbackClassifierPhase(
     buildStateReport({
       layer: 'per_turn_classifier',
       turn: { block: plan.block, report: reportedCreates },
-      failures: [
-        ...(priorReport?.failedFields ?? []),
-        ...failures.map((f) => ({ field: f.field, detail: f.detail })),
-      ],
+      failures: priorReport?.failedFields ?? [],
+      droppedRefs,
       applied,
       ...(priorReport?.raw !== undefined ? { raw: priorReport.raw } : {}),
     }),

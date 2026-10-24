@@ -525,17 +525,24 @@ so it fails no field. So does a `<drop>` kept out of the block for its
 item: an existing item's id, or the handle of a `<new_item>` the block
 declares. Any other id or handle there (a place's, a character's, a
 lore entry's) is of the wrong kind, and so is a new item's handle as
-the `<current_location>`. The two writers treat a bad ref differently:
+the `<current_location>`. A scene entry must name a character or an
+item, a new item's handle included, and a visual change a character:
+a place or a faction there is of the wrong kind too. The two writers
+treat a bad ref differently:
 
 - **The tagged block** fails the field it sits in, whether the ref is
   unknown, undeclared or of the wrong kind, so the fallback fires and
   is the turn's only creator.
-- **The fallback**, whose reply nothing rereads, drops a transfer
-  where it stands when its item or a holder is unknown, undeclared or
-  of the wrong kind, item, stackable and drop transfers alike,
-  logging `classifier.transfer_dropped`, and applies the rest of the
-  field. Its scene list, visual changes and conditions keep the
-  per-field rule, so one unknown id there still drops the whole list.
+- **The fallback**, whose reply nothing rereads, drops an entry where
+  it stands when a ref in it is unknown, undeclared or of the wrong
+  kind, and applies the rest of the field: a scene entry, a visual
+  change, a condition, and item, stackable and drop transfers alike.
+  An unknown `currentLocation` drops the same way and the previous
+  location stays. Each drop is logged as `classifier.ref_dropped` and
+  recorded in the report's `droppedRefs`
+  ([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)),
+  where the reader shows it; the report's `failedFields` keeps
+  describing the narrative's attempt alone.
   A new item's handle as the `currentLocation` is rejected the way an
   item's id is: the previous location stays, the report records
   `currentLocationRejected`, and its `currentLocation` holds the new

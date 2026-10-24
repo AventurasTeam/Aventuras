@@ -2881,13 +2881,19 @@ describe('per-turn-piggyback', () => {
       )
       const [docks, key] = createdEntries(events)
       if (!docks || !key) throw new Error('expected a location create and an item create')
-      expect(log.warn).toHaveBeenCalledWith('classifier.transfer_dropped', {
-        entryId: 'entry-2',
-        transfer: { id: ref, to: 'c1', slot: 'inventory', seq: 1 },
+      const dropped = {
+        field: 'transfers',
+        ref,
+        reason: 'wrong-kind',
         detail: expect.stringContaining('not an item'),
+      }
+      expect(log.warn).toHaveBeenCalledWith('classifier.ref_dropped', {
+        entryId: 'entry-2',
+        ...dropped,
       })
       const patch = metadataPatch(events)
       expect(patch.stateReport?.failedFields).toBeUndefined()
+      expect(patch.stateReport?.droppedRefs).toEqual([dropped])
       expect(patch.stateReport?.transfers).toEqual({
         items: [{ id: key.id, to: HERO, slot: 'inventory' }],
         stackables: [{ key: 'gold', amount: 5, to: HERO }],
@@ -2927,24 +2933,65 @@ describe('per-turn-piggyback', () => {
       )
       const [, key] = createdEntries(events)
       if (!key) throw new Error('expected the item create')
-      expect(log.warn).toHaveBeenCalledWith('classifier.transfer_dropped', {
-        entryId: 'entry-2',
-        transfer: { ...unknownItem, seq: 1 },
+      const droppedItem = {
+        field: 'transfers',
+        ref: 'i9',
+        reason: 'unknown',
         detail: expect.stringContaining('i9'),
-      })
-      expect(log.warn).toHaveBeenCalledWith('classifier.transfer_dropped', {
-        entryId: 'entry-2',
-        transfer: unknownHolder,
+      }
+      const droppedHolder = {
+        field: 'transfers',
+        ref: 'c9',
+        reason: 'unknown',
         detail: expect.stringContaining('c9'),
+      }
+      expect(log.warn).toHaveBeenCalledWith('classifier.ref_dropped', {
+        entryId: 'entry-2',
+        ...droppedItem,
+      })
+      expect(log.warn).toHaveBeenCalledWith('classifier.ref_dropped', {
+        entryId: 'entry-2',
+        ...droppedHolder,
       })
       const patch = metadataPatch(events)
       expect(patch.stateReport?.failedFields).toBeUndefined()
+      expect(patch.stateReport?.droppedRefs).toEqual([droppedItem, droppedHolder])
       expect(patch.stateReport?.transfers).toEqual({
         items: [{ id: key.id, to: HERO, slot: 'inventory' }],
         stackables: [{ key: 'gold', amount: 5, to: HERO }],
       })
     })
 
+    // One hallucinated id costs only itself: the rest of the scene still lands, the previous
+    // place stays, and both drops are recorded for the reader, not in failedFields.
+    it('keeps the rest of the scene and the previous place over one unknown id', async () => {
+      seedFallbackTurn()
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1', 'c9'],
+          currentLocation: 'l9',
+          worldTimeDelta: 10,
+        }),
+      )
+      const patch = metadataPatch(events)
+      expect(patch.sceneEntities).toEqual([HERO])
+      expect(patch.currentLocationId).toBe(TOWN)
+      expect(patch.stateReport?.failedFields).toBeUndefined()
+      expect(patch.stateReport?.droppedRefs).toEqual([
+        {
+          field: 'sceneEntities',
+          ref: 'c9',
+          reason: 'unknown',
+          detail: expect.stringContaining('c9'),
+        },
+        {
+          field: 'currentLocation',
+          ref: 'l9',
+          reason: 'unknown',
+          detail: expect.stringContaining('l9'),
+        },
+      ])
+    })
     it("rejects a new item's handle as the location when the item isn't kept", async () => {
       const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
       seedFallbackTurn()
@@ -3672,6 +3719,8 @@ describe('per-turn-piggyback', () => {
           expect(metadataPatch(events).stateReport?.visualChanges).toEqual(visualFold.visualChanges)
         })
 
+        // A place has no visual state: its change drops alone, recorded rather than reported as
+        // a change that never landed.
         it('reports its own visual changes when one of them is written', async () => {
           seedFallbackTurn(fallbackWorld(), visualFold)
           const visualChanges = [
@@ -3679,9 +3728,17 @@ describe('per-turn-piggyback', () => {
             { id: 'c1', type: 'hair', text: 'shorn short' },
           ]
           const { events } = await fallbackAfterFold({ visualChanges })
-          expect(metadataPatch(events).stateReport?.visualChanges).toEqual([
-            { id: TOWN, type: 'attire', text: 'weathered stonework' },
+          const { stateReport } = metadataPatch(events)
+          expect(stateReport?.visualChanges).toEqual([
             { id: HERO, type: 'hair', text: 'shorn short' },
+          ])
+          expect(stateReport?.droppedRefs).toEqual([
+            {
+              field: 'visualChanges',
+              ref: 'l1',
+              reason: 'wrong-kind',
+              detail: expect.stringContaining('not a character'),
+            },
           ])
         })
 

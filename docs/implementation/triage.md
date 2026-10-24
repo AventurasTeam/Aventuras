@@ -179,18 +179,6 @@ slice-planning gate forces its resolution before that slice is planned.
   in `lib/list-modules/collate.ts`. Raised 2026-10-11 by the
   locations-and-items-from-prose slice review.
 
-- **The fallback still drops its whole scene list or visual changes
-  over one unknown id.** The fallback classifier substitutes with
-  `badRef: 'drop'` (`lib/pipeline/definitions/per-turn-piggyback.ts`),
-  so a transfer whose ref doesn't resolve drops alone, but
-  `substitutePiggybackIds` (`lib/piggyback/substitute.ts`) still fails
-  `sceneEntities` and `visualChanges` whole on one unknown or
-  undeclared id: the turn keeps the previous scene, or loses every
-  visual change, and nothing rereads the reply. Predates this PR.
-  Candidate fix: the same per-entry drop for both lists under
-  `'drop'`, with a warning. Raised 2026-10-11 by the developer's Q7 on
-  the locations-and-items-from-prose PR.
-
 - **The registry describes `piggybackFires` as per-turn.**
   `lib/prompts/templateContextMap.ts` says "True when this turn
   expects…", but the value is settings-derived (`piggybackMode` and the
@@ -750,14 +738,6 @@ slice-planning gate forces its resolution before that slice is planned.
   named entities, so a numeric reference (`&#39;`) stays literal in a
   name or description. Raised 2026-10-23 by the AI writer map's Task 11
   review.
-
-- **The entry card reports a skipped visual change.**
-  `lib/piggyback/apply.ts` skips a visual change whose id isn't a
-  character, silently, but the stored report keeps the block's visual
-  changes as emitted, so "Changes this turn" lists one that never
-  landed. The AI writer map's conditions raised the same question
-  (recorded as emitted vs as written); this one predates it. Raised
-  2026-10-23 by the AI writer map's Task 14 review.
 
 - **A fallback field hides the fold's landed write.** Expected on a
   fallback turn that adds a write of its own to a field the fold also

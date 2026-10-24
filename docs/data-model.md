@@ -2018,6 +2018,7 @@ story_entries.metadata: {
     newLocations?: ({ handle: string; name: string; description: string; condition?: string; parent?: string; outcome: 'created' | 'reused'; id: string; parentDropped?: true } | { handle: string; name: string; description: string; condition?: string; parent?: string; outcome: 'dropped' })[]  // as emitted, post-substitution, with what the per-turn create planner made of it; parent 'top' for top-level, absent for unplaced; see memory/piggyback.md → New locations and items
     newItems?: ({ handle: string; name: string; description: string; condition?: string; outcome: 'created'; id: string } | { handle: string; name: string; description: string; condition?: string; outcome: 'dropped' })[]
     failedFields?: { field: string; detail: string }[]  // the failed NARRATIVE attempt, retained even once a fallback supplied the fields
+    droppedRefs?: { field: string; ref?: string; reason: 'unknown' | 'wrong-kind' | 'unreadable'; detail: string }[]  // the fallback's entries discarded before apply, ref as emitted (memory/piggyback.md → Parse strategy and failure recovery); never the narrative's, which fails a field instead
     raw?: string                     // the unparseable block text; present only alongside failedFields
   }
 
