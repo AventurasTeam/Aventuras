@@ -200,7 +200,13 @@ turn that narrated the learning, not the happening's.
 - **Status flip / first-introduction** → the triggering / introducing
   turn.
 - **Unattributed fallback** → the window head, so the fact reverses on any
-  reversal into its window (re-derivable) but never survives as an orphan.
+  reversal into its window but never survives as an orphan. It is
+  re-derived only when the reversal reaches back to its real source
+  turn: the watermark clamps to the reversal point less one
+  ([`data-model.md → Survival anchor`](../data-model.md#survival-anchor)),
+  so a source turn below that point is never re-read and the fact is
+  lost
+  ([`parked.md → An unattributed pass fact can be lost to a reversal`](../parked.md#an-unattributed-pass-fact-can-be-lost-to-a-reversal)).
 
 Provenance is a **distinct axis** from the narrative anchors
 `happenings.occurred_at_entry_id` (where an event sits in story time; `null`

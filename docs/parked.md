@@ -1604,6 +1604,24 @@ Parked 2026-10-24; the signal is a keyword of a surviving turn lost to
 a reversal, or a second keyword writer, such as chapter close, landing
 terms out of turn order.
 
+#### An unattributed pass fact can be lost to a reversal
+
+A pass fact whose reply named no source turn falls back to the window
+head as its survival anchor
+([`memory/classifier.md → Provenance attribution`](./memory/classifier.md#provenance-attribution)),
+so any reversal into the window reverses it. When its real source turn
+sits below the reversal point, the watermark clamps to that point less
+one ([`data-model.md → Survival anchor`](./data-model.md#survival-anchor)),
+the source turn is never re-read, and the fact is lost. Since the AI
+writer map, an unattributed thread a pass opens and closes is one such
+fact. A candidate fix clamps the watermark to the window's start when a
+fallback-anchored fact reverses, so the whole window is read again; the
+cost is re-extracting the window's attributed facts too, duplicates
+unless reconciliation catches them.
+
+Parked 2026-10-24; the signal is the unattributed fallback
+(`classifier.window_head_fallback`) firing often enough to measure.
+
 ### UX (parked)
 
 #### Drag-and-drop file import for ImportDialog

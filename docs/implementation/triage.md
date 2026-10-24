@@ -569,18 +569,6 @@ slice-planning gate forces its resolution before that slice is planned.
   for takes; drops add one more instance. Raised 2026-10-23 by the AI
   writer map's final review.
 
-- **An unattributed pass fact isn't always re-derivable.**
-  [`classifier.md → Provenance attribution`](../memory/classifier.md#provenance-attribution)
-  says a fact that falls back to the window head "reverses on any
-  reversal into its window (re-derivable)". When its real source turn
-  sits below the reversal point, the watermark clamps to that point
-  minus one
-  ([`data-model.md → Survival anchor`](../data-model.md#survival-anchor)),
-  so the source turn is never re-read and the fact is lost.
-  Since the AI writer map, an unattributed thread a pass opens and
-  closes is one such fact. Raised 2026-10-23 by the AI writer map's
-  Task 20 review.
-
 - **`buildClassifierActions` has outgrown one function.**
   `lib/classifier/plan.ts`'s planner runs about 900 lines; its thread
   and awareness blocks share about ten of the planner's locals
