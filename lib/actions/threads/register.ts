@@ -138,15 +138,16 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     // No columnSchemas registered: scalar/nullable columns take the whole prior value as undo.
     undoPayload[col] = current[col as keyof Thread]
   }
-  // The ref is the pass's claim of where its status ended; a user's status change retracts it.
+  // The ref is the pass's claim of where its status ended: a user's status change retracts it, and
+  // a thread with refs logs it beside every status change, so a reversal restores the pair whole.
+  const carriesRefs = current.triggeredAtEntryId !== null || current.resolvedAtEntryId !== null
   if (
-    isUserOriginatedSource(action.source) &&
+    carriesRefs &&
     !('resolvedAtEntryId' in patch) &&
     'status' in set &&
-    set.status !== current.status &&
-    current.resolvedAtEntryId !== null
+    set.status !== current.status
   ) {
-    set.resolvedAtEntryId = null
+    set.resolvedAtEntryId = isUserOriginatedSource(action.source) ? null : current.resolvedAtEntryId
     undoPayload.resolvedAtEntryId = current.resolvedAtEntryId
   }
   // A patch that parsed but touched no updatable column would reach Drizzle's
@@ -209,12 +210,10 @@ const setStatusHandler: ActionHandler = async (action, branchId, ctx) => {
   const set: Partial<Pick<Thread, 'status' | 'resolvedAtEntryId'>> = { status }
   const undoPayload: Record<string, unknown> = { status: current.status }
   // Entry refs are AI-only (data-model.md → Authorship contract): a user's thread keeps both null.
+  // A pass's thread logs the ref beside the status, even unchanged, so a reversal restores both.
   if (current.triggeredAtEntryId !== null) {
-    const resolvedAt = status === 'active' ? null : nullifyRef(resolvedAtEntryId)
-    if (resolvedAt !== current.resolvedAtEntryId) {
-      set.resolvedAtEntryId = resolvedAt
-      undoPayload.resolvedAtEntryId = current.resolvedAtEntryId
-    }
+    set.resolvedAtEntryId = status === 'active' ? null : nullifyRef(resolvedAtEntryId)
+    undoPayload.resolvedAtEntryId = current.resolvedAtEntryId
   }
   return {
     status: 'ok',
