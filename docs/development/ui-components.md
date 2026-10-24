@@ -165,9 +165,8 @@ Close), `TimelineReconciliationModal` (a multi-step wizard), the unsaved-changes
 An explanation of how something works, which a reader needs once and then knows, is a
 `shared/ExplanationFold`: a muted summary line ("How past checkpoints work", "What an anchor does")
 that unfolds the text below it. It starts open, and whether the reader folded it is saved per
-explanation, across stories and sessions. Each one is registered by id in
-`constants/explanationFolds.ts`, which is the list of them all and the name each one's state is
-saved under.
+explanation, across stories and sessions, under the `id` it is given, which no other
+explanation may share. A search for `ExplanationFold` finds them all.
 
 In an action modal it goes in the body, above the fields, not in the header's description: the
 header stays pinned, and an explanation the reader has read should not keep its height there. A

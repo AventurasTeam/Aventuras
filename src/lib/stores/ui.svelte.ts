@@ -16,7 +16,6 @@ import type {
   PersistentCharacterSnapshot,
 } from '#lib/types/index.ts'
 import * as z from 'zod'
-import { explanationFoldSetting, type ExplanationFoldId } from '#lib/constants/explanationFolds.ts'
 import type { BranchScope } from '#lib/utils/branchScope.ts'
 import type { ActionChoice } from '#lib/services/ai/sdk/schemas/actionchoices.ts'
 import type { Suggestion } from '#lib/services/ai/sdk/schemas/suggestions.ts'
@@ -133,6 +132,9 @@ export interface LoreRetry extends BranchScope {
   readAfterChapter: boolean
 }
 
+/** Prefixes the setting each `shared/ExplanationFold` saves its state under. */
+export const EXPLANATION_FOLD_PREFIX = 'explanation_folded:'
+
 class UIStore {
   activePanel = $state<ActivePanel>('story')
   sidebarTab = $state<SidebarTab>('characters')
@@ -182,7 +184,7 @@ class UIStore {
   /** Whether the landmark list shows snapshots. Kept for the session only, not saved. */
   navShowSnapshots = $state(false)
   /** Which folding explanations are folded; an id missing here is open. */
-  explanationFolded = $state<Partial<Record<ExplanationFoldId, boolean>>>({})
+  explanationFolded = $state<Record<string, boolean>>({})
 
   // Streaming state
   streamingContent = $state('')
@@ -478,10 +480,10 @@ class UIStore {
       .catch((err) => console.warn('[UI] Failed to persist gallery order:', err))
   }
 
-  setExplanationFolded(id: ExplanationFoldId, folded: boolean): Promise<void> {
+  setExplanationFolded(id: string, folded: boolean): Promise<void> {
     this.explanationFolded[id] = folded
     return database
-      .setSetting(explanationFoldSetting(id), folded.toString())
+      .setSetting(EXPLANATION_FOLD_PREFIX + id, folded.toString())
       .catch((err) => console.warn(`[UI] Failed to persist the ${id} fold:`, err))
   }
 

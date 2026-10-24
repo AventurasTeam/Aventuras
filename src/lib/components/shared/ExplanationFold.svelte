@@ -6,11 +6,11 @@
   import type { Snippet } from 'svelte'
   import { ChevronDown, ChevronRight } from '@lucide/svelte'
   import { ui } from '#lib/stores/ui.svelte.ts'
-  import type { ExplanationFoldId } from '#lib/constants/explanationFolds.ts'
   import { cn } from '#lib/utils/cn.ts'
 
   interface Props {
-    id: ExplanationFoldId
+    /** Names the saved fold state, so it must not be shared with another explanation. */
+    id: string
     summary: string
     class?: string
     children: Snippet

@@ -33,12 +33,11 @@ import {
   migrateWorldStateBudget,
   migrateWorldStateInjection,
 } from './settingsMigrations'
-import { ui, NAV_FILTER_SETTING } from '#lib/stores/ui.svelte.ts'
+import { ui, NAV_FILTER_SETTING, EXPLANATION_FOLD_PREFIX } from '#lib/stores/ui.svelte.ts'
 import { LANDMARK_FILTER_GROUPS } from '#lib/utils/storyNavigation.ts'
 import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '#lib/constants/timeout.ts'
 import { MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH } from '#lib/constants/layout.ts'
-import { EXPLANATION_FOLDS, explanationFoldSetting } from '#lib/constants/explanationFolds.ts'
 import { SvelteSet } from 'svelte/reactivity'
 import { dedupeTextModels } from '#lib/utils/dedupeTextModels.ts'
 import { applyIncognitoKeyboard } from '#lib/utils/platform.ts'
@@ -1645,9 +1644,10 @@ class SettingsStore {
         if (shown !== null) ui.navFilter[group] = shown === 'true'
       }
 
-      for (const id of EXPLANATION_FOLDS) {
-        const folded = await database.getSetting(explanationFoldSetting(id))
-        if (folded !== null) ui.explanationFolded[id] = folded === 'true'
+      for (const [key, value] of Object.entries(await database.getAllSettings())) {
+        if (key.startsWith(EXPLANATION_FOLD_PREFIX)) {
+          ui.explanationFolded[key.slice(EXPLANATION_FOLD_PREFIX.length)] = value === 'true'
+        }
       }
 
       const galleryNewestFirst = await database.getSetting('gallery_newest_first')
