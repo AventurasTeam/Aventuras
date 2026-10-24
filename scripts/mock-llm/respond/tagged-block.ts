@@ -9,6 +9,8 @@ import {
   TRAILING_ROOT_TAGS,
   type ItemDrop,
   type ItemTransfer,
+  type NewItemEmission,
+  type NewLocationEmission,
   type ParsedStateBlock,
   type StackableTransfer,
   type SuggestionRef,
@@ -23,8 +25,18 @@ import {
 /** A move as the mock's UI authors it (validate.ts), with no order: list order stands in. */
 type AuthoredMove<T extends { seq: number }> = Omit<T, 'seq'> & { seq?: number }
 
+/** A create as authored: validate.ts asks for no description, which the parser reads as ''. */
+type AuthoredCreate<T extends { description: string }> = Omit<T, 'description'> & {
+  description?: string
+}
+
 /** A block as authored, or as parsed back from a served reply ("Save reply as response"). */
-export type AuthoredStateBlock = Omit<ParsedStateBlock, 'transfers'> & {
+export type AuthoredStateBlock = Omit<
+  ParsedStateBlock,
+  'transfers' | 'newLocations' | 'newItems'
+> & {
+  newLocations?: AuthoredCreate<NewLocationEmission>[]
+  newItems?: AuthoredCreate<NewItemEmission>[]
   transfers?: {
     items: AuthoredMove<ItemTransfer>[]
     stackables: StackableTransfer[]
@@ -39,7 +51,7 @@ export type NarrativeValue = {
 }
 
 // Dropped, not escaped (ids/enums/keys never hold them): `"` ends a value early in
-// parseAttributes, `<`/`>` end the tag in the entry regexes' `[^>]*`.
+// parseAttributes, `>` ends the tag in every entry pattern, and `<` in the `[^<>]*` ones.
 function attr(value: string | number): string {
   return String(value).replace(/["<>]/g, '')
 }
@@ -92,7 +104,7 @@ function renderNewLocations(block: AuthoredStateBlock): string[] {
   return (block.newLocations ?? []).map((c) => {
     const parent = c.parent !== undefined ? ` parent="${attr(c.parent)}"` : ''
     const condition = c.condition !== undefined ? ` condition="${escaped(c.condition)}"` : ''
-    return `  <${name} handle="${attr(c.handle)}"${parent} name="${escaped(c.name)}"${condition}>${escaped(c.description)}</${name}>`
+    return `  <${name} handle="${attr(c.handle)}"${parent} name="${escaped(c.name)}"${condition}>${escaped(c.description ?? '')}</${name}>`
   })
 }
 
@@ -100,27 +112,46 @@ function renderNewItems(block: AuthoredStateBlock): string[] {
   const name = STATE_CREATE_TAGS.newItem
   return (block.newItems ?? []).map((c) => {
     const condition = c.condition !== undefined ? ` condition="${escaped(c.condition)}"` : ''
-    return `  <${name} handle="${attr(c.handle)}" name="${escaped(c.name)}"${condition}>${escaped(c.description)}</${name}>`
+    return `  <${name} handle="${attr(c.handle)}" name="${escaped(c.name)}"${condition}>${escaped(c.description ?? '')}</${name}>`
   })
 }
 
-// Block order: a parsed block's `seq`, else list order with the drops after the item moves.
+// A move with no `seq` takes the one listed before it in its list, or `first` at the list's head.
+function orderedRows<T extends { seq?: number }>(
+  moves: readonly T[],
+  first: number,
+  row: (move: T) => string,
+): { order: number; row: string }[] {
+  let order = first
+  return moves.map((move) => {
+    order = move.seq ?? order
+    return { order, row: row(move) }
+  })
+}
+
+// Block order is `seq`; a drop at its list's head follows every item move, but not a drop listed
+// below it. A tie keeps the item moves first, then list order.
 function renderTransfers(block: AuthoredStateBlock): string | null {
   const items = block.transfers?.items ?? []
   const drops = block.transfers?.drops ?? []
   const stackables = block.transfers?.stackables ?? []
   const holders = (to: string | undefined, from: string | undefined) =>
     `${to !== undefined ? ` to="${attr(to)}"` : ''}${from !== undefined ? ` from="${attr(from)}"` : ''}`
-  const moves = [
-    ...items.map((i, n) => ({
-      order: i.seq ?? n,
-      row: `    <item id="${attr(i.id)}" slot="${attr(i.slot)}"${holders(i.to, i.from)} />`,
-    })),
-    ...drops.map((d, n) => ({
-      order: d.seq ?? items.length + n,
-      row: `    <${DROP_TAG} id="${attr(d.id)}"${holders(undefined, d.from)} />`,
-    })),
-  ].sort((a, b) => a.order - b.order)
+  const itemRows = orderedRows(
+    items,
+    -Infinity,
+    (i) => `    <item id="${attr(i.id)}" slot="${attr(i.slot)}"${holders(i.to, i.from)} />`,
+  )
+  const dropRows = orderedRows(
+    drops,
+    Math.min(
+      Math.max(-Infinity, ...itemRows.map((r) => r.order)),
+      drops.find((d) => d.seq !== undefined)?.seq ?? Infinity,
+    ),
+    (d) => `    <${DROP_TAG} id="${attr(d.id)}"${holders(undefined, d.from)} />`,
+  )
+  // Two -Infinity orders subtract to NaN, which sort reads as a tie.
+  const moves = [...itemRows, ...dropRows].sort((a, b) => a.order - b.order)
   return list(STATE_TAGS.transfers, [
     ...moves.map((m) => m.row),
     ...stackables.map(

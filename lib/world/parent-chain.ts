@@ -31,6 +31,20 @@ export function checkParentChain(
   return 'ok'
 }
 
+/** Why a machine writer drops a placement: it closes a loop, or hangs below a broken chain. */
+export type PlacementLoop = { parent: string; cause: 'cycle' | 'chain-broken' }
+
+// data-model.md → LocationState shape: a machine writer walks a placement first and drops a loop.
+export function placementLoop(
+  id: string,
+  parentId: string,
+  parentOf: ParentOf,
+): PlacementLoop | null {
+  const walk = checkParentChain(id, parentId, parentOf)
+  if (walk === 'ok') return null
+  return { parent: parentId, cause: walk === 'cycle' ? 'cycle' : 'chain-broken' }
+}
+
 type LocationRow = Pick<Entity, 'id' | 'kind' | 'state'>
 
 /** A location row's parent; null at the root and for an unplaced place. */

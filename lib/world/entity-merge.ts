@@ -287,6 +287,7 @@ export function entityMergeActions(request: EntityMergeInput): PipelineAction[] 
         decayResistance: row.decayResistance,
         source: row.source,
         retrievalCount: row.retrievalCount,
+        proseEntryId: null,
       },
     })
 

@@ -83,7 +83,7 @@ async function classifierPass(createsHappening: boolean): Promise<void> {
     {
       kind: 'upsertHappeningAwareness',
       source: 'periodic_classifier',
-      payload: { branchId: 'b1', characterId: 'char_b', happeningId: 'hap_h' },
+      payload: { branchId: 'b1', characterId: 'char_b', happeningId: 'hap_h', proseEntryId: null },
     },
     'act_pass_aw',
     'e_reply',

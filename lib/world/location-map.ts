@@ -4,7 +4,7 @@ import { blankToNull } from '@/lib/text'
 import { byName, locationAncestors } from './overview'
 import { parentChainIds, parentOfLocations } from './parent-chain'
 import { placeModes } from './place-modes'
-import { placementOf, type PlacePlacement } from './placement'
+import { realPlacementOf, type PlacePlacement } from './placement'
 
 /** A retired row carries no id: the map offers none to move the scene to or nest a place under. */
 export type LocationMapRow =
@@ -17,7 +17,10 @@ export type PlaceTreeRow = { entity: Entity; depth: number }
  * Where the map hangs a place, listed or not, and how many left-out places lie in between.
  * `unplaced`: with no listed ancestor, it hangs at the root of the Unplaced group, not the map's.
  */
-export type MapAnchor = { parentId: string | null; hidden: number; unplaced: boolean }
+export type MapAnchor = { hidden: number } & (
+  | { parentId: string; unplaced: false }
+  | { parentId: null; unplaced: boolean }
+)
 
 export type LocationMapView = {
   rows: LocationMapRow[]
@@ -76,24 +79,6 @@ function nest(
   const unreached = places.filter((e) => !reached.has(e.id)).sort(byName)
   for (const place of unreached) tree.push({ entity: place, depth: 0 })
   return { tree, unplaced, atRoot: new Set(unreached.map((e) => e.id)) }
-}
-
-/**
- * A place's placement against the rows: a parent naming no place reads as unplaced, its container
- * gone. `locations` holds location rows only; an id naming none of them reads as top-level.
- */
-export function realPlacementOf(
-  locations: readonly Pick<Entity, 'id' | 'state'>[],
-): (id: string) => PlacePlacement {
-  const byId = new Map(locations.map((e) => [e.id, e]))
-  return (id) => {
-    const row = byId.get(id)
-    if (row === undefined) return { kind: 'top' }
-    const placement = placementOf(row)
-    return placement.kind === 'under' && !byId.has(placement.parentId)
-      ? { kind: 'unplaced' }
-      : placement
-  }
 }
 
 /**

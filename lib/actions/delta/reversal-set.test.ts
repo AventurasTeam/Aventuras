@@ -135,7 +135,7 @@ describe('selectReversalSet — the closure', () => {
     await pass({
       kind: 'upsertHappeningAwareness',
       source: 'periodic_classifier',
-      payload: { branchId: 'b1', happeningId: 'hap_p', characterId: 'char_n' },
+      payload: { branchId: 'b1', happeningId: 'hap_p', characterId: 'char_n', proseEntryId: null },
     })
     await pass({
       kind: 'upsertCharacterRelationship',

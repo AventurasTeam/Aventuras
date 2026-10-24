@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   bracketProseReversal,
   classifierWatermarkClampOps,
+  getRollbackCounts,
+  regenerateTurn,
+  rollbackToEntry,
   updateStoryEntryContent,
   type PipelineAction,
 } from '@/lib/actions'
@@ -72,10 +75,11 @@ import {
   PERIODIC_CLASSIFIER_RESOLVES,
   periodicClassifierPhase,
 } from './periodic-classifier'
+import { definePipeline } from '../authoring/define'
 import { __resetRegistry, getPipeline } from '../authoring/registry'
 import { configureDeltaActionPort, type DeltaActionPort } from '../runtime/action-port'
 import { runPipeline, type RunCtx } from '../runtime/orchestrator'
-import type { PhaseContext, Pipeline, TxResult } from '../types'
+import type { PhaseContext, PhaseResult, Pipeline, TxResult } from '../types'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -2269,6 +2273,83 @@ describe('periodicClassifierPhase via runPipeline', () => {
     })
   })
 
+  // cadence.md → User edits and classifier writes.
+  it("lands a later turn's restated standing past a user edit that refused the earlier one", async () => {
+    const { db, runInTransaction } = await seedStory()
+    const apply = async (action: PipelineAction, actionId: string) => {
+      const result = await realApplyDeltaAction(
+        { action, actionId, branchId: 'b1' },
+        { db, runInTransaction },
+      )
+      expect(result.status).toBe('ok')
+    }
+    const WATCH = 'fact_77777777-7777-7777-7777-777777777777'
+    const turn = (id: string, position: number): PipelineAction => ({
+      kind: 'createStoryEntry',
+      source: 'ai_classifier',
+      payload: {
+        entry: {
+          id,
+          branchId: 'b1',
+          position,
+          kind: 'ai_reply',
+          content: `turn ${position}`,
+          createdAt: 1,
+        },
+      },
+    })
+    await apply(
+      {
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: {
+          entry: {
+            id: WATCH,
+            branchId: 'b1',
+            kind: 'faction',
+            name: 'The Watch',
+            description: 'The city guard.',
+            status: 'active',
+            injectionMode: 'auto',
+            state: { standing: 'wary allies' },
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      },
+      'act_watch',
+    )
+    await apply(turn('e1', 1), 'act_e1')
+    await apply(
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: WATCH, patch: { state: { standing: 'sworn enemies' } } },
+      },
+      'act_user',
+    )
+    await apply(turn('e2', 2), 'act_e2')
+
+    registerWithReply({
+      happenings: [],
+      standings: [
+        { ref: 'f1', standing: 'at war', sourceTurn: 't1' },
+        { ref: 'f1', standing: 'at war', sourceTurn: 't2' },
+      ],
+    })
+    expect(await runOutcome({ storyId: 's1', branchId: 'b1', db, runInTransaction })).toBe(
+      'completed',
+    )
+
+    const [watch] = await db.select().from(entities).where(eq(entities.id, WATCH))
+    expect(watch.state).toEqual({ standing: 'at war' })
+    const writes = await db
+      .select({ entryId: deltas.entryId })
+      .from(deltas)
+      .where(eq(deltas.source, 'periodic_classifier'))
+    expect(writes).toEqual([{ entryId: 'e2' }])
+  })
+
   // classifier.md → Names: a rename clash's keyword lands first, and its raise needs the pair to
   // be namesakes as the rows stand, so a keyword the user removed after the prose leaves no flag.
   it.each([
@@ -2340,6 +2421,102 @@ describe('periodicClassifierPhase via runPipeline', () => {
     const [stranger] = await db.select().from(entities).where(eq(entities.id, STRANGER))
     expect(stranger.keywords).toEqual(keywords)
     expect([stranger.nameCollisionFlag, stranger.nameCollisionReason]).toEqual(flag)
+  })
+
+  // cadence.md → User edits and classifier writes.
+  const ZARA = 'char_44444444-4444-4444-4444-444444444444'
+  it.each([
+    ["lands a later clash's raise past a user clear that refused the earlier one", true, ZARA],
+    ["keeps the earlier clash's partner when no clear refused its raise", false, CHAR_KAEL],
+  ])('%s', async (_label, cleared, partnerId) => {
+    const { db, runInTransaction } = await seedStory()
+    const apply = async (action: PipelineAction, actionId: string) => {
+      const result = await realApplyDeltaAction(
+        { action, actionId, branchId: 'b1' },
+        { db, runInTransaction },
+      )
+      expect(result.status).toBe('ok')
+    }
+    const STRANGER = 'char_33333333-3333-3333-3333-333333333333'
+    const create = (id: string, name: string, flag: Record<string, unknown> = {}): PipelineAction =>
+      ({
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: {
+          entry: {
+            id,
+            branchId: 'b1',
+            kind: 'character',
+            name,
+            description: 'Someone.',
+            keywords: [],
+            status: 'active',
+            injectionMode: 'auto',
+            createdAt: 1,
+            updatedAt: 1,
+            ...flag,
+          },
+        },
+      }) as never
+    const turn = (id: string, position: number): PipelineAction => ({
+      kind: 'createStoryEntry',
+      source: 'ai_classifier',
+      payload: {
+        entry: {
+          id,
+          branchId: 'b1',
+          position,
+          kind: 'ai_reply',
+          content: `turn ${position}`,
+          createdAt: 1,
+        },
+      },
+    })
+    await apply(create(CHAR_KAEL, 'Kael'), 'act_kael')
+    const flagged = {
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: CHAR_KAEL,
+      nameCollisionReason: 'name-taken',
+    }
+    await apply(create(STRANGER, 'the hooded stranger', cleared ? flagged : {}), 'act_stranger')
+    await apply(create(ZARA, 'zara'), 'act_zara')
+    await apply(turn('e1', 1), 'act_e1')
+    if (cleared)
+      await apply(
+        {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: {
+            branchId: 'b1',
+            id: STRANGER,
+            patch: {
+              nameCollisionFlag: 0,
+              nameCollisionPartnerId: null,
+              nameCollisionReason: null,
+            },
+          },
+        },
+        'act_clear',
+      )
+    await apply(turn('e2', 2), 'act_e2')
+
+    registerWithReply({
+      renames: [
+        { ref: 'c2', name: 'Kael', sourceTurn: 't1' },
+        { ref: 'c2', name: 'Zara', sourceTurn: 't2' },
+      ],
+    })
+    expect(await runOutcome({ storyId: 's1', branchId: 'b1', db, runInTransaction })).toBe(
+      'completed',
+    )
+
+    const [stranger] = await db.select().from(entities).where(eq(entities.id, STRANGER))
+    expect(stranger.keywords).toEqual(['Kael', 'Zara'])
+    expect([
+      stranger.nameCollisionFlag,
+      stranger.nameCollisionPartnerId,
+      stranger.nameCollisionReason,
+    ]).toEqual([1, partnerId, 'name-taken'])
   })
 
   it('commits nothing and keeps its pre-run status when interrupted during the model call', async () => {
@@ -2508,25 +2685,35 @@ describe('periodicClassifierPhase via runPipeline', () => {
 
   // classifier.md → Threads: a thread these turns open and close lands as its create and its
   // close, each kept by its own turn (generation-pipeline.md → Reverse-replay).
-  describe('a thread these turns open and close, under a prose edit', () => {
+  describe('a thread these turns open and close, under a reversal', () => {
     async function passOpensAndCloses(turns: {
       sourceTurn: string
       resolvedAtTurn: string
     }): Promise<Seeded> {
       const seeded = await seedStory()
       // The head turn is e2's action and e3's reply: an edit to e3 reverses e3's facts alone.
+      // Created through the log, as a rollback and a regenerate sweep from an entry's create.
       const kinds = ['ai_reply', 'user_action', 'ai_reply'] as const
-      for (const [i, kind] of kinds.entries())
-        await seeded.db.insert(storyEntries).values({
+      for (const [i, kind] of kinds.entries()) {
+        const entry = {
           id: `e${i + 1}`,
           branchId: 'b1',
           position: i + 1,
           kind,
           content: `turn ${i + 1}`,
-          chapterId: null,
-          metadata: {},
           createdAt: 1,
-        } as never)
+        }
+        const created = await realApplyDeltaAction(
+          {
+            action: { kind: 'createStoryEntry', source: 'ai_classifier', payload: { entry } },
+            actionId: `act_${entry.id}`,
+            branchId: 'b1',
+          },
+          seeded,
+        )
+        expect(created.status).toBe('ok')
+      }
+      entriesStore.hydrate('b1', await seeded.db.select().from(storyEntries))
       threadsStore.hydrate('b1', [])
       registerWithReply({
         happenings: [],
@@ -2584,6 +2771,63 @@ describe('periodicClassifierPhase via runPipeline', () => {
         status: 'ok',
       })
 
+      expect(await storedThreads(seeded.db)).toEqual([])
+      expect(storeThreads()).toEqual([])
+    })
+
+    const rollbackTo = async (seeded: Seeded, entryId: string) => {
+      const shown = await getRollbackCounts('b1', entryId, seeded)
+      if ('status' in shown) throw new Error(`preview refused: ${shown.reason}`)
+      expect((await rollbackToEntry('b1', entryId, seeded, { expectedCounts: shown })).status).toBe(
+        'ok',
+      )
+    }
+    // A turn that writes nothing stands in for per-turn: the regenerate's sweep reverses the facts.
+    const regenerateE3 = async (seeded: Seeded) => {
+      async function* writeNothing(): AsyncGenerator<never, PhaseResult> {
+        return { status: 'completed' }
+      }
+      definePipeline({
+        kind: PER_TURN_KIND,
+        phases: [{ name: 'narrative', run: writeNothing }],
+        affordance: 'pill-and-banner',
+        gateBehavior: 'hard-gate',
+        concurrencyPolicy: { blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND] },
+      })
+      expect(await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e3', seeded)).toMatchObject({
+        status: 'ran',
+        result: { outcome: 'completed' },
+      })
+    }
+    const reopenedAtE1 = { status: 'active', triggeredAtEntryId: 'e1', resolvedAtEntryId: null }
+
+    it('reopens it when a rollback removes the closing turn and the opening turn stands', async () => {
+      const seeded = await passOpensAndCloses({ sourceTurn: 't1', resolvedAtTurn: 't3' })
+      await rollbackTo(seeded, 'e3')
+      expect(await storedThreads(seeded.db)).toEqual([reopenedAtE1])
+      expect(storeThreads()).toEqual([reopenedAtE1])
+    })
+
+    it('removes it, close and all, when a rollback removes the opening turn', async () => {
+      const seeded = await passOpensAndCloses({ sourceTurn: 't2', resolvedAtTurn: 't3' })
+      await rollbackTo(seeded, 'e2')
+      expect(await storedThreads(seeded.db)).toEqual([])
+      expect(storeThreads()).toEqual([])
+    })
+
+    it('reopens it when the closing turn is regenerated and the opening turn stands', async () => {
+      const seeded = await passOpensAndCloses({ sourceTurn: 't1', resolvedAtTurn: 't3' })
+      await regenerateE3(seeded)
+      expect(await storedThreads(seeded.db)).toEqual([reopenedAtE1])
+      expect(storeThreads()).toEqual([reopenedAtE1])
+    })
+
+    it('removes it, close and all, when the turn that opens and closes it is regenerated', async () => {
+      const seeded = await passOpensAndCloses({ sourceTurn: 't3', resolvedAtTurn: 't3' })
+      expect(await storedThreads(seeded.db)).toEqual([
+        { status: 'resolved', triggeredAtEntryId: 'e3', resolvedAtEntryId: 'e3' },
+      ])
+      await regenerateE3(seeded)
       expect(await storedThreads(seeded.db)).toEqual([])
       expect(storeThreads()).toEqual([])
     })
@@ -3065,6 +3309,66 @@ describe('periodicClassifierPhase — the writer map', () => {
     ])
   })
 
+  // data-model.md → Disabled places: the story's place is read off the tail and the scene source.
+  it('drops a move that would put a disabled place around the story, logged', async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    const LOC_THORN = 'loc_7e7e7e7e-7e7e-4e7e-8e7e-7e7e7e7e7e7e'
+    const placeOf = (id: string, name: string, over: Partial<Entity> = {}) =>
+      ({
+        ...character(id, name),
+        kind: 'location',
+        state: { parent_location_id: null },
+        ...over,
+      }) as Entity
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction({ placements: [{ ref: 'l1', parent: 'l2', sourceTurn: 't1' }] }),
+    } as never)
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      entities: [
+        placeOf(LOC_FORD, 'Ford'),
+        placeOf(LOC_THORN, 'Thornwood', { injectionMode: 'disabled' }),
+      ],
+      entryMetadata: { 2: { sceneEntities: [], currentLocationId: LOC_FORD, worldTime: 0 } },
+    })
+    const { events } = await drain(h.ctx)
+    expect(actionsOf(events, 'placeLocation')).toEqual([])
+    expect(logged('classifier.placement_dropped')).toEqual([
+      ['warn', { ref: LOC_FORD, cause: 'story-inside' }],
+    ])
+  })
+
+  // classifier.md → Failure policy: the schema reads an entry that doesn't fit as a hole.
+  it('drops and logs the entries that did not fit, and lands the rest of the reply', async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction({
+        renames: [undefined],
+        threadStatuses: [
+          undefined,
+          { thread: 'th1', status: 'resolved', sourceTurn: 't2' },
+          undefined,
+        ],
+      }),
+    } as never)
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+    threadsStore.hydrate('b1', [amulet])
+    const { events, result } = await drain(h.ctx)
+    expect(result).toEqual({ status: 'completed' })
+    expect(actionsOf(events, 'setThreadStatus')).toHaveLength(1)
+    expect(logged('classifier.entry_malformed')).toEqual([
+      ['warn', { list: 'renames', count: 1 }],
+      ['warn', { list: 'threadStatuses', count: 2 }],
+    ])
+  })
+
   it('logs each write it drops under its own key', async () => {
     clearBuffers()
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
@@ -3099,6 +3403,132 @@ describe('periodicClassifierPhase — the writer map', () => {
     ])
     expect(logged('classifier.icon_unknown')).toEqual([['warn', { title: 'A', icon: 'rocket' }]])
     expect(logged('classifier.unseen_ref')).toEqual([['warn', { list: 'standings', ref: 'f9' }]])
+  })
+
+  it('logs a write on the wrong kind of row under its own key, never as an unresolved ref', async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    const FACT_WATCH = 'fact_77777777-7777-7777-7777-777777777777'
+    const watch = { ...character(FACT_WATCH, 'The Watch'), kind: 'faction', status: 'retired' }
+    const ford = {
+      ...character(LOC_FORD, 'The Ford'),
+      kind: 'location',
+      state: { parent_location_id: null, unplaced: true },
+    } as Entity
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction({
+        newPlaces: [
+          {
+            handle: 'new:reach',
+            name: 'the Eastern Reach',
+            description: 'x',
+            keywords: [],
+            sourceTurn: 't1',
+            parent: 'top-level',
+          },
+        ],
+        placements: [
+          { ref: 'l1', parent: 'new:reach', sourceTurn: 't1' },
+          { ref: 'l1', parent: 'c1', sourceTurn: 't1' },
+          { ref: 'c1', parent: 'l1', sourceTurn: 't1' },
+        ],
+        standings: [{ ref: 'c1', standing: 'feared', sourceTurn: 't1' }],
+        statusFlips: [{ ref: 'f1', to: 'active', sourceTurn: 't1' }],
+      }),
+    } as never)
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      entities: [kael, watch as Entity, ford],
+      mentionedPlaces: true,
+    })
+    await drain(h.ctx)
+    expect(logged('classifier.placement_dropped')).toEqual([
+      ['warn', { ref: LOC_FORD, parent: 'new:reach', cause: 'parent-not-listed' }],
+      ['warn', { ref: LOC_FORD, parent: CHAR_KAEL, cause: 'parent-not-a-place' }],
+      ['warn', { ref: CHAR_KAEL, cause: 'not-a-location' }],
+    ])
+    expect(logged('classifier.standing_dropped')).toEqual([
+      ['warn', { faction: CHAR_KAEL, cause: 'not-a-faction' }],
+    ])
+    expect(logged('classifier.return_dropped')).toEqual([
+      ['warn', { ref: FACT_WATCH, cause: 'not-a-character' }],
+    ])
+    expect(logged('classifier.unresolved_refs')).toEqual([])
+  })
+
+  it('logs a blank rename and thread, a moved close and each text it cuts, under their keys', async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    const FACT_WATCH = 'fact_77777777-7777-7777-7777-777777777777'
+    const watch = { ...character(FACT_WATCH, 'The Watch'), kind: 'faction' } as Entity
+    const long = `${'a'.repeat(300)}, ${'b'.repeat(300)}`
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction({
+        newCharacters: [
+          {
+            handle: 'new:ilsa',
+            name: 'Ilsa',
+            description: 'A ferrywoman.',
+            keywords: [],
+            sourceTurn: 't1',
+            visual: { face: long },
+          },
+        ],
+        renames: [{ ref: 'c1', name: ' ', sourceTurn: 't1' }],
+        newThreads: [
+          { title: ' ', description: 'x', status: 'active', sourceTurn: 't1' },
+          {
+            title: 'Cross the river',
+            description: 'x',
+            status: 'resolved',
+            sourceTurn: 't2',
+            resolvedAtTurn: 't1',
+          },
+        ],
+        standings: [{ ref: 'f1', standing: long, sourceTurn: 't1' }],
+        newPlaces: [
+          {
+            handle: 'new:ash',
+            name: 'Ash',
+            description: 'A hamlet.',
+            keywords: [],
+            sourceTurn: 't1',
+            parent: 'top-level',
+            condition: long,
+          },
+        ],
+      }),
+    } as never)
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      entities: [kael, watch],
+      mentionedPlaces: true,
+    })
+    threadsStore.hydrate('b1', [])
+    await drain(h.ctx)
+    expect(logged('classifier.rename_dropped')).toEqual([
+      ['warn', { ref: CHAR_KAEL, cause: 'blank-name' }],
+    ])
+    expect(logged('classifier.create_dropped')).toEqual([
+      ['warn', { kind: 'thread', sourceTurn: 't1', cause: 'blank-title' }],
+    ])
+    expect(logged('classifier.thread_close_moved')).toEqual([
+      ['warn', { title: 'Cross the river', resolvedAtTurn: 't1', sourceTurn: 't2' }],
+    ])
+    const cut = { length: 602, keptLength: 300 }
+    expect(logged('classifier.visual_truncated')).toEqual([
+      ['warn', { handle: 'new:ilsa', type: 'face', ...cut }],
+    ])
+    expect(logged('classifier.standing_truncated')).toEqual([['warn', { ref: FACT_WATCH, ...cut }]])
+    expect(logged('classifier.condition_truncated')).toEqual([
+      ['warn', { handle: 'new:ash', ...cut }],
+    ])
   })
 })
 

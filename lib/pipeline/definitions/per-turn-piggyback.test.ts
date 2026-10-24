@@ -1717,7 +1717,17 @@ describe('per-turn-piggyback', () => {
           },
         } as never,
       ])
-      entitiesStore.hydrate('b1', [])
+      // A character row, so classifier changes land: one that writes nothing keeps the fold's.
+      entitiesStore.hydrate('b1', [
+        {
+          id: charUuid,
+          branchId: 'b1',
+          kind: 'character',
+          status: 'active',
+          name: 'Hero',
+          keywords: [],
+        } as never,
+      ])
 
       // Resolvable, so substitution keeps the field and the merge must leave it alone.
       const idMap = new IdBiMap()
@@ -2373,6 +2383,7 @@ describe('per-turn-piggyback', () => {
     function seedFallbackTurn(
       world: Entity[] = fallbackWorld(),
       foldReport?: NonNullable<EntryMetadata['stateReport']>,
+      before: EntryMetadata = SCENE,
     ): void {
       currentStoryStore.set({
         storyId: 's1',
@@ -2388,7 +2399,7 @@ describe('per-turn-piggyback', () => {
           kind: 'ai_reply',
           content: 'The tide is out at Saltmere.',
           chapterId: null,
-          metadata: SCENE,
+          metadata: before,
           createdAt: 1,
         },
         {
@@ -2567,6 +2578,34 @@ describe('per-turn-piggyback', () => {
         },
       })
       expect(metadataPatch(events).currentLocationId).toBe(DOCKS_ROW)
+    })
+
+    // data-model.md → Disabled places: judged by the rows below the reply, the place the turn found.
+    it('leaves a reused place unplaced when the story was in it before the reply', async () => {
+      const DOCKS_ROW = 'loc_00000000-0000-4000-8000-0000000000a3'
+      const world = fallbackWorld().map((e) =>
+        e.id === TOWN ? { ...e, injectionMode: 'disabled' as const } : e,
+      )
+      seedFallbackTurn(
+        [
+          ...world,
+          worldRow({
+            id: DOCKS_ROW,
+            kind: 'location',
+            name: 'Smuggler Docks',
+            state: { parent_location_id: null, unplaced: true },
+          }),
+        ],
+        undefined,
+        { ...SCENE, currentLocationId: DOCKS_ROW },
+      )
+      const { events } = await runFallback(docksAndKey())
+      expect(
+        events.flatMap((e) => (e.type === 'delta_emitted' ? [e.action.kind] : [])),
+      ).not.toContain('placeLocation')
+      expect(metadataPatch(events).stateReport?.newLocations).toEqual([
+        expect.objectContaining({ outcome: 'reused', id: DOCKS_ROW, parentDropped: true }),
+      ])
     })
 
     it('creates a place whose parent is "top" at the top level', async () => {
@@ -3326,7 +3365,12 @@ describe('per-turn-piggyback', () => {
       }
       const payloads = (
         events: readonly PhaseEmittedEvent[],
-        kind: 'updateEntityCondition' | 'updateEntityInventory' | 'updateItemPosition',
+        kind:
+          | 'updateEntityCondition'
+          | 'updateEntityInventory'
+          | 'updateItemPosition'
+          | 'updateEntityStackables'
+          | 'updateEntityVisualState',
       ) =>
         events.flatMap((e) =>
           e.type === 'delta_emitted' && e.action.kind === kind ? [e.action.payload] : [],
@@ -3593,6 +3637,54 @@ describe('per-turn-piggyback', () => {
           expect(metadataPatch(events).stateReport?.transfers).toEqual(foldReport.transfers)
         })
 
+        // A holder isn't kind-checked, so these resolve; naming no character, they write nothing.
+        it.each([
+          [
+            'an item moved to a place',
+            { items: [{ id: 'i1', to: 'l1', slot: 'inventory' }], stackables: [], drops: [] },
+          ],
+          [
+            'a stackable paid to a place',
+            { items: [], stackables: [{ key: 'gold', amount: 5, to: 'l1' }], drops: [] },
+          ],
+        ])("keeps the fold's transfers when its only transfer is %s", async (_label, transfers) => {
+          seedFallbackTurn(
+            [keyHeld(), worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }), keyRow()],
+            foldReport,
+          )
+          const { events } = await fallbackAfterFold({ transfers })
+          expect(payloads(events, 'updateEntityInventory')).toEqual([])
+          expect(payloads(events, 'updateEntityStackables')).toEqual([])
+          expect(metadataPatch(events).stateReport?.transfers).toEqual(foldReport.transfers)
+        })
+
+        const visualFold: NonNullable<EntryMetadata['stateReport']> = {
+          ...foldReport,
+          visualChanges: [{ id: HERO, type: 'attire', text: 'a torn cloak' }],
+        }
+
+        it("keeps the fold's visual changes when its only one names a place", async () => {
+          seedFallbackTurn(fallbackWorld(), visualFold)
+          const { events } = await fallbackAfterFold({
+            visualChanges: [{ id: 'l1', type: 'attire', text: 'weathered stonework' }],
+          })
+          expect(payloads(events, 'updateEntityVisualState')).toEqual([])
+          expect(metadataPatch(events).stateReport?.visualChanges).toEqual(visualFold.visualChanges)
+        })
+
+        it('reports its own visual changes when one of them is written', async () => {
+          seedFallbackTurn(fallbackWorld(), visualFold)
+          const visualChanges = [
+            { id: 'l1', type: 'attire', text: 'weathered stonework' },
+            { id: 'c1', type: 'hair', text: 'shorn short' },
+          ]
+          const { events } = await fallbackAfterFold({ visualChanges })
+          expect(metadataPatch(events).stateReport?.visualChanges).toEqual([
+            { id: TOWN, type: 'attire', text: 'weathered stonework' },
+            { id: HERO, type: 'hair', text: 'shorn short' },
+          ])
+        })
+
         // Each part of the transfers check on its own: a move, a stackable or an applied drop.
         it.each([
           [
@@ -3797,6 +3889,79 @@ describe('per-turn-piggyback', () => {
       expect(parsed.transfers?.drops).toEqual([{ id: 'i1', from: 'c1' }])
       expect(parsed.newLocations?.[0]?.condition).toBe('scorched')
       expect(parsed.newItems?.[0]?.condition).toBe('bent')
+    })
+
+    // A failed parse costs the turn its scene, place, time and summary: one bad value drops alone.
+    describe('a bad condition or drop', () => {
+      const parse = (reply: Record<string, unknown>) =>
+        fallbackClassifierSchema.parse({ sceneEntities: ['c1'], worldTimeDelta: 5, ...reply })
+      const withDrops = (drops: unknown) =>
+        parse({ transfers: { items: [], stackables: [], drops } })
+
+      it('reads null conditions as none, keeping the rest of the reply', () => {
+        const parsed = parse({ conditions: null, summary: 'Aria waits.' })
+        expect(parsed.conditions).toBeUndefined()
+        expect(parsed.worldTimeDelta).toBe(5)
+        expect(parsed.summary).toBe('Aria waits.')
+      })
+
+      it('drops a condition it cannot read and keeps the others', () => {
+        const parsed = parse({
+          conditions: [
+            { id: 'i1' },
+            { id: 'i2', text: null },
+            'scorched',
+            { id: null, text: 'bent' },
+            { id: 'l1', text: 'flooded to the knee' },
+          ],
+        })
+        expect(parsed.conditions).toEqual([{ id: 'l1', text: 'flooded to the knee' }])
+      })
+
+      it('reads a lone condition as a list of one, as a lone create reads', () => {
+        expect(parse({ conditions: { id: 'l1', text: 'flooded' } }).conditions).toEqual([
+          { id: 'l1', text: 'flooded' },
+        ])
+      })
+
+      it('reads null drops as none', () => {
+        expect(withDrops(null).transfers?.drops).toEqual([])
+      })
+
+      it('drops a drop it cannot read and keeps the others', () => {
+        expect(
+          withDrops(['i1', { from: 'c1' }, { id: 7 }, { id: 'i2', from: 'c1' }]).transfers?.drops,
+        ).toEqual([{ id: 'i2', from: 'c1' }])
+      })
+
+      it('reads a null holder as none, keeping the drop', () => {
+        expect(withDrops([{ id: 'i1', from: null }]).transfers?.drops).toEqual([{ id: 'i1' }])
+      })
+
+      // piggyback.md → Trailing block format: put down somewhere else than the scene stays prose.
+      it('drops a drop that names a place, as the tags do', () => {
+        expect(
+          withDrops([
+            { id: 'i1', from: 'c1', to: 'l2' },
+            { id: 'i2', to: null },
+            { id: 'i3', to: ' ' },
+          ]).transfers?.drops,
+        ).toEqual([{ id: 'i2' }, { id: 'i3' }])
+      })
+
+      it('reads a lone drop as a list of one', () => {
+        expect(withDrops({ id: 'i1', from: 'c1' }).transfers?.drops).toEqual([
+          { id: 'i1', from: 'c1' },
+        ])
+      })
+
+      // The tolerance is the parse's alone: the model is still asked for the full shape.
+      it("still asks for a condition's id and text and a drop's id", () => {
+        const jsonSchema = z.toJSONSchema(fallbackClassifierSchema)
+        expect(schemaNode(jsonSchema, ['conditions', '[]']).required).toEqual(['id', 'text'])
+        expect(schemaNode(jsonSchema, ['transfers', 'drops', '[]']).required).toEqual(['id'])
+        expect(schemaNode(jsonSchema, ['transfers', 'drops']).default).toEqual([])
+      })
     })
 
     // retrieval.md → Q4: emission is malformed-tolerant — raising here costs a full extra

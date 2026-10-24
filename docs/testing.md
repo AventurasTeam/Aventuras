@@ -311,6 +311,11 @@ inverts. Non-substitutable IDs keep readable suffixes (`br_hero_main`).
 This also repaired `pnpm db:seed` for dev, unlocking
 turns-on-seeded-data in the dev app.
 
+A harness helper that adds a row before launch derives its id by
+another hash: `seedUnplacedPlace` (`e2e/harness/seed.ts`) builds a
+mnemonic from the row's name and mints the id as a UUIDv5 of it, so a
+spec's ids stay stable across runs.
+
 ## Embedder in E2E
 
 The embedder is central to the story flow, so E2E exercises the real
@@ -399,6 +404,25 @@ output needs endpoint support and `optional`→`nullable` schemas).
 Only the LLM is mocked — the pipeline, transport, entry writes, and
 delta log all run for real; the `turn` and `classifier` specs assert
 their effects through the DB bridge.
+
+### Real-provider checks
+
+Two opt-in checks talk to a real OpenAI-compatible server instead, and
+skip unless `SMOKE_LLM_URL` (its `/v1` URL) and `SMOKE_LLM_MODEL` (a
+model it serves) are set. The
+`classifier-real-provider.smoke.spec.ts` spec sends turns on the seeded
+story, so a pass runs over the owed backlog before the first one and
+another chains behind it, and checks the rows the passes write.
+
+`pnpm probe:classifier` (`scripts/classifier-parse-probe.ts`) is no
+test: it renders the real pass prompt from a branch of the dev slot's
+database, opened read-only (`AVENTURAS_DB_PATH` picks another
+database, `PROBE_BRANCH_ID` a branch other than `br_hero_main`), and
+sends it
+`PROBE_RUNS` times, 20 by default. It prints each run's outcome with
+its parse and provider retries, its first parse failure by field path
+and the entries a reply that parsed dropped for not fitting, by list,
+then the first-attempt parse rate.
 
 ## Selector strategy
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Entity } from '@/lib/db'
+import { storyPlaceOf } from '@/lib/world'
 
 import { buildClassifierActions, clampEmbeddedCharacter, type PlannedWrite } from './plan'
 import type { ReconcileDecision } from './reconcile'
@@ -63,7 +64,12 @@ const base = {
   threads: [],
   happenings: [],
   awareness: [],
+  story: storyPlaceOf({ tail: null, sceneSource: null }),
 }
+
+// data-model.md → The story's place: the tail's and the scene source's location.
+const storyAt = (locationId: string) =>
+  storyPlaceOf({ tail: null, sceneSource: { metadata: { currentLocationId: locationId } } })
 
 // The reply schema defaults every list to []: a case names only the lists it fills.
 const reply = (over: Partial<ClassifierPlacesExtraction> = {}): ClassifierPlacesExtraction => ({
@@ -700,12 +706,13 @@ describe('buildClassifierActions', () => {
 
     // A place, a faction or an item comes back only by the user.
     it.each(['faction', 'location', 'item'])(
-      'never returns a retired %s, and reports its ref',
+      'never returns a retired %s, and reports the return as dropped',
       (kind) => {
         const row = { ...(nonCharacterRow('x_r', kind) as object), status: 'retired' } as never
-        const { planned, unresolvedRefs } = flip('x_r', 'active', [row])
+        const { planned, unresolvedRefs, droppedReturns } = flip('x_r', 'active', [row])
         expect(planned).toEqual([])
-        expect(unresolvedRefs).toEqual(['x_r'])
+        expect(droppedReturns).toEqual([{ ref: 'x_r', cause: 'not-a-character' }])
+        expect(unresolvedRefs).toEqual([])
       },
     )
 
@@ -843,8 +850,8 @@ describe('entity keywords', () => {
     expect(planned).toEqual([])
   })
 
-  // The keyword index updates on each append, not only from the pass's opening snapshot.
-  it("filters a second candidate against the first candidate's keywords in the same reply", () => {
+  // Against the stored row, not the first candidate's write: the handler may refuse that one.
+  it("filters a second candidate against the stored row, not the first candidate's terms", () => {
     const { planned } = buildClassifierActions(
       reply({
         newCharacters: [
@@ -873,12 +880,15 @@ describe('entity keywords', () => {
     )
     const appends = planned.filter((p) => p.action.kind === 'appendEntityKeywords')
     expect(appends).toHaveLength(2)
-    expect(payloadOf<{ keywords: string[] }>(appends[1]).keywords).toEqual(['the innkeeper'])
+    expect(payloadOf<{ keywords: string[] }>(appends[1]).keywords).toEqual([
+      'The Grey Wolf',
+      'the innkeeper',
+    ])
   })
 
   // Reconciliation decides every namesake against the same snapshot status (reconcile.ts):
   // two candidates for one staged entity always agree — never split 'promote' vs 'known'.
-  it('plans a repeated promote for a staged entity reconciliation decides promote twice, filtering the second append against the first', () => {
+  it('plans a repeated promote for a staged entity reconciliation decides promote twice, filtering each append against the stored row', () => {
     const { planned } = buildClassifierActions(
       reply({
         newCharacters: [
@@ -912,7 +922,10 @@ describe('entity keywords', () => {
       'appendEntityKeywords',
       'appendEntityKeywords',
     ])
-    expect(payloadOf<{ keywords: string[] }>(planned[3]).keywords).toEqual(['the innkeeper'])
+    expect(payloadOf<{ keywords: string[] }>(planned[3]).keywords).toEqual([
+      'the grey wolf',
+      'the innkeeper',
+    ])
   })
 
   // Two guarded writes: a promotion the user pre-empted no-ops while the aliases still land.
@@ -1054,7 +1067,23 @@ describe('alias list', () => {
     expect(fellBackCount).toBe(1)
   })
 
-  it('de-duplicates two entries for one entity against each other', () => {
+  // cadence.md → User edits and classifier writes: the handler may refuse a term the user removed
+  // after the earlier entry's prose, and the later turn's prose can be newer than that edit.
+  it('keeps an alias restating an earlier planned one, so a refused write cannot hide it', () => {
+    const { planned } = buildClassifierActions(
+      aliasReply([
+        { ref: 'char_kael', terms: ['the rider'], sourceTurn: 't1' },
+        { ref: 'char_kael', terms: ['the rider'], sourceTurn: 't3' },
+      ]),
+      { ...base, entities: [kael] },
+    )
+    expect(planned).toEqual([
+      appendOf('char_kael', ['the rider'], 'e1'),
+      appendOf('char_kael', ['the rider'], 'e3'),
+    ])
+  })
+
+  it('filters each entry against the stored row alone', () => {
     const { planned } = buildClassifierActions(
       aliasReply([
         { ref: 'char_kael', terms: ['the Grey Wolf'], sourceTurn: 't1' },
@@ -1068,11 +1097,11 @@ describe('alias list', () => {
     )
     expect(planned).toEqual([
       appendOf('char_kael', ['the Grey Wolf'], 'e1'),
-      appendOf('char_kael', ['the rider'], 'e3'),
+      appendOf('char_kael', ['the grey wolf', 'the rider'], 'e3'),
     ])
   })
 
-  it('de-duplicates against keywords an absorb in the same reply appended', () => {
+  it('sends again a term an absorb in the same reply appended', () => {
     const { planned } = buildClassifierActions(
       aliasReply(
         [{ ref: 'char_kael', terms: ['the grey wolf', 'the rider'], sourceTurn: 't2' }],
@@ -1094,7 +1123,7 @@ describe('alias list', () => {
     )
     expect(planned).toEqual([
       appendOf('char_kael', ['the Grey Wolf'], 'e1'),
-      appendOf('char_kael', ['the rider'], 'e2'),
+      appendOf('char_kael', ['the grey wolf', 'the rider'], 'e2'),
     ])
   })
 })
@@ -1416,10 +1445,10 @@ describe('mentioned places', () => {
     expect(parentDrops).toEqual([])
   })
 
-  // classifier.md → What the classifier writes → First profiles. piggyback.md → visuals: a long
-  // value is cut back to a clause boundary.
-  it("cuts a new place's long condition at a clause", () => {
-    const { planned } = buildClassifierActions(
+  // classifier.md → What the classifier writes → First profiles. piggyback.md → Trailing block
+  // format: a long value is cut back to a clause boundary.
+  it("cuts a new place's long condition at a clause, and reports the cut", () => {
+    const { planned, cutTexts } = buildClassifierActions(
       placesReply([
         newPlace('new:a', 'Ash', {
           parent: 'top-level',
@@ -1432,6 +1461,7 @@ describe('mentioned places', () => {
       parent_location_id: null,
       condition: 'a'.repeat(300),
     })
+    expect(cutTexts).toEqual([{ kind: 'condition', handle: 'new:a', length: 602, keptLength: 300 }])
   })
 
   it("writes a new place's condition into its state, trimmed and bounded", () => {
@@ -1695,6 +1725,24 @@ describe('mentioned places', () => {
       expect(fellBackCount).toBe(1)
     })
 
+    it('counts one fallback for an unattributed reuse that adds terms and places the row', () => {
+      const { planned, fellBackCount } = buildClassifierActions(
+        placesReply([
+          newPlace('new:varn', 'Varn', {
+            parent: 'loc_reach',
+            keywords: ['the salt town'],
+            sourceTurn: 't9',
+          }),
+        ]),
+        deps([REACH, VARN]),
+      )
+      expect(planned.map((p) => [p.action.kind, p.entryId])).toEqual([
+        ['appendEntityKeywords', 'e3'],
+        ['placeLocation', 'e3'],
+      ])
+      expect(fellBackCount).toBe(1)
+    })
+
     it('places a reused place under a new place the reply creates, after its create', () => {
       const { planned } = buildClassifierActions(
         placesReply([
@@ -1718,6 +1766,43 @@ describe('mentioned places', () => {
       expect(handleMap.get('new:varn')).toBe('loc_varn')
       expect(placementsOf(planned)).toEqual([])
       expect(parentDrops).toEqual([{ handle: 'new:varn', parent: 'loc_vdocks', cause: 'cycle' }])
+    })
+
+    // data-model.md → Disabled places: a mention's placement refuses as a placements entry does.
+    it('keeps a reuse unplaced when placing it would put a disabled place around the story', () => {
+      const thorn = placeRow('loc_thorn', 'Thornwood', null, { injectionMode: 'disabled' })
+      const crypt = placeRow('loc_crypt', 'the Crypt', 'loc_varn')
+      const { planned, handleMap, parentDrops } = buildClassifierActions(
+        placesReply([
+          newPlace('new:a', 'Varn', { parent: 'loc_thorn', keywords: ['the salt town'] }),
+          newPlace('new:b', 'Varn', { parent: 'loc_thorn' }),
+        ]),
+        deps([VARN, thorn, crypt], { story: storyAt('loc_crypt') }),
+      )
+      expect(handleMap.get('new:a')).toBe('loc_varn')
+      expect(handleMap.get('new:b')).toBe('loc_varn')
+      expect(placementsOf(planned)).toEqual([])
+      expect(planned.map((p) => p.action.kind)).toEqual(['appendEntityKeywords'])
+      expect(parentDrops).toEqual([
+        { handle: 'new:a', parent: 'loc_thorn', cause: 'story-inside' },
+        { handle: 'new:b', parent: 'loc_thorn', cause: 'story-inside' },
+      ])
+    })
+
+    it('reports the twin of a reuse whose placement looped as left unplaced too', () => {
+      const { planned, handleMap, parentDrops } = buildClassifierActions(
+        placesReply([
+          newPlace('new:a', 'Varn', { parent: 'loc_vdocks' }),
+          newPlace('new:b', 'Varn', { parent: 'loc_vdocks' }),
+        ]),
+        deps([VARN, placeRow('loc_vdocks', 'Varn Docks', 'loc_varn')]),
+      )
+      expect(handleMap.get('new:b')).toBe('loc_varn')
+      expect(placementsOf(planned)).toEqual([])
+      expect(parentDrops).toEqual([
+        { handle: 'new:a', parent: 'loc_vdocks', cause: 'cycle' },
+        { handle: 'new:b', parent: 'loc_vdocks', cause: 'cycle' },
+      ])
     })
 
     it('drops a placement that would close a loop through one the reply placed earlier', () => {
@@ -1827,6 +1912,334 @@ describe('mentioned places', () => {
         expect(parentDrops).toEqual([{ handle: 'new:a', parent: 'loc_cdocks', cause: 'cycle' }])
       })
     })
+
+    // classifier.md → Mentioned places: a mention sees the placements of its turn and earlier ones.
+    describe("a mention against this reply's placements", () => {
+      const INN = placeRow('loc_inn', 'the Inn', null)
+      const KEEP = placeRow('loc_keep', 'the Keep', null)
+      const CELLAR = unplacedRow('loc_cellar', 'the Cellar')
+      const placement = (ref: string, parent: string, sourceTurn: string) => ({
+        ref,
+        parent,
+        sourceTurn,
+      })
+      const placedRows = (planned: readonly PlannedWrite[]) =>
+        placementsOf(planned).map((p) => {
+          const { id, placement: at } = payloadOf<{ id: string; placement: unknown }>(p)
+          return [id, at, p.entryId]
+        })
+      const termWritesOn = (planned: readonly PlannedWrite[], id: string) =>
+        planned.filter(
+          (p) => p.action.kind === 'appendEntityKeywords' && payloadOf<{ id: string }>(p).id === id,
+        )
+
+      it('creates the namesake under another parent once an earlier turn placed the place', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply(
+            [newPlace('new:c', 'the Cellar', { parent: 'loc_keep', keywords: ['the vault'] })],
+            { placements: [placement('loc_cellar', 'loc_inn', 't1')] },
+          ),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_new1')
+        expect(createdPlaces(planned)).toEqual([
+          expect.objectContaining({
+            id: 'loc_new1',
+            keywords: ['the vault'],
+            state: { parent_location_id: 'loc_keep' },
+            nameCollisionFlag: 0,
+          }),
+        ])
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e1'],
+        ])
+        expect(termWritesOn(planned, 'loc_cellar')).toEqual([])
+      })
+
+      it('counts a placement of the same turn, the placement first', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply([newPlace('new:c', 'the Cellar', { parent: 'loc_keep' })], {
+            placements: [placement('loc_cellar', 'loc_inn', 't2')],
+          }),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_new1')
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e2'],
+        ])
+      })
+
+      it('reuses the place where an earlier turn put it, placing it once', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply(
+            [newPlace('new:c', 'the Cellar', { parent: 'loc_inn', keywords: ['the vault'] })],
+            { placements: [placement('loc_cellar', 'loc_inn', 't1')] },
+          ),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_cellar')
+        expect(createdPlaces(planned)).toEqual([])
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e1'],
+        ])
+        expect(termWritesOn(planned, 'loc_cellar')).toHaveLength(1)
+      })
+
+      it('places the place for an earlier mention, and a later placement moves it after', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply([newPlace('new:c', 'the Cellar', { parent: 'loc_keep', sourceTurn: 't1' })], {
+            placements: [placement('loc_cellar', 'loc_inn', 't3')],
+          }),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_cellar')
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_keep' }, 'e1'],
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e3'],
+        ])
+      })
+
+      it('ignores an earlier placement the planner drops', () => {
+        const ruin = placeRow('loc_ruin', 'the Ruin', null, { status: 'retired' })
+        const { planned, handleMap, droppedPlacements } = buildClassifierActions(
+          placesReply([newPlace('new:c', 'the Cellar', { parent: 'loc_keep' })], {
+            placements: [placement('loc_cellar', 'loc_ruin', 't1')],
+          }),
+          deps([KEEP, ruin, CELLAR]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_cellar')
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_keep' }, 'e2'],
+        ])
+        expect(droppedPlacements).toEqual([{ ref: 'loc_cellar', cause: 'retired' }])
+      })
+
+      it("judges the mention's own parent against the earlier placements", () => {
+        const { planned, handleMap, parentDrops, droppedPlacements } = buildClassifierActions(
+          placesReply([newPlace('new:c', 'the Cellar', { parent: 'loc_inn' })], {
+            placements: [placement('loc_inn', 'loc_cellar', 't1')],
+          }),
+          deps([INN, CELLAR]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_cellar')
+        expect(parentDrops).toEqual([{ handle: 'new:c', parent: 'loc_inn', cause: 'cycle' }])
+        expect(placedRows(planned)).toEqual([
+          ['loc_inn', { kind: 'under', parentId: 'loc_cellar' }, 'e1'],
+        ])
+        expect(droppedPlacements).toEqual([])
+      })
+
+      // Q30: new places settle in turn order, ties in list order, so the list's order can't decide.
+      it.each([
+        ['the later turn listed first', ['loft', 'cellar']],
+        ['in turn order', ['cellar', 'loft']],
+      ])('settles new places in turn order, %s', (_label, listed) => {
+        const BARN = placeRow('loc_barn', 'the Barn', null)
+        const entries = {
+          loft: newPlace('new:loft', 'the Loft', { parent: 'loc_barn', sourceTurn: 't3' }),
+          cellar: newPlace('new:c', 'the Cellar', { parent: 'loc_keep', sourceTurn: 't1' }),
+        }
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply(
+            listed.map((key) => entries[key as keyof typeof entries]),
+            { placements: [placement('loc_cellar', 'loc_inn', 't3')] },
+          ),
+          deps([INN, KEEP, CELLAR, BARN]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_cellar')
+        expect(createdPlaces(planned).map((e) => e.name)).toEqual(['the Loft'])
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_keep' }, 'e1'],
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e3'],
+        ])
+      })
+
+      it("keeps a repeated handle's first declaration in the reply's order, whatever its turn", () => {
+        const { handleMap, droppedPlaces } = buildClassifierActions(
+          placesReply([
+            newPlace('new:x', 'Saltmere', { sourceTurn: 't3' }),
+            newPlace('new:x', 'Ashfall', { sourceTurn: 't1' }),
+          ]),
+          deps([TOWN]),
+        )
+        expect(droppedPlaces).toEqual([{ handle: 'new:x', name: 'Ashfall', cause: 'handle-taken' }])
+        expect(handleMap.get('new:x')).toBe('loc_new1')
+      })
+
+      // An unattributed new place counts at the newest turn, as an unattributed placement does.
+      it('settles an unattributed new place at the newest turn, its ties in list order', () => {
+        const { planned } = buildClassifierActions(
+          placesReply([
+            newPlace('new:a', 'Docks', { sourceTurn: undefined }),
+            newPlace('new:b', 'Old Docks', { sourceTurn: 't2' }),
+            newPlace('new:c', 'New Docks', { sourceTurn: 't3' }),
+          ]),
+          deps([TOWN]),
+        )
+        expect(createdPlaces(planned).map((row) => row.name)).toEqual([
+          'Old Docks',
+          'Docks',
+          'New Docks',
+        ])
+      })
+
+      // A takeover follows turns too: the unplaced create of turn 1 is taken over at turn 3.
+      it("takes over an earlier turn's unplaced create listed after it, at the later turn", () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply([
+            newPlace('new:b', 'the Vault', { parent: 'loc_keep', sourceTurn: 't3' }),
+            newPlace('new:a', 'the Vault', { sourceTurn: 't1' }),
+          ]),
+          deps([KEEP]),
+        )
+        expect(createdPlaces(planned)).toEqual([
+          expect.objectContaining({
+            id: 'loc_new1',
+            state: { parent_location_id: null, unplaced: true },
+          }),
+        ])
+        expect(handleMap.get('new:b')).toBe('loc_new1')
+        expect(placedRows(planned)).toEqual([
+          ['loc_new1', { kind: 'under', parentId: 'loc_keep' }, 'e3'],
+        ])
+      })
+
+      // A parent that never resolves holds nothing back: the place settles at its own turn.
+      it('settles a new place whose parent never resolves at its own turn', () => {
+        const { planned, handleMap, parentDrops } = buildClassifierActions(
+          placesReply([
+            newPlace('new:a', 'the Vault', {
+              parent: 'loc_nope',
+              sourceTurn: 't1',
+              keywords: ['the strongroom'],
+            }),
+            newPlace('new:b', 'the Vault', { parent: 'loc_keep', sourceTurn: 't3' }),
+          ]),
+          deps([KEEP]),
+        )
+        expect(parentDrops).toEqual([{ handle: 'new:a', parent: 'loc_nope', cause: 'unresolved' }])
+        expect(createdPlaces(planned)).toEqual([
+          expect.objectContaining({
+            id: 'loc_new1',
+            keywords: ['the strongroom'],
+            state: { parent_location_id: null, unplaced: true },
+          }),
+        ])
+        expect(handleMap.get('new:b')).toBe('loc_new1')
+        expect(placedRows(planned)).toEqual([
+          ['loc_new1', { kind: 'under', parentId: 'loc_keep' }, 'e3'],
+        ])
+      })
+
+      // Q29: the twin rule comes first, so a twin maps to the first create's row a placement moved.
+      it('maps a twin to the first row even after a placement between them moved it', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply(
+            [
+              newPlace('new:c1', 'the Cellar', { parent: 'loc_keep', sourceTurn: 't1' }),
+              newPlace('new:c2', 'the Cellar', {
+                parent: 'loc_keep',
+                sourceTurn: 't3',
+                keywords: ['the vault'],
+              }),
+            ],
+            { placements: [placement('loc_cellar', 'loc_inn', 't2')] },
+          ),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(handleMap.get('new:c2')).toBe('loc_cellar')
+        expect(createdPlaces(planned)).toEqual([])
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_keep' }, 'e1'],
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e2'],
+        ])
+        expect(termWritesOn(planned, 'loc_cellar')).toEqual([
+          expect.objectContaining({ entryId: 'e3' }),
+        ])
+      })
+
+      // An unattributed fact counts at the window's newest turn, as inTurnOrder sorts it.
+      it('counts an unattributed fact at the newest turn: a placement there plans first', () => {
+        const unattributed = buildClassifierActions(
+          placesReply(
+            [newPlace('new:c', 'the Cellar', { parent: 'loc_keep', sourceTurn: undefined })],
+            {
+              placements: [{ ref: 'loc_cellar', parent: 'loc_inn' }],
+            },
+          ),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(unattributed.handleMap.get('new:c')).toBe('loc_new1')
+        const earlierMention = buildClassifierActions(
+          placesReply([newPlace('new:c', 'the Cellar', { parent: 'loc_keep', sourceTurn: 't1' })], {
+            placements: [{ ref: 'loc_cellar', parent: 'loc_inn' }],
+          }),
+          deps([INN, KEEP, CELLAR]),
+        )
+        expect(earlierMention.handleMap.get('new:c')).toBe('loc_cellar')
+        expect(placedRows(earlierMention.planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_keep' }, 'e1'],
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e3'],
+        ])
+      })
+
+      // The handlers judge each write against the writes before it, so a mention's writes follow
+      // the placements it was matched and checked against.
+      describe('writes after the placements it was judged against', () => {
+        const writesOf = (planned: readonly PlannedWrite[]) =>
+          planned.map((p) => {
+            const payload = payloadOf<{ id?: string; entry?: { id: string } }>(p)
+            return [p.action.kind, payload.id ?? payload.entry?.id, p.entryId]
+          })
+
+        it('places a mention under a place an earlier placement moved out of it', () => {
+          const attic = placeRow('loc_attic', 'the Attic', 'loc_cellar')
+          const { planned, parentDrops } = buildClassifierActions(
+            placesReply([newPlace('new:c', 'the Cellar', { parent: 'loc_attic' })], {
+              placements: [placement('loc_attic', 'loc_inn', 't1')],
+            }),
+            deps([INN, CELLAR, attic]),
+          )
+          expect(parentDrops).toEqual([])
+          expect(writesOf(planned)).toEqual([
+            ['placeLocation', 'loc_attic', 'e1'],
+            ['placeLocation', 'loc_cellar', 'e2'],
+          ])
+        })
+
+        it('places a mention in a disabled region once an earlier placement took the story out', () => {
+          const thorn = placeRow('loc_thorn', 'Thornwood', null, { injectionMode: 'disabled' })
+          const crypt = placeRow('loc_crypt', 'the Crypt', 'loc_cellar')
+          const { planned, parentDrops } = buildClassifierActions(
+            placesReply([newPlace('new:c', 'the Cellar', { parent: 'loc_thorn' })], {
+              placements: [placement('loc_crypt', 'loc_inn', 't1')],
+            }),
+            deps([INN, CELLAR, thorn, crypt], { story: storyAt('loc_crypt') }),
+          )
+          expect(parentDrops).toEqual([])
+          expect(writesOf(planned)).toEqual([
+            ['placeLocation', 'loc_crypt', 'e1'],
+            ['placeLocation', 'loc_cellar', 'e2'],
+          ])
+        })
+
+        it('creates under a chain an earlier placement mended, after the placement', () => {
+          const arch = placeRow('loc_a', 'Arch', 'loc_b')
+          const bastion = placeRow('loc_b', 'Bastion', 'loc_a')
+          const { planned, parentDrops } = buildClassifierActions(
+            placesReply([newPlace('new:h', 'the Hall', { parent: 'loc_b' })], {
+              placements: [placement('loc_a', 'loc_inn', 't1')],
+            }),
+            deps([INN, arch, bastion]),
+          )
+          expect(parentDrops).toEqual([])
+          expect(writesOf(planned)).toEqual([
+            ['placeLocation', 'loc_a', 'e1'],
+            ['createEntity', 'loc_new1', 'e2'],
+          ])
+        })
+      })
+    })
   })
 
   describe('flags', () => {
@@ -1913,6 +2326,37 @@ describe('mentioned places', () => {
       })
     })
 
+    // classifier.md → Mentioned places: one reply flags what two would.
+    it('flags a partial name or a keyword hit on an earlier place of the reply, under one parent or unplaced', () => {
+      const flagsOf = (planned: readonly PlannedWrite[]) =>
+        createdPlaces(planned).map((row) => [
+          row.name,
+          row.nameCollisionPartnerId,
+          row.nameCollisionReason,
+        ])
+      const placed = buildClassifierActions(
+        placesReply([
+          newPlace('new:a', 'Docks', { parent: 'loc_town', keywords: ['the wharf'] }),
+          newPlace('new:b', 'Old Docks', { parent: 'loc_town' }),
+          newPlace('new:c', 'The Wharf', { parent: 'loc_town' }),
+        ]),
+        deps([TOWN]),
+      )
+      expect(flagsOf(placed.planned)).toEqual([
+        ['Docks', null, null],
+        ['Old Docks', 'loc_new1', 'same-parent'],
+        ['The Wharf', 'loc_new1', 'same-parent'],
+      ])
+      const unplaced = buildClassifierActions(
+        placesReply([newPlace('new:a', 'Docks'), newPlace('new:b', 'Old Docks')]),
+        deps([TOWN]),
+      )
+      expect(flagsOf(unplaced.planned)).toEqual([
+        ['Docks', null, null],
+        ['Old Docks', 'loc_new1', 'unplaced'],
+      ])
+    })
+
     // A reply's creates match as successive replies' would, so one place is one row either way.
     describe('an unplaced place and a placed namesake', () => {
       const KEEP = placeRow('loc_keep', 'the Keep', null)
@@ -1930,6 +2374,35 @@ describe('mentioned places', () => {
         ])
         expect(handleMap.get('new:b')).toBe('loc_new1')
         expect(placementsOf(planned)).toEqual([])
+      })
+
+      // The reply's order decides "earlier", not how it ordered a parent and its child.
+      it('counts a placed namesake listed earlier, though its parent is listed after it', () => {
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply([
+            newPlace('new:a', 'the Docks', { parent: 'new:p' }),
+            newPlace('new:p', 'the Pier', { parent: 'loc_port' }),
+            newPlace('new:b', 'the Docks'),
+          ]),
+          deps([
+            placeRow('loc_bay', 'the Bay', null),
+            placeRow('loc_port', 'the Port', null),
+            placeRow('loc_docks', 'the Docks', 'loc_bay'),
+          ]),
+        )
+        expect(
+          createdPlaces(planned).map((e) => [
+            e.id,
+            e.state,
+            e.nameCollisionPartnerId,
+            e.nameCollisionReason,
+          ]),
+        ).toEqual([
+          ['loc_new1', { parent_location_id: 'loc_port' }, null, null],
+          ['loc_new2', { parent_location_id: 'loc_new1' }, null, null],
+          ['loc_new3', { parent_location_id: null, unplaced: true }, 'loc_docks', 'unplaced'],
+        ])
+        expect(handleMap.get('new:b')).toBe('loc_new3')
       })
 
       it('takes over an unplaced place the reply created earlier, placing it after its create', () => {
@@ -2708,8 +3181,8 @@ describe('first profiles', () => {
     expect(stateOf(planned)).toEqual(EMPTY_CHARACTER)
   })
 
-  it('cuts a long visual value at a clause', () => {
-    const { planned } = buildClassifierActions(
+  it('cuts a long visual value at a clause, and reports the cut', () => {
+    const { planned, cutTexts } = buildClassifierActions(
       reply({
         newCharacters: [
           {
@@ -2725,6 +3198,9 @@ describe('first profiles', () => {
       deps({ decisions: decided('new:ilsa') }),
     )
     expect((stateOf(planned) as { visual: { face: string } }).visual.face).toBe('f'.repeat(300))
+    expect(cutTexts).toEqual([
+      { kind: 'visual', handle: 'new:ilsa', type: 'face', length: 602, keptLength: 300 },
+    ])
   })
 
   it("clamps a profile to the state schema's bounds, never splitting a surrogate pair", () => {
@@ -2776,11 +3252,15 @@ describe('first profiles', () => {
       standing: 's'.repeat(500),
       agenda: ['arm the docks'],
     })
+    expect(withProfile.cutTexts).toEqual([
+      { kind: 'standing', ref: 'new:circle', length: 510, keptLength: 500 },
+    ])
     const bare = buildClassifierActions(
       reply({ newFactions: [circle] }),
       deps({ factionDecisions: decided('new:circle') }),
     )
     expect(stateOf(bare.planned)).toEqual({})
+    expect(bare.cutTexts).toEqual([])
   })
 
   it('writes no profile into a row the reconciliation absorbed', () => {
@@ -2873,6 +3353,15 @@ describe('renames', () => {
     expect(planned).toEqual([])
   })
 
+  it('reports a rename whose name is blank', () => {
+    const { planned, droppedRenames } = buildClassifierActions(
+      reply({ renames: [{ ref: 'char_stranger', name: ' \n ', sourceTurn: 't1' }] }),
+      deps([STRANGER]),
+    )
+    expect(planned).toEqual([])
+    expect(droppedRenames).toEqual([{ ref: 'char_stranger', cause: 'blank-name' }])
+  })
+
   // renameEntity compares names under keyword-term normalization: a case-only change is no reveal.
   it.each([
     ['alone', [KAEL]],
@@ -2885,6 +3374,30 @@ describe('renames', () => {
     expect(planned).toEqual([])
     expect(renameClashes).toEqual([])
     expect(fellBackCount).toBe(0)
+  })
+
+  // World's namesake rule splits a name on whitespace, and renameEntity refuses by the same rule.
+  it('plans nothing for a rename that changes only the spacing inside the name', () => {
+    const { planned, renameClashes } = buildClassifierActions(
+      reply({ renames: [{ ref: 'char_kael', name: 'Kael \n Stormborn', sourceTurn: 't1' }] }),
+      deps([row('char_kael', 'character', 'Kael Stormborn')]),
+    )
+    expect(planned).toEqual([])
+    expect(renameClashes).toEqual([])
+  })
+
+  it('takes a name spaced apart from the one another row holds as that name', () => {
+    const { planned, renameClashes } = buildClassifierActions(
+      reply({ renames: [{ ref: 'char_stranger', name: 'Kael  Stormborn', sourceTurn: 't1' }] }),
+      deps([STRANGER, row('char_kael', 'character', 'Kael Stormborn', { createdAt: 2 })]),
+    )
+    expect(planned.map((p) => p.action.kind)).toEqual([
+      'appendEntityKeywords',
+      'raiseCollisionFlag',
+    ])
+    expect(renameClashes).toEqual([
+      { ref: 'char_stranger', name: 'Kael  Stormborn', partnerId: 'char_kael', flagged: true },
+    ])
   })
 
   it('adds a name another row of the kind holds as a keyword and flags the pair name-taken', () => {
@@ -2975,7 +3488,8 @@ describe('renames', () => {
     ])
   })
 
-  it("keeps a clash's keyword for the rest of the reply", () => {
+  // The handler may refuse the clash's keyword, a term the user removed after its prose.
+  it("sends an alias naming a clash's keyword again, at its own turn", () => {
     const { planned } = buildClassifierActions(
       reply({
         renames: [{ ref: 'char_stranger', name: 'Kael', sourceTurn: 't1' }],
@@ -2983,7 +3497,11 @@ describe('renames', () => {
       }),
       deps([STRANGER, KAEL]),
     )
-    expect(kindsOf(planned)).toEqual(['appendEntityKeywords', 'raiseCollisionFlag'])
+    expect(planned.map((p) => [p.action.kind, p.entryId])).toEqual([
+      ['appendEntityKeywords', 'e1'],
+      ['raiseCollisionFlag', 'e1'],
+      ['appendEntityKeywords', 'e2'],
+    ])
   })
 
   it('only adds the keyword to a row already flagged, keeping its partner', () => {
@@ -3206,7 +3724,55 @@ describe('renames', () => {
     ])
   })
 
-  it("keeps the old name as the row's keyword for the rest of the reply", () => {
+  // cadence.md → User edits and classifier writes: the handler may refuse the earlier one, and the
+  // later turn's prose can be newer than the user's edit.
+  it('keeps a rename restating an earlier planned one, or the stored name after it', () => {
+    const { planned, renameClashes } = buildClassifierActions(
+      reply({
+        renames: [
+          { ref: 'char_stranger', name: 'Corvin', sourceTurn: 't1' },
+          { ref: 'char_stranger', name: 'Corvin', sourceTurn: 't3' },
+          { ref: 'char_kael', name: 'Mira', sourceTurn: 't1' },
+          { ref: 'char_kael', name: 'kael', sourceTurn: 't3' },
+        ],
+      }),
+      deps([STRANGER, KAEL]),
+    )
+    expect(
+      planned.map((p) => {
+        const { id, name } = payloadOf<{ id: string; name: string }>(p)
+        return [p.action.kind, id, name, p.entryId]
+      }),
+    ).toEqual([
+      ['renameEntity', 'char_stranger', 'Corvin', 'e1'],
+      ['renameEntity', 'char_kael', 'Mira', 'e1'],
+      ['renameEntity', 'char_stranger', 'Corvin', 'e3'],
+      ['renameEntity', 'char_kael', 'kael', 'e3'],
+    ])
+    expect(renameClashes).toEqual([])
+  })
+
+  it("sends a clash's keyword and raise again for a rename restating an earlier clash", () => {
+    const { planned, renameClashes } = buildClassifierActions(
+      reply({
+        renames: [
+          { ref: 'char_stranger', name: 'Kael', sourceTurn: 't1' },
+          { ref: 'char_stranger', name: 'Kael', sourceTurn: 't3' },
+        ],
+      }),
+      deps([STRANGER, KAEL]),
+    )
+    expect(planned.map((p) => [p.action.kind, p.entryId])).toEqual([
+      ['appendEntityKeywords', 'e1'],
+      ['raiseCollisionFlag', 'e1'],
+      ['appendEntityKeywords', 'e3'],
+      ['raiseCollisionFlag', 'e3'],
+    ])
+    expect(renameClashes.map((c) => c.flagged)).toEqual([true, true])
+  })
+
+  // The rename keeps the old name as a keyword only if it lands.
+  it('sends an alias naming the old name a rename earlier in the reply keeps', () => {
     const { planned } = buildClassifierActions(
       reply({
         renames: [{ ref: 'char_stranger', name: 'Corvin Vale', sourceTurn: 't1' }],
@@ -3214,7 +3780,7 @@ describe('renames', () => {
       }),
       deps([STRANGER]),
     )
-    expect(kindsOf(planned)).toEqual(['renameEntity'])
+    expect(kindsOf(planned)).toEqual(['renameEntity', 'appendEntityKeywords'])
   })
 
   it('drops and reports a rename of a row the prompt never listed', () => {
@@ -3237,7 +3803,9 @@ describe('renames', () => {
     ])
   })
 
-  it('raises one flag per row in a reply, however many taken names it meets', () => {
+  // The user may clear the flag between the turns, refusing the earlier raise; the handler keeps
+  // the first partner when both land.
+  it("sends each clash's raise while the stored flag doesn't hold", () => {
     const { planned, renameClashes } = buildClassifierActions(
       reply({
         renames: [
@@ -3247,12 +3815,19 @@ describe('renames', () => {
       }),
       deps([STRANGER, KAEL, row('char_mira', 'character', 'Mira')]),
     )
-    expect(kindsOf(planned)).toEqual([
-      'appendEntityKeywords',
-      'raiseCollisionFlag',
-      'appendEntityKeywords',
+    expect(
+      planned.map((p) => [
+        p.action.kind,
+        payloadOf<{ partnerId?: string }>(p).partnerId,
+        p.entryId,
+      ]),
+    ).toEqual([
+      ['appendEntityKeywords', undefined, 'e1'],
+      ['raiseCollisionFlag', 'char_kael', 'e1'],
+      ['appendEntityKeywords', undefined, 'e2'],
+      ['raiseCollisionFlag', 'char_mira', 'e2'],
     ])
-    expect(renameClashes.map((c) => c.flagged)).toEqual([true, false])
+    expect(renameClashes.map((c) => c.flagged)).toEqual([true, true])
   })
 
   // A clash that writes nothing takes no anchor, so it never counts as a window-head fallback.
@@ -3351,6 +3926,65 @@ describe('placements', () => {
     ])
   })
 
+  // data-model.md → Disabled places: a pass's move refuses where World's Save would.
+  describe('around the story', () => {
+    const THORN = place('loc_thorn', null, { injectionMode: 'disabled' })
+    const CRYPT = place('loc_crypt', 'loc_reach')
+    const storyDeps = (entities: Entity[], story = storyAt('loc_crypt')) =>
+      ({ ...base, entities, story }) as never
+
+    it('drops a move that puts a disabled place around the story', () => {
+      const { planned, droppedPlacements } = buildClassifierActions(
+        reply({ placements: [{ ref: 'loc_reach', parent: 'loc_thorn', sourceTurn: 't2' }] }),
+        storyDeps([REACH, THORN, CRYPT]),
+      )
+      expect(planned).toEqual([])
+      expect(droppedPlacements).toEqual([{ ref: 'loc_reach', cause: 'story-inside' }])
+    })
+
+    it('drops placing an unplaced place that holds the story in a disabled region', () => {
+      const { planned, droppedPlacements } = buildClassifierActions(
+        reply({ placements: [{ ref: 'loc_varn', parent: 'loc_thorn', sourceTurn: 't2' }] }),
+        storyDeps([VARN, THORN], storyAt('loc_varn')),
+      )
+      expect(planned).toEqual([])
+      expect(droppedPlacements).toEqual([{ ref: 'loc_varn', cause: 'story-inside' }])
+    })
+
+    it('plans the move when the story is outside the place', () => {
+      const { planned, droppedPlacements } = buildClassifierActions(
+        reply({ placements: [{ ref: 'loc_reach', parent: 'loc_thorn', sourceTurn: 't2' }] }),
+        storyDeps([REACH, THORN, CRYPT, VARN], storyAt('loc_varn')),
+      )
+      expect(placementsOf(planned)).toEqual([
+        expect.objectContaining({
+          id: 'loc_reach',
+          placement: { kind: 'under', parentId: 'loc_thorn' },
+        }),
+      ])
+      expect(droppedPlacements).toEqual([])
+    })
+
+    it("judges the story against this reply's earlier placements", () => {
+      const { planned, droppedPlacements } = buildClassifierActions(
+        reply({
+          placements: [
+            { ref: 'loc_varn', parent: 'loc_reach', sourceTurn: 't1' },
+            { ref: 'loc_reach', parent: 'loc_thorn', sourceTurn: 't2' },
+          ],
+        }),
+        storyDeps([REACH, THORN, VARN], storyAt('loc_varn')),
+      )
+      expect(placementsOf(planned)).toEqual([
+        expect.objectContaining({
+          id: 'loc_varn',
+          placement: { kind: 'under', parentId: 'loc_reach' },
+        }),
+      ])
+      expect(droppedPlacements).toEqual([{ ref: 'loc_reach', cause: 'story-inside' }])
+    })
+  })
+
   it('marks top-level a place whose stored parent names no place', () => {
     const { planned } = buildClassifierActions(
       reply({ placements: [{ ref: 'loc_orphan', parent: 'top-level', sourceTurn: 't1' }] }),
@@ -3429,40 +4063,75 @@ describe('placements', () => {
   })
 
   // The schema's parent is an ID from Places or top-level: a new place is placed by its own create.
-  it("reports a new place's handle as a placement's parent as unresolved", () => {
+  // Either side of the new place's turn: a placement may plan before the place settles.
+  it.each(['t2', 't1'])(
+    "drops and reports a placement at %s whose parent is a new place's handle",
+    (placementTurn) => {
+      const places: ClassifierPlacesExtraction = {
+        ...reply({
+          placements: [{ ref: 'loc_varn', parent: 'new:reach', sourceTurn: placementTurn }],
+        }),
+        newPlaces: [
+          {
+            handle: 'new:reach',
+            name: 'the Eastern Reach',
+            description: 'x',
+            keywords: [],
+            sourceTurn: placementTurn === 't2' ? 't1' : 't2',
+          } as NewPlace,
+        ],
+      }
+      const { planned, unresolvedRefs, droppedPlacements } = buildClassifierActions(places, {
+        ...base,
+        entities: [VARN],
+        newId: () => 'loc_new1',
+      } as never)
+      expect(kindsOf(planned)).toEqual(['createEntity'])
+      expect(droppedPlacements).toEqual([
+        { ref: 'loc_varn', parent: 'new:reach', cause: 'parent-not-listed' },
+      ])
+      expect(unresolvedRefs).toEqual([])
+    },
+  )
+
+  it("reports a parent naming a blank-named new place's handle as unresolved", () => {
     const places: ClassifierPlacesExtraction = {
-      ...reply({ placements: [{ ref: 'loc_varn', parent: 'new:reach', sourceTurn: 't2' }] }),
+      ...reply({ placements: [{ ref: 'loc_varn', parent: 'new:reach', sourceTurn: 't1' }] }),
       newPlaces: [
         {
           handle: 'new:reach',
-          name: 'the Eastern Reach',
+          name: '  ',
           description: 'x',
           keywords: [],
-          sourceTurn: 't1',
+          sourceTurn: 't2',
         } as NewPlace,
       ],
     }
-    const { planned, unresolvedRefs } = buildClassifierActions(places, {
+    const { unresolvedRefs, droppedPlacements } = buildClassifierActions(places, {
       ...base,
       entities: [VARN],
-      newId: () => 'loc_new1',
     } as never)
-    expect(kindsOf(planned)).toEqual(['createEntity'])
     expect(unresolvedRefs).toEqual(['new:reach'])
+    expect(droppedPlacements).toEqual([])
   })
 
-  it('reports a parent naming no place, and a target that is no place, as unresolved', () => {
-    const { planned, unresolvedRefs } = buildClassifierActions(
+  it('reports a parent naming nothing as unresolved, and drops one that is no place', () => {
+    const { planned, unresolvedRefs, droppedPlacements } = buildClassifierActions(
       reply({
         placements: [
           { ref: 'loc_varn', parent: 'l9', sourceTurn: 't1' },
+          { ref: 'loc_varn', parent: 'char_kael', sourceTurn: 't1' },
           { ref: 'char_kael', parent: 'loc_reach', sourceTurn: 't1' },
         ],
       }),
       deps([REACH, VARN, KAEL]),
     )
     expect(planned).toEqual([])
-    expect(unresolvedRefs).toEqual(['l9', 'char_kael'])
+    expect(unresolvedRefs).toEqual(['l9'])
+    expect(droppedPlacements).toEqual([
+      { ref: 'loc_varn', parent: 'char_kael', cause: 'parent-not-a-place' },
+      { ref: 'char_kael', cause: 'not-a-location' },
+    ])
   })
 
   it('drops and reports a placement of a place the prompt never listed', () => {
@@ -3492,7 +4161,41 @@ describe('placements', () => {
     )
   })
 
-  it('drops a top-level mark for a place this reply already placed', () => {
+  // cadence.md → User edits and classifier writes: the handler may refuse the earlier one, and the
+  // later turn's prose can be newer than the user's edit.
+  it('keeps a placement restating an earlier planned one, or the stored one after it', () => {
+    const { planned, droppedPlacements } = buildClassifierActions(
+      reply({
+        placements: [
+          { ref: 'loc_varn', parent: 'loc_reach', sourceTurn: 't1' },
+          { ref: 'loc_varn', parent: 'loc_reach', sourceTurn: 't3' },
+          { ref: 'loc_ash', parent: 'top-level', sourceTurn: 't1' },
+          { ref: 'loc_ash', parent: 'top-level', sourceTurn: 't3' },
+          { ref: 'loc_inn', parent: 'loc_reach', sourceTurn: 't1' },
+          { ref: 'loc_inn', parent: 'loc_town', sourceTurn: 't3' },
+        ],
+      }),
+      deps([
+        REACH,
+        VARN,
+        unplaced('loc_ash'),
+        place('loc_town', null),
+        place('loc_inn', 'loc_town'),
+      ]),
+    )
+    expect(planned.map((p) => [payloadOf<{ id: string }>(p).id, p.entryId])).toEqual([
+      ['loc_varn', 'e1'],
+      ['loc_ash', 'e1'],
+      ['loc_inn', 'e1'],
+      ['loc_varn', 'e3'],
+      ['loc_ash', 'e3'],
+      ['loc_inn', 'e3'],
+    ])
+    expect(droppedPlacements).toEqual([])
+  })
+
+  // The place stays unplaced if the handler refuses the placement, so the handler judges the mark.
+  it('sends a top-level mark for an unplaced place this reply already placed', () => {
     const { planned, droppedPlacements } = buildClassifierActions(
       reply({
         placements: [
@@ -3504,8 +4207,25 @@ describe('placements', () => {
     )
     expect(placementsOf(planned)).toEqual([
       expect.objectContaining({ placement: { kind: 'under', parentId: 'loc_reach' } }),
+      expect.objectContaining({ placement: { kind: 'top' } }),
     ])
-    expect(droppedPlacements).toEqual([{ ref: 'loc_varn', cause: 'not-unplaced' }])
+    expect(droppedPlacements).toEqual([])
+  })
+
+  it('judges a later rename of the place where its earlier placement, not the mark, leaves it', () => {
+    const { renameClashes } = buildClassifierActions(
+      reply({
+        placements: [
+          { ref: 'loc_varn', parent: 'loc_reach', sourceTurn: 't1' },
+          { ref: 'loc_varn', parent: 'top-level', sourceTurn: 't2' },
+        ],
+        renames: [{ ref: 'loc_varn', name: 'Mill', sourceTurn: 't3' }],
+      }),
+      deps([REACH, VARN, place('loc_mill', 'loc_reach', { name: 'Mill' })]),
+    )
+    expect(renameClashes).toEqual([
+      { ref: 'loc_varn', name: 'Mill', partnerId: 'loc_mill', flagged: true },
+    ])
   })
 })
 
@@ -3575,8 +4295,8 @@ describe('standings', () => {
     ])
   })
 
-  it('cuts a long standing at a clause, as the handler stores it', () => {
-    const { planned } = buildClassifierActions(
+  it('cuts a long standing at a clause, as the handler stores it, and reports the cut', () => {
+    const { planned, cutTexts } = buildClassifierActions(
       reply({
         standings: [
           {
@@ -3589,6 +4309,9 @@ describe('standings', () => {
       deps([faction('fact_watch')]),
     )
     expect(payloadOf<{ standing: string }>(planned[0]).standing).toBe('a'.repeat(300))
+    expect(cutTexts).toEqual([
+      { kind: 'standing', ref: 'fact_watch', length: 602, keptLength: 300 },
+    ])
   })
 
   // The handler compares what it would store: a long restatement of a cut standing writes nothing.
@@ -3659,7 +4382,7 @@ describe('standings', () => {
       status: 'active',
       keywords: [],
     } as unknown as Entity
-    const { planned, unresolvedRefs, unseenRefs } = buildClassifierActions(
+    const { planned, unresolvedRefs, unseenRefs, droppedStandings } = buildClassifierActions(
       reply({
         standings: [
           { ref: 'char_kael', standing: 'feared', sourceTurn: 't1' },
@@ -3669,21 +4392,36 @@ describe('standings', () => {
       deps([kael]),
     )
     expect(planned).toEqual([])
-    expect(unresolvedRefs).toEqual(['char_kael'])
+    expect(droppedStandings).toEqual([{ faction: 'char_kael', cause: 'not-a-faction' }])
+    expect(unresolvedRefs).toEqual([])
     expect(unseenRefs).toEqual([{ list: 'standings', ref: 'f9' }])
   })
 
-  it('plans one write for a standing the reply repeats', () => {
+  // cadence.md → User edits and classifier writes: the handler may refuse the earlier one, and the
+  // later turn's prose can be newer than the user's edit.
+  it('keeps a standing restating an earlier planned one, or the stored one after it', () => {
     const { planned } = buildClassifierActions(
       reply({
         standings: [
           { ref: 'fact_watch', standing: 'at war', sourceTurn: 't1' },
-          { ref: 'fact_watch', standing: ' at war ', sourceTurn: 't2' },
+          { ref: 'fact_watch', standing: ' at war ', sourceTurn: 't3' },
+          { ref: 'fact_guild', standing: 'at war', sourceTurn: 't1' },
+          { ref: 'fact_guild', standing: 'neutral', sourceTurn: 't3' },
         ],
       }),
-      deps([faction('fact_watch', 'wary allies')]),
+      deps([faction('fact_watch', 'wary allies'), faction('fact_guild', 'neutral')]),
     )
-    expect(planned.map((p) => payloadOf<{ standing: string }>(p).standing)).toEqual(['at war'])
+    expect(
+      planned.map((p) => {
+        const { id, standing } = payloadOf<{ id: string; standing: string }>(p)
+        return [id, standing, p.entryId]
+      }),
+    ).toEqual([
+      ['fact_watch', 'at war', 'e1'],
+      ['fact_guild', 'at war', 'e1'],
+      ['fact_watch', 'at war', 'e3'],
+      ['fact_guild', 'neutral', 'e3'],
+    ])
   })
 })
 
@@ -3887,13 +4625,14 @@ describe('plot writes', () => {
     it.each([['resolved'], ['failed']])(
       'opens it active at its turn and moves it to %s at the closing turn',
       (status) => {
-        const { planned, fellBackCount } = openAndClose({
+        const { planned, fellBackCount, earlyCloses } = openAndClose({
           status,
           sourceTurn: 't1',
           resolvedAtTurn: 't3',
         })
         expect(writes(planned)).toEqual([opened('e1'), closed(status, 'e3')])
         expect(fellBackCount).toBe(0)
+        expect(earlyCloses).toEqual([])
       },
     )
 
@@ -3912,15 +4651,21 @@ describe('plot writes', () => {
       expect(fellBackCount).toBe(0)
     })
 
-    it('never closes it before it opens', () => {
-      const { planned } = openAndClose({ sourceTurn: 't3', resolvedAtTurn: 't1' })
+    it('never closes it before it opens, and reports the closing turn it moved', () => {
+      const { planned, earlyCloses } = openAndClose({ sourceTurn: 't3', resolvedAtTurn: 't1' })
       expect(writes(planned)).toEqual([opened('e3'), closed('resolved', 'e3')])
+      expect(earlyCloses).toEqual([
+        { title: 'Cross the river', resolvedAtTurn: 't1', sourceTurn: 't3' },
+      ])
     })
 
     // An unattributed thread opens at the window head; an earlier closing turn can't precede it.
     it('closes an unattributed thread at the window head it opened on', () => {
-      const { planned } = openAndClose({ resolvedAtTurn: 't2' })
+      const { planned, earlyCloses } = openAndClose({ resolvedAtTurn: 't2' })
       expect(writes(planned)).toEqual([opened('e3'), closed('resolved', 'e3', 'e1')])
+      expect(earlyCloses).toEqual([
+        { title: 'Cross the river', resolvedAtTurn: 't2', sourceTurn: null },
+      ])
     })
 
     it.each([['active'], ['pending']])('ignores a closing turn on a %s thread', (status) => {
@@ -3947,13 +4692,7 @@ describe('plot writes', () => {
     expect(planned.map((p) => [p.action.kind, p.action.payload, p.entryId])).toEqual([
       [
         'setThreadStatus',
-        {
-          branchId: 'branch_1',
-          id: 'thr_b',
-          status: 'active',
-          resolvedAtEntryId: null,
-          proseEntryId: 'e1',
-        },
+        { branchId: 'branch_1', id: 'thr_b', status: 'active', proseEntryId: 'e1' },
         'e1',
       ],
       [
@@ -3970,14 +4709,16 @@ describe('plot writes', () => {
     ])
   })
 
-  it("judges each status change against the status the reply's earlier ones left", () => {
+  // cadence.md → User edits and classifier writes: the handler may refuse an earlier change, so
+  // only the stored status rules a change out, until the reply sends one for the thread.
+  it('judges a status change against the stored status, keeping one restating an earlier one', () => {
     const { planned } = buildClassifierActions(
       reply({
         threadStatuses: [
           { thread: 'thr_a', status: 'resolved', sourceTurn: 't1' },
-          { thread: 'thr_a', status: 'active', sourceTurn: 't2' },
+          { thread: 'thr_a', status: 'active', sourceTurn: 't3' },
           { thread: 'thr_b', status: 'resolved', sourceTurn: 't1' },
-          { thread: 'thr_b', status: 'resolved', sourceTurn: 't2' },
+          { thread: 'thr_b', status: 'resolved', sourceTurn: 't3' },
         ],
       }),
       deps({ threads: [thread('thr_a', 'active'), thread('thr_b', 'active')] }),
@@ -3987,15 +4728,27 @@ describe('plot writes', () => {
         const { id, status, resolvedAtEntryId } = payloadOf<{
           id: string
           status: string
-          resolvedAtEntryId: string | null
+          resolvedAtEntryId?: string
         }>(p)
         return [id, status, resolvedAtEntryId, p.entryId]
       }),
     ).toEqual([
       ['thr_a', 'resolved', 'e1', 'e1'],
       ['thr_b', 'resolved', 'e1', 'e1'],
-      ['thr_a', 'active', null, 'e2'],
+      ['thr_a', 'active', undefined, 'e3'],
+      ['thr_b', 'resolved', 'e3', 'e3'],
     ])
+  })
+
+  it('reports a new thread whose title is blank, creating nothing for it', () => {
+    const { planned, droppedThreads } = buildClassifierActions(
+      reply({
+        newThreads: [{ title: ' \n', description: 'x', status: 'active', sourceTurn: 't2' }],
+      }),
+      deps(),
+    )
+    expect(planned).toEqual([])
+    expect(droppedThreads).toEqual([{ sourceTurn: 't2', cause: 'blank-title' }])
   })
 
   it("trims a new thread's category, and writes a blank one as none", () => {
@@ -4077,6 +4830,28 @@ describe('plot writes', () => {
       expect.objectContaining({ characterId: 'char_b', source: 'x' }),
     ])
     expect(unseenRefs).toEqual([{ list: 'knownAwareness', ref: 'hp9' }])
+  })
+
+  // Create-only, so the earliest learning turn wins: reversing a later one keeps the awareness.
+  it('plans a pair the reply repeats at its earliest learning turn, whatever the reply order', () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        knownAwareness: [
+          { happening: 'hap_fire', ref: 'char_a', source: 'y', severity: 0.5, learnedAtTurn: 't3' },
+          { happening: 'hap_fire', ref: 'char_a', source: 'x', severity: 0.5, learnedAtTurn: 't1' },
+        ],
+      }),
+      deps({ entities: [character('char_a')], happenings: [{ id: 'hap_fire' }] }),
+    )
+    expect(
+      planned.map((p) => {
+        const { learnedAtEntryId, source } = payloadOf<{
+          learnedAtEntryId: string
+          source: string
+        }>(p)
+        return [learnedAtEntryId, source, p.entryId]
+      }),
+    ).toEqual([['e1', 'x', 'e1']])
   })
 
   // The survival anchor falls back to the newest turn; the prose dates to the oldest.

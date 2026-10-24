@@ -191,9 +191,9 @@ turn, so it matches against the turn's creates.
 Writes that can still meet serialize per row: a user write against an
 undo or redo, or against a reversal. Each action writes only the
 columns it changes but computes them from a read of the row, so every
-delta-logged write to an existing `entities` row, and every reversal of
-one, serializes on a lock keyed by that row: one writer's read and
-commit never straddle another's. `character_relationships` writes
+delta-logged write to an existing `entities` or `threads` row, and every
+reversal of one, serializes on a lock keyed by that row: one writer's
+read and commit never straddle another's. `character_relationships` writes
 serialize on one key per branch, since a delete names a row id, not a
 pair. Involvement and awareness writes and a happening delete
 serialize on one per-branch `happening_links` key, for the same reason.
@@ -240,9 +240,9 @@ came from keeps the user's value. Every write a pass or a close makes
 to an existing row carries the fact's source entry, a close's the
 latest entry it cites, and the delta log already orders both writers,
 so nothing new is stored. That covers each field they update: status,
-keywords, a name, a description, the identity fields, a place's parent
-and condition, a faction's standing and agenda, a membership, link
-rows, threads and lore:
+keywords, a name, a collision flag, a description, the identity fields,
+a place's parent and condition, a faction's standing and agenda, a
+membership, link rows, threads and lore:
 
 - The prose's position is the log position of the entry's latest
   create or content-edit delta. An entry with neither predates the
@@ -264,6 +264,23 @@ rows, threads and lore:
 - A faction the user set or cleared after the prose stands: the
   membership no-ops. A World delete or merge that re-points a
   character's faction is a user write to it too.
+- A collision flag the user cleared or re-pointed after the prose
+  stands: the raise no-ops. The flag, its partner and its reason are
+  one field, so an edit to any of them counts, a merge's re-point
+  included.
+
+A pass plans a standing, a thread status, a placement, a rename, a
+keyword append and a membership against the stored row, not against
+what an earlier fact of the same reply planned: one that restates the
+stored value plans nothing unless an earlier fact for that row was
+sent, and one that restates an earlier fact's value is still sent,
+since user precedence may refuse the earlier write and the later turn
+is newer prose. The handler no-ops a write whose value is already
+written. A rename clash's flag raise is planned against the stored
+flag alone, each clash sending its own, and the handler no-ops one
+whose flag already holds. A status transition is the exception, judged against the
+reply's view
+([`classifier.md → What the classifier writes`](./classifier.md#what-the-classifier-writes)).
 
 Undoing the user's edit removes its delta, which lifts the protection
 for any pass that reads the prose afterwards. A pass the edit already

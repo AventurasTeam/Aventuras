@@ -19,9 +19,11 @@ import {
   nextStatusOnSuccess,
   newPlacesOf,
   PERIODIC_CLASSIFIER_KIND,
+  readClassifierReply,
   RECONCILED_KINDS,
   reconcileNewEntity,
   substituteClassifierIds,
+  type PlanResult,
   type ReconciledKind,
   type ReconcileDecision,
 } from '@/lib/classifier'
@@ -48,6 +50,7 @@ import {
 
 import { buildClassifierContext } from './classifier-context'
 import { classifierEmbedder } from './description-embedder'
+import { readStoryPlace } from './entry-reads'
 import { readClassifierStatus } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import { definePipeline } from '../authoring/define'
@@ -137,6 +140,13 @@ function passFailure(
       }
   }
 }
+
+// The per-turn writer's keys for a cut condition and visual value (per-turn-creates.ts, apply.ts).
+const CUT_KEYS = {
+  condition: 'classifier.condition_truncated',
+  visual: 'classifier.visual_truncated',
+  standing: 'classifier.standing_truncated',
+} as const satisfies Record<PlanResult['cutTexts'][number]['kind'], string>
 
 type StatusCtx = Pick<PhaseContext, 'db' | 'branchId'>
 
@@ -255,6 +265,7 @@ export async function* periodicClassifierPhase(
   const awareness = [...happeningAwarenessStore.getAwareness().values()].filter(
     (a) => a.branchId === ctx.branchId,
   )
+  const story = await readStoryPlace(ctx.db, ctx.branchId)
   const idMap = new IdBiMap()
   const prompt = renderTemplate(
     TEMPLATE_IDS.periodicClassifier,
@@ -310,7 +321,8 @@ export async function* periodicClassifierPhase(
     return { status: 'failed', error: failure.error }
   }
 
-  const extraction = result.value
+  const { reply: extraction, malformed } = readClassifierReply(result.value)
+  for (const drop of malformed) ctx.log.warn('classifier.entry_malformed', drop)
   const substituted = substituteClassifierIds(
     extraction,
     idMap,
@@ -366,6 +378,7 @@ export async function* periodicClassifierPhase(
     threads,
     happenings,
     awareness,
+    story,
   })
   if (plan.fellBackCount > 0)
     ctx.log.warn('classifier.window_head_fallback', { count: plan.fellBackCount })
@@ -381,6 +394,12 @@ export async function* periodicClassifierPhase(
   for (const unseen of plan.unseenRefs) ctx.log.warn('classifier.unseen_ref', unseen)
   for (const drop of plan.droppedPlacements) ctx.log.warn('classifier.placement_dropped', drop)
   for (const icon of plan.unknownIcons) ctx.log.warn('classifier.icon_unknown', icon)
+  for (const drop of plan.droppedRenames) ctx.log.warn('classifier.rename_dropped', drop)
+  for (const drop of plan.droppedReturns) ctx.log.warn('classifier.return_dropped', drop)
+  for (const drop of plan.droppedThreads)
+    ctx.log.warn('classifier.create_dropped', { kind: 'thread', ...drop })
+  for (const moved of plan.earlyCloses) ctx.log.warn('classifier.thread_close_moved', moved)
+  for (const { kind, ...cut } of plan.cutTexts) ctx.log.warn(CUT_KEYS[kind], cut)
 
   // classifier.md → Pipeline framing: a pass cancelled during its writes reverses its own group.
   for (const write of plan.planned) {

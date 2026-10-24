@@ -1563,7 +1563,10 @@ describe('narrative fold — creates', () => {
   ]
 
   // An opening, then this turn's user_action committed under TURN_ACTION, as submitTurn does.
-  async function seedTurn(world: Entity[] = baseWorld()): Promise<void> {
+  async function seedTurn(
+    world: Entity[] = baseWorld(),
+    actionScene: EntryMetadata = SCENE,
+  ): Promise<void> {
     currentStoryStore.set({
       storyId: 's1',
       branchId: 'b1',
@@ -1619,7 +1622,7 @@ describe('narrative fold — creates', () => {
               kind: 'user_action',
               content: 'I go down to the water.',
               chapterId: null,
-              metadata: SCENE,
+              metadata: actionScene,
               createdAt: 2,
             },
           },
@@ -1864,6 +1867,21 @@ describe('narrative fold — creates', () => {
       parent_location_id: null,
       unplaced: true,
     })
+  })
+
+  // data-model.md → Disabled places: a user_action tail can stand in another place than the scene.
+  it('leaves a reused place unplaced when the story was in it before the turn', async () => {
+    const world = baseWorld().map((e) =>
+      e.id === TOWN ? { ...e, injectionMode: 'disabled' as const } : e,
+    )
+    await seedTurn([...world, unplacedDocks()], { ...SCENE, currentLocationId: UNPLACED_DOCKS })
+    const { events } = await foldTurn(CREATE_REPLY)
+    expect(
+      events.flatMap((e) => (e.type === 'delta_emitted' ? [e.action.kind] : [])),
+    ).not.toContain('placeLocation')
+    expect(replyOf(events).metadata?.stateReport?.newLocations).toEqual([
+      expect.objectContaining({ outcome: 'reused', id: UNPLACED_DOCKS, parentDropped: true }),
+    ])
   })
 
   // piggyback.md → Parent: `top` makes a place top-level, and no parent leaves it unplaced.
@@ -2385,6 +2403,35 @@ describe('narrative fold — creates', () => {
       })
     })
 
+    // piggyback.md → Trailing block format: a drop away from the scene stays prose.
+    it.each([
+      ['a listed place', 'l2'],
+      ['nothing', 'l99'],
+    ])('leaves the item held when its drop names %s', async (_label, to) => {
+      await seedTurn(swordWorld())
+      const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+      const { events, intermediates } = await foldTurn(
+        'Aria throws her sword into the market well.\n<state><scene_entities>c1</scene_entities>' +
+          `<transfers><drop id="i1" from="c1" to="${to}" /></transfers>` +
+          '<world_time_delta>30</world_time_delta></state>',
+        { log },
+      )
+      expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: true })
+      await applyEvents(events)
+      const rows = await branchRows()
+      expect(rows.find((r) => r.id === SWORD)?.state).toEqual({ at_location_id: null })
+      expect(rows.find((r) => r.id === HERO)?.state).toMatchObject({ inventory: [SWORD] })
+      expect(replyOf(events).metadata?.stateReport?.transfers).toEqual({
+        items: [],
+        stackables: [],
+      })
+      expect(log.warn).toHaveBeenCalledWith('classifier.drop_dropped', {
+        entryId: replyOf(events).id,
+        drop: { id: 'i1', to },
+        reason: 'to_named',
+      })
+    })
+
     // A new item's drop stays prose as on any skipped create; only a real item is held back.
     it('a failed fold holds back only the drops that name a real item', async () => {
       const fold = await failedFold(
@@ -2570,6 +2617,65 @@ describe('narrative fold — creates', () => {
       { id: SWORD, text: 'notched near the tip' },
       { id: MARKET, text: 'half under water', rejected: true },
     ])
+  })
+
+  // data-model.md → Entry metadata shape: a blank condition is refused, World keeping the old one.
+  describe('a blank condition', () => {
+    const SWORD = 'item_00000000-0000-4000-8000-0000000000b2'
+    const swordWorld = () => [
+      worldRow({
+        id: HERO,
+        kind: 'character',
+        name: 'Aria',
+        state: {
+          ...emptyEntityState('character'),
+          current_location_id: TOWN,
+          equipped_items: [SWORD],
+        },
+      }),
+      worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }),
+      worldRow({
+        id: SWORD,
+        kind: 'item',
+        name: 'worn sword',
+        state: { at_location_id: null, condition: 'notched near the tip' },
+      }),
+    ]
+    // c1 HERO, l1 TOWN; the sword, the one item, is i1.
+    const blankReply = (siblings: string) =>
+      'Aria wipes the blade.\n<state><world_time_delta>5</world_time_delta>' +
+      `<conditions><entity id="i1"></entity>${siblings}</conditions></state>`
+
+    it('is reported refused alone, failing no field and leaving the row as it was', async () => {
+      await seedTurn(swordWorld())
+      const { events, intermediates } = await foldTurn(blankReply(''))
+      expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: true })
+      await applyEvents(events)
+      const rows = await branchRows()
+      expect(rows.find((r) => r.id === SWORD)?.state).toEqual({
+        at_location_id: null,
+        condition: 'notched near the tip',
+      })
+      const report = replyOf(events).metadata?.stateReport
+      expect(report?.failedFields).toBeUndefined()
+      expect(report?.conditions).toEqual([{ id: SWORD, text: '', rejected: true }])
+    })
+
+    // The sword is the one row this prompt shows with its state, so the sibling names it too.
+    it('is reported refused beside a condition that lands', async () => {
+      await seedTurn(swordWorld())
+      const { events } = await foldTurn(blankReply('<entity id="i1">snapped at the hilt</entity>'))
+      await applyEvents(events)
+      const rows = await branchRows()
+      expect(rows.find((r) => r.id === SWORD)?.state).toEqual({
+        at_location_id: null,
+        condition: 'snapped at the hilt',
+      })
+      expect(replyOf(events).metadata?.stateReport?.conditions).toEqual([
+        { id: SWORD, text: '', rejected: true },
+        { id: SWORD, text: 'snapped at the hilt' },
+      ])
+    })
   })
 })
 

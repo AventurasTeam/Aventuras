@@ -13,9 +13,9 @@ import {
   stateWithRefRewritten,
   type EntityLinkRows,
 } from './entity-refs'
-import { realPlacementOf } from './location-map'
 import { checkParentChain, parentOfLocations } from './parent-chain'
 import { adoptionHidesStory, type StoryPlace } from './place-rules'
+import { realPlacementOf, type PlacedPlacement } from './placement'
 
 export type MergeLinkInput = {
   branchId: string
@@ -86,7 +86,7 @@ export function canonicalRefsCleared(canonical: Entity, loserId: string): Entity
 }
 
 export type CanonicalPlacement =
-  | { outcome: 'takes-loser'; placement: { kind: 'under'; parentId: string } | { kind: 'top' } }
+  | { outcome: 'takes-loser'; placement: PlacedPlacement }
   | { outcome: 'stays-unplaced' }
 
 const STAYS_UNPLACED: CanonicalPlacement = { outcome: 'stays-unplaced' }

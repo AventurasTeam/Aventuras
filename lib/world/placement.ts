@@ -6,6 +6,9 @@ export type PlacePlacement =
   | { kind: 'top' }
   | { kind: 'unplaced' }
 
+/** A placement that says where: under a parent or top-level. */
+export type PlacedPlacement = Exclude<PlacePlacement, { kind: 'unplaced' }>
+
 type StoredPlacement = Partial<Pick<LocationState, 'parent_location_id' | 'unplaced'>>
 
 /** A row's stored placement; a reader with the rows reads a parent naming no place as unplaced. */
@@ -19,6 +22,24 @@ export function placementOf(row: Pick<Entity, 'state'>): PlacePlacement {
 /** The stored flag only: a parent naming no place reads as placed. Rows: use `realPlacementOf`. */
 export function isUnplaced(row: Pick<Entity, 'state'>): boolean {
   return placementOf(row).kind === 'unplaced'
+}
+
+/**
+ * A place's placement against the rows: a parent naming no place reads as unplaced, its container
+ * gone. `locations` holds location rows only; an id naming none of them reads as top-level.
+ */
+export function realPlacementOf(
+  locations: readonly Pick<Entity, 'id' | 'state'>[],
+): (id: string) => PlacePlacement {
+  const byId = new Map(locations.map((e) => [e.id, e]))
+  return (id) => {
+    const row = byId.get(id)
+    if (row === undefined) return { kind: 'top' }
+    const placement = placementOf(row)
+    return placement.kind === 'under' && !byId.has(placement.parentId)
+      ? { kind: 'unplaced' }
+      : placement
+  }
 }
 
 /** The state with both keys for `placement`; the only writer of the parent and flag together. */

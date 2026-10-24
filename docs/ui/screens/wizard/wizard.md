@@ -472,10 +472,13 @@ picker reads currently-authored locations only, leaving out the
 location itself and any location whose chain of parents already
 leads back to it, so the cast can't loop. Finish still refuses a
 loop as a backstop. The picker offers `Top level` and the cast's
-places. While the parent is unknown (an AI-proposed name the wizard
-couldn't resolve, an imported parent dropped for a loop, or a parent
-removed from the cast) it also offers `Unknown`, until a parent or
-`Top level` is picked. Finish lands an unknown parent unplaced
+places; with no place to offer and the parent not unknown, it shows
+its empty-state text instead,
+`(no locations yet — add one with + Add)`. While the parent is unknown
+(an AI-proposed name the wizard couldn't resolve, an imported parent
+dropped for a loop, or a parent removed from the cast, including one a
+resumed draft couldn't load) it also offers `Unknown`, until a parent
+or `Top level` is picked. Finish lands an unknown parent unplaced
 ([LocationState shape](../../../data-model.md#locationstate-shape)).
 
 ### Item editor

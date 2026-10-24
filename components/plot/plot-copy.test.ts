@@ -12,10 +12,14 @@ import {
 } from './plot-copy'
 
 // A two-key catalog keeps the option lists short; the rest of lib/plot stays real.
-vi.mock('@/lib/plot', async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  PLOT_ICON_KEYS: ['sparkles', 'eye'],
-}))
+vi.mock('@/lib/plot', async (importOriginal) => {
+  const keys = ['sparkles', 'eye']
+  return {
+    ...(await importOriginal<Record<string, unknown>>()),
+    PLOT_ICON_KEYS: keys,
+    isPlotIconKey: (key: string) => keys.includes(key),
+  }
+})
 
 describe('plot icon options', () => {
   it('never offers an empty value, which Radix Select refuses', () => {

@@ -1,15 +1,17 @@
 import { eq } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
-import { branches, deltas, stories, threads, type NewThread } from '@/lib/db'
+import { branches, deltas, stories, storyEntries, threads, type NewThread } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { threadsStore } from '@/lib/stores'
+import { entriesStore, threadsStore } from '@/lib/stores'
 
 import { registerThreads } from './register'
 import { applyDeltaAction, lockKeysFor } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
 import { USER_EDITED_SINCE_PROSE } from '../delta/user-precedence'
+import { shownCounts } from '../story-entries/__tests__/shown-counts'
+import { rollbackToEntry, updateStoryEntryContent } from '../story-entries/operational'
 import { registerStoryEntries } from '../story-entries/register'
 import type { PipelineAction } from '../types'
 
@@ -406,7 +408,7 @@ describe('updateThread — the entry a status ended on', () => {
       status: 'failed',
       resolvedAtEntryId: 'e_old',
     })
-    expect(await undoOf(db, 'act_m')).toEqual({ status: 'resolved' })
+    expect(await undoOf(db, 'act_m')).toEqual({ status: 'resolved', resolvedAtEntryId: 'e_old' })
   })
 
   it.each([[{ status: 'resolved' }], [{ title: 'Return the relic' }]])(
@@ -469,14 +471,14 @@ describe('setThreadStatus', () => {
     )
   const setStatus = (
     status: 'active' | 'resolved' | 'failed',
-    {
-      resolvedAtEntryId = status === 'active' ? null : PROSE,
-      proseEntryId = PROSE,
-    }: { resolvedAtEntryId?: string | null; proseEntryId?: string | null } = {},
+    { proseEntryId = PROSE }: { proseEntryId?: string | null } = {},
   ): PipelineAction => ({
     kind: 'setThreadStatus',
     source: 'periodic_classifier',
-    payload: { branchId: 'br_1', id: 'thr_1', status, resolvedAtEntryId, proseEntryId },
+    payload:
+      status === 'active'
+        ? { branchId: 'br_1', id: 'thr_1', status, proseEntryId }
+        : { branchId: 'br_1', id: 'thr_1', status, resolvedAtEntryId: PROSE, proseEntryId },
   })
   const noop = (reason: string) => ({ status: 'rejected', reason, code: 'noop' })
 
@@ -497,12 +499,10 @@ describe('setThreadStatus', () => {
     },
   )
 
-  it("clears the entry when a pass's resolved thread is taken up again, whatever the payload", async () => {
+  it("clears the entry when a pass's resolved thread is taken up again", async () => {
     const { db, ctx } = await setupWithProse()
     await seed(ctx, { ...PASS_THREAD, status: 'resolved', resolvedAtEntryId: 'e_old' })
-    expect(
-      (await apply(ctx, setStatus('active', { resolvedAtEntryId: PROSE }), 'act_s')).status,
-    ).toBe('ok')
+    expect((await apply(ctx, setStatus('active'), 'act_s')).status).toBe('ok')
     expect(await rowFor(db, 'thr_1')).toMatchObject({ status: 'active', resolvedAtEntryId: null })
     expect(await undoOf(db, 'act_s')).toEqual({ status: 'resolved', resolvedAtEntryId: 'e_old' })
   })
@@ -522,11 +522,20 @@ describe('setThreadStatus', () => {
     expect(await undoOf(db, 'act_s')).toEqual({ status: 'active' })
   })
 
-  it('logs only the status when the entry stays as it was', async () => {
+  it('logs the entry beside the status when the entry stays as it was', async () => {
     const { db, ctx } = await setupWithProse()
     await seed(ctx, { ...PASS_THREAD, status: 'pending' })
     expect((await apply(ctx, setStatus('active'), 'act_s')).status).toBe('ok')
-    expect(await undoOf(db, 'act_s')).toEqual({ status: 'pending' })
+    expect(await undoOf(db, 'act_s')).toEqual({ status: 'pending', resolvedAtEntryId: null })
+  })
+
+  it("reverses a take-up to pending with no entry, past a later pass's resolve", async () => {
+    const { db, ctx } = await setupWithProse()
+    await seed(ctx, { ...PASS_THREAD, status: 'pending' })
+    await apply(ctx, setStatus('active'), 'act_s')
+    await apply(ctx, setStatus('resolved'), 'act_s2')
+    await reverseReplayDeltas('act_s', ctx)
+    expect(await rowFor(db, 'thr_1')).toMatchObject({ status: 'pending', resolvedAtEntryId: null })
   })
 
   it('reverses to the status and entry before it', async () => {
@@ -629,5 +638,80 @@ describe('setThreadStatus', () => {
 
   it("serializes on the thread's row key", () => {
     expect(lockKeysFor(setStatus('resolved'))).toEqual(['threads:br_1:thr_1'])
+  })
+})
+
+// generation-pipeline.md → Reverse-replay: a status and its entry ref restore as one field.
+describe("a thread's status and entry ref through a rollback", () => {
+  afterEach(() => {
+    entriesStore.__reset()
+  })
+
+  const turnAt = (ctx: Ctx, id: string, position: number) =>
+    apply(
+      ctx,
+      {
+        kind: 'createStoryEntry',
+        source: 'ai_classifier',
+        payload: {
+          entry: {
+            id,
+            branchId: 'br_1',
+            position,
+            kind: 'ai_reply',
+            content: `Turn ${id}.`,
+            metadata: { sceneEntities: [], currentLocationId: null, worldTime: position },
+            createdAt: position,
+          },
+        },
+      },
+      `act_turn_${id}`,
+    )
+  // A pass's write rests on the turn it read, so the rollback keeps it with that turn.
+  const applyAt = (ctx: Ctx, action: PipelineAction, actionId: string, entryId: string) =>
+    applyDeltaAction({ action, actionId, branchId: 'br_1', entryId }, ctx)
+
+  it("restores the pair a user's status change logged, over the ref a later pass wrote", async () => {
+    const { db, ctx } = await setup()
+    registerStoryEntries()
+    await db.insert(storyEntries).values({
+      id: 'e_open',
+      branchId: 'br_1',
+      position: 1,
+      kind: 'opening',
+      content: 'The road begins.',
+      createdAt: 1,
+    })
+    await turnAt(ctx, 't1', 2)
+    await turnAt(ctx, 't2', 3)
+    await turnAt(ctx, 't3', 4)
+    const entry: NewThread = { ...THREAD, status: 'active', triggeredAtEntryId: 't1' }
+    await applyAt(
+      ctx,
+      { kind: 'createThread', source: 'periodic_classifier', payload: { entry } },
+      'act_c',
+      't1',
+    )
+    await apply(ctx, userPatch({ status: 'failed' }), 'act_u')
+    entriesStore.hydrate('br_1', await db.select().from(storyEntries))
+    expect((await updateStoryEntryContent('br_1', 't1', 'Kael finds the relic.', ctx)).status).toBe(
+      'ok',
+    )
+    const resolve: PipelineAction = {
+      kind: 'setThreadStatus',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: 'br_1',
+        id: 'thr_1',
+        status: 'resolved',
+        resolvedAtEntryId: 't1',
+        proseEntryId: 't1',
+      },
+    }
+    expect((await applyAt(ctx, resolve, 'act_s', 't1')).status).toBe('ok')
+
+    const shown = await shownCounts('br_1', 't2', ctx)
+    expect((await rollbackToEntry('br_1', 't2', ctx, { expectedCounts: shown })).status).toBe('ok')
+    expect(await rowFor(db, 'thr_1')).toMatchObject({ status: 'active', resolvedAtEntryId: null })
   })
 })

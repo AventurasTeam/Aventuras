@@ -256,7 +256,7 @@ export function characterDraftFrom(
   }
 }
 
-/** world.md → Overview: a new place starts `Unknown`, not `Top level`, until the user places it. */
+/** A place created in World starts `Unknown`, not `Top level`, until the user places it. */
 export function locationDraftFrom(row: Entity | null): LocationDraft {
   const state = stateOf(row, 'location')
   return {

@@ -1323,6 +1323,127 @@ describe('buildPiggybackActions', () => {
       expect(result.applied.currentLocationRejected).toBe(false)
       expect(result.metadata.currentLocationId).toBe('loc_keep')
     })
+
+    // The fallback keeps a failed fold's record for a field where nothing of its own landed.
+    describe('what landed', () => {
+      const kael = mockEntity({ id: 'char_kael' })
+      const keep = mockEntity({
+        id: 'loc_keep',
+        kind: 'location',
+        state: { parent_location_id: null },
+      })
+      const landed = (block: ParsedStateBlock, entities: Entity[] = [kael, keep]) => {
+        const { applied } = buildPiggybackActions({
+          log: logger,
+          source: 'per_turn_classifier',
+          entryId: 'entry_1',
+          turn: planned(block),
+          entities,
+          previousMetadata,
+          branchId: 'main',
+        })
+        return {
+          visualChanges: applied.visualChangesLanded,
+          items: applied.itemsLanded,
+          stackables: applied.stackablesLanded,
+        }
+      }
+      const transfers = (over: Partial<ParsedTransfers>): ParsedTransfers => ({
+        items: [],
+        stackables: [],
+        drops: [],
+        ...over,
+      })
+
+      it('counts a visual change only on a character', () => {
+        expect(
+          landed({
+            visualChanges: [
+              { id: 'loc_keep', type: 'attire', text: 'weathered stonework' },
+              { id: 'char_kael', type: 'hair', text: 'shorn short' },
+            ],
+          }),
+        ).toEqual({ visualChanges: 1, items: 0, stackables: 0 })
+      })
+
+      it('counts an item move only when a character gives or takes it', () => {
+        expect(
+          landed({
+            transfers: transfers({
+              items: [
+                { id: 'item_blade', to: 'loc_keep', slot: 'inventory', seq: 0 },
+                { id: 'item_blade', to: 'char_kael', slot: 'inventory', seq: 1 },
+                { id: 'item_blade', from: 'char_kael', to: 'loc_keep', slot: 'inventory', seq: 2 },
+                { id: 'item_blade', slot: 'inventory', seq: 3 },
+              ],
+            }),
+          }),
+        ).toEqual({ visualChanges: 0, items: 2, stackables: 0 })
+      })
+
+      it('counts no release from a character who does not hold the item', () => {
+        expect(
+          landed({
+            transfers: transfers({
+              items: [{ id: 'item_blade', from: 'char_kael', slot: 'inventory', seq: 0 }],
+            }),
+          }),
+        ).toEqual({ visualChanges: 0, items: 0, stackables: 0 })
+      })
+
+      it.each([
+        ['counts no take into the slot that already holds it', 'inventory', 0],
+        ['counts a take that moves it to the other slot', 'equipped_items', 1],
+      ] as const)('%s', (_label, slot, items) => {
+        const holding = mockEntity({
+          id: 'char_kael',
+          state: { ...(kael.state as CharacterState), inventory: ['item_blade'] },
+        })
+        expect(
+          landed(
+            {
+              transfers: transfers({
+                items: [{ id: 'item_blade', to: 'char_kael', slot, seq: 0 }],
+              }),
+            },
+            [holding, keep],
+          ),
+        ).toEqual({ visualChanges: 0, items, stackables: 0 })
+      })
+
+      it('counts a take that lifts it from where its row says it lies', () => {
+        const holding = mockEntity({
+          id: 'char_kael',
+          state: { ...(kael.state as CharacterState), inventory: ['item_blade'] },
+        })
+        const blade = mockEntity({
+          id: 'item_blade',
+          kind: 'item',
+          state: { at_location_id: 'loc_keep' },
+        })
+        const items = [{ id: 'item_blade', to: 'char_kael', slot: 'inventory' as const, seq: 0 }]
+        expect(landed({ transfers: transfers({ items }) }, [holding, keep, blade])).toEqual({
+          visualChanges: 0,
+          items: 1,
+          stackables: 0,
+        })
+      })
+
+      it('counts a stackable only when a character pays or gains it', () => {
+        expect(
+          landed({
+            transfers: transfers({
+              stackables: [
+                { key: 'coins', amount: 5, to: 'loc_keep' },
+                { key: 'coins', amount: 5, from: 'char_kael' },
+                { key: 'coins', amount: 5, to: 'char_kael' },
+                { key: 'coins', amount: 5 },
+              ],
+            }),
+          }),
+        ).toEqual({ visualChanges: 0, items: 0, stackables: 2 })
+      })
+    })
   })
 })
 

@@ -10,18 +10,16 @@ import {
   type Entity,
   type EntityState,
 } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
 import { newTerms, normalizeTerm } from '@/lib/keyword-terms'
 import { boundStateText } from '@/lib/piggyback'
 import { entitiesStore } from '@/lib/stores'
 import {
   characterFactionId,
-  checkParentChain,
   flagStillHolds,
-  PARENT_CHAIN_BROKEN,
-  PARENT_CYCLE,
-  parentOfLocations,
+  moveHidesStory,
+  nameBasis,
   pairSideOf,
+  parentOfLocations,
   PLACE_REFUSAL,
   placementOf,
   realPlacementOf,
@@ -38,16 +36,10 @@ import {
   type GroupScope,
   type HandlerOutcome,
 } from '../delta/registry'
-import {
-  USER_EDITED_SINCE_PROSE,
-  userEditsSinceProse,
-  wroteColumn,
-  wroteCollisionFlag,
-  wrotePath,
-  wrotePlacement,
-  wroteRetirement,
-} from '../delta/user-precedence'
+import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteField } from '../delta/user-precedence'
 import type { DbCtx, DeltaSource, ProseEntryId } from '../types'
+import { branchPlaces, parentChainRefusal } from './parent-chain-check'
+import { loadStoryPlace } from '../story-entries/story-place'
 
 declare module '@/lib/actions/action-map' {
   interface PipelineActionMap {
@@ -159,12 +151,30 @@ function priorTerms(edits: readonly Delta[]): Set<string> {
   return terms
 }
 
+function noopRefusal(reason: string): HandlerOutcome {
+  return { status: 'rejected', reason, code: 'noop' }
+}
+
 async function loadCurrent(branchId: string, id: string, ctx: DbCtx): Promise<Entity | undefined> {
   const [current] = await ctx.db
     .select()
     .from(entities)
     .where(and(eq(entities.branchId, branchId), eq(entities.id, id)))
   return current
+}
+
+// By wroteField's groups, so a write yields to a user edit as its reversal would.
+async function userWroteSinceProse(
+  ctx: DbCtx,
+  branchId: string,
+  id: string,
+  proseEntryId: ProseEntryId,
+  column: string,
+  path: readonly string[] = [],
+): Promise<boolean> {
+  if (proseEntryId === null) return false
+  const edits = await userEditsSinceProse(ctx, branchId, 'entities', id, proseEntryId)
+  return wroteField(edits, 'entities', column, path)
 }
 
 function buildStatePatchOutcome(
@@ -208,27 +218,32 @@ function stateWriteOutcome(
     // 'noop', not a plain rejection: a model restating an entity's current state
     // is well-formed and merely redundant, and an unmarked rejection reverses the
     // user's whole turn (orchestrator handleEvent).
-    return {
-      status: 'rejected' as const,
-      reason: `no-op state patch for entities ${branchId}:${id}`,
-      code: 'noop' as const,
-    }
+    return noopRefusal(`no-op state patch for entities ${branchId}:${id}`)
   }
+  return columnsWriteOutcome(branchId, id, { state: next as EntityState }, undoPayload, ctx)
+}
 
+function columnsWriteOutcome(
+  branchId: string,
+  id: string,
+  columns: Partial<Entity>,
+  undoPayload: Record<string, unknown>,
+  ctx: DbCtx,
+): HandlerOutcome {
   return {
-    status: 'ok' as const,
+    status: 'ok',
     targetTable: 'entities',
     targetId: id,
-    op: 'update' as const,
+    op: 'update',
     undoPayload,
     ops: [
       ctx.db
         .update(entities)
-        .set({ state: next as EntityState })
+        .set(columns)
         .where(and(eq(entities.branchId, branchId), eq(entities.id, id)))
         .toSQL(),
     ],
-    patch: { op: 'update' as const, id, columns: { state: next } },
+    patch: { op: 'update', id, columns },
   }
 }
 
@@ -320,14 +335,9 @@ export const updateEntityConditionHandler: ActionHandler = async (action, branch
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
-  if (!current)
-    return {
-      status: 'rejected',
-      reason: `condition target entities ${bid}:${id} not found`,
-      code: 'noop',
-    }
+  if (!current) return noopRefusal(`condition target entities ${bid}:${id} not found`)
   if (current.kind !== 'location' && current.kind !== 'item')
-    return { status: 'rejected', reason: 'not-a-place-or-item', code: 'noop' }
+    return noopRefusal('not-a-place-or-item')
   return buildStatePatchOutcome(
     bid,
     id,
@@ -368,35 +378,13 @@ export const promoteStagedEntityHandler: ActionHandler = async (action, branchId
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
-  if (!current)
-    return {
-      status: 'rejected',
-      reason: `promote target entities ${bid}:${id} not found`,
-      code: 'noop',
-    }
+  if (!current) return noopRefusal(`promote target entities ${bid}:${id} not found`)
   const storeEntity = entitiesStore.getById(id)
   if (current.status !== 'staged' || (storeEntity !== undefined && storeEntity.status !== 'staged'))
-    return { status: 'rejected', reason: 'not-staged', code: 'noop' }
-  if (
-    proseEntryId !== null &&
-    wroteRetirement(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
-  )
-    return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
-  return {
-    status: 'ok',
-    targetTable: 'entities',
-    targetId: id,
-    op: 'update',
-    undoPayload: { status: current.status },
-    ops: [
-      ctx.db
-        .update(entities)
-        .set({ status: 'active' })
-        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
-        .toSQL(),
-    ],
-    patch: { op: 'update', id, columns: { status: 'active' } },
-  }
+    return noopRefusal('not-staged')
+  if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'status'))
+    return noopRefusal(USER_EDITED_SINCE_PROSE)
+  return columnsWriteOutcome(bid, id, { status: 'active' }, { status: current.status }, ctx)
 }
 
 /**
@@ -410,36 +398,16 @@ export const appendEntityKeywordsHandler: ActionHandler = async (action, branchI
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
-  if (!current)
-    return {
-      status: 'rejected',
-      reason: `keyword target entities ${bid}:${id} not found`,
-      code: 'noop',
-    }
+  if (!current) return noopRefusal(`keyword target entities ${bid}:${id} not found`)
   let added = newTerms(current.keywords, keywords)
-  if (added.length === 0) return { status: 'rejected', reason: 'no-new-keywords', code: 'noop' }
+  if (added.length === 0) return noopRefusal('no-new-keywords')
   if (proseEntryId !== null) {
     const removed = priorTerms(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
     added = added.filter((term) => !removed.has(normalizeTerm(term)))
-    if (added.length === 0)
-      return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
+    if (added.length === 0) return noopRefusal(USER_EDITED_SINCE_PROSE)
   }
   const next = [...current.keywords, ...added]
-  return {
-    status: 'ok',
-    targetTable: 'entities',
-    targetId: id,
-    op: 'update',
-    undoPayload: { keywords: current.keywords },
-    ops: [
-      ctx.db
-        .update(entities)
-        .set({ keywords: next })
-        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
-        .toSQL(),
-    ],
-    patch: { op: 'update', id, columns: { keywords: next } },
-  }
+  return columnsWriteOutcome(bid, id, { keywords: next }, { keywords: current.keywords }, ctx)
 }
 
 /** active → retired only, checked as the write lands, so a user-moved row keeps its status. */
@@ -450,36 +418,19 @@ export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) 
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
-  if (!current)
-    return {
-      status: 'rejected',
-      reason: `retire target entities ${bid}:${id} not found`,
-      code: 'noop',
-    }
-  if (current.status !== 'active') return { status: 'rejected', reason: 'not-active', code: 'noop' }
+  if (!current) return noopRefusal(`retire target entities ${bid}:${id} not found`)
+  if (current.status !== 'active') return noopRefusal('not-active')
   // Only the user retires a place (classifier.md → What the classifier writes).
-  if (current.kind === 'location') return { status: 'rejected', reason: 'location', code: 'noop' }
-  if (
-    proseEntryId !== null &&
-    wroteRetirement(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
+  if (current.kind === 'location') return noopRefusal('location')
+  if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'status'))
+    return noopRefusal(USER_EDITED_SINCE_PROSE)
+  return columnsWriteOutcome(
+    bid,
+    id,
+    { status: 'retired', retiredReason },
+    { status: current.status, retiredReason: current.retiredReason },
+    ctx,
   )
-    return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
-  const columns = { status: 'retired' as const, retiredReason }
-  return {
-    status: 'ok',
-    targetTable: 'entities',
-    targetId: id,
-    op: 'update',
-    undoPayload: { status: current.status, retiredReason: current.retiredReason },
-    ops: [
-      ctx.db
-        .update(entities)
-        .set(columns)
-        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
-        .toSQL(),
-    ],
-    patch: { op: 'update', id, columns },
-  }
 }
 
 async function isFaction(
@@ -504,37 +455,19 @@ export const setCharacterFactionHandler: ActionHandler = async (action, branchId
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
-  if (!current)
-    return {
-      status: 'rejected',
-      reason: `faction target entities ${bid}:${id} not found`,
-      code: 'noop',
-    }
-  if (current.kind !== 'character')
-    return { status: 'rejected', reason: 'not-a-character', code: 'noop' }
-  if (characterFactionId(current) === factionId)
-    return { status: 'rejected', reason: 'faction-unchanged', code: 'noop' }
+  if (!current) return noopRefusal(`faction target entities ${bid}:${id} not found`)
+  if (current.kind !== 'character') return noopRefusal('not-a-character')
+  if (characterFactionId(current) === factionId) return noopRefusal('faction-unchanged')
   if (factionId !== null && !(await isFaction(ctx, bid, factionId, group)))
-    return { status: 'rejected', reason: 'not-a-faction', code: 'noop' }
-  if (
-    proseEntryId !== null &&
-    wrotePath(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId), 'state', [
-      'faction_id',
-    ])
-  )
-    return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
+    return noopRefusal('not-a-faction')
+  if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'state', ['faction_id']))
+    return noopRefusal(USER_EDITED_SINCE_PROSE)
   return buildStatePatchOutcome(bid, id, current, { faction_id: factionId }, ctx)
 }
 
-const noopRefusal = (reason: string): HandlerOutcome => ({
-  status: 'rejected',
-  reason,
-  code: 'noop',
-})
-
 /**
  * data-model.md → LocationState shape: parent and `unplaced` flag written as the row's whole state.
- * Refusals are all noops: a machine writer plans the same checks; an unmarked one fails its run.
+ * Refusals past the branch check are noops; an unmarked one would fail the pass that planned it.
  */
 export const placeLocationHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'placeLocation')
@@ -548,45 +481,54 @@ export const placeLocationHandler: ActionHandler = async (action, branchId, ctx)
   const stored = placementOf(current)
   if (samePlacement(stored, placement)) return noopRefusal('placement-unchanged')
 
-  const places = await ctx.db
-    .select({
-      id: entities.id,
-      kind: entities.kind,
-      state: entities.state,
-      status: entities.status,
-    })
-    .from(entities)
-    .where(and(eq(entities.branchId, bid), eq(entities.kind, 'location')))
+  const places = await branchPlaces(ctx, bid)
   if (placement.kind === 'top') {
     if (realPlacementOf(places)(id).kind !== 'unplaced') return noopRefusal('not-unplaced')
   } else {
     const parent = places.find((p) => p.id === placement.parentId)
     if (parent === undefined) return noopRefusal('parent-not-a-place')
     if (parent.status === 'retired') return noopRefusal(PLACE_REFUSAL.retiredParent)
-    const check = checkParentChain(id, placement.parentId, parentOfLocations(places))
-    if (check === 'cycle') return noopRefusal(PARENT_CYCLE)
-    if (check === 'cap-hit') {
-      logger.error('action_layer.parent_chain_cap_hit', {
-        branchId: bid,
+    const refused = parentChainRefusal(bid, id, placement.parentId, places)
+    if (refused !== null) return noopRefusal(refused)
+    // data-model.md → Disabled places. The per-turn writer's planner judges its own: its turn's
+    // location lands beside it, so the story's place read here would already be the one walked into.
+    if (
+      action.source === 'periodic_classifier' &&
+      moveHidesStory({
         id,
         parentId: placement.parentId,
+        places: new Map(places.map((p) => [p.id, p])),
+        parentOf: parentOfLocations(places),
+        story: await loadStoryPlace(bid, ctx),
       })
-      return noopRefusal(PARENT_CHAIN_BROKEN)
-    }
+    )
+      return noopRefusal(PLACE_REFUSAL.storyInside)
   }
-  if (
-    proseEntryId !== null &&
-    wrotePlacement(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
-  )
+  if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'state', ['parent_location_id']))
     return noopRefusal(USER_EDITED_SINCE_PROSE)
   const next = withPlacement(stateOf(current, 'location'), placement)
   return stateWriteOutcome(bid, id, current, next, ctx)
 }
 
-/**
- * classifier.md → What the classifier writes → Names. The planner has already tested the name
- * against the kind's other rows.
- */
+// classifier.md → What the classifier writes → Names, on the rows as the write lands: a write the
+// planner counted on can have been refused since. Any status counts, as the planner counts it.
+async function nameHeldByOther(ctx: DbCtx, current: Entity, name: string): Promise<boolean> {
+  const rows = await ctx.db
+    .select({ id: entities.id, name: entities.name, state: entities.state })
+    .from(entities)
+    .where(and(eq(entities.branchId, current.branchId), eq(entities.kind, current.kind)))
+  const holders = rows.filter((r) => r.id !== current.id && nameBasis(r.name, name) === 'same-name')
+  if (current.kind !== 'location') return holders.length > 0
+  // A place is compared with a real sibling, or with any place when either is unplaced.
+  const placementAt = realPlacementOf(rows)
+  const own = placementAt(current.id)
+  return holders.some((r) => {
+    const other = placementAt(r.id)
+    return own.kind === 'unplaced' || other.kind === 'unplaced' || samePlacement(own, other)
+  })
+}
+
+/** classifier.md → What the classifier writes → Names. */
 export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'renameEntity')
     throw new Error(`handler/kind mismatch: expected 'renameEntity', got '${action.kind}'`)
@@ -597,11 +539,12 @@ export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) 
   const current = await loadCurrent(bid, id, ctx)
   if (!current) return noopRefusal(`rename target entities ${bid}:${id} not found`)
   if (name === '') return noopRefusal('name-blank')
-  // The same name under keyword-term normalization (case, surrounding space) is no reveal.
-  if (normalizeTerm(name) === normalizeTerm(current.name)) return noopRefusal('name-unchanged')
+  // The same name by World's namesake rule (case and spacing aside) is no reveal.
+  if (nameBasis(name, current.name) === 'same-name') return noopRefusal('name-unchanged')
   const edits =
     proseEntryId === null ? [] : await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId)
-  if (wroteColumn(edits, 'name')) return noopRefusal(USER_EDITED_SINCE_PROSE)
+  if (wroteField(edits, 'entities', 'name', [])) return noopRefusal(USER_EDITED_SINCE_PROSE)
+  if (await nameHeldByOther(ctx, current, name)) return noopRefusal('name-taken')
   // The old name joins the keywords unless they hold it, or the user removed it after the prose.
   const removed = priorTerms(edits)
   const kept = newTerms(current.keywords, [current.name]).filter(
@@ -609,22 +552,13 @@ export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) 
   )
   const keywords = kept.length > 0 ? { keywords: [...current.keywords, ...kept] } : {}
   // `name` is an embedded field (KIND_FIELDS.entity), so the row re-embeds.
-  const columns = { name, ...keywords, embeddingStale: 1 as const }
-  return {
-    status: 'ok',
-    targetTable: 'entities',
-    targetId: id,
-    op: 'update',
-    undoPayload: { name: current.name, ...(kept.length > 0 ? { keywords: current.keywords } : {}) },
-    ops: [
-      ctx.db
-        .update(entities)
-        .set(columns)
-        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
-        .toSQL(),
-    ],
-    patch: { op: 'update', id, columns },
-  }
+  return columnsWriteOutcome(
+    bid,
+    id,
+    { name, ...keywords, embeddingStale: 1 },
+    { name: current.name, ...(kept.length > 0 ? { keywords: current.keywords } : {}) },
+    ctx,
+  )
 }
 
 /**
@@ -648,40 +582,25 @@ export const raiseCollisionFlagHandler: ActionHandler = async (action, branchId,
   }
   if (partnerId === id) return noopRefusal('partner-is-self')
   const partner = await loadCurrent(bid, partnerId, ctx)
-  if (partner?.kind !== current.kind) return noopRefusal('partner-not-of-kind')
+  if (partner === undefined) return noopRefusal('partner-not-found')
+  if (partner.kind !== current.kind) return noopRefusal('partner-not-of-kind')
   // World's pairing rule on the rows as they stand, a clash's keyword landed: a raise needs a pair.
   if (!stillPaired(reason, pairSideOf(current), pairSideOf(partner)))
     return noopRefusal('not-namesakes')
   // A user's clear stands against older prose; newer prose may raise the flag again.
-  if (
-    proseEntryId !== null &&
-    wroteCollisionFlag(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
-  )
+  if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'nameCollisionFlag'))
     return noopRefusal(USER_EDITED_SINCE_PROSE)
-  const columns = {
-    nameCollisionFlag: 1 as const,
-    nameCollisionPartnerId: partnerId,
-    nameCollisionReason: reason,
-  }
-  return {
-    status: 'ok',
-    targetTable: 'entities',
-    targetId: id,
-    op: 'update',
-    undoPayload: {
+  return columnsWriteOutcome(
+    bid,
+    id,
+    { nameCollisionFlag: 1, nameCollisionPartnerId: partnerId, nameCollisionReason: reason },
+    {
       nameCollisionFlag: current.nameCollisionFlag,
       nameCollisionPartnerId: current.nameCollisionPartnerId,
       nameCollisionReason: current.nameCollisionReason,
     },
-    ops: [
-      ctx.db
-        .update(entities)
-        .set(columns)
-        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
-        .toSQL(),
-    ],
-    patch: { op: 'update', id, columns },
-  }
+    ctx,
+  )
 }
 
 /** classifier.md → Factions: `state.standing` alone, cut to the schema's 500 as a condition is. */
@@ -696,19 +615,14 @@ export const setFactionStandingHandler: ActionHandler = async (action, branchId,
   if (!current) return noopRefusal(`standing target entities ${bid}:${id} not found`)
   if (current.kind !== 'faction') return noopRefusal('not-a-faction')
   if (stateOf(current, 'faction').standing === bounded) return noopRefusal('standing-unchanged')
-  if (
-    proseEntryId !== null &&
-    wrotePath(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId), 'state', [
-      'standing',
-    ])
-  )
+  if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'state', ['standing']))
     return noopRefusal(USER_EDITED_SINCE_PROSE)
   return buildStatePatchOutcome(bid, id, current, { standing: bounded }, ctx)
 }
 
 /**
- * retired → active on a character, checked as the write lands so a status the user wrote since
- * stands; clears the reason as World's un-retire does. Only the user brings back a place.
+ * retired → active on a character only, checked as the write lands so a status the user wrote
+ * since stands; clears the reason with the status.
  */
 export const returnFromRetirementHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'returnFromRetirement')
@@ -720,25 +634,13 @@ export const returnFromRetirementHandler: ActionHandler = async (action, branchI
   if (!current) return noopRefusal(`return target entities ${bid}:${id} not found`)
   if (current.kind !== 'character') return noopRefusal('not-a-character')
   if (current.status !== 'retired') return noopRefusal('not-retired')
-  if (
-    proseEntryId !== null &&
-    wroteRetirement(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
-  )
+  if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'status'))
     return noopRefusal(USER_EDITED_SINCE_PROSE)
-  const columns = { status: 'active' as const, retiredReason: null }
-  return {
-    status: 'ok',
-    targetTable: 'entities',
-    targetId: id,
-    op: 'update',
-    undoPayload: { status: current.status, retiredReason: current.retiredReason },
-    ops: [
-      ctx.db
-        .update(entities)
-        .set(columns)
-        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
-        .toSQL(),
-    ],
-    patch: { op: 'update', id, columns },
-  }
+  return columnsWriteOutcome(
+    bid,
+    id,
+    { status: 'active', retiredReason: null },
+    { status: current.status, retiredReason: current.retiredReason },
+    ctx,
+  )
 }

@@ -6,7 +6,9 @@ export {
   PARENT_CYCLE,
   parentIdOf,
   parentOfLocations,
+  placementLoop,
 } from './parent-chain'
+export type { ParentOf, PlacementLoop } from './parent-chain'
 export {
   characterDraftFrom,
   characterDraftSchema,
@@ -92,7 +94,6 @@ export {
   listedAncestorNames,
   locationMapView,
   placeTree,
-  realPlacementOf,
   unhiddenLocationView,
 } from './location-map'
 export type {
@@ -120,11 +121,13 @@ export type {
 } from './entity-views'
 export { placeModes } from './place-modes'
 export type { PlaceModes } from './place-modes'
-export { isUnplaced, placementOf, samePlacement, withPlacement } from './placement'
-export type { PlacePlacement } from './placement'
+export { isUnplaced, placementOf, realPlacementOf, samePlacement, withPlacement } from './placement'
+export type { PlacedPlacement, PlacePlacement } from './placement'
 export {
   mergePlaceRefusal,
+  moveHidesStory,
   PLACE_REFUSAL,
+  placementDrop,
   placeSaveConfirm,
   placeSaveRefusal,
   retireCascade,
@@ -136,9 +139,10 @@ export type {
   NamedPlace,
   PlaceSaveConfirm,
   PlaceSaveRefusal,
+  PlacementDrop,
   StoryPlace,
 } from './place-rules'
-export { itemNamesakes, matchNewPlace } from './new-entity-match'
+export { itemNamesakes, matchNewPlace, replyMatchView, replyParentOf } from './new-entity-match'
 export type { SettledNewPlace } from './new-entity-match'
 export { placeNewLocation, settlingOrder, TOP_LEVEL } from './new-place-order'
 export type { NewPlaceDeclaration, ParentDropCause, SettlingPlace } from './new-place-order'

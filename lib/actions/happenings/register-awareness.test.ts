@@ -84,6 +84,7 @@ describe('happening_awareness upsert', () => {
             learnedAtEntryId: 'entry_3',
             decayResistance: 0.2,
             source: 'overheard in tavern',
+            proseEntryId: null,
           },
         },
         actionId: 'act_1',
@@ -112,6 +113,7 @@ describe('happening_awareness upsert', () => {
             learnedAtEntryId: 'entry_3',
             decayResistance: 0.2,
             source: 'overheard',
+            proseEntryId: null,
           },
         },
         actionId: 'act_1',
@@ -140,6 +142,7 @@ describe('happening_awareness upsert', () => {
             learnedAtEntryId: 'entry_9',
             decayResistance: 0.8,
             source: 'told by Jorin',
+            proseEntryId: null,
           },
         },
         actionId: 'act_2',
@@ -170,7 +173,13 @@ describe('happening_awareness upsert', () => {
           action: {
             kind: 'upsertHappeningAwareness',
             source: 'user_edit',
-            payload: { branchId: 'br_1', characterId: 'char_a', happeningId: 'hap_1', ...fields },
+            payload: {
+              branchId: 'br_1',
+              characterId: 'char_a',
+              happeningId: 'hap_1',
+              proseEntryId: null,
+              ...fields,
+            },
           },
           actionId,
           branchId: 'br_1',
@@ -196,7 +205,13 @@ describe('happening_awareness upsert', () => {
         action: {
           kind: 'upsertHappeningAwareness',
           source: 'ai_classifier',
-          payload: { branchId: 'br_1', characterId: 'char_a', happeningId: 'hap_1', source: 's' },
+          payload: {
+            branchId: 'br_1',
+            characterId: 'char_a',
+            happeningId: 'hap_1',
+            source: 's',
+            proseEntryId: null,
+          },
         },
         actionId: 'act_1',
         branchId: 'br_1',
@@ -226,7 +241,13 @@ describe('happening_awareness upsert', () => {
         action: {
           kind: 'upsertHappeningAwareness',
           source: 'ai_classifier',
-          payload: { branchId: 'br_1', characterId: 'char_a', happeningId: 'hap_1', source: 's' },
+          payload: {
+            branchId: 'br_1',
+            characterId: 'char_a',
+            happeningId: 'hap_1',
+            source: 's',
+            proseEntryId: null,
+          },
         },
         actionId: 'act_1',
         branchId: 'br_1',
@@ -260,7 +281,13 @@ describe('happening_awareness upsert', () => {
         action: {
           kind: 'upsertHappeningAwareness',
           source: 'ai_classifier',
-          payload: { branchId: 'br_1', characterId: 'char_a', happeningId: 'hap_1', source: 's' },
+          payload: {
+            branchId: 'br_1',
+            characterId: 'char_a',
+            happeningId: 'hap_1',
+            source: 's',
+            proseEntryId: null,
+          },
         },
         actionId: 'act_1',
         branchId: 'br_1',
@@ -287,6 +314,7 @@ describe('happening_awareness upsert', () => {
             happeningId: 'hap_1',
             learnedAtEntryId: '',
             source: 's',
+            proseEntryId: null,
           },
         },
         actionId: 'act_1',
@@ -305,7 +333,12 @@ describe('happening_awareness upsert', () => {
         action: {
           kind: 'upsertHappeningAwareness',
           source: 'ai_classifier',
-          payload: { branchId: 'br_1', characterId: 'char_a', happeningId: 'hap_1' },
+          payload: {
+            branchId: 'br_1',
+            characterId: 'char_a',
+            happeningId: 'hap_1',
+            proseEntryId: null,
+          },
         },
         actionId: 'act_1',
         branchId: 'br_1',
@@ -341,6 +374,7 @@ describe('happening_awareness upsert', () => {
             characterId: 'char_a',
             happeningId: 'hap_1',
             learnedAtEntryId: 'entry_9',
+            proseEntryId: null,
           },
         },
         actionId: 'act_learned',
@@ -612,7 +646,13 @@ describe('upsertHappeningAwareness retrievalCount', () => {
     action: {
       kind: 'upsertHappeningAwareness' as const,
       source,
-      payload: { branchId: BRANCH, characterId: 'char_a', happeningId: 'hap_1', ...fields },
+      payload: {
+        branchId: BRANCH,
+        characterId: 'char_a',
+        happeningId: 'hap_1',
+        proseEntryId: null,
+        ...fields,
+      },
     },
     actionId,
     branchId: BRANCH,
@@ -791,7 +831,7 @@ describe('upsertHappeningAwareness under user precedence', () => {
   ): PipelineAction => ({
     kind: 'upsertHappeningAwareness',
     source,
-    payload: { branchId: BRANCH, characterId, happeningId: 'hap_1', ...fields },
+    payload: { branchId: BRANCH, characterId, happeningId: 'hap_1', proseEntryId: null, ...fields },
   })
   const passLearns = (characterId = 'char_a') =>
     upsert(

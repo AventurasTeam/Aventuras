@@ -28,9 +28,9 @@ type AwarenessUpsertPayload = {
   retrievalCount?: number
   /**
    * A pass's source entry (cadence.md → User edits and classifier writes): user writes after it
-   * stand. Absent or null checks nothing, as for a user write.
+   * stand. Null checks nothing, as for a user write.
    */
-  proseEntryId?: ProseEntryId
+  proseEntryId: ProseEntryId
 }
 
 declare module '@/lib/actions/action-map' {

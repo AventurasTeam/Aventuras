@@ -12,16 +12,8 @@ import {
   KIND_FIELDS,
   stories,
 } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
 import { entitiesStore } from '@/lib/stores'
-import {
-  checkParentChain,
-  PARENT_CHAIN_BROKEN,
-  PARENT_CYCLE,
-  parentIdOf,
-  parentOfLocations,
-  PLACE_REFUSAL,
-} from '@/lib/world'
+import { parentIdOf, PLACE_REFUSAL } from '@/lib/world'
 
 import { cascadedDelete } from '../delta/delete-cascade'
 import { computeUndoPayload, deepEqual } from '../delta/delta-encoding'
@@ -34,6 +26,7 @@ import {
 } from '../delta/registry'
 import type { DbCtx, DeltaSource } from '../types'
 import { entityCascade } from './entity-cascade'
+import { branchPlaces, parentChainRefusal } from './parent-chain-check'
 import {
   appendEntityKeywordsHandler,
   placeLocationHandler,
@@ -198,21 +191,9 @@ async function refuseParent(
   { refuseRetired }: { refuseRetired: boolean },
 ): Promise<HandlerOutcome | null> {
   if (proposed == null) return null
-  const rows = await ctx.db
-    .select({
-      id: entities.id,
-      kind: entities.kind,
-      state: entities.state,
-      status: entities.status,
-    })
-    .from(entities)
-    .where(and(eq(entities.branchId, branchId), eq(entities.kind, 'location')))
-  const check = checkParentChain(id, proposed, parentOfLocations(rows))
-  if (check === 'cycle') return { status: 'rejected', reason: PARENT_CYCLE, code: PARENT_CYCLE }
-  if (check === 'cap-hit') {
-    logger.error('action_layer.parent_chain_cap_hit', { branchId, id, parentId: proposed })
-    return { status: 'rejected', reason: PARENT_CHAIN_BROKEN, code: PARENT_CHAIN_BROKEN }
-  }
+  const rows = await branchPlaces(ctx, branchId)
+  const refused = parentChainRefusal(branchId, id, proposed, rows)
+  if (refused !== null) return { status: 'rejected', reason: refused, code: refused }
   if (refuseRetired && rows.find((r) => r.id === proposed)?.status === 'retired')
     return {
       status: 'rejected',

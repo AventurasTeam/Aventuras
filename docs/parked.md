@@ -1102,12 +1102,16 @@ boot-recovery window after an abort's own reversal failed
 a later turn's piggyback or a tail scene edit can name the pass's new
 character in `sceneEntities`, and recovery then reverses the create
 with no refusal. A dangling id never crashes, but the same state
-renders two ways: Overview's single-reference regions show "Entity no
-longer exists" (`refTargets` in
+renders more than one way: Overview's single-reference regions show
+"Entity no longer exists" (`refTargets` in
 `components/world/overview/overview-parts.tsx`) and the entity picker
-shows "Missing entity", while Overview's "Part of" drops a dangling
-parent silently (`locationAncestors` in `lib/world/overview.ts` skips a
-missing id). `namesId` in `lib/actions/delta/reverse-replay.ts` already
+shows "Missing entity". A dangling parent reads as unplaced on Overview,
+whose "Part of" shows `Location unknown` (`realPlacementOf` in
+`lib/world/placement.ts`), while the Connections parent picker still
+shows "⚠ Missing entity" for it (`PlacementPicker` in
+`components/world/detail/placement-field.tsx`); no writer leaves one
+any more, since a delete and a reversal mark the place unplaced.
+`namesId` in `lib/actions/delta/reverse-replay.ts` already
 walks nested payloads, so the write-back refusal covers ids in
 `state`.
 

@@ -1056,6 +1056,7 @@ describe('entityMergeActions — link rows', () => {
           decayResistance: 0.5,
           source: 'witnessed',
           retrievalCount: 7,
+          proseEntryId: null,
         },
       },
     ])

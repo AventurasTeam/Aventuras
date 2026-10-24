@@ -177,9 +177,15 @@ function awarenessUpsert(
       learnedAtEntryId: draft.learnedAtEntryId,
       decayResistance: draft.decayResistance,
       source,
+      proseEntryId: null,
     }
   }
-  const payload: AwarenessUpsert = { branchId, characterId: draft.characterId, happeningId }
+  const payload: AwarenessUpsert = {
+    branchId,
+    characterId: draft.characterId,
+    happeningId,
+    proseEntryId: null,
+  }
   let changed = false
   if (draft.learnedAtEntryId !== baseline.learnedAtEntryId) {
     payload.learnedAtEntryId = draft.learnedAtEntryId

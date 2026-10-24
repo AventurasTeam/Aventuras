@@ -29,9 +29,16 @@ for the placement rule.
   moves no more of a stackable than its payer holds. Raised 2026-10-19
   by the entity-state implementation. The AI writer map adds more
   riding on the models: the per-turn writer writes a condition only
-  when the prose changes it and puts `top` only where nothing could
-  contain a place; a pass tells a reveal from an alias and a return
-  from a memory.
+  when the prose changes it, puts `top` only where nothing could
+  contain a place, and puts an item down only when it stays there at
+  the turn's end, since a drop records where the item ends up; a pass
+  tells a reveal from an alias and a return from a memory. A pass's
+  parse rate under the larger schema needs watching too, since a pass
+  whose reply won't parse fails a Send rather than costing memory:
+  `pnpm probe:classifier` measures the first-attempt rate on a real
+  provider
+  ([`testing.md → Real-provider checks`](./testing.md#real-provider-checks)),
+  and splitting the pass into two calls is the remedy if it falls.
 
 - **Retrieval budget defaults.** The per-type budgets
   (`stories.settings.retrievalBudgets`, entities 1200) are
@@ -81,7 +88,10 @@ for the placement rule.
     stamped in its own group, anchored on its end entry (the roadmap's
     M5 notes);
   - the actions it needs and lacks: a happening merge, an earliest-wins
-    awareness merge, the per-chapter `retrieval_count` reset;
+    awareness merge, the per-chapter `retrieval_count` reset; and a
+    thread it resolves through `updateThread` keeps the
+    `resolved_at_entry_id` it had, since only a user's status change
+    clears it, so the close sets the ref itself;
   - whether a cluster it can't decide gets a review flag (happenings
     have no column for one), and what it does with a row already
     flagged;

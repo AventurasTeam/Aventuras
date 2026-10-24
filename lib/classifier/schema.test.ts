@@ -6,12 +6,15 @@ import {
   classifierExtractionWithPlacesSchema,
   classifierReplySchema,
   newPlacesOf,
+  readClassifierReply,
+  type ParsedClassifierReply,
 } from './schema'
 
 type JsonNode = {
   properties?: Record<string, JsonNode>
   items?: JsonNode
   description?: string
+  required?: string[]
 }
 const jsonOf = (schema: z.ZodType) => z.toJSONSchema(schema) as JsonNode
 const itemFields = (list: string) =>
@@ -244,13 +247,23 @@ describe('classifierExtractionSchema — the writer map', () => {
     },
   } as const
 
+  // classifier.md → Failure policy: the model is told every key, and a reply is read leniently.
   it.each(Object.entries(REQUIRED_KEYS))(
-    'takes a %s entry whole and refuses it missing any required key',
+    'asks for every required key of a %s entry, and drops one missing any, counted',
     (list, { item, keys }) => {
-      expect(classifierExtractionSchema.safeParse({ [list]: [item] }).success, 'whole').toBe(true)
+      expect(jsonOf(classifierExtractionSchema).properties?.[list]?.items?.required).toEqual(
+        expect.arrayContaining([...keys]),
+      )
+      const read = (entries: unknown[]) =>
+        readClassifierReply(classifierExtractionSchema.parse({ [list]: entries }))
+      expect(read([item]).reply[list as keyof typeof REQUIRED_KEYS], 'whole').toHaveLength(1)
       for (const key of keys) {
         const { [key as keyof typeof item]: _dropped, ...rest } = item
-        expect(classifierExtractionSchema.safeParse({ [list]: [rest] }).success, key).toBe(false)
+        const { reply, malformed } = read([rest, item])
+        expect(reply[list as keyof typeof REQUIRED_KEYS], key).toEqual([
+          expect.objectContaining(item),
+        ])
+        expect(malformed, key).toEqual([{ list, count: 1 }])
       }
     },
   )
@@ -273,7 +286,7 @@ describe('classifierExtractionSchema — the writer map', () => {
             status,
           })),
         })
-        .newThreads.map((t) => t.status),
+        .newThreads.map((t) => t?.status),
     ).toEqual(['pending', 'active', 'resolved', 'failed'])
     expect(
       classifierExtractionSchema.parse({
@@ -281,9 +294,15 @@ describe('classifierExtractionSchema — the writer map', () => {
       }).newThreads,
     ).toEqual([{ ...thread, status: 'resolved', sourceTurn: 't1', resolvedAtTurn: 't4' }])
     expect(
-      classifierExtractionSchema.safeParse({ newThreads: [{ ...thread, status: 'paused' }] })
-        .success,
-    ).toBe(false)
+      readClassifierReply(
+        classifierExtractionSchema.parse({
+          newThreads: [
+            { ...thread, status: 'paused' },
+            { ...thread, status: 'on hold' },
+          ],
+        }),
+      ),
+    ).toMatchObject({ reply: { newThreads: [] }, malformed: [{ list: 'newThreads', count: 2 }] })
     expect(
       classifierExtractionSchema
         .parse({
@@ -293,13 +312,18 @@ describe('classifierExtractionSchema — the writer map', () => {
             { thread: 'th3', status: 'active' },
           ],
         })
-        .threadStatuses.map((t) => t.status),
+        .threadStatuses.map((t) => t?.status),
     ).toEqual(['resolved', 'failed', 'active'])
     expect(
-      classifierExtractionSchema.safeParse({
-        threadStatuses: [{ thread: 'th1', status: 'pending' }],
-      }).success,
-    ).toBe(false)
+      readClassifierReply(
+        classifierExtractionSchema.parse({
+          threadStatuses: [{ thread: 'th1', status: 'pending' }],
+        }),
+      ),
+    ).toMatchObject({
+      reply: { threadStatuses: [] },
+      malformed: [{ list: 'threadStatuses', count: 1 }],
+    })
   })
 
   it('tells the model when a new thread may be resolved or failed, and which turn is which', () => {
@@ -377,6 +401,152 @@ describe('classifierExtractionWithPlacesSchema', () => {
   })
 })
 
+// classifier.md → Failure policy: a failed parse fails the pass, so these read as absent.
+describe('optional profile and plot fields the model fills wrongly', () => {
+  const ITEMS = {
+    newCharacters: { handle: 'new:mira', name: 'Mira', description: 'A ferrywoman.' },
+    newFactions: { handle: 'new:circle', name: 'The Iron Circle', description: 'Smiths.' },
+    happenings: { title: 'The ford ambush' },
+    newThreads: { title: 'Recover the relic', description: 'Stolen.', status: 'resolved' },
+    newPlaces: { handle: 'new:varn', name: 'Varn', description: 'A salt town.' },
+  } as const
+  type List = keyof typeof ITEMS
+  const FIELDS: [List, string][] = [
+    ['newCharacters', 'visual'],
+    ['newCharacters', 'traits'],
+    ['newCharacters', 'drives'],
+    ['newCharacters', 'voice'],
+    ['newFactions', 'standing'],
+    ['newFactions', 'agenda'],
+    ['happenings', 'category'],
+    ['happenings', 'icon'],
+    ['newThreads', 'category'],
+    ['newThreads', 'icon'],
+    ['newThreads', 'resolvedAtTurn'],
+    ['newPlaces', 'condition'],
+  ]
+  const parsedItem = (list: List, item: Record<string, unknown>) => {
+    const result = classifierExtractionWithPlacesSchema.safeParse({ [list]: [item] })
+    expect(result.success).toBe(true)
+    return (result.data?.[list] as Record<string, unknown>[] | undefined)?.[0]
+  }
+
+  it.each(FIELDS)('reads a null %s %s as absent, keeping the entry', (list, field) => {
+    const item = parsedItem(list, { ...ITEMS[list], [field]: null })
+    expect(item).toMatchObject(ITEMS[list])
+    expect(item?.[field]).toBeUndefined()
+  })
+
+  it.each(FIELDS)('reads a %s %s of the wrong type as absent', (list, field) => {
+    const wrong = field === 'traits' || field === 'drives' || field === 'agenda' ? 'one' : [1]
+    expect(parsedItem(list, { ...ITEMS[list], [field]: wrong })?.[field]).toBeUndefined()
+  })
+
+  it.each(['physique', 'face', 'hair', 'eyes', 'attire', 'distinguishing'])(
+    "reads a null visual %s as absent, keeping the character's other categories",
+    (key) => {
+      const other = key === 'eyes' ? 'hair' : 'eyes'
+      const item = parsedItem('newCharacters', {
+        ...ITEMS.newCharacters,
+        visual: { [key]: null, [other]: 'grey' },
+      })
+      expect(item?.visual).toEqual({ [other]: 'grey' })
+    },
+  )
+})
+
+// classifier.md → Failure policy: the writer map's lists drop an entry that doesn't fit alone.
+describe('an entry of a writer-map list that does not fit', () => {
+  const MALFORMED = {
+    renames: { ref: 'c1', name: 7 },
+    placements: { ref: 'l2', parent: ['l1'] },
+    standings: { ref: 'f1' },
+    newThreads: { title: 'Recover the relic', description: 'Stolen.', status: 'paused' },
+    threadStatuses: { thread: 'th1', status: 'pending' },
+    knownAwareness: { happening: 'hp1', ref: 'c2', source: 'told', severity: 'high' },
+  } as const
+  const WELL_FORMED = {
+    renames: { ref: 'c2', name: 'Mira' },
+    placements: { ref: 'l3', parent: 'l1' },
+    standings: { ref: 'f2', standing: 'outlawed' },
+    newThreads: { title: 'Find the ford', description: 'Lost.', status: 'active' },
+    threadStatuses: { thread: 'th2', status: 'resolved' },
+    knownAwareness: { happening: 'hp2', ref: 'c3', source: 'saw it', severity: 0 },
+  } as const
+  type List = keyof typeof MALFORMED
+
+  it.each(Object.keys(MALFORMED) as List[])(
+    'drops a malformed %s entry alone, counted, and keeps the rest of the reply',
+    (list) => {
+      const parsed = classifierExtractionWithPlacesSchema.safeParse({
+        [list]: [MALFORMED[list], WELL_FORMED[list], 'not an entry'],
+        relationships: [{ subject: 'c1', object: 'c2', kind: 'trusts' }],
+      })
+      expect(parsed.success).toBe(true)
+      const { reply, malformed } = readClassifierReply(parsed.data!)
+      expect(reply[list]).toEqual([WELL_FORMED[list]])
+      expect(reply.relationships).toHaveLength(1)
+      expect(malformed).toEqual([{ list, count: 2 }])
+    },
+  )
+
+  // Q28: a status the model capitalised or padded lands; one outside the list still drops.
+  it('reads a status trimmed and case-folded, and still drops one outside the list', () => {
+    const thread = { title: 'Recover the relic', description: 'Stolen.' }
+    const { reply, malformed } = readClassifierReply(
+      classifierExtractionSchema.parse({
+        newThreads: [
+          { ...thread, status: 'Resolved' },
+          { ...thread, status: ' ACTIVE ' },
+        ],
+        threadStatuses: [
+          { thread: 'th1', status: 'Failed' },
+          { thread: 'th2', status: 'Pending' },
+        ],
+      }),
+    )
+    expect(reply.newThreads.map((t) => t.status)).toEqual(['resolved', 'active'])
+    expect(reply.threadStatuses).toEqual([{ thread: 'th1', status: 'failed' }])
+    expect(malformed).toEqual([{ list: 'threadStatuses', count: 1 }])
+  })
+
+  it('reads a null field as absent before it judges the entry', () => {
+    const { reply, malformed } = readClassifierReply(
+      classifierExtractionSchema.parse({
+        renames: [{ ref: 'c1', name: 'Mira', sourceTurn: null }],
+        threadStatuses: [{ thread: 'th1', status: 'failed', sourceTurn: null }],
+        standings: [{ ref: 'f1', standing: null }],
+      }),
+    )
+    expect(reply.renames).toEqual([{ ref: 'c1', name: 'Mira' }])
+    expect(reply.threadStatuses).toEqual([{ thread: 'th1', status: 'failed' }])
+    expect(malformed).toEqual([{ list: 'standings', count: 1 }])
+  })
+
+  it('reads a null list as empty, and still fails a null older list', () => {
+    const lists = Object.fromEntries(Object.keys(MALFORMED).map((list) => [list, null]))
+    const parsed = classifierExtractionSchema.safeParse(lists)
+    expect(parsed.success).toBe(true)
+    const { reply, malformed } = readClassifierReply(parsed.data!)
+    for (const list of Object.keys(MALFORMED) as List[]) expect(reply[list], list).toEqual([])
+    expect(malformed).toEqual([])
+    expect(classifierExtractionSchema.safeParse({ statusFlips: null }).success).toBe(false)
+  })
+
+  it('counts nothing for a reply whose entries all fit', () => {
+    const lists = Object.fromEntries(
+      Object.entries(WELL_FORMED).map(([list, entry]) => [list, [entry]]),
+    )
+    expect(readClassifierReply(classifierExtractionSchema.parse(lists)).malformed).toEqual([])
+  })
+
+  it('still fails the reply on a malformed entry of an older list', () => {
+    expect(
+      classifierExtractionSchema.safeParse({ statusFlips: [{ ref: 'c1', to: 'staged' }] }).success,
+    ).toBe(false)
+  })
+})
+
 describe('classifierReplySchema', () => {
   it('asks for places only with the setting on', () => {
     expect(classifierReplySchema(true)).toBe(classifierExtractionWithPlacesSchema)
@@ -385,9 +555,9 @@ describe('classifierReplySchema', () => {
 
   it('reads a reply under either schema as its new places', () => {
     const place = { handle: 'new:varn', name: 'Varn', description: '', keywords: [] }
-    expect(newPlacesOf(classifierExtractionWithPlacesSchema.parse({ newPlaces: [place] }))).toEqual(
-      [place],
-    )
-    expect(newPlacesOf(classifierExtractionSchema.parse({ newPlaces: [place] }))).toEqual([])
+    const read = (schema: z.ZodType<ParsedClassifierReply>) =>
+      newPlacesOf(readClassifierReply(schema.parse({ newPlaces: [place] })).reply)
+    expect(read(classifierExtractionWithPlacesSchema)).toEqual([place])
+    expect(read(classifierExtractionSchema)).toEqual([])
   })
 })

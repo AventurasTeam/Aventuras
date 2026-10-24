@@ -203,7 +203,7 @@ describe('wrotePlacement', () => {
   })
 })
 
-// cadence.md → User edits and classifier writes: parent and unplaced mark are one field.
+// generation-pipeline.md → Reverse-replay: parent and unplaced mark are one field.
 describe('wroteField', () => {
   const update = (undoPayload: Record<string, unknown>) => ({ op: 'update', undoPayload }) as Delta
   const markedTop = [update({ state: { unplaced: true } })]
@@ -226,7 +226,7 @@ describe('wroteField', () => {
     expect(wroteField(moved, 'entities', 'description', ['parent_location_id'])).toBe(false)
   })
 
-  // data-model.md → Authorship contract: flag, partner and reason hold together (the table's CHECK).
+  // edge-cases.md → Schema: flag, partner and reason hold together (the table's CHECK).
   it.each([['nameCollisionFlag'], ['nameCollisionPartnerId'], ['nameCollisionReason']])(
     "reads a user write to any of a row's collision-flag columns as a write to %s",
     (column) => {

@@ -940,12 +940,13 @@ slice-planning gate forces its resolution before that slice is planned.
   Raised 2026-10-23 by the AI writer map's Q19.
 
 - **An unattributed pass fact isn't always re-derivable.**
-  [`memory/classifier.md`](../memory/classifier.md)'s provenance list
+  [`classifier.md → Provenance attribution`](../memory/classifier.md#provenance-attribution)
   says a fact that falls back to the window head "reverses on any
   reversal into its window (re-derivable)". When its real source turn
   sits below the reversal point, the watermark clamps to that point
-  minus one ([`data-model.md`](../data-model.md), the watermark
-  clamp), so the source turn is never re-read and the fact is lost.
+  minus one
+  ([`data-model.md → Survival anchor`](../data-model.md#survival-anchor)),
+  so the source turn is never re-read and the fact is lost.
   Since the AI writer map, an unattributed thread a pass opens and
   closes is one such fact. Raised 2026-10-23 by the AI writer map's
   Task 20 review.
@@ -957,6 +958,93 @@ slice-planning gate forces its resolution before that slice is planned.
   the drop lists, `planned`), so a split wants a shared planner
   context rather than more closures. Raised 2026-10-23 by the AI
   writer map's Task 20 review.
+
+  The planner also plans the reply list by list, each list judged
+  against what the earlier lists planned as though it landed, where
+  canon checks a fact against what earlier facts in the reply changed
+  ([`classifier.md → What the classifier writes`](../memory/classifier.md#what-the-classifier-writes)).
+  Two facts about one row, from different turns and in different
+  lists, can then be judged in the wrong order. The AI writer map's
+  slice review fixed one case: a mentioned place's matching now sees
+  the placements of its turn and earlier ones, so the reply no longer
+  folds two places into one. The rest waits for per-row planning in
+  turn order across lists, one queue of each row's facts each judged
+  against the state after the earlier ones (the review's option A),
+  which the split is the moment for:
+  - **A rename against a placement.** Renames plan after every
+    placement, so a turn-1 rename is judged where a turn-3 move leaves
+    the place. When a user edit refuses the move as it lands, the
+    rename has already become a `name-taken` clash, and the flag lands
+    across different parents. Option A fixes it.
+  - **A create against a rename.** Creates plan before renames, so a
+    turn-1 rename of the old mill to "Varn" and a turn-3 mention of a
+    new "Varn" in the same region create a second "Varn" and flag the
+    mill, where successive passes would reuse the renamed mill. Option
+    A fixes it.
+  - **A promote against a retire.** A staged character a turn-3
+    mention promotes is promoted before a turn-1 retire is judged, so
+    the retire becomes plannable: the character is promoted, then
+    retired, where successive passes would only promote it. Option A
+    fixes it.
+  - **A new place waiting for a later turn's parent.** New places settle
+    in turn order, but each waits for its own parent, so a turn-1 place
+    under a new place of turn 3 settles after it. It then matches
+    against the placements of turns up to its parent's and counts later
+    turns' new places as its earlier creates: a turn-1 Cellar under a
+    turn-3 Loft takes over a turn-2 unplaced Cellar, a turn-1 write on a
+    row turn 2 creates, under a parent turn 3 creates. Per-row planning
+    alone doesn't give a turn-1 place a turn-3 parent; the likely fix
+    creates it unplaced at its own turn and places it at its parent's.
+  - **A twin across a placement.** Two new places with one name and
+    declared parent map to the first before any other match, even when
+    a placement of a turn between them moved the first one's row: a
+    turn-1 "Cellar" under the Keep reuses and places the unplaced
+    cellar, a turn-2 placement moves it under the Inn, and a turn-3
+    "Cellar" under the Keep, carrying "the vault", maps to it. That is a
+    silent mis-merge: the keyword lands on the moved row and the Keep's
+    cellar is never created, where successive passes would create it
+    anew under the Keep. The developer kept the twin rule as settled;
+    a fix needs option A and a twin keyed on where the first one's row
+    sits by then, which reopens the twin of a create a takeover placed.
+  - **Two renames to one name, the first refused.** When a user edit
+    refuses the first rename as it lands, the second, planned as a
+    clash against it, writes only a keyword and its flag is refused,
+    so the revealed name is lost. Option A leaves this one, since
+    canon's two-layer check lets a planned write be refused when it
+    lands; its fix is writing the clash outcome at write time, the
+    alternative to the rename's write-time no-op.
+
+  Raised 2026-10-24 by the AI writer map's slice review.
+
+- **The pass's older lists still fail on one malformed entry.**
+  Since the AI writer map, an entry of the lists it added (renames,
+  placements, standings, new threads, thread statuses, known
+  awareness) that doesn't fit is dropped alone and logged
+  ([`classifier.md → Failure policy`](../memory/classifier.md#failure-policy)).
+  The older lists in `lib/classifier/schema.ts` (happenings with their
+  involvements and awareness, relationships, status flips, new
+  characters, new factions, memberships, aliases and new places) still
+  fail the whole reply on one, so the pass and the Send behind it fail
+  until a retry parses: a `statusFlips` entry naming `staged`, or a new
+  character without a description. Wrapping their entries in
+  `tolerantList` would close it, and a blank-named create or a dropped
+  happening then needs the same logging its planner gives the new
+  lists. Raised 2026-10-24 by the AI writer map's slice review.
+
+- **A row placed under a new place reads as unplaced to matching.**
+  `matchNewPlace` (`lib/world/new-entity-match.ts`) reads placements
+  through `realPlacementOf` over the stored rows only, so a stored row
+  this reply places under a place it creates looks unplaced (its parent
+  names no stored place), and a later new place of its name reuses it
+  and moves it. A reply with "Cellar" under the Inn at turn 2, then "the
+  Old Cellar" under that new Cellar and "the Old Cellar" under the Inn
+  at turn 3, places the stored unplaced Old Cellar under the new Cellar;
+  the second "the Old Cellar" then reuses it, adding its keywords and
+  moving it under the Inn, where successive passes create a second Old
+  Cellar flagged `same-parent`.
+  Reading the reply's creates in that placement view would close it.
+  Predates the AI writer map's follow-up; raised 2026-10-24 by its
+  re-review.
 
 - **Two structured-call phases never report their retries.**
   [`generation-pipeline.md → Two retry tiers`](../generation-pipeline.md#two-retry-tiers-both-at-phase-level)
@@ -978,8 +1066,8 @@ slice-planning gate forces its resolution before that slice is planned.
 - **A pass's rename can leave a collision flag with no namesake
   basis.** `renameEntity` (`lib/actions/entities/state-patch-actions.ts`)
   writes no flag columns, and
-  [`world.md`](../ui/screens/world/world.md)'s rule for keeping flags
-  consistent lists only user writes. A row flagged against a namesake
+  [`world.md → Surfacing`](../ui/screens/world/world.md#surfacing)'s
+  rule for keeping flags consistent lists only user writes. A row flagged against a namesake
   that a pass then renames to an unrelated name keeps its old name as a
   keyword, but the namesake match is exact (`lib/world/namesakes.ts`),
   so the pair stops being namesakes while World still shows the strip.
@@ -1001,3 +1089,86 @@ slice-planning gate forces its resolution before that slice is planned.
   and a reused place's keywords in the same reply (`planNewPlaces`
   still appends those at the match, before the turn-ordered writes).
   Raised 2026-10-24 by the AI writer map's branch review (Q25).
+
+- **The seen-before-written set mirrors the bundled templates.**
+  `shownWithState` in `lib/pipeline/definitions/generation-context.ts`
+  builds the ids a per-turn condition may land on from the rows the
+  bundled per-turn and fallback templates render with their state. A
+  pack template that renders state for other rows, or hides it for
+  some, drifts from that set: a condition is refused for a row the
+  model was shown, or lands on one it wasn't. Gating the set's sources
+  on the template's `reads`, or deriving it from the rendered prompt,
+  would close it. Raised 2026-10-23 by the AI writer map's Task 12
+  review; filed by its slice review.
+
+- **A cast row's dangling faction selects nothing.** In
+  `components/wizard/cast-editors.tsx`, a character whose `factionId`
+  names no cast faction (a resumed draft whose faction row failed its
+  parse: `salvageRows` in `lib/actions/wizard/session.ts` drops the row
+  and leaves the reference) shows its faction picker with nothing
+  selected, while Finish commits it Unaffiliated (`castRef` in
+  `components/wizard/finish.ts`). The location picker now reads such a
+  parent as `Unknown` through `castPlacement`; the faction picker has no
+  equivalent. Predates the AI writer map; raised 2026-10-24 by its
+  slice review.
+
+- **The cast parent picker's empty state can mislead.** When every
+  other cast place would close a loop, `parentCandidates`
+  (`components/wizard/cast-editors.tsx`) offers none, and the picker
+  shows `wizard:cast.editor.noLocationsYet`, "(no locations yet — add
+  one with + Add)", although the cast holds places. Predates the AI
+  writer map; raised 2026-10-24 by its slice review.
+
+- **Two pass diagnostics that predate the AI writer map.** In
+  `lib/classifier/plan.ts`, a `happenings` entry with a blank title is
+  skipped with no log, while a blank `newThreads` title now logs
+  `classifier.create_dropped`. And a known (absorbed) mention takes its
+  survival anchor before the planner knows whether any of its terms
+  write, so an unattributed one that writes nothing still counts a
+  `classifier.window_head_fallback`. Raised 2026-10-24 by the AI writer
+  map's slice review.
+
+- **A release from a non-holder still writes the holder's inventory.**
+  `release` in `lib/piggyback/apply.ts` emits an
+  `updateEntityInventory` with unchanged arrays when the character
+  doesn't hold the item. Since the AI writer map the fallback's
+  carry-over no longer counts such a move as landed, but the empty
+  write still reaches the delta log's handler. Predates the AI writer
+  map; raised 2026-10-24 by its slice review.
+
+- **A World E2E spec re-checks the delete dialog's copy.**
+  `e2e/tests/world-delete-undo.spec.ts` (≈:187-188) asserts
+  `world:delete.awareness` and `world:delete.tailScene` text in the
+  confirm, which Storybook owns
+  ([`testing.md → Test taxonomy`](../testing.md#test-taxonomy): E2E "does not re-verify
+  rendering"). The AI writer map dropped the same kind of check from
+  its own specs. Predates it; raised 2026-10-24 by its slice review.
+
+- **The AI writer map's code-quality leftovers.** Its slice review's
+  simplifier pass skipped these, each needing a home or a design call
+  outside the slice's files:
+  - `hooks/use-story-place.ts` builds a new value on every entries-store
+    change; the review stabilised its one consumer
+    (`components/world/use-collision-resolve.ts`) instead of the hook.
+  - `PlacementPicker` (`components/world/detail/placement-field.tsx`)
+    copies `EntityPicker`'s row markup; sharing it means exporting a
+    row component from `components/compounds/entity-picker.tsx`.
+  - `components/ui/select.tsx` exports `resolveMode` for the cast
+    editor's reserved `Unknown` slot; dropping the export needs `Select`
+    to take a mode for a wider option list.
+  - Seeded ids use two hashes: the dataset's `canonicalSeedId` and
+    `seedUnplacedPlace`'s UUIDv5 (`e2e/harness/seed.ts`); one hash
+    needs `canonicalSeedId` exported from `lib/db` and a throw where it
+    returns null.
+  - The narrow actions in `lib/actions/entities/state-patch-actions.ts`
+    each repeat a kind check, a branch check and a row load; a shared
+    opening needs typing over every action kind. `setThreadStatus`
+    (`lib/actions/threads/register.ts`) still picks `wroteThreadStatus`
+    by hand where the entity handlers now go through `wroteField`, and
+    the other domains (relationships, threads, happenings, lore) spell
+    their noop refusals out in full.
+  - `buildStatePatchOutcome` merges a state patch without validating
+    the result, so each condition writer bounds its text itself;
+    validating the merged state once would cover every writer.
+
+  Raised 2026-10-24 by the AI writer map's slice review.

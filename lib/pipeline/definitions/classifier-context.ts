@@ -122,7 +122,7 @@ export function buildClassifierContext(args: {
       location:
         t.currentLocationId != null && known.has(t.currentLocationId) ? t.currentLocationId : null,
     })),
-    happenings: happenings.map((h) => ({ id: h.id, title: h.title })),
+    happenings: happenings.map((h) => ({ id: h.id, title: flat(h.title) })),
     threads: threads.map((t) => ({ id: t.id, title: flat(t.title), status: t.status })),
     relationships: projectRelationships(relationships, entities),
     mentionedPlaces,

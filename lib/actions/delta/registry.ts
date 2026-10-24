@@ -96,8 +96,8 @@ export type DomainRegistration = {
   patcher?: StorePatcher
   cascade?: Cascade
   /**
-   * Row exists while any of these is non-null; a reversal nulling them all deletes it instead.
-   * No other invariant may span columns. See `docs/generation-pipeline.md` → Reverse-replay.
+   * Row exists while any is non-null; a reversal nulling them all deletes it. Another invariant
+   * spanning columns needs a one-field group: `docs/generation-pipeline.md` → Reverse-replay.
    */
   rowKeepingColumns?: readonly [string, ...string[]]
 }

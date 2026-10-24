@@ -53,7 +53,7 @@ export type ParsedTransfers = {
   drops: ItemDrop[]
 }
 
-/** `parent`: a placeholder, a handle or `top` as emitted; an id or `TOP_LEVEL` substituted. */
+/** `parent`: a placeholder, handle or `top` as emitted; substituted, see SubstitutedStateBlock. */
 export type NewLocationEmission = {
   handle: string
   name: string
@@ -86,8 +86,9 @@ export type ParsedStateBlock = {
 export type NormalizedStateBlock = ParsedStateBlock & { readonly __brand: 'NormalizedStateBlock' }
 
 /**
- * Entity-id placeholders; refs name only ids or declared handles (a create's `parent` may also be
- * `TOP_LEVEL`), a transfer's item only an item. Minted only by `substitutePiggybackIds`.
+ * Placeholders swapped for ids: refs name only ids or declared handles, a transfer's item an item.
+ * A create's `parent` may also be `TOP_LEVEL` or a raw undeclared/unresolved ref, which the planner
+ * drops as `unresolved`. Minted only by `substitutePiggybackIds`.
  */
 export type SubstitutedStateBlock = ParsedStateBlock & { readonly __brand: 'SubstitutedStateBlock' }
 
@@ -101,12 +102,16 @@ export type ParseStateBlockResult = {
   blockFound: boolean
   /** Creates dropped as malformed, or opened and never closed; 0 when the block was not found. */
   malformedCreates: number
+  /** `<drop>`s that name a `to`, as emitted and kept out of the block: an item put down somewhere
+   *  else than the scene stays prose. */
+  dropsElsewhere: { id: string; to: string }[]
 }
 
 type StateReport = NonNullable<EntryMetadata['stateReport']>
 /** A `<new_location>`'s outcome; `parent`: id, `top`, as emitted if dropped, none if unplaced. */
 export type NewLocationReport = NonNullable<StateReport['newLocations']>[number]
 export type NewItemReport = NonNullable<StateReport['newItems']>[number]
+export type ReportedDrop = NonNullable<NonNullable<StateReport['transfers']>['drops']>[number]
 export type TurnCreatesReport = { newLocations: NewLocationReport[]; newItems: NewItemReport[] }
 
 /**

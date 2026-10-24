@@ -26,9 +26,9 @@ function abortableDelay(ms: number, signal: AbortSignal): Promise<'elapsed' | 'a
 }
 
 export type CallWithRetryResult<T> =
-  | { status: 'ok'; result: T; recoverable: CallRetryError[] }
-  | { status: 'failed'; error: CallRetryError; recoverable: CallRetryError[] }
-  | { status: 'aborted'; recoverable: CallRetryError[] }
+  | { status: 'ok'; result: T; recoverable: readonly CallRetryError[] }
+  | { status: 'failed'; error: CallRetryError; recoverable: readonly CallRetryError[] }
+  | { status: 'aborted'; recoverable: readonly CallRetryError[] }
 
 type CallWithRetryOpts = {
   maxProviderAttempts: number

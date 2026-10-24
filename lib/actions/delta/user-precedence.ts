@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gt, inArray, or, sql } from 'drizzle-orm'
 
-import { chunked, deltas, type Delta } from '@/lib/db'
+import { chunked, deltas, type Delta, type Entity, type LocationState, type Thread } from '@/lib/db'
 
 import { isUserOriginatedSource, type DbCtx } from '../types'
 import { isPlainObject } from './delta-encoding'
@@ -174,51 +174,54 @@ export function wroteColumn(edits: readonly Delta[], column: string): boolean {
   return wrotePath(edits, column, [])
 }
 
+/** A place's parent and unplaced mark: one field to user precedence and to an undo alike. */
+export const PLACEMENT_PATHS: readonly string[] = [
+  'parent_location_id',
+  'unplaced',
+] satisfies readonly (keyof LocationState)[]
+
 /**
  * A user edit wrote a place's parent or unplaced flag, which only sits beside a null parent
  * (data-model.md → LocationState shape).
  */
 export function wrotePlacement(edits: readonly Delta[]): boolean {
-  return (
-    wrotePath(edits, 'state', ['parent_location_id']) || wrotePath(edits, 'state', ['unplaced'])
-  )
+  return PLACEMENT_PATHS.some((key) => wrotePath(edits, 'state', [key]))
 }
-
-const PLACEMENT_PATHS: readonly string[] = ['parent_location_id', 'unplaced']
 
 const COLLISION_FLAG_COLUMNS: readonly string[] = [
   'nameCollisionFlag',
   'nameCollisionPartnerId',
   'nameCollisionReason',
-]
+] satisfies readonly (keyof Entity)[]
 
-/**
- * A user edit wrote an entity's collision flag, partner or reason, which the table's CHECK holds
- * together (data-model.md → Authorship contract).
- */
-export function wroteCollisionFlag(edits: readonly Delta[]): boolean {
+/** A user edit wrote an entity's collision flag, partner or reason, which the table's CHECK holds
+ *  together (edge-cases.md → Schema). */
+function wroteCollisionFlag(edits: readonly Delta[]): boolean {
   return COLLISION_FLAG_COLUMNS.some((column) => wroteColumn(edits, column))
 }
 
-const RETIREMENT_COLUMNS: readonly string[] = ['status', 'retiredReason']
+const RETIREMENT_COLUMNS: readonly string[] = [
+  'status',
+  'retiredReason',
+] satisfies readonly (keyof Entity)[]
 
 /** A user edit wrote an entity's status or retired reason (data-model.md → Authorship contract). */
-export function wroteRetirement(edits: readonly Delta[]): boolean {
+function wroteRetirement(edits: readonly Delta[]): boolean {
   return RETIREMENT_COLUMNS.some((column) => wroteColumn(edits, column))
 }
 
-const THREAD_STATUS_COLUMNS: readonly string[] = ['status', 'resolvedAtEntryId']
+const THREAD_STATUS_COLUMNS: readonly string[] = [
+  'status',
+  'resolvedAtEntryId',
+] satisfies readonly (keyof Thread)[]
 
 /** A user edit wrote a thread's status or resolved-at entry (classifier.md → Threads → The row). */
 export function wroteThreadStatus(edits: readonly Delta[]): boolean {
   return THREAD_STATUS_COLUMNS.some((column) => wroteColumn(edits, column))
 }
 
-/**
- * wrotePath, but a place's parent and unplaced mark, an entity's collision columns, an entity's
- * status and retired reason, and a thread's status and entry ref each count as one field
- * (cadence.md → User edits and classifier writes).
- */
+/** wrotePath, but each column group above (placement, collision flag, retirement, thread status)
+ *  counts as one field (generation-pipeline.md → Reverse-replay). */
 export function wroteField(
   edits: readonly Delta[],
   table: string,

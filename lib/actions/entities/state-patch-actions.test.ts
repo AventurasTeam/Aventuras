@@ -7,6 +7,7 @@ import {
   entities,
   entityStateSchemaForKind,
   stories,
+  storyEntries,
   type CharacterState,
   type Entity,
   type LocationState,
@@ -72,10 +73,47 @@ const NO_CHARACTER_STATE = {
   lastSeenAt: null,
 }
 
-async function rowFor(db: Awaited<ReturnType<typeof setup>>['db'], id: string) {
+type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
+type StateDb = Awaited<ReturnType<typeof setup>>['db']
+
+async function rowFor(db: StateDb, id: string) {
   const [r] = await db.select().from(entities).where(eq(entities.id, id))
   return r
 }
+
+const apply = (ctx: Ctx, action: PipelineAction, actionId: string) =>
+  applyDeltaAction({ action, actionId, branchId: 'br_1' }, ctx)
+
+const create = (ctx: Ctx, entry: NewEntity) =>
+  apply(ctx, { kind: 'createEntity', source: 'user_edit', payload: { entry } }, 'act_c')
+
+const userPatch = (patch: Record<string, unknown>): PipelineAction => ({
+  kind: 'updateEntity',
+  source: 'user_edit',
+  payload: { branchId: 'br_1', id: 'char_1', patch },
+})
+
+// cadence.md → User edits and classifier writes: the entry a pass's write rests on.
+const writeProseEntry = (ctx: Ctx, id: string, content: string) =>
+  apply(
+    ctx,
+    {
+      kind: 'createStoryEntry',
+      source: 'ai_classifier',
+      payload: {
+        entry: { id, branchId: 'br_1', position: 1, kind: 'ai_reply', content, createdAt: 1 },
+      },
+    },
+    'act_prose',
+  )
+
+const noopBecause = (reason: string) => ({ status: 'rejected', reason, code: 'noop' })
+const userWonOver = noopBecause(USER_EDITED_SINCE_PROSE)
+
+const undoPayloadsOf = async (db: StateDb, actionId: string) =>
+  (await db.select().from(deltas).where(eq(deltas.actionId, actionId))).map((d) => d.undoPayload)
+const undoPayloadOf = async (db: StateDb, actionId: string) =>
+  (await undoPayloadsOf(db, actionId))[0]
 
 describe('updateEntityVisualState', () => {
   it('merges only the given visual sub-fields, leaving siblings and other state keys untouched', async () => {
@@ -542,20 +580,6 @@ describe('promoteStagedEntity', () => {
   })
 })
 
-type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
-
-const apply = (ctx: Ctx, action: PipelineAction, actionId: string) =>
-  applyDeltaAction({ action, actionId, branchId: 'br_1' }, ctx)
-
-const create = (ctx: Ctx, entry: NewEntity) =>
-  apply(ctx, { kind: 'createEntity', source: 'user_edit', payload: { entry } }, 'act_c')
-
-const userPatch = (patch: Record<string, unknown>): PipelineAction => ({
-  kind: 'updateEntity',
-  source: 'user_edit',
-  payload: { branchId: 'br_1', id: 'char_1', patch },
-})
-
 describe('appendEntityKeywords', () => {
   const append = (keywords: string[]): PipelineAction => ({
     kind: 'appendEntityKeywords',
@@ -722,25 +746,7 @@ describe('retireEntity', () => {
 // cadence.md → User edits and classifier writes: user edits after the prose win.
 describe('user edits newer than the prose', () => {
   const PROSE = 'e_prose'
-  const writeProse = (ctx: Ctx) =>
-    apply(
-      ctx,
-      {
-        kind: 'createStoryEntry',
-        source: 'ai_classifier',
-        payload: {
-          entry: {
-            id: PROSE,
-            branchId: 'br_1',
-            position: 1,
-            kind: 'ai_reply',
-            content: 'Kael fell at the ford.',
-            createdAt: 1,
-          },
-        },
-      },
-      'act_prose',
-    )
+  const writeProse = (ctx: Ctx) => writeProseEntry(ctx, PROSE, 'Kael fell at the ford.')
   const retire: PipelineAction = {
     kind: 'retireEntity',
     source: 'periodic_classifier',
@@ -757,14 +763,13 @@ describe('user edits newer than the prose', () => {
     payload: { branchId: 'br_1', id: 'char_1', keywords, proseEntryId: PROSE },
   })
   const RETIRED = { ...CHAR, status: 'retired' as const, retiredReason: 'lost' }
-  const userWon = { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
 
   it('keeps a revive the user made after the prose', async () => {
     const { db, ctx } = await setup()
     await create(ctx, RETIRED)
     await writeProse(ctx)
     await apply(ctx, userPatch({ status: 'active' }), 'act_u')
-    expect(await apply(ctx, retire, 'act_r')).toEqual(userWon)
+    expect(await apply(ctx, retire, 'act_r')).toEqual(userWonOver)
     expect((await rowFor(db, 'char_1')).status).toBe('active')
   })
 
@@ -794,7 +799,7 @@ describe('user edits newer than the prose', () => {
     await create(ctx, { ...CHAR, status: 'active' })
     await writeProse(ctx)
     await apply(ctx, userPatch({ status: 'staged' }), 'act_u')
-    expect(await apply(ctx, promote, 'act_p')).toEqual(userWon)
+    expect(await apply(ctx, promote, 'act_p')).toEqual(userWonOver)
     expect((await rowFor(db, 'char_1')).status).toBe('staged')
   })
 
@@ -821,7 +826,7 @@ describe('user edits newer than the prose', () => {
     await create(ctx, { ...CHAR, keywords: ['the knight', 'the drunk'] })
     await writeProse(ctx)
     await apply(ctx, userPatch({ keywords: ['the knight'] }), 'act_u')
-    expect(await apply(ctx, append(['the drunk']), 'act_k')).toEqual(userWon)
+    expect(await apply(ctx, append(['the drunk']), 'act_k')).toEqual(userWonOver)
     expect((await rowFor(db, 'char_1')).keywords).toEqual(['the knight'])
   })
 
@@ -829,7 +834,7 @@ describe('user edits newer than the prose', () => {
     const { db, ctx } = await setup()
     await writeProse(ctx)
     await create(ctx, { ...CHAR, status: 'active' })
-    expect(await apply(ctx, retire, 'act_r')).toEqual(userWon)
+    expect(await apply(ctx, retire, 'act_r')).toEqual(userWonOver)
     expect((await rowFor(db, 'char_1')).status).toBe('active')
   })
 
@@ -839,7 +844,7 @@ describe('user edits newer than the prose', () => {
     await writeProse(ctx)
     await apply(ctx, userPatch({ status: 'retired', retiredReason: 'exiled' }), 'act_u1')
     await apply(ctx, userPatch({ status: 'active' }), 'act_u2')
-    expect(await apply(ctx, retire, 'act_r1')).toEqual(userWon)
+    expect(await apply(ctx, retire, 'act_r1')).toEqual(userWonOver)
     await reverseReplayDeltas('act_u2', ctx)
     await reverseReplayDeltas('act_u1', ctx)
     expect((await apply(ctx, retire, 'act_r2')).status).toBe('ok')
@@ -871,25 +876,7 @@ describe('user edits newer than the prose', () => {
 
 describe('setCharacterFaction', () => {
   const PROSE = 'e_prose'
-  const writeProse = (ctx: Ctx) =>
-    apply(
-      ctx,
-      {
-        kind: 'createStoryEntry',
-        source: 'ai_classifier',
-        payload: {
-          entry: {
-            id: PROSE,
-            branchId: 'br_1',
-            position: 1,
-            kind: 'ai_reply',
-            content: 'Kael swore to the Iron Circle.',
-            createdAt: 1,
-          },
-        },
-      },
-      'act_prose',
-    )
+  const writeProse = (ctx: Ctx) => writeProseEntry(ctx, PROSE, 'Kael swore to the Iron Circle.')
   const faction = (id: string, over: Partial<NewEntity> = {}): NewEntity => ({
     id,
     branchId: 'br_1',
@@ -910,23 +897,18 @@ describe('setCharacterFaction', () => {
     source: 'periodic_classifier',
     payload: { branchId: 'br_1', id, factionId, proseEntryId },
   })
-  const noop = (reason: string) => ({ status: 'rejected', reason, code: 'noop' })
-  const userWon = noop(USER_EDITED_SINCE_PROSE)
-
-  async function seedRows(ctx: Ctx, db: Db, character: NewEntity = ACTIVE) {
+  async function seedRows(ctx: Ctx, db: StateDb, character: NewEntity = ACTIVE) {
     await db.insert(entities).values([faction('fact_circle'), faction('fact_crown')])
     await create(ctx, character)
   }
 
-  async function seed(ctx: Ctx, db: Db, character: NewEntity = ACTIVE) {
+  async function seed(ctx: Ctx, db: StateDb, character: NewEntity = ACTIVE) {
     await seedRows(ctx, db, character)
     await writeProse(ctx)
   }
 
-  const factionOf = async (db: Db, id = 'char_1') =>
+  const factionOf = async (db: StateDb, id = 'char_1') =>
     ((await rowFor(db, id)).state as CharacterState).faction_id
-
-  type Db = Awaited<ReturnType<typeof setup>>['db']
 
   it('writes the faction alone, so its undo payload holds only that field', async () => {
     const { db, ctx } = await setup()
@@ -971,14 +953,14 @@ describe('setCharacterFaction', () => {
     const { ctx, db } = await setup()
     await seed(ctx, db)
     expect(await apply(ctx, join('fact_circle', { id: 'fact_crown' }), 'act_j')).toEqual(
-      noop('not-a-character'),
+      noopBecause('not-a-character'),
     )
   })
 
   it('no-ops when the faction already matches', async () => {
     const { db, ctx } = await setup()
     await seed(ctx, db, { ...ACTIVE, state: { ...CHAR.state, faction_id: 'fact_circle' } as never })
-    expect(await apply(ctx, join('fact_circle'), 'act_j')).toEqual(noop('faction-unchanged'))
+    expect(await apply(ctx, join('fact_circle'), 'act_j')).toEqual(noopBecause('faction-unchanged'))
   })
 
   it.each([
@@ -988,7 +970,7 @@ describe('setCharacterFaction', () => {
     const { db, ctx } = await setup()
     await seed(ctx, db)
     await db.insert(entities).values({ ...ACTIVE, id: 'char_2' })
-    expect(await apply(ctx, join(factionId), 'act_j')).toEqual(noop('not-a-faction'))
+    expect(await apply(ctx, join(factionId), 'act_j')).toEqual(noopBecause('not-a-faction'))
     expect(await factionOf(db)).toBeNull()
   })
 
@@ -997,7 +979,7 @@ describe('setCharacterFaction', () => {
     await seed(ctx, db)
     await db.insert(branches).values({ id: 'br_2', storyId: 'story_1', name: 'alt', createdAt: 1 })
     await db.insert(entities).values(faction('fact_elsewhere', { branchId: 'br_2' }))
-    expect(await apply(ctx, join('fact_elsewhere'), 'act_j')).toEqual(noop('not-a-faction'))
+    expect(await apply(ctx, join('fact_elsewhere'), 'act_j')).toEqual(noopBecause('not-a-faction'))
     expect(await factionOf(db)).toBeNull()
   })
 
@@ -1024,7 +1006,7 @@ describe('setCharacterFaction', () => {
     const { db, ctx } = await setup()
     await seed(ctx, db)
     await apply(ctx, userPatch({ state: { ...CHAR.state, faction_id: 'fact_crown' } }), 'act_u')
-    expect(await apply(ctx, join('fact_circle'), 'act_j')).toEqual(userWon)
+    expect(await apply(ctx, join('fact_circle'), 'act_j')).toEqual(userWonOver)
     expect(await factionOf(db)).toBe('fact_crown')
   })
 
@@ -1049,10 +1031,10 @@ describe('setCharacterFaction', () => {
     const { db, ctx } = await setup()
     await writeProse(ctx)
     await seedRows(ctx, db)
-    expect(await apply(ctx, join('fact_circle'), 'act_j')).toEqual(userWon)
+    expect(await apply(ctx, join('fact_circle'), 'act_j')).toEqual(userWonOver)
   })
 
-  async function rows(db: Db): Promise<Entity[]> {
+  async function rows(db: StateDb): Promise<Entity[]> {
     return (await db.select().from(entities).where(eq(entities.branchId, 'br_1'))) as Entity[]
   }
 
@@ -1073,7 +1055,7 @@ describe('setCharacterFaction', () => {
       status: 'ok',
     })
 
-    expect(await apply(ctx, join('fact_circle'), 'act_j')).toEqual(userWon)
+    expect(await apply(ctx, join('fact_circle'), 'act_j')).toEqual(userWonOver)
     expect(await factionOf(db)).toBeNull()
   })
 
@@ -1116,7 +1098,7 @@ describe('setCharacterFaction', () => {
     })
     expect(await factionOf(db)).toBe('fact_crown')
 
-    expect(await apply(ctx, join('fact_circle'), 'act_j')).toEqual(userWon)
+    expect(await apply(ctx, join('fact_circle'), 'act_j')).toEqual(userWonOver)
     expect(await factionOf(db)).toBe('fact_crown')
   })
 
@@ -1128,7 +1110,6 @@ describe('setCharacterFaction', () => {
 // data-model.md → LocationState shape: a place's parent and its unplaced flag are written as one.
 describe('placeLocation', () => {
   const PROSE = 'e_prose'
-  type Db = Awaited<ReturnType<typeof setup>>['db']
 
   const placeRow = (
     id: string,
@@ -1157,34 +1138,21 @@ describe('placeLocation', () => {
   })
   const UNDER_REACH = { kind: 'under', parentId: 'loc_reach' } as const
   const TOP = { kind: 'top' } as const
-  const noop = (reason: string) => ({ status: 'rejected', reason, code: 'noop' })
   const userState = (state: LocationState): PipelineAction => ({
     kind: 'updateEntity',
     source: 'user_edit',
     payload: { branchId: 'br_1', id: 'loc_varn', patch: { state } },
   })
   const writeProse = (ctx: Ctx) =>
-    apply(
-      ctx,
-      {
-        kind: 'createStoryEntry',
-        source: 'ai_classifier',
-        payload: {
-          entry: {
-            id: PROSE,
-            branchId: 'br_1',
-            position: 1,
-            kind: 'ai_reply',
-            content: 'The road to Varn ran through the Eastern Reach.',
-            createdAt: 1,
-          },
-        },
-      },
-      'act_prose',
-    )
+    writeProseEntry(ctx, PROSE, 'The road to Varn ran through the Eastern Reach.')
 
   // The neighbours go straight in; Varn goes through createEntity, so the store holds it too.
-  async function seed(ctx: Ctx, db: Db, varn: LocationState = UNPLACED, others: NewEntity[] = []) {
+  async function seed(
+    ctx: Ctx,
+    db: StateDb,
+    varn: LocationState = UNPLACED,
+    others: NewEntity[] = [],
+  ) {
     await db
       .insert(entities)
       .values([
@@ -1195,9 +1163,7 @@ describe('placeLocation', () => {
     await create(ctx, placeRow('loc_varn', varn))
   }
 
-  const stateIn = async (db: Db, id = 'loc_varn') => (await rowFor(db, id)).state
-  const undoOf = async (db: Db, actionId: string) =>
-    (await db.select().from(deltas).where(eq(deltas.actionId, actionId))).map((d) => d.undoPayload)
+  const stateIn = async (db: StateDb, id = 'loc_varn') => (await rowFor(db, id)).state
 
   it('places an unplaced place under a parent: the flag leaves the row and the store', async () => {
     const { db, ctx } = await setup()
@@ -1211,7 +1177,7 @@ describe('placeLocation', () => {
     const inStore = entitiesStore.getById('loc_varn')?.state
     expect(inStore).toEqual(placed)
     expect(Object.keys(inStore ?? {})).not.toContain('unplaced')
-    expect(await undoOf(db, 'act_p')).toEqual([
+    expect(await undoPayloadsOf(db, 'act_p')).toEqual([
       { state: { parent_location_id: null, unplaced: true } },
     ])
   })
@@ -1228,7 +1194,7 @@ describe('placeLocation', () => {
     const inStore = entitiesStore.getById('loc_varn')?.state
     expect(inStore).toEqual(topLevel)
     expect(Object.keys(inStore ?? {})).not.toContain('unplaced')
-    expect(await undoOf(db, 'act_p')).toEqual([{ state: { unplaced: true } }])
+    expect(await undoPayloadsOf(db, 'act_p')).toEqual([{ state: { unplaced: true } }])
   })
 
   it('moves a placed place to another parent', async () => {
@@ -1238,7 +1204,9 @@ describe('placeLocation', () => {
       (await apply(ctx, place({ kind: 'under', parentId: 'loc_marsh' }), 'act_p')).status,
     ).toBe('ok')
     expect(await stateIn(db)).toEqual({ parent_location_id: 'loc_marsh' })
-    expect(await undoOf(db, 'act_p')).toEqual([{ state: { parent_location_id: 'loc_reach' } }])
+    expect(await undoPayloadsOf(db, 'act_p')).toEqual([
+      { state: { parent_location_id: 'loc_reach' } },
+    ])
   })
 
   it('reverses to the unplaced place it was, flag and all', async () => {
@@ -1261,14 +1229,14 @@ describe('placeLocation', () => {
   describe('refusals, each a noop that leaves the row as it was', () => {
     async function expectRefused(
       ctx: Ctx,
-      db: Db,
+      db: StateDb,
       action: PipelineAction,
       reason: string | RegExp,
       before: unknown = UNPLACED,
     ) {
       const result = await apply(ctx, action, 'act_p')
       expect(result).toMatchObject({ status: 'rejected', code: 'noop', reason })
-      expect(await undoOf(db, 'act_p')).toEqual([])
+      expect(await undoPayloadsOf(db, 'act_p')).toEqual([])
       if (before !== undefined) expect(await stateIn(db)).toEqual(before)
     }
 
@@ -1332,6 +1300,84 @@ describe('placeLocation', () => {
         await expectRefused(ctx, db, place({ kind: 'under', parentId }), 'parent-cycle', before)
     })
 
+    // data-model.md → Disabled places: a pass's move refuses where World's Save would.
+    describe('a disabled place around the story', () => {
+      const THORN = placeRow(
+        'loc_thorn',
+        { parent_location_id: null },
+        { injectionMode: 'disabled' },
+      )
+      const CRYPT = placeRow('loc_crypt', { parent_location_id: 'loc_varn' })
+      // The scene source names the crypt; a user_action tail standing after it names the marsh.
+      async function storyIn(db: StateDb) {
+        await db.insert(storyEntries).values([
+          {
+            id: 'e_reply',
+            branchId: 'br_1',
+            position: 1,
+            kind: 'ai_reply',
+            content: 'In the crypt.',
+            metadata: { sceneEntities: [], currentLocationId: 'loc_crypt', worldTime: 0 },
+            createdAt: 1,
+          },
+          {
+            id: 'e_action',
+            branchId: 'br_1',
+            position: 2,
+            kind: 'user_action',
+            content: 'I head for the marsh.',
+            metadata: { sceneEntities: [], currentLocationId: 'loc_marsh', worldTime: 0 },
+            createdAt: 2,
+          },
+        ])
+      }
+      const INTO_THORN = { kind: 'under', parentId: 'loc_thorn' } as const
+
+      it("refuses placing or moving the scene's place, or the tail's, into the region", async () => {
+        const { db, ctx } = await setup()
+        await seed(ctx, db, UNPLACED, [THORN, CRYPT])
+        await storyIn(db)
+        await expectRefused(ctx, db, place(INTO_THORN), 'story-inside')
+        await expectRefused(
+          ctx,
+          db,
+          place(INTO_THORN, { id: 'loc_marsh' }),
+          'story-inside',
+          undefined,
+        )
+        expect(await stateIn(db, 'loc_marsh')).toEqual({ parent_location_id: null })
+      })
+
+      it('refuses moving a placed place that holds the story', async () => {
+        const { db, ctx } = await setup()
+        await seed(ctx, db, { parent_location_id: 'loc_reach' }, [THORN, CRYPT])
+        await storyIn(db)
+        await expectRefused(ctx, db, place(INTO_THORN), 'story-inside', {
+          parent_location_id: 'loc_reach',
+        })
+      })
+
+      it('moves a place the story is outside into the region', async () => {
+        const { db, ctx } = await setup()
+        await seed(ctx, db, UNPLACED, [THORN])
+        await storyIn(db)
+        expect((await apply(ctx, place(INTO_THORN), 'act_p')).status).toBe('ok')
+      })
+
+      // Its turn's own location lands beside it, so the story's place reads the walk-in already.
+      it("leaves the per-turn writer's placement to its planner", async () => {
+        const { db, ctx } = await setup()
+        await seed(ctx, db, UNPLACED, [THORN, CRYPT])
+        await storyIn(db)
+        const perTurn: PipelineAction = {
+          kind: 'placeLocation',
+          source: 'piggyback_tagged_block',
+          payload: { branchId: 'br_1', id: 'loc_varn', placement: INTO_THORN, proseEntryId: null },
+        }
+        expect((await apply(ctx, perTurn, 'act_p')).status).toBe('ok')
+      })
+    })
+
     it('refuses a parent whose own chain already loops', async () => {
       const { db, ctx } = await setup()
       await seed(ctx, db, UNPLACED, [
@@ -1362,7 +1408,7 @@ describe('placeLocation', () => {
         'act_u',
       )
       expect(await apply(ctx, fromProse(UNDER_REACH), 'act_p')).toEqual(
-        noop(USER_EDITED_SINCE_PROSE),
+        noopBecause(USER_EDITED_SINCE_PROSE),
       )
       expect(await stateIn(db)).toEqual({ parent_location_id: 'loc_marsh', condition: 'flooded' })
     })
@@ -1373,9 +1419,11 @@ describe('placeLocation', () => {
       await seed(ctx, db, { parent_location_id: 'loc_reach' })
       await writeProse(ctx)
       await apply(ctx, userState({ parent_location_id: 'loc_marsh' }), 'act_u')
-      expect(await undoOf(db, 'act_u')).toEqual([{ state: { parent_location_id: 'loc_reach' } }])
+      expect(await undoPayloadsOf(db, 'act_u')).toEqual([
+        { state: { parent_location_id: 'loc_reach' } },
+      ])
       expect(await apply(ctx, fromProse(UNDER_REACH), 'act_p')).toEqual(
-        noop(USER_EDITED_SINCE_PROSE),
+        noopBecause(USER_EDITED_SINCE_PROSE),
       )
       expect(await stateIn(db)).toEqual({ parent_location_id: 'loc_marsh' })
     })
@@ -1386,9 +1434,9 @@ describe('placeLocation', () => {
       await seed(ctx, db)
       await writeProse(ctx)
       await apply(ctx, userState({ parent_location_id: null, condition: 'flooded' }), 'act_u')
-      expect(await undoOf(db, 'act_u')).toEqual([{ state: { unplaced: true } }])
+      expect(await undoPayloadsOf(db, 'act_u')).toEqual([{ state: { unplaced: true } }])
       expect(await apply(ctx, fromProse(UNDER_REACH), 'act_p')).toEqual(
-        noop(USER_EDITED_SINCE_PROSE),
+        noopBecause(USER_EDITED_SINCE_PROSE),
       )
       expect(await stateIn(db)).toEqual({ parent_location_id: null, condition: 'flooded' })
     })
@@ -1398,10 +1446,12 @@ describe('placeLocation', () => {
       await writeProse(ctx)
       await seed(ctx, db)
       expect(await apply(ctx, fromProse(UNDER_REACH), 'act_p')).toEqual(
-        noop(USER_EDITED_SINCE_PROSE),
+        noopBecause(USER_EDITED_SINCE_PROSE),
       )
       // The user-created row is unplaced, a valid top target: only precedence refuses it.
-      expect(await apply(ctx, fromProse(TOP), 'act_t')).toEqual(noop(USER_EDITED_SINCE_PROSE))
+      expect(await apply(ctx, fromProse(TOP), 'act_t')).toEqual(
+        noopBecause(USER_EDITED_SINCE_PROSE),
+      )
     })
 
     it("places past a later edit of the place's condition", async () => {
@@ -1460,29 +1510,15 @@ describe('updateEntityCondition', () => {
     name: 'Rope',
     state: { at_location_id: 'loc_hall' },
   }
-  type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
-
-  const create = (ctx: Ctx, entry: NewEntity) =>
-    applyDeltaAction(
-      {
-        action: { kind: 'createEntity', source: 'user_edit', payload: { entry } },
-        actionId: 'act_c',
-        branchId: 'br_1',
-      },
-      ctx,
-    )
   const setCondition = (ctx: Ctx, id: string, condition: string) =>
-    applyDeltaAction(
-      {
-        action: {
-          kind: 'updateEntityCondition',
-          source: 'piggyback_tagged_block',
-          payload: { branchId: 'br_1', id, condition },
-        },
-        actionId: 'act_k',
-        branchId: 'br_1',
-      },
+    apply(
       ctx,
+      {
+        kind: 'updateEntityCondition',
+        source: 'piggyback_tagged_block',
+        payload: { branchId: 'br_1', id, condition },
+      },
+      'act_k',
     )
 
   it("replaces a place's condition, leaving its parent, and undo restores the old one", async () => {
@@ -1530,7 +1566,7 @@ describe('updateEntityCondition', () => {
   })
 
   it.each([
-    ['a character', 'char_1', { status: 'rejected', reason: 'not-a-place-or-item', code: 'noop' }],
+    ['a character', 'char_1', noopBecause('not-a-place-or-item')],
     ['a missing row', 'loc_gone', expect.objectContaining({ status: 'rejected', code: 'noop' })],
   ])('refuses %s, as a noop', async (_label, id, refusal) => {
     const { ctx } = await setup()
@@ -1547,32 +1583,9 @@ describe('updateEntityCondition', () => {
   })
 })
 
-// cadence.md → User edits and classifier writes: the entry a pass's write rests on.
 const REVEAL = 'e_reveal'
 const writeRevealProse = (ctx: Ctx) =>
-  apply(
-    ctx,
-    {
-      kind: 'createStoryEntry',
-      source: 'ai_classifier',
-      payload: {
-        entry: {
-          id: REVEAL,
-          branchId: 'br_1',
-          position: 1,
-          kind: 'ai_reply',
-          content: 'The hooded stranger lowers her hood: she is Mira.',
-          createdAt: 1,
-        },
-      },
-    },
-    'act_prose',
-  )
-const noopBecause = (reason: string) => ({ status: 'rejected', reason, code: 'noop' })
-const userWonOver = noopBecause(USER_EDITED_SINCE_PROSE)
-type StateDb = Awaited<ReturnType<typeof setup>>['db']
-const undoPayloadOf = async (db: StateDb, actionId: string) =>
-  (await db.select().from(deltas).where(eq(deltas.actionId, actionId)))[0]?.undoPayload
+  writeProseEntry(ctx, REVEAL, 'The hooded stranger lowers her hood: she is Mira.')
 
 // classifier.md → What the classifier writes → Names.
 describe('renameEntity', () => {
@@ -1656,6 +1669,15 @@ describe('renameEntity', () => {
     expect((await rowFor(db, 'char_1')).name).toBe('the hooded stranger')
   })
 
+  it('no-ops on a change of inner spacing alone', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db, { ...STRANGER, name: 'the  hooded stranger' })
+    expect(await apply(ctx, rename('the hooded stranger'), 'act_n')).toEqual(
+      noopBecause('name-unchanged'),
+    )
+    expect((await rowFor(db, 'char_1')).name).toBe('the  hooded stranger')
+  })
+
   it('writes the trimmed name', async () => {
     const { db, ctx } = await setup()
     await seed(ctx, db)
@@ -1735,6 +1757,145 @@ describe('renameEntity', () => {
   })
 })
 
+// classifier.md → Names, judged on the rows as the rename finds them: a write the pass planned
+// beside it can have been refused since.
+describe('renameEntity onto a name another row holds', () => {
+  const proseAt = (ctx: Ctx, id: string, position: number) =>
+    apply(
+      ctx,
+      {
+        kind: 'createStoryEntry',
+        source: 'ai_classifier',
+        payload: {
+          entry: {
+            id,
+            branchId: 'br_1',
+            position,
+            kind: 'ai_reply',
+            content: `Turn ${position}.`,
+            createdAt: 1,
+          },
+        },
+      },
+      `act_prose_${id}`,
+    )
+  const createRow = (ctx: Ctx, entry: NewEntity) =>
+    apply(
+      ctx,
+      { kind: 'createEntity', source: 'user_edit', payload: { entry } },
+      `act_c_${entry.id}`,
+    )
+  const renameOf = (id: string, name: string, proseEntryId: string): PipelineAction => ({
+    kind: 'renameEntity',
+    source: 'periodic_classifier',
+    payload: { branchId: 'br_1', id, name, proseEntryId },
+  })
+  const editOf = (id: string, patch: Record<string, unknown>): PipelineAction => ({
+    kind: 'updateEntity',
+    source: 'user_edit',
+    payload: { branchId: 'br_1', id, patch },
+  })
+  const person = (id: string, name: string, over: Partial<NewEntity> = {}): NewEntity => ({
+    ...CHAR,
+    id,
+    status: 'active',
+    name,
+    keywords: [],
+    ...over,
+  })
+  const placeRow = (id: string, name: string, state: LocationState): NewEntity => ({
+    ...CHAR,
+    id,
+    kind: 'location',
+    status: 'active',
+    name,
+    keywords: [],
+    state,
+  })
+  const REGIONS = [
+    placeRow('loc_reach', 'the Reach', { parent_location_id: null }),
+    placeRow('loc_marsh', 'the Marsh', { parent_location_id: null }),
+  ]
+
+  it('refuses a name the user gave a row whose rename away the pass planned first', async () => {
+    const { db, ctx } = await setup()
+    await createRow(ctx, person('char_2', 'Marra'))
+    await createRow(ctx, person('char_1', 'the innkeeper'))
+    await proseAt(ctx, 'e_1', 1)
+    await apply(ctx, editOf('char_2', { name: 'Mara' }), 'act_u')
+    await proseAt(ctx, 'e_2', 2)
+    expect(await apply(ctx, renameOf('char_2', 'Selene', 'e_1'), 'act_n1')).toEqual(userWonOver)
+
+    expect(await apply(ctx, renameOf('char_1', 'Mara', 'e_2'), 'act_n2')).toEqual(
+      noopBecause('name-taken'),
+    )
+    expect(await rowFor(db, 'char_1')).toMatchObject({ name: 'the innkeeper', keywords: [] })
+  })
+
+  it('refuses a sibling name when the move away the pass planned first lost to the user', async () => {
+    const { db, ctx } = await setup()
+    await db
+      .insert(entities)
+      .values([...REGIONS, placeRow('loc_mill', 'Mill', { parent_location_id: 'loc_marsh' })])
+    await createRow(ctx, placeRow('loc_a', 'old mill', { parent_location_id: 'loc_reach' }))
+    await proseAt(ctx, 'e_1', 1)
+    await apply(ctx, editOf('loc_a', { state: { parent_location_id: 'loc_marsh' } }), 'act_u')
+    await proseAt(ctx, 'e_2', 2)
+    const backToReach: PipelineAction = {
+      kind: 'placeLocation',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: 'br_1',
+        id: 'loc_a',
+        placement: { kind: 'under', parentId: 'loc_reach' },
+        proseEntryId: 'e_1',
+      },
+    }
+    expect(await apply(ctx, backToReach, 'act_p')).toEqual(userWonOver)
+
+    expect(await apply(ctx, renameOf('loc_a', 'Mill', 'e_2'), 'act_n')).toEqual(
+      noopBecause('name-taken'),
+    )
+    expect((await rowFor(db, 'loc_a')).name).toBe('old mill')
+  })
+
+  // piggyback.md → Matching before creating: a real sibling, or any place when either is unplaced.
+  it.each([
+    ['lands beside a holder under another parent', 'loc_reach', 'loc_marsh', true],
+    ['is refused beside an unplaced holder', null, 'loc_marsh', false],
+    ['is refused for an unplaced place', 'loc_reach', null, false],
+    ['is refused beside a holder whose parent is gone', 'loc_gone', 'loc_reach', false],
+  ])(
+    'a place rename %s',
+    async (_label, holderParent: string | null, ownParent: string | null, lands: boolean) => {
+      const at = (parent: string | null): LocationState =>
+        parent === null
+          ? { parent_location_id: null, unplaced: true }
+          : { parent_location_id: parent }
+      const { db, ctx } = await setup()
+      await db.insert(entities).values([...REGIONS, placeRow('loc_mill', 'Mill', at(holderParent))])
+      await createRow(ctx, placeRow('loc_a', 'old mill', at(ownParent)))
+      await proseAt(ctx, 'e_1', 1)
+      expect(await apply(ctx, renameOf('loc_a', 'Mill', 'e_1'), 'act_n')).toMatchObject(
+        lands ? { status: 'ok' } : noopBecause('name-taken'),
+      )
+    },
+  )
+
+  it.each([
+    ['is refused when a retired row of the kind holds it', 'character', 'retired', false],
+    ['lands when only a row of another kind holds it', 'faction', 'active', true],
+  ] as const)('a rename %s', async (_label, kind, status, lands) => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values({ ...person('ent_2', 'mara '), kind, status, state: {} })
+    await createRow(ctx, person('char_1', 'the innkeeper'))
+    await proseAt(ctx, 'e_1', 1)
+    expect(await apply(ctx, renameOf('char_1', 'Mara', 'e_1'), 'act_n')).toMatchObject(
+      lands ? { status: 'ok' } : noopBecause('name-taken'),
+    )
+  })
+})
+
 // edge-cases.md → Layer B: a pass whose rename meets a name another row of the kind holds.
 describe('raiseCollisionFlag', () => {
   // A clash's keyword lands before its raise, so the pair are namesakes through it.
@@ -1778,14 +1939,6 @@ describe('raiseCollisionFlag', () => {
       nameCollisionReason: null,
     })
     expect(await reverseReplayDeltas('act_f', ctx)).toBe(1)
-    expect(await flagOf(db)).toEqual([0, null, null])
-  })
-
-  it('restores the three flag columns together when no user wrote them since', async () => {
-    const { db, ctx } = await setup()
-    await seed(ctx, db)
-    await apply(ctx, raise(), 'act_f')
-    await reverseReplayDeltas('act_f', ctx)
     expect(await flagOf(db)).toEqual([0, null, null])
   })
 
@@ -1854,9 +2007,9 @@ describe('raiseCollisionFlag', () => {
   })
 
   it.each([
-    ['is gone', 'char_gone'],
-    ['is of another kind', 'fact_1'],
-  ])('no-ops when the partner %s', async (_label, partnerId) => {
+    ['is gone', 'char_gone', 'partner-not-found'],
+    ['is of another kind', 'fact_1', 'partner-not-of-kind'],
+  ])('no-ops when the partner %s', async (_label, partnerId, reason) => {
     const { db, ctx } = await setup()
     await db.insert(entities).values({
       ...CHAR,
@@ -1867,7 +2020,7 @@ describe('raiseCollisionFlag', () => {
       state: {},
     })
     await seed(ctx, db)
-    expect(await apply(ctx, raise(partnerId), 'act_f')).toEqual(noopBecause('partner-not-of-kind'))
+    expect(await apply(ctx, raise(partnerId), 'act_f')).toEqual(noopBecause(reason))
     expect(await flagOf(db)).toEqual([0, null, null])
   })
 
@@ -1953,6 +2106,21 @@ describe('raiseCollisionFlag', () => {
     )
     expect(await apply(ctx, raise(), 'act_f')).toEqual(userWonOver)
     expect(await flagOf(db)).toEqual([0, null, null])
+  })
+
+  // The three columns are one field: a re-point of the partner alone shields the flag too.
+  it('keeps a dormant flag the user re-pointed after the prose', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values({ ...CHAR, id: 'char_3', status: 'active', name: 'Zed' })
+    await seed(ctx, db, {
+      ...STRANGER,
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_gone',
+      nameCollisionReason: 'distinct',
+    })
+    await apply(ctx, userPatch({ nameCollisionPartnerId: 'char_3' }), 'act_u')
+    expect(await apply(ctx, raise(), 'act_f')).toEqual(userWonOver)
+    expect(await flagOf(db)).toEqual([1, 'char_3', 'distinct'])
   })
 
   it('raises past a later edit of the description', async () => {

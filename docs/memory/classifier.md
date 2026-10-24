@@ -65,7 +65,8 @@ alias list (the keywords bullet below).
   model's per-character severity judgment at extraction time. An
   awareness row may also name a happening Known happenings lists, when
   the turns show a character learning of it ("Kael tells Aria about
-  the massacre").
+  the massacre"); a pair the reply repeats lands at its earliest
+  learning turn.
 - **Status transitions** — `entities.status` flips:
   - `staged → active` when prose mentions a staged entity in scene
     (the slow path; see
@@ -100,32 +101,51 @@ alias list (the keywords bullet below).
   a character's visual categories, `traits`, `drives` and `voice`, a
   faction's `standing` and `agenda`, a place's `condition`. Within the
   [soft caps](../data-model.md#soft-caps--compaction-discipline), and
-  empty where the prose says nothing. After first introduction it
-  never amends the description, traits, drives, voice or agenda;
+  empty where the prose says nothing. A visual category, a condition
+  or a standing, a new faction's or a later one, past its bound is cut
+  at a clause and logged, as the per-turn writer's is
+  ([`piggyback.md → Trailing block format`](./piggyback.md#trailing-block-format)).
+  After first introduction it never amends the description, traits,
+  drives, voice or agenda;
   chapter close does
   ([`data-model.md → Authorship contract`](../data-model.md#authorship-contract)).
 - **Names** — a listed entity's name, when the turns establish it as
   the entity's own: a reveal ("the hooded stranger is Kael"), not an
   alias, a title, a disguise, or a shortened or fuller form of its
   name, which go to its keywords. On a rename the old name joins the
-  keywords, so retrieval still finds it. A name another row of the
+  keywords, so retrieval still finds it. A name is the entity's own,
+  or another row's, when the two are exact namesakes, case and spacing
+  aside
+  ([Disambiguation on new-character mentions](#disambiguation-on-new-character-mentions)),
+  so a rename that changes only case or spacing is no reveal and
+  writes nothing. A name another row of the
   kind already holds isn't written (for a place, a place it is
   compared with: a real sibling, or any place when either is
   unplaced): the name joins the entity's
   keywords, as a name the turns use for it, and the pass flags the
   entity (`name-taken`) with the oldest holder as its partner, for the
-  user to merge. An entity already flagged keeps its flag and gets the
-  keyword only. A flag whose partner is gone, or whose pair are no
-  longer namesakes once the keyword is counted (World may still show
-  the latter's strip), counts as no flag: the pass re-points it at the
-  holder.
+  user to merge. The rename is checked again against the rows as they
+  stand when it lands, since a write the pass counted on may have been
+  refused by then: a holder found only then leaves the rename unwritten,
+  with no keyword and no flag. An entity already flagged keeps its flag
+  and gets the keyword only. A flag whose partner is gone, whose pair
+  are no longer namesakes once the keyword is counted (World may still
+  show the latter's strip), or whose `same-parent` pair no longer share
+  a parent
+  ([`world.md → Surfacing`](../ui/screens/world/world.md#surfacing))
+  counts as no flag: the pass re-points it at the holder.
 - **Where a place sits** — a listed place's parent, when the turns
   place one the Places list shows unplaced or move one; and the
   top-level mark for an unplaced place nothing on the map could
   contain
   ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
-  A parent that would close a cycle, or names a retired place, is
-  dropped and logged.
+  A parent that would close a cycle or sits below a broken chain,
+  names a retired place, or is no listed place (a row of another kind,
+  or a handle the reply declares, whose create carries its own parent)
+  is dropped and logged; so is one that would put a disabled place
+  around the story's place (`story-inside`), as World refuses that
+  move
+  ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
 - **A faction's standing** — when the turns establish a change in a
   listed faction's position: it declares war, is outlawed, comes to
   power.
@@ -394,8 +414,12 @@ that name it
 ([`edge-cases.md → Layer A`](./edge-cases.md#layer-a--retrieval-time-same-name-suppression)).
 
 **Parent.** Parents resolve top-down, so the child of a new place hangs
-under whatever row that place resolved to. A place whose parent the
-turns don't give is top-level when nothing on the map could contain it,
+under whatever row that place resolved to; otherwise the places settle
+in turn order, ties in the reply's order and a place with no source
+turn counting at the newest, each waiting only for its own parent, so
+one whose parent never resolves settles unplaced at its own turn. A
+place whose parent the turns don't give is top-level when nothing on
+the map could contain it,
 and unplaced when something could and the turns don't say which; when
 unsure, unplaced
 ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
@@ -431,13 +455,28 @@ only against another unplaced place. A reused place keeps its
 description and its status, since a mention doesn't enter a staged
 place, gains the entry's new keywords, takes the parent the entry gave
 when it was unplaced, and stands for the handle in the rest of the
-reply. Two new places with one name and parent, or both with none, map
-to the first before any other match. Otherwise the reply's places match
+reply. A parent that would close a loop, sits below a broken chain or
+would put a disabled place around the story's place leaves it
+unplaced, and each entry that maps onto it with that parent is logged
+as left unplaced. Two new places with one name and parent,
+or both with none, map to the first before any other match. Otherwise
+the reply's places match
 as successive passes' would: an unplaced one counts the reply's
 earlier new places of its name as stored places, newer than any, one
 match mapping it there and several flagging it `unplaced`; a placed
 one the stored places would create takes over an earlier unplaced new
-place of its name and places it.
+place of its name and places it. A partial name or a keyword hit flags
+against the reply's earlier new places as against stored ones, newer
+than any and in the order they settle: a placed one against those under
+its parent, or at the top level, a takeover's included, and an unplaced
+one against those still unplaced. The reply's placements plan, and
+land, before any new place of their turn or a later one, a fact with no
+source turn counting at the newest: a new place matches and is written
+where they leave the places, so a place one of them puts under another
+parent is no unplaced namesake to reuse, and one it puts under the new
+place's parent is reused there, placed once. The twin rule above still
+comes first: a new place maps to an earlier one of its name and
+declared parent even after a placement moved that one's row.
 
 **After the turn.** A pass runs after the turn that brought it due, so
 a place the turn created is already a row it matches against, and the
@@ -534,11 +573,14 @@ reply is dropped as a misreading of a past membership. A member at
 retirement keeps the faction, since retiring touches no member, and a
 faction the reply itself retires keeps the memberships from its turns.
 A staged faction takes members and stays staged. One character's facts
-are planned in source-turn order, ties in reply order, each against the
-faction the earlier ones left, and one matching it writes nothing: a
-character who joins at one turn and leaves at a later one writes twice,
-and reversing the later turn leaves the earlier membership the prose
-still holds. Each is planned after the reply's creates, so it can name
+are planned in source-turn order, ties in reply order. A fact matching
+the stored faction writes nothing, but only until a fact for the
+character is sent: from then on each is sent, since user precedence
+may refuse the earlier write and the later turn is newer prose, and
+the handler no-ops one whose faction is already written. A character
+who joins at one turn and leaves at a later one writes twice, and
+reversing the later turn leaves the earlier membership the prose still
+holds. Each is planned after the reply's creates, so it can name
 a character or faction the same burst creates, anchored on its
 `sourceTurn`. The handler writes `state.faction_id` alone, checked
 against the rows as they stand and the user's later edits
@@ -585,7 +627,9 @@ any change of status the user makes. A thread a reply both opens and
 closes is written as two changes, each kept by its own turn: the
 create, `active`, at its opening turn, and the status change at its
 closing turn (the opening turn when `resolvedAtTurn` is missing,
-names no turn of the window, or an earlier one). So reversing the
+names no turn of the window, or an earlier one, the last two logged).
+A `newThreads` entry with a blank title creates nothing and is logged.
+So reversing the
 closing turn while the opening survives leaves the thread `active`,
 `resolved_at_entry_id` cleared. A status the user wrote after the
 change's prose stands
@@ -601,13 +645,13 @@ resolves or fails stale threads.
 The periodic classifier is a Pipeline declaration in the framework's
 registry, gated like per-turn and chapter-close:
 
-| Field                           | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`                          | `'periodic-classifier'`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `gateBehavior`                  | `'hard-gate'` — user-source writes wait for it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `concurrencyPolicy`             | `{ blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close', 'translation-retry'] }` — a chain, Send or Run now starts it, never under another run but suggestion refresh                                                                                                                                                                                                                                                                                                                                                                                     |
-| `affordance`                    | `'pill-and-banner'`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Write set (prose, not declared) | happenings, happening_involvements, happening_awareness, threads, new character and faction entities with their first profiles and, with the setting on, mentioned places (first-introduction description, keywords, a place's parent or unplaced mark, collision flag with its partner and reason), names, a place's parent and top-level mark, a faction's standing, a character's `state.faction_id`, entity status flips with retired reasons, entity keyword appends (aliases, absorbed candidates, reused places and replaced names), character relationships |
+| Field                           | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`                          | `'periodic-classifier'`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `gateBehavior`                  | `'hard-gate'` — user-source writes wait for it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `concurrencyPolicy`             | `{ blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close', 'translation-retry'] }` — a chain, Send or Run now starts it, never under another run but suggestion refresh                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `affordance`                    | `'pill-and-banner'`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Write set (prose, not declared) | happenings, happening_involvements, happening_awareness, threads, new character and faction entities with their first profiles and, with the setting on, mentioned places (first-introduction description, keywords, a place's parent or unplaced mark, collision flag with its partner and reason), names, the collision flag a rename that meets a taken name raises or re-points on an existing row, a place's parent and top-level mark, a faction's standing, a character's `state.faction_id`, entity status flips with retired reasons, entity keyword appends (aliases, absorbed candidates, reused places, replaced names and taken names), character relationships |
 
 **When it runs.** Per-turn's `chainsTo` starts a pass when the turn's
 commit brings the cadence due — the unprocessed entries reach
@@ -703,6 +747,21 @@ turn generated over unclassified prose is memory the story has lost.
 A pass's only retries are the structured call's own provider and parse
 attempts
 ([`generation-pipeline.md → Error, cancel, and retry`](../generation-pipeline.md#error-cancel-and-retry)).
+A reply that still doesn't parse fails the pass, so the reply's
+optional profile and plot fields never fail the parse: sent as `null`
+or the wrong type, they read as absent. They are a new
+character's visual categories, traits, drives and voice, a new
+faction's standing and agenda, a happening's or a new thread's category
+and icon, a new thread's `resolvedAtTurn` and a new place's condition.
+In the renames, placements, standings, new threads, thread statuses and
+known awareness, a `null` list reads as empty, a `null` field as absent,
+and an enum value is read trimmed and lowercased first, so a `null`
+source turn leaves the fact unattributed and `"Resolved"` lands as
+`resolved`. An entry there that still doesn't fit, a required field
+missing or an enum value outside the list (a status change to
+`pending`), is dropped alone and logged with its list, and the rest of
+the reply lands. In the older lists, a
+required field or an enum the model gets wrong still fails the reply.
 A chained pass that still fails leaves the watermark where it was,
 records the failure in the status, and shows a warning toast,
 `Memory update failed. It runs again before your next turn.` Nothing

@@ -22,6 +22,7 @@ import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore, currentStoryStore } from '@/lib/stores'
 
 import { classifierEmbedder } from './description-embedder'
+import { readStoryPlace } from './entry-reads'
 import { buildGenerationContext } from './generation-context'
 import { nextMemoryRun } from './memory-chain'
 import { planTurnCreates, skipTurnCreates, type TurnCreatePlan } from './per-turn-creates'
@@ -249,6 +250,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
         count: parsedState.malformedCreates,
         layer: 'piggyback_tagged_block',
       })
+    for (const drop of parsedState.dropsElsewhere)
+      ctx.log.warn('classifier.drop_dropped', { entryId, drop, reason: 'to_named' })
     // A failed fold creates nothing: creates aren't idempotent, and the fallback that fires
     // rewrites this turn's state, so a create made by both would leave a duplicate row.
     const turn = piggybackParseSucceeded
@@ -256,6 +259,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
           block: resolvedBlock,
           entities,
           mapCurrentLocationId: load.mapCurrentLocationId,
+          // The reply isn't written yet, so the rows read the place the turn found.
+          story: await readStoryPlace(ctx.db, branchId),
           branchId,
           source: 'piggyback_tagged_block',
           embed: classifierEmbedder(),
@@ -379,11 +384,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
 
   // Right behind the reply's create and ahead of every write naming them: a regenerate sweeps
   // from that create's log position, so a row created before it would outlive the regenerate.
-  for (const action of fold?.turn.creates ?? []) {
-    yield { type: 'delta_emitted', action }
-  }
-  // A placement can name a parent the creates insert, so it follows them.
-  for (const action of fold?.turn.placements ?? []) {
+  for (const action of fold?.turn.structural ?? []) {
     yield { type: 'delta_emitted', action }
   }
   for (const action of fold?.actions ?? []) {

@@ -4,9 +4,9 @@ import { compareId } from '@/lib/list-modules'
 import { blankToNull } from '@/lib/text'
 
 import { stateOf } from './entity-draft'
-import { realPlacementOf } from './location-map'
 import { byName, itemsAt } from './overview'
 import { placeModes } from './place-modes'
+import { realPlacementOf } from './placement'
 
 /** architecture.md → Entity state on the template surface: one shape for every reference. */
 export type EntityRef = { id: string; name: string; status: Entity['status'] }

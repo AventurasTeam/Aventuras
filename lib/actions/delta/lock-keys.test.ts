@@ -42,7 +42,12 @@ describe('lock keys', () => {
       lockKeysFor({
         kind: 'upsertHappeningAwareness',
         source: 'periodic_classifier',
-        payload: { branchId: 'b1', characterId: 'char_1', happeningId: 'hap_1' },
+        payload: {
+          branchId: 'b1',
+          characterId: 'char_1',
+          happeningId: 'hap_1',
+          proseEntryId: null,
+        },
       }),
       lockKeysFor({
         kind: 'deleteHappeningAwareness',
@@ -198,7 +203,7 @@ describe('runner lock acquisition', () => {
         {
           kind: 'upsertHappeningAwareness',
           source: 'ai_classifier',
-          payload: { branchId: 'b1', characterId: 'c2', happeningId: 'hap_1' },
+          payload: { branchId: 'b1', characterId: 'c2', happeningId: 'hap_1', proseEntryId: null },
         },
         ctx,
       ),
@@ -233,7 +238,7 @@ describe('runner lock acquisition', () => {
         {
           kind: 'upsertHappeningAwareness',
           source: 'user_edit',
-          payload: { branchId: 'b1', characterId: 'c1', happeningId: 'hap_1' },
+          payload: { branchId: 'b1', characterId: 'c1', happeningId: 'hap_1', proseEntryId: null },
         },
         {
           kind: 'deleteHappeningInvolvement',

@@ -5,12 +5,15 @@ import { and, asc, eq, gt } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 
 import { generateStructured, type CallRetryError, type ResolveModelConfig } from '@/lib/ai'
-import { buildClassifierWindow, classifierReplySchema } from '@/lib/classifier'
+import { buildClassifierWindow, classifierReplySchema, readClassifierReply } from '@/lib/classifier'
 import {
+  branches,
   characterRelationships,
   entities,
   happenings,
+  stories,
   storyEntries,
+  storySettingsSchema,
   threads,
   type CharacterRelationship,
   type Entity,
@@ -57,6 +60,8 @@ function makeProxy(sqlite: DatabaseSync) {
 }
 
 type Branch = {
+  /** stories.settings.classifierMentionedPlaces, which picks the pass's prompt and reply schema. */
+  mentionedPlaces: boolean
   entities: Entity[]
   happenings: Happening[]
   relationships: CharacterRelationship[]
@@ -68,7 +73,14 @@ async function readBranch(dbPath: string, maxEntries: number): Promise<Branch> {
   const sqlite = new DatabaseSync(dbPath, { readOnly: true })
   try {
     const db = drizzle(makeProxy(sqlite))
+    const [story] = await db
+      .select({ settings: stories.settings })
+      .from(branches)
+      .innerJoin(stories, eq(stories.id, branches.storyId))
+      .where(eq(branches.id, BRANCH_ID))
+    if (story == null) throw new Error(`[probe] no branch ${BRANCH_ID} in ${dbPath}`)
     return {
+      mentionedPlaces: storySettingsSchema.parse(story.settings).classifierMentionedPlaces,
       entities: (await db
         .select()
         .from(entities)
@@ -97,12 +109,34 @@ async function readBranch(dbPath: string, maxEntries: number): Promise<Branch> {
 
 type Outcome = {
   status: 'ok' | 'failed' | 'aborted'
-  recoverable: CallRetryError[]
+  recoverable: readonly CallRetryError[]
   detail?: string
+  /** Entries a tolerant list dropped from a reply that parsed, by list. */
+  dropped?: string
 }
+
+type ParseRetryError = Extract<CallRetryError, { tier: 'parse' }>
 
 const parseRetries = (o: Outcome) => o.recoverable.filter((e) => e.tier === 'parse').length
 const providerRetries = (o: Outcome) => o.recoverable.filter((e) => e.tier === 'provider').length
+const oneLine = (text: string) => text.replace(/\s+/g, ' ').slice(0, 300)
+
+// A Zod failure's message is its issues as JSON: name each by path, so a rate can say what broke.
+function parseFailureText(detail: string): string {
+  let issues: unknown
+  try {
+    issues = JSON.parse(detail)
+  } catch {
+    return detail
+  }
+  if (!Array.isArray(issues) || issues.length === 0) return detail
+  return issues
+    .map((issue: { path?: unknown[]; message?: string }) => {
+      const path = (issue.path ?? []).join('.')
+      return `${path === '' ? '(root)' : path}: ${issue.message ?? ''}`
+    })
+    .join('; ')
+}
 
 async function main(): Promise<void> {
   if (!LLM_URL || !LLM_MODEL) {
@@ -157,13 +191,14 @@ async function main(): Promise<void> {
       happenings: branch.happenings,
       relationships: branch.relationships,
       threads: branch.threads,
-      mentionedPlaces: true,
+      mentionedPlaces: branch.mentionedPlaces,
       idMap: new IdBiMap(),
     }),
   )
-  const schema = classifierReplySchema(true)
+  const schema = classifierReplySchema(branch.mentionedPlaces)
   console.log(
     `[probe] ${dbPath} ${BRANCH_ID}: ${window.turns.length} turns, ` +
+      `mentioned places ${branch.mentionedPlaces ? 'on' : 'off'}, ` +
       `prompt ${prompt.system.length + prompt.user.length} chars; ${RUNS} runs of ${LLM_MODEL}`,
   )
 
@@ -179,17 +214,26 @@ async function main(): Promise<void> {
     )
     if (result.status === 'not-configured')
       throw new Error(`[probe] the classifier target did not resolve: ${result.kind}`)
+    const malformed = result.status === 'ok' ? readClassifierReply(result.value).malformed : []
     const outcome: Outcome = {
       status: result.status,
       recoverable: result.recoverable,
       ...(result.status === 'failed' ? { detail: result.detail } : {}),
+      ...(malformed.length > 0
+        ? { dropped: malformed.map(({ list, count }) => `${list} ${count}`).join(', ') }
+        : {}),
     }
     outcomes.push(outcome)
     console.log(
       `[probe] run ${run}: ${outcome.status} in ${((Date.now() - startedAt) / 1000).toFixed(1)} s, ` +
         `${parseRetries(outcome)} parse / ${providerRetries(outcome)} provider retries` +
-        (outcome.detail ? ` — ${outcome.detail.replace(/\s+/g, ' ').slice(0, 300)}` : ''),
+        (outcome.detail ? ` — ${oneLine(outcome.detail)}` : ''),
     )
+    if (outcome.dropped != null)
+      console.log(`[probe]   dropped entries that didn't fit: ${outcome.dropped}`)
+    const firstParse = outcome.recoverable.find((e): e is ParseRetryError => e.tier === 'parse')
+    if (firstParse != null)
+      console.log(`[probe]   first parse failure: ${oneLine(parseFailureText(firstParse.detail))}`)
   }
 
   const firstAttempt = outcomes.filter((o) => o.status === 'ok' && parseRetries(o) === 0).length
@@ -204,6 +248,7 @@ async function main(): Promise<void> {
       `(${((100 * firstAttempt) / RUNS).toFixed(0)}%; a failed or aborted run counts as no success), ` +
       `ok after a parse retry ${afterRetry}, failed after a parse retry ${failedAfterParseRetry.length}, ` +
       `failed with no parse retry ${failedOther.length}, aborted ${aborted.length}, ` +
+      `ok with dropped entries ${outcomes.filter((o) => o.dropped != null).length}, ` +
       `provider retries ${outcomes.reduce((n, o) => n + providerRetries(o), 0)}`,
   )
 }

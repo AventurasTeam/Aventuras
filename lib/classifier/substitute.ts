@@ -1,17 +1,11 @@
 import type { IdBiMap } from '@/lib/ids'
 
+// The reference fields a new row's handle can stand in; `happening` and `thread` name listed rows.
+const HANDLE_FIELDS = ['ref', 'subject', 'object', 'parent', 'character', 'faction'] as const
+
 /** Schema fields whose string value is an entity reference. Must stay in sync
  * with the planner's ref consumers. */
-export const PLACEHOLDER_FIELDS = [
-  'ref',
-  'subject',
-  'object',
-  'parent',
-  'character',
-  'faction',
-  'happening',
-  'thread',
-] as const
+export const PLACEHOLDER_FIELDS = [...HANDLE_FIELDS, 'happening', 'thread'] as const
 
 /**
  * Namespace the prompt reserves for `newCharacters`, `newFactions` and `newPlaces` handles, so a
@@ -20,13 +14,9 @@ export const PLACEHOLDER_FIELDS = [
 export const NEW_HANDLE_PREFIX = 'new:'
 
 /**
- * Placeholder -> UUID, the return trip for a classifier extraction (`substituteIds`
- * only maps the forward direction). Unknown strings pass through untouched, so the
- * planner can still resolve temp handles through its own handleMap.
- *
- * `reservedHandles` are never rewritten even when they collide with a placeholder:
- * a model that ignores NEW_HANDLE_PREFIX and names a new character `c1` would
- * otherwise have every ref to it silently redirected to the existing entity `c1`.
+ * Placeholder -> UUID, the return trip of `substituteIds`; unknown strings pass through for the
+ * planner's handleMap. `reservedHandles` are never rewritten where a handle can stand: a model
+ * ignoring NEW_HANDLE_PREFIX and naming a new character `c1` has its refs sent to entity `c1`.
  */
 export function substituteClassifierIds<T>(
   value: T,
@@ -39,7 +29,9 @@ export function substituteClassifierIds<T>(
   return Object.fromEntries(
     Object.entries(value).map(([key, v]) => {
       if (typeof v === 'string' && (PLACEHOLDER_FIELDS as readonly string[]).includes(key)) {
-        return [key, reservedHandles.has(v) ? v : (idMap.getUuidFor(v) ?? v)]
+        const reserved =
+          (HANDLE_FIELDS as readonly string[]).includes(key) && reservedHandles.has(v)
+        return [key, reserved ? v : (idMap.getUuidFor(v) ?? v)]
       }
       return [key, substituteClassifierIds(v, idMap, reservedHandles)]
     }),

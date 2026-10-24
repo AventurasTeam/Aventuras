@@ -1094,7 +1094,8 @@ describe('conditions and drops', () => {
     })
   })
 
-  it('reads each condition trimmed, skipping one with no id or no text', () => {
+  // data-model.md → Entry metadata shape: a blank condition is kept for apply.ts to reject.
+  it('reads each condition trimmed, keeping a blank one and skipping one with no id', () => {
     const { block, failures } = parseStateBlock(`<state>
   <conditions>
     <entity id="l1">  burned to the ground  </entity>
@@ -1106,8 +1107,17 @@ describe('conditions and drops', () => {
     expect(failures).toEqual([])
     expect(block.conditions).toEqual([
       { id: 'l1', text: 'burned to the ground' },
+      { id: 'i2', text: '' },
       { id: 'i4', text: 'snapped in two at the hilt' },
     ])
+  })
+
+  it('reads a lone blank condition as an entry, failing no field', () => {
+    const { block, failures } = parseStateBlock(
+      '<state><scene_entities>c1</scene_entities><conditions><entity id="i4"></entity></conditions></state>',
+    )
+    expect(failures).toEqual([])
+    expect(block.conditions).toEqual([{ id: 'i4', text: '' }])
   })
 
   it.each([
@@ -1221,6 +1231,38 @@ describe('conditions and drops', () => {
       stackables: [],
       drops: [],
     })
+  })
+
+  // piggyback.md → Trailing block format: a drop away from the scene stays prose.
+  it('drops a drop that names a place, reporting it, and leaves it no place in the order', () => {
+    const { block, failures, dropsElsewhere } = parseStateBlock(`<state>
+  <transfers>
+    <drop id="i4" from="c1" to="l5" />
+    <drop id="i2" from="c1" to="" />
+    <item id="i1" to="c1" slot="inventory" />
+  </transfers>
+</state>`)
+    expect(failures).toEqual([])
+    expect(block.transfers).toEqual({
+      items: [{ id: 'i1', slot: 'inventory', to: 'c1', seq: 1 }],
+      stackables: [],
+      drops: [{ id: 'i2', from: 'c1', seq: 0 }],
+    })
+    expect(dropsElsewhere).toEqual([{ id: 'i4', to: 'l5' }])
+  })
+
+  it('reads transfers holding only a drop that names a place as nothing moved, failing no field', () => {
+    const { block, failures, dropsElsewhere } = parseStateBlock(
+      '<state><scene_entities>c1</scene_entities><transfers><drop id="i4" to="l99" /></transfers></state>',
+    )
+    expect(failures).toEqual([])
+    expect(block.transfers).toEqual({ items: [], stackables: [], drops: [] })
+    expect(dropsElsewhere).toEqual([{ id: 'i4', to: 'l99' }])
+  })
+
+  it('reports no drop elsewhere for a block without one, or with no block', () => {
+    expect(parseStateBlock(CANON_BLOCK).dropsElsewhere).toEqual([])
+    expect(parseStateBlock('Just prose.').dropsElsewhere).toEqual([])
   })
 
   it('fails transfers when its only tag is a drop with no id', () => {

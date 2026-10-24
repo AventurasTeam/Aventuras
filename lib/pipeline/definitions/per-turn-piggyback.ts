@@ -21,6 +21,7 @@ import {
   substitutePiggybackIds,
   suggestionRefSchema,
   type ParsedTransfers,
+  type PiggybackApplied,
   type SubstitutedStateBlock,
   type TurnCreatesReport,
   VISUAL_CHANGE_TYPES,
@@ -36,7 +37,7 @@ import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore } from '@/lib/stores'
 
 import { classifierEmbedder } from './description-embedder'
-import { readLastTurns } from './entry-reads'
+import { readLastTurns, readStoryPlace } from './entry-reads'
 import { buildGenerationContext } from './generation-context'
 import { planTurnCreates } from './per-turn-creates'
 import { loadPerTurnWorkingSet } from './working-set'
@@ -85,6 +86,40 @@ const createList = <T extends z.ZodType>(create: T) =>
     (value) => (Array.isArray(value) ? value : isRecord(value) ? [value] : undefined),
     z.array(z.preprocess((value) => (isRecord(value) ? value : {}), create)).optional(),
   )
+
+const withoutNulls = (value: object): object =>
+  Object.fromEntries(Object.entries(value).filter(([, field]) => field !== null))
+
+// Read as a create list is, but an entry the schema can't read drops alone, uncounted, as the tags'
+// parser skips one; a null field reads as absent first.
+function readableEntries(value: unknown, entry: z.ZodType): unknown[] | undefined {
+  const list = Array.isArray(value) ? value : isRecord(value) ? [value] : undefined
+  return list
+    ?.map((item) => (isRecord(item) ? withoutNulls(item) : item))
+    .filter((item) => entry.safeParse(item).success)
+}
+
+const conditionEntry = z.object({
+  id: z.string().describe('The ID of a place or item shown above with its state.'),
+  text: z
+    .string()
+    .describe(
+      'Its condition as it is now, the running consequence rather than the event: keep what still applies, drop what no longer does, in a few words, never more than about 60. It replaces the stored condition whole.',
+    ),
+})
+
+// piggyback.md → Trailing block format: put down somewhere else than the scene stays prose. Kept
+// out unlogged: the schema has no logger.
+const namesPlace = (item: unknown): boolean =>
+  isRecord(item) && 'to' in item && typeof item.to === 'string' && item.to.trim() !== ''
+
+const dropEntry = z.object({
+  id: z.string().describe("The item's ID from the list."),
+  from: z
+    .string()
+    .optional()
+    .describe('Who held it, when the turn says. Omit rather than inventing a roster ID.'),
+})
 
 export const fallbackClassifierSchema = z.object({
   sceneEntities: z
@@ -136,17 +171,10 @@ export const fallbackClassifierSchema = z.object({
     )
     .optional(),
   conditions: z
-    .array(
-      z.object({
-        id: z.string().describe('The ID of a place or item shown above with its state.'),
-        text: z
-          .string()
-          .describe(
-            'Its condition as it is now, the running consequence rather than the event: keep what still applies, drop what no longer does, in a few words, never more than about 60. It replaces the stored condition whole.',
-          ),
-      }),
+    .preprocess(
+      (value) => readableEntries(value, conditionEntry),
+      z.array(conditionEntry).optional(),
     )
-    .optional()
     .describe(
       "A place's or an item's condition, only when this turn changes it, and only for one shown above with its state: the current location, an item held in the scene or lying there, a place or item listed elsewhere in the world.",
     ),
@@ -197,14 +225,9 @@ export const fallbackClassifierSchema = z.object({
         )
         .default([]),
       drops: z
-        .array(
-          z.object({
-            id: z.string().describe("The item's ID from the list."),
-            from: z
-              .string()
-              .optional()
-              .describe('Who held it, when the turn says. Omit rather than inventing a roster ID.'),
-          }),
+        .preprocess(
+          (value) => readableEntries(value, dropEntry)?.filter((drop) => !namesPlace(drop)) ?? [],
+          z.array(dropEntry),
         )
         .default([])
         .describe(
@@ -284,20 +307,17 @@ function orderedTransfers(transfers: NonNullable<FallbackReply['transfers']>): P
 }
 
 // A failed fold lands its visual changes, conditions and transfers (bar drops it can't place), so
-// each record stays unless this reply's field has one too: an unrejected condition, a landed drop.
+// each record stays unless something in this reply's field landed too, as apply.ts reports it.
 function withFoldChanges(
   report: StateReport | undefined,
   prior: StateReport | undefined,
+  applied: PiggybackApplied,
 ): StateReport | undefined {
-  const transfers = report?.transfers
   const transfersApplied =
-    transfers !== undefined &&
-    (transfers.items.length > 0 ||
-      transfers.stackables.length > 0 ||
-      (transfers.drops?.length ?? 0) > 0)
+    applied.itemsLanded > 0 || applied.stackablesLanded > 0 || applied.drops.length > 0
   const conditionsApplied = (report?.conditions ?? []).some((c) => c.rejected !== true)
   const carried: Pick<StateReport, 'visualChanges' | 'conditions' | 'transfers'> = {
-    ...((report?.visualChanges?.length ?? 0) === 0 && prior?.visualChanges !== undefined
+    ...(applied.visualChangesLanded === 0 && prior?.visualChanges !== undefined
       ? { visualChanges: prior.visualChanges }
       : {}),
     ...(!conditionsApplied && prior?.conditions !== undefined
@@ -476,6 +496,8 @@ export async function* piggybackFallbackClassifierPhase(
     block: resolvedBlock,
     entities,
     mapCurrentLocationId: load.mapCurrentLocationId,
+    // Below the reply, which a failed fold may already have given this turn's location.
+    story: await readStoryPlace(ctx.db, ctx.branchId, tail.position),
     branchId: ctx.branchId,
     source: 'per_turn_classifier',
     embed: classifierEmbedder(),
@@ -526,6 +548,7 @@ export async function* piggybackFallbackClassifierPhase(
       ...(priorReport?.raw !== undefined ? { raw: priorReport.raw } : {}),
     }),
     priorReport,
+    applied,
   )
 
   const rawSuggestions =
@@ -557,11 +580,7 @@ export async function* piggybackFallbackClassifierPhase(
   }
 
   // After the reply's create, before writes naming them: a reversal of the turn removes them.
-  for (const action of plan.creates) {
-    yield { type: 'delta_emitted', action }
-  }
-  // A placement can name a parent the creates insert, so it follows them.
-  for (const action of plan.placements) {
+  for (const action of plan.structural) {
     yield { type: 'delta_emitted', action }
   }
   yield {
