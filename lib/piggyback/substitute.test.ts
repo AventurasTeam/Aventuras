@@ -411,9 +411,15 @@ describe('substitutePiggybackIds — kinds', () => {
     drops: [],
   }
 
+  // The row a wrong-kind ref resolved to, by id unless it's a create's handle, and its kind.
+  const wrongRow = (resolved: string, kind: Entity['kind'] | null) => ({
+    ...(resolved.startsWith('new:') ? {} : { id: resolved }),
+    ...(kind !== null ? { kind } : {}),
+  })
+
   it.each(notItems)(
     'drops only the transfer naming %s, keeping the rest of the field',
-    (_l, ref) => {
+    (_l, ref, resolved, kind) => {
       const result = substitutePiggybackIds(transferring(ref), idMap(), opts('drop'))
       expect(result.failures).toEqual([])
       expect(result.block.transfers).toEqual(keptTransfers)
@@ -421,6 +427,7 @@ describe('substitutePiggybackIds — kinds', () => {
         {
           field: 'transfers',
           ref,
+          ...wrongRow(resolved, kind),
           reason: 'wrong-kind',
           detail: expect.stringContaining('not an item'),
         },
@@ -452,23 +459,27 @@ describe('substitutePiggybackIds — kinds', () => {
     ])
   })
 
-  it.each(notItems)('drops only the drop naming %s when wrong refs drop', (_l, ref) => {
-    const result = substitutePiggybackIds(dropping(ref), idMap(), opts('drop'))
-    expect(result.failures).toEqual([])
-    expect(result.block.transfers).toEqual({
-      items: [{ id: 'new:key', slot: 'inventory', to: CHAR, seq: 0 }],
-      stackables: [],
-      drops: [{ id: ITEM, from: CHAR, seq: 2 }],
-    })
-    expect(result.droppedRefs).toEqual([
-      {
-        field: 'transfers',
-        ref,
-        reason: 'wrong-kind',
-        detail: expect.stringContaining('not an item'),
-      },
-    ])
-  })
+  it.each(notItems)(
+    'drops only the drop naming %s when wrong refs drop',
+    (_l, ref, resolved, kind) => {
+      const result = substitutePiggybackIds(dropping(ref), idMap(), opts('drop'))
+      expect(result.failures).toEqual([])
+      expect(result.block.transfers).toEqual({
+        items: [{ id: 'new:key', slot: 'inventory', to: CHAR, seq: 0 }],
+        stackables: [],
+        drops: [{ id: ITEM, from: CHAR, seq: 2 }],
+      })
+      expect(result.droppedRefs).toEqual([
+        {
+          field: 'transfers',
+          ref,
+          ...wrongRow(resolved, kind),
+          reason: 'wrong-kind',
+          detail: expect.stringContaining('not an item'),
+        },
+      ])
+    },
+  )
 
   // One transfer's bad ref, beside a transfer list that otherwise resolves.
   const unresolved: [string, Partial<ParsedTransfers>, string][] = [
@@ -569,14 +580,14 @@ describe('substitutePiggybackIds — per-entry drops', () => {
   const key = { handle: 'new:key', name: 'rusted key', description: 'an iron key' }
   const docks = { handle: 'new:docks', name: 'the Docks', description: 'a pier' }
 
-  const sceneCases: [string, string, 'unknown' | 'wrong-kind'][] = [
-    ['an unknown id', 'c9', 'unknown'],
-    ['an undeclared handle', 'new:ghost', 'unknown'],
-    ["a place's id", 'l1', 'wrong-kind'],
-    ["a new place's handle", 'new:docks', 'wrong-kind'],
+  const sceneCases: [string, string, 'unknown' | 'wrong-kind', object][] = [
+    ['an unknown id', 'c9', 'unknown', {}],
+    ['an undeclared handle', 'new:ghost', 'unknown', {}],
+    ["a place's id", 'l1', 'wrong-kind', { id: LOC, kind: 'location' }],
+    ["a new place's handle", 'new:docks', 'wrong-kind', { kind: 'location' }],
   ]
 
-  it.each(sceneCases)('drops only the scene entry naming %s', (_l, ref, reason) => {
+  it.each(sceneCases)('drops only the scene entry naming %s', (_l, ref, reason, row) => {
     const result = substitutePiggybackIds(
       assumeNormalized({
         newLocations: [docks],
@@ -589,7 +600,7 @@ describe('substitutePiggybackIds — per-entry drops', () => {
     expect(result.block.sceneEntities).toEqual([CHAR, ITEM, 'new:key'])
     expect(result.failures).toEqual([])
     expect(result.droppedRefs).toEqual([
-      { field: 'sceneEntities', ref, reason, detail: expect.stringContaining(ref) },
+      { field: 'sceneEntities', ref, ...row, reason, detail: expect.stringContaining(ref) },
     ])
   })
 
@@ -605,10 +616,10 @@ describe('substitutePiggybackIds — per-entry drops', () => {
   })
 
   it.each([
-    ['an unknown id', 'c9', 'unknown'],
-    ["a place's id", 'l1', 'wrong-kind'],
-    ["an item's id", 'i1', 'wrong-kind'],
-  ] as const)('drops only the visual change naming %s', (_l, ref, reason) => {
+    ['an unknown id', 'c9', 'unknown', {}],
+    ["a place's id", 'l1', 'wrong-kind', { id: LOC, kind: 'location' }],
+    ["an item's id", 'i1', 'wrong-kind', { id: ITEM, kind: 'item' }],
+  ] as const)('drops only the visual change naming %s', (_l, ref, reason, row) => {
     const result = substitutePiggybackIds(
       assumeNormalized({
         visualChanges: [
@@ -621,7 +632,7 @@ describe('substitutePiggybackIds — per-entry drops', () => {
     )
     expect(result.block.visualChanges).toEqual([{ id: CHAR, type: 'hair', text: 'wet' }])
     expect(result.droppedRefs).toEqual([
-      { field: 'visualChanges', ref, reason, detail: expect.stringContaining(ref) },
+      { field: 'visualChanges', ref, ...row, reason, detail: expect.stringContaining(ref) },
     ])
   })
 

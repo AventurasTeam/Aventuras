@@ -113,6 +113,8 @@ export const entryMetadataSchema = z.object({
           z.object({
             field: z.string(),
             ref: z.string().optional(),
+            id: z.string().optional(),
+            kind: z.string().optional(),
             reason: z.string(),
             detail: z.string(),
           }),
