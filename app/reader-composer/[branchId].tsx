@@ -1256,8 +1256,7 @@ export default function ReaderComposerRoute() {
       // 'rejected' is the self-block a second ⟳ hits while one runs, and
       // 'aborted' is a cancel or a branch switch — neither is a failure.
       .then((result) => {
-        if (result.outcome === 'failed')
-          fail(result.error ?? { kind: 'orchestrator', detail: 'run failed without an error' })
+        if (result.outcome === 'failed') fail(result.error)
       })
       .catch((e: unknown) => {
         // Logged outside the strip guard: a throw that lands after a branch
