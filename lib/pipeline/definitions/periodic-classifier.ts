@@ -368,17 +368,16 @@ export async function* periodicClassifierPhase(
     }
     return decided
   }
-  const decisions = await reconcile('character')
-  if (decisions === null) return { status: 'aborted' }
-  const factionDecisions = await reconcile('faction', new Set(decisions.keys()))
+  const characterDecisions = await reconcile('character')
+  if (characterDecisions === null) return { status: 'aborted' }
+  const factionDecisions = await reconcile('faction', new Set(characterDecisions.keys()))
   if (factionDecisions === null) return { status: 'aborted' }
 
   const plan = buildClassifierActions(substituted, {
     branchId: ctx.branchId,
     window,
     entities,
-    decisions,
-    factionDecisions,
+    decisions: { character: characterDecisions, faction: factionDecisions },
     now: () => Date.now(),
     newId: (kind) => generateId(kind),
     threads,

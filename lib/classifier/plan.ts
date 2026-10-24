@@ -172,10 +172,11 @@ export type PlanDeps = {
   branchId: string
   window: ClassifierWindow
   entities: readonly Entity[]
-  /** Reconcile decision per newCharacters handle, resolved before planning. */
-  decisions: Map<string, ReconcileDecision>
-  /** Per newFactions handle: kept apart, since one handle can name a character and a faction. */
-  factionDecisions: ReadonlyMap<string, ReconcileDecision>
+  /**
+   * Reconcile decision per handle, resolved before planning, one map per kind: one handle can
+   * name a character and a faction.
+   */
+  decisions: Readonly<Record<ReconciledKind, ReadonlyMap<string, ReconcileDecision>>>
   now: () => number
   // 'haw' is absent on purpose: the upsertHappeningAwareness handler in
   // lib/actions/happenings/register-awareness.ts allocates the awareness id
@@ -193,19 +194,16 @@ export type PlanDeps = {
 const SOURCE = 'periodic_classifier' as const
 
 /**
- * A kind's reply field, decision map and id prefix. NewCharacter and NewFaction differ only in
- * optional fields, so a hand-made pairing of them still compiles swapped.
+ * A kind's reply field and id prefix, as `PlanDeps.decisions` keys its decision map. NewCharacter
+ * and NewFaction differ only in optional fields, so a hand-made pairing of them still compiles
+ * swapped.
  */
 export const RECONCILED_KINDS = {
-  character: { reply: 'newCharacters', decisions: 'decisions', idPrefix: 'char' },
-  faction: { reply: 'newFactions', decisions: 'factionDecisions', idPrefix: 'fact' },
+  character: { reply: 'newCharacters', idPrefix: 'char' },
+  faction: { reply: 'newFactions', idPrefix: 'fact' },
 } as const satisfies Record<
   ReconciledKind,
-  {
-    reply: keyof ClassifierExtraction
-    decisions: keyof PlanDeps
-    idPrefix: Parameters<PlanDeps['newId']>[0]
-  }
+  { reply: keyof ClassifierExtraction; idPrefix: Parameters<PlanDeps['newId']>[0] }
 >
 
 // An embedded pair composites as `${first} ${second}` and must clear the tightest catalog
@@ -661,8 +659,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   // classifier.md → Disambiguation and → Factions: absorb, promote or create, by the decision.
   const droppedCreates: DroppedCreate[] = []
   const planNewEntities = (kind: ReconciledKind): void => {
-    const { reply, decisions, idPrefix } = RECONCILED_KINDS[kind]
-    const decisionOf = deps[decisions]
+    const { reply, idPrefix } = RECONCILED_KINDS[kind]
+    const decisionOf = deps.decisions[kind]
     for (const candidate of extraction[reply]) {
       const { handle, name } = candidate
       if (nonBlank(name) == null) {

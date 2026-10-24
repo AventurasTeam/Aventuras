@@ -230,18 +230,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Rename only. Raised 2026-10-16 by the mentioned places slice review's
   simplifier pass.
 
-- **The classifier planner's decision maps are paired by name.**
-  `PlanDeps.decisions` in `lib/classifier/plan.ts` is a `Map` the
-  planner only reads, where its `factionDecisions` sibling is a
-  `ReadonlyMap`. Both have one type, so the pass
-  (`lib/pipeline/definitions/periodic-classifier.ts`) could hand them
-  over swapped and still compile. Keying them by kind, as
-  `RECONCILED_KINDS` already keys the reply field and id prefix, would
-  close both; it changes the older `decisions` field, so it waits on
-  its own commit
-  ([`code-conventions.md → Type design`](../code-conventions.md#type-design)).
-  Raised 2026-10-18 by the classifier factions slice review.
-
 - **Three copies of `isPlainObject`.** `lib/actions/delta/delta-encoding.ts`
   exports one, which `user-precedence.ts` now shares;
   `lib/actions/settings/normalize.ts` keeps its own copy inside the same
