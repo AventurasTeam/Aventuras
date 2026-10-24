@@ -6,6 +6,9 @@ export type PlacePlacement =
   | { kind: 'top' }
   | { kind: 'unplaced' }
 
+/** A placement that says where: under a parent or top-level. */
+export type PlacedPlacement = Exclude<PlacePlacement, { kind: 'unplaced' }>
+
 type StoredPlacement = Partial<Pick<LocationState, 'parent_location_id' | 'unplaced'>>
 
 /** A row's stored placement; a reader with the rows reads a parent naming no place as unplaced. */

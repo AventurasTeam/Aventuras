@@ -27,10 +27,12 @@ import {
   matchNewPlace,
   parentOfLocations,
   placeNewLocation,
+  replyParentOf,
   settlingOrder,
   TOP_LEVEL,
   withPlacement,
   type ParentDropCause,
+  type PlacedPlacement,
   type PlacePlacement,
   type SettledNewPlace,
 } from '@/lib/world'
@@ -193,7 +195,7 @@ function planLocations(args: {
   const placed: SettledNewPlace[] = []
   const placements: PlaceLocationAction[] = []
   // Where this turn's placements put a reused place, so a later walk sees it there.
-  const placedParents = new Map<string, string | null>()
+  const placedHere = new Map<string, PlacedPlacement>()
   // The rows this turn placed, as matching must see them: no longer unplaced.
   const placedRows = new Map<string, Entity>()
 
@@ -204,9 +206,7 @@ function planLocations(args: {
   )
   for (const place of order) {
     const { emission } = place
-    const storedParentOf = parentOfLocations([...entities, ...rows])
-    const parentOf = (id: string): string | null =>
-      placedParents.has(id) ? (placedParents.get(id) ?? null) : storedParentOf(id)
+    const parentOf = replyParentOf(placedHere, parentOfLocations([...entities, ...rows]))
     const placement = placeNewLocation({
       place,
       resolve: (parent) => fates.get(parent)?.id ?? parent,
@@ -225,7 +225,7 @@ function planLocations(args: {
       placedRows.size === 0
         ? view
         : { ...view, locations: view.locations.map((e) => placedRows.get(e.id) ?? e) },
-      placedParents,
+      placedHere,
     )
     let id: string
     if (match.kind === 'create') {
@@ -254,7 +254,7 @@ function planLocations(args: {
         const loop =
           candidate.kind === 'under' ? placementLoop(id, candidate.parentId, parentOf) : null
         if (loop === null) {
-          placedParents.set(id, candidate.kind === 'under' ? candidate.parentId : null)
+          placedHere.set(id, candidate)
           const row = byId.get(id)
           if (row !== undefined)
             placedRows.set(id, {

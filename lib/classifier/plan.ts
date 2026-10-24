@@ -22,6 +22,7 @@ import {
   parentOfLocations,
   placeNewLocation,
   realPlacementOf,
+  replyParentOf,
   samePlacement,
   settlingOrder,
   stateOf,
@@ -29,6 +30,7 @@ import {
   unhiddenLocationView,
   withPlacement,
   type ParentDropCause,
+  type PlacedPlacement,
   type PlacePlacement,
   type SettledNewPlace,
 } from '@/lib/world'
@@ -277,7 +279,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   const rowById = new Map(entities.map((e) => [e.id, e]))
   // What this reply creates and where it puts a place, for the placements walk after the creates.
   const createdPlaces: Pick<Entity, 'id' | 'kind' | 'state'>[] = []
-  const placedParents = new Map<string, string | null>()
+  const placedHere = new Map<string, PlacedPlacement>()
   // Mutable, not a frozen snapshot: rows this pass plans are visible to later
   // facts in the same reply, so the flip guards read post-plan status and a ref
   // to a just-created character resolves.
@@ -360,9 +362,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       droppedPlaces.push({ handle, name, cause: 'handle-taken' })
     for (const settling of order) {
       const place = settling.emission
-      const storedParentOf = parentOfLocations([...entities, ...createdPlaces])
-      const parentOf = (id: string): string | null =>
-        placedParents.has(id) ? (placedParents.get(id) ?? null) : storedParentOf(id)
+      const parentOf = replyParentOf(placedHere, parentOfLocations([...entities, ...createdPlaces]))
       const placement = placeNewLocation({
         place: settling,
         resolve: (parent) => handleMap.get(parent) ?? parent,
@@ -384,7 +384,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         placedRows.size === 0
           ? view
           : { ...view, locations: view.locations.map((e) => placedRows.get(e.id) ?? e) },
-        placedParents,
+        placedHere,
       )
 
       let id: string
@@ -397,7 +397,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
           const loop =
             candidate.kind === 'under' ? placementLoop(id, candidate.parentId, parentOf) : null
           if (loop === null) {
-            placedParents.set(id, candidate.kind === 'under' ? candidate.parentId : null)
+            placedHere.set(id, candidate)
             const row = rowById.get(id)
             if (row !== undefined)
               placedRows.set(id, {
@@ -597,11 +597,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       ...entities.filter((e) => e.kind === 'location'),
       ...createdPlaces,
     ])
-    const placementAt = (id: string): PlacePlacement => {
-      if (!placedParents.has(id)) return storedPlacement(id)
-      const parentId = placedParents.get(id) ?? null
-      return parentId === null ? { kind: 'top' } : { kind: 'under', parentId }
-    }
+    const placementAt = (id: string): PlacePlacement => placedHere.get(id) ?? storedPlacement(id)
     const placesCompared = (a: string, b: string): boolean => {
       const [first, second] = [placementAt(a), placementAt(b)]
       return first.kind === 'unplaced' || second.kind === 'unplaced' || samePlacement(first, second)
@@ -610,7 +606,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const asPlanned = (id: string): Entity | undefined => {
       const stored = rowById.get(id)
       if (stored === undefined) return undefined
-      const placed = stored.kind === 'location' && placedParents.has(id)
+      const placed = stored.kind === 'location' && placedHere.has(id)
       return {
         ...stored,
         name: nameRows.get(id)?.name ?? stored.name,
@@ -727,9 +723,10 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   // own creates and placements; a loop or a retired parent is dropped before the handler sees it.
   const planPlacements = (): DroppedPlacement[] => {
     const droppedPlacements: DroppedPlacement[] = []
-    const parentOfRows = parentOfLocations([...entities, ...createdPlaces])
-    const placeParentOf = (id: string): string | null =>
-      placedParents.has(id) ? (placedParents.get(id) ?? null) : parentOfRows(id)
+    const placeParentOf = replyParentOf(
+      placedHere,
+      parentOfLocations([...entities, ...createdPlaces]),
+    )
     const realPlacement = realPlacementOf(entities.filter((e) => e.kind === 'location'))
     for (const fact of inTurnOrder(extraction.placements)) {
       const row = rowById.get(fact.ref)
@@ -742,10 +739,10 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         continue
       }
       const { id } = row
-      let placement: { kind: 'under'; parentId: string } | { kind: 'top' }
+      let placement: PlacedPlacement
       if (isTopLevel(fact.parent)) {
         // Only an unplaced place is marked top-level (data-model.md → Authorship contract).
-        if (placedParents.has(id) || realPlacement(id).kind !== 'unplaced') {
+        if (placedHere.has(id) || realPlacement(id).kind !== 'unplaced') {
           droppedPlacements.push({ ref: fact.ref, cause: 'not-unplaced' })
           continue
         }
@@ -770,7 +767,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         }
         placement = { kind: 'under', parentId }
       }
-      placedParents.set(id, placement.kind === 'under' ? placement.parentId : null)
+      placedHere.set(id, placement)
       planned.push({
         action: {
           kind: 'placeLocation',

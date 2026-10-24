@@ -121,7 +121,7 @@ export type {
 export { placeModes } from './place-modes'
 export type { PlaceModes } from './place-modes'
 export { isUnplaced, placementOf, samePlacement, withPlacement } from './placement'
-export type { PlacePlacement } from './placement'
+export type { PlacedPlacement, PlacePlacement } from './placement'
 export {
   mergePlaceRefusal,
   PLACE_REFUSAL,
@@ -138,7 +138,7 @@ export type {
   PlaceSaveRefusal,
   StoryPlace,
 } from './place-rules'
-export { itemNamesakes, matchNewPlace } from './new-entity-match'
+export { itemNamesakes, matchNewPlace, replyParentOf } from './new-entity-match'
 export type { SettledNewPlace } from './new-entity-match'
 export { placeNewLocation, settlingOrder, TOP_LEVEL } from './new-place-order'
 export type { NewPlaceDeclaration, ParentDropCause, SettlingPlace } from './new-place-order'

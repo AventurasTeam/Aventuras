@@ -9,6 +9,7 @@ import {
   type ParsedStateBlock,
   type SubstitutedStateBlock,
 } from '@/lib/piggyback'
+import type { PlacedPlacement } from '@/lib/world'
 
 import { planTurnCreates, skipTurnCreates, type TurnCreatePlan } from './per-turn-creates'
 
@@ -667,7 +668,7 @@ describe('planTurnCreates — unplaced places', () => {
     currentLocation: 'new:varn',
   })
   const placeVarn = (
-    placement: { kind: 'under'; parentId: string } | { kind: 'top' },
+    placement: PlacedPlacement,
     source: 'piggyback_tagged_block' | 'per_turn_classifier' = 'piggyback_tagged_block',
   ) => ({
     kind: 'placeLocation',

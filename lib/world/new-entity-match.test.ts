@@ -10,7 +10,7 @@ import {
   matchNewPlace as matchInReply,
   type SettledNewPlace,
 } from './new-entity-match'
-import type { PlacePlacement } from './placement'
+import type { PlacedPlacement, PlacePlacement } from './placement'
 
 const place = (
   id: string,
@@ -544,7 +544,7 @@ const matchNewPlace = (
   candidate: { name: string; placement: PlacePlacement },
   settled: readonly SettledNewPlace[],
   view: Parameters<typeof matchInReply>[2],
-  placedHere: ReadonlyMap<string, string | null> = new Map(),
+  placedHere: ReadonlyMap<string, PlacedPlacement> = new Map(),
 ) => matchInReply(candidate, settled, view, placedHere)
 
 describe('matchNewPlace', () => {
@@ -690,7 +690,7 @@ describe('matchNewPlace', () => {
         { name: 'Ashfall', placement: UNPLACED, id: 'loc_new1' },
         { name: 'Ashfall', placement: under('loc_town'), id: 'loc_new1' },
       ]
-      const placedHere = new Map([['loc_new1', 'loc_town']])
+      const placedHere = new Map([['loc_new1', under('loc_town')]])
 
       it('still maps an unplaced place to it, as the twin it declared', () => {
         expect(
@@ -707,7 +707,7 @@ describe('matchNewPlace', () => {
               { name: 'Ashfall', placement: TOP, id: 'loc_new1' },
             ],
             view,
-            new Map([['loc_new1', null]]),
+            new Map([['loc_new1', TOP]]),
           ),
         ).toEqual(PLAIN)
       })
