@@ -58,6 +58,14 @@ pattern.
   load-bearing affordance — touch users can still see and tap the
   icons at the receded color.
 
+- **Alert** — a toggle whose content needs the user's attention
+  renders `text-danger` at rest, with a danger dot in its corner, and
+  says why in its accessible name. The dot keeps the state from riding
+  on hue alone. The
+  [entry card's world-state toggle](./entry-card.md#state-problems) is
+  the one use: it turns alert when part of a turn's state wasn't
+  applied.
+
 The alternative — hover-reveal on desktop, persistent on mobile —
 was considered and rejected. Inconsistent cross-device behavior
 costs more than the small visual weight saved by hiding muted

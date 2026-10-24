@@ -190,15 +190,15 @@ external override prop, same as reasoning expansion.
 
 ### Panel anatomy
 
-| Group                 | Source                                                                                     | Rendered when                    | Editable  |
-| --------------------- | ------------------------------------------------------------------------------------------ | -------------------------------- | --------- |
-| **Scene**             | absolute triple, ids resolved to names                                                     | always                           | tail only |
-| **Changes this turn** | `stateReport.visualChanges` / `.conditions` / `.transfers` / `.newLocations` / `.newItems` | any renders a line               | never     |
-| **Reported delta**    | `stateReport.worldTimeDelta`                                                               | present                          | never     |
-| **Summary**           | `metadata.summary`                                                                         | present                          | never     |
-| **Retrieval asks**    | `metadata.retrievalQueries`                                                                | non-empty                        | never     |
-| **Parse failure**     | `stateReport.failedFields` / `.raw`                                                        | `failedFields` non-empty         | never     |
-| **Legacy block**      | `stripTrailingBlocks(content).stateRaw`                                                    | no `stateReport`, markup present | never     |
+| Group                 | Source                                                                                                     | Rendered when                    | Editable  |
+| --------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------- | --------- |
+| **Scene**             | absolute triple, ids resolved to names                                                                     | always                           | tail only |
+| **Changes this turn** | `stateReport.visualChanges` / `.conditions` / `.transfers` / `.newLocations` / `.newItems`                 | any renders a line               | never     |
+| **Reported delta**    | `stateReport.worldTimeDelta`                                                                               | present                          | never     |
+| **Summary**           | `metadata.summary`                                                                                         | present                          | never     |
+| **Retrieval asks**    | `metadata.retrievalQueries`                                                                                | non-empty                        | never     |
+| **State problems**    | `stateReport.failedFields` / `.droppedRefs` / `.currentLocationRejected` / rejected `.conditions` / `.raw` | any is present                   | never     |
+| **Legacy block**      | `stripTrailingBlocks(content).stateRaw`                                                                    | no `stateReport`, markup present | never     |
 
 **Retrieval asks** lists what the turn's classifier requested for the
 next turn's retrieval — the
@@ -227,8 +227,9 @@ the same holders; a new place or item as `New place:` or `New item:`
 and its name, or `Matched place:` and the reused row's name.
 A created or reused row is named from the live entity, as every other
 line is, and from the report's name only once the row is gone. A
-dropped create or a rejected condition isn't listed; the per-turn
-inspector shows them. These exist nowhere else once the block is
+dropped create isn't listed; the per-turn inspector shows it. A
+rejected condition is no change either, and
+[State problems](#state-problems) lists it. These exist nowhere else once the block is
 stripped from `content` — deltas carry the applied effect, not the
 narration of it.
 
@@ -281,6 +282,41 @@ one. Never a crash, and never a bare UUID in the reader per
 [data-model.md → ID shape](../../data-model.md#id-shape--kind-prefixed-uuids-throughout).
 The one exception is a created or reused row that is gone since: its
 line names it from the report. Create lines are one per distinct id.
+
+### State problems
+
+The group lists what the turn's model said that wasn't applied, one
+line each: a failed field, a dropped ref, a rejected location and a
+rejected condition, with the raw block under them when a parse failed.
+A wrong-kind ref is named from its row and its kind ("Ashfen Marshes
+(Location) can't go in the scene"), or from the turn's create for a
+handle; an unknown one shows as the model wrote it, since it names
+nothing; an unreadable one names only its field.
+
+**The world-state toggle turns alert** whenever the group holds a line
+the turn didn't recover from: the
+[alert variant](./icon-actions.md#visibility--always-rendered-color-tiered-brighten-on-hover)
+in `danger` with a dot in its corner, and an accessible name that says
+part of the state wasn't applied. The card then shows a problem without
+the panel open, on the turn it belongs to, and the group's box is
+`danger` to match. A narrative failure the fallback recovered still
+lists its fields, as recovered and in the warning tone, and leaves the
+toggle plain: the turn's state did apply. A clamped delta, a dropped
+create and an item moved to a holder that isn't a character don't
+count. They're corrections, or fine as they are.
+
+**A turn that ends alert also toasts**, once, as the Send or the
+regenerate completes on the branch the user is still reading. The
+warning names the model to improve: the classifier where the fallback
+supplied the state, or failed, and the narrative model otherwise. It
+has no action; the toggle is the record that stays. One rule decides
+both the toggle and the toast (`unappliedStateRole` in
+`lib/piggyback`).
+
+**A disabled row the scene seats** reads as a muted line under the
+scene: the narrator now has it in its prompt although it was disabled
+([principles.md → Injection / retrieval rules for prompt context](../principles.md#injection--retrieval-rules-for-prompt-context)).
+It is a notice rather than a problem, so it doesn't light the toggle.
 
 ### Scene editor
 
@@ -775,8 +811,8 @@ detail expanded), streaming kind (reasoning-phase, reply-phase),
 edit mode (textarea, with and without `Save & regenerate`),
 disabled state, the gate split during a pass (older entry, head turn, head-turn edit), world-time footer
 shown/hidden by kind, world-state panel (reported, fallback-layer
-badge, rejected location, clamped delta, parse failure with raw
-block, legacy row, unknown-entity chip), scene editor (tail entry
+badge, rejected location, clamped delta, state problems and the
+alert toggle, legacy row, unknown-entity chip), scene editor (tail entry
 editable, non-tail read-only). Belongs in
 `Patterns/Reader composer/EntryCard` when component
 implementation begins.

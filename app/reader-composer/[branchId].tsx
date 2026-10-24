@@ -128,6 +128,7 @@ import {
   buildSuggestionSlots,
   findSuggestionAnchor,
   shouldShowSuggestionStrip,
+  unappliedStateRole,
 } from '@/lib/piggyback'
 import {
   isClassifierHeld,
@@ -619,6 +620,28 @@ export default function ReaderComposerRoute() {
     return tail ? { content: tail.content, failure: tail.metadata?.systemFailure } : null
   }, [branchId])
 
+  // entry-card.md → State problems: once per turn, beside the card's alert toggle that stays.
+  const notifyUnappliedState = useCallback(
+    (started: string) => {
+      if (!branchUnchanged(started)) return
+      const reply = [...entriesStore.getEntries().values()]
+        .filter((e) => e.branchId === started && e.kind === 'ai_reply')
+        .reduce<
+          StoryEntry | undefined
+        >((last, e) => (last == null || e.position > last.position ? e : last), undefined)
+      const role = unappliedStateRole(reply?.metadata?.stateReport)
+      if (role != null)
+        toast.warning(
+          t(
+            role === 'classifier'
+              ? 'reader:stateUnappliedClassifier'
+              : 'reader:stateUnappliedNarrative',
+          ),
+        )
+    },
+    [branchUnchanged],
+  )
+
   const dropSystemTail = useCallback(
     async (tail: DroppedSystemEntry | null): Promise<void> => {
       if (!tail) return
@@ -774,7 +797,7 @@ export default function ReaderComposerRoute() {
               composerRef.current?.restoreDraft(raw?.text ?? content, raw?.mode ?? 'free')
             else toast.info(t('reader:turnCancelledDraftKept'))
           }
-        }
+        } else if (result.outcome === 'completed') notifyUnappliedState(branchId)
       } catch (err) {
         // submitTurn throws on a rejected user_action write — treat a thrown
         // failure like a structured 'failed' outcome so the UI surfaces an
@@ -803,6 +826,7 @@ export default function ReaderComposerRoute() {
       endDispatch,
       branchUnchanged,
       reload,
+      notifyUnappliedState,
     ],
   )
 
@@ -871,6 +895,7 @@ export default function ReaderComposerRoute() {
           return regen
         }
         const { result } = regen
+        if (result.outcome === 'completed') notifyUnappliedState(branchId)
         // A branch switch under the dispatch makes the composer's draft another
         // branch's, so it can neither decide this plan nor receive its text.
         const stillHere = branchUnchanged(branchId)
@@ -962,6 +987,7 @@ export default function ReaderComposerRoute() {
       endDispatch,
       branchUnchanged,
       handBackSubmission,
+      notifyUnappliedState,
     ],
   )
 

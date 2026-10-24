@@ -50,7 +50,12 @@ import type { CalendarFrame } from '@/lib/calendar'
 import type { EntryMetadata, StoryEntry } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { detectRichEntryHtml, parseMarkdownToHtml, sanitizeHtml } from '@/lib/markdown'
-import { isCreateHandle, stripTrailingBlocks } from '@/lib/piggyback'
+import {
+  CLASSIFIER_FAILURE_FIELD,
+  isCreateHandle,
+  stripTrailingBlocks,
+  unappliedStateRole,
+} from '@/lib/piggyback'
 import { cn } from '@/lib/utils'
 
 import { RichEntryContent } from './rich-entry-content'
@@ -495,8 +500,8 @@ function resolveName(id: string, pool: readonly ResolvedEntity[]): string {
   return pool.find((e) => e.id === id)?.name ?? t('reader:entryCard.stateUnknownEntity')
 }
 
-// A fallback keeps an uncreated item's handle as the rejected location; the turn's create names it.
-function rejectedLocationName(
+// A fallback keeps an uncreated create's handle where it named one; the turn's create names it.
+function reportedRefName(
   ref: string,
   stateReport: EntryMetadata['stateReport'],
   pool: readonly ResolvedEntity[],
@@ -594,7 +599,7 @@ function WorldStatePanel({
   // Holds the applied value rather than a flag so the copy can name it, and so all three
   // clamp causes surface — `< 0` caught only the negative one.
   const clampedTo = appliedDelta != null && appliedDelta !== emittedDelta ? appliedDelta : null
-  const failedFields = stateReport?.failedFields ?? []
+  const seatedDisabled = stateReport?.seatedDisabled ?? []
 
   return (
     <View className="mb-3 rounded border border-border bg-bg-sunken p-2.5">
@@ -638,13 +643,20 @@ function WorldStatePanel({
         ) : (
           <StateLine>{t('reader:entryCard.stateNobody')}</StateLine>
         )}
+        {seatedDisabled.length > 0 ? (
+          <Text size="xs" variant="muted" className="mt-1">
+            {t('reader:entryCard.stateSeatedDisabled', {
+              names: seatedDisabled.map((id) => resolveName(id, entityNames)).join(', '),
+            })}
+          </Text>
+        ) : null}
       </StateGroup>
 
       <StateGroup label={t('reader:entryCard.stateLocation')}>
         <StateLine>
           {rejectedLocation != null ? (
             <Text size="xs" className="text-fg-muted line-through">
-              {`${rejectedLocationName(rejectedLocation, stateReport, entityNames)} `}
+              {`${reportedRefName(rejectedLocation, stateReport, entityNames)} `}
             </Text>
           ) : null}
           {currentLocationId != null
@@ -757,26 +769,128 @@ function WorldStatePanel({
         </StateGroup>
       ) : null}
 
-      {failedFields.length > 0 ? (
-        <View className="mt-2 rounded border border-warning p-1.5">
-          <Text size="xs" className="text-warning">
-            {t('reader:entryCard.stateParseFailed', {
-              fields: failedFields.map((f) => f.field).join(', '),
-            })}
-          </Text>
-          {stateReport?.raw != null ? (
-            <Text size="xs" className="mt-1 font-mono text-fg-muted">
-              {stateReport.raw}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
+      <StateProblems stateReport={stateReport} entityNames={entityNames} />
 
       {/* Tolerant reader: rows written before the write-path strip keep their markup
           and render it verbatim rather than being migrated. */}
       {stateReport == null && legacyStateRaw != null ? (
         <Text size="xs" className="font-mono text-fg-muted">
           {legacyStateRaw}
+        </Text>
+      ) : null}
+    </View>
+  )
+}
+
+// Open strings in the report, so an unknown field or kind reads as written.
+const DROPPED_FIELD_KEYS = {
+  sceneEntities: 'reader:entryCard.stateField.sceneEntities',
+  currentLocation: 'reader:entryCard.stateField.currentLocation',
+  visualChanges: 'reader:entryCard.stateField.visualChanges',
+  conditions: 'reader:entryCard.stateField.conditions',
+  transfers: 'reader:entryCard.stateField.transfers',
+} as const
+const KIND_KEYS = {
+  character: 'common:kinds.character',
+  location: 'common:kinds.location',
+  item: 'common:kinds.item',
+  faction: 'common:kinds.faction',
+  lore: 'common:kinds.lore',
+} as const
+const known = <K extends string>(keys: Record<K, unknown>, value: string): value is K =>
+  Object.hasOwn(keys, value)
+
+type DroppedRef = NonNullable<NonNullable<EntryMetadata['stateReport']>['droppedRefs']>[number]
+
+function droppedRefLine(
+  drop: DroppedRef,
+  stateReport: EntryMetadata['stateReport'],
+  pool: readonly ResolvedEntity[],
+): string {
+  const field = known(DROPPED_FIELD_KEYS, drop.field)
+    ? t(DROPPED_FIELD_KEYS[drop.field])
+    : drop.field
+  if (drop.reason === 'wrong-kind') {
+    const name =
+      drop.id != null
+        ? resolveName(drop.id, pool)
+        : drop.ref != null
+          ? reportedRefName(drop.ref, stateReport, pool)
+          : t('reader:entryCard.stateUnknownEntity')
+    return drop.kind != null
+      ? t('reader:entryCard.stateDroppedWrongKind', {
+          name,
+          kind: known(KIND_KEYS, drop.kind) ? t(KIND_KEYS[drop.kind]) : drop.kind,
+          field,
+        })
+      : t('reader:entryCard.stateDroppedWrongKindUnnamed', { name, field })
+  }
+  if (drop.reason === 'unknown' && drop.ref != null)
+    return t('reader:entryCard.stateDroppedUnknown', { ref: drop.ref, field })
+  return t('reader:entryCard.stateDroppedUnreadable', { field })
+}
+
+// entry-card.md → State problems: in danger while the toggle is alert. A narrative failure the
+// fallback recovered applied after all, so on its own it keeps the warning tone.
+function StateProblems({
+  stateReport,
+  entityNames,
+}: {
+  stateReport?: EntryMetadata['stateReport']
+  entityNames: readonly ResolvedEntity[]
+}) {
+  const failedFields = stateReport?.failedFields ?? []
+  const droppedRefs = stateReport?.droppedRefs ?? []
+  const rejectedConditions = (stateReport?.conditions ?? []).filter((c) => c.rejected === true)
+  const rejectedLocation =
+    stateReport?.currentLocationRejected === true ? stateReport.currentLocation : undefined
+  if (
+    failedFields.length === 0 &&
+    droppedRefs.length === 0 &&
+    rejectedConditions.length === 0 &&
+    rejectedLocation == null
+  )
+    return null
+  const alert = unappliedStateRole(stateReport) != null
+  const recovered =
+    stateReport?.layer === 'per_turn_classifier' &&
+    !failedFields.some((f) => f.field === CLASSIFIER_FAILURE_FIELD)
+  const tone = alert ? 'text-danger' : 'text-warning'
+  return (
+    <View className={cn('mt-2 rounded border p-1.5', alert ? 'border-danger' : 'border-warning')}>
+      <Text size="xs" className={cn('mb-0.5 font-medium', tone)}>
+        {t('reader:entryCard.stateProblems')}
+      </Text>
+      {failedFields.length > 0 ? (
+        <Text size="xs" className={tone}>
+          {t(recovered ? 'reader:entryCard.stateRecovered' : 'reader:entryCard.stateParseFailed', {
+            fields: failedFields.map((f) => f.field).join(', '),
+          })}
+        </Text>
+      ) : null}
+      {rejectedLocation != null ? (
+        <Text size="xs" className={tone}>
+          {t('reader:entryCard.stateProblemLocation', {
+            name: reportedRefName(rejectedLocation, stateReport, entityNames),
+          })}
+        </Text>
+      ) : null}
+      {rejectedConditions.map((c, i) => (
+        <Text key={`rc${i}`} size="xs" className={tone}>
+          {t('reader:entryCard.stateProblemCondition', {
+            name: resolveName(c.id, entityNames),
+            text: c.text,
+          })}
+        </Text>
+      ))}
+      {droppedRefs.map((drop, i) => (
+        <Text key={`dr${i}`} size="xs" className={tone}>
+          {droppedRefLine(drop, stateReport, entityNames)}
+        </Text>
+      ))}
+      {stateReport?.raw != null ? (
+        <Text size="xs" className="mt-1 font-mono text-fg-muted">
+          {stateReport.raw}
         </Text>
       ) : null}
     </View>
@@ -896,6 +1010,7 @@ export function EntryCard({
   // scene editor reachable only when a parse happened to succeed — an affordance
   // whose availability depends on something the user cannot see.
   const hasState = kind === 'ai_reply' || kind === 'opening'
+  const stateUnapplied = unappliedStateRole(stateReport) != null
   // Same tier split as the world-time footer: `onEditScene == null` also routes to
   // the request fork, since a Dialog whose Save has nowhere to report would discard
   // the edit silently.
@@ -976,8 +1091,15 @@ export function EntryCard({
               <IconAction
                 icon={Globe}
                 label={t(
-                  stateExpanded ? 'reader:entryCard.hideState' : 'reader:entryCard.showState',
+                  stateUnapplied
+                    ? stateExpanded
+                      ? 'reader:entryCard.hideStateUnapplied'
+                      : 'reader:entryCard.showStateUnapplied'
+                    : stateExpanded
+                      ? 'reader:entryCard.hideState'
+                      : 'reader:entryCard.showState',
                 )}
+                variant={stateUnapplied ? 'alert' : 'default'}
                 size="sm"
                 onPress={() => setStateExpanded((v) => !v)}
               />

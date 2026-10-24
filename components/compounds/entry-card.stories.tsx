@@ -1216,10 +1216,18 @@ const reportedProps = {
   },
 } satisfies Partial<EntryCardProps>
 
+// Either toggle name: an entry whose state didn't fully apply names that in its label.
 async function openPanel() {
-  await userEvent.click(screen.getByRole('button', { name: 'Show state' }))
+  await userEvent.click(screen.getByRole('button', { name: /^Show state/ }))
   await waitFor(() => expect(screen.getByText('World state block')).toBeVisible())
 }
+
+// entry-card.md → State problems: the toggle is alert exactly when part of the state didn't apply.
+const UNAPPLIED_TOGGLE = "Hide state — part of it wasn't applied"
+const expectToggle = (alert: boolean) =>
+  expect(
+    screen.getByRole('button', { name: alert ? UNAPPLIED_TOGGLE : 'Hide state' }),
+  ).toBeVisible()
 
 export const WorldStateReported: StoryT = {
   ...wrap,
@@ -1232,6 +1240,8 @@ export const WorldStateReported: StoryT = {
     expect(screen.getByText('120s')).toBeVisible()
     expect(screen.getByText("House Eldrin's history and its sigil")).toBeVisible()
     expect(screen.getByText('exiled nobility of the marshes')).toBeVisible()
+    expectToggle(false)
+    expect(screen.queryByText('State problems')).not.toBeInTheDocument()
   },
 }
 
@@ -1297,7 +1307,8 @@ export const WorldStateConditionOnly: StoryT = {
   },
 }
 
-// entry-card.md → Panel anatomy: a refused condition (unshown row, blank text) isn't listed.
+// entry-card.md → Panel anatomy: a refused condition (unshown row, blank text) isn't a change,
+// and State problems lists it.
 export const WorldStateRejectedConditions: StoryT = {
   ...wrap,
   args: {
@@ -1320,6 +1331,10 @@ export const WorldStateRejectedConditions: StoryT = {
     expect(screen.getByText('Condition: Ashfen Marshes — flooded to the knee')).toBeVisible()
     expect(screen.queryByText(/Condition: Eldrin Keep/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Condition: Sword of Dawn/)).not.toBeInTheDocument()
+    expect(
+      screen.getByText('Condition not applied to Eldrin Keep: burned to the ground'),
+    ).toBeVisible()
+    expectToggle(true)
   },
 }
 
@@ -1341,6 +1356,7 @@ export const WorldStateRejectedConditionOnly: StoryT = {
     await openPanel()
     expect(screen.queryByText('Changes this turn')).not.toBeInTheDocument()
     expect(screen.queryByText(/Condition: Eldrin Keep/)).not.toBeInTheDocument()
+    expect(screen.getByText('State problems')).toBeVisible()
   },
 }
 
@@ -1396,7 +1412,115 @@ export const WorldStateFallbackRecovered: StoryT = {
     // The whole of the invisible-fallback fix: before the badge, a fallback turn
     // wrote metadata and deltas but touched no content, so it was unobservable.
     expect(screen.getByText('classifier fallback')).toBeVisible()
-    expect(screen.getByText('State not fully recorded: transfers.')).toBeVisible()
+    // Recovered: the fallback recorded the turn, so the toggle stays plain.
+    expect(
+      screen.getByText(
+        "The narrative's state block failed (transfers); the classifier fallback recorded the turn.",
+      ),
+    ).toBeVisible()
+    expectToggle(false)
+  },
+}
+
+// The fallback's own call failed after the fold's: nothing recovered the turn.
+export const WorldStateFallbackFailed: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'piggyback_tagged_block',
+      failedFields: [
+        { field: 'transfers', detail: 'content present but no entries' },
+        { field: 'classifier', detail: 'classifier call failed: provider' },
+      ],
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText('State not fully recorded: transfers, classifier.')).toBeVisible()
+    expectToggle(true)
+  },
+}
+
+// entry-card.md → State problems: a wrong-kind ref is named from its row or its create, an
+// unknown one as the model wrote it.
+export const WorldStateDroppedRefs: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'per_turn_classifier',
+      newLocations: [
+        { handle: 'new:docks', name: 'the Docks', description: 'a pier', outcome: 'dropped' },
+      ],
+      droppedRefs: [
+        {
+          field: 'sceneEntities',
+          ref: 'l2',
+          id: LOC_A,
+          kind: 'location',
+          reason: 'wrong-kind',
+          detail: 'l2 names a location',
+        },
+        {
+          field: 'transfers',
+          ref: 'new:docks',
+          kind: 'location',
+          reason: 'wrong-kind',
+          detail: 'new:docks names a location',
+        },
+        { field: 'visualChanges', ref: 'c9', reason: 'unknown', detail: 'c9' },
+        { field: 'conditions', reason: 'unreadable', detail: 'not an object' },
+      ],
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(
+      screen.getByText("Ashfen Marshes (Location) can't go in the scene, so it was dropped."),
+    ).toBeVisible()
+    expect(
+      screen.getByText("the Docks (Location) can't go in the item moves, so it was dropped."),
+    ).toBeVisible()
+    expect(
+      screen.getByText('An unknown id, c9, was dropped from the visual changes.'),
+    ).toBeVisible()
+    expect(
+      screen.getByText("An entry in the conditions couldn't be read and was dropped."),
+    ).toBeVisible()
+    expectToggle(true)
+  },
+}
+
+// D2: a disabled row the scene seats is a notice, not a problem.
+export const WorldStateSeatedDisabled: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_B,
+    entityNames,
+    stateReport: {
+      layer: 'per_turn_classifier',
+      currentLocation: LOC_B,
+      seatedDisabled: [LOC_B],
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(
+      screen.getByText("Now in the narrator's prompt, though disabled: Eldrin Keep."),
+    ).toBeVisible()
+    expectToggle(false)
   },
 }
 
@@ -1420,6 +1544,8 @@ export const WorldStateRejectedLocation: StoryT = {
   play: async () => {
     await openPanel()
     expect(screen.getByText(/emitted id was not a location/)).toBeVisible()
+    expect(screen.getByText("Location not applied: Sword of Dawn isn't a place.")).toBeVisible()
+    expectToggle(true)
   },
 }
 

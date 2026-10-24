@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { CalendarClock, GitBranch, Pencil, RotateCw, Trash2 } from 'lucide-react-native'
+import { CalendarClock, GitBranch, Globe, Pencil, RotateCw, Trash2 } from 'lucide-react-native'
 import { View } from 'react-native'
 import { expect, fireEvent, fn, userEvent, waitFor } from 'storybook/test'
 
@@ -16,7 +16,7 @@ const meta: Meta<typeof IconAction> = {
   argTypes: {
     icon: { control: false },
     size: { control: 'select', options: ['sm', 'md', 'lg'] },
-    variant: { control: 'select', options: ['default', 'destructive'] },
+    variant: { control: 'select', options: ['default', 'destructive', 'alert'] },
     disabled: { control: 'boolean' },
   },
 }
@@ -33,6 +33,7 @@ export const Variants: Story = {
     <View className="flex-row items-center gap-3">
       <IconAction icon={Pencil} label="Edit" />
       <IconAction icon={Trash2} label="Delete" variant="destructive" />
+      <IconAction icon={Globe} label="Show world state, not all of it applied" variant="alert" />
     </View>
   ),
 }
@@ -146,6 +147,7 @@ export const ThemeMatrix: Story = {
               <IconAction icon={RotateCw} label="Regenerate" />
               <IconAction icon={GitBranch} label="Branch" />
               <IconAction icon={Trash2} label="Delete" variant="destructive" />
+              <IconAction icon={Globe} label="World state" variant="alert" />
             </View>
           </View>
         </View>
