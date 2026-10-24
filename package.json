@@ -25,7 +25,7 @@
     "test:e2e": "tsx scripts/e2e.ts --project=dev",
     "test:e2e:packaged": "tsx scripts/e2e.ts --project=packaged",
     "coverage:lib": "vitest run --project unit --coverage",
-    "electron:compile": "tsc -p electron/tsconfig.json",
+    "electron:compile": "node -e \"require('node:fs').rmSync('electron/dist', { recursive: true, force: true })\" && tsc -p electron/tsconfig.json",
     "electron:start": "electron electron/dist/main.js",
     "desktop": "tsx scripts/desktop.ts",
     "dev:slot": "tsx scripts/dev-slot/cli.ts",
