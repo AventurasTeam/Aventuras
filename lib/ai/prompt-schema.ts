@@ -112,7 +112,7 @@ function appendToLastSystem(prompt: ModelPrompt, contract: string): ModelPrompt 
   if (lastSystemIdx === -1) return [{ role: 'system', content: contract }, ...prompt]
   return prompt.map((msg, i) =>
     i === lastSystemIdx && msg.role === 'system'
-      ? { ...msg, content: `${msg.content}\n\n${contract}` }
+      ? { ...msg, content: `${msg.content.trimEnd()}\n\n${contract}` }
       : msg,
   )
 }
@@ -122,12 +122,21 @@ function appendToLastUser(prompt: ModelPrompt, closing: string): ModelPrompt {
   if (lastUserIdx === -1) {
     return [...prompt, { role: 'user', content: [{ type: 'text', text: closing }] }]
   }
+  // Onto the last text part, in place: each part keeps its order and its providerOptions, and a
+  // lone text part stays lone, which openai-compatible sends as plain-string content.
   return prompt.map((msg, i) => {
     if (i !== lastUserIdx || msg.role !== 'user') return msg
-    const textParts = msg.content.filter((p) => p.type === 'text')
-    const otherParts = msg.content.filter((p) => p.type !== 'text')
-    const text = textParts.map((p) => p.text).join('\n') + '\n\n' + closing
-    return { ...msg, content: [{ type: 'text', text }, ...otherParts] }
+    const lastTextIdx = msg.content.findLastIndex((p) => p.type === 'text')
+    if (lastTextIdx === -1)
+      return { ...msg, content: [...msg.content, { type: 'text', text: closing }] }
+    return {
+      ...msg,
+      content: msg.content.map((part, j) =>
+        j === lastTextIdx && part.type === 'text'
+          ? { ...part, text: `${part.text.trimEnd()}\n\n${closing}` }
+          : part,
+      ),
+    }
   })
 }
 
@@ -156,12 +165,11 @@ export function promptSchemaMiddleware(): LanguageModelMiddleware {
         return params
       }
 
-      const [contract, closing] = responseFormat.schema
+      const { schema } = responseFormat
+      const [contract, closing] = schema
         ? [
-            SCHEMA_CONTRACT_TEMPLATE.replace(
-              '{schema}',
-              schemaToTypeScriptBlock(responseFormat.schema),
-            ),
+            // A function, so `$&` or `$$` in a describe() reaches the model as written.
+            SCHEMA_CONTRACT_TEMPLATE.replace('{schema}', () => schemaToTypeScriptBlock(schema)),
             SCHEMA_CLOSING,
           ]
         : [SIMPLE_JSON_CONTRACT, SIMPLE_JSON_CLOSING]
