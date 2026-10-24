@@ -37,15 +37,15 @@ declare module '@/lib/actions/action-map' {
     deleteThread: { source: DeltaSource; payload: { branchId: string; id: string } }
     setThreadStatus: {
       source: DeltaSource
-      payload: {
-        branchId: string
-        id: string
-        /** classifier.md → Threads: a pass moves a thread to these; `pending` is a create's only. */
-        status: 'active' | 'resolved' | 'failed'
-        /** The change's source turn; written only on resolved or failed, to a pass's thread. */
-        resolvedAtEntryId: string | null
-        proseEntryId: ProseEntryId
-      }
+      /** classifier.md → Threads: a pass moves a thread to these; `pending` is a create's only. */
+      payload: { branchId: string; id: string; proseEntryId: ProseEntryId } & (
+        | { status: 'active' }
+        | {
+            status: 'resolved' | 'failed'
+            /** The change's source turn, written to a pass's thread. */
+            resolvedAtEntryId: string
+          }
+      )
     }
   }
 }
@@ -187,7 +187,8 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
 const setStatusHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'setThreadStatus')
     throw new Error(`handler/kind mismatch: expected 'setThreadStatus', got '${action.kind}'`)
-  const { branchId: bid, id, status, resolvedAtEntryId, proseEntryId } = action.payload
+  const { payload } = action
+  const { branchId: bid, id, status, proseEntryId } = payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const [current] = await ctx.db
@@ -212,7 +213,8 @@ const setStatusHandler: ActionHandler = async (action, branchId, ctx) => {
   // Entry refs are AI-only (data-model.md → Authorship contract): a user's thread keeps both null.
   // A pass's thread logs the ref beside the status, even unchanged, so a reversal restores both.
   if (current.triggeredAtEntryId !== null) {
-    set.resolvedAtEntryId = status === 'active' ? null : nullifyRef(resolvedAtEntryId)
+    set.resolvedAtEntryId =
+      payload.status === 'active' ? null : nullifyRef(payload.resolvedAtEntryId)
     undoPayload.resolvedAtEntryId = current.resolvedAtEntryId
   }
   return {

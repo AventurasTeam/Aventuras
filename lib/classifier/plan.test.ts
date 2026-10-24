@@ -3976,13 +3976,7 @@ describe('plot writes', () => {
     expect(planned.map((p) => [p.action.kind, p.action.payload, p.entryId])).toEqual([
       [
         'setThreadStatus',
-        {
-          branchId: 'branch_1',
-          id: 'thr_b',
-          status: 'active',
-          resolvedAtEntryId: null,
-          proseEntryId: 'e1',
-        },
+        { branchId: 'branch_1', id: 'thr_b', status: 'active', proseEntryId: 'e1' },
         'e1',
       ],
       [
@@ -4016,14 +4010,14 @@ describe('plot writes', () => {
         const { id, status, resolvedAtEntryId } = payloadOf<{
           id: string
           status: string
-          resolvedAtEntryId: string | null
+          resolvedAtEntryId?: string
         }>(p)
         return [id, status, resolvedAtEntryId, p.entryId]
       }),
     ).toEqual([
       ['thr_a', 'resolved', 'e1', 'e1'],
       ['thr_b', 'resolved', 'e1', 'e1'],
-      ['thr_a', 'active', null, 'e2'],
+      ['thr_a', 'active', undefined, 'e2'],
     ])
   })
 

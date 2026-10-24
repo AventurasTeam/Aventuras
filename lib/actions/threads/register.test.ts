@@ -471,14 +471,14 @@ describe('setThreadStatus', () => {
     )
   const setStatus = (
     status: 'active' | 'resolved' | 'failed',
-    {
-      resolvedAtEntryId = status === 'active' ? null : PROSE,
-      proseEntryId = PROSE,
-    }: { resolvedAtEntryId?: string | null; proseEntryId?: string | null } = {},
+    { proseEntryId = PROSE }: { proseEntryId?: string | null } = {},
   ): PipelineAction => ({
     kind: 'setThreadStatus',
     source: 'periodic_classifier',
-    payload: { branchId: 'br_1', id: 'thr_1', status, resolvedAtEntryId, proseEntryId },
+    payload:
+      status === 'active'
+        ? { branchId: 'br_1', id: 'thr_1', status, proseEntryId }
+        : { branchId: 'br_1', id: 'thr_1', status, resolvedAtEntryId: PROSE, proseEntryId },
   })
   const noop = (reason: string) => ({ status: 'rejected', reason, code: 'noop' })
 
@@ -499,12 +499,10 @@ describe('setThreadStatus', () => {
     },
   )
 
-  it("clears the entry when a pass's resolved thread is taken up again, whatever the payload", async () => {
+  it("clears the entry when a pass's resolved thread is taken up again", async () => {
     const { db, ctx } = await setupWithProse()
     await seed(ctx, { ...PASS_THREAD, status: 'resolved', resolvedAtEntryId: 'e_old' })
-    expect(
-      (await apply(ctx, setStatus('active', { resolvedAtEntryId: PROSE }), 'act_s')).status,
-    ).toBe('ok')
+    expect((await apply(ctx, setStatus('active'), 'act_s')).status).toBe('ok')
     expect(await rowFor(db, 'thr_1')).toMatchObject({ status: 'active', resolvedAtEntryId: null })
     expect(await undoOf(db, 'act_s')).toEqual({ status: 'resolved', resolvedAtEntryId: 'e_old' })
   })

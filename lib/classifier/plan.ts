@@ -1096,13 +1096,10 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     action: {
       kind: 'setThreadStatus',
       source: SOURCE,
-      payload: {
-        branchId,
-        id,
-        status,
-        resolvedAtEntryId: status === 'active' ? null : entryId,
-        proseEntryId,
-      },
+      payload:
+        status === 'active'
+          ? { branchId, id, status, proseEntryId }
+          : { branchId, id, status, resolvedAtEntryId: entryId, proseEntryId },
     },
     entryId,
   })
