@@ -41,7 +41,7 @@ function rowIdOf(placement: PlacePlacement): string {
 }
 
 function StatusTag({ entity }: { entity: Entity }) {
-  // A non-active place, staged or retired, carries its status tag, as EntityPicker's rows do.
+  // Parity with EntityPicker's rows.
   if (entity.status === 'active') return null
   return (
     <View className="shrink-0">

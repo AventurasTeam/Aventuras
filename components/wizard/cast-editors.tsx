@@ -127,9 +127,8 @@ type PickFromCastProps = {
   value: string | null
   onChange: (value: string | null) => void
   /**
-   * Label of an Unknown option, for a row whose value may not be known (a parent the wizard couldn't
-   * resolve). Offered and selected only while `unknown`; never reaches `onChange`. Once offered, the
-   * mode keeps counting its slot so the pick removing it can't reshape the control.
+   * Unknown option label: offered and selected only while `unknown`; never reaches `onChange`.
+   * Once offered, the mode keeps counting its slot, so removing it can't reshape the control.
    */
   unknownLabel?: string
   unknown?: boolean

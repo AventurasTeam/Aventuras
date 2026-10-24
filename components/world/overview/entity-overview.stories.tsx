@@ -298,7 +298,7 @@ export const LocationRegionRouting: Story = {
   },
 }
 
-/** world.md → Location Overview: a top-level place has no parent chain, and nothing to add. */
+/** world.md → Location Overview: a top-level place has no parent chain. */
 export const LocationTopLevelHasNoChain: Story = {
   args: { entity: HOLLOW },
   play: async () => {

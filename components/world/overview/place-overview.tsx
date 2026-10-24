@@ -39,8 +39,7 @@ function ConditionRegion({
   )
 }
 
-// No chain for a top-level place, `Location unknown` for an unplaced one; a chain topped by an
-// unplaced place ends in it.
+// A chain ends in `Location unknown` when its top is unplaced; an unplaced place shows only that.
 function PartOfRegion({
   ancestors,
   unknown,

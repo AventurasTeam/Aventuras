@@ -11,10 +11,7 @@ import { cn } from '@/lib/utils'
 
 type ValueState =
   | {
-      /**
-       * Distinct from `children`: a dangling value (id with no matching row) still counts
-       * as "set" and renders content, not the placeholder.
-       */
+      /** Distinct from `children`: a dangling value (id, no matching row) still counts as "set". */
       hasValue: boolean
       placeholder: string
     }

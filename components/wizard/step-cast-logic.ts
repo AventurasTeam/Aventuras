@@ -71,7 +71,7 @@ export function parentCandidates(
 
 /**
  * Where `row` lands at Finish, and so what its parent picker selects (wizard.md → Location editor):
- * under the cast location it names, top-level when no parent was picked or asked for, else unplaced.
+ * under the cast location it names, top-level if no parent was picked or asked for, else unplaced.
  */
 export function castPlacement(
   row: WizardLocationDraft,

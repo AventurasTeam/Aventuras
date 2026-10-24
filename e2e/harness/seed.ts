@@ -354,7 +354,7 @@ export function parkClassifierWatermarkAtLastReply(dbPath: string, branchId: str
 // Any fixed UUID works: it only keeps a seeded id stable from run to run.
 const SEED_ID_NAMESPACE = Buffer.from('6f1c2d9e5b7a4c3e8d2f1a0b9c8e7d6f', 'hex')
 
-// RFC 9562 UUIDv5 of `mnemonic`: the same row gets the same id on every run.
+// RFC 9562 UUIDv5 of `mnemonic`.
 function seedUuid(mnemonic: string): string {
   const bytes = createHash('sha1').update(SEED_ID_NAMESPACE).update(mnemonic).digest()
   bytes[6] = (bytes[6] & 0x0f) | 0x50
@@ -364,9 +364,8 @@ function seedUuid(mnemonic: string): string {
 }
 
 /**
- * Insert an unplaced location (data-model.md → LocationState shape); its id is a real `loc_<uuid>`
- * derived from its name, since prompts substitute it (docs/testing.md → Fixture + seed contract).
- * Runs before launch.
+ * Insert an unplaced location (data-model.md → LocationState shape) with a real `loc_<uuid>` id,
+ * since prompts substitute it (docs/testing.md → Fixture + seed contract). Runs before launch.
  */
 export function seedUnplacedPlace(dbPath: string, branchId: string, name: string): string {
   const mnemonic = `loc_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`

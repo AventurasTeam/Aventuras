@@ -430,7 +430,7 @@ export const LocationUnresolvedParentPicksTopLevel: Story = {
   play: () => expectSegmentUnknownThenTopLevel({ clearedAsk: true }),
 }
 
-/** A parent id naming no cast row (a resumed draft dropped it) reads Unknown, as Finish lands it. */
+/** A dangling parent id (a resumed draft dropped its row) reads Unknown, as Finish lands it. */
 export const LocationDanglingParentReadsUnknown: Story = {
   beforeEach: () => {
     wizardStore.reset()
