@@ -210,7 +210,6 @@ export function PlacementPicker({
           {...trigger}
           hasValue
           valueText={valueText}
-          placeholder={CHOICE_LABEL.unplaced()}
           label={label}
           disabled={disabled}
           disabledReason={disabledReason}
