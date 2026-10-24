@@ -64,9 +64,9 @@ function inBranch<Row extends { branchId: string }>(
 /** The flagged row's parent, which the pair rule makes the other's too (`same-parent` only). */
 function sharedParentName(flagged: FlaggedEntity, entities: readonly Entity[]): string | undefined {
   if (flagged.nameCollisionReason !== 'same-parent') return undefined
-  const { parentId } = pairSideOf(flagged)
-  if (parentId == null) return undefined
-  return entities.find((e) => e.id === parentId)?.name
+  const { placement } = pairSideOf(flagged)
+  if (placement.kind !== 'under') return undefined
+  return entities.find((e) => e.id === placement.parentId)?.name
 }
 
 function toCollisionResolution(resolution: Resolution, [a, b]: Sides): CollisionResolution {

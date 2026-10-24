@@ -1800,6 +1800,102 @@ describe('narrative fold — creates', () => {
     ])
   })
 
+  const UNPLACED_DOCKS = 'loc_00000000-0000-4000-8000-0000000000a3'
+  const unplacedDocks = (): Entity =>
+    worldRow({
+      id: UNPLACED_DOCKS,
+      kind: 'location',
+      name: 'Smuggler Docks',
+      state: { parent_location_id: null, unplaced: true },
+    })
+
+  // data-model.md → LocationState shape: a placement may name a created row, so it follows.
+  it('reuses and places an unplaced namesake, logging the placement right after the creates', async () => {
+    await seedTurn([...baseWorld(), unplacedDocks()])
+    const { events } = await foldTurn(CREATE_REPLY)
+    await applyEvents(events)
+
+    const created = createdEntities(events)
+    expect(created.map((e) => e.kind)).toEqual(['item'])
+    const rows = await branchRows()
+    expect(rows.find((r) => r.id === UNPLACED_DOCKS)?.state).toEqual({ parent_location_id: TOWN })
+    expect(entitiesStore.getById(UNPLACED_DOCKS)?.state).toEqual({ parent_location_id: TOWN })
+    expect(rows.find((r) => r.id === HERO)?.state).toMatchObject({
+      current_location_id: UNPLACED_DOCKS,
+    })
+    const reply = await storedEntry(replyOf(events).id)
+    expect(reply?.metadata?.stateReport?.newLocations).toEqual([
+      {
+        handle: 'new:docks',
+        name: 'Smuggler Docks',
+        description: 'a rotting pier below the cliffs',
+        parent: TOWN,
+        outcome: 'reused',
+        id: UNPLACED_DOCKS,
+      },
+    ])
+    const log = await turnDb.db
+      .select()
+      .from(deltas)
+      .where(eq(deltas.actionId, TURN_ACTION))
+      .orderBy(asc(deltas.logPosition))
+    expect(log.map((d) => `${d.source}:${d.targetTable}:${d.op}:${d.targetId}`)).toEqual([
+      `user_edit:story_entries:create:${USER_ACTION_ID}`,
+      `ai_classifier:story_entries:create:${replyOf(events).id}`,
+      `piggyback_tagged_block:entities:create:${created[0]?.id}`,
+      `piggyback_tagged_block:entities:update:${UNPLACED_DOCKS}`,
+      `piggyback_tagged_block:entities:update:${HERO}`,
+      `piggyback_tagged_block:entities:update:${HERO}`,
+    ])
+  })
+
+  it('leaves a reused place unplaced again when the turn is undone', async () => {
+    await seedTurn([...baseWorld(), unplacedDocks()])
+    const { events } = await foldTurn(CREATE_REPLY)
+    await applyEvents(events)
+    expect((await branchRows()).find((r) => r.id === UNPLACED_DOCKS)?.state).toEqual({
+      parent_location_id: TOWN,
+    })
+
+    expect(await undoLastAction('b1', turnCtx())).toEqual({ status: 'ok' })
+
+    const rows = await branchRows()
+    expect(rows.find((r) => r.id === UNPLACED_DOCKS)?.state).toEqual({
+      parent_location_id: null,
+      unplaced: true,
+    })
+  })
+
+  // piggyback.md → Parent: `top` makes a place top-level, and no parent leaves it unplaced.
+  it.each([
+    ['top as its', ' parent="top"', { parent_location_id: null }, { parent: 'top' }],
+    ['no', '', { parent_location_id: null, unplaced: true }, {}],
+  ] as const)(
+    'creates a place with %s parent where the tag puts it',
+    async (_label, attribute, state, reported) => {
+      await seedTurn()
+      const { events } = await foldTurn(
+        'Aria rows out to the rock.\n<state><scene_entities>c1</scene_entities>' +
+          `<new_location handle="new:isle"${attribute} name="Gull Isle">a bare rock</new_location>` +
+          '<current_location>new:isle</current_location><world_time_delta>30</world_time_delta></state>',
+      )
+      await applyEvents(events)
+
+      const [isle] = createdEntities(events)
+      expect((await branchRows()).find((r) => r.id === isle?.id)?.state).toEqual(state)
+      expect(replyOf(events).metadata?.stateReport?.newLocations).toEqual([
+        {
+          handle: 'new:isle',
+          name: 'Gull Isle',
+          description: 'a bare rock',
+          ...reported,
+          outcome: 'created',
+          id: isle?.id,
+        },
+      ])
+    },
+  )
+
   it('reuses an exact sibling instead of creating a second one', async () => {
     await seedTurn()
     const { events } = await foldTurn(
@@ -1829,7 +1925,7 @@ describe('narrative fold — creates', () => {
     await seedTurn([hero!, { ...town!, injectionMode: 'disabled' }, market!])
     const { events } = await foldTurn(
       'Aria finds another market.\n<state><scene_entities>c1</scene_entities>' +
-        '<new_location handle="new:market" name="The Drowned Market">mud</new_location>' +
+        '<new_location handle="new:market" parent="top" name="The Drowned Market">mud</new_location>' +
         '<current_location>new:market</current_location><world_time_delta>30</world_time_delta></state>',
     )
     expect(createdEntities(events)).toEqual([

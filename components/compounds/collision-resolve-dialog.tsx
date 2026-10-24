@@ -103,6 +103,7 @@ const REASON_TEXT: Record<CollisionReason, (input: ReasonInput) => string> = {
     parentName == null
       ? t('collisionDialog.reason.sameParentRoot')
       : t('collisionDialog.reason.sameParent', { parent: parentName }),
+  unplaced: ({ flagged, other }) => t('collisionDialog.reason.unplaced', { flagged, other }),
 }
 
 type CollisionHeader = {

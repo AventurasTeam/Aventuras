@@ -58,10 +58,12 @@ current location, a null one's id would match, since nil == nil.
 Here:{% for i in looseItems %}{% include 'macro_item_line', item: i, condition: i.state.condition, ids: piggybackFires %}{% endfor %}{% endif %}
 
 {% endif -%}
-{% if locationMap.size > 0 -%}
+{% if locationMap.size > 0 or locationMapUnplaced.size > 0 -%}
 # Places
 {% for p in locationMap %}{% for d in (1..p.depth) %}  {% endfor %}{% if p.retired %}{{ p.name }} (retired{% if p.retiredReason %}: {{ p.retiredReason }}{% endif %}){% else %}{% if piggybackFires %}[{{ p.id }}] {% endif %}{{ p.name }}{% endif %}
-{% endfor %}
+{% endfor %}{% if locationMapUnplaced.size > 0 %}Unplaced:
+{% for p in locationMapUnplaced %}  {% for d in (1..p.depth) %}  {% endfor %}{% if p.retired %}{{ p.name }} (retired{% if p.retiredReason %}: {{ p.retiredReason }}{% endif %}){% else %}{% if piggybackFires %}[{{ p.id }}] {% endif %}{{ p.name }}{% endif %}
+{% endfor %}{% endif %}
 {% endif -%}
 {% include 'macro_memory_blocks', ids: piggybackFires -%}
 {% if piggybackFires -%}
@@ -69,7 +71,7 @@ Here:{% for i in looseItems %}{% include 'macro_item_line', item: i, condition: 
 If any off-scene character above enters the scene, include their ID (without brackets) in the trailing <scene_entities> block.
 
 {% endif -%}
-{% if locationMap.size > 0 -%}
+{% if locationMap.size > 0 or locationMapUnplaced.size > 0 -%}
 Use an ID from Places for <current_location>, or declare a new one with <new_location> in the state block below when the scene settles somewhere new.
 
 {% endif -%}

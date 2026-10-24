@@ -1,7 +1,14 @@
 import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
-import { branches, characterRelationships, entities, stories, type NewEntity } from '@/lib/db'
+import {
+  branches,
+  characterRelationships,
+  entities,
+  stories,
+  type Delta,
+  type NewEntity,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { characterRelationshipsStore, entitiesStore, entriesStore } from '@/lib/stores'
 
@@ -17,6 +24,8 @@ import {
   userDeletedPairSince,
   userEditsSince,
   wroteColumn,
+  wroteField,
+  wrotePlacement,
 } from './user-precedence'
 
 async function setup() {
@@ -156,6 +165,65 @@ describe('wroteColumn', () => {
     expect(wroteColumn([create], 'status')).toBe(true)
     expect(wroteColumn([update], 'status')).toBe(false)
     expect(wroteColumn([update], 'description')).toBe(true)
+  })
+})
+
+// data-model.md → LocationState shape: the flag sits only beside a null parent.
+describe('wrotePlacement', () => {
+  it('counts a create, or an update carrying the parent or the flag, not another state key', async () => {
+    const { ctx } = await setup()
+    const VARN: NewEntity = {
+      ...CHAR,
+      id: 'loc_varn',
+      kind: 'location',
+      name: 'Varn',
+      state: { parent_location_id: null, unplaced: true },
+    }
+    await ctx.db.insert(entities).values({ ...VARN, id: 'loc_reach', name: 'Reach', state: null })
+    await apply(ctx, { kind: 'createEntity', source: 'user_edit', payload: { entry: VARN } }, 'a0')
+    const state = (s: object) => updateEntity('user_edit', 'loc_varn', { state: s })
+    await apply(ctx, state({ parent_location_id: null }), 'a1')
+    await apply(ctx, state({ parent_location_id: null, condition: 'flooded' }), 'a2')
+    await apply(ctx, state({ parent_location_id: 'loc_reach', condition: 'flooded' }), 'a3')
+    const [create, flag, condition, parent] = await userEditsSince(
+      ctx,
+      'br_1',
+      'entities',
+      'loc_varn',
+      0,
+    )
+    expect(flag.undoPayload).toEqual({ state: { unplaced: true } })
+    expect(parent.undoPayload).toEqual({ state: { parent_location_id: null } })
+    expect(wrotePlacement([create])).toBe(true)
+    expect(wrotePlacement([flag])).toBe(true)
+    expect(wrotePlacement([condition])).toBe(false)
+    expect(wrotePlacement([parent])).toBe(true)
+    expect(wrotePlacement([condition, parent])).toBe(true)
+    expect(wrotePlacement([])).toBe(false)
+  })
+})
+
+// cadence.md → User edits and classifier writes: parent and unplaced mark are one field.
+describe('wroteField', () => {
+  const update = (undoPayload: Record<string, unknown>) => ({ op: 'update', undoPayload }) as Delta
+  const markedTop = [update({ state: { unplaced: true } })]
+  const moved = [update({ state: { parent_location_id: 'loc_old' } })]
+
+  it.each([['parent_location_id'], ['unplaced']])(
+    "reads a user write to either half of a place's placement as a write to %s",
+    (key) => {
+      expect(wroteField(markedTop, 'entities', 'state', [key])).toBe(true)
+      expect(wroteField(moved, 'entities', 'state', [key])).toBe(true)
+    },
+  )
+
+  it('judges every other path as wrotePath does', () => {
+    const conditioned = [update({ state: { condition: 'dry' } })]
+    expect(wroteField(conditioned, 'entities', 'state', ['parent_location_id'])).toBe(false)
+    expect(wroteField(conditioned, 'entities', 'state', ['condition'])).toBe(true)
+    expect(wroteField(moved, 'entities', 'state', ['faction_id'])).toBe(false)
+    expect(wroteField(markedTop, 'other_table', 'state', ['parent_location_id'])).toBe(false)
+    expect(wroteField(moved, 'entities', 'description', ['parent_location_id'])).toBe(false)
   })
 })
 

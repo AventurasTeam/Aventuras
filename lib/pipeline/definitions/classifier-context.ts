@@ -2,7 +2,7 @@ import type { ClassifierWindow } from '@/lib/classifier'
 import type { CharacterRelationship, Entity, Happening } from '@/lib/db'
 import { substituteIds, type IdBiMap } from '@/lib/ids'
 import { blankToNull } from '@/lib/text'
-import { characterFactionId, placeTree } from '@/lib/world'
+import { characterFactionId, placeTree, type PlaceTreeRow } from '@/lib/world'
 
 type RelationshipFact = {
   subject: string
@@ -51,6 +51,17 @@ function projectRelationships(
   })
 }
 
+// classifier.md → Mentioned places. Retired places keep their id: a happening can name one.
+const placeRow = ({ entity: e, depth }: PlaceTreeRow) => ({
+  id: e.id,
+  name: flat(e.name),
+  depth,
+  status: e.status,
+  retiredReason: e.status === 'retired' ? oneLine(e.retiredReason) : null,
+  description: oneLine(e.description),
+  keywords: e.keywords.map(flat),
+})
+
 // The classifierContext group's one builder. Separate from generationContext
 // because the classifier's window carries provenance handles no other agent has,
 // and the pinned variable set is parity-tested per group.
@@ -72,6 +83,7 @@ export function buildClassifierContext(args: {
     const id = characterFactionId(e)
     return id != null && factions.has(id) ? id : null
   }
+  const places = placeTree(entities)
   const context = {
     // Before turns: substituteIds allocates in walk order, so the roster numbers first.
     // No injectionMode, which generationContext's carries: a retrieval-time knob.
@@ -86,16 +98,9 @@ export function buildClassifierContext(args: {
         keywords: e.keywords.map(flat),
         faction: factionOf(e),
       })),
-    // classifier.md → Mentioned places. Retired places keep their id: a happening can name one.
-    places: placeTree(entities).map(({ entity: e, depth }) => ({
-      id: e.id,
-      name: flat(e.name),
-      depth,
-      status: e.status,
-      retiredReason: e.status === 'retired' ? oneLine(e.retiredReason) : null,
-      description: oneLine(e.description),
-      keywords: e.keywords.map(flat),
-    })),
+    places: places.tree.map(placeRow),
+    // After the tree, so its places number first; ids kept, so a pass can place one.
+    placesUnplaced: places.unplaced.map(placeRow),
     // entryId/position stay out: entry_* is not substitutable, so it would leak a raw id.
     // Scene/location ids are filtered to known: a deleted row would get a placeholder.
     turns: window.turns.map((t) => ({

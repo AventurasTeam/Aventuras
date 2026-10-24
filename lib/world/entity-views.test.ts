@@ -98,6 +98,7 @@ describe('buildEntityViews — every kind', () => {
     expect(locationOf(entities, 'loc_a')).toEqual({
       condition: 'half-burned',
       parent: { id: 'loc_p', name: 'Port Vellis', status: 'active' },
+      unplaced: false,
     })
     expect(itemOf(entities, 'item_s')).toEqual({
       condition: 'notched',
@@ -118,6 +119,64 @@ describe('buildEntityViews — every kind', () => {
       expect(buildEntityViews([row], NO_SCENE).byId.get('x_1')).toEqual(emptyEntityView(kind))
     },
   )
+})
+
+// architecture.md → Entity state on the template surface.
+describe('buildEntityViews — an unplaced place', () => {
+  it('marks a place carrying the flag unplaced, with no parent', () => {
+    const entities = [
+      location('loc_varn', 'Varn', null, { state: { parent_location_id: null, unplaced: true } }),
+    ]
+    expect(locationOf(entities, 'loc_varn')).toEqual({
+      condition: null,
+      parent: null,
+      unplaced: true,
+    })
+  })
+
+  // A row breaking the invariant: the flag wins, and the view keeps `parent` null with it.
+  it('reads the parent of a row holding both the flag and a parent as null', () => {
+    const entities = [
+      location('loc_p', 'Port Vellis', null),
+      location('loc_a', 'Anchor', null, {
+        state: { parent_location_id: 'loc_p', unplaced: true },
+      }),
+    ]
+    expect(locationOf(entities, 'loc_a')).toEqual({
+      condition: null,
+      parent: null,
+      unplaced: true,
+    })
+  })
+
+  it('marks a place whose stored parent names no place on the branch unplaced', () => {
+    const entities = [
+      location('loc_quay', 'Orphan Quay', 'loc_gone'),
+      location('loc_odd', 'Odd Quay', 'char_k'),
+      character('char_k', 'Kael', {}),
+    ]
+    expect(locationOf(entities, 'loc_quay').unplaced).toBe(true)
+    expect(locationOf(entities, 'loc_odd').unplaced).toBe(true)
+  })
+
+  it('leaves a top-level place and a placed one placed', () => {
+    const entities = [location('loc_p', 'Port Vellis', null), location('loc_a', 'Anchor', 'loc_p')]
+    expect(locationOf(entities, 'loc_p').unplaced).toBe(false)
+    expect(locationOf(entities, 'loc_a').unplaced).toBe(false)
+  })
+
+  // A disabled parent is left out of `parent`, but the place still sits inside it.
+  it('keeps a place under a disabled parent placed', () => {
+    const entities = [
+      location('loc_p', 'Port Vellis', null, { injectionMode: 'disabled' }),
+      location('loc_a', 'Anchor', 'loc_p'),
+    ]
+    expect(locationOf(entities, 'loc_a')).toMatchObject({ parent: null, unplaced: false })
+  })
+
+  it('gives the empty location view no flag', () => {
+    expect(emptyEntityView('location')).toEqual({ condition: null, parent: null, unplaced: false })
+  })
 })
 
 describe('buildEntityViews — holdings, holder, members, stackables', () => {

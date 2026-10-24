@@ -361,6 +361,10 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   for (const action of fold?.turn.creates ?? []) {
     yield { type: 'delta_emitted', action }
   }
+  // A placement can name a parent the creates insert, so it follows them.
+  for (const action of fold?.turn.placements ?? []) {
+    yield { type: 'delta_emitted', action }
+  }
   for (const action of fold?.actions ?? []) {
     yield { type: 'delta_emitted', action }
   }

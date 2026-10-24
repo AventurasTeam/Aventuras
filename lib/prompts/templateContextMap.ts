@@ -55,6 +55,11 @@ const ENTITY_STATE_INFO: readonly InfoField[] = [
   ),
   field('state.condition', 'string | null', 'Location, item.'),
   field('state.parent', 'EntityRef | null', 'Location: the place it is part of.'),
+  field(
+    'state.unplaced',
+    'boolean',
+    'Location: known to exist but not where, its `parent` null. A stored parent the branch has no place for counts.',
+  ),
   field('state.holder', '{ id, name, status, equipped } | null', 'Item: the character holding it.'),
   field('state.standing', 'string | null', 'Faction.'),
   field('state.agenda', 'string[]', 'Faction.'),
@@ -147,7 +152,15 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'LocationMapRow[]',
       category: 'Entities',
       description:
-        "Every place on the branch as { retired, id, name, depth, retiredReason }, in pre-order: a child follows its parent at depth + 1, siblings sorted by name. An active or staged place carries its id. A retired place has retired true, id null and its retiredReason (null when blank): render it by name and reason, since it can't be entered or nested under. A place that is effectively disabled, by its own injection mode or an ancestor's, is left out unless it is structuralLocation (currentLocationId when that is null); while the scene is inside a disabled ancestor, that ancestor stays left out but its disabling doesn't reach the places under it. A left-out place's listed children hang under its nearest listed ancestor. Built from the whole branch, never filtered through retrieval or Layer-A suppression. Empty when the branch has no listed place.",
+        "Every place on the branch as { retired, id, name, depth, retiredReason }, in pre-order: a child follows its parent at depth + 1, siblings sorted by name. An active or staged place carries its id. A retired place has retired true, id null and its retiredReason (null when blank): render it by name and reason, since it can't be entered or nested under. A place that is effectively disabled, by its own injection mode or an ancestor's, is left out unless it is structuralLocation (currentLocationId when that is null); while the scene is inside a disabled ancestor, that ancestor stays left out but its disabling doesn't reach the places under it. A left-out place's listed children hang under its nearest listed ancestor. Built from the whole branch, never filtered through retrieval or Layer-A suppression. An unplaced place, and what hangs under it, is in locationMapUnplaced instead. Empty when the branch has no listed place in the tree.",
+      required: true,
+    },
+    {
+      name: 'locationMapUnplaced',
+      type: 'LocationMapRow[]',
+      category: 'Entities',
+      description:
+        "The places known to exist but not where, in locationMap's row shape and by its rules for ids, retired places and left-out ones: each unplaced place, siblings sorted by name, followed by what hangs under it at depth + 1, depth counted from the group. A place whose stored parent is no place counts as unplaced. Render it after locationMap as a group of its own; the bundled templates head it `Unplaced:`. Empty when no unplaced place is listed.",
       required: true,
     },
     {
@@ -155,7 +168,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'string[]',
       category: 'Entities',
       description:
-        "Names of structuralLocation's listed ancestors (the locationMap places it is part of, retired ones included), nearest first, for a line like `The Rusty Anchor — in Port Vellis › Eldra`. Empty when no ancestor is listed (a top-level place, or one whose ancestors are all left out of locationMap), and when structuralLocation is null.",
+        "Names of structuralLocation's listed ancestors (the places it is part of, retired ones included), nearest first, for a line like `The Rusty Anchor — in Port Vellis › Eldra`. Empty when no ancestor is listed (a top-level or an unplaced place, or one whose ancestors are all left out of the map), and when structuralLocation is null.",
       required: true,
     },
     {
@@ -266,7 +279,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'string[]',
       category: 'Retrieval',
       description:
-        "The ids of the places retrieval puts in the prompt: the floor scene rows, structuralLocation, the pinned entities and the ranked entities, kind-filtered and de-duplicated, in the order those blocks render. Use it to tell which bracketed IDs in those blocks are places without testing each row's `kind`. Not the set to offer for <current_location>: a move may name any listed place on the branch that isn't retired, so offer locationMap's ids for that. Empty when retrieval shows no place, or no retrieval ran.",
+        "The ids of the places retrieval puts in the prompt: the floor scene rows, structuralLocation, the pinned entities and the ranked entities, kind-filtered and de-duplicated, in the order those blocks render. Use it to tell which bracketed IDs in those blocks are places without testing each row's `kind`. Not the set to offer for <current_location>: a move may name any listed place on the branch that isn't retired, so offer locationMap's and locationMapUnplaced's ids for that. Empty when retrieval shows no place, or no retrieval ran.",
       required: true,
     },
     {
@@ -380,7 +393,15 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: '{ id, name, depth, status, retiredReason, description, keywords }[]',
       category: 'Entities',
       description:
-        "Every place on the branch, whatever its status or injection mode, in tree order: each nested under its parent (`depth` levels deep), children by name. `retiredReason` is set only on a retired place. Unlike the narrator's `locationMap` it hides nothing.",
+        "Every place on the branch, whatever its status or injection mode, in tree order: each nested under its parent (`depth` levels deep), children by name. `retiredReason` is set only on a retired place. Unlike the narrator's `locationMap` it hides nothing. An unplaced place, and what lies inside it, is in placesUnplaced instead.",
+      required: true,
+    },
+    {
+      name: 'placesUnplaced',
+      type: '{ id, name, depth, status, retiredReason, description, keywords }[]',
+      category: 'Entities',
+      description:
+        "The places known to exist but not where, in places' row shape, whatever their status or mode: each unplaced place, by name, followed by what lies inside it (`depth` counted from the group). A place whose stored parent is no place counts as unplaced. Render it after places as a group of its own, ids kept, so a pass can place one.",
       required: true,
     },
     {
@@ -513,7 +534,9 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'sceneEntities',
     'currentLocationId',
     'locationMap',
+    'locationMapUnplaced',
     'places',
+    'placesUnplaced',
     'currentLocationChain',
     'heldItems',
     'looseItems',

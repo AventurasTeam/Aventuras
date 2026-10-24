@@ -85,6 +85,7 @@ export {
   listedAncestorNames,
   locationMapView,
   placeTree,
+  realPlacementOf,
   unhiddenLocationView,
 } from './location-map'
 export type {
@@ -92,6 +93,7 @@ export type {
   LocationMapView,
   LocationMatchView,
   MapAnchor,
+  PlaceTree,
   PlaceTreeRow,
 } from './location-map'
 export { buildEntityViews, emptyEntityView } from './entity-views'
@@ -111,6 +113,8 @@ export type {
 } from './entity-views'
 export { placeModes } from './place-modes'
 export type { PlaceModes } from './place-modes'
+export { isUnplaced, placementOf, samePlacement, withPlacement } from './placement'
+export type { PlacePlacement } from './placement'
 export {
   mergePlaceRefusal,
   PLACE_REFUSAL,
@@ -129,5 +133,5 @@ export type {
 } from './place-rules'
 export { itemNamesakes, matchNewPlace } from './new-entity-match'
 export type { SettledNewPlace } from './new-entity-match'
-export { placeNewLocation, settlingOrder } from './new-place-order'
+export { placeNewLocation, settlingOrder, TOP_LEVEL } from './new-place-order'
 export type { NewPlaceDeclaration, ParentDropCause, SettlingPlace } from './new-place-order'

@@ -106,7 +106,7 @@ export const fallbackClassifierSchema = z.object({
         .optional()
         .catch(undefined)
         .describe(
-          'The place it is part of: its ID from Places when Places lists it, or the handle of another location in newLocations. Omit it for a top-level place.',
+          'The place it is part of: its ID from Places when Places lists it, or the handle of another location in newLocations; "top" only when nothing in Places could contain it. Omit it when something in Places could contain it and the turn doesn\'t say which; when unsure, omit it.',
         ),
     }),
   ).describe(
@@ -490,6 +490,10 @@ export async function* piggybackFallbackClassifierPhase(
 
   // After the reply's create, before writes naming them: a reversal of the turn removes them.
   for (const action of plan.creates) {
+    yield { type: 'delta_emitted', action }
+  }
+  // A placement can name a parent the creates insert, so it follows them.
+  for (const action of plan.placements) {
     yield { type: 'delta_emitted', action }
   }
   yield {

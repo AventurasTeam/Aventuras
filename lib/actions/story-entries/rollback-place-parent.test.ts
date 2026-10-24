@@ -126,10 +126,13 @@ async function parentOf(id: string): Promise<string | null> {
   return parentIdOf(row)
 }
 
-async function expectDocksAtTheRoot(): Promise<void> {
+async function expectDocksUnplaced(): Promise<void> {
   expect(await entityIds()).toEqual(['loc_docks', 'loc_old', 'loc_pier'])
   expect(await parentOf('loc_docks')).toBeNull()
-  expect(entitiesStore.getById('loc_docks')?.state).toEqual({ parent_location_id: null })
+  expect(entitiesStore.getById('loc_docks')?.state).toEqual({
+    parent_location_id: null,
+    unplaced: true,
+  })
   expect(entitiesStore.getById('loc_varn')).toBeUndefined()
   expect(await parentOf('loc_pier')).toBe('loc_docks')
   expect(entitiesStore.getById('loc_pier')?.state).toEqual({ parent_location_id: 'loc_docks' })
@@ -175,7 +178,7 @@ afterEach(() => {
 })
 
 describe('rolling back past a place parent anchored on a later turn than its child', () => {
-  it('keeps a child the same pass anchored on an earlier turn, at the root', async () => {
+  it('keeps a child the same pass anchored on an earlier turn, unplaced', async () => {
     await apply(
       createPlace(place('loc_varn', 'Varn', null), 'periodic_classifier'),
       'act_pass',
@@ -192,10 +195,10 @@ describe('rolling back past a place parent anchored on a later turn than its chi
       status: 'ok',
       counts: { entries: 2, chapters: 0, worldStateChanges: 2 },
     })
-    await expectDocksAtTheRoot()
+    await expectDocksUnplaced()
   })
 
-  it("keeps a pass's child of a place the parent's own turn created, at the root", async () => {
+  it("keeps a pass's child of a place the parent's own turn created, unplaced", async () => {
     await apply(
       createPlace(place('loc_varn', 'Varn', null), 'piggyback_tagged_block'),
       'turn_t3',
@@ -208,6 +211,6 @@ describe('rolling back past a place parent anchored on a later turn than its chi
     const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
 
     expect(result.status).toBe('ok')
-    await expectDocksAtTheRoot()
+    await expectDocksUnplaced()
   })
 })

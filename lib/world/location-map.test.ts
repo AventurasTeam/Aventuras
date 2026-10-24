@@ -8,6 +8,7 @@ import {
   listedAncestorNames,
   locationMapView,
   placeTree,
+  realPlacementOf,
   unhiddenLocationView,
 } from './location-map'
 
@@ -24,6 +25,15 @@ const item = (
   at: string | null,
   overrides: Partial<Entity> = {},
 ): Entity => makeEntity({ id, kind: 'item', name, state: { at_location_id: at }, ...overrides })
+// data-model.md → LocationState shape: known to exist, not where.
+const unplaced = (id: string, name: string, overrides: Partial<Entity> = {}): Entity =>
+  makeEntity({
+    id,
+    kind: 'location',
+    name,
+    state: { parent_location_id: null, unplaced: true },
+    ...overrides,
+  })
 const holder = (held: Partial<Pick<CharacterState, 'inventory' | 'equipped_items'>>): Entity =>
   makeEntity({
     id: 'char_kael',
@@ -123,7 +133,7 @@ describe('buildLocationMap', () => {
 
   it('gives a retired location with a blank reason no reason', () => {
     const retired: Entity = { ...RETIRED_VELLIS, retiredReason: '  ' }
-    expect(buildLocationMap([retired], null)[0]).toMatchObject({
+    expect(buildLocationMap([ELDRA, retired], null)[1]).toMatchObject({
       retired: true,
       retiredReason: null,
     })
@@ -175,13 +185,13 @@ describe('buildLocationMap', () => {
     ])
   })
 
-  it('lists only locations, and roots one whose parent resolves to no row', () => {
+  it('lists only locations', () => {
     const entities = [
-      location('loc_orphan', 'Orphan Quay', 'loc_gone'),
+      THORNWOOD,
       makeEntity({ id: 'char_aldra', kind: 'character', name: 'Aldra' }),
       item('item_anvil', 'Anvil', null),
     ]
-    expect(outline(buildLocationMap(entities, null))).toEqual(['Orphan Quay'])
+    expect(outline(buildLocationMap(entities, null))).toEqual(['Thornwood'])
   })
 
   // Ashgate and Bellmoor parent each other, Cinderfall hangs off them: none reaches a root.
@@ -205,7 +215,7 @@ describe('buildLocationMap', () => {
 
 describe('placeTree', () => {
   const tree = (entities: readonly Entity[]) =>
-    placeTree(entities).map(({ entity, depth }) => `${'  '.repeat(depth)}${entity.id}`)
+    placeTree(entities).tree.map(({ entity, depth }) => `${'  '.repeat(depth)}${entity.id}`)
 
   it('nests every place by its real parent, children by name, whatever the input order', () => {
     expect(tree(WORLD)).toEqual([
@@ -235,16 +245,10 @@ describe('placeTree', () => {
     ])
   })
 
-  it('roots a place whose parent is no place, and lists a looping chain flat at the root', () => {
-    const orphan = location('loc_orphan', 'Ashfall', 'loc_gone')
+  it('lists a looping chain flat at the root, after the reachable tree', () => {
     const a = location('loc_a', 'Upper', 'loc_b')
     const b = location('loc_b', 'Lower', 'loc_a')
-    expect(tree([ELDRA, orphan, a, b, holder({})])).toEqual([
-      'loc_orphan',
-      'loc_eldra',
-      'loc_b',
-      'loc_a',
-    ])
+    expect(tree([ELDRA, a, b, holder({})])).toEqual(['loc_eldra', 'loc_b', 'loc_a'])
   })
 })
 
@@ -264,6 +268,7 @@ describe('locationMapView.anchorOf', () => {
     expect(locationMapView(WORLD, null).anchorOf('loc_back')).toEqual({
       parentId: 'loc_anchor',
       hidden: 0,
+      unplaced: false,
     })
   })
 
@@ -271,21 +276,29 @@ describe('locationMapView.anchorOf', () => {
     const disabledAnchor: Entity = { ...ANCHOR, injectionMode: 'disabled' }
     const world = [ELDRA, DISABLED_VELLIS, disabledAnchor, BACK_ROOM, MARKET]
     const view = locationMapView(world, null)
-    expect(view.anchorOf('loc_back')).toEqual({ parentId: 'loc_eldra', hidden: 2 })
-    expect(view.anchorOf('loc_vellis')).toEqual({ parentId: 'loc_eldra', hidden: 0 })
+    expect(view.anchorOf('loc_back')).toEqual({ parentId: 'loc_eldra', hidden: 2, unplaced: false })
+    expect(view.anchorOf('loc_vellis')).toEqual({
+      parentId: 'loc_eldra',
+      hidden: 0,
+      unplaced: false,
+    })
   })
 
-  it('anchors a place whose parent resolves to no row at the root, as the map shows it', () => {
-    const orphan = location('loc_orphan', 'Orphan Quay', 'loc_gone')
-    expect(locationMapView([orphan], null).anchorOf('loc_orphan')).toEqual({
+  it('anchors a top-level place at the root', () => {
+    expect(locationMapView(WORLD, null).anchorOf('loc_eldra')).toEqual({
       parentId: null,
       hidden: 0,
+      unplaced: false,
     })
   })
 
   it('anchors a listed row a loop keeps from the root at the root, as the map lists it', () => {
     const loop = [location('loc_la', 'Ashgate', 'loc_lb'), location('loc_lb', 'Bellmoor', 'loc_la')]
-    expect(locationMapView(loop, null).anchorOf('loc_la')).toEqual({ parentId: null, hidden: 0 })
+    expect(locationMapView(loop, null).anchorOf('loc_la')).toEqual({
+      parentId: null,
+      hidden: 0,
+      unplaced: false,
+    })
   })
 })
 
@@ -328,5 +341,145 @@ describe('listedAncestorNames', () => {
   it('stops when the chain loops', () => {
     const loop = [location('loc_la', 'Ashgate', 'loc_lb'), location('loc_lb', 'Bellmoor', 'loc_la')]
     expect(listedAncestorNames('loc_la', loop)).toEqual(['Bellmoor'])
+  })
+})
+
+// data-model.md → LocationState shape: known to exist, not where, on every list of places.
+describe('realPlacementOf', () => {
+  const VARN = unplaced('loc_varn', 'Varn')
+  const ORPHAN = location('loc_orphan', 'Orphan Quay', 'loc_gone')
+  const placementAt = realPlacementOf([ELDRA, VELLIS, VARN, ORPHAN])
+
+  it('reads the flag as unplaced, a parent that is a place as under it, none as top-level', () => {
+    expect(placementAt('loc_varn')).toEqual({ kind: 'unplaced' })
+    expect(placementAt('loc_vellis')).toEqual({ kind: 'under', parentId: 'loc_eldra' })
+    expect(placementAt('loc_eldra')).toEqual({ kind: 'top' })
+  })
+
+  it('reads a stored parent naming no place as unplaced: its container is gone', () => {
+    expect(placementAt('loc_orphan')).toEqual({ kind: 'unplaced' })
+  })
+
+  it('reads an id naming no place as top-level', () => {
+    expect(placementAt('loc_none')).toEqual({ kind: 'top' })
+  })
+})
+
+describe('the unplaced group', () => {
+  const VARN = unplaced('loc_varn', 'Varn')
+  const DOCKS = location('loc_docks', 'Varn Docks', 'loc_varn')
+  const ASHFALL = unplaced('loc_ash', 'Ashfall')
+  const ORPHAN = location('loc_orphan', 'Orphan Quay', 'loc_gone')
+
+  describe('on the narrator map', () => {
+    it('lists an unplaced place and what hangs under it in its own group, never in the tree', () => {
+      const view = locationMapView([...WORLD, DOCKS, VARN, ASHFALL], null)
+      expect(view.rows.map((r) => r.id)).not.toContain('loc_varn')
+      expect(view.rows.map((r) => r.id)).not.toContain('loc_docks')
+      expect(view.unplacedRows).toEqual([
+        listed('loc_ash', 'Ashfall', 0),
+        listed('loc_varn', 'Varn', 0),
+        listed('loc_docks', 'Varn Docks', 1),
+      ])
+    })
+
+    it('groups a place whose stored parent names no place with the unplaced', () => {
+      const view = locationMapView([ELDRA, ORPHAN], null)
+      expect(outline(view.rows)).toEqual(['Eldra'])
+      expect(outline(view.unplacedRows)).toEqual(['Orphan Quay'])
+    })
+
+    it('lists a retired unplaced place by name and reason, without an id', () => {
+      const retired = unplaced('loc_salt', 'Saltmere', {
+        status: 'retired',
+        retiredReason: 'swallowed by the rift',
+      })
+      expect(locationMapView([ELDRA, retired], null).unplacedRows).toEqual([
+        {
+          retired: true,
+          id: null,
+          name: 'Saltmere',
+          depth: 0,
+          retiredReason: 'swallowed by the rift',
+        },
+      ])
+    })
+
+    it('leaves out a disabled unplaced place with every place inside it', () => {
+      const view = locationMapView([ELDRA, { ...VARN, injectionMode: 'disabled' }, DOCKS], null)
+      expect(view.unplacedRows).toEqual([])
+      expect(outline(view.rows)).toEqual(['Eldra'])
+    })
+
+    // The story is inside a disabled unplaced place: the place stays left out, its insides don't.
+    it('hangs a place under a left-out unplaced one at the root of the group', () => {
+      const view = locationMapView(
+        [ELDRA, { ...VARN, injectionMode: 'disabled' }, DOCKS],
+        'loc_docks',
+      )
+      expect(view.unplacedRows).toEqual([listed('loc_docks', 'Varn Docks', 0)])
+      expect(view.anchorOf('loc_docks')).toEqual({ parentId: null, hidden: 1, unplaced: true })
+      expect(view.hiddenBetween('loc_docks', null)).toBeNull()
+      expect(view.hiddenBetween('loc_docks', 'loc_varn')).toBe(0)
+    })
+
+    it('anchors an unplaced place at the root of the group, and hangs it at no root', () => {
+      const view = locationMapView([...WORLD, VARN, DOCKS], null)
+      expect(view.anchorOf('loc_varn')).toEqual({ parentId: null, hidden: 0, unplaced: true })
+      expect(view.hiddenBetween('loc_varn', null)).toBeNull()
+      expect(view.anchorOf('loc_docks')).toEqual({
+        parentId: 'loc_varn',
+        hidden: 0,
+        unplaced: false,
+      })
+      expect(view.hiddenBetween('loc_docks', 'loc_varn')).toBe(0)
+      expect(view.hiddenBetween('loc_eldra', null)).toBe(0)
+    })
+
+    it('hangs a place whose stored parent names no place at no root', () => {
+      expect(locationMapView([ORPHAN], null).hiddenBetween('loc_orphan', null)).toBeNull()
+    })
+  })
+
+  describe('in the pass tree', () => {
+    const groups = (entities: readonly Entity[]) => {
+      const { tree, unplaced: group } = placeTree(entities)
+      const ids = (rows: typeof tree) =>
+        rows.map(({ entity, depth }) => `${'  '.repeat(depth)}${entity.id}`)
+      return { tree: ids(tree), unplaced: ids(group) }
+    }
+
+    it('lists the unplaced places, each with what lies inside it, apart from the tree', () => {
+      expect(groups([ELDRA, VELLIS, DOCKS, VARN, ASHFALL, ORPHAN])).toEqual({
+        tree: ['loc_eldra', '  loc_vellis'],
+        unplaced: ['loc_ash', 'loc_orphan', 'loc_varn', '  loc_docks'],
+      })
+    })
+
+    it('hides nothing in the group either: a retired or disabled unplaced place keeps its row', () => {
+      expect(
+        groups([
+          { ...VARN, status: 'retired' as const },
+          DOCKS,
+          { ...ASHFALL, injectionMode: 'disabled' as const },
+        ]).unplaced,
+      ).toEqual(['loc_ash', 'loc_varn', '  loc_docks'])
+    })
+  })
+
+  describe('in the unhidden view', () => {
+    it('hangs an unplaced place, or one whose parent is no place, at no root', () => {
+      const view = unhiddenLocationView([ELDRA, VARN, DOCKS, ORPHAN])
+      expect(view.hiddenBetween('loc_varn', null)).toBeNull()
+      expect(view.hiddenBetween('loc_orphan', null)).toBeNull()
+      expect(view.hiddenBetween('loc_docks', 'loc_varn')).toBe(0)
+      expect(view.hiddenBetween('loc_eldra', null)).toBe(0)
+    })
+  })
+
+  // data-model.md → LocationState shape: an unplaced current location shows just its name.
+  it('gives an unplaced current location no chain, and its insides a chain that stops at it', () => {
+    expect(listedAncestorNames('loc_varn', [ELDRA, VARN, DOCKS])).toEqual([])
+    expect(listedAncestorNames('loc_docks', [ELDRA, VARN, DOCKS])).toEqual(['Varn'])
   })
 })

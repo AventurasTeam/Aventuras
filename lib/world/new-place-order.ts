@@ -1,8 +1,15 @@
 import type { Entity } from '@/lib/db'
 
 import { checkParentChain, type ParentOf } from './parent-chain'
+import type { PlacePlacement } from './placement'
 
-/** A place a writer declares, by its temporary handle, nested under a `parent` id or handle. */
+/** A declaration's parent for a top-level place; every surface's own token maps to it. */
+export const TOP_LEVEL = 'top'
+
+/**
+ * A place a writer declares, by its temporary handle. `parent`: a place id, another declaration's
+ * handle, `TOP_LEVEL`, or absent for a place known to exist but not where.
+ */
 export type NewPlaceDeclaration = { handle: string; parent?: string }
 
 /** A create in settling order. One whose parent never resolved still names that parent. */
@@ -16,12 +23,12 @@ export type SettlingOrder<E extends NewPlaceDeclaration> = {
   duplicates: E[]
 }
 
-/** Why a new place went to the root although it named a parent (piggyback.md → Parent). */
+/** Why a new place landed unplaced although it named a parent (piggyback.md → Parent). */
 export type ParentDropCause = 'unresolved' | 'retired' | 'chain-broken'
 
-/** Where a new place goes: under `parentId` (null: the root), or to the root for `cause`. */
+/** Where a new place goes: the placement its parent gives, or unplaced for `cause`. */
 export type NewPlacement =
-  | { kind: 'kept'; parentId: string | null }
+  | { kind: 'kept'; placement: PlacePlacement }
   | { kind: 'dropped'; cause: ParentDropCause; parent: string }
 
 function inHandleCycle(create: NewPlaceDeclaration, waiting: readonly NewPlaceDeclaration[]) {
@@ -40,8 +47,8 @@ const namesParent = <E extends NewPlaceDeclaration>(e: E): e is E & { parent: st
   e.parent !== undefined
 
 /**
- * Top-down passes: a child listed before its parent settles on a later pass. A parent that never
- * resolves (undeclared handle, non-location id, handle cycle) roots its create; children follow it.
+ * Top-down: a child may precede its parent. No parent or `TOP_LEVEL` settles at once; a parent that
+ * never resolves (undeclared handle, non-location id, cycle) unplaces its create; children follow.
  */
 export function settlingOrder<E extends NewPlaceDeclaration>(
   creates: readonly E[],
@@ -66,7 +73,10 @@ export function settlingOrder<E extends NewPlaceDeclaration>(
     settled.add(place.emission.handle)
   }
   const resolvable = (parent: string | undefined) =>
-    parent === undefined || settled.has(parent) || (!declared.has(parent) && isLocationId(parent))
+    parent === undefined ||
+    parent === TOP_LEVEL ||
+    settled.has(parent) ||
+    (!declared.has(parent) && isLocationId(parent))
 
   let waiting = unique
   while (waiting.length > 0) {
@@ -74,7 +84,7 @@ export function settlingOrder<E extends NewPlaceDeclaration>(
     for (const emission of waiting)
       if (resolvable(emission.parent)) settle({ emission, parentUnresolved: false })
     if (order.length === before) {
-      // A create naming no parent always settles, so every waiting one names a parent.
+      // No parent and TOP_LEVEL always settle, so every waiting create names another parent.
       const parented = waiting.filter(namesParent)
       const handles = new Set(waiting.map((e) => e.handle))
       const orphans = parented.filter((e) => !handles.has(e.parent))
@@ -88,8 +98,8 @@ export function settlingOrder<E extends NewPlaceDeclaration>(
 }
 
 /**
- * piggyback.md → Parent: a retired parent, or one whose stored chain is already broken, puts the new
- * place at the root, as an unresolvable one does. `resolve` maps the declared parent to its row id.
+ * piggyback.md → Parent: `TOP_LEVEL` is top-level; no parent, a retired parent, a broken stored
+ * chain or an unresolvable one unplaces it. `resolve` maps the declared parent to its row id.
  */
 export function placeNewLocation(args: {
   place: SettlingPlace<NewPlaceDeclaration>
@@ -101,12 +111,13 @@ export function placeNewLocation(args: {
   if (place.parentUnresolved)
     return { kind: 'dropped', cause: 'unresolved', parent: place.emission.parent }
   const { handle, parent } = place.emission
-  if (parent === undefined) return { kind: 'kept', parentId: null }
+  if (parent === undefined) return { kind: 'kept', placement: { kind: 'unplaced' } }
+  if (parent === TOP_LEVEL) return { kind: 'kept', placement: { kind: 'top' } }
   const parentId = resolve(parent)
   // Nothing active may sit inside a retired place (data-model.md → LocationState shape).
   if (statusOf(parentId) === 'retired') return { kind: 'dropped', cause: 'retired', parent }
   // The new row has no children, so only a loop already stored above its parent fails.
   if (checkParentChain(handle, parentId, parentOf) !== 'ok')
     return { kind: 'dropped', cause: 'chain-broken', parent }
-  return { kind: 'kept', parentId }
+  return { kind: 'kept', placement: { kind: 'under', parentId } }
 }

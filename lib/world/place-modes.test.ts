@@ -102,4 +102,24 @@ describe('placeModes', () => {
     ]
     expect(disabledIds(loop, null)).toEqual(['loc_la', 'loc_lb'])
   })
+
+  // data-model.md → LocationState shape: an unplaced place is inside nothing, so inherits nothing.
+  it("gives an unplaced place no ancestor's mode, while what lies inside it inherits its own", () => {
+    const varn = makeEntity({
+      id: 'loc_varn',
+      kind: 'location',
+      name: 'Varn',
+      state: { parent_location_id: null, unplaced: true },
+    })
+    const docks = location('loc_docks', 'Varn Docks', 'loc_varn')
+    const modes = placeModes([...WORLD, varn, docks], null)
+    expect(modes.isDisabled('loc_varn')).toBe(false)
+    expect(modes.disabledThrough('loc_varn')).toBeNull()
+    expect(
+      placeModes(
+        [...WORLD, { ...varn, injectionMode: 'disabled' as const }, docks],
+        null,
+      ).disabledThrough('loc_docks')?.id,
+    ).toBe('loc_varn')
+  })
 })

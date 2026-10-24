@@ -38,6 +38,7 @@ const context = {
       keywords: [],
     },
   ],
+  placesUnplaced: [],
   happenings: [{ id: 'hp1', title: 'The satchel was stolen' }],
   relationships: [
     { subject: 'c1', subjectName: 'Kael', object: 'c2', objectName: 'Aria', kind: 'sister' },
@@ -273,6 +274,52 @@ describe('periodic classifier template — places', () => {
     },
   )
 
+  // classifier.md → What the classifier reads: the unplaced places in a group of their own.
+  const unplaced = [
+    {
+      id: 'l5',
+      name: 'Varn',
+      depth: 0,
+      status: 'active',
+      retiredReason: null,
+      description: 'A river town.',
+      keywords: ['the ford town'],
+    },
+    {
+      id: 'l6',
+      name: 'Varn Docks',
+      depth: 1,
+      status: 'staged',
+      retiredReason: null,
+      description: null,
+      keywords: [],
+    },
+  ]
+
+  it('lists the unplaced places after the tree under Unplaced:, a level in, with IDs', () => {
+    const { user, system } = render({ places, placesUnplaced: unplaced })
+    expect(user).toContain(
+      [
+        '    - [l4] Old Well (retired)',
+        'Unplaced:',
+        '  - [l5] Varn — A river town. (also called: the ford town)',
+        '    - [l6] Varn Docks (staged)',
+        '',
+        'Known relationships',
+      ].join('\n'),
+    )
+    expect(system).not.toContain('Unplaced:')
+  })
+
+  it('prints (none) only when neither the tree nor the group holds a place', () => {
+    const onlyUnplaced = render({ places: [], placesUnplaced: unplaced }).user
+    expect(onlyUnplaced).toContain(
+      'Places, same ID rule — each nested under the place it is part of:\nUnplaced:\n  - [l5] Varn',
+    )
+    expect(onlyUnplaced).not.toContain('(none)\n\nKnown relationships')
+    expect(render({ places }).user).not.toContain('Unplaced:')
+  })
+
   it('sits between Known entities and Known relationships, (none) when empty', () => {
     const { user } = render({ places: [] })
     expect(user).toContain('— A courier.')
@@ -289,7 +336,9 @@ describe('periodic classifier template — places', () => {
     expect(on.system).toContain(
       "A new place's handle must differ from every newCharacters and newFactions handle and from every other new place's, even when a character or a faction shares its name.",
     )
-    expect(on.system).toMatch(/leave parent out when the turns don't say/)
+    expect(on.system).toContain(
+      'When the turns don\'t say, set parent to "top-level" only when nothing in Places could contain the place, as for a city when Places holds only cities; leave parent out when something could contain it, and when unsure.',
+    )
     expect(on.user).not.toContain('newPlaces')
 
     const off = render({ mentionedPlaces: false })

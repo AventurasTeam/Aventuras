@@ -245,7 +245,8 @@ describe('substitutePiggybackIds with creates', () => {
     expect(result.failures.map((f) => f.field)).toEqual(['transfers'])
   })
 
-  it('substitutes a create parent leniently', () => {
+  // piggyback.md → Parent: `top`, bracketed or not and in any case, is the top-level sentinel.
+  it('substitutes a create parent leniently, reading top as the top level', () => {
     const create = (handle: string, parent?: string) => ({
       handle,
       name: handle,
@@ -262,6 +263,9 @@ describe('substitutePiggybackIds with creates', () => {
           create('new:e', 'l9'),
           create('new:g', '[l9]'),
           create('new:f'),
+          create('new:h', 'top'),
+          create('new:i', '[top]'),
+          create('new:j', 'Top'),
         ],
       }),
       idMap(),
@@ -276,6 +280,9 @@ describe('substitutePiggybackIds with creates', () => {
       'l9',
       '[l9]',
       undefined,
+      'top',
+      'top',
+      'top',
     ])
   })
 

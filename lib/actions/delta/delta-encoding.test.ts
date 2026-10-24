@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import { entryMetadataSchema } from '@/lib/db'
+import { entityStateColumnSchema, entryMetadataSchema } from '@/lib/db'
 
 import { applyUndoPayload, computeUndoPayload } from './delta-encoding'
 
@@ -156,5 +156,24 @@ describe('stateReport round-trip through entryMetadataSchema', () => {
     }
     const undo = computeUndoPayload(entryMetadataSchema, current, next)
     expect(applyUndoPayload(entryMetadataSchema, next, undo)).toEqual(current)
+  })
+})
+
+// data-model.md → LocationState shape: undo keeps the flag only while the column schema has it.
+describe("a place's unplaced flag through entityStateColumnSchema", () => {
+  it('records the flag absent -> present, and undo takes it away', () => {
+    const prior = { parent_location_id: null }
+    const next = { parent_location_id: null, unplaced: true }
+    const undo = computeUndoPayload(entityStateColumnSchema, prior, next)
+    expect(undo).toEqual({ unplaced: null })
+    expect(applyUndoPayload(entityStateColumnSchema, next, undo)).toEqual(prior)
+  })
+
+  it('records the flag present -> absent beside the parent that replaced it', () => {
+    const prior = { parent_location_id: null, unplaced: true }
+    const next = { parent_location_id: 'loc_reach' }
+    const undo = computeUndoPayload(entityStateColumnSchema, prior, next)
+    expect(undo).toEqual({ parent_location_id: null, unplaced: true })
+    expect(applyUndoPayload(entityStateColumnSchema, next, undo)).toEqual(prior)
   })
 })

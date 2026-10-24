@@ -999,7 +999,7 @@ describe('regenerateTurn', () => {
     expect(await pairDeltas()).toEqual([])
   })
 
-  it('keeps a place whose parent only the regenerated turn anchors, at the root', async () => {
+  it('keeps a place whose parent only the regenerated turn anchors, unplaced', async () => {
     const { ctx, db } = await makeHarness()
     await seedTwoTurnsWithCatchUp(ctx)
     await openStory(db, 's1', 'b1')
@@ -1036,8 +1036,9 @@ describe('regenerateTurn', () => {
     if (regen.status !== 'ran') return
     expect(expectRan(regen.result).outcome).toBe('completed')
     const places = await db.select({ id: entities.id, state: entities.state }).from(entities)
-    expect(places).toEqual([{ id: 'loc_docks', state: { parent_location_id: null } }])
-    expect(entitiesStore.getById('loc_docks')?.state).toEqual({ parent_location_id: null })
+    const unplaced = { parent_location_id: null, unplaced: true }
+    expect(places).toEqual([{ id: 'loc_docks', state: unplaced }])
+    expect(entitiesStore.getById('loc_docks')?.state).toEqual(unplaced)
     expect(entitiesStore.getById('loc_varn')).toBeUndefined()
   })
 

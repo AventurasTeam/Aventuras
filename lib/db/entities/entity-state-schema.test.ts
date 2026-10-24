@@ -40,6 +40,16 @@ describe('per-kind state schemas', () => {
     ).toBe(true)
   })
 
+  // data-model.md → LocationState shape: the flag is true or absent.
+  it('takes an unplaced place, and no other value for the flag', () => {
+    expect(
+      locationStateSchema.safeParse({ parent_location_id: null, unplaced: true }).success,
+    ).toBe(true)
+    expect(
+      locationStateSchema.safeParse({ parent_location_id: null, unplaced: false }).success,
+    ).toBe(false)
+  })
+
   it('rejects values past the degradation bounds', () => {
     const base = {
       visual: {},

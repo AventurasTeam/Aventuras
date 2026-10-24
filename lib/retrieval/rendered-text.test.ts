@@ -129,7 +129,11 @@ describe('entityStateLines', () => {
       entityStateLines(
         {
           kind: 'location',
-          state: { condition: 'half-burned', parent: { id: 'l', name: 'Port', status: 'active' } },
+          state: {
+            condition: 'half-burned',
+            parent: { id: 'l', name: 'Port', status: 'active' },
+            unplaced: false,
+          },
         },
         { here: false, held: null },
       ),

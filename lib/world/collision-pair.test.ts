@@ -51,6 +51,10 @@ const place = (
 ): Entity =>
   row(id, name, { kind: 'location', state: { parent_location_id: parentId }, ...overrides })
 
+const under = (parentId: string) => ({ kind: 'under', parentId }) as const
+const TOP = { kind: 'top' } as const
+const UNPLACED = { kind: 'unplaced' } as const
+
 const OLDER = row('char_a', 'Kael')
 const NEWER = row('char_b', 'Kael Stormborn', flaggedWith('char_a', 'ambiguous'))
 
@@ -113,27 +117,58 @@ describe('collisionPairOf', () => {
 })
 
 describe('pairSideOf', () => {
-  it("reads a place's parent, and no parent at the root or for another kind", () => {
+  it("reads a place's placement, and top-level for another kind", () => {
     expect(
       pairSideOf(place('loc_s', 'The Stalls', 'loc_p', { keywords: ['the stalls'] })),
-    ).toStrictEqual({ name: 'The Stalls', keywords: ['the stalls'], parentId: 'loc_p' })
-    expect(pairSideOf(place('loc_r', 'The Quay', null)).parentId).toBeNull()
+    ).toStrictEqual({ name: 'The Stalls', keywords: ['the stalls'], placement: under('loc_p') })
+    expect(pairSideOf(place('loc_r', 'The Quay', null)).placement).toEqual(TOP)
     expect(
-      pairSideOf(row('loc_n', 'Nowhere', { kind: 'location', state: null })).parentId,
-    ).toBeNull()
-    expect(pairSideOf(OLDER).parentId).toBeNull()
+      pairSideOf(row('loc_n', 'Nowhere', { kind: 'location', state: null })).placement,
+    ).toEqual(TOP)
+    expect(
+      pairSideOf(
+        row('loc_u', 'Varn', {
+          kind: 'location',
+          state: { parent_location_id: null, unplaced: true },
+        }),
+      ).placement,
+    ).toEqual(UNPLACED)
+    expect(pairSideOf(OLDER).placement).toEqual(TOP)
   })
 })
 
 describe('sharesRequiredParent', () => {
-  const a: PairSide = { name: 'The Market', keywords: [], parentId: 'loc_p' }
-  const b: PairSide = { name: 'The Quay', keywords: [], parentId: 'loc_p' }
+  const a: PairSide = { name: 'The Market', keywords: [], placement: under('loc_p') }
+  const b: PairSide = { name: 'The Quay', keywords: [], placement: under('loc_p') }
 
   it('reads the parent clause alone, names aside', () => {
     expect(sharesRequiredParent('same-parent', a, b)).toBe(true)
-    expect(sharesRequiredParent('same-parent', a, { ...b, parentId: 'loc_q' })).toBe(false)
-    expect(sharesRequiredParent('same-parent', a, { ...b, parentId: null })).toBe(false)
-    expect(sharesRequiredParent('alike', a, { ...b, parentId: 'loc_q' })).toBe(true)
+    expect(sharesRequiredParent('same-parent', a, { ...b, placement: under('loc_q') })).toBe(false)
+    expect(sharesRequiredParent('same-parent', a, { ...b, placement: TOP })).toBe(false)
+    expect(sharesRequiredParent('alike', a, { ...b, placement: under('loc_q') })).toBe(true)
+  })
+
+  it('counts the top level as one parent', () => {
+    expect(
+      sharesRequiredParent('same-parent', { ...a, placement: TOP }, { ...b, placement: TOP }),
+    ).toBe(true)
+  })
+
+  // world.md → Surfacing: a `same-parent` pair is one only while the two share a parent.
+  it('never pairs an unplaced place same-parent, beside another unplaced one or anywhere', () => {
+    const unplacedA = { ...a, placement: UNPLACED }
+    expect(sharesRequiredParent('same-parent', unplacedA, { ...b, placement: UNPLACED })).toBe(
+      false,
+    )
+    expect(sharesRequiredParent('same-parent', unplacedA, { ...b, placement: TOP })).toBe(false)
+    expect(sharesRequiredParent('same-parent', unplacedA, b)).toBe(false)
+  })
+
+  it('pairs an unplaced flag whatever the two placements', () => {
+    expect(
+      sharesRequiredParent('unplaced', { ...a, placement: UNPLACED }, { ...b, placement: TOP }),
+    ).toBe(true)
+    expect(sharesRequiredParent('unplaced', { ...a, placement: UNPLACED }, b)).toBe(true)
   })
 })
 
@@ -141,7 +176,7 @@ describe('stillPaired', () => {
   const side = (name: string, parentId: string | null): PairSide => ({
     name,
     keywords: [],
-    parentId,
+    placement: parentId === null ? TOP : under(parentId),
   })
 
   it('needs a shared parent only for a same-parent flag, the root counting as one parent', () => {
@@ -198,6 +233,18 @@ describe('collisionPairOf — the same-parent clause', () => {
       miss: COLLISION_PAIR_MISS.notFlagged,
     })
     expect(collisionPairOf([MARKET, split], ['loc_m', 'loc_s'])).toEqual({
+      miss: COLLISION_PAIR_MISS.notFlagged,
+    })
+  })
+
+  it('misses a same-parent pair of two unplaced places, which share no parent', () => {
+    const unplacedState = { parent_location_id: null, unplaced: true as const }
+    const market = place('loc_m', 'The Market', null, { state: unplacedState })
+    const stalls = place('loc_s', 'The Market Stalls', null, {
+      ...flaggedWith('loc_m', 'same-parent'),
+      state: unplacedState,
+    })
+    expect(collisionPairOf([market, stalls], ['loc_s', 'loc_m'])).toEqual({
       miss: COLLISION_PAIR_MISS.notFlagged,
     })
   })

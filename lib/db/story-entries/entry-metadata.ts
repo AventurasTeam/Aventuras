@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { VISUAL_CATEGORIES } from '../entities/entity-state-schema'
 
 const createEmission = { handle: z.string(), name: z.string(), description: z.string() }
+// A kept parent's id, 'top' for top-level, as emitted when dropped; absent when unplaced.
 const locationEmission = { ...createEmission, parent: z.string().optional() }
 
 // A create that made or reused a row carries that row's id; a dropped one has none.
@@ -11,7 +12,7 @@ const newLocationReportSchema = z.discriminatedUnion('outcome', [
     ...locationEmission,
     outcome: z.enum(['created', 'reused']),
     id: z.string(),
-    // Literal true: its parent couldn't be used, so it went to the root.
+    // Literal true: its parent couldn't be used, so the place is unplaced.
     parentDropped: z.literal(true).optional(),
   }),
   z.object({ ...locationEmission, outcome: z.literal('dropped') }),

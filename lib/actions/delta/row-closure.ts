@@ -26,7 +26,7 @@ import {
 import { resolveByTable } from './registry'
 import { ReversalIntegrityError } from './replay-errors'
 import { deltaLockKeys, type RowLockKey } from './row-locks'
-import { userEditsOutliving, wroteColumn, wrotePath } from './user-precedence'
+import { userEditsOutliving, wroteColumn, wroteField } from './user-precedence'
 
 type ReversalSetFields = Pick<ReversalSet, 'branchId' | 'rows' | 'redoRows' | 'held' | 'refClears'>
 
@@ -190,7 +190,7 @@ function restoredRefs(
   for (const d of set) {
     const edits = laterUserEdits.get(d.id) ?? []
     for (const { ref, id } of pathUndos(d)) {
-      if (wrotePath(edits, ref.column, [ref.path])) continue
+      if (wroteField(edits, d.targetTable, ref.column, [ref.path])) continue
       const row = { table: d.targetTable, id: d.targetId }
       const key = restoredKey(row, ref)
       const seen = restored.get(key)

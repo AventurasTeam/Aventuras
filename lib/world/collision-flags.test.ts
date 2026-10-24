@@ -216,7 +216,10 @@ describe('brokenFlags', () => {
     brokenFlags({
       entities: rows,
       after: new Map(
-        after.map(([id, side]): [string, PairSide] => [id, { ...side, parentId: null }]),
+        after.map(([id, side]): [string, PairSide] => [
+          id,
+          { ...side, placement: { kind: 'top' } },
+        ]),
       ),
     })
 
@@ -281,10 +284,13 @@ describe('brokenFlags', () => {
 
     it('breaks when a re-parent moves either row away from the other', () => {
       expect(
-        judged([market, stalls], [['loc_s', sideOf(stalls, { parentId: 'loc_q' })]]),
+        judged(
+          [market, stalls],
+          [['loc_s', sideOf(stalls, { placement: { kind: 'under', parentId: 'loc_q' } })]],
+        ),
       ).toStrictEqual(['loc_s'])
       expect(
-        judged([market, stalls], [['loc_m', sideOf(market, { parentId: null })]]),
+        judged([market, stalls], [['loc_m', sideOf(market, { placement: { kind: 'top' } })]]),
       ).toStrictEqual(['loc_s'])
     })
 
@@ -300,6 +306,19 @@ describe('brokenFlags', () => {
           [['loc_s', sideOf(rootStalls, { name: 'The Market Hall' })]],
         ),
       ).toStrictEqual([])
+    })
+
+    // A delete that leaves both rows unplaced leaves them sharing no parent.
+    it('breaks when both rows are left unplaced', () => {
+      expect(
+        judged(
+          [market, stalls],
+          [
+            ['loc_m', sideOf(market, { placement: { kind: 'unplaced' } })],
+            ['loc_s', sideOf(stalls, { placement: { kind: 'unplaced' } })],
+          ],
+        ),
+      ).toStrictEqual(['loc_s'])
     })
 
     it('breaks on a rename that keeps the parent but ends the namesakes', () => {
@@ -321,7 +340,10 @@ describe('brokenFlags', () => {
     it('keeps a flag for another reason across a re-parent', () => {
       const distinct: Entity = { ...stalls, nameCollisionReason: 'distinct' }
       expect(
-        judged([market, distinct], [['loc_s', sideOf(distinct, { parentId: 'loc_q' })]]),
+        judged(
+          [market, distinct],
+          [['loc_s', sideOf(distinct, { placement: { kind: 'under', parentId: 'loc_q' } })]],
+        ),
       ).toStrictEqual([])
     })
   })

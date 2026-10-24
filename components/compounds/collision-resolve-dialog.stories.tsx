@@ -1367,6 +1367,29 @@ export const SameParentAtRoot: Story = {
   },
 }
 
+// world.md → Resolve dialog: an unplaced place created beside a namesake placed elsewhere.
+const varn = placeOf('loc_varn', 'Varn', '2026-05-01T00:00:00Z')
+const unplacedVarn = placeOf('loc_varn_2', 'Varn', NEWER_AT)
+
+export const Unplaced: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={varn}
+      entityB={unplacedVarn}
+      reason="unplaced"
+      parentName="Veil’s Hollow"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(await dialogNamed('⚠ Two locations named "Varn"')).toBeInTheDocument()
+    expect(
+      screen.getByText('"Varn" was created with no known location, so it may be "Varn".'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/^Both are /)).toBeNull()
+  },
+}
+
 // Only `same-parent` reads the parent: any other reason keeps its own line.
 export const ParentNameOnlyForSameParent: Story = {
   render: () => (

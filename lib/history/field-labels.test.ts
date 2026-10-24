@@ -71,6 +71,13 @@ describe('field-labels vocabulary coverage', () => {
     }
   })
 
+  // data-model.md → LocationState shape: the parent and the flag are one field.
+  it('labels the unplaced flag as the parent it stands in for', () => {
+    expect(fieldPathLabel('entities', 'state.unplaced')).toBe(
+      fieldPathLabel('entities', 'state.parent_location_id'),
+    )
+  })
+
   it('labels every editable column of every link table, from either side of a relationship', () => {
     for (const table of HISTORY_LINK_TABLES) {
       const columns = Object.keys(getTableColumns(LINK_TABLE_DEFS[table])).filter(

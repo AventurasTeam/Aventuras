@@ -4,6 +4,7 @@ import { compareId } from '@/lib/list-modules'
 import { blankToNull } from '@/lib/text'
 
 import { stateOf } from './entity-draft'
+import { realPlacementOf } from './location-map'
 import { byName, itemsAt } from './overview'
 import { placeModes } from './place-modes'
 
@@ -32,7 +33,12 @@ export type CharacterStateView = {
   stackables: readonly StackableView[]
 }
 
-export type LocationStateView = { condition: string | null; parent: EntityRef | null }
+export type LocationStateView = {
+  condition: string | null
+  parent: EntityRef | null
+  /** Known to exist, not where: the flag, or a stored parent the branch has no place for. */
+  unplaced: boolean
+}
 
 export type ItemStateView = {
   condition: string | null
@@ -97,7 +103,7 @@ const EMPTY_VIEW_BY_KIND = {
     holdings: [],
     stackables: [],
   }),
-  location: (): LocationStateView => ({ condition: null, parent: null }),
+  location: (): LocationStateView => ({ condition: null, parent: null, unplaced: false }),
   item: (): ItemStateView => ({ condition: null, location: null, holder: null }),
   faction: (): FactionStateView => ({ standing: null, agenda: [], members: [] }),
 } satisfies { [K in EntityKind]: () => EntityStateViewByKind[K] }
@@ -126,6 +132,7 @@ export function buildEntityViews(entities: readonly Entity[], scene: ViewScene):
   const byEntityId = new Map(entities.map((e) => [e.id, e]))
   const inScene = new Set(scene.sceneEntities)
   const modes = placeModes(entities, scene.currentLocationId)
+  const placementAt = realPlacementOf(entities.filter((e) => e.kind === 'location'))
 
   const seatedByScene = (e: Entity): boolean => e.status === 'active' && inScene.has(e.id)
   const disabled = (e: Entity): boolean =>
@@ -231,9 +238,11 @@ export function buildEntityViews(entities: readonly Entity[], scene: ViewScene):
         return characterView(e)
       case 'location': {
         const state = stateOf(e, 'location')
+        const placement = placementAt(e.id)
         return {
           condition: text(state.condition),
-          parent: ref(state.parent_location_id, 'location'),
+          parent: placement.kind === 'under' ? ref(placement.parentId, 'location') : null,
+          unplaced: placement.kind === 'unplaced',
         }
       }
       case 'item':

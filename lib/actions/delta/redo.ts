@@ -1,5 +1,6 @@
-import type { Delta, SqlOp } from '@/lib/db'
+import type { Delta, Entity, LocationState, SqlOp } from '@/lib/db'
 import { deltas, isEmbeddedSourceTable } from '@/lib/db'
+import { placementOf, withPlacement, type PlacePlacement } from '@/lib/world'
 
 import type { DbCtx } from '../types'
 import { cascadePatches } from './delete-cascade'
@@ -11,6 +12,7 @@ import {
   DeltaReplayError,
   ReversalIntegrityError,
   reverseAndPruneDeltaRows,
+  stateWithRefCleared,
 } from './reverse-replay'
 import type { RefClear, ReversalSet, RowRef } from './row-closure'
 import { deltaLockKeys } from './row-locks'
@@ -28,6 +30,8 @@ export type RefRestore = {
   readonly row: RowRef
   readonly ref: RefPath
   readonly idBeforeUndo: string | null
+  /** A place's placement before the undo, for a parent ref; null for any other ref. */
+  readonly placementBeforeUndo: PlacePlacement | null
 }
 
 /**
@@ -133,7 +137,9 @@ async function snapshotForRedo(set: ReversalSet, ctx: DbCtx): Promise<RedoGroup>
     // Neither live nor held: the planner clears nothing there, so nothing goes back.
     if (before) {
       const id = pathRefIds(row.table, before).find((p) => p.ref.path === ref.path)?.id ?? null
-      refRestores.push({ branchId: set.branchId, row, ref, idBeforeUndo: id })
+      const placementBeforeUndo =
+        ref.path === 'parent_location_id' ? placementOf(before as Pick<Entity, 'state'>) : null
+      refRestores.push({ branchId: set.branchId, row, ref, idBeforeUndo: id, placementBeforeUndo })
     }
   }
   return new RedoGroup(snapshots, refRestores)
@@ -203,6 +209,18 @@ async function deadAfterRedo(
   return dead
 }
 
+// A place's parent goes back with its placement: top-level stays top, a dead parent unplaces.
+function restoredState(
+  state: unknown,
+  { ref, idBeforeUndo, placementBeforeUndo }: RefRestore,
+  dead: ReadonlySet<HeldKey>,
+): Record<string, unknown> {
+  if (idBeforeUndo !== null && dead.has(heldKey(ref.refTable, idBeforeUndo)))
+    return stateWithRefCleared(state, ref)
+  if (placementBeforeUndo === null) return { ...(state as object), [ref.path]: idBeforeUndo }
+  return withPlacement((state ?? {}) as LocationState, placementBeforeUndo)
+}
+
 function withoutDeadRefs(
   table: string,
   row: Record<string, unknown> | null,
@@ -212,7 +230,7 @@ function withoutDeadRefs(
   let out = row
   for (const { ref, id } of pathRefIds(table, row)) {
     if (id === null || !dead.has(heldKey(ref.refTable, id))) continue
-    out = { ...out, [ref.column]: { ...(out[ref.column] as object), [ref.path]: null } }
+    out = { ...out, [ref.column]: stateWithRefCleared(out[ref.column], ref) }
   }
   return out
 }
@@ -273,14 +291,13 @@ async function applyRedoLocked(
   const deltaOps = restoredDeltas.map((delta) => ctx.db.insert(deltas).values(delta).toSQL())
   // Read under the key locks: only the ref goes back, over the column as the undo left it.
   const refPatches: { row: RowRef; branchId: string; columns: Record<string, unknown> }[] = []
-  for (const { branchId, row, ref, idBeforeUndo } of refRestores) {
+  for (const restore of refRestores) {
+    const { branchId, row, ref } = restore
     const entry = resolveByTable(row.table)
     if (!entry) throw new Error(`redo apply: unknown target_table ${row.table}`)
     const current = await currentRow(ctx, row.table, { branchId, targetId: row.id })
     if (!current) continue
-    const id =
-      idBeforeUndo !== null && dead.has(heldKey(ref.refTable, idBeforeUndo)) ? null : idBeforeUndo
-    const columns = { [ref.column]: { ...(current[ref.column] as object), [ref.path]: id } }
+    const columns = { [ref.column]: restoredState(current[ref.column], restore, dead) }
     ops.push(
       ctx.db
         .update(entry.descriptor.table)

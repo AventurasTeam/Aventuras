@@ -78,6 +78,7 @@ const TURN_A: Record<string, unknown> = {
     { id: 'l2', name: 'The Marsh', depth: 0 },
     { id: 'l1', name: 'The Drowned Keep', depth: 1 },
   ],
+  locationMapUnplaced: [{ id: 'l4', name: 'Varn', depth: 0 }],
   currentLocationChain: ['The Marsh'],
   heldItems: [{ holderId: 'c1', items: [{ id: 'i1', name: 'Courier’s seal', equipped: false }] }],
   looseItems: [
@@ -145,6 +146,7 @@ const TURN_B: Record<string, unknown> = {
     { id: 'l3', name: 'The Ford', depth: 0 },
     { id: 'l2', name: 'The Marsh', depth: 0 },
   ],
+  locationMapUnplaced: [],
   currentLocationChain: [],
   heldItems: [{ holderId: 'c2', items: [{ id: 'i3', name: 'a bone knife', equipped: true }] }],
   looseItems: [],
@@ -198,6 +200,17 @@ const PASS_A: Record<string, unknown> = {
       keywords: [],
     },
   ],
+  placesUnplaced: [
+    {
+      id: 'l2',
+      name: 'Varn',
+      depth: 0,
+      status: 'active',
+      retiredReason: null,
+      description: null,
+      keywords: [],
+    },
+  ],
   relationships: [
     { subject: 'c1', subjectName: 'Kael', object: 'c2', objectName: 'Aria', kind: 'sister' },
   ],
@@ -220,6 +233,7 @@ const PASS_B: Record<string, unknown> = {
     },
   ],
   places: [],
+  placesUnplaced: [],
   relationships: [],
   happenings: [],
 }

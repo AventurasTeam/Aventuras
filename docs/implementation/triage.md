@@ -342,8 +342,9 @@ slice-planning gate forces its resolution before that slice is planned.
   (developer checks before merge, step 3).
 
 - **The location instructions count retired places.** Two prompt lines
-  are gated on `{% if locationMap.size > 0 %}`, which now counts retired
-  rows too, and those carry no id: the narrator's "Use an ID from
+  are gated on `{% if locationMap.size > 0 or locationMapUnplaced.size > 0 %}`,
+  which counts retired rows too in either list, and those carry no id:
+  the narrator's "Use an ID from
   Places" line (`lib/prompts/bundled/per-turn.ts`) and the
   state block's `<current_location>` hint
   (`lib/prompts/bundled/state-emission.ts`). A branch whose only places

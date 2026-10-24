@@ -52,10 +52,12 @@ source, and a section that shows state without one leaves the model matching by 
 Here:{% for i in looseItems %}{% include 'macro_item_line', item: i, condition: i.state.condition, ids: true %}{% endfor %}{% endif %}
 
 {% endif -%}
-{% if locationMap.size > 0 -%}
+{% if locationMap.size > 0 or locationMapUnplaced.size > 0 -%}
 # Places
 {% for p in locationMap %}{% for d in (1..p.depth) %}  {% endfor %}{% if p.retired %}{{ p.name }} (retired{% if p.retiredReason %}: {{ p.retiredReason }}{% endif %}){% else %}[{{ p.id }}] {{ p.name }}{% endif %}
-{% endfor %}
+{% endfor %}{% if locationMapUnplaced.size > 0 %}Unplaced:
+{% for p in locationMapUnplaced %}  {% for d in (1..p.depth) %}  {% endfor %}{% if p.retired %}{{ p.name }} (retired{% if p.retiredReason %}: {{ p.retiredReason }}{% endif %}){% else %}[{{ p.id }}] {{ p.name }}{% endif %}
+{% endfor %}{% endif %}
 {% endif -%}
 {% include 'macro_memory_blocks', ids: true -%}
 {%- comment -%}
@@ -91,6 +93,8 @@ For the time delta, give {% if worldTimeDeltaBasis == 'sinceUserAction' %}second
 Report a place the scene settled in that has no ID yet in newLocations, and an item someone took or was given that has no ID yet in newItems. A handle is the one reference you make up: give each a handle that starts with new: (e.g. new:docks), and use it like an ID — a new place as currentLocation or as another new place's parent, a new item as a transfer's item id or, when it is in the scene, in sceneEntities.
 
 Create a place only when the scene settles somewhere with its own identity the story could come back to: a named place, a building, a room that matters, a stretch of wild land where things happen. Don't create one for passing through (a corridor, a doorway, the road between two places); keep the current location then. Use an existing place's ID whenever the scene is somewhere already in Places, and nest a new place under the place it's part of.
+
+Set a new place's parent to top only when nothing in Places could contain it, as for the story's first place or a city when Places holds only cities. Leave its parent out when something in Places could contain it and the prose doesn't say which; when unsure, leave it out.
 
 Create an item only when a character takes, receives or is given something that matters beyond this moment: a weapon, a key, a letter, a relic. Not food eaten on the spot, not money (use a stackable), not scenery.
 {% if suggestionsFire -%}

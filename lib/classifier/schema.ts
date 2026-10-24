@@ -116,6 +116,9 @@ export const classifierExtractionSchema = z.object({
     .default([]),
 })
 
+/** classifier.md → Mentioned places → Parent: a new place's `parent` for a top-level place. */
+export const TOP_LEVEL_TOKEN = 'top-level'
+
 const newPlace = z.object({
   /** Temporary handle in the newCharacters namespace; later refs in the same reply use it. */
   handle: z.string(),
@@ -132,7 +135,7 @@ const newPlace = z.object({
     .string()
     .optional()
     .describe(
-      "ID of the place it is part of, from Places, or another new place's handle. Omit when the turns don't say.",
+      `ID of the place it is part of, from Places, or another new place's handle; "${TOP_LEVEL_TOKEN}" only when nothing in Places could contain it. Omit it when something in Places could contain it and the turns don't say which, and when unsure.`,
     ),
 })
 

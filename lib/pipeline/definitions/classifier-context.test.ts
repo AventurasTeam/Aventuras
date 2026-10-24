@@ -326,6 +326,36 @@ describe('buildClassifierContext', () => {
       ])
     })
 
+    // classifier.md → What the classifier reads: the unplaced places in a group of their own.
+    it('lists the unplaced places, each with what lies inside it, apart from the tree', () => {
+      const VARN = 'loc_55555555-5555-5555-5555-555555555555'
+      const DOCKS = 'loc_66666666-6666-6666-6666-666666666666'
+      const context = build([
+        place(DOCKS, 'Varn Docks', VARN),
+        place(VARN, 'Varn', null, {
+          state: { parent_location_id: null, unplaced: true },
+          keywords: ['the ford town'],
+        }),
+        place(KEEP, 'Ashen Keep', null),
+        place(MARSH, 'The Marsh', 'loc_gone'),
+      ])
+      expect(context.places).toEqual([expect.objectContaining({ id: 'l1', name: 'Ashen Keep' })])
+      // Numbered after the tree: substituteIds allocates in walk order.
+      expect(context.placesUnplaced).toEqual([
+        expect.objectContaining({ id: 'l2', name: 'The Marsh', depth: 0 }),
+        {
+          id: 'l3',
+          name: 'Varn',
+          depth: 0,
+          status: 'active',
+          retiredReason: null,
+          description: 'Varn, described.',
+          keywords: ['the ford town'],
+        },
+        expect.objectContaining({ id: 'l4', name: 'Varn Docks', depth: 1 }),
+      ])
+    })
+
     it('puts a multi-line name or keyword on one line', () => {
       const context = build([
         place(HALL, 'Great\n  Hall', null, { keywords: ['the\nhall', 'the  great\r\nroom'] }),

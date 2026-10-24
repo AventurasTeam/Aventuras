@@ -391,8 +391,14 @@ under a rule per kind:
   its partner; otherwise, or when the descriptions can't be compared,
   it is created plain.
 - **Within one block**, a second new location with the same name and
-  parent maps to the first, and two new items of one name are both
-  created.
+  parent, or with no parent like the first, maps to the first before
+  any other match, and two new items of one name are both created.
+  Otherwise the block's locations match as successive turns' would: a
+  create with no parent counts the block's earlier creates of its name
+  as stored places, newer than any, so one match maps it there and
+  several create it flagged `unplaced`; a create under a parent, or
+  top-level, that would otherwise be created takes over an earlier
+  unplaced create of its name and places it there.
 
 World pairs, explains and resolves these flags as it does a
 character's

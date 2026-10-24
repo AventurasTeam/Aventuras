@@ -20,30 +20,40 @@ import {
   type SubstitutedStateBlock,
 } from '@/lib/piggyback'
 import {
+  checkParentChain,
   itemNamesakes,
   locationMapView,
   matchNewPlace,
   parentOfLocations,
   placeNewLocation,
   settlingOrder,
+  TOP_LEVEL,
+  withPlacement,
   type ParentDropCause,
+  type PlacePlacement,
   type SettledNewPlace,
 } from '@/lib/world'
 
 type CreateEntityAction = Extract<PipelineAction, { kind: 'createEntity' }>
+type PlaceLocationAction = Extract<PipelineAction, { kind: 'placeLocation' }>
 
 export type TurnCreatePlan = PlannedTurn & {
   /** Insert `createdRows`: parents before children, locations before items. */
   creates: CreateEntityAction[]
+  /** A reused unplaced place's placement; emitted after `creates`, before every other write. */
+  placements: PlaceLocationAction[]
 }
 
 type LocationFate = {
   outcome: 'created' | 'reused'
   id: string
-  /** Where the row sits; null at the root. */
-  parentId: string | null
+  /** The create's settled placement, unplaced if its parent dropped; a reused row keeps its own. */
+  placement: PlacePlacement
   parentDropped: boolean
 }
+
+// piggyback.md → Parent: a parent the planner can't use leaves the place unplaced.
+const UNPLACED: PlacePlacement = { kind: 'unplaced' }
 
 type StoredText = { name: string; description: string }
 
@@ -97,9 +107,20 @@ function logDropped(
 function logParentDropped(
   log: Logger,
   handle: string,
-  drop: { parent: string; cause: ParentDropCause },
+  drop: { parent: string; cause: ParentDropCause | 'cycle' },
 ): void {
   log.warn('classifier.create_parent_dropped', { handle, parent: drop.parent, cause: drop.cause })
+}
+
+// data-model.md → LocationState shape: a machine writer walks a placement first and drops a loop.
+function placementLoop(
+  id: string,
+  parentId: string,
+  parentOf: (id: string) => string | null,
+): { parent: string; cause: 'cycle' | 'chain-broken' } | null {
+  const walk = checkParentChain(id, parentId, parentOf)
+  if (walk === 'ok') return null
+  return { parent: parentId, cause: walk === 'cycle' ? 'cycle' : 'chain-broken' }
 }
 
 /** piggyback.md → Kept only if used. */
@@ -133,16 +154,27 @@ function planLocations(args: {
   byId: ReadonlyMap<string, Entity>
   mapCurrentLocationId: string | null
   branchId: string
+  source: PlaceLocationAction['source']
   now: () => number
   newId: (prefix: 'loc') => string
   log: Logger
-}): { fates: Map<string, LocationFate>; rows: Entity[]; reusedIds: string[] } {
+}): {
+  fates: Map<string, LocationFate>
+  rows: Entity[]
+  reusedIds: string[]
+  placements: PlaceLocationAction[]
+} {
   const { entities, byId } = args
   const view = locationMapView(entities, args.mapCurrentLocationId)
   const fates = new Map<string, LocationFate>()
   const rows: Entity[] = []
   const reused = new Set<string>()
   const placed: SettledNewPlace[] = []
+  const placements: PlaceLocationAction[] = []
+  // Where this turn's placements put a reused place, so a later walk sees it there.
+  const placedParents = new Map<string, string | null>()
+  // The rows this turn placed, as matching must see them: no longer unplaced.
+  const placedRows = new Map<string, Entity>()
 
   // normalizeCreates already dropped a second declaration of a handle, so none is a duplicate.
   const { order } = settlingOrder(
@@ -151,40 +183,77 @@ function planLocations(args: {
   )
   for (const place of order) {
     const { emission } = place
+    const storedParentOf = parentOfLocations([...entities, ...rows])
+    const parentOf = (id: string): string | null =>
+      placedParents.has(id) ? (placedParents.get(id) ?? null) : storedParentOf(id)
     const placement = placeNewLocation({
       place,
       resolve: (parent) => fates.get(parent)?.id ?? parent,
       statusOf: (id) => byId.get(id)?.status,
-      parentOf: parentOfLocations([...entities, ...rows]),
+      parentOf,
     })
-    const parentId = placement.kind === 'kept' ? placement.parentId : null
-    const parentDropped = placement.kind === 'dropped'
+    let parentDropped = placement.kind === 'dropped'
     if (placement.kind === 'dropped') logParentDropped(args.log, emission.handle, placement)
+    const candidate = placement.kind === 'kept' ? placement.placement : UNPLACED
 
     const text = storedText(emission)
-    const match = matchNewPlace({ name: text.name, parentId }, placed, view)
-    let fate: LocationFate
-    if (match.kind === 'twin') {
-      fate = { outcome: 'reused', id: match.id, parentId, parentDropped }
-    } else if (match.kind === 'reuse') {
-      if (byId.get(match.id)?.status === 'staged') reused.add(match.id)
-      fate = { outcome: 'reused', id: match.id, parentId, parentDropped }
-    } else {
+    // Stale hiddenBetween above a row placed here is harmless: the one chain settles top-down.
+    const match = matchNewPlace(
+      { name: text.name, placement: candidate },
+      placed,
+      placedRows.size === 0
+        ? view
+        : { ...view, locations: view.locations.map((e) => placedRows.get(e.id) ?? e) },
+      placedParents,
+    )
+    let id: string
+    if (match.kind === 'create') {
       const row = newRow({
         id: args.newId('loc'),
         branchId: args.branchId,
-        shape: { kind: 'location', state: { parent_location_id: parentId } },
+        shape: { kind: 'location', state: withPlacement({ parent_location_id: null }, candidate) },
         text,
         flag: match.flag,
         at: args.now(),
       })
       rows.push(row)
-      fate = { outcome: 'created', id: row.id, parentId, parentDropped }
+      id = row.id
+    } else {
+      id = match.id
+      if (match.kind === 'reuse' && byId.get(id)?.status === 'staged') reused.add(id)
+      // data-model.md → Authorship contract: the writer places only an unplaced place it reuses:
+      // a row, or this block's own create taken over.
+      if (match.place && candidate.kind !== 'unplaced') {
+        const loop =
+          candidate.kind === 'under' ? placementLoop(id, candidate.parentId, parentOf) : null
+        if (loop === null) {
+          placedParents.set(id, candidate.kind === 'under' ? candidate.parentId : null)
+          const row = byId.get(id)
+          if (row !== undefined)
+            placedRows.set(id, {
+              ...row,
+              state: withPlacement(row.state as LocationState, candidate),
+            })
+          placements.push({
+            kind: 'placeLocation',
+            source: args.source,
+            payload: { branchId: args.branchId, id, placement: candidate, proseEntryId: null },
+          })
+        } else {
+          parentDropped = true
+          logParentDropped(args.log, emission.handle, loop)
+        }
+      }
     }
-    fates.set(emission.handle, fate)
-    placed.push({ name: text.name, parentId, id: fate.id })
+    fates.set(emission.handle, {
+      outcome: match.kind === 'create' ? 'created' : 'reused',
+      id,
+      placement: candidate,
+      parentDropped,
+    })
+    placed.push({ name: text.name, placement: candidate, id })
   }
-  return { fates, rows, reusedIds: [...reused] }
+  return { fates, rows, reusedIds: [...reused], placements }
 }
 
 /** piggyback.md → Matching before creating: an item is never reused, only flagged. */
@@ -277,6 +346,13 @@ function rewriteHandles(
   return out as PlannedStateBlock
 }
 
+// data-model.md → Entry metadata shape: a placed create's parent id, `top` for a top-level one,
+// none for an unplaced one.
+function reportedParent(placement: PlacePlacement): string | undefined {
+  if (placement.kind === 'under') return placement.parentId
+  return placement.kind === 'top' ? TOP_LEVEL : undefined
+}
+
 function locationReport(
   emission: NewLocationEmission,
   fate: LocationFate | undefined,
@@ -291,8 +367,8 @@ function locationReport(
       outcome: 'dropped',
     }
   }
-  // A dropped parent reports what was emitted; a resolved one, the id it resolved to.
-  const parent = fate.parentDropped ? emission.parent : (fate.parentId ?? undefined)
+  // A dropped parent reports what was emitted; a kept one, where the planner settled the create.
+  const parent = fate.parentDropped ? emission.parent : reportedParent(fate.placement)
   return {
     handle,
     name,
@@ -349,6 +425,7 @@ export async function planTurnCreates(input: {
     byId,
     mapCurrentLocationId,
     branchId,
+    source,
     now,
     newId,
     log,
@@ -374,6 +451,7 @@ export async function planTurnCreates(input: {
     ),
     createdRows,
     reusedIds: places.reusedIds,
+    placements: places.placements,
     report: {
       newLocations: locations.map((e) => locationReport(e, places.fates.get(e.handle))),
       newItems: items.map((e) => itemReport(e, things.ids.get(e.handle))),
@@ -392,6 +470,7 @@ export function skipTurnCreates(block: SubstitutedStateBlock): TurnCreatePlan {
     creates: [],
     createdRows: [],
     reusedIds: [],
+    placements: [],
     report: {
       newLocations: (block.newLocations ?? []).map((e) => locationReport(e, undefined)),
       newItems: (block.newItems ?? []).map((e) => itemReport(e, undefined)),

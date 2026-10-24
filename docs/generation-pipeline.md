@@ -1682,11 +1682,13 @@ before the undo, the parent of each place and the faction of each
 character the reversal clears when the named row's `create` is among
 the first two, and redo puts that field alone back with the named row,
 over the row's `state` as the undo left it, logging nothing, as the
-clear did. A row the snapshot restores whole gets the field back with
-its row. A row whose reference only a sweep's row removes would stay
-cleared; that is a guard, since no sweep holds an entity create today. Every
-delta-logged write clears the redo stack, so redo always meets the
-state its undo left.
+clear did; for a place that is its placement from before the undo, a
+parent, top-level or unplaced, with the parent and the `unplaced` mark
+put back as one field. A row the snapshot restores whole gets
+the field back with its row. A row whose reference only a sweep's row
+removes would stay cleared; that is a guard, since no sweep holds an
+entity create today. Every delta-logged write clears the redo stack, so
+redo always meets the state its undo left.
 
 Abort is conceptually identical to user CTRL-Z — same
 `undo_payload` primitive, same reverse-replay path, and the replayed
