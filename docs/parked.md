@@ -208,6 +208,23 @@ The other three Group D surfaces (story-settings, app-settings,
 vault calendars) landed; this one was always pending its desktop
 design and is now confirmed post-v1 in scope.
 
+#### The seen-before-written set mirrors the bundled templates
+
+`shownWithState` in `lib/pipeline/definitions/generation-context.ts`
+builds the ids a per-turn condition may land on from the rows the
+bundled per-turn and fallback templates render with their state. A
+pack template that renders state for other rows, or hides it for
+some, drifts from that set: a condition is refused for a row the
+model was shown, or lands on one it wasn't. Gating the set's sources
+on the template's `reads`, or deriving it from the rendered prompt,
+would close it. Raised 2026-10-23 by the AI writer map's Task 12
+review; filed by its slice review.
+
+It lands with user-authored packs, the
+[prompt-pack editor](#prompt-pack-editor-desktop-spec--mobile-retrofit)
+above: the app ships only the bundled pack, so until then no template
+can drift from the set. Routed from triage 2026-10-24.
+
 #### Pack validation contract
 
 [`architecture.md → Prompt templates and authoring`](./architecture.md#prompt-templates-and-authoring)

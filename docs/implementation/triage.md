@@ -561,17 +561,6 @@ slice-planning gate forces its resolution before that slice is planned.
   for takes; drops add one more instance. Raised 2026-10-23 by the AI
   writer map's final review.
 
-- **The seen-before-written set mirrors the bundled templates.**
-  `shownWithState` in `lib/pipeline/definitions/generation-context.ts`
-  builds the ids a per-turn condition may land on from the rows the
-  bundled per-turn and fallback templates render with their state. A
-  pack template that renders state for other rows, or hides it for
-  some, drifts from that set: a condition is refused for a row the
-  model was shown, or lands on one it wasn't. Gating the set's sources
-  on the template's `reads`, or deriving it from the rendered prompt,
-  would close it. Raised 2026-10-23 by the AI writer map's Task 12
-  review; filed by its slice review.
-
 - **A cast row's dangling faction selects nothing.** In
   `components/wizard/cast-editors.tsx`, a character whose `factionId`
   names no cast faction (a resumed draft whose faction row failed its
