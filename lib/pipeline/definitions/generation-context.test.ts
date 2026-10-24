@@ -1526,6 +1526,27 @@ describe('buildGenerationContext — location map and held items', () => {
     ])
   })
 
+  // A retired place is listed by name alone, so it gives a move nothing to name: the lines that
+  // point the model at an ID in Places gate on this, not on the lists being non-empty.
+  it('reads placesListed false when every listed place is retired, true once one has an id', async () => {
+    const retiredOnly = await buildContext({
+      idMap: seededIdMap(),
+      entities: [place(PORT, 'Port Vellis', null, { status: 'retired', retiredReason: 'burned' })],
+      retrieval: undefined,
+    })
+    expect(retiredOnly.locationMap).toHaveLength(1)
+    expect(retiredOnly.placesListed).toBe(false)
+    const unplacedOne = await buildContext({
+      idMap: seededIdMap(VAULT),
+      entities: [
+        place(PORT, 'Port Vellis', null, { status: 'retired', retiredReason: 'burned' }),
+        place(VAULT, 'The Vault', null, { state: { parent_location_id: null, unplaced: true } }),
+      ],
+      retrieval: undefined,
+    })
+    expect(unplacedOne.placesListed).toBe(true)
+  })
+
   it('keeps a disabled place on the map while the scene is there', async () => {
     const ctx = await buildContext({
       idMap: seededIdMap(VAULT),

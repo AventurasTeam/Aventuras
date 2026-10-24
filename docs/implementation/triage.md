@@ -190,21 +190,6 @@ slice-planning gate forces its resolution before that slice is planned.
   function. Raised 2026-10-11 by that PR's task reviews and its slice
   review.
 
-- **The location instructions count retired places.** Two prompt lines
-  are gated on `{% if locationMap.size > 0 or locationMapUnplaced.size > 0 %}`,
-  which counts retired rows too in either list, and those carry no id:
-  the narrator's "Use an ID from
-  Places" line (`lib/prompts/bundled/per-turn.ts`) and the
-  state block's `<current_location>` hint
-  (`lib/prompts/bundled/state-emission.ts`). A branch whose only places
-  are retired is still told to use an ID from Places. A count of the
-  rows with an id, or a flag the builder sets, fixes both; the prompt
-  content pass may reword the lines anyway. A third, ungated line makes
-  the same assumption: "Use an existing place's ID whenever the scene
-  is somewhere already in Places" (`state-emission.ts` and
-  `piggyback-fallback-classifier.ts`). Raised 2026-10-12 by the
-  retired and disabled places implementation.
-
 - **The fallback classifier's roster lists effectively disabled places
   with ids.** `lib/prompts/bundled/piggyback-fallback-classifier.ts`
   renders every active and staged entity, so a place disabled by its

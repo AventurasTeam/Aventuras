@@ -8,6 +8,9 @@ import { renderTemplate, TEMPLATE_IDS } from '../index'
 import { PIGGYBACK_FALLBACK_CLASSIFIER } from './piggyback-fallback-classifier'
 import { STATE_EMISSION } from './state-emission'
 
+// The macro's source, its Liquid tags aside: a rule may sit behind a gate and still be verbatim.
+const STATE_EMISSION_TEXT = STATE_EMISSION.replace(/\{%-?[^%]*?-?%\}/g, '')
+
 const renderHalves = (context: Record<string, unknown>) =>
   renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
 const render = (context: Record<string, unknown>) => renderHalves(context).user
@@ -102,6 +105,7 @@ const context = (over: Record<string, unknown> = {}, rows: Entity[] = WORLD) => 
       tiers: [{ name: 'month', labels: ['Frostmoon', 'Thawmoon'] }],
     },
     locationIds: [],
+    placesListed: true,
     locationMap: [
       { id: 'l2', name: 'The Marsh', depth: 0 },
       { id: 'l1', name: 'The Drowned Keep', depth: 1 },
@@ -460,7 +464,7 @@ describe('bundled piggyback fallback classifier template', () => {
     // One contract across both writers (piggyback.md → Fallback classifier context): same rules.
     it.each([
       ['the fallback prompt', () => render(context())],
-      ['the tagged-block macro', () => STATE_EMISSION],
+      ['the tagged-block macro', () => STATE_EMISSION_TEXT],
     ])('carries the significance rules verbatim in %s', (_, source) => {
       expect(source()).toContain(PLACE_RULE)
       expect(source()).toContain(ITEM_RULE)
@@ -468,14 +472,14 @@ describe('bundled piggyback fallback classifier template', () => {
 
     it.each([
       ['the fallback prompt', () => render(context())],
-      ['the tagged-block macro', () => STATE_EMISSION],
+      ['the tagged-block macro', () => STATE_EMISSION_TEXT],
     ])('carries the parent rule verbatim in %s', (_, source) => {
       expect(source()).toContain(PARENT_RULE)
     })
 
     it.each([
       ['the fallback prompt', () => render(context())],
-      ['the tagged-block macro', () => STATE_EMISSION],
+      ['the tagged-block macro', () => STATE_EMISSION_TEXT],
     ])('carries the condition and drop rules verbatim in %s', (_, source) => {
       expect(source()).toContain(CONDITION_RULE)
       expect(source()).toContain(DROP_RULE)

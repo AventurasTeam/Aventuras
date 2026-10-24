@@ -166,6 +166,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
           description: 'A weathered hilltop fortress.',
         },
         locationIds: ['loc_1'],
+        placesListed: true,
         locationMap: [
           { id: 'loc_0', name: 'Highmoor', depth: 0 },
           { id: 'loc_1', name: 'The Keep', depth: 1 },
@@ -205,6 +206,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
   it('renders the memory blocks and the map before the instructions that refer back to them', () => {
     const withMemory = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
+      placesListed: true,
       locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
       retrievedEntities: [rankedRow('char_2', 'Mira')],
     }).user
@@ -340,6 +342,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
       ...m2Context,
       currentLocationId: 'loc_1',
       structuralLocation: null,
+      placesListed: true,
       locationMap: [{ id: 'loc_2', name: 'Old Mill', depth: 0 }],
     }).user
     expect(rendered).not.toContain('# Current location')
@@ -360,6 +363,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
         name: 'The Keep',
         description: 'A weathered hilltop fortress.',
       },
+      placesListed: true,
       locationMap: [
         { id: 'loc_1', name: 'The Keep', depth: 0 },
         { id: 'loc_9', name: 'The Market', depth: 0 },
@@ -481,6 +485,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
           injectionMode: 'auto',
         },
       ],
+      placesListed: true,
       locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
     }).user
     expect(rendered).toContain('# Places\n[loc_1] The Keep\n')
@@ -502,6 +507,7 @@ describe('bundled per-turn template — piggybackFires gating', () => {
       description: 'A weathered hilltop fortress.',
     },
     locationIds: ['loc_1'],
+    placesListed: true,
     locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
     entities: withViews(
       [aria({ inventory: ['item_1'] }), thing('item_1', 'Silver Key')],
@@ -587,13 +593,13 @@ describe('bundled per-turn template — the location map and item lines', () => 
     renderTemplate(TEMPLATE_IDS.perTurnNarrative, { ...m2Context, ...over }).user
 
   it('nests the map two spaces per level, with IDs when piggyback fires', () => {
-    expect(render({ locationMap: MAP })).toContain(
+    expect(render({ placesListed: true, locationMap: MAP })).toContain(
       '# Places\n[loc_0] Highmoor\n  [loc_1] The Keep\n    [loc_2] The Gatehouse\n[loc_3] Lowmarsh\n',
     )
   })
 
   it('renders the map by name alone when piggyback does not fire', () => {
-    expect(render({ piggybackFires: false, locationMap: MAP })).toContain(
+    expect(render({ piggybackFires: false, placesListed: true, locationMap: MAP })).toContain(
       '# Places\nHighmoor\n  The Keep\n    The Gatehouse\nLowmarsh\n',
     )
   })
@@ -606,26 +612,33 @@ describe('bundled per-turn template — the location map and item lines', () => 
   ]
 
   it('lists the unplaced places after the tree under Unplaced:, a level in, with IDs', () => {
-    expect(render({ locationMap: MAP, locationMapUnplaced: UNPLACED })).toContain(
+    expect(
+      render({ placesListed: true, locationMap: MAP, locationMapUnplaced: UNPLACED }),
+    ).toContain(
       '# Places\n[loc_0] Highmoor\n  [loc_1] The Keep\n    [loc_2] The Gatehouse\n[loc_3] Lowmarsh\nUnplaced:\n  [loc_7] Varn\n    [loc_8] Varn Docks\n  Saltmere (retired: swallowed by the rift)\n\n',
     )
   })
 
   it('renders the unplaced group by name alone when piggyback does not fire', () => {
     expect(
-      render({ piggybackFires: false, locationMap: MAP, locationMapUnplaced: UNPLACED }),
+      render({
+        piggybackFires: false,
+        placesListed: true,
+        locationMap: MAP,
+        locationMapUnplaced: UNPLACED,
+      }),
     ).toContain(
       'Lowmarsh\nUnplaced:\n  Varn\n    Varn Docks\n  Saltmere (retired: swallowed by the rift)\n',
     )
   })
 
   it('prints no Unplaced: line when no unplaced place is listed', () => {
-    expect(render({ locationMap: MAP })).not.toContain('Unplaced:')
+    expect(render({ placesListed: true, locationMap: MAP })).not.toContain('Unplaced:')
   })
 
   // A story whose only place went in unplaced still has Places to move within.
   it('renders Places, and offers its IDs, when only unplaced places are listed', () => {
-    const rendered = render({ locationMapUnplaced: UNPLACED.slice(0, 1) })
+    const rendered = render({ placesListed: true, locationMapUnplaced: UNPLACED.slice(0, 1) })
     expect(rendered).toContain('# Places\nUnplaced:\n  [loc_7] Varn\n\n')
     expect(rendered).toContain(PLACES_INSTRUCTION)
     expect(rendered).toContain(
@@ -641,13 +654,15 @@ describe('bundled per-turn template — the location map and item lines', () => 
   ]
 
   it('renders a retired place without an id, with its reason or none', () => {
-    expect(render({ locationMap: RETIRED_MAP })).toContain(
+    expect(render({ placesListed: true, locationMap: RETIRED_MAP })).toContain(
       '# Places\n[loc_0] Highmoor\n  Saltmere (retired: swallowed by the rift)\n    the Drowned Chapel (retired)\n',
     )
   })
 
   it('marks a retired place when piggyback does not fire', () => {
-    expect(render({ piggybackFires: false, locationMap: RETIRED_MAP })).toContain(
+    expect(
+      render({ piggybackFires: false, placesListed: true, locationMap: RETIRED_MAP }),
+    ).toContain(
       '# Places\nHighmoor\n  Saltmere (retired: swallowed by the rift)\n    the Drowned Chapel (retired)\n',
     )
   })
@@ -655,6 +670,7 @@ describe('bundled per-turn template — the location map and item lines', () => 
   it('puts the map after the current location and before the memory blocks', () => {
     const rendered = render({
       structuralLocation: KEEP,
+      placesListed: true,
       locationMap: MAP,
       retrievedEntities: [rankedRow('char_2', 'Mira')],
     })
@@ -883,11 +899,27 @@ describe('bundled per-turn template — create instructions', () => {
     expect(rendered).not.toContain('<current_location>the ID from Places')
     const withPlaces = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
+      placesListed: true,
       locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
     }).user
     expect(withPlaces).toContain(
       '<current_location>the ID from Places, or the handle of a new_location above</current_location>',
     )
+  })
+
+  // A branch whose only places are retired lists them by name alone: no ID to point the model at.
+  it('lists retired places by name but offers no ID from Places for them', () => {
+    const retiredOnly = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...m2Context,
+      placesListed: false,
+      locationMap: [
+        { retired: true, id: null, name: 'Port Vellis', depth: 0, retiredReason: 'burned' },
+      ],
+    }).user
+    expect(retiredOnly).toContain('# Places\nPort Vellis (retired: burned)\n')
+    expect(retiredOnly).not.toContain('Use an ID from Places')
+    expect(retiredOnly).not.toContain('<current_location>the ID from Places')
+    expect(retiredOnly).not.toContain("Use an existing place's ID")
   })
 
   it('explains handles and carries the significance rules', () => {
@@ -1045,6 +1077,7 @@ describe('bundled per-turn template — system and user halves', () => {
       name: 'The Keep',
       description: 'A weathered hilltop fortress.',
     },
+    placesListed: true,
     locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
     locationMapUnplaced: [
       { retired: false, id: 'loc_7', name: 'Varn', depth: 0, retiredReason: null },

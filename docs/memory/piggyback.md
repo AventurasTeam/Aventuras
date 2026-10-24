@@ -330,6 +330,11 @@ as empty: it fails `state`, the fallback fires, and its creates report
 > a relic. Not food eaten on the spot, not money (use a stackable), not
 > scenery.
 
+The sentence about an existing place's ID, and every other line that
+points the model at an ID in Places, renders only while Places lists a
+place with one (`placesListed`): a branch whose places are all retired
+shows them by name alone, so there is no ID to use.
+
 **Parent.** `top` makes the location top-level, and no parent leaves
 it unplaced. The prompt asks for `top` only when nothing on the map
 could contain the place (the story's first place, a city when the map

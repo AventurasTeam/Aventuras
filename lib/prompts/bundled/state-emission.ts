@@ -3,7 +3,7 @@ export const STATE_EMISSION = `After your narrative prose, append exactly one <s
 <state>
   <scene_entities>comma-separated IDs of every character/item present in this scene</scene_entities>
   <new_location handle="new:a-short-label" parent="the ID or handle of the place it is part of, or top" name="the place's name" condition="its condition, only when the prose shows one">a short description of the place</new_location>
-  <current_location>{% if locationMap.size > 0 or locationMapUnplaced.size > 0 %}the ID from Places, or {% endif %}the handle of a new_location above</current_location>
+  <current_location>{% if placesListed %}the ID from Places, or {% endif %}the handle of a new_location above</current_location>
   <world_time_delta>{% if worldTimeDeltaBasis == 'sinceUserAction' %}seconds elapsed since the end of the user's action{% else %}seconds elapsed since the previous entry, including any time the user's action itself took{% endif %} (0 for a flashback or memory; never negative)</world_time_delta>
   <visual_changes>
     <entity id="ID" type="physique | face | hair | eyes | attire | distinguishing">the category as it is now, restated from its current value shown above: keep what still applies, drop what no longer does, in about 60 words — it replaces the stored value whole</entity>
@@ -25,7 +25,7 @@ export const STATE_EMISSION = `After your narrative prose, append exactly one <s
 
 Give each new place or item its own <new_location> or <new_item> tag with a handle that starts with new: (e.g. new:docks), and use a new place's handle like an ID only as the <current_location> or another new place's parent, and a new item's handle only as a transfer's item id or, when it is in the scene, in <scene_entities>. Write a double quote, < or > inside a create's name or condition as &quot;, &lt; or &gt;, and a < inside its description as &lt;.
 
-Create a place only when the scene settles somewhere with its own identity the story could come back to: a named place, a building, a room that matters, a stretch of wild land where things happen. Don't create one for passing through (a corridor, a doorway, the road between two places); keep the current location then. Use an existing place's ID whenever the scene is somewhere already in Places, and nest a new place under the place it's part of.
+Create a place only when the scene settles somewhere with its own identity the story could come back to: a named place, a building, a room that matters, a stretch of wild land where things happen. Don't create one for passing through (a corridor, a doorway, the road between two places); keep the current location then.{% if placesListed %} Use an existing place's ID whenever the scene is somewhere already in Places, and nest a new place under the place it's part of.{% endif %}
 
 Set a new place's parent to top only when nothing in Places could contain it, as for the story's first place or a city when Places holds only cities. Leave its parent out when something in Places could contain it and the prose doesn't say which; when unsure, leave it out.
 
