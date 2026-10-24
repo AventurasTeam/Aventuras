@@ -1520,7 +1520,12 @@ assumes no other constraint spans a row's columns. The collision flag's
 three columns (flag, partner and reason) are the exception: they are
 restored and kept as one field, as are a place's parent and its
 unplaced mark, an entity's status and its `retired_reason`, and a
-thread's status and its `resolved_at_entry_id`.
+thread's status and its `resolved_at_entry_id`. A pass's thread logs
+its `resolved_at_entry_id` beside every status change, so the restore
+holds both; a user's thread, which has no refs, logs the status alone.
+An undo that restores an absent `unplaced` mark without the parent puts
+the place back top-level, since the mark alone changed and an unplaced
+place's parent is null.
 `happenings_mutual_excl` would break if a machine write ever updated a
 happening.
 
