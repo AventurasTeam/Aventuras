@@ -97,7 +97,7 @@ export type DomainRegistration = {
   cascade?: Cascade
   /**
    * Row exists while any of these is non-null; a reversal nulling them all deletes it instead.
-   * No other invariant may span columns. See `docs/generation-pipeline.md` → Reverse-replay.
+   * Any other cross-column invariant needs a one-field group (generation-pipeline.md → Reverse-replay).
    */
   rowKeepingColumns?: readonly [string, ...string[]]
 }
