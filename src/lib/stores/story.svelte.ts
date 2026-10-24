@@ -155,6 +155,8 @@ import { findLiveCharacter, sameBranchScope, type BranchScope } from '#lib/utils
 import {
   isEquipped,
   isInInventory,
+  itemLocationId,
+  itemsAt,
   normalizeItemLocation,
   resolveItemLocation,
 } from '#lib/utils/itemLocation.ts'
@@ -2732,10 +2734,66 @@ class StoryStore {
     const location = this.locations.find((l) => l.id === locationId)
     if (!location) throw new Error('Location not found')
 
-    const removal = this.deletePlan('location', location, this.recordContext(opts))
-    await this.commit(removal.statements, removal.records)
+    const ctx = this.recordContext(opts)
+    // Items left there go to the scene; with no other scene location they keep the dead id.
+    const scene = this.currentLocation
+    const strays =
+      scene && scene.id !== locationId
+        ? itemsAt(this.items, this.locations, new Set([locationId]))
+        : []
+    const move = this.moveItemsPlan(strays, scene?.id, ctx)
+    const removal = this.deletePlan('location', location, ctx)
+    await this.commit(
+      [...move.statements, ...removal.statements],
+      [...move.records, ...removal.records],
+    )
+    move.publish()
     this.locations = this.locations.filter((l) => l.id !== locationId)
-    log('Location deleted:', location.name)
+    log('Location deleted:', location.name, { itemsMoved: strays.length })
+  }
+
+  /** Moves every item at any of `fromIds` to `toId`, in one transaction. */
+  async moveItemsBetweenLocations(
+    fromIds: readonly string[],
+    toId: string,
+    opts?: RecordOptions,
+  ): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+
+    const to = itemLocationId(toId, this.locations)
+    const items = itemsAt(this.items, this.locations, new Set(fromIds)).filter(
+      (i) => i.location !== to,
+    )
+    if (items.length === 0) return
+    const move = this.moveItemsPlan(items, toId, this.recordContext(opts))
+    await this.commit(move.statements, move.records)
+    move.publish()
+  }
+
+  private moveItemsPlan(
+    items: readonly Item[],
+    locationId: string | undefined,
+    ctx: RecordContext | null,
+  ): {
+    statements: (DbStatement | null)[]
+    records: (WorldStateRecord | null)[]
+    publish: () => void
+  } {
+    const statements: (DbStatement | null)[] = []
+    if (!locationId) return { statements, records: [], publish: () => {} }
+    const records: (WorldStateRecord | null)[] = []
+    const publishes: (() => void)[] = []
+    const updates = { location: itemLocationId(locationId, this.locations) }
+    for (const item of items) {
+      const cow = this.cowPlan('item', item, ctx)
+      statements.push(...cow.statements, database.updateItemStatement(cow.entity.id, updates))
+      records.push(...cow.records, this.updateRecord(ctx, 'item', cow.entity, updates))
+      publishes.push(() => {
+        cow.publish()
+        this.items = this.items.map((i) => (i.id === cow.entity.id ? { ...i, ...updates } : i))
+      })
+    }
+    return { statements, records, publish: () => publishes.forEach((p) => p()) }
   }
 
   // Add an item to inventory

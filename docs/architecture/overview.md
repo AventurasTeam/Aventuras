@@ -313,7 +313,9 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   `readItemPlacement`. Legacy free text is read leniently and not migrated: a location's name
   as that location, a lone `worn` as equipped, a lone `inventory`/`carried` as the inventory,
   anything else as its text. The next classifier update to the item, or a save in the panel,
-  rewrites one it can read (`normalizeItemLocation`).
+  rewrites one it can read (`normalizeItemLocation`). Deleting a location moves its items to
+  the scene's location; when it is the scene's, or there is none, they keep the id and read
+  as "Unknown location".
 
   **Presence is reported, departure is inferred.** The classifier answers one question about the
   cast — `scene.presentCharacterNames`, every _other_ character in the scene at the end of the
