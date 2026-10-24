@@ -18,6 +18,7 @@ import {
   characterFactionId,
   flagStillHolds,
   matchNewPlace,
+  moveHidesStory,
   nameBasis,
   parentOfLocations,
   placementLoop,
@@ -34,9 +35,9 @@ import {
   type ParentDropCause,
   type ParentOf,
   type PlacedPlacement,
-  type PlacementLoop,
   type PlacePlacement,
   type SettledNewPlace,
+  type StoryPlace,
 } from '@/lib/world'
 
 import type { ReconciledKind, ReconcileDecision } from './reconcile'
@@ -60,9 +61,14 @@ export type PlannedWrite = { action: PipelineAction; entryId: string }
 
 /**
  * A new place left unplaced although it named a parent, or a reused unplaced place left so because
- * placing it would close a loop or hang it below a broken chain.
+ * placing it would close a loop, hang it below a broken chain or put a disabled place around the
+ * story.
  */
-export type ParentDrop = { handle: string; parent: string; cause: ParentDropCause | 'cycle' }
+export type ParentDrop = {
+  handle: string
+  parent: string
+  cause: ParentDropCause | 'cycle' | 'story-inside'
+}
 
 /** A newPlaces entry that plans nothing: an earlier entry declared its handle, or it has no name. */
 export type DroppedPlace = { handle: string; name: string; cause: 'handle-taken' | 'blank-name' }
@@ -92,12 +98,22 @@ export type DroppedReturn = { ref: string; cause: 'not-a-character' }
 export type UnknownIcon = { title: string; icon: string }
 
 /**
- * A placement that plans nothing: a loop, a broken chain above its parent, a retired parent,
- * top-level marking a placed one, a target that is no place, or a parent that is no listed place
- * (a row of another kind, or one this reply creates, whose create carries its own parent).
+ * A placement that plans nothing: a loop, a broken chain above its parent, a retired parent, a
+ * disabled place around the story, top-level marking a placed one, a target that is no place, or a
+ * parent that is no listed place (a row of another kind, or one this reply creates, whose create
+ * carries its own parent).
  */
 export type DroppedPlacement =
-  | { ref: string; cause: 'cycle' | 'retired' | 'not-unplaced' | 'chain-broken' | 'not-a-location' }
+  | {
+      ref: string
+      cause:
+        | 'cycle'
+        | 'retired'
+        | 'story-inside'
+        | 'not-unplaced'
+        | 'chain-broken'
+        | 'not-a-location'
+    }
   | { ref: string; parent: string; cause: 'parent-not-a-place' | 'parent-not-listed' }
 
 /** A rename that plans nothing: its name is blank. */
@@ -162,6 +178,8 @@ export type PlanDeps = {
   happenings: readonly Pick<Happening, 'id'>[]
   /** The branch's stored pairs; a listed happening's stored pair plans nothing. */
   awareness: readonly Pick<HappeningAwareness, 'characterId' | 'happeningId'>[]
+  /** Where the story is, which a placement may not hide (data-model.md → Disabled places). */
+  story: StoryPlace
 }
 
 const SOURCE = 'periodic_classifier' as const
@@ -288,7 +306,7 @@ function factionProfile(candidate: NewFaction, cutTexts: CutText[]): FactionStat
 }
 
 export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDeps): PlanResult {
-  const { branchId, window, entities, now, newId } = deps
+  const { branchId, window, entities, now, newId, story } = deps
   const planned: PlannedWrite[] = []
   const handleMap = new Map<string, string>()
   const unresolvedRefs: string[] = []
@@ -388,6 +406,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
 
   // classifier.md → What the classifier writes → Where a place sits.
   const realPlacement = realPlacementOf(entities.filter((e) => e.kind === 'location'))
+  const hidesStory = (id: string, parentId: string, parentOf: ParentOf): boolean =>
+    moveHidesStory({ id, parentId, places: rowById, parentOf, story })
   const placementFacts = inTurnOrder(extraction.placements)
   type PlacementJudgment =
     | { kind: 'place'; id: string; placement: PlacedPlacement }
@@ -427,6 +447,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       return { kind: 'dropped', drop: { ref: fact.ref, cause: 'retired' } }
     const loop = placementLoop(id, parentId, parentOf)
     if (loop !== null) return { kind: 'dropped', drop: { ref: fact.ref, cause: loop.cause } }
+    if (hidesStory(id, parentId, parentOf))
+      return { kind: 'dropped', drop: { ref: fact.ref, cause: 'story-inside' } }
     return { kind: 'place', id, placement: { kind: 'under', parentId } }
   }
   // A mark after a placement this reply sent lands only if that one is refused: keep the view.
@@ -448,8 +470,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const view = unhiddenLocationView(entities)
     const placed: SettledNewPlace[] = []
     // By row and parent: the pass keeps no one chain, so another parent's placement walks anew.
-    const loopDrops = new Map<string, PlacementLoop>()
-    const loopKey = (id: string, parentId: string): string => `${id} ${parentId}`
+    const placementDrops = new Map<string, Omit<ParentDrop, 'handle'>>()
+    const dropKey = (id: string, parentId: string): string => `${id} ${parentId}`
 
     const declared: NewPlace[] = []
     for (const place of newPlacesOf(extraction)) {
@@ -465,6 +487,15 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     )
     for (const { handle, name } of duplicates)
       droppedPlaces.push({ handle, name, cause: 'handle-taken' })
+    const reusePlacementDrop = (
+      id: string,
+      parentId: string,
+      parentOf: ParentOf,
+    ): Omit<ParentDrop, 'handle'> | null => {
+      const loop = placementLoop(id, parentId, parentOf)
+      if (loop !== null) return loop
+      return hidesStory(id, parentId, parentOf) ? { parent: parentId, cause: 'story-inside' } : null
+    }
     // What a mention's matching sees: the placements of its turn and earlier, judged as the
     // placements walk will judge them, over the reply's placements so far.
     const placementsThrough = (position: number): Map<string, PlacedPlacement> => {
@@ -512,9 +543,9 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         appendTerms(id, place.keywords, proseSource(place.sourceTurn), at)
         // `match.place`: an unplaced reused row, or this reply's own create taken over.
         if (match.place && candidate.kind !== 'unplaced') {
-          const loop =
-            candidate.kind === 'under' ? placementLoop(id, candidate.parentId, parentOf) : null
-          if (loop === null) {
+          const drop =
+            candidate.kind === 'under' ? reusePlacementDrop(id, candidate.parentId, parentOf) : null
+          if (drop === null) {
             placedHere.set(id, candidate)
             planned.push({
               action: {
@@ -530,13 +561,13 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
               entryId: at(),
             })
           } else {
-            loopDrops.set(loopKey(id, loop.parent), loop)
-            parentDrops.push({ handle: place.handle, ...loop })
+            placementDrops.set(dropKey(id, drop.parent), drop)
+            parentDrops.push({ handle: place.handle, ...drop })
           }
         } else if (candidate.kind === 'under') {
-          // A twin of a reuse whose placement looped maps to the same row, left unplaced too.
-          const loop = loopDrops.get(loopKey(id, candidate.parentId))
-          if (loop !== undefined) parentDrops.push({ handle: place.handle, ...loop })
+          // A twin of a reuse whose placement was dropped maps to the same row, left unplaced too.
+          const drop = placementDrops.get(dropKey(id, candidate.parentId))
+          if (drop !== undefined) parentDrops.push({ handle: place.handle, ...drop })
         }
       } else {
         id = newId('loc')

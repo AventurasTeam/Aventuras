@@ -3309,6 +3309,39 @@ describe('periodicClassifierPhase — the writer map', () => {
     ])
   })
 
+  // data-model.md → Disabled places: the story's place is read off the tail and the scene source.
+  it('drops a move that would put a disabled place around the story, logged', async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    const LOC_THORN = 'loc_7e7e7e7e-7e7e-4e7e-8e7e-7e7e7e7e7e7e'
+    const placeOf = (id: string, name: string, over: Partial<Entity> = {}) =>
+      ({
+        ...character(id, name),
+        kind: 'location',
+        state: { parent_location_id: null },
+        ...over,
+      }) as Entity
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction({ placements: [{ ref: 'l1', parent: 'l2', sourceTurn: 't1' }] }),
+    } as never)
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      entities: [
+        placeOf(LOC_FORD, 'Ford'),
+        placeOf(LOC_THORN, 'Thornwood', { injectionMode: 'disabled' }),
+      ],
+      entryMetadata: { 2: { sceneEntities: [], currentLocationId: LOC_FORD, worldTime: 0 } },
+    })
+    const { events } = await drain(h.ctx)
+    expect(actionsOf(events, 'placeLocation')).toEqual([])
+    expect(logged('classifier.placement_dropped')).toEqual([
+      ['warn', { ref: LOC_FORD, cause: 'story-inside' }],
+    ])
+  })
+
   // classifier.md → Failure policy: the schema reads an entry that doesn't fit as a hole.
   it('drops and logs the entries that did not fit, and lands the rest of the reply', async () => {
     clearBuffers()

@@ -7,6 +7,7 @@ import {
   entities,
   entityStateSchemaForKind,
   stories,
+  storyEntries,
   type CharacterState,
   type Entity,
   type LocationState,
@@ -1297,6 +1298,84 @@ describe('placeLocation', () => {
       const before = { parent_location_id: 'loc_reach' }
       for (const parentId of ['loc_docks', 'loc_varn'])
         await expectRefused(ctx, db, place({ kind: 'under', parentId }), 'parent-cycle', before)
+    })
+
+    // data-model.md → Disabled places: a pass's move refuses where World's Save would.
+    describe('a disabled place around the story', () => {
+      const THORN = placeRow(
+        'loc_thorn',
+        { parent_location_id: null },
+        { injectionMode: 'disabled' },
+      )
+      const CRYPT = placeRow('loc_crypt', { parent_location_id: 'loc_varn' })
+      // The scene source names the crypt; a user_action tail standing after it names the marsh.
+      async function storyIn(db: StateDb) {
+        await db.insert(storyEntries).values([
+          {
+            id: 'e_reply',
+            branchId: 'br_1',
+            position: 1,
+            kind: 'ai_reply',
+            content: 'In the crypt.',
+            metadata: { sceneEntities: [], currentLocationId: 'loc_crypt', worldTime: 0 },
+            createdAt: 1,
+          },
+          {
+            id: 'e_action',
+            branchId: 'br_1',
+            position: 2,
+            kind: 'user_action',
+            content: 'I head for the marsh.',
+            metadata: { sceneEntities: [], currentLocationId: 'loc_marsh', worldTime: 0 },
+            createdAt: 2,
+          },
+        ])
+      }
+      const INTO_THORN = { kind: 'under', parentId: 'loc_thorn' } as const
+
+      it("refuses placing or moving the scene's place, or the tail's, into the region", async () => {
+        const { db, ctx } = await setup()
+        await seed(ctx, db, UNPLACED, [THORN, CRYPT])
+        await storyIn(db)
+        await expectRefused(ctx, db, place(INTO_THORN), 'story-inside')
+        await expectRefused(
+          ctx,
+          db,
+          place(INTO_THORN, { id: 'loc_marsh' }),
+          'story-inside',
+          undefined,
+        )
+        expect(await stateIn(db, 'loc_marsh')).toEqual({ parent_location_id: null })
+      })
+
+      it('refuses moving a placed place that holds the story', async () => {
+        const { db, ctx } = await setup()
+        await seed(ctx, db, { parent_location_id: 'loc_reach' }, [THORN, CRYPT])
+        await storyIn(db)
+        await expectRefused(ctx, db, place(INTO_THORN), 'story-inside', {
+          parent_location_id: 'loc_reach',
+        })
+      })
+
+      it('moves a place the story is outside into the region', async () => {
+        const { db, ctx } = await setup()
+        await seed(ctx, db, UNPLACED, [THORN])
+        await storyIn(db)
+        expect((await apply(ctx, place(INTO_THORN), 'act_p')).status).toBe('ok')
+      })
+
+      // Its turn's own location lands beside it, so the story's place reads the walk-in already.
+      it("leaves the per-turn writer's placement to its planner", async () => {
+        const { db, ctx } = await setup()
+        await seed(ctx, db, UNPLACED, [THORN, CRYPT])
+        await storyIn(db)
+        const perTurn: PipelineAction = {
+          kind: 'placeLocation',
+          source: 'piggyback_tagged_block',
+          payload: { branchId: 'br_1', id: 'loc_varn', placement: INTO_THORN, proseEntryId: null },
+        }
+        expect((await apply(ctx, perTurn, 'act_p')).status).toBe('ok')
+      })
     })
 
     it('refuses a parent whose own chain already loops', async () => {

@@ -125,6 +125,7 @@ export { isUnplaced, placementOf, realPlacementOf, samePlacement, withPlacement 
 export type { PlacedPlacement, PlacePlacement } from './placement'
 export {
   mergePlaceRefusal,
+  moveHidesStory,
   PLACE_REFUSAL,
   placeSaveConfirm,
   placeSaveRefusal,

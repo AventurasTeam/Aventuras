@@ -142,7 +142,10 @@ alias list (the keywords bullet below).
   A parent that would close a cycle or sits below a broken chain,
   names a retired place, or is no listed place (a row of another kind,
   or a handle the reply declares, whose create carries its own parent)
-  is dropped and logged.
+  is dropped and logged; so is one that would put a disabled place
+  around the story's place (`story-inside`), as World refuses that
+  move
+  ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
 - **A faction's standing** — when the turns establish a change in a
   listed faction's position: it declares war, is outlawed, comes to
   power.
@@ -450,9 +453,10 @@ only against another unplaced place. A reused place keeps its
 description and its status, since a mention doesn't enter a staged
 place, gains the entry's new keywords, takes the parent the entry gave
 when it was unplaced, and stands for the handle in the rest of the
-reply. A parent that would close a loop or sits below a broken chain
-leaves it unplaced, and each entry that maps onto it with that parent
-is logged as left unplaced. Two new places with one name and parent,
+reply. A parent that would close a loop, sits below a broken chain or
+would put a disabled place around the story's place leaves it
+unplaced, and each entry that maps onto it with that parent is logged
+as left unplaced. Two new places with one name and parent,
 or both with none, map to the first before any other match. Otherwise
 the reply's places match
 as successive passes' would: an unplaced one counts the reply's

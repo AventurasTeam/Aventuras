@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, ne } from 'drizzle-orm'
 import { storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
 import { NARRATIVE_KINDS } from '@/lib/piggyback'
 import { settingsCount } from '@/lib/settings-number'
+import { storyPlaceOf, type StoryPlace } from '@/lib/world'
 
 const LAST_TURNS = 2
 
@@ -41,4 +42,11 @@ export async function readLastTurns(
     .orderBy(desc(storyEntries.position), desc(storyEntries.createdAt))
     .limit(take)
   return rows.reverse()
+}
+
+/** data-model.md → The story's place: the narrative tail's location and the scene source's. */
+export async function readStoryPlace(db: DbCtx['db'], branchId: string): Promise<StoryPlace> {
+  const turns = await readLastTurns(db, branchId)
+  const sceneSource = await readSceneSource(db, branchId)
+  return storyPlaceOf({ tail: turns.at(-1), sceneSource })
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Entity } from '@/lib/db'
+import { storyPlaceOf } from '@/lib/world'
 
 import { buildClassifierActions, clampEmbeddedCharacter, type PlannedWrite } from './plan'
 import type { ReconcileDecision } from './reconcile'
@@ -63,7 +64,12 @@ const base = {
   threads: [],
   happenings: [],
   awareness: [],
+  story: storyPlaceOf({ tail: null, sceneSource: null }),
 }
+
+// data-model.md → The story's place: the tail's and the scene source's location.
+const storyAt = (locationId: string) =>
+  storyPlaceOf({ tail: null, sceneSource: { metadata: { currentLocationId: locationId } } })
 
 // The reply schema defaults every list to []: a case names only the lists it fills.
 const reply = (over: Partial<ClassifierPlacesExtraction> = {}): ClassifierPlacesExtraction => ({
@@ -1760,6 +1766,27 @@ describe('mentioned places', () => {
       expect(handleMap.get('new:varn')).toBe('loc_varn')
       expect(placementsOf(planned)).toEqual([])
       expect(parentDrops).toEqual([{ handle: 'new:varn', parent: 'loc_vdocks', cause: 'cycle' }])
+    })
+
+    // data-model.md → Disabled places: a mention's placement refuses as a placements entry does.
+    it('keeps a reuse unplaced when placing it would put a disabled place around the story', () => {
+      const thorn = placeRow('loc_thorn', 'Thornwood', null, { injectionMode: 'disabled' })
+      const crypt = placeRow('loc_crypt', 'the Crypt', 'loc_varn')
+      const { planned, handleMap, parentDrops } = buildClassifierActions(
+        placesReply([
+          newPlace('new:a', 'Varn', { parent: 'loc_thorn', keywords: ['the salt town'] }),
+          newPlace('new:b', 'Varn', { parent: 'loc_thorn' }),
+        ]),
+        deps([VARN, thorn, crypt], { story: storyAt('loc_crypt') }),
+      )
+      expect(handleMap.get('new:a')).toBe('loc_varn')
+      expect(handleMap.get('new:b')).toBe('loc_varn')
+      expect(placementsOf(planned)).toEqual([])
+      expect(planned.map((p) => p.action.kind)).toEqual(['appendEntityKeywords'])
+      expect(parentDrops).toEqual([
+        { handle: 'new:a', parent: 'loc_thorn', cause: 'story-inside' },
+        { handle: 'new:b', parent: 'loc_thorn', cause: 'story-inside' },
+      ])
     })
 
     it('reports the twin of a reuse whose placement looped as left unplaced too', () => {
@@ -3686,6 +3713,65 @@ describe('placements', () => {
     expect(placementsOf(planned)).toEqual([
       expect.objectContaining({ id: 'loc_varn', placement: { kind: 'top' } }),
     ])
+  })
+
+  // data-model.md → Disabled places: a pass's move refuses where World's Save would.
+  describe('around the story', () => {
+    const THORN = place('loc_thorn', null, { injectionMode: 'disabled' })
+    const CRYPT = place('loc_crypt', 'loc_reach')
+    const storyDeps = (entities: Entity[], story = storyAt('loc_crypt')) =>
+      ({ ...base, entities, story }) as never
+
+    it('drops a move that puts a disabled place around the story', () => {
+      const { planned, droppedPlacements } = buildClassifierActions(
+        reply({ placements: [{ ref: 'loc_reach', parent: 'loc_thorn', sourceTurn: 't2' }] }),
+        storyDeps([REACH, THORN, CRYPT]),
+      )
+      expect(planned).toEqual([])
+      expect(droppedPlacements).toEqual([{ ref: 'loc_reach', cause: 'story-inside' }])
+    })
+
+    it('drops placing an unplaced place that holds the story in a disabled region', () => {
+      const { planned, droppedPlacements } = buildClassifierActions(
+        reply({ placements: [{ ref: 'loc_varn', parent: 'loc_thorn', sourceTurn: 't2' }] }),
+        storyDeps([VARN, THORN], storyAt('loc_varn')),
+      )
+      expect(planned).toEqual([])
+      expect(droppedPlacements).toEqual([{ ref: 'loc_varn', cause: 'story-inside' }])
+    })
+
+    it('plans the move when the story is outside the place', () => {
+      const { planned, droppedPlacements } = buildClassifierActions(
+        reply({ placements: [{ ref: 'loc_reach', parent: 'loc_thorn', sourceTurn: 't2' }] }),
+        storyDeps([REACH, THORN, CRYPT, VARN], storyAt('loc_varn')),
+      )
+      expect(placementsOf(planned)).toEqual([
+        expect.objectContaining({
+          id: 'loc_reach',
+          placement: { kind: 'under', parentId: 'loc_thorn' },
+        }),
+      ])
+      expect(droppedPlacements).toEqual([])
+    })
+
+    it("judges the story against this reply's earlier placements", () => {
+      const { planned, droppedPlacements } = buildClassifierActions(
+        reply({
+          placements: [
+            { ref: 'loc_varn', parent: 'loc_reach', sourceTurn: 't1' },
+            { ref: 'loc_reach', parent: 'loc_thorn', sourceTurn: 't2' },
+          ],
+        }),
+        storyDeps([REACH, THORN, VARN], storyAt('loc_varn')),
+      )
+      expect(placementsOf(planned)).toEqual([
+        expect.objectContaining({
+          id: 'loc_varn',
+          placement: { kind: 'under', parentId: 'loc_reach' },
+        }),
+      ])
+      expect(droppedPlacements).toEqual([{ ref: 'loc_reach', cause: 'story-inside' }])
+    })
   })
 
   it('marks top-level a place whose stored parent names no place', () => {

@@ -100,11 +100,14 @@ function holdsStory(id: string, storyLocationId: string | null, parentOf: Parent
   return storyLocationId === id || parentChainIds(storyLocationId, parentOf).includes(id)
 }
 
+/** A place as its own mode reads it. */
+type ModedPlace = Pick<Entity, 'kind' | 'injectionMode'>
+
 /** The places whose own mode is `disabled` on the chain from `start` up, `start` read as given. */
 function ownDisabledChain(
   start: { id: string; injectionMode: Entity['injectionMode'] },
   parentId: string | null,
-  byId: ReadonlyMap<string, Entity>,
+  byId: ReadonlyMap<string, ModedPlace>,
   parentOf: ParentOf,
 ): Set<string> {
   const disabled = new Set<string>(start.injectionMode === 'disabled' ? [start.id] : [])
@@ -120,13 +123,30 @@ function ownDisabledChain(
 function gainedDisabled(
   oldParentId: string | null,
   newParentId: string | null,
-  byId: ReadonlyMap<string, Entity>,
+  byId: ReadonlyMap<string, ModedPlace>,
   parentOf: ParentOf,
 ): string[] {
   const none = { id: '', injectionMode: 'auto' as const }
   const before = ownDisabledChain(none, oldParentId, byId, parentOf)
   const after = ownDisabledChain(none, newParentId, byId, parentOf)
   return [...after].filter((id) => !before.has(id))
+}
+
+/**
+ * data-model.md → Disabled places: whether a machine writer moving `id` under `parentId` puts a
+ * disabled place around the story, the move a World Save refuses `story-inside`. `parentOf` is the
+ * writer's view of the chains, read for both the place's parent before the move and the story.
+ */
+export function moveHidesStory(args: {
+  id: string
+  parentId: string
+  places: ReadonlyMap<string, ModedPlace>
+  parentOf: ParentOf
+  story: StoryPlace
+}): boolean {
+  const { id, parentId, places, parentOf, story } = args
+  if (!storyLocations(story).some((at) => holdsStory(id, at, parentOf))) return false
+  return gainedDisabled(parentOf(id), parentId, places, parentOf).length > 0
 }
 
 /** A retired location the value enters, when it changed; null otherwise. */
