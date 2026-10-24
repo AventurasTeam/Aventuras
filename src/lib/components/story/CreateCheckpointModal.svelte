@@ -12,6 +12,7 @@
   import { Bookmark, Check, ChevronDown, ChevronRight, TriangleAlert, X } from '@lucide/svelte'
   import ChangeList from './ChangeList.svelte'
   import ActionModal from '#lib/components/shared/ActionModal.svelte'
+  import ExplanationFold from '#lib/components/shared/ExplanationFold.svelte'
 
   let entry = $state<StoryEntry | null>(null)
   let name = $state('')
@@ -184,27 +185,13 @@
       <p>Checkpoints save the story state and allow branching.</p>
       <!-- The latest entry is checkpointed from the current state; nothing is rebuilt. -->
       {#if !isLatestEntry}
-        <button
-          type="button"
-          class="hover:text-foreground flex items-center gap-1 font-medium"
-          onclick={() => void ui.setCheckpointHelpFolded(!ui.checkpointHelpFolded)}
-          aria-expanded={!ui.checkpointHelpFolded}
-          aria-controls="past-checkpoint-help"
-        >
-          {#if ui.checkpointHelpFolded}
-            <ChevronRight class="h-3.5 w-3.5 shrink-0" />
-          {:else}
-            <ChevronDown class="h-3.5 w-3.5 shrink-0" />
-          {/if}
-          How past checkpoints work
-        </button>
-        {#if !ui.checkpointHelpFolded}
-          <p id="past-checkpoint-help" class="mt-1 pl-[1.125rem]">
+        <ExplanationFold id="checkpoint_help" summary="How past checkpoints work">
+          <p>
             Historical checkpoints rely on the state diffs that are recorded alongside the tracked
             entries, and calculate past state through the rollback from the nearest full-state
             landmark: an automated snapshot, another checkpoint, or current state.
           </p>
-        {/if}
+        </ExplanationFold>
       {/if}
     </div>
 

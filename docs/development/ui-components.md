@@ -160,6 +160,22 @@ These are not Cancel plus one action, and stay as they are: `TimelineAnomaliesMo
 Close), `TimelineReconciliationModal` (a multi-step wizard), the unsaved-changes question in
 `PromptPackEditor` (three choices) and `RestoreCompleteDialog` (a status screen).
 
+## Folding explanations
+
+An explanation of how something works, which a reader needs once and then knows, is a
+`shared/ExplanationFold`: a muted summary line ("How past checkpoints work", "What an anchor does")
+that unfolds the text below it. It starts open, and whether the reader folded it is saved per
+explanation, across stories and sessions. Each one is registered by id in
+`constants/explanationFolds.ts`, which is the list of them all and the name each one's state is
+saved under.
+
+In an action modal it goes in the body, above the fields, not in the header's description: the
+header stays pinned, and an explanation the reader has read should not keep its height there. A
+description is for what the reader needs every time.
+
+Not every fold is one. A notice about this particular item, like the time edit's "This entry is a
+fork point", opens again each time, since what it says changes with the item.
+
 ## Feature colours
 
 Some features have a colour: Branch and Regenerate are amber, Checkpoint is blue, Delete is red.

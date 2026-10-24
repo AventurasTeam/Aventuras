@@ -38,6 +38,7 @@ import { LANDMARK_FILTER_GROUPS } from '#lib/utils/storyNavigation.ts'
 import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '#lib/constants/timeout.ts'
 import { MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH } from '#lib/constants/layout.ts'
+import { EXPLANATION_FOLDS, explanationFoldSetting } from '#lib/constants/explanationFolds.ts'
 import { SvelteSet } from 'svelte/reactivity'
 import { dedupeTextModels } from '#lib/utils/dedupeTextModels.ts'
 import { applyIncognitoKeyboard } from '#lib/utils/platform.ts'
@@ -1644,8 +1645,10 @@ class SettingsStore {
         if (shown !== null) ui.navFilter[group] = shown === 'true'
       }
 
-      const checkpointHelpFolded = await database.getSetting('checkpoint_help_folded')
-      if (checkpointHelpFolded !== null) ui.checkpointHelpFolded = checkpointHelpFolded === 'true'
+      for (const id of EXPLANATION_FOLDS) {
+        const folded = await database.getSetting(explanationFoldSetting(id))
+        if (folded !== null) ui.explanationFolded[id] = folded === 'true'
+      }
 
       const galleryNewestFirst = await database.getSetting('gallery_newest_first')
       if (galleryNewestFirst !== null) ui.galleryNewestFirst = galleryNewestFirst === 'true'

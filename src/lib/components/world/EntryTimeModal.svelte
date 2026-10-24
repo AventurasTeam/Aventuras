@@ -3,6 +3,7 @@
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
   import ActionModal from '#lib/components/shared/ActionModal.svelte'
+  import ExplanationFold from '#lib/components/shared/ExplanationFold.svelte'
   import { ChevronDown, ChevronRight } from '@lucide/svelte'
   import {
     parseStoryTime,
@@ -11,8 +12,6 @@
     toMinutes,
   } from '#lib/services/storyTime/index.ts'
   import { entryNumber } from '#lib/utils/storyNavigation.ts'
-
-  const DESCRIPTION_FOLD_KEY = 'aventuras.entryTime.descriptionFolded'
 
   let { open = $bindable(false), entryId }: { open?: boolean; entryId: string } = $props()
 
@@ -42,19 +41,8 @@
   )
   const forkCount = $derived(story.branchesForkedFrom(checkpointHere?.id ?? null, entryId))
 
-  /** The reader's own reading habit, not this entry's: kept across dialogs and sessions. */
-  let descriptionOpen = $state(true)
   /** Reset on every opening: what it says depends on the entry, so a fold cannot carry over. */
   let noticeOpen = $state(true)
-
-  function toggleDescription() {
-    descriptionOpen = !descriptionOpen
-    try {
-      localStorage.setItem(DESCRIPTION_FOLD_KEY, descriptionOpen ? 'open' : 'folded')
-    } catch {
-      // Private mode or blocked storage: the fold is a convenience, not state to insist on.
-    }
-  }
 
   /** Seeded once per opening: the fields are the reader's working copy, not a live view. */
   let seeded = false
@@ -71,11 +59,6 @@
     seededStart = startText
     seededEnd = endText
     noticeOpen = true
-    try {
-      descriptionOpen = localStorage.getItem(DESCRIPTION_FOLD_KEY) !== 'folded'
-    } catch {
-      descriptionOpen = true
-    }
   })
 
   /** An edit is saved only through Save, so Enter moves on or drops the keyboard. */
@@ -118,26 +101,15 @@
   {dirty}
 >
   <!-- The header stays pinned, so the folds, which open long, sit here with the fields. -->
-  <div>
-    <button
-      type="button"
-      class="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
-      aria-expanded={descriptionOpen}
-      onclick={toggleDescription}
-    >
-      {@render foldIcon(descriptionOpen)}
-      What this changes
-    </button>
-    {#if descriptionOpen}
-      <p class="text-muted-foreground mt-1 text-sm">
-        Rewrites what entry {entry ? entryNumber(entry) : '?'} records for itself{precedingAction
-          ? `, and moves the action before it to the same instant`
-          : ''}. Chapter spans covering it and the clock kept for rollback are updated to match the
-        new value. No other entry moves. This action may create a time gap or overlapping. A
-        reconciliation run is advised to get rid of undesired anomalies.
-      </p>
-    {/if}
-  </div>
+  <ExplanationFold id="entry_time_help" summary="What this changes">
+    <p>
+      Rewrites what entry {entry ? entryNumber(entry) : '?'} records for itself{precedingAction
+        ? `, and moves the action before it to the same instant`
+        : ''}. Chapter spans covering it and the clock kept for rollback are updated to match the
+      new value. No other entry moves. This action may create a time gap or overlapping. A
+      reconciliation run is advised to get rid of undesired anomalies.
+    </p>
+  </ExplanationFold>
   {#if checkpointHere}
     <div class="text-muted-foreground">
       <button

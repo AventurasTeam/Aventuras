@@ -16,6 +16,7 @@ import type {
   PersistentCharacterSnapshot,
 } from '#lib/types/index.ts'
 import * as z from 'zod'
+import { explanationFoldSetting, type ExplanationFoldId } from '#lib/constants/explanationFolds.ts'
 import type { BranchScope } from '#lib/utils/branchScope.ts'
 import type { ActionChoice } from '#lib/services/ai/sdk/schemas/actionchoices.ts'
 import type { Suggestion } from '#lib/services/ai/sdk/schemas/suggestions.ts'
@@ -180,8 +181,8 @@ class UIStore {
   })
   /** Whether the landmark list shows snapshots. Kept for the session only, not saved. */
   navShowSnapshots = $state(false)
-  /** Whether the checkpoint form's explanation of past checkpoints is folded. */
-  checkpointHelpFolded = $state(false)
+  /** Which folding explanations are folded; an id missing here is open. */
+  explanationFolded = $state<Partial<Record<ExplanationFoldId, boolean>>>({})
 
   // Streaming state
   streamingContent = $state('')
@@ -477,11 +478,11 @@ class UIStore {
       .catch((err) => console.warn('[UI] Failed to persist gallery order:', err))
   }
 
-  setCheckpointHelpFolded(folded: boolean): Promise<void> {
-    this.checkpointHelpFolded = folded
+  setExplanationFolded(id: ExplanationFoldId, folded: boolean): Promise<void> {
+    this.explanationFolded[id] = folded
     return database
-      .setSetting('checkpoint_help_folded', folded.toString())
-      .catch((err) => console.warn('[UI] Failed to persist checkpoint help fold:', err))
+      .setSetting(explanationFoldSetting(id), folded.toString())
+      .catch((err) => console.warn(`[UI] Failed to persist the ${id} fold:`, err))
   }
 
   setNavFilter(group: LandmarkFilterGroup, show: boolean): Promise<void> {

@@ -5,6 +5,7 @@
   import { Input } from '#lib/components/ui/input/index.ts'
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
   import ActionModal from '#lib/components/shared/ActionModal.svelte'
+  import ExplanationFold from '#lib/components/shared/ExplanationFold.svelte'
   import {
     parseStoryTime,
     formatStoryTime,
@@ -148,7 +149,6 @@
     : usableEntry
       ? `Create an anchor on entry ${entryNumber(usableEntry)}`
       : 'Create an anchor'}
-  description="A point of reference for the time reconciliation. Asserts when the entry ended. Does not change the recorded time."
   action={{ label: 'Save', disabled: !canSave, onConfirm: () => void save() }}
   busy={saving}
   {dirty}
@@ -165,6 +165,12 @@
       }
     : undefined}
 >
+  <ExplanationFold id="time_anchor_help" summary="What an anchor does">
+    <p>
+      A point of reference for the time reconciliation. Asserts when the entry ended. Does not
+      change the recorded time.
+    </p>
+  </ExplanationFold>
   <div class="flex flex-col gap-3 text-sm">
     <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
       <label class="flex items-center gap-2">
