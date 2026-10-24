@@ -415,9 +415,10 @@ that name it
 
 **Parent.** Parents resolve top-down, so the child of a new place hangs
 under whatever row that place resolved to; otherwise the places settle
-in the reply's order, each waiting only for its own parent. A place
-whose parent the
-turns don't give is top-level when nothing on the map could contain it,
+in turn order, ties in the reply's order and a place with no source
+turn counting at the newest, each waiting only for its own parent. A
+place whose parent the turns don't give is top-level when nothing on
+the map could contain it,
 and unplaced when something could and the turns don't say which; when
 unsure, unplaced
 ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).

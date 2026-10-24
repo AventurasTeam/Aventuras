@@ -513,12 +513,19 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       else declared.push(declaredPlace(place))
     }
 
-    const { order, duplicates } = settlingOrder(
-      declared,
+    // A repeated handle keeps its first declaration in the reply's order, before turns reorder it.
+    const firsts = new Map<string, NewPlace>()
+    for (const place of declared) {
+      const { handle, name } = place
+      if (firsts.has(handle)) droppedPlaces.push({ handle, name, cause: 'handle-taken' })
+      else firsts.set(handle, place)
+    }
+    // classifier.md → Mentioned places: in turn order, ties in the reply's order, as successive
+    // passes would meet them; each still waits for its own parent.
+    const { order } = settlingOrder(
+      inTurnOrder([...firsts.values()]),
       (id) => rowById.get(id)?.kind === 'location',
     )
-    for (const { handle, name } of duplicates)
-      droppedPlaces.push({ handle, name, cause: 'handle-taken' })
     for (const settling of order) {
       const place = settling.emission
       planPlacementsThrough(turnPosition(place.sourceTurn))

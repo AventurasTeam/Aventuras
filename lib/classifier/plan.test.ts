@@ -2029,6 +2029,64 @@ describe('mentioned places', () => {
         expect(droppedPlacements).toEqual([])
       })
 
+      // Q30: new places settle in turn order, ties in list order, so the list's order can't decide.
+      it.each([
+        ['the later turn listed first', ['loft', 'cellar']],
+        ['in turn order', ['cellar', 'loft']],
+      ])('settles new places in turn order, %s', (_label, listed) => {
+        const BARN = placeRow('loc_barn', 'the Barn', null)
+        const entries = {
+          loft: newPlace('new:loft', 'the Loft', { parent: 'loc_barn', sourceTurn: 't3' }),
+          cellar: newPlace('new:c', 'the Cellar', { parent: 'loc_keep', sourceTurn: 't1' }),
+        }
+        const { planned, handleMap } = buildClassifierActions(
+          placesReply(
+            listed.map((key) => entries[key as keyof typeof entries]),
+            { placements: [placement('loc_cellar', 'loc_inn', 't3')] },
+          ),
+          deps([INN, KEEP, CELLAR, BARN]),
+        )
+        expect(handleMap.get('new:c')).toBe('loc_cellar')
+        expect(createdPlaces(planned).map((e) => e.name)).toEqual(['the Loft'])
+        expect(placedRows(planned)).toEqual([
+          ['loc_cellar', { kind: 'under', parentId: 'loc_keep' }, 'e1'],
+          ['loc_cellar', { kind: 'under', parentId: 'loc_inn' }, 'e3'],
+        ])
+      })
+
+      it("keeps a repeated handle's first declaration in the reply's order, whatever its turn", () => {
+        const { handleMap, droppedPlaces } = buildClassifierActions(
+          placesReply([
+            newPlace('new:x', 'Saltmere', { sourceTurn: 't3' }),
+            newPlace('new:x', 'Ashfall', { sourceTurn: 't1' }),
+          ]),
+          deps([TOWN]),
+        )
+        expect(droppedPlaces).toEqual([{ handle: 'new:x', name: 'Ashfall', cause: 'handle-taken' }])
+        expect(handleMap.get('new:x')).toBe('loc_new1')
+      })
+
+      // An unattributed new place counts at the newest turn, as an unattributed placement does.
+      it('settles an unattributed new place at the newest turn', () => {
+        const { planned } = buildClassifierActions(
+          placesReply([
+            newPlace('new:a', 'Docks', { sourceTurn: undefined }),
+            newPlace('new:b', 'Old Docks', { sourceTurn: 't1' }),
+          ]),
+          deps([TOWN]),
+        )
+        expect(
+          createdPlaces(planned).map((row) => [
+            row.name,
+            row.nameCollisionPartnerId,
+            row.nameCollisionReason,
+          ]),
+        ).toEqual([
+          ['Old Docks', null, null],
+          ['Docks', 'loc_new1', 'unplaced'],
+        ])
+      })
+
       // Q29: the twin rule comes first, so a twin maps to the first create's row a placement moved.
       it('maps a twin to the first row even after a placement between them moved it', () => {
         const { planned, handleMap } = buildClassifierActions(

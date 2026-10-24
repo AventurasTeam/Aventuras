@@ -971,15 +971,11 @@ slice-planning gate forces its resolution before that slice is planned.
     the retire becomes plannable: the character is promoted, then
     retired, where successive passes would only promote it. Option A
     fixes it.
-  - **A new place settling out of turn order.** New places settle in the
-    reply's list order, each waiting for its own parent, not in turn
-    order, so one of an earlier turn can settle after one of a later
-    turn. The placements planned ahead of the later one then land before
-    it too, and it matches and is placed against placements of turns
-    after its own: a turn-3 "Cellar" under the Keep listed before a
-    turn-1 "Attic" inside the Cellar, with a turn-2 move of the Cellar
-    under the Attic, leaves two Cellars where successive passes leave
-    one. Option A fixes it.
+  - **A new place waiting for a later turn's parent.** New places settle
+    in turn order, but each waits for its own parent, so a turn-1 place
+    under a new place of turn 3 settles after it, and matches and is
+    placed against the placements of turns up to its parent's. Option A
+    fixes it.
   - **A twin across a placement.** Two new places with one name and
     declared parent map to the first before any other match, even when
     a placement of a turn between them moved the first one's row: a
