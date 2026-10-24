@@ -257,14 +257,6 @@ slice-planning gate forces its resolution before that slice is planned.
   exhaustive. Raised 2026-10-22 in the pass failure policy slice's
   branch review.
 
-- **The seeded hero branch holds six system rows.** `heroKind` in
-  `lib/db/devtools/seed-dataset.ts:246-250` makes every twelfth of the
-  72 hero entries `system`, against
-  [`data-model.md`](../data-model.md)'s system entry as a branch-tail
-  singleton, which `lib/classifier/window.ts:59-61`'s truncated-window
-  argument relies on. Raised 2026-10-22 in the pass failure policy
-  slice's branch review.
-
 - **A completed regenerate drops a cleared failure entry's
   submission.** `runRegenerate` in `app/reader-composer/[branchId].tsx`
   clears the system tail before dispatching (`:789`); the throw arm
