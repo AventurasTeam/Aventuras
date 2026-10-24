@@ -7,6 +7,7 @@ import {
   restateBoundaries,
   movesForkEnding,
   editedAnchors,
+  canRestate,
 } from './boundaries'
 
 function t(hours: number, minutes = 0): TimeTracker {
@@ -277,5 +278,22 @@ describe('editedAnchors', () => {
     const time = { years: 0, days: 0, hours: 0, minutes: 1500 }
     const [edited] = editedAnchors(range, { to: { time } }, anchorFor)
     expect(edited.assertedTime).toEqual({ years: 0, days: 1, hours: 1, minutes: 0 })
+  })
+})
+
+describe('canRestate', () => {
+  const action = { ...entry('A', null), type: 'user_action' } as StoryEntry
+
+  it('lets a player action be restated as the earlier boundary', () => {
+    expect(canRestate('from', action)).toBe(true)
+  })
+
+  it('refuses a player action as the later boundary', () => {
+    expect(canRestate('to', action)).toBe(false)
+  })
+
+  it('lets a narration be restated at either end', () => {
+    expect(canRestate('from', entry('N', t(1)))).toBe(true)
+    expect(canRestate('to', entry('N', t(1)))).toBe(true)
   })
 })

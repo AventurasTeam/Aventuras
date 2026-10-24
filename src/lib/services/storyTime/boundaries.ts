@@ -151,6 +151,14 @@ export function editedAnchors(
 }
 
 /**
+ * Whether a boundary may be restated. An earlier boundary only moves the baseline, so even a player
+ * action may be; a later one is written to its entry, and an action has no ending to write.
+ */
+export function canRestate(which: 'from' | 'to', entry: StoryEntry | undefined): boolean {
+  return !!entry && (which === 'from' || entry.type !== 'user_action')
+}
+
+/**
  * Whether applying would move the ending branches open on. Only a later boundary is written
  * through to its entry, so only a later boundary can.
  */

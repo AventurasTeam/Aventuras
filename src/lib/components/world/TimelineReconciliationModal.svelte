@@ -33,6 +33,7 @@
     refuseRange,
     restateBoundaries,
     movesForkEnding,
+    canRestate,
   } from '#lib/services/storyTime/index.ts'
   import type {
     SelectableRange,
@@ -139,10 +140,9 @@
     return which === 'from' ? range?.from : range?.to
   }
 
-  /** An anchor asserts an ending, and a player action has none. */
-  function anchorable(which: 'from' | 'to'): boolean {
+  function restatable(which: 'from' | 'to'): boolean {
     const boundary = boundaryOf(which)
-    return !!boundary && byId.get(boundary.entryId)?.type !== 'user_action'
+    return !!boundary && canRestate(which, byId.get(boundary.entryId))
   }
 
   function openEditor(which: 'from' | 'to') {
@@ -1017,7 +1017,7 @@
       </span>
       <!-- Inert rather than gone while its own editor is open: a control that closes what it
            opened would take the reader's typing with it. -->
-      {#if anchorable(which)}
+      {#if restatable(which)}
         {#if draft}
           <Button
             variant="outline"
@@ -1067,7 +1067,9 @@
           {/if}
         </p>
         <label class="flex flex-wrap items-center gap-2">
-          <span class="text-muted-foreground shrink-0">{anchor ? 'Asserted time' : 'Ends at'}</span>
+          <span class="text-muted-foreground shrink-0"
+            >{anchor ? 'Asserted time' : which === 'from' ? 'Range starts at' : 'Ends at'}</span
+          >
           <Input
             placeholder="e.g. Y1 D4 14:30"
             class="h-7 w-36 text-xs"

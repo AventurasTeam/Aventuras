@@ -86,9 +86,10 @@ preview and the apply path share one calculation: the preview _is_ the result.
 
 The reader may restate either boundary for one reconciliation (`BoundaryDrafts`, resolved by
 `restateBoundaries`). A restated earlier boundary moves only the baseline: its entry stays as it is,
-and the mismatch with it is the leading join. A restated later boundary is the target, so applying
-writes it to that entry's ending. A restatement is an input like a weight, never a stored anchor, and
-the fingerprint keeps comparing the stored boundaries.
+and the mismatch with it is the leading join. A restated later boundary is the target, and applying
+writes it to that entry's ending; an action has no ending to write, so only the earlier boundary may
+name one (`canRestate`). A restatement is an input like a weight, never a stored anchor, and the
+fingerprint keeps comparing the stored boundaries.
 
 The range is weighed as alternating entry durations and the intervals between them,
 `[d0, g0, d1, g1, … dN-1]`:

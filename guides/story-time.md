@@ -193,7 +193,9 @@ for this reconciliation, and nothing is saved until you press _Apply changes_:
 - **Edit**, on an end that carries an anchor, changes the anchor's time (and its note). The anchor
   is saved with the new time when you apply.
 - **Assert**, on a natural boundary, sets a time for this reconciliation only. It works like an
-  anchor while the screen is open, but no anchor is ever created.
+  anchor while the screen is open, but no anchor is ever created. A story that opens on your own
+  action (an imported chat often does) can be asserted at its start too: the action keeps its
+  time, and the range simply begins where you said.
 
 What a restated time does depends on the end:
 

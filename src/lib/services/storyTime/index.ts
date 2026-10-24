@@ -16,6 +16,7 @@ export {
   restateBoundaries,
   movesForkEnding,
   editedAnchors,
+  canRestate,
   type Boundary,
   type BoundaryDrafts,
   type BoundaryRestatement,
