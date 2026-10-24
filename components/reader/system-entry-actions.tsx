@@ -33,6 +33,49 @@ export async function dismissSystemEntry(deps: {
   if (deps.stillOnBranch()) deps.handBack(deps.submission)
 }
 
+// Exhaustive per wording set: a new resolver kind is a type error, not another kind's copy.
+const TURN_RESOLVER_COPY = {
+  'no-profile-assigned': 'reader:systemEntry.failure.noProfileAssigned',
+  'profile-missing': 'reader:systemEntry.failure.profileMissing',
+  'provider-missing': 'reader:systemEntry.failure.providerMissing',
+  'override-provider-missing': 'reader:systemEntry.failure.overrideProviderMissing',
+} as const satisfies Record<ResolveFailureKind, string>
+
+const PASS_RESOLVER_COPY = {
+  'no-profile-assigned': 'reader:systemEntry.failure.memoryNoProfileAssigned',
+  'profile-missing': 'reader:systemEntry.failure.memoryProfileMissing',
+  'provider-missing': 'reader:systemEntry.failure.memoryProviderMissing',
+  'override-provider-missing': 'reader:systemEntry.failure.memoryOverrideProviderMissing',
+} as const satisfies Record<ResolveFailureKind, string>
+
+const FIX_LABEL = {
+  'no-profile-assigned': 'reader:systemEntry.assignProfile',
+  'profile-missing': 'reader:systemEntry.fixProfile',
+  'provider-missing': 'reader:systemEntry.fixDefault',
+  'override-provider-missing': 'reader:systemEntry.fixOverride',
+} as const satisfies Record<ResolveFailureKind, string>
+
+function isResolveFailureKind(failure: string): failure is ResolveFailureKind {
+  return Object.hasOwn(FIX_LABEL, failure)
+}
+
+function providerDetail(error: Extract<PipelineError, { kind: 'provider' }>): string {
+  return error.detail != null ? `${error.reason}: ${error.detail}` : error.reason
+}
+
+function failureMetaOf(
+  error: PipelineError | undefined,
+  detail: string | undefined,
+  submission: SystemFailureMeta['submission'],
+): SystemFailureMeta {
+  return {
+    kind: error?.kind ?? 'orchestrator',
+    ...(error?.kind === 'config-resolver' ? { failure: error.failure } : {}),
+    ...(detail != null ? { detail } : {}),
+    ...(submission != null ? { submission } : {}),
+  }
+}
+
 // Per-kind bubble copy (reader-composer.md → Error surface), resolved at write
 // time so the persisted entry keeps its vocabulary across an app restart.
 export function describeTurnFailure(error: PipelineError | undefined): {
@@ -40,21 +83,10 @@ export function describeTurnFailure(error: PipelineError | undefined): {
   detail?: string
 } {
   if (error?.kind === 'provider') {
-    return {
-      content: t('reader:systemEntry.failure.llmCall'),
-      detail: error.detail != null ? `${error.reason}: ${error.detail}` : error.reason,
-    }
+    return { content: t('reader:systemEntry.failure.llmCall'), detail: providerDetail(error) }
   }
   if (error?.kind === 'config-resolver') {
-    const contentKey =
-      error.failure === 'no-profile-assigned'
-        ? 'reader:systemEntry.failure.noProfileAssigned'
-        : error.failure === 'profile-missing'
-          ? 'reader:systemEntry.failure.profileMissing'
-          : error.failure === 'override-provider-missing'
-            ? 'reader:systemEntry.failure.overrideProviderMissing'
-            : 'reader:systemEntry.failure.providerMissing'
-    return { content: t(contentKey), detail: error.detail }
+    return { content: t(TURN_RESOLVER_COPY[error.failure]), detail: error.detail }
   }
   if (error?.kind === 'embedder') {
     // One string for every embedder failure: `reason` is lossy — the shared
@@ -75,13 +107,7 @@ export function toSystemFailureMeta(
   error: PipelineError | undefined,
   submission: { content: string; composerMode: string } | undefined,
 ): SystemFailureMeta {
-  const { detail } = describeTurnFailure(error)
-  return {
-    kind: error?.kind ?? 'orchestrator',
-    ...(error?.kind === 'config-resolver' ? { failure: error.failure } : {}),
-    ...(detail != null ? { detail } : {}),
-    ...(submission != null ? { submission } : {}),
-  }
+  return failureMetaOf(error, describeTurnFailure(error).detail, submission)
 }
 
 // The pass's own vocabulary (classifier.md → Failure policy): a turn's copy names the narrative
@@ -101,21 +127,10 @@ export function describePassFailure(
     }
   const { error } = refusal
   if (error?.kind === 'provider') {
-    return {
-      content: t('reader:systemEntry.failure.memory'),
-      detail: error.detail != null ? `${error.reason}: ${error.detail}` : error.reason,
-    }
+    return { content: t('reader:systemEntry.failure.memory'), detail: providerDetail(error) }
   }
   if (error?.kind === 'config-resolver') {
-    const contentKey =
-      error.failure === 'no-profile-assigned'
-        ? 'reader:systemEntry.failure.memoryNoProfileAssigned'
-        : error.failure === 'profile-missing'
-          ? 'reader:systemEntry.failure.memoryProfileMissing'
-          : error.failure === 'override-provider-missing'
-            ? 'reader:systemEntry.failure.memoryOverrideProviderMissing'
-            : 'reader:systemEntry.failure.memoryProviderMissing'
-    return { content: t(contentKey), detail: error.detail }
+    return { content: t(PASS_RESOLVER_COPY[error.failure]), detail: error.detail }
   }
   return { content: t('reader:systemEntry.failure.memory'), detail: error?.detail }
 }
@@ -126,13 +141,7 @@ export function toPassFailureMeta(
 ): SystemFailureMeta {
   const error = refusal.held ? undefined : refusal.error
   const { detail } = describePassFailure(refusal, submission)
-  return {
-    kind: error?.kind ?? 'orchestrator',
-    ...(error?.kind === 'config-resolver' ? { failure: error.failure } : {}),
-    ...(detail != null ? { detail } : {}),
-    ...(submission != null ? { submission } : {}),
-    pass: refusal.held ? 'held' : 'failed',
-  }
+  return { ...failureMetaOf(error, detail, submission), pass: refusal.held ? 'held' : 'failed' }
 }
 
 /**
@@ -181,18 +190,12 @@ export function useConfigFixAction(
   if (failure === 'override-provider-missing') {
     if (storyId === null) return undefined
     return {
-      label: t('reader:systemEntry.fixOverride'),
+      label: t(FIX_LABEL['override-provider-missing']),
       onPress: () => router.navigate(`/story-settings/${storyId}?tab=models`),
     }
   }
-  const labelKey =
-    failure === 'no-profile-assigned'
-      ? 'reader:systemEntry.assignProfile'
-      : failure === 'profile-missing'
-        ? 'reader:systemEntry.fixProfile'
-        : 'reader:systemEntry.fixDefault'
   return {
-    label: t(labelKey),
+    label: t(isResolveFailureKind(failure) ? FIX_LABEL[failure] : 'reader:systemEntry.fixDefault'),
     onPress: () => leaveStory(() => router.push('/settings?tab=providers')),
   }
 }

@@ -147,17 +147,6 @@ slice-planning gate forces its resolution before that slice is planned.
   earlier entry can't simply be put back beside the new one. Raised
   2026-10-22 in the pass failure policy slice's Task 7 review.
 
-- **The pass and turn failure copy resolvers repeat each other.**
-  `describePassFailure` and `toPassFailureMeta`
-  (`components/reader/system-entry-actions.tsx:89`, `:112`) repeat
-  `describeTurnFailure` and `toSystemFailureMeta`'s four-way
-  config-resolver key ternary (`:49-56`) and the provider detail
-  format. A new `ResolveFailureKind` must be added in both or it
-  silently falls through to the `providerMissing` copy; a
-  per-vocabulary `Record<ResolveFailureKind, key>` would make it
-  exhaustive. Raised 2026-10-22 in the pass failure policy slice's
-  branch review.
-
 - **A completed regenerate drops a cleared failure entry's
   submission.** `runRegenerate` in `app/reader-composer/[branchId].tsx`
   clears the system tail before dispatching (`:789`); the throw arm
