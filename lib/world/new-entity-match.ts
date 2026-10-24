@@ -1,4 +1,4 @@
-import type { CollisionReason, Entity } from '@/lib/db'
+import type { CollisionReason, Entity, LocationState } from '@/lib/db'
 import { compareId } from '@/lib/list-modules'
 
 import type { LocationMatchView } from './location-map'
@@ -7,6 +7,7 @@ import type { ParentOf } from './parent-chain'
 import {
   realPlacementOf,
   samePlacement,
+  withPlacement,
   type PlacedPlacement,
   type PlacePlacement,
 } from './placement'
@@ -103,6 +104,20 @@ export function replyParentOf(placedHere: ReplyPlacements, stored: ParentOf): Pa
     const at = placedHere.get(id)
     if (at === undefined) return stored(id)
     return at.kind === 'under' ? at.parentId : null
+  }
+}
+
+/** `view` as matching must see it once this reply's placements land: those rows no longer unplaced. */
+export function replyMatchView(
+  view: LocationMatchView,
+  placedHere: ReplyPlacements,
+): LocationMatchView {
+  return {
+    ...view,
+    locations: view.locations.map((e) => {
+      const at = placedHere.get(e.id)
+      return at === undefined ? e : { ...e, state: withPlacement(e.state as LocationState, at) }
+    }),
   }
 }
 

@@ -21,18 +21,20 @@ import {
   type SubstitutedStateBlock,
 } from '@/lib/piggyback'
 import {
-  checkParentChain,
   itemNamesakes,
   locationMapView,
   matchNewPlace,
   parentOfLocations,
+  placementLoop,
   placeNewLocation,
+  replyMatchView,
   replyParentOf,
   settlingOrder,
   TOP_LEVEL,
   withPlacement,
   type ParentDropCause,
   type PlacedPlacement,
+  type PlacementLoop,
   type PlacePlacement,
   type SettledNewPlace,
 } from '@/lib/world'
@@ -57,8 +59,6 @@ type LocationFate = { outcome: 'created' | 'reused'; id: string } & (
       placement: PlacePlacement
     }
 )
-
-type PlacementLoop = { parent: string; cause: 'cycle' | 'chain-broken' }
 
 // piggyback.md → Parent: a parent the planner can't use leaves the place unplaced.
 const UNPLACED: PlacePlacement = { kind: 'unplaced' }
@@ -118,17 +118,6 @@ function logParentDropped(
   drop: { parent: string; cause: ParentDropCause | 'cycle' },
 ): void {
   log.warn('classifier.create_parent_dropped', { handle, parent: drop.parent, cause: drop.cause })
-}
-
-// data-model.md → LocationState shape: a machine writer walks a placement first and drops a loop.
-function placementLoop(
-  id: string,
-  parentId: string,
-  parentOf: (id: string) => string | null,
-): PlacementLoop | null {
-  const walk = checkParentChain(id, parentId, parentOf)
-  if (walk === 'ok') return null
-  return { parent: parentId, cause: walk === 'cycle' ? 'cycle' : 'chain-broken' }
 }
 
 // piggyback.md → Creating a place or an item: bounded like a visual value.
@@ -199,10 +188,8 @@ function planLocations(args: {
   const reused = new Set<string>()
   const placed: SettledNewPlace[] = []
   const placements: PlaceLocationAction[] = []
-  // Where this turn's placements put a reused place, so a later walk sees it there.
+  // Where this turn's placements put a reused place, so a later walk and match see it there.
   const placedHere = new Map<string, PlacedPlacement>()
-  // The rows this turn placed, as matching must see them: no longer unplaced.
-  const placedRows = new Map<string, Entity>()
   // A row whose placement looped stays unplaced: the kept chain puts every later create below it.
   const loopDrops = new Map<string, PlacementLoop>()
 
@@ -229,9 +216,7 @@ function planLocations(args: {
     const match = matchNewPlace(
       { name: text.name, placement: candidate },
       placed,
-      placedRows.size === 0
-        ? view
-        : { ...view, locations: view.locations.map((e) => placedRows.get(e.id) ?? e) },
+      replyMatchView(view, placedHere),
       placedHere,
     )
     let id: string
@@ -262,12 +247,6 @@ function planLocations(args: {
           candidate.kind === 'under' ? placementLoop(id, candidate.parentId, parentOf) : null
         if (loop === null) {
           placedHere.set(id, candidate)
-          const row = byId.get(id)
-          if (row !== undefined)
-            placedRows.set(id, {
-              ...row,
-              state: withPlacement(row.state as LocationState, candidate),
-            })
           placements.push({
             kind: 'placeLocation',
             source: args.source,

@@ -6,7 +6,9 @@ export {
   PARENT_CYCLE,
   parentIdOf,
   parentOfLocations,
+  placementLoop,
 } from './parent-chain'
+export type { PlacementLoop } from './parent-chain'
 export {
   characterDraftFrom,
   characterDraftSchema,
@@ -137,7 +139,7 @@ export type {
   PlaceSaveRefusal,
   StoryPlace,
 } from './place-rules'
-export { itemNamesakes, matchNewPlace, replyParentOf } from './new-entity-match'
+export { itemNamesakes, matchNewPlace, replyMatchView, replyParentOf } from './new-entity-match'
 export type { SettledNewPlace } from './new-entity-match'
 export { placeNewLocation, settlingOrder, TOP_LEVEL } from './new-place-order'
 export type { NewPlaceDeclaration, ParentDropCause, SettlingPlace } from './new-place-order'

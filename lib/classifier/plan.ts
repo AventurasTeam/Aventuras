@@ -16,13 +16,14 @@ import { isPlotIconKey } from '@/lib/plot'
 import { oneLine } from '@/lib/text'
 import {
   characterFactionId,
-  checkParentChain,
   flagStillHolds,
   matchNewPlace,
   nameBasis,
   parentOfLocations,
+  placementLoop,
   placeNewLocation,
   realPlacementOf,
+  replyMatchView,
   replyParentOf,
   samePlacement,
   settlingOrder,
@@ -32,6 +33,7 @@ import {
   withPlacement,
   type ParentDropCause,
   type PlacedPlacement,
+  type PlacementLoop,
   type PlacePlacement,
   type SettledNewPlace,
 } from '@/lib/world'
@@ -230,19 +232,6 @@ function declaredPlace(place: NewPlace): NewPlace {
   return isTopLevel(place.parent) ? { ...place, parent: TOP_LEVEL } : place
 }
 
-type PlacementLoop = { parent: string; cause: 'cycle' | 'chain-broken' }
-
-// data-model.md → LocationState shape: a machine writer walks a placement first and drops a loop.
-function placementLoop(
-  id: string,
-  parentId: string,
-  parentOf: (id: string) => string | null,
-): PlacementLoop | null {
-  const walk = checkParentChain(id, parentId, parentOf)
-  if (walk === 'ok') return null
-  return { parent: parentId, cause: walk === 'cycle' ? 'cycle' : 'chain-broken' }
-}
-
 // data-model.md → Soft caps + compaction discipline: the Zod degradation bounds a create's state
 // must pass, else the handler refuses the row and the pass fails. The soft caps are the prompt's.
 const MAX_VOICE = 2000
@@ -393,8 +382,6 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     // The pass saw every place, so matching is over real children: nothing is hidden.
     const view = unhiddenLocationView(entities)
     const placed: SettledNewPlace[] = []
-    // The rows this reply placed, as matching must see them: no longer unplaced.
-    const placedRows = new Map<string, Entity>()
     // By row and parent: the pass keeps no one chain, so another parent's placement walks anew.
     const loopDrops = new Map<string, PlacementLoop>()
     const loopKey = (id: string, parentId: string): string => `${id} ${parentId}`
@@ -434,9 +421,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       const match = matchNewPlace(
         { name: stored.name, placement: candidate, keywords: place.keywords },
         placed,
-        placedRows.size === 0
-          ? view
-          : { ...view, locations: view.locations.map((e) => placedRows.get(e.id) ?? e) },
+        replyMatchView(view, placedHere),
         placedHere,
       )
 
@@ -453,12 +438,6 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
             candidate.kind === 'under' ? placementLoop(id, candidate.parentId, parentOf) : null
           if (loop === null) {
             placedHere.set(id, candidate)
-            const row = rowById.get(id)
-            if (row !== undefined)
-              placedRows.set(id, {
-                ...row,
-                state: withPlacement(row.state as LocationState, candidate),
-              })
             planned.push({
               action: {
                 kind: 'placeLocation',
