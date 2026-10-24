@@ -112,6 +112,8 @@ type StateReport = NonNullable<EntryMetadata['stateReport']>
 /** A `<new_location>`'s outcome; `parent`: id, `top`, as emitted if dropped, none if unplaced. */
 export type NewLocationReport = NonNullable<StateReport['newLocations']>[number]
 export type NewItemReport = NonNullable<StateReport['newItems']>[number]
+/** A drop as the entry's state report records it. */
+export type ReportedDrop = NonNullable<NonNullable<StateReport['transfers']>['drops']>[number]
 export type TurnCreatesReport = { newLocations: NewLocationReport[]; newItems: NewItemReport[] }
 
 /**

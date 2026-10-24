@@ -5,7 +5,13 @@ import { foldStackables } from '@/lib/keyword-terms'
 
 import { boundStateText } from './bound-text'
 import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from './scene-tracking'
-import { MAX_RETRIEVAL_QUERIES, type ItemDrop, type ItemTransfer, type PlannedTurn } from './types'
+import {
+  MAX_RETRIEVAL_QUERIES,
+  type ItemDrop,
+  type ItemTransfer,
+  type PlannedTurn,
+  type ReportedDrop,
+} from './types'
 import { resolvePiggybackWorldTimeDelta } from './world-time'
 
 // Two producers write this field; only the tagged-block parser filters itself (trims,
@@ -40,8 +46,6 @@ type BuildArgs = {
   log: Logger
 }
 
-type AppliedDrop = { id: string; from?: string; at: string | null }
-
 type Move = { seq: number; item: ItemTransfer } | { seq: number; drop: ItemDrop }
 
 /** What validation did to the emitted values, for stateReport — so the reader renders the
@@ -50,7 +54,7 @@ export type PiggybackApplied = {
   worldTimeDelta: number
   currentLocationRejected: boolean
   /** The drops applied, in the block's order, each where it landed: null with no scene place. */
-  drops: AppliedDrop[]
+  drops: ReportedDrop[]
   /** Positions in `block.conditions` refused, not ids: an id can repeat in one block. */
   conditionsRejected: number[]
   // How many of each wrote anything: one naming no character as its target or a party writes none.
@@ -282,7 +286,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     return whereIs(item.id) !== before
   }
 
-  const drops: AppliedDrop[] = []
+  const drops: ReportedDrop[] = []
   // Someone who left this turn can still have put it down before going.
   const nearScene = new Set([...sceneEntities, ...previousMetadata.sceneEntities])
   // piggyback.md → Trailing block format: a drop lands where the scene is; elsewhere stays prose.

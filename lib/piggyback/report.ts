@@ -1,10 +1,10 @@
 import type { EntryMetadata } from '@/lib/db'
 
-import type { ParsedTransfers, PlannedTurn } from './types'
+import type { PiggybackApplied } from './apply'
+import type { ParsedTransfers, PlannedTurn, ReportedDrop } from './types'
 
 type StateReport = NonNullable<EntryMetadata['stateReport']>
 type ReportedTransfers = NonNullable<StateReport['transfers']>
-type ReportedDrop = NonNullable<ReportedTransfers['drops']>[number]
 
 // data-model.md → Entry metadata shape: moves as emitted, minus `seq`; each drop as apply.ts put
 // it, never the block's own.
@@ -31,12 +31,10 @@ type BuildReportArgs = {
   /** The trailing block's own text. Retained only when a field failed. */
   raw?: string
   /** What apply.ts did with the emitted values. Absent when nothing was applied. */
-  applied?: {
-    worldTimeDelta: number
-    currentLocationRejected: boolean
-    drops: readonly ReportedDrop[]
-    conditionsRejected: readonly number[]
-  }
+  applied?: Pick<
+    PiggybackApplied,
+    'worldTimeDelta' | 'currentLocationRejected' | 'drops' | 'conditionsRejected'
+  >
 }
 
 /**
