@@ -174,8 +174,10 @@
       placeholder="Checkpoint name..."
       bind:value={name}
       disabled={saving}
+      data-autofocus
+      enterkeyhint="go"
       onkeydown={(e) => {
-        if (e.key === 'Enter') create()
+        if (e.key === 'Enter' && !e.isComposing) create()
       }}
     />
     <div class="text-muted-foreground space-y-1 text-xs">

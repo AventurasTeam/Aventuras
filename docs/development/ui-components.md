@@ -101,6 +101,20 @@ import, is not a step of the control that started the flow. Its title asks its o
 buttons say what they do to the larger flow ("Cancel import", "Import story"), and its action
 carries no glyph of that control.
 
+### Focus and Enter
+
+Mark a field `data-autofocus` when it is the first control that decides the action and it is a
+single-line text field: a name to create, a model to add, a time to set. The shell focuses it on
+opening, so a phone raises its keyboard; a sheet waits until it has slid in. Mark nothing when the
+first such control is a toggle, or when the modal edits a whole record whose fields the user may
+each want or not: Edit story opens with no keyboard. iOS raises no keyboard for this focus, so
+there it waits for a tap.
+
+Enter in a single-line field moves to the next text field, with `enterkeyhint="next"`. In the
+last one, a modal that creates or adds performs its action (`enterkeyhint="go"`). A modal that
+edits existing values only drops the keyboard (`enterkeyhint="done"`): an edit is saved through the
+on-screen button, never by a key under the thumb.
+
 ### Wording
 
 - **Sentence case** for titles and buttons.

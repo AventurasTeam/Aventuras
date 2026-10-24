@@ -431,8 +431,10 @@
   <Input
     placeholder="model-name or provider/model"
     bind:value={customModelDialogInput}
+    data-autofocus
+    enterkeyhint="go"
     onkeydown={(e) => {
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' && !e.isComposing) {
         e.preventDefault()
         handleAddCustomModelFromDialog()
       }

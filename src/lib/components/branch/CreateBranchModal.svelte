@@ -70,8 +70,10 @@
     placeholder="Branch name..."
     bind:value={name}
     disabled={saving}
+    data-autofocus
+    enterkeyhint="go"
     onkeydown={(e) => {
-      if (e.key === 'Enter') void create()
+      if (e.key === 'Enter' && !e.isComposing) void create()
     }}
   />
 </ActionModal>

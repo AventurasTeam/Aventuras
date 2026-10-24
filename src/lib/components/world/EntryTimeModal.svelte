@@ -21,6 +21,7 @@
   let seededStart = $state('')
   let seededEnd = $state('')
   let saving = $state(false)
+  let endField = $state<HTMLInputElement | null>(null)
 
   const entry = $derived(story.entries.find((candidate) => candidate.id === entryId) ?? null)
   const start = $derived(parseStoryTime(startText))
@@ -76,6 +77,14 @@
       descriptionOpen = true
     }
   })
+
+  /** An edit is saved only through Save, so Enter moves on or drops the keyboard. */
+  function handleEnter(e: KeyboardEvent, next: HTMLElement | null) {
+    if (e.key !== 'Enter' || e.isComposing) return
+    e.preventDefault()
+    if (next) next.focus()
+    else (e.currentTarget as HTMLElement).blur()
+  }
 
   async function save() {
     if (!start || !end) return
@@ -166,6 +175,9 @@
       Begins
       <Input
         bind:value={startText}
+        data-autofocus
+        enterkeyhint="next"
+        onkeydown={(e) => handleEnter(e, endField)}
         placeholder="Y1 D4 14:30"
         class="mt-1 h-8 text-sm {storyTimeIsInvalid(startText) ? 'border-destructive' : ''}"
       />
@@ -173,7 +185,10 @@
     <label class="text-xs">
       Ends
       <Input
+        bind:ref={endField}
         bind:value={endText}
+        enterkeyhint="done"
+        onkeydown={(e) => handleEnter(e, null)}
         placeholder="Y1 D4 16:00"
         class="mt-1 h-8 text-sm {storyTimeIsInvalid(endText) ? 'border-destructive' : ''}"
       />

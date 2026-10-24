@@ -25,6 +25,8 @@
   let timeText = $state('')
   let note = $state('')
   let saving = $state(false)
+  let timeField = $state<HTMLInputElement | null>(null)
+  let noteField = $state<HTMLTextAreaElement | null>(null)
   let seeded = $state({ number: '', time: '', note: '' })
 
   const fixedEntry = $derived(
@@ -128,6 +130,13 @@
       saving = false
     }
   }
+
+  /** The anchor is saved only through Save, so Enter in a single-line field moves on. */
+  function moveOn(e: KeyboardEvent, next: HTMLElement | null) {
+    if (e.key !== 'Enter' || e.isComposing) return
+    e.preventDefault()
+    next?.focus()
+  }
 </script>
 
 <ActionModal
@@ -170,6 +179,9 @@
             placeholder="e.g. 12"
             class="h-8 w-24 text-sm"
             bind:value={numberText}
+            data-autofocus
+            enterkeyhint="next"
+            onkeydown={(e) => moveOn(e, timeField)}
           />
         {/if}
       </label>
@@ -201,7 +213,15 @@
 
     <label class="flex items-center gap-2">
       <span class="text-muted-foreground shrink-0">Anchor time point:</span>
-      <Input placeholder="e.g. Y1 D4 14:30" class="h-8 w-36 text-sm" bind:value={timeText} />
+      <Input
+        placeholder="e.g. Y1 D4 14:30"
+        class="h-8 w-36 text-sm"
+        bind:ref={timeField}
+        bind:value={timeText}
+        data-autofocus={fixedEntry ? true : undefined}
+        enterkeyhint="next"
+        onkeydown={(e) => moveOn(e, noteField)}
+      />
       <span class="text-muted-foreground shrink-0 text-xs">
         {#if parsedTime}
           = {formatStoryTime(parsedTime)}
@@ -224,6 +244,7 @@
           maxlength={NOTE_LIMIT}
           placeholder="optional"
           class="min-h-14 w-full text-sm"
+          bind:ref={noteField}
           bind:value={note}
         />
         <span class="text-muted-foreground mt-0.5 block text-right text-[10px]">

@@ -10,7 +10,7 @@
   import { createDrawerSwipeGuard } from '#lib/components/ui/drawer/index.ts'
   import { setTextareaUncapped } from '#lib/components/ui/textarea/index.ts'
   import { releaseOrphanScrollLock } from '#lib/utils/scrollLock.ts'
-  import { MODAL_CLOSE_TRANSITION_MS } from '#lib/constants/layout.ts'
+  import { MODAL_CLOSE_TRANSITION_MS, SHEET_OPEN_TRANSITION_MS } from '#lib/constants/layout.ts'
   import { cn } from '#lib/utils/cn.ts'
   import ModalActions from './ModalActions.svelte'
   import DiscardConfirm from './DiscardConfirm.svelte'
@@ -99,6 +99,8 @@
   let returning = false
   let wasOpen = untrack(() => open)
   let timer: ReturnType<typeof setTimeout> | null = null
+  let focusTimer: ReturnType<typeof setTimeout> | null = null
+  let frame = $state<HTMLDivElement | null>(null)
 
   const locked = $derived(busy && !cancelWhileBusy)
   const shown = $derived(
@@ -134,8 +136,30 @@
   // A pending timer would otherwise act on whichever modal has taken this one's place.
   onDestroy(() => {
     if (timer) clearTimeout(timer)
+    if (focusTimer) clearTimeout(focusTimer)
     releaseOrphanScrollLock()
   })
+
+  /**
+   * Focuses the field a caller marked `data-autofocus`, so a phone raises its keyboard. A sheet
+   * waits for its slide, which a keyboard rising midway would shift. iOS WKWebView raises no
+   * keyboard for a focus outside a tap (`KeyboardDisplayRequiresUserAction`): the field is
+   * focused there, but the keyboard waits for the user.
+   */
+  function focusMarkedField(e: Event) {
+    const field = frame?.querySelector<HTMLElement>('[data-autofocus]')
+    if (!field) return
+    e.preventDefault()
+    if (presentation === 'dialog') {
+      field.focus()
+      return
+    }
+    if (focusTimer) clearTimeout(focusTimer)
+    focusTimer = setTimeout(() => {
+      focusTimer = null
+      if (field.isConnected) field.focus({ preventScroll: true })
+    }, SHEET_OPEN_TRANSITION_MS)
+  }
 
   function leave() {
     question = null
@@ -223,10 +247,11 @@
         e.preventDefault()
         request('escape')
       }}
+      onOpenAutoFocus={focusMarkedField}
       onpointerup={(e: PointerEvent) => swipeGuard?.release(e)}
       onpointerout={(e: PointerEvent) => swipeGuard?.release(e)}
     >
-      <div class="flex min-h-0 flex-1 flex-col" inert={question !== null}>
+      <div bind:this={frame} class="flex min-h-0 flex-1 flex-col" inert={question !== null}>
         <ResponsiveModal.Header class="border-b px-6 py-4" closeButton={false}>
           <ResponsiveModal.Title
             class={titleIcon && 'flex items-center justify-center gap-2 sm:justify-start'}
