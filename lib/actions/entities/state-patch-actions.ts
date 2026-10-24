@@ -10,18 +10,13 @@ import {
   type Entity,
   type EntityState,
 } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
 import { newTerms, normalizeTerm } from '@/lib/keyword-terms'
 import { boundStateText } from '@/lib/piggyback'
 import { entitiesStore } from '@/lib/stores'
 import {
   characterFactionId,
-  checkParentChain,
   flagStillHolds,
   nameBasis,
-  PARENT_CHAIN_BROKEN,
-  PARENT_CYCLE,
-  parentOfLocations,
   pairSideOf,
   PLACE_REFUSAL,
   placementOf,
@@ -41,6 +36,7 @@ import {
 } from '../delta/registry'
 import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteField } from '../delta/user-precedence'
 import type { DbCtx, DeltaSource, ProseEntryId } from '../types'
+import { branchPlaces, parentChainRefusal } from './parent-chain-check'
 
 declare module '@/lib/actions/action-map' {
   interface PipelineActionMap {
@@ -483,31 +479,15 @@ export const placeLocationHandler: ActionHandler = async (action, branchId, ctx)
   const stored = placementOf(current)
   if (samePlacement(stored, placement)) return noopRefusal('placement-unchanged')
 
-  const places = await ctx.db
-    .select({
-      id: entities.id,
-      kind: entities.kind,
-      state: entities.state,
-      status: entities.status,
-    })
-    .from(entities)
-    .where(and(eq(entities.branchId, bid), eq(entities.kind, 'location')))
+  const places = await branchPlaces(ctx, bid)
   if (placement.kind === 'top') {
     if (realPlacementOf(places)(id).kind !== 'unplaced') return noopRefusal('not-unplaced')
   } else {
     const parent = places.find((p) => p.id === placement.parentId)
     if (parent === undefined) return noopRefusal('parent-not-a-place')
     if (parent.status === 'retired') return noopRefusal(PLACE_REFUSAL.retiredParent)
-    const check = checkParentChain(id, placement.parentId, parentOfLocations(places))
-    if (check === 'cycle') return noopRefusal(PARENT_CYCLE)
-    if (check === 'cap-hit') {
-      logger.error('action_layer.parent_chain_cap_hit', {
-        branchId: bid,
-        id,
-        parentId: placement.parentId,
-      })
-      return noopRefusal(PARENT_CHAIN_BROKEN)
-    }
+    const refused = parentChainRefusal(bid, id, placement.parentId, places)
+    if (refused !== null) return noopRefusal(refused)
   }
   if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'state', ['parent_location_id']))
     return noopRefusal(USER_EDITED_SINCE_PROSE)
