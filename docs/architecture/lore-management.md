@@ -46,6 +46,9 @@ story had brought back marked them dead again whichever row was kept. For the lo
 absorbed names still become **aliases** on the survivor, which is what stops the same
 duplicate being re-created — except one the survivor's name already matches by `termKey`.
 
+A location merge moves the items at an absorbed location to the survivor before deleting it
+(`story.moveItemsBetweenLocations`), including items that hold its name as legacy text.
+
 **A dismissal is remembered, in `kept_separate`** (migration 037), keyed by normalized
 **name pair** and scoped to a branch. Names rather than ids, so a later rename cannot
 resurrect a settled decision; per pair rather than per group, because a group of three can
