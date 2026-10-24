@@ -3846,6 +3846,17 @@ describe('per-turn-piggyback', () => {
         expect(withDrops([{ id: 'i1', from: null }]).transfers?.drops).toEqual([{ id: 'i1' }])
       })
 
+      // piggyback.md → Trailing block format: put down somewhere else than the scene stays prose.
+      it('drops a drop that names a place, as the tags do', () => {
+        expect(
+          withDrops([
+            { id: 'i1', from: 'c1', to: 'l2' },
+            { id: 'i2', to: null },
+            { id: 'i3', to: ' ' },
+          ]).transfers?.drops,
+        ).toEqual([{ id: 'i2' }, { id: 'i3' }])
+      })
+
       it('reads a lone drop as a list of one', () => {
         expect(withDrops({ id: 'i1', from: 'c1' }).transfers?.drops).toEqual([
           { id: 'i1', from: 'c1' },

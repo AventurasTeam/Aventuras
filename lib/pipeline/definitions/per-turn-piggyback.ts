@@ -107,6 +107,11 @@ const conditionEntry = z.object({
     ),
 })
 
+// piggyback.md → Trailing block format: put down somewhere else than the scene stays prose. Kept
+// out unlogged: the schema has no logger.
+const namesPlace = (item: unknown): boolean =>
+  isRecord(item) && 'to' in item && typeof item.to === 'string' && item.to.trim() !== ''
+
 const dropEntry = z.object({
   id: z.string().describe("The item's ID from the list."),
   from: z
@@ -219,7 +224,10 @@ export const fallbackClassifierSchema = z.object({
         )
         .default([]),
       drops: z
-        .preprocess((value) => readableEntries(value, dropEntry) ?? [], z.array(dropEntry))
+        .preprocess(
+          (value) => readableEntries(value, dropEntry)?.filter((drop) => !namesPlace(drop)) ?? [],
+          z.array(dropEntry),
+        )
         .default([])
         .describe(
           'Items someone holding them put down where the scene is and still lying there when the turn ends. An item picked up again, or put down anywhere else, is left out.',

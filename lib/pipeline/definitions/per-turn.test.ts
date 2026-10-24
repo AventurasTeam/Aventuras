@@ -2385,6 +2385,36 @@ describe('narrative fold — creates', () => {
       })
     })
 
+    // piggyback.md → Trailing block format: an item put down somewhere else than the scene stays
+    // prose, whether its `to` names a listed place or nothing.
+    it.each([
+      ['a listed place', 'l2'],
+      ['nothing', 'l99'],
+    ])('leaves the item held when its drop names %s', async (_label, to) => {
+      await seedTurn(swordWorld())
+      const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+      const { events, intermediates } = await foldTurn(
+        'Aria throws her sword into the market well.\n<state><scene_entities>c1</scene_entities>' +
+          `<transfers><drop id="i1" from="c1" to="${to}" /></transfers>` +
+          '<world_time_delta>30</world_time_delta></state>',
+        { log },
+      )
+      expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: true })
+      await applyEvents(events)
+      const rows = await branchRows()
+      expect(rows.find((r) => r.id === SWORD)?.state).toEqual({ at_location_id: null })
+      expect(rows.find((r) => r.id === HERO)?.state).toMatchObject({ inventory: [SWORD] })
+      expect(replyOf(events).metadata?.stateReport?.transfers).toEqual({
+        items: [],
+        stackables: [],
+      })
+      expect(log.warn).toHaveBeenCalledWith('classifier.drop_dropped', {
+        entryId: replyOf(events).id,
+        drop: { id: 'i1', to },
+        reason: 'to_named',
+      })
+    })
+
     // A new item's drop stays prose as on any skipped create; only a real item is held back.
     it('a failed fold holds back only the drops that name a real item', async () => {
       const fold = await failedFold(

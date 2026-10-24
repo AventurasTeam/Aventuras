@@ -249,6 +249,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
         count: parsedState.malformedCreates,
         layer: 'piggyback_tagged_block',
       })
+    for (const drop of parsedState.dropsElsewhere)
+      ctx.log.warn('classifier.drop_dropped', { entryId, drop, reason: 'to_named' })
     // A failed fold creates nothing: creates aren't idempotent, and the fallback that fires
     // rewrites this turn's state, so a create made by both would leave a duplicate row.
     const turn = piggybackParseSucceeded

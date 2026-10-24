@@ -101,6 +101,9 @@ export type ParseStateBlockResult = {
   blockFound: boolean
   /** Creates dropped as malformed, or opened and never closed; 0 when the block was not found. */
   malformedCreates: number
+  /** `<drop>`s that name a `to`, as emitted and kept out of the block: an item put down somewhere
+   *  else than the scene stays prose. */
+  dropsElsewhere: { id: string; to: string }[]
 }
 
 type StateReport = NonNullable<EntryMetadata['stateReport']>

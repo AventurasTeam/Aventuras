@@ -150,11 +150,15 @@ function parseConditions(segment: string): ConditionChange[] {
   return changes
 }
 
+/** What a field's parse kept out of the block, for the phase to log. */
+type ParseNotes = Pick<ParseStateBlockResult, 'dropsElsewhere'>
+
 // Self-closing, attribute-only <item>, <drop> and <stackable> (piggyback.md → Trailing block
 // format). Item moves and drops share one document-order `seq`, which apply.ts follows.
-function parseTransfers(segment: string): ParsedTransfers {
+function parseTransfers(segment: string, notes: ParseNotes): ParsedTransfers {
   const items: ItemTransfer[] = []
   const drops: ItemDrop[] = []
+  const elsewhere: ParseNotes['dropsElsewhere'] = []
   let seq = 0
   // No `<` in the attributes, so a tag missing its `>` is lost rather than read into the next one.
   const moveRe = new RegExp(`<(item|${DROP_TAG})\\s+([^<>]*)\\/?>`, 'g')
@@ -165,7 +169,10 @@ function parseTransfers(segment: string): ParsedTransfers {
     if (!attrs.id) continue
     const from = attrs.from !== undefined ? { from: attrs.from } : {}
     if (tag === DROP_TAG) {
-      drops.push({ id: attrs.id, ...from, seq: seq++ })
+      // piggyback.md → Trailing block format: put down somewhere else than the scene stays prose.
+      if (attrs.to !== undefined && attrs.to.trim() !== '')
+        elsewhere.push({ id: attrs.id, to: attrs.to })
+      else drops.push({ id: attrs.id, ...from, seq: seq++ })
       continue
     }
     const slot = attrs.slot === 'equipped_items' ? 'equipped_items' : 'inventory'
@@ -194,7 +201,10 @@ function parseTransfers(segment: string): ParsedTransfers {
     if (transfer !== null) stackables.push(transfer)
   }
 
-  assertNotTruncated(segment, items.length + drops.length + stackables.length, 'transfers')
+  // A drop kept out for its `to` was whole, so it doesn't read as a cut-off field.
+  const whole = items.length + drops.length + elsewhere.length + stackables.length
+  assertNotTruncated(segment, whole, 'transfers')
+  notes.dropsElsewhere.push(...elsewhere)
   return { items, stackables, drops }
 }
 
@@ -221,7 +231,7 @@ function parseRetrievalQueries(segment: string): string[] | undefined {
 type FieldParser = {
   field: keyof ParsedStateBlock
   tag: string
-  parse: (segment: string) => unknown
+  parse: (segment: string, notes: ParseNotes) => unknown
 }
 
 const FIELD_PARSERS: readonly FieldParser[] = [
@@ -421,16 +431,18 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
       failures: [],
       blockFound: false,
       malformedCreates: 0,
+      dropsElsewhere: [],
     }
 
   const block: ParsedStateBlock = {}
   const failures: ParseFieldFailure[] = []
+  const notes: ParseNotes = { dropsElsewhere: [] }
 
   for (const { field, tag, parse } of FIELD_PARSERS) {
     const segment = extractSegment(stateSegment, tag, STATE_ROOT_TAG)
     if (segment === undefined) continue
     try {
-      const value = parse(segment)
+      const value = parse(segment, notes)
       // Object.keys below judges the block empty, so assigning an undefined key would
       // make a block carrying nothing else read as a clean parse and lose its fallback.
       if (value === undefined) {
@@ -472,7 +484,13 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
       ),
     })
 
-  return { block: normalized.block, failures, blockFound: true, malformedCreates }
+  return {
+    block: normalized.block,
+    failures,
+    blockFound: true,
+    malformedCreates,
+    dropsElsewhere: notes.dropsElsewhere,
+  }
 }
 
 // <item category="cat1">complete prose</item> — one entry per chip slot.
