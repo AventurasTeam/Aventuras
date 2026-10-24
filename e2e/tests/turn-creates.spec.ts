@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { takeTurn, waitForTurnTerminal } from '../flows/turn'
 import { currentBranchId, queryApp, tailMetadata } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
+import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm, type MockRequest } from '../harness/mock-llm'
 import {
@@ -441,6 +442,190 @@ test.describe('turn creates — where a new place sits', () => {
       const [cove] = (await tailMetadata(app.window, branchId))?.stateReport?.newLocations ?? []
       expect(cove).toMatchObject({ handle: 'new:cove', outcome: 'created' })
       expect(cove).not.toHaveProperty('parent')
+    })
+  })
+})
+
+// piggyback.md → Trailing block format.
+const BLADE = 'Courier’s Blade'
+const BLADE_REF = /\[(i\d+)\] Courier’s Blade/
+const SCENE_CONDITION = 'its gate smashed open and the yard ankle-deep in rain'
+
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+// No <scene_entities> or <current_location>: the scene, and its place, carry over.
+const waitingNarrative = `E2E-COND-T1 Kael waits out the rain under the arch.
+<state>
+  <world_time_delta>0</world_time_delta>
+</state>`
+
+function puttingDownNarrative(ids: { kael: string; blade: string; place: string }): string {
+  return `E2E-COND-T2 The gate gives; Kael lays the blade on the flagstones.
+<state>
+  <world_time_delta>30</world_time_delta>
+  <conditions>
+    <entity id="${ids.place}">${SCENE_CONDITION}</entity>
+  </conditions>
+  <transfers>
+    <drop id="${ids.blade}" from="${ids.kael}" />
+  </transfers>
+</state>`
+}
+
+const KAEL_CONDITION = 'soaked through and shivering'
+const LATER_CONDITION = 'its yard drained, the gate propped shut'
+
+// Kael is shown, but a character has no condition: apply.ts refuses it and writes the place's.
+function refusedConditionNarrative(ids: { kael: string; place: string }): string {
+  return `E2E-COND-T3 The rain stops; Kael props the gate shut.
+<state>
+  <world_time_delta>30</world_time_delta>
+  <conditions>
+    <entity id="${ids.kael}">${KAEL_CONDITION}</entity>
+    <entity id="${ids.place}">${LATER_CONDITION}</entity>
+  </conditions>
+</state>`
+}
+
+async function stateOf(page: Page, branchId: string, id: string): Promise<Record<string, unknown>> {
+  const rows = await queryApp(page, `SELECT state FROM entities WHERE branch_id = ? AND id = ?`, [
+    branchId,
+    id,
+  ])
+  const raw = rows[0]?.[0]
+  return typeof raw === 'string' ? (JSON.parse(raw) as Record<string, unknown>) : {}
+}
+
+async function nameOf(page: Page, branchId: string, id: string): Promise<string> {
+  const rows = await queryApp(page, `SELECT name FROM entities WHERE branch_id = ? AND id = ?`, [
+    branchId,
+    id,
+  ])
+  return (rows[0]?.[0] as string | undefined) ?? ''
+}
+
+test.describe('turn creates — conditions and drops', () => {
+  let app: LaunchedApp
+  let mock: MockLlm
+  let userDataDir: string | undefined
+
+  test.beforeAll(async () => {
+    test.setTimeout(180_000)
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    await installEmbedderModel(userDataDir)
+    mock = await startMockLlm()
+    mock.setNarrative(waitingNarrative)
+    setProviderEndpoint(seeded.dbPath, mock.url)
+    app = await launchApp({ userDataDir, cleanupUserData: true })
+  })
+
+  test.afterAll(async () => {
+    await app?.close()
+    await mock?.close()
+    removeUserDataDir(userDataDir)
+  })
+
+  test("a turn writes the scene place's condition and puts a held item down there", async () => {
+    test.setTimeout(150_000)
+    await home.openStory(app.window, HERO_TITLE).click()
+    await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
+    const branchId = await currentBranchId(app.window, HERO_STORY)
+    const kaelId = await idOf(app.window, branchId, 'Kael')
+    const bladeId = await idOf(app.window, branchId, BLADE)
+
+    let ids = { kael: '', blade: '', place: '' }
+    let placeId = ''
+    let placeName = ''
+    await test.step('a turn that changes nothing shows the place and the held blade', async () => {
+      await takeTurn(app.window, 'E2E-COND-U1 I wait under the arch.', 'E2E-COND-T1')
+      // The next turn's prompt is built around this reply's place, which the floor seats.
+      placeId = (await tailMetadata(app.window, branchId))?.currentLocationId ?? ''
+      expect(placeId, 'the scene has a place').not.toBe('')
+      placeName = await nameOf(app.window, branchId, placeId)
+      const narrative = mock.requests.findLast((r) => r.streamed)
+      expect(narrative, 'a narrative call was made').toBeDefined()
+      const prompt = promptOf(narrative!)
+      expect(prompt).toContain('# Current location')
+      ids = {
+        kael: placeholderIn(prompt, KAEL_REF, 'Kael'),
+        blade: placeholderIn(prompt, BLADE_REF, BLADE),
+        place: placeholderIn(
+          prompt,
+          new RegExp(`\\[(l\\d+)\\] ${escapeRegExp(placeName)}`),
+          placeName,
+        ),
+      }
+      expect((await stateOf(app.window, branchId, kaelId)).equipped_items).toContain(bladeId)
+    })
+
+    await test.step('the next turn writes the condition and puts the blade down there', async () => {
+      mock.setNarrative(puttingDownNarrative(ids))
+      await takeTurn(app.window, 'E2E-COND-U2 I set the blade down.', 'E2E-COND-T2')
+      await expect
+        .poll(async () => (await stateOf(app.window, branchId, placeId)).condition, {
+          timeout: 15_000,
+        })
+        .toBe(SCENE_CONDITION)
+      expect((await stateOf(app.window, branchId, bladeId)).at_location_id).toBe(placeId)
+      expect((await stateOf(app.window, branchId, kaelId)).equipped_items).not.toContain(bladeId)
+      const report = (await tailMetadata(app.window, branchId))?.stateReport
+      expect(report?.layer).toBe('piggyback_tagged_block')
+      expect(report?.conditions).toEqual([{ id: placeId, text: SCENE_CONDITION }])
+      expect(report?.transfers?.drops).toEqual([{ id: bladeId, from: kaelId, at: placeId }])
+    })
+
+    await test.step('the entry card lists both under Changes this turn', async () => {
+      const reply = await tailReply(app.window, branchId)
+      expect(reply?.content).toContain('E2E-COND-T2')
+      await reader.showState(app.window, reply!.id).click()
+      await expect(
+        reader.stateLine(
+          app.window,
+          reply!.id,
+          t('reader:entryCard.stateCondition', { name: placeName, text: SCENE_CONDITION }),
+        ),
+      ).toBeVisible()
+      await expect(
+        reader.stateLine(
+          app.window,
+          reply!.id,
+          t('reader:entryCard.statePutDown', { item: BLADE, place: placeName }),
+        ),
+      ).toBeVisible()
+    })
+
+    await test.step('a refused condition is marked on the report and stays off the card and the row', async () => {
+      mock.setNarrative(refusedConditionNarrative(ids))
+      await takeTurn(app.window, 'E2E-COND-U3 I wait for the rain to stop.', 'E2E-COND-T3')
+      await expect
+        .poll(async () => (await stateOf(app.window, branchId, placeId)).condition, {
+          timeout: 15_000,
+        })
+        .toBe(LATER_CONDITION)
+      expect(await stateOf(app.window, branchId, kaelId)).not.toHaveProperty('condition')
+      const report = (await tailMetadata(app.window, branchId))?.stateReport
+      expect(report?.conditions).toEqual([
+        { id: kaelId, text: KAEL_CONDITION, rejected: true },
+        { id: placeId, text: LATER_CONDITION },
+      ])
+      const reply = await tailReply(app.window, branchId)
+      expect(reply?.content).toContain('E2E-COND-T3')
+      await reader.showState(app.window, reply!.id).click()
+      await expect(
+        reader.stateLine(
+          app.window,
+          reply!.id,
+          t('reader:entryCard.stateCondition', { name: placeName, text: LATER_CONDITION }),
+        ),
+      ).toBeVisible()
+      await expect(
+        reader.stateLine(
+          app.window,
+          reply!.id,
+          t('reader:entryCard.stateCondition', { name: 'Kael', text: KAEL_CONDITION }),
+        ),
+      ).toHaveCount(0)
     })
   })
 })

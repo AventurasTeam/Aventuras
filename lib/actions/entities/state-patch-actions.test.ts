@@ -1443,3 +1443,106 @@ describe('placeLocation', () => {
     expect(lockKeysFor(place(TOP))).toEqual(['entities:br_1:loc_varn'])
   })
 })
+
+// piggyback.md → Trailing block format.
+describe('updateEntityCondition', () => {
+  const HALL: NewEntity = {
+    ...CHAR,
+    id: 'loc_hall',
+    kind: 'location',
+    name: 'Hall',
+    state: { parent_location_id: null, condition: 'swept' },
+  }
+  const ROPE: NewEntity = {
+    ...CHAR,
+    id: 'item_rope',
+    kind: 'item',
+    name: 'Rope',
+    state: { at_location_id: 'loc_hall' },
+  }
+  type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
+
+  const create = (ctx: Ctx, entry: NewEntity) =>
+    applyDeltaAction(
+      {
+        action: { kind: 'createEntity', source: 'user_edit', payload: { entry } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+  const setCondition = (ctx: Ctx, id: string, condition: string) =>
+    applyDeltaAction(
+      {
+        action: {
+          kind: 'updateEntityCondition',
+          source: 'piggyback_tagged_block',
+          payload: { branchId: 'br_1', id, condition },
+        },
+        actionId: 'act_k',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+
+  it("replaces a place's condition, leaving its parent, and undo restores the old one", async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, HALL)
+    expect((await setCondition(ctx, 'loc_hall', 'burned to the ground')).status).toBe('ok')
+    expect((await rowFor(db, 'loc_hall')).state).toEqual({
+      parent_location_id: null,
+      condition: 'burned to the ground',
+    })
+    expect(entitiesStore.getById('loc_hall')?.state).toEqual({
+      parent_location_id: null,
+      condition: 'burned to the ground',
+    })
+    expect(await reverseReplayDeltas('act_k', ctx)).toBe(1)
+    expect((await rowFor(db, 'loc_hall')).state).toEqual({
+      parent_location_id: null,
+      condition: 'swept',
+    })
+  })
+
+  it('gives an item a condition it had none of, and undo takes it away again', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, ROPE)
+    expect((await setCondition(ctx, 'item_rope', 'frayed through')).status).toBe('ok')
+    expect((await rowFor(db, 'item_rope')).state).toEqual({
+      at_location_id: 'loc_hall',
+      condition: 'frayed through',
+    })
+    expect(await reverseReplayDeltas('act_k', ctx)).toBe(1)
+    expect((await rowFor(db, 'item_rope')).state).toEqual({ at_location_id: 'loc_hall' })
+  })
+
+  // The patch builder merges without parsing, so the bound is the handler's own.
+  it('bounds an over-long condition as a visual value is', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, HALL)
+    await setCondition(ctx, 'loc_hall', 'word '.repeat(150).trim())
+    const { state } = await rowFor(db, 'loc_hall')
+    expect(state).toEqual({
+      parent_location_id: null,
+      condition: Array.from({ length: 100 }, () => 'word').join(' '),
+    })
+    expect(entityStateSchemaForKind('location').safeParse(state).success).toBe(true)
+  })
+
+  it.each([
+    ['a character', 'char_1', { status: 'rejected', reason: 'not-a-place-or-item', code: 'noop' }],
+    ['a missing row', 'loc_gone', expect.objectContaining({ status: 'rejected', code: 'noop' })],
+  ])('refuses %s, as a noop', async (_label, id, refusal) => {
+    const { ctx } = await setup()
+    await create(ctx, CHAR)
+    expect(await setCondition(ctx, id, 'scorched')).toEqual(refusal)
+  })
+
+  it('refuses a condition that is already the stored one, as a noop', async () => {
+    const { ctx } = await setup()
+    await create(ctx, HALL)
+    expect(await setCondition(ctx, 'loc_hall', 'swept')).toEqual(
+      expect.objectContaining({ status: 'rejected', code: 'noop' }),
+    )
+  })
+})

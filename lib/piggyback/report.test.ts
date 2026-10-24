@@ -39,7 +39,12 @@ describe('buildStateReport', () => {
       layer: 'piggyback_tagged_block',
       turn: planned({ worldTimeDelta: -600 }),
       failures: [],
-      applied: { worldTimeDelta: 0, currentLocationRejected: false },
+      applied: {
+        worldTimeDelta: 0,
+        currentLocationRejected: false,
+        drops: [],
+        conditionsRejected: [],
+      },
     })
     expect(report?.worldTimeDelta).toBe(-600)
     expect(report?.worldTimeDeltaApplied).toBe(0)
@@ -52,7 +57,12 @@ describe('buildStateReport', () => {
       layer: 'piggyback_tagged_block',
       turn: planned({ worldTimeDelta: 9_000_000 }),
       failures: [],
-      applied: { worldTimeDelta: 120, currentLocationRejected: false },
+      applied: {
+        worldTimeDelta: 120,
+        currentLocationRejected: false,
+        drops: [],
+        conditionsRejected: [],
+      },
     })
     expect(report?.worldTimeDelta).toBe(9_000_000)
     expect(report?.worldTimeDeltaApplied).toBe(120)
@@ -63,7 +73,12 @@ describe('buildStateReport', () => {
       layer: 'piggyback_tagged_block',
       turn: planned({ currentLocation: 'item_sword' }),
       failures: [],
-      applied: { worldTimeDelta: 0, currentLocationRejected: true },
+      applied: {
+        worldTimeDelta: 0,
+        currentLocationRejected: true,
+        drops: [],
+        conditionsRejected: [],
+      },
     })
     expect(rejected?.currentLocationRejected).toBe(true)
 
@@ -73,7 +88,12 @@ describe('buildStateReport', () => {
       layer: 'piggyback_tagged_block',
       turn: planned({ currentLocation: 'loc_keep' }),
       failures: [],
-      applied: { worldTimeDelta: 0, currentLocationRejected: false },
+      applied: {
+        worldTimeDelta: 0,
+        currentLocationRejected: false,
+        drops: [],
+        conditionsRejected: [],
+      },
     })
     expect(accepted).not.toHaveProperty('currentLocationRejected')
   })
@@ -130,7 +150,12 @@ describe('buildStateReport', () => {
       layer: 'piggyback_tagged_block',
       turn: planned({ summary: 'A sentence.' }),
       failures: [],
-      applied: { worldTimeDelta: 0, currentLocationRejected: false },
+      applied: {
+        worldTimeDelta: 0,
+        currentLocationRejected: false,
+        drops: [],
+        conditionsRejected: [],
+      },
     })
     expect(report).toEqual({ layer: 'piggyback_tagged_block' })
   })
@@ -180,8 +205,9 @@ describe('buildStateReport', () => {
       turn: planned({
         visualChanges: [{ id: 'char_a', type: 'attire', text: 'muddied cloak' }],
         transfers: {
-          items: [{ id: 'item_a', slot: 'inventory', to: 'char_a', from: 'char_b' }],
+          items: [{ id: 'item_a', slot: 'inventory', to: 'char_a', from: 'char_b', seq: 0 }],
           stackables: [{ key: 'gold', amount: 50, to: 'char_a' }],
+          drops: [],
         },
       }),
       failures: [],
@@ -189,6 +215,25 @@ describe('buildStateReport', () => {
     expect(report?.visualChanges).toEqual([{ id: 'char_a', type: 'attire', text: 'muddied cloak' }])
     expect(report?.transfers?.items[0]?.from).toBe('char_b')
     expect(report?.transfers?.stackables[0]?.key).toBe('gold')
+  })
+
+  // data-model.md → Entry metadata shape.
+  it('reports item moves without the order the block carried', () => {
+    const report = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      turn: planned({
+        transfers: {
+          items: [{ id: 'item_a', slot: 'inventory', to: 'char_a', seq: 0 }],
+          stackables: [{ key: 'gold', amount: 5, to: 'char_a' }],
+          drops: [],
+        },
+      }),
+      failures: [],
+    })
+    expect(report?.transfers).toEqual({
+      items: [{ id: 'item_a', slot: 'inventory', to: 'char_a' }],
+      stackables: [{ key: 'gold', amount: 5, to: 'char_a' }],
+    })
   })
 })
 
@@ -271,5 +316,91 @@ describe("buildStateReport with this turn's creates", () => {
         failures: [],
       })
     expect([handBuilt, relisted, report]).toHaveLength(3)
+  })
+})
+
+// data-model.md → Entry metadata shape.
+describe('buildStateReport — conditions and drops', () => {
+  it('reports conditions as emitted', () => {
+    const report = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      turn: planned({ conditions: [{ id: 'loc_a', text: 'burned to the ground' }] }),
+      failures: [],
+    })
+    expect(report).toEqual({
+      layer: 'piggyback_tagged_block',
+      conditions: [{ id: 'loc_a', text: 'burned to the ground' }],
+    })
+  })
+
+  // Positions, not ids: the same place can be conditioned twice in one block.
+  it('marks each condition apply.ts refused, by its position, keeping text and order', () => {
+    const report = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      turn: planned({
+        conditions: [
+          { id: 'loc_a', text: '' },
+          { id: 'loc_a', text: 'burned to the ground' },
+          { id: 'loc_b', text: 'flooded to the knee' },
+        ],
+      }),
+      failures: [],
+      applied: {
+        worldTimeDelta: 0,
+        currentLocationRejected: false,
+        drops: [],
+        conditionsRejected: [0, 2],
+      },
+    })
+    expect(report?.conditions).toEqual([
+      { id: 'loc_a', text: '', rejected: true },
+      { id: 'loc_a', text: 'burned to the ground' },
+      { id: 'loc_b', text: 'flooded to the knee', rejected: true },
+    ])
+  })
+
+  it("reports the drops apply.ts applied, where they landed, never the block's own", () => {
+    const report = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      turn: planned({
+        transfers: {
+          items: [],
+          stackables: [],
+          drops: [
+            { id: 'item_a', from: 'char_a', seq: 0 },
+            { id: 'item_b', seq: 1 },
+          ],
+        },
+      }),
+      failures: [],
+      applied: {
+        worldTimeDelta: 0,
+        currentLocationRejected: false,
+        drops: [{ id: 'item_a', from: 'char_a', at: 'loc_a' }],
+        conditionsRejected: [],
+      },
+    })
+    expect(report?.transfers).toEqual({
+      items: [],
+      stackables: [],
+      drops: [{ id: 'item_a', from: 'char_a', at: 'loc_a' }],
+    })
+  })
+
+  it('leaves drops out of the report when none was applied', () => {
+    const report = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      turn: planned({
+        transfers: { items: [], stackables: [], drops: [{ id: 'item_b', seq: 0 }] },
+      }),
+      failures: [],
+      applied: {
+        worldTimeDelta: 0,
+        currentLocationRejected: false,
+        drops: [],
+        conditionsRejected: [],
+      },
+    })
+    expect(report?.transfers).toEqual({ items: [], stackables: [] })
   })
 })

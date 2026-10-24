@@ -900,11 +900,34 @@ describe('bundled per-turn template — create instructions', () => {
     expect(rendered).toContain('Apart from those handles, use only the IDs shown to you above')
   })
 
+  // piggyback.md → Trailing block format: a model copies the skeleton's order.
+  it('shows <conditions> after <visual_changes>, and <drop> inside <transfers> after <item>', () => {
+    const conditions = rendered.indexOf('<conditions>')
+    expect(conditions).toBeGreaterThan(rendered.indexOf('</visual_changes>'))
+    expect(rendered).toContain(
+      '<entity id="ID">the place or item as it is now: keep what still applies, drop what no longer does, in a few words, never more than about 60 — it replaces the stored condition whole</entity>',
+    )
+    const item = rendered.indexOf('<item id="item ID')
+    const drop = rendered.indexOf('<drop id="item ID" from="ID" />')
+    expect(item).toBeGreaterThan(rendered.indexOf('<transfers>'))
+    expect(drop).toBeGreaterThan(item)
+    expect(drop).toBeLessThan(rendered.indexOf('</transfers>'))
+  })
+
+  it('offers a condition on both create tags', () => {
+    expect(rendered).toContain(
+      'name="the place\'s name" condition="its condition, only when the prose shows one">a short description of the place</new_location>',
+    )
+    expect(rendered).toContain(
+      'name="the item\'s name" condition="its condition, only when the prose shows one">a short description of the item</new_item>',
+    )
+  })
+
   // The parser decodes five XML entities but drops a create with malformed attributes (raw " < or >
   // in the name) or a raw < in the description, so the model must be told how to write them.
-  it("tells the model to escape a double quote, < or > in a create's name and a < in its description", () => {
+  it("tells the model to escape a double quote, < or > in a create's name or condition and a < in its description", () => {
     expect(rendered).toContain(
-      "Write a double quote, < or > inside a create's name as &quot;, &lt; or &gt;, and a < inside its description as &lt;.",
+      "Write a double quote, < or > inside a create's name or condition as &quot;, &lt; or &gt;, and a < inside its description as &lt;.",
     )
   })
 
@@ -929,6 +952,9 @@ describe('bundled per-turn template — create instructions', () => {
     expect(off).not.toContain('Create a place only when')
     expect(off).not.toContain('could contain it')
     expect(off).not.toContain('&quot;')
+    expect(off).not.toContain('<conditions>')
+    expect(off).not.toContain('<drop')
+    expect(off).not.toContain('Put an item down only when')
   })
 })
 

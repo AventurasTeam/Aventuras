@@ -1,36 +1,90 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseStateBlock, parseSuggestionsBlock, stripTrailingBlocks } from '@/lib/piggyback'
+import {
+  parseStateBlock,
+  parseSuggestionsBlock,
+  stripTrailingBlocks,
+  type ParsedStateBlock,
+} from '@/lib/piggyback'
 
 import { hasStateContent, renderNarrative, renderStateBlock } from './tagged-block'
 
 describe('renderStateBlock', () => {
   it('round-trips every field through the app parser', () => {
-    const raw = renderStateBlock({
+    const state: ParsedStateBlock = {
       sceneEntities: ['c1', 'c2'],
-      currentLocation: 'l1',
+      newLocations: [
+        {
+          handle: 'new:docks',
+          name: 'the "Salt" Docks & Pier',
+          description: 'a pier <rotting> fast',
+          parent: 'l1',
+          condition: 'half under water',
+        },
+      ],
+      currentLocation: 'new:docks',
       worldTimeDelta: 300,
       visualChanges: [{ id: 'c1', type: 'attire', text: 'a rain-dark cloak' }],
+      conditions: [{ id: 'l1', text: 'flooded to the knee' }],
+      newItems: [
+        {
+          handle: 'new:key',
+          name: 'rusted key',
+          description: 'an iron key',
+          condition: 'bent > straight',
+        },
+      ],
       transfers: {
-        items: [{ id: 'i1', slot: 'inventory', to: 'c1', from: 'c2' }],
+        items: [
+          { id: 'new:key', slot: 'inventory', to: 'c1', seq: 0 },
+          { id: 'i1', slot: 'inventory', to: 'c1', from: 'c2', seq: 2 },
+        ],
         stackables: [{ key: 'gold', amount: 5, from: 'c1' }],
+        drops: [{ id: 'i2', from: 'c1', seq: 1 }],
       },
       summary: 'Kael takes the cloak and pays for passage.',
-    })
+      retrievalQueries: ['the salt docks', 'who forged the key'],
+    }
 
-    const { block, failures, blockFound } = parseStateBlock(raw)
+    const { block, failures, blockFound, malformedCreates } = parseStateBlock(
+      renderStateBlock(state),
+    )
 
     expect(blockFound).toBe(true)
     expect(failures).toEqual([])
-    expect(block.sceneEntities).toEqual(['c1', 'c2'])
-    expect(block.currentLocation).toBe('l1')
-    expect(block.worldTimeDelta).toBe(300)
-    expect(block.visualChanges).toEqual([{ id: 'c1', type: 'attire', text: 'a rain-dark cloak' }])
-    expect(block.transfers).toEqual({
-      items: [{ id: 'i1', slot: 'inventory', to: 'c1', from: 'c2' }],
-      stackables: [{ key: 'gold', amount: 5, from: 'c1' }],
+    expect(malformedCreates).toBe(0)
+    expect(block).toEqual(state)
+  })
+
+  // An authored response (validate.ts) gives its moves no order.
+  it("renders an authored block's moves in list order, its drops after its item moves", () => {
+    const raw = renderStateBlock({
+      transfers: {
+        items: [
+          { id: 'i1', slot: 'inventory', to: 'c1' },
+          { id: 'i2', slot: 'inventory', to: 'c1' },
+        ],
+        stackables: [],
+        drops: [{ id: 'i1', from: 'c1' }],
+      },
     })
-    expect(block.summary).toBe('Kael takes the cloak and pays for passage.')
+    expect(parseStateBlock(raw).block.transfers).toEqual({
+      items: [
+        { id: 'i1', slot: 'inventory', to: 'c1', seq: 0 },
+        { id: 'i2', slot: 'inventory', to: 'c1', seq: 1 },
+      ],
+      stackables: [],
+      drops: [{ id: 'i1', from: 'c1', seq: 2 }],
+    })
+  })
+
+  // The parser's text pattern is `[^<]*`, so an angle bracket typed into a condition would fail it.
+  it('drops angle brackets from a condition so the field still parses', () => {
+    const { block, failures } = parseStateBlock(
+      renderStateBlock({ conditions: [{ id: 'l1', text: 'a <rotting> pier' }] }),
+    )
+    expect(failures).toEqual([])
+    expect(block.conditions).toEqual([{ id: 'l1', text: 'a rotting pier' }])
   })
 
   it('omits empty collections rather than emitting a tag the parser reads as truncated', () => {
@@ -38,7 +92,7 @@ describe('renderStateBlock', () => {
       worldTimeDelta: 0,
       sceneEntities: [],
       visualChanges: [],
-      transfers: { items: [], stackables: [] },
+      transfers: { items: [], stackables: [], drops: [] },
     })
 
     expect(raw).not.toContain('<visual_changes>')
@@ -85,9 +139,9 @@ describe('renderStateBlock', () => {
 describe('hasStateContent', () => {
   it('is false for an all-empty block and true once any field carries content', () => {
     expect(hasStateContent(undefined)).toBe(false)
-    expect(hasStateContent({ sceneEntities: [], transfers: { items: [], stackables: [] } })).toBe(
-      false,
-    )
+    expect(
+      hasStateContent({ sceneEntities: [], transfers: { items: [], stackables: [], drops: [] } }),
+    ).toBe(false)
     expect(hasStateContent({ worldTimeDelta: 0 })).toBe(true)
     expect(hasStateContent({ summary: 'something happened' })).toBe(true)
   })

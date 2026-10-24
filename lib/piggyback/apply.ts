@@ -3,8 +3,9 @@ import type { CharacterState, Entity, EntryMetadata, ItemState } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import { foldStackables } from '@/lib/keyword-terms'
 
+import { boundStateText } from './bound-text'
 import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from './scene-tracking'
-import { MAX_RETRIEVAL_QUERIES, VISUAL_TEXT_MAX, type PlannedTurn } from './types'
+import { MAX_RETRIEVAL_QUERIES, type ItemDrop, type ItemTransfer, type PlannedTurn } from './types'
 import { resolvePiggybackWorldTimeDelta } from './world-time'
 
 // Two producers write this field; only the tagged-block parser filters itself (trims,
@@ -13,38 +14,6 @@ import { resolvePiggybackWorldTimeDelta } from './world-time'
 function normalizeRetrievalQueries(queries: readonly string[]): string[] {
   const distinct = new Set(queries.map((q) => q.trim()).filter((q) => q !== ''))
   return [...distinct].slice(0, MAX_RETRIEVAL_QUERIES)
-}
-
-const CJK_CLAUSE_MARKS = '。、，；！？'
-const SENTENCE_ENDS = '.。！？'
-
-// Both producers arrive here uncapped. An over-long note fails the whole-state re-validation of
-// every later updateEntity carrying `state`, a delete's ref clear among them. piggyback.md →
-// Trailing block format: cut back to the last sentence or clause boundary in the bound's second
-// half, else the last whitespace there, else mid-word. By UTF-16 unit (Zod's `.length`), never
-// mid-surrogate.
-function truncateVisualText(text: string): string {
-  if (text.length <= VISUAL_TEXT_MAX) return text
-  const head = text.slice(0, VISUAL_TEXT_MAX)
-  // Below the midpoint a cut drops half the bound or more, too much to pay for a cleaner one.
-  const floor = VISUAL_TEXT_MAX / 2
-  // An ASCII mark ends a clause only where whitespace follows it ("1.8 m" has none); CJK text
-  // puts no whitespace after its marks.
-  let clause = -1
-  for (let i = head.length - 1; i >= floor && clause < 0; i--) {
-    const mark = head[i]!
-    if (CJK_CLAUSE_MARKS.includes(mark) || ('.;,'.includes(mark) && /\s/.test(text[i + 1]!)))
-      clause = i
-  }
-  const atClause =
-    clause < 0 ? '' : head.slice(0, SENTENCE_ENDS.includes(head[clause]!) ? clause + 1 : clause)
-  if (atClause.trim() !== '') return atClause.trimEnd()
-  // Whitespace just past the bound still ends the head's last word.
-  const space = text.slice(0, VISUAL_TEXT_MAX + 1).search(/\s\S*$/)
-  const atSpace = space < floor ? '' : head.slice(0, space).trimEnd()
-  if (atSpace !== '') return atSpace
-  const lastUnit = head.charCodeAt(head.length - 1)
-  return lastUnit >= 0xd800 && lastUnit <= 0xdbff ? head.slice(0, -1) : head
 }
 
 type PreviousMetadata = {
@@ -60,6 +29,8 @@ type BuildArgs = {
    *  can change hands. */
   turn: PlannedTurn
   entities: readonly Entity[]
+  /** The rows the prompt showed with their state (generation-context.ts): a condition names one. */
+  stateShownIds: ReadonlySet<string>
   previousMetadata: PreviousMetadata
   branchId: string
   // Caller-supplied, not hardcoded: the two producers are distinct agents whose deltas'
@@ -69,6 +40,10 @@ type BuildArgs = {
   log: Logger
 }
 
+type AppliedDrop = { id: string; from?: string; at: string | null }
+
+type Move = { seq: number; item: ItemTransfer } | { seq: number; drop: ItemDrop }
+
 type BuildResult = {
   metadata: Pick<
     EntryMetadata,
@@ -77,11 +52,18 @@ type BuildResult = {
   actions: PipelineAction[]
   /** What validation did to the emitted values, for stateReport — so the reader renders
    *  the emitted-vs-applied divergence as fact instead of inferring a cause from it. */
-  applied: { worldTimeDelta: number; currentLocationRejected: boolean }
+  applied: {
+    worldTimeDelta: number
+    currentLocationRejected: boolean
+    /** The drops applied, in the block's order, each where it landed: null with no scene place. */
+    drops: AppliedDrop[]
+    /** Positions in `block.conditions` refused, not ids: an id can repeat in one block. */
+    conditionsRejected: number[]
+  }
 }
 
 export function buildPiggybackActions(args: BuildArgs): BuildResult {
-  const { entryId, previousMetadata, branchId, source, log } = args
+  const { entryId, previousMetadata, branchId, source, log, stateShownIds } = args
   const { block, createdRows, reusedIds } = args.turn
   const entities = [...args.entities, ...createdRows]
 
@@ -165,9 +147,9 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   // Visual changes
   for (const note of block.visualChanges ?? []) {
     if (isCharacter(note.id)) {
-      const text = truncateVisualText(note.text)
+      const { text, cut } = boundStateText(note.text)
       // The writer is asked for about 60 words; a cut says it overran the 500-character bound.
-      if (text !== note.text)
+      if (cut)
         log.warn('classifier.visual_truncated', {
           entryId,
           source,
@@ -188,7 +170,44 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     }
   }
 
-  // Item transfers
+  // data-model.md → Authorship contract (seen before written): only shown places and items.
+  const conditionsRejected: number[] = []
+  for (const [position, change] of (block.conditions ?? []).entries()) {
+    const condition = change.text.trim()
+    if (condition === '') {
+      conditionsRejected.push(position)
+      continue
+    }
+    const row = byId.get(change.id)
+    const shown = stateShownIds.has(change.id)
+    if (!shown || (row?.kind !== 'location' && row?.kind !== 'item')) {
+      log.warn('classifier.condition_unseen', {
+        entryId,
+        source,
+        entityId: change.id,
+        kind: row?.kind ?? null,
+        shown,
+      })
+      conditionsRejected.push(position)
+      continue
+    }
+    const { text, cut } = boundStateText(condition)
+    if (cut)
+      log.warn('classifier.condition_truncated', {
+        entryId,
+        source,
+        entityId: change.id,
+        length: condition.length,
+        keptLength: text.length,
+      })
+    actions.push({
+      kind: 'updateEntityCondition',
+      source,
+      payload: { branchId, id: change.id, condition: text },
+    })
+  }
+
+  // In the block's order: taken then put down lies at the scene; put down then taken is held.
   const inventoryPatches = new Map<string, { equipped_items?: string[]; inventory?: string[] }>()
   const currentInventory = (id: string): { equipped_items: string[]; inventory: string[] } => {
     const state = byId.get(id)?.state as CharacterState | undefined
@@ -211,8 +230,14 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     const cur = currentInventory(holderId)
     return cur.equipped_items.includes(itemId) || cur.inventory.includes(itemId)
   }
-  const pickedUp = new Set<string>()
-  for (const item of block.transfers?.items ?? []) {
+  // Where each item the block moves ends up; a write goes out only where that differs from its row.
+  const positions = new Map<string, string | null>()
+  const storedPosition = (itemId: string): string | null =>
+    (byId.get(itemId)?.state as ItemState | null | undefined)?.at_location_id ?? null
+  const positionOf = (itemId: string): string | null =>
+    positions.has(itemId) ? (positions.get(itemId) ?? null) : storedPosition(itemId)
+
+  const take = (item: ItemTransfer) => {
     if (item.from !== undefined && isCharacter(item.from)) release(item.from, item.id)
     if (item.to !== undefined && isCharacter(item.to)) {
       // data-model.md → ItemState: an item has one position, so taking it moves it from
@@ -225,8 +250,65 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
         [other]: cur[other].filter((i) => i !== item.id),
         [item.slot]: [...cur[item.slot].filter((i) => i !== item.id), item.id],
       } as { equipped_items: string[]; inventory: string[] })
-      pickedUp.add(item.id)
+      positions.set(item.id, null)
     }
+  }
+
+  const drops: AppliedDrop[] = []
+  // Someone who left this turn can still have put it down before going.
+  const nearScene = new Set([...sceneEntities, ...previousMetadata.sceneEntities])
+  // piggyback.md → Trailing block format: a drop lands where the scene is; elsewhere stays prose.
+  const putDown = (drop: ItemDrop) => {
+    if (byId.get(drop.id)?.kind !== 'item') return
+    const holders = entities.filter((holder) => holds(holder.id, drop.id)).map((h) => h.id)
+    if (holders.length > 0 && !holders.some((id) => nearScene.has(id))) {
+      log.warn('classifier.drop_dropped', {
+        entryId,
+        source,
+        itemId: drop.id,
+        reason: 'off_scene',
+        holderIds: holders,
+      })
+      return
+    }
+    const lyingAt = positionOf(drop.id)
+    if (holders.length === 0 && lyingAt !== null && lyingAt !== currentLocationId) {
+      log.warn('classifier.drop_dropped', {
+        entryId,
+        source,
+        itemId: drop.id,
+        reason: 'elsewhere',
+        atLocationId: lyingAt,
+      })
+      return
+    }
+    for (const holderId of holders) release(holderId, drop.id)
+    if (currentLocationId === null)
+      log.warn('classifier.drop_unplaced', { entryId, source, itemId: drop.id })
+    else if (holders.length === 0 && lyingAt === currentLocationId)
+      log.debug('classifier.drop_unchanged', {
+        entryId,
+        source,
+        itemId: drop.id,
+        atLocationId: lyingAt,
+      })
+    positions.set(drop.id, currentLocationId)
+    drops.push({
+      id: drop.id,
+      ...(drop.from !== undefined ? { from: drop.from } : {}),
+      at: currentLocationId,
+    })
+  }
+
+  // `seq` is unchecked producer output; the sort is stable, so a repeated seq keeps list order,
+  // item moves before drops, as keptItemHandles reads a tie.
+  const moves: Move[] = [
+    ...(block.transfers?.items ?? []).map((item) => ({ seq: item.seq, item })),
+    ...(block.transfers?.drops ?? []).map((drop) => ({ seq: drop.seq, drop })),
+  ].sort((a, b) => a.seq - b.seq)
+  for (const move of moves) {
+    if ('item' in move) take(move.item)
+    else putDown(move.drop)
   }
   for (const [id, patch] of inventoryPatches) {
     if (isCharacter(id)) {
@@ -237,13 +319,12 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
       })
     }
   }
-  for (const id of pickedUp) {
-    const item = byId.get(id)
-    if (item?.kind === 'item' && (item.state as ItemState).at_location_id != null)
+  for (const [id, atLocationId] of positions) {
+    if (byId.get(id)?.kind === 'item' && storedPosition(id) !== atLocationId)
       actions.push({
         kind: 'updateItemPosition',
         source,
-        payload: { branchId, id, atLocationId: null },
+        payload: { branchId, id, atLocationId },
       })
   }
 
@@ -294,5 +375,9 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     }
   }
 
-  return { metadata, actions, applied: { worldTimeDelta: appliedDelta, currentLocationRejected } }
+  return {
+    metadata,
+    actions,
+    applied: { worldTimeDelta: appliedDelta, currentLocationRejected, drops, conditionsRejected },
+  }
 }

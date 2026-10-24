@@ -40,9 +40,11 @@ describe('substitutePiggybackIds', () => {
         sceneEntities: ['c1', 'c2'],
         currentLocation: 'l1',
         visualChanges: [{ id: 'c2', type: 'attire', text: 'a cloak' }],
+        conditions: [{ id: 'l1', text: 'flooded to the knee' }],
         transfers: {
-          items: [{ id: 'i1', slot: 'inventory', to: 'c1', from: 'c2' }],
+          items: [{ id: 'i1', slot: 'inventory', to: 'c1', from: 'c2', seq: 0 }],
           stackables: [{ key: 'gold', amount: 5, to: 'c1' }],
+          drops: [{ id: 'i1', from: 'c1', seq: 1 }],
         },
       }),
       idMap,
@@ -63,6 +65,7 @@ describe('substitutePiggybackIds', () => {
           text: 'a cloak',
         },
       ],
+      conditions: [{ id: 'loc_00000000-0000-4000-8000-000000000003', text: 'flooded to the knee' }],
       transfers: {
         items: [
           {
@@ -70,9 +73,17 @@ describe('substitutePiggybackIds', () => {
             slot: 'inventory',
             to: 'char_00000000-0000-4000-8000-000000000001',
             from: 'char_00000000-0000-4000-8000-000000000002',
+            seq: 0,
           },
         ],
         stackables: [{ key: 'gold', amount: 5, to: 'char_00000000-0000-4000-8000-000000000001' }],
+        drops: [
+          {
+            id: 'item_00000000-0000-4000-8000-000000000004',
+            from: 'char_00000000-0000-4000-8000-000000000001',
+            seq: 1,
+          },
+        ],
       },
     })
   })
@@ -148,13 +159,29 @@ describe('substitutePiggybackIds', () => {
     const idMap = mapWith(['char_00000000-0000-4000-8000-000000000001'])
     const result = substitutePiggybackIds(
       assumeNormalized({
-        transfers: { items: [{ id: 'i9', slot: 'inventory', to: 'c1' }], stackables: [] },
+        transfers: {
+          items: [{ id: 'i9', slot: 'inventory', to: 'c1', seq: 0 }],
+          stackables: [],
+          drops: [],
+        },
       }),
       idMap,
       FAIL,
     )
     expect(result.block.transfers).toBeUndefined()
     expect(result.failures).toEqual([{ field: 'transfers', detail: expect.any(String) }])
+  })
+
+  it('fails conditions on an unresolvable id, leaving the other fields', () => {
+    const idMap = mapWith(['char_00000000-0000-4000-8000-000000000001'])
+    const result = substitutePiggybackIds(
+      assumeNormalized({ sceneEntities: ['c1'], conditions: [{ id: 'l9', text: 'burned' }] }),
+      idMap,
+      FAIL,
+    )
+    expect(result.block.conditions).toBeUndefined()
+    expect(result.block.sceneEntities).toEqual(['char_00000000-0000-4000-8000-000000000001'])
+    expect(result.failures).toEqual([{ field: 'conditions', detail: expect.any(String) }])
   })
 })
 
@@ -174,7 +201,11 @@ describe('substitutePiggybackIds with creates', () => {
         newItems: [key],
         sceneEntities: ['c1', 'new:key'],
         currentLocation: 'new:docks',
-        transfers: { items: [{ id: 'new:key', slot: 'inventory', to: 'c1' }], stackables: [] },
+        transfers: {
+          items: [{ id: 'new:key', slot: 'inventory', to: 'c1', seq: 0 }],
+          stackables: [],
+          drops: [{ id: 'new:key', from: 'c1', seq: 1 }],
+        },
       }),
       idMap(),
       FAIL,
@@ -182,7 +213,10 @@ describe('substitutePiggybackIds with creates', () => {
     expect(result.failures).toEqual([])
     expect(result.block.sceneEntities).toEqual([CHAR, 'new:key'])
     expect(result.block.currentLocation).toBe('new:docks')
-    expect(result.block.transfers?.items).toEqual([{ id: 'new:key', slot: 'inventory', to: CHAR }])
+    expect(result.block.transfers?.items).toEqual([
+      { id: 'new:key', slot: 'inventory', to: CHAR, seq: 0 },
+    ])
+    expect(result.block.transfers?.drops).toEqual([{ id: 'new:key', from: CHAR, seq: 1 }])
   })
 
   it('unwraps a bracketed handle like a bracketed placeholder', () => {
@@ -200,7 +234,13 @@ describe('substitutePiggybackIds with creates', () => {
     ['currentLocation', { currentLocation: 'new:ghost' }],
     [
       'transfers',
-      { transfers: { items: [{ id: 'new:ghost', slot: 'inventory', to: 'c1' }], stackables: [] } },
+      {
+        transfers: {
+          items: [{ id: 'new:ghost', slot: 'inventory', to: 'c1', seq: 0 }],
+          stackables: [],
+          drops: [],
+        },
+      },
     ],
   ]
   it.each(undeclared)('fails %s on a handle no create declares', (field, refs) => {
@@ -213,31 +253,58 @@ describe('substitutePiggybackIds with creates', () => {
     expect(result.failures).toEqual([{ field, detail: expect.any(String) }])
   })
 
+  it('fails transfers on a drop naming a handle no create declares', () => {
+    const result = substitutePiggybackIds(
+      assumeNormalized({
+        newItems: [key],
+        transfers: { items: [], stackables: [], drops: [{ id: 'new:ghost', seq: 0 }] },
+      }),
+      idMap(),
+      FAIL,
+    )
+    expect(result.block.transfers).toBeUndefined()
+    expect(result.failures).toEqual([{ field: 'transfers', detail: expect.any(String) }])
+  })
+
   it('refuses a declared handle as a transfer holder or a visual change target', () => {
     const result = substitutePiggybackIds(
       assumeNormalized({
         newItems: [key],
         visualChanges: [{ id: 'new:key', type: 'attire', text: 'rusted' }],
-        transfers: { items: [{ id: 'i1', slot: 'inventory', to: 'new:key' }], stackables: [] },
+        conditions: [{ id: 'new:key', text: 'rusted' }],
+        transfers: {
+          items: [{ id: 'i1', slot: 'inventory', to: 'new:key', seq: 0 }],
+          stackables: [],
+          drops: [],
+        },
       }),
       idMap(),
       FAIL,
     )
     expect(result.block.visualChanges).toBeUndefined()
+    expect(result.block.conditions).toBeUndefined()
     expect(result.block.transfers).toBeUndefined()
-    expect(result.failures.map((f) => f.field)).toEqual(['visualChanges', 'transfers'])
+    expect(result.failures.map((f) => f.field)).toEqual([
+      'visualChanges',
+      'conditions',
+      'transfers',
+    ])
   })
 
   it.each([
     [
       'an item transfer from',
-      { items: [{ id: 'i1', slot: 'inventory' as const, from: 'new:key' }] },
+      { items: [{ id: 'i1', slot: 'inventory' as const, from: 'new:key', seq: 0 }] },
     ],
+    ['a drop from', { drops: [{ id: 'i1', from: 'new:key', seq: 0 }] }],
     ['a stackable to', { stackables: [{ key: 'gold', amount: 1, to: 'new:key' }] }],
     ['a stackable from', { stackables: [{ key: 'gold', amount: 1, from: 'new:key' }] }],
   ])('refuses a declared handle in %s', (_label, partial) => {
     const result = substitutePiggybackIds(
-      assumeNormalized({ newItems: [key], transfers: { items: [], stackables: [], ...partial } }),
+      assumeNormalized({
+        newItems: [key],
+        transfers: { items: [], stackables: [], drops: [], ...partial },
+      }),
       idMap(),
       FAIL,
     )
@@ -307,7 +374,7 @@ describe('substitutePiggybackIds — kinds', () => {
   const opts = (badRef: 'fail' | 'drop') => ({ entities: ROWS, badRef })
   const docks = { handle: 'new:docks', name: 'the Docks', description: 'a pier', parent: 'l1' }
   const key = { handle: 'new:key', name: 'rusted key', description: 'an iron key' }
-  const toHero = (id: string) => ({ id, slot: 'inventory' as const, to: 'c1' })
+  const toHero = (id: string, seq = 0) => ({ id, slot: 'inventory' as const, to: 'c1', seq })
 
   const notItems: [string, string, string, Entity['kind'] | null][] = [
     ["a new place's handle", 'new:docks', 'new:docks', 'location'],
@@ -321,8 +388,9 @@ describe('substitutePiggybackIds — kinds', () => {
       newItems: [key],
       currentLocation: 'new:docks',
       transfers: {
-        items: [toHero('new:key'), toHero(ref), toHero('i1')],
+        items: [toHero('new:key', 0), toHero(ref, 1), toHero('i1', 2)],
         stackables: [{ key: 'gold', amount: 5, to: 'c1' }],
+        drops: [],
       },
     })
 
@@ -337,10 +405,11 @@ describe('substitutePiggybackIds — kinds', () => {
 
   const keptTransfers = {
     items: [
-      { id: 'new:key', slot: 'inventory', to: CHAR },
-      { id: ITEM, slot: 'inventory', to: CHAR },
+      { id: 'new:key', slot: 'inventory', to: CHAR, seq: 0 },
+      { id: ITEM, slot: 'inventory', to: CHAR, seq: 2 },
     ],
     stackables: [{ key: 'gold', amount: 5, to: CHAR }],
+    drops: [],
   }
 
   it.each(notItems)(
@@ -350,16 +419,55 @@ describe('substitutePiggybackIds — kinds', () => {
       expect(result.failures).toEqual([])
       expect(result.block.transfers).toEqual(keptTransfers)
       expect(result.droppedTransfers).toEqual([
-        { transfer: toHero(ref), detail: expect.stringContaining('not an item') },
+        { transfer: toHero(ref, 1), detail: expect.stringContaining('not an item') },
       ])
     },
   )
 
+  // A drop's item is resolved and kind-checked as an item transfer's is.
+  const dropping = (ref: string) =>
+    assumeNormalized({
+      newLocations: [docks],
+      newItems: [key],
+      currentLocation: 'new:docks',
+      transfers: {
+        items: [toHero('new:key', 0)],
+        stackables: [],
+        drops: [
+          { id: ref, seq: 1 },
+          { id: 'i1', from: 'c1', seq: 2 },
+        ],
+      },
+    })
+
+  it.each(notItems)('fails transfers on %s as a drop’s item when wrong refs fail', (_l, ref) => {
+    const result = substitutePiggybackIds(dropping(ref), idMap(), opts('fail'))
+    expect(result.block.transfers).toBeUndefined()
+    expect(result.failures).toEqual([
+      { field: 'transfers', detail: expect.stringContaining('not an item') },
+    ])
+  })
+
+  it.each(notItems)('drops only the drop naming %s when wrong refs drop', (_l, ref) => {
+    const result = substitutePiggybackIds(dropping(ref), idMap(), opts('drop'))
+    expect(result.failures).toEqual([])
+    expect(result.block.transfers).toEqual({
+      items: [{ id: 'new:key', slot: 'inventory', to: CHAR, seq: 0 }],
+      stackables: [],
+      drops: [{ id: ITEM, from: CHAR, seq: 2 }],
+    })
+    expect(result.droppedTransfers).toEqual([
+      { transfer: { id: ref, seq: 1 }, detail: expect.stringContaining('not an item') },
+    ])
+  })
+
   // One transfer's bad ref, beside a transfer list that otherwise resolves.
   const unresolved: [string, Partial<ParsedTransfers>, string][] = [
-    ['an unknown item id', { items: [toHero('i9')] }, 'i9'],
-    ['an undeclared handle as the item', { items: [toHero('new:ghost')] }, 'new:ghost'],
-    ['an unknown holder', { items: [{ id: 'i1', slot: 'inventory', from: 'c9' }] }, 'c9'],
+    ['an unknown item id', { items: [toHero('i9', 1)] }, 'i9'],
+    ['an undeclared handle as the item', { items: [toHero('new:ghost', 1)] }, 'new:ghost'],
+    ['an unknown holder', { items: [{ id: 'i1', slot: 'inventory', from: 'c9', seq: 1 }] }, 'c9'],
+    ['an unknown dropped item', { drops: [{ id: 'i9', seq: 1 }] }, 'i9'],
+    ['an unknown drop holder', { drops: [{ id: 'i1', from: 'c9', seq: 1 }] }, 'c9'],
     ['an unknown stackable holder', { stackables: [{ key: 'silver', amount: 2, to: 'c9' }] }, 'c9'],
     [
       'a handle as a stackable holder',
@@ -372,10 +480,11 @@ describe('substitutePiggybackIds — kinds', () => {
     block.transfers?.items.splice(1, 1)
     block.transfers?.items.push(...(bad.items ?? []))
     block.transfers?.stackables.push(...(bad.stackables ?? []))
+    block.transfers?.drops.push(...(bad.drops ?? []))
     return block
   }
   const badTransfer = (bad: Partial<ParsedTransfers>) =>
-    [...(bad.items ?? []), ...(bad.stackables ?? [])][0]
+    [...(bad.items ?? []), ...(bad.stackables ?? []), ...(bad.drops ?? [])][0]
 
   it.each(unresolved)('drops only a transfer with %s when wrong refs drop', (_l, bad, ref) => {
     const result = substitutePiggybackIds(withBad(bad), idMap(), opts('drop'))

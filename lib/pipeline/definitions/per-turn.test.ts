@@ -2212,6 +2212,241 @@ describe('narrative fold — creates', () => {
     expect(await storedEntry(USER_ACTION_ID)).toBeDefined()
   })
 
+  // piggyback.md → Parse strategy and failure recovery: a failed fold that can't use its own place
+  // holds its drops back, so the item is still held when the fallback puts it down there.
+  describe('a fold with a drop', () => {
+    const SWORD = 'item_00000000-0000-4000-8000-0000000000b2'
+    const swordWorld = (): Entity[] => [
+      worldRow({
+        id: HERO,
+        kind: 'character',
+        name: 'Aria',
+        state: { ...emptyEntityState('character'), current_location_id: TOWN, inventory: [SWORD] },
+      }),
+      worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }),
+      worldRow({ id: SWORD, kind: 'item', name: 'worn sword', state: { at_location_id: null } }),
+    ]
+    // c1 HERO, l1 TOWN; the sword, the one item, is i1. A delta of `soon` fails the parse.
+    const dropReply = (delta: string) =>
+      'Aria walks down to the docks and sets her sword on a crate.\n<state><scene_entities>c1</scene_entities>' +
+      '<new_location handle="new:docks" parent="l1" name="Smuggler Docks">a rotting pier</new_location>' +
+      '<current_location>new:docks</current_location>' +
+      '<transfers><drop id="i1" from="c1" /></transfers>' +
+      `<world_time_delta>${delta}</world_time_delta></state>`
+
+    it('a parsed fold puts the item down at the place it creates', async () => {
+      await seedTurn(swordWorld())
+      const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+      const { events, intermediates } = await foldTurn(dropReply('30'), { log })
+      expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: true })
+      await applyEvents(events)
+      const [docks] = createdEntities(events)
+      if (!docks) throw new Error('expected the docks create')
+      const rows = await branchRows()
+      expect(rows.find((r) => r.id === SWORD)?.state).toEqual({ at_location_id: docks.id })
+      expect(rows.find((r) => r.id === HERO)?.state).toMatchObject({
+        current_location_id: docks.id,
+        equipped_items: [],
+        inventory: [],
+      })
+      expect(replyOf(events).metadata?.stateReport?.transfers?.drops).toEqual([
+        { id: SWORD, from: HERO, at: docks.id },
+      ])
+      expect(log.debug).not.toHaveBeenCalledWith('classifier.drops_held', expect.anything())
+    })
+
+    async function failedFold(reply = dropReply('soon')) {
+      await seedTurn(swordWorld())
+      const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+      const fold = await foldTurn(reply, { log })
+      expect(fold.intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: false })
+      await applyEvents(fold.events)
+      return { ...fold, log, replyId: replyOf(fold.events).id }
+    }
+
+    async function fallbackReplies(
+      fold: { intermediates: Record<string, unknown> },
+      reply: unknown,
+    ) {
+      generateStructuredMock.mockResolvedValueOnce(reply)
+      const fallback = await drain(phaseAt(3)(phaseCtx(fold.intermediates)))
+      await applyEvents(fallback.events)
+      return fallback.events
+    }
+
+    it('a failed fold leaves the item to the fallback, which puts it down where it moves', async () => {
+      const fold = await failedFold()
+      expect(
+        fold.events.filter(
+          (e) =>
+            e.type === 'delta_emitted' &&
+            (e.action.kind === 'updateItemPosition' || e.action.kind === 'updateEntityInventory'),
+        ),
+      ).toEqual([])
+      expect(replyOf(fold.events).metadata?.stateReport?.transfers?.drops).toBeUndefined()
+      expect(fold.log.debug).toHaveBeenCalledWith('classifier.drops_held', {
+        entryId: fold.replyId,
+        itemIds: [SWORD],
+      })
+
+      const events = await fallbackReplies(fold, {
+        status: 'ok',
+        value: fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          newLocations: [
+            {
+              handle: 'new:docks',
+              name: 'Smuggler Docks',
+              description: 'a rotting pier',
+              parent: 'l1',
+            },
+          ],
+          currentLocation: 'new:docks',
+          worldTimeDelta: 30,
+          transfers: { items: [], stackables: [], drops: [{ id: 'i1', from: 'c1' }] },
+        }),
+      })
+      const [docks] = createdEntities(events)
+      if (!docks) throw new Error('expected the docks create')
+      const rows = await branchRows()
+      expect(rows.find((r) => r.id === SWORD)?.state).toEqual({ at_location_id: docks.id })
+      expect(rows.find((r) => r.id === HERO)?.state).toMatchObject({
+        current_location_id: docks.id,
+        equipped_items: [],
+        inventory: [],
+      })
+      expect((await storedEntry(fold.replyId))?.metadata?.stateReport?.transfers?.drops).toEqual([
+        { id: SWORD, from: HERO, at: docks.id },
+      ])
+    })
+
+    // Accepted, as for its creates: nothing else puts the item down.
+    it.each([
+      [
+        'a fallback reply without the drop',
+        {
+          status: 'ok',
+          value: fallbackClassifierSchema.parse({ sceneEntities: ['c1'], worldTimeDelta: 30 }),
+        },
+      ],
+      ['a failed fallback call', { status: 'failed', detail: 'LLM error' }],
+    ])(
+      'a failed fold leaves the item held after %s, with no drop on the record',
+      async (_label, reply) => {
+        const fold = await failedFold()
+        await fallbackReplies(fold, reply)
+        const rows = await branchRows()
+        expect(rows.find((r) => r.id === SWORD)?.state).toEqual({ at_location_id: null })
+        expect(rows.find((r) => r.id === HERO)?.state).toMatchObject({ inventory: [SWORD] })
+        const final = (await storedEntry(fold.replyId))?.metadata?.stateReport
+        expect(final?.failedFields?.map((f) => f.field)).toContain('worldTimeDelta')
+        expect(final?.transfers?.drops).toBeUndefined()
+      },
+    )
+
+    const docksFallback = {
+      status: 'ok',
+      value: fallbackClassifierSchema.parse({
+        sceneEntities: ['c1'],
+        newLocations: [
+          {
+            handle: 'new:docks',
+            name: 'Smuggler Docks',
+            description: 'a rotting pier',
+            parent: 'l1',
+          },
+        ],
+        currentLocation: 'new:docks',
+        worldTimeDelta: 30,
+        transfers: { items: [], stackables: [], drops: [{ id: 'i1', from: 'c1' }] },
+      }),
+    }
+
+    it('a failed fold whose location field failed leaves the item to the fallback', async () => {
+      const fold = await failedFold(
+        'Aria walks on and sets her sword on a crate.\n<state><scene_entities>c1</scene_entities>' +
+          '<current_location>l9</current_location>' +
+          '<transfers><drop id="i1" from="c1" /></transfers>' +
+          '<world_time_delta>30</world_time_delta></state>',
+      )
+      expect(replyOf(fold.events).metadata?.stateReport?.failedFields?.map((f) => f.field)).toEqual(
+        ['currentLocation'],
+      )
+      expect(replyOf(fold.events).metadata?.stateReport?.transfers?.drops).toBeUndefined()
+      expect(fold.log.debug).toHaveBeenCalledWith('classifier.drops_held', {
+        entryId: fold.replyId,
+        itemIds: [SWORD],
+      })
+      const events = await fallbackReplies(fold, docksFallback)
+      const [docks] = createdEntities(events)
+      if (!docks) throw new Error('expected the docks create')
+      expect((await branchRows()).find((r) => r.id === SWORD)?.state).toEqual({
+        at_location_id: docks.id,
+      })
+    })
+
+    // A new item's drop stays prose as on any skipped create; only a real item is held back.
+    it('a failed fold holds back only the drops that name a real item', async () => {
+      const fold = await failedFold(
+        dropReply('soon').replace(
+          '<transfers><drop id="i1" from="c1" /></transfers>',
+          '<new_item handle="new:rope" name="coil of rope">tarred hemp</new_item>' +
+            '<transfers><drop id="new:rope" /><drop id="i1" from="c1" /></transfers>',
+        ),
+      )
+      expect(fold.log.debug).toHaveBeenCalledWith('classifier.drop_dropped', {
+        handle: 'new:rope',
+        reason: 'not-created',
+      })
+      expect(fold.log.debug).toHaveBeenCalledWith('classifier.drops_held', {
+        entryId: fold.replyId,
+        itemIds: [SWORD],
+      })
+    })
+
+    // The fold can use its own place, or keeps the previous one for a place apply.ts rejects on any
+    // block: the drop lands now.
+    describe('a failed fold whose place stands', () => {
+      const sceneReply = (location: string, transfers: string) =>
+        'Aria sets her sword on a crate.\n<state><scene_entities>c1</scene_entities>' +
+        location +
+        `<transfers>${transfers}</transfers><world_time_delta>soon</world_time_delta></state>`
+
+      it.each([
+        ['names no location', ''],
+        ['names the scene place', '<current_location>l1</current_location>'],
+        ['names an item, which apply.ts rejects', '<current_location>i1</current_location>'],
+      ])('puts the item down at the scene when it %s', async (_label, location) => {
+        const fold = await failedFold(sceneReply(location, '<drop id="i1" from="c1" />'))
+        const rows = await branchRows()
+        expect(rows.find((r) => r.id === SWORD)?.state).toEqual({ at_location_id: TOWN })
+        expect(rows.find((r) => r.id === HERO)?.state).toMatchObject({
+          equipped_items: [],
+          inventory: [],
+        })
+        expect(replyOf(fold.events).metadata?.stateReport?.transfers?.drops).toEqual([
+          { id: SWORD, from: HERO, at: TOWN },
+        ])
+        expect(fold.log.debug).not.toHaveBeenCalledWith('classifier.drops_held', expect.anything())
+      })
+
+      it('applies a take and then a drop, so the item lies at the scene', async () => {
+        await failedFold(
+          sceneReply(
+            '',
+            '<item id="i1" to="c1" slot="equipped_items" /><drop id="i1" from="c1" />',
+          ),
+        )
+        const rows = await branchRows()
+        expect(rows.find((r) => r.id === SWORD)?.state).toEqual({ at_location_id: TOWN })
+        expect(rows.find((r) => r.id === HERO)?.state).toMatchObject({
+          equipped_items: [],
+          inventory: [],
+        })
+      })
+    })
+  })
+
   const MALFORMED =
     '<new_item handle="key" name="key">a key</new_item>' +
     '<new_location handle="new:" name="Nowhere">nothing</new_location>'
@@ -2284,6 +2519,57 @@ describe('narrative fold — creates', () => {
     const { events, result } = await foldTurn(CREATE_REPLY, { signal: controller.signal })
     expect(result).toEqual({ status: 'aborted' })
     expect(events.filter((e) => e.type === 'delta_emitted')).toEqual([])
+  })
+
+  // data-model.md → Authorship contract, seen before written: the market is listed by name only.
+  it('writes a condition only for a row its prompt showed with its state', async () => {
+    const SWORD = 'item_00000000-0000-4000-8000-0000000000b2'
+    await seedTurn([
+      worldRow({
+        id: HERO,
+        kind: 'character',
+        name: 'Aria',
+        state: {
+          ...emptyEntityState('character'),
+          current_location_id: TOWN,
+          equipped_items: [SWORD],
+        },
+      }),
+      worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }),
+      worldRow({
+        id: MARKET,
+        kind: 'location',
+        name: 'The Drowned Market',
+        state: { parent_location_id: TOWN },
+      }),
+      worldRow({ id: SWORD, kind: 'item', name: 'worn sword', state: { at_location_id: null } }),
+    ])
+    const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+    // c1 HERO, l1 TOWN and l2 MARKET (foldTurn allocates them); the sword, the one item, is i1.
+    const { events } = await foldTurn(
+      'Aria nicks the blade on the rail.\n<state><world_time_delta>5</world_time_delta>' +
+        '<conditions><entity id="i1">notched near the tip</entity>' +
+        '<entity id="l2">half under water</entity></conditions></state>',
+      { log },
+    )
+    await applyEvents(events)
+    const rows = await branchRows()
+    expect(rows.find((r) => r.id === SWORD)?.state).toEqual({
+      at_location_id: null,
+      condition: 'notched near the tip',
+    })
+    expect(rows.find((r) => r.id === MARKET)?.state).toEqual({ parent_location_id: TOWN })
+    expect(log.warn).toHaveBeenCalledWith('classifier.condition_unseen', {
+      entryId: expect.any(String),
+      source: 'piggyback_tagged_block',
+      entityId: MARKET,
+      kind: 'location',
+      shown: false,
+    })
+    expect(replyOf(events).metadata?.stateReport?.conditions).toEqual([
+      { id: SWORD, text: 'notched near the tip' },
+      { id: MARKET, text: 'half under water', rejected: true },
+    ])
   })
 })
 

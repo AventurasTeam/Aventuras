@@ -1,8 +1,23 @@
 import type { EntryMetadata } from '@/lib/db'
 
-import type { PlannedTurn } from './types'
+import type { ParsedTransfers, PlannedTurn } from './types'
 
 type StateReport = NonNullable<EntryMetadata['stateReport']>
+type ReportedTransfers = NonNullable<StateReport['transfers']>
+type ReportedDrop = NonNullable<ReportedTransfers['drops']>[number]
+
+// data-model.md → Entry metadata shape: moves as emitted, minus `seq`; each drop as apply.ts put
+// it, never the block's own.
+function reportedTransfers(
+  transfers: ParsedTransfers,
+  drops: readonly ReportedDrop[],
+): ReportedTransfers {
+  return {
+    items: transfers.items.map(({ seq, ...item }) => item),
+    stackables: transfers.stackables,
+    ...(drops.length > 0 ? { drops: [...drops] } : {}),
+  }
+}
 
 type BuildReportArgs = {
   layer: StateReport['layer']
@@ -16,7 +31,12 @@ type BuildReportArgs = {
   /** The trailing block's own text. Retained only when a field failed. */
   raw?: string
   /** What apply.ts did with the emitted values. Absent when nothing was applied. */
-  applied?: { worldTimeDelta: number; currentLocationRejected: boolean }
+  applied?: {
+    worldTimeDelta: number
+    currentLocationRejected: boolean
+    drops: readonly ReportedDrop[]
+    conditionsRejected: readonly number[]
+  }
 }
 
 /**
@@ -50,7 +70,18 @@ export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateRep
       ? { currentLocationRejected: true as const }
       : {}),
     ...(block.visualChanges !== undefined ? { visualChanges: block.visualChanges } : {}),
-    ...(block.transfers !== undefined ? { transfers: block.transfers } : {}),
+    ...(block.conditions !== undefined
+      ? {
+          conditions: block.conditions.map((condition, position) =>
+            applied?.conditionsRejected.includes(position) === true
+              ? { ...condition, rejected: true as const }
+              : condition,
+          ),
+        }
+      : {}),
+    ...(block.transfers !== undefined
+      ? { transfers: reportedTransfers(block.transfers, applied?.drops ?? []) }
+      : {}),
     ...(newLocations.length > 0 ? { newLocations } : {}),
     ...(newItems.length > 0 ? { newItems } : {}),
     ...(failures.length > 0

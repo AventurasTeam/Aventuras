@@ -1,10 +1,16 @@
 import {
+  DROP_TAG,
+  RETRIEVAL_QUERY_ITEM_TAG,
+  STATE_CREATE_TAGS,
   STATE_ROOT_TAG,
   STATE_TAGS,
   SUGGESTION_ITEM_TAG,
   SUGGESTIONS_ROOT_TAG,
   TRAILING_ROOT_TAGS,
+  type ItemDrop,
+  type ItemTransfer,
   type ParsedStateBlock,
+  type StackableTransfer,
   type SuggestionRef,
 } from '@/lib/piggyback'
 
@@ -14,16 +20,37 @@ import {
 // app's real parsers in tagged-block.test.ts, so the mock cannot serve markup
 // the app rejects.
 
+/** A move as the mock's UI authors it (validate.ts), with no order: list order stands in. */
+type AuthoredMove<T extends { seq: number }> = Omit<T, 'seq'> & { seq?: number }
+
+/** A block as authored, or as parsed back from a served reply ("Save reply as response"). */
+export type AuthoredStateBlock = Omit<ParsedStateBlock, 'transfers'> & {
+  transfers?: {
+    items: AuthoredMove<ItemTransfer>[]
+    stackables: StackableTransfer[]
+    drops?: AuthoredMove<ItemDrop>[]
+  }
+}
+
 export type NarrativeValue = {
   prose: string
-  state?: ParsedStateBlock
+  state?: AuthoredStateBlock
   suggestions?: SuggestionRef[]
 }
 
-// Dropped, not escaped (ids/enums/keys never hold them; only a create's name is entity-decoded):
-// `"` ends a value early in parseAttributes, `<`/`>` end the tag in the entry regexes' `[^>]*`.
+// Dropped, not escaped (ids/enums/keys never hold them): `"` ends a value early in
+// parseAttributes, `<`/`>` end the tag in the entry regexes' `[^>]*`.
 function attr(value: string | number): string {
   return String(value).replace(/["<>]/g, '')
+}
+
+// Round-trips the parser's entity decoding; `&` first, so an entity typed into the text survives.
+function escaped(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
 }
 
 // Segment extraction is non-greedy to the first matching close tag, so a
@@ -36,48 +63,98 @@ function tag(name: string, value: string, indent = '  '): string {
   return `${indent}<${name}>${value}</${name}>`
 }
 
-function renderVisualChanges(block: ParsedStateBlock): string | null {
-  const changes = block.visualChanges ?? []
-  if (changes.length === 0) return null
-  const rows = changes.map(
-    (c) =>
-      `    <entity id="${attr(c.id)}" type="${attr(c.type)}">${text(c.text, 'entity')}</entity>`,
-  )
-  return `  <${STATE_TAGS.visualChanges}>\n${rows.join('\n')}\n  </${STATE_TAGS.visualChanges}>`
+function list(name: string, rows: string[]): string | null {
+  return rows.length === 0 ? null : `  <${name}>\n${rows.join('\n')}\n  </${name}>`
 }
 
-function renderTransfers(block: ParsedStateBlock): string | null {
-  const items = block.transfers?.items ?? []
-  const stackables = block.transfers?.stackables ?? []
-  if (items.length === 0 && stackables.length === 0) return null
+function renderVisualChanges(block: AuthoredStateBlock): string | null {
+  return list(
+    STATE_TAGS.visualChanges,
+    (block.visualChanges ?? []).map(
+      (c) =>
+        `    <entity id="${attr(c.id)}" type="${attr(c.type)}">${text(c.text, 'entity')}</entity>`,
+    ),
+  )
+}
 
-  const rows = [
-    ...items.map((i) => {
-      const to = i.to !== undefined ? ` to="${attr(i.to)}"` : ''
-      const from = i.from !== undefined ? ` from="${attr(i.from)}"` : ''
-      return `    <item id="${attr(i.id)}" slot="${attr(i.slot)}"${to}${from} />`
-    }),
-    ...stackables.map((s) => {
-      const to = s.to !== undefined ? ` to="${attr(s.to)}"` : ''
-      const from = s.from !== undefined ? ` from="${attr(s.from)}"` : ''
-      return `    <stackable key="${attr(s.key)}" amount="${attr(s.amount)}"${to}${from} />`
-    }),
-  ]
-  return `  <${STATE_TAGS.transfers}>\n${rows.join('\n')}\n  </${STATE_TAGS.transfers}>`
+function renderConditions(block: AuthoredStateBlock): string | null {
+  return list(
+    STATE_TAGS.conditions,
+    (block.conditions ?? []).map(
+      (c) =>
+        `    <entity id="${attr(c.id)}">${text(c.text.replace(/[<>]/g, ''), 'entity')}</entity>`,
+    ),
+  )
+}
+
+function renderNewLocations(block: AuthoredStateBlock): string[] {
+  const name = STATE_CREATE_TAGS.newLocation
+  return (block.newLocations ?? []).map((c) => {
+    const parent = c.parent !== undefined ? ` parent="${attr(c.parent)}"` : ''
+    const condition = c.condition !== undefined ? ` condition="${escaped(c.condition)}"` : ''
+    return `  <${name} handle="${attr(c.handle)}"${parent} name="${escaped(c.name)}"${condition}>${escaped(c.description)}</${name}>`
+  })
+}
+
+function renderNewItems(block: AuthoredStateBlock): string[] {
+  const name = STATE_CREATE_TAGS.newItem
+  return (block.newItems ?? []).map((c) => {
+    const condition = c.condition !== undefined ? ` condition="${escaped(c.condition)}"` : ''
+    return `  <${name} handle="${attr(c.handle)}" name="${escaped(c.name)}"${condition}>${escaped(c.description)}</${name}>`
+  })
+}
+
+// Block order: a parsed block's `seq`, else list order with the drops after the item moves.
+function renderTransfers(block: AuthoredStateBlock): string | null {
+  const items = block.transfers?.items ?? []
+  const drops = block.transfers?.drops ?? []
+  const stackables = block.transfers?.stackables ?? []
+  const holders = (to: string | undefined, from: string | undefined) =>
+    `${to !== undefined ? ` to="${attr(to)}"` : ''}${from !== undefined ? ` from="${attr(from)}"` : ''}`
+  const moves = [
+    ...items.map((i, n) => ({
+      order: i.seq ?? n,
+      row: `    <item id="${attr(i.id)}" slot="${attr(i.slot)}"${holders(i.to, i.from)} />`,
+    })),
+    ...drops.map((d, n) => ({
+      order: d.seq ?? items.length + n,
+      row: `    <${DROP_TAG} id="${attr(d.id)}"${holders(undefined, d.from)} />`,
+    })),
+  ].sort((a, b) => a.order - b.order)
+  return list(STATE_TAGS.transfers, [
+    ...moves.map((m) => m.row),
+    ...stackables.map(
+      (s) =>
+        `    <stackable key="${attr(s.key)}" amount="${attr(s.amount)}"${holders(s.to, s.from)} />`,
+    ),
+  ])
+}
+
+function renderRetrievalQueries(block: AuthoredStateBlock): string | null {
+  return list(
+    STATE_TAGS.retrievalQueries,
+    (block.retrievalQueries ?? []).map((q) =>
+      tag(RETRIEVAL_QUERY_ITEM_TAG, text(q, RETRIEVAL_QUERY_ITEM_TAG), '    '),
+    ),
+  )
 }
 
 /**
- * An inner tag is emitted only when it carries content: the app's parser treats
- * "content present but nothing extractable" as a truncation failure, so an
- * empty `<visual_changes></visual_changes>` would report a parse failure rather
- * than "nothing to report".
+ * An inner tag is emitted only with content: the parser reads "content present but nothing
+ * extractable" as truncation, so an empty `<visual_changes></visual_changes>` reports a parse
+ * failure, not "nothing to report". Tags follow the order the state-emission macro shows.
  */
-function stateLines(block: ParsedStateBlock): string[] {
+function stateLines(block: AuthoredStateBlock): string[] {
   const lines: string[] = []
+  const push = (line: string | null) => {
+    if (line) lines.push(line)
+  }
 
   const scene = block.sceneEntities ?? []
   if (scene.length > 0)
     lines.push(tag(STATE_TAGS.sceneEntities, text(scene.join(', '), STATE_TAGS.sceneEntities)))
+
+  lines.push(...renderNewLocations(block))
 
   const location = block.currentLocation?.trim()
   if (location)
@@ -86,23 +163,23 @@ function stateLines(block: ParsedStateBlock): string[] {
   if (block.worldTimeDelta !== undefined)
     lines.push(tag(STATE_TAGS.worldTimeDelta, String(block.worldTimeDelta)))
 
-  const visual = renderVisualChanges(block)
-  if (visual) lines.push(visual)
-
-  const transfers = renderTransfers(block)
-  if (transfers) lines.push(transfers)
+  push(renderVisualChanges(block))
+  push(renderConditions(block))
+  lines.push(...renderNewItems(block))
+  push(renderTransfers(block))
 
   const summary = block.summary?.trim()
   if (summary) lines.push(tag(STATE_TAGS.summary, text(summary, STATE_TAGS.summary)))
 
+  push(renderRetrievalQueries(block))
   return lines
 }
 
-export function hasStateContent(block: ParsedStateBlock | undefined): boolean {
+export function hasStateContent(block: AuthoredStateBlock | undefined): boolean {
   return block !== undefined && stateLines(block).length > 0
 }
 
-export function renderStateBlock(block: ParsedStateBlock): string {
+export function renderStateBlock(block: AuthoredStateBlock): string {
   const lines = stateLines(block)
   // An empty root reads to the app's parser as a truncated block, not as
   // "nothing to report" — the same reason stateLines omits empty inner tags.

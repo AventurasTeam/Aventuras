@@ -90,13 +90,18 @@ mark; it logs a diagnostics warning with the entity, the category and
 both lengths.
 
 **`conditions` is full-replace, one entry per changed place or
-item.** `id` names a place or an item the prompt shows with its state
-([What the writer sees](#what-the-writer-sees)): the current location,
-an item held in the scene or lying there, a retrieved place or item.
-The text replaces its `condition` wholesale, written as it is now, under
-the same bound and cut as a visual value. Like a visual category, a
-condition is written only when the prose changes it, never restated
-unchanged. A condition is the running consequence, not the event
+item.** `id` names an existing place or item the prompt shows with its
+state ([What the writer sees](#what-the-writer-sees)): the current
+location, an item held in the scene or lying there, a retrieved place
+or item. A place or item the block creates takes its condition on its
+create, not here (the create's `condition`, under
+[New locations and items](#new-locations-and-items)). The text
+replaces its `condition` wholesale, written as it is now: what still
+applies kept, what no longer does dropped, in a few words and never more
+than about 60. The prompt words the 60 as a limit, not a target, and the
+text keeps the same bound and cut as a visual value. Like a visual
+category, a condition is written only when the prose changes it, never
+restated unchanged. A condition is the running consequence, not the event
 ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)):
 "burned to the ground", not "the fire".
 
@@ -110,12 +115,24 @@ creates ([New locations and items](#new-locations-and-items)):
   up loose). Taking an item moves it from wherever else it sits,
   whatever `from` names, per
   [`data-model.md → ItemState`](../data-model.md#itemstate-shape).
-- `<drop id="..." from="..." />` puts a held item down where the
-  scene is: the turn's `<current_location>`, or the previous location
-  when the turn names none. It leaves every holder and its
-  `at_location_id` becomes that place; `from` is optional, as on
-  `<item>`. An item put down somewhere else than the scene, thrown into
-  a river, stays prose.
+- `<drop id="..." from="..." />` puts an item held by someone in the
+  scene down where the scene is: the turn's `<current_location>`, or
+  the previous location when the turn names none. It leaves every
+  holder and its `at_location_id` becomes that place; `from` is
+  optional, as on `<item>`. In the scene means in this turn's scene
+  list or the previous one, so someone who leaves this turn can put it
+  down on the way out. The tagged block's list is its own
+  `<scene_entities>`, the fallback's its `sceneEntities`, each the
+  previous scene when it names none or its list was dropped; the
+  previous scene is the one the turn's user action carries, the scene
+  before this turn. A held item's drop whose holders are all out of
+  both lists is dropped and logged (`classifier.drop_dropped`,
+  `off_scene`). An item put down somewhere else than the scene, thrown
+  into a river, stays prose. The prompt asks for a drop only for an
+  item still lying there when the turn ends. Tags apply in document
+  order and a drop takes the item off every holder, and the fallback
+  applies its drops after its item moves, so an item set down and
+  picked up again gets its `<item>` move and no drop.
 - `<stackable key="..." amount="..." to="..." from="..." />` moves a
   quantity (gold, arrows, supplies) between characters' `stackables`
   records. Either `to` or `from` may be omitted (gained from
@@ -264,12 +281,13 @@ bracketed handle (`[new:a]`) reads as the bare handle.
 **Create tag format.** A create's attribute text must be entirely
 `key="value"` pairs; any other text drops the create and counts it
 malformed, so a reference to its handle then fails its field and the
-fallback fires. The five XML entities are decoded in a create's name
-and description, and a raw `<` or `>` in a name or a raw `<` in a
-description drops the create, so the prompt asks the model to write a
-double quote, `<` or `>` inside a name as `&quot;`, `&lt;` or `&gt;`,
-and a `<` inside a description as `&lt;`. A malformed create in a
-closed block only logs a warning, unless the block held nothing but
+fallback fires. The five XML entities are decoded in a create's name,
+condition and description, and a raw `<` or `>` in a name or condition
+or a raw `<` in a description drops the create, so the prompt asks the
+model to write a double quote, `<` or `>` inside a name or condition as
+`&quot;`, `&lt;` or `&gt;`, and a `<` inside a description as
+`&lt;`. A malformed create in a closed block only logs a warning,
+unless the block held nothing but
 creates: that block counts as empty and fails `state`, so the fallback
 fires. A `<state>` the stream cut off (no `</state>`) that declares
 any create, whole or not, fails the `state` field instead, because the
@@ -421,12 +439,22 @@ JSON.
 
 If a top-level tag parses, its fields are used. If a tag is missing
 or its content doesn't parse, that field is skipped for this turn —
-per-field best-effort, one failing tag never blocks another. The
-creates are one exception: a failing field keeps the block's own
-creates from landing
-([Creating a place or an item](#creating-a-place-or-an-item)). The
-fallback's transfers are the other: there a transfer with a bad ref
-drops alone and the rest of the field applies, as below.
+per-field best-effort, one failing tag never blocks another. There
+are three exceptions. A failing field keeps the block's own creates
+from landing
+([Creating a place or an item](#creating-a-place-or-an-item)). It
+keeps the block's drops from landing too when the block's own place
+can't be used: its `<current_location>` names a place the block
+creates, which a failed block doesn't create, or the
+`<current_location>` field itself failed. Those drops are logged
+(`classifier.drops_held`) and the report lists none of them; the item
+stays held for the fallback to put down where it resolves the scene,
+and stays held when the fallback leaves the drop out or fails too. A
+place that can't be entered (an item's id, a retired place) doesn't
+count: it keeps the previous location on any block, as below, and the
+drops land there, as they do wherever a failed block's place stands.
+The fallback's transfers are the third: there a transfer with a bad
+ref drops alone and the rest of the field applies, as below.
 
 An empty `<state>` counts as a missing one, since no turn has no
 state, and so does a block holding nothing but creates, since only
@@ -479,12 +507,12 @@ the `<current_location>`. The two writers treat a bad ref differently:
   is the turn's only creator.
 - **The fallback**, whose reply nothing rereads, drops a transfer
   where it stands when its item or a holder is unknown, undeclared or
-  of the wrong kind, item and stackable transfers alike, logging
-  `classifier.transfer_dropped`, and applies the rest of the field.
-  Its scene list and visual changes keep the per-field rule, so one
-  unknown id there still drops the whole list. A new item's handle as
-  the `currentLocation` is rejected the way an item's id is: the
-  previous location stays, the report records
+  of the wrong kind, item, stackable and drop transfers alike,
+  logging `classifier.transfer_dropped`, and applies the rest of the
+  field. Its scene list, visual changes and conditions keep the
+  per-field rule, so one unknown id there still drops the whole list.
+  A new item's handle as the `currentLocation` is rejected the way an
+  item's id is: the previous location stays, the report records
   `currentLocationRejected`, and its `currentLocation` holds the new
   item's id, or the emitted handle when the item isn't created.
 

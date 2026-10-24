@@ -9,6 +9,7 @@ import {
 import type { CollisionReason, Entity, ItemState, LocationState } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import {
+  boundStateText,
   isCreateHandle,
   type NewItemEmission,
   type NewItemReport,
@@ -123,6 +124,22 @@ function placementLoop(
   return { parent: parentId, cause: walk === 'cycle' ? 'cycle' : 'chain-broken' }
 }
 
+// piggyback.md → Creating a place or an item: bounded like a visual value.
+function createdCondition(
+  emission: { handle: string; condition?: string },
+  log: Logger,
+): { condition?: string } {
+  if (emission.condition === undefined) return {}
+  const { text, cut } = boundStateText(emission.condition)
+  if (cut)
+    log.warn('classifier.condition_truncated', {
+      handle: emission.handle,
+      length: emission.condition.length,
+      keptLength: text.length,
+    })
+  return { condition: text }
+}
+
 /** piggyback.md → Kept only if used. */
 function keptLocationHandles(block: ParsedStateBlock): Set<string> {
   const parentOf = new Map((block.newLocations ?? []).map((l) => [l.handle, l.parent]))
@@ -135,14 +152,18 @@ function keptLocationHandles(block: ParsedStateBlock): Set<string> {
   return kept
 }
 
-/** A new item stays only when the last transfer naming it leaves it with a character. */
+/** A new item stays only when the last transfer naming it, a drop included, leaves it with a character. */
 function keptItemHandles(block: ParsedStateBlock, byId: ReadonlyMap<string, Entity>): Set<string> {
   const declared = new Set((block.newItems ?? []).map((i) => i.handle))
-  const lastTo = new Map<string, string | undefined>()
-  for (const transfer of block.transfers?.items ?? [])
-    if (declared.has(transfer.id)) lastTo.set(transfer.id, transfer.to)
+  const last = new Map<string, { seq: number; to: string | undefined }>()
+  const note = (id: string, seq: number, to: string | undefined) => {
+    const prior = last.get(id)
+    if (declared.has(id) && (prior === undefined || seq >= prior.seq)) last.set(id, { seq, to })
+  }
+  for (const transfer of block.transfers?.items ?? []) note(transfer.id, transfer.seq, transfer.to)
+  for (const drop of block.transfers?.drops ?? []) note(drop.id, drop.seq, undefined)
   const kept = new Set<string>()
-  for (const [handle, to] of lastTo)
+  for (const [handle, { to }] of last)
     if (to !== undefined && byId.get(to)?.kind === 'character') kept.add(handle)
   return kept
 }
@@ -211,7 +232,13 @@ function planLocations(args: {
       const row = newRow({
         id: args.newId('loc'),
         branchId: args.branchId,
-        shape: { kind: 'location', state: withPlacement({ parent_location_id: null }, candidate) },
+        shape: {
+          kind: 'location',
+          state: withPlacement(
+            { parent_location_id: null, ...createdCondition(emission, args.log) },
+            candidate,
+          ),
+        },
         text,
         flag: match.flag,
         at: args.now(),
@@ -299,7 +326,10 @@ async function planItems(args: {
     const row = newRow({
       id: args.newId('item'),
       branchId: args.branchId,
-      shape: { kind: 'item', state: { at_location_id: null } },
+      shape: {
+        kind: 'item',
+        state: { at_location_id: null, ...createdCondition(emission, args.log) },
+      },
       text,
       flag,
       at: args.now(),
@@ -314,6 +344,7 @@ function rewriteHandles(
   block: SubstitutedStateBlock,
   ids: ReadonlyMap<string, string>,
   itemIds: ReadonlyMap<string, string>,
+  log: Logger,
 ): PlannedStateBlock {
   const resolve = (ref: string, from: ReadonlyMap<string, string>): string | undefined =>
     isCreateHandle(ref) ? from.get(ref) : ref
@@ -341,6 +372,14 @@ function rewriteHandles(
         const id = resolve(transfer.id, itemIds)
         return id === undefined ? [] : [{ ...transfer, id }]
       }),
+      // A new item the block didn't keep stays prose with its drop, so no handle reaches apply.ts,
+      // whose position write to a missing row would fail the turn.
+      drops: block.transfers.drops.flatMap((drop) => {
+        const id = resolve(drop.id, itemIds)
+        if (id !== undefined) return [{ ...drop, id }]
+        log.debug('classifier.drop_dropped', { handle: drop.id, reason: 'not-created' })
+        return []
+      }),
     }
   }
   return out as PlannedStateBlock
@@ -358,11 +397,13 @@ function locationReport(
   fate: LocationFate | undefined,
 ): NewLocationReport {
   const { handle, name, description } = emission
+  const condition = emission.condition !== undefined ? { condition: emission.condition } : {}
   if (fate === undefined) {
     return {
       handle,
       name,
       description,
+      ...condition,
       ...(emission.parent !== undefined ? { parent: emission.parent } : {}),
       outcome: 'dropped',
     }
@@ -373,6 +414,7 @@ function locationReport(
     handle,
     name,
     description,
+    ...condition,
     ...(parent !== undefined ? { parent } : {}),
     outcome: fate.outcome,
     id: fate.id,
@@ -382,9 +424,10 @@ function locationReport(
 
 function itemReport(emission: NewItemEmission, id: string | undefined): NewItemReport {
   const { handle, name, description } = emission
+  const condition = emission.condition !== undefined ? { condition: emission.condition } : {}
   return id === undefined
-    ? { handle, name, description, outcome: 'dropped' }
-    : { handle, name, description, outcome: 'created', id }
+    ? { handle, name, description, ...condition, outcome: 'dropped' }
+    : { handle, name, description, ...condition, outcome: 'created', id }
 }
 
 /**
@@ -445,7 +488,7 @@ export async function planTurnCreates(input: {
   for (const [handle, fate] of places.fates) ids.set(handle, fate.id)
   const createdRows = [...places.rows, ...things.rows]
   return {
-    block: rewriteHandles(block, ids, things.ids),
+    block: rewriteHandles(block, ids, things.ids, log),
     creates: createdRows.map(
       (entry): CreateEntityAction => ({ kind: 'createEntity', source, payload: { entry } }),
     ),
@@ -463,10 +506,10 @@ export async function planTurnCreates(input: {
  * A failed fold: nothing is created; every create reports `dropped`, every declared handle is
  * dropped where it stands, bar an item's as the location.
  */
-export function skipTurnCreates(block: SubstitutedStateBlock): TurnCreatePlan {
+export function skipTurnCreates(block: SubstitutedStateBlock, log: Logger): TurnCreatePlan {
   const none = new Map<string, string>()
   return {
-    block: rewriteHandles(block, none, none),
+    block: rewriteHandles(block, none, none, log),
     creates: [],
     createdRows: [],
     reusedIds: [],

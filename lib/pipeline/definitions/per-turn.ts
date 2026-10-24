@@ -4,7 +4,7 @@ import { eq, sql } from 'drizzle-orm'
 import { describeProviderError, resolveModel, resolveModelCapabilities, streamText } from '@/lib/ai'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
-import { redactUrl } from '@/lib/diagnostics'
+import { redactUrl, type Logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import {
   buildPiggybackActions,
@@ -16,6 +16,7 @@ import {
   resolveSuggestionItems,
   stripTrailingBlocks,
   substitutePiggybackIds,
+  type SubstitutedStateBlock,
 } from '@/lib/piggyback'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore, currentStoryStore } from '@/lib/stores'
@@ -46,6 +47,25 @@ export type PerTurnPhaseName =
   | typeof RETRIEVAL_PHASE_NAME
   | 'narrative'
   | typeof PIGGYBACK_FALLBACK_PHASE_NAME
+
+// piggyback.md → Parse strategy and failure recovery: a failed fold that can't use its own place
+// leaves its drops to the fallback, which may resolve that place; here they'd land at the last one.
+function skipFailedFold(
+  block: SubstitutedStateBlock,
+  failures: readonly ParseFieldFailure[],
+  entryId: string,
+  log: Logger,
+): TurnCreatePlan {
+  const turn = skipTurnCreates(block, log)
+  const locationFailed = failures.some((f) => f.field === 'currentLocation')
+  const locationSkipped =
+    block.currentLocation !== undefined && turn.block.currentLocation === undefined
+  const transfers = turn.block.transfers
+  if (!(locationFailed || locationSkipped) || !transfers || transfers.drops.length === 0)
+    return turn
+  log.debug('classifier.drops_held', { entryId, itemIds: transfers.drops.map((d) => d.id) })
+  return { ...turn, block: { ...turn.block, transfers: { ...transfers, drops: [] } } }
+}
 
 async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
   const { branchId } = ctx
@@ -243,7 +263,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
           newId: (prefix) => generateId(prefix),
           log: ctx.log,
         })
-      : skipTurnCreates(resolvedBlock)
+      : skipFailedFold(resolvedBlock, parseFailures, entryId, ctx.log)
     // Matching an item can await an embed call; a cancel during it discards the reply.
     if (ctx.abortSignal.aborted) return { status: 'aborted' }
     fold = {
@@ -252,6 +272,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
         entryId,
         turn,
         entities,
+        stateShownIds: load.stateShownIds,
         previousMetadata: {
           ...inherited,
           ...(tail?.id ? { entryId: tail.id } : {}),
