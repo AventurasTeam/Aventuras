@@ -616,7 +616,7 @@ describe('finishWizard', () => {
 
     // Both authoring paths reject a self-parent (the editor's candidate list
     // excludes self, cast-import.ts excludes selfId), so this shape only
-    // arrives on a corrupt working state — which is what castRef must survive.
+    // arrives on a corrupt working state — which is what castPlacement must survive.
     const result = await finishWizard(
       makeState({
         title: 'Self-Parented',

@@ -430,6 +430,33 @@ export const LocationUnresolvedParentPicksTopLevel: Story = {
   play: () => expectSegmentUnknownThenTopLevel({ clearedAsk: true }),
 }
 
+/** A parent id naming no cast row (a resumed draft dropped it) reads Unknown, as Finish lands it. */
+export const LocationDanglingParentReadsUnknown: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([
+      locationRow({ id: 'loc-1', name: 'Lower', parentLocationId: 'loc-gone' }),
+      locationRow({ id: 'loc-2', name: 'Upper' }),
+    ])
+  },
+  render: () => <LocationEditorDemo id="loc-1" />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'More options' }))
+    await expect(await screen.findByRole('radio', { name: 'Unknown' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    await expect(screen.getByRole('radio', { name: 'Top level' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Top level' }))
+    await waitFor(() => expect(screen.queryByRole('radio', { name: 'Unknown' })).toBeNull())
+    expect(parentOf('loc-1')).toMatchObject({ parentLocationId: null, parentUnknown: false })
+  },
+}
+
 const optionNamed = (name: string) => screen.findByRole('option', { name })
 
 /** Dropdown picker: Unknown is selected until a parent is picked; the control stays controlled. */
