@@ -1501,7 +1501,12 @@ reversals that run after later user edits take only a pass's or a
 close's facts, whose `state` writes are all whole values (a
 character's faction, a faction's standing, a place's parent, unplaced
 mark and condition, an item's condition); it needs a guard once one of
-them takes a write to a record.
+them takes a write to a record. The same reach keeps the rule from
+splitting one move across two rows: undoing a turn's `<item>` or
+`<drop>` after the user moved the item in World would restore the
+holder's inventory but keep the user's position, so the item would be
+held and lying somewhere at once. No reversal that keeps a later user
+write takes a turn's facts.
 The rule has one exception. A machine `create`
 still deletes its row, since an entity or happening exists only
 because of the reversed write, and takes every later write to that row

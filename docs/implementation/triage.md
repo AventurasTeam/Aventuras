@@ -306,14 +306,6 @@ slice-planning gate forces its resolution before that slice is planned.
   they can name different places. Predates the AI writer map; raised
   2026-10-23 by its merge-adoption review.
 
-- **Undoing a take or a drop after a World move leaves the item held
-  and placed.** Reverse-replay keeps a field the user wrote since, so
-  undoing a turn's `<item>` or `<drop>` after the user moved the item
-  in World restores the holder's inventory but keeps the user's
-  position: the item ends both held and lying somewhere. Pre-existing
-  for takes; drops add one more instance. Raised 2026-10-23 by the AI
-  writer map's final review.
-
 - **A cast row's dangling faction selects nothing.** In
   `components/wizard/cast-editors.tsx`, a character whose `factionId`
   names no cast faction (a resumed draft whose faction row failed its
