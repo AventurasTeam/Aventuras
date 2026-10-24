@@ -299,13 +299,6 @@ slice-planning gate forces its resolution before that slice is planned.
   offers no choice at all. Raised 2026-10-23 by the AI writer map's final PR 1
   review.
 
-- **A merge's story reads two ways.** `lib/world/entity-delete.ts`'s
-  `deleteTailOf` reads the tail entry's raw `metadata.currentLocationId`,
-  while `storyPlaceOf` (`lib/world/place-rules.ts`) reads it through
-  `inheritedEntryMetadata`; `EntityMergeInput` now carries both, and
-  they can name different places. Predates the AI writer map; raised
-  2026-10-23 by its merge-adoption review.
-
 - **A cast row's dangling faction selects nothing.** In
   `components/wizard/cast-editors.tsx`, a character whose `factionId`
   names no cast faction (a resumed draft whose faction row failed its

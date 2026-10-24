@@ -7,10 +7,11 @@ import {
   type Entity,
   type EntityKind,
   type EntityState,
+  type StoryEntry,
 } from '@/lib/db'
 
 import { FLAG_CLEAR } from './collision-flags'
-import { entityDeleteActions } from './entity-delete'
+import { deleteTailOf, entityDeleteActions } from './entity-delete'
 
 function entity(id: string, kind: EntityKind, state: Partial<EntityState> = {}): Entity {
   return {
@@ -402,5 +403,22 @@ describe('entityDeleteActions — the places inside', () => {
       updateOf('loc_3', { state: { parent_location_id: null, unplaced: true } }),
       deleteOf('loc_1'),
     ])
+  })
+})
+
+describe('deleteTailOf', () => {
+  // storyPlaceOf's reader, so a delete and the story place can't name different places.
+  it('reads a tail missing its scene fields as an empty scene with no place', () => {
+    const tail = { id: 'entry_1', metadata: { worldTime: 4 } as StoryEntry['metadata'] }
+    expect(deleteTailOf({ tail })).toEqual({
+      id: 'entry_1',
+      sceneEntities: [],
+      currentLocationId: null,
+    })
+  })
+
+  it('reads no tail, or one with no metadata, as none', () => {
+    expect(deleteTailOf(null)).toBeNull()
+    expect(deleteTailOf({ tail: { id: 'entry_1', metadata: null } })).toBeNull()
   })
 })
