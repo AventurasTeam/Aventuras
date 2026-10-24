@@ -148,7 +148,12 @@ desktop IPC bridge. A store hot enough that re-reading it per edit
 shows up in a profile may apply the change optimistically instead —
 but that mutator stays **package-private to the action layer**
 (boundaries-lint, like a raw store handle), never reachable from a
-component.
+component. A mutator that lives on an exported store object is
+invisible to the boundaries rule, which sees imports, not property
+access, so it is restricted with `no-restricted-properties` in
+`eslint.config.js` instead: `generationStore`'s run mutators belong to
+the orchestrator and the prose-reversal bracket, since a stray caller
+can leave the hard gate or the reversal barrier stuck.
 
 Failure handling is **not** part of this mechanism — it is a
 per-store, per-context policy, and the mechanism itself carries no

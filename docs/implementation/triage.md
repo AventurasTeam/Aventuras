@@ -167,19 +167,6 @@ slice-planning gate forces its resolution before that slice is planned.
   2026-10-15 by the retired and disabled places slice review's
   simplifier pass.
 
-- **The generation store's run mutators are public.**
-  `generationStore.startRun`, `finishRun`, `abortRun` and
-  `setReversalInProgress` (`lib/stores/generation/generation.ts`) are
-  exported to every module. Only the orchestrator and the
-  prose-reversal bracket should call them, and a stray caller can leave
-  the hard gate or the reversal barrier stuck. The mentioned-places
-  slice review closed the same gap for the pending-turn mark by
-  exposing it only as a bracket. A `boundaries` lint rule limiting
-  these to `lib/pipeline/runtime` and `lib/actions` is the route
-  [`code-conventions.md → Syncing a store after a write`](../code-conventions.md#syncing-a-store-after-a-write)
-  names for a package-private mutator. Raised 2026-10-16 by the
-  mentioned places slice review.
-
 - **Nine migration tests carry their own copy of two helpers.**
   `migrationTags` and `applyMigration` are copied byte for byte into the
   seven migration tests under `lib/db/__tests__/`, plus
