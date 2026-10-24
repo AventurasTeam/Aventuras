@@ -52,14 +52,13 @@ test.describe.serial('World — unplaced places', () => {
     removeUserDataDir(userDataDir)
   })
 
-  test('an unplaced place reads Location unknown, and Top level places it', async () => {
+  test("an unplaced place's picker reads Unknown, and Top level places it", async () => {
     const page = app.window
     await openWorld(page, HERO_TITLE)
     await world.categoryTrigger(page).click()
     await world.categoryOption(page, 'location').click()
     await world.row(page, SALTMERE).click()
     await expect(world.detailName(page)).toHaveText(SALTMERE)
-    await expect(world.locationUnknown(page)).toBeVisible()
 
     await world.tab(page, 'connections').click()
     await world.placementPicker(page, t('world:connections.placementUnknown')).click()

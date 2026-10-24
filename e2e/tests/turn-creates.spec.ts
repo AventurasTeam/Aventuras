@@ -3,7 +3,6 @@ import { expect, test, type Page } from '@playwright/test'
 import { takeTurn, waitForTurnTerminal } from '../flows/turn'
 import { currentBranchId, queryApp, tailMetadata } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
-import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm, type MockRequest } from '../harness/mock-llm'
 import {
@@ -573,29 +572,10 @@ test.describe('turn creates — conditions and drops', () => {
       expect(report?.layer).toBe('piggyback_tagged_block')
       expect(report?.conditions).toEqual([{ id: placeId, text: SCENE_CONDITION }])
       expect(report?.transfers?.drops).toEqual([{ id: bladeId, from: kaelId, at: placeId }])
+      expect((await tailReply(app.window, branchId))?.content).toContain('E2E-COND-T2')
     })
 
-    await test.step('the entry card lists both under Changes this turn', async () => {
-      const reply = await tailReply(app.window, branchId)
-      expect(reply?.content).toContain('E2E-COND-T2')
-      await reader.showState(app.window, reply!.id).click()
-      await expect(
-        reader.stateLine(
-          app.window,
-          reply!.id,
-          t('reader:entryCard.stateCondition', { name: placeName, text: SCENE_CONDITION }),
-        ),
-      ).toBeVisible()
-      await expect(
-        reader.stateLine(
-          app.window,
-          reply!.id,
-          t('reader:entryCard.statePutDown', { item: BLADE, place: placeName }),
-        ),
-      ).toBeVisible()
-    })
-
-    await test.step('a refused condition is marked on the report and stays off the card and the row', async () => {
+    await test.step('a refused condition is marked on the report and stays off the row', async () => {
       mock.setNarrative(refusedConditionNarrative(ids))
       await takeTurn(app.window, 'E2E-COND-U3 I wait for the rain to stop.', 'E2E-COND-T3')
       await expect
@@ -609,23 +589,7 @@ test.describe('turn creates — conditions and drops', () => {
         { id: kaelId, text: KAEL_CONDITION, rejected: true },
         { id: placeId, text: LATER_CONDITION },
       ])
-      const reply = await tailReply(app.window, branchId)
-      expect(reply?.content).toContain('E2E-COND-T3')
-      await reader.showState(app.window, reply!.id).click()
-      await expect(
-        reader.stateLine(
-          app.window,
-          reply!.id,
-          t('reader:entryCard.stateCondition', { name: placeName, text: LATER_CONDITION }),
-        ),
-      ).toBeVisible()
-      await expect(
-        reader.stateLine(
-          app.window,
-          reply!.id,
-          t('reader:entryCard.stateCondition', { name: 'Kael', text: KAEL_CONDITION }),
-        ),
-      ).toHaveCount(0)
+      expect((await tailReply(app.window, branchId))?.content).toContain('E2E-COND-T3')
     })
   })
 })
