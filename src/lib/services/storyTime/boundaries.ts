@@ -7,7 +7,7 @@
  */
 
 import type { StoryEntry, TimeAnchor, TimeTracker } from '#lib/types/index.ts'
-import { toMinutes } from './minutes'
+import { normalizeTime, toMinutes } from './minutes'
 
 export type BoundaryKind = 'anchor' | 'story-start' | 'story-end' | 'fork'
 
@@ -104,6 +104,36 @@ export function selectableRanges(entries: StoryEntry[], boundaries: Boundary[]):
     })
   }
   return ranges
+}
+
+/** Times the reader states for a range's boundaries, for one reconciliation and nothing else. */
+export interface BoundaryRestatement {
+  from?: TimeTracker
+  to?: TimeTracker
+}
+
+/** The range's boundaries as the reconciliation reads them: restated where the reader said so. */
+export function restateBoundaries(
+  range: Pick<SelectableRange, 'from' | 'to'>,
+  restated: BoundaryRestatement = {},
+): { from: Boundary; to: Boundary } {
+  const restate = (boundary: Boundary, time: TimeTracker | undefined): Boundary =>
+    time ? { ...boundary, time: normalizeTime(time) } : boundary
+  return { from: restate(range.from, restated.from), to: restate(range.to, restated.to) }
+}
+
+/**
+ * Whether applying would move the ending branches open on. Only a later boundary is written
+ * through to its entry, so only a later boundary can.
+ */
+export function movesForkEnding(
+  entry: StoryEntry | undefined,
+  effectiveTime: TimeTracker | null,
+  forked: boolean,
+): boolean {
+  if (!forked || !entry || !effectiveTime) return false
+  const recorded = entry.metadata?.timeEnd
+  return !recorded || toMinutes(recorded) !== toMinutes(effectiveTime)
 }
 
 export type RangeRefusal = {

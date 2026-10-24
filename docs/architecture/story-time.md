@@ -70,7 +70,8 @@ the shared entries to a destination inside one branch, rewriting the history eve
 stands on to suit that one. Stopping every range at the fork keeps shared entries reconciled only
 between points they all share. It also keeps the fork's own ending still, since every branch forked
 there opens on it. Forks are taken from every branch in the story, not just the one in view, and
-kept where their entry is visible. Anchoring a fork point is the one deliberate way to move it. A checkpoint is not a
+kept where their entry is visible. A fork point moves only deliberately: by anchoring it, or by
+restating it as the later boundary of a reconciliation, which warns how many branches open on it. A checkpoint is not a
 boundary: its clock is a copy, updated when its entry moves.
 
 A **range** is the stretch between two adjacent boundaries (`selectableRanges`). Adjacent only: a
@@ -82,6 +83,12 @@ exactly at the boundary. `refuseRange` refuses a range whose end has no time, or
 
 `reconcileRange` (`reconcile.ts`) is pure — entries and boundaries in, new times out — so the
 preview and the apply path share one calculation: the preview _is_ the result.
+
+The reader may restate either boundary for one reconciliation (`BoundaryDrafts`, resolved by
+`restateBoundaries`). A restated earlier boundary moves only the baseline: its entry stays as it is,
+and the mismatch with it is the leading join. A restated later boundary is the target, so applying
+writes it to that entry's ending. A restatement is an input like a weight, never a stored anchor, and
+the fingerprint keeps comparing the stored boundaries.
 
 The range is weighed as alternating entry durations and the intervals between them,
 `[d0, g0, d1, g1, … dN-1]`:
@@ -108,6 +115,9 @@ when the range reaches the branch's last entry. An interior range makes no claim
 story now stands, and writing the clock anyway would discard a clock adjustment the reader had not
 yet committed by continuing.
 
+A restated boundary that was already anchored is an edit of that anchor, and the plan stores it in the
+same transaction (`plan.anchors`); one that was not anchored is stored nowhere.
+
 `applyReconciliation` commits the plan as one transaction and publishes it to memory only after the
 commit. The store refuses while a generation holds the story (`assertNotBusy`), re-resolves the
 range from the current boundaries, recomputes the preview with the reader's weights, and applies
@@ -118,7 +128,8 @@ any boundary that appeared inside the range.
 ## Editing one entry
 
 `setEntryTimes` writes one entry's own beginning and ending as a one-entry plan, so it carries the
-same guarantees. The player action before a narration moves with it, to the narration's new
+same guarantees. It is offered from the entry and from the reference-points list, not from the
+reconciliation screen, which restates boundaries for the repair instead. The player action before a narration moves with it, to the narration's new
 beginning. Beyond the generation guard it is never refused: on a fork point it also updates the
 checkpoint the branches open on, and the dialog tells the reader how many intervals the edit reaches. No other entry moves, so an edit
 can open a gap or an overlap that detection then reports.

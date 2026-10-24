@@ -51,6 +51,7 @@ import type {
   EnumOption,
 } from '#lib/services/packs/types.ts'
 import { hashContent } from '#lib/services/packs/hash.ts'
+import { timeAnchorUpsert } from '#lib/services/storyTime/index.ts'
 import {
   packReplacementStatements,
   shippedTemplateStatements,
@@ -4238,19 +4239,8 @@ class DatabaseService {
    */
   async setTimeAnchor(anchor: TimeAnchor): Promise<void> {
     const db = await this.getDb()
-    await db.execute(
-      `INSERT INTO time_anchors (id, story_id, entry_id, asserted_time, note, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(entry_id) DO UPDATE SET asserted_time = excluded.asserted_time, note = excluded.note`,
-      [
-        anchor.id,
-        anchor.storyId,
-        anchor.entryId,
-        JSON.stringify(anchor.assertedTime),
-        anchor.note,
-        anchor.createdAt,
-      ],
-    )
+    const { sql, params } = timeAnchorUpsert(anchor)
+    await db.execute(sql, params)
   }
 
   async deleteTimeAnchor(entryId: string): Promise<void> {

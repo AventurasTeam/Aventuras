@@ -89,6 +89,7 @@ import {
   planReconciliation,
   reconcileRange,
   refuseRange,
+  restateBoundaries,
   selectableRanges,
   toMinutes,
   type Boundary,
@@ -112,8 +113,20 @@ export type TimelineReconciliationPreview =
       plan: ReconciliationPlan
       fingerprint: string
       /** What the reader supplied, so apply can recompute the same preview to revalidate it. */
-      inputs: { durations: Record<string, number>; intervals: Record<string, number> }
+      inputs: {
+        durations: Record<string, number>
+        intervals: Record<string, number>
+        boundaries: BoundaryDrafts
+      }
     }
+
+/**
+ * Times the reader restated for a range's boundaries. On an anchored boundary it is an edit of the
+ * anchor, stored with the reconciliation along with its note; otherwise it is never stored.
+ */
+export type BoundaryDrafts = Partial<
+  Record<'from' | 'to', { time: TimeTracker; note?: string | null }>
+>
 import { settings } from './settings.svelte'
 import { extractInlineCustomVars } from '#lib/services/ai/sdk/schemas/runtime-variables.ts'
 import type { ClassificationResult } from '#lib/services/ai/sdk/schemas/classifier.ts'
@@ -1861,9 +1874,14 @@ class StoryStore {
     range: SelectableRange,
     suppliedDurations: Record<string, number> = {},
     intervalWeights: Record<string, number> = {},
+    drafts: BoundaryDrafts = {},
   ): TimelineReconciliationPreview {
-    const refusal = refuseRange(range.from, range.to)
-    if (refusal) return { status: 'refused', refusal }
+    const { from, to } = restateBoundaries(range, {
+      from: drafts.from?.time,
+      to: drafts.to?.time,
+    })
+    const refusal = refuseRange(from, to)
+    if (refusal) return { status: 'refused', refusal, range }
 
     const byId = new Map(this.entries.map((entry) => [entry.id, entry]))
     const rangeEntries = range.entryIds
@@ -1875,8 +1893,8 @@ class StoryStore {
 
     const result = reconcileRange({
       entries: rangeEntries,
-      baseline: range.from.time!,
-      target: range.to.time!,
+      baseline: from.time!,
+      target: to.time!,
       previousEnd: before?.metadata?.timeEnd ?? null,
       nextStart: after?.metadata?.timeStart ?? null,
       suppliedDurations,
@@ -1886,7 +1904,7 @@ class StoryStore {
     if (result.status === 'refused') {
       return {
         status: 'refused',
-        refusal: { reason: 'backwards-span', boundaries: [range.from, range.to] },
+        refusal: { reason: 'backwards-span', boundaries: [from, to] },
         range,
       }
     }
@@ -1904,10 +1922,27 @@ class StoryStore {
         chapters: this.chapters,
         times: result.times,
         checkpoints: this.checkpoints,
+        anchors: this.editedAnchors(range, drafts),
       }),
       fingerprint: this.timelineFingerprint(range, rangeEntries),
-      inputs: { durations: suppliedDurations, intervals: intervalWeights },
+      inputs: { durations: suppliedDurations, intervals: intervalWeights, boundaries: drafts },
     }
+  }
+
+  /** The anchors a reconciliation stores: those on a restated boundary that was already anchored. */
+  private editedAnchors(range: SelectableRange, drafts: BoundaryDrafts): TimeAnchor[] {
+    return (['from', 'to'] as const).flatMap((which) => {
+      const draft = drafts[which]
+      const existing = draft && this.timeAnchorFor(range[which].entryId)
+      if (!draft || !existing) return []
+      return [
+        {
+          ...existing,
+          assertedTime: normalizeTime(draft.time),
+          note: draft.note === undefined ? existing.note : draft.note,
+        },
+      ]
+    })
   }
 
   private timelineFingerprint(range: SelectableRange, rangeEntries: StoryEntry[]): string {
@@ -1951,6 +1986,7 @@ class StoryStore {
       range,
       preview.inputs.durations,
       preview.inputs.intervals,
+      preview.inputs.boundaries,
     )
     if (fresh.status !== 'ok' || fresh.fingerprint !== preview.fingerprint) return 'stale'
 
@@ -1969,6 +2005,14 @@ class StoryStore {
 
   /** In-memory state after a reconciliation commits, shared by every path that plans one. */
   private publishReconciliation(plan: ReconciliationPlan): void {
+    if (plan.anchors.length > 0) {
+      const stored = new Set(plan.anchors.map((anchor) => anchor.entryId))
+      this.timeAnchors = [
+        ...this.timeAnchors.filter((anchor) => !stored.has(anchor.entryId)),
+        ...plan.anchors,
+      ]
+    }
+
     const times = new Map(plan.times.map((time) => [time.entryId, time]))
     this.entries = this.entries.map((entry) => {
       const time = times.get(entry.id)

@@ -6,7 +6,7 @@
  * together or not at all.
  */
 
-import type { Chapter, Checkpoint, StoryEntry, TimeTracker } from '#lib/types/index.ts'
+import type { Chapter, Checkpoint, StoryEntry, TimeAnchor, TimeTracker } from '#lib/types/index.ts'
 import type { ReconciledTime } from './reconcile'
 import type { Boundary } from './boundaries'
 import { toMinutes } from './minutes'
@@ -50,6 +50,8 @@ export interface ReconciliationPlan {
    * kept: past states are rebuilt from them, and a closing one shows a run was tracked.
    */
   snapshotClocks: SnapshotClockUpdate[]
+  /** Anchors the reader edited for this reconciliation, stored with it and nothing more. */
+  anchors: TimeAnchor[]
 }
 
 export interface PlanReconciliationInput {
@@ -59,10 +61,11 @@ export interface PlanReconciliationInput {
   /** The reconciliation's output for the entries inside the range. */
   times: ReconciledTime[]
   checkpoints?: Checkpoint[]
+  anchors?: TimeAnchor[]
 }
 
 export function planReconciliation(input: PlanReconciliationInput): ReconciliationPlan {
-  const { entries, chapters, times, checkpoints = [] } = input
+  const { entries, chapters, times, checkpoints = [], anchors = [] } = input
   const reconciled = new Map(times.map((time) => [time.entryId, time]))
 
   const startOf = (entry: StoryEntry) =>
@@ -109,6 +112,7 @@ export function planReconciliation(input: PlanReconciliationInput): Reconciliati
     clock,
     checkpointClocks,
     snapshotClocks: times.map((time) => ({ entryId: time.entryId, timeTracker: time.end })),
+    anchors,
   }
 }
 
@@ -151,6 +155,23 @@ export interface ReconciliationWriteDeps {
   publish: (plan: ReconciliationPlan) => void
 }
 
+/** Storing an anchor, replacing any the entry already carries. */
+export function timeAnchorUpsert(anchor: TimeAnchor): { sql: string; params: unknown[] } {
+  return {
+    sql: `INSERT INTO time_anchors (id, story_id, entry_id, asserted_time, note, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(entry_id) DO UPDATE SET asserted_time = excluded.asserted_time, note = excluded.note`,
+    params: [
+      anchor.id,
+      anchor.storyId,
+      anchor.entryId,
+      JSON.stringify(anchor.assertedTime),
+      anchor.note,
+      anchor.createdAt,
+    ],
+  }
+}
+
 /** The statements a plan writes, in the order they are applied. */
 export function reconciliationStatements(
   plan: ReconciliationPlan,
@@ -166,6 +187,8 @@ export function reconciliationStatements(
       params: [JSON.stringify(metadata), time.entryId],
     })
   }
+
+  for (const anchor of plan.anchors) statements.push(timeAnchorUpsert(anchor))
 
   for (const span of plan.chapterSpans) {
     statements.push({

@@ -1,6 +1,10 @@
 <script lang="ts">
-  import { story, type TimelineReconciliationPreview } from '#lib/stores/story.svelte.ts'
-  import { ui } from '#lib/stores/ui.svelte.ts'
+  import {
+    story,
+    type BoundaryDrafts,
+    type TimelineReconciliationPreview,
+  } from '#lib/stores/story.svelte.ts'
+  import { ask } from '@tauri-apps/plugin-dialog'
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
   import * as Dialog from '#lib/components/ui/dialog/index.ts'
@@ -31,6 +35,8 @@
     outstandingDurations,
     rangeIntervals,
     refuseRange,
+    restateBoundaries,
+    movesForkEnding,
   } from '#lib/services/storyTime/index.ts'
   import type {
     SelectableRange,
@@ -117,29 +123,22 @@
   const range = $derived<SelectableRange | undefined>(ranges[selectedIndex])
   const hasNextRange = $derived(selectedIndex + 1 < ranges.length)
 
-  function goToNextRange() {
+  async function goToNextRange() {
     holdFocus()
-    selectedIndex += 1
+    if (await confirmDiscard()) selectedIndex += 1
   }
 
   const byId = $derived(new Map(story.entries.map((entry) => [entry.id, entry])))
   const anchorsInView = $derived(story.timeAnchors.filter((a) => byId.has(a.entryId)).length)
 
   const ANCHOR_NOTE_LIMIT = 140
-  /** Which of the range's two boundaries is open for editing, and as what. */
+  /** Times restated for this range's boundaries. Nothing is written until the range is applied. */
+  let drafts = $state<BoundaryDrafts>({})
+  /** Which of the range's two boundaries is open for restating. */
   let editing = $state<'from' | 'to' | null>(null)
-  let editingKind = $state<'anchor' | 'entry'>('anchor')
-  let anchorTimeText = $state('')
-  let anchorNote = $state('')
-  let entryStartText = $state('')
-  let entryEndText = $state('')
-  let anchorSaving = $state(false)
-  const anchorTime = $derived(parseStoryTime(anchorTimeText))
-  const entryStart = $derived(parseStoryTime(entryStartText))
-  const entryEnd = $derived(parseStoryTime(entryEndText))
-  const entryBackwards = $derived(
-    !!entryStart && !!entryEnd && toMinutes(entryEnd) < toMinutes(entryStart),
-  )
+  let draftTimeText = $state('')
+  let draftNote = $state('')
+  const draftTime = $derived(parseStoryTime(draftTimeText))
 
   function boundaryOf(which: 'from' | 'to'): Boundary | undefined {
     return which === 'from' ? range?.from : range?.to
@@ -151,75 +150,70 @@
     return !!boundary && byId.get(boundary.entryId)?.type !== 'user_action'
   }
 
-  function editAnchor(which: 'from' | 'to') {
+  function openEditor(which: 'from' | 'to') {
     const boundary = boundaryOf(which)
     if (!boundary) return
-    const anchor = story.timeAnchorFor(boundary.entryId)
-    const seed = anchor?.assertedTime ?? byId.get(boundary.entryId)?.metadata?.timeEnd ?? null
-    anchorTimeText = seed ? formatStoryTime(seed) : ''
-    anchorNote = anchor?.note ?? ''
-    editingKind = 'anchor'
+    const seed = drafts[which]?.time ?? boundary.time
+    draftTimeText = seed ? formatStoryTime(seed) : ''
+    const draftedNote = drafts[which]?.note
+    draftNote =
+      (draftedNote !== undefined ? draftedNote : story.timeAnchorFor(boundary.entryId)?.note) ?? ''
     editing = which
   }
 
-  function editEntryTime(which: 'from' | 'to') {
-    const boundary = boundaryOf(which)
-    if (!boundary) return
-    const metadata = byId.get(boundary.entryId)?.metadata
-    entryStartText = metadata?.timeStart ? formatStoryTime(metadata.timeStart) : ''
-    entryEndText = metadata?.timeEnd ? formatStoryTime(metadata.timeEnd) : ''
-    editingKind = 'entry'
-    editing = which
-  }
-
-  function closeAnchorEditor() {
+  function closeEditor() {
     holdFocus()
     editing = null
   }
 
-  // An open editor belongs to the boundary it was opened on, not to whatever is selected now.
+  function setDraft() {
+    const boundary = editing ? boundaryOf(editing) : undefined
+    if (!editing || !boundary || !draftTime) return
+    // A note is stored only with an anchor, so an assertion carries none.
+    const anchored = !!story.timeAnchorFor(boundary.entryId)
+    drafts = {
+      ...drafts,
+      [editing]: { time: draftTime, ...(anchored ? { note: draftNote.trim() || null } : {}) },
+    }
+    closeEditor()
+  }
+
+  function revertDraft(which: 'from' | 'to') {
+    holdFocus()
+    const { [which]: _dropped, ...rest } = drafts
+    drafts = rest
+  }
+
+  // A restatement belongs to the boundaries it was made against, not to whatever is selected now.
   let editorRangeKey = ''
   $effect(() => {
     const key = range ? `${range.from.entryId}:${range.to.entryId}` : ''
     if (key === editorRangeKey) return
     editorRangeKey = key
-    untrack(() => closeAnchorEditor())
+    untrack(() => {
+      closeEditor()
+      drafts = {}
+    })
   })
 
-  async function saveEntryTime() {
-    const boundary = editing ? boundaryOf(editing) : undefined
-    if (!boundary || !entryStart || !entryEnd) return
-    anchorSaving = true
-    try {
-      await story.setEntryTimes(boundary.entryId, entryStart, entryEnd)
-      closeAnchorEditor()
-    } catch (error) {
-      ui.showToast(error instanceof Error ? error.message : 'The time could not be saved', 'error')
-    } finally {
-      anchorSaving = false
-    }
-  }
+  /** The boundaries as this reconciliation reads them. */
+  const effective = $derived(
+    range ? restateBoundaries(range, { from: drafts.from?.time, to: drafts.to?.time }) : null,
+  )
 
-  async function saveAnchor() {
-    const boundary = editing ? boundaryOf(editing) : undefined
-    if (!boundary || !anchorTime) return
-    anchorSaving = true
-    try {
-      await story.setTimeAnchor(boundary.entryId, anchorTime, anchorNote.trim() || null)
-      closeAnchorEditor()
-    } catch (error) {
-      ui.showToast(
-        error instanceof Error ? error.message : 'The anchor could not be saved',
-        'error',
-      )
-    } finally {
-      anchorSaving = false
-    }
-  }
+  /** Branches opening on the later boundary's entry, when applying would move its ending. */
+  const forkWarning = $derived.by(() => {
+    if (!range || !effective) return 0
+    const entryId = range.to.entryId
+    const checkpoint = story.checkpoints.find((candidate) => candidate.lastEntryId === entryId)
+    const count = story.branchesForkedFrom(checkpoint?.id ?? null, entryId)
+    return movesForkEnding(byId.get(entryId), effective.to.time, count > 0) ? count : 0
+  })
 
   /** What the range's entries record for themselves, first beginning to last ending. */
   const recordedSpan = $derived.by(() => {
-    const start = range ? byId.get(range.entryIds[0])?.metadata?.timeStart : null
+    const first = range ? byId.get(range.entryIds[0]) : undefined
+    const start = first ? recordedStart(first) : null
     const end = range ? byId.get(range.to.entryId)?.metadata?.timeEnd : null
     if (!start || !end) return null
     return toMinutes(end) - toMinutes(start)
@@ -227,8 +221,8 @@
 
   /** What the two reference points say it should occupy. The reconciliation is the ratio between them. */
   const assertedSpan = $derived(
-    range?.from.time && range?.to.time
-      ? toMinutes(range.to.time) - toMinutes(range.from.time)
+    effective?.from.time && effective?.to.time
+      ? toMinutes(effective.to.time) - toMinutes(effective.from.time)
       : null,
   )
 
@@ -331,12 +325,12 @@
   )
   const resolved = $derived(unreadable.length === 0 && !invalidWeights)
 
-  const refusal = $derived(range ? refuseRange(range.from, range.to) : null)
+  const refusal = $derived(effective ? refuseRange(effective.from, effective.to) : null)
   const isRefused = $derived(!!refusal)
 
   const preview = $derived<TimelineReconciliationPreview | null>(
     range && resolved && !isRefused
-      ? story.previewReconciliation(range, overrides, statedWeights)
+      ? story.previewReconciliation(range, overrides, statedWeights, drafts)
       : null,
   )
 
@@ -499,6 +493,8 @@
     supplied = {}
     gapWeights = {}
     addedGapIds = []
+    drafts = {}
+    editing = null
     errorMessage = null
     staleMessage = null
     appliedMessage = null
@@ -520,6 +516,39 @@
   $effect(() => {
     if (!open) reset()
   })
+
+  /** Anything the reader would lose by leaving the range: a restated boundary or a typed weight. */
+  const unapplied = $derived(
+    editing !== null ||
+      Object.keys(drafts).length > 0 ||
+      addedGapIds.length > 0 ||
+      [...Object.values(supplied), ...Object.values(gapWeights)].some((text) => text.trim() !== ''),
+  )
+
+  /** The one question before discarding what was typed. */
+  async function confirmDiscard(): Promise<boolean> {
+    if (!unapplied) return true
+    return ask('Discard the boundaries and weights you have set for this range?', {
+      title: 'Discard Changes',
+      kind: 'warning',
+    })
+  }
+
+  /** Every way of closing the screen comes through here. */
+  async function requestClose() {
+    if (await confirmDiscard()) open = false
+  }
+
+  async function chooseRange(event: Event) {
+    const select = event.currentTarget as HTMLSelectElement
+    const next = Number(select.value)
+    if (next === selectedIndex) return
+    if (!(await confirmDiscard())) {
+      select.value = String(selectedIndex)
+      return
+    }
+    selectedIndex = next
+  }
 
   const fullTextEntry = $derived(fullTextId ? (byId.get(fullTextId) ?? null) : null)
 
@@ -780,6 +809,14 @@
       event.preventDefault()
       holdFocus()
     }}
+    onEscapeKeydown={(event: KeyboardEvent) => {
+      event.preventDefault()
+      void requestClose()
+    }}
+    onInteractOutside={(event: PointerEvent) => {
+      event.preventDefault()
+      void requestClose()
+    }}
     style={narrow
       ? '--tw-enter-translate-x: 0; --tw-enter-translate-y: 0; --tw-exit-translate-x: 0; --tw-exit-translate-y: 0; --tw-enter-scale: 1; --tw-exit-scale: 1;'
       : undefined}
@@ -834,20 +871,16 @@
                 relative pacing. Nothing outside the range is touched.
               </Dialog.Description>
             </div>
-            <Dialog.Close>
-              {#snippet child({ props })}
-                <Button variant="destructive" size="icon" {...props}>
-                  <X class="size-6!" />
-                  <span class="sr-only">Close</span>
-                </Button>
-              {/snippet}
-            </Dialog.Close>
+            <Button variant="destructive" size="icon" onclick={requestClose}>
+              <X class="size-6!" />
+              <span class="sr-only">Close</span>
+            </Button>
           </div>
 
           {@render desktopBody()}
 
           <div class="border-border mt-4 flex justify-end gap-2 border-t py-2">
-            <Button variant="outline" onclick={() => (open = false)}>
+            <Button variant="outline" onclick={requestClose}>
               {appliedMessage ? 'Close' : 'Cancel'}
             </Button>
             {#if appliedMessage && hasNextRange}
@@ -914,7 +947,8 @@
     Range
     <select
       class="border-input bg-card mt-1 w-full rounded-md border px-2 py-1 text-sm"
-      bind:value={selectedIndex}
+      value={selectedIndex}
+      onchange={chooseRange}
     >
       {#each ranges as candidate, index (candidate.from.entryId + candidate.to.entryId)}
         <option value={index}>{rangeLabel(candidate)}</option>
@@ -923,8 +957,8 @@
   </label>
 {/snippet}
 
-<!-- What the range is measured from, editable where it is read: an unanchored boundary resolves
-     to a recorded ending, and only the reader can say otherwise. -->
+<!-- What the range is measured from. Either end can be restated for this reconciliation; nothing
+     is written until it is applied. -->
 {#snippet anchors(edgeToEdge: boolean)}
   {#if range}
     <!-- Rules across the surface, but the rows held to a readable width so the controls stay
@@ -937,6 +971,18 @@
         {@render anchorRow('Start', 'from')}
         <div class="border-border/60 my-1 border-t"></div>
         {@render anchorRow('End', 'to')}
+        {#if forkWarning > 0}
+          <p class="mt-1 flex items-start gap-1 text-amber-700 dark:text-amber-500">
+            <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0" />
+            <span>
+              Entry {entryNumber(range.to.entryId)} is a fork point:
+              {forkWarning === 1 ? 'a branch opens' : `${forkWarning} branches open`} on its ending, and
+              applying moves it. Reconciling the start of {forkWarning === 1
+                ? 'that branch'
+                : 'each of them'} afterwards is advised.
+            </span>
+          </p>
+        {/if}
       </div>
     </div>
   {/if}
@@ -946,6 +992,7 @@
   {@const boundary = boundaryOf(which)}
   {#if boundary}
     {@const anchor = story.timeAnchorFor(boundary.entryId)}
+    {@const draft = drafts[which]}
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1 py-0.5">
       <span class="text-muted-foreground w-6 shrink-0">{label}</span>
       <span class="text-muted-foreground flex shrink-0 items-center gap-1">
@@ -957,9 +1004,15 @@
         Entry {entryNumber(boundary.entryId)}
       </span>
       <!-- A natural boundary resolves to its recorded ending, which is a reading rather than an
-           assertion: it is shown, dimmed, exactly as an unset one is. -->
+           assertion: it is shown, dimmed, exactly as an unset one is. A restated time is shown
+           against the one it replaces. -->
       <span class="flex-1 truncate">
-        {#if anchor}
+        {#if draft}
+          <span class="text-foreground font-medium">{stamp(draft.time)}</span>
+          <span class="text-muted-foreground line-through">
+            {boundary.time ? stamp(boundary.time) : 'Not set'}
+          </span>
+        {:else if anchor}
           <span class="text-foreground font-medium">{stamp(anchor.assertedTime)}</span>
         {:else}
           <span class="text-muted-foreground"
@@ -968,17 +1021,27 @@
         {/if}
       </span>
       <!-- Inert rather than gone while its own editor is open: a control that closes what it
-           opened would take the reader's typing with it. What it opens follows what is there — an
-           anchor is edited as an anchor, a boundary without one as the entry's own times. -->
-      {#if anchor || anchorable(which)}
+           opened would take the reader's typing with it. -->
+      {#if anchorable(which)}
+        {#if draft}
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-6 shrink-0 text-[11px]"
+            disabled={editing === which}
+            onclick={() => revertDraft(which)}
+          >
+            Revert
+          </Button>
+        {/if}
         <Button
           variant="outline"
           size="sm"
           class="h-6 w-16 shrink-0 text-[11px]"
           disabled={editing === which}
-          onclick={() => (anchor ? editAnchor(which) : editEntryTime(which))}
+          onclick={() => openEditor(which)}
         >
-          Edit
+          {anchor ? 'Edit' : 'Assert'}
         </Button>
       {:else}
         <span class="text-muted-foreground shrink-0">an action has no ending to anchor</span>
@@ -997,21 +1060,32 @@
           Show full text
         </Button>
 
-        {#if editingKind === 'anchor'}
-          <label class="flex flex-wrap items-center gap-2">
-            <span class="text-muted-foreground shrink-0">Asserted time</span>
-            <Input
-              placeholder="e.g. Y1 D4 14:30"
-              class="h-7 w-36 text-xs"
-              bind:value={anchorTimeText}
-            />
-            <span class="text-muted-foreground shrink-0">
-              {anchorTime ? `= ${formatStoryTime(anchorTime)}` : 'year, day, clock'}
-            </span>
-          </label>
-          {#if storyTimeIsInvalid(anchorTimeText)}
-            <p class="text-destructive">Not a story time. Try 14:30, D4 14:30, or Y1 D4 14:30.</p>
+        <p class="text-muted-foreground">
+          {#if anchor}
+            The anchor is stored with this time when the range is applied.
+          {:else if which === 'from'}
+            For this reconciliation only: the range starts here, and the entry itself is left as it
+            is. Nothing is stored as an anchor.
+          {:else}
+            For this reconciliation only: applying ends the entry here. Nothing is stored as an
+            anchor.
           {/if}
+        </p>
+        <label class="flex flex-wrap items-center gap-2">
+          <span class="text-muted-foreground shrink-0">{anchor ? 'Asserted time' : 'Ends at'}</span>
+          <Input
+            placeholder="e.g. Y1 D4 14:30"
+            class="h-7 w-36 text-xs"
+            bind:value={draftTimeText}
+          />
+          <span class="text-muted-foreground shrink-0">
+            {draftTime ? `= ${formatStoryTime(draftTime)}` : 'year, day, clock'}
+          </span>
+        </label>
+        {#if storyTimeIsInvalid(draftTimeText)}
+          <p class="text-destructive">Not a story time. Try 14:30, D4 14:30, or Y1 D4 14:30.</p>
+        {/if}
+        {#if anchor}
           <label class="flex flex-col gap-1">
             <span class="text-muted-foreground">Note</span>
             <Textarea
@@ -1020,62 +1094,18 @@
               maxlength={ANCHOR_NOTE_LIMIT}
               placeholder="optional"
               class="h-12 w-full resize-none text-xs"
-              bind:value={anchorNote}
+              bind:value={draftNote}
             />
           </label>
-        {:else}
-          <p class="text-muted-foreground">
-            What this entry records for itself. Chapter spans, the clock kept for rollback and any
-            checkpoint taken here follow it.
-          </p>
-          <label class="flex flex-wrap items-center gap-2">
-            <span class="text-muted-foreground w-12 shrink-0">Begins</span>
-            <Input
-              placeholder="e.g. Y1 D4 14:30"
-              class="h-7 w-36 text-xs"
-              bind:value={entryStartText}
-            />
-          </label>
-          <label class="flex flex-wrap items-center gap-2">
-            <span class="text-muted-foreground w-12 shrink-0">Ends</span>
-            <Input
-              placeholder="e.g. Y1 D4 16:00"
-              class="h-7 w-36 text-xs"
-              bind:value={entryEndText}
-            />
-          </label>
-          {#if storyTimeIsInvalid(entryStartText) || storyTimeIsInvalid(entryEndText)}
-            <p class="text-destructive">
-              Give both as Y1 D4 14:30. An unreadable time is left as it was.
-            </p>
-          {:else if entryBackwards}
-            <p class="text-destructive">The entry cannot end before it begins.</p>
-          {/if}
         {/if}
 
         <div class="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" class="h-6 text-[11px]" onclick={closeAnchorEditor}>
+          <Button variant="outline" size="sm" class="h-6 text-[11px]" onclick={closeEditor}>
             Cancel
           </Button>
-          {#if editingKind === 'anchor'}
-            <Button
-              size="sm"
-              class="h-6 text-[11px]"
-              disabled={!anchorTime || anchorSaving}
-              onclick={saveAnchor}
-            >
-              {anchorSaving ? 'Saving…' : 'Save'}
-            </Button>
-          {:else}
-            <Button
-              size="sm"
-              class="h-6 text-[11px]"
-              disabled={!entryStart || !entryEnd || entryBackwards || anchorSaving}
-              onclick={saveEntryTime}
-            >
-              {anchorSaving ? 'Saving…' : 'Save'}
-            </Button>
-          {/if}
+          <Button size="sm" class="h-6 text-[11px]" disabled={!draftTime} onclick={setDraft}>
+            Set
+          </Button>
         </div>
       </div>
     {/if}
@@ -1096,11 +1126,11 @@
         {stamp(boundaries[0].time)}, entry
         {entryNumber(boundaries[1].entryId)} at
         {stamp(boundaries[1].time)}. The later one asserts an earlier time, and only you can say
-        which is wrong.
+        which is wrong: restate either one under Reference points.
       {:else}
         {#each boundaries as boundary (boundary.entryId)}
-          Entry {entryNumber(boundary.entryId)} has no recorded ending. Pin when it ended to use it as
-          a boundary.
+          Entry {entryNumber(boundary.entryId)} has no recorded ending. Assert when it ended under Reference
+          points to use it as a boundary.
         {/each}
       {/if}
     </p>
@@ -1184,7 +1214,9 @@
     >
       <div class="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs">
         <span>Was <span class="text-foreground">{spanText(recordedSpan)}</span></span>
-        <span>Becomes <span class="text-foreground">{spanText(assertedSpan)}</span></span>
+        <span>
+          Becomes <span class="text-foreground">{isRefused ? '—' : spanText(assertedSpan)}</span>
+        </span>
       </div>
 
       <!-- What the reader still has to settle is the reason to read the table at all. -->
@@ -1208,151 +1240,150 @@
     </div>
 
     {#if refusal}
-      {@render refusalCard(refusal.reason, refusal.boundaries)}
-    {:else}
-      <div class="border-border bg-card rounded-lg border px-3 py-1">
-        <table class="w-full border-collapse text-xs">
-          <thead
-            class="text-muted-foreground bg-card border-border sticky z-10 border-b text-left"
-            style="top: {pickerHeight + pinnedHeight}px"
-          >
-            <tr>
-              <th class="w-8 py-1 pr-2 font-medium">#</th>
-              <th class="w-24 py-1 pr-2 font-medium">Label</th>
-              <th class="py-1 pr-2 font-medium">Entry</th>
-              <th class="w-36 py-1 pr-2 font-medium">Was</th>
-              <th class="w-36 py-1 font-medium">Becomes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each rangeEntries as entry (entry.id)}
-              {@const request = requestFor(entry.id)}
-              {@const reconciled = reconciledTimes(entry.id)}
-              {@const interval = intervals.find((i) => i.afterEntryId === entry.id)}
-              {@const was = wasWeight(entry.id)}
-              <tr
-                class="border-border/50 hover:bg-muted/60 cursor-pointer border-t {isOpen(
-                  'entry',
-                  entry.id,
-                )
-                  ? 'bg-primary/20'
-                  : ''}"
-                onclick={() => chooseRow('entry', entry.id)}
-              >
-                <td class="text-muted-foreground py-1 pr-2 align-top">{entryNumber(entry.id)}</td>
-                <td class="py-1 pr-2 align-top">
-                  <span class="flex items-center gap-1">
-                    {#if request}
-                      <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
-                    {/if}
-                    {@render entryChip(entry.id)}
-                  </span>
-                </td>
-                <td class="py-1 pr-2 align-top">
-                  <span class="line-clamp-3 {isAction(entry.id) ? 'italic' : ''}">
-                    {entryText(entry.id)}
-                  </span>
-                </td>
-                <td class="text-muted-foreground py-1 pr-2 align-top whitespace-nowrap">
+      <div class="mb-3">{@render refusalCard(refusal.reason, refusal.boundaries)}</div>
+    {/if}
+    <div class="border-border bg-card rounded-lg border px-3 py-1">
+      <table class="w-full border-collapse text-xs">
+        <thead
+          class="text-muted-foreground bg-card border-border sticky z-10 border-b text-left"
+          style="top: {pickerHeight + pinnedHeight}px"
+        >
+          <tr>
+            <th class="w-8 py-1 pr-2 font-medium">#</th>
+            <th class="w-24 py-1 pr-2 font-medium">Label</th>
+            <th class="py-1 pr-2 font-medium">Entry</th>
+            <th class="w-36 py-1 pr-2 font-medium">Was</th>
+            <th class="w-36 py-1 font-medium">Becomes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each rangeEntries as entry (entry.id)}
+            {@const request = requestFor(entry.id)}
+            {@const reconciled = reconciledTimes(entry.id)}
+            {@const interval = intervals.find((i) => i.afterEntryId === entry.id)}
+            {@const was = wasWeight(entry.id)}
+            <tr
+              class="border-border/50 hover:bg-muted/60 cursor-pointer border-t {isOpen(
+                'entry',
+                entry.id,
+              )
+                ? 'bg-primary/20'
+                : ''}"
+              onclick={() => chooseRow('entry', entry.id)}
+            >
+              <td class="text-muted-foreground py-1 pr-2 align-top">{entryNumber(entry.id)}</td>
+              <td class="py-1 pr-2 align-top">
+                <span class="flex items-center gap-1">
+                  {#if request}
+                    <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
+                  {/if}
+                  {@render entryChip(entry.id)}
+                </span>
+              </td>
+              <td class="py-1 pr-2 align-top">
+                <span class="line-clamp-3 {isAction(entry.id) ? 'italic' : ''}">
+                  {entryText(entry.id)}
+                </span>
+              </td>
+              <td class="text-muted-foreground py-1 pr-2 align-top whitespace-nowrap">
+                <div class="grid grid-cols-[auto_1fr] gap-x-2">
+                  {#if isAction(entry.id)}
+                    <span>At:</span><span>{stamp(entry.metadata?.timeEnd)}</span>
+                  {:else}
+                    <span>Start:</span><span>{stamp(entry.metadata?.timeStart)}</span>
+                    <span>End:</span><span>{stamp(entry.metadata?.timeEnd)}</span>
+                    <span>Weight:</span>
+                    <span class={was.supplied ? 'text-foreground font-medium' : ''}>
+                      {was.text}
+                    </span>
+                  {/if}
+                </div>
+              </td>
+              <td class="py-1 align-top whitespace-nowrap">
+                {#if reconciled}
                   <div class="grid grid-cols-[auto_1fr] gap-x-2">
                     {#if isAction(entry.id)}
-                      <span>At:</span><span>{stamp(entry.metadata?.timeEnd)}</span>
+                      <span>At:</span><span>{stamp(reconciled.end)}</span>
                     {:else}
-                      <span>Start:</span><span>{stamp(entry.metadata?.timeStart)}</span>
-                      <span>End:</span><span>{stamp(entry.metadata?.timeEnd)}</span>
+                      <span>Start:</span><span>{stamp(reconciled.start)}</span>
+                      <span>End:</span><span>{stamp(reconciled.end)}</span>
                       <span>Weight:</span>
-                      <span class={was.supplied ? 'text-foreground font-medium' : ''}>
-                        {was.text}
+                      <span class="flex items-center gap-1">
+                        {#if collapsed.includes(entry.id)}
+                          <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
+                        {/if}
+                        {formatDuration(toMinutes(reconciled.end) - toMinutes(reconciled.start))}
                       </span>
                     {/if}
                   </div>
+                {:else}
+                  <span class="text-muted-foreground">—</span>
+                {/if}
+              </td>
+            </tr>
+
+            {#if isOpen('entry', entry.id)}
+              <tr class="border-border/50 bg-background border-t">
+                <td colspan="5" class="p-2">{@render entryPanel(entry)}</td>
+              </tr>
+            {/if}
+
+            {#if interval}
+              {@const scaled = scaledInterval(interval.afterEntryId, interval.beforeEntryId)}
+              <tr
+                class="border-border/50 hover:bg-muted/60 cursor-pointer border-t {isOpen(
+                  'gap',
+                  interval.afterEntryId,
+                )
+                  ? 'bg-primary/20'
+                  : 'bg-muted/40'}"
+                onclick={() => chooseRow('gap', interval.afterEntryId)}
+              >
+                <td class="py-1 pr-2"></td>
+                <td class="py-1 pr-2 align-top">
+                  <span class="flex items-center gap-1">{@render gapChip()}</span>
                 </td>
-                <td class="py-1 align-top whitespace-nowrap">
-                  {#if reconciled}
-                    <div class="grid grid-cols-[auto_1fr] gap-x-2">
-                      {#if isAction(entry.id)}
-                        <span>At:</span><span>{stamp(reconciled.end)}</span>
+                <td class="text-muted-foreground py-1 pr-2 align-top">
+                  Time not claimed by adjacent entries
+                </td>
+                <td class="text-muted-foreground py-1 pr-2 align-top whitespace-nowrap">
+                  <div class="grid grid-cols-[auto_1fr] gap-x-2">
+                    <span>Weight:</span>
+                    <span
+                      class={statedWeights[interval.afterEntryId] !== undefined
+                        ? 'text-foreground font-medium'
+                        : ''}
+                    >
+                      {formatDuration(interval.recordedMinutes)}
+                    </span>
+                  </div>
+                </td>
+                <td class="text-muted-foreground py-1 align-top whitespace-nowrap">
+                  <div class="grid grid-cols-[auto_1fr] gap-x-2">
+                    <span>Weight:</span>
+                    <span>
+                      {#if scaled === null}
+                        —
+                      {:else if scaled === 0}
+                        closed
                       {:else}
-                        <span>Start:</span><span>{stamp(reconciled.start)}</span>
-                        <span>End:</span><span>{stamp(reconciled.end)}</span>
-                        <span>Weight:</span>
-                        <span class="flex items-center gap-1">
-                          {#if collapsed.includes(entry.id)}
-                            <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
-                          {/if}
-                          {formatDuration(toMinutes(reconciled.end) - toMinutes(reconciled.start))}
-                        </span>
+                        {formatDuration(scaled)}
                       {/if}
-                    </div>
-                  {:else}
-                    <span class="text-muted-foreground">—</span>
-                  {/if}
+                    </span>
+                  </div>
                 </td>
               </tr>
 
-              {#if isOpen('entry', entry.id)}
+              {#if isOpen('gap', interval.afterEntryId)}
                 <tr class="border-border/50 bg-background border-t">
-                  <td colspan="5" class="p-2">{@render entryPanel(entry)}</td>
+                  <td colspan="5" class="p-2">{@render intervalPanel(interval)}</td>
                 </tr>
               {/if}
-
-              {#if interval}
-                {@const scaled = scaledInterval(interval.afterEntryId, interval.beforeEntryId)}
-                <tr
-                  class="border-border/50 hover:bg-muted/60 cursor-pointer border-t {isOpen(
-                    'gap',
-                    interval.afterEntryId,
-                  )
-                    ? 'bg-primary/20'
-                    : 'bg-muted/40'}"
-                  onclick={() => chooseRow('gap', interval.afterEntryId)}
-                >
-                  <td class="py-1 pr-2"></td>
-                  <td class="py-1 pr-2 align-top">
-                    <span class="flex items-center gap-1">{@render gapChip()}</span>
-                  </td>
-                  <td class="text-muted-foreground py-1 pr-2 align-top">
-                    Time not claimed by adjacent entries
-                  </td>
-                  <td class="text-muted-foreground py-1 pr-2 align-top whitespace-nowrap">
-                    <div class="grid grid-cols-[auto_1fr] gap-x-2">
-                      <span>Weight:</span>
-                      <span
-                        class={statedWeights[interval.afterEntryId] !== undefined
-                          ? 'text-foreground font-medium'
-                          : ''}
-                      >
-                        {formatDuration(interval.recordedMinutes)}
-                      </span>
-                    </div>
-                  </td>
-                  <td class="text-muted-foreground py-1 align-top whitespace-nowrap">
-                    <div class="grid grid-cols-[auto_1fr] gap-x-2">
-                      <span>Weight:</span>
-                      <span>
-                        {#if scaled === null}
-                          —
-                        {:else if scaled === 0}
-                          closed
-                        {:else}
-                          {formatDuration(scaled)}
-                        {/if}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-
-                {#if isOpen('gap', interval.afterEntryId)}
-                  <tr class="border-border/50 bg-background border-t">
-                    <td colspan="5" class="p-2">{@render intervalPanel(interval)}</td>
-                  </tr>
-                {/if}
-              {/if}
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    {/if}
+            {/if}
+          {/each}
+        </tbody>
+      </table>
+    </div>
 
     <!-- Closes the table off: what follows is about the range, not about a row in it. -->
     <div class="border-border mt-3 flex flex-col gap-3 border-t pt-3">
@@ -1366,7 +1397,7 @@
     {#if ranges.length === 0}
       {@render emptyRanges()}
       <!-- The footer carries Close, and there is no footer without a range to apply. -->
-      <Button variant="outline" class="w-fit" onclick={() => (open = false)}>Close</Button>
+      <Button variant="outline" class="w-fit" onclick={requestClose}>Close</Button>
     {:else}
       <div class="border-border -mx-4 border-b px-4 pt-1 pb-3">
         <Dialog.Description class="text-muted-foreground text-xs">
@@ -1428,14 +1459,13 @@
     <div class="flex flex-col gap-3 px-4 pt-3 pb-4">
       {#if refusal}
         {@render refusalCard(refusal.reason, refusal.boundaries)}
-      {:else}
-        {@render ladder()}
       {/if}
+      {@render ladder()}
 
       {@render outcomeNotes()}
 
       <div id="reconcile-footer" class="flex gap-2 pt-2">
-        <Button variant="outline" class="flex-1" onclick={() => (open = false)}>
+        <Button variant="outline" class="flex-1" onclick={requestClose}>
           {appliedMessage ? 'Close' : 'Cancel'}
         </Button>
         {#if appliedMessage && hasNextRange}
@@ -1462,7 +1492,8 @@
     <span class="flex flex-col items-end gap-0.5">
       <span class="text-muted-foreground tracking-wide uppercase">Becomes</span>
       <span class="text-muted-foreground">
-        <span class="text-foreground font-medium">{spanText(assertedSpan)}</span> total
+        <span class="text-foreground font-medium">{isRefused ? '—' : spanText(assertedSpan)}</span>
+        total
       </span>
     </span>
   </div>

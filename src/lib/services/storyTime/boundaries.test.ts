@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import type { StoryEntry, TimeAnchor, TimeTracker } from '#lib/types/index.ts'
-import { listBoundaries, selectableRanges, refuseRange } from './boundaries'
+import {
+  listBoundaries,
+  selectableRanges,
+  refuseRange,
+  restateBoundaries,
+  movesForkEnding,
+} from './boundaries'
 
 function t(hours: number, minutes = 0): TimeTracker {
   return { years: 0, days: 0, hours, minutes }
@@ -178,5 +184,69 @@ describe('refuseRange', () => {
     const refusal = refuseRange(boundaries[0], boundaries[1])!
     expect(refusal.reason).toBe('backwards-span')
     expect(refusal.boundaries.map((b) => b.entryId)).toEqual(['A', 'B'])
+  })
+})
+
+describe('restateBoundaries', () => {
+  const entries = [entry('A', t(1)), entry('B', t(2)), entry('C', t(3))]
+  const [range] = selectableRanges(entries, listBoundaries({ entries, anchors: [] }))
+
+  it('reads the stored times when nothing is restated', () => {
+    const { from, to } = restateBoundaries(range)
+    expect(from.time).toEqual(t(1))
+    expect(to.time).toEqual(t(3))
+  })
+
+  it('replaces only the restated time', () => {
+    const { from, to } = restateBoundaries(range, { to: t(7) })
+    expect(from).toEqual(range.from)
+    expect(to).toEqual({ ...range.to, time: t(7) })
+  })
+
+  it('normalizes the restated time', () => {
+    const { to } = restateBoundaries(range, { to: { years: 0, days: 0, hours: 0, minutes: 1500 } })
+    expect(to.time).toEqual({ years: 0, days: 1, hours: 1, minutes: 0 })
+  })
+
+  it('does not mutate the range', () => {
+    restateBoundaries(range, { from: t(0), to: t(9) })
+    expect(range.from.time).toEqual(t(1))
+    expect(range.to.time).toEqual(t(3))
+  })
+
+  it('lifts an unusable boundary once a time is asserted for it', () => {
+    const blank = [entry('A', t(1)), entry('B', null)]
+    const [unusable] = selectableRanges(blank, listBoundaries({ entries: blank, anchors: [] }))
+    expect(refuseRange(unusable.from, unusable.to)!.reason).toBe('unusable-boundary')
+    const { from, to } = restateBoundaries(unusable, { to: t(4) })
+    expect(refuseRange(from, to)).toBeNull()
+  })
+
+  it('lifts a backwards span once a later time is asserted', () => {
+    const backwards = [entry('A', t(5)), entry('B', t(2))]
+    const [span] = selectableRanges(backwards, listBoundaries({ entries: backwards, anchors: [] }))
+    expect(refuseRange(span.from, span.to)!.reason).toBe('backwards-span')
+    const { from, to } = restateBoundaries(span, { to: t(6) })
+    expect(refuseRange(from, to)).toBeNull()
+  })
+})
+
+describe('movesForkEnding', () => {
+  it('warns when an asserted time differs from a fork point recorded ending', () => {
+    expect(movesForkEnding(entry('F', t(3)), t(5), true)).toBe(true)
+  })
+
+  it('warns for an anchor already disagreeing with its fork point, with nothing restated', () => {
+    const entries = [entry('A', t(1)), entry('F', t(3))]
+    const boundaries = listBoundaries({ entries, anchors: [anchor('F', t(4))] })
+    expect(movesForkEnding(entries[1], boundaries[1].time, true)).toBe(true)
+  })
+
+  it('stays quiet when the fork point keeps its ending', () => {
+    expect(movesForkEnding(entry('F', t(3)), t(3), true)).toBe(false)
+  })
+
+  it('never warns for an entry no branch forked from', () => {
+    expect(movesForkEnding(entry('E', t(3)), t(5), false)).toBe(false)
   })
 })
