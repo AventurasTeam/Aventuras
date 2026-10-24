@@ -665,7 +665,8 @@ export const raiseCollisionFlagHandler: ActionHandler = async (action, branchId,
   }
   if (partnerId === id) return noopRefusal('partner-is-self')
   const partner = await loadCurrent(bid, partnerId, ctx)
-  if (partner?.kind !== current.kind) return noopRefusal('partner-not-of-kind')
+  if (partner === undefined) return noopRefusal('partner-not-found')
+  if (partner.kind !== current.kind) return noopRefusal('partner-not-of-kind')
   // World's pairing rule on the rows as they stand, a clash's keyword landed: a raise needs a pair.
   if (!stillPaired(reason, pairSideOf(current), pairSideOf(partner)))
     return noopRefusal('not-namesakes')

@@ -1993,9 +1993,9 @@ describe('raiseCollisionFlag', () => {
   })
 
   it.each([
-    ['is gone', 'char_gone'],
-    ['is of another kind', 'fact_1'],
-  ])('no-ops when the partner %s', async (_label, partnerId) => {
+    ['is gone', 'char_gone', 'partner-not-found'],
+    ['is of another kind', 'fact_1', 'partner-not-of-kind'],
+  ])('no-ops when the partner %s', async (_label, partnerId, reason) => {
     const { db, ctx } = await setup()
     await db.insert(entities).values({
       ...CHAR,
@@ -2006,7 +2006,7 @@ describe('raiseCollisionFlag', () => {
       state: {},
     })
     await seed(ctx, db)
-    expect(await apply(ctx, raise(partnerId), 'act_f')).toEqual(noopBecause('partner-not-of-kind'))
+    expect(await apply(ctx, raise(partnerId), 'act_f')).toEqual(noopBecause(reason))
     expect(await flagOf(db)).toEqual([0, null, null])
   })
 
