@@ -18,6 +18,7 @@ import {
   type PhaseContext,
   type PhaseEmittedEvent,
   type PhaseResult,
+  pipelineEventBus,
 } from '@/lib/pipeline'
 import { generationStore, type DeferredWorkKind } from '@/lib/stores'
 
@@ -220,9 +221,18 @@ describe("an interruptible run's abort reversal and the branch write lock", () =
     const run = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
     await landed
 
+    const completes: { outcome: string; detail?: string }[] = []
+    pipelineEventBus.subscribe('run_complete', (e) => {
+      completes.push({ outcome: e.outcome, detail: e.error?.detail })
+    })
     abortRuns()
-    // The rethrow leaves the run registered; the hold is released all the same.
-    await expect(within(run.origin, 'abort')).rejects.toThrow('not a replay error')
+    // generation-pipeline.md → Run state transitions: every abort ends the run, so the gate drops
+    // and the reader hears of the failure; recovery owns the writes, as for a failed reversal.
+    expect(await within(run.origin, 'abort')).toMatchObject({ outcome: 'failed' })
+    expect(completes).toEqual([
+      { outcome: 'failed', detail: 'reverse-replay failed: not a replay error' },
+    ])
+    expect(generationStore.getTxState().runs.size).toBe(0)
     expect(await grantedWithin('a write after the thrown reversal')).toBe('granted')
   })
 })

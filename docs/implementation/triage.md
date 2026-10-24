@@ -478,19 +478,6 @@ slice-planning gate forces its resolution before that slice is planned.
   by the AI writers design's inventory; not reproduced in the running
   app.
 
-- **An abort whose reversal throws something unrecognised leaves the
-  run registered.** `abortRun` in `lib/pipeline/runtime/orchestrator.ts`
-  rethrows any reversal error `describeReplayError` doesn't recognise,
-  before `generationStore.abortRun` and `resolveTerminal` run. The run
-  stays in `txState` with the gate up and an unsettled terminal, so
-  `interruptMemoryRuns`, `cancelStoryRuns` and the gate itself hang
-  until a restart. A chained successor inherits it: the
-  `pipeline.chain_run_failed` catch in `driveSuccessors` only logs.
-  Needs a reversal to throw a non-`DeltaReplayError`, which nothing
-  does today. Related to
-  [`parked.md → An abort waits on its phases, except a thrown parallel branch`](../parked.md#an-abort-waits-on-its-phases-except-a-thrown-parallel-branch).
-  Raised 2026-10-21 by the gated classifier slice's task reviews.
-
 - **The head turn's membership test is written out four times.**
   `resolveHeadTurn` in `lib/head-turn` is the one definition of the
   head turn, but the "is this entry its tail or origin" test on top of
@@ -600,16 +587,6 @@ slice-planning gate forces its resolution before that slice is planned.
   when a Retry commits over an occupied draft; or carry a dropped
   entry's submission onto the next entry. Raised 2026-10-22 in the
   pass failure policy slice's Task 7 review.
-
-- **A chained successor that throws raises no failure toast.**
-  `driveSuccessors` (`lib/pipeline/runtime/orchestrator.ts:606`) logs
-  `pipeline.chain_run_failed` and returns when `driveRun` throws for a
-  successor. `abortRun` rethrows a non-replay error from its reversal
-  (`:409`) before it emits `run_complete`, so nothing reaches the toast
-  listener and the reader never hears of that pass's failure; only the
-  log has it. Rare: the reversal has to throw something other than a
-  `DeltaReplayError`. Raised 2026-10-22 in the pass failure policy
-  slice's Task 8 review.
 
 - **Recovery copy matches the periodic classifier's kind as a
   literal.** `formatRun` and `formatFailure` in `lib/recovery/copy.ts`

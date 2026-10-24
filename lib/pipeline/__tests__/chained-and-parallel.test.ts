@@ -648,11 +648,32 @@ describe('split start', () => {
       ...base,
     })
 
+    let successor: RunState | undefined
+    pipelineEventBus.subscribe('run_complete', (e) => {
+      if (e.kind === 'pred') successor = [...generationStore.getTxState().runs.values()][0]
+    })
+    const completes = recordCompletes()
     const { origin, chain } = startPipeline('pred', ctx)
 
     expect(expectRan(await origin).outcome).toBe('completed')
     await expect(chain).resolves.toBeUndefined()
     expect(logged('pipeline.chain_run_failed')).toBe(true)
+    // Unwound like a failed marker insert: otherwise it holds the gate until a restart.
+    expect(completes).toEqual([
+      { kind: 'pred', outcome: 'completed', idle: false },
+      {
+        kind: 'succ',
+        outcome: 'failed',
+        idle: true,
+        error: { kind: 'orchestrator', detail: expect.stringMatching(/^run threw: /) },
+      },
+    ])
+    const ended = await Promise.race([
+      successor!.terminal.then(() => 'ended'),
+      flush().then(() => 'pending'),
+    ])
+    expect(ended).toBe('ended')
+    expect(generationStore.isUserEditBlocked()).toBe(false)
   })
 })
 
