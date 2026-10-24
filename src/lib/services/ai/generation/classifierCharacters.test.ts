@@ -5,6 +5,7 @@ import {
   formatExistingCharacters,
   planCharacterChanges,
   shownCharacters,
+  shownInPrompt,
   viewsForApply,
   type ClassifierCharacterView,
 } from './classifierCharacters'
@@ -44,6 +45,23 @@ describe('classifierCharacterView', () => {
       appearance: true,
       profile: false,
     })
+  })
+})
+
+describe('shownInPrompt', () => {
+  const cast = [character('Mira')]
+  const formatted = formatExistingCharacters(cast)
+
+  it('lists the cast when the rendered prompt carries the character list', () => {
+    expect(shownInPrompt(cast, formatted, ['system', `Characters:\n${formatted}`])).toEqual(
+      shownCharacters(cast),
+    )
+  })
+
+  it('lists nobody when a custom template leaves the character list out', () => {
+    expect(shownInPrompt(cast, formatted, ['system', 'no list here'])).toEqual([])
+    // An empty list, not a missing one: nothing falls back to the cast.
+    expect(viewsForApply([], cast)('Mira')).toEqual(HIDDEN)
   })
 })
 
@@ -248,6 +266,13 @@ describe('planCharacterChanges', () => {
     expect(
       planCharacterChanges(mira, { status: 'deceased', relationship: 'rival' }, HIDDEN).changes,
     ).toEqual({ status: 'deceased', relationship: 'rival', translatedRelationship: null })
+  })
+
+  it('makes no change for the status the character already has', () => {
+    expect(planCharacterChanges(mira, { status: 'active' }, HIDDEN)).toEqual({
+      changes: {},
+      ignored: [],
+    })
   })
 
   it("keeps the protagonist's relationship, and gives nobody else 'self'", () => {

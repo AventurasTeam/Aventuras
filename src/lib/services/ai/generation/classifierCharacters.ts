@@ -26,6 +26,18 @@ export function shownCharacters(characters: readonly Character[]): ShownCharacte
   return characters.map((c) => ({ name: c.name, ...classifierCharacterView(c) }))
 }
 
+/**
+ * `shownCharacters`, if the rendered prompt carries the formatted list. A custom template may
+ * leave `existingCharacters` out, and then nothing of the cast was shown.
+ */
+export function shownInPrompt(
+  characters: readonly Character[],
+  formatted: string,
+  rendered: readonly string[],
+): ShownCharacter[] {
+  return rendered.some((text) => text.includes(formatted)) ? shownCharacters(characters) : []
+}
+
 const CREATED_THIS_RUN: ClassifierCharacterView = { appearance: true, profile: true }
 const NOT_SHOWN: ClassifierCharacterView = { appearance: false, profile: false }
 
@@ -126,7 +138,9 @@ export function planCharacterChanges(
           : 'not shown',
     })
 
-  if (update.status) changes.status = update.status
+  if (update.status && update.status !== (existing.status ?? 'active')) {
+    changes.status = update.status
+  }
   // The protagonist's relationship is only changed by an explicit swap.
   if (
     update.relationship &&
