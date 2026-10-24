@@ -181,10 +181,10 @@ export type StructuredCallOptions = {
 
 /** generation-pipeline.md → Two retry tiers: `recoverable` holds each retried attempt. */
 export type GenerateStructuredResult<T> =
-  | { status: 'ok'; value: T; recoverable: CallRetryError[] }
+  | { status: 'ok'; value: T; recoverable: readonly CallRetryError[] }
   | { status: 'not-configured'; kind: ResolveFailureKind }
-  | { status: 'failed'; detail: string; recoverable: CallRetryError[] }
-  | { status: 'aborted'; recoverable: CallRetryError[] }
+  | { status: 'failed'; detail: string; recoverable: readonly CallRetryError[] }
+  | { status: 'aborted'; recoverable: readonly CallRetryError[] }
 
 function describeCallRetryError(error: CallRetryError): string {
   return error.tier === 'provider' ? (error.detail ?? error.reason) : error.detail

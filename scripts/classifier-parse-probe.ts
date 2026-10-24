@@ -97,7 +97,7 @@ async function readBranch(dbPath: string, maxEntries: number): Promise<Branch> {
 
 type Outcome = {
   status: 'ok' | 'failed' | 'aborted'
-  recoverable: CallRetryError[]
+  recoverable: readonly CallRetryError[]
   detail?: string
 }
 
