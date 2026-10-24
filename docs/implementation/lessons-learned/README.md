@@ -200,6 +200,11 @@ slice plans when relevant.
   — `xvfb-run` sets only `DISPLAY`, which Electron ignores in favour of
   the compositor; pin `--ozone-platform=x11` at launch, and verify by
   where the window rendered, not that Xvfb is running.
+- [A worktree with symlinked `node_modules` needs its own Metro cache](./metro-cache-shared-across-worktrees.md)
+  — suspected, not reproduced: every checkout shares Metro's transform
+  cache, whose key holds no project root while expo-router's transform
+  bakes in the app's path, so a bundle can find no routes; give the
+  worktree its own `cacheStores` before `build:web`.
 - [Vite eagerly bundles a runtime-guarded `require()`, Metro doesn't](./storybook-vite-eager-guarded-require.md)
   — a `typeof window` guard around a Node-only `require()` is safe under
   Metro but can crash every Storybook story importing that module; alias

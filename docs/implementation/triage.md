@@ -116,18 +116,6 @@ slice-planning gate forces its resolution before that slice is planned.
   classifier branch extends the same pin to stream end. Raised
   2026-10-21 by the gated classifier slice's task reviews.
 
-- **E2E in a scratch worktree can bundle with no routes.** A worktree
-  with symlinked `node_modules` built a web bundle that found no routes
-  ("No routes found"), so every test timed out at 30 s. The suspected
-  cause: the shared `/tmp/metro-cache` keys expo-router's context
-  transform by project-relative path, so two worktrees at the same
-  depth share an entry pointing at a deleted `app/`. Worked around
-  with a scratch-only `cacheStores` override. Reported by a review
-  agent and not reproduced here. Owner: dev tooling
-  ([`dev-environment.md`](../dev-environment.md) or
-  [lessons-learned](lessons-learned/README.md)). Raised 2026-10-21 by
-  the gated classifier slice's task reviews.
-
 - **On an Android phone the keyboard hides the reader's inline editor.**
   Pre-existing: main behaves the same. On an emulator (411×914 dp, the
   suggestion strip open), Edit on an entry near the bottom autofocuses
