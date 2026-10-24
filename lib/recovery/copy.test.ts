@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { RecoveredRun, RecoveryFailure, RecoveryReport } from '@/lib/pipeline'
+import type { BootRecoveryReport, RecoveredRun, RecoveryFailure } from '@/lib/pipeline'
 
 import { formatRecoveryReport, formatRecoveryTitle } from './copy'
 
@@ -14,8 +14,8 @@ function recovered(kind: string, storyId: string | null): RecoveredRun {
   }
 }
 
-function report(...reversed: RecoveredRun[]): RecoveryReport {
-  return { reversed, failures: [] }
+function report(...reversed: RecoveredRun[]): BootRecoveryReport {
+  return { reversed, failures: [], heldStoryIds: [] }
 }
 
 function failed(
@@ -33,8 +33,9 @@ function failed(
   }
 }
 
-function failureReport(...failures: RecoveryFailure[]): RecoveryReport {
-  return { reversed: [], failures }
+// The hold unread: every pass failure reads as holding its branch.
+function failureReport(...failures: RecoveryFailure[]): BootRecoveryReport {
+  return { reversed: [], failures, heldStoryIds: null }
 }
 
 describe('formatRecoveryReport', () => {
@@ -173,6 +174,7 @@ describe('failure copy', () => {
       {
         reversed: [recovered('per-turn', 'story_1')],
         failures: [failed('periodic-classifier', 'story_1')],
+        heldStoryIds: ['story_1'],
       },
       { story_1: 'Mornstone' },
     )
@@ -197,7 +199,49 @@ describe('formatRecoveryTitle', () => {
       formatRecoveryTitle({
         reversed: [recovered('per-turn', 'story_1')],
         failures: [failed('periodic-classifier', 'story_2')],
+        heldStoryIds: ['story_2'],
       }),
     ).toBe('Recovery incomplete')
+  })
+})
+
+// generation-pipeline.md → Recovery-failure policy: the stop is promised only where the boot left
+// the branch held, read after the reset rather than inferred from the failures.
+describe('the hold the boot left', () => {
+  const names = { story_1: 'Mornstone', story_2: 'Vellaby' }
+
+  it('promises no stop for a pass failure whose branch the reset freed', () => {
+    const text = formatRecoveryReport(
+      { reversed: [], failures: [failed('periodic-classifier', 'story_1')], heldStoryIds: [] },
+      names,
+    )
+    expect(text).toBe(
+      'An interrupted background update in Mornstone could not be undone. Your story content is intact, and restarting the app retries automatically.',
+    )
+  })
+
+  it('keeps the stop for a pass failure whose branch is still held', () => {
+    expect(
+      formatRecoveryReport(
+        {
+          reversed: [],
+          failures: [failed('periodic-classifier', 'story_1')],
+          heldStoryIds: ['story_1'],
+        },
+        names,
+      ),
+    ).toContain("Its branch can't take turns until it is")
+  })
+
+  it('names a held story no pass failure explains, as when the reset threw', () => {
+    const held: BootRecoveryReport = {
+      reversed: [recovered('per-turn', 'story_1')],
+      failures: [],
+      heldStoryIds: ['story_2'],
+    }
+    expect(formatRecoveryReport(held, names)).toBe(
+      "An interrupted shutdown was detected in Mornstone. Your last AI response was reverted to keep the story consistent. A memory update in Vellaby was left unfinished at startup. Its branch can't take turns until it is cleared — your story content is intact, and restarting the app retries automatically.",
+    )
+    expect(formatRecoveryTitle(held)).toBe('Recovery incomplete')
   })
 })

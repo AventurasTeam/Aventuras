@@ -588,15 +588,6 @@ slice-planning gate forces its resolution before that slice is planned.
   entry's submission onto the next entry. Raised 2026-10-22 in the
   pass failure policy slice's Task 7 review.
 
-- **Recovery copy matches the periodic classifier's kind as a
-  literal.** `formatRun` and `formatFailure` in `lib/recovery/copy.ts`
-  (`:16`, `:31`) compare against `'periodic-classifier'`, where
-  `lib/pipeline/definitions/memory-chain.ts` and `per-turn.ts` use
-  `PERIODIC_CLASSIFIER_KIND` from `@/lib/classifier`. A rename of the
-  kind would leave the recovery copy on its generic branch with no
-  type error. Raised 2026-10-22 in the pass failure policy slice's
-  Task 8 review.
-
 - **`onPreflightFailure` gets the caller's `RunCtx`, not the run's
   identity.** The orchestrator passes `ctx` straight through
   (`lib/pipeline/runtime/orchestrator.ts:537-541`), and a chained
@@ -674,18 +665,6 @@ slice-planning gate forces its resolution before that slice is planned.
   holds the pass, and the gate, until it returns. Predates the pass
   failure policy slice, which noted it as a monitor item; raised
   2026-10-23 by its slice review.
-
-- **The recovery modal can promise a hold the boot reset already
-  lifted.** `formatFailure` (`lib/recovery/copy.ts`) gives every
-  `periodic-classifier` failure the branch-held copy, but
-  `resetStuckClassifierRunState` (`lib/actions/classifier/deps.ts`)
-  frees a branch whose failed orphan left no deltas (`deps.test.ts`,
-  "reconciles a failed orphan that left no deltas behind"), as after a
-  crash during the pass's call and a failed boot transaction for its
-  marker. Canon's "definitionally stops them"
-  ([`generation-pipeline.md → Recovery-failure policy`](../generation-pipeline.md#recovery-failure-policy))
-  misses that case. Predates the pass failure policy slice (the copy
-  said memory was paused); raised 2026-10-23 by its slice review.
 
 - **A pass bound that expires during a retry backoff reports a
   timeout.** `callWithRetry` (`lib/ai/transport/call-with-retry.ts`)

@@ -1,18 +1,19 @@
 import { inArray } from 'drizzle-orm'
 
 import { stories, type DbCtx } from '@/lib/db'
-import type { RecoveryReport } from '@/lib/pipeline'
+import type { BootRecoveryReport } from '@/lib/pipeline'
 
 import type { RecoveryStoryNames } from './copy'
 
 export async function loadRecoveryStoryNames(
-  report: RecoveryReport,
+  report: BootRecoveryReport,
   db: DbCtx['db'],
 ): Promise<RecoveryStoryNames> {
   const storyIds = new Set<string>()
   for (const run of [...report.reversed, ...report.failures]) {
     if (run.storyId !== null) storyIds.add(run.storyId)
   }
+  for (const storyId of report.heldStoryIds ?? []) storyIds.add(storyId)
 
   if (storyIds.size === 0) return {}
 

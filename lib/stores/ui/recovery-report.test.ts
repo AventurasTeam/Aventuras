@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import type { RecoveryReport } from '@/lib/pipeline'
+import type { BootRecoveryReport } from '@/lib/pipeline'
 
 import { recoveryReportStore } from './recovery-report'
 
-const reversedReport: RecoveryReport = {
+const reversedReport: BootRecoveryReport = {
   reversed: [
     {
       runId: 'r1',
@@ -15,6 +15,7 @@ const reversedReport: RecoveryReport = {
     },
   ],
   failures: [],
+  heldStoryIds: [],
 }
 
 describe('recoveryReportStore', () => {
@@ -35,6 +36,7 @@ describe('recoveryReportStore', () => {
           refusal: null,
         },
       ],
+      heldStoryIds: null,
     }
 
     recoveryReportStore.publish(failureReport)
@@ -42,8 +44,18 @@ describe('recoveryReportStore', () => {
     expect(recoveryReportStore.getSnapshot().pendingRecoveryReport).toBe(failureReport)
   })
 
-  it('ignores a report with nothing reversed and nothing failed', () => {
-    recoveryReportStore.publish({ reversed: [], failures: [] })
+  // A reset that threw or never ran can hold a branch with no orphan to report.
+  it('publishes a report that only has a held story', () => {
+    const heldReport = { reversed: [], failures: [], heldStoryIds: ['s1'] }
+
+    recoveryReportStore.publish(heldReport)
+
+    expect(recoveryReportStore.getSnapshot().pendingRecoveryReport).toBe(heldReport)
+  })
+
+  it('ignores a report with nothing reversed, failed or held', () => {
+    recoveryReportStore.publish({ reversed: [], failures: [], heldStoryIds: [] })
+    recoveryReportStore.publish({ reversed: [], failures: [], heldStoryIds: null })
 
     expect(recoveryReportStore.getSnapshot()).toEqual({
       pendingRecoveryReport: null,

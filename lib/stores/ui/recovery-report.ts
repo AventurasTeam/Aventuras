@@ -1,11 +1,11 @@
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
-import type { RecoveryReport } from '@/lib/pipeline'
+import type { BootRecoveryReport } from '@/lib/pipeline'
 
 export type RecoveryReportSnapshot = {
-  pendingRecoveryReport: RecoveryReport | null
-  activeRecoveryReport: RecoveryReport | null
+  pendingRecoveryReport: BootRecoveryReport | null
+  activeRecoveryReport: BootRecoveryReport | null
 }
 
 const INITIAL_SNAPSHOT: RecoveryReportSnapshot = {
@@ -16,11 +16,12 @@ const INITIAL_SNAPSHOT: RecoveryReportSnapshot = {
 const store = createStore<RecoveryReportSnapshot>()(() => INITIAL_SNAPSHOT)
 
 export const recoveryReportStore = {
-  publish: (report: RecoveryReport): void => {
-    if (report.reversed.length === 0 && report.failures.length === 0) return
+  publish: (report: BootRecoveryReport): void => {
+    const held = report.heldStoryIds?.length ?? 0
+    if (report.reversed.length === 0 && report.failures.length === 0 && held === 0) return
     store.setState({ pendingRecoveryReport: report })
   },
-  claim: (): RecoveryReport | null => {
+  claim: (): BootRecoveryReport | null => {
     const snapshot = store.getState()
     if (snapshot.activeRecoveryReport) return snapshot.activeRecoveryReport
     if (!snapshot.pendingRecoveryReport) return null
