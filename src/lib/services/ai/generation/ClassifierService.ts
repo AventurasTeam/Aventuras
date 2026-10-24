@@ -40,7 +40,7 @@ import type { RuntimeVariable, RuntimeEntityType } from '#lib/services/packs/typ
 import { NoObjectGeneratedError } from 'ai'
 import { jsonrepair } from 'jsonrepair'
 import { describeActivityError, isAbortError } from '#lib/services/activity/index.ts'
-import { formatExistingCharacters, shownCharacters } from './classifierCharacters'
+import { formatExistingCharacters, shownInPrompt } from './classifierCharacters'
 
 const log = createLogger('Classifier')
 
@@ -150,6 +150,7 @@ export class ClassifierService extends BaseAIService {
 
     // Render through the classifier template
     const { system, user: prompt } = await ctx.render('classifier')
+    const shown = shownInPrompt(context.existingCharacters, existingCharacters, [system, prompt])
 
     try {
       const result = (await generateStructured(
@@ -173,7 +174,7 @@ export class ClassifierService extends BaseAIService {
       if (runtimeVars.length > 0) {
         result._runtimeVarDefs = runtimeVars
       }
-      result._shownCharacters = shownCharacters(context.existingCharacters)
+      result._shownCharacters = shown
 
       log('classify complete', {
         characterUpdates: result.entryUpdates.characterUpdates.length,
@@ -193,7 +194,7 @@ export class ClassifierService extends BaseAIService {
       log('classify failed', error)
       if (isAbortError(error)) throw error
       const recovered = this.recover(error, runtimeVars, runtimeVarsByType)
-      recovered._shownCharacters = shownCharacters(context.existingCharacters)
+      recovered._shownCharacters = shown
       return recovered
     }
   }
