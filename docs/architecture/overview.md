@@ -298,6 +298,25 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   places kept whichever ran last — and the merge path set a second `current` without
   clearing the first. Both are gone from the schema.
 
+  **An item's `location` is `'inventory'` or a location id; the classifier speaks names.**
+  `utils/itemLocation.ts` converts both ways. On the way in, `inventory`/`carried` is the
+  inventory, `worn` the inventory and equipped, `ground`/`here` the scene's location, and a
+  name its location by `sameEntityName` (then without a leading article); a name matching
+  none is a part of the scene's place, and so is an item worn or carried by a character other
+  than the protagonist. With no scene location an update keeps the item where it was and a
+  new item goes to the inventory. Only a held item can be equipped. Items are applied after
+  the response's locations and scene change, so a place named in the same response resolves
+  and `ground` is where the passage ends. The id stored is the root a branch override stands
+  in for, which every branch resolves (`overridesId`).
+
+  Every reader (the panels, both prompts, the retrieval tool) goes through
+  `readItemPlacement`. Legacy free text is read leniently and not migrated: a location's name
+  as that location, a lone `worn` as equipped, a lone `inventory`/`carried` as the inventory,
+  anything else as its text. The next classifier update to the item, or a save in the panel,
+  rewrites one it can read (`normalizeItemLocation`). Deleting a location moves its items to
+  the scene's location; when it is the scene's, or there is none, they keep the id and read
+  as "Unknown location".
+
   **Presence is reported, departure is inferred.** The classifier answers one question about the
   cast — `scene.presentCharacterNames`, every _other_ character in the scene at the end of the
   passage; the protagonist is in every scene by definition and is added by the consumers — and

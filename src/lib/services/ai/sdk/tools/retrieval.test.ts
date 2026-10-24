@@ -853,6 +853,28 @@ describe('inspect_world_state', () => {
 
     expect(res.results.items[0].location).toBe('Chest in Oakvale')
   })
+
+  it("returns an item's location by name and matches on it", async () => {
+    const ws = {
+      locations: [{ id: 'l1', name: 'Oakvale' }],
+      items: [
+        { id: 'i1', name: 'Golden Ring', location: 'l1', description: null },
+        { id: 'i2', name: 'Cloak', location: 'worn', equipped: false, description: null },
+      ],
+    } as any
+    const tools = createRetrievalTools(makeContext({ worldState: ws })) as Record<string, any>
+
+    const res = await tools.inspect_world_state.execute(
+      { category: 'items', query: 'oakvale' },
+      {} as any,
+    )
+    expect(res.results.items).toEqual([expect.objectContaining({ id: 'i1', location: 'Oakvale' })])
+
+    const all = await tools.inspect_world_state.execute({ category: 'items' }, {} as any)
+    expect(all.results.items[1]).toEqual(
+      expect.objectContaining({ location: 'Inventory', equipped: true }),
+    )
+  })
 })
 
 describe('query_chapter — the whole-chapter read budget', () => {

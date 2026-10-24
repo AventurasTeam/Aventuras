@@ -117,6 +117,31 @@ describe('WorldStateInjector', () => {
     expect(result.tier1.map((e) => e.name)).not.toContain('Borin')
   })
 
+  it('counts legacy worn items as inventory, and items at a location as not', async () => {
+    const withLegacy = {
+      ...worldState,
+      items: [
+        { id: 'i3', name: 'Cloak', location: 'worn', equipped: false, description: null },
+        { id: 'i4', name: 'Anvil', location: 'l2', equipped: true, description: null },
+      ] as Item[],
+    }
+    const result = await injector.buildContext(withLegacy, '', [], { storyId: undefined })
+
+    expect(result.tier1.find((e) => e.name === 'Cloak')?.metadata?.equipped).toBe(true)
+    expect(result.tier1.map((e) => e.name)).not.toContain('Anvil')
+    expect(result.contextBlock).toContain('Cloak [equipped]')
+  })
+
+  it('names the location of an item it matched', async () => {
+    const lying = {
+      ...worldState,
+      items: [{ id: 'i4', name: 'Anvil', location: 'l2', equipped: false, description: null }],
+    } as typeof worldState
+    const result = await injector.buildContext(lying, 'the Anvil', [], { storyId: undefined })
+
+    expect(result.tier2.find((e) => e.name === 'Anvil')?.metadata?.location).toBe('Iron Mountain')
+  })
+
   it('selects Tier 2 entities via fuzzy matching against user input and recent narrative', async () => {
     const recentEntries: StoryEntry[] = [
       {
