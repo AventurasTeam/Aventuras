@@ -998,3 +998,14 @@ slice-planning gate forces its resolution before that slice is planned.
   on the template's `reads`, or deriving it from the rendered prompt,
   would close it. Raised 2026-10-23 by the AI writer map's Task 12
   review; filed by its slice review.
+
+- **A cast row's dangling faction selects nothing.** In
+  `components/wizard/cast-editors.tsx`, a character whose `factionId`
+  names no cast faction (a resumed draft whose faction row failed its
+  parse: `salvageRows` in `lib/actions/wizard/session.ts` drops the row
+  and leaves the reference) shows its faction picker with nothing
+  selected, while Finish commits it Unaffiliated (`castRef` in
+  `components/wizard/finish.ts`). The location picker now reads such a
+  parent as `Unknown` through `castPlacement`; the faction picker has no
+  equivalent. Predates the AI writer map; raised 2026-10-24 by its
+  slice review.
