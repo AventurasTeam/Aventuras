@@ -897,11 +897,18 @@ characters and items at a place are unaffected. Disabling a place, or
 moving one into a disabled region, refuses while the tail scene is in
 it or inside it (`story-inside`): a disabled region the story enters is
 one the model walked into through the prose, never one disabled around
-it. That binds the periodic classifier too: a pass's placement that
-would put a disabled place around the story's place, the tail's or the
-scene's, is dropped and logged, and `placeLocation` refuses one that
-gets past the planner as a no-op
+it. That binds the machine writers too, judged on the story's place,
+the tail's and the scene's. A pass's placement that would put a
+disabled place around it is dropped and logged, and `placeLocation`
+refuses one from a pass that gets past its planner as a no-op
 ([`classifier.md → What the classifier writes`](./memory/classifier.md#what-the-classifier-writes)).
+The per-turn writer places only an unplaced place it reuses, always on
+its turn's own location chain, so it judges the story's place as the
+turn found it: a placement around a story already in the place or
+inside it is dropped, logged, and one the story walks into through the
+turn lands
+([`piggyback.md → Creating a place or an item`](./memory/piggyback.md#creating-a-place-or-an-item)).
+A new place is never checked, since nothing is in it yet.
 
 **The story's place.** The tail scene above is the location the next
 prompt's map is built around, read off the latest `ai_reply` or

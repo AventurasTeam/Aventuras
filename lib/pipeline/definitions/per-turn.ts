@@ -22,6 +22,7 @@ import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore, currentStoryStore } from '@/lib/stores'
 
 import { classifierEmbedder } from './description-embedder'
+import { readStoryPlace } from './entry-reads'
 import { buildGenerationContext } from './generation-context'
 import { nextMemoryRun } from './memory-chain'
 import { planTurnCreates, skipTurnCreates, type TurnCreatePlan } from './per-turn-creates'
@@ -258,6 +259,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
           block: resolvedBlock,
           entities,
           mapCurrentLocationId: load.mapCurrentLocationId,
+          // The reply isn't written yet, so the rows read the place the turn found.
+          story: await readStoryPlace(ctx.db, branchId),
           branchId,
           source: 'piggyback_tagged_block',
           embed: classifierEmbedder(),

@@ -338,6 +338,12 @@ already broken above it creates the location unplaced, logged, rather
 than failing the turn. A retired parent, which a place pinned `always`
 can still put in the prompt with its id, also creates the location
 unplaced, logged, since nothing active may sit inside a retired place.
+A reused unplaced place's placement is dropped instead, the place left
+unplaced, logged, when its parent would close a loop through it or
+would put a disabled place around the story's place as the turn found
+it
+([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape));
+the story walking into it through the turn is no reason to drop it.
 Parents resolve top-down, so the child of a new location hangs under
 whatever row that location resolved to; otherwise the creates settle in
 the block's order, each waiting only for its own parent.

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, ne } from 'drizzle-orm'
+import { and, desc, eq, inArray, lt, ne, type SQL } from 'drizzle-orm'
 
 import { storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
 import { NARRATIVE_KINDS } from '@/lib/piggyback'
@@ -7,23 +7,34 @@ import { storyPlaceOf, type StoryPlace } from '@/lib/world'
 
 const LAST_TURNS = 2
 
+// The branch's latest entry the filter keeps, below `before` when given.
+async function latestEntry(
+  db: DbCtx['db'],
+  branchId: string,
+  filter: SQL,
+  before?: number,
+): Promise<StoryEntry | undefined> {
+  const below = before === undefined ? undefined : lt(storyEntries.position, before)
+  const [row] = await db
+    .select()
+    .from(storyEntries)
+    .where(and(eq(storyEntries.branchId, branchId), filter, below))
+    .orderBy(desc(storyEntries.position), desc(storyEntries.createdAt))
+    .limit(1)
+  return row
+}
+
+const NARRATIVE = inArray(storyEntries.kind, [...NARRATIVE_KINDS])
+
 // Scene state is written by classification, so it lives on AI-authored rows; a
 // user_action only inherits it forward. Reading the AI row directly keeps the
 // scene independent of which kind happens to sit at the tail — and keeps the
 // prompt and the ranker scoped to the same one.
-export async function readSceneSource(
+export function readSceneSource(
   db: DbCtx['db'],
   branchId: string,
 ): Promise<StoryEntry | undefined> {
-  const [row] = await db
-    .select()
-    .from(storyEntries)
-    .where(
-      and(eq(storyEntries.branchId, branchId), inArray(storyEntries.kind, [...NARRATIVE_KINDS])),
-    )
-    .orderBy(desc(storyEntries.position), desc(storyEntries.createdAt))
-    .limit(1)
-  return row
+  return latestEntry(db, branchId, NARRATIVE)
 }
 
 // Bounded by the query, not the caller or a pack — nothing narrows it below the
@@ -44,9 +55,16 @@ export async function readLastTurns(
   return rows.reverse()
 }
 
-/** data-model.md → The story's place: the narrative tail's location and the scene source's. */
-export async function readStoryPlace(db: DbCtx['db'], branchId: string): Promise<StoryPlace> {
-  const turns = await readLastTurns(db, branchId)
-  const sceneSource = await readSceneSource(db, branchId)
-  return storyPlaceOf({ tail: turns.at(-1), sceneSource })
+/**
+ * data-model.md → The story's place: the narrative tail's location and the scene source's, read
+ * below `before` when given, so a turn's reply already written leaves the place it found.
+ */
+export async function readStoryPlace(
+  db: DbCtx['db'],
+  branchId: string,
+  before?: number,
+): Promise<StoryPlace> {
+  const tail = await latestEntry(db, branchId, ne(storyEntries.kind, 'system'), before)
+  const sceneSource = await latestEntry(db, branchId, NARRATIVE, before)
+  return storyPlaceOf({ tail, sceneSource })
 }
