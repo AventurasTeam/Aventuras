@@ -240,17 +240,6 @@ slice-planning gate forces its resolution before that slice is planned.
   failure policy slice's commits ran 73 to 75 (`28950818`, `042c011c`,
   `0f8086c0`, `21ae1f2f`). Raised 2026-10-23 by its slice review.
 
-- **On Android a profile `timeout` may fail every call.** React
-  Native's global `AbortController` (abort-controller@3) has no
-  `AbortSignal.timeout`, as `lib/abort.ts` notes, yet the AI SDK builds
-  one whenever a call sets `timeout` (`AbortSignal.timeout(totalMs)` in
-  `node_modules/ai/dist/index.mjs`), and `buildCallSettings`
-  (`lib/ai/generate.ts`) sets it from the profile. Read, not run on a
-  device. Nothing writes a profile timeout before M7's settings UI;
-  under the pass failure policy a classifier profile with one would
-  fail every pass, and so every Send at cadence. Raised 2026-10-23 by
-  the pass failure policy slice review.
-
 - **The embed-failure spec builds its system-entry selectors inline.**
   `e2e/tests/retrieval-embed-failure.spec.ts` (~:104, :108) calls
   `getByText(t('reader:systemEntry.failure.embed'))` and the

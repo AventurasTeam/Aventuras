@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import type { ProviderInstance } from '../db'
@@ -6,6 +6,7 @@ import {
   buildCallSettings,
   generateStructured,
   parseStructured,
+  profileTimeoutMs,
   streamText,
   type PromptHalves,
 } from './generate'
@@ -78,7 +79,8 @@ const STREAM_CFG = {
 }
 
 describe('buildCallSettings', () => {
-  it('maps every profile parameter to its SDK option (anthropic)', () => {
+  // The timeout stays out: the SDK would build AbortSignal.timeout, which React Native lacks.
+  it('maps every profile parameter but the timeout to its SDK option (anthropic)', () => {
     expect(
       buildCallSettings(
         { temperature: 0.7, maxOutput: 2048, thinking: 1024, timeout: 45 },
@@ -88,7 +90,6 @@ describe('buildCallSettings', () => {
       temperature: 0.7,
       maxOutputTokens: 2048,
       providerOptions: { anthropic: { thinking: { type: 'enabled', budgetTokens: 1024 } } },
-      timeout: { totalMs: 45_000 },
     })
   })
 
@@ -105,21 +106,23 @@ describe('buildCallSettings', () => {
   it('maps an empty params object to no options', () => {
     expect(buildCallSettings({}, 'anthropic')).toEqual({})
   })
+})
 
-  // AbortSignal.timeout fires at once on 0 and throws on a negative or non-finite delay.
-  it.each([0, -30, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
-    'drops an invalid timeout (%s)',
+describe('profileTimeoutMs', () => {
+  it('reads seconds as milliseconds', () => {
+    expect(profileTimeoutMs(45)).toBe(45_000)
+  })
+
+  // A timer fires at once on 0 and on a non-finite delay.
+  it.each([0, -30, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, undefined])(
+    'reads an invalid timeout (%s) as none',
     (timeout) => {
-      expect(buildCallSettings({ temperature: 0.7, timeout }, 'anthropic')).toEqual({
-        temperature: 0.7,
-      })
+      expect(profileTimeoutMs(timeout)).toBeUndefined()
     },
   )
 
   it("caps a huge timeout at setTimeout's largest delay", () => {
-    expect(buildCallSettings({ timeout: 9_999_999 }, 'anthropic')).toEqual({
-      timeout: { totalMs: 2_147_483_647 },
-    })
+    expect(profileTimeoutMs(9_999_999)).toBe(2_147_483_647)
   })
 })
 
@@ -131,10 +134,14 @@ describe('streamText', () => {
   it('resolves the target; streams both halves verbatim with the mapped options', () => {
     const onError = () => {}
     const signal = new AbortController().signal
+    const untimed = {
+      ...STREAM_CFG,
+      profiles: STREAM_CFG.profiles.map(({ timeout: _, ...profile }) => profile),
+    }
 
     const result = streamText('narrative', {
       prompt: { system: ' S\n', user: ' P\n' },
-      config: STREAM_CFG,
+      config: untimed,
       abortSignal: signal,
       actionId: 'act_1',
       onError,
@@ -151,7 +158,53 @@ describe('streamText', () => {
       temperature: 0.7,
       maxOutputTokens: 2048,
       providerOptions: { anthropic: { thinking: { type: 'enabled', budgetTokens: 1024 } } },
-      timeout: { totalMs: 45_000 },
+    })
+  })
+
+  describe("a profile's timeout", () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    const streamed = (abortSignal?: AbortSignal) => {
+      vi.mocked(streamProviderCall).mockClear()
+      const result = streamText('narrative', {
+        prompt: PROMPT,
+        config: STREAM_CFG,
+        ...(abortSignal ? { abortSignal } : {}),
+      })
+      const call = vi.mocked(streamProviderCall).mock.calls.at(-1)?.[0]
+      if (!result.ok || call === undefined) throw new Error('expected a stream')
+      return { result, call }
+    }
+
+    it('bounds the stream with its own signal, never the SDK option', () => {
+      const { result, call } = streamed()
+
+      expect(call).not.toHaveProperty('timeout')
+      vi.advanceTimersByTime(44_999)
+      expect(call.abortSignal?.aborted).toBe(false)
+      expect(result.timedOut()).toBe(false)
+      vi.advanceTimersByTime(1)
+      expect(call.abortSignal?.aborted).toBe(true)
+      expect(result.timedOut()).toBe(true)
+    })
+
+    it('reads a cancel as no timeout, and a finished stream disarms the bound', () => {
+      const controller = new AbortController()
+      const cancelled = streamed(controller.signal)
+      controller.abort()
+      expect(cancelled.call.abortSignal?.aborted).toBe(true)
+      expect(cancelled.result.timedOut()).toBe(false)
+
+      const finished = streamed()
+      finished.call.onFinish?.({} as never)
+      vi.advanceTimersByTime(45_000)
+      expect(finished.call.abortSignal?.aborted).toBe(false)
+      expect(finished.result.timedOut()).toBe(false)
     })
   })
 
@@ -358,6 +411,52 @@ describe('generateStructured', () => {
     expect(runProviderCall).toHaveBeenCalledWith(
       expect.objectContaining({ temperature: 0.5, maxOutputTokens: 100 }),
     )
+  })
+
+  it("bounds each attempt by the profile's timeout, retrying the first as a timeout", async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(resolveModel).mockReturnValueOnce({
+        ok: true,
+        providerId: structuredProvider.id,
+        providerType: structuredProvider.type,
+        modelId: 'm',
+        params: { timeout: 30 },
+      })
+      const attempts: AbortSignal[] = []
+      vi.mocked(runProviderCall).mockImplementation(({ abortSignal }) => {
+        if (abortSignal === undefined) throw new Error('expected a bound')
+        attempts.push(abortSignal)
+        return new Promise((_, reject) => {
+          abortSignal.addEventListener('abort', () =>
+            reject(new DOMException('aborted', 'AbortError')),
+          )
+        })
+      })
+      const outer = new AbortController()
+
+      const pending = generateStructured(
+        'wizard-assist',
+        PROMPT,
+        schema,
+        STRUCTURED_CFG,
+        outer.signal,
+      )
+      await vi.advanceTimersByTimeAsync(29_999)
+      expect(attempts.map((signal) => signal.aborted)).toEqual([false])
+      await vi.advanceTimersByTimeAsync(31_000)
+
+      expect(await pending).toEqual({
+        status: 'failed',
+        detail: 'timeout',
+        recoverable: [{ tier: 'provider', reason: 'timeout' }],
+      })
+      expect(attempts.map((signal) => signal.aborted)).toEqual([true, true])
+      expect(outer.signal.aborted).toBe(false)
+      expect(vi.mocked(runProviderCall).mock.calls[0]?.[0]).not.toHaveProperty('timeout')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('returns not-configured when the resolver fails', async () => {

@@ -1753,6 +1753,14 @@ failed attempt yields a `recoverable_error` event. Retries are
 transparent — the phase eventually returns success or fatal; no
 user surfacing in between.
 
+A profile's `timeout` bounds each attempt of a structured call, and a
+streamed reply as a whole, by the app's own signal rather than the
+SDK's `timeout` option, which builds `AbortSignal.timeout` and React
+Native's `AbortController` has none. An expired attempt is a provider
+timeout. An expired stream closes the way a cancel does, so the
+narrative phase fails it as a provider timeout instead of committing
+the reply so far.
+
 ```ts
 type CallRetryError =
   | { tier: 'provider'; reason: 'auth' | 'network' | 'timeout' | 'unknown'; detail?: string }

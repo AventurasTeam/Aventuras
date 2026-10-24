@@ -100,6 +100,7 @@ function failingStreamCall() {
     ok: true,
     modelId: 'model-1',
     providerId: 'prov-1',
+    timedOut: () => false,
     stream: {
       fullStream: (async function* () {
         throw new Error('stop after call')
@@ -277,6 +278,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           controller.abort()
@@ -287,6 +289,33 @@ describe('per-turn pipeline declaration', () => {
     const result = await runNarrativePhase(controller.signal)
 
     expect(result).toEqual({ status: 'aborted' })
+  })
+
+  // The profile's timeout ends the stream the same graceful way, and what arrived is no reply.
+  it('fails as a provider timeout when the timeout ends the stream', async () => {
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition,
+      settings: baseSettings({ partialChapterBuffer: 3 }),
+    })
+    hydrateEntries(phaseDb, 'b1', [])
+    entitiesStore.hydrate('b1', [])
+    streamTextMock.mockReturnValue({
+      ok: true,
+      modelId: 'model-1',
+      providerId: 'prov-1',
+      timedOut: () => true,
+      stream: {
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'The lantern gutt' }
+        })(),
+      },
+    })
+
+    const result = await runNarrativePhase()
+
+    expect(result).toEqual({ status: 'failed', error: { kind: 'provider', reason: 'timeout' } })
   })
 
   it('surfaces a resolve failure as a config-resolver phase error', async () => {
@@ -366,6 +395,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield {
@@ -482,6 +512,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield {
@@ -565,6 +596,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield { type: 'text-delta', text: raw }
@@ -637,6 +669,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield {
@@ -721,6 +754,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield {
@@ -798,6 +832,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield {
@@ -876,6 +911,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield {
@@ -963,6 +999,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield { type: 'text-delta', text: 'Narrative text\n<state></state>' }
@@ -1043,6 +1080,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield { type: 'text-delta', text: 'Narrative text and nothing else.' }
@@ -1207,6 +1245,7 @@ async function runNarrativeWith(opts: {
     ok: true,
     modelId: 'model-1',
     providerId: 'prov-1',
+    timedOut: () => false,
     stream: {
       fullStream: (async function* () {
         yield { type: 'text-delta', text: opts.narrative }
@@ -1676,6 +1715,7 @@ describe('narrative fold — creates', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield { type: 'text-delta', text }
