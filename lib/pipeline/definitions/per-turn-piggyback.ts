@@ -86,6 +86,35 @@ const createList = <T extends z.ZodType>(create: T) =>
     z.array(z.preprocess((value) => (isRecord(value) ? value : {}), create)).optional(),
   )
 
+const withoutNulls = (value: object): object =>
+  Object.fromEntries(Object.entries(value).filter(([, field]) => field !== null))
+
+// Read as a create list is, but an entry the schema can't read drops alone, uncounted, as the tags'
+// parser skips one; a null field reads as absent first.
+function readableEntries(value: unknown, entry: z.ZodType): unknown[] | undefined {
+  const list = Array.isArray(value) ? value : isRecord(value) ? [value] : undefined
+  return list
+    ?.map((item) => (isRecord(item) ? withoutNulls(item) : item))
+    .filter((item) => entry.safeParse(item).success)
+}
+
+const conditionEntry = z.object({
+  id: z.string().describe('The ID of a place or item shown above with its state.'),
+  text: z
+    .string()
+    .describe(
+      'Its condition as it is now, the running consequence rather than the event: keep what still applies, drop what no longer does, in a few words, never more than about 60. It replaces the stored condition whole.',
+    ),
+})
+
+const dropEntry = z.object({
+  id: z.string().describe("The item's ID from the list."),
+  from: z
+    .string()
+    .optional()
+    .describe('Who held it, when the turn says. Omit rather than inventing a roster ID.'),
+})
+
 export const fallbackClassifierSchema = z.object({
   sceneEntities: z
     .array(z.string())
@@ -136,17 +165,10 @@ export const fallbackClassifierSchema = z.object({
     )
     .optional(),
   conditions: z
-    .array(
-      z.object({
-        id: z.string().describe('The ID of a place or item shown above with its state.'),
-        text: z
-          .string()
-          .describe(
-            'Its condition as it is now, the running consequence rather than the event: keep what still applies, drop what no longer does, in a few words, never more than about 60. It replaces the stored condition whole.',
-          ),
-      }),
+    .preprocess(
+      (value) => readableEntries(value, conditionEntry),
+      z.array(conditionEntry).optional(),
     )
-    .optional()
     .describe(
       "A place's or an item's condition, only when this turn changes it, and only for one shown above with its state: the current location, an item held in the scene or lying there, a place or item listed elsewhere in the world.",
     ),
@@ -197,15 +219,7 @@ export const fallbackClassifierSchema = z.object({
         )
         .default([]),
       drops: z
-        .array(
-          z.object({
-            id: z.string().describe("The item's ID from the list."),
-            from: z
-              .string()
-              .optional()
-              .describe('Who held it, when the turn says. Omit rather than inventing a roster ID.'),
-          }),
-        )
+        .preprocess((value) => readableEntries(value, dropEntry) ?? [], z.array(dropEntry))
         .default([])
         .describe(
           'Items someone holding them put down where the scene is and still lying there when the turn ends. An item picked up again, or put down anywhere else, is left out.',

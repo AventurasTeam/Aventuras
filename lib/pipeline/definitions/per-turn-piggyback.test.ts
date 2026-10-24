@@ -3799,6 +3799,68 @@ describe('per-turn-piggyback', () => {
       expect(parsed.newItems?.[0]?.condition).toBe('bent')
     })
 
+    // A failed parse costs the turn its scene, place, time and summary: one bad value drops alone.
+    describe('a bad condition or drop', () => {
+      const parse = (reply: Record<string, unknown>) =>
+        fallbackClassifierSchema.parse({ sceneEntities: ['c1'], worldTimeDelta: 5, ...reply })
+      const withDrops = (drops: unknown) =>
+        parse({ transfers: { items: [], stackables: [], drops } })
+
+      it('reads null conditions as none, keeping the rest of the reply', () => {
+        const parsed = parse({ conditions: null, summary: 'Aria waits.' })
+        expect(parsed.conditions).toBeUndefined()
+        expect(parsed.worldTimeDelta).toBe(5)
+        expect(parsed.summary).toBe('Aria waits.')
+      })
+
+      it('drops a condition it cannot read and keeps the others', () => {
+        const parsed = parse({
+          conditions: [
+            { id: 'i1' },
+            { id: 'i2', text: null },
+            'scorched',
+            { id: null, text: 'bent' },
+            { id: 'l1', text: 'flooded to the knee' },
+          ],
+        })
+        expect(parsed.conditions).toEqual([{ id: 'l1', text: 'flooded to the knee' }])
+      })
+
+      it('reads a lone condition as a list of one, as a lone create reads', () => {
+        expect(parse({ conditions: { id: 'l1', text: 'flooded' } }).conditions).toEqual([
+          { id: 'l1', text: 'flooded' },
+        ])
+      })
+
+      it('reads null drops as none', () => {
+        expect(withDrops(null).transfers?.drops).toEqual([])
+      })
+
+      it('drops a drop it cannot read and keeps the others', () => {
+        expect(
+          withDrops(['i1', { from: 'c1' }, { id: 7 }, { id: 'i2', from: 'c1' }]).transfers?.drops,
+        ).toEqual([{ id: 'i2', from: 'c1' }])
+      })
+
+      it('reads a null holder as none, keeping the drop', () => {
+        expect(withDrops([{ id: 'i1', from: null }]).transfers?.drops).toEqual([{ id: 'i1' }])
+      })
+
+      it('reads a lone drop as a list of one', () => {
+        expect(withDrops({ id: 'i1', from: 'c1' }).transfers?.drops).toEqual([
+          { id: 'i1', from: 'c1' },
+        ])
+      })
+
+      // The tolerance is the parse's alone: the model is still asked for the full shape.
+      it("still asks for a condition's id and text and a drop's id", () => {
+        const jsonSchema = z.toJSONSchema(fallbackClassifierSchema)
+        expect(schemaNode(jsonSchema, ['conditions', '[]']).required).toEqual(['id', 'text'])
+        expect(schemaNode(jsonSchema, ['transfers', 'drops', '[]']).required).toEqual(['id'])
+        expect(schemaNode(jsonSchema, ['transfers', 'drops']).default).toEqual([])
+      })
+    })
+
     // retrieval.md → Q4: emission is malformed-tolerant — raising here costs a full extra
     // provider call and takes the mandatory summary field down with an over-long hint too.
     it('drops an over-long retrievalQueries without failing the sibling fields', () => {
