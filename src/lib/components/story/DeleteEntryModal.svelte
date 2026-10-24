@@ -96,7 +96,8 @@
   busy={deleting}
   title={`Delete entry ${number}`}
 >
-  {#snippet description()}
+  <!-- The setting comes first, so what the switch overrules is read before it is switched. -->
+  <p class="text-muted-foreground text-sm">
     {#if revertsOnDelete && number === lastEntryNumber}
       Revert on Delete is on: deleting this entry will undo the world state changes associated with
       it.
@@ -106,25 +107,21 @@
     {:else}
       Revert on Delete is off.
     {/if}
-  {/snippet}
-  {#snippet headerExtra()}
-    <!-- Below the description, so what it overrules is read before it is switched. -->
-    {#if revertsOnDelete}
-      <label class="mt-2 flex items-center gap-2 text-sm">
-        <Switch bind:checked={onlyThisEntry} disabled={deleting} />
-        Delete only this entry, without a rollback
-      </label>
-    {/if}
-  {/snippet}
-  <p class="text-muted-foreground text-sm">
-    {#if !rollsBack}
-      Only entry {number} will be deleted. The world state will stay as it is.
-    {:else if number === lastEntryNumber}
-      Entry {number} will be deleted.
-    {:else}
-      Entries {number} to {lastEntryNumber} will be deleted.
-    {/if}
   </p>
+  {#if revertsOnDelete}
+    <label class="flex items-center gap-2 text-sm">
+      <Switch bind:checked={onlyThisEntry} disabled={deleting} />
+      Delete only this entry, without a rollback
+    </label>
+  {/if}
+  <!-- Says only what the title does not: the range, or that the world state is left alone. -->
+  {#if !rollsBack}
+    <p class="text-muted-foreground text-sm">The world state will stay as it is.</p>
+  {:else if number !== lastEntryNumber}
+    <p class="text-muted-foreground text-sm">
+      Entries {number} to {lastEntryNumber} will be deleted.
+    </p>
+  {/if}
   {#if !rollsBack}
     {@const gone = deletedSnapshotsLine(snapshots.here)}
     {#if gone}

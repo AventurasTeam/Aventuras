@@ -32,7 +32,6 @@ rest:
 | `onClosed`                 | after the close transition, for a caller that unmounts the modal then           |
 | `title` / `description`    | `description` is a string or a snippet                                          |
 | `children`                 | the body; a confirmation whose description says it all has none                 |
-| `headerExtra`              | a switch that changes what the body says, read before the body                  |
 | `action`                   | `{ label, icon?, tone?, disabled?, onConfirm }`                                 |
 | `busy`, `cancelWhileBusy`  | the busy lock                                                                   |
 | `dirty`, `discardQuestion` | see below                                                                       |
@@ -122,6 +121,11 @@ action is disabled or running. The shell owns it, so a field's own Enter handler
 a modifier. A phone keyboard has no such key, so it cannot save by accident.
 
 ### Wording
+
+The header is left-aligned at every width, since a title or description that wraps reads badly
+centred. It holds only the title and a short description; a control, even a switch that changes
+what the body says, goes at the top of the body. The body never repeats the title: "Entry 47 will
+be deleted" under "Delete entry 47" says nothing.
 
 - **Sentence case** for titles and buttons.
 - **A command's title is a statement:** a verb, its object with an article, and the target when

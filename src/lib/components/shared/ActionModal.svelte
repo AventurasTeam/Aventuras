@@ -49,8 +49,6 @@
     description?: string | Snippet
     /** Only for a confirmation that warns, drawn before the title. */
     titleIcon?: Snippet
-    /** Controls that belong under the description, read before the body they change. */
-    headerExtra?: Snippet
     /** The body; a confirmation whose description says it all has none. */
     children?: Snippet
     action: Action
@@ -73,7 +71,6 @@
     title,
     description,
     titleIcon,
-    headerExtra,
     children,
     action,
     cancelLabel,
@@ -255,19 +252,21 @@
       onpointerout={(e: PointerEvent) => swipeGuard?.release(e)}
     >
       <div bind:this={frame} class="flex min-h-0 flex-1 flex-col" inert={question !== null}>
-        <ResponsiveModal.Header class="border-b px-6 py-4" closeButton={false}>
-          <ResponsiveModal.Title
-            class={titleIcon && 'flex items-center justify-center gap-2 sm:justify-start'}
-          >
+        <!-- Left-aligned at every width: a title or description that wraps reads badly centred. -->
+        <ResponsiveModal.Header class="border-b px-6 py-4 text-left" closeButton={false}>
+          <ResponsiveModal.Title class={cn('text-left', titleIcon && 'flex items-center gap-2')}>
             {@render titleIcon?.()}
             {title}
           </ResponsiveModal.Title>
           {#if typeof description === 'string'}
-            <ResponsiveModal.Description>{description}</ResponsiveModal.Description>
+            <ResponsiveModal.Description class="text-left"
+              >{description}</ResponsiveModal.Description
+            >
           {:else if description}
-            <ResponsiveModal.Description>{@render description()}</ResponsiveModal.Description>
+            <ResponsiveModal.Description class="text-left">
+              {@render description()}
+            </ResponsiveModal.Description>
           {/if}
-          {@render headerExtra?.()}
         </ResponsiveModal.Header>
 
         <!-- The one scroller: the buttons scroll with the content, so what they do is read first. -->

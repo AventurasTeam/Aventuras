@@ -81,14 +81,12 @@
   {#snippet description()}
     Its entries will remain, and the summary will be lost.
   {/snippet}
-  {#snippet headerExtra()}
-    {#if offered}
-      <label class="mt-2 flex items-center gap-2 text-sm">
-        <Switch bind:checked={undoLore} disabled={deleting} />
-        Undo this chapter's lore management
-      </label>
-    {/if}
-  {/snippet}
+  {#if offered}
+    <label class="flex items-center gap-2 text-sm">
+      <Switch bind:checked={undoLore} disabled={deleting} />
+      Undo this chapter's lore management
+    </label>
+  {/if}
   {#if preview === null}
     <p class="text-muted-foreground text-xs italic">Checking the recorded lore changes…</p>
   {:else if offered && undoLore}
