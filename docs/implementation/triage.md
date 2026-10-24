@@ -192,13 +192,6 @@ slice-planning gate forces its resolution before that slice is planned.
   earlier entry can't simply be put back beside the new one. Raised
   2026-10-22 in the pass failure policy slice's Task 7 review.
 
-- **`retries: 1` also applies to the opt-in real-provider smoke.**
-  `playwright.config.ts:20` sets it for every spec, and
-  `e2e/tests/classifier-real-provider.smoke.spec.ts` sets only a
-  timeout. A model failure there doubles the run's worst case, and one
-  that passes on the retry reports as flaky rather than failed. Raised
-  2026-10-22 in the pass failure policy slice's Task 11 review.
-
 - **The pass and turn failure copy resolvers repeat each other.**
   `describePassFailure` and `toPassFailureMeta`
   (`components/reader/system-entry-actions.tsx:89`, `:112`) repeat

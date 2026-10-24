@@ -39,6 +39,8 @@ const PROMPTS = [
 ]
 
 test.describe('periodic classifier — real provider smoke', () => {
+  // A model failure must fail the run, not pass as flaky on a retry that doubles its worst case.
+  test.describe.configure({ retries: 0 })
   test.skip(!LLM_URL || !LLM_MODEL, 'set SMOKE_LLM_URL and SMOKE_LLM_MODEL to run')
 
   let app: LaunchedApp
