@@ -217,31 +217,62 @@ fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
     PathBuf::from(s)
 }
 
+/// Split an image's stored value into its `data:` URL MIME label, if any, and its base64 body.
+fn split_data_url(data: &str) -> (Option<&str>, &str) {
+    match data.split_once(',') {
+        Some((prefix, rest)) if prefix.starts_with("data:") => {
+            let label = prefix["data:".len()..]
+                .split(';')
+                .next()
+                .filter(|l| !l.is_empty());
+            (label, rest)
+        }
+        _ => (None, data),
+    }
+}
+
 /// Decode an image's stored value (optionally a `data:` URL) into raw bytes.
 fn decode_image(data: &str) -> Result<Vec<u8>, String> {
-    let b64 = match data.split_once(',') {
-        Some((prefix, rest)) if prefix.starts_with("data:") => rest,
-        _ => data,
-    };
     general_purpose::STANDARD
-        .decode(b64.trim())
+        .decode(split_data_url(data).1.trim())
         .map_err(|e| format!("invalid base64: {e}"))
 }
 
-/// File extension for an image's bytes, from its signature; anything unrecognised is `png`.
-fn image_extension(bytes: &[u8]) -> &'static str {
+/// File extension for an image: its signature decides, then its `data:` label, then `png`.
+fn image_extension(bytes: &[u8], label: Option<&str>) -> String {
+    sniff_extension(bytes).map_or_else(|| label_extension(label), str::to_string)
+}
+
+fn sniff_extension(bytes: &[u8]) -> Option<&'static str> {
     if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-        "png"
+        Some("png")
     } else if bytes.starts_with(b"\xff\xd8\xff") {
-        "jpg"
+        Some("jpg")
     } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
-        "gif"
+        Some("gif")
     } else if bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
-        "webp"
+        Some("webp")
     } else if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {
         isobmff_extension(bytes)
     } else {
-        "png"
+        None
+    }
+}
+
+/// The subtype of an `image/*` label; anything else, and APNG, is `png`.
+fn label_extension(label: Option<&str>) -> String {
+    let Some(subtype) = label.and_then(|l| l.strip_prefix("image/")) else {
+        return "png".to_string();
+    };
+    if subtype == "jpeg" {
+        return "jpg".to_string();
+    }
+    let end = subtype
+        .find(|c: char| !c.is_ascii_lowercase() && !c.is_ascii_digit())
+        .unwrap_or(subtype.len());
+    match &subtype[..end] {
+        "" | "apng" => "png".to_string(),
+        ext => ext.to_string(),
     }
 }
 
@@ -262,7 +293,7 @@ const ISOBMFF_BRANDS: &[(&[u8; 4], &str)] = &[
 ];
 
 /// Checks the major brand and the compatible brands of the `ftyp` box; the minor version is skipped.
-fn isobmff_extension(bytes: &[u8]) -> &'static str {
+fn isobmff_extension(bytes: &[u8]) -> Option<&'static str> {
     let size = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
     let end = if size == 0 {
         bytes.len()
@@ -278,7 +309,7 @@ fn isobmff_extension(bytes: &[u8]) -> &'static str {
     ISOBMFF_BRANDS
         .iter()
         .find(|(brand, _)| brands.contains(brand))
-        .map_or("png", |&(_, ext)| ext)
+        .map(|&(_, ext)| ext)
 }
 
 /// Open a read-only connection pool to the live database.
@@ -340,7 +371,8 @@ pub async fn export_images_zip(
             }
         };
 
-        let name = format!("image-{:03}.{}", written + 1, image_extension(&bytes));
+        let ext = image_extension(&bytes, split_data_url(&data).0);
+        let name = format!("image-{:03}.{ext}", written + 1);
         zip.start_file(&name, stored)
             .map_err(|e| format!("failed to add {name}: {e}"))?;
         zip.write_all(&bytes)
@@ -585,27 +617,65 @@ mod tests {
 
     #[test]
     fn image_extension_follows_the_signature() {
-        assert_eq!(image_extension(b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR"), "png");
-        assert_eq!(image_extension(b"\xff\xd8\xff\xe0\0\x10JFIF"), "jpg");
-        assert_eq!(image_extension(b"GIF87a\x01\0\x01\0"), "gif");
-        assert_eq!(image_extension(b"GIF89a\x01\0\x01\0"), "gif");
-        assert_eq!(image_extension(b"RIFF\x24\0\0\0WEBPVP8 "), "webp");
-        assert_eq!(image_extension(&ftyp(b"avif", &[b"mif1", b"miaf"])), "avif");
-        assert_eq!(image_extension(&ftyp(b"mif1", &[b"miaf", b"avif"])), "avif");
-        assert_eq!(image_extension(&ftyp(b"heic", &[b"mif1"])), "heic");
-        assert_eq!(image_extension(&ftyp(b"hevm", &[])), "heic");
-        assert_eq!(image_extension(&ftyp(b"hevs", &[])), "heic");
-        assert_eq!(image_extension(&ftyp(b"mif1", &[b"miaf"])), "heif");
-        assert_eq!(image_extension(&ftyp(b"msf1", &[])), "heif");
+        assert_eq!(
+            image_extension(b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR", None),
+            "png"
+        );
+        assert_eq!(image_extension(b"\xff\xd8\xff\xe0\0\x10JFIF", None), "jpg");
+        assert_eq!(image_extension(b"GIF87a\x01\0\x01\0", None), "gif");
+        assert_eq!(image_extension(b"GIF89a\x01\0\x01\0", None), "gif");
+        assert_eq!(image_extension(b"RIFF\x24\0\0\0WEBPVP8 ", None), "webp");
+        assert_eq!(
+            image_extension(&ftyp(b"avif", &[b"mif1", b"miaf"]), None),
+            "avif"
+        );
+        assert_eq!(
+            image_extension(&ftyp(b"mif1", &[b"miaf", b"avif"]), None),
+            "avif"
+        );
+        assert_eq!(image_extension(&ftyp(b"heic", &[b"mif1"]), None), "heic");
+        assert_eq!(image_extension(&ftyp(b"hevm", &[]), None), "heic");
+        assert_eq!(image_extension(&ftyp(b"hevs", &[]), None), "heic");
+        assert_eq!(image_extension(&ftyp(b"mif1", &[b"miaf"]), None), "heif");
+        assert_eq!(image_extension(&ftyp(b"msf1", &[]), None), "heif");
     }
 
     #[test]
-    fn image_extension_falls_back_to_png() {
-        assert_eq!(image_extension(b""), "png");
-        assert_eq!(image_extension(b"<svg xmlns="), "png");
-        assert_eq!(image_extension(b"RIFF\x24\0\0\0WAVEfmt "), "png");
-        assert_eq!(image_extension(&ftyp(b"mp42", &[b"isom"])), "png");
-        assert_eq!(image_extension(b"\0\0\0\x10ftyp"), "png");
+    fn image_extension_falls_back_to_the_label_then_png() {
+        assert_eq!(
+            image_extension(b"<svg xmlns=", Some("image/svg+xml")),
+            "svg"
+        );
+        assert_eq!(
+            image_extension(b"RIFF\x24\0\0\0WAVEfmt ", Some("image/bmp")),
+            "bmp"
+        );
+        assert_eq!(
+            image_extension(&ftyp(b"mp42", &[b"isom"]), Some("image/jp2")),
+            "jp2"
+        );
+        assert_eq!(
+            image_extension(b"\xff\xd8\xff\xe0", Some("image/png")),
+            "jpg"
+        );
+        assert_eq!(image_extension(b"junk", Some("image/jpeg")), "jpg");
+        assert_eq!(image_extension(b"junk", Some("image/apng")), "png");
+        assert_eq!(image_extension(b"junk", Some("text/plain")), "png");
+        assert_eq!(image_extension(b"", None), "png");
+        assert_eq!(image_extension(b"<svg xmlns=", None), "png");
+        assert_eq!(image_extension(&ftyp(b"mp42", &[b"isom"]), None), "png");
+        assert_eq!(image_extension(b"\0\0\0\x10ftyp", None), "png");
+    }
+
+    #[test]
+    fn split_data_url_separates_the_label() {
+        assert_eq!(
+            split_data_url("data:image/png;base64,AAAA"),
+            (Some("image/png"), "AAAA")
+        );
+        assert_eq!(split_data_url("data:;base64,AAAA"), (None, "AAAA"));
+        assert_eq!(split_data_url("AAAA"), (None, "AAAA"));
+        assert_eq!(split_data_url("AA,AA"), (None, "AA,AA"));
     }
 
     /// Minimal stand-in for a real database file: enough bytes to look like SQLite.
