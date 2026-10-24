@@ -160,22 +160,6 @@ slice-planning gate forces its resolution before that slice is planned.
   promotion at the merge base too. Raised 2026-10-11 by the
   locations-and-items-from-prose slice review.
 
-- **The fallback schema's optional fields reject `null`.** In
-  `fallbackClassifierSchema`
-  (`lib/pipeline/definitions/per-turn-piggyback.ts`), the `.optional()`
-  fields with no `.catch` (`currentLocation`, `visualChanges`,
-  `transfers` and its `to` and `from`, `summary`) fail the whole
-  structured parse when a model answers `null` for one; after the parse
-  retry the call fails, and the turn loses the fallback's scene, time
-  and summary. `generateStructured` defaults to the prompt-injection
-  path (`lib/ai/generate.ts`, around line 161), where `null` is a
-  natural JSON answer, and the fallback runs every turn today, since no
-  model carries the tagged-block capability flag. Predates this PR; the
-  create fields get the fix in it. Related: the M7.1 force-on entry in
-  the [roadmap](./roadmap.md#m7--app-settings--diagnostics--onboarding)
-  plans converting these fields to nullable for the native path. Raised
-  2026-10-11 by the locations-and-items-from-prose slice review.
-
 - **`generation-pipeline.md`'s lifecycle names a reverse swap nothing
   calls.** Step 5 of the substitution lifecycle is
   `parseAndSubstitute(rawOutput, idMap)`, but `parseAndSubstitute`

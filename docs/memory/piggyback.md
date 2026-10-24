@@ -745,11 +745,14 @@ transfer with a bad ref, which it drops rather than fails
 ([Parse strategy and failure recovery](#parse-strategy-and-failure-recovery)).
 A create there may omit its description or parent, or give either as
 `null`, which reads as omitted; one with no description is created
-without one, as a self-closed tag is. Its conditions and drops read
-`null`, or any other value that isn't a list, as none, and a lone entry
-as a list of one; an entry it can't read (no id, a condition with no
-text, a drop given as a bare string) drops alone, its `null` fields
-read as absent first.
+without one, as a self-closed tag is. Its visual changes, conditions,
+item moves, stackables and drops read `null`, or any other value that
+isn't a list, as none, and a lone entry as a list of one; an entry it
+can't read (no id, a condition with no text, a slot or category outside
+its list, an amount that isn't a number, a drop given as a bare string)
+drops alone, its `null` fields read as absent first. A `null` current
+location, summary or transfers object reads as omitted, so a model
+answering `null` for a field it has nothing for never fails the reply.
 
 ## Mode-mixing across a story
 

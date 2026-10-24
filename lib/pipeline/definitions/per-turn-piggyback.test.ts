@@ -3977,6 +3977,86 @@ describe('per-turn-piggyback', () => {
       expect(parsed.summary).toBe('Kael drew.')
       expect(parsed.sceneEntities).toEqual(['char_a'])
     })
+
+    // The prompt-injection path shows the model a JSON Schema, where null is the natural answer
+    // for a field it has nothing for: one must not fail the parse and cost the turn its scene.
+    it.each([
+      ['currentLocation', { currentLocation: null }],
+      ['visualChanges', { visualChanges: null }],
+      ['summary', { summary: null }],
+      ['transfers', { transfers: null }],
+      ['transfers.items', { transfers: { items: null } }],
+      ['transfers.stackables', { transfers: { stackables: null } }],
+      [
+        'transfers.items[].to and .from',
+        { transfers: { items: [{ id: 'i1', slot: 'inventory', to: null, from: null }] } },
+      ],
+      [
+        'transfers.stackables[].to and .from',
+        { transfers: { stackables: [{ key: 'gold', amount: 3, to: null, from: null }] } },
+      ],
+    ] as const)('reads a null %s as omitted', (_field, nulled) => {
+      const result = fallbackClassifierSchema.safeParse({
+        sceneEntities: ['char_a'],
+        worldTimeDelta: 30,
+        ...nulled,
+      })
+      expect(result.success).toBe(true)
+      expect(result.data?.sceneEntities).toEqual(['char_a'])
+      expect(result.data?.worldTimeDelta).toBe(30)
+      expect(JSON.stringify(result.data)).not.toContain('null')
+    })
+
+    // As conditions and drops already are: one entry the schema can't read drops alone.
+    it.each([
+      [
+        'visualChanges',
+        {
+          visualChanges: [
+            { id: 'c1', type: 'mood', text: 'x' },
+            { id: 'c2', type: 'hair', text: 'wet' },
+          ],
+        },
+        (d: z.infer<typeof fallbackClassifierSchema>) => d.visualChanges,
+        [{ id: 'c2', type: 'hair', text: 'wet' }],
+      ],
+      [
+        'transfers.items',
+        {
+          transfers: {
+            items: [
+              { id: 'i1', slot: 'pocket', to: 'c1' },
+              { id: 'i2', slot: 'inventory', to: 'c1' },
+            ],
+          },
+        },
+        (d: z.infer<typeof fallbackClassifierSchema>) => d.transfers?.items,
+        [{ id: 'i2', slot: 'inventory', to: 'c1' }],
+      ],
+      [
+        'transfers.stackables',
+        {
+          transfers: {
+            stackables: [
+              { key: 'gold', amount: 'five', to: 'c1' },
+              { key: 'arrows', amount: 4, to: 'c1' },
+            ],
+          },
+        },
+        (d: z.infer<typeof fallbackClassifierSchema>) => d.transfers?.stackables,
+        [{ key: 'arrows', amount: 4, to: 'c1' }],
+      ],
+    ] as const)('drops a malformed %s entry alone', (_list, reply, read, kept) => {
+      const result = fallbackClassifierSchema.safeParse({
+        sceneEntities: ['char_a'],
+        worldTimeDelta: 30,
+        summary: 'Kael drew.',
+        ...reply,
+      })
+      expect(result.success).toBe(true)
+      expect(read(result.data!)).toEqual(kept)
+      expect(result.data?.summary).toBe('Kael drew.')
+    })
   })
 
   describe('fallbackClassifierWithSuggestionsSchema', () => {

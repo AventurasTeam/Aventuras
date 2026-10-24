@@ -99,6 +99,10 @@ function readableEntries(value: unknown, entry: z.ZodType): unknown[] | undefine
     .filter((item) => entry.safeParse(item).success)
 }
 
+// A null single-value field reads as absent; not .nullable(), which changes the JSON Schema shown.
+const nullAsOmitted = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((value) => (value === null ? undefined : value), schema)
+
 const conditionEntry = z.object({
   id: z.string().describe('The ID of a place or item shown above with its state.'),
   text: z
@@ -112,6 +116,36 @@ const conditionEntry = z.object({
 // out unlogged: the schema has no logger.
 const namesPlace = (item: unknown): boolean =>
   isRecord(item) && 'to' in item && typeof item.to === 'string' && item.to.trim() !== ''
+
+const visualChangeEntry = z.object({
+  id: z.string(),
+  type: z.enum(VISUAL_CHANGE_TYPES),
+  text: z
+    .string()
+    .describe(
+      'The category named in `type` as it is now, restated from its current value shown above: keep what still applies, drop what no longer does, in about 60 words. It replaces the stored value whole.',
+    ),
+})
+
+const itemMoveEntry = z.object({
+  id: z.string().describe("The item's ID from the list, or the handle of an item in newItems."),
+  slot: z.enum(['equipped_items', 'inventory']),
+  to: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
+  from: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
+})
+
+const stackableEntry = z.object({
+  key: z
+    .string()
+    .describe(
+      "The key exactly as the holder's Stackables line shows it, or a new lowercase name, e.g. gold, only for something they don't hold yet.",
+    ),
+  amount: z
+    .number()
+    .describe('Quantity moved, not the resulting total, and never more than the payer holds.'),
+  to: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
+  from: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
+})
 
 const dropEntry = z.object({
   id: z.string().describe("The item's ID from the list."),
@@ -150,26 +184,19 @@ export const fallbackClassifierSchema = z.object({
   ).describe(
     'Places this turn creates, when the scene settles somewhere not in Places. A new place is kept only as currentLocation or a place currentLocation is part of; any other is dropped.',
   ),
-  currentLocation: z
-    .string()
-    .optional()
-    .describe(
-      'The ID of the place this scene happens at: its ID from Places when Places lists it, or the handle of a location in newLocations.',
-    ),
+  currentLocation: nullAsOmitted(
+    z
+      .string()
+      .optional()
+      .describe(
+        'The ID of the place this scene happens at: its ID from Places when Places lists it, or the handle of a location in newLocations.',
+      ),
+  ),
   worldTimeDelta: z.number(),
-  visualChanges: z
-    .array(
-      z.object({
-        id: z.string(),
-        type: z.enum(VISUAL_CHANGE_TYPES),
-        text: z
-          .string()
-          .describe(
-            'The category named in `type` as it is now, restated from its current value shown above: keep what still applies, drop what no longer does, in about 60 words. It replaces the stored value whole.',
-          ),
-      }),
-    )
-    .optional(),
+  visualChanges: z.preprocess(
+    (value) => readableEntries(value, visualChangeEntry),
+    z.array(visualChangeEntry).optional(),
+  ),
   conditions: z
     .preprocess(
       (value) => readableEntries(value, conditionEntry),
@@ -192,55 +219,41 @@ export const fallbackClassifierSchema = z.object({
   ).describe(
     'Items this turn creates, when a character takes or receives something new. A new item is kept only when the last transfers.items entry naming it gives it to a character; any other is dropped.',
   ),
-  transfers: z
-    .object({
-      items: z
-        .array(
-          z.object({
-            id: z
-              .string()
-              .describe("The item's ID from the list, or the handle of an item in newItems."),
-            slot: z.enum(['equipped_items', 'inventory']),
-            to: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
-            from: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
-          }),
-        )
-        .default([]),
-      stackables: z
-        .array(
-          z.object({
-            key: z
-              .string()
-              .describe(
-                "The key exactly as the holder's Stackables line shows it, or a new lowercase name, e.g. gold, only for something they don't hold yet.",
-              ),
-            amount: z
-              .number()
-              .describe(
-                'Quantity moved, not the resulting total, and never more than the payer holds.',
-              ),
-            to: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
-            from: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
-          }),
-        )
-        .default([]),
-      drops: z
-        .preprocess(
-          (value) => readableEntries(value, dropEntry)?.filter((drop) => !namesPlace(drop)) ?? [],
-          z.array(dropEntry),
-        )
-        .default([])
-        .describe(
-          'Items someone holding them put down where the scene is and still lying there when the turn ends. An item picked up again, or put down anywhere else, is left out.',
-        ),
-    })
-    .optional(),
-  summary: z
-    .string()
-    .optional()
-    .describe(
-      'One sentence summarizing what happened in this turn. Used verbatim as a retrieval query next turn, so identify the people, places and things that mattered by name, not ID.',
-    ),
+  transfers: nullAsOmitted(
+    z
+      .object({
+        items: z
+          .preprocess(
+            (value) => readableEntries(value, itemMoveEntry) ?? [],
+            z.array(itemMoveEntry),
+          )
+          .default([]),
+        stackables: z
+          .preprocess(
+            (value) => readableEntries(value, stackableEntry) ?? [],
+            z.array(stackableEntry),
+          )
+          .default([]),
+        drops: z
+          .preprocess(
+            (value) => readableEntries(value, dropEntry)?.filter((drop) => !namesPlace(drop)) ?? [],
+            z.array(dropEntry),
+          )
+          .default([])
+          .describe(
+            'Items someone holding them put down where the scene is and still lying there when the turn ends. An item picked up again, or put down anywhere else, is left out.',
+          ),
+      })
+      .optional(),
+  ),
+  summary: nullAsOmitted(
+    z
+      .string()
+      .optional()
+      .describe(
+        'One sentence summarizing what happened in this turn. Used verbatim as a retrieval query next turn, so identify the people, places and things that mattered by name, not ID.',
+      ),
+  ),
   // retrieval.md → Q4: must never raise the parse — a raise costs a full extra classifier
   // call and, on failure, takes the mandatory summary down with it. Drops over-emission rather
   // than truncating: truncation needs .transform(), which breaks z.toJSONSchema.
