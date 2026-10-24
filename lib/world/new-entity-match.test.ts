@@ -260,6 +260,17 @@ describe('matchNewLocation — by the map the prompt showed', () => {
     ).toEqual(reuse('loc_sanctum'))
   })
 
+  // The map lists a stored parent loop flat at the top level, beside the real top-level places.
+  it('prefers a real top-level place to an older one on a parent loop the map hangs there', () => {
+    const rows = [
+      place('loc_a', 'Mill', 'loc_b', { createdAt: 1 }),
+      place('loc_b', 'Weir', 'loc_a', { createdAt: 1 }),
+      place('loc_real', 'Mill', null, { createdAt: 9 }),
+    ]
+    expect(locationMapView([HOLLOW, ...rows], null).hiddenBetween('loc_a', null)).toBe(0)
+    expect(matchNewLocation({ name: 'Mill', placement: TOP }, rows)).toEqual(reuse('loc_real'))
+  })
+
   // A place whose parent row is gone is unplaced: its container is gone.
   it('prefers a real top-level place to one whose parent row is gone, which it reuses and places', () => {
     const orphan = place('loc_orphan', 'Quay', 'loc_gone', { createdAt: 1 })
