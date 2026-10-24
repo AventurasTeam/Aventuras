@@ -19,6 +19,7 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import type { Logger } from '@/lib/diagnostics'
+import { spyLogger } from '@/lib/diagnostics/__tests__/spy-logger'
 import { __resetCaptureMode, armDeepCapture, decompressPayload } from '@/lib/probe'
 import {
   buildStructuralFloor,
@@ -223,9 +224,7 @@ async function runRetrievalPhase(
   const node = getPipeline(PER_TURN_KIND).phases.find((n) => n.name === RETRIEVAL_PHASE_NAME)
   if (!node || !('run' in node)) throw new Error('expected a single-run retrieval phase node')
   const intermediates: Record<string, unknown> = {}
-  // A fake logger rather than makeLogger: the real one drops everything when the
-  // diagnostics gate is off, which is the default in unit tests.
-  const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+  const log = spyLogger()
   const gen = node.run({
     actionId: 'act_1',
     abortSignal,

@@ -32,10 +32,12 @@ public entry. Everything else in the module is internal.
 - **Types are part of the public API.** A deep `import type` from a
   module's internals is banned the same as a value import. Re-export
   public types from the root `index.ts`.
-- **Test files follow the boundary of their location.** A test
-  inside a module (`lib/foo/bar.test.ts`) is part of the module and
-  deep-imports freely; a test outside `lib/` uses the public API
-  like any other outside importer.
+- **Tests and their fixtures are exempt.** A test file, or a fixture
+  under a `__tests__/` folder, may import any module's internals: a
+  test stages state the public API has no reason to expose. A helper
+  the tests of several modules share lives in the `__tests__/` folder
+  of the module whose thing it fakes, as `lib/db/__tests__/test-db.ts`
+  and `lib/diagnostics/__tests__/spy-logger.ts` do.
 - **Build scripts are exempt.** Files under `scripts/**` run through
   `tsx` (Node) and legitimately read module internals for data and
   logic; they cannot import the React-Native-coupled public barrels.

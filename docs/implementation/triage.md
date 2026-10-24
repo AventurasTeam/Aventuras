@@ -113,14 +113,6 @@ slice-planning gate forces its resolution before that slice is planned.
   mentioned places slice review's simplifier pass, which skipped it as
   outside that slice.
 
-- **Test helpers the slices keep re-rolling.** A logger stand-in
-  (`{ error: vi.fn(), warn: vi.fn(), debug: vi.fn() }`) is written out
-  in `lib/piggyback/apply.test.ts`, `world-time.test.ts` and about six
-  pipeline tests, and suites wrap `makeEntity` in per-file `character`,
-  `item` and `faction` builders. Both want a shared test-helper home no
-  module boundary objects to. Raised 2026-10-20 by the entity-state
-  slice review's simplifier pass, which skipped them for want of one.
-
 - **The head turn's membership test is written out four times.**
   `resolveHeadTurn` in `lib/head-turn` is the one definition of the
   head turn, but the "is this entry its tail or origin" test on top of

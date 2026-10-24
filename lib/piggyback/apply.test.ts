@@ -7,6 +7,7 @@ import {
   type Entity,
 } from '@/lib/db'
 import { logger, type Logger } from '@/lib/diagnostics'
+import { spyLogger } from '@/lib/diagnostics/__tests__/spy-logger'
 
 import { buildPiggybackActions as buildActions } from './apply'
 import { parseStateBlock } from './parse'
@@ -44,8 +45,6 @@ function mockEntity(overrides: Partial<Entity>): Entity {
     ...overrides,
   } as Entity
 }
-
-const spyLog = (): Logger => ({ error: vi.fn(), warn: vi.fn(), debug: vi.fn() })
 
 // Most cases show no row with its state; a condition case passes its own set.
 function buildPiggybackActions(
@@ -533,7 +532,7 @@ describe('buildPiggybackActions', () => {
     })
 
     it("logs the cut on the run's logger with the entry, the producer, the entity, the category and both lengths", () => {
-      const log = spyLog()
+      const log = spyLogger()
       visualText(fallbackBlock(`${'a'.repeat(300)}. ${'b'.repeat(300)}`), log)
       expect(log.warn).toHaveBeenCalledWith('classifier.visual_truncated', {
         entryId: 'entry_1',
@@ -709,7 +708,7 @@ describe('buildPiggybackActions', () => {
   })
 
   it('debits a stored key with a line break under the single-spaced key the prompt shows', () => {
-    const log = spyLog()
+    const log = spyLogger()
     const result = buildPiggybackActions({
       log,
       source: 'ai_classifier',
@@ -908,7 +907,7 @@ describe('buildPiggybackActions', () => {
   it('credits the payee in full on a shortfall, clamps the payer at zero and logs it', () => {
     const holder = (id: string, stackables: Record<string, number>) =>
       mockEntity({ id, state: { ...emptyEntityState('character'), stackables } })
-    const log = spyLog()
+    const log = spyLogger()
     const result = buildPiggybackActions({
       log,
       source: 'ai_classifier',
@@ -1226,7 +1225,7 @@ describe('buildPiggybackActions', () => {
   // the cause instead of leaving the reader to guess it from a difference.
   describe('applied outcomes', () => {
     it("reports the clamped delta while metadata carries the clamped total, warning on the run's logger", () => {
-      const log = spyLog()
+      const log = spyLogger()
       const result = buildPiggybackActions({
         log,
         source: 'ai_classifier',
@@ -1277,7 +1276,7 @@ describe('buildPiggybackActions', () => {
 
     // piggyback.md → A bad ref in the two writers: a retired place can't be entered.
     it('rejects a retired location, logged, and keeps the previous one', () => {
-      const log = spyLog()
+      const log = spyLogger()
       const sunk = mockEntity({
         id: 'loc_sunk',
         kind: 'location',
@@ -1711,7 +1710,7 @@ describe('buildPiggybackActions — conditions and drops', () => {
       ['that is no place or item', 'char_1', ['char_1'], 'character', true],
       ['that names no entity', 'loc_gone', ['loc_gone'], null, true],
     ] as const)('refuses a condition for a row %s, logged', (_label, id, shown, kind, wasShown) => {
-      const log = spyLog()
+      const log = spyLogger()
       const result = run(
         { conditions: [{ id, text: 'scorched' }] },
         [place('loc_dock'), person('char_1')],
@@ -1729,7 +1728,7 @@ describe('buildPiggybackActions — conditions and drops', () => {
     })
 
     it('cuts an over-long condition as it cuts a visual value, logged', () => {
-      const log = spyLog()
+      const log = spyLogger()
       const result = run(
         { conditions: [{ id: 'loc_dock', text: 'word '.repeat(150) }] },
         [place('loc_dock')],
@@ -1821,7 +1820,7 @@ describe('buildPiggybackActions — conditions and drops', () => {
     })
 
     it('with no scene location, takes it off its holders and leaves it nowhere, logged', () => {
-      const log = spyLog()
+      const log = spyLogger()
       const result = run(
         { transfers: transfers({ drops: [{ id: 'item_blade', from: 'char_1', seq: 0 }] }) },
         [person('char_1', { equipped_items: ['item_blade'] }), thing('item_blade')],
@@ -1852,7 +1851,7 @@ describe('buildPiggybackActions — conditions and drops', () => {
       })
 
       it('refuses a drop when no holder is in either scene, logged', () => {
-        const log = spyLog()
+        const log = spyLogger()
         const result = run(dropBlade(['char_1']), bladeWith('char_3'), {
           previousScene: ['char_1'],
           log,
@@ -1935,7 +1934,7 @@ describe('buildPiggybackActions — conditions and drops', () => {
     })
 
     it('drops a drop for an item nobody holds that lies elsewhere, logged', () => {
-      const log = spyLog()
+      const log = spyLogger()
       const result = run(
         {
           currentLocation: 'loc_dock',
@@ -1956,7 +1955,7 @@ describe('buildPiggybackActions — conditions and drops', () => {
     })
 
     it('leaves an item already lying where the scene is as it is, logged', () => {
-      const log = spyLog()
+      const log = spyLogger()
       const result = run(
         {
           currentLocation: 'loc_dock',
