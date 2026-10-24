@@ -8,6 +8,7 @@ import { PLOT_REJECTION, type ImportRejectionCode, type PlotSaveResult } from '@
 import { t } from '@/lib/i18n'
 import type { PlotKind } from '@/lib/list-modules'
 import {
+  isPlotIconKey,
   isPlotIssue,
   PLOT_ICON_KEYS,
   type HappeningDraft,
@@ -147,8 +148,8 @@ const NO_ICON = '__none__'
 
 /** The icon dropdown: none, the catalog, and the row's own key when it is not in the catalog. */
 export function plotIconOptions(current: string | null): SelectOption[] {
-  const keys =
-    current != null && current !== '' && !PLOT_ICON_KEYS.includes(current)
+  const keys: readonly string[] =
+    current != null && current !== '' && !isPlotIconKey(current)
       ? [current, ...PLOT_ICON_KEYS]
       : PLOT_ICON_KEYS
   return [

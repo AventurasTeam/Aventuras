@@ -21,10 +21,9 @@ const KEYS = [
 
 export type PlotIconKey = (typeof KEYS)[number]
 
-// Widened: plot-copy calls PLOT_ICON_KEYS.includes(string), which a literal tuple refuses.
-export const PLOT_ICON_KEYS: readonly string[] = KEYS
+export const PLOT_ICON_KEYS: readonly PlotIconKey[] = KEYS
 
 /** A catalog key, never an inherited property name such as `constructor`. */
 export function isPlotIconKey(key: string): key is PlotIconKey {
-  return PLOT_ICON_KEYS.includes(key)
+  return (PLOT_ICON_KEYS as readonly string[]).includes(key)
 }
