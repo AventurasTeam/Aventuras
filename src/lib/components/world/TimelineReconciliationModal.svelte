@@ -210,8 +210,18 @@
   const forkWarning = $derived.by(() => {
     if (!range || !effective) return 0
     const entryId = range.to.entryId
-    const checkpoints = story.checkpoints.filter((candidate) => candidate.lastEntryId === entryId)
-    const count = story.branchesForkedFrom(checkpoints[0]?.id ?? null, entryId)
+    // Only the checkpoints a branch was taken from: an unbranched one opens nothing.
+    const checkpoints = story.checkpoints.filter(
+      (candidate) =>
+        candidate.lastEntryId === entryId &&
+        story.branches.some((branch) => branch.checkpointId === candidate.id),
+    )
+    const taken = new Set(checkpoints.map((checkpoint) => checkpoint.id))
+    const count = story.branches.filter(
+      (branch) =>
+        (branch.checkpointId !== null && taken.has(branch.checkpointId)) ||
+        branch.forkEntryId === entryId,
+    ).length
     const clocks = checkpoints.map((checkpoint) => checkpoint.timeTrackerSnapshot)
     return movesForkEnding(byId.get(entryId), effective.to.time, count > 0, clocks) ? count : 0
   })
