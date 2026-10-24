@@ -182,6 +182,27 @@ describe('substituteClassifierIds', () => {
     })
   })
 
+  // A handle stands only where a new row's id could: a happening or thread field names a listed one.
+  it("maps a listed happening's and thread's placeholders back though a handle spells them", () => {
+    const idMap = new IdBiMap()
+    const fire = idMap.allocate(HAP_A)
+    const relic = idMap.allocate(THR_A)
+    const out = substituteClassifierIds(
+      {
+        newCharacters: [{ handle: fire }, { handle: relic }],
+        knownAwareness: [{ happening: fire, ref: fire, source: 'saw it' }],
+        threadStatuses: [{ thread: relic, status: 'resolved' }],
+      },
+      idMap,
+      new Set([fire, relic]),
+    )
+    expect(out).toEqual({
+      newCharacters: [{ handle: fire }, { handle: relic }],
+      knownAwareness: [{ happening: HAP_A, ref: fire, source: 'saw it' }],
+      threadStatuses: [{ thread: THR_A, status: 'resolved' }],
+    })
+  })
+
   it('still substitutes placeholders no handle claims', () => {
     const idMap = new IdBiMap()
     const a = idMap.allocate(CHAR_A)
