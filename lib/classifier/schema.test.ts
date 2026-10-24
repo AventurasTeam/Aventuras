@@ -298,7 +298,7 @@ describe('classifierExtractionSchema — the writer map', () => {
         classifierExtractionSchema.parse({
           newThreads: [
             { ...thread, status: 'paused' },
-            { ...thread, status: 'Resolved' },
+            { ...thread, status: 'on hold' },
           ],
         }),
       ),
@@ -461,7 +461,7 @@ describe('an entry of a writer-map list that does not fit', () => {
     renames: { ref: 'c1', name: 7 },
     placements: { ref: 'l2', parent: ['l1'] },
     standings: { ref: 'f1' },
-    newThreads: { title: 'Recover the relic', description: 'Stolen.', status: 'Resolved' },
+    newThreads: { title: 'Recover the relic', description: 'Stolen.', status: 'paused' },
     threadStatuses: { thread: 'th1', status: 'pending' },
     knownAwareness: { happening: 'hp1', ref: 'c2', source: 'told', severity: 'high' },
   } as const
@@ -489,6 +489,26 @@ describe('an entry of a writer-map list that does not fit', () => {
       expect(malformed).toEqual([{ list, count: 2 }])
     },
   )
+
+  // Q28: a status the model capitalised or padded lands; one outside the list still drops.
+  it('reads a status trimmed and case-folded, and still drops one outside the list', () => {
+    const thread = { title: 'Recover the relic', description: 'Stolen.' }
+    const { reply, malformed } = readClassifierReply(
+      classifierExtractionSchema.parse({
+        newThreads: [
+          { ...thread, status: 'Resolved' },
+          { ...thread, status: ' ACTIVE ' },
+        ],
+        threadStatuses: [
+          { thread: 'th1', status: 'Failed' },
+          { thread: 'th2', status: 'Pending' },
+        ],
+      }),
+    )
+    expect(reply.newThreads.map((t) => t.status)).toEqual(['resolved', 'active'])
+    expect(reply.threadStatuses).toEqual([{ thread: 'th1', status: 'failed' }])
+    expect(malformed).toEqual([{ list: 'threadStatuses', count: 1 }])
+  })
 
   it('reads a null field as absent before it judges the entry', () => {
     const { reply, malformed } = readClassifierReply(

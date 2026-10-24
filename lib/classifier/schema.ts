@@ -30,6 +30,10 @@ const withoutNulls = (value: unknown): unknown =>
 const tolerantList = <T extends z.ZodType>(entry: T) =>
   z.array(z.preprocess(withoutNulls, entry).optional().catch(undefined)).default([])
 
+// A tolerant list's enum value is read trimmed and case-folded, so "Resolved" lands as resolved.
+const foldedEnum = <T extends z.ZodEnum>(values: T) =>
+  z.preprocess((value) => (typeof value === 'string' ? value.trim().toLowerCase() : value), values)
+
 const awareness = z.object({
   /** Character placeholder (c1, ...) or a newCharacters handle. */
   ref: z.string(),
@@ -178,9 +182,11 @@ export const classifierExtractionSchema = z.object({
       description: z.string(),
       category: tolerated(z.string()),
       icon,
-      status: z
-        .enum(['pending', 'active', 'resolved', 'failed'])
-        .describe('Resolved or failed only for a thread the turns both open and close.'),
+      status: foldedEnum(
+        z
+          .enum(['pending', 'active', 'resolved', 'failed'])
+          .describe('Resolved or failed only for a thread the turns both open and close.'),
+      ),
       sourceTurn,
       resolvedAtTurn: tolerated(z.string()).describe(
         'The turn that resolved or failed it, when the turns both open and close it; sourceTurn stays the turn that opened it. Omit otherwise.',
@@ -190,7 +196,7 @@ export const classifierExtractionSchema = z.object({
   threadStatuses: tolerantList(
     z.object({
       thread: z.string(),
-      status: z.enum(['active', 'resolved', 'failed']),
+      status: foldedEnum(z.enum(['active', 'resolved', 'failed'])),
       sourceTurn,
     }),
   ),
