@@ -1819,6 +1819,13 @@ aborted; reverse-replay runs; `run_complete` emits with
 `outcome: 'aborted'`. UI distinguishes cancel from failure by
 reading outcome.
 
+A phase may finish past its last check and return completed, so the
+orchestrator checks the signal before each later phase too: a cancel
+between phases aborts the run. One that lands inside the last phase,
+past that phase's own checks, finds no later phase to stop: the run
+commits its turn and chains nothing, which a head reversal can still
+undo.
+
 ### Fatal error categories
 
 ```ts

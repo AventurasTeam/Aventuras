@@ -480,7 +480,11 @@ type PhaseOutcome = { kind: 'completed' } | { kind: 'aborted'; cause: AbortCause
 async function runPhases(run: RunState, ctx: RunCtx): Promise<PhaseOutcome> {
   const pipeline = getPipeline(run.kind)
   try {
-    for (const node of pipeline.phases) {
+    for (const [index, node] of pipeline.phases.entries()) {
+      // generation-pipeline.md → User cancel = abort: a phase that finished past the cancel hands
+      // nothing on. After the last phase the run commits (commitRun), chaining nothing.
+      if (index > 0 && run.abortController.signal.aborted)
+        return { kind: 'aborted', cause: { reason: 'user-cancel' } }
       const result = await runNode(node, run, ctx)
       if (result.status === 'failed') {
         logger.error(
