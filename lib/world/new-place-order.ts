@@ -27,8 +27,10 @@ export type NewPlacement =
   | { kind: 'kept'; placement: PlacePlacement }
   | { kind: 'dropped'; cause: ParentDropCause; parent: string }
 
-function inHandleCycle(create: NewPlaceDeclaration, waiting: readonly NewPlaceDeclaration[]) {
-  const parentOf = new Map(waiting.map((e) => [e.handle, e.parent]))
+function inHandleCycle(
+  create: NewPlaceDeclaration,
+  parentOf: ReadonlyMap<string, string | undefined>,
+) {
   const seen = new Set<string>()
   let at = create.parent
   while (at !== undefined && !seen.has(at)) {
@@ -52,8 +54,9 @@ export function settlingOrder<E extends NewPlaceDeclaration>(
   isLocationId: (id: string) => boolean,
 ): SettlingOrder<E> {
   const declared = new Set(creates.map((create) => create.handle))
+  const parentOf = new Map(creates.map((create) => [create.handle, create.parent]))
   const cyclic = new Set(
-    creates.filter((create) => inHandleCycle(create, creates)).map((create) => create.handle),
+    creates.filter((create) => inHandleCycle(create, parentOf)).map((create) => create.handle),
   )
   const order: SettlingPlace<E>[] = []
   const settled = new Set<string>()

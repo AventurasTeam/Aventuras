@@ -1016,6 +1016,21 @@ slice-planning gate forces its resolution before that slice is planned.
   happening then needs the same logging its planner gives the new
   lists. Raised 2026-10-24 by the AI writer map's slice review.
 
+- **A row placed under a new place reads as unplaced to matching.**
+  `matchNewPlace` (`lib/world/new-entity-match.ts`) reads placements
+  through `realPlacementOf` over the stored rows only, so a stored row
+  this reply places under a place it creates looks unplaced (its parent
+  names no stored place), and a later new place of its name reuses it
+  and moves it. A reply with "Cellar" under the Inn at turn 2, then "the
+  Old Cellar" under that new Cellar and "the Old Cellar" under the Inn
+  at turn 3, places the stored unplaced Old Cellar under the new Cellar;
+  the second "the Old Cellar" then reuses it, adding its keywords and
+  moving it under the Inn, where successive passes create a second Old
+  Cellar flagged `same-parent`.
+  Reading the reply's creates in that placement view would close it.
+  Predates the AI writer map's follow-up; raised 2026-10-24 by its
+  re-review.
+
 - **Two structured-call phases never report their retries.**
   [`generation-pipeline.md → Two retry tiers`](../generation-pipeline.md#two-retry-tiers-both-at-phase-level)
   says a phase yields a `recoverable_error` per retried attempt however
