@@ -244,6 +244,10 @@ describe('movesForkEnding', () => {
     expect(movesForkEnding(entries[1], boundaries[1].time, true)).toBe(true)
   })
 
+  it('warns when the checkpoint branches open on disagrees with the ending', () => {
+    expect(movesForkEnding(entry('F', t(3)), t(3), true, [t(5)])).toBe(true)
+  })
+
   it('stays quiet when the fork point keeps its ending', () => {
     expect(movesForkEnding(entry('F', t(3)), t(3), true)).toBe(false)
   })
@@ -261,22 +265,30 @@ describe('editedAnchors', () => {
   const anchorFor = (entryId: string) => (entryId === 'C' ? stored : undefined)
 
   it('stores nothing for a draft on a natural boundary', () => {
-    expect(editedAnchors(range, { from: { time: t(0) } }, anchorFor)).toEqual([])
+    expect(editedAnchors(range, { from: { kind: 'assert', time: t(0) } }, anchorFor)).toEqual([])
   })
 
   it('keeps the stored note when the draft gives none', () => {
-    const [edited] = editedAnchors(range, { to: { time: t(4) } }, anchorFor)
+    const [edited] = editedAnchors(range, { to: { kind: 'edit', time: t(4) } }, anchorFor)
     expect(edited).toEqual({ ...stored, assertedTime: t(4) })
   })
 
   it('clears the note when the draft sets it to null', () => {
-    const [edited] = editedAnchors(range, { to: { time: t(4), note: null } }, anchorFor)
+    const [edited] = editedAnchors(
+      range,
+      { to: { kind: 'edit', time: t(4), note: null } },
+      anchorFor,
+    )
     expect(edited.note).toBeNull()
+  })
+
+  it('stores nothing for an assertion, even once the boundary is anchored', () => {
+    expect(editedAnchors(range, { to: { kind: 'assert', time: t(4) } }, anchorFor)).toEqual([])
   })
 
   it('normalizes the drafted time', () => {
     const time = { years: 0, days: 0, hours: 0, minutes: 1500 }
-    const [edited] = editedAnchors(range, { to: { time } }, anchorFor)
+    const [edited] = editedAnchors(range, { to: { kind: 'edit', time } }, anchorFor)
     expect(edited.assertedTime).toEqual({ years: 0, days: 1, hours: 1, minutes: 0 })
   })
 })

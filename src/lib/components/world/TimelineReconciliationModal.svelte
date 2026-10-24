@@ -134,7 +134,12 @@
   let editing = $state<'from' | 'to' | null>(null)
   let draftTimeText = $state('')
   let draftNote = $state('')
+  /** What the editor opened with, so opening it is not a change. */
+  let editorSeed = $state({ time: '', note: '' })
   const draftTime = $derived(parseStoryTime(draftTimeText))
+  const editorChanged = $derived(
+    editing !== null && (draftTimeText !== editorSeed.time || draftNote !== editorSeed.note),
+  )
 
   function boundaryOf(which: 'from' | 'to'): Boundary | undefined {
     return which === 'from' ? range?.from : range?.to
@@ -153,6 +158,7 @@
     const draftedNote = drafts[which]?.note
     draftNote =
       (draftedNote !== undefined ? draftedNote : story.timeAnchorFor(boundary.entryId)?.note) ?? ''
+    editorSeed = { time: draftTimeText, note: draftNote }
     editing = which
   }
 
@@ -164,11 +170,11 @@
   function setDraft() {
     const boundary = editing ? boundaryOf(editing) : undefined
     if (!editing || !boundary || !draftTime) return
-    // A note is stored only with an anchor, so an assertion carries none.
-    const anchored = !!story.timeAnchorFor(boundary.entryId)
     drafts = {
       ...drafts,
-      [editing]: { time: draftTime, ...(anchored ? { note: draftNote.trim() || null } : {}) },
+      [editing]: story.timeAnchorFor(boundary.entryId)
+        ? { kind: 'edit', time: draftTime, note: draftNote.trim() || null }
+        : { kind: 'assert', time: draftTime },
     }
     closeEditor()
   }
@@ -179,7 +185,8 @@
     drafts = rest
   }
 
-  // A restatement belongs to the boundaries it was made against, not to whatever is selected now.
+  // What the reader set belongs to the boundaries it was set against, not to whatever is selected
+  // now: a range that changed under the same index takes none of it along.
   let editorRangeKey = ''
   $effect(() => {
     const key = range ? `${range.from.entryId}:${range.to.entryId}` : ''
@@ -188,6 +195,9 @@
     untrack(() => {
       closeEditor()
       drafts = {}
+      supplied = {}
+      gapWeights = {}
+      addedGapIds = []
     })
   })
 
@@ -200,9 +210,10 @@
   const forkWarning = $derived.by(() => {
     if (!range || !effective) return 0
     const entryId = range.to.entryId
-    const checkpoint = story.checkpoints.find((candidate) => candidate.lastEntryId === entryId)
-    const count = story.branchesForkedFrom(checkpoint?.id ?? null, entryId)
-    return movesForkEnding(byId.get(entryId), effective.to.time, count > 0) ? count : 0
+    const checkpoints = story.checkpoints.filter((candidate) => candidate.lastEntryId === entryId)
+    const count = story.branchesForkedFrom(checkpoints[0]?.id ?? null, entryId)
+    const clocks = checkpoints.map((checkpoint) => checkpoint.timeTrackerSnapshot)
+    return movesForkEnding(byId.get(entryId), effective.to.time, count > 0, clocks) ? count : 0
   })
 
   /** What the range's entries record for themselves, first beginning to last ending. */
@@ -514,19 +525,28 @@
 
   /** Anything the reader would lose by leaving the range: a restated boundary or a typed weight. */
   const unapplied = $derived(
-    editing !== null ||
+    editorChanged ||
       Object.keys(drafts).length > 0 ||
       addedGapIds.length > 0 ||
       [...Object.values(supplied), ...Object.values(gapWeights)].some((text) => text.trim() !== ''),
   )
 
+  /** A question already on screen answers for every close attempt made while it is up. */
+  let asking = false
+
   /** The one question before discarding what was typed. */
   async function confirmDiscard(): Promise<boolean> {
     if (!unapplied) return true
-    return ask('Discard the boundaries and weights you have set for this range?', {
-      title: 'Discard Changes',
-      kind: 'warning',
-    })
+    if (asking) return false
+    asking = true
+    try {
+      return await ask('Discard the boundaries and weights you have set for this range?', {
+        title: 'Discard Changes',
+        kind: 'warning',
+      })
+    } finally {
+      asking = false
+    }
   }
 
   /** Every way of closing the screen comes through here. */
@@ -806,7 +826,8 @@
     }}
     onEscapeKeydown={(event: KeyboardEvent) => {
       event.preventDefault()
-      void requestClose()
+      if (editing) closeEditor()
+      else void requestClose()
     }}
     onInteractOutside={(event: PointerEvent) => {
       event.preventDefault()
@@ -1123,11 +1144,17 @@
         {stamp(boundaries[0].time)}, entry
         {entryNumber(boundaries[1].entryId)} at
         {stamp(boundaries[1].time)}. The later one asserts an earlier time, and only you can say
-        which is wrong: restate either one under Reference points.
+        which is wrong: {restatable('to') ? 'restate either one' : 'restate the start'} under Reference
+        points.
       {:else}
         {#each boundaries as boundary (boundary.entryId)}
-          Entry {entryNumber(boundary.entryId)} has no recorded ending. Assert when it ended under Reference
-          points to use it as a boundary.
+          {#if restatable(boundary.entryId === range?.to.entryId ? 'to' : 'from')}
+            Entry {entryNumber(boundary.entryId)} has no recorded ending. Assert when it ended under Reference
+            points to use it as a boundary.
+          {:else}
+            Entry {entryNumber(boundary.entryId)} is a player action with no recorded time, and an action
+            has no ending to assert, so this range cannot be reconciled.
+          {/if}
         {/each}
       {/if}
     </p>
@@ -1142,7 +1169,13 @@
           The entry before this range still ends at
           {stamp(preview.result.leadingJoin.neighbourTime)}, so it will
           {preview.result.leadingJoin.differenceMinutes > 0 ? 'overlap' : 'leave a gap before'} the new
-          start. Reconcile the range before this one to close it.
+          start.
+          {#if preview.range.from.index === 0}
+            It is the story's first entry, which belongs to no range, so this join stays open and
+            the anomalies keep reporting it.
+          {:else}
+            Reconcile the range before this one to close it.
+          {/if}
         </p>
       {/if}
       {#if preview.result.trailingJoin && preview.result.trailingJoin.differenceMinutes !== 0}

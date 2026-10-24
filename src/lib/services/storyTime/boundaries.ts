@@ -123,14 +123,17 @@ export function restateBoundaries(
 }
 
 /**
- * Times the reader restated for a range's boundaries. On an anchored boundary it is an edit of the
- * anchor, stored with the reconciliation along with its note; otherwise it is never stored.
+ * Times the reader restated for a range's boundaries. An `edit` changes the boundary's anchor and is
+ * stored with the reconciliation, note included; an `assert` is never stored.
  */
 export type BoundaryDrafts = Partial<
-  Record<'from' | 'to', { time: TimeTracker; note?: string | null }>
+  Record<'from' | 'to', { kind: 'edit' | 'assert'; time: TimeTracker; note?: string | null }>
 >
 
-/** The anchors a reconciliation stores: those on a restated boundary that was already anchored. */
+/**
+ * The anchors a reconciliation stores: those the reader edited. Decided by the draft, not by the
+ * anchor found now, so an assertion never turns into an overwrite of an anchor added since.
+ */
 export function editedAnchors(
   range: Pick<SelectableRange, 'from' | 'to'>,
   drafts: BoundaryDrafts,
@@ -138,7 +141,7 @@ export function editedAnchors(
 ): TimeAnchor[] {
   return (['from', 'to'] as const).flatMap((which) => {
     const draft = drafts[which]
-    const existing = draft && anchorFor(range[which].entryId)
+    const existing = draft?.kind === 'edit' ? anchorFor(range[which].entryId) : undefined
     if (!draft || !existing) return []
     return [
       {
@@ -159,17 +162,21 @@ export function canRestate(which: 'from' | 'to', entry: StoryEntry | undefined):
 }
 
 /**
- * Whether applying would move the ending branches open on. Only a later boundary is written
- * through to its entry, so only a later boundary can.
+ * Whether applying would move the time branches open on. Only a later boundary is written through
+ * to its entry, so only a later boundary can. Branches open on the checkpoint's clock, which can
+ * disagree with the entry's ending, and applying rewrites both.
  */
 export function movesForkEnding(
   entry: StoryEntry | undefined,
   effectiveTime: TimeTracker | null,
   forked: boolean,
+  checkpointClocks: (TimeTracker | null | undefined)[] = [],
 ): boolean {
   if (!forked || !entry || !effectiveTime) return false
+  const target = toMinutes(effectiveTime)
   const recorded = entry.metadata?.timeEnd
-  return !recorded || toMinutes(recorded) !== toMinutes(effectiveTime)
+  if (!recorded || toMinutes(recorded) !== target) return true
+  return checkpointClocks.some((clock) => !!clock && toMinutes(clock) !== target)
 }
 
 export type RangeRefusal = {
