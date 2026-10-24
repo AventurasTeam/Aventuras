@@ -725,8 +725,8 @@ export const setFactionStandingHandler: ActionHandler = async (action, branchId,
 }
 
 /**
- * retired → active on a character, checked as the write lands so a status the user wrote since
- * stands; clears the reason as World's un-retire does. Only the user brings back a place.
+ * retired → active on a character only, checked as the write lands so a status the user wrote
+ * since stands; clears the reason with the status.
  */
 export const returnFromRetirementHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'returnFromRetirement')
