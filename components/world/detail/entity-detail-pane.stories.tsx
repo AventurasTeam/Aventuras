@@ -1615,6 +1615,18 @@ export const PlacementPickerTopLevel: Story = {
   },
 }
 
+/** The parent picker searches places, and says so when nothing matches. */
+export const PlacementPickerSearchesPlaces: Story = {
+  args: { kind: 'location', row: VARN, entities: WITH_VARN },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await userEvent.click(await screen.findByRole('button', { name: 'Part of: Unknown' }, WAIT))
+    const search = await screen.findByPlaceholderText('Search places…', {}, WAIT)
+    await userEvent.type(search, 'zzz')
+    await expect(await screen.findByText('No matching places.', {}, WAIT)).toBeVisible()
+  },
+}
+
 /** A placed place can't go back to Unknown; an unplaced one is still offered as its parent. */
 export const PlacedPickerOffersNoUnknown: Story = {
   args: { kind: 'location', row: MARKET, entities: WITH_VARN },
