@@ -137,7 +137,7 @@ type PipelineEvent =
   | { type: 'run_deferred'; runId: string; kind: string; branchId: string; work: 'pass' | 'close' }
   // phase-emitted core
   | { type: 'stream_chunk'; targetEntryId: string; text: string; channel: 'text' | 'reasoning' }
-  | { type: 'delta_emitted'; action: PipelineAction }
+  | { type: 'delta_emitted'; action: PipelineAction; entryId?: string | null }
   | { type: 'recoverable_error'; error: PipelineError }
   // phase-emitted specific — grows additively
   | { type: 'lore_mgmt_subjob_complete'; jobName: string; done: number; total: number }
@@ -416,7 +416,10 @@ emission from the LLM is a prompt bug, not a runtime case to handle.
 
 - `delta_emitted` — every persisted write. Orchestrator routes
   through the action layer with `source: 'pipeline'` + the current
-  `actionId`. Phase doesn't touch delta log / SQLite / undo_payload.
+  `actionId`, and the event's `entryId` (the entry the write belongs
+  to, `null` when none) onto the delta row; a `createStoryEntry` with
+  one also records the turn capture's target entry. Phase doesn't
+  touch delta log / SQLite / undo_payload.
 - `stream_chunk` — display-token path (`channel` splits narrative
   text from streamed reasoning). Orchestrator dispatches a
   side-channel append action; **no delta** until stream completion

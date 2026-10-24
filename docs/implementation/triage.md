@@ -337,13 +337,6 @@ slice-planning gate forces its resolution before that slice is planned.
   entry's submission onto the next entry. Raised 2026-10-22 in the
   pass failure policy slice's Task 7 review.
 
-- **The `delta_emitted` event sketch lacks `entryId`.**
-  [`generation-pipeline.md`](../generation-pipeline.md) (the
-  `PipelineEvent` union, near the `delta_emitted` line) shows
-  `{ type: 'delta_emitted'; action: PipelineAction }`, while
-  `lib/pipeline/types.ts:49` carries `entryId?: string | null` as well.
-  Raised 2026-10-22 in the pass failure policy slice's Task 2 review.
-
 - **A refused Send destroys the earlier failure entry's text.**
   `runSubmit` drops the system tail before it dispatches
   (`app/reader-composer/[branchId].tsx`), and `dropSystemTail`'s own
