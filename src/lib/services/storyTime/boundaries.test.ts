@@ -6,6 +6,7 @@ import {
   refuseRange,
   restateBoundaries,
   movesForkEnding,
+  editedAnchors,
 } from './boundaries'
 
 function t(hours: number, minutes = 0): TimeTracker {
@@ -248,5 +249,33 @@ describe('movesForkEnding', () => {
 
   it('never warns for an entry no branch forked from', () => {
     expect(movesForkEnding(entry('E', t(3)), t(5), false)).toBe(false)
+  })
+})
+
+describe('editedAnchors', () => {
+  const entries = [entry('A', t(1)), entry('B', t(2)), entry('C', t(3))]
+  const stored = { ...anchor('C', t(3)), note: 'dawn', createdAt: 7 }
+  const boundaries = listBoundaries({ entries, anchors: [stored] })
+  const [range] = selectableRanges(entries, boundaries)
+  const anchorFor = (entryId: string) => (entryId === 'C' ? stored : undefined)
+
+  it('stores nothing for a draft on a natural boundary', () => {
+    expect(editedAnchors(range, { from: { time: t(0) } }, anchorFor)).toEqual([])
+  })
+
+  it('keeps the stored note when the draft gives none', () => {
+    const [edited] = editedAnchors(range, { to: { time: t(4) } }, anchorFor)
+    expect(edited).toEqual({ ...stored, assertedTime: t(4) })
+  })
+
+  it('clears the note when the draft sets it to null', () => {
+    const [edited] = editedAnchors(range, { to: { time: t(4), note: null } }, anchorFor)
+    expect(edited.note).toBeNull()
+  })
+
+  it('normalizes the drafted time', () => {
+    const time = { years: 0, days: 0, hours: 0, minutes: 1500 }
+    const [edited] = editedAnchors(range, { to: { time } }, anchorFor)
+    expect(edited.assertedTime).toEqual({ years: 0, days: 1, hours: 1, minutes: 0 })
   })
 })

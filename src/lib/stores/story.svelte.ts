@@ -90,9 +90,11 @@ import {
   reconcileRange,
   refuseRange,
   restateBoundaries,
+  editedAnchors,
   selectableRanges,
   toMinutes,
   type Boundary,
+  type BoundaryDrafts,
   type DurationRequest,
   type RangeRefusal,
   type ReconcileResult,
@@ -119,14 +121,6 @@ export type TimelineReconciliationPreview =
         boundaries: BoundaryDrafts
       }
     }
-
-/**
- * Times the reader restated for a range's boundaries. On an anchored boundary it is an edit of the
- * anchor, stored with the reconciliation along with its note; otherwise it is never stored.
- */
-export type BoundaryDrafts = Partial<
-  Record<'from' | 'to', { time: TimeTracker; note?: string | null }>
->
 import { settings } from './settings.svelte'
 import { extractInlineCustomVars } from '#lib/services/ai/sdk/schemas/runtime-variables.ts'
 import type { ClassificationResult } from '#lib/services/ai/sdk/schemas/classifier.ts'
@@ -1922,27 +1916,11 @@ class StoryStore {
         chapters: this.chapters,
         times: result.times,
         checkpoints: this.checkpoints,
-        anchors: this.editedAnchors(range, drafts),
+        anchors: editedAnchors(range, drafts, (entryId) => this.timeAnchorFor(entryId)),
       }),
       fingerprint: this.timelineFingerprint(range, rangeEntries),
       inputs: { durations: suppliedDurations, intervals: intervalWeights, boundaries: drafts },
     }
-  }
-
-  /** The anchors a reconciliation stores: those on a restated boundary that was already anchored. */
-  private editedAnchors(range: SelectableRange, drafts: BoundaryDrafts): TimeAnchor[] {
-    return (['from', 'to'] as const).flatMap((which) => {
-      const draft = drafts[which]
-      const existing = draft && this.timeAnchorFor(range[which].entryId)
-      if (!draft || !existing) return []
-      return [
-        {
-          ...existing,
-          assertedTime: normalizeTime(draft.time),
-          note: draft.note === undefined ? existing.note : draft.note,
-        },
-      ]
-    })
   }
 
   private timelineFingerprint(range: SelectableRange, rangeEntries: StoryEntry[]): string {

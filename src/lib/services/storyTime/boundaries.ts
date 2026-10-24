@@ -123,6 +123,34 @@ export function restateBoundaries(
 }
 
 /**
+ * Times the reader restated for a range's boundaries. On an anchored boundary it is an edit of the
+ * anchor, stored with the reconciliation along with its note; otherwise it is never stored.
+ */
+export type BoundaryDrafts = Partial<
+  Record<'from' | 'to', { time: TimeTracker; note?: string | null }>
+>
+
+/** The anchors a reconciliation stores: those on a restated boundary that was already anchored. */
+export function editedAnchors(
+  range: Pick<SelectableRange, 'from' | 'to'>,
+  drafts: BoundaryDrafts,
+  anchorFor: (entryId: string) => TimeAnchor | undefined,
+): TimeAnchor[] {
+  return (['from', 'to'] as const).flatMap((which) => {
+    const draft = drafts[which]
+    const existing = draft && anchorFor(range[which].entryId)
+    if (!draft || !existing) return []
+    return [
+      {
+        ...existing,
+        assertedTime: normalizeTime(draft.time),
+        note: draft.note === undefined ? existing.note : draft.note,
+      },
+    ]
+  })
+}
+
+/**
  * Whether applying would move the ending branches open on. Only a later boundary is written
  * through to its entry, so only a later boundary can.
  */

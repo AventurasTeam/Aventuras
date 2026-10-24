@@ -1,9 +1,5 @@
 <script lang="ts">
-  import {
-    story,
-    type BoundaryDrafts,
-    type TimelineReconciliationPreview,
-  } from '#lib/stores/story.svelte.ts'
+  import { story, type TimelineReconciliationPreview } from '#lib/stores/story.svelte.ts'
   import { ask } from '@tauri-apps/plugin-dialog'
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
@@ -43,6 +39,7 @@
     RangeInterval,
     RangeRefusal,
     Boundary,
+    BoundaryDrafts,
   } from '#lib/services/storyTime/index.ts'
   import type { StoryEntry, TimeTracker } from '#lib/types/index.ts'
 
