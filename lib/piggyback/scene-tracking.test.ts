@@ -26,7 +26,7 @@ describe('sceneTrackingActions', () => {
       branchId,
       source: 'user_edit',
       entities,
-      previous: { entryId: 'ent_0', currentLocationId: null, worldTime: 0 },
+      previous: { entryId: 'ent_0', currentLocationId: null, worldTime: 0, sceneEntities: [] },
       before: { sceneEntities: [], currentLocationId: null },
       after: { sceneEntities: ['char_a'], currentLocationId: 'loc_a' },
     })
@@ -35,9 +35,9 @@ describe('sceneTrackingActions', () => {
     ])
   })
 
-  // The trap the three-way shape exists for: char_b was in this entry's ORIGINAL
-  // scene but is in neither the previous entry's nor the edited one. Folding from
-  // `previous` alone never visits it, leaving the location the first fold wrote.
+  // The trap the three-way shape exists for: char_b was in this entry's ORIGINAL scene but
+  // not the edited one. Folding from `previous` alone never visits them, leaving the location
+  // the first fold wrote.
   it('closes tracking for a character the edit removed from the scene', () => {
     const actions = sceneTrackingActions({
       branchId,
@@ -47,6 +47,7 @@ describe('sceneTrackingActions', () => {
         entryId: 'ent_0',
         currentLocationId: 'loc_a',
         worldTime: 100,
+        sceneEntities: ['char_a', 'char_b'],
       },
       before: { sceneEntities: ['char_a', 'char_b'], currentLocationId: 'loc_a' },
       after: { sceneEntities: ['char_a'], currentLocationId: 'loc_a' },
@@ -70,6 +71,7 @@ describe('sceneTrackingActions', () => {
         entryId: 'ent_0',
         currentLocationId: 'loc_a',
         worldTime: 100,
+        sceneEntities: ['char_a', 'char_b'],
       },
       before: { sceneEntities: ['char_a', 'char_b'], currentLocationId: 'loc_b' },
       after: { sceneEntities: ['char_a'], currentLocationId: 'loc_b' },
@@ -97,6 +99,7 @@ describe('sceneTrackingActions', () => {
         entryId: 'ent_0',
         currentLocationId: 'loc_a',
         worldTime: 40,
+        sceneEntities: ['char_a'],
       },
       before: { sceneEntities: ['char_a'], currentLocationId: 'loc_a' },
       after,
@@ -133,6 +136,7 @@ describe('sceneTrackingActions', () => {
         entryId: 'ent_0',
         currentLocationId: 'loc_a',
         worldTime: 100,
+        sceneEntities: ['char_a'],
       },
       before: { sceneEntities: ['char_a'], currentLocationId: 'loc_a' },
       after: { sceneEntities: ['char_a'], currentLocationId: null },
@@ -154,6 +158,7 @@ describe('sceneTrackingActions', () => {
         entryId: 'ent_0',
         currentLocationId: null,
         worldTime: 0,
+        sceneEntities: ['char_a'],
       },
       before: { sceneEntities: ['char_a'], currentLocationId: null },
       after: { sceneEntities: ['char_a', 'char_b'], currentLocationId: null },
@@ -171,6 +176,7 @@ describe('sceneTrackingActions', () => {
         entryId: 'ent_0',
         currentLocationId: 'loc_a',
         worldTime: 0,
+        sceneEntities: ['char_a', 'char_b'],
       },
       before: { sceneEntities: ['char_a', 'char_b'], currentLocationId: 'loc_a' },
       after: { sceneEntities: ['char_a', 'char_b'], currentLocationId: 'loc_b' },
@@ -194,6 +200,7 @@ describe('sceneTrackingActions', () => {
         entryId: 'ent_0',
         currentLocationId: null,
         worldTime: 0,
+        sceneEntities: ['char_b'],
       },
       before: { sceneEntities: ['char_b'], currentLocationId: null },
       after: { sceneEntities: [], currentLocationId: null },
@@ -208,11 +215,49 @@ describe('sceneTrackingActions', () => {
       branchId,
       source: 'user_edit',
       entities,
-      previous: { entryId: 'ent_0', currentLocationId: null, worldTime: 0 },
+      previous: { entryId: 'ent_0', currentLocationId: null, worldTime: 0, sceneEntities: [] },
       before: { sceneEntities: [], currentLocationId: null },
       after: { sceneEntities: ['item_a'], currentLocationId: 'loc_a' },
     })
     expect(actions).toEqual([])
+  })
+})
+
+// data-model.md → lastSeenAt: from the entry they were last in. A character the tail brought in
+// that the previous entry didn't show was never at its place, which may be retired.
+describe('sceneTrackingActions — a removed character the previous entry did not show', () => {
+  const seen = (lastSeenAt: unknown): Entity =>
+    ({
+      id: 'char_c',
+      kind: 'character',
+      status: 'active',
+      state: { lastSeenAt },
+    }) as unknown as Entity
+  const removeC = (character: Entity) =>
+    sceneTrackingActions({
+      branchId,
+      source: 'user_edit',
+      entities: [character],
+      previous: {
+        entryId: 'ent_0',
+        currentLocationId: 'loc_retired',
+        worldTime: 100,
+        sceneEntities: [],
+      },
+      before: { sceneEntities: ['char_c'], currentLocationId: 'loc_b' },
+      after: { sceneEntities: [], currentLocationId: 'loc_b' },
+    })
+
+  it('puts them back at their own older anchor, leaving that anchor as it was', () => {
+    const actions = removeC(seen({ entryId: 'ent_old', locationId: 'loc_old', worldTime: 10 }))
+    expect(payloadsFor(actions, 'char_c')).toEqual([
+      { branchId, id: 'char_c', currentLocationId: 'loc_old' },
+    ])
+  })
+
+  // The wizard places characters with no lastSeenAt: that location stands.
+  it('leaves their stored location alone when they have no older anchor', () => {
+    expect(payloadsFor(removeC(seen(null)), 'char_c')).toEqual([])
   })
 })
 

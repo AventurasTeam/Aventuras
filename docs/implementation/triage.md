@@ -131,28 +131,6 @@ slice-planning gate forces its resolution before that slice is planned.
   told which person to write in. Raised 2026-10-11 by the system and
   user prompt halves design.
 
-- **The scene editor doesn't promote a staged current location it
-  sets.** `updateEntrySceneFields`
-  (`lib/actions/story-entries/scene-fields.ts`, ~line 108) passes only
-  `sceneEntities` to `scenePromotionActions`, while the generation fold
-  now promotes a staged `<current_location>` too
-  ([`piggyback.md → Auto-promote on staged-ID emission`](../memory/piggyback.md#auto-promote-on-staged-id-emission)).
-  The editor offers staged locations
-  (`components/reader/scene-editing.ts`, ~line 59), and the structural
-  floor seats only an active current location (`lib/retrieval/pools.ts`,
-  ~line 91), so the next prompt has no `# Current location`. The
-  editor's copy promises promotion with no such limit
-  (`sceneEdit.applyNote` in `locales/en/reader.json`: "Saving
-  re-applies scene presence to world state: per-character location,
-  last-seen, and staged promotion."). Canon question: whether
-  [`entry-card.md → Scene editor`](../ui/patterns/entry-card.md#scene-editor)'s
-  "a staged entity the edit names in the scene is promoted exactly as
-  the classifier would promote it" includes the location. Fixes:
-  promote a staged location the edit sets, in `updateEntrySceneFields`;
-  or narrow the copy. Predates this PR: the fold lacked the location
-  promotion at the merge base too. Raised 2026-10-11 by the
-  locations-and-items-from-prose slice review.
-
 - **`generation-pipeline.md`'s lifecycle names a reverse swap nothing
   calls.** Step 5 of the substitution lifecycle is
   `parseAndSubstitute(rawOutput, idMap)`, but `parseAndSubstitute`
@@ -246,20 +224,6 @@ slice-planning gate forces its resolution before that slice is planned.
   mode, which the 2026-10-12 design decided for the periodic classifier;
   the fallback, which extracts but can also move the scene, is the case
   that rule doesn't settle.
-
-- **The scene editor can write a character into a retired place.**
-  Removing a character from the tail's scene sets their
-  `current_location_id` to the previous entry's location, as the
-  last place they were seen (`lib/piggyback/scene-tracking.ts`, the
-  `wasInScene` branch, ~line 93). For a character first seen at the
-  tail that is a place they were never seen in, and once that place
-  is retired it breaks "nothing enters a retired place"
-  ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
-  The scene-fields guard checks only the scene's own location. Fixes:
-  anchor a character first seen at the tail on the tail's original
-  location, or skip the write when the anchor is retired. Predates the
-  retired-place rule: the anchor choice is older. Raised 2026-10-15 by
-  the retired and disabled places slice review.
 
 - **Two save-confirm dialogs repeat one shell.** `RowConfirmDialog`
   (`components/compounds/row-save-session-chrome.tsx`) and Story

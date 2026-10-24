@@ -96,6 +96,16 @@ async function updateEntrySceneFieldsLocked(
   const branchEntities = [...entitiesStore.getEntities().values()].filter(
     (e) => e.branchId === branchId,
   )
+  // The editor offers places only; the action layer holds the line for any other caller.
+  const location =
+    after.currentLocationId === null
+      ? undefined
+      : branchEntities.find((e) => e.id === after.currentLocationId)
+  if (after.currentLocationId !== null && location?.kind !== 'location')
+    return rejected(
+      STORY_ENTRY_REJECTION.notALocation,
+      `${after.currentLocationId} is not a location on branch ${branchId}`,
+    )
   // Nothing enters a retired place (data-model.md → LocationState shape); a scene already in one
   // keeps it until it is changed.
   if (
@@ -115,12 +125,17 @@ async function updateEntrySceneFieldsLocked(
       source: 'user_edit',
       payload: { branchId, id, metadata: after },
     },
-    // Promotion first: a staged scene member is promoted as the generation fold promotes one.
+    // Promotion first: a staged scene member, or a staged place the edit moves the scene to, is
+    // promoted as the generation fold promotes one; a location the edit leaves names nothing.
     ...scenePromotionActions({
       branchId,
       source: 'user_edit',
       entities: branchEntities,
       sceneEntities: after.sceneEntities,
+      alsoIds:
+        after.currentLocationId !== null && after.currentLocationId !== before.currentLocationId
+          ? [after.currentLocationId]
+          : [],
     }),
     ...sceneTrackingActions({
       branchId,
@@ -131,6 +146,7 @@ async function updateEntrySceneFieldsLocked(
         currentLocationId:
           previousLocationId != null && live.has(previousLocationId) ? previousLocationId : null,
         worldTime: previousMetadata?.worldTime ?? 0,
+        sceneEntities: previousMetadata?.sceneEntities ?? [],
       },
       before,
       after,
