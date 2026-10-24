@@ -111,11 +111,15 @@ export const newLocationSchema = z.object({
 // Item Schemas
 // ============================================================================
 
+/** What an item's `location` accepts; the app converts it to an id (`utils/itemLocation.ts`). */
+export const ITEM_LOCATION_OPTIONS =
+  'inventory, worn, ground (where the scene is), or the exact name of a listed location'
+
 export const itemUpdateSchema = z.object({
   name: z.string().describe('Exact name of existing item'),
   changes: z.object({
     quantity: z.number().describe('New quantity').optional(),
-    location: z.string().describe('inventory, worn, or location name').optional(),
+    location: z.string().describe(ITEM_LOCATION_OPTIONS).optional(),
     equipped: z.boolean().describe('true if currently worn/wielded').optional(),
   }),
 })
@@ -124,7 +128,7 @@ export const newItemSchema = z.object({
   name: z.string().describe('Item name'),
   description: z.string().describe('One sentence description').optional(),
   quantity: z.number().describe('How many (default 1)').optional(),
-  location: z.string().describe('inventory, worn, or location name').optional(),
+  location: z.string().describe(ITEM_LOCATION_OPTIONS).optional(),
   equipped: z.boolean().describe('true if currently worn/wielded').optional(),
 })
 
