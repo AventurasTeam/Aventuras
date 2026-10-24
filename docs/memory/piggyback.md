@@ -476,6 +476,10 @@ creates, which a failed block doesn't create, or the
 (`classifier.drops_held`) and the report lists none of them; the item
 stays held for the fallback to put down where it resolves the scene,
 and stays held when the fallback leaves the drop out or fails too. A
+block the stream cut off before any `<current_location>` holds its
+drops the same way, logged with reason `cut_off`, failed or not: a
+closed block naming no place means the scene stays, but a cut one may
+have lost the place it moved to. A
 place that can't be entered (an item's id, a retired place) doesn't
 count: it keeps the previous location on any block, as below, and the
 drops land there, as they do wherever a failed block's place stands.

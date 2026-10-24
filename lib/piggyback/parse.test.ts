@@ -1233,6 +1233,36 @@ describe('conditions and drops', () => {
     })
   })
 
+  // piggyback.md → Parse strategy and failure recovery: a cut may have taken the place the scene
+  // moved to, so a cut-off block naming none holds its drops rather than land them where it left.
+  describe('a block the stream cut off', () => {
+    const transfers = '<transfers><drop id="i2" from="c1" /></transfers>'
+
+    it('holds its drops when it names no current location', () => {
+      const { block, dropsCutOff } = parseStateBlock(
+        `<state><scene_entities>c1</scene_entities>${transfers}<world_time_delta>30`,
+      )
+      expect(block.transfers?.drops).toEqual([])
+      expect(dropsCutOff).toEqual([{ id: 'i2', from: 'c1', seq: 0 }])
+    })
+
+    it('keeps its drops when its current location came before the cut', () => {
+      const { block, dropsCutOff } = parseStateBlock(
+        `<state><current_location>l1</current_location>${transfers}<world_time_delta>30`,
+      )
+      expect(block.transfers?.drops).toEqual([{ id: 'i2', from: 'c1', seq: 0 }])
+      expect(dropsCutOff).toEqual([])
+    })
+
+    it('keeps the drops of a closed block that names no current location', () => {
+      const { block, dropsCutOff } = parseStateBlock(
+        `<state><scene_entities>c1</scene_entities>${transfers}</state>`,
+      )
+      expect(block.transfers?.drops).toEqual([{ id: 'i2', from: 'c1', seq: 0 }])
+      expect(dropsCutOff).toEqual([])
+    })
+  })
+
   // piggyback.md → Trailing block format: a drop away from the scene stays prose.
   it('drops a drop that names a place, reporting it, and leaves it no place in the order', () => {
     const { block, failures, dropsElsewhere } = parseStateBlock(`<state>

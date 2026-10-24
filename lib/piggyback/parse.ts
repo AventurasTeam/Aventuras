@@ -432,6 +432,7 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
       blockFound: false,
       malformedCreates: 0,
       dropsElsewhere: [],
+      dropsCutOff: [],
     }
 
   const block: ParsedStateBlock = {}
@@ -484,12 +485,24 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
       ),
     })
 
+  // Held, not landed at the place the scene left: a closed block naming no place means the scene
+  // stays, but a cut one may have lost it. A cut after <current_location> keeps them.
+  const transfers = normalized.block.transfers
+  const holdDrops =
+    !stateClosed(raw) && normalized.block.currentLocation === undefined && transfers !== undefined
+  const dropsCutOff = holdDrops ? transfers.drops : []
+  const kept =
+    holdDrops && dropsCutOff.length > 0
+      ? { ...normalized.block, transfers: { ...transfers, drops: [] } }
+      : normalized.block
+
   return {
-    block: normalized.block,
+    block: kept,
     failures,
     blockFound: true,
     malformedCreates,
     dropsElsewhere: notes.dropsElsewhere,
+    dropsCutOff,
   }
 }
 

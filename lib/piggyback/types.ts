@@ -128,6 +128,9 @@ export type ParseStateBlockResult = {
   /** `<drop>`s that name a `to`, as emitted and kept out of the block: an item put down somewhere
    *  else than the scene stays prose. */
   dropsElsewhere: { id: string; to: string }[]
+  /** Drops kept out of a block the stream cut off before its `<current_location>`: they land where
+   *  the scene is, and the cut may have taken the place the scene moved to. */
+  dropsCutOff: ItemDrop[]
 }
 
 type StateReport = NonNullable<EntryMetadata['stateReport']>
