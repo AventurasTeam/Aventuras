@@ -1735,6 +1735,145 @@ describe('renameEntity', () => {
   })
 })
 
+// classifier.md → Names, judged on the rows as the rename finds them: a write the pass planned
+// beside it can have been refused since.
+describe('renameEntity onto a name another row holds', () => {
+  const proseAt = (ctx: Ctx, id: string, position: number) =>
+    apply(
+      ctx,
+      {
+        kind: 'createStoryEntry',
+        source: 'ai_classifier',
+        payload: {
+          entry: {
+            id,
+            branchId: 'br_1',
+            position,
+            kind: 'ai_reply',
+            content: `Turn ${position}.`,
+            createdAt: 1,
+          },
+        },
+      },
+      `act_prose_${id}`,
+    )
+  const createRow = (ctx: Ctx, entry: NewEntity) =>
+    apply(
+      ctx,
+      { kind: 'createEntity', source: 'user_edit', payload: { entry } },
+      `act_c_${entry.id}`,
+    )
+  const renameOf = (id: string, name: string, proseEntryId: string): PipelineAction => ({
+    kind: 'renameEntity',
+    source: 'periodic_classifier',
+    payload: { branchId: 'br_1', id, name, proseEntryId },
+  })
+  const editOf = (id: string, patch: Record<string, unknown>): PipelineAction => ({
+    kind: 'updateEntity',
+    source: 'user_edit',
+    payload: { branchId: 'br_1', id, patch },
+  })
+  const person = (id: string, name: string, over: Partial<NewEntity> = {}): NewEntity => ({
+    ...CHAR,
+    id,
+    status: 'active',
+    name,
+    keywords: [],
+    ...over,
+  })
+  const placeRow = (id: string, name: string, state: LocationState): NewEntity => ({
+    ...CHAR,
+    id,
+    kind: 'location',
+    status: 'active',
+    name,
+    keywords: [],
+    state,
+  })
+  const REGIONS = [
+    placeRow('loc_reach', 'the Reach', { parent_location_id: null }),
+    placeRow('loc_marsh', 'the Marsh', { parent_location_id: null }),
+  ]
+
+  it('refuses a name the user gave a row whose rename away the pass planned first', async () => {
+    const { db, ctx } = await setup()
+    await createRow(ctx, person('char_2', 'Marra'))
+    await createRow(ctx, person('char_1', 'the innkeeper'))
+    await proseAt(ctx, 'e_1', 1)
+    await apply(ctx, editOf('char_2', { name: 'Mara' }), 'act_u')
+    await proseAt(ctx, 'e_2', 2)
+    expect(await apply(ctx, renameOf('char_2', 'Selene', 'e_1'), 'act_n1')).toEqual(userWonOver)
+
+    expect(await apply(ctx, renameOf('char_1', 'Mara', 'e_2'), 'act_n2')).toEqual(
+      noopBecause('name-taken'),
+    )
+    expect(await rowFor(db, 'char_1')).toMatchObject({ name: 'the innkeeper', keywords: [] })
+  })
+
+  it('refuses a sibling name when the move away the pass planned first lost to the user', async () => {
+    const { db, ctx } = await setup()
+    await db
+      .insert(entities)
+      .values([...REGIONS, placeRow('loc_mill', 'Mill', { parent_location_id: 'loc_marsh' })])
+    await createRow(ctx, placeRow('loc_a', 'old mill', { parent_location_id: 'loc_reach' }))
+    await proseAt(ctx, 'e_1', 1)
+    await apply(ctx, editOf('loc_a', { state: { parent_location_id: 'loc_marsh' } }), 'act_u')
+    await proseAt(ctx, 'e_2', 2)
+    const backToReach: PipelineAction = {
+      kind: 'placeLocation',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: 'br_1',
+        id: 'loc_a',
+        placement: { kind: 'under', parentId: 'loc_reach' },
+        proseEntryId: 'e_1',
+      },
+    }
+    expect(await apply(ctx, backToReach, 'act_p')).toEqual(userWonOver)
+
+    expect(await apply(ctx, renameOf('loc_a', 'Mill', 'e_2'), 'act_n')).toEqual(
+      noopBecause('name-taken'),
+    )
+    expect((await rowFor(db, 'loc_a')).name).toBe('old mill')
+  })
+
+  // piggyback.md → Matching before creating: a real sibling, or any place when either is unplaced.
+  it.each([
+    ['lands beside a holder under another parent', 'loc_reach', 'loc_marsh', true],
+    ['is refused beside an unplaced holder', null, 'loc_marsh', false],
+    ['is refused for an unplaced place', 'loc_reach', null, false],
+    ['is refused beside a holder whose parent is gone', 'loc_gone', 'loc_reach', false],
+  ])(
+    'a place rename %s',
+    async (_label, holderParent: string | null, ownParent: string | null, lands: boolean) => {
+      const at = (parent: string | null): LocationState =>
+        parent === null
+          ? { parent_location_id: null, unplaced: true }
+          : { parent_location_id: parent }
+      const { db, ctx } = await setup()
+      await db.insert(entities).values([...REGIONS, placeRow('loc_mill', 'Mill', at(holderParent))])
+      await createRow(ctx, placeRow('loc_a', 'old mill', at(ownParent)))
+      await proseAt(ctx, 'e_1', 1)
+      expect(await apply(ctx, renameOf('loc_a', 'Mill', 'e_1'), 'act_n')).toMatchObject(
+        lands ? { status: 'ok' } : noopBecause('name-taken'),
+      )
+    },
+  )
+
+  it.each([
+    ['is refused when a retired row of the kind holds it', 'character', 'retired', false],
+    ['lands when only a row of another kind holds it', 'faction', 'active', true],
+  ] as const)('a rename %s', async (_label, kind, status, lands) => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values({ ...person('ent_2', 'mara '), kind, status, state: {} })
+    await createRow(ctx, person('char_1', 'the innkeeper'))
+    await proseAt(ctx, 'e_1', 1)
+    expect(await apply(ctx, renameOf('char_1', 'Mara', 'e_1'), 'act_n')).toMatchObject(
+      lands ? { status: 'ok' } : noopBecause('name-taken'),
+    )
+  })
+})
+
 // edge-cases.md → Layer B: a pass whose rename meets a name another row of the kind holds.
 describe('raiseCollisionFlag', () => {
   // A clash's keyword lands before its raise, so the pair are namesakes through it.

@@ -18,6 +18,7 @@ import {
   characterFactionId,
   checkParentChain,
   flagStillHolds,
+  nameBasis,
   PARENT_CHAIN_BROKEN,
   PARENT_CYCLE,
   parentOfLocations,
@@ -583,10 +584,25 @@ export const placeLocationHandler: ActionHandler = async (action, branchId, ctx)
   return stateWriteOutcome(bid, id, current, next, ctx)
 }
 
-/**
- * classifier.md → What the classifier writes → Names. The planner has already tested the name
- * against the kind's other rows.
- */
+// classifier.md → What the classifier writes → Names, on the rows as the write lands: a write the
+// planner counted on can have been refused since. Any status counts, as the planner counts it.
+async function nameHeldByOther(ctx: DbCtx, current: Entity, name: string): Promise<boolean> {
+  const rows = await ctx.db
+    .select({ id: entities.id, name: entities.name, state: entities.state })
+    .from(entities)
+    .where(and(eq(entities.branchId, current.branchId), eq(entities.kind, current.kind)))
+  const holders = rows.filter((r) => r.id !== current.id && nameBasis(r.name, name) === 'same-name')
+  if (current.kind !== 'location') return holders.length > 0
+  // A place is compared with a real sibling, or with any place when either is unplaced.
+  const placementAt = realPlacementOf(rows)
+  const own = placementAt(current.id)
+  return holders.some((r) => {
+    const other = placementAt(r.id)
+    return own.kind === 'unplaced' || other.kind === 'unplaced' || samePlacement(own, other)
+  })
+}
+
+/** classifier.md → What the classifier writes → Names. */
 export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'renameEntity')
     throw new Error(`handler/kind mismatch: expected 'renameEntity', got '${action.kind}'`)
@@ -602,6 +618,7 @@ export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) 
   const edits =
     proseEntryId === null ? [] : await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId)
   if (wroteColumn(edits, 'name')) return noopRefusal(USER_EDITED_SINCE_PROSE)
+  if (await nameHeldByOther(ctx, current, name)) return noopRefusal('name-taken')
   // The old name joins the keywords unless they hold it, or the user removed it after the prose.
   const removed = priorTerms(edits)
   const kept = newTerms(current.keywords, [current.name]).filter(
