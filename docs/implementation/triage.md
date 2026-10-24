@@ -370,18 +370,6 @@ slice-planning gate forces its resolution before that slice is planned.
   entry's submission onto the next entry. Raised 2026-10-22 in the
   pass failure policy slice's Task 7 review.
 
-- **`onPreflightFailure` gets the caller's `RunCtx`, not the run's
-  identity.** The orchestrator passes `ctx` straight through
-  (`lib/pipeline/runtime/orchestrator.ts:537-541`), and a chained
-  successor shares its origin's `ctx`, so any `actionId` read off it
-  would be the origin's. `PreflightFailureHook`
-  (`lib/pipeline/types.ts:132`) takes only `db` and `branchId`, so
-  nothing can read one today. Widening it to carry
-  `actionId` would reintroduce the bug `runPhaseExceptionHook` avoids by
-  building its context from the `RunState`; build the hook's context
-  the same way first. Raised 2026-10-22 in the pass failure policy
-  slice's Task 2 review.
-
 - **The `delta_emitted` event sketch lacks `entryId`.**
   [`generation-pipeline.md`](../generation-pipeline.md) (the
   `PipelineEvent` union, near the `delta_emitted` line) shows

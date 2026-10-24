@@ -204,6 +204,26 @@ describe('runPipeline config pre-flight', () => {
     expect(order).toEqual(['hook', 'run_complete'])
   })
 
+  // A chained successor shares its origin's ctx, so the hook gets the run's own identity and
+  // nothing else of ctx: an actionId read off it would be the origin's.
+  it("hands the pre-flight hook the run's branch and the db, nothing else of the caller's ctx", async () => {
+    const { ctx } = await makeHarness()
+    await hydrateAppSettings(async () => ({ ...WIRED_CONFIG, profiles: [] }))
+    const seen: Record<string, unknown>[] = []
+    definePipeline({
+      kind: 'pf-hook-ctx',
+      phases: [{ name: 'narrative', run: noopPhase, resolves: [{ target: 'narrative' }] }],
+      onPreflightFailure: async (hookCtx) => {
+        seen.push({ ...hookCtx })
+      },
+      ...base,
+    })
+
+    await runPipeline('pf-hook-ctx', ctx)
+
+    expect(seen).toEqual([{ db: ctx.db, branchId: ctx.branchId }])
+  })
+
   it('winds the run down even when the pre-flight hook throws', async () => {
     const { ctx } = await makeHarness()
     await hydrateAppSettings(async () => ({ ...WIRED_CONFIG, profiles: [] }))

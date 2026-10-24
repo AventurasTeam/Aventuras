@@ -556,8 +556,10 @@ async function driveRun(
     // that serializes this write against the phases' own status writes.
     const onPreflightFailure = getPipeline(run.kind).onPreflightFailure
     if (onPreflightFailure)
+      // Built from the run, as runPhaseExceptionHook's is: a chained successor shares its
+      // origin's ctx, so anything read off ctx would be the origin's.
       await runHook(run, 'pipeline.preflight_hook_failed', () =>
-        onPreflightFailure(ctx, preflightError),
+        onPreflightFailure({ db: ctx.db, branchId: run.branchId }, preflightError),
       )
     return { tx: await abortRun(run, ctx, { reason: 'preflight-failure', error: preflightError }) }
   }
