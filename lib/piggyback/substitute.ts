@@ -128,6 +128,15 @@ function resolveItemMove<T extends { id: string; to?: string; from?: string }>(
   return resolved
 }
 
+// A drop lands wherever its holder is, never reading `from`: one that names no one is left off
+// rather than costing the drop.
+function withKnownFrom(drop: ItemDrop, idMap: IdBiMap): ItemDrop {
+  if (drop.from === undefined || idMap.getUuidFor(unwrapBracket(drop.from)) !== undefined)
+    return drop
+  const { from: _unknown, ...rest } = drop
+  return rest
+}
+
 function resolveStackable(s: StackableTransfer, idMap: IdBiMap): StackableTransfer {
   return {
     ...s,
@@ -165,7 +174,7 @@ function resolveTransfers(transfers: ParsedTransfers, refs: Refs, settle: Settle
       settle('transfers', s, (x) => resolveStackable(x, refs.idMap)),
     ),
     drops: transfers.drops.flatMap((drop: ItemDrop) =>
-      settle('transfers', drop, (d) => resolveItemMove(d, refs)),
+      settle('transfers', drop, (d) => resolveItemMove(withKnownFrom(d, refs.idMap), refs)),
     ),
   }
 }

@@ -1,6 +1,7 @@
 import type { DeltaSource, PipelineAction } from '@/lib/actions'
-import type { CharacterState, Entity, ItemState } from '@/lib/db'
+import type { Entity } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
+import { stateAs } from '@/lib/world'
 
 import type { ItemDrop, ItemTransfer, ParsedTransfers, ReportedDrop } from './types'
 
@@ -26,6 +27,9 @@ type ItemMoves = {
   itemsLanded: number
   /** Drops that moved their item: one already lying where the scene is changes nothing. */
   dropsLanded: number
+  /** The character a stackable's party stands for once the moves landed: itself, or whoever holds
+   *  the item it names; anything else reads as omitted. */
+  holderOf: (id: string | undefined) => string | undefined
 }
 
 /** In the block's order: taken then put down lies at the scene; put down then taken is held. */
@@ -33,35 +37,38 @@ export function itemMoveActions(args: ItemMoveArgs): ItemMoves {
   const { transfers, entities, byId, nearScene, currentLocationId } = args
   const { branchId, entryId, source, log } = args
   const isCharacter = (id: string): boolean => byId.get(id)?.kind === 'character'
-  const characterOf = (id: string | undefined): string | undefined =>
-    id !== undefined && isCharacter(id) ? id : undefined
 
   const inventoryPatches = new Map<string, { equipped_items?: string[]; inventory?: string[] }>()
+  const storedInventory = (id: string): { equipped_items: string[]; inventory: string[] } => {
+    const state = stateAs(byId.get(id), 'character')
+    return { equipped_items: state.equipped_items ?? [], inventory: state.inventory ?? [] }
+  }
   const currentInventory = (id: string): { equipped_items: string[]; inventory: string[] } => {
-    const state = byId.get(id)?.state as CharacterState | undefined
+    const stored = storedInventory(id)
     const pending = inventoryPatches.get(id)
     return {
-      equipped_items: pending?.equipped_items ?? state?.equipped_items ?? [],
-      inventory: pending?.inventory ?? state?.inventory ?? [],
+      equipped_items: pending?.equipped_items ?? stored.equipped_items,
+      inventory: pending?.inventory ?? stored.inventory,
     }
   }
 
+  const holds = (holderId: string, itemId: string): boolean => {
+    if (!isCharacter(holderId)) return false
+    const cur = currentInventory(holderId)
+    return cur.equipped_items.includes(itemId) || cur.inventory.includes(itemId)
+  }
   const release = (holderId: string, itemId: string) => {
+    if (!holds(holderId, itemId)) return
     const cur = currentInventory(holderId)
     inventoryPatches.set(holderId, {
       equipped_items: cur.equipped_items.filter((i) => i !== itemId),
       inventory: cur.inventory.filter((i) => i !== itemId),
     })
   }
-  const holds = (holderId: string, itemId: string): boolean => {
-    if (!isCharacter(holderId)) return false
-    const cur = currentInventory(holderId)
-    return cur.equipped_items.includes(itemId) || cur.inventory.includes(itemId)
-  }
   // Where each item the block moves ends up; a write goes out only where that differs from its row.
   const positions = new Map<string, string | null>()
   const storedPosition = (itemId: string): string | null =>
-    (byId.get(itemId)?.state as ItemState | null | undefined)?.at_location_id ?? null
+    stateAs(byId.get(itemId), 'item').at_location_id ?? null
   const positionOf = (itemId: string): string | null =>
     positions.has(itemId) ? (positions.get(itemId) ?? null) : storedPosition(itemId)
 
@@ -78,13 +85,34 @@ export function itemMoveActions(args: ItemMoveArgs): ItemMoves {
       }),
     ])
 
+  // piggyback.md → A bad ref in the two writers: until containers exist only a character holds
+  // anything, so another holder reads by what it names. An item stands for whoever holds it, or
+  // for the place it lies at; the scene's place is `here`, any other `elsewhere`.
+  type Party = { holder: string } | 'here' | 'elsewhere' | 'none'
+  const partyOf = (id: string | undefined): Party => {
+    const row = id === undefined ? undefined : byId.get(id)
+    if (id === undefined || row === undefined) return 'none'
+    if (row.kind === 'character') return { holder: id }
+    if (row.kind === 'location') return id === currentLocationId ? 'here' : 'elsewhere'
+    if (row.kind !== 'item') return 'none'
+    const holder = entities.find((h) => holds(h.id, id))
+    if (holder !== undefined) return { holder: holder.id }
+    const at = positionOf(id)
+    return at === null ? 'none' : at === currentLocationId ? 'here' : 'elsewhere'
+  }
+
   // Whether the move changed who holds the item or where it lies.
   const take = (item: ItemTransfer): boolean => {
     const before = whereIs(item.id)
-    const giver = characterOf(item.from)
-    const taker = characterOf(item.to)
-    if (giver !== undefined) release(giver, item.id)
-    if (taker !== undefined) {
+    const to = partyOf(item.to)
+    // Into the scene's place, or a container lying there, is a put-down; anywhere else stays
+    // prose, as a drop's does, and leaves the item where it was.
+    if (to === 'here') return putDownHere(item.id) && whereIs(item.id) !== before
+    if (to === 'elsewhere') return false
+    const from = partyOf(item.from)
+    if (typeof from === 'object') release(from.holder, item.id)
+    if (typeof to === 'object') {
+      const taker = to.holder
       // data-model.md → ItemState: an item has one position, so taking it moves it from
       // wherever else it sits, whatever `from` named.
       for (const holder of entities)
@@ -103,42 +131,42 @@ export function itemMoveActions(args: ItemMoveArgs): ItemMoves {
   const drops: ReportedDrop[] = []
   let dropsLanded = 0
   // piggyback.md → Trailing block format: a drop lands where the scene is; elsewhere stays prose.
-  const putDown = (drop: ItemDrop) => {
-    if (byId.get(drop.id)?.kind !== 'item') return
-    const holders = entities.filter((holder) => holds(holder.id, drop.id)).map((h) => h.id)
+  // False when it can't: held by no one near the scene, or lying elsewhere.
+  function putDownHere(itemId: string): boolean {
+    if (byId.get(itemId)?.kind !== 'item') return false
+    const holders = entities.filter((holder) => holds(holder.id, itemId)).map((h) => h.id)
     if (holders.length > 0 && !holders.some((id) => nearScene.has(id))) {
       log.warn('classifier.drop_dropped', {
         entryId,
         source,
-        itemId: drop.id,
+        itemId,
         reason: 'off_scene',
         holderIds: holders,
       })
-      return
+      return false
     }
-    const lyingAt = positionOf(drop.id)
+    const lyingAt = positionOf(itemId)
     if (holders.length === 0 && lyingAt !== null && lyingAt !== currentLocationId) {
       log.warn('classifier.drop_dropped', {
         entryId,
         source,
-        itemId: drop.id,
+        itemId,
         reason: 'elsewhere',
         atLocationId: lyingAt,
       })
-      return
+      return false
     }
-    const before = whereIs(drop.id)
-    for (const holderId of holders) release(holderId, drop.id)
+    for (const holderId of holders) release(holderId, itemId)
     if (currentLocationId === null)
-      log.warn('classifier.drop_unplaced', { entryId, source, itemId: drop.id })
+      log.warn('classifier.drop_unplaced', { entryId, source, itemId })
     else if (holders.length === 0 && lyingAt === currentLocationId)
-      log.debug('classifier.drop_unchanged', {
-        entryId,
-        source,
-        itemId: drop.id,
-        atLocationId: lyingAt,
-      })
-    positions.set(drop.id, currentLocationId)
+      log.debug('classifier.drop_unchanged', { entryId, source, itemId, atLocationId: lyingAt })
+    positions.set(itemId, currentLocationId)
+    return true
+  }
+  const putDown = (drop: ItemDrop) => {
+    const before = whereIs(drop.id)
+    if (!putDownHere(drop.id)) return
     if (whereIs(drop.id) !== before) dropsLanded += 1
     drops.push({
       id: drop.id,
@@ -160,8 +188,14 @@ export function itemMoveActions(args: ItemMoveArgs): ItemMoves {
   }
 
   const actions: PipelineAction[] = []
+  const sameList = (a: readonly string[], b: readonly string[]) =>
+    a.length === b.length && a.every((v, i) => v === b[i])
   for (const [id, patch] of inventoryPatches) {
-    if (isCharacter(id)) {
+    const stored = storedInventory(id)
+    const unchanged =
+      sameList(patch.equipped_items ?? stored.equipped_items, stored.equipped_items) &&
+      sameList(patch.inventory ?? stored.inventory, stored.inventory)
+    if (isCharacter(id) && !unchanged) {
       actions.push({
         kind: 'updateEntityInventory',
         source,
@@ -177,5 +211,9 @@ export function itemMoveActions(args: ItemMoveArgs): ItemMoves {
         payload: { branchId, id, atLocationId },
       })
   }
-  return { actions, drops, itemsLanded, dropsLanded }
+  const holderOf = (id: string | undefined): string | undefined => {
+    const party = partyOf(id)
+    return typeof party === 'object' ? party.holder : undefined
+  }
+  return { actions, drops, itemsLanded, dropsLanded, holderOf }
 }

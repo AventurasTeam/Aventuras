@@ -3685,25 +3685,44 @@ describe('per-turn-piggyback', () => {
           expect(metadataPatch(events).stateReport?.transfers).toEqual(foldReport.transfers)
         })
 
-        // A holder isn't kind-checked, so these resolve; naming no character, they write nothing.
-        it.each([
-          [
-            'an item moved to a place',
-            { items: [{ id: 'i1', to: 'l1', slot: 'inventory' }], stackables: [], drops: [] },
-          ],
-          [
-            'a stackable paid to a place',
-            { items: [], stackables: [{ key: 'gold', amount: 5, to: 'l1' }], drops: [] },
-          ],
-        ])("keeps the fold's transfers when its only transfer is %s", async (_label, transfers) => {
+        // A place holds no stackable, so a stackable paid to one reads as spent and pays no one.
+        it("keeps the fold's transfers when its only transfer is a stackable paid to a place", async () => {
           seedFallbackTurn(
             [keyHeld(), worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }), keyRow()],
             foldReport,
           )
-          const { events } = await fallbackAfterFold({ transfers })
+          const { events } = await fallbackAfterFold({
+            transfers: {
+              items: [],
+              stackables: [{ key: 'gold', amount: 5, to: 'l1' }],
+              drops: [],
+            },
+          })
           expect(payloads(events, 'updateEntityInventory')).toEqual([])
           expect(payloads(events, 'updateEntityStackables')).toEqual([])
           expect(metadataPatch(events).stateReport?.transfers).toEqual(foldReport.transfers)
+        })
+
+        // Moved into the scene's place, the key is put down there: a landed move of its own.
+        it('reports its own item move when it moves the key into the scene’s place', async () => {
+          seedFallbackTurn(
+            [keyHeld(), worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }), keyRow()],
+            foldReport,
+          )
+          const { events } = await fallbackAfterFold({
+            transfers: {
+              items: [{ id: 'i1', to: 'l1', slot: 'inventory' }],
+              stackables: [],
+              drops: [],
+            },
+          })
+          expect(payloads(events, 'updateItemPosition')).toEqual([
+            { branchId: 'b1', id: OLD_KEY, atLocationId: TOWN },
+          ])
+          expect(metadataPatch(events).stateReport?.transfers).toEqual({
+            items: [{ id: OLD_KEY, to: TOWN, slot: 'inventory' }],
+            stackables: [],
+          })
         })
 
         const visualFold: NonNullable<EntryMetadata['stateReport']> = {

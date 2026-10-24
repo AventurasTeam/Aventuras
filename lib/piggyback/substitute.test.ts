@@ -296,7 +296,6 @@ describe('substitutePiggybackIds with creates', () => {
       'an item transfer from',
       { items: [{ id: 'i1', slot: 'inventory' as const, from: 'new:key', seq: 0 }] },
     ],
-    ['a drop from', { drops: [{ id: 'i1', from: 'new:key', seq: 0 }] }],
     ['a stackable to', { stackables: [{ key: 'gold', amount: 1, to: 'new:key' }] }],
     ['a stackable from', { stackables: [{ key: 'gold', amount: 1, from: 'new:key' }] }],
   ])('refuses a declared handle in %s', (_label, partial) => {
@@ -477,7 +476,6 @@ describe('substitutePiggybackIds — kinds', () => {
     ['an undeclared handle as the item', { items: [toHero('new:ghost', 1)] }, 'new:ghost'],
     ['an unknown holder', { items: [{ id: 'i1', slot: 'inventory', from: 'c9', seq: 1 }] }, 'c9'],
     ['an unknown dropped item', { drops: [{ id: 'i9', seq: 1 }] }, 'i9'],
-    ['an unknown drop holder', { drops: [{ id: 'i1', from: 'c9', seq: 1 }] }, 'c9'],
     ['an unknown stackable holder', { stackables: [{ key: 'silver', amount: 2, to: 'c9' }] }, 'c9'],
     [
       'a handle as a stackable holder',
@@ -674,4 +672,32 @@ describe('substitutePiggybackIds — per-entry drops', () => {
     expect(failed.failures.map((f) => f.field)).toEqual(['currentLocation'])
     expect(failed.droppedRefs).toEqual([])
   })
+})
+
+describe('substitutePiggybackIds — a drop names its holder for the record only', () => {
+  const CHAR = 'char_00000000-0000-4000-8000-000000000002'
+  const ITEM = 'item_00000000-0000-4000-8000-000000000003'
+  const idMap = () => mapWith([CHAR, ITEM])
+
+  it.each([
+    ['an unknown id', 'c9', 'fail'],
+    ['an unknown id', 'c9', 'drop'],
+    ["a new item's handle", 'new:key', 'fail'],
+    ["a new item's handle", 'new:key', 'drop'],
+  ] as const)(
+    'keeps a drop whose holder is %s, without the holder, when wrong refs %s',
+    (_label, from, badRef) => {
+      const result = substitutePiggybackIds(
+        assumeNormalized({
+          newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
+          transfers: { items: [], stackables: [], drops: [{ id: 'i1', from, seq: 0 }] },
+        }),
+        idMap(),
+        { entities: ROWS, badRef },
+      )
+      expect(result.block.transfers?.drops).toEqual([{ id: ITEM, seq: 0 }])
+      expect(result.failures).toEqual([])
+      expect(result.droppedRefs).toEqual([])
+    },
+  )
 })

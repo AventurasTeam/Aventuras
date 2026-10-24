@@ -341,18 +341,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Rename only. Raised 2026-10-16 by the mentioned places slice review's
   simplifier pass.
 
-- **Older reads cast `state` to `CharacterState` without checking the
-  kind.** `lib/piggyback/apply.ts` (two reads of a holder's state) and
-  `lib/world/entity-actions.ts` (a merge's other row) cast an entity's
-  `state` straight to `CharacterState`, though `EntityState` is
-  undiscriminated and callers should pair the kind with the state
-  (`lib/db/entities/entities-types.ts`). The classifier factions slice
-  added a helper that checks the kind first for a character's faction;
-  these older reads predate it and stay out of its scope
-  ([`code-conventions.md → Type design`](../code-conventions.md#type-design)).
-  Read, not probed. Raised 2026-10-18 by the classifier factions slice
-  review.
-
 - **The classifier planner's decision maps are paired by name.**
   `PlanDeps.decisions` in `lib/classifier/plan.ts` is a `Map` the
   planner only reads, where its `factionDecisions` sibling is a
@@ -394,21 +382,6 @@ slice-planning gate forces its resolution before that slice is planned.
   already), or give an ancestor its own framing, which makes
   `entityFraming` read the scene. Raised 2026-10-19 by the entity-state
   smoke check.
-
-- **A transfer's holder is never kind-checked.** Canon has the fallback
-  drop a transfer whose item or holder is of the wrong kind, item and
-  stackable transfers alike, logging `classifier.transfer_dropped`, and
-  the tagged block fail the field
-  ([`piggyback.md → Parse strategy and failure recovery`](../memory/piggyback.md#parse-strategy-and-failure-recovery)).
-  `lib/piggyback/substitute.ts` checks only an item transfer's item:
-  `resolveItemTransfer` never checks `to` or `from`, and
-  `resolveStackable` checks nothing. A probe through
-  `buildPiggybackActions` moved 30 gold from an item to a character, and
-  4 gold from a character to an item, which credited no one, with
-  nothing logged. Older than entity state, which now brackets the ids
-  of held and loose items in every generation prompt, so a container
-  item named as a payer is likelier. Raised 2026-10-19 by the
-  entity-state slice review.
 
 - **Retrieval takes its disabled places beside the scene they derive
   from.** `per-turn-retrieval.ts` computes `disabledPlaceIds` with
@@ -963,14 +936,6 @@ slice-planning gate forces its resolution before that slice is planned.
   write, so an unattributed one that writes nothing still counts a
   `classifier.window_head_fallback`. Raised 2026-10-24 by the AI writer
   map's slice review.
-
-- **A release from a non-holder still writes the holder's inventory.**
-  `release` in `lib/piggyback/apply.ts` emits an
-  `updateEntityInventory` with unchanged arrays when the character
-  doesn't hold the item. Since the AI writer map the fallback's
-  carry-over no longer counts such a move as landed, but the empty
-  write still reaches the delta log's handler. Predates the AI writer
-  map; raised 2026-10-24 by its slice review.
 
 - **A World E2E spec re-checks the delete dialog's copy.**
   `e2e/tests/world-delete-undo.spec.ts` (≈:187-188) asserts

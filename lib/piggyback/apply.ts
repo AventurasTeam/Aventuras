@@ -1,7 +1,8 @@
 import type { DeltaSource, PipelineAction } from '@/lib/actions'
-import type { CharacterState, Entity, EntryMetadata, ItemState, LocationState } from '@/lib/db'
+import type { CharacterState, Entity, EntryMetadata } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import { foldStackables } from '@/lib/keyword-terms'
+import { stateAs } from '@/lib/world'
 
 import { boundStateText } from './bound-text'
 import { itemMoveActions } from './item-moves'
@@ -122,8 +123,6 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   // those fields merged onto its state unvalidated (state-patch-actions.ts never
   // parses the merged result against the target's own kind-specific schema).
   const isCharacter = (id: string): boolean => byId.get(id)?.kind === 'character'
-  const characterOf = (id: string | undefined): string | undefined =>
-    id !== undefined && isCharacter(id) ? id : undefined
 
   actions.push(
     ...scenePromotionActions({
@@ -158,10 +157,8 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   for (const note of block.visualChanges ?? []) {
     if (isCharacter(note.id)) {
       const { text, cut } = boundStateText(note.text)
-      const stored = (byId.get(note.id)?.state as CharacterState | null | undefined)?.visual?.[
-        note.type
-      ]
-      if (text !== stored) visualChangesLanded += 1
+      if (text !== stateAs(byId.get(note.id), 'character').visual?.[note.type])
+        visualChangesLanded += 1
       // The writer is asked for about 60 words; a cut says it overran the 500-character bound.
       if (cut)
         log.warn('classifier.visual_truncated', {
@@ -207,7 +204,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
       continue
     }
     const { text, cut } = boundStateText(condition)
-    if (text !== (row.state as ItemState | LocationState | null)?.condition) conditionsLanded += 1
+    if (text !== stateAs(row, row.kind).condition) conditionsLanded += 1
     if (cut)
       log.warn('classifier.condition_truncated', {
         entryId,
@@ -228,6 +225,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     drops,
     itemsLanded,
     dropsLanded,
+    holderOf,
   } = itemMoveActions({
     transfers: block.transfers,
     entities,
@@ -249,14 +247,13 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     const patched = stackablePatches.get(id)
     if (patched) return new Map(patched)
     // The patch carries the folded keys, so the first transfer to touch a holder heals its row.
-    const state = byId.get(id)?.state as CharacterState | undefined
-    return foldStackables(state?.stackables)
+    return foldStackables(stateAs(byId.get(id), 'character').stackables)
   }
 
   let stackablesLanded = 0
   for (const transfer of block.transfers?.stackables ?? []) {
-    const payer = characterOf(transfer.from)
-    const payee = characterOf(transfer.to)
+    const payer = holderOf(transfer.from)
+    const payee = holderOf(transfer.to)
     if (payer !== undefined || payee !== undefined) stackablesLanded += 1
     if (payer !== undefined) {
       const next = currentStackables(payer)

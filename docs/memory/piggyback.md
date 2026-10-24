@@ -536,7 +536,8 @@ treat a bad ref differently:
 - **The fallback**, whose reply nothing rereads, drops an entry where
   it stands when a ref in it is unknown, undeclared or of the wrong
   kind, and applies the rest of the field: a scene entry, a visual
-  change, a condition, and item, stackable and drop transfers alike.
+  change, a condition, and item, stackable and drop transfers alike
+  (a holder is never of the wrong kind, below).
   An unknown `currentLocation` drops the same way and the previous
   location stays. Each drop is logged as `classifier.ref_dropped` and
   recorded in the report's `droppedRefs`
@@ -547,6 +548,21 @@ treat a bad ref differently:
   item's id is: the previous location stays, the report records
   `currentLocationRejected`, and its `currentLocation` holds the new
   item's id, or the emitted handle when the item isn't created.
+
+**A holder is read by what it names, never refused for its kind.**
+Until containers exist only a character holds anything, so a
+transfer's other holder stands for what the app can track. An item
+someone holds stands for that character: an item moved into a satchel
+lands with whoever holds it, and into the giver's own pouch it changes
+slot. The scene's place, or an item lying there, takes an item moved
+into it as a put-down there, as `<drop>` does, and holds no stackable,
+which reads as found or stashed. Another place, or an item lying
+elsewhere, leaves a moved item where it was, as a drop elsewhere
+stays prose. Anything else, a faction or a lore entry, reads as an
+omitted holder, so an item given to it is unplaced. A holder that
+resolves to no entity at all is still a bad ref. A drop's holder is
+read for the record only, since a drop lands wherever its item is: one
+that names no one is left off, never costing the drop.
 
 An existing item's id as the location is rejected that way on both
 paths
