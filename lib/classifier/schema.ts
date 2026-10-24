@@ -2,8 +2,9 @@ import { z } from 'zod'
 
 import { PLOT_ICON_KEYS } from '@/lib/plot'
 
-// No .transform() anywhere: z.toJSONSchema (used by generateStructured) throws
-// on transforms, so the severity clamp into [0, 1] lives in plan.ts.
+// No .transform() on a parsed value: z.toJSONSchema (used by generateStructured) throws on one,
+// so the severity clamp into [0, 1] lives in plan.ts. A z.preprocess only reads the reply leniently:
+// the model is shown the schema it feeds.
 const severity = z.number().default(0)
 
 /** classifier.md → Mentioned places → Parent: a new place's `parent` for a top-level place. */
@@ -27,8 +28,12 @@ const withoutNulls = (value: unknown): unknown =>
 
 // classifier.md → Failure policy: an entry that doesn't fit reads as a hole, a null field as
 // absent first, so one bad entry drops alone; readClassifierReply removes and counts the holes.
+// A null list reads as an empty one.
 const tolerantList = <T extends z.ZodType>(entry: T) =>
-  z.array(z.preprocess(withoutNulls, entry).optional().catch(undefined)).default([])
+  z.preprocess(
+    (value) => (value === null ? undefined : value),
+    z.array(z.preprocess(withoutNulls, entry).optional().catch(undefined)).default([]),
+  )
 
 // A tolerant list's enum value is read trimmed and case-folded, so "Resolved" lands as resolved.
 const foldedEnum = <T extends z.ZodEnum>(values: T) =>

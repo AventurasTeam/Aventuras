@@ -523,6 +523,16 @@ describe('an entry of a writer-map list that does not fit', () => {
     expect(malformed).toEqual([{ list: 'standings', count: 1 }])
   })
 
+  it('reads a null list as empty, and still fails a null older list', () => {
+    const lists = Object.fromEntries(Object.keys(MALFORMED).map((list) => [list, null]))
+    const parsed = classifierExtractionSchema.safeParse(lists)
+    expect(parsed.success).toBe(true)
+    const { reply, malformed } = readClassifierReply(parsed.data!)
+    for (const list of Object.keys(MALFORMED) as List[]) expect(reply[list], list).toEqual([])
+    expect(malformed).toEqual([])
+    expect(classifierExtractionSchema.safeParse({ statusFlips: null }).success).toBe(false)
+  })
+
   it('counts nothing for a reply whose entries all fit', () => {
     const lists = Object.fromEntries(
       Object.entries(WELL_FORMED).map(([list, entry]) => [list, [entry]]),
