@@ -46,8 +46,9 @@ anything on a Wayland session. See
 
 Seed into a fresh temp `userData` per run via `--user-data-dir`;
 nothing binary in git. **Seeded IDs under a substitutable prefix must
-be real `prefix_<uuid>`** (deterministic UUIDv5 from the mnemonic) or
-turns fail on the placeholder return trip — mnemonic IDs like
+be real `prefix_<uuid>`** (deterministic from the mnemonic: a v4-shaped
+hash in the dataset, a UUIDv5 in a harness helper) or turns fail on the
+placeholder return trip — mnemonic IDs like
 `char_kael` pass `substituteIds` untouched and break silently. See
 [testing.md → Fixture + seed contract](../../docs/testing.md#fixture--seed-contract).
 
