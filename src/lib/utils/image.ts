@@ -1,6 +1,6 @@
 import type { ImageGenerationMode, StorySettings } from '#lib/types/index.ts'
 
-// Whole base64 quanta; long enough for every signature `sniffImageMime` reads, ISOBMFF brands included.
+// Whole base64 quanta; covers any real `ftyp` box. An APNG whose `acTL` sits further in labels as PNG, which renders the same.
 const LABEL_SNIFF_CHARS = 128
 const BASE64_MARKER = ';base64,'
 
