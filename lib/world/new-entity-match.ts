@@ -86,7 +86,7 @@ function matchPlaced(
   return flagPartner(candidate, siblings, SAME_PARENT)
 }
 
-/** A new place this reply settled: the placement it declared, and the row it resolved to. */
+/** A reply's new place: the placement its parent gave, unplaced if dropped, and its row's id. */
 export type SettledNewPlace = { name: string; placement: PlacePlacement; id: string }
 
 /** Where this reply's placements put a place. */
