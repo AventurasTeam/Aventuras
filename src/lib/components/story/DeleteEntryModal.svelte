@@ -114,9 +114,12 @@
       Delete only this entry, without a rollback
     </label>
   {/if}
-  <!-- Says only what the title does not: the range, or that the world state is left alone. -->
+  <!-- Says only what the title does not; "Only" sets the switch apart from the range it overrules. -->
   {#if !rollsBack}
-    <p class="text-muted-foreground text-sm">The world state will stay as it is.</p>
+    <p class="text-muted-foreground text-sm">
+      {revertsOnDelete ? `Only entry ${number} will be deleted. ` : ''}The world state will stay as
+      it is.
+    </p>
   {:else if number !== lastEntryNumber}
     <p class="text-muted-foreground text-sm">
       Entries {number} to {lastEntryNumber} will be deleted.
