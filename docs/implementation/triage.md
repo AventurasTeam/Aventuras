@@ -925,12 +925,13 @@ slice-planning gate forces its resolution before that slice is planned.
   Raised 2026-10-23 by the AI writer map's Q19.
 
 - **An unattributed pass fact isn't always re-derivable.**
-  [`memory/classifier.md`](../memory/classifier.md)'s provenance list
+  [`classifier.md → Provenance attribution`](../memory/classifier.md#provenance-attribution)
   says a fact that falls back to the window head "reverses on any
   reversal into its window (re-derivable)". When its real source turn
   sits below the reversal point, the watermark clamps to that point
-  minus one ([`data-model.md`](../data-model.md), the watermark
-  clamp), so the source turn is never re-read and the fact is lost.
+  minus one
+  ([`data-model.md → Survival anchor`](../data-model.md#survival-anchor)),
+  so the source turn is never re-read and the fact is lost.
   Since the AI writer map, an unattributed thread a pass opens and
   closes is one such fact. Raised 2026-10-23 by the AI writer map's
   Task 20 review.
@@ -963,8 +964,8 @@ slice-planning gate forces its resolution before that slice is planned.
 - **A pass's rename can leave a collision flag with no namesake
   basis.** `renameEntity` (`lib/actions/entities/state-patch-actions.ts`)
   writes no flag columns, and
-  [`world.md`](../ui/screens/world/world.md)'s rule for keeping flags
-  consistent lists only user writes. A row flagged against a namesake
+  [`world.md → Surfacing`](../ui/screens/world/world.md#surfacing)'s
+  rule for keeping flags consistent lists only user writes. A row flagged against a namesake
   that a pass then renames to an unrelated name keeps its old name as a
   keyword, but the namesake match is exact (`lib/world/namesakes.ts`),
   so the pair stops being namesakes while World still shows the strip.
@@ -986,3 +987,14 @@ slice-planning gate forces its resolution before that slice is planned.
   and a reused place's keywords in the same reply (`planNewPlaces`
   still appends those at the match, before the turn-ordered writes).
   Raised 2026-10-24 by the AI writer map's branch review (Q25).
+
+- **The seen-before-written set mirrors the bundled templates.**
+  `shownWithState` in `lib/pipeline/definitions/generation-context.ts`
+  builds the ids a per-turn condition may land on from the rows the
+  bundled per-turn and fallback templates render with their state. A
+  pack template that renders state for other rows, or hides it for
+  some, drifts from that set: a condition is refused for a row the
+  model was shown, or lands on one it wasn't. Gating the set's sources
+  on the template's `reads`, or deriving it from the rendered prompt,
+  would close it. Raised 2026-10-23 by the AI writer map's Task 12
+  review; filed by its slice review.
