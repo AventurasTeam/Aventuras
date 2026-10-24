@@ -79,15 +79,6 @@ slice-planning gate forces its resolution before that slice is planned.
   its 224 px. Raised 2026-10-21 by the gated classifier slice review's
   R1 probe.
 
-- **The Select's segment and radio branches go uncontrolled on an
-  `undefined` value.** `components/ui/select.tsx`'s `SegmentBranch` and
-  `RadioBranch` hand `value` straight to Radix, whose
-  `useControllableState` reads `undefined` as uncontrolled, so a caller
-  passing `undefined` (legal under `value: string | undefined`) switches
-  between controlled and uncontrolled and gets React's warning. The
-  dropdown branch maps it to `EMPTY_VALUE`. Raised 2026-10-23 by the AI
-  writer map's Task 9 review, whose cast parent picker hit it.
-
 - **A World E2E spec re-checks the delete dialog's copy.**
   `e2e/tests/world-delete-undo.spec.ts` (≈:187-188) asserts
   `world:delete.awareness` and `world:delete.tailScene` text in the
