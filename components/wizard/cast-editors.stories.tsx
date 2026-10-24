@@ -228,6 +228,66 @@ export const CharacterHasNoFactionsYetShowsEmptyState: Story = {
   },
 }
 
+const characterOf = (id: string) => castRowById(id) as WizardCharacterDraft
+const UNRESOLVED_GUILD = 'The Iron Guild (unresolved)'
+
+/** wizard.md → Faction asks: with no faction to pick, the ask still shows and one pick settles it. */
+export const CharacterUnresolvedFactionWithNoFactionsClears: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([
+      characterRow({ id: 'char-1', name: 'Aria', unresolvedFactionName: 'The Iron Guild' }),
+    ])
+  },
+  render: () => <CharacterEditorDemo id="char-1" />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'More options' }))
+    await expect(await screen.findByRole('radio', { name: UNRESOLVED_GUILD })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    expect(screen.queryByText('(no factions yet — add one with + Add)')).toBeNull()
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Unaffiliated' }))
+    await waitFor(() =>
+      expect(characterOf('char-1')).toMatchObject({ factionId: null, unresolvedFactionName: '' }),
+    )
+    expect(await screen.findByText('(no factions yet — add one with + Add)')).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: UNRESOLVED_GUILD })).toBeNull()
+  },
+}
+
+/** Beside factions the ask is the selected value, not Unaffiliated, so Unaffiliated takes one pick. */
+export const CharacterUnresolvedFactionClearsInOnePick: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([
+      characterRow({ id: 'char-1', name: 'Aria', unresolvedFactionName: 'The Iron Guild' }),
+      factionRow({ id: 'fact-1', name: 'The Ash Court' }),
+    ])
+  },
+  render: () => <CharacterEditorDemo id="char-1" />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'More options' }))
+    await expect(await screen.findByRole('radio', { name: UNRESOLVED_GUILD })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    const unaffiliated = screen.getByRole('radio', { name: 'Unaffiliated' })
+    await expect(unaffiliated).toHaveAttribute('aria-checked', 'false')
+
+    await userEvent.click(unaffiliated)
+    await waitFor(() =>
+      expect(characterOf('char-1')).toMatchObject({ factionId: null, unresolvedFactionName: '' }),
+    )
+    await waitFor(() => expect(screen.queryByRole('radio', { name: UNRESOLVED_GUILD })).toBeNull())
+    await expect(screen.getByRole('radio', { name: 'Unaffiliated' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+  },
+}
+
 export const CharacterIsLeadHidesSetAsLead: Story = {
   beforeEach: () => {
     wizardStore.reset()

@@ -449,7 +449,11 @@ Maps to [`CharacterState`](../../../data-model.md#characterstate-shape).
   `(no factions yet — add one with + Add)` empty state when none
   exist. `null` = unaffiliated. A faction removed from the cast,
   including one a resumed draft couldn't load, leaves the character
-  unaffiliated.
+  unaffiliated. While an AI-proposed faction the wizard couldn't
+  resolve is still asked for, the picker offers and selects
+  `<name> (unresolved)`, even with no faction to pick, as the
+  [location picker](#location-editor) offers `Unknown`; any pick,
+  `Unaffiliated` included, settles the ask.
 
 **Not in wizard editor** (per the authorship contract,
 classifier-managed per-turn): `current_location_id`,

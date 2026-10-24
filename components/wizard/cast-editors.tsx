@@ -215,6 +215,9 @@ export function CharacterEditor({
   leadEntityId,
 }: CommonEditorProps<WizardCharacterDraft>) {
   const factionCandidates = cast.filter((r): r is WizardFactionDraft => r.kind === 'faction')
+  // The same pending ask pendingCastRef warns about: offered as the selected value, so any pick
+  // settles it in one go, Unaffiliated included, with or without a faction to pick.
+  const askedFaction = row.factionId == null ? row.unresolvedFactionName.trim() : ''
   return (
     <>
       <NameStatusRow row={row} invalid={invalid} />
@@ -278,6 +281,8 @@ export function CharacterEditor({
               label={t('wizard:cast.editor.faction')}
               emptyLabel={t('wizard:cast.editor.noFactionsYet')}
               nullLabel={t('wizard:cast.editor.unaffiliated')}
+              unknownLabel={t('wizard:cast.editor.factionUnresolved', { name: askedFaction })}
+              unknown={askedFaction !== ''}
               candidates={factionCandidates}
               value={row.factionId}
               // Cleared on any explicit assignment, including back to null — a kept ask

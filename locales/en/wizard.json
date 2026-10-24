@@ -345,6 +345,7 @@
       "faction": "Faction",
       "noFactionsYet": "(no factions yet — add one with + Add)",
       "unaffiliated": "Unaffiliated",
+      "factionUnresolved": "{{name}} (unresolved)",
       "parentLocation": "Parent location",
       "noLocationsYet": "(no locations yet — add one with + Add)",
       "noParent": "Top level",
