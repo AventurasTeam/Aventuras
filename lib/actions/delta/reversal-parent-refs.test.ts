@@ -616,8 +616,8 @@ describe('redo of a CTRL-Z that cleared a parent', () => {
   })
 })
 
-// cadence.md → User edits and classifier writes: a reversed pass placement keeps a later user
-// placement whole, the parent and the unplaced mark as one field.
+// generation-pipeline.md → Reverse-replay: a reversed pass placement keeps a later user placement
+// whole, the parent and the unplaced mark as one field.
 describe('a reversed pass placement and the writes after it', () => {
   const unplacedPlace = (id: string): NewEntity => ({
     ...place(id, null),
