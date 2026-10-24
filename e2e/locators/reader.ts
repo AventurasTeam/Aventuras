@@ -113,8 +113,11 @@ export const reader = {
   // System (failure) entry: its copy and actions.
   systemEntryFailure: (
     page: Page,
-    failure: 'memory' | 'memoryNoProfileAssigned' | 'memoryHeld',
+    failure: 'embed' | 'memory' | 'memoryNoProfileAssigned' | 'memoryHeld',
   ): Locator => page.getByText(t(`reader:systemEntry.failure.${failure}`), { exact: false }),
+  // The copy of a turn failure no kind-specific arm claims (describeTurnFailure).
+  systemEntryGenericFailure: (page: Page): Locator =>
+    page.getByText(t('reader:systemEntry.failureMessage'), { exact: false }),
   retrySystemEntry: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:systemEntry.retry') }),
   // A toast's close button shares the name, so the entry rows scope it.

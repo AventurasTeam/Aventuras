@@ -212,16 +212,6 @@ slice-planning gate forces its resolution before that slice is planned.
   not handed back. Raised 2026-10-22 in the pass failure policy
   slice's branch review.
 
-- **The embed-failure spec builds its system-entry selectors inline.**
-  `e2e/tests/retrieval-embed-failure.spec.ts` (~:104, :108) calls
-  `getByText(t('reader:systemEntry.failure.embed'))` and the
-  `failureMessage` twin in the spec, against
-  [`testing.md → Selector strategy`](../testing.md#selector-strategy)'s
-  "compose from `e2e/locators/`". `reader.systemEntryFailure`
-  (`e2e/locators/reader.ts`) now covers the pass copies; widening its
-  key union takes these too. Predates the pass failure policy slice;
-  raised 2026-10-23 by its slice review.
-
 - **E2E specs inline the current-branch query.** About fifteen specs
   (`periodic-classifier.spec.ts` five times, `turn.spec.ts`,
   `reader-*.spec.ts`, the real-provider smoke and others) run

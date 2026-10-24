@@ -2,7 +2,6 @@ import { expect, test } from '@playwright/test'
 
 import { branchStaleTotal, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
-import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
 import { createSeededUserDataDir, removeUserDataDir, setProviderEndpoint } from '../harness/seed'
@@ -101,11 +100,11 @@ test.describe.serial('retrieval — a failed embed blocks the turn', () => {
     // arm produces — a failure that reached the generic arm renders the string
     // asserted absent below instead.
     await expect(
-      app.window.getByText(t('reader:systemEntry.failure.embed'), { exact: false }),
+      reader.systemEntryFailure(app.window, 'embed'),
       'the embedder-specific system entry',
     ).toBeVisible({ timeout: 90_000 })
     await expect(
-      app.window.getByText(t('reader:systemEntry.failureMessage'), { exact: false }),
+      reader.systemEntryGenericFailure(app.window),
       'not the generic failure copy',
     ).toHaveCount(0)
 
