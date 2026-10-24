@@ -390,6 +390,7 @@ export async function* periodicClassifierPhase(
   for (const drop of plan.droppedPlacements) ctx.log.warn('classifier.placement_dropped', drop)
   for (const icon of plan.unknownIcons) ctx.log.warn('classifier.icon_unknown', icon)
   for (const drop of plan.droppedRenames) ctx.log.warn('classifier.rename_dropped', drop)
+  for (const drop of plan.droppedReturns) ctx.log.warn('classifier.return_dropped', drop)
   for (const drop of plan.droppedThreads)
     ctx.log.warn('classifier.create_dropped', { kind: 'thread', ...drop })
   for (const moved of plan.earlyCloses) ctx.log.warn('classifier.thread_close_moved', moved)

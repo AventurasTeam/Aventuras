@@ -3179,6 +3179,60 @@ describe('periodicClassifierPhase — the writer map', () => {
     expect(logged('classifier.unseen_ref')).toEqual([['warn', { list: 'standings', ref: 'f9' }]])
   })
 
+  it('logs a write on the wrong kind of row under its own key, never as an unresolved ref', async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    const FACT_WATCH = 'fact_77777777-7777-7777-7777-777777777777'
+    const watch = { ...character(FACT_WATCH, 'The Watch'), kind: 'faction', status: 'retired' }
+    const ford = {
+      ...character(LOC_FORD, 'The Ford'),
+      kind: 'location',
+      state: { parent_location_id: null, unplaced: true },
+    } as Entity
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction({
+        newPlaces: [
+          {
+            handle: 'new:reach',
+            name: 'the Eastern Reach',
+            description: 'x',
+            keywords: [],
+            sourceTurn: 't1',
+            parent: 'top-level',
+          },
+        ],
+        placements: [
+          { ref: 'l1', parent: 'new:reach', sourceTurn: 't1' },
+          { ref: 'l1', parent: 'c1', sourceTurn: 't1' },
+          { ref: 'c1', parent: 'l1', sourceTurn: 't1' },
+        ],
+        standings: [{ ref: 'c1', standing: 'feared', sourceTurn: 't1' }],
+        statusFlips: [{ ref: 'f1', to: 'active', sourceTurn: 't1' }],
+      }),
+    } as never)
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      entities: [kael, watch as Entity, ford],
+      mentionedPlaces: true,
+    })
+    await drain(h.ctx)
+    expect(logged('classifier.placement_dropped')).toEqual([
+      ['warn', { ref: LOC_FORD, parent: 'new:reach', cause: 'parent-not-listed' }],
+      ['warn', { ref: LOC_FORD, parent: CHAR_KAEL, cause: 'parent-not-a-place' }],
+      ['warn', { ref: CHAR_KAEL, cause: 'not-a-location' }],
+    ])
+    expect(logged('classifier.standing_dropped')).toEqual([
+      ['warn', { faction: CHAR_KAEL, cause: 'not-a-faction' }],
+    ])
+    expect(logged('classifier.return_dropped')).toEqual([
+      ['warn', { ref: FACT_WATCH, cause: 'not-a-character' }],
+    ])
+    expect(logged('classifier.unresolved_refs')).toEqual([])
+  })
+
   it('logs a blank rename and thread, a moved close and each text it cuts, under their keys', async () => {
     clearBuffers()
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })

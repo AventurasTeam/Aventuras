@@ -78,20 +78,23 @@ export type UnseenRef = {
   ref: string
 }
 
-/** A standing naming a faction retired before the reply, dropped as memberships are. */
-export type DroppedStanding = { faction: string; cause: 'retired-faction' }
+/** A standing naming no faction, or one retired before the reply, dropped as memberships are. */
+export type DroppedStanding = { faction: string; cause: 'retired-faction' | 'not-a-faction' }
+
+/** A return from retirement naming a row that is no character: only a character returns. */
+export type DroppedReturn = { ref: string; cause: 'not-a-character' }
 
 /** A happening's or a new thread's icon the catalog lacks: written as none. */
 export type UnknownIcon = { title: string; icon: string }
 
 /**
- * A placement that plans nothing: a loop, a broken chain above its parent, a retired parent, or
- * top-level marking a placed one.
+ * A placement that plans nothing: a loop, a broken chain above its parent, a retired parent,
+ * top-level marking a placed one, a target that is no place, or a parent that is no listed place
+ * (a row of another kind, or one this reply creates, whose create carries its own parent).
  */
-export type DroppedPlacement = {
-  ref: string
-  cause: 'cycle' | 'retired' | 'not-unplaced' | 'chain-broken'
-}
+export type DroppedPlacement =
+  | { ref: string; cause: 'cycle' | 'retired' | 'not-unplaced' | 'chain-broken' | 'not-a-location' }
+  | { ref: string; parent: string; cause: 'parent-not-a-place' | 'parent-not-listed' }
 
 /** A rename that plans nothing: its name is blank. */
 export type DroppedRename = { ref: string; cause: 'blank-name' }
@@ -131,6 +134,7 @@ export type PlanResult = {
   droppedStandings: readonly DroppedStanding[]
   unknownIcons: readonly UnknownIcon[]
   droppedRenames: readonly DroppedRename[]
+  droppedReturns: readonly DroppedReturn[]
   droppedThreads: readonly DroppedThread[]
   earlyCloses: readonly EarlyClose[]
   cutTexts: readonly CutText[]
@@ -797,7 +801,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         continue
       }
       if (row.kind !== 'location') {
-        unresolvedRefs.push(fact.ref)
+        droppedPlacements.push({ ref: fact.ref, cause: 'not-a-location' })
         continue
       }
       const { id } = row
@@ -816,7 +820,10 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         const parentId = fact.parent
         const parent = rowById.get(parentId)
         if (parent?.kind !== 'location') {
-          unresolvedRefs.push(fact.parent)
+          if (parent !== undefined || handleMap.has(parentId)) {
+            const cause = parent === undefined ? 'parent-not-listed' : 'parent-not-a-place'
+            droppedPlacements.push({ ref: fact.ref, parent: parentId, cause })
+          } else unresolvedRefs.push(parentId)
           continue
         }
         if (!placedEarlier && placeParentOf(id) === parentId) continue
@@ -858,7 +865,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         continue
       }
       if (row.kind !== 'faction') {
-        unresolvedRefs.push(fact.ref)
+        droppedStandings.push({ faction: fact.ref, cause: 'not-a-faction' })
         continue
       }
       // The pre-reply row, so a faction this reply retires keeps the standings from its turns.
@@ -1105,6 +1112,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     })
   }
 
+  const droppedReturns: DroppedReturn[] = []
   for (const flip of inTurnOrder(extraction.statusFlips)) {
     const id = resolveRef(flip.ref)
     if (id == null) continue
@@ -1113,7 +1121,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     // classifier.md → What the classifier writes → Status transitions: only a character returns.
     const returning = flip.to === 'active' && current.status === 'retired'
     if (returning && current.kind !== 'character') {
-      unresolvedRefs.push(flip.ref)
+      droppedReturns.push({ ref: flip.ref, cause: 'not-a-character' })
       continue
     }
     // Monotonic staged->active (the other writer may have landed it already), a return, and
@@ -1268,6 +1276,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     droppedStandings,
     unknownIcons,
     droppedRenames,
+    droppedReturns,
     droppedThreads,
     earlyCloses,
     cutTexts,

@@ -700,12 +700,13 @@ describe('buildClassifierActions', () => {
 
     // A place, a faction or an item comes back only by the user.
     it.each(['faction', 'location', 'item'])(
-      'never returns a retired %s, and reports its ref',
+      'never returns a retired %s, and reports the return as dropped',
       (kind) => {
         const row = { ...(nonCharacterRow('x_r', kind) as object), status: 'retired' } as never
-        const { planned, unresolvedRefs } = flip('x_r', 'active', [row])
+        const { planned, unresolvedRefs, droppedReturns } = flip('x_r', 'active', [row])
         expect(planned).toEqual([])
-        expect(unresolvedRefs).toEqual(['x_r'])
+        expect(droppedReturns).toEqual([{ ref: 'x_r', cause: 'not-a-character' }])
+        expect(unresolvedRefs).toEqual([])
       },
     )
 
@@ -3591,7 +3592,8 @@ describe('placements', () => {
   })
 
   // The schema's parent is an ID from Places or top-level: a new place is placed by its own create.
-  it("reports a new place's handle as a placement's parent as unresolved", () => {
+  // Q15: a placement's parent is a listed place, its create carrying a new place's own parent.
+  it("drops and reports a placement whose parent is a new place's handle", () => {
     const places: ClassifierPlacesExtraction = {
       ...reply({ placements: [{ ref: 'loc_varn', parent: 'new:reach', sourceTurn: 't2' }] }),
       newPlaces: [
@@ -3604,27 +3606,35 @@ describe('placements', () => {
         } as NewPlace,
       ],
     }
-    const { planned, unresolvedRefs } = buildClassifierActions(places, {
+    const { planned, unresolvedRefs, droppedPlacements } = buildClassifierActions(places, {
       ...base,
       entities: [VARN],
       newId: () => 'loc_new1',
     } as never)
     expect(kindsOf(planned)).toEqual(['createEntity'])
-    expect(unresolvedRefs).toEqual(['new:reach'])
+    expect(droppedPlacements).toEqual([
+      { ref: 'loc_varn', parent: 'new:reach', cause: 'parent-not-listed' },
+    ])
+    expect(unresolvedRefs).toEqual([])
   })
 
-  it('reports a parent naming no place, and a target that is no place, as unresolved', () => {
-    const { planned, unresolvedRefs } = buildClassifierActions(
+  it('reports a parent naming nothing as unresolved, and drops one that is no place', () => {
+    const { planned, unresolvedRefs, droppedPlacements } = buildClassifierActions(
       reply({
         placements: [
           { ref: 'loc_varn', parent: 'l9', sourceTurn: 't1' },
+          { ref: 'loc_varn', parent: 'char_kael', sourceTurn: 't1' },
           { ref: 'char_kael', parent: 'loc_reach', sourceTurn: 't1' },
         ],
       }),
       deps([REACH, VARN, KAEL]),
     )
     expect(planned).toEqual([])
-    expect(unresolvedRefs).toEqual(['l9', 'char_kael'])
+    expect(unresolvedRefs).toEqual(['l9'])
+    expect(droppedPlacements).toEqual([
+      { ref: 'loc_varn', parent: 'char_kael', cause: 'parent-not-a-place' },
+      { ref: 'char_kael', cause: 'not-a-location' },
+    ])
   })
 
   it('drops and reports a placement of a place the prompt never listed', () => {
@@ -3875,7 +3885,7 @@ describe('standings', () => {
       status: 'active',
       keywords: [],
     } as unknown as Entity
-    const { planned, unresolvedRefs, unseenRefs } = buildClassifierActions(
+    const { planned, unresolvedRefs, unseenRefs, droppedStandings } = buildClassifierActions(
       reply({
         standings: [
           { ref: 'char_kael', standing: 'feared', sourceTurn: 't1' },
@@ -3885,7 +3895,8 @@ describe('standings', () => {
       deps([kael]),
     )
     expect(planned).toEqual([])
-    expect(unresolvedRefs).toEqual(['char_kael'])
+    expect(droppedStandings).toEqual([{ faction: 'char_kael', cause: 'not-a-faction' }])
+    expect(unresolvedRefs).toEqual([])
     expect(unseenRefs).toEqual([{ list: 'standings', ref: 'f9' }])
   })
 
