@@ -73,7 +73,7 @@
     data-autofocus
     enterkeyhint="go"
     onkeydown={(e) => {
-      if (e.key === 'Enter' && !e.isComposing) void create()
+      if (e.key === 'Enter' && !e.isComposing && !e.ctrlKey && !e.metaKey) void create()
     }}
   />
 </ActionModal>

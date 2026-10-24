@@ -84,11 +84,8 @@
   }
 
   function handleKeydown(e: KeyboardEvent, nextFieldId?: string) {
-    if (e.key !== 'Enter' || e.isComposing) return
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault()
-      void save()
-    } else if (nextFieldId) {
+    if (e.key !== 'Enter' || e.isComposing || e.ctrlKey || e.metaKey) return
+    if (nextFieldId) {
       // A single-value field takes no line break, and a phone's return key must not save a
       // half-typed form. It moves on instead, which is what its "next" label promises.
       e.preventDefault()

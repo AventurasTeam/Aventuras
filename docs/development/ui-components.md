@@ -115,6 +115,10 @@ last one, a modal that creates or adds performs its action (`enterkeyhint="go"`)
 edits existing values only drops the keyboard (`enterkeyhint="done"`): an edit is saved through the
 on-screen button, never by a key under the thumb.
 
+Ctrl+Enter (Cmd+Enter on a Mac) in any field of an action modal performs its action, unless the
+action is disabled or running. The shell owns it, so a field's own Enter handler ignores Enter with
+a modifier. A phone keyboard has no such key, so it cannot save by accident.
+
 ### Wording
 
 - **Sentence case** for titles and buttons.

@@ -133,7 +133,7 @@
 
   /** The anchor is saved only through Save, so Enter in a single-line field moves on. */
   function moveOn(e: KeyboardEvent, next: HTMLElement | null) {
-    if (e.key !== 'Enter' || e.isComposing) return
+    if (e.key !== 'Enter' || e.isComposing || e.ctrlKey || e.metaKey) return
     e.preventDefault()
     next?.focus()
   }

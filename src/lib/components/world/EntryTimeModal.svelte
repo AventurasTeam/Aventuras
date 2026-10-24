@@ -80,7 +80,7 @@
 
   /** An edit is saved only through Save, so Enter moves on or drops the keyboard. */
   function handleEnter(e: KeyboardEvent, next: HTMLElement | null) {
-    if (e.key !== 'Enter' || e.isComposing) return
+    if (e.key !== 'Enter' || e.isComposing || e.ctrlKey || e.metaKey) return
     e.preventDefault()
     if (next) next.focus()
     else (e.currentTarget as HTMLElement).blur()

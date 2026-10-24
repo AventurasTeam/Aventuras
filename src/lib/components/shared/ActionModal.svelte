@@ -216,6 +216,14 @@
     return () => guard.destroy()
   })
 
+  // Ctrl+Enter in any field acts, so a modal whose Enter only moves on still has a key to finish.
+  function handleShortcut(e: KeyboardEvent) {
+    if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey) || e.isComposing) return
+    if (!(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) return
+    e.preventDefault()
+    if (!action.disabled && !busy) action.onConfirm()
+  }
+
   function answer(confirmed: boolean) {
     const asked = question
     question = null
@@ -248,6 +256,7 @@
         request('escape')
       }}
       onOpenAutoFocus={focusMarkedField}
+      onkeydown={handleShortcut}
       onpointerup={(e: PointerEvent) => swipeGuard?.release(e)}
       onpointerout={(e: PointerEvent) => swipeGuard?.release(e)}
     >
