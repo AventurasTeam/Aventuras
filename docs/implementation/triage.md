@@ -79,14 +79,6 @@ slice-planning gate forces its resolution before that slice is planned.
   its 224 px. Raised 2026-10-21 by the gated classifier slice review's
   R1 probe.
 
-- **A World E2E spec re-checks the delete dialog's copy.**
-  `e2e/tests/world-delete-undo.spec.ts` (≈:187-188) asserts
-  `world:delete.awareness` and `world:delete.tailScene` text in the
-  confirm, which Storybook owns
-  ([`testing.md → Test taxonomy`](../testing.md#test-taxonomy): E2E "does not re-verify
-  rendering"). The AI writer map dropped the same kind of check from
-  its own specs. Predates it; raised 2026-10-24 by its slice review.
-
 - **The AI writer map's code-quality leftovers.** Its slice review's
   simplifier pass skipped these, each needing a home or a design call
   outside the slice's files:

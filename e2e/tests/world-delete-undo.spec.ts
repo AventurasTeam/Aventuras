@@ -6,7 +6,6 @@ import type { EntryMetadata } from '@/lib/db'
 
 import { undoFromReader } from '../flows/navigation'
 import { currentBranchId, queryApp, seedVectors, tailMetadata } from '../harness/db'
-import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { suppressNativeUnloadDialogRace } from '../harness/reload'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
@@ -184,8 +183,6 @@ test.describe.serial('World delete', () => {
     await world.row(page, 'Mira').click()
     await world.moreActions(page).click()
     await world.deleteEntityItem(page).click()
-    await expect(world.deleteDialog(page)).toContainText(t('world:delete.awareness', { count: 2 }))
-    await expect(world.deleteDialog(page)).toContainText(t('world:delete.tailScene'))
     await world.deleteConfirm(page, 'character').click()
 
     await expect
