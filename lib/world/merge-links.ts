@@ -13,10 +13,9 @@ import {
   stateWithRefRewritten,
   type EntityLinkRows,
 } from './entity-refs'
-import { realPlacementOf } from './location-map'
 import { checkParentChain, parentOfLocations } from './parent-chain'
 import { adoptionHidesStory, type StoryPlace } from './place-rules'
-import type { PlacedPlacement } from './placement'
+import { realPlacementOf, type PlacedPlacement } from './placement'
 
 export type MergeLinkInput = {
   branchId: string

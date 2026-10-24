@@ -8,7 +8,6 @@ import {
   listedAncestorNames,
   locationMapView,
   placeTree,
-  realPlacementOf,
   unhiddenLocationView,
 } from './location-map'
 
@@ -341,27 +340,6 @@ describe('listedAncestorNames', () => {
   it('stops when the chain loops', () => {
     const loop = [location('loc_la', 'Ashgate', 'loc_lb'), location('loc_lb', 'Bellmoor', 'loc_la')]
     expect(listedAncestorNames('loc_la', loop)).toEqual(['Bellmoor'])
-  })
-})
-
-// data-model.md → LocationState shape: known to exist, not where, on every list of places.
-describe('realPlacementOf', () => {
-  const VARN = unplaced('loc_varn', 'Varn')
-  const ORPHAN = location('loc_orphan', 'Orphan Quay', 'loc_gone')
-  const placementAt = realPlacementOf([ELDRA, VELLIS, VARN, ORPHAN])
-
-  it('reads the flag as unplaced, a parent that is a place as under it, none as top-level', () => {
-    expect(placementAt('loc_varn')).toEqual({ kind: 'unplaced' })
-    expect(placementAt('loc_vellis')).toEqual({ kind: 'under', parentId: 'loc_eldra' })
-    expect(placementAt('loc_eldra')).toEqual({ kind: 'top' })
-  })
-
-  it('reads a stored parent naming no place as unplaced: its container is gone', () => {
-    expect(placementAt('loc_orphan')).toEqual({ kind: 'unplaced' })
-  })
-
-  it('reads an id naming no place as top-level', () => {
-    expect(placementAt('loc_none')).toEqual({ kind: 'top' })
   })
 })
 

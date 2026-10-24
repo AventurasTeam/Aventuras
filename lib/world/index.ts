@@ -92,7 +92,6 @@ export {
   listedAncestorNames,
   locationMapView,
   placeTree,
-  realPlacementOf,
   unhiddenLocationView,
 } from './location-map'
 export type {
@@ -120,7 +119,7 @@ export type {
 } from './entity-views'
 export { placeModes } from './place-modes'
 export type { PlaceModes } from './place-modes'
-export { isUnplaced, placementOf, samePlacement, withPlacement } from './placement'
+export { isUnplaced, placementOf, realPlacementOf, samePlacement, withPlacement } from './placement'
 export type { PlacedPlacement, PlacePlacement } from './placement'
 export {
   mergePlaceRefusal,

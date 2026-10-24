@@ -1,10 +1,15 @@
 import type { CollisionReason, Entity } from '@/lib/db'
 import { compareId } from '@/lib/list-modules'
 
-import { realPlacementOf, type LocationMatchView } from './location-map'
+import type { LocationMatchView } from './location-map'
 import { nameBasis, namesakeBasis } from './namesakes'
 import type { ParentOf } from './parent-chain'
-import { samePlacement, type PlacedPlacement, type PlacePlacement } from './placement'
+import {
+  realPlacementOf,
+  samePlacement,
+  type PlacedPlacement,
+  type PlacePlacement,
+} from './placement'
 
 const SAME_PARENT = 'same-parent' satisfies CollisionReason
 const UNPLACED = 'unplaced' satisfies CollisionReason

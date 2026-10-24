@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { LocationState } from '@/lib/db'
 
-import { isUnplaced, placementOf, samePlacement, withPlacement } from './placement'
+import { isUnplaced, placementOf, realPlacementOf, samePlacement, withPlacement } from './placement'
 
 const row = (state: object | null) => ({ state: state as LocationState | null })
 
@@ -31,6 +31,31 @@ describe('isUnplaced', () => {
     expect(isUnplaced(row({ parent_location_id: null }))).toBe(false)
     expect(isUnplaced(row({ parent_location_id: 'loc_reach' }))).toBe(false)
     expect(isUnplaced(row(null))).toBe(false)
+  })
+})
+
+// data-model.md → LocationState shape: known to exist, not where, on every list of places.
+describe('realPlacementOf', () => {
+  const place = (id: string, state: LocationState) => ({ id, state })
+  const placementAt = realPlacementOf([
+    place('loc_eldra', { parent_location_id: null }),
+    place('loc_vellis', { parent_location_id: 'loc_eldra' }),
+    place('loc_varn', { parent_location_id: null, unplaced: true }),
+    place('loc_orphan', { parent_location_id: 'loc_gone' }),
+  ])
+
+  it('reads the flag as unplaced, a parent that is a place as under it, none as top-level', () => {
+    expect(placementAt('loc_varn')).toEqual({ kind: 'unplaced' })
+    expect(placementAt('loc_vellis')).toEqual({ kind: 'under', parentId: 'loc_eldra' })
+    expect(placementAt('loc_eldra')).toEqual({ kind: 'top' })
+  })
+
+  it('reads a stored parent naming no place as unplaced: its container is gone', () => {
+    expect(placementAt('loc_orphan')).toEqual({ kind: 'unplaced' })
+  })
+
+  it('reads an id naming no place as top-level', () => {
+    expect(placementAt('loc_none')).toEqual({ kind: 'top' })
   })
 })
 
