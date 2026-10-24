@@ -187,15 +187,9 @@ function undoneValue(schema: ZodType | undefined, partial: unknown, current: unk
 
 // A place's parent and unplaced mark restore as one field: the clear logs nothing, so a
 // parent-only partial can land on a place it unplaced.
-function undoneColumn(
-  entry: TableEntry,
-  table: string,
-  col: string,
-  partial: unknown,
-  current: unknown,
-): unknown {
+function undoneColumn(entry: TableEntry, col: string, partial: unknown, current: unknown): unknown {
   const undone = undoneValue(entry.columnSchemas[col], partial, current)
-  if (table !== 'entities' || col !== 'state') return undone
+  if (entry.table !== 'entities' || col !== 'state') return undone
   if (!isPlainObject(partial) || !isPlainObject(undone)) return undone
   if (!Object.hasOwn(partial, 'parent_location_id') && !Object.hasOwn(partial, 'unplaced'))
     return undone
@@ -566,7 +560,6 @@ function undoDelete(walk: UndoWalk, target: UndoTarget, liveLinks: LiveLinkFilte
 // column groups `wroteField` counts as one field yield together.
 function restorablePayload(
   entry: TableEntry,
-  table: string,
   payload: Record<string, unknown>,
   userEdits: readonly Delta[],
 ): Record<string, unknown> {
@@ -574,11 +567,11 @@ function restorablePayload(
   for (const [col, partial] of Object.entries(payload)) {
     if (isPayloadMetaKey(col)) continue
     if (!Object.hasOwn(entry.columnSchemas, col)) {
-      if (!wroteField(userEdits, table, col, [])) restorable[col] = partial
+      if (!wroteField(userEdits, entry.table, col, [])) restorable[col] = partial
       continue
     }
     const kept = pruneUndoPartial(entry.columnSchemas[col], partial, (path) =>
-      wroteField(userEdits, table, col, path),
+      wroteField(userEdits, entry.table, col, path),
     )
     if (kept !== undefined) restorable[col] = kept
   }
@@ -593,7 +586,6 @@ async function undoUpdate(
   const { delta, entry } = target
   const payload = restorablePayload(
     entry,
-    delta.targetTable,
     (delta.undoPayload ?? {}) as Record<string, unknown>,
     userEdits,
   )
@@ -601,14 +593,14 @@ async function undoUpdate(
   if (columns.length === 0) return
   const copy = await heldCopyOf(walk, target)
   if (copy) {
-    undoHeldUpdate(entry, delta.targetTable, copy, payload, columns)
+    undoHeldUpdate(entry, copy, payload, columns)
     return
   }
   const state = await rowStateOf(walk, target)
   const { row } = state
   const restored: Record<string, unknown> = {}
   for (const col of columns) {
-    const value = undoneColumn(entry, delta.targetTable, col, payload[col], row[col])
+    const value = undoneColumn(entry, col, payload[col], row[col])
     restored[col] = value
     row[col] = value // thread into the working copy for later-in-DESC undos
   }
@@ -625,14 +617,12 @@ async function undoUpdate(
 
 function undoHeldUpdate(
   entry: TableEntry,
-  table: string,
   copy: HeldCopy,
   payload: Record<string, unknown>,
   columns: readonly string[],
 ): void {
   if (copy.removedByCreate) return
-  for (const col of columns)
-    copy.row[col] = undoneColumn(entry, table, col, payload[col], copy.row[col])
+  for (const col of columns) copy.row[col] = undoneColumn(entry, col, payload[col], copy.row[col])
   copy.removed = keepsNothing(entry, copy.row)
 }
 
