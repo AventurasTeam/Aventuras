@@ -276,7 +276,9 @@ stored value plans nothing unless an earlier fact for that row was
 sent, and one that restates an earlier fact's value is still sent,
 since user precedence may refuse the earlier write and the later turn
 is newer prose. The handler no-ops a write whose value is already
-written. A status transition is the exception, judged against the
+written. A rename clash's flag raise is planned against the stored
+flag alone, each clash sending its own, and the handler no-ops one
+whose flag already holds. A status transition is the exception, judged against the
 reply's view
 ([`classifier.md → What the classifier writes`](./classifier.md#what-the-classifier-writes)).
 
