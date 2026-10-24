@@ -183,7 +183,10 @@ treatment used by `retired_reason` (visible only when
   none for a top-level place, and `Location unknown` for an unplaced
   one, known to exist but not where. Its parent picker shows
   `Unknown` until the user picks a parent or `Top level`, either of
-  which places it.
+  which places it. A place created in World starts `Unknown`, not
+  `Top level`, until the user places it, and an imported one lands
+  unplaced too
+  ([`data-model.md → Aventuras file format`](../../../data-model.md#aventuras-file-format-avts)).
 - `condition` — single line if populated
 - "Characters here" count + first 3 names (portraits once the
   asset gallery lands)
@@ -287,9 +290,11 @@ Per-kind sub-labels:
 Connections is where entity navigation lives. A picker holding an
 entity (current location, faction, parent location, an item's
 location) carries an open action — an external-link icon before
-its clear `×`, spaced so their phone touch zones don't overlap —
-that opens that entity's detail pane; it stays live while edits
-are blocked, since navigating isn't editing. The inverse lists
+its clear `×` where it has one, spaced so their phone touch zones
+don't overlap — that opens that entity's detail pane; it stays live
+while edits are blocked, since navigating isn't editing. The
+parent-location picker has no `×`: `Top level`, and `Unknown` while
+the place is unplaced, are options in its list. The inverse lists
 link each name.
 
 The location pickers (a character's current location, an item's
@@ -1155,10 +1160,12 @@ non-canonical's counts:
   canonical's (a location parented under the non-canonical) a
   footnote says the canonical loses it and becomes unplaced.
   A canonical already unplaced before the merge takes the
-  non-canonical's placement instead, unless that parent is retired,
-  would put the canonical inside itself, or would put the story
-  inside a disabled place; it then stays unplaced, and the footnote
-  says which.
+  non-canonical's placement instead, unless the non-canonical is
+  unplaced too, or its parent is retired, would put the canonical
+  inside itself or sits on a broken chain, or would put the story
+  inside a disabled place; it then stays unplaced. A footnote says
+  which of the two happens; the stays-unplaced one lists every cause
+  that can keep it there, not the one that did.
   A holder of a non-canonical item drops it instead when the canonical item
   already has a position ([Reversibility](#reversibility)), and
   still counts here.

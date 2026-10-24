@@ -135,8 +135,10 @@ type EntitySummary = {
       involvements: number
       relationships: number
       holdersLosingItem: number
-      /** 1 when the other side's state names this side; the merge clears that ref. */
+      /** 1 when the other side sits under this side; the merge leaves it unplaced. */
       canonicalRefs: number
+      /** Only when the other side is an unplaced place: whether it takes this side's placement. */
+      canonicalPlacement?: 'takes-loser' | 'stays-unplaced'
     }
   }
 }
@@ -158,7 +160,10 @@ one happening, its relationships with a character the other side
 relates to, for an item its holders who lose it because the other
 item already has a position, and in `canonicalRefs` the other
 side's own ref to this side (a location parented under it), which
-the merge clears since the merged row can't point at itself.
+the merge drops, leaving the merged row unplaced since a place can't
+contain itself. `canonicalPlacement` says whether an unplaced other
+side takes this side's placement or stays unplaced
+([`world.md → Merge`](../screens/world/world.md#merge)).
 
 `state` is opaque (`Record<string, unknown>`). The dialog only
 deep-equals it to decide whether to render the inline note
@@ -370,8 +375,10 @@ empty, and `deselectedTags = []` and `deselectedKeywords = []`.
    (it keeps its own views, taking the duplicate's only where blank),
    holders who lose an item because the canonical item is already
    held or placed, the relationship between the two being dropped,
-   and the canonical sitting under the non-canonical location, a
-   parent the merge clears since a place can't contain itself.
+   and the canonical sitting under the non-canonical location, which
+   loses that parent and becomes unplaced since a place can't contain
+   itself. A canonical already unplaced gets one more: that it takes
+   the non-canonical's place on the map, or that it stays unplaced.
    Counts re-derive when canonical flips.
 7. **Footer** — `[ Cancel ]` ·
    `[ Merge into the <older|newer> <canonical-name> ]`. The primary
