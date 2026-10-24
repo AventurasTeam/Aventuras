@@ -39,15 +39,7 @@ import {
   type GroupScope,
   type HandlerOutcome,
 } from '../delta/registry'
-import {
-  USER_EDITED_SINCE_PROSE,
-  userEditsSinceProse,
-  wroteColumn,
-  wroteCollisionFlag,
-  wrotePath,
-  wrotePlacement,
-  wroteRetirement,
-} from '../delta/user-precedence'
+import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteField } from '../delta/user-precedence'
 import type { DbCtx, DeltaSource, ProseEntryId } from '../types'
 
 declare module '@/lib/actions/action-map' {
@@ -170,6 +162,20 @@ async function loadCurrent(branchId: string, id: string, ctx: DbCtx): Promise<En
     .from(entities)
     .where(and(eq(entities.branchId, branchId), eq(entities.id, id)))
   return current
+}
+
+// By wroteField's groups, so a write yields to a user edit as its reversal would.
+async function userWroteSinceProse(
+  ctx: DbCtx,
+  branchId: string,
+  id: string,
+  proseEntryId: ProseEntryId,
+  column: string,
+  path: readonly string[] = [],
+): Promise<boolean> {
+  if (proseEntryId === null) return false
+  const edits = await userEditsSinceProse(ctx, branchId, 'entities', id, proseEntryId)
+  return wroteField(edits, 'entities', column, path)
 }
 
 function buildStatePatchOutcome(
@@ -368,10 +374,7 @@ export const promoteStagedEntityHandler: ActionHandler = async (action, branchId
   const storeEntity = entitiesStore.getById(id)
   if (current.status !== 'staged' || (storeEntity !== undefined && storeEntity.status !== 'staged'))
     return noopRefusal('not-staged')
-  if (
-    proseEntryId !== null &&
-    wroteRetirement(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
-  )
+  if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'status'))
     return noopRefusal(USER_EDITED_SINCE_PROSE)
   return {
     status: 'ok',
@@ -439,10 +442,7 @@ export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) 
   if (current.status !== 'active') return noopRefusal('not-active')
   // Only the user retires a place (classifier.md → What the classifier writes).
   if (current.kind === 'location') return noopRefusal('location')
-  if (
-    proseEntryId !== null &&
-    wroteRetirement(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
-  )
+  if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'status'))
     return noopRefusal(USER_EDITED_SINCE_PROSE)
   const columns = { status: 'retired' as const, retiredReason }
   return {
@@ -489,12 +489,7 @@ export const setCharacterFactionHandler: ActionHandler = async (action, branchId
   if (characterFactionId(current) === factionId) return noopRefusal('faction-unchanged')
   if (factionId !== null && !(await isFaction(ctx, bid, factionId, group)))
     return noopRefusal('not-a-faction')
-  if (
-    proseEntryId !== null &&
-    wrotePath(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId), 'state', [
-      'faction_id',
-    ])
-  )
+  if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'state', ['faction_id']))
     return noopRefusal(USER_EDITED_SINCE_PROSE)
   return buildStatePatchOutcome(bid, id, current, { faction_id: factionId }, ctx)
 }
@@ -541,10 +536,7 @@ export const placeLocationHandler: ActionHandler = async (action, branchId, ctx)
       return noopRefusal(PARENT_CHAIN_BROKEN)
     }
   }
-  if (
-    proseEntryId !== null &&
-    wrotePlacement(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
-  )
+  if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'state', ['parent_location_id']))
     return noopRefusal(USER_EDITED_SINCE_PROSE)
   const next = withPlacement(stateOf(current, 'location'), placement)
   return stateWriteOutcome(bid, id, current, next, ctx)
@@ -583,7 +575,7 @@ export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) 
   if (nameBasis(name, current.name) === 'same-name') return noopRefusal('name-unchanged')
   const edits =
     proseEntryId === null ? [] : await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId)
-  if (wroteColumn(edits, 'name')) return noopRefusal(USER_EDITED_SINCE_PROSE)
+  if (wroteField(edits, 'entities', 'name', [])) return noopRefusal(USER_EDITED_SINCE_PROSE)
   if (await nameHeldByOther(ctx, current, name)) return noopRefusal('name-taken')
   // The old name joins the keywords unless they hold it, or the user removed it after the prose.
   const removed = priorTerms(edits)
@@ -637,10 +629,7 @@ export const raiseCollisionFlagHandler: ActionHandler = async (action, branchId,
   if (!stillPaired(reason, pairSideOf(current), pairSideOf(partner)))
     return noopRefusal('not-namesakes')
   // A user's clear stands against older prose; newer prose may raise the flag again.
-  if (
-    proseEntryId !== null &&
-    wroteCollisionFlag(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
-  )
+  if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'nameCollisionFlag'))
     return noopRefusal(USER_EDITED_SINCE_PROSE)
   const columns = {
     nameCollisionFlag: 1 as const,
@@ -680,12 +669,7 @@ export const setFactionStandingHandler: ActionHandler = async (action, branchId,
   if (!current) return noopRefusal(`standing target entities ${bid}:${id} not found`)
   if (current.kind !== 'faction') return noopRefusal('not-a-faction')
   if (stateOf(current, 'faction').standing === bounded) return noopRefusal('standing-unchanged')
-  if (
-    proseEntryId !== null &&
-    wrotePath(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId), 'state', [
-      'standing',
-    ])
-  )
+  if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'state', ['standing']))
     return noopRefusal(USER_EDITED_SINCE_PROSE)
   return buildStatePatchOutcome(bid, id, current, { standing: bounded }, ctx)
 }
@@ -704,10 +688,7 @@ export const returnFromRetirementHandler: ActionHandler = async (action, branchI
   if (!current) return noopRefusal(`return target entities ${bid}:${id} not found`)
   if (current.kind !== 'character') return noopRefusal('not-a-character')
   if (current.status !== 'retired') return noopRefusal('not-retired')
-  if (
-    proseEntryId !== null &&
-    wroteRetirement(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
-  )
+  if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'status'))
     return noopRefusal(USER_EDITED_SINCE_PROSE)
   const columns = { status: 'active' as const, retiredReason: null }
   return {
