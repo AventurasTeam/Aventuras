@@ -613,8 +613,8 @@ export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) 
   const current = await loadCurrent(bid, id, ctx)
   if (!current) return noopRefusal(`rename target entities ${bid}:${id} not found`)
   if (name === '') return noopRefusal('name-blank')
-  // The same name under keyword-term normalization (case, surrounding space) is no reveal.
-  if (normalizeTerm(name) === normalizeTerm(current.name)) return noopRefusal('name-unchanged')
+  // The same name by World's namesake rule (case and spacing aside) is no reveal.
+  if (nameBasis(name, current.name) === 'same-name') return noopRefusal('name-unchanged')
   const edits =
     proseEntryId === null ? [] : await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId)
   if (wroteColumn(edits, 'name')) return noopRefusal(USER_EDITED_SINCE_PROSE)

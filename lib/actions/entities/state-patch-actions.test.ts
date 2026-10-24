@@ -1656,6 +1656,15 @@ describe('renameEntity', () => {
     expect((await rowFor(db, 'char_1')).name).toBe('the hooded stranger')
   })
 
+  it('no-ops on a change of inner spacing alone', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db, { ...STRANGER, name: 'the  hooded stranger' })
+    expect(await apply(ctx, rename('the hooded stranger'), 'act_n')).toEqual(
+      noopBecause('name-unchanged'),
+    )
+    expect((await rowFor(db, 'char_1')).name).toBe('the  hooded stranger')
+  })
+
   it('writes the trimmed name', async () => {
     const { db, ctx } = await setup()
     await seed(ctx, db)
