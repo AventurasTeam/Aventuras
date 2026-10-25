@@ -2112,7 +2112,7 @@ Three rules hold those numbers in place:
   macro.** They cost once per prompt, while anything inside a block is
   charged once per row: the `<scene_entities>` instruction is 27
   tokens on its own, and moving it into the entity block would take
-  that type's overhead from 11 to 38.
+  that type's overhead from 9 to 36.
 
 Measured on a one-row block, so an N-row block is charged its header N
 times and renders it once: the estimate carries `N − 1` headers of
