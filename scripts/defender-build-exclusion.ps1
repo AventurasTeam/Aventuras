@@ -56,6 +56,10 @@ switch ($Action) {
       $worktrees = @(git -C $PSScriptRoot worktree list --porcelain |
           Where-Object { $_ -like 'worktree *' } |
           ForEach-Object { [IO.Path]::GetFullPath($_.Substring(9)).TrimEnd('\') })
+      # A failing native command does not trip $ErrorActionPreference, and an empty list would mislabel every checkout.
+      if ($LASTEXITCODE -ne 0) {
+        Write-Error "git worktree list failed (exit $LASTEXITCODE), so worktree status cannot be told."
+      }
 
       # A missing `target` alone only means a clean; a missing checkout is a rule left behind.
       $found | ForEach-Object {
@@ -64,7 +68,7 @@ switch ($Action) {
         $isWorktree = $worktrees -contains $root.TrimEnd('\')
         [pscustomobject]@{
           Path = $_
-          Status = if ($isWorktree) { 'live' } elseif ($rootExists) { 'not a worktree' } else { 'left behind' }
+          Status = if (-not $rootExists) { 'left behind' } elseif ($isWorktree) { 'live' } else { 'not a worktree' }
           TargetExists = Test-Path -LiteralPath $_
           ThisCheckout = $_ -eq $target
         }
