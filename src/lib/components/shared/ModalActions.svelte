@@ -33,8 +33,8 @@
 </script>
 
 <ResponsiveModal.Footer class="border-t px-6 py-4">
-  <!-- Half the width each, until a label does not fit: then they stack, the action on top. -->
-  <span class="flex w-full flex-wrap-reverse gap-2 sm:w-auto sm:flex-nowrap">
+  <!-- Half the width each, until a label does not fit: then they stack in reading order. -->
+  <span class="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
     <Button
       variant="outline"
       class="grow basis-[calc(50%-0.25rem)] sm:grow-0 sm:basis-auto"

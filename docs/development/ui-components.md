@@ -20,8 +20,8 @@ rest:
   held near the top when it has a text field. Only a tool with no text field is a bottom sheet
   with a handle (see below), where only the handle drags and the content scrolls.
 - **Buttons.** An outlined Cancel and the action, side by side on a phone and at the trailing edge
-  on desktop. On a phone each takes half the width, and when a label does not fit they stack, the
-  action on top. The action's icon turns into a spinner while it runs.
+  on desktop. On a phone each takes half the width, and when a label does not fit they stack in
+  reading order, Cancel above the action. The action's icon turns into a spinner while it runs.
 - **Ways out.** Cancel, Escape, Android's back press (claimed by the open modal through
   `utils/backPress.ts`, and decided as Escape) and a click outside all go
   through one decision, `shared/actionModalClose.ts`, which has its own tests. A sheet's swipe or
