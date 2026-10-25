@@ -1934,7 +1934,8 @@ content. Lore is timeless reference; chapter summaries are factual
 records of "what happened in chapter X." Both rank purely on
 relevance to the current scene.
 
-These defaults are starting guesses; the empirical-tuning followup
+These defaults are starting guesses; the
+[empirical-tuning followup](../followups.md#tuning-and-play-testing)
 calibrates them against real story data.
 
 ### Common-knowledge happenings — special case

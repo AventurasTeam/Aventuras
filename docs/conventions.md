@@ -193,6 +193,13 @@ under the appropriate flavor:
 - "If signal surfaces", "if real demand", "speculative" → **Parked
   until signal**.
 
+Within `followups.md`, v1 work that has to wait until every base
+system is online and real stories exist to measure against (tuning a
+default, play-checking a model's behavior, tuning a prompt's wording)
+goes under
+[`## Tuning and play testing`](./followups.md#tuning-and-play-testing).
+Unlike parked-until-signal it will be done; v1 ships after it.
+
 Movement between the two files is normal as scope clarifies. When
 a parked item becomes blocking for the current milestone, move it
 into `followups.md`; when an active item gets pushed past the

@@ -3,7 +3,9 @@
 Top-level ledger of **active** outstanding items — design questions
 or work the current milestone (v1) needs answered, or that block
 other v1 work. Resolved items are **removed** (not crossed out); the
-commit that resolves an item carries the resolution narrative.
+commit that resolves an item carries the resolution narrative. v1 work
+held for the end of the cycle sits under
+[Tuning and play testing](#tuning-and-play-testing).
 
 Items confirmed for a future milestone or parked indefinitely
 pending signal live in [`parked.md`](./parked.md). Movement between
@@ -13,47 +15,25 @@ for the placement rule.
 
 ## Data-model
 
-- **Play-check entity state in prompts.** Entity state reaches every
-  generation prompt
-  ([`architecture.md → Entity state on the template surface`](./architecture.md#entity-state-on-the-template-surface)),
-  and nobody has played it. Four assumptions ride on the model: the
-  writer restates a visual category rather than appending to it, keeps
-  to the word bound
-  ([`piggyback.md → Trailing block format`](./memory/piggyback.md#trailing-block-format)),
-  isn't pulled into bringing on stage the characters whose full rows
-  sit elsewhere, and, in the fallback, doesn't read a character the turn
-  names as present
-  ([`piggyback.md → Fallback classifier context`](./memory/piggyback.md#fallback-classifier-context)).
-  The visual-cut warning measures the first two; only play shows the
-  last two. The shortfall warning measures one more: that the writer
-  moves no more of a stackable than its payer holds. Raised 2026-10-19
-  by the entity-state implementation. The AI writer map adds more
-  riding on the models: the per-turn writer writes a condition only
-  when the prose changes it, puts `top` only where nothing could
-  contain a place, and puts an item down only when it stays there at
-  the turn's end, since a drop records where the item ends up; a pass
-  tells a reveal from an alias and a return from a memory. A pass's
-  parse rate under the larger schema needs watching too, since a pass
+- **Classifier parse rate under the AI writer map's schema.** A pass's
+  parse rate under the larger schema needs watching, since a pass
   whose reply won't parse fails a Send rather than costing memory:
   `pnpm probe:classifier` measures the first-attempt rate on a real
   provider
   ([`testing.md → Real-provider checks`](./testing.md#real-provider-checks)),
   and splitting the pass into two calls is the remedy if it falls.
+  Raised by the AI writer map; taken out of the entity-state play-check
+  2026-10-25, since a structural remedy found at the end of the cycle
+  costs the most.
 
-- **Retrieval budget defaults.** The per-type budgets
-  (`stories.settings.retrievalBudgets`, entities 1200) are
-  placeholders, expected to rise severalfold. Entity rows now carry
-  their state
-  ([`retrieval.md → Token estimation`](./memory/retrieval.md#token-estimation)),
-  so at the default a fully described character can outgrow the whole
-  entity budget, which budget fill skips permanently
-  ([`retrieval.md → Budget-fill termination`](./memory/retrieval.md#budget-fill-termination)):
-  the characters a user invested in most become the ones retrieval
-  can't seat. Nothing compares a generation prompt against the model's
-  window either (`maxInputTokens` is read by the embedder only), while
-  the structural floor now seats more, and how a provider's overflow
-  error reaches the user is unverified. Raised 2026-10-19 by the
-  entity-state design.
+- **Generation prompts aren't checked against the model's window.**
+  Nothing compares a generation prompt against the model's window
+  (`maxInputTokens` is read by the embedder only), while the
+  structural floor now seats more, and how a provider's overflow error
+  reaches the user is unverified. It comes before
+  [retrieval tuning](#tuning-and-play-testing), which raises the
+  budgets severalfold and makes an overflow likelier. Raised 2026-10-19
+  by the entity-state design.
 
 - **Periodic classifier context grows with the story.** A pass lists
   every entity, place, relationship view and happening on the branch
@@ -128,10 +108,11 @@ for the placement rule.
   changes as the user fills the wizard in, so each splits into a
   contract macro and a grounding macro; and the blocks the split left in
   a user half only because they point at its content by position. The
-  narrator's output-format line also left the end of the prompt for the
-  system half, unmeasured; the pass checks where it reads best. v1
-  work, since the shipped prompts have to be good, once the halves land.
-  Raised 2026-10-11.
+  pass is done when every story and settings input the user sets
+  reaches the prompts that should carry it. It comes before play
+  testing, which needs those inputs in place to tune against; tuning
+  the wording is [prompt tuning](#tuning-and-play-testing). Raised
+  2026-10-11.
 
   The pass also takes the whitespace and wording nits the halves PR's
   reviews found in the bundled prompts, all older than the split
@@ -256,3 +237,75 @@ for the placement rule.
   [`entry-card.md`](./ui/patterns/entry-card.md), and a wireframe.
   Raised by the developer 2026-10-25 in the 2026-10-24 triage pass's
   slice review.
+
+## Tuning and play testing
+
+v1 work held for the end of the cycle, once every base system is
+online and real stories exist to measure against: the polish era of
+the roadmap's
+[sequencing thesis](./implementation/roadmap.md#sequencing-thesis).
+Unlike [parked-until-signal](./parked.md#parked-until-signal) items,
+these will be done; they wait because tuning earlier tunes against
+systems still changing. Their instruments land first: the
+[memory probe](./memory/probe.md) (M7.5) and the per-turn token usage
+breakdown under [UX](#ux).
+
+- **Play-check entity state in prompts.** Entity state reaches every
+  generation prompt
+  ([`architecture.md → Entity state on the template surface`](./architecture.md#entity-state-on-the-template-surface)),
+  and nobody has played it. Four assumptions ride on the model: the
+  writer restates a visual category rather than appending to it, keeps
+  to the word bound
+  ([`piggyback.md → Trailing block format`](./memory/piggyback.md#trailing-block-format)),
+  isn't pulled into bringing on stage the characters whose full rows
+  sit elsewhere, and, in the fallback, doesn't read a character the turn
+  names as present
+  ([`piggyback.md → Fallback classifier context`](./memory/piggyback.md#fallback-classifier-context)).
+  The visual-cut warning measures the first two; only play shows the
+  last two. The shortfall warning measures one more: that the writer
+  moves no more of a stackable than its payer holds. Raised 2026-10-19
+  by the entity-state implementation. The AI writer map adds more
+  riding on the models: the per-turn writer writes a condition only
+  when the prose changes it, puts `top` only where nothing could
+  contain a place, and puts an item down only when it stays there at
+  the turn's end, since a drop records where the item ends up; a pass
+  tells a reveal from an alias and a return from a memory. The pass's
+  parse rate, which can't wait for play, is under
+  [Data-model](#data-model).
+
+- **Retrieval tuning.** The ranker's defaults are starting guesses:
+  decay rates (`λ_type`), MMR diversity (`λ_div`), the similarity
+  thresholds, `kw_boost`, `τ_revive` and the per-query weights,
+  calibrated against the
+  [scale-assumed pool sizes](./memory/retrieval.md#scale-assumptions)
+  with the memory probe as the instrument. The per-type budgets
+  (`stories.settings.retrievalBudgets`, entities 1200) are
+  placeholders, expected to rise severalfold. Entity rows now carry
+  their state
+  ([`retrieval.md → Token estimation`](./memory/retrieval.md#token-estimation)),
+  so at the default a fully described character can outgrow the whole
+  entity budget, which budget fill skips permanently
+  ([`retrieval.md → Budget-fill termination`](./memory/retrieval.md#budget-fill-termination)):
+  the characters a user invested in most become the ones retrieval
+  can't seat. The budgets rise only after the window check under
+  [Data-model](#data-model) lands, and the
+  [Tier-2 knob surface](./parked.md#tier-2-retrieval-ranker-knob-tuning-surface)
+  waits on these defaults settling. Raised 2026-10-19 by the
+  entity-state design (the budgets).
+
+- **Prompt tuning.** Once the prompt content pass has every input in
+  the prompts, play tunes their wording for the writing itself: the
+  narrator's narrative writing, prose and behaviors. The
+  narrator's output-format line also left the end of the prompt for
+  the system half, unmeasured; tuning checks where it reads best.
+  Raised by the developer 2026-10-25, split from the prompt content
+  pass.
+
+- **Parked items play gives a signal for.** Each waits on evidence
+  only play produces, so play checks them rather than letting the
+  signal pass unseen:
+  - [Narrative quality empirical risk under suggestion fold](./parked.md#narrative-quality-empirical-risk-under-suggestion-fold)
+  - [Split capability flag for `<suggestions>` parse reliability](./parked.md#split-capability-flag-for-suggestions-parse-reliability)
+  - [Recency-bias diversity mitigation for suggestion category mix](./parked.md#recency-bias-diversity-mitigation-for-suggestion-category-mix)
+  - [Multi-axis salience](./parked.md#multi-axis-salience)
+  - [Prompt-cache optimization](./parked.md#prompt-cache-optimization)

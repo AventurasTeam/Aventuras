@@ -62,6 +62,9 @@ When a session surfaces a new deferral, decide placement:
 
 - **Active** (current milestone needs it OR blocks v1 work) →
   add to `followups.md` under `## Data-model` or `## UX`.
+- **Late-cycle v1** (tuning, play testing: needs every base system
+  online and real stories to measure against) → add to
+  `followups.md` under `## Tuning and play testing`.
 - **Post-v1 confirmed** (clear future landing window) → add to
   `parked.md` under `## Post-v1 confirmed → ### Data-model | UX |
 Deferred design sessions`.

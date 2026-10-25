@@ -1314,7 +1314,8 @@ Flag for future sessions:
   decay rates, similarity thresholds, MMR diversity, budget defaults
   (calibrated against the
   [scale-assumed pool sizes](./memory/retrieval.md#scale-assumptions)
-  once test stories exist).
+  once test stories exist), tracked in
+  [`followups.md → Tuning and play testing`](./followups.md#tuning-and-play-testing).
 - **Boot-time orchestration** — the interaction between Drizzle's
   `migrate()` (per
   [Slice 1.2](./implementation/milestones/01-spine/slices/02-drizzle-schema.md)),
