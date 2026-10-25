@@ -350,6 +350,31 @@ describe('updateEntrySceneFields', () => {
     const meta = await storedMetadata(db, 'e2')
     expect(meta?.sceneEntities).toEqual(['char_a'])
     expect(meta?.currentLocationId).toBe('loc_gone')
+    const before = (await entityState(db, 'char_a')).current_location_id
+    expect(before).not.toBe('loc_gone')
+  })
+
+  it('writes no character to a tail location that names no place', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    const stored = (await entityState(db, 'char_a')).current_location_id
+    await db
+      .update(storyEntries)
+      .set({
+        metadata: { sceneEntities: ['char_b'], currentLocationId: 'loc_gone', worldTime: 120 },
+      })
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e2')))
+
+    expect(
+      await updateEntrySceneFields(
+        'b1',
+        'e2',
+        { sceneEntities: ['char_a', 'char_b'], currentLocationId: 'loc_gone' },
+        ctx,
+      ),
+    ).toEqual({ status: 'ok' })
+    expect((await entityState(db, 'char_a')).current_location_id).toBe(stored)
   })
 
   // A delete clears the location from the tail only; the previous entry still names it,

@@ -121,6 +121,12 @@ async function updateEntrySceneFieldsLocked(
   // and tracking anchored there would write the deleted location back.
   const live = new Set(branchEntities.map((e) => e.id))
   const previousLocationId = previousMetadata?.currentLocationId ?? null
+  // A kept tail location that names no place stays on the entry but is written to no character.
+  const unplacedLocation =
+    after.currentLocationId !== null &&
+    branchEntities.find((e) => e.id === after.currentLocationId)?.kind !== 'location'
+      ? after.currentLocationId
+      : null
   const group: PipelineAction[] = [
     {
       kind: 'updateStoryEntryMetadata',
@@ -149,7 +155,12 @@ async function updateEntrySceneFieldsLocked(
       },
       before,
       after,
-    }),
+    }).filter(
+      (action) =>
+        unplacedLocation === null ||
+        action.kind !== 'updateEntityLocationTracking' ||
+        action.payload.currentLocationId !== unplacedLocation,
+    ),
   ]
 
   // One transaction under one actionId: a partial commit would report total failure over
