@@ -1,9 +1,9 @@
 import { eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { type PipelineAction } from '@/lib/actions'
 import { deltas, pipelineRuns, storyEntries } from '@/lib/db'
-import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
+import { getDiagnosticsSnapshot, turnCaptureSink } from '@/lib/diagnostics'
 import {
   __resetRegistry,
   definePipeline,
@@ -504,7 +504,10 @@ describe('chained transition', () => {
 
 describe('split start', () => {
   beforeEach(() => resetSingletons())
-  afterEach(() => resetSingletons())
+  afterEach(() => {
+    vi.restoreAllMocks()
+    resetSingletons()
+  })
 
   function defineHeldChain(): () => void {
     const held = heldPhase()
@@ -710,6 +713,72 @@ describe('split start', () => {
       (t) => t.actionId === origin!.actionId,
     )
     expect(capture).toMatchObject({ outcome: 'failed', outcomeReason: 'unwound' })
+  })
+
+  // Contrived trigger: the capture opening throws once the marker row is in.
+  it('unwinds an origin that throws after its marker insert, then rejects its caller', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({ kind: 'solo', phases: [{ name: 'p', run: noop }], ...base })
+    vi.spyOn(turnCaptureSink, 'beginTurn').mockImplementation(() => {
+      throw new Error('capture failed')
+    })
+    const completes = recordCompletes()
+
+    await expect(startPipeline('solo', ctx).origin).rejects.toThrow('capture failed')
+
+    expect(completes).toEqual([
+      {
+        kind: 'solo',
+        outcome: 'failed',
+        idle: true,
+        error: { kind: 'orchestrator', detail: 'run threw: capture failed' },
+      },
+    ])
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(generationStore.isUserEditBlocked()).toBe(false)
+  })
+
+  it('unwinds a successor that throws after its marker insert and ends the chain', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({ kind: 'succ', phases: [{ name: 'p', run: noop }], ...base })
+    definePipeline({
+      kind: 'pred',
+      phases: [{ name: 'p', run: noop }],
+      chainsTo: () => 'succ',
+      ...base,
+    })
+    const beginTurn = turnCaptureSink.beginTurn
+    vi.spyOn(turnCaptureSink, 'beginTurn').mockImplementation((turn) => {
+      if (turn.kind === 'succ') throw new Error('capture failed')
+      beginTurn.call(turnCaptureSink, turn)
+    })
+    let successor: RunState | undefined
+    pipelineEventBus.subscribe('run_complete', (e) => {
+      if (e.kind === 'pred') successor = [...generationStore.getTxState().runs.values()][0]
+    })
+    const completes = recordCompletes()
+
+    const { origin, chain } = startPipeline('pred', ctx)
+
+    expect(expectRan(await origin).outcome).toBe('completed')
+    await expect(chain).resolves.toBeUndefined()
+    expect(completes).toEqual([
+      { kind: 'pred', outcome: 'completed', idle: false },
+      {
+        kind: 'succ',
+        outcome: 'failed',
+        idle: true,
+        error: { kind: 'orchestrator', detail: 'run threw: capture failed' },
+      },
+    ])
+    const ended = await Promise.race([
+      successor!.terminal.then(() => 'ended'),
+      flush().then(() => 'pending'),
+    ])
+    expect(ended).toBe('ended')
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(generationStore.isUserEditBlocked()).toBe(false)
+    expect(logged('pipeline.chain_start_failed')).toBe(true)
   })
 })
 
