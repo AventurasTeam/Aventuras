@@ -1646,7 +1646,7 @@ class SettingsStore {
 
       for (const [key, value] of Object.entries(await database.getAllSettings())) {
         if (key.startsWith(EXPLANATION_FOLD_PREFIX)) {
-          ui.explanationFolded[key.slice(EXPLANATION_FOLD_PREFIX.length)] = value === 'true'
+          ui.explanationFolded.set(key.slice(EXPLANATION_FOLD_PREFIX.length), value === 'true')
         }
       }
 

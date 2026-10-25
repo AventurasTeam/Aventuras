@@ -13,7 +13,7 @@ export function claimBackPress(handler: BackHandler): () => void {
 
 /** Hands the back press to the latest claim, and says whether there was one. */
 export function dispatchBackPress(): boolean {
-  const handler = handlers[handlers.length - 1]
+  const handler = handlers.at(-1)
   if (!handler) return false
   handler()
   return true

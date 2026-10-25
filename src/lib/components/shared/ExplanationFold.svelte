@@ -19,7 +19,7 @@
   let { id, summary, class: className, children }: Props = $props()
 
   const uid = $props.id()
-  const folded = $derived(ui.explanationFolded[id] ?? false)
+  const folded = $derived(ui.explanationFolded.get(id) ?? false)
 </script>
 
 <div class={cn('text-muted-foreground text-xs', className)}>

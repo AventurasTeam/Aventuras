@@ -177,7 +177,7 @@
       {disabled}
       normalize
       value={text}
-      oninput={(e: Event) => onChange((e.currentTarget as HTMLInputElement).value)}
+      oninput={(e) => onChange(e.currentTarget.value)}
       placeholder="e.g. Y1 D1 19:00"
       examples="19:00, D2 19:00, or Y1 D2 19:00"
     />

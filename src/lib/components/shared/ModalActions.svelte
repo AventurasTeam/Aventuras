@@ -37,7 +37,7 @@
   <span class="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
     <Button
       variant="outline"
-      class="grow basis-[calc(50%-0.25rem)] sm:grow-0 sm:basis-auto"
+      class="basis-pair grow sm:grow-0 sm:basis-auto"
       onclick={onCancel}
       disabled={busy && !cancelWhileBusy}
     >
@@ -47,7 +47,7 @@
       variant={tone === 'default' ? 'default' : 'feature'}
       onclick={onConfirm}
       class={cn(
-        'grow basis-[calc(50%-0.25rem)] sm:grow-0 sm:basis-auto',
+        'basis-pair grow sm:grow-0 sm:basis-auto',
         tone !== 'default' && FEATURE_COLORS[tone].vars,
       )}
       disabled={disabled || busy}

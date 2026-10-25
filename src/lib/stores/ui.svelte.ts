@@ -184,7 +184,7 @@ class UIStore {
   /** Whether the landmark list shows snapshots. Kept for the session only, not saved. */
   navShowSnapshots = $state(false)
   /** Which folding explanations are folded; an id missing here is open. */
-  explanationFolded = $state<Record<string, boolean>>({})
+  explanationFolded = new SvelteMap<string, boolean>()
 
   // Streaming state
   streamingContent = $state('')
@@ -481,7 +481,7 @@ class UIStore {
   }
 
   setExplanationFolded(id: string, folded: boolean): Promise<void> {
-    this.explanationFolded[id] = folded
+    this.explanationFolded.set(id, folded)
     return database
       .setSetting(EXPLANATION_FOLD_PREFIX + id, folded.toString())
       .catch((err) => console.warn(`[UI] Failed to persist the ${id} fold:`, err))

@@ -66,7 +66,7 @@
     if (e.key !== 'Enter' || e.isComposing || e.ctrlKey || e.metaKey) return
     e.preventDefault()
     if (next) next.focus()
-    else (e.currentTarget as HTMLElement).blur()
+    else if (e.currentTarget instanceof HTMLElement) e.currentTarget.blur()
   }
 
   async function save() {

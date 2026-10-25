@@ -31,6 +31,9 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
+  /* Half a row of two, less half a gap-2 (for basis-pair) */
+  --container-pair: calc(50% - 0.25rem);
+
   /* Colors - map to Tailwind theme system */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
