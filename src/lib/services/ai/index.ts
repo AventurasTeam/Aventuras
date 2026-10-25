@@ -97,9 +97,9 @@ export { clearTier3SelectionCache } from './retrieval'
 export {
   planCharacterChanges,
   planRename,
-  renameLookup,
+  responseCast,
+  traitList,
   viewsForApply,
-  type Rename,
 } from './generation'
 import type {
   TimelineFillResult,

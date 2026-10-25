@@ -58,6 +58,7 @@ import {
 import type { PackExport } from '#lib/services/packs/validation.ts'
 import { readStorySettings } from '#lib/utils/storySettings.ts'
 import { uniqueTerms } from '#lib/utils/text.ts'
+import { stringToDescriptors } from '#lib/utils/visualDescriptors.ts'
 import {
   uniqueInjectionTerms,
   withUniqueEntryTerms,
@@ -3083,11 +3084,13 @@ class DatabaseService {
     const rawTranslatedDescriptors = row.translated_visual_descriptors
       ? JSON.parse(row.translated_visual_descriptors)
       : null
-    // Translations were once saved as one string, which reads as no categories: none, so the
-    // panel falls back to the appearance rather than showing nothing.
-    const translatedDescriptors = rawTranslatedDescriptors
-      ? migrateVisualDescriptors(rawTranslatedDescriptors)
-      : {}
+    // Translations were once saved as one "Face: …, Hair: …" string.
+    const translatedDescriptors =
+      typeof rawTranslatedDescriptors === 'string'
+        ? stringToDescriptors(rawTranslatedDescriptors)
+        : rawTranslatedDescriptors
+          ? migrateVisualDescriptors(rawTranslatedDescriptors)
+          : {}
     const rawTranslatedTraits = row.translated_traits ? JSON.parse(row.translated_traits) : null
 
     return {

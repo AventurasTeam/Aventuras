@@ -55,8 +55,9 @@ The database, the native layer that moves bytes around it, and the settings blob
   an object reads as the default, and vault `entries` that are not a list read as `[]`.
 - **`stories.retry_state` is a JSON blob**, so fields are added inside it rather than by migration —
   `embeddedImageIds`, `characterSnapshots`, `timeTracker` and now `branchId` all arrived that way,
-  as did a character snapshot's `name` and `description`, which an older snapshot lacks and a
-  restore then leaves as they are.
+  as did a character snapshot's `name`, `description` and `translations`. A restore leaves a
+  field an older snapshot lacks as it is, and drops the translation of text it changes when the
+  snapshot holds none.
   `branchId` names the branch the snapshot was taken on, and a restore onto any other branch is
   refused. State written before it was recorded cannot be attributed to a branch, and is **discarded
   on load** rather than assumed to belong to main: the readers most likely to hold such state are

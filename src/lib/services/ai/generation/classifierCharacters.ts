@@ -9,7 +9,11 @@
 import type { Character, VisualDescriptors } from '#lib/types/index.ts'
 import type { CharacterUpdate, ShownCharacter } from '../sdk/schemas/classifier'
 import { sameEntityName, termKey, uniqueTerms } from '#lib/utils/text.ts'
-import { descriptorsToString, hasDescriptors } from '#lib/utils/visualDescriptors.ts'
+import {
+  DESCRIPTOR_CATEGORIES,
+  descriptorsToString,
+  hasDescriptors,
+} from '#lib/utils/visualDescriptors.ts'
 
 export type ClassifierCharacterView = Omit<ShownCharacter, 'name'>
 
@@ -81,32 +85,23 @@ export function planRename(
   return { name }
 }
 
-export interface Rename {
-  from: string
-  to: string
-}
+// A copy-on-write override has its own id; the row it overrides is the character.
+const rootId = (c: Character) => c.overridesId ?? c.id
 
 /**
- * The rest of a response may name a renamed character by any name it had: `after` gives the
- * name it has now, `before` the one the classifier was shown. Renames are applied in order and
- * may chain (A→B, then B→C).
+ * Finds the character a response names, while its renames are applied. The response names
+ * characters as they were listed, so a listed name wins over the same name given to someone
+ * else by a rename; any other name is looked up in the cast as it is now.
  */
-export function renameLookup(renames: readonly Rename[]) {
-  const follow = (name: string, step: (name: string) => string | undefined) => {
-    let current = name
-    // A chain can come back to a name (A→B, B→A), so it is followed once per rename at most.
-    for (let i = 0; i < renames.length; i++) {
-      const next = step(current)
-      if (next === undefined) break
-      current = next
-    }
-    return current
-  }
+export function responseCast(listed: readonly Character[]) {
   return {
-    after: (name: string) =>
-      follow(name, (n) => renames.find((r) => sameEntityName(r.from, n))?.to),
-    before: (name: string) =>
-      follow(name, (n) => renames.findLast((r) => sameEntityName(r.to, n))?.from),
+    find(cast: readonly Character[], name: string): Character | undefined {
+      const was = listed.find((c) => sameEntityName(c.name, name))
+      const now = was && cast.find((c) => rootId(c) === rootId(was))
+      return now ?? cast.find((c) => sameEntityName(c.name, name))
+    },
+    /** The name the classifier was shown for `c`, or its own if it was not listed. */
+    listedName: (c: Character) => listed.find((l) => rootId(l) === rootId(c))?.name ?? c.name,
   }
 }
 
@@ -224,7 +219,7 @@ export function planCharacterChanges(
   }
 
   if (update.traits !== undefined) {
-    const traits = uniqueTerms(update.traits)
+    const traits = traitList(update.traits)
     if (traits.length === 0) ignored.push({ field: 'traits', reason: 'empty' })
     else if (!view.profile) hidden('traits')
     else if (!sameTerms(traits, existing.traits ?? [])) {
@@ -252,16 +247,24 @@ function sameTerms(a: readonly string[], b: readonly string[]): boolean {
   return a.length === keys.size && a.every((term) => keys.has(termKey(term)))
 }
 
-function sameDescriptors(a: VisualDescriptors, b: VisualDescriptors): boolean {
-  const keys = new Set([...Object.keys(a), ...Object.keys(b)] as (keyof VisualDescriptors)[])
-  return [...keys].every((k) => a[k] === b[k])
+export const MAX_TRAITS = 8
+
+/** Traits as stored: deduplicated, and no more than the prompt allows. */
+export function traitList(traits: readonly string[]): string[] {
+  return uniqueTerms(traits).slice(0, MAX_TRAITS)
 }
 
+function sameDescriptors(a: VisualDescriptors, b: VisualDescriptors): boolean {
+  return DESCRIPTOR_CATEGORIES.every((k) => a[k] === b[k])
+}
+
+// Only the known categories, so a stray key the model adds is dropped.
 function withoutBlanks(descriptors: VisualDescriptors): VisualDescriptors {
   const out: VisualDescriptors = {}
-  for (const [key, value] of Object.entries(descriptors)) {
+  for (const key of DESCRIPTOR_CATEGORIES) {
+    const value = descriptors[key]
     const text = typeof value === 'string' ? trimLines(value) : ''
-    if (text) out[key as keyof VisualDescriptors] = text
+    if (text) out[key] = text
   }
   return out
 }

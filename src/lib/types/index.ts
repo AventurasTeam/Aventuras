@@ -98,6 +98,17 @@ export interface PersistentCharacterSnapshot {
   relationship: string | null
   visualDescriptors: VisualDescriptors
   portrait: string | null // Data URL (data:image/...) or legacy base64
+  /** The translations of the text above, so a restore can put them back with it. */
+  translations?: Partial<
+    Pick<
+      Character,
+      | 'translatedName'
+      | 'translatedDescription'
+      | 'translatedRelationship'
+      | 'translatedTraits'
+      | 'translatedVisualDescriptors'
+    >
+  >
 }
 
 // Persistent style review state - saved per-story for style analysis tracking

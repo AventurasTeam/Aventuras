@@ -312,14 +312,18 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   landing mid-translation is not overwritten. The protagonist's appearance is
   listed, but not their description or traits: those are usually the reader's own setup, and
   the protagonist is in every scene, so every turn would be a chance to rewrite them. Traits
-  and descriptions are replaced whole, like appearance; there is no add or remove.
+  and descriptions are replaced whole, like appearance; there is no add or remove. A trait list
+  is cut to the first 8, the most the prompt asks for (`traitList`).
 
   **A character listed under a placeholder is renamed when the story reveals their name.**
   `characterUpdates[].changes.newName` carries it, under the listed name (`planRename`).
   Renames apply before every other update, and the rest of the response may name the character
-  either way (`renameLookup`): the other updates, the presence list and the shown-list gate all
-  resolve both. A name another character already holds is refused and logged, because that is a
-  duplicate to merge, not a rename; so is any rename of the protagonist.
+  either way (`responseCast`): the other updates, the presence list and the shown-list gate all
+  resolve both. A character is followed by its row, not its name, so two renames in one response
+  (Bob to Robert, the stranger to Bob) keep two characters; a listed name means the character
+  listed under it. A name another character already holds is refused and logged, because that
+  is a duplicate to merge, not a rename; so is any rename of the protagonist. An update whose
+  listed name matches no one goes to the character holding its new name, or creates one under it.
 
   **`scene.currentLocationName` is the only thing that moves the scene.** It creates the
   location if the name is new, marks it `current` and `visited`, and clears the previous

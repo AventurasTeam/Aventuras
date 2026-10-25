@@ -45,6 +45,7 @@ export {
   headerRecord,
   markId,
   markRecord,
+  sameValue,
   staleTranslations,
   type RecordContext,
   type RecordScope,

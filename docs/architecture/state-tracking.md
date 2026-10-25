@@ -103,8 +103,9 @@ so a revert never strips them. The exception is a translation of text the revert
 would describe the other text: an update that reverts a description, name, title, relationship,
 traits or appearance drops its translation, and a row written again takes the one its record
 saved, or none (`staleTranslations`); an override written again over its parent never takes the
-parent's. The panel then shows the source text. A retry without records restores from its
-snapshot the same way. A revert that removes entries records the kept changes again on the entry that now ends the branch, in the same transaction: their own records go with the removed entries, and a later revert must still be able to undo and list them. They are recorded as the plan applied them, in that order, with each `before` read from the state it landed on, and with the revert's time, since they are new writes.
+parent's. The panel then shows the source text, until the classifier next updates that
+row and it is translated again. A retry without records restores from its snapshot the same way, and takes the
+translations the snapshot saved with its text. A revert that removes entries records the kept changes again on the entry that now ends the branch, in the same transaction: their own records go with the removed entries, and a later revert must still be able to undo and list them. They are recorded as the plan applied them, in that order, with each `before` read from the state it landed on, and with the revert's time, since they are new writes.
 
 The clock is not recorded at all. After a revert, and in a past checkpoint, it is the end time of
 the last entry that remains (`clockAfter`): a gap before the removed entries goes with them, and

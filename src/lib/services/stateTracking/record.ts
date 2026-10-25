@@ -1,6 +1,11 @@
 import type {
   ChangeOp,
   ChangeOrigin,
+  Character,
+  Entry,
+  Item,
+  Location,
+  StoryBeat,
   TrackedEntityType,
   WorldStateBreakRecord,
   WorldStateChangeRecord,
@@ -23,8 +28,10 @@ export const UNRECORDED_FIELDS: ReadonlySet<string> = new Set([
   'portrait',
 ])
 
+type TranslationsOf<T> = { [K in keyof T & `translated${string}`]?: keyof T & string }
+
 // Each translation and the field it translates.
-const TRANSLATED_FROM: Partial<Record<TrackedEntityType, Record<string, string>>> = {
+const TRANSLATED_FROM = {
   character: {
     translatedName: 'name',
     translatedDescription: 'description',
@@ -35,6 +42,13 @@ const TRANSLATED_FROM: Partial<Record<TrackedEntityType, Record<string, string>>
   location: { translatedName: 'name', translatedDescription: 'description' },
   item: { translatedName: 'name', translatedDescription: 'description' },
   story_beat: { translatedTitle: 'title', translatedDescription: 'description' },
+  lorebook_entry: {},
+} satisfies {
+  character: TranslationsOf<Character>
+  location: TranslationsOf<Location>
+  item: TranslationsOf<Item>
+  story_beat: TranslationsOf<StoryBeat>
+  lorebook_entry: TranslationsOf<Entry>
 }
 
 /**
@@ -49,7 +63,7 @@ export function staleTranslations(
   saved: Record<string, unknown> | null = null,
 ): Record<string, unknown> {
   const stale: Record<string, unknown> = {}
-  for (const [translated, source] of Object.entries(TRANSLATED_FROM[type] ?? {})) {
+  for (const [translated, source] of Object.entries(TRANSLATED_FROM[type])) {
     if (source in to && !sameValue(from[source], to[source]))
       stale[translated] = saved?.[translated] ?? null
   }
@@ -116,7 +130,7 @@ export function breakRecord(scope: RecordScope): WorldStateBreakRecord {
   return { id: crypto.randomUUID(), ...scope, seq: 0, createdAt: Date.now(), kind: 'break' }
 }
 
-const sameValue = (a: unknown, b: unknown) =>
+export const sameValue = (a: unknown, b: unknown) =>
   JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
 
 /** Previous and new values of the fields `updates` actually changes on `row`. */

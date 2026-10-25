@@ -6,6 +6,7 @@
 import type { Character, Location, Item, StoryBeat, VisualDescriptors } from '#lib/types/index.ts'
 import type { UITranslationItem } from '#lib/services/ai/utils/TranslationService.ts'
 import { createLogger } from '#lib/log.ts'
+import { sameValue } from '#lib/services/stateTracking/index.ts'
 
 const log = createLogger('WorldStateTranslationService')
 
@@ -212,9 +213,6 @@ export class WorldStateTranslationService {
     return { translatedCount: translated.length }
   }
 }
-
-const sameValue = (a: unknown, b: unknown) =>
-  JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
 
 // Traits and appearance go one trait or category per item, so a comma inside one cannot split
 // it and the appearance comes back as categories.

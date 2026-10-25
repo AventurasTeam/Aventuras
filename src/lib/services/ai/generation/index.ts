@@ -27,9 +27,9 @@ export { ClassifierService, type ClassificationContext } from './ClassifierServi
 export {
   planCharacterChanges,
   planRename,
-  renameLookup,
+  responseCast,
+  traitList,
   viewsForApply,
-  type Rename,
 } from './classifierCharacters'
 
 // Memory

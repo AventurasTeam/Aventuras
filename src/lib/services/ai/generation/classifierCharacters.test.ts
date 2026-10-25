@@ -5,9 +5,10 @@ import {
   formatExistingCharacters,
   planCharacterChanges,
   planRename,
-  renameLookup,
+  responseCast,
   shownCharacters,
   shownInPrompt,
+  traitList,
   viewsForApply,
   type ClassifierCharacterView,
 } from './classifierCharacters'
@@ -31,27 +32,61 @@ describe('planRename', () => {
   })
 })
 
-describe('renameLookup', () => {
-  const names = renameLookup([{ from: 'weapon vendor', to: 'Darek' }])
+describe('responseCast', () => {
+  const renamed = (c: Character, name: string) => ({ ...c, name })
 
-  it('finds the name a character has now and the one it was listed under', () => {
-    expect(names.after('Weapon Vendor')).toBe('Darek')
-    expect(names.before('darek')).toBe('weapon vendor')
+  it('finds a renamed character by the name it was listed under or its new one', () => {
+    const vendor = character('weapon vendor')
+    const cast = responseCast([vendor, character('Mira')])
+    const now = [renamed(vendor, 'Darek'), character('Mira')]
+    expect(cast.find(now, 'Weapon Vendor')?.name).toBe('Darek')
+    expect(cast.find(now, 'darek')?.name).toBe('Darek')
+    expect(cast.listedName(now[0])).toBe('weapon vendor')
+    expect(cast.find(now, 'Mira')?.name).toBe('Mira')
   })
 
-  it('leaves every other name alone', () => {
-    expect(names.after('Mira')).toBe('Mira')
-    expect(names.before('Mira')).toBe('Mira')
+  it('keeps two characters apart when one takes the name the other gave up', () => {
+    const bob = character('Bob')
+    const stranger = character('the stranger')
+    const cast = responseCast([bob, stranger])
+    const now = [renamed(bob, 'Robert'), renamed(stranger, 'Bob')]
+    expect(cast.find(now, 'the stranger')?.id).toBe(stranger.id)
+    expect(cast.find(now, 'Bob')?.id).toBe(bob.id)
+    expect(cast.listedName(now[0])).toBe('Bob')
+    expect(cast.listedName(now[1])).toBe('the stranger')
   })
 
   it('follows a character renamed twice in one response', () => {
-    const chain = renameLookup([
-      { from: 'hooded woman', to: 'Sera' },
-      { from: 'Sera', to: 'Seraphine' },
+    const woman = character('hooded woman')
+    const cast = responseCast([woman])
+    expect(cast.find([renamed(woman, 'Sera')], 'Sera')?.id).toBe(woman.id)
+    const now = [renamed(woman, 'Seraphine')]
+    expect(cast.find(now, 'hooded woman')?.id).toBe(woman.id)
+    expect(cast.listedName(now[0])).toBe('hooded woman')
+  })
+
+  it('follows a character onto the override a write gave it', () => {
+    const vendor = character('weapon vendor')
+    const cast = responseCast([vendor])
+    const override = { ...vendor, id: 'override', overridesId: vendor.id, name: 'Darek' }
+    expect(cast.find([override], 'weapon vendor')?.id).toBe('override')
+    expect(cast.listedName(override)).toBe('weapon vendor')
+  })
+
+  it('gives a character created by the response its own name', () => {
+    const cast = responseCast([character('Mira')])
+    expect(cast.listedName(character('Darek'))).toBe('Darek')
+    expect(cast.find([character('Mira')], 'Darek')).toBeUndefined()
+  })
+})
+
+describe('traitList', () => {
+  it('keeps the first 8 distinct traits', () => {
+    const traits = ['brave', 'Brave', ...Array.from({ length: 10 }, (_, i) => `trait ${i}`)]
+    expect(traitList(traits)).toEqual([
+      'brave',
+      ...Array.from({ length: 7 }, (_, i) => `trait ${i}`),
     ])
-    expect(chain.after('hooded woman')).toBe('Seraphine')
-    expect(chain.after('Sera')).toBe('Seraphine')
-    expect(chain.before('Seraphine')).toBe('hooded woman')
   })
 })
 

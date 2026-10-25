@@ -153,9 +153,9 @@ import {
   clearTier3SelectionCache,
   planCharacterChanges,
   planRename,
-  renameLookup,
+  responseCast,
+  traitList,
   viewsForApply,
-  type Rename,
 } from '#lib/services/ai/index.ts'
 import { clearImageMarkerCache } from '#lib/services/image/index.ts'
 import { GenerationLease } from '#lib/utils/generationLease.ts'
@@ -3256,12 +3256,20 @@ class StoryStore {
     const shownToClassifier = viewsForApply(result._shownCharacters, this.characters)
 
     // Renames first, so the rest of the response finds a renamed character by either name.
-    const renames: Rename[] = []
+    const cast = responseCast(this.characters)
+    // An update whose listed name matches no one but whose new name does is about that one.
+    const updateTarget = (update: (typeof result.entryUpdates.characterUpdates)[number]) => {
+      const newName = update.changes.newName?.trim()
+      return (
+        cast.find(this.characters, update.name) ??
+        (newName ? cast.find(this.characters, newName) : undefined)
+      )
+    }
     for (const update of result.entryUpdates.characterUpdates) {
       const newName = update.changes.newName
       if (!newName) continue
       await this.wrapUpdate('Rename character', update.name, async () => {
-        const existing = this.characters.find((c) => sameEntityName(c.name, update.name))
+        const existing = cast.find(this.characters, update.name)
         if (!existing) return
         const plan = planRename(existing, newName, this.characters)
         if (!plan) return
@@ -3275,15 +3283,13 @@ class StoryStore {
         this.characters = this.characters.map((c) =>
           c.id === ownedChar.id ? { ...c, ...changes } : c,
         )
-        renames.push({ from: existing.name, to: plan.name })
       })
     }
-    const names = renameLookup(renames)
 
     // Apply character updates
     for (const update of result.entryUpdates.characterUpdates) {
       await this.wrapUpdate('Update character', update.name, async () => {
-        let existing = this.characters.find((c) => sameEntityName(c.name, names.after(update.name)))
+        let existing = updateTarget(update)
 
         // If character doesn't exist yet, create it first
         if (!existing) {
@@ -3304,10 +3310,10 @@ class StoryStore {
           const character: Character = {
             id: crypto.randomUUID(),
             storyId,
-            name: newCharData?.name ?? update.name,
+            name: newCharData?.name ?? (update.changes.newName?.trim() || update.name),
             description: newCharData?.description ?? null,
             relationship: newCharData?.relationship ?? null,
-            traits: uniqueTerms(newCharData?.traits ?? []),
+            traits: traitList(newCharData?.traits ?? []),
             visualDescriptors: newCharData?.visualDescriptors ?? {},
             status: (newCharData?.status as Character['status']) ?? 'active',
             metadata: charMetadata,
@@ -3324,7 +3330,7 @@ class StoryStore {
           const { changes, ignored } = planCharacterChanges(
             existing,
             update.changes,
-            shownToClassifier(names.before(existing.name)),
+            shownToClassifier(cast.listedName(existing)),
           )
           if (ignored.length > 0) log('Ignored character rewrites:', existing.name, ignored)
           // Merge inline runtime variable values into metadata if present
@@ -3581,7 +3587,7 @@ class StoryStore {
             name: newChar.name,
             description: newChar.description ?? null,
             relationship: newChar.relationship ?? null,
-            traits: uniqueTerms(newChar.traits ?? []),
+            traits: traitList(newChar.traits ?? []),
             visualDescriptors: newChar.visualDescriptors ?? {},
             status: 'active',
             metadata: charMetadata,
@@ -3789,11 +3795,13 @@ class StoryStore {
     // are already in `this.characters` and the explicit updates above have had their say.
     const presenceChanges = resolveCharacterPresence({
       characters: this.characters,
-      presentNames: (result.scene.presentCharacterNames ?? []).map(names.after),
+      presentNames: (result.scene.presentCharacterNames ?? []).map(
+        (name) => cast.find(this.characters, name)?.name ?? name,
+      ),
       newNames: result.entryUpdates.newCharacters.map((c) => c.name),
       explicitStatusNames: result.entryUpdates.characterUpdates
         .filter((u) => u.changes.status !== undefined)
-        .map((u) => names.after(u.name)),
+        .map((u) => updateTarget(u)?.name ?? u.name),
       hadError: !!result._error,
     })
 
@@ -5985,7 +5993,12 @@ class StoryStore {
           visualDescriptors: snapshot.visualDescriptors ?? {},
           portrait: snapshot.portrait, // null means no portrait
         }
-        const stale = staleTranslations('character', { ...character }, { ...restored })
+        const stale = staleTranslations(
+          'character',
+          { ...character },
+          { ...restored },
+          { ...snapshot.translations },
+        )
         return [[character.id, { ...restored, ...stale }]]
       }),
     )

@@ -829,6 +829,15 @@ class UIStore {
       relationship: c.relationship ?? null,
       visualDescriptors: { ...(c.visualDescriptors ?? {}) },
       portrait: c.portrait,
+      translations: {
+        translatedName: c.translatedName,
+        translatedDescription: c.translatedDescription,
+        translatedRelationship: c.translatedRelationship,
+        translatedTraits: c.translatedTraits && [...c.translatedTraits],
+        translatedVisualDescriptors: c.translatedVisualDescriptors && {
+          ...c.translatedVisualDescriptors,
+        },
+      },
     }))
 
     // Create new backup and store by story ID
