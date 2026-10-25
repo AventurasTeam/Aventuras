@@ -28,12 +28,15 @@ import { createLogger } from '#lib/log.ts'
 import { CLEAN_FOR_CLASSIFICATION, narrationCleaner } from '#lib/utils/narrationClean.ts'
 import { recentContent, AS_PROSE } from '#lib/utils/recentContent.ts'
 import {
-  ITEM_LOCATION_OPTIONS,
   classificationResultSchema,
   clampNumber,
   type ClassificationResult,
 } from '../sdk/schemas/classifier'
-import { itemLocationLabel, readItemPlacement } from '#lib/utils/itemLocation.ts'
+import {
+  ITEM_LOCATION_OPTIONS,
+  itemLocationLabel,
+  readItemPlacement,
+} from '#lib/utils/itemLocation.ts'
 import {
   buildExtendedClassificationSchema,
   salvageClassification,

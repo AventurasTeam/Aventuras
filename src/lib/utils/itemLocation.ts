@@ -9,6 +9,10 @@ import { foldName, sameEntityName } from '#lib/utils/text.ts'
 
 export const INVENTORY = 'inventory'
 
+/** What an item's `location` accepts from the classifier. */
+export const ITEM_LOCATION_OPTIONS =
+  'inventory, worn, ground (where the scene is), or the exact name of a listed location'
+
 export type ItemPlacement =
   | { kind: 'inventory'; equipped: boolean }
   | { kind: 'location'; location: Location }

@@ -7,6 +7,7 @@
 
 import * as z from 'zod'
 import type { RuntimeVariable } from '#lib/services/packs/types.ts'
+import { ITEM_LOCATION_OPTIONS } from '#lib/utils/itemLocation.ts'
 
 // ============================================================================
 // Visual Descriptors Schema
@@ -110,10 +111,6 @@ export const newLocationSchema = z.object({
 // ============================================================================
 // Item Schemas
 // ============================================================================
-
-/** What an item's `location` accepts; the app converts it to an id (`utils/itemLocation.ts`). */
-export const ITEM_LOCATION_OPTIONS =
-  'inventory, worn, ground (where the scene is), or the exact name of a listed location'
 
 export const itemUpdateSchema = z.object({
   name: z.string().describe('Exact name of existing item'),
