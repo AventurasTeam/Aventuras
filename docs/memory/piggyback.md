@@ -270,11 +270,10 @@ keywords are chapter close's
 **Where a handle is used.** The prompt asks for a new place's handle
 only as the `<current_location>` or another new place's `parent`, and
 for a new item's handle only as a transfer's item `id` or, when the item
-is in the scene, in `<scene_entities>`; the parser also tolerates a
-new place's handle in `<scene_entities>`. A handle in any other field, a
+is in the scene, in `<scene_entities>`. A handle in any other field, a
 visual change's id or a transfer's holder, or one the block's creates
 don't declare, fails the field it sits in, like an unknown id, though
-in the fallback a transfer holding one drops alone. A handle of the
+in the fallback an entry holding one drops alone. A handle of the
 wrong kind, a new place's as a transfer's item or a new item's as the
 `<current_location>`, fails its field in the tagged block; the
 fallback drops the transfer and rejects the location
@@ -564,8 +563,9 @@ treat a bad ref differently:
   location stays. Each drop is logged as `classifier.ref_dropped` and
   recorded in the report's `droppedRefs`
   ([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)),
-  where the reader shows it; the report's `failedFields` keeps
-  describing the narrative's attempt alone.
+  where the reader shows it. The report's `failedFields` keeps
+  describing the narrative's attempt: the fallback's only entry there
+  is the `classifier` one its own call appends when it fails.
   A new item's handle as the `currentLocation` is rejected the way an
   item's id is: the previous location stays, the report records
   `currentLocationRejected`, and its `currentLocation` holds the new
@@ -787,8 +787,8 @@ It also gets the location map's tree and the held-item lines, and its
 structured output carries the creates as `newLocations[]` and
 `newItems[]`, and conditions and drops beside the visual changes and
 transfers, under the same rules as the tags
-([New locations and items](#new-locations-and-items)), apart from a
-transfer with a bad ref, which it drops rather than fails
+([New locations and items](#new-locations-and-items)), apart from a bad
+ref: an entry holding one drops alone rather than failing its field
 ([Parse strategy and failure recovery](#parse-strategy-and-failure-recovery)).
 A create there may omit its description or parent, or give either as
 `null`, which reads as omitted; one with no description is created
