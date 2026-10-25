@@ -1500,7 +1500,7 @@ export const WorldStateDroppedRefs: StoryT = {
   },
 }
 
-// D2: a disabled row the scene seats is a notice, not a problem.
+// entry-card.md → State problems: a disabled row the scene seats is a notice, not a problem.
 export const WorldStateSeatedDisabled: StoryT = {
   ...wrap,
   args: {
