@@ -327,3 +327,24 @@ describe('catalog and control surface', () => {
     ])
   })
 })
+
+describe('lane PUT', () => {
+  const put = (patch: unknown): Promise<Response> =>
+    fetch(`${base()}/api/lanes/narrative`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+
+  it('merges an object patch into its group, keeping the fields it leaves out', async () => {
+    mock.ctx.lane('narrative').stream = { charsPerSecond: 40, chunkSize: 6 }
+    expect((await put({ stream: { chunkSize: 9 } })).status).toBe(200)
+    expect(mock.ctx.lane('narrative').stream).toEqual({ charsPerSecond: 40, chunkSize: 9 })
+  })
+
+  it('validates a patch that is no object as sent, refusing it', async () => {
+    mock.ctx.lane('narrative').stream = { charsPerSecond: 40, chunkSize: 6 }
+    expect((await put({ stream: 5 })).status).toBe(400)
+    expect(mock.ctx.lane('narrative').stream).toEqual({ charsPerSecond: 40, chunkSize: 6 })
+  })
+})
