@@ -189,6 +189,7 @@
     if (!dropLocationId) return
     await story.updateItem(item.id, {
       location: itemLocationId(dropLocationId, story.locations),
+      equipped: false,
     })
     cancelDrop()
   }

@@ -154,7 +154,6 @@ import { GenerationLease } from '#lib/utils/generationLease.ts'
 import { findLiveCharacter, sameBranchScope, type BranchScope } from '#lib/utils/branchScope.ts'
 import {
   INVENTORY,
-  castNames,
   copiedLocationIds,
   itemLocationId,
   itemsAt,
@@ -1794,7 +1793,7 @@ class StoryStore {
       this.items = this.items.filter((i) => !i.deleted)
       this.storyBeats = this.storyBeats.filter((b) => !b.deleted)
     }
-    this.items = normalizeItems(this.items, this.locations, this.characters)
+    this.items = normalizeItems(this.items, this.locations)
 
     log('World state refreshed', {
       characters: characters.length,
@@ -2787,7 +2786,7 @@ class StoryStore {
     const records: (WorldStateRecord | null)[] = []
     const cows: (() => void)[] = []
     const moved: string[] = []
-    const updates = { location: itemLocationId(locationId, this.locations) }
+    const updates = { location: itemLocationId(locationId, this.locations), equipped: false }
     for (const item of items) {
       const cow = this.cowPlan('item', item, ctx)
       statements.push(...cow.statements, database.updateItemStatement(cow.entity.id, updates))
@@ -3720,7 +3719,6 @@ class StoryStore {
     const itemWorld = () => ({
       locations: this.locations,
       currentLocationId: this.currentLocation?.id ?? null,
-      ...castNames(this.characters),
     })
 
     // Apply item updates
@@ -5600,7 +5598,7 @@ class StoryStore {
       this.chapters = chapters
       this.characters = world.characters
       this.locations = world.locations
-      this.items = normalizeItems(world.items, world.locations, world.characters)
+      this.items = normalizeItems(world.items, world.locations)
       this.storyBeats = world.storyBeats
       this.lorebookEntries = world.lorebookEntries
     } else {
@@ -5674,7 +5672,7 @@ class StoryStore {
 
       this.characters = characters
       this.locations = locations
-      this.items = normalizeItems(items, locations, characters)
+      this.items = normalizeItems(items, locations)
       this.storyBeats = storyBeats
       this.lorebookEntries = lorebookEntries
 

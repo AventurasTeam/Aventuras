@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { Character, Item, Location } from '#lib/types/index.ts'
+import type { Item, Location } from '#lib/types/index.ts'
 import {
   copiedLocationIds,
   itemLocationLabel,
@@ -7,7 +7,6 @@ import {
   newItemLocation,
   normalizeItemLocation,
   normalizeItems,
-  castNames,
   readItemPlacement,
   resolveItemLocation,
   type ItemLocationWorld,
@@ -45,12 +44,19 @@ function item(name: string, overrides: Partial<Item> = {}): Item {
 
 const tavern = location("Kaelen's Rest")
 const cave = location('Crystal Caverns')
-const world: ItemLocationWorld = {
-  locations: [tavern, cave],
-  currentLocationId: tavern.id,
-  protagonistName: 'Aria',
-  otherCharacterNames: ['Borin Ironfoot', 'The Captain'],
-}
+const world: ItemLocationWorld = { locations: [tavern, cave], currentLocationId: tavern.id }
+const nowhere: ItemLocationWorld = { ...world, currentLocationId: null }
+
+/** Text that is not one of the options. */
+const OFF_LIST = [
+  'in her pack',
+  'worn by Borin',
+  'the holding cells',
+  'the Worn Bridge',
+  'in the Crystal Caverns',
+  'Unknown location',
+  'somewhere',
+]
 
 describe('newItemLocation', () => {
   it('stores the id of a location named exactly', () => {
@@ -75,52 +81,25 @@ describe('newItemLocation', () => {
     expect(newItemLocation({ location: 'Taverna' }, listed).location).toBe(taverna.id)
   })
 
-  it('stores worn and equipped as the inventory, equipped', () => {
-    for (const said of [
-      'worn',
-      'Equipped',
-      'worn by Aria',
-      'around her neck',
-      'worn on her left wrist',
-      'equipped (main hand)',
-      'is worn',
-    ]) {
+  it('stores the options as documented', () => {
+    expect(newItemLocation({ location: 'inventory' }, world)).toEqual({
+      location: 'inventory',
+      equipped: false,
+    })
+    for (const said of ['worn', 'Equipped']) {
       expect(newItemLocation({ location: said }, world)).toEqual({
         location: 'inventory',
         equipped: true,
       })
     }
+    expect(newItemLocation({ location: 'Ground' }, world)).toEqual({
+      location: tavern.id,
+      equipped: false,
+    })
   })
 
-  it('stores what the protagonist carries as the inventory', () => {
-    for (const said of [
-      'inventory',
-      'Inventory',
-      "in Aria's inventory",
-      'carried',
-      'Aria',
-      'in her pack',
-      'on her belt',
-      'in hand',
-      'in her left hand',
-      'on her back',
-      'strapped to her back',
-      'slung over her shoulder',
-      'tucked in her belt behind the buckle',
-      'stowed in pack',
-      "protagonist's inventory",
-      "player's inventory",
-      'on you',
-      'with me',
-      'inside her coat',
-      'in her saddlebag',
-      'picked up from the floor',
-      'given to you',
-      'given to Aria',
-      'being carried',
-      'picked up and added to her pack',
-      'handed over to you',
-    ]) {
+  it('puts an item with any other text in the inventory, the default', () => {
+    for (const said of OFF_LIST) {
       expect(newItemLocation({ location: said }, world)).toEqual({
         location: 'inventory',
         equipped: false,
@@ -128,80 +107,10 @@ describe('newItemLocation', () => {
     }
   })
 
-  it('stores an item someone else wears or carries at the scene', () => {
-    for (const said of [
-      'worn by Borin',
-      'worn by borin',
-      "in Borin's bag",
-      'carried by Borin Ironfoot',
-      'held by the Captain',
-    ]) {
-      expect(newItemLocation({ location: said }, world)).toEqual({
-        location: tavern.id,
-        equipped: false,
-      })
-    }
-  })
-
-  it('keeps an item that is only near the protagonist, or passed on, out of the inventory', () => {
-    for (const said of [
-      'on the table beside her pack',
-      "in her sister's bag",
-      'in her hand, then given to the guard',
-      'around the neck of her horse',
-      'not in inventory',
-      'not carried',
-      'no longer carried',
-      'given to her',
-      'handed to the guard',
-      'handed over',
-    ]) {
-      expect(newItemLocation({ location: said }, world)).toEqual({
-        location: tavern.id,
-        equipped: false,
-      })
-    }
-  })
-
-  it('tells the protagonist from someone who shares a title', () => {
-    const titled = { ...world, protagonistName: 'Aldric', otherCharacterNames: ['Sir Gareth'] }
-    expect(newItemLocation({ location: 'Held by Sir Aldric' }, titled).location).toBe('inventory')
-    const knights = { ...world, protagonistName: 'Sir Aldric', otherCharacterNames: ['Sir Gareth'] }
-    expect(newItemLocation({ location: 'worn by Sir Aldric' }, knights)).toEqual({
-      location: 'inventory',
-      equipped: true,
-    })
-    expect(newItemLocation({ location: 'worn by Sir Gareth' }, knights).location).toBe(tavern.id)
-  })
-
-  it('does not read a placement word inside the name of a place', () => {
-    for (const said of ['the holding cells', 'the Worn Bridge']) {
-      expect(newItemLocation({ location: said }, world)).toEqual({
-        location: tavern.id,
-        equipped: false,
-      })
-    }
-    const cells = location('Holding Cells')
-    const listed = { ...world, locations: [tavern, cells] }
-    expect(newItemLocation({ location: 'the holding cells' }, listed).location).toBe(cells.id)
-  })
-
-  it('finds a listed location behind a preposition or a parenthesis', () => {
-    const cells = location('Holding Cells')
-    const oakvale = location('Oakvale')
-    const listed = {
-      ...world,
-      locations: [tavern, cells, oakvale],
-      protagonistName: 'Aria of Oakvale',
-    }
-    for (const said of [
-      'in the Holding Cells (back room)',
-      'at the holding cells',
-      'back at the Holding Cells',
-    ]) {
-      expect(newItemLocation({ location: said }, listed).location).toBe(cells.id)
-    }
-    expect(newItemLocation({ location: 'in Oakvale' }, listed).location).toBe(oakvale.id)
+  it('reads a listed place that shares a word with an option as that place', () => {
+    const bridge = location('The Worn Bridge')
+    const listed = { ...world, locations: [tavern, bridge] }
+    expect(newItemLocation({ location: 'the Worn Bridge' }, listed).location).toBe(bridge.id)
   })
 
   it('lets an explicit equipped: false win over worn', () => {
@@ -218,29 +127,8 @@ describe('newItemLocation', () => {
     expect(newItemLocation({ location: 'ground' }, onBranch).location).toBe(cave.id)
   })
 
-  it('stores ground, here and dropped as the scene location', () => {
-    for (const said of ['ground', 'on the floor', 'here', 'dropped', 'dropped from her pack']) {
-      expect(newItemLocation({ location: said }, world)).toEqual({
-        location: tavern.id,
-        equipped: false,
-      })
-    }
-  })
-
-  it('stores a name that matches no location as the scene location', () => {
-    expect(newItemLocation({ location: 'the back room' }, world).location).toBe(tavern.id)
-  })
-
-  it('never stores the text it was given', () => {
-    for (const said of ['the back room', 'ground', 'worn', 'somewhere']) {
-      const { location: stored } = newItemLocation({ location: said }, world)
-      expect([tavern.id, cave.id, 'inventory']).toContain(stored)
-    }
-  })
-
-  it('passes an existing id and the inventory sentinel through', () => {
+  it('passes an existing id through', () => {
     expect(newItemLocation({ location: cave.id }, world).location).toBe(cave.id)
-    expect(newItemLocation({ location: 'inventory' }, world).location).toBe('inventory')
   })
 
   it('defaults to the inventory, honouring equipped', () => {
@@ -259,24 +147,8 @@ describe('newItemLocation', () => {
   })
 
   it('goes to the inventory when there is no scene location to put it in', () => {
-    const nowhere = { ...world, currentLocationId: null }
     expect(newItemLocation({ location: 'ground' }, nowhere).location).toBe('inventory')
-    expect(newItemLocation({ location: 'the back room' }, nowhere).location).toBe('inventory')
     expect(newItemLocation({ location: 'Crystal Caverns' }, nowhere).location).toBe(cave.id)
-  })
-
-  it("does not equip someone else's item that has nowhere else to go", () => {
-    const nowhere = { ...world, currentLocationId: null }
-    expect(newItemLocation({ location: 'worn by Borin', equipped: true }, nowhere)).toEqual({
-      location: 'inventory',
-      equipped: false,
-    })
-    expect(
-      resolveItemLocation({ location: 'worn by Borin', equipped: true }, nowhere, item('Axe')),
-    ).toEqual({
-      location: 'inventory',
-      equipped: false,
-    })
   })
 
   it('resolves a location created in the same response', () => {
@@ -296,36 +168,30 @@ describe('resolveItemLocation', () => {
     expect(resolveItemLocation({}, world, held)).toEqual({})
   })
 
+  it('ignores any other text', () => {
+    for (const said of OFF_LIST) {
+      expect(resolveItemLocation({ location: said }, world, held)).toEqual({})
+      expect(resolveItemLocation({ location: said }, world, lying)).toEqual({})
+    }
+    const legacy = item('Chest', { location: 'Chest in Oakvale' })
+    expect(resolveItemLocation({ location: 'Chest in Oakvale' }, world, legacy)).toEqual({})
+  })
+
   it('moves an item to a location and unequips it', () => {
     const equipped = item('Sword', { equipped: true })
     expect(resolveItemLocation({ location: 'ground' }, world, equipped)).toEqual({
       location: tavern.id,
       equipped: false,
     })
+    expect(resolveItemLocation({ location: 'Crystal Caverns' }, world, equipped)).toEqual({
+      location: cave.id,
+      equipped: false,
+    })
   })
 
   it('keeps the existing location when there is no scene location', () => {
-    const nowhere = { ...world, currentLocationId: null }
     expect(resolveItemLocation({ location: 'ground' }, nowhere, lying)).toEqual({})
-    expect(resolveItemLocation({ location: 'the back room' }, nowhere, held)).toEqual({})
-  })
-
-  it('unequips an item that is dropped or taken with nowhere to put it', () => {
-    const nowhere = { ...world, currentLocationId: null }
-    const equipped = item('Sword', { equipped: true })
-    for (const said of ['dropped', 'worn by Borin']) {
-      expect(resolveItemLocation({ location: said }, nowhere, equipped)).toEqual({
-        location: 'inventory',
-        equipped: false,
-      })
-    }
-  })
-
-  it('moves nothing when the location it was shown is echoed back', () => {
-    const legacy = item('Chest', { location: 'Chest in Oakvale' })
-    expect(resolveItemLocation({ location: 'chest in oakvale' }, world, legacy)).toEqual({})
-    const lost = item('Map', { location: '0b9e7a52-1c1e-4f3a-9d2b-6a1f0e4c8d11' })
-    expect(resolveItemLocation({ location: 'Unknown location' }, world, lost)).toEqual({})
+    expect(resolveItemLocation({ location: 'ground' }, nowhere, held)).toEqual({})
   })
 
   it('picks an item up', () => {
@@ -352,29 +218,22 @@ describe('resolveItemLocation', () => {
 
   it('keeps equipped as it is when a held item stays held', () => {
     const equipped = item('Sword', { equipped: true })
-    expect(resolveItemLocation({ location: 'carried' }, world, equipped)).toEqual({
+    expect(resolveItemLocation({ location: 'inventory' }, world, equipped)).toEqual({
       location: 'inventory',
       equipped: true,
     })
   })
 
-  it('unequips an item the text says is not equipped', () => {
+  it('unequips on an explicit equipped: false', () => {
     const equipped = item('Sword', { equipped: true })
-    for (const said of [
-      'inventory (unequipped)',
-      'inventory, not equipped',
-      'unequipped',
-      'not worn',
-      'no longer equipped',
-      'is not equipped',
-      'not currently worn',
-      'not being worn',
-    ]) {
-      expect(resolveItemLocation({ location: said }, world, equipped)).toEqual({
-        location: 'inventory',
-        equipped: false,
-      })
-    }
+    expect(resolveItemLocation({ location: 'worn', equipped: false }, world, equipped)).toEqual({
+      location: 'inventory',
+      equipped: false,
+    })
+    expect(resolveItemLocation({ equipped: false }, world, equipped)).toEqual({
+      location: 'inventory',
+      equipped: false,
+    })
   })
 
   it('writes the location with equipped, so a legacy row is rewritten', () => {
@@ -444,23 +303,23 @@ describe('itemLocationLabel', () => {
 describe('normalizeItemLocation', () => {
   const locations = [tavern, cave]
   const normalize = (overrides: Partial<Item>) =>
-    normalizeItemLocation(item('a', overrides), locations, { protagonistName: 'Aria' })
+    normalizeItemLocation(item('a', overrides), locations)
 
   it("rewrites a location's name as its id", () => {
     expect(normalize({ location: 'crystal caverns' })).toEqual({ location: cave.id })
   })
 
-  it('rewrites worn and carried as the inventory', () => {
+  it('rewrites the options and empty text as the inventory', () => {
     expect(normalize({ location: 'worn' })).toEqual({ location: 'inventory', equipped: true })
     expect(normalize({ location: 'Inventory' })).toEqual({ location: 'inventory' })
-    expect(normalize({ location: "in Aria's pack" })).toEqual({ location: 'inventory' })
+    expect(normalize({ location: '' })).toEqual({ location: 'inventory' })
   })
 
   it('leaves current values, and text it cannot place, alone', () => {
     expect(normalize({})).toEqual({})
     expect(normalize({ location: cave.id })).toEqual({})
     expect(normalize({ location: 'ground' })).toEqual({})
-    expect(normalize({ location: 'worn by Borin' })).toEqual({})
+    expect(normalize({ location: "in Aria's pack" })).toEqual({})
     const override = location('Crystal Caverns', { id: 'loc-override', overridesId: cave.id })
     expect(normalizeItemLocation(item('a', { location: cave.id }), [override])).toEqual({})
   })
@@ -472,17 +331,13 @@ describe('normalizeItemLocation', () => {
 })
 
 describe('normalizeItems', () => {
-  it("rewrites legacy items with the protagonist's name, and passes the rest through", () => {
-    const character = (name: string, relationship: string) =>
-      ({ name, relationship }) as Partial<Character> as Character
-    const cast = [character('Borin', 'companion'), character('Aria', 'self')]
+  it('rewrites legacy items and passes the rest through', () => {
     const current = item('Sword')
-    const legacy = item('Cloak', { location: "in Aria's pack" })
+    const legacy = item('Cloak', { location: "kaelen's rest" })
 
-    const [kept, rewritten] = normalizeItems([current, legacy], [tavern], cast)
+    const [kept, rewritten] = normalizeItems([current, legacy], [tavern])
     expect(kept).toBe(current)
-    expect(rewritten).toEqual({ ...legacy, location: 'inventory' })
-    expect(castNames(cast)).toEqual({ protagonistName: 'Aria', otherCharacterNames: ['Borin'] })
+    expect(rewritten).toEqual({ ...legacy, location: tavern.id })
   })
 })
 
