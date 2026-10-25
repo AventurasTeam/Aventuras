@@ -28,6 +28,19 @@ export interface WrittenCharacter {
   fields: 'all' | readonly CharacterTextField[]
 }
 
+/** One entry per character, with every field any of `written` changed. */
+export function mergeWritten(written: readonly WrittenCharacter[]): WrittenCharacter[] {
+  const byId = new Map<string, WrittenCharacter['fields']>()
+  for (const { id, fields } of written) {
+    const before = byId.get(id) ?? []
+    byId.set(
+      id,
+      fields === 'all' || before === 'all' ? 'all' : [...new Set([...before, ...fields])],
+    )
+  }
+  return [...byId].map(([id, fields]) => ({ id, fields }))
+}
+
 /** New entities from classification result. */
 export interface ClassificationNewEntities {
   newLocations: Array<{ name: string; description?: string }>
@@ -47,7 +60,7 @@ export interface WorldStateEntities {
 export interface WorldStateTranslationCallbacks {
   updateCharacter: (id: string, data: Partial<Character>) => Promise<void>
   /** The character as it is now; a translation is not written over text that changed since. */
-  getCharacter?: (id: string) => Character | undefined
+  getCharacter: (id: string) => Character | undefined
   updateLocation: (id: string, data: Record<string, string | null>) => Promise<void>
   updateItem: (id: string, data: Record<string, string | null>) => Promise<void>
   updateStoryBeat: (id: string, data: Record<string, string | null>) => Promise<void>
@@ -217,10 +230,9 @@ export class WorldStateTranslationService {
       const { entityType, entityId, field } = parts[0].item
 
       if (entityType === 'character') {
-        const current = callbacks.getCharacter?.(entityId)
-        if (callbacks.getCharacter && !current) continue
-        if (current && parts.some(({ item }) => item.stillCurrent && !item.stillCurrent(current)))
-          continue
+        const current = callbacks.getCharacter(entityId)
+        if (!current) continue
+        if (parts.some(({ item }) => item.stillCurrent && !item.stillCurrent(current))) continue
         await callbacks.updateCharacter(entityId, {
           [field]: assemble(field, parts),
           translationLanguage: targetLanguage,

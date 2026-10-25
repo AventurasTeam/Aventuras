@@ -7,7 +7,12 @@
  */
 
 import type { Character, VisualDescriptors } from '#lib/types/index.ts'
-import type { CharacterUpdate, NewCharacter, ShownCharacter } from '../sdk/schemas/classifier'
+import {
+  MAX_TRAITS,
+  type CharacterUpdate,
+  type NewCharacter,
+  type ShownCharacter,
+} from '../sdk/schemas/classifier'
 import { sameEntityName, termKey, uniqueTerms } from '#lib/utils/text.ts'
 import {
   DESCRIPTOR_CATEGORIES,
@@ -46,22 +51,15 @@ const CREATED_THIS_RUN: ClassifierCharacterView = { appearance: true, profile: t
 const NOT_SHOWN: ClassifierCharacterView = { appearance: false, profile: false }
 
 /**
- * What the classifier was shown of a character, looked up by name. `shown` is the list the
- * prompt was built from; a result without one showed nobody. A character missing from both
- * the list and the cast was created by this response and has nothing unseen to lose; one that
- * exists but was not listed was not shown.
+ * What the classifier was shown of an existing character, by the name it was listed under.
+ * `shown` is the list the prompt was built from; a result without one showed nobody.
  */
-export function viewsForApply(
+export function shownView(
   shown: readonly ShownCharacter[] | undefined,
-  castBeforeApply: readonly Character[],
-): (name: string) => ClassifierCharacterView {
-  const listed = shown ?? []
-  const existed = castBeforeApply.map((c) => c.name)
-  return (name) => {
-    const entry = listed.find((s) => sameEntityName(s.name, name))
-    if (entry) return { appearance: entry.appearance, profile: entry.profile }
-    return existed.some((n) => sameEntityName(n, name)) ? NOT_SHOWN : CREATED_THIS_RUN
-  }
+  name: string,
+): ClassifierCharacterView {
+  const entry = shown?.find((s) => sameEntityName(s.name, name))
+  return entry ? { appearance: entry.appearance, profile: entry.profile } : NOT_SHOWN
 }
 
 export type RenameRefusal = 'empty' | 'protagonist' | 'taken'
@@ -157,7 +155,6 @@ export function planCharacterResponse(
   response: CharacterResponse,
   shown: readonly ShownCharacter[] | undefined,
 ): CharacterResponsePlan {
-  const view = viewsForApply(shown, cast)
   const planned: Planned[] = cast.map((c) => ({
     original: c,
     listed: c.name,
@@ -242,7 +239,7 @@ export function planCharacterResponse(
     const { changes, ignored } = planCharacterChanges(
       target.row,
       update.changes,
-      target.original ? view(target.listed ?? target.row.name) : CREATED_THIS_RUN,
+      target.original ? shownView(shown, target.listed ?? target.row.name) : CREATED_THIS_RUN,
     )
     write(target, changes)
     target.ignored.push(...ignored)
@@ -423,8 +420,6 @@ function sameTerms(a: readonly string[], b: readonly string[]): boolean {
   const keys = new Set(uniqueTerms(b).map(termKey))
   return a.length === keys.size && a.every((term) => keys.has(termKey(term)))
 }
-
-export const MAX_TRAITS = 8
 
 /** Traits as stored: deduplicated, and no more than the prompt allows. */
 export function traitList(traits: readonly string[]): string[] {

@@ -133,7 +133,11 @@ export type {
 } from './BackgroundTaskCoordinator'
 
 // World state translation service
-export { WorldStateTranslationService, CHARACTER_TEXT_FIELDS } from './WorldStateTranslationService'
+export {
+  WorldStateTranslationService,
+  CHARACTER_TEXT_FIELDS,
+  mergeWritten,
+} from './WorldStateTranslationService'
 export type {
   CharacterTextField,
   ClassificationNewEntities,

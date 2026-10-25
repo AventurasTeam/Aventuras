@@ -8,6 +8,9 @@
 import * as z from 'zod'
 import type { RuntimeVariable } from '#lib/services/packs/types.ts'
 
+/** The most traits a character keeps; the default prompt asks for the same. */
+export const MAX_TRAITS = 8
+
 // ============================================================================
 // Visual Descriptors Schema
 // ============================================================================
@@ -73,7 +76,7 @@ export const characterUpdateSchema = z.object({
     traits: z
       .array(z.string())
       .describe(
-        'Replaces the whole trait list: lasting personality only, at most 8; only for a character whose current traits are shown',
+        `Replaces the whole trait list: lasting personality only, at most ${MAX_TRAITS}; only for a character whose current traits are shown`,
       )
       .optional(),
     visualDescriptors: visualDescriptorsSchema
@@ -88,7 +91,10 @@ export const newCharacterSchema = z.object({
   name: z.string().describe("Character's proper name"),
   description: z.string().describe('One sentence: who they are. Always provide it').optional(),
   relationship: z.string().describe('friend, enemy, ally, neutral, or unknown').optional(),
-  traits: z.array(z.string()).describe('Lasting personality traits only, at most 8').optional(),
+  traits: z
+    .array(z.string())
+    .describe(`Lasting personality traits only, at most ${MAX_TRAITS}`)
+    .optional(),
   visualDescriptors: visualDescriptorsSchema
     .describe('Complete visual appearance - ALL categories should be filled')
     .optional(),

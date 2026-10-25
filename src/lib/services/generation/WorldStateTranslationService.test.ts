@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { WorldStateTranslationService } from './WorldStateTranslationService'
+import { WorldStateTranslationService, mergeWritten } from './WorldStateTranslationService'
 import type { Character } from '#lib/types/index.ts'
 
 describe('WorldStateTranslationService', () => {
@@ -26,6 +26,7 @@ describe('WorldStateTranslationService', () => {
       },
       {
         updateCharacter: vi.fn(),
+        getCharacter: () => undefined,
         updateLocation: vi.fn(),
         updateItem: vi.fn(),
         updateStoryBeat: vi.fn(),
@@ -75,6 +76,7 @@ describe('WorldStateTranslationService', () => {
       },
       {
         updateCharacter,
+        getCharacter: () => mockChar,
         updateLocation: vi.fn(),
         updateItem: vi.fn(),
         updateStoryBeat: vi.fn(),
@@ -129,6 +131,7 @@ describe('WorldStateTranslationService', () => {
       },
       {
         updateCharacter,
+        getCharacter: () => rewritten,
         updateLocation: vi.fn(),
         updateItem: vi.fn(),
         updateStoryBeat: vi.fn(),
@@ -156,7 +159,7 @@ describe('WorldStateTranslationService', () => {
 
     function run(
       translate: (items: any[]) => any[],
-      getCharacter?: (id: string) => Character | undefined,
+      getCharacter: (id: string) => Character | undefined = () => mira,
     ) {
       const updateCharacter = vi.fn()
       const service = new WorldStateTranslationService({
@@ -220,5 +223,21 @@ describe('WorldStateTranslationService', () => {
       const updateCharacter = await run(tag, () => undefined)
       expect(updateCharacter).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('mergeWritten', () => {
+  it('keeps one entry per character with every field any write changed', () => {
+    expect(
+      mergeWritten([
+        { id: 'a', fields: ['description'] },
+        { id: 'b', fields: 'all' },
+        { id: 'a', fields: ['traits', 'description'] },
+        { id: 'b', fields: ['name'] },
+      ]),
+    ).toEqual([
+      { id: 'a', fields: ['description', 'traits'] },
+      { id: 'b', fields: 'all' },
+    ])
   })
 })

@@ -65,9 +65,11 @@ describe('presentInScene', () => {
     expect(ids(presentInScene(cast, result(['mira'])))).toEqual(['me', 'mira'])
   })
 
-  it('finds a character renamed this turn under the name it was listed with', () => {
+  it('finds a character renamed this turn, under its new name', () => {
     const renamed = result(['Darek'], [{ name: 'weapon vendor', changes: { newName: 'Darek' } }])
-    expect(ids(presentInScene(cast, renamed))).toEqual(['me', 'vendor'])
+    const present = presentInScene(cast, renamed)
+    expect(ids(present)).toEqual(['me', 'vendor'])
+    expect(present[1].name).toBe('Darek')
   })
 
   it('does not bring in a renamed character that is not in the scene', () => {

@@ -94,6 +94,7 @@ import type {
 } from './generation'
 import { EntryRetrievalService, getEntryRetrievalConfigFromSettings } from './retrieval'
 export { clearTier3SelectionCache } from './retrieval'
+export { TranslationService } from './utils'
 export {
   planCharacterResponse,
   type CharacterResponsePlan,

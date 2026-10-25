@@ -10,7 +10,7 @@ import {
   shownCharacters,
   shownInPrompt,
   traitList,
-  viewsForApply,
+  shownView,
   type CharacterResponse,
   type CharacterResponsePlan,
   type ClassifierCharacterView,
@@ -294,30 +294,24 @@ describe('shownInPrompt', () => {
 
   it('lists nobody when a custom template leaves the character list out', () => {
     expect(shownInPrompt(cast, formatted, ['system', 'no list here'])).toEqual([])
-    expect(viewsForApply([], cast)('Mira')).toEqual(HIDDEN)
+    expect(shownView([], 'Mira')).toEqual(HIDDEN)
   })
 })
 
-describe('viewsForApply', () => {
+describe('shownView', () => {
   it('uses what the prompt listed, not the status at apply time', () => {
     const tomas = character('Tomas', { status: 'inactive' })
     const shown = shownCharacters([tomas])
     tomas.status = 'active'
-    expect(viewsForApply(shown, [tomas])('tomas')).toEqual(HIDDEN)
+    expect(shownView(shown, 'tomas')).toEqual(HIDDEN)
   })
 
-  it('treats a character that exists but was not listed as not shown', () => {
-    expect(viewsForApply([], [character('Tomas')])('Tomas')).toEqual(HIDDEN)
-  })
-
-  it('treats a name nobody had as created by this response', () => {
-    expect(viewsForApply([], [])('Newcomer')).toEqual(SHOWN)
+  it('treats a character that was not listed as not shown', () => {
+    expect(shownView([], 'Tomas')).toEqual(HIDDEN)
   })
 
   it('treats a result without a list as having shown nobody', () => {
-    const views = viewsForApply(undefined, [character('Tomas')])
-    expect(views('Tomas')).toEqual(HIDDEN)
-    expect(views('Newcomer')).toEqual(SHOWN)
+    expect(shownView(undefined, 'Tomas')).toEqual(HIDDEN)
   })
 })
 

@@ -368,9 +368,9 @@ export class GenerationPipeline {
 }
 
 /**
- * The characters the classification placed in the scene, out of the cast from before it was
- * applied, resolved by the same plan the store applies, so a renamed character is found under
- * either name.
+ * The characters the classification placed in the scene, as it leaves them, out of the cast from
+ * before it was applied. Resolved by the same plan the store applies, so a character renamed
+ * this turn is found under either name and comes back under its new one.
  *
  * The protagonist is added rather than looked for. They are in every scene by definition, so
  * whether the classifier remembered to name them says nothing — and leaving them out costs the
@@ -380,7 +380,7 @@ export function presentInScene(
   characters: readonly Character[],
   result: ClassificationPhaseResult['classificationResult'] | undefined,
 ): Character[] {
-  const { presentIds } = planCharacterResponse(
+  const plan = planCharacterResponse(
     characters,
     {
       updates: result?.entryUpdates?.characterUpdates ?? [],
@@ -389,5 +389,8 @@ export function presentInScene(
     },
     result?._shownCharacters,
   )
-  return characters.filter((c) => c.relationship === 'self' || presentIds.includes(c.id))
+  const changes = new Map(plan.updates.map((u) => [u.character.id, u.changes]))
+  return characters
+    .filter((c) => c.relationship === 'self' || plan.presentIds.includes(c.id))
+    .map((c) => ({ ...c, ...changes.get(c.id) }))
 }

@@ -830,13 +830,13 @@ class UIStore {
       visualDescriptors: { ...(c.visualDescriptors ?? {}) },
       portrait: c.portrait,
       translations: {
-        translatedName: c.translatedName,
-        translatedDescription: c.translatedDescription,
-        translatedRelationship: c.translatedRelationship,
-        translatedTraits: c.translatedTraits && [...c.translatedTraits],
-        translatedVisualDescriptors: c.translatedVisualDescriptors && {
-          ...c.translatedVisualDescriptors,
-        },
+        translatedName: c.translatedName ?? null,
+        translatedDescription: c.translatedDescription ?? null,
+        translatedRelationship: c.translatedRelationship ?? null,
+        translatedTraits: c.translatedTraits ? [...c.translatedTraits] : null,
+        translatedVisualDescriptors: c.translatedVisualDescriptors
+          ? { ...c.translatedVisualDescriptors }
+          : null,
       },
     }))
 
