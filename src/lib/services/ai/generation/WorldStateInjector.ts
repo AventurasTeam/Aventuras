@@ -961,6 +961,9 @@ export class WorldStateInjector extends BaseAIService {
         if (item.description) {
           block += `: ${item.description}`
         }
+        if (typeof item.metadata?.location === 'string') {
+          block += ` — Location: ${item.metadata.location}`
+        }
       }
     }
 

@@ -140,6 +140,7 @@ describe('WorldStateInjector', () => {
     const result = await injector.buildContext(lying, 'the Anvil', [], { storyId: undefined })
 
     expect(result.tier2.find((e) => e.name === 'Anvil')?.metadata?.location).toBe('Iron Mountain')
+    expect(result.contextBlock).toContain('• Anvil — Location: Iron Mountain')
   })
 
   it('selects Tier 2 entities via fuzzy matching against user input and recent narrative', async () => {
