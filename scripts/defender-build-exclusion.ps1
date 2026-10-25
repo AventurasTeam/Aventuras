@@ -13,12 +13,24 @@
 #>
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory)]
   [ValidateSet('Add', 'Remove', 'Scan')]
   [string]$Action
 )
 
 $ErrorActionPreference = 'Stop'
+
+if (-not $Action) {
+  @'
+Usage: .\scripts\defender-build-exclusion.ps1 -Action <Add|Remove|Scan>
+
+  Add     Exclude this checkout's src-tauri\target from Defender real-time scanning
+  Remove  Scan this checkout's src-tauri\target again
+  Scan    List every Aventuras build exclusion and whether its checkout still exists
+
+Run from an administrator PowerShell.
+'@
+  exit
+}
 
 # Defender keeps each rule as typed, so `...\target\` and `...\target` are the same folder.
 function Get-NormalPath([string]$Path) {
