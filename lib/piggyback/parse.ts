@@ -489,11 +489,14 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
     })
 
   // Held, not landed at the place the scene left: a closed block naming no place means the scene
-  // stays, but a cut one may have lost it. A cut after <current_location> keeps them.
+  // stays, but a cut one may have lost it. A cut after <current_location> keeps them. Failed like a
+  // cut with creates, so the fallback fires to resolve the scene and put them down.
   const transfers = normalized.block.transfers
   const holdDrops =
     !stateClosed(raw) && normalized.block.currentLocation === undefined && transfers !== undefined
   const dropsCutOff = holdDrops ? transfers.drops : []
+  if (dropsCutOff.length > 0 && !failures.some((f) => f.field === 'state'))
+    failures.push({ field: 'state', detail: 'block with drops cut off' })
   const kept =
     holdDrops && dropsCutOff.length > 0
       ? { ...normalized.block, transfers: { ...transfers, drops: [] } }
