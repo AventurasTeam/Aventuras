@@ -46,10 +46,21 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-const check = (message: string) => {
+const check = (message: string, commentChar?: string) => {
   const file = join(dir, 'COMMIT_EDITMSG')
   writeFileSync(file, message)
-  const run = spawnSync('sh', [HOOK, file], { encoding: 'utf8' })
+  const config =
+    commentChar === undefined
+      ? {}
+      : {
+          GIT_CONFIG_COUNT: '1',
+          GIT_CONFIG_KEY_0: 'core.commentChar',
+          GIT_CONFIG_VALUE_0: commentChar,
+        }
+  const run = spawnSync('sh', [HOOK, file], {
+    encoding: 'utf8',
+    env: { ...process.env, ...config },
+  })
   return { status: run.status, stderr: run.stderr }
 }
 
@@ -135,5 +146,24 @@ describe('check-commit-msg.sh body', () => {
 
   it('does not count blank lines between the body and the comments', () => {
     expect(check('fix: thing\n\n1\n2\n3\n4\n5\n6\n\n\n# A comment.\n\n').status).toBe(0)
+  })
+})
+
+describe('check-commit-msg.sh under core.commentChar', () => {
+  const tail = (char: string) =>
+    VERBOSE_TAIL.split('\n')
+      .map((line) => (line.startsWith('#') ? char + line.slice(1) : line))
+      .join('\n')
+
+  it('cuts at the scissors line git writes with the configured character', () => {
+    expect(check(`fix: thing\n\nOne body line.\n${tail(';')}`, ';').status).toBe(0)
+  })
+
+  it('keeps a `#` line git keeps, so it can run the subject onto line 2', () => {
+    expect(check('fix: thing\n#2 stays\n', ';').status).toBe(1)
+  })
+
+  it('finds the character `auto` chose on the scissors line', () => {
+    expect(check(`fix: thing\n\nOne body line.\n${tail(';')}`, 'auto').status).toBe(0)
   })
 })
