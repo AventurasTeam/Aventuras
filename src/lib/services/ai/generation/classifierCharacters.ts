@@ -256,7 +256,7 @@ export function planCharacterResponse(
   }
 
   for (const nc of response.newCharacters) {
-    if (!used.has(nc) && !find(nc.name)) create(nc.name, nc, 'active')
+    if (!used.has(nc) && !find(nc.name)) create(nc.name, nc, nc.status ?? 'active')
   }
 
   const finalName = (name: string) => find(name)?.row.name ?? name
@@ -344,7 +344,8 @@ export type RewriteField = 'description' | 'traits' | 'visualDescriptors'
 
 export interface IgnoredRewrite {
   field: RewriteField
-  reason: 'empty' | 'not shown' | 'protagonist'
+  /** `over limit`: the traits past the cap were cut and the rest applied. */
+  reason: 'empty' | 'not shown' | 'protagonist' | 'over limit'
 }
 
 export interface CharacterChangePlan {
@@ -404,9 +405,13 @@ export function planCharacterChanges(
     const traits = traitList(update.traits)
     if (traits.length === 0) ignored.push({ field: 'traits', reason: 'empty' })
     else if (!view.profile) hidden('traits')
-    else if (!sameTerms(traits, existing.traits ?? [])) {
-      changes.traits = traits
-      changes.translatedTraits = null
+    else {
+      if (uniqueTerms(update.traits).length > MAX_TRAITS)
+        ignored.push({ field: 'traits', reason: 'over limit' })
+      if (!sameTerms(traits, existing.traits ?? [])) {
+        changes.traits = traits
+        changes.translatedTraits = null
+      }
     }
   }
 

@@ -233,6 +233,11 @@ describe('planCharacterResponse', () => {
     expect(result.creates[0].fields.traits).toHaveLength(8)
   })
 
+  it('creates a new character with the status its entry gives', () => {
+    const result = plan({ newCharacters: [{ name: 'the guard', status: 'deceased' }] })
+    expect(result.creates[0].fields.status).toBe('deceased')
+  })
+
   it('gates rewrites by what the classifier was shown under the listed name', () => {
     const hidden = character('the guard', { status: 'inactive', description: 'Bored.' })
     const result = planCharacterResponse(
@@ -498,6 +503,14 @@ describe('planCharacterChanges', () => {
       { field: 'description', reason: 'protagonist' },
       { field: 'traits', reason: 'protagonist' },
     ])
+  })
+
+  it('says so when it cuts a trait list over the cap, even when the cut list is no change', () => {
+    const eight = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+    const full = character('Mira', { traits: eight })
+    const plan = planCharacterChanges(full, { traits: [...eight, 'brave'] }, SHOWN)
+    expect(plan.changes).toEqual({})
+    expect(plan.ignored).toEqual([{ field: 'traits', reason: 'over limit' }])
   })
 
   it('never erases with an empty value', () => {

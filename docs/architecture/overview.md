@@ -318,7 +318,9 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   listed, but not their description or traits: those are usually the reader's own setup, and
   the protagonist is in every scene, so every turn would be a chance to rewrite them. Traits
   and descriptions are replaced whole, like appearance; there is no add or remove. A trait list
-  is cut to the first 8, the most the prompt asks for (`traitList`).
+  is cut to the first 8, the most the prompt asks for (`traitList`), and a rewrite that loses
+  traits that way is logged with the other ignored rewrites. A new character takes the status
+  its entry gives, `active` when it gives none.
 
   **A character listed under a placeholder is renamed when the story reveals their name.**
   `characterUpdates[].changes.newName` carries it, under the listed name (`planRename`).
