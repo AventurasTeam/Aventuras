@@ -1204,7 +1204,10 @@ describe('per-turn-piggyback', () => {
         entitiesStore.hydrate('b1', [])
       }
 
-      async function drainPhase(outcome?: PiggybackOutcome): Promise<PhaseEmittedEvent[]> {
+      async function drainPhase(
+        outcome?: PiggybackOutcome,
+        log: Logger = makeLogger('act_1'),
+      ): Promise<PhaseEmittedEvent[]> {
         const gen = piggybackFallbackClassifierPhase({
           actionId: 'act_1',
           abortSignal: new AbortController().signal,
@@ -1212,7 +1215,7 @@ describe('per-turn-piggyback', () => {
             idMap: new IdBiMap(),
             ...(outcome ? { piggybackOutcome: outcome } : {}),
           },
-          log: makeLogger('act_1'),
+          log,
           db: phaseDb.db,
           runInTransaction: async () => undefined,
           storyId: 's1',
@@ -1267,6 +1270,76 @@ describe('per-turn-piggyback', () => {
             error: { kind: 'provider', reason: 'network', detail: '503' },
           },
         ])
+      })
+
+      describe('a re-roll that fails', () => {
+        const first = { tier: 'parse', detail: 'Unexpected end of JSON input', attempt: 0 } as const
+        const retried = { tier: 'provider', reason: 'network', detail: '503' } as const
+
+        function rerollFails(): void {
+          seedClearing(false)
+          generateStructuredMock
+            .mockResolvedValueOnce({
+              status: 'ok',
+              value: { ...REPORT, worldTimeDelta: -10 },
+              recoverable: [first],
+            })
+            .mockResolvedValueOnce({
+              status: 'failed',
+              detail: 'provider timeout on reroll',
+              recoverable: [retried],
+            })
+        }
+
+        it('still reports its retried attempts, keeping the first reply', async () => {
+          rerollFails()
+          const events = await drainPhase()
+          expect(events.filter((e) => e.type === 'recoverable_error')).toEqual([
+            { type: 'recoverable_error', error: { kind: 'phase-logic', detail: first.detail } },
+            {
+              type: 'recoverable_error',
+              error: { kind: 'provider', reason: 'network', detail: '503' },
+            },
+          ])
+          expect(
+            events.some(
+              (e) => e.type === 'delta_emitted' && e.action.kind === 'updateStoryEntryMetadata',
+            ),
+          ).toBe(true)
+        })
+
+        it('is logged with its error and the negative delta it leaves', async () => {
+          rerollFails()
+          const log = spyLogger()
+          await drainPhase(undefined, log)
+          expect(log.warn).toHaveBeenCalledWith('classifier.delta_reroll_failed', {
+            status: 'failed',
+            errorDetail: 'provider timeout on reroll',
+            worldTimeDelta: -10,
+          })
+        })
+
+        it('is not logged when the re-roll succeeds', async () => {
+          seedClearing(false)
+          generateStructuredMock
+            .mockResolvedValueOnce({
+              status: 'ok',
+              value: { ...REPORT, worldTimeDelta: -10 },
+              recoverable: [],
+            })
+            .mockResolvedValueOnce({
+              status: 'ok',
+              value: { ...REPORT, worldTimeDelta: 15 },
+              recoverable: [],
+            })
+          const log = spyLogger()
+          await drainPhase(undefined, log)
+          expect(generateStructuredMock).toHaveBeenCalledTimes(2)
+          expect(log.warn).not.toHaveBeenCalledWith(
+            'classifier.delta_reroll_failed',
+            expect.anything(),
+          )
+        })
       })
 
       // Both schema branches: a recovery that also asks for chips stays unmarked.

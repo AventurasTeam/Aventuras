@@ -321,12 +321,20 @@ async function generateClassifierState<T extends { worldTimeDelta: number }>(
   config: ResolveModelConfig,
   abortSignal: AbortSignal,
   options: StructuredCallOptions,
+  log: PhaseContext['log'],
 ): Promise<GenerateStructuredResult<T>> {
   const classify = () =>
     generateStructured('classifier', prompt, schema, config, abortSignal, options)
   const first = await classify()
   if (first.status !== 'ok' || first.value.worldTimeDelta >= 0) return first
   const reroll = await classify()
+  if (reroll.status === 'failed' || reroll.status === 'not-configured')
+    log.warn('classifier.delta_reroll_failed', {
+      status: reroll.status,
+      ...('kind' in reroll ? { errorKind: reroll.kind } : {}),
+      ...('detail' in reroll ? { errorDetail: reroll.detail } : {}),
+      worldTimeDelta: first.value.worldTimeDelta,
+    })
   const chosen = reroll.status === 'ok' ? reroll : first
   // Each call's retried attempts are reported, whichever result the turn keeps.
   const retried = reroll.status === 'not-configured' ? [] : reroll.recoverable
@@ -512,6 +520,7 @@ export async function* piggybackFallbackClassifierPhase(
         classifierConfig,
         ctx.abortSignal,
         callOptions,
+        ctx.log,
       )
     : await generateClassifierState(
         prompt,
@@ -519,6 +528,7 @@ export async function* piggybackFallbackClassifierPhase(
         classifierConfig,
         ctx.abortSignal,
         callOptions,
+        ctx.log,
       )
 
   // generation-pipeline.md → Two retry tiers: one event per retried attempt, however the call ended.

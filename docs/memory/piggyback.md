@@ -717,6 +717,8 @@ slice's per-turn fallback classifier are isolated structured-output
 calls, so on a negative `worldTimeDelta` they re-roll the whole call
 once before falling back to clamp-and-warn
 ([`architecture.md → Classifier contract — metadata fields`](../architecture.md#classifier-contract--metadata-fields)).
+The fallback keeps its first reply when the re-roll fails, and logs
+the failure (`classifier.delta_reroll_failed`).
 The direct tagged-block path can't do this cheaply — the delta rides
 the same call as the narrative prose — so it clamps immediately on a
 negative delta, no re-roll.
