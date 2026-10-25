@@ -293,7 +293,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     if (parsedState.dropsCutOff.length > 0)
       ctx.log.debug('classifier.drops_held', {
         entryId,
-        itemIds: parsedState.dropsCutOff.map((d) => d.id),
+        itemIds: parsedState.dropsCutOff.map((d) => idMap.getUuidFor(d.id) ?? d.id),
         reason: 'cut_off',
       })
     // A failed fold creates nothing: creates aren't idempotent, and the fallback that fires

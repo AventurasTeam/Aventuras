@@ -2634,7 +2634,7 @@ describe('narrative fold — creates', () => {
       )
       expect(fold.log.debug).toHaveBeenCalledWith('classifier.drops_held', {
         entryId: fold.replyId,
-        itemIds: ['i1'],
+        itemIds: [SWORD],
         reason: 'cut_off',
       })
       expect(replyOf(fold.events).metadata?.stateReport?.transfers?.drops).toBeUndefined()
