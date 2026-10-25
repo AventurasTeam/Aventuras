@@ -27,7 +27,7 @@ export function sseFetch(tokens: readonly string[]): typeof fetch {
     })}\n\n`,
     'data: [DONE]\n\n',
   )
-  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+  return vi.fn<typeof fetch>(async (input, init) => {
     const request = input instanceof Request ? input : new Request(input, init)
     const body = (await request.clone().json()) as { stream?: boolean }
     if (body.stream !== true) {
@@ -40,7 +40,7 @@ export function sseFetch(tokens: readonly string[]): typeof fetch {
       status: 200,
       headers: { 'content-type': 'text/event-stream' },
     })
-  }) as unknown as typeof fetch
+  })
 }
 
 export const WORKING_CONFIG = {
