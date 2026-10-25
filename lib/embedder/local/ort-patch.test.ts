@@ -50,8 +50,20 @@ describe('onnxruntime-react-native patch guard', () => {
     const cmake = readFileSync(`${PKG_DIR}/android/CMakeLists.txt`, 'utf8')
     const pinned = /onnxruntime-android:([^@"]+)@aar/.exec(gradle)?.[1]
     expect(pinned, 'build.gradle no longer pins onnxruntime-android').toBe('1.31.0')
-    expect(cmake.match(/onnxruntime-android-[^/"]*\.aar/g), 'CMakeLists.txt links another').toEqual(
-      ['onnxruntime-android-1.31.0.aar', 'onnxruntime-android-1.31.0.aar'],
-    )
+    const standard = /^else\(\)$([\s\S]*?)^endif\(\)$/m.exec(cmake)?.[1] ?? ''
+    expect(
+      standard.match(/onnxruntime-android-[^/"]*\.aar/g),
+      'CMakeLists.txt links another',
+    ).toEqual(['onnxruntime-android-1.31.0.aar', 'onnxruntime-android-1.31.0.aar'])
+  })
+
+  // build.gradle's QNN line stays at latest.integration, so the pin above must not reach it.
+  it('the installed build still links a QNN build against the QNN AAR', () => {
+    const cmake = readFileSync(`${PKG_DIR}/android/CMakeLists.txt`, 'utf8')
+    const qnn = /^if\(USE_QNN\)$([\s\S]*?)^else\(\)$/m.exec(cmake)?.[1] ?? ''
+    expect(qnn.match(/onnxruntime-android-[^/"]*\.aar/g), 'a QNN build links another').toEqual([
+      'onnxruntime-android-qnn-*.aar',
+      'onnxruntime-android-qnn-*.aar',
+    ])
   })
 })

@@ -113,6 +113,8 @@ function reserveRun(kind: string, ctx: RunCtx): RunState {
 // retry, and run_complete reports the idle and the failure.
 function unwindRun(run: RunState, detail: string): void {
   generationStore.abortRun(run.runId, 'unwound')
+  // A capture left open is never evicted. Before beginTurn (a failed marker insert) there is none.
+  turnCaptureSink.endTurn(run.actionId, 'failed', 'unwound')
   pipelineEventBus.emit({
     type: 'run_complete',
     runId: run.runId,
@@ -598,8 +600,15 @@ async function driveOrigin(
   // reserveRun raised it could still commit under this run's reads. A chain's successor needs no
   // settle: the gate stayed up across the handoff.
   if (run.gateBehavior === 'hard-gate') await settleUserWrites()
-  const { tx, successor } = await driveRun(run, ctx)
-  return { result: tx, successor }
+  try {
+    const { tx, successor } = await driveRun(run, ctx)
+    return { result: tx, successor }
+  } catch (e) {
+    // Unwound as a successor is, or it holds the gate until a restart; the caller still gets the throw.
+    if (generationStore.getTxState().runs.has(run.runId))
+      unwindRun(run, `run threw: ${messageOf(e)}`)
+    throw e
+  }
 }
 
 // Each successor is already in txState, swapped in at its predecessor's commit. Nothing here

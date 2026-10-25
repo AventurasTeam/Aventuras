@@ -1232,7 +1232,7 @@ So this is not an observability-only state:
   holds nothing. A held branch no failure explains, because the reset
   threw or never ran, gets its own line. Other kinds describe the
   fault without promising a stop; if the hold can't be read, every
-  pass failure reads as held.
+  pass failure reads as held, and the title can't claim recovery.
 - Every variant says the story's content is intact. Each also says
   that restarting the app retries automatically, unless the reversal
   was refused as an integrity error (`ReversalIntegrityError`): every
@@ -1395,7 +1395,9 @@ the chain's last run ends. Submit and regenerate await only `origin`,
 so they release the branch queue at the turn's commit while a
 chained pass runs on, and a head reversal reaches the pass to
 interrupt it rather than queueing behind it. A successor whose marker
-insert fails is unwound, and the chain ends there.
+insert fails is unwound, and the chain ends there. So is any run whose
+drive throws before it ends, which would otherwise hold the gate until
+a restart; an origin's `origin` still rejects with the throw.
 
 (Invariant depends on Zustand's setState being synchronous; pin
 in tests if a state-library swap ever happens.)

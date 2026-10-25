@@ -171,18 +171,12 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
       : resolved.model,
     ...promptParams(opts.prompt),
     ...(abortSignal !== undefined ? { abortSignal } : {}),
+    ...(opts.onError !== undefined ? { onError: opts.onError } : {}),
+    // Not on an error: the SDK reports each error part and reads on, so a stall can follow. After a
+    // fatal one the stream is over, and the timer lapses on a call nothing awaits.
     ...(bounded === null
-      ? opts.onError !== undefined
-        ? { onError: opts.onError }
-        : {}
-      : {
-          onError: (event: { error: unknown }) => {
-            bounded.dispose()
-            opts.onError?.(event)
-          },
-          onFinish: () => bounded.dispose(),
-          onAbort: () => bounded.dispose(),
-        }),
+      ? {}
+      : { onFinish: () => bounded.dispose(), onAbort: () => bounded.dispose() }),
     ...resolved.callSettings,
   })
   return {

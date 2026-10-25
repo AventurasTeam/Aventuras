@@ -206,6 +206,22 @@ describe('streamText', () => {
       expect(finished.call.abortSignal?.aborted).toBe(false)
       expect(finished.result.timedOut()).toBe(false)
     })
+
+    // The SDK calls onError for each error part and keeps the stream open, so a stall can follow.
+    it("keeps the bound armed through an error part, still handing it to the caller's onError", () => {
+      const onError = vi.fn()
+      vi.mocked(streamProviderCall).mockClear()
+      const result = streamText('narrative', { prompt: PROMPT, config: STREAM_CFG, onError })
+      const call = vi.mocked(streamProviderCall).mock.calls.at(-1)?.[0]
+      if (!result.ok || call === undefined) throw new Error('expected a stream')
+
+      const error = new Error('bad chunk')
+      call.onError?.({ error })
+      expect(onError).toHaveBeenCalledWith({ error })
+      vi.advanceTimersByTime(45_000)
+      expect(call.abortSignal?.aborted).toBe(true)
+      expect(result.timedOut()).toBe(true)
+    })
   })
 
   // architecture.md → System and user halves: providers reject an empty system message.
