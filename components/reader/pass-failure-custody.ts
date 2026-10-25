@@ -54,7 +54,7 @@ type Submission = NonNullable<SystemFailureMeta['submission']>
 type ComposerDraft = { text: string; mode: ComposerMode }
 
 /**
- * A pass entry's Retry committed: the entry goes and Dismiss hands its text back, unless the
+ * A pass entry's Retry committed: the entry goes and its text returns to the composer, unless the
  * composer can't take it (occupied, or the user left the branch). Then the entry stays as a notice
  * holding the text, whose own Dismiss hands it back later.
  */
@@ -68,12 +68,24 @@ export function planCommittedPassRetry(
 export async function settleCommittedPassRetry(deps: {
   stored: Submission | undefined
   custodyNow: () => PassFailureCustodyRead
-  dismiss: () => Promise<void>
+  clear: () => Promise<void>
+  reload: () => Promise<void>
+  handBack: (submission: Submission) => void
   keepNotice: (submission: Submission) => Promise<void>
 }): Promise<void> {
-  const plan = planCommittedPassRetry({ entryHasText: deps.stored != null, ...deps.custodyNow() })
-  if (plan === 'keep-notice' && deps.stored != null) return deps.keepNotice(deps.stored)
-  return deps.dismiss()
+  const { stored } = deps
+  const plan = () => planCommittedPassRetry({ entryHasText: stored != null, ...deps.custodyNow() })
+  if (stored != null && plan() === 'keep-notice') return deps.keepNotice(stored)
+  await deps.clear()
+  try {
+    await deps.reload()
+  } finally {
+    // Read again: the composer stays editable through the clear, and a draft typed there wins.
+    if (stored != null) {
+      if (plan() === 'dismiss') deps.handBack(stored)
+      else await deps.keepNotice(stored)
+    }
+  }
 }
 
 /**

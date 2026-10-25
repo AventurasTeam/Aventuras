@@ -1030,7 +1030,9 @@ export default function ReaderComposerRoute() {
                 stillOnBranch: branchUnchanged(branchId),
                 composer: composerRef.current,
               }),
-            dismiss: handleDismissSystemEntry,
+            clear: () => clearSystemEntry(branchId, ctx),
+            reload,
+            handBack: handBackSubmission,
             keepNotice: async (submission) => {
               await writeSystemEntry({ branchId, ...passResolvedEntry(submission) }, ctx)
               await reload()
@@ -1063,7 +1065,7 @@ export default function ReaderComposerRoute() {
     branchId,
     systemFailure,
     showPassFailure,
-    handleDismissSystemEntry,
+    handBackSubmission,
     reload,
     beginDispatch,
     endDispatch,

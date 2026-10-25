@@ -582,10 +582,11 @@ than losing it silently. A reader closed under the dispatch has no
 composer to take the text, and nothing claims it was restored.
 
 A pass entry's `Retry` whose pass commits clears the entry through
-`Dismiss` only when the composer can take its text back. Over an
-occupied draft, or once the user has left the branch, the entry stays
-as a notice holding the text, with no `Retry` and copy that says so,
-and its `Dismiss` hands the text back.
+`Dismiss` only when the composer can take its text back, and asks
+again once the clear has landed, since the composer stays editable
+through it. Over an occupied draft, or once the user has left the
+branch, the entry stays as a notice holding the text, with no `Retry`
+and copy that says so, and its `Dismiss` hands the text back.
 
 A **Memory update failed** entry carries the submission only where
 the composer can't hold the text. A Send refused on a held branch

@@ -43,38 +43,86 @@ describe('planCommittedPassRetry', () => {
 describe('settleCommittedPassRetry', () => {
   const STORED = { content: 'I wade across.', composerMode: 'free' }
 
-  function harness(custody: { stillOnBranch: boolean; draftEmpty: boolean }) {
+  const FREE = { stillOnBranch: true, draftEmpty: true }
+  const OCCUPIED = { stillOnBranch: true, draftEmpty: false }
+
+  /** Each custody read takes the next state; the last one repeats. */
+  function harness(
+    reads: { stillOnBranch: boolean; draftEmpty: boolean }[],
+    over: { clear?: () => Promise<void>; reload?: () => Promise<void> } = {},
+  ) {
     const calls: unknown[] = []
+    let read = 0
     return {
       calls,
       deps: {
-        custodyNow: () => custody,
-        dismiss: vi.fn(async () => {
-          calls.push('dismiss')
-        }),
-        keepNotice: vi.fn(async (submission: typeof STORED) => {
+        custodyNow: () => {
+          calls.push('read')
+          return reads[Math.min(read++, reads.length - 1)]
+        },
+        clear: async () => {
+          calls.push('clear')
+          await over.clear?.()
+        },
+        reload: async () => {
+          calls.push('reload')
+          await over.reload?.()
+        },
+        handBack: (submission: typeof STORED) => {
+          calls.push(['handBack', submission])
+        },
+        keepNotice: async (submission: typeof STORED) => {
           calls.push(['keep', submission])
-        }),
+        },
       },
     }
   }
 
   it('keeps the stored text on a notice when the composer holds a draft', async () => {
-    const h = harness({ stillOnBranch: true, draftEmpty: false })
+    const h = harness([OCCUPIED])
     await settleCommittedPassRetry({ ...h.deps, stored: STORED })
-    expect(h.calls).toEqual([['keep', STORED]])
+    expect(h.calls).toEqual(['read', ['keep', STORED]])
   })
 
-  it('dismisses into an empty composer', async () => {
-    const h = harness({ stillOnBranch: true, draftEmpty: true })
+  it('clears the entry and hands its text to an empty composer', async () => {
+    const h = harness([FREE])
     await settleCommittedPassRetry({ ...h.deps, stored: STORED })
-    expect(h.calls).toEqual(['dismiss'])
+    expect(h.calls).toEqual(['read', 'clear', 'reload', 'read', ['handBack', STORED]])
   })
 
-  it('dismisses an entry that stores no text', async () => {
-    const h = harness({ stillOnBranch: true, draftEmpty: false })
+  // The composer stays editable through the clear and its reload, and the draft typed there wins.
+  it('keeps the text on a notice when the draft filled during the clear', async () => {
+    const h = harness([FREE, OCCUPIED])
+    await settleCommittedPassRetry({ ...h.deps, stored: STORED })
+    expect(h.calls).toEqual(['read', 'clear', 'reload', 'read', ['keep', STORED]])
+  })
+
+  it('keeps the text on a notice when the user left the branch during the clear', async () => {
+    const h = harness([FREE, { stillOnBranch: false, draftEmpty: true }])
+    await settleCommittedPassRetry({ ...h.deps, stored: STORED })
+    expect(h.calls).toEqual(['read', 'clear', 'reload', 'read', ['keep', STORED]])
+  })
+
+  // The row is gone, so the stale card can't hold the text.
+  it('still settles the text when the reload rejects', async () => {
+    const h = harness([FREE], { reload: () => Promise.reject(new Error('read failed')) })
+    await expect(settleCommittedPassRetry({ ...h.deps, stored: STORED })).rejects.toThrow(
+      'read failed',
+    )
+    expect(h.calls).toEqual(['read', 'clear', 'reload', 'read', ['handBack', STORED]])
+  })
+
+  // The entry and its Retry still stand, so a composer copy would run the turn twice.
+  it('settles nothing when the clear rejects', async () => {
+    const h = harness([FREE], { clear: () => Promise.reject(new Error('db gone')) })
+    await expect(settleCommittedPassRetry({ ...h.deps, stored: STORED })).rejects.toThrow('db gone')
+    expect(h.calls).toEqual(['read', 'clear'])
+  })
+
+  it('clears an entry that stores no text and settles nothing', async () => {
+    const h = harness([OCCUPIED])
     await settleCommittedPassRetry({ ...h.deps, stored: undefined })
-    expect(h.calls).toEqual(['dismiss'])
+    expect(h.calls).toEqual(['clear', 'reload'])
   })
 })
 
