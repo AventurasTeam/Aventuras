@@ -11,15 +11,25 @@ import { DESCRIPTOR_CATEGORIES } from '#lib/utils/visualDescriptors.ts'
 
 const log = createLogger('WorldStateTranslationService')
 
+/** The character fields that carry text to translate. */
+export const CHARACTER_TEXT_FIELDS = [
+  'name',
+  'description',
+  'relationship',
+  'traits',
+  'visualDescriptors',
+] as const satisfies readonly (keyof Character)[]
+
+export type CharacterTextField = (typeof CHARACTER_TEXT_FIELDS)[number]
+
+/** A character a classification wrote: the text fields it changed, or all of one it created. */
+export interface WrittenCharacter {
+  id: string
+  fields: 'all' | readonly CharacterTextField[]
+}
+
 /** New entities from classification result. */
 export interface ClassificationNewEntities {
-  newCharacters: Array<{
-    name: string
-    description?: string
-    relationship?: string
-    traits?: string[]
-    visualDescriptors?: Record<string, string>
-  }>
   newLocations: Array<{ name: string; description?: string }>
   newItems: Array<{ name: string; description?: string }>
   newStoryBeats: Array<{ title: string; description?: string }>
@@ -58,11 +68,8 @@ export interface WorldStateTranslationInput {
   classificationResult: ClassificationNewEntities
   worldState: WorldStateEntities
   targetLanguage: string
-  /**
-   * Existing characters the classifier updated, as stored after it. A rewrite drops a field's
-   * translation, so each field with text and no translation is translated.
-   */
-  updatedCharacters?: Character[]
+  /** The characters the classification wrote; the fields it changed are translated. */
+  characters?: readonly WrittenCharacter[]
 }
 
 export interface WorldStateTranslationResult {
@@ -106,18 +113,10 @@ export class WorldStateTranslationService {
     const { storyId, classificationResult, worldState, targetLanguage } = input
     const items: TranslationItem[] = []
 
-    // Characters are translated from their stored rows. An updated one only where a field has
-    // no translation, and first, so a name the classifier also listed as new keeps its own text.
-    const queued = new Set<string>()
-    const queueCharacter = (char: Character, onlyMissing: boolean) => {
-      if (queued.has(char.id)) return
-      queued.add(char.id)
-      items.push(...characterItems(char, onlyMissing))
-    }
-    for (const char of input.updatedCharacters ?? []) queueCharacter(char, true)
-    for (const char of classificationResult.newCharacters) {
-      const db = worldState.characters.find((c) => c.name === char.name)
-      if (db) queueCharacter(db, false)
+    // Characters are translated from their stored rows.
+    for (const { id, fields } of input.characters ?? []) {
+      const char = worldState.characters.find((c) => c.id === id)
+      if (char) items.push(...characterItems(char, fields))
     }
 
     // Collect location fields
@@ -242,9 +241,9 @@ export class WorldStateTranslationService {
 
 // Traits and appearance go one trait or category per item, so a comma inside one cannot split
 // it and the appearance comes back as categories.
-function characterItems(char: Character, onlyMissing: boolean): TranslationItem[] {
+function characterItems(char: Character, fields: WrittenCharacter['fields']): TranslationItem[] {
   const items: TranslationItem[] = []
-  const wanted = (translation: unknown) => !onlyMissing || !translation
+  const wanted = (field: CharacterTextField) => fields === 'all' || fields.includes(field)
   const add = (
     field: TranslatedField,
     key: string,
@@ -263,29 +262,29 @@ function characterItems(char: Character, onlyMissing: boolean): TranslationItem[
       ...part,
     })
 
-  if (char.name && wanted(char.translatedName))
+  if (char.name && wanted('name'))
     add('translatedName', 'name', char.name, (c) => c.name === char.name)
-  if (char.description && wanted(char.translatedDescription))
+  if (char.description && wanted('description'))
     add(
       'translatedDescription',
       'desc',
       char.description,
       (c) => c.description === char.description,
     )
-  if (char.relationship && wanted(char.translatedRelationship))
+  if (char.relationship && wanted('relationship'))
     add(
       'translatedRelationship',
       'rel',
       char.relationship,
       (c) => c.relationship === char.relationship,
     )
-  if (wanted(char.translatedTraits)) {
+  if (wanted('traits')) {
     const sameTraits = (c: Character) => sameValue(c.traits, char.traits)
     ;(char.traits ?? []).forEach((text, trait) =>
       add('translatedTraits', `trait:${trait}`, text, sameTraits, { trait }),
     )
   }
-  if (wanted(char.translatedVisualDescriptors)) {
+  if (wanted('visualDescriptors')) {
     const sameLook = (c: Character) => sameValue(c.visualDescriptors, char.visualDescriptors)
     for (const category of DESCRIPTOR_CATEGORIES) {
       const value = char.visualDescriptors?.[category]

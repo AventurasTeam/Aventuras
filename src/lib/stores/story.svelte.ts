@@ -68,7 +68,6 @@ import {
   type ReversalPlan,
   type TrackedRow,
   type TrackedState,
-  staleTranslations,
 } from '#lib/services/stateTracking/index.ts'
 import {
   DELETE_ROW,
@@ -141,6 +140,8 @@ import {
   buildLoreManagementCallbacks,
   buildLoreManagementUICallbacks,
   resolveCharacterPresence,
+  CHARACTER_TEXT_FIELDS,
+  type WrittenCharacter,
   type LoreSessionWrites,
   type WorldState,
 } from '#lib/services/generation/index.ts'
@@ -151,11 +152,8 @@ import { storyDetailsUpdate } from '#lib/utils/storyDetails.ts'
 import { grammarService } from '#lib/services/grammar.ts'
 import {
   clearTier3SelectionCache,
-  planCharacterChanges,
-  planRename,
-  responseCast,
-  traitList,
-  viewsForApply,
+  planCharacterResponse,
+  type CharacterSource,
 } from '#lib/services/ai/index.ts'
 import { clearImageMarkerCache } from '#lib/services/image/index.ts'
 import { GenerationLease } from '#lib/utils/generationLease.ts'
@@ -3221,10 +3219,13 @@ class StoryStore {
    * Apply classification results to update world state.
    * This is Phase 4 of the processing pipeline per design doc.
    */
-  async applyClassificationResult(result: ClassificationResult, entryId?: string): Promise<void> {
+  async applyClassificationResult(
+    result: ClassificationResult,
+    entryId?: string,
+  ): Promise<WrittenCharacter[]> {
     if (!this.currentStory) {
       log('applyClassificationResult: No story loaded, skipping')
-      return
+      return []
     }
 
     log('applyClassificationResult called', {
@@ -3253,106 +3254,65 @@ class StoryStore {
     const recordCtx = entryId ? this.recordContext({ origin: 'classifier', entryId }) : null
     const stateBefore = recordCtx ? cloneState(classifierView(this.trackedState())) : null
 
-    const shownToClassifier = viewsForApply(result._shownCharacters, this.characters)
-
-    // Renames first, so the rest of the response finds a renamed character by either name.
-    const cast = responseCast(this.characters)
-    // An update whose listed name matches no one but whose new name does is about that one.
-    const updateTarget = (update: (typeof result.entryUpdates.characterUpdates)[number]) => {
-      const newName = update.changes.newName?.trim()
-      return (
-        cast.find(this.characters, update.name) ??
-        (newName ? cast.find(this.characters, newName) : undefined)
-      )
-    }
-    for (const update of result.entryUpdates.characterUpdates) {
-      const newName = update.changes.newName
-      if (!newName) continue
-      await this.wrapUpdate('Rename character', update.name, async () => {
-        const existing = cast.find(this.characters, update.name)
-        if (!existing) return
-        const plan = planRename(existing, newName, this.characters)
-        if (!plan) return
-        if ('refused' in plan) {
-          log('Ignored character rename:', existing.name, newName, plan.refused)
-          return
-        }
-        const changes: Partial<Character> = { name: plan.name, translatedName: null }
-        const { entity: ownedChar } = await this.cowTracked('character', existing)
-        await database.updateCharacter(ownedChar.id, changes)
-        this.characters = this.characters.map((c) =>
-          c.id === ownedChar.id ? { ...c, ...changes } : c,
+    const plan = planCharacterResponse(
+      this.characters,
+      {
+        updates: result.entryUpdates.characterUpdates,
+        newCharacters: result.entryUpdates.newCharacters,
+        presentNames: result.scene.presentCharacterNames ?? [],
+      },
+      result._shownCharacters,
+    )
+    for (const refused of plan.refusedRenames) log('Ignored character rename:', refused)
+    const withRuntimeVars = (
+      metadata: Record<string, unknown> | null,
+      sources: readonly CharacterSource[],
+    ) =>
+      sources.reduce((merged, source) => {
+        const vars = extractInlineCustomVars(
+          source as unknown as Record<string, unknown>,
+          defsByName,
         )
+        return Object.keys(vars).length > 0 ? mergeRuntimeVars(merged, vars, defsByName) : merged
+      }, metadata)
+    const written: WrittenCharacter[] = []
+
+    for (const { character, changes, ignored, sources } of plan.updates) {
+      await this.wrapUpdate('Update character', character.name, async () => {
+        if (ignored.length > 0) log('Ignored character rewrites:', character.name, ignored)
+        const existing = this.characters.find((c) => c.id === character.id)
+        if (!existing) return
+        const metadata = withRuntimeVars(existing.metadata, sources)
+        const update = metadata === existing.metadata ? changes : { ...changes, metadata }
+        if (Object.keys(update).length === 0) return
+        log('Updating character:', character.name, update)
+        // COW: ensure entity is owned by current branch before updating
+        const { entity: ownedChar } = await this.cowTracked('character', existing)
+        await database.updateCharacter(ownedChar.id, update)
+        this.characters = this.characters.map((c) =>
+          c.id === ownedChar.id ? { ...c, ...update } : c,
+        )
+        written.push({
+          id: ownedChar.id,
+          fields: CHARACTER_TEXT_FIELDS.filter((field) => field in changes),
+        })
       })
     }
 
-    // Apply character updates
-    for (const update of result.entryUpdates.characterUpdates) {
-      await this.wrapUpdate('Update character', update.name, async () => {
-        let existing = updateTarget(update)
-
-        // If character doesn't exist yet, create it first
-        if (!existing) {
-          const newName = update.changes.newName?.trim()
-          const newCharData = result.entryUpdates.newCharacters.find(
-            (nc) =>
-              sameEntityName(nc.name, update.name) ||
-              (!!newName && sameEntityName(nc.name, newName)),
-          )
-          log('Creating character from update (not found):', update.name)
-          const charMetadata: Record<string, unknown> = { source: 'classifier' }
-          if (newCharData) {
-            const newCharInlineVars = extractInlineCustomVars(
-              newCharData as unknown as Record<string, unknown>,
-              defsByName,
-            )
-            if (Object.keys(newCharInlineVars).length > 0) {
-              Object.assign(charMetadata, mergeRuntimeVars(null, newCharInlineVars, defsByName))
-            }
-          }
-          const character: Character = {
-            id: crypto.randomUUID(),
-            storyId,
-            name: newName || (newCharData?.name ?? update.name),
-            description: newCharData?.description ?? null,
-            relationship: newCharData?.relationship ?? null,
-            traits: traitList(newCharData?.traits ?? []),
-            visualDescriptors: newCharData?.visualDescriptors ?? {},
-            status: (newCharData?.status as Character['status']) ?? 'active',
-            metadata: charMetadata,
-            portrait: null,
-            branchId: this.currentStory?.currentBranchId ?? null,
-          }
-          await database.addCharacter(character)
-          this.characters = [...this.characters, character]
-          existing = character
+    for (const { fields, sources } of plan.creates) {
+      await this.wrapUpdate('Add character', fields.name, async () => {
+        log('Adding new character:', fields.name)
+        const character: Character = {
+          id: crypto.randomUUID(),
+          storyId,
+          ...fields,
+          metadata: withRuntimeVars({ source: 'classifier' }, sources),
+          portrait: null,
+          branchId: this.currentStory?.currentBranchId ?? null,
         }
-
-        if (existing) {
-          log('Updating character:', update.name, update.changes)
-          const { changes, ignored } = planCharacterChanges(
-            existing,
-            update.changes,
-            shownToClassifier(cast.listedName(existing)),
-          )
-          if (ignored.length > 0) log('Ignored character rewrites:', existing.name, ignored)
-          // Merge inline runtime variable values into metadata if present
-          const charInlineVars = extractInlineCustomVars(
-            update.changes as unknown as Record<string, unknown>,
-            defsByName,
-          )
-          if (Object.keys(charInlineVars).length > 0) {
-            changes.metadata = mergeRuntimeVars(existing.metadata, charInlineVars, defsByName)
-          }
-          if (Object.keys(changes).length === 0) return
-          // COW: ensure entity is owned by current branch before updating
-          const { entity: ownedChar } = await this.cowTracked('character', existing)
-          await database.updateCharacter(ownedChar.id, changes)
-          this.characters = this.characters.map((c) =>
-            c.id === ownedChar.id ? { ...c, ...changes } : c,
-          )
-          // If COW'd, track override as created (rollback = delete override)
-        }
+        await database.addCharacter(character)
+        this.characters = [...this.characters, character]
+        written.push({ id: character.id, fields: 'all' })
       })
     }
 
@@ -3570,39 +3530,6 @@ class StoryStore {
       })
     }
 
-    // Add new characters (check for duplicates)
-    for (const newChar of result.entryUpdates.newCharacters) {
-      await this.wrapUpdate('Add character', newChar.name, async () => {
-        const exists = this.characters.some((c) => sameEntityName(c.name, newChar.name))
-        if (!exists) {
-          log('Adding new character:', newChar.name)
-          const charMetadata: Record<string, unknown> = { source: 'classifier' }
-          const newCharInlineVars = extractInlineCustomVars(
-            newChar as unknown as Record<string, unknown>,
-            defsByName,
-          )
-          if (Object.keys(newCharInlineVars).length > 0) {
-            Object.assign(charMetadata, mergeRuntimeVars(null, newCharInlineVars, defsByName))
-          }
-          const character: Character = {
-            id: crypto.randomUUID(),
-            storyId,
-            name: newChar.name,
-            description: newChar.description ?? null,
-            relationship: newChar.relationship ?? null,
-            traits: traitList(newChar.traits ?? []),
-            visualDescriptors: newChar.visualDescriptors ?? {},
-            status: 'active',
-            metadata: charMetadata,
-            portrait: null,
-            branchId: this.currentStory?.currentBranchId ?? null,
-          }
-          await database.addCharacter(character)
-          this.characters = [...this.characters, character]
-        }
-      })
-    }
-
     // Handle scene.currentLocationName - update current location if specified
     // Runs before newLocations so stubs are available for merging
     if (result.scene.currentLocationName) {
@@ -3798,13 +3725,9 @@ class StoryStore {
     // are already in `this.characters` and the explicit updates above have had their say.
     const presenceChanges = resolveCharacterPresence({
       characters: this.characters,
-      presentNames: (result.scene.presentCharacterNames ?? []).map(
-        (name) => cast.find(this.characters, name)?.name ?? name,
-      ),
-      newNames: result.entryUpdates.newCharacters.map((c) => c.name),
-      explicitStatusNames: result.entryUpdates.characterUpdates
-        .filter((u) => u.changes.status !== undefined)
-        .map((u) => updateTarget(u)?.name ?? u.name),
+      presentNames: plan.presentNames,
+      newNames: plan.newNames,
+      explicitStatusNames: plan.explicitStatusNames,
       hadError: !!result._error,
     })
 
@@ -3893,6 +3816,7 @@ class StoryStore {
           result.entryUpdates.newStoryBeats.length + result.entryUpdates.storyBeatUpdates.length,
       })
     }
+    return written
   }
 
   // Clear current story (when switching or closing)
@@ -4516,7 +4440,9 @@ class StoryStore {
             undefined, // no "recent chat history" framing — the chapter content IS the input
             currentTime,
           ),
-        applyClassificationResult: (result) => this.applyClassificationResult(result),
+        applyClassificationResult: async (result) => {
+          await this.applyClassificationResult(result)
+        },
       })
 
       const result = await service.run(
@@ -5996,8 +5922,8 @@ class StoryStore {
           visualDescriptors: snapshot.visualDescriptors ?? {},
           portrait: snapshot.portrait, // null means no portrait
         }
-        const stale = staleTranslations('character', character, restored, snapshot.translations)
-        return [[character.id, { ...restored, ...stale }]]
+        // The translations of the snapshot's text go back with it, where it holds them.
+        return [[character.id, { ...restored, ...snapshot.translations }]]
       }),
     )
 

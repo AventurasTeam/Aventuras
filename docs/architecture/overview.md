@@ -306,7 +306,8 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   never erases one, and a rewrite or status equal to the current value writes nothing.
   A rewritten field drops its translation, which would otherwise be shown in its place, and
   with world-state translation on it is translated again after the turn, as a new character's
-  fields are (`WorldStateTranslationService`, `updatedCharacters`). Characters are translated
+  fields are: `applyClassificationResult` returns the characters it wrote and the text fields
+  it changed (`WrittenCharacter`), and only those are translated. Characters are translated
   from their stored rows, traits one by one and appearance by category, and a field is written
   only whole and only while the character still holds the text that was sent, so a revert
   landing mid-translation is not overwritten. Answers are matched to what was sent by id, and a
@@ -319,13 +320,15 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
 
   **A character listed under a placeholder is renamed when the story reveals their name.**
   `characterUpdates[].changes.newName` carries it, under the listed name (`planRename`).
-  Renames apply before every other update, and the rest of the response may name the character
-  either way (`responseCast`): the other updates, the presence list and the shown-list gate all
-  resolve both. A character is followed by its row, not its name, so two renames in one response
-  (Bob to Robert, the stranger to Bob) keep two characters; a listed name means the character
-  listed under it. A name another character already holds is refused and logged, because that
+  What a response does to the cast is planned whole before anything is written
+  (`planCharacterResponse`), and the store, the presence pass and the scene image all read the
+  same plan. Renames apply first, and the rest of the response may name the character either
+  way. A listed name means the character listed under it, so two renames in one response (Bob
+  to Robert, the stranger to Bob) keep two characters. Each character gets one write, its
+  rename included. A name another character already holds is refused and logged, because that
   is a duplicate to merge, not a rename; so is any rename of the protagonist. An update whose
-  listed name matches no one goes to the character holding its new name, or creates one under it.
+  listed name matches no one goes to the character holding its new name, or creates one under
+  it from the `newCharacters` entry filed under either name, and answers to both.
 
   **`scene.currentLocationName` is the only thing that moves the scene.** It creates the
   location if the name is new, marks it `current` and `visited`, and clears the previous

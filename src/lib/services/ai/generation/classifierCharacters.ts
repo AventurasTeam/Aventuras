@@ -7,7 +7,7 @@
  */
 
 import type { Character, VisualDescriptors } from '#lib/types/index.ts'
-import type { CharacterUpdate, ShownCharacter } from '../sdk/schemas/classifier'
+import type { CharacterUpdate, NewCharacter, ShownCharacter } from '../sdk/schemas/classifier'
 import { sameEntityName, termKey, uniqueTerms } from '#lib/utils/text.ts'
 import {
   DESCRIPTOR_CATEGORIES,
@@ -85,23 +85,200 @@ export function planRename(
   return { name }
 }
 
-// A copy-on-write override has its own id; the row it overrides is the character.
-const rootId = (c: Character) => c.overridesId ?? c.id
+/** The parts of a classifier response that are about characters. */
+export interface CharacterResponse {
+  updates: readonly CharacterUpdate[]
+  newCharacters: readonly NewCharacter[]
+  presentNames: readonly string[]
+}
+
+/** What the response sent about a character, in order; the caller reads its runtime variables. */
+export type CharacterSource = CharacterUpdate['changes'] | NewCharacter
+
+export type NewCharacterFields = Pick<
+  Character,
+  'name' | 'description' | 'relationship' | 'traits' | 'visualDescriptors' | 'status'
+>
+
+export interface PlannedUpdate {
+  /** The row as the response found it. */
+  character: Character
+  /** Every change the response makes to it, renames included, as one write. */
+  changes: Partial<Character>
+  ignored: IgnoredRewrite[]
+  sources: CharacterSource[]
+}
+
+export interface PlannedCreate {
+  fields: NewCharacterFields
+  sources: CharacterSource[]
+}
+
+export interface CharacterResponsePlan {
+  updates: PlannedUpdate[]
+  creates: PlannedCreate[]
+  refusedRenames: Array<{ name: string; newName: string; reason: RenameRefusal }>
+  /** Who the response places in the scene, by the names they have once it is applied. */
+  presentNames: string[]
+  /** The `newCharacters` entries, by the names they have once it is applied. */
+  newNames: string[]
+  /** The characters an update gave a status, by the names they have once it is applied. */
+  explicitStatusNames: string[]
+  /** The ids of existing characters the response places in the scene. */
+  presentIds: string[]
+}
+
+interface Planned {
+  /** The existing row, or null for a character the response creates. */
+  original: Character | null
+  /** The name the classifier was shown, for an existing character. */
+  listed: string | null
+  /** Other names the response gave a character it creates. */
+  aliases: string[]
+  row: Character
+  changes: Partial<Character>
+  ignored: IgnoredRewrite[]
+  sources: CharacterSource[]
+}
 
 /**
- * Finds the character a response names, while its renames are applied. The response names
- * characters as they were listed, so a listed name wins over the same name given to someone
- * else by a rename; any other name is looked up in the cast as it is now.
+ * What a whole response does to the cast, worked out on a copy so it can be applied, and
+ * tested, as one plan. The response names characters as they were listed: a listed name means
+ * that character even after a rename in the same response gave the name to someone else, and
+ * any other name is looked up by the names the plan has given so far. Renames apply first, so
+ * the rest of the response may name a renamed character either way.
+ *
+ * An update naming no one goes to the character holding its new name, or creates one under it
+ * from the `newCharacters` entry filed under either name, and answers to both. A
+ * `newCharacters` entry naming a character that exists, by any of its names, adds nothing.
  */
-export function responseCast(listed: readonly Character[]) {
+export function planCharacterResponse(
+  cast: readonly Character[],
+  response: CharacterResponse,
+  shown: readonly ShownCharacter[] | undefined,
+): CharacterResponsePlan {
+  const view = viewsForApply(shown, cast)
+  const planned: Planned[] = cast.map((c) => ({
+    original: c,
+    listed: c.name,
+    aliases: [],
+    row: { ...c },
+    changes: {},
+    ignored: [],
+    sources: [],
+  }))
+  const find = (name: string) =>
+    planned.find((p) => p.listed !== null && sameEntityName(p.listed, name)) ??
+    planned.find(
+      (p) => sameEntityName(p.row.name, name) || p.aliases.some((a) => sameEntityName(a, name)),
+    )
+  const write = (p: Planned, changes: Partial<Character>) => {
+    Object.assign(p.row, changes)
+    if (p.original) Object.assign(p.changes, changes)
+  }
+  const create = (
+    name: string,
+    data: NewCharacter | undefined,
+    status: Character['status'],
+    aliases: string[] = [],
+  ) => {
+    const p: Planned = {
+      original: null,
+      listed: null,
+      aliases,
+      row: {
+        id: `new:${planned.length}`,
+        storyId: '',
+        name,
+        description: data?.description ?? null,
+        relationship: data?.relationship ?? null,
+        traits: traitList(data?.traits ?? []),
+        visualDescriptors: data?.visualDescriptors ?? {},
+        status,
+        metadata: null,
+        portrait: null,
+        branchId: null,
+      },
+      changes: {},
+      ignored: [],
+      sources: data ? [data] : [],
+    }
+    planned.push(p)
+    return p
+  }
+
+  const refusedRenames: CharacterResponsePlan['refusedRenames'] = []
+  for (const update of response.updates) {
+    const newName = update.changes.newName
+    const target = newName ? find(update.name) : undefined
+    if (!newName || !target) continue
+    const rename = planRename(
+      target.row,
+      newName,
+      planned.map((p) => p.row),
+    )
+    if (rename && 'refused' in rename)
+      refusedRenames.push({ name: target.row.name, newName, reason: rename.refused })
+    else if (rename) write(target, { name: rename.name, translatedName: null })
+  }
+
+  const used = new Set<NewCharacter>()
+  const statusTargets: Planned[] = []
+  for (const update of response.updates) {
+    const newName = update.changes.newName?.trim()
+    let target = find(update.name) ?? (newName ? find(newName) : undefined)
+    if (!target) {
+      const data = response.newCharacters.find(
+        (nc) =>
+          !used.has(nc) &&
+          (sameEntityName(nc.name, update.name) || (!!newName && sameEntityName(nc.name, newName))),
+      )
+      if (data) used.add(data)
+      target = create(newName || (data?.name ?? update.name), data, data?.status ?? 'active', [
+        update.name,
+        ...(data ? [data.name] : []),
+      ])
+    }
+    const { changes, ignored } = planCharacterChanges(
+      target.row,
+      update.changes,
+      target.original ? view(target.listed ?? target.row.name) : CREATED_THIS_RUN,
+    )
+    write(target, changes)
+    target.ignored.push(...ignored)
+    target.sources.push(update.changes)
+    if (update.changes.status !== undefined) statusTargets.push(target)
+  }
+
+  for (const nc of response.newCharacters) {
+    if (!used.has(nc) && !find(nc.name)) create(nc.name, nc, 'active')
+  }
+
+  const finalName = (name: string) => find(name)?.row.name ?? name
   return {
-    find(cast: readonly Character[], name: string): Character | undefined {
-      const was = listed.find((c) => sameEntityName(c.name, name))
-      const now = was && cast.find((c) => rootId(c) === rootId(was))
-      return now ?? cast.find((c) => sameEntityName(c.name, name))
-    },
-    /** The name the classifier was shown for `c`, or its own if it was not listed. */
-    listedName: (c: Character) => listed.find((l) => rootId(l) === rootId(c))?.name ?? c.name,
+    updates: planned.flatMap((p) =>
+      p.original && (Object.keys(p.changes).length > 0 || p.sources.length > 0)
+        ? [{ character: p.original, changes: p.changes, ignored: p.ignored, sources: p.sources }]
+        : [],
+    ),
+    creates: planned.flatMap((p) => {
+      if (p.original) return []
+      const { name, description, relationship, traits, visualDescriptors, status } = p.row
+      return [
+        {
+          fields: { name, description, relationship, traits, visualDescriptors, status },
+          sources: p.sources,
+        },
+      ]
+    }),
+    refusedRenames,
+    presentNames: response.presentNames.map(finalName),
+    newNames: response.newCharacters.map((nc) => finalName(nc.name)),
+    explicitStatusNames: statusTargets.map((p) => p.row.name),
+    presentIds: response.presentNames.flatMap((name) => {
+      const original = find(name)?.original
+      return original ? [original.id] : []
+    }),
   }
 }
 

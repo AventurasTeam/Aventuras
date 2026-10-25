@@ -12,7 +12,7 @@ import {
   type TrackedRow,
   type TrackedState,
 } from './state'
-import { UNRECORDED_FIELDS, recordedRow, staleTranslations } from './record'
+import { UNRECORDED_FIELDS, recordedRow } from './record'
 
 /** A database write that carries the live state along with the plan. */
 export type ReversalOp =
@@ -93,19 +93,16 @@ class Workspace {
 
   /**
    * A row written again from a record takes the columns records leave out (a portrait, the
-   * translations) from the row as it was, where it existed, except a translation of text the
-   * row no longer has: that one comes from `saved`, the whole row the record holds, or is
-   * dropped.
+   * translations) from the row as it was, where it existed.
    */
-  withUnrecorded(type: TrackedEntityType, row: TrackedRow, saved: object | null = row): TrackedRow {
+  withUnrecorded(type: TrackedEntityType, row: TrackedRow): TrackedRow {
     const was = rowsOf(this.original, type).find((r) => r.id === row.id) as
       Record<string, unknown> | undefined
     if (!was) return row
     const kept = Object.fromEntries(
       [...UNRECORDED_FIELDS].filter((key) => key in was).map((key) => [key, was[key]]),
     )
-    const stale = staleTranslations(type, was, row, saved)
-    return { ...row, ...kept, ...stale } as TrackedRow
+    return { ...row, ...kept } as TrackedRow
   }
 
   find(type: TrackedEntityType, id: string): TrackedRow | undefined {
@@ -128,12 +125,8 @@ class Workspace {
   patch(type: TrackedEntityType, id: string, fields: Record<string, unknown>): boolean {
     const row = this.find(type, id)
     if (!row) return false
-    const written = {
-      ...fields,
-      ...staleTranslations(type, row, fields),
-    }
-    this.put(type, { ...row, ...written } as TrackedRow)
-    this.ops.push({ kind: 'update', entityType: type, id, fields: written })
+    this.put(type, { ...row, ...fields } as TrackedRow)
+    this.ops.push({ kind: 'update', entityType: type, id, fields })
     return true
   }
 
@@ -211,20 +204,14 @@ class Workspace {
         const shadow = this.shadowed.get(id)
         const visible = shadow && this.find(type, shadow.id)
         if (!visible) return null
-        // `visible`'s translations are of the parent's text, not of what this update wrote.
-        const override = this.withUnrecorded(
-          type,
-          {
-            ...visible,
-            ...record.after,
-            ...staleTranslations(type, visible, record.after, record.after),
-            id,
-            branchId: record.branchId,
-            overridesId: canonicalId(visible),
-            deleted: false,
-          } as TrackedRow,
-          record.after,
-        )
+        const override = this.withUnrecorded(type, {
+          ...visible,
+          ...record.after,
+          id,
+          branchId: record.branchId,
+          overridesId: canonicalId(visible),
+          deleted: false,
+        } as TrackedRow)
         this.remove(type, visible.id)
         this.put(type, override)
         this.ops.push({ kind: 'restore', entityType: type, row: override })

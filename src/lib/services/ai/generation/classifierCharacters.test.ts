@@ -1,15 +1,18 @@
 import { describe, it, expect } from 'vitest'
 import type { Character } from '#lib/types/index.ts'
+import type { CharacterUpdate } from '../sdk/schemas/classifier'
 import {
   classifierCharacterView,
   formatExistingCharacters,
   planCharacterChanges,
   planRename,
-  responseCast,
+  planCharacterResponse,
   shownCharacters,
   shownInPrompt,
   traitList,
   viewsForApply,
+  type CharacterResponse,
+  type CharacterResponsePlan,
   type ClassifierCharacterView,
 } from './classifierCharacters'
 
@@ -32,51 +35,202 @@ describe('planRename', () => {
   })
 })
 
-describe('responseCast', () => {
-  const renamed = (c: Character, name: string) => ({ ...c, name })
+describe('planCharacterResponse', () => {
+  const me = character('Me', { relationship: 'self' })
+  const vendor = character('weapon vendor', { description: 'Sells blades.' })
+  const mira = character('Mira')
+  const cast = [me, vendor, mira]
+  const update = (name: string, changes: CharacterUpdate['changes']): CharacterUpdate => ({
+    name,
+    changes,
+  })
+  const plan = (
+    response: Partial<CharacterResponse>,
+    characters: Character[] = cast,
+  ): CharacterResponsePlan =>
+    planCharacterResponse(
+      characters,
+      { updates: [], newCharacters: [], presentNames: [], ...response },
+      shownCharacters(characters),
+    )
 
-  it('finds a renamed character by the name it was listed under or its new one', () => {
-    const vendor = character('weapon vendor')
-    const cast = responseCast([vendor, character('Mira')])
-    const now = [renamed(vendor, 'Darek'), character('Mira')]
-    expect(cast.find(now, 'Weapon Vendor')?.name).toBe('Darek')
-    expect(cast.find(now, 'darek')?.name).toBe('Darek')
-    expect(cast.listedName(now[0])).toBe('weapon vendor')
-    expect(cast.find(now, 'Mira')?.name).toBe('Mira')
+  it('renames a character and applies its other changes in one write', () => {
+    const result = plan({
+      updates: [
+        update('weapon vendor', { newName: 'Darek', description: 'Sells blades. A veteran.' }),
+      ],
+      presentNames: ['Darek'],
+    })
+    expect(result.updates).toHaveLength(1)
+    expect(result.updates[0].character.id).toBe(vendor.id)
+    expect(result.updates[0].changes).toMatchObject({
+      name: 'Darek',
+      translatedName: null,
+      description: 'Sells blades. A veteran.',
+    })
+    expect(result.creates).toEqual([])
+    expect(result.presentNames).toEqual(['Darek'])
+    expect(result.presentIds).toEqual([vendor.id])
+  })
+
+  it('finds a renamed character by its new name anywhere else in the response', () => {
+    const result = plan({
+      updates: [
+        update('weapon vendor', { newName: 'Darek' }),
+        update('Darek', { status: 'inactive' }),
+      ],
+      presentNames: ['weapon vendor'],
+    })
+    expect(result.updates).toHaveLength(1)
+    expect(result.updates[0].changes).toMatchObject({ name: 'Darek', status: 'inactive' })
+    expect(result.explicitStatusNames).toEqual(['Darek'])
+    expect(result.presentNames).toEqual(['Darek'])
   })
 
   it('keeps two characters apart when one takes the name the other gave up', () => {
     const bob = character('Bob')
     const stranger = character('the stranger')
-    const cast = responseCast([bob, stranger])
-    const now = [renamed(bob, 'Robert'), renamed(stranger, 'Bob')]
-    expect(cast.find(now, 'the stranger')?.id).toBe(stranger.id)
-    expect(cast.find(now, 'Bob')?.id).toBe(bob.id)
-    expect(cast.listedName(now[0])).toBe('Bob')
-    expect(cast.listedName(now[1])).toBe('the stranger')
+    const result = plan(
+      {
+        updates: [
+          update('Bob', { newName: 'Robert' }),
+          update('the stranger', { newName: 'Bob', description: 'A drifter.' }),
+        ],
+      },
+      [bob, stranger],
+    )
+    const byId = new Map(result.updates.map((u) => [u.character.id, u.changes]))
+    expect(byId.get(bob.id)).toEqual({ name: 'Robert', translatedName: null })
+    expect(byId.get(stranger.id)).toMatchObject({ name: 'Bob', description: 'A drifter.' })
   })
 
   it('follows a character renamed twice in one response', () => {
-    const woman = character('hooded woman')
-    const cast = responseCast([woman])
-    expect(cast.find([renamed(woman, 'Sera')], 'Sera')?.id).toBe(woman.id)
-    const now = [renamed(woman, 'Seraphine')]
-    expect(cast.find(now, 'hooded woman')?.id).toBe(woman.id)
-    expect(cast.listedName(now[0])).toBe('hooded woman')
+    const result = plan({
+      updates: [
+        update('weapon vendor', { newName: 'Sera' }),
+        update('Sera', { newName: 'Seraphine' }),
+      ],
+    })
+    expect(result.updates).toHaveLength(1)
+    expect(result.updates[0].changes.name).toBe('Seraphine')
   })
 
-  it('follows a character onto the override a write gave it', () => {
-    const vendor = character('weapon vendor')
-    const cast = responseCast([vendor])
-    const override = { ...vendor, id: 'override', overridesId: vendor.id, name: 'Darek' }
-    expect(cast.find([override], 'weapon vendor')?.id).toBe('override')
-    expect(cast.listedName(override)).toBe('weapon vendor')
+  it('refuses a rename to a name someone holds, and the scene keeps the right character', () => {
+    const result = plan({
+      updates: [update('weapon vendor', { newName: 'Mira' })],
+      presentNames: ['Mira'],
+    })
+    expect(result.refusedRenames).toEqual([
+      { name: 'weapon vendor', newName: 'Mira', reason: 'taken' },
+    ])
+    expect(result.updates[0].changes).toEqual({})
+    expect(result.presentIds).toEqual([mira.id])
   })
 
-  it('gives a character created by the response its own name', () => {
-    const cast = responseCast([character('Mira')])
-    expect(cast.listedName(character('Darek'))).toBe('Darek')
-    expect(cast.find([character('Mira')], 'Darek')).toBeUndefined()
+  it('never renames the protagonist', () => {
+    const result = plan({ updates: [update('Me', { newName: 'Someone' })] })
+    expect(result.refusedRenames[0].reason).toBe('protagonist')
+  })
+
+  it('does not add a renamed character again when newCharacters lists it under either name', () => {
+    const result = plan({
+      updates: [update('weapon vendor', { newName: 'Darek' })],
+      newCharacters: [{ name: 'weapon vendor' }, { name: 'Darek' }],
+    })
+    expect(result.creates).toEqual([])
+    expect(result.newNames).toEqual(['Darek', 'Darek'])
+  })
+
+  it('creates a character renamed before it was listed once, from its newCharacters entry', () => {
+    const result = plan({
+      updates: [update('the hooded woman', { newName: 'Mara' })],
+      newCharacters: [{ name: 'the hooded woman', description: 'A smuggler.', traits: ['wary'] }],
+      presentNames: ['Mara'],
+    })
+    expect(result.creates).toHaveLength(1)
+    expect(result.creates[0].fields).toMatchObject({
+      name: 'Mara',
+      description: 'A smuggler.',
+      traits: ['wary'],
+      status: 'active',
+    })
+    expect(result.newNames).toEqual(['Mara'])
+    expect(result.presentNames).toEqual(['Mara'])
+  })
+
+  it('finds a character it created under the placeholder name too', () => {
+    const result = plan({
+      updates: [
+        update('the hooded woman', { newName: 'Mara' }),
+        update('the hooded woman', { status: 'inactive' }),
+      ],
+      newCharacters: [{ name: 'the hooded woman' }],
+    })
+    expect(result.creates).toHaveLength(1)
+    expect(result.creates[0].fields).toMatchObject({ name: 'Mara', status: 'inactive' })
+    expect(result.explicitStatusNames).toEqual(['Mara'])
+  })
+
+  it('takes the newCharacters entry filed under the revealed name', () => {
+    const result = plan({
+      updates: [update('the hooded woman', { newName: 'Mara' })],
+      newCharacters: [{ name: 'Mara', description: 'A smuggler.' }],
+    })
+    expect(result.creates).toHaveLength(1)
+    expect(result.creates[0].fields).toMatchObject({ name: 'Mara', description: 'A smuggler.' })
+  })
+
+  it('sends an unmatched update with a new name to the character holding it', () => {
+    const result = plan({
+      updates: [update('the weapons vendor', { newName: 'Mira', status: 'inactive' })],
+    })
+    expect(result.creates).toEqual([])
+    expect(result.updates[0].character.id).toBe(mira.id)
+    expect(result.updates[0].changes).toEqual({ status: 'inactive' })
+  })
+
+  it('creates a character for an update naming no one', () => {
+    const result = plan({ updates: [update('Tobin', { status: 'active' })] })
+    expect(result.creates.map((c) => c.fields.name)).toEqual(['Tobin'])
+    expect(result.updates).toEqual([])
+  })
+
+  it('adds a new character once, and nothing for one that exists', () => {
+    const result = plan({
+      newCharacters: [
+        { name: 'Tobin', traits: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'] },
+        { name: 'mira' },
+      ],
+    })
+    expect(result.creates).toHaveLength(1)
+    expect(result.creates[0].fields.traits).toHaveLength(8)
+  })
+
+  it('gates rewrites by what the classifier was shown under the listed name', () => {
+    const hidden = character('the guard', { status: 'inactive', description: 'Bored.' })
+    const result = planCharacterResponse(
+      [hidden],
+      {
+        updates: [update('the guard', { newName: 'Hal', description: 'Short.' })],
+        newCharacters: [],
+        presentNames: [],
+      },
+      shownCharacters([hidden]),
+    )
+    expect(result.updates[0].changes).toEqual({ name: 'Hal', translatedName: null })
+    expect(result.updates[0].ignored).toEqual([{ field: 'description', reason: 'not shown' }])
+  })
+
+  it('keeps every update it applied as a source, for runtime variables', () => {
+    const first = { status: 'inactive' as const }
+    const second = { relationship: 'ally' }
+    const result = plan({ updates: [update('Mira', first), update('Mira', second)] })
+    expect(result.updates[0].sources).toEqual([first, second])
+    expect(result.updates[0].changes).toEqual({
+      status: 'inactive',
+      relationship: 'ally',
+      translatedRelationship: null,
+    })
   })
 })
 

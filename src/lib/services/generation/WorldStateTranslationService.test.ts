@@ -3,7 +3,7 @@ import { WorldStateTranslationService } from './WorldStateTranslationService'
 import type { Character } from '#lib/types/index.ts'
 
 describe('WorldStateTranslationService', () => {
-  it('returns translatedCount 0 when no matching entities are found', async () => {
+  it('returns translatedCount 0 when no written character is found', async () => {
     const translateUIElements = vi.fn()
     const service = new WorldStateTranslationService({ translateUIElements })
 
@@ -11,7 +11,6 @@ describe('WorldStateTranslationService', () => {
       {
         storyId: 'story-1',
         classificationResult: {
-          newCharacters: [{ name: 'Gareth', description: 'Missing rogue' }],
           newLocations: [],
           newItems: [],
           newStoryBeats: [],
@@ -23,6 +22,7 @@ describe('WorldStateTranslationService', () => {
           storyBeats: [],
         },
         targetLanguage: 'it',
+        characters: [{ id: 'gone', fields: 'all' }],
       },
       {
         updateCharacter: vi.fn(),
@@ -60,7 +60,6 @@ describe('WorldStateTranslationService', () => {
       {
         storyId: 'story-1',
         classificationResult: {
-          newCharacters: [{ name: 'Aria', description: 'Brave warrior' }],
           newLocations: [],
           newItems: [],
           newStoryBeats: [],
@@ -72,6 +71,7 @@ describe('WorldStateTranslationService', () => {
           storyBeats: [],
         },
         targetLanguage: 'it',
+        characters: [{ id: 'c1', fields: 'all' }],
       },
       {
         updateCharacter,
@@ -94,7 +94,7 @@ describe('WorldStateTranslationService', () => {
     expect(refreshWorldState).toHaveBeenCalled()
   })
 
-  it('translates the fields an update left without a translation, and only those', async () => {
+  it('translates the fields the classification changed, and only those', async () => {
     const translateUIElements = vi
       .fn()
       .mockImplementation(async (items) =>
@@ -119,14 +119,13 @@ describe('WorldStateTranslationService', () => {
       {
         storyId: 'story-1',
         classificationResult: {
-          newCharacters: [],
           newLocations: [],
           newItems: [],
           newStoryBeats: [],
         },
         worldState: { characters: [rewritten], locations: [], items: [], storyBeats: [] },
         targetLanguage: 'it',
-        updatedCharacters: [rewritten],
+        characters: [{ id: 'c1', fields: ['description'] }],
       },
       {
         updateCharacter,
@@ -167,14 +166,13 @@ describe('WorldStateTranslationService', () => {
         {
           storyId: 'story-1',
           classificationResult: {
-            newCharacters: [],
             newLocations: [],
             newItems: [],
             newStoryBeats: [],
           },
           worldState: { characters: [mira], locations: [], items: [], storyBeats: [] },
           targetLanguage: 'it',
-          updatedCharacters: [mira],
+          characters: [{ id: 'm1', fields: ['traits', 'visualDescriptors'] }],
         },
         {
           updateCharacter,

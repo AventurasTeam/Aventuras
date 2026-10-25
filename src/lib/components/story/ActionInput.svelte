@@ -21,7 +21,6 @@
   import { database } from '#lib/services/database.ts'
   import { SimpleActivationTracker } from '#lib/services/ai/retrieval/EntryRetrievalService.ts'
   import { TranslationService } from '#lib/services/ai/utils/TranslationService.ts'
-  import { sameEntityName } from '#lib/utils/text.ts'
   import { Send, Wand2, MessageSquare, Brain, Sparkles, PenLine, Square } from '@lucide/svelte'
   import Suggestions from './Suggestions.svelte'
   import GrammarCheck from './GrammarCheck.svelte'
@@ -59,6 +58,7 @@
     type GenerationContext,
     type RetrievalResult,
     type BackgroundTaskDependencies,
+    type WrittenCharacter,
     type BackgroundTaskInput,
     type PipelineUICallbacks,
     type PipelineEventState,
@@ -831,6 +831,7 @@
           }
           const entryId = narrationEntry.id
           const { _error, _salvaged } = event.result
+          let written: WrittenCharacter[] = []
           // A failed result still runs the entry's bookkeeping: its end time, and with state
           // tracking its header and maybe a snapshot.
           await trackStep(
@@ -845,7 +846,7 @@
                   : 'fallback bookkeeping only',
             },
             async () => {
-              await story.applyClassificationResult(event.result, entryId)
+              written = await story.applyClassificationResult(event.result, entryId)
               await story.updateEntryTimeEnd(entryId)
             },
           )
@@ -861,7 +862,6 @@
                 {
                   storyId: currentStoryRef.id,
                   classificationResult: {
-                    newCharacters: event.result.entryUpdates.newCharacters,
                     newLocations: event.result.entryUpdates.newLocations,
                     newItems: event.result.entryUpdates.newItems,
                     newStoryBeats: event.result.entryUpdates.newStoryBeats,
@@ -873,13 +873,7 @@
                     storyBeats: story.storyBeats,
                   },
                   targetLanguage: translationSettings.targetLanguage,
-                  updatedCharacters: story.characters.filter((c) =>
-                    event.result.entryUpdates.characterUpdates.some(
-                      (u) =>
-                        sameEntityName(u.name, c.name) ||
-                        (!!u.changes.newName && sameEntityName(u.changes.newName, c.name)),
-                    ),
-                  ),
+                  characters: written,
                 },
                 {
                   updateCharacter: (id, data) => database.updateCharacter(id, data),

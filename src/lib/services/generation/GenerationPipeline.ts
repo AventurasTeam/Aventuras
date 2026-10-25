@@ -48,7 +48,7 @@ import {
 } from './phases/BackgroundImagePhase'
 import { mergeGenerators } from '#lib/utils/async.ts'
 import { NO_ACTIVITY, trackPhase, type ActivityReporter } from '#lib/services/activity/index.ts'
-import { sameEntityName } from '#lib/utils/text.ts'
+import { planCharacterResponse } from '#lib/services/ai/index.ts'
 
 export interface PipelineDependencies
   extends
@@ -369,9 +369,8 @@ export class GenerationPipeline {
 
 /**
  * The characters the classification placed in the scene, out of the cast from before it was
- * applied. Matched the way presence is matched everywhere else: an exact-string compare dropped
- * the portrait reference for any name the model spelled differently. A character renamed this
- * turn is also looked for under the name it was listed with.
+ * applied, resolved by the same plan the store applies, so a renamed character is found under
+ * either name.
  *
  * The protagonist is added rather than looked for. They are in every scene by definition, so
  * whether the classifier remembered to name them says nothing — and leaving them out costs the
@@ -381,15 +380,14 @@ export function presentInScene(
   characters: readonly Character[],
   result: ClassificationPhaseResult['classificationResult'] | undefined,
 ): Character[] {
-  const present = result?.scene?.presentCharacterNames ?? []
-  const names = [
-    ...present,
-    ...(result?.entryUpdates?.characterUpdates ?? []).flatMap((u) => {
-      const newName = u.changes.newName
-      return newName && present.some((name) => sameEntityName(name, newName)) ? [u.name] : []
-    }),
-  ]
-  return characters.filter(
-    (c) => c.relationship === 'self' || names.some((name) => sameEntityName(c.name, name)),
+  const { presentIds } = planCharacterResponse(
+    characters,
+    {
+      updates: result?.entryUpdates?.characterUpdates ?? [],
+      newCharacters: result?.entryUpdates?.newCharacters ?? [],
+      presentNames: result?.scene?.presentCharacterNames ?? [],
+    },
+    result?._shownCharacters,
   )
+  return characters.filter((c) => c.relationship === 'self' || presentIds.includes(c.id))
 }

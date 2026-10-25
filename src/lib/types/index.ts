@@ -90,7 +90,7 @@ export interface PersistentRetryState {
 
 export interface PersistentCharacterSnapshot {
   id: string
-  /** Absent in snapshots saved before the classifier could rename or rewrite a character. */
+  /** Left as they are by a restore when the snapshot does not hold them. */
   name?: string
   description?: string | null
   traits: string[]

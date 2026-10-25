@@ -3084,7 +3084,7 @@ class DatabaseService {
     const rawTranslatedDescriptors = row.translated_visual_descriptors
       ? JSON.parse(row.translated_visual_descriptors)
       : null
-    // Translations were once saved as one "Face: …, Hair: …" string.
+    // A translation stored as one "Face: …, Hair: …" string is read back by category.
     const translatedDescriptors =
       typeof rawTranslatedDescriptors === 'string'
         ? stringToDescriptors(rawTranslatedDescriptors)

@@ -95,11 +95,9 @@ import type {
 import { EntryRetrievalService, getEntryRetrievalConfigFromSettings } from './retrieval'
 export { clearTier3SelectionCache } from './retrieval'
 export {
-  planCharacterChanges,
-  planRename,
-  responseCast,
-  traitList,
-  viewsForApply,
+  planCharacterResponse,
+  type CharacterResponsePlan,
+  type CharacterSource,
 } from './generation'
 import type {
   TimelineFillResult,
