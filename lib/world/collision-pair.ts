@@ -62,19 +62,26 @@ export function flagStillHolds(
   partner: Entity | undefined,
   /** Each row's side as a planned write leaves it; stored rows by default. */
   sideOf: (row: Entity) => PairSide = pairSideOf,
-): row is FlaggedEntity {
+): boolean {
   return (
-    row.nameCollisionFlag === 1 &&
-    row.nameCollisionReason != null &&
+    isFlagged(row) &&
     partner?.id === row.nameCollisionPartnerId &&
     stillPaired(row.nameCollisionReason, sideOf(row), sideOf(partner))
   )
 }
 
+function isFlagged(row: Entity): row is FlaggedEntity {
+  return (
+    row.nameCollisionFlag === 1 &&
+    row.nameCollisionPartnerId != null &&
+    row.nameCollisionReason != null
+  )
+}
+
 /** The row whose flag names the other and holds, `first` preferred; null when neither does. */
 export function flaggedSideOf(first: Entity, second: Entity): FlaggedEntity | null {
-  if (flagStillHolds(first, second)) return first
-  if (flagStillHolds(second, first)) return second
+  if (isFlagged(first) && flagStillHolds(first, second)) return first
+  if (isFlagged(second) && flagStillHolds(second, first)) return second
   return null
 }
 
