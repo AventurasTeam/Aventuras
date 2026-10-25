@@ -157,6 +157,7 @@ import {
   copiedLocationIds,
   itemLocationId,
   itemsAt,
+  itemsToMoveOnDelete,
   newItemLocation,
   normalizeItems,
   resolveItemLocation,
@@ -2730,19 +2731,22 @@ class StoryStore {
   }
 
   // Delete a location
+  canDeleteLocation(locationId: string): boolean {
+    return (
+      itemsToMoveOnDelete(this.items, this.locations, locationId, this.currentLocation?.id) !== null
+    )
+  }
+
   async deleteLocation(locationId: string, opts?: RecordOptions): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const location = this.locations.find((l) => l.id === locationId)
     if (!location) throw new Error('Location not found')
 
-    const ctx = this.recordContext(opts)
-    // Items left there go to the scene; with no other scene location they keep the dead id.
     const scene = this.currentLocation
-    const strays =
-      scene && scene.id !== locationId
-        ? itemsAt(this.items, this.locations, new Set([locationId]))
-        : []
+    const strays = itemsToMoveOnDelete(this.items, this.locations, locationId, scene?.id)
+    if (!strays) throw new Error('Location holds items and there is no other scene location')
+    const ctx = this.recordContext(opts)
     const move = this.moveItemsPlan(strays, scene?.id, ctx)
     const removal = this.deletePlan('location', location, ctx)
     await this.commit(

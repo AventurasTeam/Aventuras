@@ -318,8 +318,8 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   An update writes `location` and `equipped` together, so the row is rewritten the first time
   either changes or the item is saved in the panel; until then it is converted again on each
   load, against the locations as they are then. Deleting a location moves its items to the
-  scene's location; when it is the scene's, or there is none, an item keeps the id and reads
-  as "Unknown location".
+  scene's location. A location holding items cannot be deleted while it is the scene's, or
+  while there is none: the panel hides its delete button and `deleteLocation` refuses.
 
   **Presence is reported, departure is inferred.** The classifier answers one question about the
   cast — `scene.presentCharacterNames`, every _other_ character in the scene at the end of the

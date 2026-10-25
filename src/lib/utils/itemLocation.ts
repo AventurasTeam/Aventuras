@@ -191,6 +191,21 @@ export function copiedLocationIds(locations: readonly Location[]): Map<string, s
   return ids
 }
 
+/**
+ * The items deleting `locationId` moves to the scene's location, or `null` when it holds items
+ * and there is no other scene location to take them.
+ */
+export function itemsToMoveOnDelete<T extends Item>(
+  items: readonly T[],
+  locations: readonly Location[],
+  locationId: string,
+  sceneId: string | undefined,
+): T[] | null {
+  const strays = itemsAt(items, locations, new Set([locationId]))
+  if (strays.length === 0) return []
+  return sceneId && sceneId !== locationId ? strays : null
+}
+
 /** Items placed at any of `locationIds`, or at the root one of them overrides. */
 export function itemsAt<T extends Item>(
   items: readonly T[],

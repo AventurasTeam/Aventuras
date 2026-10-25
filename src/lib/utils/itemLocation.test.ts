@@ -4,6 +4,7 @@ import {
   copiedLocationIds,
   itemLocationLabel,
   itemsAt,
+  itemsToMoveOnDelete,
   newItemLocation,
   normalizeItemLocation,
   normalizeItems,
@@ -384,5 +385,23 @@ describe('itemsAt', () => {
     const override = location('Crystal Caverns', { id: 'loc-override', overridesId: cave.id })
     const lantern = item('Lantern', { location: cave.id })
     expect(itemsAt([lantern], [override], new Set([override.id]))).toEqual([lantern])
+  })
+})
+
+describe('itemsToMoveOnDelete', () => {
+  const lantern = item('Lantern', { location: cave.id })
+  const items = [lantern, item('Sword')]
+
+  it("moves a deleted location's items to the scene's location", () => {
+    expect(itemsToMoveOnDelete(items, [cave, tavern], cave.id, tavern.id)).toEqual([lantern])
+  })
+
+  it('refuses when the items would have nowhere to go', () => {
+    expect(itemsToMoveOnDelete(items, [cave, tavern], cave.id, cave.id)).toBeNull()
+    expect(itemsToMoveOnDelete(items, [cave, tavern], cave.id, undefined)).toBeNull()
+  })
+
+  it('allows deleting an empty location, even the scene', () => {
+    expect(itemsToMoveOnDelete(items, [cave, tavern], tavern.id, tavern.id)).toEqual([])
   })
 })
