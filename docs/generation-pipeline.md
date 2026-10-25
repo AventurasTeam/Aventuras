@@ -1225,7 +1225,7 @@ So this is not an observability-only state:
   holds nothing. A held branch no failure explains, because the reset
   threw or never ran, gets its own line. Other kinds describe the
   fault without promising a stop; if the hold can't be read, every
-  pass failure reads as held.
+  pass failure reads as held, and the title can't claim recovery.
 - Every variant says the story's content is intact. Each also says
   that restarting the app retries automatically, unless the reversal
   was refused as an integrity error (`ReversalIntegrityError`): every

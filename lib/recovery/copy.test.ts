@@ -203,6 +203,17 @@ describe('formatRecoveryTitle', () => {
       }),
     ).toBe('Recovery incomplete')
   })
+
+  // generation-pipeline.md → Recovery-failure policy: a hold that can't be read counts as one.
+  it('does not claim recovery when the hold could not be read', () => {
+    expect(
+      formatRecoveryTitle({
+        reversed: [recovered('per-turn', 'story_1')],
+        failures: [],
+        heldStoryIds: null,
+      }),
+    ).toBe('Recovery incomplete')
+  })
 })
 
 // generation-pipeline.md → Recovery-failure policy: the stop is promised only where the boot left

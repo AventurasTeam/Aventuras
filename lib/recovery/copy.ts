@@ -76,11 +76,11 @@ function unexplainedHolds(report: BootRecoveryReport): readonly string[] {
   return (report.heldStoryIds ?? []).filter((storyId) => !explained.has(storyId))
 }
 
-/** "Story recovered" over-claims while any orphan's writes are still on disk or a branch is held. */
+/** "Story recovered" over-claims while any orphan's writes are still on disk or a branch may be held. */
 export function formatRecoveryTitle(report: BootRecoveryReport): string {
   return report.reversed.length > 0 &&
     report.failures.length === 0 &&
-    (report.heldStoryIds?.length ?? 0) === 0
+    report.heldStoryIds?.length === 0
     ? t('crashRecovery.title')
     : t('crashRecovery.titleIncomplete')
 }
