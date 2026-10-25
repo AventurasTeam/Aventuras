@@ -2108,9 +2108,9 @@ describe('buildPiggybackActions — holders read by what they name', () => {
     place('loc_mill'),
     mockEntity({ id: 'fac_guild', kind: 'faction', name: 'the Guild', state: {} }),
   ]
-  const run = (transfers: Partial<ParsedTransfers>) =>
+  const run = (transfers: Partial<ParsedTransfers>, log: Logger = logger) =>
     buildPiggybackActions({
-      log: logger,
+      log,
       source: 'per_turn_classifier',
       entryId: 'entry_2',
       turn: planned({ transfers: { items: [], stackables: [], drops: [], ...transfers } }),
@@ -2219,6 +2219,56 @@ describe('buildPiggybackActions — holders read by what they name', () => {
         ]),
       ),
     ).toEqual(balances)
+  })
+
+  it.each([
+    [
+      'an item someone holds, as that character',
+      blade('item_satchel'),
+      { holderId: 'item_satchel', kind: 'item', readAs: 'character', characterId: 'char_bob' },
+    ],
+    [
+      "the scene's place, as here",
+      blade('loc_dock'),
+      { holderId: 'loc_dock', kind: 'location', readAs: 'here' },
+    ],
+    [
+      'an item lying elsewhere, as elsewhere',
+      blade('item_crate'),
+      { holderId: 'item_crate', kind: 'item', readAs: 'elsewhere' },
+    ],
+    [
+      'a faction, as omitted',
+      blade('fac_guild'),
+      { holderId: 'fac_guild', kind: 'faction', readAs: 'omitted' },
+    ],
+    [
+      "a stackable's chest lying here, as here",
+      { stackables: [{ key: 'gold', amount: 4, from: 'char_mira', to: 'item_chest' }] },
+      { holderId: 'item_chest', kind: 'item', readAs: 'here' },
+    ],
+  ])('logs a holder read as %s, at debug only', (_label, transfers, reading) => {
+    const log = spyLogger()
+    run(transfers, log)
+    expect(log.debug).toHaveBeenCalledWith('classifier.holder_read', {
+      entryId: 'entry_2',
+      source: 'per_turn_classifier',
+      ...reading,
+    })
+    expect(log.warn).not.toHaveBeenCalled()
+    expect(log.error).not.toHaveBeenCalled()
+  })
+
+  it('logs no reading for a character holder', () => {
+    const log = spyLogger()
+    run(
+      {
+        ...blade('char_bob'),
+        stackables: [{ key: 'gold', amount: 1, from: 'char_bob', to: 'char_mira' }],
+      },
+      log,
+    )
+    expect(log.debug).not.toHaveBeenCalledWith('classifier.holder_read', expect.anything())
   })
 })
 
