@@ -1,9 +1,9 @@
 <script lang="ts">
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
-  import { Input } from '#lib/components/ui/input/index.ts'
   import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import ExplanationFold from '#lib/components/shared/ExplanationFold.svelte'
+  import StoryTimeField from '#lib/components/shared/StoryTimeField.svelte'
   import { ChevronDown, ChevronRight } from '@lucide/svelte'
   import {
     parseStoryTime,
@@ -142,35 +142,26 @@
   {/if}
 
   <div class="grid gap-3 sm:grid-cols-2">
-    <label class="text-xs">
-      Begins
-      <Input
-        bind:value={startText}
-        data-autofocus
-        enterkeyhint="next"
-        onkeydown={(e) => handleEnter(e, endField)}
-        placeholder="Y1 D4 14:30"
-        class="mt-1 h-8 text-sm {storyTimeIsInvalid(startText) ? 'border-destructive' : ''}"
-      />
-    </label>
-    <label class="text-xs">
-      Ends
-      <Input
-        bind:ref={endField}
-        bind:value={endText}
-        enterkeyhint="done"
-        onkeydown={(e) => handleEnter(e, null)}
-        placeholder="Y1 D4 16:00"
-        class="mt-1 h-8 text-sm {storyTimeIsInvalid(endText) ? 'border-destructive' : ''}"
-      />
-    </label>
-    {#if storyTimeIsInvalid(startText) || storyTimeIsInvalid(endText)}
-      <p class="text-destructive text-xs sm:col-span-2">
-        Give both as Y1 D4 14:30. An unreadable time is left as it was.
-      </p>
-    {:else if backwards}
+    <StoryTimeField
+      label="Begins"
+      bind:value={startText}
+      data-autofocus
+      enterkeyhint="next"
+      onkeydown={(e: KeyboardEvent) => handleEnter(e, endField)}
+      placeholder="Y1 D4 14:30"
+    />
+    <StoryTimeField
+      label="Ends"
+      bind:ref={endField}
+      bind:value={endText}
+      enterkeyhint="done"
+      onkeydown={(e: KeyboardEvent) => handleEnter(e, null)}
+      placeholder="Y1 D4 16:00"
+    />
+    <!-- An unreadable time is reported under its own field. -->
+    {#if backwards}
       <p class="text-destructive text-xs sm:col-span-2">The entry cannot end before it begins.</p>
-    {:else if isLastEntry}
+    {:else if isLastEntry && !storyTimeIsInvalid(startText) && !storyTimeIsInvalid(endText)}
       <p class="text-muted-foreground text-xs sm:col-span-2">
         This is the last entry, so the story's current time moves to its ending.
       </p>

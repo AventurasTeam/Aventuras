@@ -345,6 +345,17 @@ class DatabaseService {
     await db.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [key, value])
   }
 
+  /** Every setting whose key starts with `prefix`, keyed by the rest of the key. */
+  async getSettingsWithPrefix(prefix: string): Promise<Map<string, string>> {
+    const db = await this.getDb()
+    // `substr` rather than LIKE, whose `_` and `%` a prefix may contain.
+    const rows = await db.select<{ key: string; value: string }[]>(
+      'SELECT key, value FROM settings WHERE substr(key, 1, ?) = ?',
+      [prefix.length, prefix],
+    )
+    return new Map(rows.map((row) => [row.key.slice(prefix.length), row.value]))
+  }
+
   async deleteSetting(key: string): Promise<void> {
     const db = await this.getDb()
     await db.execute('DELETE FROM settings WHERE key = ?', [key])

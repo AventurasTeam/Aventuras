@@ -117,8 +117,9 @@ a tap on the handle closes a sheet, even one that is not dismissible. So nothing
 is a sheet: the action modals that hold edits are dialogs on a phone too (see
 [ui-components.md](../development/ui-components.md)). Escape and an outside click reach their guard
 through bits-ui, which can be vetoed. Android's back press does not rely on that: an open action
-modal claims it (`utils/backPress.ts`), and the layout's back handler gives it to the latest claim
-before it tries anything else. The synthetic Escape the handler sends to other dialogs closed a
+modal claims it (`utils/backPress.ts`), and the layout's back handler offers it to the claims,
+latest first, before it tries anything else. A claim declines when another layer, such as a
+Select's list, was opened over its modal, and the press falls through to the handler's Escape. The synthetic Escape the handler sends to other dialogs closed a
 dirty action modal without asking. A close driven from our side
 never reaches `vaul`'s restore, so the scroll lock is released by hand (see `utils/scrollLock`).
 

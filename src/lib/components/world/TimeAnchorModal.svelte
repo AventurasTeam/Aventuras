@@ -217,7 +217,6 @@
     <StoryTimeField
       label="Anchor time point"
       placeholder="e.g. Y1 D4 14:30"
-      examples="14:30, D4 14:30, or Y1 D4 14:30"
       bind:ref={timeField}
       bind:value={timeText}
       data-autofocus={fixedEntry ? true : undefined}

@@ -25,7 +25,6 @@
     toMinutes,
     parseStoryTime,
     formatStoryTime,
-    storyTimeIsInvalid,
     parseDuration,
     formatDuration,
     durationIsInvalid,
@@ -1122,7 +1121,6 @@
           label={anchor ? 'Asserted time' : which === 'from' ? 'Range starts at' : 'Ends at'}
           compact
           placeholder="e.g. Y1 D4 14:30"
-          examples="14:30, D4 14:30, or Y1 D4 14:30"
           bind:value={draftTimeText}
         />
         {#if anchor}

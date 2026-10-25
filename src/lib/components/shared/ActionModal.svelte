@@ -97,7 +97,12 @@
   let wasOpen = untrack(() => open)
   let timer: ReturnType<typeof setTimeout> | null = null
   let frame = $state<HTMLDivElement | null>(null)
-  const FOCUSABLE = 'input:not([type=hidden]), textarea, select, button, [href], [tabindex="0"]'
+  // What bits-ui's open focus could land on: a hidden form input or a disabled control cannot.
+  const FOCUSABLE =
+    'input:not([type=hidden]):not([aria-hidden=true]):enabled, textarea:enabled, select:enabled, button:enabled, [href], [tabindex="0"]'
+  // A popup layer bits-ui portals to the end of the body, latest opened last.
+  const OPEN_LAYER =
+    '[data-state="open"]:is([role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"])'
 
   const locked = $derived(busy && !cancelWhileBusy)
   const shown = $derived(
@@ -130,10 +135,16 @@
     })
   })
 
-  // Android's back press reaches this as Escape directly, not through a synthetic key event.
+  // Android's back press reaches this as Escape directly, not through a synthetic key event. A
+  // layer opened over the modal, such as a Select's list, is declined back to the caller's Escape.
   $effect(() => {
     if (!open) return
-    return claimBackPress(() => request('escape'))
+    return claimBackPress(() => {
+      const content = frame?.closest('[role="dialog"]')
+      if (!content || [...document.querySelectorAll(OPEN_LAYER)].at(-1) !== content) return false
+      request('escape')
+      return true
+    })
   })
 
   // A pending timer would otherwise act on whichever modal has taken this one's place.
@@ -181,9 +192,13 @@
   }
 
   // Only a sheet's swipe or handle tap reaches here: Escape and outside clicks are intercepted on
-  // the content. A sheet holds nothing to lose, so it leaves without asking.
+  // the content. `vaul` has already hidden the sheet and cannot be vetoed, so the modal closes
+  // whatever `onCancel` does, and a running action it cannot stop is left to finish unseen.
   function handleOpenChange(next: boolean) {
-    if (!next && open) leave()
+    if (next || !open) return
+    question = null
+    if (!locked) onCancel?.()
+    open = false
   }
 
   // Ctrl+Enter in any field acts, so a modal whose Enter only moves on still has a key to finish.
@@ -218,7 +233,7 @@
       // Held near the top on a phone when it has a text field, so the keyboard shortening the
       // screen does not move it; only its bottom edge comes up, and the content scrolls.
       presentation === 'dialog' &&
-        'max-md:has-[input:not([type=hidden]),textarea]:top-[calc(var(--safe-top)+1rem)] max-md:has-[input:not([type=hidden]),textarea]:translate-y-0',
+        'max-md:has-[input:not([type=hidden]):not([aria-hidden=true]),textarea]:top-[calc(var(--safe-top)+1rem)] max-md:has-[input:not([type=hidden]):not([aria-hidden=true]),textarea]:translate-y-0',
     )}
     onInteractOutside={(e: PointerEvent) => {
       e.preventDefault()

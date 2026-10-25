@@ -183,7 +183,7 @@ fork point", opens again each time, since what it says changes with the item.
 
 A field that takes a story time is a `shared/StoryTimeField`: its label above, the input, and below
 it what the text reads as ("= Y1 D4 14:30"), the format when it is empty ("year, day, clock"), or
-the error with the caller's `examples` when it is not a time. The reading sits under the field, not
+the error, with example spellings, when it is not a time. The reading sits under the field, not
 beside it, so a long one never widens the form. `normalize` shows the time carried over as it will
 be stored. The caller's own help text goes below the field.
 

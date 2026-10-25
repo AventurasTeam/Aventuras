@@ -7,8 +7,8 @@ describe('back press claims', () => {
   })
 
   it('hands the press to the latest claim only', () => {
-    const outer = vi.fn()
-    const inner = vi.fn()
+    const outer = vi.fn(() => true)
+    const inner = vi.fn(() => true)
     const releaseOuter = claimBackPress(outer)
     const releaseInner = claimBackPress(inner)
     expect(dispatchBackPress()).toBe(true)
@@ -21,9 +21,27 @@ describe('back press claims', () => {
     expect(dispatchBackPress()).toBe(false)
   })
 
+  it('passes the press on when a claim declines it', () => {
+    const outer = vi.fn(() => true)
+    const inner = vi.fn(() => false)
+    const releaseOuter = claimBackPress(outer)
+    const releaseInner = claimBackPress(inner)
+    expect(dispatchBackPress()).toBe(true)
+    expect(inner).toHaveBeenCalledOnce()
+    expect(outer).toHaveBeenCalledOnce()
+    releaseInner()
+    releaseOuter()
+  })
+
+  it('reports no taker when every claim declines', () => {
+    const release = claimBackPress(() => false)
+    expect(dispatchBackPress()).toBe(false)
+    release()
+  })
+
   it('releases a claim out of order without disturbing the others', () => {
-    const first = vi.fn()
-    const second = vi.fn()
+    const first = vi.fn(() => true)
+    const second = vi.fn(() => true)
     const releaseFirst = claimBackPress(first)
     const releaseSecond = claimBackPress(second)
     releaseFirst()

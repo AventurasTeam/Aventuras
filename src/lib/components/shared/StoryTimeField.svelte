@@ -20,8 +20,8 @@
     ref?: HTMLInputElement | null
     /** Reads the time as it is stored once carried over, so 25:00 reads as D2 01:00. */
     normalize?: boolean
-    /** Valid spellings named when the text is not a time, as "14:30, D4 14:30, or Y1 D4 14:30". */
-    examples: string
+    /** Valid spellings named when the text is not a time. */
+    examples?: string
     compact?: boolean
   }
 
@@ -30,7 +30,7 @@
     value = $bindable(''),
     ref = $bindable(null),
     normalize = false,
-    examples,
+    examples = '14:30, D4 14:30, or Y1 D4 14:30',
     compact = false,
     id,
     disabled,

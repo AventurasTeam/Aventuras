@@ -56,18 +56,18 @@
       </p>
 
       <!-- The same pair as an action modal's footer: neutral to stay, the delete tone to go. -->
-      <div class="mt-5 flex gap-2 sm:justify-end">
+      <div class="mt-5 flex flex-wrap gap-2 sm:flex-nowrap sm:justify-end">
         <Button
           bind:ref={cancelButton}
           variant="outline"
-          class="flex-1 sm:flex-none"
+          class="basis-pair grow sm:grow-0 sm:basis-auto"
           onclick={onCancel}
         >
           {keepLabel}
         </Button>
         <Button
           variant="feature"
-          class={cn('flex-1 sm:flex-none', FEATURE_COLORS.delete.vars)}
+          class={cn('basis-pair grow sm:grow-0 sm:basis-auto', FEATURE_COLORS.delete.vars)}
           onclick={onDiscard}
         >
           {discardLabel}

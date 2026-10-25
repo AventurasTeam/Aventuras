@@ -1644,10 +1644,8 @@ class SettingsStore {
         if (shown !== null) ui.navFilter[group] = shown === 'true'
       }
 
-      for (const [key, value] of Object.entries(await database.getAllSettings())) {
-        if (key.startsWith(EXPLANATION_FOLD_PREFIX)) {
-          ui.explanationFolded.set(key.slice(EXPLANATION_FOLD_PREFIX.length), value === 'true')
-        }
+      for (const [id, value] of await database.getSettingsWithPrefix(EXPLANATION_FOLD_PREFIX)) {
+        ui.explanationFolded.set(id, value === 'true')
       }
 
       const galleryNewestFirst = await database.getSetting('gallery_newest_first')

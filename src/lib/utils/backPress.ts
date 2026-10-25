@@ -1,8 +1,9 @@
-type BackHandler = () => void
+/** Returns whether it took the press; one that declines lets the next claim or the caller try. */
+type BackHandler = () => boolean
 
 const handlers: BackHandler[] = []
 
-/** Takes Android's back press until the returned function is called; the latest one wins. */
+/** Offers Android's back press to `handler` until the returned function is called. */
 export function claimBackPress(handler: BackHandler): () => void {
   handlers.push(handler)
   return () => {
@@ -11,10 +12,7 @@ export function claimBackPress(handler: BackHandler): () => void {
   }
 }
 
-/** Hands the back press to the latest claim, and says whether there was one. */
+/** Offers the back press to the claims, latest first, and says whether one took it. */
 export function dispatchBackPress(): boolean {
-  const handler = handlers.at(-1)
-  if (!handler) return false
-  handler()
-  return true
+  return handlers.toReversed().some((handler) => handler())
 }

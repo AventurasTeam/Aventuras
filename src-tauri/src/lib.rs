@@ -293,6 +293,12 @@ pub(crate) fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/043_reasoning_effort.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 44,
+            description: "explanation_fold_keys",
+            sql: include_str!("../migrations/044_explanation_fold_keys.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
