@@ -139,17 +139,10 @@ interface Planned {
   sources: CharacterSource[]
 }
 
-/**
- * What a whole response does to the cast, worked out on a copy so it can be applied, and
- * tested, as one plan. The response names characters as they were listed: a listed name means
- * that character even after a rename in the same response gave the name to someone else, and
- * any other name is looked up by the names the plan has given so far. Renames apply first, so
- * the rest of the response may name a renamed character either way.
- *
- * An update naming no one goes to the character holding its new name, or creates one under it
- * from the `newCharacters` entry filed under either name, and answers to both. A
- * `newCharacters` entry naming a character that exists, by any of its names, adds nothing.
- */
+type RenameAttempt =
+  { kind: 'done' } | { kind: 'unknown' } | { kind: 'refused'; name: string; reason: RenameRefusal }
+
+/** What a whole response does to the cast, planned on a copy. See docs/architecture/overview.md. */
 export function planCharacterResponse(
   cast: readonly Character[],
   response: CharacterResponse,
@@ -204,20 +197,35 @@ export function planCharacterResponse(
     return p
   }
 
-  const refusedRenames: CharacterResponsePlan['refusedRenames'] = []
-  for (const update of response.updates) {
-    const newName = update.changes.newName
-    const target = newName ? find(update.name) : undefined
-    if (!newName || !target) continue
+  const tryRename = (name: string, newName: string): RenameAttempt => {
+    const target = find(name)
+    if (!target) return { kind: 'unknown' }
     const rename = planRename(
       target.row,
       newName,
       planned.map((p) => p.row),
     )
     if (rename && 'refused' in rename)
-      refusedRenames.push({ name: target.row.name, newName, reason: rename.refused })
-    else if (rename) write(target, { name: rename.name, translatedName: null })
+      return { kind: 'refused', name: target.row.name, reason: rename.refused }
+    if (rename) write(target, { name: rename.name, translatedName: null })
+    return { kind: 'done' }
   }
+  let pending = response.updates.flatMap((u) =>
+    u.changes.newName ? [{ name: u.name, newName: u.changes.newName }] : [],
+  )
+  // A rename can wait on another in the response, whichever comes first: to free the name it
+  // takes, or to give the name it is filed under.
+  for (let progress = true; progress;) {
+    const before = pending.length
+    pending = pending.filter((r) => tryRename(r.name, r.newName).kind !== 'done')
+    progress = pending.length < before
+  }
+  const refusedRenames: CharacterResponsePlan['refusedRenames'] = pending.flatMap((r) => {
+    const attempt = tryRename(r.name, r.newName)
+    return attempt.kind === 'refused'
+      ? [{ name: attempt.name, newName: r.newName, reason: attempt.reason }]
+      : []
+  })
 
   const used = new Set<NewCharacter>()
   const statusTargets: Planned[] = []

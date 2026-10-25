@@ -22,6 +22,37 @@ export const CHARACTER_TEXT_FIELDS = [
 
 export type CharacterTextField = (typeof CHARACTER_TEXT_FIELDS)[number]
 
+const TRANSLATION_FIELD = {
+  name: 'translatedName',
+  description: 'translatedDescription',
+  relationship: 'translatedRelationship',
+  traits: 'translatedTraits',
+  visualDescriptors: 'translatedVisualDescriptors',
+} as const satisfies { [F in CharacterTextField]: keyof Character }
+
+export type CharacterTranslations = Partial<
+  Pick<Character, (typeof TRANSLATION_FIELD)[CharacterTextField]>
+>
+
+/**
+ * The saved translations of the fields a restore changes. A field it leaves as it is keeps its
+ * current translation, which may have finished after the save.
+ */
+export function translationsToRestore(
+  current: Character,
+  restored: Partial<Character>,
+  saved: CharacterTranslations | undefined,
+): CharacterTranslations {
+  const result: CharacterTranslations = {}
+  if (!saved) return result
+  for (const field of CHARACTER_TEXT_FIELDS) {
+    const key = TRANSLATION_FIELD[field]
+    if (field in restored && key in saved && !sameValue(restored[field], current[field]))
+      Object.assign(result, { [key]: saved[key] })
+  }
+  return result
+}
+
 /** A character a classification wrote: the text fields it changed, or all of one it created. */
 export interface WrittenCharacter {
   id: string

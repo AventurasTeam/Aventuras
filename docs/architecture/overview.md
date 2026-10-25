@@ -308,7 +308,8 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   with world-state translation on it is translated again after the turn, as a new character's
   fields are: `applyClassificationResult` returns the characters it wrote and the text fields
   it changed (`WrittenCharacter`), and only those are translated; batch chapterization
-  translates what its chapters wrote once it ends. Characters are translated
+  translates what its chapters wrote once it ends, cancelled or failed included, in the
+  background and ten characters per request. Characters are translated
   from their stored rows, traits one by one and appearance by category, and a field is written
   only whole and only while the character still holds the text that was sent, so a revert
   landing mid-translation is not overwritten. Answers are matched to what was sent by id, and a
@@ -325,9 +326,10 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   (`planCharacterResponse`), and the store, the presence pass and the scene image all read the
   same plan. Renames apply first, and the rest of the response may name the character either
   way. A listed name means the character listed under it, so two renames in one response (Bob
-  to Robert, the stranger to Bob) keep two characters. Each character gets one write, its
-  rename included. A name another character already holds is refused and logged, because that
-  is a duplicate to merge, not a rename; so is any rename of the protagonist. An update whose
+  to Robert, the stranger to Bob) keep two characters, in either order. Each character gets one
+  write, its rename included. A name another character still holds once the other renames are
+  done is refused and logged, because that is a duplicate to merge, not a rename; so is any
+  rename of the protagonist. An update whose
   listed name matches no one goes to the character holding its new name, or creates one under
   it from the `newCharacters` entry filed under either name, and answers to both.
 

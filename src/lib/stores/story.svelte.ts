@@ -143,6 +143,7 @@ import {
   WorldStateTranslationService,
   CHARACTER_TEXT_FIELDS,
   mergeWritten,
+  translationsToRestore,
   type WrittenCharacter,
   type LoreSessionWrites,
   type WorldState,
@@ -172,8 +173,12 @@ import {
   lastResolvedChapterEnd,
   type ChapterBanner,
 } from '#lib/utils/chapterBanners.ts'
+import { retainBackgroundKeepAlive } from '#lib/utils/backgroundKeepAlive.ts'
 
 const log = createLogger('StoryStore')
+
+/** Characters per translation request after a chapterization, which can write the whole cast. */
+const CHARACTERS_PER_TRANSLATION = 10
 
 /**
  * Merge LLM-extracted inline runtime vars into entity metadata.runtimeVars.
@@ -4424,9 +4429,9 @@ class StoryStore {
     this.chapterizationCancelRequested = false
     this.chapterizationProgress = { current: 0, total: 0 }
 
+    // The characters each chapter's classification wrote, translated once at the end.
+    const written: WrittenCharacter[] = []
     try {
-      // The characters each chapter's classification wrote, translated once at the end.
-      const written: WrittenCharacter[] = []
       const service = new ChapterBatchService({
         buildAndSaveChapter: this.buildAndSaveChapter.bind(this),
         runLoreManagement: aiService.runLoreManagement.bind(aiService),
@@ -4494,7 +4499,6 @@ class StoryStore {
         chaptersCreated: result.chapters.length,
         cancelled: result.cancelled,
       })
-      await this.translateWrittenCharacters(mergeWritten(written))
 
       return { chaptersCreated: result.chapters.length, cancelled: result.cancelled }
     } finally {
@@ -4502,42 +4506,55 @@ class StoryStore {
       this.chapterizationTimelineProgress = null
       this.chapterizationClassificationProgress = null
       this.chapterizationStatus = null
+      void this.translateWrittenCharacters(mergeWritten(written))
     }
   }
 
-  /** Translates the character fields a classification wrote, when world state is translated. */
+  /**
+   * Translates the character fields a classification wrote, when world state is translated, a
+   * batch of characters per request so one failure loses only its batch.
+   */
   private async translateWrittenCharacters(characters: WrittenCharacter[]): Promise<void> {
     const translation = settings.translationSettings
-    if (!this.currentStory || characters.length === 0) return
+    const storyId = this.currentStory?.id
+    if (!storyId || characters.length === 0) return
     if (!TranslationService.shouldTranslateWorldState(translation)) return
     const service = new WorldStateTranslationService({
       translateUIElements: aiService.translateUIElements.bind(aiService),
     })
+    const release = retainBackgroundKeepAlive()
     try {
-      await service.translateEntities(
-        {
-          storyId: this.currentStory.id,
-          classificationResult: { newLocations: [], newItems: [], newStoryBeats: [] },
-          worldState: {
-            characters: this.characters,
-            locations: this.locations,
-            items: this.items,
-            storyBeats: this.storyBeats,
-          },
-          targetLanguage: translation.targetLanguage,
-          characters,
-        },
-        {
-          updateCharacter: (id, data) => database.updateCharacter(id, data),
-          getCharacter: (id) => this.characters.find((c) => c.id === id),
-          updateLocation: (id, data) => database.updateLocation(id, data),
-          updateItem: (id, data) => database.updateItem(id, data),
-          updateStoryBeat: (id, data) => database.updateStoryBeat(id, data),
-          refreshWorldState: this.refreshWorldState.bind(this),
-        },
-      )
-    } catch (error) {
-      log('Character translation failed (non-fatal)', error)
+      for (let i = 0; i < characters.length; i += CHARACTERS_PER_TRANSLATION) {
+        if (this.currentStory?.id !== storyId) return
+        try {
+          await service.translateEntities(
+            {
+              storyId,
+              classificationResult: { newLocations: [], newItems: [], newStoryBeats: [] },
+              worldState: {
+                characters: this.characters,
+                locations: this.locations,
+                items: this.items,
+                storyBeats: this.storyBeats,
+              },
+              targetLanguage: translation.targetLanguage,
+              characters: characters.slice(i, i + CHARACTERS_PER_TRANSLATION),
+            },
+            {
+              updateCharacter: (id, data) => database.updateCharacter(id, data),
+              getCharacter: (id) => this.characters.find((c) => c.id === id),
+              updateLocation: (id, data) => database.updateLocation(id, data),
+              updateItem: (id, data) => database.updateItem(id, data),
+              updateStoryBeat: (id, data) => database.updateStoryBeat(id, data),
+              refreshWorldState: this.refreshWorldState.bind(this),
+            },
+          )
+        } catch (error) {
+          log('Character translation failed (non-fatal)', error)
+        }
+      }
+    } finally {
+      release()
     }
   }
 
@@ -5964,8 +5981,8 @@ class StoryStore {
           visualDescriptors: snapshot.visualDescriptors ?? {},
           portrait: snapshot.portrait, // null means no portrait
         }
-        // The translations of the snapshot's text go back with it, where it holds them.
-        return [[character.id, { ...restored, ...snapshot.translations }]]
+        const translations = translationsToRestore(character, restored, snapshot.translations)
+        return [[character.id, { ...restored, ...translations }]]
       }),
     )
 

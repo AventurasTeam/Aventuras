@@ -137,9 +137,11 @@ export {
   WorldStateTranslationService,
   CHARACTER_TEXT_FIELDS,
   mergeWritten,
+  translationsToRestore,
 } from './WorldStateTranslationService'
 export type {
   CharacterTextField,
+  CharacterTranslations,
   ClassificationNewEntities,
   WorldStateEntities,
   WorldStateTranslationCallbacks,

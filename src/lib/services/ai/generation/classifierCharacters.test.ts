@@ -104,15 +104,42 @@ describe('planCharacterResponse', () => {
     expect(byId.get(stranger.id)).toMatchObject({ name: 'Bob', description: 'A drifter.' })
   })
 
-  it('follows a character renamed twice in one response', () => {
-    const result = plan({
-      updates: [
-        update('weapon vendor', { newName: 'Sera' }),
-        update('Sera', { newName: 'Seraphine' }),
-      ],
-    })
-    expect(result.updates).toHaveLength(1)
-    expect(result.updates[0].changes.name).toBe('Seraphine')
+  it('takes a name another rename frees later in the same response', () => {
+    const bob = character('Bob')
+    const stranger = character('the stranger')
+    const result = plan(
+      {
+        updates: [update('the stranger', { newName: 'Bob' }), update('Bob', { newName: 'Robert' })],
+      },
+      [bob, stranger],
+    )
+    const byId = new Map(result.updates.map((u) => [u.character.id, u.changes.name]))
+    expect(byId.get(bob.id)).toBe('Robert')
+    expect(byId.get(stranger.id)).toBe('Bob')
+    expect(result.refusedRenames).toEqual([])
+  })
+
+  it('refuses two renames that swap names', () => {
+    const bob = character('Bob')
+    const ann = character('Ann')
+    const result = plan(
+      { updates: [update('Bob', { newName: 'Ann' }), update('Ann', { newName: 'Bob' })] },
+      [bob, ann],
+    )
+    expect(result.refusedRenames.map((r) => r.reason)).toEqual(['taken', 'taken'])
+    expect(result.updates.every((u) => u.changes.name === undefined)).toBe(true)
+  })
+
+  it('follows a character renamed twice in one response, in either order', () => {
+    for (const updates of [
+      [update('weapon vendor', { newName: 'Sera' }), update('Sera', { newName: 'Seraphine' })],
+      [update('Sera', { newName: 'Seraphine' }), update('weapon vendor', { newName: 'Sera' })],
+    ]) {
+      const result = plan({ updates })
+      expect(result.updates).toHaveLength(1)
+      expect(result.updates[0].changes.name).toBe('Seraphine')
+      expect(result.creates).toEqual([])
+    }
   })
 
   it('refuses a rename to a name someone holds, and the scene keeps the right character', () => {

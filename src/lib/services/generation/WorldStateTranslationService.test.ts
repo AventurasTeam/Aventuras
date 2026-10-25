@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
-import { WorldStateTranslationService, mergeWritten } from './WorldStateTranslationService'
+import {
+  WorldStateTranslationService,
+  mergeWritten,
+  translationsToRestore,
+} from './WorldStateTranslationService'
 import type { Character } from '#lib/types/index.ts'
 
 describe('WorldStateTranslationService', () => {
@@ -239,5 +243,45 @@ describe('mergeWritten', () => {
       { id: 'a', fields: ['description', 'traits'] },
       { id: 'b', fields: 'all' },
     ])
+  })
+})
+
+describe('translationsToRestore', () => {
+  const current: Character = {
+    id: 'c',
+    storyId: 's',
+    name: 'Darek',
+    description: 'A veteran.',
+    relationship: null,
+    traits: ['wary'],
+    visualDescriptors: {},
+    status: 'active',
+    metadata: null,
+    portrait: null,
+    branchId: null,
+    translatedName: 'Darek (it)',
+    translatedDescription: 'Un veterano.',
+  }
+
+  it('puts back the saved translation of a field the restore changes', () => {
+    const restored = { name: 'weapon vendor', description: 'A veteran.' }
+    const saved = { translatedName: 'venditore', translatedDescription: null }
+    expect(translationsToRestore(current, restored, saved)).toEqual({
+      translatedName: 'venditore',
+    })
+  })
+
+  it('keeps a translation that finished after the save when the text is the same', () => {
+    expect(
+      translationsToRestore(
+        current,
+        { description: 'A veteran.' },
+        { translatedDescription: null },
+      ),
+    ).toEqual({})
+  })
+
+  it('leaves everything as it is without saved translations', () => {
+    expect(translationsToRestore(current, { name: 'x' }, undefined)).toEqual({})
   })
 })
