@@ -288,12 +288,13 @@ bracketed handle (`[new:a]`) reads as the bare handle.
 malformed, so a reference to its handle then fails its field and the
 fallback fires. The five XML entities are decoded in a create's name,
 condition and description, and so are numeric references (`&#39;`,
-`&#x27;`); a raw `<` or `>` in a name or condition
+`&#x27;`), bar one naming NUL, a lone surrogate or a code past
+U+10FFFF, which stays as written; a raw `<` or `>` in a name or condition
 or a raw `<` in a description drops the create, so the prompt asks the
 model to write a double quote, `<` or `>` inside a name or condition as
 `&quot;`, `&lt;` or `&gt;`, and a `<` inside a description as
-`&lt;`. Every other entry holds no `<` either, in its attributes or its
-text: a visual change, condition, move, stackable, query or suggestion
+`&lt;`. Every other entry holds no `<` in its attributes and no tag in
+its text, though a `<` that opens no tag, as in `<3`, is text: a visual change, condition, move, stackable, query or suggestion
 that a self-closed or unclosed tag leaves malformed drops alone rather
 than reading the next tag into itself. A malformed create in a closed block only logs a warning,
 unless the block held nothing but
@@ -310,7 +311,7 @@ create and holds no drop.
 **Kept only if used.** A new location is created only as the turn's
 `<current_location>` or an ancestor of it, and a new item only when
 the last transfer in the block naming its handle gives it to a
-character, so an item taken and then put down in the same block stays
+character, or puts it into an item a character holds, so an item taken and then put down in the same block stays
 prose. Anything else is dropped and logged, so a place the prose
 merely mentions, or an item only seen or put down, stays prose; the
 periodic classifier may create the place later
@@ -576,12 +577,14 @@ Until containers exist only a character holds anything, so a
 transfer's other holder stands for what the app can track. An item
 someone holds stands for that character: an item moved into a satchel
 lands with whoever holds it, and into the giver's own pouch it changes
-slot. The scene's place, or an item lying there, takes an item moved
+slot. A stackable whose payer and payee read as one character, as one
+paid into a pouch its payer holds, changes nothing. The scene's place, or an item lying there, takes an item moved
 into it as a put-down there, as `<drop>` does, and holds no stackable,
 which reads as found or stashed. Another place, or an item lying
 elsewhere, leaves a moved item where it was, as a drop elsewhere
 stays prose. Anything else, a faction or a lore entry, reads as an
-omitted holder, so an item given to it is unplaced. A holder that
+omitted holder, so an item given to it is unplaced. Each such reading
+is logged at debug as `classifier.holder_read`. A holder that
 resolves to no entity at all is still a bad ref. A drop's holder is
 read for the record only, since a drop lands wherever its item is: one
 that names no one is left off, never costing the drop.
