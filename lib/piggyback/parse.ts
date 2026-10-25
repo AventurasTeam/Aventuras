@@ -119,7 +119,9 @@ function assertNotTruncated(segment: string, extractedCount: number, tagLabel: s
 // An entry's text holds no `<` that opens a tag, so a self-closed or unclosed entry can't swallow
 // the next one, and only one path matches each `<`, so an unclosed opener's scan stays linear.
 const ENTRY_TEXT = '[^<]*(?:<(?![A-Za-z/!?])[^<]*)*'
-const ENTITY_ENTRY = `<entity\\s+([^<>]*)>(${ENTRY_TEXT})</entity>`
+// One `\s`: as `\s+`, it and the attribute text would split a run of spaces every way, quadratically.
+const ATTRIBUTES = '\\s([^<>]*)'
+const ENTITY_ENTRY = `<entity${ATTRIBUTES}>(${ENTRY_TEXT})</entity>`
 
 // <entity id="..." type="...">text</entity> — full-replace visual change,
 // one entry per changed category (docs/memory/piggyback.md → Trailing block format).
@@ -162,7 +164,7 @@ function parseTransfers(segment: string, notes: ParseNotes): ParsedTransfers {
   const elsewhere: ParseNotes['dropsElsewhere'] = []
   let seq = 0
   // No `<` in the attributes, so a tag missing its `>` is lost rather than read into the next one.
-  const moveRe = new RegExp(`<(item|${DROP_TAG})\\s+([^<>]*)\\/?>`, 'g')
+  const moveRe = new RegExp(`<(item|${DROP_TAG})${ATTRIBUTES}\\/?>`, 'g')
   for (const match of segment.matchAll(moveRe)) {
     const [, tag, attrText] = match
     if (attrText === undefined) continue
@@ -187,7 +189,7 @@ function parseTransfers(segment: string, notes: ParseNotes): ParsedTransfers {
   }
 
   const stackables: StackableTransfer[] = []
-  const stackableRe = /<stackable\s+([^<>]*)\/?>/g
+  const stackableRe = new RegExp(`<stackable${ATTRIBUTES}\\/?>`, 'g')
   for (const match of segment.matchAll(stackableRe)) {
     const [, attrText] = match
     if (attrText === undefined) continue
@@ -527,7 +529,7 @@ export function parseSuggestionsBlock(raw: string): ParseSuggestionsBlockResult 
 
   const items: SuggestionRef[] = []
   const re = new RegExp(
-    `<${SUGGESTION_ITEM_TAG}\\s+([^<>]*)>(${ENTRY_TEXT})</${SUGGESTION_ITEM_TAG}>`,
+    `<${SUGGESTION_ITEM_TAG}${ATTRIBUTES}>(${ENTRY_TEXT})</${SUGGESTION_ITEM_TAG}>`,
     'g',
   )
   for (const match of segment.matchAll(re)) {

@@ -1394,6 +1394,26 @@ describe('an entry that never closes swallows nothing', () => {
     // The bound sits far above a linear scan's few ms and below a quadratic one's ~800 ms.
     expect(performance.now() - started).toBeLessThan(250)
   })
+
+  // The bound sits far above a linear scan's few ms and below a quadratic one's ~1 s.
+  it.each([
+    ['a visual change', (pad: string) => `<visual_changes><entity${pad}</visual_changes>`],
+    ['a condition', (pad: string) => `<conditions><entity${pad}</conditions>`],
+    ['an item move', (pad: string) => `<transfers><item${pad}</transfers>`],
+    ['a stackable', (pad: string) => `<transfers><stackable${pad}</transfers>`],
+  ])('scans %s opener trailing 60,000 spaces in linear time', (_label, field) => {
+    const started = performance.now()
+    parseStateBlock(
+      `<state><scene_entities>c1</scene_entities>${field(' '.repeat(60_000))}</state>`,
+    )
+    expect(performance.now() - started).toBeLessThan(250)
+  })
+
+  it('scans a suggestion opener trailing 60,000 spaces in linear time', () => {
+    const started = performance.now()
+    parseSuggestionsBlock(`<suggestions><item${' '.repeat(60_000)}</suggestions>`)
+    expect(performance.now() - started).toBeLessThan(250)
+  })
 })
 
 describe("an entry's text holding a `<` that opens no tag", () => {
