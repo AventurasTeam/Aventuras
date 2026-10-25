@@ -4,11 +4,56 @@ import {
   classifierCharacterView,
   formatExistingCharacters,
   planCharacterChanges,
+  planRename,
+  renameLookup,
   shownCharacters,
   shownInPrompt,
   viewsForApply,
   type ClassifierCharacterView,
 } from './classifierCharacters'
+
+describe('planRename', () => {
+  const vendor = character('weapon vendor')
+  const cast = [vendor, character('Mira'), character('Me', { relationship: 'self' })]
+
+  it('gives a placeholder the name the story reveals', () => {
+    expect(planRename(vendor, ' Darek ', cast)).toEqual({ name: 'Darek' })
+  })
+
+  it('is no change for the name the character already has', () => {
+    expect(planRename(vendor, 'Weapon Vendor', cast)).toBeNull()
+  })
+
+  it('refuses a name another character holds, an empty one, and the protagonist', () => {
+    expect(planRename(vendor, 'mira', cast)).toEqual({ refused: 'taken' })
+    expect(planRename(vendor, '  ', cast)).toEqual({ refused: 'empty' })
+    expect(planRename(cast[2], 'Someone', cast)).toEqual({ refused: 'protagonist' })
+  })
+})
+
+describe('renameLookup', () => {
+  const names = renameLookup([{ from: 'weapon vendor', to: 'Darek' }])
+
+  it('finds the name a character has now and the one it was listed under', () => {
+    expect(names.after('Weapon Vendor')).toBe('Darek')
+    expect(names.before('darek')).toBe('weapon vendor')
+  })
+
+  it('leaves every other name alone', () => {
+    expect(names.after('Mira')).toBe('Mira')
+    expect(names.before('Mira')).toBe('Mira')
+  })
+
+  it('follows a character renamed twice in one response', () => {
+    const chain = renameLookup([
+      { from: 'hooded woman', to: 'Sera' },
+      { from: 'Sera', to: 'Seraphine' },
+    ])
+    expect(chain.after('hooded woman')).toBe('Seraphine')
+    expect(chain.after('Sera')).toBe('Seraphine')
+    expect(chain.before('Seraphine')).toBe('hooded woman')
+  })
+})
 
 function character(name: string, overrides: Partial<Character> = {}): Character {
   return {

@@ -152,7 +152,10 @@ import { grammarService } from '#lib/services/grammar.ts'
 import {
   clearTier3SelectionCache,
   planCharacterChanges,
+  planRename,
+  renameLookup,
   viewsForApply,
+  type Rename,
 } from '#lib/services/ai/index.ts'
 import { clearImageMarkerCache } from '#lib/services/image/index.ts'
 import { GenerationLease } from '#lib/utils/generationLease.ts'
@@ -3252,10 +3255,35 @@ class StoryStore {
 
     const shownToClassifier = viewsForApply(result._shownCharacters, this.characters)
 
+    // Renames first, so the rest of the response finds a renamed character by either name.
+    const renames: Rename[] = []
+    for (const update of result.entryUpdates.characterUpdates) {
+      const newName = update.changes.newName
+      if (!newName) continue
+      await this.wrapUpdate('Rename character', update.name, async () => {
+        const existing = this.characters.find((c) => sameEntityName(c.name, update.name))
+        if (!existing) return
+        const plan = planRename(existing, newName, this.characters)
+        if (!plan) return
+        if ('refused' in plan) {
+          log('Ignored character rename:', existing.name, newName, plan.refused)
+          return
+        }
+        const changes: Partial<Character> = { name: plan.name, translatedName: null }
+        const { entity: ownedChar } = await this.cowTracked('character', existing)
+        await database.updateCharacter(ownedChar.id, changes)
+        this.characters = this.characters.map((c) =>
+          c.id === ownedChar.id ? { ...c, ...changes } : c,
+        )
+        renames.push({ from: existing.name, to: plan.name })
+      })
+    }
+    const names = renameLookup(renames)
+
     // Apply character updates
     for (const update of result.entryUpdates.characterUpdates) {
       await this.wrapUpdate('Update character', update.name, async () => {
-        let existing = this.characters.find((c) => sameEntityName(c.name, update.name))
+        let existing = this.characters.find((c) => sameEntityName(c.name, names.after(update.name)))
 
         // If character doesn't exist yet, create it first
         if (!existing) {
@@ -3296,7 +3324,7 @@ class StoryStore {
           const { changes, ignored } = planCharacterChanges(
             existing,
             update.changes,
-            shownToClassifier(existing.name),
+            shownToClassifier(names.before(existing.name)),
           )
           if (ignored.length > 0) log('Ignored character rewrites:', existing.name, ignored)
           // Merge inline runtime variable values into metadata if present
@@ -3761,11 +3789,11 @@ class StoryStore {
     // are already in `this.characters` and the explicit updates above have had their say.
     const presenceChanges = resolveCharacterPresence({
       characters: this.characters,
-      presentNames: result.scene.presentCharacterNames ?? [],
+      presentNames: (result.scene.presentCharacterNames ?? []).map(names.after),
       newNames: result.entryUpdates.newCharacters.map((c) => c.name),
       explicitStatusNames: result.entryUpdates.characterUpdates
         .filter((u) => u.changes.status !== undefined)
-        .map((u) => u.name),
+        .map((u) => names.after(u.name)),
       hadError: !!result._error,
     })
 

@@ -314,6 +314,13 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   the protagonist is in every scene, so every turn would be a chance to rewrite them. Traits
   and descriptions are replaced whole, like appearance; there is no add or remove.
 
+  **A character listed under a placeholder is renamed when the story reveals their name.**
+  `characterUpdates[].changes.newName` carries it, under the listed name (`planRename`).
+  Renames apply before every other update, and the rest of the response may name the character
+  either way (`renameLookup`): the other updates, the presence list and the shown-list gate all
+  resolve both. A name another character already holds is refused and logged, because that is a
+  duplicate to merge, not a rename; so is any rename of the protagonist.
+
   **`scene.currentLocationName` is the only thing that moves the scene.** It creates the
   location if the name is new, marks it `current` and `visited`, and clears the previous
   one. `locationUpdates.changes.current` and `newLocations[].current` did the same job from

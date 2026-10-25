@@ -874,8 +874,10 @@
                   },
                   targetLanguage: translationSettings.targetLanguage,
                   updatedCharacters: story.characters.filter((c) =>
-                    event.result.entryUpdates.characterUpdates.some((u) =>
-                      sameEntityName(u.name, c.name),
+                    event.result.entryUpdates.characterUpdates.some(
+                      (u) =>
+                        sameEntityName(u.name, c.name) ||
+                        (!!u.changes.newName && sameEntityName(u.changes.newName, c.name)),
                     ),
                   ),
                 },

@@ -94,7 +94,13 @@ import type {
 } from './generation'
 import { EntryRetrievalService, getEntryRetrievalConfigFromSettings } from './retrieval'
 export { clearTier3SelectionCache } from './retrieval'
-export { planCharacterChanges, viewsForApply } from './generation'
+export {
+  planCharacterChanges,
+  planRename,
+  renameLookup,
+  viewsForApply,
+  type Rename,
+} from './generation'
 import type {
   TimelineFillResult,
   TimelineAnswer,

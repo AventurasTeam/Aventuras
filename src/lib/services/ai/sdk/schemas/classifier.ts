@@ -51,8 +51,14 @@ export type VisualDescriptors = z.infer<typeof visualDescriptorsSchema>
 // ============================================================================
 
 export const characterUpdateSchema = z.object({
-  name: z.string().describe('Exact name of existing character to update'),
+  name: z.string().describe('Exact name of existing character to update, as listed'),
   changes: z.object({
+    newName: z
+      .string()
+      .describe(
+        'The real name the story reveals for a character listed under a placeholder ("the weapon vendor"); never a nickname or a guess',
+      )
+      .optional(),
     status: z
       .enum(['active', 'inactive', 'deceased'])
       .describe('active=present, inactive=away, deceased=dead')

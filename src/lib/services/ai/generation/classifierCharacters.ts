@@ -60,6 +60,56 @@ export function viewsForApply(
   }
 }
 
+export type RenameRefusal = 'empty' | 'protagonist' | 'taken'
+
+/**
+ * The name `newName` gives `existing`, or why it is refused. Null when it is the name the
+ * character already has. A name another character holds is refused: that is a duplicate to
+ * merge, not a rename.
+ */
+export function planRename(
+  existing: Character,
+  newName: string,
+  cast: readonly Character[],
+): { name: string } | { refused: RenameRefusal } | null {
+  const name = newName.trim()
+  if (!name) return { refused: 'empty' }
+  if (existing.relationship === 'self') return { refused: 'protagonist' }
+  if (sameEntityName(name, existing.name)) return null
+  if (cast.some((c) => c.id !== existing.id && sameEntityName(c.name, name)))
+    return { refused: 'taken' }
+  return { name }
+}
+
+export interface Rename {
+  from: string
+  to: string
+}
+
+/**
+ * The rest of a response may name a renamed character by any name it had: `after` gives the
+ * name it has now, `before` the one the classifier was shown. Renames are applied in order and
+ * may chain (A→B, then B→C).
+ */
+export function renameLookup(renames: readonly Rename[]) {
+  const follow = (name: string, step: (name: string) => string | undefined) => {
+    let current = name
+    // A chain can come back to a name (A→B, B→A), so it is followed once per rename at most.
+    for (let i = 0; i < renames.length; i++) {
+      const next = step(current)
+      if (next === undefined) break
+      current = next
+    }
+    return current
+  }
+  return {
+    after: (name: string) =>
+      follow(name, (n) => renames.find((r) => sameEntityName(r.from, n))?.to),
+    before: (name: string) =>
+      follow(name, (n) => renames.findLast((r) => sameEntityName(r.to, n))?.from),
+  }
+}
+
 /**
  * Format existing characters for the prompt.
  *

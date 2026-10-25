@@ -20,6 +20,9 @@ Note: The story may be in Adventure mode (player as protagonist) or Creative Wri
 - Example: "Elena, the blacksmith's daughter who offers a task" = YES
 - Example: "the innkeeper who served a drink" = NO
 
+### Revealed Names
+A character may be listed under a placeholder ("weapon vendor", "the hooded woman") until the story reveals their real name. When it does, send a \`characterUpdates\` entry with the LISTED name in \`name\` and the revealed name in \`changes.newName\`, and put that character's other changes in the same entry. Never add them to \`newCharacters\` under the new name: that makes a second character. Only for a name the story establishes, not a nickname, title or guess, and never for {{ protagonistName }}.
+
 ### Character Description and Traits
 Every NEW character gets a \`description\`: one sentence saying who they are.
 
@@ -228,7 +231,7 @@ appended to it creates a second copy of the same character.
 """
 
 ## Your Task
-1. Check if any EXISTING entities need updates (a lasting change to who a character is, a condition the story resolved, an appearance that changed, a death). Rewrite a description, traits or appearance only where it is listed above
+1. Check if any EXISTING entities need updates (a revealed name, a lasting change to who a character is, a condition the story resolved, an appearance that changed, a death). Rewrite a description, traits or appearance only where it is listed above
 {% if hasStoryBeats %}2. **IMPORTANT**: Check if any active story beats have been COMPLETED or FAILED in this passage - mark them accordingly to keep the list clean
 {% endif %}3. Identify any NEW significant entities introduced (apply the extraction rules strictly)
 4. Set \`presentCharacterNames\`, \`currentLocationName\` and \`timeProgression\`
