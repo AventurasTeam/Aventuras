@@ -1,4 +1,5 @@
 <script lang="ts">
+  import StoryTimeField from '#lib/components/shared/StoryTimeField.svelte'
   import type { VaultScenarioInput } from '#lib/services/ai/sdk/schemas/vault.ts'
   import type { VaultCharacter } from '#lib/types/index.ts'
   import { characterVault } from '#lib/stores/characterVault.svelte.ts'
@@ -15,12 +16,6 @@
   import TagInput from '#lib/components/tags/TagInput.svelte'
   import TermsInput from '#lib/components/shared/TermsInput.svelte'
   import { normalizeImageDataUrl } from '#lib/utils/image.ts'
-  import {
-    formatStoryTime,
-    normalizeTime,
-    parseStoryTime,
-    storyTimeIsInvalid,
-  } from '#lib/services/storyTime/index.ts'
 
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
@@ -47,10 +42,6 @@
       : ''
 
   /** What the typed value comes to once days roll into years: `Y1 D400` is a year and 35 days. */
-  const startNormalized = $derived.by(() => {
-    const parsed = parseStoryTime(startingTimeText)
-    return parsed ? formatStoryTime(normalizeTime(parsed)) : null
-  })
 
   let showCharacterSelector = $state(false)
   let charSearchQuery = $state('')
@@ -347,30 +338,17 @@
         </div>
 
         {#if startingTimeText !== undefined}
-          <div class="space-y-2">
-            <Label for="starting-time">Starting Time</Label>
-            <div class="flex items-center gap-2">
-              <Input
-                id="starting-time"
-                fullWidth={false}
-                bind:value={startingTimeText}
-                placeholder="e.g. Y1 D1 19:00"
-                class="h-8 w-40 text-sm {storyTimeIsInvalid(startingTimeText)
-                  ? 'border-destructive'
-                  : ''}"
-              />
-              <span class="text-muted-foreground shrink-0 text-xs">
-                {startNormalized ? `= ${startNormalized}` : 'year, day, clock'}
-              </span>
-            </div>
-            <p
-              class="text-xs {storyTimeIsInvalid(startingTimeText)
-                ? 'text-destructive'
-                : 'text-muted-foreground'}"
-            >
-              {storyTimeIsInvalid(startingTimeText)
-                ? 'Not a story time. Try 19:00, D2 19:00, or Y1 D2 19:00.'
-                : 'Optional. When a story from this scenario begins, at the end of its first message.'}
+          <div class="space-y-1">
+            <StoryTimeField
+              id="starting-time"
+              label="Starting Time"
+              normalize
+              placeholder="e.g. Y1 D1 19:00"
+              examples="19:00, D2 19:00, or Y1 D2 19:00"
+              bind:value={startingTimeText}
+            />
+            <p class="text-muted-foreground text-xs">
+              Optional. When a story from this scenario begins, at the end of its first message.
             </p>
           </div>
         {/if}

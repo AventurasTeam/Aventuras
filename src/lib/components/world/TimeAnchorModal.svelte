@@ -6,11 +6,9 @@
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
   import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import ExplanationFold from '#lib/components/shared/ExplanationFold.svelte'
-  import {
-    parseStoryTime,
-    formatStoryTime,
-    storyTimeIsInvalid,
-  } from '#lib/services/storyTime/index.ts'
+  import StoryTimeField from '#lib/components/shared/StoryTimeField.svelte'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { parseStoryTime, formatStoryTime } from '#lib/services/storyTime/index.ts'
   import { entryNumber, resolveEntryByNumber } from '#lib/utils/storyNavigation.ts'
   import type { StoryEntry } from '#lib/types/index.ts'
 
@@ -216,46 +214,31 @@
       {/if}
     </div>
 
-    <label class="flex items-center gap-2">
-      <span class="text-muted-foreground shrink-0">Anchor time point:</span>
-      <Input
-        placeholder="e.g. Y1 D4 14:30"
-        class="h-8 w-36 text-sm"
-        bind:ref={timeField}
-        bind:value={timeText}
-        data-autofocus={fixedEntry ? true : undefined}
-        enterkeyhint="next"
-        onkeydown={(e) => moveOn(e, noteField)}
-      />
-      <span class="text-muted-foreground shrink-0 text-xs">
-        {#if parsedTime}
-          = {formatStoryTime(parsedTime)}
-        {:else}
-          year, day, clock
-        {/if}
-      </span>
-    </label>
-    {#if storyTimeIsInvalid(timeText)}
-      <p class="text-destructive -mt-2 text-xs">
-        Not a story time. Try 14:30, D4 14:30, or Y1 D4 14:30.
-      </p>
-    {/if}
+    <StoryTimeField
+      label="Anchor time point"
+      placeholder="e.g. Y1 D4 14:30"
+      examples="14:30, D4 14:30, or Y1 D4 14:30"
+      bind:ref={timeField}
+      bind:value={timeText}
+      data-autofocus={fixedEntry ? true : undefined}
+      enterkeyhint="next"
+      onkeydown={(e: KeyboardEvent) => moveOn(e, noteField)}
+    />
 
-    <label class="flex items-start gap-2">
-      <span class="text-muted-foreground mt-2 shrink-0">Note:</span>
-      <span class="flex-1">
-        <Textarea
-          rows={2}
-          maxlength={NOTE_LIMIT}
-          placeholder="optional"
-          class="min-h-14 w-full text-sm"
-          bind:ref={noteField}
-          bind:value={note}
-        />
-        <span class="text-muted-foreground mt-0.5 block text-right text-[10px]">
-          {note.length}/{NOTE_LIMIT}
-        </span>
+    <div class="flex flex-col gap-1">
+      <Label for="time-anchor-note" class="text-xs">Note</Label>
+      <Textarea
+        id="time-anchor-note"
+        rows={2}
+        maxlength={NOTE_LIMIT}
+        placeholder="optional"
+        class="min-h-14 w-full text-sm"
+        bind:ref={noteField}
+        bind:value={note}
+      />
+      <span class="text-muted-foreground block text-right text-[10px]">
+        {note.length}/{NOTE_LIMIT}
       </span>
-    </label>
+    </div>
   </div>
 </ActionModal>

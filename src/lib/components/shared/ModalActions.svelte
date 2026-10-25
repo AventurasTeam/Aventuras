@@ -33,10 +33,11 @@
 </script>
 
 <ResponsiveModal.Footer class="border-t px-6 py-4">
-  <span class="flex w-full gap-2 sm:w-auto">
+  <!-- Half the width each, until a label does not fit: then they stack, the action on top. -->
+  <span class="flex w-full flex-wrap-reverse gap-2 sm:w-auto sm:flex-nowrap">
     <Button
       variant="outline"
-      class="flex-1 sm:flex-none"
+      class="grow basis-[calc(50%-0.25rem)] sm:grow-0 sm:basis-auto"
       onclick={onCancel}
       disabled={busy && !cancelWhileBusy}
     >
@@ -45,7 +46,10 @@
     <Button
       variant={tone === 'default' ? 'default' : 'feature'}
       onclick={onConfirm}
-      class={cn('flex-1 sm:flex-none', tone !== 'default' && FEATURE_COLORS[tone].vars)}
+      class={cn(
+        'grow basis-[calc(50%-0.25rem)] sm:grow-0 sm:basis-auto',
+        tone !== 'default' && FEATURE_COLORS[tone].vars,
+      )}
       disabled={disabled || busy}
     >
       {#if busy}

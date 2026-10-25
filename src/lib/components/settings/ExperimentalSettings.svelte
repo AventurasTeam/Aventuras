@@ -341,13 +341,13 @@
       which holds every story, lorebook entry and image. You can restore from a backup to revert to
       a previous state.
     </p>
-    <div class="flex items-center gap-3">
+    <div class="flex flex-wrap gap-2 sm:gap-3">
       <Button
         variant="outline"
         size="sm"
         onclick={handleBackup}
         disabled={isBackingUp || isRestoring}
-        class="gap-2"
+        class="grow gap-2 sm:grow-0"
       >
         {#if isBackingUp}
           <Loader2 class="h-4 w-4 animate-spin" />
@@ -362,7 +362,7 @@
         size="sm"
         onclick={handleRestore}
         disabled={isBackingUp || isRestoring}
-        class="gap-2"
+        class="grow gap-2 sm:grow-0"
       >
         {#if isRestoring}
           <Loader2 class="h-4 w-4 animate-spin" />

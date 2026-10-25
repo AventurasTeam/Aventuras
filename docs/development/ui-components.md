@@ -20,7 +20,8 @@ rest:
   held near the top when it has a text field. Only a tool with no text field is a bottom sheet
   with a handle (see below), where only the handle drags and the content scrolls.
 - **Buttons.** An outlined Cancel and the action, side by side on a phone and at the trailing edge
-  on desktop. The action's icon turns into a spinner while it runs.
+  on desktop. On a phone each takes half the width, and when a label does not fit they stack, the
+  action on top. The action's icon turns into a spinner while it runs.
 - **Ways out.** Cancel, Escape, Android's back press (claimed by the open modal through
   `utils/backPress.ts`, and decided as Escape) and a click outside all go
   through one decision, `shared/actionModalClose.ts`, which has its own tests. A sheet's swipe or
@@ -177,6 +178,14 @@ description is for what the reader needs every time.
 
 Not every fold is one. A notice about this particular item, like the time edit's "This entry is a
 fork point", opens again each time, since what it says changes with the item.
+
+## Story-time fields
+
+A field that takes a story time is a `shared/StoryTimeField`: its label above, the input, and below
+it what the text reads as ("= Y1 D4 14:30"), the format when it is empty ("year, day, clock"), or
+the error with the caller's `examples` when it is not a time. The reading sits under the field, not
+beside it, so a long one never widens the form. `normalize` shows the time carried over as it will
+be stored. The caller's own help text goes below the field.
 
 ## Feature colours
 

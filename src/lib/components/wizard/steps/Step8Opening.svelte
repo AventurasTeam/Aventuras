@@ -1,4 +1,5 @@
 <script lang="ts">
+  import StoryTimeField from '#lib/components/shared/StoryTimeField.svelte'
   import { slide } from 'svelte/transition'
   import { FileJson, Loader2, Check, Sparkles, PenTool, Book, X, ChevronDown } from '@lucide/svelte'
   import { Button } from '#lib/components/ui/button/index.ts'
@@ -10,13 +11,7 @@
   import { Badge } from '#lib/components/ui/badge/index.ts'
 
   import type { StoryMode, POV, Tense, TimeTracker } from '#lib/types/index.ts'
-  import {
-    formatStoryTime,
-    normalizeTime,
-    parseStoryTime,
-    storyTimeIsInvalid,
-    STARTING_TIME_VAR,
-  } from '#lib/services/storyTime/index.ts'
+  import { STARTING_TIME_VAR } from '#lib/services/storyTime/index.ts'
   import type {
     ExpandedSetting,
     GeneratedOpening,
@@ -141,10 +136,6 @@
   })
 
   /** What a typed value comes to once days roll into years: `Y1 D400` is a year and 35 days. */
-  function normalized(text: string): string | null {
-    const parsed = parseStoryTime(text)
-    return parsed ? formatStoryTime(normalizeTime(parsed)) : null
-  }
 
   function resultStartNote(): string {
     if (isEditingOpening)
@@ -179,31 +170,21 @@
   disabled: boolean = false,
   label: string = 'Starting Time',
 )}
-  <div class="space-y-1.5">
-    <Label for={id} class="text-xs">{label}</Label>
-    <div class="flex items-center gap-2">
-      <Input
-        {id}
-        type="text"
-        {disabled}
-        fullWidth={false}
-        value={text}
-        oninput={(e) => onChange(e.currentTarget.value)}
-        placeholder="e.g. Y1 D1 19:00"
-        class="h-8 w-44 text-sm {storyTimeIsInvalid(text) ? 'border-destructive' : ''}"
-      />
-      <span class="text-muted-foreground shrink-0 text-xs">
-        {!disabled && normalized(text) ? `= ${normalized(text)}` : 'year, day, clock'}
-      </span>
+  <div class="space-y-1">
+    <StoryTimeField
+      {id}
+      {label}
+      {disabled}
+      normalize
+      value={text}
+      oninput={(e: Event) => onChange((e.currentTarget as HTMLInputElement).value)}
+      placeholder="e.g. Y1 D1 19:00"
+      examples="19:00, D2 19:00, or Y1 D2 19:00"
+    />
+    <div class="text-muted-foreground text-xs">
+      <p>When the story begins after the opening.</p>
+      <p>{hint}</p>
     </div>
-    {#if storyTimeIsInvalid(text)}
-      <p class="text-destructive text-xs">Not a story time. Try 19:00, D2 19:00, or Y1 D2 19:00.</p>
-    {:else}
-      <div class="flex-column text-muted-foreground text-xs">
-        <p>When the story begins after the opening.</p>
-        <p>{hint}</p>
-      </div>
-    {/if}
   </div>
 {/snippet}
 

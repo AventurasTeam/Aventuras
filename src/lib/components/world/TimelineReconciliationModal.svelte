@@ -1,4 +1,5 @@
 <script lang="ts">
+  import StoryTimeField from '#lib/components/shared/StoryTimeField.svelte'
   import { story, type TimelineReconciliationPreview } from '#lib/stores/story.svelte.ts'
   import { ask } from '@tauri-apps/plugin-dialog'
   import { Button } from '#lib/components/ui/button/index.ts'
@@ -1117,22 +1118,13 @@
             anchor.
           {/if}
         </p>
-        <label class="flex flex-wrap items-center gap-2">
-          <span class="text-muted-foreground shrink-0"
-            >{anchor ? 'Asserted time' : which === 'from' ? 'Range starts at' : 'Ends at'}</span
-          >
-          <Input
-            placeholder="e.g. Y1 D4 14:30"
-            class="h-7 w-36 text-xs"
-            bind:value={draftTimeText}
-          />
-          <span class="text-muted-foreground shrink-0">
-            {draftTime ? `= ${formatStoryTime(draftTime)}` : 'year, day, clock'}
-          </span>
-        </label>
-        {#if storyTimeIsInvalid(draftTimeText)}
-          <p class="text-destructive">Not a story time. Try 14:30, D4 14:30, or Y1 D4 14:30.</p>
-        {/if}
+        <StoryTimeField
+          label={anchor ? 'Asserted time' : which === 'from' ? 'Range starts at' : 'Ends at'}
+          compact
+          placeholder="e.g. Y1 D4 14:30"
+          examples="14:30, D4 14:30, or Y1 D4 14:30"
+          bind:value={draftTimeText}
+        />
         {#if anchor}
           <label class="flex flex-col gap-1">
             <span class="text-muted-foreground">Note</span>
