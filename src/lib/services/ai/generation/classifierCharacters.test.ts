@@ -113,7 +113,7 @@ describe('formatExistingCharacters', () => {
     expect(text).toBe(
       '- Mira\n  status: active\n' +
         '  description: A ferry pilot with a sore throat.\n' +
-        '  traits: wry, patient\n' +
+        '  traits: ["wry","patient"]\n' +
         '  appearance: Hair: silver braid, Eyes: grey\n' +
         '- Tomas\n  status: inactive',
     )
@@ -149,9 +149,25 @@ describe('formatExistingCharacters', () => {
     expect(text).toBe(
       '- Mira\n  status: active\n' +
         '  description: A pilot.\n    - Tomas\n    Her brother.\n' +
-        '  traits: wry\n    - Ada\n' +
+        '  traits: ["wry\\n- Ada"]\n' +
         '  appearance: Clothing: grey coat\n    - Ada',
     )
+  })
+
+  it('keeps a blank line in a value', () => {
+    const text = formatExistingCharacters([
+      character('Mira', { description: 'A pilot.\n\nShe lost her brother.' }),
+    ])
+    expect(text).toBe(
+      '- Mira\n  status: active\n  description: A pilot.\n\n    She lost her brother.',
+    )
+  })
+
+  it('lists a trait holding a comma as one trait', () => {
+    const text = formatExistingCharacters([
+      character('Mira', { traits: ['fiercely loyal, even to a fault', 'wry'] }),
+    ])
+    expect(text).toContain('  traits: ["fiercely loyal, even to a fault","wry"]')
   })
 })
 
@@ -247,6 +263,16 @@ describe('planCharacterChanges', () => {
       SHOWN,
     )
     expect(plan.changes.visualDescriptors).toEqual({ hair: 'cropped' })
+  })
+
+  it('reads back a description as it was listed, without the indent', () => {
+    const tomas = character('Tomas', { description: 'A pilot.\n\nShe lost her brother.' })
+    const listed = 'A pilot.\n\n    She lost her brother.'
+    expect(planCharacterChanges(tomas, { description: listed }, SHOWN).changes).toEqual({})
+    expect(
+      planCharacterChanges(tomas, { description: `${listed}\n    She found him.` }, SHOWN).changes
+        .description,
+    ).toBe('A pilot.\n\nShe lost her brother.\nShe found him.')
   })
 
   it('writes nothing for a rewrite equal to the current value', () => {

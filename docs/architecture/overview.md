@@ -283,7 +283,9 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   (`relationship:`, `status:`, `description:`, `traits:`, `appearance:`), in every list the
   classifier is shown — characters (`classifierCharacters.ts`), locations, items, story beats
   (`ClassifierService`) — and in `WorldStateInjector`'s narrator block, whose prose the
-  classifier also reads. A line break inside a character's value is indented under it. One
+  classifier also reads. Every further line of a character's value is indented under it, blank
+  lines kept, and a rewrite has the indent taken off again; traits are listed as a JSON list,
+  since the model writes the list back whole and a trait may hold a comma. One
   name per line also holds names a comma-separated list could not: locations and items were
   CSV until they carried state.
 

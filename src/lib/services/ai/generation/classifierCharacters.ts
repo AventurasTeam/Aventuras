@@ -86,8 +86,9 @@ export function formatExistingCharacters(characters: Character[]): string {
       if (view.profile) {
         const description = c.description?.trim()
         if (description) entry += attribute('description', description)
+        // A JSON list, since a trait may hold a comma and the model writes the list back whole.
         const traits = uniqueTerms(c.traits ?? [])
-        if (traits.length > 0) entry += attribute('traits', traits.join(', '))
+        if (traits.length > 0) entry += attribute('traits', JSON.stringify(traits))
       }
       if (view.appearance && hasDescriptors(c.visualDescriptors)) {
         entry += attribute('appearance', descriptorsToString(c.visualDescriptors))
@@ -97,9 +98,19 @@ export function formatExistingCharacters(characters: Character[]): string {
     .join('\n')
 }
 
-// A line break inside a value is indented, so it cannot start a line read as a name.
+// Every further line of a value is indented, so none can be read as a name; blank lines stay.
+// `trimLines` takes the indent off what the model writes back.
 function attribute(label: string, value: string): string {
-  return `\n  ${label}: ${value.trim().replace(/\s*\n\s*/g, '\n    ')}`
+  const [first, ...rest] = trimLines(value).split('\n')
+  return [`\n  ${label}: ${first}`, ...rest.map((line) => (line ? `    ${line}` : ''))].join('\n')
+}
+
+function trimLines(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .join('\n')
+    .trim()
 }
 
 export type RewriteField = 'description' | 'traits' | 'visualDescriptors'
@@ -153,10 +164,10 @@ export function planCharacterChanges(
   }
 
   if (update.description !== undefined) {
-    const description = update.description.trim()
+    const description = trimLines(update.description)
     if (!description) ignored.push({ field: 'description', reason: 'empty' })
     else if (!view.profile) hidden('description')
-    else if (description !== existing.description?.trim()) {
+    else if (description !== trimLines(existing.description ?? '')) {
       changes.description = description
       changes.translatedDescription = null
     }
@@ -199,7 +210,7 @@ function sameDescriptors(a: VisualDescriptors, b: VisualDescriptors): boolean {
 function withoutBlanks(descriptors: VisualDescriptors): VisualDescriptors {
   const out: VisualDescriptors = {}
   for (const [key, value] of Object.entries(descriptors)) {
-    const text = typeof value === 'string' ? value.trim() : ''
+    const text = typeof value === 'string' ? trimLines(value) : ''
     if (text) out[key as keyof VisualDescriptors] = text
   }
   return out
