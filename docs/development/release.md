@@ -343,6 +343,14 @@ install will see the new version. See [The Updater](#the-updater).
 npx tauri build
 ```
 
+On Windows, Defender's real-time scanning can grab a freshly written archive in
+`src-tauri\target` and fail the build with "failed to remove temporary directory … (os error 32)".
+`scripts\defender-build-exclusion.ps1 -Action Add` (or `-Action Remove`), run from an administrator
+PowerShell, excludes that checkout's build output only; sources, `node_modules` and the cargo
+registry stay scanned. Each worktree has its own `target`, so run the copy in each. `-Action Scan`
+lists every exclusion with "Aventuras" in its path, and whether its checkout is a live git
+worktree or was removed and left the rule behind.
+
 ### Building iOS
 
 The iOS build produces an **unsigned** ARM64 device `.ipa`: no Apple certificates,
