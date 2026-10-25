@@ -276,6 +276,45 @@ describe('runBootstrap', () => {
     })
   })
 
+  // An unread hold counts as one: an empty list would let the title claim the story recovered.
+  it('publishes the hold as unread when it cannot be read', async () => {
+    await seedRow()
+    await ctx.db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await ctx.db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    // json_extract throws on it, failing the read.
+    ctx.sqlite.exec(`UPDATE branches SET classifier_status = '{not json' WHERE id = 'b1'`)
+    // A turn orphan whose reversal fails, so there is a report to publish.
+    await ctx.db.insert(pipelineRuns).values({
+      runId: 'r-failed',
+      kind: 'per-turn',
+      actionId: 'a-failed',
+      storyId: 's1',
+      startedAt: 1,
+      finishedAt: null,
+      outcome: null,
+    })
+    await ctx.db.insert(deltas).values({
+      id: 'd-failed',
+      branchId: 'b1',
+      entryId: null,
+      actionId: 'a-failed',
+      logPosition: 1,
+      source: 'ai_classifier',
+      targetTable: 'not_registered' as never,
+      targetId: 'missing',
+      op: 'create',
+      undoPayload: null,
+      encodingVersion: 1,
+      createdAt: 1,
+    })
+
+    expect(await runBootstrap(ctx)).toEqual({ status: 'ok' })
+
+    const published = recoveryReportStore.getSnapshot().pendingRecoveryReport
+    expect(published?.failures).toMatchObject([{ runId: 'r-failed', storyId: 's1' }])
+    expect(published?.heldStoryIds).toBeNull()
+  })
+
   // Guards the load-bearing registerAllDomains()-before-recovery order. Simulate a
   // cold boot (empty registry): runBootstrap's own registration must repopulate it
   // before reverse-replay, else recovery throws unknown target_table and the dirty
