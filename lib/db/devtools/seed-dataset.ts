@@ -372,7 +372,7 @@ const heroEntities: NewEntity[] = [
       equipped_items: [ID.blade],
       inventory: [ID.amulet],
       faction_id: ID.watch,
-      // The last entry is a multiple of 12 (`system`); the one before it is a reply.
+      // The tail entry is `system`; the one before it is a reply.
       lastSeenAt: {
         entryId: entryId('hero', N_HERO - 1),
         locationId: ID.hollow,
@@ -944,8 +944,8 @@ const heroInvolvements: NewHappeningInvolvement[] = [
 ]
 
 // characterId must be a character entity; the natural key is (branch, character, happening).
-// No anchor may land on a multiple of 12: those hero entries are `system`, which the entry
-// index excludes, and the picker would render them as "Entry no longer exists".
+// No anchor may land on the hero tail: it is `system`, which the entry index excludes, and
+// the picker would render it as "Entry no longer exists".
 const heroAwareness: NewHappeningAwareness[] = [
   {
     id: 'haw_ambush_kael',
