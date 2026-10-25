@@ -26,6 +26,13 @@ for the placement rule.
   2026-10-25, since a structural remedy found at the end of the cycle
   costs the most.
 
+  Measured 2026-10-26 on the seeded `br_hero_main` (20 turns, a
+  14–15k-character prompt) against a local Gemma 4 26B A4B: 20 of 20
+  first-attempt parses with mentioned places off, 19 of 20 with them
+  on, the miss a JSON syntax slip a parse retry recovered; no run
+  failed. The seed's graph is small, so a played story's longer
+  replies are the open case.
+
 - **Generation prompts aren't checked against the model's window.**
   Nothing compares a generation prompt against the model's window
   (`maxInputTokens` is read by the embedder only), while the
