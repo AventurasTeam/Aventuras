@@ -131,7 +131,7 @@ describe('classifierExtractionSchema', () => {
     expect(parsed.happenings[0]?.awareness[0]?.severity).toBe(0)
   })
 
-  it('takes only the two canon status transitions, read trimmed and case-folded', () => {
+  it('takes only the two canon status transitions, read trimmed and lowercased', () => {
     const { reply, malformed } = readClassifierReply(
       classifierExtractionSchema.parse({
         statusFlips: [
@@ -542,7 +542,7 @@ describe('an entry of a reply list that does not fit', () => {
   )
 
   // Q28: a status the model capitalised or padded lands; one outside the list still drops.
-  it('reads a status trimmed and case-folded, and still drops one outside the list', () => {
+  it('reads a status trimmed and lowercased, and still drops one outside the list', () => {
     const thread = { title: 'Recover the relic', description: 'Stolen.' }
     const { reply, malformed } = readClassifierReply(
       classifierExtractionSchema.parse({

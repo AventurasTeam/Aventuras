@@ -468,8 +468,8 @@ describe('periodicClassifierPhase', () => {
     expect(prompt).not.toMatch(/(char|loc|item|fact)_[0-9a-f]{8}-/)
   })
 
-  // architecture.md → System and user halves.
-  // observability.md → actionId threading: no cache marker, and the pass's action id.
+  // architecture.md → System and user halves: no cache marker.
+  // observability.md → actionId threading: the pass's action id.
   it("sends no cache marker, and the pass's action id", async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 1 })
     vi.mocked(generateStructured).mockResolvedValue({
@@ -2140,7 +2140,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
     const logged = getDiagnosticsSnapshot().logEntries.filter(
       (e) => e.kind === 'pipeline.recoverable_error',
     )
-    // The reason too: a timeout carries no detail, and logging its kind alone lost why it retried.
+    // The reason too: a timeout carries no detail, so its kind alone can't say why it retried.
     expect(logged.map((e) => [e.level, e.fields, e.actionId])).toEqual([
       ['warn', { kind: 'phase-logic', detail: 'Unexpected end of JSON input' }, result.actionId],
       ['warn', { kind: 'provider', reason: 'timeout' }, result.actionId],
