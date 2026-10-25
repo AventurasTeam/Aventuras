@@ -42,7 +42,7 @@ export function profileTimeoutMs(seconds: number | undefined): number | undefine
 
 // Single owner of the ResolvedParams → SDK call-settings mapping. Thinking is
 // anthropic-only: other provider types would reject the providerOptions key. No `timeout`: the
-// SDK builds AbortSignal.timeout from it, which React Native's AbortController lacks.
+// SDK builds AbortSignal.timeout from it, which React Native's AbortSignal lacks.
 export function buildCallSettings(
   params: ResolvedParams,
   providerType: ProviderInstance['type'] | undefined,
@@ -70,7 +70,10 @@ export type PreparedGeneration =
       ok: true
       model: LanguageModel
       callSettings: CallSettings
-      /** The profile's `timeout`, bounded by the caller's own signal rather than the SDK's. */
+      /**
+       * The profile's `timeout` in ms, enforced on the call's own signal, not the SDK's `timeout`
+       * option.
+       */
       timeoutMs: number | undefined
       providerId: string
       modelId: string

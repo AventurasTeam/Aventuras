@@ -2315,8 +2315,8 @@ describe('narrative fold — creates', () => {
     expect(await storedEntry(USER_ACTION_ID)).toBeDefined()
   })
 
-  // piggyback.md → Parse strategy and failure recovery: stackables add, so a failed fold holds its
-  // back for the fallback, which would otherwise move the same amount a second time.
+  // piggyback.md → Parse strategy and failure recovery: stackables add, so a failed fold holds them
+  // back for the fallback, which would otherwise move the same amount twice.
   describe('a failed fold with a stackable', () => {
     const goldReply =
       'Aria pockets the purse.\n<state><scene_entities>c1</scene_entities>' +
