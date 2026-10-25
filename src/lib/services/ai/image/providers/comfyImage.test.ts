@@ -315,6 +315,15 @@ describe('references', () => {
   const other = 'AQID'
   const uploadedName = (index: number) =>
     ((uploads()[index][1]!.body as FormData).get('image') as File).name
+  // Uploads hash first, so files sent together reach fetch in no fixed order.
+  const uploadedNameOf = async (data: string) => {
+    for (const [, init] of uploads()) {
+      const file = (init!.body as FormData).get('image') as File
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      if (btoa(String.fromCharCode(...bytes)) === data) return file.name
+    }
+    throw new Error(`No upload carries ${data}`)
+  }
   const generateWith = (
     files: NonNullable<ImageModelV4CallOptions['files']>,
     {
@@ -340,19 +349,22 @@ describe('references', () => {
     )
 
   it('uploads each reference into temp and writes the names into the graph', async () => {
-    const result = await generateWith([png(), png(other)], {
+    const first = 'iVBORw0KGgo='
+    const result = await generateWith([png(first), png(other)], {
       references: ['10.inputs.image', '11.inputs.image'],
     })
 
     expect(uploads()).toHaveLength(2)
-    const form = uploads()[0][1]!.body as FormData
-    expect(form.get('type')).toBe('temp')
-    expect(form.get('subfolder')).toBe('aventuras')
-    expect(uploadedName(0)).toMatch(/^aventuras-[0-9a-f]{16}\.png$/)
+    for (const [, init] of uploads()) {
+      const form = init!.body as FormData
+      expect(form.get('type')).toBe('temp')
+      expect(form.get('subfolder')).toBe('aventuras')
+    }
+    expect(await uploadedNameOf(first)).toMatch(/^aventuras-[0-9a-f]{16}\.png$/)
 
     const graph = sentPrompt().body.prompt
-    expect(graph['10'].inputs.image).toBe(`aventuras/${uploadedName(0)} [temp]`)
-    expect(graph['11'].inputs.image).toBe(`aventuras/${uploadedName(1)} [temp]`)
+    expect(graph['10'].inputs.image).toBe(`aventuras/${await uploadedNameOf(first)} [temp]`)
+    expect(graph['11'].inputs.image).toBe(`aventuras/${await uploadedNameOf(other)} [temp]`)
     expect(result.warnings).toEqual([])
   })
 
