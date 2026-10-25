@@ -116,7 +116,9 @@ export function resolveItemLocation(
   const equippedSaid = said.equipped ?? undefined
   const text = said.location?.trim() ?? ''
 
-  let target: Target = text ? targetOf(text, world) : { kind: 'none' }
+  // A legacy "ground" row is shown to the classifier as is; repeating it is not a move.
+  const groundEcho = foldName(text) === GROUND && foldName(existing.location) === GROUND
+  let target: Target = text && !groundEcho ? targetOf(text, world) : { kind: 'none' }
   // Equipping an item takes it.
   if (target.kind === 'none' && equippedSaid && !wasHeld) target = { kind: 'inventory' }
 

@@ -313,7 +313,8 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   Legacy free text is converted in memory when a story or branch loads (`normalizeItems`), so
   every reader uses the plain fields: empty text and `inventory` become the inventory, `worn`
   the inventory equipped, a location's name its id, and anything else ("ground", "in her pack")
-  stays as text and is unequipped.
+  stays as text and is unequipped. The classifier is shown that text, so a legacy `ground`
+  it sends back unchanged is not read as a move to the scene's location.
   An update writes `location` and `equipped` together, so the row is rewritten the first time
   either changes or the item is saved in the panel; until then it is converted again on each
   load, against the locations as they are then. Deleting a location moves its items to the

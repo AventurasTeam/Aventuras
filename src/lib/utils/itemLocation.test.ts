@@ -189,6 +189,15 @@ describe('resolveItemLocation', () => {
     })
   })
 
+  it('does not move a legacy "ground" item when the classifier repeats it', () => {
+    const dropped = item('Rope', { location: 'ground' })
+    expect(resolveItemLocation({ location: 'Ground' }, world, dropped)).toEqual({})
+    expect(resolveItemLocation({ location: 'inventory' }, world, dropped)).toEqual({
+      location: 'inventory',
+      equipped: false,
+    })
+  })
+
   it('keeps the existing location when there is no scene location', () => {
     expect(resolveItemLocation({ location: 'ground' }, nowhere, lying)).toEqual({})
     expect(resolveItemLocation({ location: 'ground' }, nowhere, held)).toEqual({})
