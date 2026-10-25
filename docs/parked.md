@@ -2784,6 +2784,12 @@ text?" confirm gate. Toast is lighter-weight and uses the existing
 [`patterns/toast.md`](./ui/patterns/toast.md) primitive; dialog is
 more explicit. Surface on user reports.
 
+A failed or cancelled turn's text shares the gap once it goes back to
+the draft: a draft doesn't survive a restart, nor a reader closed
+under the dispatch
+([`reader-composer.md → Custody of the turn's text`](./ui/screens/reader-composer/reader-composer.md#custody-of-the-turns-text)).
+Persisting drafts closes both.
+
 #### A turn started mid-refresh kills the re-roll with no user feedback
 
 `GenerationStatusPill`'s `GenerationPhase` union

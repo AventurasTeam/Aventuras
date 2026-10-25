@@ -2300,7 +2300,12 @@ to any of these alongside whatever causes the relaxation.
   marker scheme has a small data-loss window between the final
   action's SQLite commit and the `pipeline_runs` finish marker
   UPDATE. Tighten by coupling them in one txn when measurement
-  shows it bites.
+  shows it bites. A periodic classifier pass makes the loss
+  permanent rather than a redo: its watermark lands with its success
+  status before the marker, so boot reverses the pass's facts while
+  `processedThrough` stays past them, and no later pass rereads that
+  window. Coupling the watermark into the marker's transaction closes
+  it for the pass.
 - **Pack-defined pipeline kinds (post-v1).** Pack model assumes
   templates / macros only. `PipelineAction` kind set is closed
   (TypeScript union); pack-defined deltas would need a different
