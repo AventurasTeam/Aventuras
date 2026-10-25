@@ -5,7 +5,7 @@ import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { branches, deltas, stories, type ClassifierStatus } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
-import { resetStuckClassifierRunState } from './deps'
+import { readHeldClassifierStoryIds, resetStuckClassifierRunState } from './deps'
 
 async function seed(
   db: Awaited<ReturnType<typeof createTestDb>>['db'],
@@ -195,5 +195,23 @@ describe('resetStuckClassifierRunState', () => {
     await resetStuckClassifierRunState({ db, runInTransaction }, [])
 
     expect(await readStatus(db, 'b-idle')).toEqual(idle)
+  })
+})
+
+describe('readHeldClassifierStoryIds', () => {
+  it('lists a story once, however many of its branches are running', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    const running: ClassifierStatus = {
+      state: 'running',
+      lastSuccessAt: null,
+      lastError: null,
+      processedThrough: 0,
+    }
+    await seed(db, 'b1', running)
+    await seed(db, 'b2', running)
+    await seed(db, 'b-idle', { ...running, state: 'idle' })
+
+    expect(await readHeldClassifierStoryIds({ db, runInTransaction })).toEqual(['s1'])
   })
 })
