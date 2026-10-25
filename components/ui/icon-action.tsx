@@ -154,14 +154,18 @@ export function IconAction({
       </Pressable>
     </TextClassContext.Provider>
   )
-  if (disabled && disabledReason && Platform.OS === 'web') {
-    return (
-      <div title={disabledReason} className="inline-flex">
-        {pressable}
-      </div>
-    )
-  }
-  return pressable
+  if (Platform.OS !== 'web') return pressable
+  // Always rendered, display: contents until it carries the tooltip: a wrapper that came and went
+  // would remount the button each time it disabled, every row of the reader at once per turn.
+  const titled = disabled === true && !!disabledReason
+  return (
+    <div
+      title={titled ? disabledReason : undefined}
+      className={titled ? 'inline-flex' : 'contents'}
+    >
+      {pressable}
+    </div>
+  )
 }
 
 export { iconActionVariants }
