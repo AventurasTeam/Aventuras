@@ -206,8 +206,9 @@ export type StructuredCallOptions = {
   /** Mark the system prefix for caching; honoured on `anthropic` providers only. */
   cacheSystemPrefix?: boolean
   /** The run's action, so the call's fetch capture links to it (observability.md → actionId
-   *  threading). Absent outside a run, as for the wizard. */
-  actionId?: string
+   *  threading); `null` outside a run, as for the wizard. Required, so a call can't compile
+   *  without one. */
+  actionId: string | null
 }
 
 /** generation-pipeline.md → Two retry tiers: `recoverable` holds each retried attempt. */
@@ -232,9 +233,9 @@ export async function generateStructured<T>(
   schema: z.ZodType<T>,
   config: ResolveModelConfig,
   signal: AbortSignal,
-  options?: StructuredCallOptions,
+  options: StructuredCallOptions,
 ): Promise<GenerateStructuredResult<T>> {
-  const resolved = prepareGeneration(target, config, options?.actionId)
+  const resolved = prepareGeneration(target, config, options.actionId ?? undefined)
   if (!resolved.ok) return { status: 'not-configured', kind: resolved.kind }
 
   // z.toJSONSchema throws on unrepresentable schemas (transforms, refinements);
@@ -256,7 +257,7 @@ export async function generateStructured<T>(
   const model = withMiddleware(resolved.model, [
     jsonResponseFormatMiddleware(jsonSchema),
     ...(resolved.params.structuredOutput === 'force-on' ? [] : [promptSchemaMiddleware()]),
-    ...(marksSystemPrefix(options?.cacheSystemPrefix, resolved.providerType)
+    ...(marksSystemPrefix(options.cacheSystemPrefix, resolved.providerType)
       ? [anthropicCacheMarkerMiddleware()]
       : []),
   ])

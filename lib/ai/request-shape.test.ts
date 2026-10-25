@@ -90,14 +90,10 @@ async function structured(
   config: ResolveModelConfig,
   cacheSystemPrefix?: boolean,
 ): Promise<Body> {
-  await generateStructured(
-    'classifier',
-    prompt,
-    schema,
-    config,
-    new AbortController().signal,
-    cacheSystemPrefix === undefined ? undefined : { cacheSystemPrefix },
-  )
+  await generateStructured('classifier', prompt, schema, config, new AbortController().signal, {
+    actionId: null,
+    ...(cacheSystemPrefix === undefined ? {} : { cacheSystemPrefix }),
+  })
   return lastBody()
 }
 

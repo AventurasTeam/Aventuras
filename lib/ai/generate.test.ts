@@ -289,6 +289,7 @@ describe('generateStructured', () => {
       schema,
       STRUCTURED_CFG,
       new AbortController().signal,
+      { actionId: null },
     )
     expect(res).toEqual({ status: 'ok', value: { description: 'A tale.' }, recoverable: [] })
   })
@@ -312,6 +313,7 @@ describe('generateStructured', () => {
       schema,
       STRUCTURED_CFG,
       new AbortController().signal,
+      { actionId: null },
     )
     expect(vi.mocked(getModel).mock.calls.map((call) => call[2])).toEqual(['act_1', undefined])
   })
@@ -327,6 +329,7 @@ describe('generateStructured', () => {
       schema,
       STRUCTURED_CFG,
       new AbortController().signal,
+      { actionId: null },
     )
     expect(res).toEqual({
       status: 'ok',
@@ -343,6 +346,7 @@ describe('generateStructured', () => {
       schema,
       STRUCTURED_CFG,
       new AbortController().signal,
+      { actionId: null },
     )
     expect(res).toEqual({
       status: 'failed',
@@ -360,6 +364,7 @@ describe('generateStructured', () => {
       schema,
       STRUCTURED_CFG,
       controller.signal,
+      { actionId: null },
     )
     expect(res).toEqual({ status: 'aborted', recoverable: [] })
   })
@@ -378,6 +383,7 @@ describe('generateStructured', () => {
       schema,
       STRUCTURED_CFG,
       controller.signal,
+      { actionId: null },
     )
     expect(res).toEqual({
       status: 'aborted',
@@ -393,6 +399,7 @@ describe('generateStructured', () => {
       schema,
       STRUCTURED_CFG,
       new AbortController().signal,
+      { actionId: null },
     )
     expect(runProviderCall).toHaveBeenCalledOnce()
     return vi.mocked(runProviderCall).mock.calls.at(-1)?.[0]
@@ -424,6 +431,7 @@ describe('generateStructured', () => {
       schema,
       STRUCTURED_CFG,
       new AbortController().signal,
+      { actionId: null },
     )
     expect(runProviderCall).toHaveBeenCalledWith(
       expect.objectContaining({ temperature: 0.5, maxOutputTokens: 100 }),
@@ -458,6 +466,7 @@ describe('generateStructured', () => {
         schema,
         STRUCTURED_CFG,
         outer.signal,
+        { actionId: null },
       )
       await vi.advanceTimersByTimeAsync(29_999)
       expect(attempts.map((signal) => signal.aborted)).toEqual([false])
@@ -488,6 +497,7 @@ describe('generateStructured', () => {
       schema,
       STRUCTURED_CFG,
       new AbortController().signal,
+      { actionId: null },
     )
     expect(res.status).toBe('not-configured')
   })
@@ -499,6 +509,7 @@ describe('generateStructured', () => {
       schema,
       STRUCTURED_CFG,
       new AbortController().signal,
+      { actionId: null },
     )
     expect(res.status).toBe('failed')
   })
@@ -511,6 +522,7 @@ describe('generateStructured', () => {
       unrepresentable as never,
       STRUCTURED_CFG,
       new AbortController().signal,
+      { actionId: null },
     )
     expect(res).toEqual({ status: 'failed', detail: expect.any(String), recoverable: [] })
   })
@@ -607,7 +619,7 @@ describe('cache marker', () => {
       schema,
       config(type),
       new AbortController().signal,
-      cacheSystemPrefix === undefined ? undefined : { cacheSystemPrefix },
+      { actionId: null, ...(cacheSystemPrefix === undefined ? {} : { cacheSystemPrefix }) },
     )
     const sent = vi.mocked(runProviderCall).mock.calls.at(-1)?.[0].model
     return systemCacheControl(sent, inner, 'doGenerate')

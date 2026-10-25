@@ -211,6 +211,7 @@ async function main(): Promise<void> {
       schema,
       config,
       AbortSignal.timeout(PASS_TIMEOUT_DEFAULT_MS),
+      { actionId: null },
     )
     if (result.status === 'not-configured')
       throw new Error(`[probe] the classifier target did not resolve: ${result.kind}`)
