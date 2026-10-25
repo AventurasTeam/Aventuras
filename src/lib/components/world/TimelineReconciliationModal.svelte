@@ -1,7 +1,7 @@
 <script lang="ts">
   import StoryTimeField from '#lib/components/shared/StoryTimeField.svelte'
+  import DiscardConfirm from '#lib/components/shared/DiscardConfirm.svelte'
   import { story, type TimelineReconciliationPreview } from '#lib/stores/story.svelte.ts'
-  import { ask } from '@tauri-apps/plugin-dialog'
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
   import * as Dialog from '#lib/components/ui/dialog/index.ts'
@@ -154,7 +154,7 @@
     const boundary = boundaryOf(which)
     if (!boundary) return
     // One editor at a time: opening the other end replaces what this one holds.
-    if (editorChanged && !(await askToDiscard('Discard the time you typed?'))) return
+    if (!(await confirmDiscardEditor())) return
     const seed = drafts[which]?.time ?? boundary.time
     draftTimeText = seed ? formatStoryTime(seed) : ''
     const draftedNote = drafts[which]?.note
@@ -551,28 +551,50 @@
       [...Object.values(supplied), ...Object.values(gapWeights)].some((text) => text.trim() !== ''),
   )
 
-  /** A question already on screen answers for every attempt made while it is up. */
-  let asking = false
+  interface DiscardQuestion {
+    title: string
+    description: string
+    resolve: (discard: boolean) => void
+  }
 
-  async function askToDiscard(message: string): Promise<boolean> {
-    if (asking) return false
-    asking = true
-    try {
-      return await ask(message, { title: 'Discard Changes', kind: 'warning' })
-    } finally {
-      asking = false
-    }
+  /** Asked inside the screen, over its body, like an action modal's discard question. */
+  let question = $state<DiscardQuestion | null>(null)
+
+  /** A question already on screen answers for every attempt made while it is up. */
+  function askToDiscard(title: string, description: string): Promise<boolean> {
+    if (question) return Promise.resolve(false)
+    return new Promise((resolve) => {
+      question = { title, description, resolve }
+    })
+  }
+
+  function answer(discard: boolean) {
+    const asked = question
+    question = null
+    asked?.resolve(discard)
   }
 
   /** The one question before discarding what was typed. */
   async function confirmDiscard(): Promise<boolean> {
     if (!unapplied) return true
-    return askToDiscard('Discard the boundaries and weights you have set for this range?')
+    return askToDiscard(
+      'Discard the changes to this range?',
+      'The boundaries and weights you have set for this range will be lost.',
+    )
+  }
+
+  /** The question before dropping what the open editor holds. */
+  function confirmDiscardEditor(): Promise<boolean> {
+    if (!editorChanged) return Promise.resolve(true)
+    return askToDiscard(
+      'Discard the time you typed?',
+      'What you typed for this boundary will be lost.',
+    )
   }
 
   /** Escape on an open editor closes it, asking first when something was typed. */
   async function escapeEditor() {
-    if (!editorChanged || (await askToDiscard('Discard the time you typed?'))) closeEditor()
+    if (await confirmDiscardEditor()) closeEditor()
   }
 
   /** Every way of closing the screen comes through here. */
@@ -852,12 +874,14 @@
     }}
     onEscapeKeydown={(event: KeyboardEvent) => {
       event.preventDefault()
-      if (editing) void escapeEditor()
+      if (question) answer(false)
+      else if (editing) void escapeEditor()
       else void requestClose()
     }}
     onInteractOutside={(event: PointerEvent) => {
       event.preventDefault()
-      void requestClose()
+      if (question) answer(false)
+      else void requestClose()
     }}
     style={narrow
       ? '--tw-enter-translate-x: 0; --tw-enter-translate-y: 0; --tw-exit-translate-x: 0; --tw-exit-translate-y: 0; --tw-enter-scale: 1; --tw-exit-scale: 1;'
@@ -871,7 +895,7 @@
       a scroll container loses where the reader was, and returning to the top of a long ladder
       after reading one entry is the opposite of what the button is for.
     -->
-    <div inert={!!fullTextEntry} class="flex min-h-0 flex-1 flex-col">
+    <div inert={!!fullTextEntry || question !== null} class="flex min-h-0 flex-1 flex-col">
       {#if narrow}
         <div class="px-4 py-3 text-center">
           <Dialog.Title class="text-lg font-semibold">Reconcile a range</Dialog.Title>
@@ -971,6 +995,14 @@
         </p>
       </div>
     {/if}
+
+    <DiscardConfirm
+      open={question !== null}
+      title={question?.title}
+      description={question?.description}
+      onCancel={() => answer(false)}
+      onDiscard={() => answer(true)}
+    />
   </Dialog.Content>
 </Dialog.Root>
 

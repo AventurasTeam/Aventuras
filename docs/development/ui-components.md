@@ -164,6 +164,11 @@ These are not Cancel plus one action, and stay as they are: `TimelineAnomaliesMo
 Close), `TimelineReconciliationModal` (a multi-step wizard), the unsaved-changes question in
 `PromptPackEditor` (three choices) and `RestoreCompleteDialog` (a status screen).
 
+A screen like these that asks before discarding still asks the shell's way: `shared/DiscardConfirm`
+inside its own content, over an `inert` body, never the native `ask()` of
+`@tauri-apps/plugin-dialog`. `TimelineReconciliationModal` does, and answers Escape and an outside
+click with "keep" while the question is up.
+
 ## Folding explanations
 
 An explanation of how something works, which a reader needs once and then knows, is a
