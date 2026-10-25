@@ -49,6 +49,10 @@ slice-planning gate forces its resolution before that slice is planned.
   - 2026-10-07, 4.5a: `Trigger Opens Overlay`
     (`preset-browser.stories.tsx:49`) failed once in a 27-file parallel
     run, on `findByText`'s 1 s default, and passed 3 of 3 alone.
+  - 2026-10-25, the 2026-10-24 triage pass: `Trigger Opens Overlay`
+    failed once in a full parallel Storybook run (145 files) at a
+    commit whose `components/wizard/` matched main's, and passed 3 of
+    3 alone. The other two full runs that day were green.
 
   **Revisit trigger.** A browser-project regression that a parallel run
   cannot localise. That is the moment the missing debugging move costs
