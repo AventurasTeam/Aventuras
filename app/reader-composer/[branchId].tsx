@@ -852,7 +852,7 @@ export default function ReaderComposerRoute() {
           })
         // Scoped to the action alone: a throw out of the arms below happens
         // *after* it returned, with the user's text in hand, so it must not
-        // inherit the "no submission to hand back" premise the catch encodes.
+        // inherit the "no submission to hand back" premise the throw arm encodes.
         const ran = await runBehindTailDrop({
           hasTail: dropped != null,
           clear: () => clearSystemEntry(branchId, ctx),

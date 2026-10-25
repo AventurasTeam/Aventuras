@@ -575,9 +575,9 @@ throw). A regenerate whose own text is the same, on its new failure
 entry or back in the draft, hands nothing back. `Dismiss` and a
 regenerate hand the text back once the row is deleted, even when the
 reload after it fails: the stale card left on screen no longer holds
-it. A delete that fails leaves the entry and its `Retry` standing, so
-nothing is handed back, since a copy in the draft would run the turn
-twice. An empty draft receives the text verbatim under composer mode
+it. A delete that fails hands nothing back: the entry and its `Retry`
+still stand, and a copy in the draft would run the turn twice. An
+empty draft receives the text verbatim under composer mode
 `Free`, since the stored content is already wrapped and must not be
 wrapped twice; a non-empty draft wins and the user is told the text
 was dropped rather than losing it silently. A reader closed under the
