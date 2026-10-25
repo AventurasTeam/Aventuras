@@ -2590,6 +2590,20 @@ describe('narrative fold — creates', () => {
       })
     })
 
+    // piggyback.md → Parse strategy: a cut may have taken the place the scene moved to.
+    it('holds the drops of a block the stream cut off before any place, logged as cut off', async () => {
+      const fold = await failedFold(
+        'Aria sets her sword on a crate.\n<state><scene_entities>c1</scene_entities>' +
+          '<transfers><drop id="i1" from="c1" /></transfers><world_time_delta>30',
+      )
+      expect(fold.log.debug).toHaveBeenCalledWith('classifier.drops_held', {
+        entryId: fold.replyId,
+        itemIds: ['i1'],
+        reason: 'cut_off',
+      })
+      expect(replyOf(fold.events).metadata?.stateReport?.transfers?.drops).toBeUndefined()
+    })
+
     // The fold can use its own place, or keeps the previous one for a place apply.ts rejects on any
     // block: the drop lands now.
     describe('a failed fold whose place stands', () => {
@@ -2705,6 +2719,23 @@ describe('narrative fold — creates', () => {
     const { events, result } = await foldTurn(CREATE_REPLY, { signal: controller.signal })
     expect(result).toEqual({ status: 'aborted' })
     expect(events.filter((e) => e.type === 'delta_emitted')).toEqual([])
+  })
+
+  // A cancel during an item's match embed must end it rather than wait out a slow provider.
+  it("hands the run's signal to the item match embed, so a cancel ends it", async () => {
+    await seedTurn([
+      ...baseWorld(),
+      worldRow({ id: OLD_KEY, kind: 'item', name: 'rusted key', description: 'an iron key' }),
+    ])
+    const controller = new AbortController()
+    const embedSignals: (AbortSignal | undefined)[] = []
+    configureClassifierEmbedder(async (texts, signal) => {
+      embedSignals.push(signal)
+      return { vectors: texts.map(() => new Float32Array([1, 0])), dim: 2 }
+    })
+    await foldTurn(CREATE_REPLY, { signal: controller.signal })
+    expect(embedSignals).toHaveLength(1)
+    expect(embedSignals[0]).toBe(controller.signal)
   })
 
   // data-model.md → Authorship contract, seen before written: the market is listed by name only.
