@@ -58,16 +58,20 @@ const TRANSLATED_FROM = {
  */
 export function staleTranslations(
   type: TrackedEntityType,
-  from: Record<string, unknown>,
-  to: Record<string, unknown>,
-  saved: Record<string, unknown> | null = null,
+  from: object,
+  to: object,
+  saved: object | null = null,
 ): Record<string, unknown> {
   const stale: Record<string, unknown> = {}
   for (const [translated, source] of Object.entries(TRANSLATED_FROM[type])) {
-    if (source in to && !sameValue(from[source], to[source]))
-      stale[translated] = saved?.[translated] ?? null
+    if (source in to && !sameValue(fieldOf(from, source), fieldOf(to, source)))
+      stale[translated] = (saved && fieldOf(saved, translated)) ?? null
   }
   return stale
+}
+
+function fieldOf(row: object, key: string): unknown {
+  return Object.getOwnPropertyDescriptor(row, key)?.value
 }
 
 // Image data would ride along into every export, sync and load of the records.

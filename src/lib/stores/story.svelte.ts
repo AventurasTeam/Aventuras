@@ -3293,8 +3293,11 @@ class StoryStore {
 
         // If character doesn't exist yet, create it first
         if (!existing) {
-          const newCharData = result.entryUpdates.newCharacters.find((nc) =>
-            sameEntityName(nc.name, update.name),
+          const newName = update.changes.newName?.trim()
+          const newCharData = result.entryUpdates.newCharacters.find(
+            (nc) =>
+              sameEntityName(nc.name, update.name) ||
+              (!!newName && sameEntityName(nc.name, newName)),
           )
           log('Creating character from update (not found):', update.name)
           const charMetadata: Record<string, unknown> = { source: 'classifier' }
@@ -3310,7 +3313,7 @@ class StoryStore {
           const character: Character = {
             id: crypto.randomUUID(),
             storyId,
-            name: newCharData?.name ?? (update.changes.newName?.trim() || update.name),
+            name: newName || (newCharData?.name ?? update.name),
             description: newCharData?.description ?? null,
             relationship: newCharData?.relationship ?? null,
             traits: traitList(newCharData?.traits ?? []),
@@ -5993,12 +5996,7 @@ class StoryStore {
           visualDescriptors: snapshot.visualDescriptors ?? {},
           portrait: snapshot.portrait, // null means no portrait
         }
-        const stale = staleTranslations(
-          'character',
-          { ...character },
-          { ...restored },
-          { ...snapshot.translations },
-        )
+        const stale = staleTranslations('character', character, restored, snapshot.translations)
         return [[character.id, { ...restored, ...stale }]]
       }),
     )

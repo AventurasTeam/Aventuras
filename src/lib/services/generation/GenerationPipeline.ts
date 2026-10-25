@@ -348,15 +348,9 @@ export class GenerationPipeline {
     classification: ClassificationPhaseResult | null,
     translation: TranslationResult2,
   ) {
-    // Matched the way presence is matched everywhere else: an exact-string compare here
-    // dropped the portrait reference for any name the model spelled differently.
-    //
-    // The protagonist is added rather than looked for. They are in every scene by
-    // definition, so whether the classifier remembered to name them says nothing — and
-    // leaving them out costs the image prompt its `isProtagonist` reference.
-    const names = classification?.classificationResult?.scene?.presentCharacterNames ?? []
-    const presentCharacters: Character[] = ctx.worldState.characters.filter(
-      (c) => c.relationship === 'self' || names.some((name) => sameEntityName(c.name, name)),
+    const presentCharacters = presentInScene(
+      ctx.worldState.characters,
+      classification?.classificationResult,
     )
     return {
       storyId: ctx.story.id,
@@ -371,4 +365,31 @@ export class GenerationPipeline {
       abortSignal: ctx.abortSignal,
     }
   }
+}
+
+/**
+ * The characters the classification placed in the scene, out of the cast from before it was
+ * applied. Matched the way presence is matched everywhere else: an exact-string compare dropped
+ * the portrait reference for any name the model spelled differently. A character renamed this
+ * turn is also looked for under the name it was listed with.
+ *
+ * The protagonist is added rather than looked for. They are in every scene by definition, so
+ * whether the classifier remembered to name them says nothing — and leaving them out costs the
+ * image prompt its `isProtagonist` reference.
+ */
+export function presentInScene(
+  characters: readonly Character[],
+  result: ClassificationPhaseResult['classificationResult'] | undefined,
+): Character[] {
+  const present = result?.scene?.presentCharacterNames ?? []
+  const names = [
+    ...present,
+    ...(result?.entryUpdates?.characterUpdates ?? []).flatMap((u) => {
+      const newName = u.changes.newName
+      return newName && present.some((name) => sameEntityName(name, newName)) ? [u.name] : []
+    }),
+  ]
+  return characters.filter(
+    (c) => c.relationship === 'self' || names.some((name) => sameEntityName(c.name, name)),
+  )
 }

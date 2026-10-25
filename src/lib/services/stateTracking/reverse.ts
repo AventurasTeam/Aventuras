@@ -104,12 +104,7 @@ class Workspace {
     const kept = Object.fromEntries(
       [...UNRECORDED_FIELDS].filter((key) => key in was).map((key) => [key, was[key]]),
     )
-    const stale = staleTranslations(
-      type,
-      was,
-      row as unknown as Record<string, unknown>,
-      saved as Record<string, unknown> | null,
-    )
+    const stale = staleTranslations(type, was, row, saved)
     return { ...row, ...kept, ...stale } as TrackedRow
   }
 
@@ -135,7 +130,7 @@ class Workspace {
     if (!row) return false
     const written = {
       ...fields,
-      ...staleTranslations(type, row as unknown as Record<string, unknown>, fields),
+      ...staleTranslations(type, row, fields),
     }
     this.put(type, { ...row, ...written } as TrackedRow)
     this.ops.push({ kind: 'update', entityType: type, id, fields: written })
@@ -217,13 +212,12 @@ class Workspace {
         const visible = shadow && this.find(type, shadow.id)
         if (!visible) return null
         // `visible`'s translations are of the parent's text, not of what this update wrote.
-        const visibleFields = visible as unknown as Record<string, unknown>
         const override = this.withUnrecorded(
           type,
           {
             ...visible,
             ...record.after,
-            ...staleTranslations(type, visibleFields, record.after, record.after),
+            ...staleTranslations(type, visible, record.after, record.after),
             id,
             branchId: record.branchId,
             overridesId: canonicalId(visible),

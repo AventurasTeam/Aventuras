@@ -7,6 +7,7 @@ import type { Character, Location, Item, StoryBeat, VisualDescriptors } from '#l
 import type { UITranslationItem } from '#lib/services/ai/utils/TranslationService.ts'
 import { createLogger } from '#lib/log.ts'
 import { sameValue } from '#lib/services/stateTracking/index.ts'
+import { DESCRIPTOR_CATEGORIES } from '#lib/utils/visualDescriptors.ts'
 
 const log = createLogger('WorldStateTranslationService')
 
@@ -70,13 +71,29 @@ export interface WorldStateTranslationResult {
 
 type EntityType = 'character' | 'location' | 'item' | 'storyBeat'
 
+type TranslatedField =
+  | 'translatedName'
+  | 'translatedDescription'
+  | 'translatedTitle'
+  | 'translatedRelationship'
+  | 'translatedTraits'
+  | 'translatedVisualDescriptors'
+
 interface TranslationItem extends UITranslationItem {
   entityType: EntityType
-  field: string
-  /** The trait's index or the appearance category, for a field translated in parts. */
-  part?: string
+  entityId: string
+  field: TranslatedField
+  /** For traits, translated one per item: the trait's index. */
+  trait?: number
+  /** For appearance, translated one category per item: the category. */
+  category?: keyof VisualDescriptors
   /** Whether a character still holds the text this item was made from. */
   stillCurrent?: (c: Character) => boolean
+}
+
+interface TranslatedPart {
+  item: TranslationItem
+  text: string
 }
 
 export class WorldStateTranslationService {
@@ -109,6 +126,7 @@ export class WorldStateTranslationService {
       if (!db) continue
       items.push({
         id: `${db.id}:name`,
+        entityId: db.id,
         text: loc.name,
         type: 'name',
         entityType: 'location',
@@ -117,6 +135,7 @@ export class WorldStateTranslationService {
       if (loc.description)
         items.push({
           id: `${db.id}:desc`,
+          entityId: db.id,
           text: loc.description,
           type: 'description',
           entityType: 'location',
@@ -130,6 +149,7 @@ export class WorldStateTranslationService {
       if (!db) continue
       items.push({
         id: `${db.id}:name`,
+        entityId: db.id,
         text: item.name,
         type: 'name',
         entityType: 'item',
@@ -138,6 +158,7 @@ export class WorldStateTranslationService {
       if (item.description)
         items.push({
           id: `${db.id}:desc`,
+          entityId: db.id,
           text: item.description,
           type: 'description',
           entityType: 'item',
@@ -151,6 +172,7 @@ export class WorldStateTranslationService {
       if (!db) continue
       items.push({
         id: `${db.id}:title`,
+        entityId: db.id,
         text: beat.title,
         type: 'title',
         entityType: 'storyBeat',
@@ -159,6 +181,7 @@ export class WorldStateTranslationService {
       if (beat.description)
         items.push({
           id: `${db.id}:desc`,
+          entityId: db.id,
           text: beat.description,
           type: 'description',
           entityType: 'storyBeat',
@@ -177,19 +200,22 @@ export class WorldStateTranslationService {
 
     // One write per field. A field translated in parts (traits, appearance) is written only
     // whole, and a character's only while it still holds the text that was sent.
-    const byField = new Map<string, Array<{ item: TranslationItem; text: string }>>()
+    const fieldKey = (i: TranslationItem) => `${i.entityId} ${i.field}`
+    const fields = new Map<string, { expected: number; parts: TranslatedPart[] }>()
+    for (const item of items) {
+      const group = fields.get(fieldKey(item))
+      if (group) group.expected++
+      else fields.set(fieldKey(item), { expected: 1, parts: [] })
+    }
+    const byId = new Map(items.map((i) => [i.id, i]))
     for (const t of translated) {
-      const item = items.find((i) => i.id === t.id)
-      if (!item) continue
-      const key = `${t.id.split(':')[0]}:${item.field}`
-      byField.set(key, [...(byField.get(key) ?? []), { item, text: t.text }])
+      const item = byId.get(t.id)
+      if (item) fields.get(fieldKey(item))?.parts.push({ item, text: t.text })
     }
 
-    for (const [key, parts] of byField) {
-      const [entityId, field] = key.split(':')
-      const { entityType } = parts[0].item
-      const expected = items.filter((i) => `${i.id.split(':')[0]}:${i.field}` === key).length
-      if (parts.length !== expected) continue
+    for (const { expected, parts } of fields.values()) {
+      if (parts.length === 0 || parts.length !== expected) continue
+      const { entityType, entityId, field } = parts[0].item
 
       if (entityType === 'character') {
         const current = callbacks.getCharacter?.(entityId)
@@ -220,20 +246,21 @@ function characterItems(char: Character, onlyMissing: boolean): TranslationItem[
   const items: TranslationItem[] = []
   const wanted = (translation: unknown) => !onlyMissing || !translation
   const add = (
-    field: string,
+    field: TranslatedField,
     key: string,
     text: string,
     stillCurrent: (c: Character) => boolean,
-    part?: string,
+    part: Pick<TranslationItem, 'trait' | 'category'> = {},
   ) =>
     items.push({
       id: `${char.id}:${key}`,
       text,
       type: field === 'translatedName' ? 'name' : 'description',
       entityType: 'character',
+      entityId: char.id,
       field,
-      part,
       stillCurrent,
+      ...part,
     })
 
   if (char.name && wanted(char.translatedName))
@@ -254,27 +281,34 @@ function characterItems(char: Character, onlyMissing: boolean): TranslationItem[
     )
   if (wanted(char.translatedTraits)) {
     const sameTraits = (c: Character) => sameValue(c.traits, char.traits)
-    ;(char.traits ?? []).forEach((trait, i) =>
-      add('translatedTraits', `trait:${i}`, trait, sameTraits, String(i)),
+    ;(char.traits ?? []).forEach((text, trait) =>
+      add('translatedTraits', `trait:${trait}`, text, sameTraits, { trait }),
     )
   }
   if (wanted(char.translatedVisualDescriptors)) {
     const sameLook = (c: Character) => sameValue(c.visualDescriptors, char.visualDescriptors)
-    for (const [category, value] of Object.entries(char.visualDescriptors ?? {})) {
-      if (typeof value === 'string' && value.trim())
-        add('translatedVisualDescriptors', `visual:${category}`, value, sameLook, category)
+    for (const category of DESCRIPTOR_CATEGORIES) {
+      const value = char.visualDescriptors?.[category]
+      if (value?.trim())
+        add('translatedVisualDescriptors', `visual:${category}`, value, sameLook, { category })
     }
   }
   return items
 }
 
 function assemble(
-  field: string,
-  parts: Array<{ item: TranslationItem; text: string }>,
+  field: TranslatedField,
+  parts: TranslatedPart[],
 ): string | string[] | VisualDescriptors {
-  if (field === 'translatedTraits')
-    return parts.toSorted((a, b) => Number(a.item.part) - Number(b.item.part)).map((p) => p.text)
-  if (field === 'translatedVisualDescriptors')
-    return Object.fromEntries(parts.map((p) => [p.item.part, p.text])) as VisualDescriptors
-  return parts[0].text
+  switch (field) {
+    case 'translatedTraits':
+      return parts.toSorted((a, b) => (a.item.trait ?? 0) - (b.item.trait ?? 0)).map((p) => p.text)
+    case 'translatedVisualDescriptors': {
+      const look: VisualDescriptors = {}
+      for (const { item, text } of parts) if (item.category) look[item.category] = text
+      return look
+    }
+    default:
+      return parts[0].text
+  }
 }

@@ -309,7 +309,9 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   fields are (`WorldStateTranslationService`, `updatedCharacters`). Characters are translated
   from their stored rows, traits one by one and appearance by category, and a field is written
   only whole and only while the character still holds the text that was sent, so a revert
-  landing mid-translation is not overwritten. The protagonist's appearance is
+  landing mid-translation is not overwritten. Answers are matched to what was sent by id, and a
+  failed request returns none, so a source text is never saved as its translation. The
+  protagonist's appearance is
   listed, but not their description or traits: those are usually the reader's own setup, and
   the protagonist is in every scene, so every turn would be a chance to rewrite them. Traits
   and descriptions are replaced whole, like appearance; there is no add or remove. A trait list
