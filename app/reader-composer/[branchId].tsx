@@ -1203,7 +1203,17 @@ export default function ReaderComposerRoute() {
         return
       }
       if (classifyRegenerateGate(counts) === 'immediate') {
-        await runRegenerate(entryId)
+        // The confirm path runs this through runAction; the ↻ tap fires it unhandled.
+        try {
+          await runRegenerate(entryId)
+        } catch (err) {
+          logger.error('reader.regenerate_failed', {
+            branchId: startedBranchId,
+            entryId,
+            error: err instanceof Error ? err.message : String(err),
+          })
+          toast.error(t('reader:regenerateFailed'))
+        }
         return
       }
       // Both confirm arms open the cascade modal in M3; M5.2 swaps the
