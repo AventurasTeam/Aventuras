@@ -151,6 +151,8 @@ export type StreamTextResult =
       providerId: string
       /** The profile's `timeout` ended the stream, which then closes as if cancelled. */
       timedOut: () => boolean
+      /** The bound `timedOut` reports on, in ms; `undefined` when the profile sets none. */
+      timeoutMs: number | undefined
     }
   | { ok: false; kind: ResolveFailureKind; target: ResolveTarget }
 
@@ -185,6 +187,7 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
     modelId: resolved.modelId,
     providerId: resolved.providerId,
     timedOut: () => bounded?.expired() ?? false,
+    timeoutMs: resolved.timeoutMs,
   }
 }
 

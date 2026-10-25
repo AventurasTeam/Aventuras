@@ -185,6 +185,7 @@ describe('streamText', () => {
       const { result, call } = streamed()
 
       expect(call).not.toHaveProperty('timeout')
+      expect(result.timeoutMs).toBe(45_000)
       vi.advanceTimersByTime(44_999)
       expect(call.abortSignal?.aborted).toBe(false)
       expect(result.timedOut()).toBe(false)

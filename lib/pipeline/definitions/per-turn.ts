@@ -82,6 +82,14 @@ function skipFailedFold(
   return { ...turn, block: { ...turn.block, transfers: held } }
 }
 
+// A provider can send an error part and then stall: the stall fails the reply, the error says why.
+function narrativeTimeoutDetail(timeoutMs: number | undefined, streamError: unknown): string {
+  const timeout = `narrative: timeout after ${timeoutMs}ms`
+  return streamError === undefined
+    ? timeout
+    : `${timeout}; earlier stream error: ${describeProviderError(streamError)}`
+}
+
 async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
   const { branchId } = ctx
   const working = loadPerTurnWorkingSet(ctx, 'narrative')
@@ -190,7 +198,15 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // supposed to discard.
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
   // Ends the same graceful way, so without this the reply so far would commit as whole.
-  if (call.timedOut()) return { status: 'failed', error: { kind: 'provider', reason: 'timeout' } }
+  if (call.timedOut())
+    return {
+      status: 'failed',
+      error: {
+        kind: 'provider',
+        reason: 'timeout',
+        detail: narrativeTimeoutDetail(call.timeoutMs, streamError),
+      },
+    }
   if (streamError !== undefined) {
     // The envelope message alone ("Failed to process successful response") names
     // nothing actionable, and the orchestrator's own pipeline.phase_failed

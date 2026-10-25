@@ -306,6 +306,7 @@ describe('per-turn pipeline declaration', () => {
       modelId: 'model-1',
       providerId: 'prov-1',
       timedOut: () => true,
+      timeoutMs: 45_000,
       stream: {
         fullStream: (async function* () {
           yield { type: 'text-delta', text: 'The lantern gutt' }
@@ -315,7 +316,47 @@ describe('per-turn pipeline declaration', () => {
 
     const result = await runNarrativePhase()
 
-    expect(result).toEqual({ status: 'failed', error: { kind: 'provider', reason: 'timeout' } })
+    // The orchestrator's failure logs carry only the kind and the detail.
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'provider', reason: 'timeout', detail: 'narrative: timeout after 45000ms' },
+    })
+  })
+
+  // The SDK reports an error part and reads on, so a stall can follow it.
+  it('names the stream error a timeout followed', async () => {
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition,
+      settings: baseSettings({ partialChapterBuffer: 3 }),
+    })
+    hydrateEntries(phaseDb, 'b1', [])
+    entitiesStore.hydrate('b1', [])
+    streamTextMock.mockImplementation((_target, opts) => ({
+      ok: true,
+      modelId: 'model-1',
+      providerId: 'prov-1',
+      timedOut: () => true,
+      timeoutMs: 45_000,
+      stream: {
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'The lantern gutt' }
+          opts.onError?.({ error: new Error('upstream overloaded') })
+        })(),
+      },
+    }))
+
+    const result = await runNarrativePhase()
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: {
+        kind: 'provider',
+        reason: 'timeout',
+        detail: 'narrative: timeout after 45000ms; earlier stream error: upstream overloaded',
+      },
+    })
   })
 
   it('surfaces a resolve failure as a config-resolver phase error', async () => {
