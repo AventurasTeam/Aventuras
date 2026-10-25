@@ -236,3 +236,23 @@ for the placement rule.
   (`usage.inputTokenDetails`), the only measure of whether a cache
   marker pays.
   Wanted in v1, design deferred. Raised by the developer 2026-10-10.
+
+- **Seeing a failure entry's held input.** A failure entry carries the
+  turn's text in `metadata.systemFailure.submission`
+  ([`reader-composer.md → Custody of the turn's text`](./ui/screens/reader-composer/reader-composer.md#custody-of-the-turns-text)),
+  but no card shows it: not a turn's failure entry, not a **Memory
+  update failed** entry, not the notice a committed pass Retry leaves,
+  whose copy says the text is kept on it. Since a Send supersedes that
+  text, seeing it is how the user decides whether it's worth keeping
+  before sending something else. The design settles:
+  - The stored text is already wrapped by its composer mode (that's why
+    hand-back restores it as `Free`), so a preview shows the wrapped
+    text, not what was typed.
+  - How it fits a phone: a one- or two-line muted preview with expand,
+    or a copy action, without pushing the card's actions down.
+  - That one treatment covers all three entries.
+
+  Needs canon in reader-composer.md and
+  [`entry-card.md`](./ui/patterns/entry-card.md), and a wireframe.
+  Raised by the developer 2026-10-25 in the 2026-10-24 triage pass's
+  slice review.

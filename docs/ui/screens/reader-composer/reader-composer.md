@@ -594,7 +594,10 @@ A pass entry's `Retry` whose pass commits clears the entry through
 again once the clear has landed, since the composer stays editable
 through it. Over an occupied draft, or once the user has left the
 branch, the entry stays as a notice holding the text, with no `Retry`
-and copy that says so, and its `Dismiss` hands the text back.
+and copy that says so, and its `Dismiss` hands the text back. A Send
+supersedes the notice's text as it does a failure entry's, and the
+notice's copy says that too, since emptying the composer by sending is
+the step it would otherwise invite.
 
 A **Memory update failed** entry carries the submission only where
 the composer can't hold the text. A Send refused on a held branch
