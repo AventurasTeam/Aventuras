@@ -794,8 +794,11 @@ without one, as a self-closed tag is. Its visual changes, conditions,
 item moves, stackables and drops read `null`, or any other value that
 isn't a list, as none, and a lone entry as a list of one; an entry it
 can't read (no id, a condition with no text, a slot or category outside
-its list, an amount that isn't a number, a drop given as a bare string)
-drops alone, its `null` fields read as absent first. A `null` current
+its list, an amount that isn't a number, a drop given as a bare string),
+or a stackable whose key or amount the tags would refuse, drops alone,
+its `null` fields read as absent first. Each is logged as
+`classifier.ref_dropped` and recorded in the report's `droppedRefs` as
+`unreadable`, so the reader still sees it. A `null` current
 location, summary or transfers object reads as omitted, so a model
 answering `null` for a field it has nothing for never fails the reply.
 

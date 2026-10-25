@@ -26,7 +26,7 @@ import {
   type DroppedRef,
   type ParsedTransfers,
   type PiggybackApplied,
-  type SubstitutedStateBlock,
+  type StackableTransfer,
   type TurnCreatesReport,
   VISUAL_CHANGE_TYPES,
 } from '@/lib/piggyback'
@@ -92,13 +92,38 @@ const createList = <T extends z.ZodType>(create: T) =>
 const withoutNulls = (value: object): object =>
   Object.fromEntries(Object.entries(value).filter(([, field]) => field !== null))
 
-// Read as a create list is, but an entry the schema can't read drops alone, uncounted, as the tags'
-// parser skips one; a null field reads as absent first.
-function readableEntries(value: unknown, entry: z.ZodType): unknown[] | undefined {
+// Read as a create list is, an entry's null field as absent.
+function listEntries(value: unknown): unknown[] | undefined {
   const list = Array.isArray(value) ? value : isJsonObject(value) ? [value] : undefined
-  return list
-    ?.map((item) => (isJsonObject(item) ? withoutNulls(item) : item))
-    .filter((item) => entry.safeParse(item).success)
+  return list?.map((item) => (isJsonObject(item) ? withoutNulls(item) : item))
+}
+
+/** A list entry the schema couldn't read, left in its place for the phase to record. */
+class UnreadableEntry {
+  constructor(readonly detail: string) {}
+}
+
+const issuesText = (issues: readonly z.core.$ZodIssue[]): string =>
+  issues
+    .map((issue) =>
+      issue.path.length > 0
+        ? `${issue.path.map(String).join('.')}: ${issue.message}`
+        : issue.message,
+    )
+    .join('; ')
+
+// The model is shown `entry` alone: one that fails it parses as an UnreadableEntry instead of failing
+// the reply. zod calls a catch with no context for its JSON Schema default, so none is shown.
+function tolerantEntry<T extends z.ZodType>(
+  entry: T,
+  list: string,
+): z.ZodType<z.output<T> | UnreadableEntry> {
+  return entry.catch(
+    (ctx?: z.core.$ZodCatchCtx) =>
+      (ctx === undefined
+        ? undefined
+        : new UnreadableEntry(`${list}: ${issuesText(ctx.error.issues)}`)) as z.output<T>,
+  )
 }
 
 // A null single-value field reads as absent; not .nullable(), which changes the JSON Schema shown.
@@ -196,14 +221,11 @@ export const fallbackClassifierSchema = z.object({
   ),
   worldTimeDelta: z.number(),
   visualChanges: z.preprocess(
-    (value) => readableEntries(value, visualChangeEntry),
-    z.array(visualChangeEntry).optional(),
+    listEntries,
+    z.array(tolerantEntry(visualChangeEntry, 'visualChanges')).optional(),
   ),
   conditions: z
-    .preprocess(
-      (value) => readableEntries(value, conditionEntry),
-      z.array(conditionEntry).optional(),
-    )
+    .preprocess(listEntries, z.array(tolerantEntry(conditionEntry, 'conditions')).optional())
     .describe(
       "A place's or an item's condition, only when this turn changes it, and only for one shown above with its state: the current location, an item held in the scene or lying there, a place or item listed elsewhere in the world.",
     ),
@@ -226,20 +248,20 @@ export const fallbackClassifierSchema = z.object({
       .object({
         items: z
           .preprocess(
-            (value) => readableEntries(value, itemMoveEntry) ?? [],
-            z.array(itemMoveEntry),
+            (value) => listEntries(value) ?? [],
+            z.array(tolerantEntry(itemMoveEntry, 'transfers.items')),
           )
           .default([]),
         stackables: z
           .preprocess(
-            (value) => readableEntries(value, stackableEntry) ?? [],
-            z.array(stackableEntry),
+            (value) => listEntries(value) ?? [],
+            z.array(tolerantEntry(stackableEntry, 'transfers.stackables')),
           )
           .default([]),
         drops: z
           .preprocess(
-            (value) => readableEntries(value, dropEntry)?.filter((drop) => !namesPlace(drop)) ?? [],
-            z.array(dropEntry),
+            (value) => listEntries(value)?.filter((drop) => !namesPlace(drop)) ?? [],
+            z.array(tolerantEntry(dropEntry, 'transfers.drops')),
           )
           .default([])
           .describe(
@@ -314,13 +336,76 @@ async function generateClassifierState<T extends { worldTimeDelta: number }>(
 type FallbackReply = z.infer<typeof fallbackClassifierSchema>
 type StateReport = NonNullable<EntryMetadata['stateReport']>
 
+function readable<T>(
+  entries: readonly (T | UnreadableEntry)[],
+  field: DroppedRef['field'],
+  dropped: DroppedRef[],
+): T[] {
+  return entries.flatMap((entry) => {
+    if (!(entry instanceof UnreadableEntry)) return [entry]
+    dropped.push({ field, reason: 'unreadable', detail: entry.detail })
+    return []
+  })
+}
+
+// The tags' parser's key and amount rules, which the schema can't state.
+function usableStackables(
+  stackables: readonly StackableTransfer[],
+  dropped: DroppedRef[],
+): StackableTransfer[] {
+  return stackables.flatMap((stackable) => {
+    const usable = normalizeStackableTransfer(stackable)
+    if (usable === null)
+      dropped.push({
+        field: 'transfers',
+        reason: 'unreadable',
+        detail: `transfers.stackables: no usable key or amount (key ${JSON.stringify(stackable.key)}, amount ${stackable.amount})`,
+      })
+    return usable ?? []
+  })
+}
+
+/**
+ * The reply less each entry it can't use, which is returned as an `unreadable` dropped ref: an entry
+ * its schema couldn't read, and a stackable the tags' parser would refuse.
+ */
+export function readFallbackReply(value: FallbackReply) {
+  const dropped: DroppedRef[] = []
+  const { visualChanges, conditions, transfers, ...rest } = value
+  const reply = {
+    ...rest,
+    ...(visualChanges !== undefined
+      ? { visualChanges: readable(visualChanges, 'visualChanges', dropped) }
+      : {}),
+    ...(conditions !== undefined
+      ? { conditions: readable(conditions, 'conditions', dropped) }
+      : {}),
+    ...(transfers !== undefined
+      ? {
+          transfers: {
+            items: readable(transfers.items, 'transfers', dropped),
+            stackables: usableStackables(
+              readable(transfers.stackables, 'transfers', dropped),
+              dropped,
+            ),
+            // generateStructured parses with the schema's default; a value handed in unparsed may
+            // lack it.
+            drops: readable(transfers.drops ?? [], 'transfers', dropped),
+          },
+        }
+      : {}),
+  }
+  return { reply, dropped }
+}
+
+type ReadTransfers = NonNullable<ReturnType<typeof readFallbackReply>['reply']['transfers']>
+
 // The JSON has no tag order: items take `seq` by index, then drops.
-function orderedTransfers(transfers: NonNullable<FallbackReply['transfers']>): ParsedTransfers {
+function orderedTransfers(transfers: ReadTransfers): ParsedTransfers {
   return {
     items: transfers.items.map((item, seq) => ({ ...item, seq })),
     stackables: transfers.stackables,
-    // generateStructured parses with the schema's default; a value handed in unparsed may lack it.
-    drops: (transfers.drops ?? []).map((drop, i) => ({ ...drop, seq: transfers.items.length + i })),
+    drops: transfers.drops.map((drop, i) => ({ ...drop, seq: transfers.items.length + i })),
   }
 }
 
@@ -490,8 +575,9 @@ export async function* piggybackFallbackClassifierPhase(
     return { status: 'completed' }
   }
 
+  const { reply: readReply, dropped: unreadable } = readFallbackReply(result.value)
   // Tagged-parser rule: a create with no usable handle or name is dropped and counted, not failed.
-  const { transfers: replyTransfers, ...reply } = result.value
+  const { transfers: replyTransfers, ...reply } = readReply
   const normalized = normalizeCreates({
     ...reply,
     ...(replyTransfers !== undefined ? { transfers: orderedTransfers(replyTransfers) } : {}),
@@ -512,6 +598,7 @@ export async function* piggybackFallbackClassifierPhase(
   // failedFields describes the narrative's attempt (data-model.md → Entry metadata shape), so this
   // reply's own field failures are recorded with its dropped refs.
   const droppedRefs: DroppedRef[] = [
+    ...unreadable,
     ...refDrops,
     ...failures.flatMap((f): DroppedRef[] =>
       isDroppedRefField(f.field)
@@ -519,23 +606,9 @@ export async function* piggybackFallbackClassifierPhase(
         : [],
     ),
   ]
-  for (const dropped of refDrops) {
+  for (const dropped of [...unreadable, ...refDrops]) {
     ctx.log.warn('classifier.ref_dropped', { entryId: tail.id, ...dropped })
   }
-  // The schema can't reject one bad stackable without failing the whole call, so the
-  // transfers parseTransfers would drop are dropped here, before the actions and report.
-  const resolvedBlock: SubstitutedStateBlock =
-    substituted.transfers === undefined
-      ? substituted
-      : {
-          ...substituted,
-          transfers: {
-            ...substituted.transfers,
-            stackables: substituted.transfers.stackables.flatMap(
-              (transfer) => normalizeStackableTransfer(transfer) ?? [],
-            ),
-          },
-        }
   if (failures.length > 0) {
     ctx.log.warn('classifier.piggyback_fallback_parse_failed', {
       fields: failures.map((f) => f.field),
@@ -544,7 +617,7 @@ export async function* piggybackFallbackClassifierPhase(
   }
 
   const plan = await planTurnCreates({
-    block: resolvedBlock,
+    block: substituted,
     entities,
     mapCurrentLocationId: load.mapCurrentLocationId,
     // Below the reply, which a failed fold may already have given this turn's location.
