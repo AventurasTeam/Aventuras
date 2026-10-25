@@ -231,7 +231,7 @@ export const CharacterHasNoFactionsYetShowsEmptyState: Story = {
 const characterOf = (id: string) => castRowById(id) as WizardCharacterDraft
 const UNRESOLVED_GUILD = 'The Iron Guild (unresolved)'
 
-/** wizard.md → Faction asks: with no faction to pick, the ask still shows and one pick settles it. */
+/** wizard.md → Character editor: the ask shows with no faction to pick, and one pick settles it. */
 export const CharacterUnresolvedFactionWithNoFactionsClears: Story = {
   beforeEach: () => {
     wizardStore.reset()
