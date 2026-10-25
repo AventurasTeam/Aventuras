@@ -9,6 +9,7 @@ import {
   happenings,
   type DbCtx,
 } from '@/lib/db'
+import { isJsonObject } from '@/lib/json-object'
 
 import { listedLinkColumns, type HistoryTable } from './field-labels'
 import { HISTORY_LINK_TABLES, type HistoryLinkTable, type HistoryVia } from './link-rows'
@@ -115,10 +116,6 @@ export function inJsonList(column: SQLWrapper, ids: readonly string[]): SQL {
 
 function isLinkTable(table: string): table is HistoryLinkTable {
   return (HISTORY_LINK_TABLES as readonly string[]).includes(table)
-}
-
-function isRow(value: unknown): value is Row {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
 function isNonEmpty<T>(items: T[]): items is [T, ...T[]] {
@@ -238,7 +235,7 @@ function heldLinks(payload: Row, ends: readonly End[], targetId: string): LinkEn
     const rows = payload[HELD_KEY[table]]
     if (!Array.isArray(rows)) return []
     return rows.flatMap((row) => {
-      const link = isRow(row) ? linkOf(table, row, ends, targetId) : null
+      const link = isJsonObject(row) ? linkOf(table, row, ends, targetId) : null
       return link == null ? [] : [link]
     })
   })
