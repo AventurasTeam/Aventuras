@@ -78,6 +78,8 @@ const oldKey = (): Entity =>
   row({ id: OLD_KEY, kind: 'item', name: 'rusted key', description: 'an iron key' })
 
 const noEmbed: EmbedDescriptions = async () => ({ vectors: [], dim: 0 })
+// A run nothing cancels; the cancel case passes its own.
+const runSignal = new AbortController().signal
 
 // Cast, not substituted: these blocks are built already holding ids and normalized creates.
 const assumeSubstituted = (block: ParsedStateBlock) => block as SubstitutedStateBlock
@@ -113,7 +115,7 @@ function runPlanner(
     now: () => 1000,
     newId: (prefix) => `${prefix}_new_${++counts[prefix]}`,
     log: opts.log ?? logger,
-    signal: opts.signal,
+    signal: opts.signal ?? runSignal,
   })
 }
 
@@ -417,6 +419,47 @@ describe('planTurnCreates — kept only if used', () => {
       ['item_new_1', HERO],
       ['item_new_1', MIRA],
     ])
+  })
+
+  describe('into a satchel', () => {
+    const SATCHEL = 'item_00000000-0000-4000-8000-0000000000b4'
+    const gemIntoSatchel = (heldBy: readonly string[]) =>
+      runPlanner(
+        {
+          newItems: [{ handle: 'new:gem', name: 'gem', description: 'a green gem' }],
+          transfers: {
+            items: [{ id: 'new:gem', to: SATCHEL, slot: 'inventory', seq: 0 }],
+            stackables: [],
+            drops: [],
+          },
+        },
+        {
+          entities: world(
+            row({
+              id: MIRA,
+              kind: 'character',
+              name: 'Mira',
+              state: { ...emptyEntityState('character'), inventory: [...heldBy] },
+            }),
+            row({ id: SATCHEL, kind: 'item', name: 'satchel' }),
+          ),
+        },
+      )
+
+    it('keeps a new item put into a satchel a character holds', async () => {
+      const plan = await gemIntoSatchel([SATCHEL])
+      expect(createdEntries(creates(plan)).map((e) => e.id)).toEqual(['item_new_1'])
+      expect(plan.block.transfers?.items).toEqual([
+        { id: 'item_new_1', to: SATCHEL, slot: 'inventory', seq: 0 },
+      ])
+      expect(plan.report.newItems[0]?.outcome).toBe('created')
+    })
+
+    it('drops a new item put into a satchel nobody holds', async () => {
+      const plan = await gemIntoSatchel([])
+      expect(creates(plan)).toEqual([])
+      expect(plan.report.newItems[0]?.outcome).toBe('dropped')
+    })
   })
 
   it('drops a new item a transfer only takes from someone', async () => {
@@ -1280,7 +1323,7 @@ describe('planTurnCreates — matching', () => {
       embed,
     })
     expect(embed).toHaveBeenCalledOnce()
-    expect(embed).toHaveBeenCalledWith(['an iron key, flaked with rust', 'an iron key'], undefined)
+    expect(embed).toHaveBeenCalledWith(['an iron key, flaked with rust', 'an iron key'], runSignal)
     expect(createdEntries(creates(plan))).toEqual([
       expect.objectContaining({
         id: 'item_new_1',
@@ -1343,7 +1386,6 @@ describe('planTurnCreates — matching', () => {
     const embed = vi.fn<EmbedDescriptions>(
       (_texts, signal) =>
         new Promise((_resolve, reject) => {
-          if (signal === undefined) return reject(new Error('no signal'))
           signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
           controller.abort()
         }),
@@ -1382,7 +1424,7 @@ describe('planTurnCreates — matching', () => {
     })
     expect(embed).toHaveBeenCalledWith(
       ['an iron key, flaked with rust', 'bronze', 'iron'],
-      undefined,
+      runSignal,
     )
     expect(createdEntries(creates(plan))).toEqual([
       expect.objectContaining({ nameCollisionPartnerId: IRON_KEY, nameCollisionReason: 'alike' }),
@@ -1412,8 +1454,8 @@ describe('planTurnCreates — matching', () => {
       { entities: world(oldKey()), embed },
     )
     expect(embed.mock.calls).toEqual([
-      [['small', 'an iron key'], undefined],
-      [['large', 'an iron key'], undefined],
+      [['small', 'an iron key'], runSignal],
+      [['large', 'an iron key'], runSignal],
     ])
   })
 

@@ -444,17 +444,25 @@ export function ReaderSurface({
     if (el == null) return
     const doc = el.ownerDocument
     // On the document, not the scroller: with nothing focused the key lands on the body yet still
-    // scrolls the scroller last pressed.
+    // scrolls the scroller last pressed, which may be another one (the rail list).
+    let pressedInside = false
+    const onPointerDown = (event: Event) => {
+      pressedInside = event.target instanceof Node && el.contains(event.target)
+    }
     const onKeyDown = (event: KeyboardEvent) => {
       // A reader left mounted under another screen isn't laid out, and the key isn't its.
       if (event.defaultPrevented || !isUpwardScrollKey(event) || el.getClientRects().length === 0)
         return
       const target = event.target
       if (!(target instanceof Node) || isEditableTarget(target)) return
-      if (target === doc.body || el.contains(target)) interruptByGesture()
+      if (target === doc.body ? pressedInside : el.contains(target)) interruptByGesture()
     }
+    doc.addEventListener('pointerdown', onPointerDown, true)
     doc.addEventListener('keydown', onKeyDown)
-    return () => doc.removeEventListener('keydown', onKeyDown)
+    return () => {
+      doc.removeEventListener('pointerdown', onPointerDown, true)
+      doc.removeEventListener('keydown', onKeyDown)
+    }
   }, [interruptByGesture])
 
   // Touch drags interrupt like native drag-begin did — keyed off the first

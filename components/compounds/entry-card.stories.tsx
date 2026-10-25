@@ -1500,7 +1500,7 @@ export const WorldStateDroppedRefs: StoryT = {
   },
 }
 
-// D2: a disabled row the scene seats is a notice, not a problem.
+// entry-card.md → State problems: a disabled row the scene seats is a notice, not a problem.
 export const WorldStateSeatedDisabled: StoryT = {
   ...wrap,
   args: {
@@ -1994,6 +1994,33 @@ export const WorldStateSaveRefusedRetiredPlace: StoryT = {
         screen.getByText("That place is retired, so the story can't move there."),
       ).toBeVisible(),
     )
+  },
+}
+
+// A terminal refusal: the generic copy's "Try again" would loop on it.
+export const WorldStateSaveRefusedNotALocation: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...reportedProps,
+    sceneOptions,
+    onEditScene: fn(async () => ({ ok: false, code: 'not-a-location' }) as const),
+  },
+  play: async () => {
+    await openPanel()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit scene' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible())
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Corin' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "That place no longer exists or isn't a place, so the story can't move there.",
+        ),
+      ).toBeVisible(),
+    )
+    expect(screen.queryByText('Could not save the scene. Try again.')).not.toBeInTheDocument()
   },
 }
 

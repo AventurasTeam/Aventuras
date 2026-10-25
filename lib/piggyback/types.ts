@@ -93,35 +93,33 @@ export type NormalizedStateBlock = ParsedStateBlock & { readonly __brand: 'Norma
 export type SubstitutedStateBlock = ParsedStateBlock & { readonly __brand: 'SubstitutedStateBlock' }
 
 // `'state'` is the block-level failure: no block in a reply that owed one, an empty block (creates
-// alone count as empty), or a cut-off one that declares a create.
+// alone count as empty), or a cut-off one that declares a create or holds drops but no place.
 export type ParseFieldFailure = { field: keyof ParsedStateBlock | 'state'; detail: string }
 
+/** The fields whose refs are substituted, so whose entries the fallback can drop. */
+export type DroppedRefField = keyof Pick<
+  ParsedStateBlock,
+  'sceneEntities' | 'currentLocation' | 'visualChanges' | 'conditions' | 'transfers'
+>
+
 /**
- * An entry the fallback discarded before apply (piggyback.md → A bad ref in the two writers):
- * `unknown` names no listed entity or declared handle, `wrong-kind` one of a kind the field can't
- * hold, `unreadable` an entry the schema couldn't read. `ref` is as emitted.
+ * An entry the fallback discarded before apply (piggyback.md → A bad ref in the two writers): an
+ * `unknown` ref names no listed entity or declared handle, a `wrong-kind` one an entity of a kind
+ * the field can't hold; an `unreadable` entry is one it couldn't read, so it names no ref. `ref` is
+ * as emitted.
  */
-const DROPPED_REF_FIELDS = [
-  'sceneEntities',
-  'currentLocation',
-  'visualChanges',
-  'conditions',
-  'transfers',
-] as const
-
-export const isDroppedRefField = (field: string): field is DroppedRef['field'] =>
-  (DROPPED_REF_FIELDS as readonly string[]).includes(field)
-
-export type DroppedRef = {
-  field: (typeof DROPPED_REF_FIELDS)[number]
-  ref?: string
-  /** A wrong-kind ref's row, so the reader can name it: `ref` is the prompt's placeholder. */
-  id?: string
-  /** The kind a wrong-kind ref named, a create's included. */
-  kind?: EntityKind
-  reason: 'unknown' | 'wrong-kind' | 'unreadable'
-  detail: string
-}
+export type DroppedRef = { field: DroppedRefField; detail: string } & (
+  | { reason: 'unknown'; ref: string }
+  | {
+      reason: 'wrong-kind'
+      ref: string
+      /** The ref's row, so the reader can name it: `ref` is the prompt's placeholder. */
+      id?: string
+      /** The kind the ref named, a create's included. */
+      kind?: EntityKind
+    }
+  | { reason: 'unreadable' }
+)
 
 export type ParseStateBlockResult = {
   block: NormalizedStateBlock

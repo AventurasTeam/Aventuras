@@ -1,7 +1,7 @@
 import type { DeltaSource, PipelineAction } from '@/lib/actions'
 import type { Entity } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
-import { stateAs } from '@/lib/world'
+import { sameList, stateAs } from '@/lib/world'
 
 import type { ItemDrop, ItemTransfer, ParsedTransfers, ReportedDrop } from './types'
 
@@ -89,16 +89,30 @@ export function itemMoveActions(args: ItemMoveArgs): ItemMoves {
   // anything, so another holder reads by what it names. An item stands for whoever holds it, or
   // for the place it lies at; the scene's place is `here`, any other `elsewhere`.
   type Party = { holder: string } | 'here' | 'elsewhere' | 'none'
-  const partyOf = (id: string | undefined): Party => {
-    const row = id === undefined ? undefined : byId.get(id)
-    if (id === undefined || row === undefined) return 'none'
-    if (row.kind === 'character') return { holder: id }
-    if (row.kind === 'location') return id === currentLocationId ? 'here' : 'elsewhere'
-    if (row.kind !== 'item') return 'none'
+  const standsFor = (id: string, kind: Entity['kind']): Party => {
+    if (kind === 'location') return id === currentLocationId ? 'here' : 'elsewhere'
+    if (kind !== 'item') return 'none'
     const holder = entities.find((h) => holds(h.id, id))
     if (holder !== undefined) return { holder: holder.id }
     const at = positionOf(id)
     return at === null ? 'none' : at === currentLocationId ? 'here' : 'elsewhere'
+  }
+  const partyOf = (id: string | undefined): Party => {
+    const row = id === undefined ? undefined : byId.get(id)
+    if (id === undefined || row === undefined) return 'none'
+    if (row.kind === 'character') return { holder: id }
+    const party = standsFor(id, row.kind)
+    // A correction, not a model error: no alert, no dropped ref (entry-card.md → State problems).
+    log.debug('classifier.holder_read', {
+      entryId,
+      source,
+      holderId: id,
+      kind: row.kind,
+      ...(typeof party === 'object'
+        ? { readAs: 'character', characterId: party.holder }
+        : { readAs: party === 'none' ? 'omitted' : party }),
+    })
+    return party
   }
 
   // Whether the move changed who holds the item or where it lies.
@@ -188,8 +202,6 @@ export function itemMoveActions(args: ItemMoveArgs): ItemMoves {
   }
 
   const actions: PipelineAction[] = []
-  const sameList = (a: readonly string[], b: readonly string[]) =>
-    a.length === b.length && a.every((v, i) => v === b[i])
   for (const [id, patch] of inventoryPatches) {
     const stored = storedInventory(id)
     const unchanged =

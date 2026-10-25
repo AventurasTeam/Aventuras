@@ -1061,6 +1061,30 @@ Parked 2026-09-13 from the PR #513 review; the first pipeline that
 declares a `parallel:` group, or a cancel that visibly lags, is the
 signal to revisit.
 
+#### A run that throws after its writes is unwound over them
+
+The orchestrator unwinds a run whose drive throws
+([Chained transition](./generation-pipeline.md#chained-transition--no-user-edit-window)):
+the gate goes down and `run_complete` reports a failure, but the run's
+writes and its open `pipeline_runs` marker stay on disk for the next
+boot to reverse. A user who takes a turn in between builds on them,
+and that boot then reverses the orphan from under the later turn,
+which the recovery copy describes as the last AI response. A second
+gap sits beside it: a throw after `finishRun` has swapped in a
+successor leaves that successor registered and never driven, so the
+gate holds until a restart. Probed in the 2026-10-24 triage pass's
+slice review by dropping the registry inside a phase and by a throwing
+`endTurn`.
+
+Latent: no production code throws there. The event bus catches
+listener throws, the logger doesn't throw, the registry is static and
+`settleUserWrites` uses `allSettled`. `abortRun`'s uncommitted-reversal
+path takes the same stance, leaving writes for boot. Calling `abortRun`
+before unwinding would reverse the run while the app is open.
+
+The signal is a production throw path into the unwind after a phase
+has written, or one after a commit.
+
 #### A store sync that fails after a committed reversal leaves stores stale
 
 Every reversal commits its database writes first, then patches the
@@ -1588,6 +1612,14 @@ obvious fix, writing `parsed.data`, would silently drop a stackable
 named `__proto__`, which the pane and piggyback store deliberately:
 zod's record skips that key. Parked 2026-10-09; the signal is a writer
 that can emit model-shaped state, such as an agentic classifier.
+
+That stackable doesn't land today either. `encodeField` in
+`lib/actions/delta/delta-encoding.ts` builds the undo payload by
+assignment, so a changed or added `__proto__` count encodes as `{}`
+and `updateEntityStackables` refuses the write as a noop; the row keeps
+its old stackables. A count that already exists still restores on
+undo. Found by the 2026-10-24 triage pass's slice review; the encoding
+dates from #546. The same signal applies.
 
 #### Merging any two rows of one kind
 

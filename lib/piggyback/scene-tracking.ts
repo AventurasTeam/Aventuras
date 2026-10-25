@@ -20,6 +20,11 @@ type Args = {
   before: SceneFields
   /** This entry's scene after the change. */
   after: SceneFields
+  /**
+   * Where a removed character the previous entry didn't show goes when they have no usable
+   * last-seen place; one absent from the map keeps their stored location.
+   */
+  restoredLocations?: ReadonlyMap<string, string | null>
 }
 
 /**
@@ -74,7 +79,7 @@ export function scenePromotionActions(args: {
  * out was closed out by the original fold, and re-writing them would undo a manual edit.
  */
 export function sceneTrackingActions(args: Args): PipelineAction[] {
-  const { branchId, source, entities, previous, before, after } = args
+  const { branchId, source, entities, previous, before, after, restoredLocations } = args
   const actions: PipelineAction[] = []
 
   const wasInScene = new Set(before.sceneEntities)
@@ -100,12 +105,16 @@ export function sceneTrackingActions(args: Args): PipelineAction[] {
       // them back at their own older anchor.
       if (!seenBefore.has(character.id)) {
         const anchor = stateAs(character, 'character').lastSeenAt?.locationId
-        // With no anchor the stored location stands: the wizard places characters without one.
-        if (anchor != null)
+        // The wizard places characters without an anchor, and a delete leaves one naming the
+        // removed place, which reads as none.
+        const usable =
+          anchor != null && entities.some((e) => e.id === anchor && e.kind === 'location')
+        const restored = usable ? anchor : restoredLocations?.get(character.id)
+        if (restored !== undefined)
           actions.push({
             kind: 'updateEntityLocationTracking',
             source,
-            payload: { branchId, id: character.id, currentLocationId: anchor },
+            payload: { branchId, id: character.id, currentLocationId: restored },
           })
         continue
       }

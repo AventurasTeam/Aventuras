@@ -99,8 +99,10 @@ Two cases the sentence above does **not** cover:
   `runRetrieval` and aborts the turn before the capture site is
   reached. `failure_reason` is an `EmbedderErrorKind`, so there is no
   legal value for such a fault to carry. Closing that gap needs a
-  capture-failure taxonomy separate from the embedder's — filed in
-  [`triage.md`](../implementation/triage.md).
+  capture-failure taxonomy separate from the embedder's, carried as
+  the roadmap's "A non-embedder retrieval fault writes no capture"
+  item under
+  [M7.3](../implementation/roadmap.md#m7--app-settings--diagnostics--onboarding).
 
 ### What gets captured — light mode (default)
 

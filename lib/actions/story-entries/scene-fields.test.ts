@@ -2,10 +2,14 @@ import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
+  applyDeltaAction,
   deleteEntityRow,
+  saveEntity,
   undoLastAction,
   updateEntrySceneFields,
   writeSystemEntry,
+  type DbCtx,
+  type PipelineAction,
 } from '@/lib/actions'
 import {
   branches,
@@ -14,10 +18,12 @@ import {
   stories,
   storyEntries,
   type CharacterState,
+  type Entity,
   type NewEntity,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entitiesStore, entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
+import { characterDraftFrom } from '@/lib/world'
 
 afterEach(() => {
   entriesStore.__reset()
@@ -29,7 +35,11 @@ afterEach(() => {
 const LOC_A = 'loc_a'
 const LOC_B = 'loc_b'
 
-function character(id: string, locationId: string | null): NewEntity {
+function character(
+  id: string,
+  locationId: string | null,
+  lastSeenAt: CharacterState['lastSeenAt'] = null,
+): NewEntity {
   return {
     id,
     branchId: 'b1',
@@ -46,7 +56,7 @@ function character(id: string, locationId: string | null): NewEntity {
       equipped_items: [],
       inventory: [],
       faction_id: null,
-      lastSeenAt: null,
+      lastSeenAt,
     },
     createdAt: 1,
     updatedAt: 1,
@@ -131,6 +141,77 @@ async function entityState(db: TestDb, id: string): Promise<CharacterState> {
   return row.state as CharacterState
 }
 
+async function hydrateEntities(db: TestDb) {
+  entitiesStore.hydrate(
+    'b1',
+    (await db.select().from(entities).where(eq(entities.branchId, 'b1'))) as never,
+  )
+}
+
+const LOC_C = 'loc_c'
+const MIRA = 'char_m'
+const TURN = 'act_turn'
+
+/**
+ * e1 is the user_action, e2 the reply taking char_a and the cast it brings in to LOC_B, logged as
+ * submit-turn and the per-turn pipeline log them: only the reply's create carries an entry anchor.
+ */
+async function seedTurn(db: TestDb, ctx: DbCtx, cast: NewEntity[] = [character(MIRA, LOC_C)]) {
+  await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+  await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+  const scene = ['char_a', ...cast.map((c) => c.id)]
+  const rows = [
+    character('char_a', LOC_A),
+    ...cast,
+    location(LOC_A),
+    location(LOC_B),
+    location(LOC_C),
+  ]
+  for (const row of rows) await db.insert(entities).values(row)
+  await hydrateEntities(db)
+  entriesStore.hydrate('b1', [])
+
+  const log = async (action: PipelineAction, entryId: string | null) => {
+    const result = await applyDeltaAction({ action, actionId: TURN, branchId: 'b1', entryId }, ctx)
+    if (result.status === 'rejected' && result.code !== 'noop')
+      throw new Error(`${action.kind} rejected: ${result.reason}`)
+  }
+  const [userAction, reply] = entryRows()
+  await log(
+    {
+      kind: 'createStoryEntry',
+      source: 'user_edit',
+      payload: { entry: { ...userAction, kind: 'user_action' } },
+    },
+    null,
+  )
+  await log(
+    {
+      kind: 'createStoryEntry',
+      source: 'ai_classifier',
+      payload: {
+        entry: {
+          ...reply,
+          metadata: { sceneEntities: scene, currentLocationId: LOC_B, worldTime: 120 },
+        },
+      },
+    },
+    'e2',
+  )
+  for (const id of scene)
+    await log(
+      {
+        kind: 'updateEntityLocationTracking',
+        source: 'piggyback_tagged_block',
+        payload: { branchId: 'b1', id, currentLocationId: LOC_B },
+      },
+      null,
+    )
+}
+
+const removeCast = (ctx: DbCtx) =>
+  updateEntrySceneFields('b1', 'e2', { sceneEntities: ['char_a'] }, ctx)
+
 describe('updateEntrySceneFields', () => {
   it('writes the absolute triple and leaves the report untouched', async () => {
     const { db, runInTransaction } = await createTestDb()
@@ -211,8 +292,6 @@ describe('updateEntrySceneFields', () => {
     expect((await entityState(db, 'char_b')).current_location_id).toBe(LOC_A)
   })
 
-  // char_b is in this entry's ORIGINAL scene but not the previous entry's, so only
-  // the three-way diff visits them at all.
   // data-model.md → lastSeenAt: from the entry they were last in, e1 for char_a.
   it('closes location tracking for a character the edit removed', async () => {
     const { db, runInTransaction } = await createTestDb()
@@ -226,34 +305,157 @@ describe('updateEntrySceneFields', () => {
     })
   })
 
-  // char_b came in at e2, at LOC_B, so e1's LOC_A is a place they were never seen at; retired, it
-  // can't be entered at all (data-model.md → LocationState shape).
-  it("never writes a character the tail brought in into the previous entry's place", async () => {
+  // Mira came in at e2, so e1's LOC_A is a place she was never seen at; retired, it can't be
+  // entered at all (data-model.md → LocationState shape). With no last-seen place, she goes back to
+  // where she stood before e2 seated her.
+  it('puts a character the tail brought in back where they stood before it', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTurn(db, ctx)
+    await db.update(entities).set({ status: 'retired' }).where(eq(entities.id, LOC_A))
+    await hydrateEntities(db)
+
+    expect(await removeCast(ctx)).toEqual({ status: 'ok' })
+    const state = await entityState(db, MIRA)
+    expect(state.current_location_id).toBe(LOC_C)
+    expect(state.lastSeenAt).toBeNull()
+  })
+
+  it('leaves a character the tail brought in where something moved them since', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTurn(db, ctx)
+    const [row] = (await db.select().from(entities).where(eq(entities.id, MIRA))) as Entity[]
+    const draft = { ...characterDraftFrom(row, []), currentLocationId: LOC_A }
+    expect(
+      await saveEntity({ kind: 'character', branchId: 'b1', row, draft, relationships: [] }, ctx),
+    ).toMatchObject({ status: 'ok' })
+
+    expect(await removeCast(ctx)).toEqual({ status: 'ok' })
+    expect((await entityState(db, MIRA)).current_location_id).toBe(LOC_A)
+  })
+
+  it('leaves a character the tail brought in where they stood when it never moved them', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTurn(db, ctx, [character(MIRA, LOC_B)])
+    // The turn changed how she looks, not where she is.
+    const visual: PipelineAction = {
+      kind: 'updateEntityVisualState',
+      source: 'piggyback_tagged_block',
+      payload: { branchId: 'b1', id: MIRA, visual: { hair: 'rain-soaked' } },
+    }
+    expect(
+      await applyDeltaAction(
+        { action: visual, actionId: TURN, branchId: 'b1', entryId: null },
+        ctx,
+      ),
+    ).toMatchObject({ status: 'ok' })
+    const writes = await db.select().from(deltas).where(eq(deltas.targetId, MIRA))
+    expect(writes).toHaveLength(1)
+
+    expect(await removeCast(ctx)).toEqual({ status: 'ok' })
+    expect((await entityState(db, MIRA)).current_location_id).toBe(LOC_B)
+  })
+
+  it('clears the location of a character the tail brought in when their place is gone', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTurn(db, ctx)
+    expect(await deleteEntityRow('b1', LOC_C, ctx)).toEqual({ status: 'ok' })
+
+    expect(await removeCast(ctx)).toEqual({ status: 'ok' })
+    expect((await entityState(db, MIRA)).current_location_id).toBeNull()
+  })
+
+  it('clears the location of a character the tail brought in when its record is unreadable', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTurn(db, ctx)
+    await db
+      .update(deltas)
+      .set({ undoPayload: { state: { current_location_id: 7 } } })
+      .where(and(eq(deltas.actionId, TURN), eq(deltas.targetId, MIRA)))
+
+    expect(await removeCast(ctx)).toEqual({ status: 'ok' })
+    expect((await entityState(db, MIRA)).current_location_id).toBeNull()
+  })
+
+  it('puts a character the tail brought in at their last-seen place when they have one', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTurn(db, ctx, [
+      character(MIRA, LOC_C, { entryId: 'e0', locationId: LOC_A, worldTime: 10 }),
+    ])
+
+    expect(await removeCast(ctx)).toEqual({ status: 'ok' })
+    expect((await entityState(db, MIRA)).current_location_id).toBe(LOC_A)
+  })
+
+  it('puts each character the tail brought in back at their own place', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTurn(db, ctx, [character(MIRA, LOC_C), character('char_n', LOC_A)])
+
+    expect(await removeCast(ctx)).toEqual({ status: 'ok' })
+    expect((await entityState(db, MIRA)).current_location_id).toBe(LOC_C)
+    expect((await entityState(db, 'char_n')).current_location_id).toBe(LOC_A)
+  })
+
+  // The turn's write is the earliest, so a scene edit that moved her since is not where she began.
+  it('puts a character the tail brought in back past an earlier edit that moved them', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTurn(db, ctx)
+    expect(
+      await updateEntrySceneFields(
+        'b1',
+        'e2',
+        { sceneEntities: ['char_a', MIRA], currentLocationId: LOC_A },
+        ctx,
+      ),
+    ).toEqual({ status: 'ok' })
+    expect((await entityState(db, MIRA)).current_location_id).toBe(LOC_A)
+
+    expect(await removeCast(ctx)).toEqual({ status: 'ok' })
+    expect((await entityState(db, MIRA)).current_location_id).toBe(LOC_C)
+  })
+
+  // A seeded or imported tail has no create row, so only the edits anchored on it say where she was.
+  it('puts a character an earlier edit seated back where it found them', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seed(db)
-    await db.update(entities).set({ status: 'retired' }).where(eq(entities.id, LOC_A))
-    await db
-      .update(storyEntries)
-      .set({
-        metadata: { sceneEntities: ['char_a', 'char_b'], currentLocationId: LOC_B, worldTime: 120 },
-      })
-      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e2')))
-    const charB = character('char_b', LOC_B)
-    await db.update(entities).set({ state: charB.state }).where(eq(entities.id, 'char_b'))
-    entitiesStore.hydrate('b1', [
-      character('char_a', LOC_B),
-      charB,
-      { ...location(LOC_A), status: 'retired' },
-      location(LOC_B),
-    ] as never)
+    for (const row of [character(MIRA, LOC_C), location(LOC_C)])
+      await db.insert(entities).values(row)
+    await hydrateEntities(db)
+    expect(
+      await updateEntrySceneFields('b1', 'e2', { sceneEntities: ['char_a', 'char_b', MIRA] }, ctx),
+    ).toEqual({ status: 'ok' })
+    expect((await entityState(db, MIRA)).current_location_id).toBe(LOC_A)
 
-    expect(await updateEntrySceneFields('b1', 'e2', { sceneEntities: ['char_a'] }, ctx)).toEqual({
+    expect(
+      await updateEntrySceneFields('b1', 'e2', { sceneEntities: ['char_a', 'char_b'] }, ctx),
+    ).toEqual({ status: 'ok' })
+    expect((await entityState(db, MIRA)).current_location_id).toBe(LOC_C)
+  })
+
+  it('puts a character an edit seated after the turn back where it found them', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTurn(db, ctx)
+    await db.insert(entities).values(character('char_n', LOC_A))
+    await hydrateEntities(db)
+    const scene = ['char_a', MIRA]
+    expect(
+      await updateEntrySceneFields('b1', 'e2', { sceneEntities: [...scene, 'char_n'] }, ctx),
+    ).toEqual({ status: 'ok' })
+    expect((await entityState(db, 'char_n')).current_location_id).toBe(LOC_B)
+
+    expect(await updateEntrySceneFields('b1', 'e2', { sceneEntities: scene }, ctx)).toEqual({
       status: 'ok',
     })
-    const state = await entityState(db, 'char_b')
-    expect(state.current_location_id).toBe(LOC_B)
-    expect(state.lastSeenAt).toBeNull()
+    expect((await entityState(db, 'char_n')).current_location_id).toBe(LOC_A)
   })
 
   // entry-card.md → Scene editor: promoted exactly as the generation fold promotes it, the place
@@ -280,6 +482,37 @@ describe('updateEntrySceneFields', () => {
     expect(row.status).toBe('active')
   })
 
+  it('leaves a staged place the scene stays in staged', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db.update(entities).set({ status: 'staged' }).where(eq(entities.id, LOC_B))
+    await db
+      .update(storyEntries)
+      .set({
+        metadata: { sceneEntities: ['char_a', 'char_b'], currentLocationId: LOC_B, worldTime: 120 },
+      })
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e2')))
+    entitiesStore.hydrate('b1', [
+      character('char_a', LOC_B),
+      character('char_b', LOC_B),
+      location(LOC_A),
+      { ...location(LOC_B), status: 'staged' },
+    ] as never)
+
+    expect(
+      await updateEntrySceneFields(
+        'b1',
+        'e2',
+        { sceneEntities: ['char_a'], currentLocationId: LOC_B },
+        ctx,
+      ),
+    ).toEqual({ status: 'ok' })
+    expect((await storedMetadata(db, 'e2'))?.sceneEntities).toEqual(['char_a'])
+    const [row] = await db.select().from(entities).where(eq(entities.id, LOC_B))
+    expect(row.status).toBe('staged')
+  })
+
   it('refuses a location id that names no place, writing nothing', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
@@ -293,6 +526,59 @@ describe('updateEntrySceneFields', () => {
     )
     expect(result).toMatchObject({ status: 'rejected', code: 'not-a-location' })
     expect(await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).toHaveLength(0)
+  })
+
+  // As a scene already in a retired place keeps it: refusing would block every member-only edit.
+  it('saves a member-only edit on a tail whose location names no place', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db
+      .update(storyEntries)
+      .set({
+        metadata: {
+          sceneEntities: ['char_a', 'char_b'],
+          currentLocationId: 'loc_gone',
+          worldTime: 120,
+        },
+      })
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e2')))
+
+    const result = await updateEntrySceneFields(
+      'b1',
+      'e2',
+      { sceneEntities: ['char_a'], currentLocationId: 'loc_gone' },
+      ctx,
+    )
+    expect(result).toEqual({ status: 'ok' })
+    const meta = await storedMetadata(db, 'e2')
+    expect(meta?.sceneEntities).toEqual(['char_a'])
+    expect(meta?.currentLocationId).toBe('loc_gone')
+    const before = (await entityState(db, 'char_a')).current_location_id
+    expect(before).not.toBe('loc_gone')
+  })
+
+  it('writes no character to a tail location that names no place', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    const stored = (await entityState(db, 'char_a')).current_location_id
+    await db
+      .update(storyEntries)
+      .set({
+        metadata: { sceneEntities: ['char_b'], currentLocationId: 'loc_gone', worldTime: 120 },
+      })
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e2')))
+
+    expect(
+      await updateEntrySceneFields(
+        'b1',
+        'e2',
+        { sceneEntities: ['char_a', 'char_b'], currentLocationId: 'loc_gone' },
+        ctx,
+      ),
+    ).toEqual({ status: 'ok' })
+    expect((await entityState(db, 'char_a')).current_location_id).toBe(stored)
   })
 
   // A delete clears the location from the tail only; the previous entry still names it,

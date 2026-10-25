@@ -3,6 +3,7 @@ import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { entryMetadataSchema, type SystemFailureMeta } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { hasCopy } from '@/lib/i18n/__tests__/locale-keys'
 import {
@@ -463,6 +464,7 @@ describe('dismissSystemEntry', () => {
       order,
       handBack,
       deps: {
+        branchId: 'branch_a',
         submission: SUBMISSION,
         clear:
           over.clear ??
@@ -482,13 +484,19 @@ describe('dismissSystemEntry', () => {
     }
   }
 
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('returns the draft only once the entry holding it is gone', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     const h = harness()
 
     await dismissSystemEntry(h.deps)
 
     expect(h.order).toEqual(['clear', 'reload', 'handBack'])
     expect(h.handBack).toHaveBeenCalledWith(SUBMISSION)
+    expect(warn).not.toHaveBeenCalled()
   })
 
   // The notice and its Retry survive a rejected clear, so a copy in the composer
@@ -522,12 +530,27 @@ describe('dismissSystemEntry', () => {
     expect(h.handBack).toHaveBeenCalledWith(SUBMISSION)
   })
 
-  it('drops the hand-back when the branch changed under the awaits', async () => {
+  // One composer serves every branch, so the text can't follow the user; the log records the loss.
+  it('drops the hand-back with a warning when the branch changed under the awaits', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     const h = harness({ stillOnBranch: () => false })
 
     await dismissSystemEntry(h.deps)
 
     expect(h.handBack).not.toHaveBeenCalled()
+    expect(warn).toHaveBeenCalledWith('reader.handback_skipped_left_branch', {
+      branchId: 'branch_a',
+      source: 'dismiss',
+    })
+  })
+
+  it('warns of nothing off-branch when the entry held no text', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const h = harness({ stillOnBranch: () => false })
+
+    await dismissSystemEntry({ ...h.deps, submission: undefined })
+
+    expect(warn).not.toHaveBeenCalled()
   })
 })
 

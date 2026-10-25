@@ -144,7 +144,7 @@ function generateFromState<T>(
   )
   const prompt = renderTemplate(templateId, context)
   const call = deps?.generate ?? generateStructured
-  return call(ASSIST_TARGET, prompt, schema, config(deps), signal)
+  return call(ASSIST_TARGET, prompt, schema, config(deps), signal, { actionId: null })
 }
 
 function resolveOpening(

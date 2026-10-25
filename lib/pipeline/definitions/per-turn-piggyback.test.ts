@@ -30,6 +30,7 @@ import {
   fallbackClassifierWithSuggestionsSchema,
   piggybackFallbackClassifierPhase,
   PIGGYBACK_FALLBACK_RESOLVES,
+  readFallbackReply,
   resolvePiggybackFires,
   shouldFallbackFire,
   type PiggybackOutcome,
@@ -864,6 +865,87 @@ describe('per-turn-piggyback', () => {
       })
     })
 
+    it('keeps the previous scene when every scene entry the reply names drops', async () => {
+      const heroId = 'char_00000000-0000-4000-8000-000000000001'
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {} }),
+      })
+      hydrateEntries(phaseDb, 'b1', [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          content: 'Hero waits',
+          metadata: { sceneEntities: [heroId], currentLocationId: null, worldTime: 100 },
+        } as never,
+        {
+          id: 'entry-2',
+          branchId: 'b1',
+          position: 2,
+          content: 'Hero steps into the clearing',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+      ])
+      entitiesStore.hydrate('b1', [
+        {
+          id: heroId,
+          branchId: 'b1',
+          kind: 'character',
+          status: 'active',
+          name: 'Hero',
+          keywords: [],
+          state: emptyEntityState('character'),
+        } as never,
+      ])
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'ok',
+        recoverable: [],
+        value: {
+          sceneEntities: ['Hero'],
+          currentLocation: undefined,
+          worldTimeDelta: 5,
+          visualChanges: [],
+          transfers: { items: [], stackables: [] },
+        },
+      })
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      const gen = piggybackFallbackClassifierPhase(ctx)
+      const events = []
+      let result = await gen.next()
+      while (!result.done) {
+        events.push(result.value)
+        result = await gen.next()
+      }
+
+      expect(events[0]).toEqual({
+        type: 'delta_emitted',
+        action: expect.objectContaining({
+          kind: 'updateStoryEntryMetadata',
+          payload: expect.objectContaining({
+            metadata: expect.objectContaining({
+              sceneEntities: [heroId],
+              stateReport: expect.objectContaining({
+                droppedRefs: [expect.objectContaining({ field: 'sceneEntities', ref: 'Hero' })],
+              }),
+            }),
+          }),
+        }),
+      })
+    })
+
     it('safely ignores unknown entity IDs in visualChanges when classifier emits unmapped placeholders', async () => {
       const heroId = 'char_00000000-0000-4000-8000-000000000001'
       currentStoryStore.set({
@@ -1203,7 +1285,10 @@ describe('per-turn-piggyback', () => {
         entitiesStore.hydrate('b1', [])
       }
 
-      async function drainPhase(outcome?: PiggybackOutcome): Promise<PhaseEmittedEvent[]> {
+      async function drainPhase(
+        outcome?: PiggybackOutcome,
+        log: Logger = makeLogger('act_1'),
+      ): Promise<PhaseEmittedEvent[]> {
         const gen = piggybackFallbackClassifierPhase({
           actionId: 'act_1',
           abortSignal: new AbortController().signal,
@@ -1211,7 +1296,7 @@ describe('per-turn-piggyback', () => {
             idMap: new IdBiMap(),
             ...(outcome ? { piggybackOutcome: outcome } : {}),
           },
-          log: makeLogger('act_1'),
+          log,
           db: phaseDb.db,
           runInTransaction: async () => undefined,
           storyId: 's1',
@@ -1266,6 +1351,76 @@ describe('per-turn-piggyback', () => {
             error: { kind: 'provider', reason: 'network', detail: '503' },
           },
         ])
+      })
+
+      describe('a re-roll that fails', () => {
+        const first = { tier: 'parse', detail: 'Unexpected end of JSON input', attempt: 0 } as const
+        const retried = { tier: 'provider', reason: 'network', detail: '503' } as const
+
+        function rerollFails(): void {
+          seedClearing(false)
+          generateStructuredMock
+            .mockResolvedValueOnce({
+              status: 'ok',
+              value: { ...REPORT, worldTimeDelta: -10 },
+              recoverable: [first],
+            })
+            .mockResolvedValueOnce({
+              status: 'failed',
+              detail: 'provider timeout on reroll',
+              recoverable: [retried],
+            })
+        }
+
+        it('still reports its retried attempts, keeping the first reply', async () => {
+          rerollFails()
+          const events = await drainPhase()
+          expect(events.filter((e) => e.type === 'recoverable_error')).toEqual([
+            { type: 'recoverable_error', error: { kind: 'phase-logic', detail: first.detail } },
+            {
+              type: 'recoverable_error',
+              error: { kind: 'provider', reason: 'network', detail: '503' },
+            },
+          ])
+          expect(
+            events.some(
+              (e) => e.type === 'delta_emitted' && e.action.kind === 'updateStoryEntryMetadata',
+            ),
+          ).toBe(true)
+        })
+
+        it('is logged with its error and the negative delta it leaves', async () => {
+          rerollFails()
+          const log = spyLogger()
+          await drainPhase(undefined, log)
+          expect(log.warn).toHaveBeenCalledWith('classifier.delta_reroll_failed', {
+            status: 'failed',
+            errorDetail: 'provider timeout on reroll',
+            worldTimeDelta: -10,
+          })
+        })
+
+        it('is not logged when the re-roll succeeds', async () => {
+          seedClearing(false)
+          generateStructuredMock
+            .mockResolvedValueOnce({
+              status: 'ok',
+              value: { ...REPORT, worldTimeDelta: -10 },
+              recoverable: [],
+            })
+            .mockResolvedValueOnce({
+              status: 'ok',
+              value: { ...REPORT, worldTimeDelta: 15 },
+              recoverable: [],
+            })
+          const log = spyLogger()
+          await drainPhase(undefined, log)
+          expect(generateStructuredMock).toHaveBeenCalledTimes(2)
+          expect(log.warn).not.toHaveBeenCalledWith(
+            'classifier.delta_reroll_failed',
+            expect.anything(),
+          )
+        })
       })
 
       // Both schema branches: a recovery that also asks for chips stays unmarked.
@@ -3090,6 +3245,156 @@ describe('per-turn-piggyback', () => {
         },
       ])
     })
+
+    // piggyback.md → Fallback classifier context: an unreadable entry drops alone, recorded.
+    describe('an entry the reply cannot read', () => {
+      const unreadable = (field: string, list: string) => ({
+        field,
+        reason: 'unreadable',
+        detail: expect.stringContaining(list),
+      })
+
+      const cases: [label: string, reply: object, field: string, list: string][] = [
+        [
+          'a visual change of a type outside the list',
+          { visualChanges: [{ id: 'c1', type: 'mood', text: 'grim' }] },
+          'visualChanges',
+          'visualChanges',
+        ],
+        ['a condition with no text', { conditions: [{ id: 'l1' }] }, 'conditions', 'conditions'],
+        ['an empty visual change', { visualChanges: [{}] }, 'visualChanges', 'visualChanges'],
+        [
+          'an item move to slot "pocket"',
+          { transfers: { items: [{ id: 'l1', slot: 'pocket', to: 'c1' }] } },
+          'transfers',
+          'transfers.items',
+        ],
+        [
+          'an item move with no slot',
+          { transfers: { items: [{ id: 'l1', to: 'c1' }] } },
+          'transfers',
+          'transfers.items',
+        ],
+        ...['five', 2.5, -3].map((amount): (typeof cases)[number] => [
+          `a stackable of ${JSON.stringify(amount)}`,
+          { transfers: { stackables: [{ key: 'gold', amount, to: 'c1' }] } },
+          'transfers',
+          'transfers.stackables',
+        ]),
+        [
+          'a drop given as a bare string',
+          { transfers: { drops: ['l1'] } },
+          'transfers',
+          'transfers.drops',
+        ],
+      ]
+      it.each(cases)('records %s as unreadable and logs it', async (_label, reply, field, list) => {
+        seedFallbackTurn()
+        const log = spyLogger()
+        const { events } = await runFallback(
+          fallbackClassifierSchema.parse({ sceneEntities: ['c1'], worldTimeDelta: 10, ...reply }),
+          { log },
+        )
+        const dropped = unreadable(field, list)
+        expect(metadataPatch(events).stateReport?.droppedRefs).toEqual([dropped])
+        expect(log.warn).toHaveBeenCalledWith('classifier.ref_dropped', {
+          entryId: 'entry-2',
+          ...dropped,
+        })
+      })
+
+      it('applies the rest of each field beside the entries it drops', async () => {
+        seedFallbackTurn()
+        const { events } = await runFallback(
+          fallbackClassifierSchema.parse({
+            sceneEntities: ['c1'],
+            worldTimeDelta: 10,
+            visualChanges: [
+              { id: 'c1', type: 'mood', text: 'grim' },
+              { id: 'c1', type: 'hair', text: 'soaked through' },
+            ],
+            transfers: {
+              items: [{ id: 'l1', slot: 'pocket' }],
+              stackables: [
+                { key: 'gold', amount: -3, to: 'c1' },
+                { key: 'gold', amount: 4, to: 'c1' },
+              ],
+            },
+          }),
+        )
+        const report = metadataPatch(events).stateReport
+        expect(report?.visualChanges).toEqual([{ id: HERO, type: 'hair', text: 'soaked through' }])
+        expect(report?.transfers).toEqual({
+          items: [],
+          stackables: [{ key: 'gold', amount: 4, to: HERO }],
+        })
+        expect(report?.droppedRefs).toEqual([
+          unreadable('visualChanges', 'visualChanges'),
+          unreadable('transfers', 'transfers.items'),
+          unreadable('transfers', 'transfers.stackables'),
+        ])
+      })
+
+      // As a null field or list reads as absent.
+      it('reads a null entry as none, applying the rest of its list', async () => {
+        seedFallbackTurn()
+        const log = spyLogger()
+        const { events } = await runFallback(
+          fallbackClassifierSchema.parse({
+            sceneEntities: ['c1'],
+            worldTimeDelta: 10,
+            visualChanges: [null, { id: 'c1', type: 'hair', text: 'soaked through' }],
+            transfers: { stackables: [null, { key: 'gold', amount: 4, to: 'c1' }] },
+          }),
+          { log },
+        )
+        const report = metadataPatch(events).stateReport
+        expect(report?.visualChanges).toEqual([{ id: HERO, type: 'hair', text: 'soaked through' }])
+        expect(report?.transfers).toEqual({
+          items: [],
+          stackables: [{ key: 'gold', amount: 4, to: HERO }],
+        })
+        expect(report?.droppedRefs).toBeUndefined()
+        expect(log.warn).not.toHaveBeenCalled()
+      })
+
+      // A drop with a `to` is prose the turn kept out, not a model error.
+      it('records nothing for a drop that names a place', async () => {
+        seedFallbackTurn()
+        const log = spyLogger()
+        const { events } = await runFallback(
+          fallbackClassifierSchema.parse({
+            sceneEntities: ['c1'],
+            worldTimeDelta: 10,
+            transfers: { drops: [{ id: 'l1', to: 'l2' }] },
+          }),
+          { log },
+        )
+        expect(metadataPatch(events).stateReport?.droppedRefs).toBeUndefined()
+        expect(log.warn).not.toHaveBeenCalledWith('classifier.ref_dropped', expect.anything())
+      })
+
+      // A bad ref drops only its entry: a field fails whole only on an unexpected error.
+      it('records a field its substitution failed whole as unreadable', async () => {
+        class FailingIdMap extends IdBiMap {
+          override getUuidFor(placeholder: string): string | undefined {
+            if (placeholder === 'c9') throw new RangeError('lookup failed')
+            return super.getUuidFor(placeholder)
+          }
+        }
+        const idMap = new FailingIdMap()
+        for (const id of [HERO, TOWN, MARKET]) idMap.allocate(id)
+        seedFallbackTurn()
+        const { events } = await runFallback(
+          fallbackClassifierSchema.parse({ sceneEntities: ['c1', 'c9'], worldTimeDelta: 10 }),
+          { intermediates: { idMap } },
+        )
+        expect(metadataPatch(events).stateReport?.droppedRefs).toEqual([
+          { field: 'sceneEntities', reason: 'unreadable', detail: 'lookup failed' },
+        ])
+      })
+    })
+
     it("rejects a new item's handle as the location when the item isn't kept", async () => {
       const log = spyLogger()
       seedFallbackTurn()
@@ -4141,17 +4446,31 @@ describe('per-turn-piggyback', () => {
         expect(parsed.summary).toBe('Aria waits.')
       })
 
-      it('drops a condition it cannot read and keeps the others', () => {
-        const parsed = parse({
-          conditions: [
-            { id: 'i1' },
-            { id: 'i2', text: null },
-            'scorched',
-            { id: null, text: 'bent' },
-            { id: 'l1', text: 'flooded to the knee' },
-          ],
-        })
-        expect(parsed.conditions).toEqual([{ id: 'l1', text: 'flooded to the knee' }])
+      it('drops a condition it cannot read, recording it, and keeps the others', () => {
+        const { reply, dropped } = readFallbackReply(
+          parse({
+            conditions: [
+              { id: 'i1' },
+              { id: 'i2', text: null },
+              'scorched',
+              { id: null, text: 'bent' },
+              { id: 'l1', text: 'flooded to the knee' },
+            ],
+          }),
+        )
+        expect(reply.conditions).toEqual([{ id: 'l1', text: 'flooded to the knee' }])
+        expect(dropped).toEqual(
+          [
+            'conditions: text: ',
+            'conditions: text: ',
+            'conditions: Invalid',
+            'conditions: id: ',
+          ].map((detail) => ({
+            field: 'conditions',
+            reason: 'unreadable',
+            detail: expect.stringContaining(detail),
+          })),
+        )
       })
 
       it('reads a lone condition as a list of one, as a lone create reads', () => {
@@ -4164,10 +4483,18 @@ describe('per-turn-piggyback', () => {
         expect(withDrops(null).transfers?.drops).toEqual([])
       })
 
-      it('drops a drop it cannot read and keeps the others', () => {
-        expect(
-          withDrops(['i1', { from: 'c1' }, { id: 7 }, { id: 'i2', from: 'c1' }]).transfers?.drops,
-        ).toEqual([{ id: 'i2', from: 'c1' }])
+      it('drops a drop it cannot read, recording it, and keeps the others', () => {
+        const { reply, dropped } = readFallbackReply(
+          withDrops(['i1', { from: 'c1' }, { id: 7 }, { id: 'i2', from: 'c1' }]),
+        )
+        expect(reply.transfers?.drops).toEqual([{ id: 'i2', from: 'c1' }])
+        expect(dropped).toEqual(
+          Array(3).fill({
+            field: 'transfers',
+            reason: 'unreadable',
+            detail: expect.stringContaining('transfers.drops: '),
+          }),
+        )
       })
 
       it('reads a null holder as none, keeping the drop', () => {
@@ -4197,6 +4524,18 @@ describe('per-turn-piggyback', () => {
         expect(schemaNode(jsonSchema, ['conditions', '[]']).required).toEqual(['id', 'text'])
         expect(schemaNode(jsonSchema, ['transfers', 'drops', '[]']).required).toEqual(['id'])
         expect(schemaNode(jsonSchema, ['transfers', 'drops']).default).toEqual([])
+      })
+
+      it.each([
+        ['visualChanges', ['visualChanges', '[]']],
+        ['conditions', ['conditions', '[]']],
+        ['transfers.items', ['transfers', 'items', '[]']],
+        ['transfers.stackables', ['transfers', 'stackables', '[]']],
+        ['transfers.drops', ['transfers', 'drops', '[]']],
+      ])('shows a %s entry as an object with no default', (_list, path) => {
+        const entry = schemaNode(z.toJSONSchema(fallbackClassifierSchema), path)
+        expect(entry.type).toBe('object')
+        expect(entry).not.toHaveProperty('default')
       })
     })
 
@@ -4243,7 +4582,9 @@ describe('per-turn-piggyback', () => {
       expect(JSON.stringify(result.data)).not.toContain('null')
     })
 
-    // As conditions and drops already are: one entry the schema can't read drops alone.
+    type ReadReply = ReturnType<typeof readFallbackReply>['reply']
+
+    // As for conditions and drops: one entry the schema can't read drops alone, recorded.
     it.each([
       [
         'visualChanges',
@@ -4253,8 +4594,9 @@ describe('per-turn-piggyback', () => {
             { id: 'c2', type: 'hair', text: 'wet' },
           ],
         },
-        (d: z.infer<typeof fallbackClassifierSchema>) => d.visualChanges,
+        (d: ReadReply) => d.visualChanges,
         [{ id: 'c2', type: 'hair', text: 'wet' }],
+        'visualChanges',
       ],
       [
         'transfers.items',
@@ -4266,8 +4608,9 @@ describe('per-turn-piggyback', () => {
             ],
           },
         },
-        (d: z.infer<typeof fallbackClassifierSchema>) => d.transfers?.items,
+        (d: ReadReply) => d.transfers?.items,
         [{ id: 'i2', slot: 'inventory', to: 'c1' }],
+        'transfers',
       ],
       [
         'transfers.stackables',
@@ -4279,10 +4622,11 @@ describe('per-turn-piggyback', () => {
             ],
           },
         },
-        (d: z.infer<typeof fallbackClassifierSchema>) => d.transfers?.stackables,
+        (d: ReadReply) => d.transfers?.stackables,
         [{ key: 'arrows', amount: 4, to: 'c1' }],
+        'transfers',
       ],
-    ] as const)('drops a malformed %s entry alone', (_list, reply, read, kept) => {
+    ] as const)('drops a malformed %s entry alone', (list, reply, read, kept, field) => {
       const result = fallbackClassifierSchema.safeParse({
         sceneEntities: ['char_a'],
         worldTimeDelta: 30,
@@ -4290,8 +4634,41 @@ describe('per-turn-piggyback', () => {
         ...reply,
       })
       expect(result.success).toBe(true)
-      expect(read(result.data!)).toEqual(kept)
-      expect(result.data?.summary).toBe('Kael drew.')
+      const { reply: readReply, dropped } = readFallbackReply(result.data!)
+      expect(read(readReply)).toEqual(kept)
+      expect(readReply.summary).toBe('Kael drew.')
+      expect(dropped).toEqual([
+        { field, reason: 'unreadable', detail: expect.stringContaining(`${list}: `) },
+      ])
+    })
+
+    // The tags' parser's key and amount rules, which the schema can't state.
+    it('drops a stackable with no usable key or amount, recording it', () => {
+      const { reply, dropped } = readFallbackReply(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['char_a'],
+          worldTimeDelta: 30,
+          transfers: {
+            stackables: [
+              { key: 'Silver', amount: 3, to: 'c1' },
+              { key: 'gold', amount: -5, from: 'c1' },
+              { key: 'copper', amount: 1.5, to: 'c1' },
+              { key: '  ', amount: 2, to: 'c1' },
+              { key: 'x'.repeat(41), amount: 2, to: 'c1' },
+            ],
+          },
+        }),
+      )
+      expect(reply.transfers?.stackables).toEqual([{ key: 'silver', amount: 3, to: 'c1' }])
+      expect(dropped).toEqual(
+        ['"gold", amount -5', '"copper", amount 1.5', '"  ", amount 2', 'x", amount 2'].map(
+          (detail) => ({
+            field: 'transfers',
+            reason: 'unreadable',
+            detail: expect.stringContaining(detail),
+          }),
+        ),
+      )
     })
   })
 

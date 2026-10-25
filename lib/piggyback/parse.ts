@@ -116,14 +116,18 @@ function assertNotTruncated(segment: string, extractedCount: number, tagLabel: s
   }
 }
 
+// An entry's text holds no `<` that opens a tag, so a self-closed or unclosed entry can't swallow
+// the next one, and only one path matches each `<`, so an unclosed opener's scan stays linear.
+const ENTRY_TEXT = '[^<]*(?:<(?![A-Za-z/!?])[^<]*)*'
+// One `\s`: as `\s+`, it and the attributes would split a run of spaces every way, quadratically.
+const ATTRIBUTES = '\\s([^<>]*)'
+const ENTITY_ENTRY = `<entity${ATTRIBUTES}>(${ENTRY_TEXT})</entity>`
+
 // <entity id="..." type="...">text</entity> — full-replace visual change,
 // one entry per changed category (docs/memory/piggyback.md → Trailing block format).
 function parseVisualChanges(segment: string): VisualChangeNote[] {
   const notes: VisualChangeNote[] = []
-  // No `<` inside, so a self-closed or unclosed entry can't swallow the next one, and an unclosed
-  // opener can't make the scan run to the segment's end.
-  const re = /<entity\s+([^<>]*)>([^<]*)<\/entity>/g
-  for (const match of segment.matchAll(re)) {
+  for (const match of segment.matchAll(new RegExp(ENTITY_ENTRY, 'g'))) {
     const [, attrText, text] = match
     if (attrText === undefined || text === undefined) continue
     const attrs = parseAttributes(attrText)
@@ -138,9 +142,7 @@ function parseVisualChanges(segment: string): VisualChangeNote[] {
 // piggyback.md → Trailing block format. A blank condition is kept for apply.ts to refuse.
 function parseConditions(segment: string): ConditionChange[] {
   const changes: ConditionChange[] = []
-  // No `<` inside, so a self-closed or unclosed entry can't swallow the next one.
-  const re = /<entity\s+([^<>]*)>([^<]*)<\/entity>/g
-  for (const match of segment.matchAll(re)) {
+  for (const match of segment.matchAll(new RegExp(ENTITY_ENTRY, 'g'))) {
     const [, attrText, text] = match
     if (attrText === undefined || text === undefined) continue
     const { id } = parseAttributes(attrText)
@@ -162,7 +164,7 @@ function parseTransfers(segment: string, notes: ParseNotes): ParsedTransfers {
   const elsewhere: ParseNotes['dropsElsewhere'] = []
   let seq = 0
   // No `<` in the attributes, so a tag missing its `>` is lost rather than read into the next one.
-  const moveRe = new RegExp(`<(item|${DROP_TAG})\\s+([^<>]*)\\/?>`, 'g')
+  const moveRe = new RegExp(`<(item|${DROP_TAG})${ATTRIBUTES}\\/?>`, 'g')
   for (const match of segment.matchAll(moveRe)) {
     const [, tag, attrText] = match
     if (attrText === undefined) continue
@@ -187,7 +189,7 @@ function parseTransfers(segment: string, notes: ParseNotes): ParsedTransfers {
   }
 
   const stackables: StackableTransfer[] = []
-  const stackableRe = /<stackable\s+([^<>]*)\/?>/g
+  const stackableRe = new RegExp(`<stackable${ATTRIBUTES}\\/?>`, 'g')
   for (const match of segment.matchAll(stackableRe)) {
     const [, attrText] = match
     if (attrText === undefined) continue
@@ -215,7 +217,10 @@ function parseTransfers(segment: string, notes: ParseNotes): ParsedTransfers {
 function parseRetrievalQueries(segment: string): string[] | undefined {
   const seen = new Set<string>()
   const out: string[] = []
-  const re = new RegExp(`<${RETRIEVAL_QUERY_ITEM_TAG}>([^<]*)</${RETRIEVAL_QUERY_ITEM_TAG}>`, 'g')
+  const re = new RegExp(
+    `<${RETRIEVAL_QUERY_ITEM_TAG}>(${ENTRY_TEXT})</${RETRIEVAL_QUERY_ITEM_TAG}>`,
+    'g',
+  )
   for (const match of segment.matchAll(re)) {
     const text = match[1]?.trim()
     if (text === undefined || text === '' || seen.has(text)) continue
@@ -282,7 +287,9 @@ function decodeEntities(text: string): string {
     (match, named: keyof typeof XML_ENTITIES | undefined, decimal?: string, hex?: string) => {
       if (named !== undefined) return XML_ENTITIES[named]
       const code = decimal !== undefined ? Number(decimal) : parseInt(hex ?? '', 16)
-      return code <= 0x10ffff ? String.fromCodePoint(code) : match
+      // NUL and a lone surrogate are no text, and past U+10FFFF fromCodePoint throws.
+      const isText = code > 0 && code <= 0x10ffff && (code < 0xd800 || code > 0xdfff)
+      return isText ? String.fromCodePoint(code) : match
     },
   )
 }
@@ -521,7 +528,10 @@ export function parseSuggestionsBlock(raw: string): ParseSuggestionsBlockResult 
     return { items: [], blockFound: false, failed: false, malformedCount: 0 }
 
   const items: SuggestionRef[] = []
-  const re = new RegExp(`<${SUGGESTION_ITEM_TAG}\\s+([^<>]*)>([^<]*)</${SUGGESTION_ITEM_TAG}>`, 'g')
+  const re = new RegExp(
+    `<${SUGGESTION_ITEM_TAG}${ATTRIBUTES}>(${ENTRY_TEXT})</${SUGGESTION_ITEM_TAG}>`,
+    'g',
+  )
   for (const match of segment.matchAll(re)) {
     const [, attrText, text] = match
     if (attrText === undefined || text === undefined) continue

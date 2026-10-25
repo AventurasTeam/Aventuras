@@ -47,7 +47,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useEditOverlayGuard } from '@/hooks/use-edit-overlay-guard'
 import type { Tier } from '@/hooks/use-tier'
 import type { CalendarFrame } from '@/lib/calendar'
-import type { EntryMetadata, StoryEntry } from '@/lib/db'
+import type { EntityKind, EntryMetadata, StoryEntry } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { detectRichEntryHtml, parseMarkdownToHtml, sanitizeHtml } from '@/lib/markdown'
 import {
@@ -55,6 +55,7 @@ import {
   isCreateHandle,
   stripTrailingBlocks,
   unappliedStateRole,
+  type DroppedRef as EmittedDroppedRef,
 } from '@/lib/piggyback'
 import { cn } from '@/lib/utils'
 
@@ -789,14 +790,13 @@ const DROPPED_FIELD_KEYS = {
   visualChanges: 'reader:entryCard.stateField.visualChanges',
   conditions: 'reader:entryCard.stateField.conditions',
   transfers: 'reader:entryCard.stateField.transfers',
-} as const
+} as const satisfies Record<EmittedDroppedRef['field'], string>
 const KIND_KEYS = {
   character: 'common:kinds.character',
   location: 'common:kinds.location',
   item: 'common:kinds.item',
   faction: 'common:kinds.faction',
-  lore: 'common:kinds.lore',
-} as const
+} as const satisfies Record<EntityKind, string>
 const known = <K extends string>(keys: Record<K, unknown>, value: string): value is K =>
   Object.hasOwn(keys, value)
 

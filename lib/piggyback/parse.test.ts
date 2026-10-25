@@ -1353,9 +1353,8 @@ describe('conditions and drops', () => {
   })
 })
 
-// No `<` inside an entry's attributes or text, as conditions and moves already read: a malformed
-// entry drops alone instead of swallowing the next one, and an unclosed opener can't make the
-// scan run to the end of the segment.
+// No `<` in attributes and no tag in text, as in conditions and moves: a malformed entry drops
+// alone, and an unclosed opener can't run the scan to the segment end.
 describe('an entry that never closes swallows nothing', () => {
   it('keeps the next visual change whole after a self-closed one', () => {
     const { block } = parseStateBlock(
@@ -1391,8 +1390,82 @@ describe('an entry that never closes swallows nothing', () => {
     parseStateBlock(
       `<state><scene_entities>c1</scene_entities><visual_changes>${openers}</visual_changes></state>`,
     )
-    // Quadratic, this took about 800 ms; linear, a few ms. A generous bound keeps CI from flaking.
+    // The bound sits far above a linear scan's few ms and below a quadratic one's ~800 ms.
     expect(performance.now() - started).toBeLessThan(250)
+  })
+
+  // The bound sits far above a linear scan's few ms and below a quadratic one's ~1 s.
+  it.each([
+    ['a visual change', (pad: string) => `<visual_changes><entity${pad}</visual_changes>`],
+    ['a condition', (pad: string) => `<conditions><entity${pad}</conditions>`],
+    ['an item move', (pad: string) => `<transfers><item${pad}</transfers>`],
+    ['a stackable', (pad: string) => `<transfers><stackable${pad}</transfers>`],
+  ])('scans %s opener trailing 60,000 spaces in linear time', (_label, field) => {
+    const started = performance.now()
+    parseStateBlock(
+      `<state><scene_entities>c1</scene_entities>${field(' '.repeat(60_000))}</state>`,
+    )
+    expect(performance.now() - started).toBeLessThan(250)
+  })
+
+  it('scans a suggestion opener trailing 60,000 spaces in linear time', () => {
+    const started = performance.now()
+    parseSuggestionsBlock(`<suggestions><item${' '.repeat(60_000)}</suggestions>`)
+    expect(performance.now() - started).toBeLessThan(250)
+  })
+})
+
+describe("an entry's text holding a `<` that opens no tag", () => {
+  const visual = (...entries: string[]) =>
+    parseStateBlock(
+      `<state><scene_entities>c1</scene_entities><visual_changes>${entries.join('')}</visual_changes></state>`,
+    )
+  const scar = '<entity id="c1" type="distinguishing">a scar shaped like <3</entity>'
+  const hair = '<entity id="c2" type="hair">wet hair</entity>'
+
+  it('keeps a visual change holding one beside a sibling', () => {
+    expect(visual(scar, hair).block.visualChanges).toEqual([
+      { id: 'c1', type: 'distinguishing', text: 'a scar shaped like <3' },
+      { id: 'c2', type: 'hair', text: 'wet hair' },
+    ])
+  })
+
+  it('reads a visual change holding one alone, failing no field', () => {
+    const { block, failures } = visual(scar)
+    expect(failures).toEqual([])
+    expect(block.visualChanges).toEqual([
+      { id: 'c1', type: 'distinguishing', text: 'a scar shaped like <3' },
+    ])
+  })
+
+  it.each(['<b>', '</b>', '<!-- x -->', '<?x?>'])(
+    'drops a visual change holding %s alone, as a tag',
+    (tag) => {
+      const tagged = `<entity id="c1" type="distinguishing">a scar ${tag} here</entity>`
+      expect(visual(tagged, hair).block.visualChanges).toEqual([
+        { id: 'c2', type: 'hair', text: 'wet hair' },
+      ])
+    },
+  )
+
+  it('still stops an unclosed visual change at the next tag after one', () => {
+    const unclosed = '<entity id="c1" type="distinguishing">a scar shaped like <3 and'
+    expect(visual(unclosed, hair).block.visualChanges).toEqual([
+      { id: 'c2', type: 'hair', text: 'wet hair' },
+    ])
+  })
+
+  it('reads a condition, a query and a suggestion holding one', () => {
+    const { block, failures } = parseStateBlock(
+      '<state><scene_entities>c1</scene_entities><conditions><entity id="i1">cracked, 2 < 3 pieces</entity></conditions><retrieval_queries><query>the <3 carving</query></retrieval_queries></state>',
+    )
+    expect(failures).toEqual([])
+    expect(block.conditions).toEqual([{ id: 'i1', text: 'cracked, 2 < 3 pieces' }])
+    expect(block.retrievalQueries).toEqual(['the <3 carving'])
+    expect(
+      parseSuggestionsBlock('<suggestions><item category="cat1">Carve a <3</item></suggestions>')
+        .items,
+    ).toEqual([{ categoryRef: 'cat1', text: 'Carve a <3' }])
   })
 })
 
@@ -1402,6 +1475,25 @@ describe('a create name with a numeric character reference', () => {
       '<state><scene_entities>c1</scene_entities><new_location handle="new:inn" name="O&#39;Malley&#x27;s &amp; Sons">an inn</new_location><current_location>new:inn</current_location></state>',
     )
     expect(block.newLocations?.[0]?.name).toBe("O'Malley's & Sons")
+  })
+
+  const nameOf = (name: string) =>
+    parseStateBlock(
+      `<state><scene_entities>c1</scene_entities><new_location handle="new:inn" name="${name}">an inn</new_location><current_location>new:inn</current_location></state>`,
+    ).block.newLocations?.[0]?.name
+
+  it.each([
+    ['NUL', '&#0;'],
+    ['NUL in hex', '&#x0;'],
+    ['a lone high surrogate', '&#xD800;'],
+    ['a lone low surrogate', '&#57343;'],
+    ['a code past U+10FFFF', '&#1114112;'],
+  ])('leaves a reference to %s as written', (_label, ref) => {
+    expect(nameOf(`Gem${ref}`)).toBe(`Gem${ref}`)
+  })
+
+  it('decodes the codes either side of the surrogates, and the last code', () => {
+    expect(nameOf('&#xD7FF;&#xE000;&#x10FFFF;')).toBe('퟿\u{10FFFF}')
   })
 
   it('leaves an unknown named entity as written', () => {

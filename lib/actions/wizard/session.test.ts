@@ -334,6 +334,29 @@ describe('wizard session/draft actions', () => {
     expect(row('loc_lost')).toMatchObject({ parentLocationId: null, parentUnknown: true })
   })
 
+  it('resumes with no lead when the lead names no loaded character', async () => {
+    const good = emptyWorkingState()
+    const leading = async (storyId: string, leadEntityId: string) => {
+      const state = {
+        ...good,
+        leadEntityId,
+        cast: [
+          { id: 'char_ok', kind: 'character', name: 'Bren' },
+          { id: 'char_bad', kind: 'character', name: 42 },
+          { id: 'faction_ok', kind: 'faction', name: 'The Guild' },
+        ],
+      }
+      await ctx.db
+        .insert(wizardSessions)
+        .values({ id: storyId, storyId, state: state as never, updatedAt: 1 })
+      return (await loadDraft(storyId, ctx))?.state.leadEntityId
+    }
+
+    expect(await leading('story_lost', 'char_bad')).toBeNull()
+    expect(await leading('story_faction', 'faction_ok')).toBeNull()
+    expect(await leading('story_kept', 'char_ok')).toBe('char_ok')
+  })
+
   it('clears an unreadable section, toasts, and orphans the draft pointer', async () => {
     let sawError = false
     const unsub = toastStore.subscribe((items) => {

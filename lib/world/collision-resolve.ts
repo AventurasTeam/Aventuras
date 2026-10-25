@@ -62,7 +62,7 @@ export function entityRenameActions(input: {
     })
   }
   const clears = [
-    ...pairFlagsToClear(pair, branchEntities),
+    ...pairFlagsToClear(pair, branchEntities, after),
     ...brokenFlags({ entities: branchEntities, after }),
   ]
   return { actions: withFlagClears(updates, branchId, clears) }

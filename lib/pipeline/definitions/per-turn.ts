@@ -82,6 +82,14 @@ function skipFailedFold(
   return { ...turn, block: { ...turn.block, transfers: held } }
 }
 
+// A provider can send an error part and then stall: the stall fails the reply, the error says why.
+function narrativeTimeoutDetail(timeoutMs: number | undefined, earlierError: unknown): string {
+  const timeout = `narrative: timeout after ${timeoutMs}ms`
+  return earlierError === undefined
+    ? timeout
+    : `${timeout}; earlier stream error: ${describeProviderError(earlierError)}`
+}
+
 async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
   const { branchId } = ctx
   const working = loadPerTurnWorkingSet(ctx, 'narrative')
@@ -133,6 +141,9 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   const entryId = generateId('entry')
   const startedAt = Date.now()
   let streamError: unknown
+  let errorBeforeTimeout: unknown
+  // Assigned once the call returns; onError fires only while the stream runs.
+  let timedOut = (): boolean => false
   // streamText (ai@6) does NOT throw from textStream on a network/connection failure —
   // it terminates iteration silently and surfaces the error only via onError. Capture it
   // there and gate the commit on it.
@@ -148,6 +159,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     actionId: ctx.actionId,
     onError: ({ error }) => {
       streamError = error
+      // Native fetch rejects an aborted read with a plain error: one after expiry is the bound's.
+      if (!timedOut()) errorBeforeTimeout ??= error
     },
     cacheSystemPrefix: true,
   })
@@ -164,6 +177,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       },
     }
   const { stream } = call
+  timedOut = call.timedOut
   let content = ''
   try {
     // fullStream, not textStream: reasoning deltas stream to the UI as the
@@ -190,7 +204,15 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // supposed to discard.
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
   // Ends the same graceful way, so without this the reply so far would commit as whole.
-  if (call.timedOut()) return { status: 'failed', error: { kind: 'provider', reason: 'timeout' } }
+  if (timedOut())
+    return {
+      status: 'failed',
+      error: {
+        kind: 'provider',
+        reason: 'timeout',
+        detail: narrativeTimeoutDetail(call.timeoutMs, errorBeforeTimeout),
+      },
+    }
   if (streamError !== undefined) {
     // The envelope message alone ("Failed to process successful response") names
     // nothing actionable, and the orchestrator's own pipeline.phase_failed
@@ -271,7 +293,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     if (parsedState.dropsCutOff.length > 0)
       ctx.log.debug('classifier.drops_held', {
         entryId,
-        itemIds: parsedState.dropsCutOff.map((d) => d.id),
+        itemIds: parsedState.dropsCutOff.map((d) => idMap.getUuidFor(d.id) ?? d.id),
         reason: 'cut_off',
       })
     // A failed fold creates nothing: creates aren't idempotent, and the fallback that fires

@@ -51,7 +51,7 @@ export async function branchStaleTotal(page: Page, branchId: string): Promise<nu
 export async function currentBranchId(page: Page, storyId: string): Promise<string> {
   const rows = await queryApp(page, `SELECT current_branch_id FROM stories WHERE id = ?`, [storyId])
   const id = rows[0]?.[0]
-  // Not a cast: every per-branch query after a missing story would read empty and pass.
+  // A missing story throws: every per-branch query after it would read empty and pass.
   if (typeof id !== 'string') throw new Error(`story ${storyId} has no current branch`)
   return id
 }

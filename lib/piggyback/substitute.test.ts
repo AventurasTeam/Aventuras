@@ -604,6 +604,29 @@ describe('substitutePiggybackIds — per-entry drops', () => {
     ])
   })
 
+  // A list with no usable entry is no evidence the scene emptied: the previous one stays.
+  it('reads a scene list that loses every entry as omitted, each drop recorded', () => {
+    const result = substitutePiggybackIds(
+      assumeNormalized({ sceneEntities: ['Kael', 'l1'] }),
+      idMap(),
+      opts('drop'),
+    )
+    expect(result.block.sceneEntities).toBeUndefined()
+    expect(result.droppedRefs).toEqual([
+      expect.objectContaining({ field: 'sceneEntities', ref: 'Kael' }),
+      expect.objectContaining({ field: 'sceneEntities', ref: 'l1' }),
+    ])
+  })
+
+  it('keeps an empty scene list the reply sent as empty', () => {
+    const result = substitutePiggybackIds(
+      assumeNormalized({ sceneEntities: [] }),
+      idMap(),
+      opts('drop'),
+    )
+    expect(result.block.sceneEntities).toEqual([])
+  })
+
   it.each(sceneCases)('fails the scene list on %s when wrong refs fail', (_l, ref) => {
     const result = substitutePiggybackIds(
       assumeNormalized({ newLocations: [docks], sceneEntities: ['c1', ref] }),

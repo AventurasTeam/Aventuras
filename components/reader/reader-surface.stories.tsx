@@ -592,7 +592,7 @@ export const ShrinkWhileEditingHolds: Story = {
   },
 }
 
-// The keyboard's share of a phone's reader (the triage measurement left 180 CSS px above it).
+// A phone keyboard's share of the reader: on a 411×914 dp emulator it leaves the reader 180 CSS px.
 const KEYBOARD_HEIGHT_PX = 260
 
 /** The keyboard hides the last row's editor; the reader brings its row, Save included, back up. */
@@ -814,7 +814,8 @@ export const StreamEndSettleBrokenByPageUp: Story = {
   },
 }
 
-// A stream whose next chunk lands on a button press, so the play can move between chunks.
+// A stream whose next chunk lands on a button press, so the play can move between chunks, beside
+// a scroller standing in for the rail list: a focusable row over blank space.
 function StreamChunksHarness(props: ComponentProps<typeof ReaderSurface>) {
   const [chunks, setChunks] = useState(1)
   const content = Array.from({ length: chunks }, () => REPLY_TEXT).join('\n\n')
@@ -823,11 +824,40 @@ function StreamChunksHarness(props: ComponentProps<typeof ReaderSurface>) {
       <button type="button" onClick={() => setChunks((n) => n + 1)}>
         Next chunk
       </button>
-      <div style={{ minHeight: 0, flex: 1 }}>
-        <ReaderSurface {...props} rows={OVERFLOW_ROWS} streaming={{ content, reasoning: '' }} />
+      <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
+        <div data-rail-stand-in style={{ width: 120, overflowY: 'auto' }}>
+          <button type="button">Rail row</button>
+          <div style={{ height: 2000 }} />
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <ReaderSurface {...props} rows={OVERFLOW_ROWS} streaming={{ content, reasoning: '' }} />
+        </div>
       </div>
     </div>
   )
+}
+
+function railStandIn(): HTMLElement {
+  const rail = document.querySelector('[data-rail-stand-in]')
+  if (!(rail instanceof HTMLElement)) throw new Error('no rail stand-in')
+  return rail
+}
+
+async function nextChunk(scroller: HTMLElement) {
+  const heightBefore = scroller.scrollHeight
+  screen.getByRole('button', { name: 'Next chunk' }).click()
+  await waitFor(() => expect(scroller.scrollHeight).toBeGreaterThan(heightBefore))
+  await nextFrame()
+}
+
+async function scrollSettled(el: HTMLElement) {
+  let stable = 0
+  let lastTop = -1
+  while (stable < 10) {
+    await nextFrame()
+    stable = el.scrollTop === lastTop ? stable + 1 : 0
+    lastTop = el.scrollTop
+  }
 }
 
 /**
@@ -841,11 +871,61 @@ export const StreamFollowBrokenByArrowUp: Story = {
     await settleLanding(scroller)
     scroller.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }))
     await scrollToDistance(scroller, 40)
-    const heightBefore = scroller.scrollHeight
-    screen.getByRole('button', { name: 'Next chunk' }).click()
-    await waitFor(() => expect(scroller.scrollHeight).toBeGreaterThan(heightBefore))
-    await nextFrame()
+    await nextChunk(scroller)
     expect(distanceFromBottom(scroller)).toBeGreaterThan(40)
+  },
+}
+
+const RAIL_START_PX = 1000
+
+/**
+ * With nothing focused, Chromium scrolls the scroller last pressed: a key that scrolls the rail
+ * leaves the reader following. Real input, a no-op outside Vitest: a dispatched key scrolls nothing.
+ */
+export const StreamFollowHoldsWhileRailScrollsByKey: Story = {
+  render: (args) => <StreamChunksHarness {...args} />,
+  play: async () => {
+    const browser = await import('vitest/browser').catch(() => null)
+    if (browser == null) return
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    const rail = railStandIn()
+    rail.scrollTop = RAIL_START_PX
+    await scrollSettled(rail)
+    await browser.userEvent.click(rail, { position: { x: 20, y: 200 } })
+    expect(document.activeElement).toBe(document.body)
+    const readerTop = scroller.scrollTop
+    await browser.userEvent.keyboard('{PageUp}')
+    await waitFor(() => expect(rail.scrollTop).toBeLessThan(RAIL_START_PX))
+    await scrollSettled(rail)
+    expect(scroller.scrollTop).toBe(readerTop)
+    await nextChunk(scroller)
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+  },
+}
+
+/** With nothing focused, a key after a press inside the reader scrolls it, and disengages. */
+export const StreamFollowBrokenByKeyAfterReaderPress: Story = {
+  render: (args) => <StreamChunksHarness {...args} />,
+  play: async () => {
+    const browser = await import('vitest/browser').catch(() => null)
+    if (browser == null) return
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    const rail = railStandIn()
+    rail.scrollTop = RAIL_START_PX
+    await scrollSettled(rail)
+    await browser.userEvent.click(entryRow('o14'), { position: { x: 4, y: 4 } })
+    expect(document.activeElement).toBe(document.body)
+    const readerTop = scroller.scrollTop
+    await browser.userEvent.keyboard('{ArrowUp}')
+    await waitFor(() => expect(scroller.scrollTop).toBeLessThan(readerTop))
+    await scrollSettled(scroller)
+    expect(rail.scrollTop).toBe(RAIL_START_PX)
+    const distance = distanceFromBottom(scroller)
+    expect(distance).toBeLessThan(80)
+    await nextChunk(scroller)
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(distance)
   },
 }
 

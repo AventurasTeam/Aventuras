@@ -40,9 +40,8 @@ export function profileTimeoutMs(seconds: number | undefined): number | undefine
   return Math.min(seconds * 1000, MAX_TIMER_DELAY_MS)
 }
 
-// Single owner of the ResolvedParams → SDK call-settings mapping. Thinking is
-// anthropic-only: other provider types would reject the providerOptions key. No `timeout`: the
-// SDK builds AbortSignal.timeout from it, which React Native's AbortController lacks.
+// Sole ResolvedParams → call-settings mapping. Thinking is anthropic-only: other providers reject
+// the providerOptions key. No `timeout`: the SDK builds AbortSignal.timeout, which RN lacks.
 export function buildCallSettings(
   params: ResolvedParams,
   providerType: ProviderInstance['type'] | undefined,
@@ -70,7 +69,7 @@ export type PreparedGeneration =
       ok: true
       model: LanguageModel
       callSettings: CallSettings
-      /** The profile's `timeout`, bounded by the caller's own signal rather than the SDK's. */
+      /** Profile `timeout` in ms, enforced on the call's own signal, not the SDK's `timeout`. */
       timeoutMs: number | undefined
       providerId: string
       modelId: string
@@ -151,6 +150,8 @@ export type StreamTextResult =
       providerId: string
       /** The profile's `timeout` ended the stream, which then closes as if cancelled. */
       timedOut: () => boolean
+      /** The bound `timedOut` reports on, in ms; `undefined` when the profile sets none. */
+      timeoutMs: number | undefined
     }
   | { ok: false; kind: ResolveFailureKind; target: ResolveTarget }
 
@@ -185,6 +186,7 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
     modelId: resolved.modelId,
     providerId: resolved.providerId,
     timedOut: () => bounded?.expired() ?? false,
+    timeoutMs: resolved.timeoutMs,
   }
 }
 
@@ -202,9 +204,9 @@ export function parseStructured<T>(raw: string, schema: z.ZodType<T>): T {
 export type StructuredCallOptions = {
   /** Mark the system prefix for caching; honoured on `anthropic` providers only. */
   cacheSystemPrefix?: boolean
-  /** The run's action, so the call's fetch capture links to it (observability.md → actionId
-   *  threading). Absent outside a run, as for the wizard. */
-  actionId?: string
+  /** The run's action, linking the call's fetch capture (observability.md → actionId threading);
+   *  `null` outside a run, as for the wizard. Required so no call compiles without one. */
+  actionId: string | null
 }
 
 /** generation-pipeline.md → Two retry tiers: `recoverable` holds each retried attempt. */
@@ -229,9 +231,9 @@ export async function generateStructured<T>(
   schema: z.ZodType<T>,
   config: ResolveModelConfig,
   signal: AbortSignal,
-  options?: StructuredCallOptions,
+  options: StructuredCallOptions,
 ): Promise<GenerateStructuredResult<T>> {
-  const resolved = prepareGeneration(target, config, options?.actionId)
+  const resolved = prepareGeneration(target, config, options.actionId ?? undefined)
   if (!resolved.ok) return { status: 'not-configured', kind: resolved.kind }
 
   // z.toJSONSchema throws on unrepresentable schemas (transforms, refinements);
@@ -253,7 +255,7 @@ export async function generateStructured<T>(
   const model = withMiddleware(resolved.model, [
     jsonResponseFormatMiddleware(jsonSchema),
     ...(resolved.params.structuredOutput === 'force-on' ? [] : [promptSchemaMiddleware()]),
-    ...(marksSystemPrefix(options?.cacheSystemPrefix, resolved.providerType)
+    ...(marksSystemPrefix(options.cacheSystemPrefix, resolved.providerType)
       ? [anthropicCacheMarkerMiddleware()]
       : []),
   ])

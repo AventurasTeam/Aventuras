@@ -51,9 +51,8 @@ export type PiggybackApplied = {
   drops: ReportedDrop[]
   /** Positions in `block.conditions` refused, not ids: an id can repeat in one block. */
   conditionsRejected: number[]
-  // How many of each changed what World stores: one naming no character as its target or a party
-  // writes none, and one restating the stored value changes nothing. The fallback's report carries
-  // a failed fold's record over per list on these (data-model.md → Entry metadata shape).
+  // How many of each changed what World stores; a no-op or restated value counts none. Per list,
+  // they gate the fallback keeping a failed fold's record (data-model.md → Entry metadata shape).
   visualChangesLanded: number
   conditionsLanded: number
   itemsLanded: number
@@ -271,10 +270,14 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   for (const transfer of block.transfers?.stackables ?? []) {
     const payer = holderOf(transfer.from)
     const payee = holderOf(transfer.to)
-    if (payer !== undefined || payee !== undefined) stackablesLanded += 1
+    // Paid to themselves, into a satchel they hold included: nothing moves, and the shortfall
+    // rule below would mint the difference.
+    if (payer === payee) continue
+    let moved = payee !== undefined
     if (payer !== undefined) {
       const next = currentStackables(payer)
       const balance = next.get(transfer.key) ?? 0
+      if (balance > 0) moved = true
       // data-model.md → Stackable items: the payer clamps at zero while the payee still gains
       // the full amount, so the prose stays true for whoever received it.
       if (balance < transfer.amount)
@@ -296,6 +299,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
       next.set(transfer.key, (next.get(transfer.key) ?? 0) + transfer.amount)
       stackablePatches.set(payee, next)
     }
+    if (moved) stackablesLanded += 1
   }
   for (const [id, stackables] of stackablePatches) {
     if (isCharacter(id)) {

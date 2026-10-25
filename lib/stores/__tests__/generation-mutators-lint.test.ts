@@ -12,17 +12,21 @@ async function flagged(code: string, filePath: string): Promise<boolean> {
 const IMPORT = "import { generationStore } from '@/lib/stores'\n"
 
 describe('generationStore run-mutator lint', () => {
-  it.each(['startRun', 'finishRun', 'abortRun', 'setReversalInProgress'])(
-    'flags %s called from a component',
-    async (mutator) => {
-      expect(
-        await flagged(
-          `${IMPORT}export const x = () => generationStore.${mutator}('r')\n`,
-          'components/reader/__mutator-fixture.ts',
-        ),
-      ).toBe(true)
-    },
-  )
+  it.each([
+    'startRun',
+    'finishRun',
+    'abortRun',
+    'setReversalInProgress',
+    'setCurrentPhase',
+    'recordPhaseResult',
+  ])('flags %s called from a component', async (mutator) => {
+    expect(
+      await flagged(
+        `${IMPORT}export const x = () => generationStore.${mutator}('r')\n`,
+        'components/reader/__mutator-fixture.ts',
+      ),
+    ).toBe(true)
+  })
 
   it('flags a mutator pulled off the store by destructuring', async () => {
     expect(

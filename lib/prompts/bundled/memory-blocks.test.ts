@@ -223,8 +223,7 @@ describe('memory-blocks macro — row content', () => {
     expect(renderMacro({ ...EMPTY, structuralSceneFactions: [faction] })).not.toContain('(')
   })
 
-  // retrieval.md → Three-sub-pool entity model: "Veil's Hollow (not in the scene)" read wrong
-  // while the scene stood inside it.
+  // retrieval.md → Three-sub-pool entity model: the scene may stand inside an active place.
   it('leaves an active place unframed, as the mirror does', () => {
     const place = {
       ...floorEntity,

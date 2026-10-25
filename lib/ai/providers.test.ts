@@ -1,8 +1,16 @@
+import { createAnthropic } from '@ai-sdk/anthropic'
 import { generateText } from 'ai'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createProviderModel } from './providers'
 import type { ProviderInstanceWithStub } from './types'
+
+// A spy that still builds the real provider: a malformed endpoint never reaches fetch, so the
+// header can only be read off the options the provider was built with.
+vi.mock('@ai-sdk/anthropic', async (orig) => {
+  const actual = await orig<{ createAnthropic: typeof createAnthropic }>()
+  return { ...actual, createAnthropic: vi.fn(actual.createAnthropic) }
+})
 
 const oai: ProviderInstanceWithStub = {
   id: 'prov-1',
@@ -75,5 +83,13 @@ describe('createProviderModel · anthropic', () => {
   it('leaves the header off for a proxy endpoint', async () => {
     const headers = await sentHeaders({ ...anthropic, endpoint: 'https://proxy.example.com/v1' })
     expect(headers.get('anthropic-dangerous-direct-browser-access')).toBeNull()
+  })
+
+  // An endpoint that isn't a URL can't be Anthropic's own.
+  it('leaves the header off for a malformed endpoint', () => {
+    vi.mocked(createAnthropic).mockClear()
+    createProviderModel({ ...anthropic, endpoint: 'api.anthropic.com/v1' }, 'claude-test')
+    expect(createAnthropic).toHaveBeenCalledOnce()
+    expect(vi.mocked(createAnthropic).mock.calls[0]?.[0]).not.toHaveProperty('headers')
   })
 })

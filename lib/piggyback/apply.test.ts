@@ -1429,8 +1429,8 @@ describe('buildPiggybackActions', () => {
             transfers: transfers({
               stackables: [
                 { key: 'coins', amount: 5, to: 'loc_keep' },
-                { key: 'coins', amount: 5, from: 'char_kael' },
                 { key: 'coins', amount: 5, to: 'char_kael' },
+                { key: 'coins', amount: 5, from: 'char_kael' },
                 { key: 'coins', amount: 5 },
               ],
             }),
@@ -2104,13 +2104,14 @@ describe('buildPiggybackActions — holders read by what they name', () => {
     item('item_satchel', null),
     item('item_chest', 'loc_dock'),
     item('item_crate', 'loc_mill'),
+    item('item_box', null),
     place('loc_dock'),
     place('loc_mill'),
     mockEntity({ id: 'fac_guild', kind: 'faction', name: 'the Guild', state: {} }),
   ]
-  const run = (transfers: Partial<ParsedTransfers>) =>
+  const run = (transfers: Partial<ParsedTransfers>, log: Logger = logger) =>
     buildPiggybackActions({
-      log: logger,
+      log,
       source: 'per_turn_classifier',
       entryId: 'entry_2',
       turn: planned({ transfers: { items: [], stackables: [], drops: [], ...transfers } }),
@@ -2179,6 +2180,24 @@ describe('buildPiggybackActions — holders read by what they name', () => {
     expect(result.applied.itemsLanded).toBe(0)
   })
 
+  it('leaves an item moved into a box nobody holds that lies nowhere unplaced', () => {
+    const result = run(blade('item_box'))
+    expect(writes(result, 'updateEntityInventory')).toEqual([
+      { branchId: 'main', id: 'char_mira', equipped_items: [], inventory: ['item_pouch'] },
+    ])
+    expect(writes(result, 'updateItemPosition')).toEqual([])
+    expect(result.applied.itemsLanded).toBe(1)
+  })
+
+  it("counts nothing landed for an item moved into the scene's place where it already lies", () => {
+    const result = run({
+      items: [{ id: 'item_chest', to: 'loc_dock', slot: 'inventory', seq: 0 }],
+    })
+    expect(writes(result, 'updateEntityInventory')).toEqual([])
+    expect(writes(result, 'updateItemPosition')).toEqual([])
+    expect(result.applied.itemsLanded).toBe(0)
+  })
+
   it('leaves an item given to a faction unplaced, as given away off-scene', () => {
     const result = run(blade('fac_guild'))
     expect(writes(result, 'updateEntityInventory')).toEqual([
@@ -2219,6 +2238,79 @@ describe('buildPiggybackActions — holders read by what they name', () => {
         ]),
       ),
     ).toEqual(balances)
+  })
+
+  it.each([
+    [
+      'an item someone holds, as that character',
+      blade('item_satchel'),
+      { holderId: 'item_satchel', kind: 'item', readAs: 'character', characterId: 'char_bob' },
+    ],
+    [
+      "the scene's place, as here",
+      blade('loc_dock'),
+      { holderId: 'loc_dock', kind: 'location', readAs: 'here' },
+    ],
+    [
+      'an item lying elsewhere, as elsewhere',
+      blade('item_crate'),
+      { holderId: 'item_crate', kind: 'item', readAs: 'elsewhere' },
+    ],
+    [
+      'a faction, as omitted',
+      blade('fac_guild'),
+      { holderId: 'fac_guild', kind: 'faction', readAs: 'omitted' },
+    ],
+    [
+      "a stackable's chest lying here, as here",
+      { stackables: [{ key: 'gold', amount: 4, from: 'char_mira', to: 'item_chest' }] },
+      { holderId: 'item_chest', kind: 'item', readAs: 'here' },
+    ],
+  ])('logs a holder read as %s, at debug only', (_label, transfers, reading) => {
+    const log = spyLogger()
+    run(transfers, log)
+    expect(log.debug).toHaveBeenCalledWith('classifier.holder_read', {
+      entryId: 'entry_2',
+      source: 'per_turn_classifier',
+      ...reading,
+    })
+    expect(log.warn).not.toHaveBeenCalled()
+    expect(log.error).not.toHaveBeenCalled()
+  })
+
+  // Bob holds 3 gold and the satchel: the shortfall rule would credit the payee in full.
+  it.each([
+    ['into his own satchel, past his purse', { from: 'char_bob', to: 'item_satchel', amount: 20 }],
+    ['into his own satchel, within his purse', { from: 'char_bob', to: 'item_satchel', amount: 2 }],
+    ['to himself by name', { from: 'char_bob', to: 'char_bob', amount: 20 }],
+    ['out of his own satchel to himself', { from: 'item_satchel', to: 'char_bob', amount: 20 }],
+  ])('changes nothing for a stackable Bob pays %s', (_label, parties) => {
+    const log = spyLogger()
+    const result = run({ stackables: [{ key: 'gold', ...parties }] }, log)
+    expect(writes(result, 'updateEntityStackables')).toEqual([])
+    expect(result.applied.stackablesLanded).toBe(0)
+    expect(log.warn).not.toHaveBeenCalled()
+  })
+
+  // Mira holds 10 gold and no silver; a chest lying here holds no stackable.
+  it.each([
+    ['gold', 1],
+    ['silver', 0],
+  ])('counts a stash of %s into a chest as %i landed', (key, landed) => {
+    const result = run({ stackables: [{ key, amount: 4, from: 'char_mira', to: 'item_chest' }] })
+    expect(result.applied.stackablesLanded).toBe(landed)
+  })
+
+  it('logs no reading for a character holder', () => {
+    const log = spyLogger()
+    run(
+      {
+        ...blade('char_bob'),
+        stackables: [{ key: 'gold', amount: 1, from: 'char_bob', to: 'char_mira' }],
+      },
+      log,
+    )
+    expect(log.debug).not.toHaveBeenCalledWith('classifier.holder_read', expect.anything())
   })
 })
 

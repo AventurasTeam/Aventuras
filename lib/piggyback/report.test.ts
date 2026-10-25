@@ -69,6 +69,37 @@ describe('buildStateReport', () => {
     expect(report([])).not.toHaveProperty('seatedDisabled')
   })
 
+  describe('dropped refs', () => {
+    const dropped = {
+      field: 'transfers',
+      reason: 'unreadable',
+      detail: 'transfers.items: slot: Invalid option',
+    } as const
+
+    it("records the fallback's, even in a report that holds nothing else", () => {
+      expect(
+        buildStateReport({
+          layer: 'per_turn_classifier',
+          turn: planned({}),
+          failures: [],
+          droppedRefs: [dropped],
+        }),
+      ).toEqual({ layer: 'per_turn_classifier', droppedRefs: [dropped] })
+    })
+
+    // data-model.md → Entry metadata shape: never the narrative's, which fails a field instead.
+    it("are refused on the narrative's layer", () => {
+      const narrative = {
+        layer: 'piggyback_tagged_block' as const,
+        turn: planned({}),
+        failures: [],
+      }
+      // @ts-expect-error the narrative fold fails a field rather than dropping an entry
+      const report = buildStateReport({ ...narrative, droppedRefs: [dropped] })
+      expect(report?.layer).toBe('piggyback_tagged_block')
+    })
+  })
+
   // The headroom clamp is the case `worldTimeDelta < 0` never caught: a positive
   // emitted value that apply.ts still had to truncate.
   it('records a headroom clamp, which the emitted value alone cannot reveal', () => {

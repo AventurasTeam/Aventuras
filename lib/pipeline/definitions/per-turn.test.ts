@@ -306,6 +306,7 @@ describe('per-turn pipeline declaration', () => {
       modelId: 'model-1',
       providerId: 'prov-1',
       timedOut: () => true,
+      timeoutMs: 45_000,
       stream: {
         fullStream: (async function* () {
           yield { type: 'text-delta', text: 'The lantern gutt' }
@@ -315,7 +316,83 @@ describe('per-turn pipeline declaration', () => {
 
     const result = await runNarrativePhase()
 
-    expect(result).toEqual({ status: 'failed', error: { kind: 'provider', reason: 'timeout' } })
+    // The orchestrator's failure logs carry only the kind and the detail.
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'provider', reason: 'timeout', detail: 'narrative: timeout after 45000ms' },
+    })
+  })
+
+  // The SDK reports an error part and reads on, so a stall can follow it.
+  it('names the stream error a timeout followed', async () => {
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition,
+      settings: baseSettings({ partialChapterBuffer: 3 }),
+    })
+    hydrateEntries(phaseDb, 'b1', [])
+    entitiesStore.hydrate('b1', [])
+    let expired = false
+    streamTextMock.mockImplementation((_target, opts) => ({
+      ok: true,
+      modelId: 'model-1',
+      providerId: 'prov-1',
+      timedOut: () => expired,
+      timeoutMs: 45_000,
+      stream: {
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'The lantern gutt' }
+          opts.onError?.({ error: new Error('upstream overloaded') })
+          expired = true
+        })(),
+      },
+    }))
+
+    const result = await runNarrativePhase()
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: {
+        kind: 'provider',
+        reason: 'timeout',
+        detail: 'narrative: timeout after 45000ms; earlier stream error: upstream overloaded',
+      },
+    })
+  })
+
+  // Native fetch rejects an aborted read with a plain error, which the SDK then reports.
+  it("doesn't name the error the timeout's own abort raised", async () => {
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition,
+      settings: baseSettings({ partialChapterBuffer: 3 }),
+    })
+    hydrateEntries(phaseDb, 'b1', [])
+    entitiesStore.hydrate('b1', [])
+    let expired = false
+    streamTextMock.mockImplementation((_target, opts) => ({
+      ok: true,
+      modelId: 'model-1',
+      providerId: 'prov-1',
+      timedOut: () => expired,
+      timeoutMs: 45_000,
+      stream: {
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'The lantern gutt' }
+          expired = true
+          opts.onError?.({ error: new Error('fetch failed: The operation was aborted.') })
+        })(),
+      },
+    }))
+
+    const result = await runNarrativePhase()
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'provider', reason: 'timeout', detail: 'narrative: timeout after 45000ms' },
+    })
   })
 
   it('surfaces a resolve failure as a config-resolver phase error', async () => {
@@ -2274,8 +2351,8 @@ describe('narrative fold — creates', () => {
     expect(await storedEntry(USER_ACTION_ID)).toBeDefined()
   })
 
-  // piggyback.md → Parse strategy and failure recovery: stackables add, so a failed fold holds its
-  // back for the fallback, which would otherwise move the same amount a second time.
+  // piggyback.md → Parse strategy and failure recovery: stackables add, so a failed fold holds them
+  // back for the fallback, which would otherwise move the same amount twice.
   describe('a failed fold with a stackable', () => {
     const goldReply =
       'Aria pockets the purse.\n<state><scene_entities>c1</scene_entities>' +
@@ -2549,6 +2626,20 @@ describe('narrative fold — creates', () => {
       })
     })
 
+    // piggyback.md → Parse strategy: a cut may have taken the place the scene moved to.
+    it('holds the drops of a block the stream cut off before any place, logged as cut off', async () => {
+      const fold = await failedFold(
+        'Aria sets her sword on a crate.\n<state><scene_entities>c1</scene_entities>' +
+          '<transfers><drop id="i1" from="c1" /></transfers><world_time_delta>30',
+      )
+      expect(fold.log.debug).toHaveBeenCalledWith('classifier.drops_held', {
+        entryId: fold.replyId,
+        itemIds: [SWORD],
+        reason: 'cut_off',
+      })
+      expect(replyOf(fold.events).metadata?.stateReport?.transfers?.drops).toBeUndefined()
+    })
+
     // The fold can use its own place, or keeps the previous one for a place apply.ts rejects on any
     // block: the drop lands now.
     describe('a failed fold whose place stands', () => {
@@ -2664,6 +2755,23 @@ describe('narrative fold — creates', () => {
     const { events, result } = await foldTurn(CREATE_REPLY, { signal: controller.signal })
     expect(result).toEqual({ status: 'aborted' })
     expect(events.filter((e) => e.type === 'delta_emitted')).toEqual([])
+  })
+
+  // A cancel during an item's match embed must end it rather than wait out a slow provider.
+  it("hands the run's signal to the item match embed, so a cancel ends it", async () => {
+    await seedTurn([
+      ...baseWorld(),
+      worldRow({ id: OLD_KEY, kind: 'item', name: 'rusted key', description: 'an iron key' }),
+    ])
+    const controller = new AbortController()
+    const embedSignals: (AbortSignal | undefined)[] = []
+    configureClassifierEmbedder(async (texts, signal) => {
+      embedSignals.push(signal)
+      return { vectors: texts.map(() => new Float32Array([1, 0])), dim: 2 }
+    })
+    await foldTurn(CREATE_REPLY, { signal: controller.signal })
+    expect(embedSignals).toHaveLength(1)
+    expect(embedSignals[0]).toBe(controller.signal)
   })
 
   // data-model.md → Authorship contract, seen before written: the market is listed by name only.

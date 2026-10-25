@@ -76,17 +76,23 @@ export function brokenFlags(input: {
 }
 
 /**
- * The pair's flagged rows whose partner is the other row, or whose flag is dormant among
- * `entities` (world.md → Keep as distinct). A live flag naming a third row is its own question.
+ * The pair's flagged rows whose partner is the other row, or whose flag is dormant in `entities`
+ * after the write (world.md → Keep as distinct, Rename). A live flag naming a third row stays.
  */
-export function pairFlagsToClear(pair: CollisionPair, entities: readonly Entity[]): string[] {
+export function pairFlagsToClear(
+  pair: CollisionPair,
+  entities: readonly Entity[],
+  /** id → that row's name, keywords and parent after the write; other rows read as stored. */
+  after: ReadonlyMap<string, PairSide> = new Map(),
+): string[] {
   const byId = new Map(entities.map((e) => [e.id, e]))
+  const side = (e: Entity): PairSide => after.get(e.id) ?? pairSideOf(e)
   return pair
     .filter((row, index) => {
       const partner = row.nameCollisionPartnerId
       if (row.nameCollisionFlag !== 1) return false
       if (partner === pair[1 - index].id) return true
-      return !flagStillHolds(row, partner == null ? undefined : byId.get(partner))
+      return !flagStillHolds(row, partner == null ? undefined : byId.get(partner), side)
     })
     .map((row) => row.id)
 }

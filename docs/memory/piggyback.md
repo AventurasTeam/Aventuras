@@ -270,11 +270,10 @@ keywords are chapter close's
 **Where a handle is used.** The prompt asks for a new place's handle
 only as the `<current_location>` or another new place's `parent`, and
 for a new item's handle only as a transfer's item `id` or, when the item
-is in the scene, in `<scene_entities>`; the parser also tolerates a
-new place's handle in `<scene_entities>`. A handle in any other field, a
+is in the scene, in `<scene_entities>`. A handle in any other field, a
 visual change's id or a transfer's holder, or one the block's creates
 don't declare, fails the field it sits in, like an unknown id, though
-in the fallback a transfer holding one drops alone. A handle of the
+in the fallback an entry holding one drops alone. A handle of the
 wrong kind, a new place's as a transfer's item or a new item's as the
 `<current_location>`, fails its field in the tagged block; the
 fallback drops the transfer and rejects the location
@@ -289,12 +288,13 @@ bracketed handle (`[new:a]`) reads as the bare handle.
 malformed, so a reference to its handle then fails its field and the
 fallback fires. The five XML entities are decoded in a create's name,
 condition and description, and so are numeric references (`&#39;`,
-`&#x27;`); a raw `<` or `>` in a name or condition
+`&#x27;`), bar one naming NUL, a lone surrogate or a code past
+U+10FFFF, which stays as written; a raw `<` or `>` in a name or condition
 or a raw `<` in a description drops the create, so the prompt asks the
 model to write a double quote, `<` or `>` inside a name or condition as
 `&quot;`, `&lt;` or `&gt;`, and a `<` inside a description as
-`&lt;`. Every other entry holds no `<` either, in its attributes or its
-text: a visual change, condition, move, stackable, query or suggestion
+`&lt;`. Every other entry holds no `<` in its attributes and no tag in
+its text, though a `<` that opens no tag, as in `<3`, is text: a visual change, condition, move, stackable, query or suggestion
 that a self-closed or unclosed tag leaves malformed drops alone rather
 than reading the next tag into itself. A malformed create in a closed block only logs a warning,
 unless the block held nothing but
@@ -311,7 +311,7 @@ create and holds no drop.
 **Kept only if used.** A new location is created only as the turn's
 `<current_location>` or an ancestor of it, and a new item only when
 the last transfer in the block naming its handle gives it to a
-character, so an item taken and then put down in the same block stays
+character, or puts it into an item a character holds, so an item taken and then put down in the same block stays
 prose. Anything else is dropped and logged, so a place the prose
 merely mentions, or an item only seen or put down, stays prose; the
 periodic classifier may create the place later
@@ -561,11 +561,14 @@ treat a bad ref differently:
   change, a condition, and item, stackable and drop transfers alike
   (a holder is never of the wrong kind, below).
   An unknown `currentLocation` drops the same way and the previous
-  location stays. Each drop is logged as `classifier.ref_dropped` and
+  location stays. So does a scene list every entry dropped from: a reply that
+  named no one usably is no evidence the scene emptied, so the previous
+  scene stays, while one that sends an empty list empties it. Each drop is logged as `classifier.ref_dropped` and
   recorded in the report's `droppedRefs`
   ([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)),
-  where the reader shows it; the report's `failedFields` keeps
-  describing the narrative's attempt alone.
+  where the reader shows it. The report's `failedFields` keeps
+  describing the narrative's attempt: the fallback's only entry there
+  is the `classifier` one its own call appends when it fails.
   A new item's handle as the `currentLocation` is rejected the way an
   item's id is: the previous location stays, the report records
   `currentLocationRejected`, and its `currentLocation` holds the new
@@ -576,12 +579,14 @@ Until containers exist only a character holds anything, so a
 transfer's other holder stands for what the app can track. An item
 someone holds stands for that character: an item moved into a satchel
 lands with whoever holds it, and into the giver's own pouch it changes
-slot. The scene's place, or an item lying there, takes an item moved
+slot. A stackable whose payer and payee read as one character, as one
+paid into a pouch its payer holds, changes nothing. The scene's place, or an item lying there, takes an item moved
 into it as a put-down there, as `<drop>` does, and holds no stackable,
 which reads as found or stashed. Another place, or an item lying
 elsewhere, leaves a moved item where it was, as a drop elsewhere
 stays prose. Anything else, a faction or a lore entry, reads as an
-omitted holder, so an item given to it is unplaced. A holder that
+omitted holder, so an item given to it is unplaced. Each such reading
+is logged at debug as `classifier.holder_read`. A holder that
 resolves to no entity at all is still a bad ref. A drop's holder is
 read for the record only, since a drop lands wherever its item is: one
 that names no one is left off, never costing the drop.
@@ -717,6 +722,8 @@ slice's per-turn fallback classifier are isolated structured-output
 calls, so on a negative `worldTimeDelta` they re-roll the whole call
 once before falling back to clamp-and-warn
 ([`architecture.md → Classifier contract — metadata fields`](../architecture.md#classifier-contract--metadata-fields)).
+The fallback keeps its first reply when the re-roll fails, and logs
+the failure (`classifier.delta_reroll_failed`).
 The direct tagged-block path can't do this cheaply — the delta rides
 the same call as the narrative prose — so it clamps immediately on a
 negative delta, no re-roll.
@@ -785,8 +792,8 @@ It also gets the location map's tree and the held-item lines, and its
 structured output carries the creates as `newLocations[]` and
 `newItems[]`, and conditions and drops beside the visual changes and
 transfers, under the same rules as the tags
-([New locations and items](#new-locations-and-items)), apart from a
-transfer with a bad ref, which it drops rather than fails
+([New locations and items](#new-locations-and-items)), apart from a bad
+ref: an entry holding one drops alone rather than failing its field
 ([Parse strategy and failure recovery](#parse-strategy-and-failure-recovery)).
 A create there may omit its description or parent, or give either as
 `null`, which reads as omitted; one with no description is created
@@ -794,8 +801,12 @@ without one, as a self-closed tag is. Its visual changes, conditions,
 item moves, stackables and drops read `null`, or any other value that
 isn't a list, as none, and a lone entry as a list of one; an entry it
 can't read (no id, a condition with no text, a slot or category outside
-its list, an amount that isn't a number, a drop given as a bare string)
-drops alone, its `null` fields read as absent first. A `null` current
+its list, an amount that isn't a number, a drop given as a bare string),
+or a stackable whose key or amount the tags would refuse, drops alone,
+its `null` fields read as absent first. Each is logged as
+`classifier.ref_dropped` and recorded in the report's `droppedRefs` as
+`unreadable`, so the reader still sees it; a `null` entry reads as
+none, recorded nowhere. A `null` current
 location, summary or transfers object reads as omitted, so a model
 answering `null` for a field it has nothing for never fails the reply.
 

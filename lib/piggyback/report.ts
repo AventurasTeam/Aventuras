@@ -19,8 +19,14 @@ function reportedTransfers(
   }
 }
 
-type BuildReportArgs = {
-  layer: StateReport['layer']
+type BuildReportArgs = (
+  | { layer: 'piggyback_tagged_block'; droppedRefs?: never }
+  | {
+      layer: 'per_turn_classifier'
+      /** Entries discarded before apply; the narrative fold fails a field instead. */
+      droppedRefs?: readonly DroppedRef[]
+    }
+) & {
   /** Real entity ids in the block, never placeholders, nor create handles bar a rejected
    *  `currentLocation`; what became of each create in the report, whose lists are written only
    *  when they hold an entry. */
@@ -28,8 +34,6 @@ type BuildReportArgs = {
   /** Widened to plain strings: a report read back from the column has already lost
    *  the `keyof ParsedStateBlock` narrowing, and the fallback re-supplies its own. */
   failures: { field: string; detail: string }[]
-  /** The fallback's entries discarded before apply; the narrative fold fails a field instead. */
-  droppedRefs?: readonly DroppedRef[]
   /** The trailing block's own text. Retained only when a field failed. */
   raw?: string
   /** What apply.ts did with the emitted values. Absent when nothing was applied. */

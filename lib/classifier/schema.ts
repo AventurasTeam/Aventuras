@@ -31,16 +31,26 @@ const withoutNulls =
         )
       : value
 
+type NullableKey<T> = {
+  [K in keyof T]-?: null extends T[K] ? (K extends string ? K : never) : never
+}[keyof T]
+
 // classifier.md → Failure policy: an entry that doesn't fit reads as a hole, a null field as
 // absent first, so one bad entry drops alone; readClassifierReply removes and counts the holes.
 // A null list reads as an empty one. `nullable`: fields whose null is a value, not an absence.
-const tolerantList = <T extends z.ZodType>(entry: T, nullable: readonly string[] = []) =>
+const tolerantList = <T extends z.ZodType>(
+  entry: T,
+  nullable: readonly NullableKey<z.input<T>>[] = [],
+) =>
   z.preprocess(
     (value) => (value === null ? undefined : value),
     z.array(z.preprocess(withoutNulls(nullable), entry).optional().catch(undefined)).default([]),
   )
 
 const terms = tolerantList(z.string())
+
+// A profile list sent as null or no list reads as absent; an item that is no string is a hole.
+const profileTerms = tolerated(z.array(z.string().optional().catch(undefined)))
 
 // A tolerant list's enum value is read trimmed and lowercased, so "Resolved" lands as resolved.
 const foldedEnum = <T extends z.ZodEnum>(values: T) =>
@@ -111,8 +121,8 @@ export const classifierExtractionSchema = z.object({
           distinguishing: tolerated(z.string()),
         }),
       ),
-      traits: tolerated(z.array(z.string())),
-      drives: tolerated(z.array(z.string())),
+      traits: profileTerms,
+      drives: profileTerms,
       voice: tolerated(z.string()),
     }),
   ),
@@ -127,7 +137,7 @@ export const classifierExtractionSchema = z.object({
       ),
       sourceTurn,
       standing: tolerated(z.string()),
-      agenda: tolerated(z.array(z.string())),
+      agenda: profileTerms,
     }),
   ),
   memberships: tolerantList(
@@ -257,7 +267,7 @@ export function classifierReplySchema(mentionedPlaces: boolean): z.ZodType<Parse
   return mentionedPlaces ? classifierExtractionWithPlacesSchema : classifierExtractionSchema
 }
 
-/** The lists whose malformed entry drops alone (tolerantList): every list, nested ones included. */
+/** The lists whose malformed entry drops alone: every list of the reply, nested ones included. */
 export type TolerantList =
   | 'happenings'
   | 'happenings.involvements'
@@ -266,8 +276,11 @@ export type TolerantList =
   | 'statusFlips'
   | 'newCharacters'
   | 'newCharacters.keywords'
+  | 'newCharacters.traits'
+  | 'newCharacters.drives'
   | 'newFactions'
   | 'newFactions.keywords'
+  | 'newFactions.agenda'
   | 'memberships'
   | 'aliases'
   | 'aliases.terms'
@@ -295,6 +308,8 @@ export function readClassifierReply(parsed: ParsedClassifierReply): {
     if (holes > 0) counts.set(list, (counts.get(list) ?? 0) + holes)
     return kept
   }
+  const presentIfSent = <T>(list: TolerantList, entries: readonly (T | undefined)[] | undefined) =>
+    entries === undefined ? undefined : present(list, entries)
   const withKeywords = <E extends { keywords: readonly (string | undefined)[] }>(
     list: 'newCharacters' | 'newFactions' | 'newPlaces',
     entries: readonly (E | undefined)[],
@@ -311,8 +326,15 @@ export function readClassifierReply(parsed: ParsedClassifierReply): {
     })),
     relationships: present('relationships', parsed.relationships),
     statusFlips: present('statusFlips', parsed.statusFlips),
-    newCharacters: withKeywords('newCharacters', parsed.newCharacters),
-    newFactions: withKeywords('newFactions', parsed.newFactions),
+    newCharacters: withKeywords('newCharacters', parsed.newCharacters).map((character) => ({
+      ...character,
+      traits: presentIfSent('newCharacters.traits', character.traits),
+      drives: presentIfSent('newCharacters.drives', character.drives),
+    })),
+    newFactions: withKeywords('newFactions', parsed.newFactions).map((faction) => ({
+      ...faction,
+      agenda: presentIfSent('newFactions.agenda', faction.agenda),
+    })),
     memberships: present('memberships', parsed.memberships),
     aliases: present('aliases', parsed.aliases).map((alias) => ({
       ...alias,

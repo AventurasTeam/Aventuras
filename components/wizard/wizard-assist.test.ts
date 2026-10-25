@@ -387,8 +387,8 @@ describe('runGenreAssist', () => {
     expect(captured?.user).toContain('Suggest a genre for this story')
   })
 
-  // architecture.md → System and user halves: the wizard carries no cache marker.
-  it('sends no cache marker: the generate call takes no sixth argument', async () => {
+  // architecture.md → System and user halves; outside any run, its fetch capture links no action.
+  it('sends no cache marker and no action id', async () => {
     let args: unknown[] = []
     const generate: WizardAssistDeps['generate'] = (async (...received: unknown[]) => {
       args = received
@@ -401,8 +401,8 @@ describe('runGenreAssist', () => {
 
     await runGenreAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
 
-    expect(args).toHaveLength(5)
-    expect(args[5]).toBeUndefined()
+    expect(args).toHaveLength(6)
+    expect(args[5]).toStrictEqual({ actionId: null })
   })
 })
 

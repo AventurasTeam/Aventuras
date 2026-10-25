@@ -16,16 +16,15 @@ import { reader } from '../locators/reader'
 // reversing it also takes later turns with it. Both paths asserted through
 // the DB. See docs/testing.md → Coverage.
 //
-// Test 2 builds on test 1's committed state, so the describe below forces
-// mode: 'serial' — workers:1 + fullyParallel:false only order the tests;
-// retries:1 starts a *new worker* per attempt (fresh beforeAll → a freshly
-// reseeded DB), and without 'serial' a retried test 1 would leave test 2
-// running against that fresh DB instead of being skipped.
+// Each test builds on the one before's state, hence 'serial': workers:1 only orders tests, and
+// a retry's new worker reseeds the DB, which a later test would then run on instead of skipping.
 const REPLY_1 = 'E2E-REGEN-R1 the courier reads the letter twice.'
 const REPLY_2 = 'E2E-REGEN-R2 the courier burns the letter unread.'
 const REPLY_3 = 'E2E-REGEN-R3 the courier hides the letter in a boot.'
 const REPLY_4 = 'E2E-REGEN-R4 the letter names a city that no longer exists.'
+const REPLY_5 = 'E2E-REGEN-R5 the city returns to the maps overnight.'
 const EDITED_ACTION = 'E2E-REGEN-U3 I open the satchel and read the letter aloud.'
+const FAILED_ACTION = 'E2E-REGEN-U5 I tear the letter in half.'
 
 test.describe('reader — regenerate a reply', () => {
   test.describe.configure({ mode: 'serial' })
@@ -102,6 +101,27 @@ test.describe('reader — regenerate a reply', () => {
     // as a named assertion, not a cryptic "Cannot read properties of undefined".
     expect(rows.length, `create delta for entry ${entryId}`).toBe(1)
     return rows[0][0] as string
+  }
+
+  async function systemCount(branch: string): Promise<number> {
+    const rows = await queryApp(
+      app.window,
+      `SELECT count(*) FROM story_entries WHERE branch_id = ? AND kind = 'system'`,
+      [branch],
+    )
+    return Number(rows[0][0])
+  }
+
+  // The failed turn's text as its failure entry stores it (wrapped, as the Send took it).
+  async function failureSubmission(branch: string): Promise<string | undefined> {
+    const rows = await queryApp(
+      app.window,
+      `SELECT json_extract(metadata, '$.systemFailure.submission.content') FROM story_entries
+         WHERE branch_id = ? AND kind = 'system'`,
+      [branch],
+    )
+    expect(rows.length, 'system entry count').toBeLessThanOrEqual(1)
+    return (rows[0]?.[0] as string | null | undefined) ?? undefined
   }
 
   test('terminal reply regenerates with no confirm: fresh action_id, user action untouched', async () => {
@@ -215,5 +235,35 @@ test.describe('reader — regenerate a reply', () => {
     const prompt = JSON.stringify(streamed[0].body)
     expect(prompt).toContain('E2E-REGEN-U3')
     expect(prompt).not.toContain('E2E-REGEN-U1')
+  })
+
+  // reader-composer.md → Custody of the turn's text: the failure entry holds the only copy, so
+  // regenerating the reply beneath it, which deletes the entry, must hand the text back.
+  test("regenerating under a failed turn's entry hands its text to the composer", async () => {
+    const branch = await branchId()
+    const replyId = await pollEntryId(branch, 'E2E-REGEN-R4')
+
+    mock.failNextNarrative()
+    await reader.composer(app.window).fill(FAILED_ACTION)
+    await reader.send(app.window).click()
+    await expect(reader.retrySystemEntry(app.window)).toBeVisible({ timeout: 30_000 })
+
+    await expect
+      .poll(() => failureSubmission(branch), { timeout: 15_000 })
+      .toContain('E2E-REGEN-U5')
+    const submission = await failureSubmission(branch)
+    if (submission === undefined)
+      throw new Error('failure entry: present at the poll, gone on read')
+    // The entry is the only copy: no user_action row holds it, and the Send emptied the composer,
+    // so the text the composer holds at the end can only have come back from the entry.
+    expect(await entryIdByContent(branch, 'E2E-REGEN-U5')).toBeUndefined()
+    await expect(reader.composer(app.window)).toHaveValue('')
+
+    mock.setNarrative(REPLY_5)
+    await reader.regenEntry(app.window, replyId).click()
+    await pollEntryId(branch, 'E2E-REGEN-R5')
+
+    await expect.poll(() => systemCount(branch), { timeout: 15_000 }).toBe(0)
+    await expect(reader.composer(app.window)).toHaveValue(submission, { timeout: 15_000 })
   })
 })

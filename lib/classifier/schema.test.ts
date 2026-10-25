@@ -131,7 +131,7 @@ describe('classifierExtractionSchema', () => {
     expect(parsed.happenings[0]?.awareness[0]?.severity).toBe(0)
   })
 
-  it('takes only the two canon status transitions, read trimmed and case-folded', () => {
+  it('takes only the two canon status transitions, read trimmed and lowercased', () => {
     const { reply, malformed } = readClassifierReply(
       classifierExtractionSchema.parse({
         statusFlips: [
@@ -542,7 +542,7 @@ describe('an entry of a reply list that does not fit', () => {
   )
 
   // Q28: a status the model capitalised or padded lands; one outside the list still drops.
-  it('reads a status trimmed and case-folded, and still drops one outside the list', () => {
+  it('reads a status trimmed and lowercased, and still drops one outside the list', () => {
     const thread = { title: 'Recover the relic', description: 'Stolen.' }
     const { reply, malformed } = readClassifierReply(
       classifierExtractionSchema.parse({
@@ -648,6 +648,39 @@ describe('an entry of a reply list that does not fit', () => {
       { list: 'newFactions.keywords', count: 1 },
       { list: 'aliases.terms', count: 1 },
       { list: 'newPlaces.keywords', count: 1 },
+    ])
+  })
+
+  it('drops a trait, drive or agenda item that is no string alone, keeping its list', () => {
+    const { reply, malformed } = readClassifierReply(
+      classifierExtractionSchema.parse({
+        newCharacters: [
+          {
+            handle: 'new:mira',
+            name: 'Mira',
+            description: 'A ferrywoman.',
+            traits: ['brave', null, 'loyal'],
+            drives: [7, 'find her brother'],
+          },
+        ],
+        newFactions: [
+          {
+            handle: 'new:circle',
+            name: 'The Circle',
+            description: 'Smiths.',
+            agenda: [['hoard'], 'forge the crown', { goal: 'x' }],
+          },
+        ],
+      }),
+    )
+    expect(reply.newCharacters.map(({ traits, drives }) => ({ traits, drives }))).toEqual([
+      { traits: ['brave', 'loyal'], drives: ['find her brother'] },
+    ])
+    expect(reply.newFactions.map((f) => f.agenda)).toEqual([['forge the crown']])
+    expect(malformed).toEqual([
+      { list: 'newCharacters.traits', count: 1 },
+      { list: 'newCharacters.drives', count: 1 },
+      { list: 'newFactions.agenda', count: 2 },
     ])
   })
 })

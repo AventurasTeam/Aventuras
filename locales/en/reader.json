@@ -164,7 +164,7 @@
     "failureMessage": "Generation failed. Retry to try again.",
     "blockedDetail": "blocked by another operation ({{reason}})",
     "passRetryBlocked": "Memory update couldn't start ({{reason}}).",
-    "passResolvedTextKept": "Memory updated. The composer couldn't take the earlier turn's text back, so it's kept on this entry: Dismiss hands it back once the composer is empty.",
+    "passResolvedTextKept": "Memory updated. The composer couldn't take the earlier turn's text back, so it's kept on this entry: Dismiss hands it back once the composer is empty. Sending a new turn discards it.",
     "failure": {
       "llmCall": "LLM call failed.",
       "embed": "The embedder failed, so memory retrieval couldn't run.",
@@ -204,6 +204,7 @@
     "failedNoMetadata": "This entry has no world state to edit.",
     "failedNotFound": "This entry no longer exists.",
     "failedRetiredPlace": "That place is retired, so the story can't move there.",
+    "failedNotALocation": "That place no longer exists or isn't a place, so the story can't move there.",
     "proseNote": "This doesn't change the entry's text. If the prose still names someone you removed, edit it too."
   },
   "rail": {

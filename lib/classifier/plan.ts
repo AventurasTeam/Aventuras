@@ -74,7 +74,7 @@ export type ParentDrop = {
 /** A newPlaces entry that plans nothing: an earlier entry declared its handle, or it has no name. */
 export type DroppedPlace = { handle: string; name: string; cause: 'handle-taken' | 'blank-name' }
 
-/** A newCharacters or newFactions entry that plans nothing, for a new place's reasons. */
+/** A newCharacters or newFactions entry that plans nothing, for the causes a DroppedPlace has. */
 export type DroppedCreate = DroppedPlace & { kind: ReconciledKind }
 
 /** A membership naming a faction retired before the reply: a misreading of a past membership. */

@@ -9,6 +9,7 @@ import { applyDeltaActionGroup } from '../delta/apply-delta-action'
 import type { DbCtx, PipelineAction } from '../types'
 import { withEntryMetadataLock } from './entry-metadata-lock'
 import type { StoryEntryRejection } from './operational'
+import { firstLocationWrites, preEntryLocations } from './pre-entry-locations'
 import { STORY_ENTRY_REJECTION } from './register'
 
 export type SceneFieldsEdit = {
@@ -84,7 +85,16 @@ async function updateEntrySceneFieldsLocked(
   )
     return { status: 'ok' }
 
-  // Re-checked after the awaited read: the gate above is a TOCTOU window, and a
+  const firstWrites = await firstLocationWrites(
+    {
+      branchId,
+      entryId: id,
+      characterIds: before.sceneEntities.filter((member) => !after.sceneEntities.includes(member)),
+    },
+    ctx,
+  )
+
+  // Re-checked after the awaited reads: the gate above is a TOCTOU window, and a
   // hard-gate run starting inside it would race this write.
   if (generationStore.isUserEditBlocked())
     return rejected(STORY_ENTRY_REJECTION.inFlight, 'generation in flight')
@@ -96,12 +106,14 @@ async function updateEntrySceneFieldsLocked(
   const branchEntities = [...entitiesStore.getEntities().values()].filter(
     (e) => e.branchId === branchId,
   )
-  // The editor offers places only; the action layer holds the line for any other caller.
-  const location =
-    after.currentLocationId === null
-      ? undefined
-      : branchEntities.find((e) => e.id === after.currentLocationId)
-  if (after.currentLocationId !== null && location?.kind !== 'location')
+  // The editor offers places only; the action layer holds the line for any other caller. A scene
+  // already at an id that names no place keeps it until it is changed, as a retired place does.
+  const locationChanged = after.currentLocationId !== before.currentLocationId
+  if (
+    locationChanged &&
+    after.currentLocationId !== null &&
+    branchEntities.find((e) => e.id === after.currentLocationId)?.kind !== 'location'
+  )
     return rejected(
       STORY_ENTRY_REJECTION.notALocation,
       `${after.currentLocationId} is not a location on branch ${branchId}`,
@@ -119,6 +131,12 @@ async function updateEntrySceneFieldsLocked(
   // and tracking anchored there would write the deleted location back.
   const live = new Set(branchEntities.map((e) => e.id))
   const previousLocationId = previousMetadata?.currentLocationId ?? null
+  // A kept tail location that names no place stays on the entry but is written to no character.
+  const unplacedLocation =
+    after.currentLocationId !== null &&
+    branchEntities.find((e) => e.id === after.currentLocationId)?.kind !== 'location'
+      ? after.currentLocationId
+      : null
   const group: PipelineAction[] = [
     {
       kind: 'updateStoryEntryMetadata',
@@ -126,16 +144,13 @@ async function updateEntrySceneFieldsLocked(
       payload: { branchId, id, metadata: after },
     },
     // Promotion first: a staged scene member, or a staged place the edit moves the scene to, is
-    // promoted as the generation fold promotes one; a location the edit leaves names nothing.
+    // promoted as the generation fold promotes one; an unchanged location promotes nothing.
     ...scenePromotionActions({
       branchId,
       source: 'user_edit',
       entities: branchEntities,
       sceneEntities: after.sceneEntities,
-      alsoIds:
-        after.currentLocationId !== null && after.currentLocationId !== before.currentLocationId
-          ? [after.currentLocationId]
-          : [],
+      alsoIds: locationChanged && after.currentLocationId !== null ? [after.currentLocationId] : [],
     }),
     ...sceneTrackingActions({
       branchId,
@@ -150,7 +165,13 @@ async function updateEntrySceneFieldsLocked(
       },
       before,
       after,
-    }),
+      restoredLocations: preEntryLocations(firstWrites, before.currentLocationId, branchEntities),
+    }).filter(
+      (action) =>
+        unplacedLocation === null ||
+        action.kind !== 'updateEntityLocationTracking' ||
+        action.payload.currentLocationId !== unplacedLocation,
+    ),
   ]
 
   // One transaction under one actionId: a partial commit would report total failure over

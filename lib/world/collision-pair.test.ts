@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import { emptyEntityState, type Entity, type EntityKind } from '@/lib/db'
 
@@ -6,9 +6,11 @@ import {
   COLLISION_PAIR_MISS,
   collisionPairOf,
   flaggedSideOf,
+  flagStillHolds,
   pairSideOf,
   sharesRequiredParent,
   stillPaired,
+  type FlaggedEntity,
   type PairSide,
 } from './collision-pair'
 
@@ -73,6 +75,16 @@ describe('flaggedSideOf', () => {
   it('returns null when neither flag names the other, a flag naming a third row included', () => {
     expect(flaggedSideOf(OLDER, row('char_c', 'Kael'))).toBeNull()
     expect(flaggedSideOf(OLDER, row('char_c', 'Kael', flaggedWith('char_x')))).toBeNull()
+  })
+})
+
+describe('flagStillHolds', () => {
+  // Its false result turns on the partner, so it can't narrow the row away.
+  it('leaves a flagged row typed as flagged when its partner is gone', () => {
+    const side = flaggedSideOf(NEWER, OLDER)
+    if (side == null) throw new Error('expected NEWER’s flag on OLDER to hold')
+    if (flagStillHolds(side, undefined)) throw new Error('a flag whose partner is gone held')
+    expectTypeOf(side).toEqualTypeOf<FlaggedEntity>()
   })
 })
 

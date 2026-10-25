@@ -35,9 +35,8 @@ describe('sceneTrackingActions', () => {
     ])
   })
 
-  // The trap the three-way shape exists for: char_b was in this entry's ORIGINAL scene but
-  // not the edited one. Folding from `previous` alone never visits them, leaving the location
-  // the first fold wrote.
+  // char_b was in the previous scene and this entry's original one, not the edited one: they
+  // close out at the previous entry.
   it('closes tracking for a character the edit removed from the scene', () => {
     const actions = sceneTrackingActions({
       branchId,
@@ -75,6 +74,31 @@ describe('sceneTrackingActions', () => {
       },
       before: { sceneEntities: ['char_a', 'char_b'], currentLocationId: 'loc_b' },
       after: { sceneEntities: ['char_a'], currentLocationId: 'loc_b' },
+    })
+    expect(payloadsFor(actions, 'char_b')).toEqual([
+      {
+        branchId,
+        id: 'char_b',
+        currentLocationId: 'loc_a',
+        lastSeenAt: { entryId: 'ent_0', locationId: 'loc_a', worldTime: 100 },
+      },
+    ])
+  })
+
+  it('closes a character the previous entry showed out there, whatever is restored', () => {
+    const actions = sceneTrackingActions({
+      branchId,
+      source: 'user_edit',
+      entities,
+      previous: {
+        entryId: 'ent_0',
+        currentLocationId: 'loc_a',
+        worldTime: 100,
+        sceneEntities: ['char_a', 'char_b'],
+      },
+      before: { sceneEntities: ['char_a', 'char_b'], currentLocationId: 'loc_b' },
+      after: { sceneEntities: ['char_a'], currentLocationId: 'loc_b' },
+      restoredLocations: new Map([['char_b', 'loc_c']]),
     })
     expect(payloadsFor(actions, 'char_b')).toEqual([
       {
@@ -233,11 +257,15 @@ describe('sceneTrackingActions — a removed character the previous entry did no
       status: 'active',
       state: { lastSeenAt },
     }) as unknown as Entity
-  const removeC = (character: Entity) =>
+  const places = [
+    { id: 'loc_old', kind: 'location', status: 'active' },
+    { id: 'loc_b', kind: 'location', status: 'active' },
+  ] as unknown as Entity[]
+  const removeC = (character: Entity, restoredLocations?: ReadonlyMap<string, string | null>) =>
     sceneTrackingActions({
       branchId,
       source: 'user_edit',
-      entities: [character],
+      entities: [character, ...places],
       previous: {
         entryId: 'ent_0',
         currentLocationId: 'loc_retired',
@@ -246,6 +274,7 @@ describe('sceneTrackingActions — a removed character the previous entry did no
       },
       before: { sceneEntities: ['char_c'], currentLocationId: 'loc_b' },
       after: { sceneEntities: [], currentLocationId: 'loc_b' },
+      ...(restoredLocations ? { restoredLocations } : {}),
     })
 
   it('puts them back at their own older anchor, leaving that anchor as it was', () => {
@@ -255,9 +284,38 @@ describe('sceneTrackingActions — a removed character the previous entry did no
     ])
   })
 
-  // The wizard places characters with no lastSeenAt: that location stands.
+  // The wizard places characters with no lastSeenAt: with nothing restored, that location stands.
   it('leaves their stored location alone when they have no older anchor', () => {
     expect(payloadsFor(removeC(seen(null)), 'char_c')).toEqual([])
+  })
+
+  it.each([
+    ['a place', 'loc_old'],
+    ['no place', null],
+  ])('puts them at a restored location naming %s when they have no anchor', (_label, restored) => {
+    const actions = removeC(seen(null), new Map([['char_c', restored]]))
+    expect(payloadsFor(actions, 'char_c')).toEqual([
+      { branchId, id: 'char_c', currentLocationId: restored },
+    ])
+  })
+
+  it('keeps their older anchor over a restored location', () => {
+    const actions = removeC(
+      seen({ entryId: 'ent_old', locationId: 'loc_old', worldTime: 10 }),
+      new Map([['char_c', null]]),
+    )
+    expect(payloadsFor(actions, 'char_c')).toEqual([
+      { branchId, id: 'char_c', currentLocationId: 'loc_old' },
+    ])
+  })
+
+  // A delete leaves a lastSeenAt naming the place it removed.
+  it.each([
+    ['a deleted place', 'loc_deleted'],
+    ['a row that is no place', 'char_c'],
+  ])('reads an anchor at %s as no anchor', (_label, locationId) => {
+    const actions = removeC(seen({ entryId: 'ent_old', locationId, worldTime: 10 }))
+    expect(payloadsFor(actions, 'char_c')).toEqual([])
   })
 })
 

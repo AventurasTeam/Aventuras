@@ -264,7 +264,7 @@ erDiagram
     deltas {
         text id PK
         text branch_id FK
-        text entry_id FK "survival anchor: reverse this delta iff this entry is reversed. The entry the delta is about, whoever wrote it. Foreground turn delta → its own turn; periodic_classifier fact → its provenance entry; translation → its target's content-defining-delta anchor; user edit → the entry it edits, or null when it edits no entry; null (chapter close, entity / lore / thread / happening edits) → reverse positionally by own commit position. See Entry mutability & rollback → Survival anchor"
+        text entry_id FK "survival anchor: reverse this delta iff this entry is reversed. The entry the delta is about, whoever wrote it. Foreground turn: its entry's create → that entry, the fold's state writes → null (they sit in the turn's own suffix, so either anchor reverses them); periodic_classifier fact → its provenance entry; translation → its target's content-defining-delta anchor; user edit → the entry it edits, or null when it edits no entry; null (chapter close, entity / lore / thread / happening edits) → reverse positionally by own commit position. See Entry mutability & rollback → Survival anchor"
         text action_id "groups deltas into one user-visible action (used for CTRL-Z batching)"
         integer log_position "append-only ordering within branch"
         text source "ai_classifier | piggyback_tagged_block | per_turn_classifier | periodic_classifier | user_edit | lore_agent | chapter_close"
@@ -2019,7 +2019,7 @@ story_entries.metadata: {
     newItems?: ({ handle: string; name: string; description: string; condition?: string; outcome: 'created'; id: string } | { handle: string; name: string; description: string; condition?: string; outcome: 'dropped' })[]
     failedFields?: { field: string; detail: string }[]  // the failed NARRATIVE attempt, retained even once a fallback supplied the fields
     seatedDisabled?: string[]        // rows the narrator was kept from that this turn's scene seats: a place it moved into that was disabled, judged from where the story stood, or a disabled member it brought in (ui/principles.md → Injection / retrieval rules)
-    droppedRefs?: { field: string; ref?: string; id?: string; kind?: string; reason: 'unknown' | 'wrong-kind' | 'unreadable'; detail: string }[]  // the fallback's entries discarded before apply, ref as emitted (memory/piggyback.md → Parse strategy and failure recovery); a wrong-kind ref adds the kind it named and, unless a create's handle, the row's id, so the reader can name it; never the narrative's, which fails a field instead
+    droppedRefs?: { field: string; ref?: string; id?: string; kind?: string; reason: 'unknown' | 'wrong-kind' | 'unreadable'; detail: string }[]  // the fallback's entries discarded before apply, ref as emitted and absent on an unreadable one (memory/piggyback.md → Parse strategy and failure recovery); a wrong-kind ref adds the kind it named and, unless a create's handle, the row's id, so the reader can name it; never the narrative's, which fails a field instead
     raw?: string                     // the unparseable block text; present only alongside failedFields
   }
 
@@ -2132,12 +2132,14 @@ its own call fails: returning silently leaves a row that reported
 nothing, which is not distinguishable from a turn where nothing
 changed. Inheriting the report through a `{ ...tail.metadata }` spread
 would instead leave a `layer` that lies. A failed fold has already
-landed its visual changes, conditions and transfers, so the fallback's
-report keeps the fold's record of each list (visual changes,
-conditions, item moves, stackables and drops, each on its own) unless
-the fallback's entries in that list changed what World stores;
-restating a stored value changes nothing. The two writers' rows never
-share one list.
+landed its visual changes, conditions and item moves, and its drops
+when it could place them, but holds back its stackables
+([`memory/piggyback.md → Parse strategy and failure recovery`](./memory/piggyback.md#parse-strategy-and-failure-recovery)),
+so the fallback's report keeps the fold's record of each list (visual
+changes, conditions, item moves, stackables and drops, each on its
+own) unless the fallback's entries in that list changed what World
+stores; restating a stored value changes nothing. The two writers'
+rows never share one list.
 
 **`content` stores prose only.** The model's trailing `<state>` and
 `<suggestions>` blocks are parsed and stripped at write time; the raw
@@ -2951,9 +2953,13 @@ the sweep reverses
 log_position ≥ N  AND  ( entry_id IS NULL OR position(entry_id) ≥ position(B) )
 ```
 
-where `position()` reads `story_entries.position`. Foreground deltas
-anchor to their own turn (≥ B), and `null`-anchor deltas always reverse,
-exactly as before; only a lagging background
+where `position()` reads `story_entries.position`. A foreground turn
+anchors only its entry's create to the turn; its fold's state writes
+carry a `null` anchor. Both reverse with the turn, since a turn's own
+deltas sit at or after its first `log_position`, and `null`-anchor
+deltas always reverse, exactly as before. To find a turn's writes, read
+its run's `action_id`, which every delta of the turn shares. Only a
+lagging background
 delta whose anchor is below `B` is spared. A background delta therefore
 survives only if its anchor entry survives — no orphans or dangling
 anchors by construction. The one exception runs the other way: a

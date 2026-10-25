@@ -1272,11 +1272,13 @@ showing that row's old name, so Save can't send the old name back over
 it; a field the user edited keeps the edit. Save commits under one
 delta `action_id`: an `updateEntity` per row whose name changed,
 and the flag cleared on each row of the pair whose partner is the
-other row or is gone (folded into that row's rename when it has
-one). A flag on any other row clears too when the rename leaves
-that row and its partner no longer namesakes
-([Surfacing](#surfacing)). No other writes — both rows continue to
-exist. Names save trimmed.
+other row, or whose flag is [dormant](#surfacing) under the new
+names (folded into that row's rename when it has one). A flag
+naming a third row that is live under the new names stays, as its
+own question, even one that was dormant before. A flag on any other
+row clears too when the rename leaves that row and its partner no
+longer namesakes ([Surfacing](#surfacing)). No other writes — both
+rows continue to exist. Names save trimmed.
 
 Validation: a name must change, both trimmed names must be
 non-empty, and they must stop matching by name: neither the same

@@ -1758,10 +1758,12 @@ user surfacing in between.
 A profile's `timeout` bounds each attempt of a structured call, and a
 streamed reply as a whole, by the app's own signal rather than the
 SDK's `timeout` option, which builds `AbortSignal.timeout` and React
-Native's `AbortController` has none. An expired attempt is a provider
+Native's `AbortSignal` has no `timeout`. An expired attempt is a provider
 timeout. An expired stream closes the way a cancel does, so the
 narrative phase fails it as a provider timeout instead of committing
-the reply so far.
+the reply so far. Its detail names the bound, and the stream error
+the SDK reported before the stall when there was one: a provider can
+send an error part and then go quiet.
 
 ```ts
 type CallRetryError =

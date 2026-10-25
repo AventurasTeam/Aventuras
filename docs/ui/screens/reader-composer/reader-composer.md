@@ -572,20 +572,32 @@ putting it back hands the submission to the composer draft once its
 own text has settled**: `Dismiss`, and every regenerate outcome but
 the rejection (a completed take, a failed or blocked one, a cancel, a
 throw). A regenerate whose own text is the same, on its new failure
-entry or back in the draft, hands nothing back. `Dismiss` hands the
-text back once the row is deleted, even when the reload after it
-fails: the stale card left on screen no longer holds it. An empty draft
-receives the text verbatim under composer mode `Free`, since the
-stored content is already wrapped and must not be wrapped twice; a
-non-empty draft wins and the user is told the text was dropped rather
-than losing it silently. A reader closed under the dispatch has no
-composer to take the text, and nothing claims it was restored.
+entry or back in the draft, hands nothing back. `Dismiss` and a
+regenerate hand the text back once the row is deleted, even when the
+reload after it fails: the stale card left on screen no longer holds
+it. A delete that fails hands nothing back: the entry and its `Retry`
+still stand, and a copy in the draft would run the turn twice. The
+same rule keeps a regenerate's own text off the draft once its new
+failure entry is written, even when the reload after it fails. An
+empty draft receives the text verbatim under composer mode
+`Free`, since the stored content is already wrapped and must not be
+wrapped twice; a non-empty draft wins and the user is told the text
+was dropped rather than losing it silently. A reader closed under the
+dispatch has no composer to take the text, and nothing claims it was
+restored. A branch left under `Dismiss` or a regenerate drops the text
+too, since one composer serves every branch and its draft is now the
+other branch's; no toast tells the user, and a warning in the log
+records the drop.
 
 A pass entry's `Retry` whose pass commits clears the entry through
-`Dismiss` only when the composer can take its text back. Over an
-occupied draft, or once the user has left the branch, the entry stays
-as a notice holding the text, with no `Retry` and copy that says so,
-and its `Dismiss` hands the text back.
+`Dismiss` only when the composer can take its text back, and asks
+again once the clear has landed, since the composer stays editable
+through it. Over an occupied draft, or once the user has left the
+branch, the entry stays as a notice holding the text, with no `Retry`
+and copy that says so, and its `Dismiss` hands the text back. A Send
+supersedes the notice's text as it does a failure entry's, and the
+notice's copy says that too, since emptying the composer by sending is
+the step it would otherwise invite.
 
 A **Memory update failed** entry carries the submission only where
 the composer can't hold the text. A Send refused on a held branch
@@ -998,7 +1010,10 @@ different value, it's user-initiated. A move inside the ~80px band
 would be re-pinned by the next chunk before it could leave it, so an
 upward gesture disengages at once: a wheel up, a touch drag, a press
 on the reader's scrollbar, or an upward scroll key (Arrow Up, Page
-Up, Home, Shift+Space) outside a text field. A press counts as the
+Up, Home, Shift+Space) outside a text field that scrolls the reader:
+focus is inside it, or nothing is focused and the last press landed
+inside it. With nothing focused the browser scrolls the scroller last
+pressed, such as the rail list. A press counts as the
 scrollbar's only past the reader's client width, so an overlay
 scrollbar (macOS's default), which takes none, isn't one
 ([parked](../../../parked.md#overlay-scrollbar-presses-breaking-the-autoscroll-pin)).

@@ -236,6 +236,18 @@ describe('promptSchemaMiddleware', () => {
     expect((out.prompt[0] as { content: string }).content).toContain('in $$, e.g. $& or $1')
   })
 
+  it('gives the closing line its own text part when the last user message has no text', async () => {
+    const image = { type: 'file', data: 'aGk=', mediaType: 'image/png' }
+    const out = await transform(promptSchemaMiddleware(), {
+      prompt: [{ role: 'user', content: [image] }],
+      responseFormat,
+    })
+    expect(out.prompt[1]).toEqual({
+      role: 'user',
+      content: [image, { type: 'text', text: CLOSING }],
+    })
+  })
+
   it('adds a user message for the closing line when the prompt has none', async () => {
     const out = await transform(promptSchemaMiddleware(), {
       prompt: [{ role: 'system', content: 'Rules.' }],

@@ -1040,6 +1040,7 @@ describe('buildDrainController', () => {
 // tests inject a stub and never reach the composition here: a dropped intent or
 // provider degrades reconciliation silently rather than failing anything.
 describe('embedClassifierDescriptions', () => {
+  const signal = new AbortController().signal
   const definition = storyDefinitionSchema.parse({
     mode: 'adventure',
     leadEntityId: 'char_00000000-0000-4000-8000-000000000001',
@@ -1062,7 +1063,9 @@ describe('embedClassifierDescriptions', () => {
     const result = { vectors: [new Float32Array([0.5])], dim: 384, truncated: [] }
     vi.mocked(embedTexts).mockResolvedValue(result)
 
-    await expect(embedClassifierDescriptions(['a knight', 'a sellsword'])).resolves.toBe(result)
+    await expect(embedClassifierDescriptions(['a knight', 'a sellsword'], signal)).resolves.toBe(
+      result,
+    )
 
     // 'document', against composeRetrievalEmbedDeps' 'query': these descriptions
     // are stored-row material, and the query prefix would put them in the wrong
@@ -1072,7 +1075,7 @@ describe('embedClassifierDescriptions', () => {
       ['a knight', 'a sellsword'],
       'document',
       undefined,
-      undefined,
+      signal,
     )
   })
 
@@ -1092,7 +1095,7 @@ describe('embedClassifierDescriptions', () => {
     currentStoryStore.set({ storyId: 's1', branchId: 'b1', definition, settings })
     vi.mocked(embedTexts).mockResolvedValue({ vectors: [], dim: 1536, truncated: [] })
 
-    await embedClassifierDescriptions(['a knight'])
+    await embedClassifierDescriptions(['a knight'], signal)
 
     // Positive control against the `undefined` above: a dropped providerFor()
     // would send a provider embed with no instance to call.
@@ -1101,12 +1104,12 @@ describe('embedClassifierDescriptions', () => {
       ['a knight'],
       'document',
       expect.objectContaining({ id: 'prov1' }),
-      undefined,
+      signal,
     )
   })
 
   it('yields no vectors when no story is open, rather than throwing', async () => {
-    await expect(embedClassifierDescriptions(['a knight'])).resolves.toEqual({
+    await expect(embedClassifierDescriptions(['a knight'], signal)).resolves.toEqual({
       vectors: [],
       dim: 0,
     })
@@ -1121,7 +1124,7 @@ describe('embedClassifierDescriptions', () => {
     await seedStores(settings)
     currentStoryStore.set({ storyId: 's1', branchId: 'b1', definition, settings })
 
-    await expect(embedClassifierDescriptions(['a knight'])).resolves.toEqual({
+    await expect(embedClassifierDescriptions(['a knight'], signal)).resolves.toEqual({
       vectors: [],
       dim: 0,
     })

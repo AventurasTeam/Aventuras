@@ -185,11 +185,20 @@
   .ws-line { line-height: 1.6; }
   .ws-line .k { color: var(--ink-muted); }
   /* emitted vs applied — the report records what the model said, the absolute triple
-     records what survived validation. Both disagreements reach only the
-     classifier.current_location_rejected / classifier.delta_clamped logs today. */
+     records what survived validation. A rejected location is also a state problem. */
   .ws-rejected { text-decoration: line-through; color: var(--ink-faint); }
   .ws-applied { color: var(--ink-muted); font-size: 10.5px; }
-  .ws-fail { margin-top: 8px; padding: 6px 8px; border: 1px solid var(--warn); background: var(--warn-bg); border-radius: 3px; font-size: 10.5px; color: #765; }
+  /* State problems (entry-card.md -> State problems): one line for the failed fields, one per
+     other problem, every line in the box's tone. Danger while the toggle is alert (solid here),
+     warning when a recovered narrative failure stands alone (dashed here). */
+  .ws-problems { margin-top: 8px; padding: 6px 8px; border: 1px dashed var(--warn); border-radius: 3px; font-size: 10.5px; color: #765; }
+  .ws-problems.alert { border-style: solid; background: var(--warn-bg); color: var(--warn); }
+  .ws-problems-label { font-weight: 600; margin-bottom: 2px; }
+  /* a disabled row the scene seats: a muted notice, not a problem, so it never lights the toggle */
+  .ws-notice { margin-top: 3px; font-size: 10.5px; color: var(--ink-muted); }
+  /* alert toggle: the world-state globe in danger, with a dot in its corner */
+  .reasoning-icon.ws-alert { position: relative; opacity: 1; box-shadow: 0 0 0 1px var(--warn); }
+  .reasoning-icon.ws-alert::after { content: ''; position: absolute; top: -2px; right: -2px; width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
   .ws-raw { margin-top: 6px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; white-space: pre-wrap; color: var(--ink-muted); max-height: 88px; overflow: auto; }
   .ws-note { margin-top: 8px; font-size: 10px; color: var(--ink-faint); font-style: italic; }
 
@@ -975,15 +984,16 @@
           <div class="bubble-kind">
             <span class="bubble-meta">
               <span class="bubble-glyph" title="Narrative" aria-label="Narrative">&#128218;</span>
-              <span class="reasoning-icon" data-ws-toggle title="Show world state">&#127758;</span>
+              <!-- Alert: the problems box below holds a line the turn didn't recover from. The card
+                   shows it with the panel closed; the name says part of the state wasn't applied. -->
+              <span class="reasoning-icon ws-alert" data-ws-toggle title="Show world state &mdash; part of it wasn't applied">&#127758;</span>
               <span class="tok-display" title="reply tok / reasoning tok">2.1k / &mdash;</span>
             </span>
           </div>
-          <!-- World-state panel, TAIL entry + recovered-parse case. Stands in for the tail here
-               so the editable state is reviewable next to the read-only one above.
-               Four legible report states exist; this is "recovered": the narrative block failed
-               to parse, the per-turn fallback classifier supplied the fields, so `layer` names the
-               fallback while failedFields / raw retain the failed narrative attempt. -->
+          <!-- World-state panel, TAIL entry, alert case. Stands in for the tail here so the
+               editable state is reviewable next to the read-only one above. The narrative block
+               failed to parse and the per-turn fallback classifier supplied the fields, so `layer`
+               names the fallback; the fallback's own reply then lost a location and two refs. -->
           <div class="ws-body">
             <div class="ws-head">
               <h4>World state</h4>
@@ -992,24 +1002,31 @@
             </div>
             <div class="ws-group">
               <div class="ws-label">In scene</div>
-              <div class="ws-chips"><span class="ws-chip">Aria</span></div>
+              <div class="ws-chips"><span class="ws-chip">Aria</span><span class="ws-chip">the Ferryman</span></div>
+              <!-- The fallback named a disabled row in the scene, and the in-scene invariant seats it:
+                   a notice, not a problem (principles.md -> Injection / retrieval rules). -->
+              <div class="ws-notice">Now in the narrator's prompt, though disabled: the Ferryman.</div>
             </div>
             <div class="ws-group">
               <div class="ws-label">Location</div>
               <!-- Emitted vs applied: apply.ts refuses a currentLocation that does not resolve to a
-                   kind='location' entity and inherits the previous one. Reaches only the
-                   classifier.current_location_rejected log today. -->
-              <div class="ws-line"><span class="ws-rejected">Sword of Dawn</span> Ashfen Marshes <span class="ws-applied">(emitted id was not a location &mdash; previous kept)</span></div>
+                   kind='location' entity and inherits the previous one. -->
+              <div class="ws-line"><span class="ws-rejected">Sword of Dawn</span> Ashfen Marshes <span class="ws-applied">(not a place &mdash; previous kept)</span></div>
             </div>
             <div class="ws-group">
               <div class="ws-label">Reported delta</div>
               <!-- Clamped: negative / non-finite goes to 0, over-headroom goes to the remaining
-                   headroom. Reaches only the classifier.delta_clamped log today. -->
+                   headroom. A correction, so not a state problem. -->
               <div class="ws-line">&minus;600s <span class="ws-applied">(clamped to 0)</span></div>
             </div>
-            <div class="ws-fail">
-              &#9888; Narrative block failed to parse: <b>transfers</b>, <b>visual_changes</b>.
-              Fields above came from the fallback classifier.
+            <!-- Alert, so the box is danger and so is every line, the recovered one included. That
+                 line alone would leave the toggle plain and the box warning. -->
+            <div class="ws-problems alert">
+              <div class="ws-problems-label">State problems</div>
+              <div class="ws-line">The narrative's state block failed (transfers, visualChanges); the classifier fallback recorded the turn.</div>
+              <div class="ws-line">Location not applied: Sword of Dawn isn't a place.</div>
+              <div class="ws-line">Ashfen Marshes (Location) can't go in the scene, so it was dropped.</div>
+              <div class="ws-line">An unknown id, c9, was dropped from the visual changes.</div>
               <div class="ws-raw">&lt;state&gt;
   &lt;scene_entities&gt;c1&lt;/scene_entities&gt;
   &lt;transfers&gt;

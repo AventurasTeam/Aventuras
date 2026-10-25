@@ -556,7 +556,9 @@ verified against the code first. Resolve with the slice each names.
   Cancel and the deferral toast exist; M6.3 builds the navigator's
   paused state and banner to that rule. A
   pass can hold the story for as long as the classifier's timeout
-  allows (ten minutes by default), then apply. Routed from triage 2026-09-27.
+  allows (ten minutes by default), then apply, and longer while a
+  reconcile embed hangs, which nothing bounds yet (M7.1's embed-timeout
+  item below). Routed from triage 2026-09-27.
 - **M6.3 — No shared branch filter for store rows.** About twenty call sites
   in `lib`, `components` and `app` filter a store's rows by
   `branchId` inline; 4.2c added two more (`branchRows` in
@@ -1106,6 +1108,14 @@ code before it moved; resolve with the slice it names.
   `components/ui/autocomplete.tsx` and call it at submit rather than
   on blur, which would race the Flip click. Raised by 4.2b; routed from
   triage 2026-10-04.
+- **M7.2 — The dev seed flips eras on a calendar without eras.**
+  `heroEraFlips` in `lib/db/devtools/seed-dataset.ts` writes
+  `branch_era_flips` rows for the hero story, whose calendar defines no
+  eras. Nothing reads a flip yet, so they are inert; once the flip
+  writer wires `eraName`, the seeded story would show eras its calendar
+  can't hold. Reseed it with an eras calendar or drop the rows. Raised
+  by the 2026-10-24 triage pass's verification; filed by its slice
+  review.
 - **M7.2 — `setStoryLead` can't clear the lead.** The lead picker is
   optional unless the story is adventure or first / second person
   ([`story-settings.md → Orthogonal axes`](../ui/screens/story-settings/story-settings.md#orthogonal-axes)),
@@ -1204,6 +1214,15 @@ code before it moved; resolve with the slice it names.
   profile, which the embedder settings would carry. Raised 2026-10-23
   by the pass failure policy slice review; routed by the 2026-10-24
   triage pass.
+- **M7.1 — The pass's retry after a timeout can never run.** A
+  classifier profile's `timeout` bounds each attempt of the structured
+  call (`lib/ai/generate.ts`) and, armed with the same value before the
+  call starts, the whole pass (`periodic-classifier.ts`). An attempt
+  that times out therefore ends the pass, and the retry its
+  `ProviderTimeoutError` is classified for never starts. Predates the
+  2026-10-24 triage pass, which routed it here and lost it; filed by
+  its slice review. Options: a pass bound longer than one attempt's,
+  or a per-attempt share of the pass bound.
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware

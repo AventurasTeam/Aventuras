@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { z } from 'zod'
 
+import { isJsonObject } from '@/lib/json-object'
 import { parseStateBlock, parseSuggestionsBlock, stripTrailingBlocks } from '@/lib/piggyback'
 
 import { readBody } from './completions'
@@ -146,10 +147,7 @@ export async function handleControl(
       for (const group of ['sequence', 'delay', 'failure', 'stream'] as const) {
         if (!(group in payload)) continue
         const patch = payload[group]
-        candidate[group] =
-          typeof patch === 'object' && patch !== null && !Array.isArray(patch)
-            ? { ...lane[group], ...patch }
-            : patch
+        candidate[group] = isJsonObject(patch) ? { ...lane[group], ...patch } : patch
       }
       const parsed = laneSchema.safeParse(candidate)
       if (!parsed.success) return json(res, 400, { error: parsed.error.message })
