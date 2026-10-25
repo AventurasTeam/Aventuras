@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router'
 
 import type { ResolveFailureKind } from '@/lib/ai'
 import type { SystemFailureMeta } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import {
   CLASSIFIER_HELD,
@@ -20,9 +21,10 @@ type LeaveStory = (proceed: () => void) => void
 /**
  * Hand the draft back only once the entry is gone: a rejected clear keeps Retry, and a
  * composer copy would run the turn twice. A rejected reload still hands it back, since the row
- * holding it is gone. Off-branch, the hand-back is dropped, not pasted.
+ * holding it is gone. Off-branch, the hand-back is dropped with a warning, not pasted.
  */
 export async function dismissSystemEntry(deps: {
+  branchId: string
   submission: SystemFailureMeta['submission']
   clear: () => Promise<void>
   reload: () => Promise<void>
@@ -34,6 +36,11 @@ export async function dismissSystemEntry(deps: {
     await deps.reload()
   } finally {
     if (deps.stillOnBranch()) deps.handBack(deps.submission)
+    else if (deps.submission != null)
+      logger.warn('reader.handback_skipped_left_branch', {
+        branchId: deps.branchId,
+        source: 'dismiss',
+      })
   }
 }
 

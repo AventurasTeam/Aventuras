@@ -1,3 +1,5 @@
+import { logger } from '@/lib/diagnostics'
+
 /**
  * What the host owes the user after a regenerate returns, given the run outcome,
  * whether the follow-up unwind landed, and whether the composer holds a draft.
@@ -115,9 +117,10 @@ export async function runBehindTailDrop<T>(deps: {
  * Custody of the turn's text): once `settle` has put the arm's own text in the draft or on its
  * entry, the dropped entry's text goes to the draft, unless it is that same text. A throwing
  * `settle` still hands it back before the throw propagates. The rejection arm puts the entry
- * back instead, so it never comes through here.
+ * back instead, so it never comes through here. Off-branch, it is dropped with a warning.
  */
 export async function settleWithDroppedHandback(deps: {
+  branchId: string
   dropped: Submission | undefined
   /** Resolves to the text the arm left in the draft or on its own entry, or null for none. */
   settle: () => Promise<string | null>
@@ -128,8 +131,14 @@ export async function settleWithDroppedHandback(deps: {
   try {
     settled = await deps.settle()
   } finally {
-    if (deps.dropped != null && deps.dropped.content !== settled && deps.stillOnBranch())
-      deps.handBack(deps.dropped)
+    if (deps.dropped != null && deps.dropped.content !== settled) {
+      if (deps.stillOnBranch()) deps.handBack(deps.dropped)
+      else
+        logger.warn('reader.handback_skipped_left_branch', {
+          branchId: deps.branchId,
+          source: 'regenerate',
+        })
+    }
   }
 }
 

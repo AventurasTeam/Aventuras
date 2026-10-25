@@ -847,6 +847,7 @@ export default function ReaderComposerRoute() {
           settle: () => Promise<string | null>,
         ) =>
           settleWithDroppedHandback({
+            branchId,
             dropped: owed,
             settle,
             stillOnBranch: () => branchUnchanged(branchId),
@@ -1012,6 +1013,7 @@ export default function ReaderComposerRoute() {
   const handleDismissSystemEntry = useCallback(
     () =>
       dismissSystemEntry({
+        branchId,
         submission: systemFailure?.submission,
         clear: () => clearSystemEntry(branchId, ctx),
         reload,

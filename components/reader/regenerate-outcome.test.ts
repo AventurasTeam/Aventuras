@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { logger } from '@/lib/diagnostics'
 
 import {
   armSettledText,
@@ -272,6 +274,7 @@ describe('settleWithDroppedHandback', () => {
     return {
       calls,
       deps: {
+        branchId: 'branch_a',
         dropped: DROPPED,
         settle: async () => {
           calls.push('settle')
@@ -285,11 +288,17 @@ describe('settleWithDroppedHandback', () => {
     }
   }
 
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   // A completed regenerate owes the composer the cleared failure entry's text.
   it("hands the dropped entry's text back once an arm that settled nothing returns", async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     const h = harness(async () => null)
     await settleWithDroppedHandback(h.deps)
     expect(h.calls).toEqual(['settle', ['handBack', DROPPED]])
+    expect(warn).not.toHaveBeenCalled()
   })
 
   // The arm's own text goes first, so the dropped text meets the draft it left.
@@ -311,10 +320,30 @@ describe('settleWithDroppedHandback', () => {
     expect(h.calls).toEqual(['settle', ['handBack', DROPPED]])
   })
 
-  it('hands nothing back once the user left the branch', async () => {
+  // One composer serves every branch, so the text can't follow the user; the log records the loss.
+  it('hands nothing back once the user left the branch, with a warning', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     const h = harness(async () => null, false)
     await settleWithDroppedHandback(h.deps)
     expect(h.calls).toEqual(['settle'])
+    expect(warn).toHaveBeenCalledWith('reader.handback_skipped_left_branch', {
+      branchId: 'branch_a',
+      source: 'regenerate',
+    })
+  })
+
+  it('warns of nothing off-branch when the arm settled that same text', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const h = harness(async () => 'I climb the tower.', false)
+    await settleWithDroppedHandback(h.deps)
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  it('warns of nothing off-branch when the drop removed no text', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const h = harness(async () => null, false)
+    await settleWithDroppedHandback({ ...h.deps, dropped: undefined })
+    expect(warn).not.toHaveBeenCalled()
   })
 
   it('hands nothing back when the drop removed no text', async () => {

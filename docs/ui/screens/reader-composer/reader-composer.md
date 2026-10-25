@@ -582,7 +582,10 @@ twice. An empty draft receives the text verbatim under composer mode
 wrapped twice; a non-empty draft wins and the user is told the text
 was dropped rather than losing it silently. A reader closed under the
 dispatch has no composer to take the text, and nothing claims it was
-restored.
+restored. A branch left under `Dismiss` or a regenerate drops the text
+too, since one composer serves every branch and its draft is now the
+other branch's; no toast tells the user, and a warning in the log
+records the drop.
 
 A pass entry's `Retry` whose pass commits clears the entry through
 `Dismiss` only when the composer can take its text back, and asks
