@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   offersUserAction,
   planRegenerateOutcome,
+  runBehindTailDrop,
   settleWithDroppedHandback,
   shouldRestoreUserActionAfterHandlingFailure,
   type RegenerateOutcomeAction,
@@ -107,6 +108,87 @@ describe('offersUserAction', () => {
 describe('outcome handling failure recovery', () => {
   it('does not restore text for an unconverged action that still stands', () => {
     expect(shouldRestoreUserActionAfterHandlingFailure('refuse-unconverged', true)).toBe(false)
+  })
+})
+
+describe('runBehindTailDrop', () => {
+  const BOOM = new Error('boom')
+
+  function harness(
+    over: {
+      hasTail?: boolean
+      clear?: () => Promise<void>
+      reload?: () => Promise<void>
+      run?: () => Promise<string>
+    } = {},
+  ) {
+    const calls: string[] = []
+    const step =
+      <T>(name: string, then: () => Promise<T>) =>
+      () => {
+        calls.push(name)
+        return then()
+      }
+    return {
+      calls,
+      deps: {
+        hasTail: over.hasTail ?? true,
+        clear: step('clear', over.clear ?? (() => Promise.resolve())),
+        reload: step('reload', over.reload ?? (() => Promise.resolve())),
+        run: step('run', over.run ?? (() => Promise.resolve('take'))),
+      },
+    }
+  }
+
+  it('runs once the tail is cleared and resynced', async () => {
+    const h = harness()
+    expect(await runBehindTailDrop(h.deps)).toEqual({ status: 'returned', value: 'take' })
+    expect(h.calls).toEqual(['clear', 'reload', 'run'])
+  })
+
+  it('runs straight away when no entry stands at the tail', async () => {
+    const h = harness({ hasTail: false })
+    expect(await runBehindTailDrop(h.deps)).toEqual({ status: 'returned', value: 'take' })
+    expect(h.calls).toEqual(['run'])
+  })
+
+  // The entry and its Retry still stand, so a composer copy of its text would run the turn twice.
+  it('reports the entry standing when its clear throws', async () => {
+    const h = harness({ clear: () => Promise.reject(BOOM) })
+    expect(await runBehindTailDrop(h.deps)).toEqual({
+      status: 'threw',
+      error: BOOM,
+      entryDestroyed: false,
+    })
+    expect(h.calls).toEqual(['clear'])
+  })
+
+  it('reports the entry destroyed when the resync after its clear throws', async () => {
+    const h = harness({ reload: () => Promise.reject(BOOM) })
+    expect(await runBehindTailDrop(h.deps)).toEqual({
+      status: 'threw',
+      error: BOOM,
+      entryDestroyed: true,
+    })
+    expect(h.calls).toEqual(['clear', 'reload'])
+  })
+
+  it('reports the entry destroyed when the run behind its clear throws', async () => {
+    const h = harness({ run: () => Promise.reject(BOOM) })
+    expect(await runBehindTailDrop(h.deps)).toEqual({
+      status: 'threw',
+      error: BOOM,
+      entryDestroyed: true,
+    })
+  })
+
+  it('reports no entry destroyed when none stood and the run throws', async () => {
+    const h = harness({ hasTail: false, run: () => Promise.reject(BOOM) })
+    expect(await runBehindTailDrop(h.deps)).toEqual({
+      status: 'threw',
+      error: BOOM,
+      entryDestroyed: false,
+    })
   })
 })
 

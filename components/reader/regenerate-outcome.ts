@@ -54,6 +54,33 @@ export function offersUserAction(action: RegenerateOutcomeAction): boolean {
 
 type Submission = { content: string; composerMode: string }
 
+export type BehindTailDrop<T> =
+  | { status: 'returned'; value: T }
+  | { status: 'threw'; error: unknown; entryDestroyed: boolean }
+
+/**
+ * Runs a dispatch behind its tail drop, split at the clear's commit: a clear that throws leaves the
+ * entry and its Retry standing, so only a later throw reports the entry's text as owed.
+ */
+export async function runBehindTailDrop<T>(deps: {
+  hasTail: boolean
+  clear: () => Promise<void>
+  reload: () => Promise<void>
+  run: () => Promise<T>
+}): Promise<BehindTailDrop<T>> {
+  let entryDestroyed = false
+  try {
+    if (deps.hasTail) {
+      await deps.clear()
+      entryDestroyed = true
+      await deps.reload()
+    }
+    return { status: 'returned', value: await deps.run() }
+  } catch (error) {
+    return { status: 'threw', error, entryDestroyed }
+  }
+}
+
 /**
  * A regenerate's custody of the failure entry its tail drop destroyed (reader-composer.md →
  * Custody of the turn's text): once `settle` has put the arm's own text in the draft or on its
