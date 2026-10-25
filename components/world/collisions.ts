@@ -4,9 +4,8 @@ import { collisionPairOf, flagStillHolds } from '@/lib/world'
 export type CollisionTarget = { otherId: string; otherName: string }
 
 /**
- * Flagged rows → the stored partner each pairs with (world.md → Surfacing), under the resolve
- * action's pair rule, so a strip shows only where Resolve can act. A row whose own flag is
- * dormant gets none, though its partner's live flag names it.
+ * Flagged rows → their stored partner under Resolve's pair rule, so strips show only where it acts
+ * (world.md → Surfacing). None for a row whose own flag is dormant, though its partner's names it.
  */
 export function deriveCollisions(
   entities: readonly Entity[],

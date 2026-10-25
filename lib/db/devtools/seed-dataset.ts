@@ -944,8 +944,7 @@ const heroInvolvements: NewHappeningInvolvement[] = [
 ]
 
 // characterId must be a character entity; the natural key is (branch, character, happening).
-// No anchor may land on the hero tail: it is `system`, which the entry index excludes, and
-// the picker would render it as "Entry no longer exists".
+// No anchor on the hero tail: the entry index skips `system`, so the picker shows it as deleted.
 const heroAwareness: NewHappeningAwareness[] = [
   {
     id: 'haw_ambush_kael',

@@ -397,8 +397,7 @@ export function readFallbackReply(value: FallbackReply) {
               readable(transfers.stackables, 'transfers', dropped),
               dropped,
             ),
-            // generateStructured parses with the schema's default; a value handed in unparsed may
-            // lack it.
+            // generateStructured's parse applies the default; unparsed input may lack it.
             drops: readable(transfers.drops ?? [], 'transfers', dropped),
           },
         }

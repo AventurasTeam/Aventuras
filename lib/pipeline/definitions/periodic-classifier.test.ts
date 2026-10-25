@@ -468,8 +468,7 @@ describe('periodicClassifierPhase', () => {
     expect(prompt).not.toMatch(/(char|loc|item|fact)_[0-9a-f]{8}-/)
   })
 
-  // architecture.md → System and user halves: no cache marker.
-  // observability.md → actionId threading: the pass's action id.
+  // architecture.md → System and user halves; observability.md → actionId threading.
   it("sends no cache marker, and the pass's action id", async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 1 })
     vi.mocked(generateStructured).mockResolvedValue({

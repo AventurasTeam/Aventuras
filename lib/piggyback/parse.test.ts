@@ -1353,9 +1353,8 @@ describe('conditions and drops', () => {
   })
 })
 
-// No `<` in an entry's attributes and no tag in its text, as in conditions and moves: a malformed
-// entry drops alone instead of swallowing the next one, and an unclosed opener can't make the
-// scan run to the end of the segment.
+// No `<` in attributes and no tag in text, as in conditions and moves: a malformed entry drops
+// alone, and an unclosed opener can't run the scan to the segment end.
 describe('an entry that never closes swallows nothing', () => {
   it('keeps the next visual change whole after a self-closed one', () => {
     const { block } = parseStateBlock(

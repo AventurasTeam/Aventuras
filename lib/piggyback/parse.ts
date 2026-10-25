@@ -119,7 +119,7 @@ function assertNotTruncated(segment: string, extractedCount: number, tagLabel: s
 // An entry's text holds no `<` that opens a tag, so a self-closed or unclosed entry can't swallow
 // the next one, and only one path matches each `<`, so an unclosed opener's scan stays linear.
 const ENTRY_TEXT = '[^<]*(?:<(?![A-Za-z/!?])[^<]*)*'
-// One `\s`: as `\s+`, it and the attribute text would split a run of spaces every way, quadratically.
+// One `\s`: as `\s+`, it and the attributes would split a run of spaces every way, quadratically.
 const ATTRIBUTES = '\\s([^<>]*)'
 const ENTITY_ENTRY = `<entity${ATTRIBUTES}>(${ENTRY_TEXT})</entity>`
 

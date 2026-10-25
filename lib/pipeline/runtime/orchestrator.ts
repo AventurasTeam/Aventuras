@@ -109,9 +109,8 @@ function reserveRun(kind: string, ctx: RunCtx): RunState {
   return run
 }
 
-// Releases a run that can't end through abortRun or commitRun, so it can't gate edits or block a
-// retry, and run_complete reports the idle and the failure: a successor's predecessor sent its own
-// while this one was registered.
+// Ends a run abortRun/commitRun can't, so it stops gating edits or a retry; run_complete reports
+// idle and failure, as a successor's predecessor sent its own while this one was registered.
 function unwindRun(run: RunState, detail: string): void {
   generationStore.abortRun(run.runId, 'unwound')
   // A capture left open is never evicted. Before beginTurn (a failed marker insert) there is none.
@@ -600,9 +599,8 @@ async function driveOrigin(
   const run = reserveRun(kind, ctx)
   try {
     await beginRun(run, ctx)
-    // A user write checks the gate before queueing on its row locks, so one that passed just before
-    // reserveRun raised it could still commit under this run's reads. A chain's successor needs no
-    // settle: the gate stayed up across the handoff.
+    // A user write checks the gate before locking its rows: one passing just before reserveRun can
+    // commit under this run's reads. A successor needs no settle: the gate held across the handoff.
     if (run.gateBehavior === 'hard-gate') await settleUserWrites()
     const { tx, successor } = await driveRun(run, ctx)
     return { result: tx, successor }

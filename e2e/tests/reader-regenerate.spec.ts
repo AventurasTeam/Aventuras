@@ -16,11 +16,8 @@ import { reader } from '../locators/reader'
 // reversing it also takes later turns with it. Both paths asserted through
 // the DB. See docs/testing.md → Coverage.
 //
-// Each test builds on the one before's committed state, so the describe below
-// forces mode: 'serial' — workers:1 + fullyParallel:false only order the tests;
-// retries:1 starts a *new worker* per attempt (fresh beforeAll → a freshly
-// reseeded DB), and without 'serial' a retried test 1 would leave test 2
-// running against that fresh DB instead of being skipped.
+// Each test builds on the one before's state, hence 'serial': workers:1 only orders tests, and
+// a retry's new worker reseeds the DB, which a later test would then run on instead of skipping.
 const REPLY_1 = 'E2E-REGEN-R1 the courier reads the letter twice.'
 const REPLY_2 = 'E2E-REGEN-R2 the courier burns the letter unread.'
 const REPLY_3 = 'E2E-REGEN-R3 the courier hides the letter in a boot.'
@@ -240,9 +237,8 @@ test.describe('reader — regenerate a reply', () => {
     expect(prompt).not.toContain('E2E-REGEN-U1')
   })
 
-  // reader-composer.md → Custody of the turn's text: the failed turn's user_action went with
-  // its reversal, so its failure entry holds the only copy of the text. Regenerating the reply
-  // beneath that entry deletes it, and the text has to come back to the composer.
+  // reader-composer.md → Custody of the turn's text: the failure entry holds the only copy, so
+  // regenerating the reply beneath it, which deletes the entry, must hand the text back.
   test("regenerating under a failed turn's entry hands its text to the composer", async () => {
     const branch = await branchId()
     const replyId = await pollEntryId(branch, 'E2E-REGEN-R4')

@@ -51,9 +51,8 @@ export type PiggybackApplied = {
   drops: ReportedDrop[]
   /** Positions in `block.conditions` refused, not ids: an id can repeat in one block. */
   conditionsRejected: number[]
-  // How many of each changed what World stores: one with nothing to write, or restating the stored
-  // value, counts none. The fallback's report carries a failed fold's record over per list on these
-  // (data-model.md → Entry metadata shape).
+  // How many of each changed what World stores; a no-op or restated value counts none. Per list,
+  // they gate the fallback keeping a failed fold's record (data-model.md → Entry metadata shape).
   visualChangesLanded: number
   conditionsLanded: number
   itemsLanded: number

@@ -76,9 +76,8 @@ export function brokenFlags(input: {
 }
 
 /**
- * The pair's flagged rows whose partner is the other row, or whose flag is dormant among
- * `entities` once the write lands (world.md → Keep as distinct, Rename). A live flag naming a
- * third row is its own question.
+ * The pair's flagged rows whose partner is the other row, or whose flag is dormant in `entities`
+ * after the write (world.md → Keep as distinct, Rename). A live flag naming a third row stays.
  */
 export function pairFlagsToClear(
   pair: CollisionPair,

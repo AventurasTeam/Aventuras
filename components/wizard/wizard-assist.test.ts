@@ -387,8 +387,7 @@ describe('runGenreAssist', () => {
     expect(captured?.user).toContain('Suggest a genre for this story')
   })
 
-  // architecture.md → System and user halves: the wizard carries no cache marker, and it calls
-  // outside any run, so its fetch capture links to no action.
+  // architecture.md → System and user halves; outside any run, its fetch capture links no action.
   it('sends no cache marker and no action id', async () => {
     let args: unknown[] = []
     const generate: WizardAssistDeps['generate'] = (async (...received: unknown[]) => {

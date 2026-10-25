@@ -102,7 +102,7 @@ export function itemMoveActions(args: ItemMoveArgs): ItemMoves {
     if (id === undefined || row === undefined) return 'none'
     if (row.kind === 'character') return { holder: id }
     const party = standsFor(id, row.kind)
-    // A correction, not a model error: no alert and no dropped ref (entry-card.md → State problems).
+    // A correction, not a model error: no alert, no dropped ref (entry-card.md → State problems).
     log.debug('classifier.holder_read', {
       entryId,
       source,

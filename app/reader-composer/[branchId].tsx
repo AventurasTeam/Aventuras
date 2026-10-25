@@ -616,11 +616,8 @@ export default function ReaderComposerRoute() {
 
   type DroppedSystemEntry = { content: string; failure: SystemFailureMeta | undefined }
 
-  // A prior failure leaves a system entry as the branch tail; drop it (and
-  // resync the store) before a dispatch so the pipeline's prompt/position reads
-  // the real content tail, not the failure singleton.
-  // Read before the drop, so a caller whose drop or resync throws still holds the entry's text
-  // (composer-draft.ts → SubmissionHandback).
+  // Read before the drop (composer-draft.ts → SubmissionHandback), so a caller whose drop or
+  // resync throws still holds its text. The drop keeps it out of the pipeline's prompt/position.
   const systemTail = useCallback((): DroppedSystemEntry | null => {
     const tail = [...entriesStore.getEntries().values()].find(
       (e) => e.branchId === branchId && e.kind === 'system',
@@ -859,9 +856,8 @@ export default function ReaderComposerRoute() {
             stillOnBranch: () => branchUnchanged(branchId),
             handBack: handBackSubmission,
           })
-        // Scoped to the action alone: a throw out of the arms below happens
-        // *after* it returned, with the user's text in hand, so it must not
-        // inherit the "no submission to hand back" premise the throw arm encodes.
+        // Wraps the action alone: arms below throw with the user's text in hand, so they must not
+        // inherit the throw arm's "no submission to hand back" premise.
         const ran = await runBehindTailDrop({
           hasTail: dropped != null,
           clear: () => clearSystemEntry(branchId, ctx),
@@ -879,10 +875,8 @@ export default function ReaderComposerRoute() {
             error: ran.error instanceof Error ? ran.error.message : String(ran.error),
           })
           toast.error(t('reader:regenerateFailed'))
-          // A DeltaReplayError can commit its transaction and fail the store sync,
-          // leaving entriesStore holding rows the sweep already deleted. A committed
-          // clear destroyed an earlier failure's only copy of its text: restoreSystemTail
-          // is unsafe here (the tail may have moved), the draft isn't.
+          // Reload: a DeltaReplayError can commit, then fail its store sync. A committed clear
+          // destroyed the text's only copy; restoreSystemTail is unsafe: the tail may have moved.
           await droppedHandback(
             ran.entryDestroyed ? dropped?.failure?.submission : undefined,
             async () => {
@@ -926,9 +920,8 @@ export default function ReaderComposerRoute() {
             userActionContent: regen.userActionContent,
             arm: async () => {
               if (plan.action === 'refuse-unconverged') {
-                // The unwind didn't land, so the user_action is still in the branch.
-                // Neither a Retry nor a draft-restore can offer its text without
-                // duplicating it — the same hazard the throw arm above refuses.
+                // The unwind didn't land, so the user_action still stands: a Retry or
+                // draft-restore offering its text would duplicate it.
                 logger.error('pipeline.regenerate_unconverged', {
                   branchId,
                   entryId: targetId,

@@ -19,9 +19,8 @@ export type SystemEntryFixAction = { label: string; onPress: () => void } | unde
 type LeaveStory = (proceed: () => void) => void
 
 /**
- * Hand the draft back only once the entry is gone: a rejected clear keeps Retry, and a
- * composer copy would run the turn twice. A rejected reload still hands it back, since the row
- * holding it is gone. Off-branch, the hand-back is dropped with a warning, not pasted.
+ * Hand the draft back only once the entry is gone (a rejected clear keeps Retry; a composer copy
+ * would run the turn twice), even if reload rejects. Off-branch it's dropped with a warning.
  */
 export async function dismissSystemEntry(deps: {
   branchId: string

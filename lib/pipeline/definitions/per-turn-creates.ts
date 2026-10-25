@@ -146,7 +146,8 @@ function keptLocationHandles(block: ParsedStateBlock): Set<string> {
   return kept
 }
 
-/** A new item stays only when the last transfer naming it, a drop included, leaves it with a character. */
+/** A new item stays only when the last transfer naming it, a drop included, leaves it with a
+ *  character or in an item one holds. */
 function keptItemHandles(
   block: ParsedStateBlock,
   entities: readonly Entity[],

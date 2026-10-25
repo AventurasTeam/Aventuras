@@ -3165,8 +3165,7 @@ describe('per-turn-piggyback', () => {
       ])
     })
 
-    // piggyback.md → Fallback classifier context: an entry it can't read drops alone, and the
-    // reader still learns of it.
+    // piggyback.md → Fallback classifier context: an unreadable entry drops alone, recorded.
     describe('an entry the reply cannot read', () => {
       const unreadable = (field: string, list: string) => ({
         field,
@@ -3294,7 +3293,7 @@ describe('per-turn-piggyback', () => {
         expect(log.warn).not.toHaveBeenCalledWith('classifier.ref_dropped', expect.anything())
       })
 
-      // Unreachable from a bad ref, which drops its entry alone: only an unexpected error fails one.
+      // A bad ref drops only its entry: a field fails whole only on an unexpected error.
       it('records a field its substitution failed whole as unreadable', async () => {
         class FailingIdMap extends IdBiMap {
           override getUuidFor(placeholder: string): string | undefined {

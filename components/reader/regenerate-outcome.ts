@@ -54,11 +54,7 @@ export function offersUserAction(action: RegenerateOutcomeAction): boolean {
   )
 }
 
-/**
- * The text a regenerate arm left in the draft or on its own entry, which the dropped entry's
- * hand-back defers to: an arm that offers the action's text settles it once its write landed, or
- * once its failure handling restored the text to the draft.
- */
+/** Text the arm left in the draft or on its entry; the dropped entry's hand-back defers to it. */
 export function armSettledText(args: {
   action: RegenerateOutcomeAction
   userActionContent: string
@@ -70,7 +66,6 @@ export function armSettledText(args: {
     : null
 }
 
-/** The branch's newest reply, whose state report the post-turn toast reads. */
 export function latestReplyOf<E extends { branchId: string; kind: string; position: number }>(
   entries: Iterable<E>,
   branchId: string,
@@ -113,11 +108,8 @@ export async function runBehindTailDrop<T>(deps: {
 }
 
 /**
- * A regenerate's custody of the failure entry its tail drop destroyed (reader-composer.md →
- * Custody of the turn's text): once `settle` has put the arm's own text in the draft or on its
- * entry, the dropped entry's text goes to the draft, unless it is that same text. A throwing
- * `settle` still hands it back before the throw propagates. The rejection arm puts the entry
- * back instead, so it never comes through here. Off-branch, it is dropped with a warning.
+ * reader-composer.md → Custody of the turn's text. Once `settle` returns or throws, hands the
+ * dropped entry's text to the draft unless `settle` left that text. Rejection never comes here.
  */
 export async function settleWithDroppedHandback(deps: {
   branchId: string
