@@ -29,12 +29,18 @@ Usage: .\scripts\defender-build-exclusion.ps1 -Action <Add|Remove|Scan>
 
 Run from an administrator PowerShell.
 '@
-  exit
+  exit 1
 }
 
-# Defender keeps each rule as typed, so `...\target\` and `...\target` are the same folder.
+# Defender keeps each rule as typed and expands %VAR% itself, so `%USERPROFILE%\x\` and
+# `C:\Users\me\x` are the same folder. A relative or wildcard rule is left as typed: resolving it
+# against this shell's folder would match by accident, and GetFullPath rejects `*` and `?`.
 function Get-NormalPath([string]$Path) {
-  [IO.Path]::GetFullPath($Path).TrimEnd('\')
+  $expanded = [Environment]::ExpandEnvironmentVariables($Path)
+  if ($expanded -match '[*?]' -or -not [IO.Path]::IsPathRooted($expanded)) {
+    return $expanded.TrimEnd('\')
+  }
+  [IO.Path]::GetFullPath($expanded).TrimEnd('\')
 }
 
 # Reading the exclusions needs an administrator too: otherwise Defender returns a notice in their place.
@@ -96,7 +102,9 @@ switch ($Action) {
       $rows = $found | ForEach-Object {
         $path = Get-NormalPath $_
         $root = if ($path -like '*\src-tauri\target') { Split-Path (Split-Path $path) } else { $path }
-        $status = if (-not (Test-Path -LiteralPath $root)) {
+        $status = if ($path -match '[*?]') {
+          'unknown'
+        } elseif (-not (Test-Path -LiteralPath $root)) {
           'left behind'
         } elseif ($null -eq $worktrees) {
           'unknown'
