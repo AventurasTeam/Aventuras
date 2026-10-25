@@ -93,10 +93,15 @@ function withoutTags<T extends { tags: readonly string[] }>(row: T): Record<stri
   return rest
 }
 
-// `parentUnknown` is wizard bookkeeping for Finish's placement, not a documented variable.
+// The unresolved asks and `parentUnknown` are wizard bookkeeping for the editor's warnings and
+// Finish's placement, not documented variables.
 function castRowForTemplate(row: WizardWorkingState['cast'][number]): Record<string, unknown> {
+  if (row.kind === 'character') {
+    const { unresolvedFactionName, ...character } = row
+    return withoutTags(character)
+  }
   if (row.kind !== 'location') return withoutTags(row)
-  const { parentUnknown, ...location } = row
+  const { parentUnknown, unresolvedParentLocationName, ...location } = row
   return withoutTags(location)
 }
 

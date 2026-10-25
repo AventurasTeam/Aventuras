@@ -99,7 +99,9 @@ measure, so it takes that extension
 Open-at-bottom is a document concern: land on the last entry
 before first paint and re-assert per frame until layout settles —
 late layout lands a one-shot write short of the true bottom. The
-user's first gesture breaks the pin.
+user's first gesture breaks the pin: a wheel, a touch drag, a
+scrollbar press or an upward scroll key
+([`reader-composer.md → Autoscroll`](../screens/reader-composer/reader-composer.md#autoscroll)).
 
 ## Native hosting
 

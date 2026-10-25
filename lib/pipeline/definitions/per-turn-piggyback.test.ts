@@ -2943,10 +2943,10 @@ describe('per-turn-piggyback', () => {
 
     // c1 is HERO and l1 is TOWN: neither is an item, nor is the new place.
     it.each([
-      ["a new place's handle", 'new:docks'],
-      ["an existing place's id", 'l1'],
-      ["a character's id", 'c1'],
-    ])('drops only a transfer naming %s as its item, with a warning', async (_label, ref) => {
+      ["a new place's handle", 'new:docks', { kind: 'location' }],
+      ["an existing place's id", 'l1', { id: TOWN, kind: 'location' }],
+      ["a character's id", 'c1', { id: HERO, kind: 'character' }],
+    ])('drops only a transfer naming %s as its item, with a warning', async (_label, ref, row) => {
       seedFallbackTurn()
       const log = spyLogger()
       const { events } = await runFallback(
@@ -2967,6 +2967,7 @@ describe('per-turn-piggyback', () => {
       const dropped = {
         field: 'transfers',
         ref,
+        ...row,
         reason: 'wrong-kind',
         detail: expect.stringContaining('not an item'),
       }
@@ -3868,6 +3869,8 @@ describe('per-turn-piggyback', () => {
             {
               field: 'visualChanges',
               ref: 'l1',
+              id: TOWN,
+              kind: 'location',
               reason: 'wrong-kind',
               detail: expect.stringContaining('not a character'),
             },

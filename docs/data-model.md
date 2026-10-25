@@ -2019,7 +2019,7 @@ story_entries.metadata: {
     newItems?: ({ handle: string; name: string; description: string; condition?: string; outcome: 'created'; id: string } | { handle: string; name: string; description: string; condition?: string; outcome: 'dropped' })[]
     failedFields?: { field: string; detail: string }[]  // the failed NARRATIVE attempt, retained even once a fallback supplied the fields
     seatedDisabled?: string[]        // rows the narrator was kept from that this turn's scene seats: a place it moved into that was disabled, judged from where the story stood, or a disabled member it brought in (ui/principles.md → Injection / retrieval rules)
-    droppedRefs?: { field: string; ref?: string; reason: 'unknown' | 'wrong-kind' | 'unreadable'; detail: string }[]  // the fallback's entries discarded before apply, ref as emitted (memory/piggyback.md → Parse strategy and failure recovery); never the narrative's, which fails a field instead
+    droppedRefs?: { field: string; ref?: string; id?: string; kind?: string; reason: 'unknown' | 'wrong-kind' | 'unreadable'; detail: string }[]  // the fallback's entries discarded before apply, ref as emitted (memory/piggyback.md → Parse strategy and failure recovery); a wrong-kind ref adds the kind it named and, unless a create's handle, the row's id, so the reader can name it; never the narrative's, which fails a field instead
     raw?: string                     // the unparseable block text; present only alongside failedFields
   }
 
@@ -2039,7 +2039,7 @@ story_entries.metadata: {
       content: string
       composerMode: string
     }
-    pass?: 'failed' | 'held'        // a pass-failure entry: its Retry runs the pass alone; held has no Retry
+    pass?: 'failed' | 'held' | 'resolved'  // a pass-failure entry: its Retry runs the pass alone; held has no Retry; resolved is what a committed Retry leaves when the composer couldn't take the submission back, a notice holding it with no Retry
   }
 }
 ```

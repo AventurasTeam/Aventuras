@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { deltas, type Delta, type SqlOp } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import { headTurnEntries } from '@/lib/head-turn'
 
 import { loadHeadTurn } from './head-turn'
 import { PAYLOAD_META_PREFIX } from '../delta/delta-encoding'
@@ -41,13 +42,13 @@ async function resolveInvalidationScope(
 ): Promise<InvalidationScope | null> {
   const head = await loadHeadTurn(branchId, ctx)
   if (!head) return null
-  if (head.tail.id === editedId)
-    return { entryIds: [head.tail.id], editedPosition: head.tail.position }
+  const members = headTurnEntries(head)
+  const at = members.findIndex((entry) => entry.id === editedId)
+  const edited = members[at]
+  if (!edited) return null
   // Clamping below the origin reopens the reply too, so the reply's facts go with it or
   // they re-derive twice.
-  if (head.origin?.id === editedId)
-    return { entryIds: [head.origin.id, head.tail.id], editedPosition: head.origin.position }
-  return null
+  return { entryIds: members.slice(at).map((entry) => entry.id), editedPosition: edited.position }
 }
 
 // The arms meet a delta, not an edit call, so they identify one by payload shape. Sound

@@ -14,6 +14,7 @@ import { expect, screen, spyOn, userEvent, waitFor, within } from 'storybook/tes
 
 import { themes } from '@/lib/themes'
 
+import { Button } from './button'
 import { Select, type SelectOption } from './select'
 import { Text } from './text'
 
@@ -199,6 +200,69 @@ export const EmptyDropdownStaysControlled: Story = {
     expect(screen.getByText('Pick one…')).toHaveClass('text-fg-muted')
     expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(/uncontrolled to controlled/))
     warn.mockRestore()
+  },
+}
+
+function Clearable({
+  mode,
+  options,
+  label,
+}: {
+  mode: 'segment' | 'radio'
+  options: SelectOption[]
+  label: string
+}) {
+  const [value, setValue] = useState<string | undefined>(undefined)
+  return (
+    <View className="flex-col gap-2">
+      <Select mode={mode} label={label} options={options} value={value} onValueChange={setValue} />
+      <Button variant="secondary" size="sm" onPress={() => setValue(undefined)}>
+        <Text>{`Clear ${label}`}</Text>
+      </Button>
+    </View>
+  )
+}
+
+/** A segment or radio group handed `undefined` around a pick shows nothing picked and stays controlled. */
+export const RadioBranchesStayControlledWhenCleared: Story = {
+  render: () => (
+    <View className="w-96 flex-col gap-6 p-4">
+      <Clearable mode="segment" options={SHORT_OPTIONS} label="Segment field" />
+      <Clearable mode="radio" options={RADIO_OPTIONS} label="Radio field" />
+    </View>
+  ),
+  play: async () => {
+    const warn = spyOn(console, 'warn')
+    const error = spyOn(console, 'error')
+    try {
+      for (const [label, pick] of [
+        ['Segment field', /^Two/],
+        ['Radio field', /^Review/],
+      ] as const) {
+        const group = await screen.findByRole('radiogroup', { name: label })
+        const checked = () =>
+          within(group)
+            .getAllByRole('radio')
+            .filter((radio) => radio.getAttribute('aria-checked') === 'true')
+        expect(checked()).toEqual([])
+
+        await userEvent.click(within(group).getByRole('radio', { name: pick }))
+        await waitFor(() =>
+          expect(within(group).getByRole('radio', { name: pick })).toHaveAttribute(
+            'aria-checked',
+            'true',
+          ),
+        )
+        await userEvent.click(screen.getByRole('button', { name: `Clear ${label}` }))
+        await waitFor(() => expect(checked()).toEqual([]))
+      }
+      const text = (call: unknown[]) => String(call[0])
+      expect(warn.mock.calls.map(text).filter((m) => /controlled/.test(m))).toEqual([])
+      expect(error.mock.calls.map(text).filter((m) => /controlled/.test(m))).toEqual([])
+    } finally {
+      warn.mockRestore()
+      error.mockRestore()
+    }
   },
 }
 

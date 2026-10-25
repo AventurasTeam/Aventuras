@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from 'class-variance-authority'
 import type { LucideIcon } from 'lucide-react-native'
 import type { Ref } from 'react'
-import { Platform, Pressable, type PressableProps, type View } from 'react-native'
+import { Platform, Pressable, View, type PressableProps } from 'react-native'
 
 import { Icon, type IconSizeVariant } from '@/components/ui/icon'
 import { TextClassContext } from '@/components/ui/text'
@@ -59,6 +59,7 @@ const iconColorVariants = cva(
             default: '',
           }) ?? '',
         ),
+        'enabled-alert': 'text-danger',
         disabled: 'text-fg-muted',
       },
     },
@@ -66,7 +67,7 @@ const iconColorVariants = cva(
   },
 )
 
-type IconActionVariant = 'default' | 'destructive'
+type IconActionVariant = 'default' | 'destructive' | 'alert'
 type IconActionSize = NonNullable<VariantProps<typeof iconActionVariants>['size']>
 
 type IconActionProps = Omit<PressableProps, 'children' | 'aria-label'> & {
@@ -89,6 +90,12 @@ type IconActionProps = Omit<PressableProps, 'children' | 'aria-label'> & {
   ref?: Ref<View>
   className?: string
 }
+
+const VARIANT_TONES = {
+  default: 'enabled',
+  destructive: 'enabled-destructive',
+  alert: 'enabled-alert',
+} as const satisfies Record<IconActionVariant, string>
 
 // Expand the tap zone to the 44px phone floor at regular density (the phone
 // default): visible + 2·slop = 44 (24+2·10, 28+2·8, 32+2·6). Comfortable
@@ -117,7 +124,7 @@ export function IconAction({
   ...props
 }: IconActionProps) {
   const accessibleName = disabled && disabledReason ? disabledReason : label
-  const tone = disabled ? 'disabled' : variant === 'destructive' ? 'enabled-destructive' : 'enabled'
+  const tone = disabled ? 'disabled' : VARIANT_TONES[variant]
   const pressable = (
     <TextClassContext.Provider value={iconColorVariants({ tone })}>
       <Pressable
@@ -137,17 +144,28 @@ export function IconAction({
         {...props}
       >
         <Icon as={icon} size={SIZE_TO_ICON_SIZE[size]} />
+        {/* icon-actions.md → Alert: a dot as well as the colour, so it isn't hue alone. */}
+        {variant === 'alert' ? (
+          <View
+            aria-hidden
+            className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-danger"
+          />
+        ) : null}
       </Pressable>
     </TextClassContext.Provider>
   )
-  if (disabled && disabledReason && Platform.OS === 'web') {
-    return (
-      <div title={disabledReason} className="inline-flex">
-        {pressable}
-      </div>
-    )
-  }
-  return pressable
+  if (Platform.OS !== 'web') return pressable
+  // Always rendered, display: contents until it carries the tooltip: a wrapper that came and went
+  // would remount the button each time it disabled, every row of the reader at once per turn.
+  const titled = disabled === true && !!disabledReason
+  return (
+    <div
+      title={titled ? disabledReason : undefined}
+      className={titled ? 'inline-flex' : 'contents'}
+    >
+      {pressable}
+    </div>
+  )
 }
 
 export { iconActionVariants }

@@ -19,7 +19,8 @@ type LeaveStory = (proceed: () => void) => void
 
 /**
  * Hand the draft back only once the entry is gone: a rejected clear keeps Retry, and a
- * composer copy would run the turn twice. Off-branch, the hand-back is dropped, not pasted.
+ * composer copy would run the turn twice. A rejected reload still hands it back, since the row
+ * holding it is gone. Off-branch, the hand-back is dropped, not pasted.
  */
 export async function dismissSystemEntry(deps: {
   submission: SystemFailureMeta['submission']
@@ -29,8 +30,54 @@ export async function dismissSystemEntry(deps: {
   handBack: (submission: SystemFailureMeta['submission']) => void
 }): Promise<void> {
   await deps.clear()
-  await deps.reload()
-  if (deps.stillOnBranch()) deps.handBack(deps.submission)
+  try {
+    await deps.reload()
+  } finally {
+    if (deps.stillOnBranch()) deps.handBack(deps.submission)
+  }
+}
+
+// Exhaustive per wording set: a new resolver kind is a type error, not another kind's copy.
+const TURN_RESOLVER_COPY = {
+  'no-profile-assigned': 'reader:systemEntry.failure.noProfileAssigned',
+  'profile-missing': 'reader:systemEntry.failure.profileMissing',
+  'provider-missing': 'reader:systemEntry.failure.providerMissing',
+  'override-provider-missing': 'reader:systemEntry.failure.overrideProviderMissing',
+} as const satisfies Record<ResolveFailureKind, string>
+
+const PASS_RESOLVER_COPY = {
+  'no-profile-assigned': 'reader:systemEntry.failure.memoryNoProfileAssigned',
+  'profile-missing': 'reader:systemEntry.failure.memoryProfileMissing',
+  'provider-missing': 'reader:systemEntry.failure.memoryProviderMissing',
+  'override-provider-missing': 'reader:systemEntry.failure.memoryOverrideProviderMissing',
+} as const satisfies Record<ResolveFailureKind, string>
+
+const FIX_LABEL = {
+  'no-profile-assigned': 'reader:systemEntry.assignProfile',
+  'profile-missing': 'reader:systemEntry.fixProfile',
+  'provider-missing': 'reader:systemEntry.fixDefault',
+  'override-provider-missing': 'reader:systemEntry.fixOverride',
+} as const satisfies Record<ResolveFailureKind, string>
+
+function isResolveFailureKind(failure: string): failure is ResolveFailureKind {
+  return Object.hasOwn(FIX_LABEL, failure)
+}
+
+function providerDetail(error: Extract<PipelineError, { kind: 'provider' }>): string {
+  return error.detail != null ? `${error.reason}: ${error.detail}` : error.reason
+}
+
+function failureMetaOf(
+  error: PipelineError | undefined,
+  detail: string | undefined,
+  submission: SystemFailureMeta['submission'],
+): SystemFailureMeta {
+  return {
+    kind: error?.kind ?? 'orchestrator',
+    ...(error?.kind === 'config-resolver' ? { failure: error.failure } : {}),
+    ...(detail != null ? { detail } : {}),
+    ...(submission != null ? { submission } : {}),
+  }
 }
 
 // Per-kind bubble copy (reader-composer.md → Error surface), resolved at write
@@ -40,21 +87,10 @@ export function describeTurnFailure(error: PipelineError | undefined): {
   detail?: string
 } {
   if (error?.kind === 'provider') {
-    return {
-      content: t('reader:systemEntry.failure.llmCall'),
-      detail: error.detail != null ? `${error.reason}: ${error.detail}` : error.reason,
-    }
+    return { content: t('reader:systemEntry.failure.llmCall'), detail: providerDetail(error) }
   }
   if (error?.kind === 'config-resolver') {
-    const contentKey =
-      error.failure === 'no-profile-assigned'
-        ? 'reader:systemEntry.failure.noProfileAssigned'
-        : error.failure === 'profile-missing'
-          ? 'reader:systemEntry.failure.profileMissing'
-          : error.failure === 'override-provider-missing'
-            ? 'reader:systemEntry.failure.overrideProviderMissing'
-            : 'reader:systemEntry.failure.providerMissing'
-    return { content: t(contentKey), detail: error.detail }
+    return { content: t(TURN_RESOLVER_COPY[error.failure]), detail: error.detail }
   }
   if (error?.kind === 'embedder') {
     // One string for every embedder failure: `reason` is lossy — the shared
@@ -75,13 +111,7 @@ export function toSystemFailureMeta(
   error: PipelineError | undefined,
   submission: { content: string; composerMode: string } | undefined,
 ): SystemFailureMeta {
-  const { detail } = describeTurnFailure(error)
-  return {
-    kind: error?.kind ?? 'orchestrator',
-    ...(error?.kind === 'config-resolver' ? { failure: error.failure } : {}),
-    ...(detail != null ? { detail } : {}),
-    ...(submission != null ? { submission } : {}),
-  }
+  return failureMetaOf(error, describeTurnFailure(error).detail, submission)
 }
 
 // The pass's own vocabulary (classifier.md → Failure policy): a turn's copy names the narrative
@@ -101,21 +131,10 @@ export function describePassFailure(
     }
   const { error } = refusal
   if (error?.kind === 'provider') {
-    return {
-      content: t('reader:systemEntry.failure.memory'),
-      detail: error.detail != null ? `${error.reason}: ${error.detail}` : error.reason,
-    }
+    return { content: t('reader:systemEntry.failure.memory'), detail: providerDetail(error) }
   }
   if (error?.kind === 'config-resolver') {
-    const contentKey =
-      error.failure === 'no-profile-assigned'
-        ? 'reader:systemEntry.failure.memoryNoProfileAssigned'
-        : error.failure === 'profile-missing'
-          ? 'reader:systemEntry.failure.memoryProfileMissing'
-          : error.failure === 'override-provider-missing'
-            ? 'reader:systemEntry.failure.memoryOverrideProviderMissing'
-            : 'reader:systemEntry.failure.memoryProviderMissing'
-    return { content: t(contentKey), detail: error.detail }
+    return { content: t(PASS_RESOLVER_COPY[error.failure]), detail: error.detail }
   }
   return { content: t('reader:systemEntry.failure.memory'), detail: error?.detail }
 }
@@ -126,25 +145,34 @@ export function toPassFailureMeta(
 ): SystemFailureMeta {
   const error = refusal.held ? undefined : refusal.error
   const { detail } = describePassFailure(refusal, submission)
+  return { ...failureMetaOf(error, detail, submission), pass: refusal.held ? 'held' : 'failed' }
+}
+
+/**
+ * What a committed Retry leaves when the composer couldn't take its entry's text back: a notice
+ * holding the text, with no Retry and no fix, whose Dismiss hands the text back.
+ */
+export function passResolvedEntry(submission: NonNullable<SystemFailureMeta['submission']>): {
+  content: string
+  failure: SystemFailureMeta
+} {
   return {
-    kind: error?.kind ?? 'orchestrator',
-    ...(error?.kind === 'config-resolver' ? { failure: error.failure } : {}),
-    ...(detail != null ? { detail } : {}),
-    ...(submission != null ? { submission } : {}),
-    pass: refusal.held ? 'held' : 'failed',
+    content: t('reader:systemEntry.passResolvedTextKept'),
+    failure: { kind: 'orchestrator', submission, pass: 'resolved' },
   }
 }
 
 /**
- * A pass-failure entry's Retry: runs the pass alone. A commit clears the entry through `dismiss`;
- * a failure, a throw or a hold rewrites it, a failure as held when its reversal didn't commit; a
- * cancel leaves the entry as it was. A throw from `held`, `dismiss` or `rewrite` propagates.
+ * A pass-failure entry's Retry: runs the pass alone. A commit settles the entry through
+ * `committed`; a failure, a throw or a hold rewrites it, a failure as held when its reversal didn't
+ * commit; a cancel leaves the entry as it was. A throw from `held`, `committed` or `rewrite`
+ * propagates.
  */
 export async function retryPassEntry(deps: {
   runPass: () => Promise<TxResult | RejectedStart>
   /** Read once the pass ended: whether the branch is held `running`. */
   held: () => Promise<boolean>
-  dismiss: () => Promise<void>
+  committed: () => Promise<void>
   rewrite: (refusal: PassRefusal) => Promise<void>
   notify: (message: string) => void
 }): Promise<void> {
@@ -155,7 +183,7 @@ export async function retryPassEntry(deps: {
     const detail = err instanceof Error ? err.message : String(err)
     return deps.rewrite({ held: false, error: { kind: 'orchestrator', detail } })
   }
-  if (result.outcome === 'completed') return deps.dismiss()
+  if (result.outcome === 'completed') return deps.committed()
   if (result.outcome === 'failed')
     return deps.rewrite((await deps.held()) ? { held: true } : { held: false, error: result.error })
   if (result.outcome !== 'rejected') return
@@ -181,18 +209,12 @@ export function useConfigFixAction(
   if (failure === 'override-provider-missing') {
     if (storyId === null) return undefined
     return {
-      label: t('reader:systemEntry.fixOverride'),
+      label: t(FIX_LABEL['override-provider-missing']),
       onPress: () => router.navigate(`/story-settings/${storyId}?tab=models`),
     }
   }
-  const labelKey =
-    failure === 'no-profile-assigned'
-      ? 'reader:systemEntry.assignProfile'
-      : failure === 'profile-missing'
-        ? 'reader:systemEntry.fixProfile'
-        : 'reader:systemEntry.fixDefault'
   return {
-    label: t(labelKey),
+    label: t(isResolveFailureKind(failure) ? FIX_LABEL[failure] : 'reader:systemEntry.fixDefault'),
     onPress: () => leaveStory(() => router.push('/settings?tab=providers')),
   }
 }
@@ -224,10 +246,10 @@ export function useSystemEntryActions(
     leaveStory,
   )
   const embedderFix = useEmbedderFixAction(failure?.kind === 'embedder' ? storyId : null)
-  // A held branch can't run a pass, so its entry offers Dismiss alone. The two fix gates are
-  // kind-exclusive, so the `??` order carries no meaning.
+  // A held branch can't run a pass, and a resolved entry's pass has run, so either offers Dismiss
+  // alone. The two fix gates are kind-exclusive, so the `??` order carries no meaning.
   return {
-    onRetry: failure?.pass === 'held' ? undefined : onRetry,
+    onRetry: failure?.pass === 'held' || failure?.pass === 'resolved' ? undefined : onRetry,
     fixAction: embedderFix ?? configFix,
   }
 }

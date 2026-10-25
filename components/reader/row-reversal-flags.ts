@@ -1,4 +1,4 @@
-import { resolveHeadTurn, type TurnEntry } from '@/lib/head-turn'
+import { headTurnEntries, resolveHeadTurn, type TurnEntry } from '@/lib/head-turn'
 
 import type { EditGate } from './reader-document-types'
 
@@ -13,7 +13,7 @@ export function headTurnIdsOf(
 ): ReadonlySet<string> {
   const head = resolveHeadTurn(rows)
   if (head == null || head.tail.id !== tailEntryId) return new Set()
-  return new Set(head.origin == null ? [head.tail.id] : [head.tail.id, head.origin.id])
+  return new Set(headTurnEntries(head).map((entry) => entry.id))
 }
 
 /** The host's two gates as one; the head-reversal gate implies the whole gate, so it closes all. */
@@ -23,6 +23,18 @@ export function editGateOf(gates: {
 }): EditGate {
   if (gates.headReversalBlocked) return 'closed'
   return gates.editBlocked ? 'interruptible' : 'open'
+}
+
+/**
+ * The row controls' tooltip. An `interruptible` gate disables only what the pill's run holds; a
+ * `closed` one holds the head reversals too, so it names the run they can't pass through.
+ */
+export function rowGateReason(
+  editGate: EditGate,
+  reasons: { gate: string | undefined; headReversal: string | undefined },
+): string | undefined {
+  if (editGate === 'open') return undefined
+  return editGate === 'closed' ? reasons.headReversal : reasons.gate
 }
 
 /**

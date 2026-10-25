@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   offersUserAction,
   planRegenerateOutcome,
+  settleWithDroppedHandback,
   shouldRestoreUserActionAfterHandlingFailure,
   type RegenerateOutcomeAction,
 } from './regenerate-outcome'
@@ -106,5 +107,65 @@ describe('offersUserAction', () => {
 describe('outcome handling failure recovery', () => {
   it('does not restore text for an unconverged action that still stands', () => {
     expect(shouldRestoreUserActionAfterHandlingFailure('refuse-unconverged', true)).toBe(false)
+  })
+})
+
+describe('settleWithDroppedHandback', () => {
+  const DROPPED = { content: 'I climb the tower.', composerMode: 'free' }
+
+  function harness(settle: () => Promise<string | null>, stillOnBranch = true) {
+    const calls: unknown[] = []
+    return {
+      calls,
+      deps: {
+        dropped: DROPPED,
+        settle: async () => {
+          calls.push('settle')
+          return settle()
+        },
+        stillOnBranch: () => stillOnBranch,
+        handBack: (submission: typeof DROPPED) => {
+          calls.push(['handBack', submission])
+        },
+      },
+    }
+  }
+
+  // A completed regenerate owes the composer the cleared failure entry's text.
+  it("hands the dropped entry's text back once an arm that settled nothing returns", async () => {
+    const h = harness(async () => null)
+    await settleWithDroppedHandback(h.deps)
+    expect(h.calls).toEqual(['settle', ['handBack', DROPPED]])
+  })
+
+  // The arm's own text goes first, so the dropped text meets the draft it left.
+  it('hands it back after an arm that settled another text', async () => {
+    const h = harness(async () => 'I step back from the edge.')
+    await settleWithDroppedHandback(h.deps)
+    expect(h.calls).toEqual(['settle', ['handBack', DROPPED]])
+  })
+
+  it('hands nothing back when the arm settled that same text', async () => {
+    const h = harness(async () => 'I climb the tower.')
+    await settleWithDroppedHandback(h.deps)
+    expect(h.calls).toEqual(['settle'])
+  })
+
+  it('hands it back before a throwing arm propagates', async () => {
+    const h = harness(() => Promise.reject(new Error('resync failed')))
+    await expect(settleWithDroppedHandback(h.deps)).rejects.toThrow('resync failed')
+    expect(h.calls).toEqual(['settle', ['handBack', DROPPED]])
+  })
+
+  it('hands nothing back once the user left the branch', async () => {
+    const h = harness(async () => null, false)
+    await settleWithDroppedHandback(h.deps)
+    expect(h.calls).toEqual(['settle'])
+  })
+
+  it('hands nothing back when the drop removed no text', async () => {
+    const h = harness(async () => null)
+    await settleWithDroppedHandback({ ...h.deps, dropped: undefined })
+    expect(h.calls).toEqual(['settle'])
   })
 })

@@ -947,7 +947,9 @@ test.describe('periodic classifier — the gated pass', () => {
     await expect(reader.deleteEntry(page, reply)).toBeEnabled()
     await expect(reader.editEntry(page, reply)).toBeEnabled()
     await expect(reader.editEntry(page, userEntry)).toBeEnabled()
-    await expect(reader.editEntry(page, offHead)).toBeDisabled()
+    await expect(
+      reader.gatedEntryAction(page, offHead, t('generationGate.updatingMemory')),
+    ).toBeDisabled()
     await expect(reader.suggestionRefreshAny(page)).toBeEnabled()
     await chrome.actionsTrigger(page).click()
     await expect(reader.undoMenuRow(page)).toBeEnabled()

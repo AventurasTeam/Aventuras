@@ -7,6 +7,7 @@ export { boundStateText } from './bound-text'
 export { buildStateReport } from './report'
 export { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from './scene-tracking'
 export { substitutePiggybackIds } from './substitute'
+export { CLASSIFIER_FAILURE_FIELD, unappliedStateRole } from './unapplied'
 export {
   buildSuggestionSlots,
   findSuggestionAnchor,

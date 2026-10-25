@@ -826,8 +826,11 @@ trailing `system` rows: an untruncated window covers through its last
 non-system entry, so the watermark never lands on a trailing system row
 whose position the next Send's user_action reuses (a truncated window
 still claims its cut). A successful pass over `(processedThrough, E]` sets
-`processedThrough = E` in its commit transaction, in the same write as its
-success status. A prose reversal clamps
+`processedThrough = E` in the same write as its success status, after its
+last fact and before the run's finish marker; a crash between the two
+loses that window's facts for good
+([`generation-pipeline.md → Open / deferred`](../generation-pipeline.md#open--deferred)).
+A prose reversal clamps
 it — `processedThrough ← min(processedThrough, position(B) − 1)` for `B`
 the earliest removed entry (see
 [`data-model.md → Entry mutability & rollback → Survival anchor`](../data-model.md#survival-anchor))

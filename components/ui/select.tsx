@@ -613,6 +613,10 @@ function groupOptions(options: SelectOption[]): {
   return groups
 }
 
+// The radio Root must stay controlled too: Radix reads `undefined` as uncontrolled and warns on
+// each switch. NUL is no option value, and '' is the dropdown's placeholder.
+const NO_RADIO_VALUE = '\u0000'
+
 function SegmentBranch({
   options,
   value,
@@ -624,7 +628,7 @@ function SegmentBranch({
 }: SelectProps) {
   return (
     <RadioGroupBase.Root
-      value={value}
+      value={value ?? NO_RADIO_VALUE}
       onValueChange={onValueChange}
       disabled={disabled}
       aria-label={label}
@@ -677,7 +681,7 @@ function RadioBranch({
 }: SelectProps) {
   return (
     <RadioGroupBase.Root
-      value={value}
+      value={value ?? NO_RADIO_VALUE}
       onValueChange={onValueChange}
       disabled={disabled}
       aria-label={label}

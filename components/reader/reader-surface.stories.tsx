@@ -7,7 +7,12 @@ import type { StoryEntry, SystemFailureMeta } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
 import { ReaderSurface } from './reader-surface'
-import { describePassFailure, describeTurnFailure, toPassFailureMeta } from './system-entry-actions'
+import {
+  describePassFailure,
+  describeTurnFailure,
+  passResolvedEntry,
+  toPassFailureMeta,
+} from './system-entry-actions'
 
 const NOW = 1752900000000
 
@@ -373,6 +378,42 @@ export const ClosedGateHoldsEveryRow: Story = {
   },
 }
 
+/** A gated row control is named and titled by the gate's reason; a live one keeps its own name. */
+export const GatedRowControlNamesTheRun: Story = {
+  args: {
+    ...PASS_IN_FLIGHT_ARGS,
+    editGate: 'interruptible',
+    gateReason: t('generationGate.updatingMemory'),
+  },
+  play: async () => {
+    const reason = t('generationGate.updatingMemory')
+    const pencil = await waitFor(() => within(entryRow('p3')).getByRole('button', { name: reason }))
+    expect(pencil).toBeDisabled()
+    expect(pencil.closest('[title]')?.getAttribute('title')).toBe(reason)
+    expect(rowButton('p3', t('reader:entryCard.regenerate'))).not.toBeDisabled()
+    expect(rowButton('p5', t('reader:entryCard.editEntry'))).not.toBeDisabled()
+    expect(within(entryRow('p5')).queryByRole('button', { name: reason })).not.toBeInTheDocument()
+  },
+}
+
+/** A closed gate names the head reversals' blocker on the head turn's controls too. */
+export const ClosedGateNamesItsBlocker: Story = {
+  args: {
+    ...PASS_IN_FLIGHT_ARGS,
+    editGate: 'closed',
+    gateReason: t('generationGate.suggestionRefresh'),
+  },
+  play: async () => {
+    const reason = t('generationGate.suggestionRefresh')
+    const gated = await waitFor(() => {
+      const buttons = within(entryRow('p5')).getAllByRole('button', { name: reason })
+      expect(buttons).toHaveLength(3)
+      return buttons
+    })
+    for (const button of gated) expect(button).toBeDisabled()
+  },
+}
+
 // Enough rows to overflow the 480 px box, so the viewport can shrink under a reader at the bottom.
 const OVERFLOW_ROWS: StoryEntry[] = Array.from({ length: 14 }, (_, i) =>
   entry({
@@ -548,6 +589,32 @@ export const ShrinkWhileEditingHolds: Story = {
     await shrinkViewport(scroller)
     expect(textarea).toHaveFocus()
     expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
+// The keyboard's share of a phone's reader (the triage measurement left 180 CSS px above it).
+const KEYBOARD_HEIGHT_PX = 260
+
+/** The keyboard hides the last row's editor; the reader brings its row, Save included, back up. */
+export const ShrinkWhileEditingRevealsTheEditor: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await userEvent.click(rowButton('o14', t('reader:entryCard.editEntry')))
+    const textarea = await waitFor(() =>
+      screen.getByRole('textbox', { name: t('reader:entryCard.editContent') }),
+    )
+    await waitFor(() => expect(textarea).toHaveFocus())
+    await scrollToDistance(scroller, 0)
+    await resizeViewport(scroller, -KEYBOARD_HEIGHT_PX)
+    expect(textarea).toHaveFocus()
+    const save = within(entryRow('o14')).getByRole('button', { name: t('save') })
+    await waitFor(() =>
+      expect(save.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        scroller.getBoundingClientRect().bottom,
+      ),
+    )
   },
 }
 
@@ -729,6 +796,59 @@ export const StreamEndSettleBrokenByTouch: Story = {
   },
 }
 
+/** An upward scroll key during the settle hands the position back to the user. */
+export const StreamEndSettleBrokenByPageUp: Story = {
+  render: (args) => <StreamEndHarness {...args} />,
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await endStream()
+    expect(entryRow('reply')).toBeInstanceOf(HTMLElement)
+    expect(document.querySelector('[data-grown="false"]')).toBeInstanceOf(HTMLElement)
+    // A dispatched key scrolls nothing, so the play makes the move the key would.
+    scroller.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageUp', bubbles: true }))
+    scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight - 100
+    const scrollTop = scroller.scrollTop
+    await replyGrown()
+    expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
+// A stream whose next chunk lands on a button press, so the play can move between chunks.
+function StreamChunksHarness(props: ComponentProps<typeof ReaderSurface>) {
+  const [chunks, setChunks] = useState(1)
+  const content = Array.from({ length: chunks }, () => REPLY_TEXT).join('\n\n')
+  return (
+    <div style={{ display: 'flex', height: '100%', flexDirection: 'column' }}>
+      <button type="button" onClick={() => setChunks((n) => n + 1)}>
+        Next chunk
+      </button>
+      <div style={{ minHeight: 0, flex: 1 }}>
+        <ReaderSurface {...props} rows={OVERFLOW_ROWS} streaming={{ content, reasoning: '' }} />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * reader-composer.md → Autoscroll: an upward scroll key disengages an engaged stream, though its
+ * move stays inside the at-bottom band the next chunk's re-pin would otherwise pull it out of.
+ */
+export const StreamFollowBrokenByArrowUp: Story = {
+  render: (args) => <StreamChunksHarness {...args} />,
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    scroller.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }))
+    await scrollToDistance(scroller, 40)
+    const heightBefore = scroller.scrollHeight
+    screen.getByRole('button', { name: 'Next chunk' }).click()
+    await waitFor(() => expect(scroller.scrollHeight).toBeGreaterThan(heightBefore))
+    await nextFrame()
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(40)
+  },
+}
+
 export const OlderBoundaryShimmer: Story = {
   args: { hasOlder: true },
 }
@@ -850,6 +970,16 @@ export const PassFailureHeldTextKept: Story = {
     ).not.toBeInTheDocument()
     expect(within(row).getByRole('button', { name: /Dismiss/ })).toBeVisible()
     expect(within(row).queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument()
+  },
+}
+
+const RESOLVED_PASS = passResolvedEntry({ content: 'I wade in after it.', composerMode: 'free' })
+
+// A Retry committed over an occupied draft: the entry stays to hold the text, Dismiss alone.
+export const PassResolvedTextKept: Story = {
+  args: {
+    rows: passFailureRows(RESOLVED_PASS.content, RESOLVED_PASS.failure),
+    onRetrySystemEntry: undefined,
   },
 }
 

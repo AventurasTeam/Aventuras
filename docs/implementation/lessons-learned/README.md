@@ -97,8 +97,9 @@ slice plans when relevant.
   — substrate must emit exactly one React element per tier;
   Fragments leak siblings into consumer layout.
 - [Input adornment DOM identity](./input-adornment-dom-identity.md)
-  — always render adornments, toggle visibility; conditional
-  render re-keys TextInput and loses focus.
+  — always render adornments and wrappers, toggle what they do; a
+  conditional one remounts what it wraps (a TextInput's focus, every
+  row's buttons per turn).
 - [Controlled TextInput in a portal loses the caret](./portal-controlled-textinput-caret.md)
   — the portal delivers `value` one commit late and RN's sync
   effect rewrites native text; route fields through

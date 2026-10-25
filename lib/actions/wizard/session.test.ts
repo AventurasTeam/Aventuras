@@ -307,6 +307,33 @@ describe('wizard session/draft actions', () => {
     expect(sawError).toBe(true)
   })
 
+  // Left dangling, the faction picker selects nothing while Finish commits Unaffiliated.
+  it('prunes the refs to a cast row that failed its parse, as a removal does', async () => {
+    const good = emptyWorkingState()
+    const state = {
+      ...good,
+      cast: [
+        { id: 'faction_ok', kind: 'faction', name: 'The Guild' },
+        { id: 'faction_bad', kind: 'faction', name: 42 },
+        { id: 'loc_bad', kind: 'location', name: 42 },
+        { id: 'char_lost', kind: 'character', name: 'Kara', factionId: 'faction_bad' },
+        { id: 'char_kept', kind: 'character', name: 'Bren', factionId: 'faction_ok' },
+        { id: 'loc_lost', kind: 'location', name: 'Cellar', parentLocationId: 'loc_bad' },
+      ],
+    }
+    await ctx.db
+      .insert(wizardSessions)
+      .values({ id: 'story_refs', storyId: 'story_refs', state: state as never, updatedAt: 1 })
+
+    const loaded = await loadDraft('story_refs', ctx)
+    const row = (id: string) => loaded?.state.cast.find((r) => r.id === id)
+
+    expect(loaded?.droppedRows).toBe(2)
+    expect(row('char_lost')).toMatchObject({ factionId: null })
+    expect(row('char_kept')).toMatchObject({ factionId: 'faction_ok' })
+    expect(row('loc_lost')).toMatchObject({ parentLocationId: null, parentUnknown: true })
+  })
+
   it('clears an unreadable section, toasts, and orphans the draft pointer', async () => {
     let sawError = false
     const unsub = toastStore.subscribe((items) => {

@@ -49,7 +49,9 @@ const kindPhrase = (kind: EntityKind | null) =>
 class WrongKindError extends Error {
   constructor(
     readonly ref: string,
-    kind: EntityKind | null,
+    /** What `ref` resolved to: a row's id, or a create's handle. */
+    readonly resolved: string,
+    readonly kind: EntityKind | null,
     expected: readonly EntityKind[],
   ) {
     super(`${ref} names ${kindPhrase(kind)}, not ${expected.map(kindPhrase).join(' or ')}`)
@@ -64,7 +66,7 @@ const VISUAL_KINDS: readonly EntityKind[] = ['character']
 
 function requireKind(ref: string, resolved: string, refs: Refs, kinds: readonly EntityKind[]) {
   const kind = kindOf(resolved, refs)
-  if (kind === null || !kinds.includes(kind)) throw new WrongKindError(ref, kind, kinds)
+  if (kind === null || !kinds.includes(kind)) throw new WrongKindError(ref, resolved, kind, kinds)
 }
 
 // Strict by design: the classifier's contract is that it only ever
@@ -158,7 +160,14 @@ function settler(badRef: SubstituteOptions['badRef'], dropped: DroppedRef[]): Se
       if (e instanceof MalformedPlaceholderError)
         dropped.push({ field, ref: e.placeholder, reason: 'unknown', detail: e.message })
       else if (e instanceof WrongKindError)
-        dropped.push({ field, ref: e.ref, reason: 'wrong-kind', detail: e.message })
+        dropped.push({
+          field,
+          ref: e.ref,
+          ...(isCreateHandle(e.resolved) ? {} : { id: e.resolved }),
+          ...(e.kind !== null ? { kind: e.kind } : {}),
+          reason: 'wrong-kind',
+          detail: e.message,
+        })
       else throw e
       return []
     }
@@ -184,7 +193,7 @@ function resolveTransfers(transfers: ParsedTransfers, refs: Refs, settle: Settle
 function resolveLocation(ref: string, refs: Refs, badRef: SubstituteOptions['badRef']): string {
   const resolved = resolveRefOrHandle(ref, refs)
   if (badRef === 'fail' && refs.handles.get(resolved) === 'item')
-    throw new WrongKindError(ref, 'item', ['location'])
+    throw new WrongKindError(ref, resolved, 'item', ['location'])
   return resolved
 }
 

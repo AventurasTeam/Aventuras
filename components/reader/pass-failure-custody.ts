@@ -54,6 +54,29 @@ type Submission = NonNullable<SystemFailureMeta['submission']>
 type ComposerDraft = { text: string; mode: ComposerMode }
 
 /**
+ * A pass entry's Retry committed: the entry goes and Dismiss hands its text back, unless the
+ * composer can't take it (occupied, or the user left the branch). Then the entry stays as a notice
+ * holding the text, whose own Dismiss hands it back later.
+ */
+export function planCommittedPassRetry(
+  args: { entryHasText: boolean } & PassFailureCustodyRead,
+): 'dismiss' | 'keep-notice' {
+  if (!args.entryHasText) return 'dismiss'
+  return args.stillOnBranch && args.draftEmpty ? 'dismiss' : 'keep-notice'
+}
+
+export async function settleCommittedPassRetry(deps: {
+  stored: Submission | undefined
+  custodyNow: () => PassFailureCustodyRead
+  dismiss: () => Promise<void>
+  keepNotice: (submission: Submission) => Promise<void>
+}): Promise<void> {
+  const plan = planCommittedPassRetry({ entryHasText: deps.stored != null, ...deps.custodyNow() })
+  if (plan === 'keep-notice' && deps.stored != null) return deps.keepNotice(deps.stored)
+  return deps.dismiss()
+}
+
+/**
  * A pass-entry Retry's rewrite: a held entry with no text takes the composer's draft, since it
  * advises a restart the draft wouldn't survive. Off the branch, the draft is another branch's.
  */

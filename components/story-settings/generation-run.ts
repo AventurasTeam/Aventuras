@@ -9,6 +9,7 @@ import {
   generationStore,
   interruptMemoryRuns,
   isUserEditBlocked,
+  runBlocksHeadReversal,
   type RunState,
   type TxState,
 } from '@/lib/stores'
@@ -26,10 +27,16 @@ type PillScope = { storyId: string | undefined; branchId?: string }
  * refresh beside it. `branchId` narrows the pick to that branch.
  */
 function pillRun(txState: TxState, scope: PillScope): RunState | undefined {
-  const runs = [...txState.runs.values()].filter(
-    (run) =>
-      run.storyId === scope.storyId && (scope.branchId == null || run.branchId === scope.branchId),
+  return firstByPillOrder(
+    [...txState.runs.values()].filter(
+      (run) =>
+        run.storyId === scope.storyId &&
+        (scope.branchId == null || run.branchId === scope.branchId),
+    ),
   )
+}
+
+function firstByPillOrder(runs: readonly RunState[]): RunState | undefined {
   return (
     runs.find((run) => run.kind === PER_TURN_KIND) ??
     runs.find((run) => run.interruptible) ??
@@ -44,6 +51,19 @@ export function selectStorySettingsGenerationRunKind(
   storyId: string | undefined,
 ): string | null {
   return pillRun(txState, { storyId })?.kind ?? null
+}
+
+/**
+ * The kind of the run a head reversal on `branchId` waits on, which beside a pass is not the
+ * pill's: the pass lets the reversal through, a refresh beside it does not. Null when no run holds
+ * that gate (a pending turn or a reversal's sweep may still close it).
+ */
+export function selectHeadReversalRunKind(txState: TxState, branchId: string): string | null {
+  return (
+    firstByPillOrder(
+      [...txState.runs.values()].filter((run) => runBlocksHeadReversal(run, branchId)),
+    )?.kind ?? null
+  )
 }
 
 function cancelPillRunIn(scope: PillScope): void {
@@ -63,6 +83,17 @@ export function generationGateReason(
   if (runKind === 'chapter-close') return t('generationGate.chapterClose')
   if (runKind === SUGGESTION_REFRESH_KIND) return t('generationGate.suggestionRefresh')
   return t('generationGate.inFlight')
+}
+
+/**
+ * Why a head reversal is blocked: the run it can't interrupt, else the pill's — a dispatch or a
+ * sweep can hold head reversals while the only run is one they would otherwise pass through.
+ */
+export function headReversalGateReason(
+  blocked: boolean,
+  runKinds: { headReversal: string | null; pill: string | null },
+): string | undefined {
+  return generationGateReason(blocked, runKinds.headReversal ?? runKinds.pill)
 }
 
 /** `branchId` scopes the pill's run to that branch (World, Plot); omitted, to the story. */

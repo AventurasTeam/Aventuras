@@ -9,6 +9,7 @@ import {
   wizardSessions,
   wizardWorkingStateSchema,
   type StoryDefinition,
+  type WizardCastDraft,
   type WizardWorkingState,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -119,6 +120,20 @@ function salvageRows<T>(
   return { rows, dropped, structural: false }
 }
 
+// A row that failed its parse is gone, so the refs to it go too, as removeCast prunes them: left
+// standing, a faction picker would select nothing while Finish commits the character unaffiliated.
+function pruneDanglingCastRefs(cast: WizardCastDraft[]): WizardCastDraft[] {
+  const factions = new Set(cast.filter((r) => r.kind === 'faction').map((r) => r.id))
+  const locations = new Set(cast.filter((r) => r.kind === 'location').map((r) => r.id))
+  return cast.map((r) => {
+    if (r.kind === 'character' && r.factionId != null && !factions.has(r.factionId))
+      return { ...r, factionId: null }
+    if (r.kind === 'location' && r.parentLocationId != null && !locations.has(r.parentLocationId))
+      return { ...r, parentLocationId: null, parentUnknown: true }
+    return r
+  })
+}
+
 // Scalar shell resets wholesale; row arrays salvage element-wise, like decodeCaptures.
 function parsePersistedState(
   raw: unknown,
@@ -148,7 +163,11 @@ function parsePersistedState(
   }
   if (dropped > 0) toast.error(t('landing:errors.sessionRowsDropped', { count: dropped }))
   if (structural) toast.error(t('landing:errors.sessionSectionUnreadable'))
-  return { state: { ...shell.data, lore: lore.rows, cast: cast.rows }, ok: !structural, dropped }
+  return {
+    state: { ...shell.data, lore: lore.rows, cast: pruneDanglingCastRefs(cast.rows) },
+    ok: !structural,
+    dropped,
+  }
 }
 
 type DraftSession = {

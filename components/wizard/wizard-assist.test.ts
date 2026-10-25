@@ -590,6 +590,30 @@ describe('wizardTemplateContext', () => {
     expect(castRow).toMatchObject({ id: 'loc_1', kind: 'location', parentLocationId: null })
   })
 
+  // A pack can reach anything projected, and can't be withdrawn from it once released.
+  it("keeps the editor's unresolved asks off character and location rows", () => {
+    const state = {
+      ...emptyWorkingState(),
+      cast: [
+        {
+          ...emptyCastDraft('character', 'char_1'),
+          name: 'Aria',
+          unresolvedFactionName: 'The Iron Guild',
+        },
+        {
+          ...emptyCastDraft('location', 'loc_1'),
+          name: 'Lower',
+          unresolvedParentLocationName: 'Mornstone Keep',
+        },
+      ],
+    }
+    const [character, location] = wizardTemplateContext(state, '').cast as Record<string, unknown>[]
+    expect(character).not.toHaveProperty('unresolvedFactionName')
+    expect(character).toMatchObject({ id: 'char_1', kind: 'character', factionId: null })
+    expect(location).not.toHaveProperty('unresolvedParentLocationName')
+    expect(location).toMatchObject({ id: 'loc_1', kind: 'location', parentLocationId: null })
+  })
+
   it('drops tags from cast and lore rows, keeping every other field', () => {
     const state = {
       ...emptyWorkingState(),

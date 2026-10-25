@@ -52,6 +52,31 @@ export function offersUserAction(action: RegenerateOutcomeAction): boolean {
   )
 }
 
+type Submission = { content: string; composerMode: string }
+
+/**
+ * A regenerate's custody of the failure entry its tail drop destroyed (reader-composer.md →
+ * Custody of the turn's text): once `settle` has put the arm's own text in the draft or on its
+ * entry, the dropped entry's text goes to the draft, unless it is that same text. A throwing
+ * `settle` still hands it back before the throw propagates. The rejection arm puts the entry
+ * back instead, so it never comes through here.
+ */
+export async function settleWithDroppedHandback(deps: {
+  dropped: Submission | undefined
+  /** Resolves to the text the arm left in the draft or on its own entry, or null for none. */
+  settle: () => Promise<string | null>
+  stillOnBranch: () => boolean
+  handBack: (submission: Submission) => void
+}): Promise<void> {
+  let settled: string | null = null
+  try {
+    settled = await deps.settle()
+  } finally {
+    if (deps.dropped != null && deps.dropped.content !== settled && deps.stillOnBranch())
+      deps.handBack(deps.dropped)
+  }
+}
+
 export function shouldRestoreUserActionAfterHandlingFailure(
   action: RegenerateOutcomeAction,
   draftEmpty: boolean,

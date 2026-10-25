@@ -10,6 +10,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type PointerEvent,
   type Ref,
   type UIEvent,
   type WheelEvent,
@@ -24,7 +25,12 @@ import { useTier } from '@/hooks/use-tier'
 import type { Tier } from '@/hooks/use-tier'
 import type { CalendarFrame } from '@/lib/calendar'
 import type { StoryEntry } from '@/lib/db'
-import { computeScrollMetrics, createAutoscrollMachine } from '@/lib/reader-scroll'
+import {
+  computeScrollMetrics,
+  createAutoscrollMachine,
+  isScrollbarPress,
+  isUpwardScrollKey,
+} from '@/lib/reader-scroll'
 
 import type { EditResult, ReaderSurfaceHandle, ReaderSurfaceProps } from './reader-document-types'
 import { headTurnIdsOf, rowReversalFlags } from './row-reversal-flags'
@@ -43,6 +49,16 @@ const NEAR_TOP_IDLE_MS = 150
 // compensation, and scrolling exact.
 const ROW_FRAME_CLASS = 'mx-auto w-full max-w-[860px] px-7 py-2'
 
+// A key typed into a field moves its caret, not the reader.
+function isEditableTarget(target: Node): boolean {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  )
+}
+
 type ReaderRowProps = {
   row: StoryEntry
   tier: Tier
@@ -52,6 +68,7 @@ type ReaderRowProps = {
   // Split from editBlocked by rowReversalFlags, so the head reversals stay live during a pass.
   editDisabled: boolean
   reversalDisabled: boolean
+  disabledReason?: string
   systemFixLabel?: string
   // Flat primitives rather than the decoration object: a fresh `{…}` per walk
   // would defeat the shallow memo compare the same way a merged row would.
@@ -94,6 +111,7 @@ const ReaderRow = memo(function ReaderRow({
   editBlocked,
   editDisabled,
   reversalDisabled,
+  disabledReason,
   systemFixLabel,
   worldTimeLabel,
   worldTimeRaw,
@@ -141,6 +159,7 @@ const ReaderRow = memo(function ReaderRow({
       meta={row.metadata ?? undefined}
       reasoning={row.metadata?.reasoning}
       disabled={editBlocked}
+      disabledReason={disabledReason}
       editDisabled={editDisabled}
       reversalDisabled={reversalDisabled}
       editing={editing}
@@ -194,6 +213,7 @@ export function ReaderSurface({
   branchKey,
   hasOlder,
   editGate,
+  gateReason,
   jumpButtonEnabled,
   systemFixLabel,
   entityNames,
@@ -244,7 +264,7 @@ export function ReaderSurface({
   }, [branchKey])
   // Bottom pin: late layout (font swaps, image decode) can still grow content
   // after a scrollTop write, so re-assert per frame until the scroll height
-  // settles. A wheel or touch drag breaks it.
+  // settles. A wheel, touch drag, scrollbar press or upward scroll key breaks it.
   const pinRafRef = useRef(0)
   const stopBottomPin = useCallback(() => {
     pinActiveRef.current = false
@@ -404,6 +424,39 @@ export function ReaderSurface({
     [stopBottomPin],
   )
 
+  // A scrollbar press or an upward scroll key moves the view less than the at-bottom band, so
+  // without this the bottom pin or the next chunk's re-pin pulls it straight back.
+  const interruptByGesture = useCallback(() => {
+    stopBottomPin()
+    anchorHoldActiveRef.current = false
+    autoscrollRef.current.userInterrupted()
+  }, [stopBottomPin])
+  const handlePointerDown = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      const el = event.currentTarget
+      const press = { onScroller: event.target === el, offsetX: event.nativeEvent.offsetX }
+      if (isScrollbarPress({ ...press, clientWidth: el.clientWidth })) interruptByGesture()
+    },
+    [interruptByGesture],
+  )
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el == null) return
+    const doc = el.ownerDocument
+    // On the document, not the scroller: with nothing focused the key lands on the body yet still
+    // scrolls the scroller last pressed.
+    const onKeyDown = (event: KeyboardEvent) => {
+      // A reader left mounted under another screen isn't laid out, and the key isn't its.
+      if (event.defaultPrevented || !isUpwardScrollKey(event) || el.getClientRects().length === 0)
+        return
+      const target = event.target
+      if (!(target instanceof Node) || isEditableTarget(target)) return
+      if (target === doc.body || el.contains(target)) interruptByGesture()
+    }
+    doc.addEventListener('keydown', onKeyDown)
+    return () => doc.removeEventListener('keydown', onKeyDown)
+  }, [interruptByGesture])
+
   // Touch drags interrupt like native drag-begin did — keyed off the first
   // touchmove, not touchstart, so plain taps can't disengage a pinned stream.
   const handleTouchStart = useCallback(() => {
@@ -462,11 +515,18 @@ export function ReaderSurface({
       const previousClientHeight = lastClientHeight
       lastClientHeight = el.clientHeight
       if (el.clientHeight >= previousClientHeight || gestureActiveRef.current) return
-      // The Android keyboard opening under an in-row editor would push the editor up under
-      // the top. hasFocus: a tap on the native composer leaves activeElement on an open editor.
+      // Pinning the bottom under an in-row editor would push it up under the top, yet the Android
+      // keyboard can still hide it, which its WebView never scrolls into view: bring the editor's
+      // row, Save included, just into view. hasFocus: a tap on the native composer leaves
+      // activeElement on an open editor.
       const doc = el.ownerDocument
       const active = doc.activeElement
-      if (active instanceof HTMLTextAreaElement && el.contains(active) && doc.hasFocus()) return
+      if (active instanceof HTMLTextAreaElement && el.contains(active) && doc.hasFocus()) {
+        const row = active.closest('[data-entry-row]') ?? active
+        const hiddenPx = row.getBoundingClientRect().bottom - el.getBoundingClientRect().bottom
+        if (hiddenPx > 0) el.scrollTop += hiddenPx
+        return
+      }
       // Read from geometry, not lastDistanceRef: content can grow below without a scroll
       // event, and a shrink never clamps scrollTop.
       const distanceBeforePx = el.scrollHeight - el.scrollTop - previousClientHeight
@@ -537,6 +597,7 @@ export function ReaderSurface({
         className="h-full overflow-y-auto [overflow-anchor:none]"
         onScroll={handleScroll}
         onWheel={handleWheel}
+        onPointerDown={handlePointerDown}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -564,6 +625,7 @@ export function ReaderSurface({
                 editBlocked={editGate !== 'open'}
                 editDisabled={flags.editDisabled}
                 reversalDisabled={flags.reversalDisabled}
+                disabledReason={gateReason}
                 systemFixLabel={systemFixLabel}
                 worldTimeLabel={decoration?.label}
                 worldTimeRaw={decoration?.raw}

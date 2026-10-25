@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { CalendarClock, GitBranch, Pencil, RotateCw, Trash2 } from 'lucide-react-native'
+import { CalendarClock, GitBranch, Globe, Pencil, RotateCw, Trash2 } from 'lucide-react-native'
+import { useState } from 'react'
 import { View } from 'react-native'
-import { expect, fireEvent, fn, userEvent, waitFor } from 'storybook/test'
+import { expect, fireEvent, fn, userEvent, waitFor, within } from 'storybook/test'
 
 import { themes } from '@/lib/themes'
 
@@ -16,7 +17,7 @@ const meta: Meta<typeof IconAction> = {
   argTypes: {
     icon: { control: false },
     size: { control: 'select', options: ['sm', 'md', 'lg'] },
-    variant: { control: 'select', options: ['default', 'destructive'] },
+    variant: { control: 'select', options: ['default', 'destructive', 'alert'] },
     disabled: { control: 'boolean' },
   },
 }
@@ -33,6 +34,7 @@ export const Variants: Story = {
     <View className="flex-row items-center gap-3">
       <IconAction icon={Pencil} label="Edit" />
       <IconAction icon={Trash2} label="Delete" variant="destructive" />
+      <IconAction icon={Globe} label="Show world state, not all of it applied" variant="alert" />
     </View>
   ),
 }
@@ -146,6 +148,7 @@ export const ThemeMatrix: Story = {
               <IconAction icon={RotateCw} label="Regenerate" />
               <IconAction icon={GitBranch} label="Branch" />
               <IconAction icon={Trash2} label="Delete" variant="destructive" />
+              <IconAction icon={Globe} label="World state" variant="alert" />
             </View>
           </View>
         </View>
@@ -180,5 +183,35 @@ export const DisabledBlocksPress: Story = {
     expect(button).toBeDisabled()
     fireEvent.click(button)
     expect(args.onPress).not.toHaveBeenCalled()
+  },
+}
+
+// The reader disables every row's icons at once as a turn starts: a wrapper that came and went
+// with the reason remounted each button.
+function DisablingAction() {
+  const [disabled, setDisabled] = useState(false)
+  return (
+    <View className="flex-row items-center gap-3">
+      <IconAction
+        icon={Pencil}
+        label="Edit"
+        disabled={disabled}
+        disabledReason="A turn is running"
+      />
+      <IconAction icon={RotateCw} label="Toggle" onPress={() => setDisabled((d) => !d)} />
+    </View>
+  )
+}
+
+export const KeepsItsButtonAsItDisables: Story = {
+  render: () => <DisablingAction />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const before = canvas.getByRole('button', { name: 'Edit' })
+    expect(before.closest('[title]')).toBeNull()
+    await userEvent.click(canvas.getByRole('button', { name: 'Toggle' }))
+    const after = await waitFor(() => canvas.getByRole('button', { name: 'A turn is running' }))
+    expect(after).toBe(before)
+    expect(after.closest('[title]')).toHaveAttribute('title', 'A turn is running')
   },
 }

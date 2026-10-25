@@ -1266,7 +1266,10 @@ Older · 3 days ago:   [ Kael                       ]
 Newer · just now:     [ Kaelan (the guardsman)     ]
 ```
 
-Editing either field dirties the form. Save commits under one
+Editing either field dirties the form. A rename made elsewhere while
+the dialog is open (a pass, another surface) replaces a field still
+showing that row's old name, so Save can't send the old name back over
+it; a field the user edited keeps the edit. Save commits under one
 delta `action_id`: an `updateEntity` per row whose name changed,
 and the flag cleared on each row of the pair whose partner is the
 other row or is gone (folded into that row's rename when it has

@@ -31,3 +31,8 @@ export function resolveHeadTurn<T extends TurnEntry>(rows: readonly T[]): HeadTu
     origin: tail.kind === 'ai_reply' && previous?.kind === 'user_action' ? previous : null,
   }
 }
+
+/** The head turn's members in position order: the `user_action` it answers, if any, then the tail. */
+export function headTurnEntries<T extends TurnEntry>(head: HeadTurn<T>): readonly T[] {
+  return head.origin == null ? [head.tail] : [head.origin, head.tail]
+}

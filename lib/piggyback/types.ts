@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import type { Entity, EntryMetadata, VISUAL_CATEGORIES } from '@/lib/db'
+import type { Entity, EntityKind, EntryMetadata, VISUAL_CATEGORIES } from '@/lib/db'
 
 // Mirrors CharacterState['visual']'s keys (lib/db/entities/entity-state-schema.ts →
 // VISUAL_CATEGORIES) — the only categories a full-replace visual change can target.
@@ -115,6 +115,10 @@ export const isDroppedRefField = (field: string): field is DroppedRef['field'] =
 export type DroppedRef = {
   field: (typeof DROPPED_REF_FIELDS)[number]
   ref?: string
+  /** A wrong-kind ref's row, so the reader can name it: `ref` is the prompt's placeholder. */
+  id?: string
+  /** The kind a wrong-kind ref named, a create's included. */
+  kind?: EntityKind
   reason: 'unknown' | 'wrong-kind' | 'unreadable'
   detail: string
 }

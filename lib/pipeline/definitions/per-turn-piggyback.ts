@@ -14,6 +14,7 @@ import { isJsonObject } from '@/lib/json-object'
 import {
   buildPiggybackActions,
   buildStateReport,
+  CLASSIFIER_FAILURE_FIELD,
   isDroppedRefField,
   MAX_RETRIEVAL_QUERIES,
   normalizeCreates,
@@ -458,7 +459,7 @@ export async function* piggybackFallbackClassifierPhase(
       ...('detail' in result ? { errorDetail: result.detail } : {}),
     })
     const classifierFailure = {
-      field: 'classifier',
+      field: CLASSIFIER_FAILURE_FIELD,
       detail:
         'kind' in result
           ? `classifier call ${result.status}: ${result.kind}`

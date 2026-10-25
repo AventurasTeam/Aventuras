@@ -906,13 +906,15 @@ function RenameBody({
   const [nameA, setNameA] = useState(entityA.name)
   const [nameB, setNameB] = useState(entityB.name)
 
-  // Reset names if entity inputs change.
+  // A new pair re-seeds both inputs. A rename made elsewhere re-seeds an input still showing the
+  // old name, which Save would otherwise send back over it; an edited input keeps the edit.
   const pairKey = `${entityA.id}::${entityB.id}`
-  const lastPairRef = useRef(pairKey)
-  if (lastPairRef.current !== pairKey) {
-    lastPairRef.current = pairKey
-    setNameA(entityA.name)
-    setNameB(entityB.name)
+  const [seeded, setSeeded] = useState({ pairKey, a: entityA.name, b: entityB.name })
+  if (seeded.pairKey !== pairKey || seeded.a !== entityA.name || seeded.b !== entityB.name) {
+    const samePair = seeded.pairKey === pairKey
+    setSeeded({ pairKey, a: entityA.name, b: entityB.name })
+    if (!samePair || nameA === seeded.a) setNameA(entityA.name)
+    if (!samePair || nameB === seeded.b) setNameB(entityB.name)
   }
 
   const issue = renameIssue([entityA.name, entityB.name], [nameA, nameB])

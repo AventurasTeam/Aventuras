@@ -447,7 +447,13 @@ Maps to [`CharacterState`](../../../data-model.md#characterstate-shape).
 - **`▼ More options`** — tags + faction. Faction picker reads
   currently-authored factions in the wizard's cast list;
   `(no factions yet — add one with + Add)` empty state when none
-  exist. `null` = unaffiliated.
+  exist. `null` = unaffiliated. A faction removed from the cast,
+  including one a resumed draft couldn't load, leaves the character
+  unaffiliated. While an AI-proposed faction the wizard couldn't
+  resolve is still asked for, the picker offers and selects
+  `<name> (unresolved)`, even with no faction to pick, as the
+  [location picker](#location-editor) offers `Unknown`; any pick,
+  `Unaffiliated` included, settles the ask.
 
 **Not in wizard editor** (per the authorship contract,
 classifier-managed per-turn): `current_location_id`,
@@ -473,8 +479,10 @@ location itself and any location whose chain of parents already
 leads back to it, so the cast can't loop. Finish still refuses a
 loop as a backstop. The picker offers `Top level` and the cast's
 places; with no place to offer and the parent not unknown, it shows
-its empty-state text instead,
-`(no locations yet — add one with + Add)`. While the parent is unknown
+its empty-state text instead: `(no locations yet — add one with + Add)`
+when the cast holds no other place, and
+`(every other location sits inside this one)` when every other place
+would close a loop. While the parent is unknown
 (an AI-proposed name the wizard couldn't resolve, an imported parent
 dropped for a loop, or a parent removed from the cast, including one a
 resumed draft couldn't load) it also offers `Unknown`, until a parent

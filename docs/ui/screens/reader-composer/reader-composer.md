@@ -512,6 +512,7 @@ chrome blip.
 | **LLM call failed**                                                                                                                                                                                                    | `Retry` · `View details` · `Dismiss`              |
 | **Memory update failed** before the turn, failing the Send ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy))                                                                   | `Retry` · `View details` · `Dismiss`              |
 | **Memory update failed**, branch held (an earlier update couldn't be undone, so Send is refused)                                                                                                                       | `Dismiss`                                         |
+| **Memory updated** on `Retry`, its text kept on the entry ([Custody of the turn's text](#custody-of-the-turns-text))                                                                                                   | `Dismiss`                                         |
 | **Embed call failed** mid-turn (blocking per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle); the composer is not gated — a resubmit re-runs the same blocking sync stage) | `Switch embedder` · `Retry` · `Dismiss`           |
 | **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `View details` · `Dismiss`        |
 | **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `View details` · `Dismiss`        |
@@ -561,15 +562,30 @@ surface via the existing global broken-config banner instead.
 A failure entry carries the submission that produced it
 (`metadata.systemFailure.submission`), and since the turn's
 `user_action` was reverse-replayed with the run, that copy is the only
-one left. It is a convenience for `Retry`, not a vault: **every path
-that destroys the entry hands the submission back to the composer
-draft** — `Dismiss`, a pass entry's `Retry` whose pass commits (it
-clears the entry through `Dismiss`), and the pre-dispatch tail clear on
-a regenerate that then throws. An empty draft receives the text
-verbatim under composer mode `Free`, since the stored content is
-already wrapped and must not be wrapped twice; a non-empty draft wins
-and the user is told the text was dropped rather than losing it
-silently.
+one left. It is a convenience for `Retry`, not a vault.
+
+**A Send supersedes the entry's text.** The user wrote the Send's
+text while the entry and its `Retry` stood, so the entry's text is
+stale: the Send's pre-dispatch tail clear drops it with no hand-back
+and no toast. **Any other dispatch that destroys the entry without
+putting it back hands the submission to the composer draft once its
+own text has settled**: `Dismiss`, and every regenerate outcome but
+the rejection (a completed take, a failed or blocked one, a cancel, a
+throw). A regenerate whose own text is the same, on its new failure
+entry or back in the draft, hands nothing back. `Dismiss` hands the
+text back once the row is deleted, even when the reload after it
+fails: the stale card left on screen no longer holds it. An empty draft
+receives the text verbatim under composer mode `Free`, since the
+stored content is already wrapped and must not be wrapped twice; a
+non-empty draft wins and the user is told the text was dropped rather
+than losing it silently. A reader closed under the dispatch has no
+composer to take the text, and nothing claims it was restored.
+
+A pass entry's `Retry` whose pass commits clears the entry through
+`Dismiss` only when the composer can take its text back. Over an
+occupied draft, or once the user has left the branch, the entry stays
+as a notice holding the text, with no `Retry` and copy that says so,
+and its `Dismiss` hands the text back.
 
 A **Memory update failed** entry carries the submission only where
 the composer can't hold the text. A Send refused on a held branch
@@ -978,7 +994,14 @@ composer chrome sits below the entries.
 **Disengage.** Any user-initiated scroll upward during a stream →
 disengaged for the rest of the stream. Detection: track `scrollTop`
 set by autoscroll programmatically; if a `scroll` event reports a
-different value, it's user-initiated.
+different value, it's user-initiated. A move inside the ~80px band
+would be re-pinned by the next chunk before it could leave it, so an
+upward gesture disengages at once: a wheel up, a touch drag, a press
+on the reader's scrollbar, or an upward scroll key (Arrow Up, Page
+Up, Home, Shift+Space) outside a text field. A press counts as the
+scrollbar's only past the reader's client width, so an overlay
+scrollbar (macOS's default), which takes none, isn't one
+([parked](../../../parked.md#overlay-scrollbar-presses-breaking-the-autoscroll-pin)).
 
 **Re-engage (auto).** User scrolls back to within ~80px of bottom
 while still in the same stream → autoscroll re-engages. Viewport
@@ -989,8 +1012,8 @@ re-evaluates the engage condition fresh. An engaged end holds the
 bottom while the reply settles: the committed row replaces the
 streaming card and lays out taller (its footer arrives with it), so
 the viewport re-asserts the bottom each frame until the content
-height holds, and a wheel or touch gesture hands control back. A
-disengaged end moves nothing.
+height holds, and any of those gestures, or a wheel down, hands
+control back. A disengaged end moves nothing.
 
 **Layout shifts during a stream.**
 
@@ -1016,9 +1039,12 @@ without the re-pin, the reply's last lines would stay hidden for the
 whole pass. A draft that grows the composer is another trigger.
 Further from the bottom the user keeps their position, and a
 viewport that grows needs nothing. An entry's inline editor that has
-focus holds the position too: on Android the keyboard opening under
-it shrinks the viewport, and pinning the bottom then would push the
-editor up under the top bar.
+focus doesn't re-pin: on Android the keyboard opening under it
+shrinks the viewport, and pinning the bottom then would push the
+editor up under the top bar. The reader instead scrolls just far
+enough to bring the editor's row, Save and Cancel included, back
+into view, since Android's WebView never scrolls a focused field into
+view itself; an editor already in view holds its position.
 
 **Streaming while in a non-recent window.** Pipeline writes happen
 in the data layer regardless of which window is rendered. The
