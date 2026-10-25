@@ -19,7 +19,8 @@ type LeaveStory = (proceed: () => void) => void
 
 /**
  * Hand the draft back only once the entry is gone: a rejected clear keeps Retry, and a
- * composer copy would run the turn twice. Off-branch, the hand-back is dropped, not pasted.
+ * composer copy would run the turn twice. A rejected reload still hands it back, since the row
+ * holding it is gone. Off-branch, the hand-back is dropped, not pasted.
  */
 export async function dismissSystemEntry(deps: {
   submission: SystemFailureMeta['submission']
@@ -29,8 +30,11 @@ export async function dismissSystemEntry(deps: {
   handBack: (submission: SystemFailureMeta['submission']) => void
 }): Promise<void> {
   await deps.clear()
-  await deps.reload()
-  if (deps.stillOnBranch()) deps.handBack(deps.submission)
+  try {
+    await deps.reload()
+  } finally {
+    if (deps.stillOnBranch()) deps.handBack(deps.submission)
+  }
 }
 
 // Exhaustive per wording set: a new resolver kind is a type error, not another kind's copy.

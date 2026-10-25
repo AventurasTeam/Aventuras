@@ -448,7 +448,13 @@ describe('dismissSystemEntry', () => {
     composerMode: 'free',
   }
 
-  function harness(over: { clear?: () => Promise<void>; stillOnBranch?: () => boolean } = {}) {
+  function harness(
+    over: {
+      clear?: () => Promise<void>
+      reload?: () => Promise<void>
+      stillOnBranch?: () => boolean
+    } = {},
+  ) {
     const order: string[] = []
     const handBack = vi.fn<(s: SystemFailureMeta['submission']) => void>(() => {
       order.push('handBack')
@@ -464,10 +470,12 @@ describe('dismissSystemEntry', () => {
             order.push('clear')
             return Promise.resolve()
           }),
-        reload: (): Promise<void> => {
-          order.push('reload')
-          return Promise.resolve()
-        },
+        reload:
+          over.reload ??
+          ((): Promise<void> => {
+            order.push('reload')
+            return Promise.resolve()
+          }),
         stillOnBranch: over.stillOnBranch ?? ((): boolean => true),
         handBack,
       },
@@ -497,6 +505,21 @@ describe('dismissSystemEntry', () => {
 
     expect(h.handBack).not.toHaveBeenCalled()
     expect(h.order).toEqual(['clear'])
+  })
+
+  // The row holding the text is already deleted, so the stale card is not a copy to keep it in.
+  it('still hands the draft back when the reload rejects', async () => {
+    const h = harness({
+      reload: () => {
+        h.order.push('reload')
+        return Promise.reject(new Error('read failed'))
+      },
+    })
+
+    await expect(dismissSystemEntry(h.deps)).rejects.toThrow('read failed')
+
+    expect(h.order).toEqual(['clear', 'reload', 'handBack'])
+    expect(h.handBack).toHaveBeenCalledWith(SUBMISSION)
   })
 
   it('drops the hand-back when the branch changed under the awaits', async () => {

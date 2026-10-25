@@ -572,7 +572,9 @@ putting it back hands the submission to the composer draft once its
 own text has settled**: `Dismiss`, and every regenerate outcome but
 the rejection (a completed take, a failed or blocked one, a cancel, a
 throw). A regenerate whose own text is the same, on its new failure
-entry or back in the draft, hands nothing back. An empty draft
+entry or back in the draft, hands nothing back. `Dismiss` hands the
+text back once the row is deleted, even when the reload after it
+fails: the stale card left on screen no longer holds it. An empty draft
 receives the text verbatim under composer mode `Free`, since the
 stored content is already wrapped and must not be wrapped twice; a
 non-empty draft wins and the user is told the text was dropped rather
