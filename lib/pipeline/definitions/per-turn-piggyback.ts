@@ -111,8 +111,8 @@ const issuesText = (issues: readonly z.core.$ZodIssue[]): string =>
     )
     .join('; ')
 
-// The model is shown `entry` alone: one that fails it parses as an UnreadableEntry instead of failing
-// the reply. zod calls a catch with no context for its JSON Schema default, so none is shown.
+// The model is shown `entry` alone: one that fails it parses as an UnreadableEntry rather than
+// failing the reply. zod calls a catch with no context for its JSON Schema default, so none shows.
 function tolerantEntry<T extends z.ZodType>(
   entry: T,
   list: string,
@@ -373,8 +373,8 @@ function usableStackables(
 }
 
 /**
- * The reply less each entry it can't use, which is returned as an `unreadable` dropped ref: an entry
- * its schema couldn't read, and a stackable the tags' parser would refuse.
+ * The reply less each entry it can't use, returned as an `unreadable` dropped ref: an entry its
+ * schema couldn't read, and a stackable the tags' parser would refuse.
  */
 export function readFallbackReply(value: FallbackReply) {
   const dropped: DroppedRef[] = []
@@ -433,8 +433,8 @@ function carriedTransfers(
   }
 }
 
-// A failed fold lands its visual changes, conditions and transfers (bar drops it can't place), so
-// each record stays unless something in this reply's list changed World too, as apply.ts counts it.
+// A failed fold lands its visual changes, conditions and item moves, not stackables or drops it
+// can't place: each record stays unless this reply's list changed World too, as apply.ts counts.
 function withFoldChanges(
   report: StateReport | undefined,
   prior: StateReport | undefined,
