@@ -191,7 +191,8 @@ the error under it, example spellings included, when the text is not a time. Tim
 carried over, so when what was typed overflows (D400 is Y2 D35), an (i) beside the input opens
 what it is stored as (`convertedStoryTime` in `services/storyTime`). Otherwise the field shows
 nothing more: a reading of every time repeated the input and, beside it, widened the form. The
-caller's own help text goes below the field.
+caller's own help text goes below the field. The input is sized for `Y999999 D9999 23:59`;
+longer text scrolls inside it.
 
 ## Feature colours
 

@@ -50,7 +50,8 @@
       bind:value
       {disabled}
       class={cn(
-        'w-full max-w-48',
+        // Sized for Y999999 D9999 23:59, plus its padding and border; longer text scrolls inside.
+        'w-[calc(19ch+1.5rem+2px)] max-w-full',
         compact ? 'h-7 text-xs' : 'h-8 text-sm',
         invalid && 'border-destructive',
       )}
