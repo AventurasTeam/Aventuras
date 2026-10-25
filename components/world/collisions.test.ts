@@ -96,6 +96,21 @@ describe('deriveCollisions', () => {
     expect(map.size).toBe(0)
   })
 
+  it('leaves a row’s dormant flag without a strip though its partner’s live flag names it', () => {
+    const place = (id: string, parentId: string, flag: Partial<Entity>) =>
+      entity(id, id, { kind: 'location', state: { parent_location_id: parentId }, ...flag })
+    const map = deriveCollisions([
+      place('Market', 'loc_p', {
+        ...flaggedWith('Market Stalls'),
+        nameCollisionReason: 'same-parent',
+      }),
+      place('Market Stalls', 'loc_q', flaggedWith('Market')),
+    ])
+    expect([...map.entries()]).toEqual([
+      ['Market Stalls', { otherId: 'Market', otherName: 'Market' }],
+    ])
+  })
+
   it('with 3+ namesakes, each flagged row pairs with its own partner', () => {
     const map = deriveCollisions([
       entity('base', 'Sage', { createdAt: 1 }),
