@@ -29,7 +29,14 @@ state — who is present, where you are, what you carry — is tracked turn by t
   suggestions that match how you write.
 - **Yours to keep** — SQLite on your machine, full backup/restore, `.avt` story export, LAN sync
   between devices over QR pairing, and an optional translation layer over the whole app.
+- **Story time** — every entry knows when it happens in the story's world. Anchor the moments you
+  are sure of, and reconcile the stretches between them when the clock drifts.
 - **26 themes**, adjustable text size, dialogue highlighting.
+
+## Guides
+
+- [Story time](guides/story-time.md) — why story time drifts, anchors and reference points,
+  timeline anomalies, reconciling a stretch, and a new story's starting time.
 
 ## Install
 
