@@ -37,7 +37,7 @@ import { BaseAIService } from '../BaseAIService'
 import { WORLD_STATE_INJECTION_DEFAULTS } from '../core/defaults'
 import { createLogger } from '#lib/log.ts'
 import { entityNameMatches, measureMatching } from '#lib/utils/text.ts'
-import { itemLocationLabel, readItemPlacement } from '#lib/utils/itemLocation.ts'
+import { INVENTORY, itemLocationLabel, readItemPlacement } from '#lib/utils/itemLocation.ts'
 import { activity } from '#lib/stores/activity.svelte.ts'
 import {
   runTier3Selection,
@@ -427,8 +427,7 @@ export class WorldStateInjector extends BaseAIService {
 
     // Inventory items
     for (const item of worldState.items) {
-      const placement = readItemPlacement(item, worldState.locations)
-      if (placement.kind !== 'inventory') continue
+      if (item.location !== INVENTORY) continue
       entries.push({
         type: 'item',
         id: item.id,
@@ -438,7 +437,7 @@ export class WorldStateInjector extends BaseAIService {
         priority: 70,
         metadata: {
           quantity: item.quantity,
-          equipped: placement.equipped,
+          equipped: item.equipped,
         },
       })
       includedIds.add(item.id)

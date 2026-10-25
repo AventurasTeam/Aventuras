@@ -964,19 +964,19 @@ function createInspectWorldStateTool({
       }
 
       if (category === 'items' || category === 'all') {
-        const placed = (ws.items ?? []).map((i: Item) => {
-          const placement = readItemPlacement(i, ws.locations ?? [])
-          return { item: i, placement, label: itemLocationLabel(placement) }
-        })
+        const placed = (ws.items ?? []).map((i: Item) => ({
+          item: i,
+          label: itemLocationLabel(readItemPlacement(i, ws.locations ?? [])),
+        }))
         const matched = placed.filter(
           ({ item, label }) => match(item.name) || match(item.description) || match(label),
         )
         totalMatched += matched.length
-        const sliced = matched.slice(0, limit).map(({ item, placement, label }) => ({
+        const sliced = matched.slice(0, limit).map(({ item, label }) => ({
           id: item.id,
           name: item.name,
           location: label,
-          equipped: placement.kind === 'inventory' && placement.equipped,
+          equipped: item.equipped,
           description: item.description,
         }))
         totalReturned += sliced.length

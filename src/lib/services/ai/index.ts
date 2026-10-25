@@ -120,7 +120,6 @@ import { joinPromptBlocks } from '#lib/utils/promptBlocks.ts'
 import { activity } from '#lib/stores/activity.svelte.ts'
 import { saveLoreSession } from './lorebook'
 import { describeActivityError, failStep, isAbortError } from '#lib/services/activity/index.ts'
-import { isEquipped } from '#lib/utils/itemLocation.ts'
 
 // Timeline Fill service settings (per design doc section 3.1.4: Static Retrieval)
 export interface TimelineFillSettings {
@@ -439,7 +438,7 @@ class AIService {
     )
 
     // Get inventory items (those that are equipped)
-    const inventory = worldState.items?.filter((i) => isEquipped(i, worldState.locations ?? []))
+    const inventory = worldState.items?.filter((i) => i.equipped)
 
     // Build context for the service
     const context = {

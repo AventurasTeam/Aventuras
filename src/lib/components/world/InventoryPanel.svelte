@@ -26,11 +26,9 @@
   import { cn } from '#lib/utils/cn.ts'
   import { database } from '#lib/services/database.ts'
   import {
-    isEquipped,
-    isInInventory,
+    INVENTORY,
     itemLocationId,
     itemLocationLabel,
-    normalizeItemLocation,
     readItemPlacement,
   } from '#lib/utils/itemLocation.ts'
   import RuntimeVariableDisplay from './RuntimeVariableDisplay.svelte'
@@ -82,10 +80,8 @@
     }
   }
 
-  const carriedItems = $derived(
-    story.inventoryItems.filter((item) => !isEquipped(item, story.locations)),
-  )
-  const worldItems = $derived(story.items.filter((item) => !isInInventory(item, story.locations)))
+  const carriedItems = $derived(story.inventoryItems.filter((item) => !item.equipped))
+  const worldItems = $derived(story.items.filter((item) => item.location !== INVENTORY))
 
   function toggleCollapse(itemId: string) {
     const isCollapsed = ui.isEntityCollapsed(itemId)
@@ -106,7 +102,7 @@
     editName = item.name
     editDescription = item.description ?? ''
     editQuantity = item.quantity
-    editEquipped = isEquipped(item, story.locations)
+    editEquipped = item.equipped
     // Reset other modes
     droppingItemId = null
     // Initialize runtime vars from entity metadata
@@ -142,13 +138,13 @@
         }
       : item.metadata
 
-    const held = isInInventory(item, story.locations)
     await story.updateItem(item.id, {
       name,
       description: editDescription.trim() || null,
       quantity,
-      ...normalizeItemLocation(item, story.locations),
-      equipped: held ? editEquipped : false,
+      // Written with `equipped`, so a row still holding legacy text is rewritten too.
+      location: item.location,
+      equipped: item.location === INVENTORY && editEquipped,
       metadata: updatedMetadata,
     })
 
@@ -184,7 +180,7 @@
 
   async function pickUpItem(item: Item) {
     await story.updateItem(item.id, {
-      location: 'inventory',
+      location: INVENTORY,
       equipped: false,
     })
   }

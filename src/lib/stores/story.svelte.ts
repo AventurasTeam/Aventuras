@@ -153,12 +153,13 @@ import { clearImageMarkerCache } from '#lib/services/image/index.ts'
 import { GenerationLease } from '#lib/utils/generationLease.ts'
 import { findLiveCharacter, sameBranchScope, type BranchScope } from '#lib/utils/branchScope.ts'
 import {
+  INVENTORY,
+  castNames,
   copiedLocationIds,
-  isEquipped,
-  isInInventory,
   itemLocationId,
   itemsAt,
-  normalizeItemLocation,
+  newItemLocation,
+  normalizeItems,
   resolveItemLocation,
 } from '#lib/utils/itemLocation.ts'
 import {
@@ -388,11 +389,11 @@ class StoryStore {
   }
 
   get inventoryItems(): Item[] {
-    return this.items.filter((i) => isInInventory(i, this.locations))
+    return this.items.filter((i) => i.location === INVENTORY)
   }
 
   get equippedItems(): Item[] {
-    return this.items.filter((i) => isEquipped(i, this.locations))
+    return this.items.filter((i) => i.equipped)
   }
 
   get pendingQuests(): StoryBeat[] {
@@ -1793,6 +1794,7 @@ class StoryStore {
       this.items = this.items.filter((i) => !i.deleted)
       this.storyBeats = this.storyBeats.filter((b) => !b.deleted)
     }
+    this.items = normalizeItems(this.items, this.locations, this.characters)
 
     log('World state refreshed', {
       characters: characters.length,
@@ -3715,9 +3717,7 @@ class StoryStore {
     const itemWorld = () => ({
       locations: this.locations,
       currentLocationId: this.currentLocation?.id ?? null,
-      otherCharacterNames: this.characters
-        .filter((c) => c.relationship !== 'self')
-        .map((c) => c.name),
+      ...castNames(this.characters),
     })
 
     // Apply item updates
@@ -3747,9 +3747,7 @@ class StoryStore {
             name: newItemData?.name ?? update.name,
             description: newItemData?.description ?? null,
             quantity: newItemData?.quantity ?? 1,
-            equipped: false,
-            location: 'inventory',
-            ...resolveItemLocation(newItemData ?? {}, itemWorld()),
+            ...newItemLocation(newItemData ?? {}, itemWorld()),
             metadata: itemMetadata,
             branchId: this.currentStory?.currentBranchId ?? null,
           }
@@ -3762,12 +3760,7 @@ class StoryStore {
           log('Updating item:', update.name, update.changes)
           const changes: Partial<Item> = {}
           if (update.changes.quantity !== undefined) changes.quantity = update.changes.quantity
-          const world = itemWorld()
-          Object.assign(
-            changes,
-            normalizeItemLocation(existing, world.locations),
-            resolveItemLocation(update.changes, world, existing),
-          )
+          Object.assign(changes, resolveItemLocation(update.changes, itemWorld(), existing))
           // Merge inline runtime variable values into metadata if present
           const itemInlineVars = extractInlineCustomVars(
             update.changes as unknown as Record<string, unknown>,
@@ -3804,9 +3797,7 @@ class StoryStore {
             name: newItem.name,
             description: newItem.description ?? null,
             quantity: newItem.quantity ?? 1,
-            equipped: false,
-            location: 'inventory',
-            ...resolveItemLocation(newItem, itemWorld()),
+            ...newItemLocation(newItem, itemWorld()),
             metadata: itemMetadata,
             branchId: this.currentStory?.currentBranchId ?? null,
           }
@@ -5606,7 +5597,7 @@ class StoryStore {
       this.chapters = chapters
       this.characters = world.characters
       this.locations = world.locations
-      this.items = world.items
+      this.items = normalizeItems(world.items, world.locations, world.characters)
       this.storyBeats = world.storyBeats
       this.lorebookEntries = world.lorebookEntries
     } else {
@@ -5680,7 +5671,7 @@ class StoryStore {
 
       this.characters = characters
       this.locations = locations
-      this.items = items
+      this.items = normalizeItems(items, locations, characters)
       this.storyBeats = storyBeats
       this.lorebookEntries = lorebookEntries
 

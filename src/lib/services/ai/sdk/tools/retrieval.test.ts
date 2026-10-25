@@ -859,7 +859,7 @@ describe('inspect_world_state', () => {
       locations: [{ id: 'l1', name: 'Oakvale' }],
       items: [
         { id: 'i1', name: 'Golden Ring', location: 'l1', description: null },
-        { id: 'i2', name: 'Cloak', location: 'worn', equipped: false, description: null },
+        { id: 'i2', name: 'Cloak', location: 'inventory', equipped: true, description: null },
       ],
     } as any
     const tools = createRetrievalTools(makeContext({ worldState: ws })) as Record<string, any>

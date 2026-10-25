@@ -47,7 +47,7 @@ absorbed names still become **aliases** on the survivor, which is what stops the
 duplicate being re-created — except one the survivor's name already matches by `termKey`.
 
 A location merge moves the items at an absorbed location to the survivor before deleting it
-(`story.moveItemsBetweenLocations`), including items that hold its name as legacy text.
+(`story.moveItemsBetweenLocations`).
 
 **A dismissal is remembered, in `kept_separate`** (migration 037), keyed by normalized
 **name pair** and scoped to a branch. Names rather than ids, so a later rename cannot
