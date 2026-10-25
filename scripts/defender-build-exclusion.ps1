@@ -111,11 +111,19 @@ switch ($Action) {
         [pscustomobject]@{ Status = $status; Line = $line }
       }
 
-      foreach ($status in 'live', 'other checkout', 'not a checkout', 'unknown', 'left behind') {
+      $colors = [ordered]@{
+        'live' = 'Green'
+        'other checkout' = 'Cyan'
+        'not a checkout' = 'Yellow'
+        'unknown' = 'Yellow'
+        'left behind' = 'Red'
+      }
+      # Write-Host for the lines too, so they cannot fall out of order with the colored headers.
+      foreach ($status in $colors.Keys) {
         $group = @($rows | Where-Object Status -eq $status)
         if ($group.Count -gt 0) {
-          $status
-          $group.Line
+          Write-Host $status -ForegroundColor $colors[$status]
+          $group | ForEach-Object { Write-Host $_.Line }
         }
       }
     }
