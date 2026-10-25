@@ -50,7 +50,8 @@ that block; do not add more of it.
 
 ## Style
 
-- Match the surrounding code: naming, structure, and how much it explains itself.
+- Match the surrounding code's naming, file layout, and how much it explains itself. Where
+  matching it would mean a dated idiom, [Modern code](#modern-code) wins.
 - Svelte 5 runes only (`$state`, `$derived`, `$props`) — no legacy store syntax in new code.
 - A `*.svelte.ts` module cannot be imported by a test. Logic that needs testing goes in a
   plain `.ts` module. See [docs/development/testing.md](docs/development/testing.md).
@@ -58,6 +59,58 @@ that block; do not add more of it.
 - Import a service through its `index.ts`, not its internals.
 - Import from `src/lib` as `#lib/…` with the real extension: `#lib/services/database.ts`,
   `#lib/components/ui/button/index.ts`. Omitting it does not resolve. There is no `$lib`.
+
+## Modern code
+
+Write new code in the current idiom of the installed versions, using the newest feature each
+layer's floor allows. Check the installed version's docs, not memory, for what is current.
+
+| Layer            | Floor                                                            |
+| ---------------- | ---------------------------------------------------------------- |
+| JS, CSS, HTML    | Chrome 111 / Safari 16.4 ([Things that bite](#things-that-bite)) |
+| Svelte, Tailwind | the installed 5.x and 4.x                                        |
+| SQL              | the SQLite `libsqlite3-sys` bundles on every platform (3.46)     |
+| Rust             | edition 2024                                                     |
+
+- Svelte: `{@attach}` over `use:` actions, `cn(…)` over `class:` directives, snippets and
+  callback props over slots and dispatched events.
+- HTML: the native element over a `div` with ARIA and key handlers — `<button>`, not
+  `role="button"` plus `tabindex` and `onkeydown`. Where a bits-ui component exists for the job
+  (dialog, popover, select), use it.
+- TS/JS: `async`/`await` over `.then` chains, `$state.snapshot` for reactive state,
+  `structuredClone` for plain values (it throws on a `$state` proxy) over
+  `JSON.parse(JSON.stringify(…))`, `toSorted`/`toSpliced`/`with`/`at`/`findLast` over
+  copy-then-mutate or index arithmetic.
+- Types: make the type system carry the shape. A known shape gets a named type, not `object`,
+  `Object`, `Record<string, …>` or an index signature; a lookup is keyed by a literal union
+  (`Record<ServiceId, …>`), or is a `Map` when its keys are truly dynamic. Derive types with
+  `keyof`, `typeof` and indexed access rather than restating them. `satisfies` and discriminated
+  unions with an exhaustive `never` check over casts and boolean flags; narrow `unknown` with a
+  type guard at the boundary over `as` or `any`, and over `Object.keys`/`entries` cast back to
+  the key type.
+- Tailwind: v4 names and syntax — `shrink-0`, `grow`, `bg-linear-to-*`, `size-*`, `bg-(--x)` —
+  over v3 aliases and `[var(--x)]`. A value used twice is a token in `@theme` in `src/app.css`,
+  not a repeated arbitrary value; `tv(…)` for a component with variants.
+- CSS: `:has()`, container queries, `dvh`, `color-mix()`, logical properties, `gap` — over JS
+  measurement, `vh`, and margin hacks.
+- SQL: `RETURNING` over a follow-up `SELECT` or `last_insert_rowid()`, `->>` over
+  `json_extract`, `ON CONFLICT … DO UPDATE` over `INSERT OR REPLACE` (which deletes and re-inserts
+  the row). Shipped migrations stay as they are.
+- Rust: `let … else` and `?` over nested `match`/`unwrap`.
+
+Current but unavailable in Chrome 111 or Safari 16.4, so not usable yet (per MDN): the `popover`
+attribute, `text-wrap: balance`, subgrid, `@starting-style`, `Object.groupBy`,
+`Promise.withResolvers`, and the `Set` composition methods (`union`, `intersection`, …).
+
+This applies to code you are already changing, not to a hunt through the codebase. When you edit
+a function or component, modernize the dated idioms in it and in the code it directly touches,
+keeping its behaviour the same. Some swaps change behaviour on their own:
+`ON CONFLICT … DO UPDATE` keeps unlisted columns and skips the delete triggers and cascades
+`INSERT OR REPLACE` fires; `async` turns a synchronous throw into a rejection. Make one only where
+it behaves the same here — every column is set, nothing depends on the delete, no caller relies on
+the throw — and keep the old idiom otherwise rather than adjusting other code to fit. Leave
+untouched files alone. Modernizations stay out of the commit message: it describes only the
+functional change.
 
 ## Where the reasoning lives
 
