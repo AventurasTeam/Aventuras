@@ -21,6 +21,7 @@ import {
   type SubstitutedStateBlock,
 } from '@/lib/piggyback'
 import {
+  holdersOf,
   itemNamesakes,
   locationMapView,
   matchNewPlace,
@@ -146,7 +147,14 @@ function keptLocationHandles(block: ParsedStateBlock): Set<string> {
 }
 
 /** A new item stays only when the last transfer naming it, a drop included, leaves it with a character. */
-function keptItemHandles(block: ParsedStateBlock, byId: ReadonlyMap<string, Entity>): Set<string> {
+function keptItemHandles(
+  block: ParsedStateBlock,
+  entities: readonly Entity[],
+  byId: ReadonlyMap<string, Entity>,
+): Set<string> {
+  // piggyback.md → A holder is read by what it names: an item someone holds stands for them.
+  const reachesCharacter = (to: string): boolean =>
+    byId.get(to)?.kind === 'character' || holdersOf(to, entities).length > 0
   const declared = new Set((block.newItems ?? []).map((i) => i.handle))
   const last = new Map<string, { seq: number; to: string | undefined }>()
   const note = (id: string, seq: number, to: string | undefined) => {
@@ -157,7 +165,7 @@ function keptItemHandles(block: ParsedStateBlock, byId: ReadonlyMap<string, Enti
   for (const drop of block.transfers?.drops ?? []) note(drop.id, drop.seq, undefined)
   const kept = new Set<string>()
   for (const [handle, { to }] of last)
-    if (to !== undefined && byId.get(to)?.kind === 'character') kept.add(handle)
+    if (to !== undefined && reachesCharacter(to)) kept.add(handle)
   return kept
 }
 
@@ -463,7 +471,7 @@ export async function planTurnCreates(input: {
   const locations = block.newLocations ?? []
   const items = block.newItems ?? []
   const keptLocations = keptLocationHandles(block)
-  const keptItems = keptItemHandles(block, byId)
+  const keptItems = keptItemHandles(block, entities, byId)
   for (const emission of locations) {
     if (!keptLocations.has(emission.handle)) logDropped(log, 'location', emission)
   }

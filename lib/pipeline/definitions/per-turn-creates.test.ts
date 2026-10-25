@@ -419,6 +419,47 @@ describe('planTurnCreates — kept only if used', () => {
     ])
   })
 
+  describe('into a satchel', () => {
+    const SATCHEL = 'item_00000000-0000-4000-8000-0000000000b4'
+    const gemIntoSatchel = (heldBy: readonly string[]) =>
+      runPlanner(
+        {
+          newItems: [{ handle: 'new:gem', name: 'gem', description: 'a green gem' }],
+          transfers: {
+            items: [{ id: 'new:gem', to: SATCHEL, slot: 'inventory', seq: 0 }],
+            stackables: [],
+            drops: [],
+          },
+        },
+        {
+          entities: world(
+            row({
+              id: MIRA,
+              kind: 'character',
+              name: 'Mira',
+              state: { ...emptyEntityState('character'), inventory: [...heldBy] },
+            }),
+            row({ id: SATCHEL, kind: 'item', name: 'satchel' }),
+          ),
+        },
+      )
+
+    it('keeps a new item put into a satchel a character holds', async () => {
+      const plan = await gemIntoSatchel([SATCHEL])
+      expect(createdEntries(creates(plan)).map((e) => e.id)).toEqual(['item_new_1'])
+      expect(plan.block.transfers?.items).toEqual([
+        { id: 'item_new_1', to: SATCHEL, slot: 'inventory', seq: 0 },
+      ])
+      expect(plan.report.newItems[0]?.outcome).toBe('created')
+    })
+
+    it('drops a new item put into a satchel nobody holds', async () => {
+      const plan = await gemIntoSatchel([])
+      expect(creates(plan)).toEqual([])
+      expect(plan.report.newItems[0]?.outcome).toBe('dropped')
+    })
+  })
+
   it('drops a new item a transfer only takes from someone', async () => {
     const plan = await runPlanner({
       newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
