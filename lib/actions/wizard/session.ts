@@ -122,16 +122,23 @@ function salvageRows<T>(
 
 // A row that failed its parse is gone, so the refs to it go too, as removeCast prunes them: left
 // standing, a faction picker would select nothing while Finish commits the character unaffiliated.
-function pruneDanglingCastRefs(cast: WizardCastDraft[]): WizardCastDraft[] {
+function pruneDanglingCastRefs(
+  cast: WizardCastDraft[],
+  leadEntityId: string | null,
+): { cast: WizardCastDraft[]; leadEntityId: string | null } {
   const factions = new Set(cast.filter((r) => r.kind === 'faction').map((r) => r.id))
   const locations = new Set(cast.filter((r) => r.kind === 'location').map((r) => r.id))
-  return cast.map((r) => {
-    if (r.kind === 'character' && r.factionId != null && !factions.has(r.factionId))
-      return { ...r, factionId: null }
-    if (r.kind === 'location' && r.parentLocationId != null && !locations.has(r.parentLocationId))
-      return { ...r, parentLocationId: null, parentUnknown: true }
-    return r
-  })
+  const leadLoaded = cast.some((r) => r.kind === 'character' && r.id === leadEntityId)
+  return {
+    cast: cast.map((r) => {
+      if (r.kind === 'character' && r.factionId != null && !factions.has(r.factionId))
+        return { ...r, factionId: null }
+      if (r.kind === 'location' && r.parentLocationId != null && !locations.has(r.parentLocationId))
+        return { ...r, parentLocationId: null, parentUnknown: true }
+      return r
+    }),
+    leadEntityId: leadLoaded ? leadEntityId : null,
+  }
 }
 
 // Scalar shell resets wholesale; row arrays salvage element-wise, like decodeCaptures.
@@ -164,7 +171,11 @@ function parsePersistedState(
   if (dropped > 0) toast.error(t('landing:errors.sessionRowsDropped', { count: dropped }))
   if (structural) toast.error(t('landing:errors.sessionSectionUnreadable'))
   return {
-    state: { ...shell.data, lore: lore.rows, cast: pruneDanglingCastRefs(cast.rows) },
+    state: {
+      ...shell.data,
+      lore: lore.rows,
+      ...pruneDanglingCastRefs(cast.rows, shell.data.leadEntityId),
+    },
     ok: !structural,
     dropped,
   }
