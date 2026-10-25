@@ -12,6 +12,7 @@ import {
   itemDraftSchema,
   locationDraftFrom,
   locationDraftSchema,
+  stateAs,
   VISUAL_DRAFT_FIELDS,
 } from './entity-draft'
 
@@ -207,6 +208,34 @@ describe('characterFactionId', () => {
       expect(characterFactionId({ kind, state: KAEL_STATE })).toBeNull()
     },
   )
+})
+
+describe('stateAs', () => {
+  const emptyCharacter: CharacterState = {
+    visual: {},
+    traits: [],
+    drives: [],
+    current_location_id: null,
+    equipped_items: [],
+    inventory: [],
+    faction_id: null,
+    lastSeenAt: null,
+  }
+
+  it("reads a character's state as a character's", () => {
+    expect(stateAs(KAEL, 'character')).toEqual(KAEL_STATE)
+  })
+
+  it.each(['location', 'item', 'faction'] as const)(
+    "reads another kind (%s) as an empty character state, even one holding a character's state",
+    (kind) => {
+      expect(stateAs({ kind, state: KAEL_STATE }, 'character')).toEqual(emptyCharacter)
+    },
+  )
+
+  it('reads no row as an empty character state', () => {
+    expect(stateAs(undefined, 'character')).toEqual(emptyCharacter)
+  })
 })
 
 describe('draft schemas', () => {
