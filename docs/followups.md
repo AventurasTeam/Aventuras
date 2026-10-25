@@ -155,8 +155,7 @@ for the placement rule.
     the retired and disabled places slice review).
 
 - **`buildClassifierActions` has outgrown one function.**
-  `lib/classifier/plan.ts`'s planner runs about 1,030 lines (lines
-  314-1347); its thread and awareness blocks share about ten of the
+  `lib/classifier/plan.ts`'s planner runs about a thousand lines; its thread and awareness blocks share about ten of the
   planner's locals
   (`anchor`, `proseSource`, `entryPosition`, `inTurnOrder`, `iconOf`,
   the drop lists, `planned`), so a split wants a shared planner

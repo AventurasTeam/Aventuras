@@ -60,3 +60,32 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
+
+- **A failed Dismiss tells the user nothing.** The reader passes
+  `handleDismissSystemEntry` unwrapped, and the card fires it as
+  `() => void onDismissSystemEntry()` (`components/reader/reader-surface.tsx`),
+  so a throw becomes an unhandled rejection. A failed delete leaves the
+  tap doing nothing. A failed reload, which the hand-back now survives,
+  leaves "text restored" beside a stale card. A pass entry's Retry goes
+  through `runAction` and toasts its failure; Dismiss doesn't. The
+  `void` predates the 2026-10-24 triage pass; raised by its slice
+  review.
+
+- **A boot whose recovery pass throws reports nothing.** When
+  `recoverInFlightRuns` itself throws, `bootstrap.ts` logs
+  `bootstrap.recovery_failed` and publishes the report with empty
+  `reversed` and `failures`, so the modal shows only a held branch the
+  read found, or doesn't open at all. The orphans it never reached stay
+  on disk and the next boot retries them. Canon's crash-recovery copy
+  ([`generation-pipeline.md → Crash recovery`](../generation-pipeline.md#crash-recovery-via-pipeline_runs-marker-table)) covers failed
+  orphans, not a failed pass. Before the 2026-10-24 triage pass the
+  report wasn't published at all on a throw; raised by its slice
+  review.
+
+- **The state report shows a change as emitted, not as stored.**
+  `buildPiggybackActions` bounds a visual change's and a condition's text
+  before writing it (`boundStateText` in `lib/piggyback/apply.ts`), but
+  the report keeps the emitted text, so the entry card's panel can show
+  more than World holds. Canon doesn't say which the panel shows.
+  Raised by the 2026-10-24 triage pass's verification; filed by its
+  slice review.
