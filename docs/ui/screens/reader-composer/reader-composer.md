@@ -1007,7 +1007,10 @@ different value, it's user-initiated. A move inside the ~80px band
 would be re-pinned by the next chunk before it could leave it, so an
 upward gesture disengages at once: a wheel up, a touch drag, a press
 on the reader's scrollbar, or an upward scroll key (Arrow Up, Page
-Up, Home, Shift+Space) outside a text field. A press counts as the
+Up, Home, Shift+Space) outside a text field that scrolls the reader:
+focus is inside it, or nothing is focused and the last press landed
+inside it. With nothing focused the browser scrolls the scroller last
+pressed, such as the rail list. A press counts as the
 scrollbar's only past the reader's client width, so an overlay
 scrollbar (macOS's default), which takes none, isn't one
 ([parked](../../../parked.md#overlay-scrollbar-presses-breaking-the-autoscroll-pin)).

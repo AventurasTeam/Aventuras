@@ -333,7 +333,8 @@ scene. A character it drops is closed out where they were last seen
 ([`data-model.md → lastSeenAt`](../../data-model.md#characterstate-shape)):
 at the previous entry's place when that entry showed them, and
 otherwise back at their own older last-seen place, never at a place
-they weren't seen at; one with none keeps the location stored. The
+they weren't seen at; one with none, or whose last-seen place was
+deleted since, keeps the location stored. The
 editor refuses a location that isn't a place. A character who left the
 scene at this entry and stays out keeps any location set since.
 Promotion is shared with the generation fold rather than reimplemented:
