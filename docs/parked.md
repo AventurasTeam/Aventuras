@@ -3287,6 +3287,21 @@ rule for an integrity refusal at boot recovery is to promise no retry
 Parked 2026-10-05; the signal to revisit is a persistent reader
 rejection becoming reachable.
 
+#### Overlay-scrollbar presses breaking the autoscroll pin
+
+[`reader-composer.md → Autoscroll`](./ui/screens/reader-composer/reader-composer.md#autoscroll)
+has a press on the reader's scrollbar disengage the stream's bottom
+pin, and `isScrollbarPress` (`lib/reader-scroll/scroll-gestures.ts`)
+finds one as a press on the scroller itself past its `clientWidth`. An
+overlay scrollbar, macOS's default, takes no width, so a press on its
+thumb reads as a content press and the next chunk re-pins the reader
+under the drag. A wheel or trackpad scroll still disengages, and Linux
+and Windows draw classic scrollbars. Telling the thumb apart needs its
+hit area, and a guessed edge band would also catch content presses
+beside it, which nothing here can test without a macOS desktop. Parked
+2026-10-25 from a review of the triage pass; the signal to revisit is a
+macOS desktop build in testing.
+
 ### Code structure (parked)
 
 #### Unsaved-changes guard folder placement

@@ -998,7 +998,10 @@ different value, it's user-initiated. A move inside the ~80px band
 would be re-pinned by the next chunk before it could leave it, so an
 upward gesture disengages at once: a wheel up, a touch drag, a press
 on the reader's scrollbar, or an upward scroll key (Arrow Up, Page
-Up, Home, Shift+Space) outside a text field.
+Up, Home, Shift+Space) outside a text field. A press counts as the
+scrollbar's only past the reader's client width, so an overlay
+scrollbar (macOS's default), which takes none, isn't one
+([parked](../../../parked.md#overlay-scrollbar-presses-breaking-the-autoscroll-pin)).
 
 **Re-engage (auto).** User scrolls back to within ~80px of bottom
 while still in the same stream → autoscroll re-engages. Viewport
