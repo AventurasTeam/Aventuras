@@ -1,7 +1,7 @@
 import type { DeltaSource, PipelineAction } from '@/lib/actions'
 import type { Entity } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
-import { stateAs } from '@/lib/world'
+import { sameList, stateAs } from '@/lib/world'
 
 import type { ItemDrop, ItemTransfer, ParsedTransfers, ReportedDrop } from './types'
 
@@ -202,8 +202,6 @@ export function itemMoveActions(args: ItemMoveArgs): ItemMoves {
   }
 
   const actions: PipelineAction[] = []
-  const sameList = (a: readonly string[], b: readonly string[]) =>
-    a.length === b.length && a.every((v, i) => v === b[i])
   for (const [id, patch] of inventoryPatches) {
     const stored = storedInventory(id)
     const unchanged =

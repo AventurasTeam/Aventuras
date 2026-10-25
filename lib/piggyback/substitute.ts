@@ -202,14 +202,13 @@ function resolveLocation(ref: string, refs: Refs, badRef: SubstituteOptions['bad
 function resolveField<K extends DroppedRefField>(
   block: ParsedStateBlock,
   field: K,
-  resolve: (value: NonNullable<ParsedStateBlock[K]>, idMap: IdBiMap) => ParsedStateBlock[K],
-  idMap: IdBiMap,
+  resolve: (value: NonNullable<ParsedStateBlock[K]>) => ParsedStateBlock[K],
   failures: FieldFailure[],
 ): void {
   const value = block[field]
   if (value === undefined) return
   try {
-    block[field] = resolve(value, idMap)
+    block[field] = resolve(value)
   } catch (e) {
     delete block[field]
     failures.push({ field, detail: e instanceof Error ? e.message : String(e) })
@@ -245,7 +244,6 @@ export function substitutePiggybackIds(
           return resolved
         }),
       ),
-    idMap,
     failures,
   )
   // A dropped location reads as omitted: the previous one stays, as a field failure would leave it.
@@ -253,7 +251,6 @@ export function substitutePiggybackIds(
     result,
     'currentLocation',
     (id) => settle('currentLocation', id, (ref) => resolveLocation(ref, refs, options.badRef))[0],
-    idMap,
     failures,
   )
   resolveField(
@@ -267,7 +264,6 @@ export function substitutePiggybackIds(
           return { ...note, id }
         }),
       ),
-    idMap,
     failures,
   )
   resolveField(
@@ -280,14 +276,12 @@ export function substitutePiggybackIds(
           id: resolveRef(change.id, idMap),
         })),
       ),
-    idMap,
     failures,
   )
   resolveField(
     result,
     'transfers',
     (transfers) => resolveTransfers(transfers, refs, settle),
-    idMap,
     failures,
   )
   if (result.currentLocation === undefined) delete result.currentLocation

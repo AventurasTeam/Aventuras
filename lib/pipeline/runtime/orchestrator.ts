@@ -425,10 +425,7 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
   } catch (e) {
     // An error it doesn't recognise counts as uncommitted: the marker rides the reversal's
     // transaction, so boot recovery reads the truth either way, and the run must still end here.
-    const replayFailure = describeReplayError(e) ?? {
-      committed: false,
-      detail: e instanceof Error ? e.message : String(e),
-    }
+    const replayFailure = describeReplayError(e) ?? { committed: false, detail: messageOf(e) }
     const stage = replayFailure.committed ? 'post-commit store sync' : 'reverse-replay'
     failure = { kind: 'orchestrator', detail: `${stage} failed: ${replayFailure.detail}` }
     reversalFailed = !replayFailure.committed
