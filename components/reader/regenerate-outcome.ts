@@ -52,6 +52,35 @@ export function offersUserAction(action: RegenerateOutcomeAction): boolean {
   )
 }
 
+/**
+ * The text a regenerate arm left in the draft or on its own entry, which the dropped entry's
+ * hand-back defers to: an arm that offers the action's text settles it once its write landed, or
+ * once its failure handling restored the text to the draft.
+ */
+export function armSettledText(args: {
+  action: RegenerateOutcomeAction
+  userActionContent: string
+  landed: boolean
+  restored: boolean
+}): string | null {
+  return (args.landed || args.restored) && offersUserAction(args.action)
+    ? args.userActionContent
+    : null
+}
+
+/** The branch's newest reply, whose state report the post-turn toast reads. */
+export function latestReplyOf<E extends { branchId: string; kind: string; position: number }>(
+  entries: Iterable<E>,
+  branchId: string,
+): E | undefined {
+  let latest: E | undefined
+  for (const entry of entries) {
+    if (entry.branchId !== branchId || entry.kind !== 'ai_reply') continue
+    if (latest == null || entry.position > latest.position) latest = entry
+  }
+  return latest
+}
+
 type Submission = { content: string; composerMode: string }
 
 export type BehindTailDrop<T> =

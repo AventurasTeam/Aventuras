@@ -39,6 +39,8 @@ import {
   loadRegenerateCountsIfCurrent,
 } from '@/components/reader/regenerate-gate'
 import {
+  armSettledText,
+  latestReplyOf,
   planRegenerateOutcome,
   runBehindTailDrop,
   settleWithDroppedHandback,
@@ -624,11 +626,7 @@ export default function ReaderComposerRoute() {
   const notifyUnappliedState = useCallback(
     (started: string) => {
       if (!branchUnchanged(started)) return
-      const reply = [...entriesStore.getEntries().values()]
-        .filter((e) => e.branchId === started && e.kind === 'ai_reply')
-        .reduce<
-          StoryEntry | undefined
-        >((last, e) => (last == null || e.position > last.position ? e : last), undefined)
+      const reply = latestReplyOf(entriesStore.getEntries().values(), started)
       const role = unappliedStateRole(reply?.metadata?.stateReport)
       if (role != null)
         toast.warning(
@@ -916,7 +914,7 @@ export default function ReaderComposerRoute() {
         const submission = { content: regen.userActionContent, composerMode: 'free' }
         // Every arm below destroyed the dropped entry for good, so its text follows the arm's own.
         await droppedHandback(dropped?.failure?.submission, async () => {
-          let settled: string | null = null
+          let landed = false
           try {
             if (plan.action === 'refuse-unconverged') {
               // The unwind didn't land, so the user_action is still in the branch.
@@ -931,7 +929,6 @@ export default function ReaderComposerRoute() {
             } else if (plan.action === 'write-failure-entry' && result.outcome === 'failed') {
               if (stillHere) setLastSubmission(submission)
               await showTurnFailure(result.error, submission)
-              settled = submission.content
             } else if (plan.action === 'write-blocked-entry' && result.outcome === 'rejected') {
               if (stillHere) setLastSubmission(submission)
               await showTurnFailure(
@@ -941,17 +938,21 @@ export default function ReaderComposerRoute() {
                 },
                 submission,
               )
-              settled = submission.content
             } else if (plan.action === 'restore-draft') {
               composerRef.current?.restoreDraft(regen.userActionContent, 'free')
-              settled = regen.userActionContent
             } else if (plan.action === 'keep-draft' && stillHere) {
               // The swept action is unrecoverable either way, but they asked to
               // discard it; the draft they typed they never agreed to lose.
               toast.info(t('reader:regenerateCancelledDraftKept'))
             }
+            landed = true
             if (plan.resync) await reload()
-            return settled
+            return armSettledText({
+              action: plan.action,
+              userActionContent: regen.userActionContent,
+              landed,
+              restored: false,
+            })
           } catch (err) {
             // Reached only once the action returned, so unlike the arm above the
             // user's text is still in hand — hand it back rather than losing it
@@ -972,7 +973,12 @@ export default function ReaderComposerRoute() {
               )
             if (restore) composerRef.current?.restoreDraft(regen.userActionContent, 'free')
             await reload()
-            return restore ? regen.userActionContent : settled
+            return armSettledText({
+              action: plan.action,
+              userActionContent: regen.userActionContent,
+              landed,
+              restored: restore,
+            })
           }
         })
         return null
