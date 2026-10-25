@@ -299,7 +299,9 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   (`services/ai/generation/classifierCharacters.ts`) decides both what is listed and which
   rewrites `applyClassificationResult` takes. The classifier attaches what it listed to its
   result (`_shownCharacters`), so a status changed while it ran does not widen the gate, and
-  lists nobody when a custom template leaves `existingCharacters` out. A rewrite of a field
+  lists nobody, with a console warning, when the rendered prompt does not carry
+  `existingCharacters` as given: a custom template that leaves it out or filters it. A result
+  without the list showed nobody. A rewrite of a field
   that was not listed is dropped and logged, an empty description, trait list or appearance
   never erases one, and a rewrite or status equal to the current value writes nothing.
   A rewritten field drops its translation, which would otherwise be shown in its place; nothing

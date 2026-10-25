@@ -43,15 +43,15 @@ const NOT_SHOWN: ClassifierCharacterView = { appearance: false, profile: false }
 
 /**
  * What the classifier was shown of a character, looked up by name. `shown` is the list the
- * prompt was built from; without it, the cast before the response is applied stands in. A
- * character missing from both was created by this response and has nothing unseen to lose;
- * one that exists but was not listed was not shown.
+ * prompt was built from; a result without one showed nobody. A character missing from both
+ * the list and the cast was created by this response and has nothing unseen to lose; one that
+ * exists but was not listed was not shown.
  */
 export function viewsForApply(
   shown: readonly ShownCharacter[] | undefined,
   castBeforeApply: readonly Character[],
 ): (name: string) => ClassifierCharacterView {
-  const listed = shown ?? shownCharacters(castBeforeApply)
+  const listed = shown ?? []
   const existed = castBeforeApply.map((c) => c.name)
   return (name) => {
     const entry = listed.find((s) => sameEntityName(s.name, name))

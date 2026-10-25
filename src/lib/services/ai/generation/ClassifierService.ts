@@ -151,6 +151,11 @@ export class ClassifierService extends BaseAIService {
     // Render through the classifier template
     const { system, user: prompt } = await ctx.render('classifier')
     const shown = shownInPrompt(context.existingCharacters, existingCharacters, [system, prompt])
+    if (shown.length === 0 && context.existingCharacters.length > 0) {
+      console.warn(
+        '[Classifier] The rendered prompt does not carry the existingCharacters list as given, so no description, trait or appearance rewrite will be taken this turn',
+      )
+    }
 
     try {
       const result = (await generateStructured(

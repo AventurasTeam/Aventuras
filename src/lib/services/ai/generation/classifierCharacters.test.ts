@@ -60,7 +60,6 @@ describe('shownInPrompt', () => {
 
   it('lists nobody when a custom template leaves the character list out', () => {
     expect(shownInPrompt(cast, formatted, ['system', 'no list here'])).toEqual([])
-    // An empty list, not a missing one: nothing falls back to the cast.
     expect(viewsForApply([], cast)('Mira')).toEqual(HIDDEN)
   })
 })
@@ -81,8 +80,8 @@ describe('viewsForApply', () => {
     expect(viewsForApply([], [])('Newcomer')).toEqual(SHOWN)
   })
 
-  it('falls back to the cast before apply when the prompt list is missing', () => {
-    const views = viewsForApply(undefined, [character('Tomas', { status: 'inactive' })])
+  it('treats a result without a list as having shown nobody', () => {
+    const views = viewsForApply(undefined, [character('Tomas')])
     expect(views('Tomas')).toEqual(HIDDEN)
     expect(views('Newcomer')).toEqual(SHOWN)
   })
