@@ -123,6 +123,9 @@ Select's list, was opened over its modal, and the press falls through to the han
 dirty action modal without asking. A close driven from our side
 never reaches `vaul`'s restore, so the scroll lock is released by hand (see `utils/scrollLock`).
 
+A sheet spans the screen, so `ResponsiveModal.Content` drops a caller's width classes (`w-*`,
+`max-w-*`, `min-w-*`, under any variant) before they reach it; they size the dialog only.
+
 Sheets open and close in 180ms, set in `app.css` over `vaul`'s 0.5s animation. Only the open and
 close animations change; a drag's settle keeps `vaul`'s timing.
 

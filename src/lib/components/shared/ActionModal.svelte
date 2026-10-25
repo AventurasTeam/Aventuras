@@ -50,8 +50,11 @@
     description?: string | Snippet
     /** Only for a confirmation that warns, drawn before the title. */
     titleIcon?: Snippet
-    /** A way to do the job other than this modal, such as asking the assistant; beside the title. */
-    headerAction?: Snippet
+    /**
+     * A way to do the job other than this modal, such as asking the assistant; beside the title.
+     * It gets `leaveFor`, which asks before discarding edits and then runs what it is given.
+     */
+    headerAction?: Snippet<[leaveFor: (next: () => void) => void]>
     /** The body; a confirmation whose description says it all has none. */
     children?: Snippet
     action: Action
@@ -100,6 +103,8 @@
   setTextareaUncapped()
 
   let question = $state<'discard' | 'remove' | null>(null)
+  /** Run instead of closing when the discard was asked on the way somewhere else. */
+  let afterDiscard: (() => void) | null = null
   /** What the modal shows; a close is routed through `leave` before `open` follows. */
   let shownOpen = $state(untrack(() => open))
   let wasOpen = untrack(() => open)
@@ -195,9 +200,13 @@
       dirty,
       questionOpen: question !== null,
     })
-    if (outcome === 'ask') question = 'discard'
-    else if (outcome === 'closeQuestion') question = null
-    else if (outcome === 'close') leave()
+    if (outcome === 'ask') {
+      afterDiscard = null
+      question = 'discard'
+    } else if (outcome === 'closeQuestion') {
+      question = null
+      afterDiscard = null
+    } else if (outcome === 'close') leave()
   }
 
   // Only a sheet's swipe or handle tap reaches here: Escape and outside clicks are intercepted on
@@ -218,10 +227,20 @@
     if (!actionDisabled && !busy) action.onConfirm()
   }
 
+  function leaveFor(next: () => void) {
+    if (locked || question !== null) return
+    if (!dirty) return next()
+    afterDiscard = next
+    question = 'discard'
+  }
+
   function answer(confirmed: boolean) {
     const asked = question
+    const then = afterDiscard
     question = null
+    afterDiscard = null
     if (!confirmed) return
+    if (then) return then()
     if (asked === 'remove') removal?.onRemove()
     else leave()
   }
@@ -239,10 +258,14 @@
       { md: 'max-w-md', lg: 'max-w-lg', '2xl': 'max-w-2xl' }[size],
       // Inset from a phone's edges, where the dialog would otherwise run full width.
       presentation === 'dialog' && 'w-[calc(100%-2rem)] rounded-lg',
+      // Placed on a phone by insets and auto margins, not the -50% translate, which can land it
+      // between device pixels and soften its border on the curves.
+      presentation === 'dialog' &&
+        'max-md:inset-x-4 max-md:inset-y-0 max-md:m-auto max-md:h-fit max-md:w-auto max-md:translate-x-0 max-md:translate-y-0',
       // Held near the top on a phone when it has a text field, so the keyboard shortening the
       // screen does not move it; only its bottom edge comes up, and the content scrolls.
       presentation === 'dialog' &&
-        'max-md:has-[input:not([type=hidden]):not([aria-hidden=true]),textarea]:top-[calc(var(--safe-top)+1rem)] max-md:has-[input:not([type=hidden]):not([aria-hidden=true]),textarea]:translate-y-0',
+        'max-md:has-[input:not([type=hidden]):not([aria-hidden=true]),textarea]:top-[calc(var(--safe-top)+1rem)] max-md:has-[input:not([type=hidden]):not([aria-hidden=true]),textarea]:bottom-auto max-md:has-[input:not([type=hidden]):not([aria-hidden=true]),textarea]:mt-0',
     )}
     onInteractOutside={(e: PointerEvent) => {
       e.preventDefault()
@@ -280,7 +303,7 @@
             {/if}
           </div>
           {#if headerAction}
-            <div class="shrink-0">{@render headerAction()}</div>
+            <div class="shrink-0">{@render headerAction(leaveFor)}</div>
           {/if}
         </div>
       </ResponsiveModal.Header>

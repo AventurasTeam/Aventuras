@@ -16,7 +16,8 @@ rest:
   Below it, one scroller holds the body and the two buttons, so the action is reached by reading
   down to it. The header stays pinned. Nothing inside scrolls on its own: an autosizing `Textarea`
   in the body drops its height cap and lets the modal scroll.
-- **Phone.** Below 768px an action modal is a dialog inset from the screen's edges: centred, or
+- **Phone.** Below 768px an action modal is a dialog inset from the screen's edges, placed by insets
+  and auto margins rather than a -50% translate that can land it between device pixels: centred, or
   held near the top when it has a text field. Only a tool with no text field is a bottom sheet
   with a handle (see below), where only the handle drags and the content scrolls.
 - **Buttons.** An outlined Cancel and the action, side by side on a phone and at the trailing edge
@@ -146,7 +147,9 @@ The header is left-aligned at every width, since a title or description that wra
 centred. It holds only the title and a short description; a control, even a switch that changes
 what the body says, goes at the top of the body. The one exception is `headerAction`: a way to do
 the job other than this modal, such as the character editor's "Ask assistant", sits right of the
-title, as an icon alone on a phone. The body never repeats the title: "Entry 47 will
+title, as an icon alone on a phone. The snippet gets `leaveFor(next)`, which asks the discard
+question first when the modal holds edits and then runs `next`, since leaving for the other route
+drops what was typed here. The body never repeats the title: "Entry 47 will
 be deleted" under "Delete entry 47" says nothing.
 
 - **Sentence case** for titles and buttons.

@@ -126,7 +126,7 @@
   requireChange={isEditing}
   size="2xl"
 >
-  {#snippet headerAction()}
+  {#snippet headerAction(leaveFor: (next: () => void) => void)}
     {#if isEditing && onOpenAssistant}
       <!-- An alternative to editing by hand, so it sits by the title rather than in the form. -->
       <Button
@@ -138,11 +138,11 @@
         disabled={saving}
         onclick={() => {
           if (!character) return
-          onOpenAssistant({
-            entityType: 'character',
-            entityId: character.id,
-            entityName: character.name,
-          })
+          const { id, name } = character
+          // The assistant works on the stored character, so unsaved edits are asked about first.
+          leaveFor(() =>
+            onOpenAssistant({ entityType: 'character', entityId: id, entityName: name }),
+          )
         }}
       >
         <Bot class="h-4 w-4" />

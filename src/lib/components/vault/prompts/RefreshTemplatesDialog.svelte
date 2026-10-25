@@ -32,6 +32,19 @@
       .sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label))
   }
 
+  type Listed = ReturnType<typeof listed>
+
+  /** The entries under their group, groups in the order the list already has them. */
+  function grouped(entries: Listed): { group: string; members: Listed }[] {
+    const groups: { group: string; members: Listed }[] = []
+    for (const entry of entries) {
+      const found = groups.find((candidate) => candidate.group === entry.group)
+      if (found) found.members.push(entry)
+      else groups.push({ group: entry.group, members: [entry] })
+    }
+    return groups
+  }
+
   let behind = $derived(listed(classified?.behind ?? []))
   let customised = $derived(listed(classified?.customised ?? []))
   let total = $derived(behind.length + customised.length)
@@ -43,21 +56,27 @@
   })
 </script>
 
-{#snippet templateList(title: string, hint: string, entries: ReturnType<typeof listed>)}
+{#snippet templateList(title: string, hint: string, entries: Listed)}
   <div class="flex flex-col gap-2">
     <div class="flex items-center gap-2">
       <h4 class="text-sm font-medium">{title}</h4>
       <Badge variant="secondary">{entries.length}</Badge>
     </div>
     <p class="text-muted-foreground text-xs">{hint}</p>
-    <ul class="flex flex-col gap-1 text-sm">
-      {#each entries as entry (entry.templateId)}
-        <li class="flex items-baseline gap-2">
-          <span class="text-muted-foreground shrink-0 text-xs">{entry.group}</span>
-          <span>{entry.label}</span>
-        </li>
+    <dl class="flex flex-col gap-2 text-sm">
+      {#each grouped(entries) as { group, members } (group)}
+        <div>
+          <dt class="text-muted-foreground text-xs">{group}</dt>
+          <dd>
+            <ul class="border-border ml-1 border-l pl-3">
+              {#each members as entry (entry.templateId)}
+                <li>{entry.label}</li>
+              {/each}
+            </ul>
+          </dd>
+        </div>
       {/each}
-    </ul>
+    </dl>
   </div>
 {/snippet}
 
@@ -75,8 +94,8 @@
 >
   <ExplanationFold id="pack_refresh_help" summary="What it changes">
     <p>
-      Your version of each template you choose is replaced by the one this version of the app ships.
-      Templates you have not edited are untouched either way.
+      Every edited template in the set you pick below goes back to the text this version of the app
+      ships, and your version of it is lost. Templates you have not edited stay as they are.
     </p>
   </ExplanationFold>
 
@@ -97,15 +116,25 @@
 
   <!-- After the lists, so what each choice replaces is read before it is chosen. -->
   {#if behind.length > 0 && customised.length > 0}
-    <RadioGroup bind:value={scope} class="gap-2" disabled={refreshing}>
-      <label class="flex items-center gap-2 text-sm">
-        <RadioGroupItem value="behind" />
-        Only the {behind.length} behind newer shipped text
-      </label>
-      <label class="flex items-center gap-2 text-sm">
-        <RadioGroupItem value="edited" />
-        All {total} edited
-      </label>
-    </RadioGroup>
+    <div class="border-border flex flex-col gap-2 border-t pt-3">
+      <p id="refresh-scope-label" class="text-sm font-medium">
+        Which templates should be replaced?
+      </p>
+      <RadioGroup
+        bind:value={scope}
+        class="gap-2"
+        disabled={refreshing}
+        aria-labelledby="refresh-scope-label"
+      >
+        <label class="flex items-center gap-2 text-sm">
+          <RadioGroupItem value="behind" />
+          Only the {behind.length} behind newer shipped text
+        </label>
+        <label class="flex items-center gap-2 text-sm">
+          <RadioGroupItem value="edited" />
+          All {total} edited
+        </label>
+      </RadioGroup>
+    </div>
   {/if}
 </ActionModal>
