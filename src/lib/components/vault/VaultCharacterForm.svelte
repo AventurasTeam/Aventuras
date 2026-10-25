@@ -1,14 +1,14 @@
 <script lang="ts">
   import type { VaultCharacter } from '#lib/types/index.ts'
   import { characterVault } from '#lib/stores/characterVault.svelte.ts'
-  import { Loader2, Bot, X } from '@lucide/svelte'
+  import { Bot } from '@lucide/svelte'
   import VaultCharacterFormFields from './VaultCharacterFormFields.svelte'
   import type { VaultCharacterInput } from '#lib/services/ai/sdk/schemas/vault.ts'
   import type { FocusedEntity } from '#lib/services/ai/vault/InteractiveVaultService.ts'
-  import { untrack, onDestroy } from 'svelte'
+  import { untrack } from 'svelte'
   import { ui } from '#lib/stores/ui.svelte.ts'
 
-  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import { Button } from '#lib/components/ui/button/index.ts'
 
   interface Props {
@@ -35,14 +35,6 @@
   let savedSnapshot = $state<string>(untrack(() => JSON.stringify(formData)))
   let saving = $state(false)
   let _error = $state<string | null>(null)
-  let isOpen = $state(true)
-  let closeCooldownActive = $state(false)
-  let closeCooldownTimer: ReturnType<typeof setTimeout> | undefined = $state()
-  const CLOSE_COOLDOWN_MS = 3000
-
-  onDestroy(() => {
-    clearTimeout(closeCooldownTimer)
-  })
 
   const isEditing = $derived(!!character)
   const hasChanges = $derived(JSON.stringify(formData) !== savedSnapshot)
@@ -112,51 +104,6 @@
     }
   }
 
-  function closeWithChanges() {
-    if (closeCooldownActive) {
-      clearTimeout(closeCooldownTimer)
-      closeCooldownActive = false
-      onClose()
-    } else {
-      closeCooldownActive = true
-      ui.showToast('Unsaved Changes — Press close again to discard changes', 'warning')
-      closeCooldownTimer = setTimeout(() => {
-        closeCooldownActive = false
-      }, CLOSE_COOLDOWN_MS)
-    }
-  }
-
-  function handleCloseAttempt() {
-    if (isEditing && hasChanges) {
-      closeWithChanges()
-    } else {
-      onClose()
-    }
-  }
-
-  function handleModalOpenChange(nextOpen: boolean) {
-    if (nextOpen) return
-    if (isEditing && hasChanges) {
-      if (closeCooldownActive) {
-        clearTimeout(closeCooldownTimer)
-        closeCooldownActive = false
-        onClose()
-      } else {
-        closeCooldownActive = true
-        isOpen = true
-        ui.showToast(
-          'Unsaved Changes — Press Escape or click outside again to discard changes',
-          'warning',
-        )
-        closeCooldownTimer = setTimeout(() => {
-          closeCooldownActive = false
-        }, CLOSE_COOLDOWN_MS)
-      }
-    } else {
-      onClose()
-    }
-  }
-
   function handleKeydown(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault()
@@ -165,63 +112,40 @@
   }
 </script>
 
-<ResponsiveModal.Root bind:open={isOpen} onOpenChange={handleModalOpenChange}>
-  <ResponsiveModal.Content class="flex flex-col md:h-auto md:max-h-[90vh] md:max-w-150">
-    <ResponsiveModal.Header title={isEditing ? 'Edit Character' : 'New Character'} />
-
-    <div class="flex-1 overflow-y-auto px-4 sm:pr-4">
-      <form
-        id="character-form"
-        onsubmit={(e) => {
-          e.preventDefault()
-          handleSubmit()
-        }}
-      >
-        <VaultCharacterFormFields data={formData} onUpdate={(newData) => (formData = newData)} />
-      </form>
-    </div>
-
-    <!-- Actions -->
-    <ResponsiveModal.Footer class="gap-2 sm:gap-0">
-      <div class="flex flex-1 items-center gap-2">
-        {#if isEditing && onOpenAssistant}
-          <Button
-            variant="outline"
-            class="w-full sm:w-auto"
-            disabled={saving}
-            onclick={() => {
-              if (!character) return
-              onOpenAssistant({
-                entityType: 'character',
-                entityId: character.id,
-                entityName: character.name,
-              })
-            }}
-          >
-            <Bot class="h-4 w-4" />
-            Ask Assistant
-          </Button>
-        {/if}
-      </div>
-      <div class="flex items-center gap-2">
-        <Button variant="outline" onclick={handleCloseAttempt} disabled={saving}>
-          <X class="h-4 w-4" />
-          <span class="hidden sm:inline">Close</span>
-        </Button>
-        <Button
-          type="submit"
-          form="character-form"
-          disabled={saving || !formData.name.trim() || (isEditing && !hasChanges)}
-          class="w-full sm:w-auto"
-        >
-          {#if saving}
-            <Loader2 class="h-4 w-4 animate-spin" />
-          {/if}
-          {isEditing ? 'Save Changes' : 'Create Character'}
-        </Button>
-      </div>
-    </ResponsiveModal.Footer>
-  </ResponsiveModal.Content>
-</ResponsiveModal.Root>
+<ActionModal
+  open={true}
+  onCancel={onClose}
+  title={isEditing ? 'Edit the character' : 'Create a character'}
+  action={{
+    label: isEditing ? 'Save' : 'Create character',
+    disabled: !formData.name.trim(),
+    onConfirm: () => void handleSubmit(),
+  }}
+  busy={saving}
+  dirty={hasChanges}
+  requireChange={isEditing}
+  size="2xl"
+>
+  {#if isEditing && onOpenAssistant}
+    <Button
+      variant="outline"
+      size="sm"
+      class="gap-1.5"
+      disabled={saving}
+      onclick={() => {
+        if (!character) return
+        onOpenAssistant({
+          entityType: 'character',
+          entityId: character.id,
+          entityName: character.name,
+        })
+      }}
+    >
+      <Bot class="h-4 w-4" />
+      Ask assistant
+    </Button>
+  {/if}
+  <VaultCharacterFormFields data={formData} onUpdate={(newData) => (formData = newData)} />
+</ActionModal>
 
 <svelte:window onkeydown={handleKeydown} />

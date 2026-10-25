@@ -102,6 +102,7 @@
   action={{ label: 'Save', disabled: !canSave, onConfirm: () => void save() }}
   busy={saving}
   {dirty}
+  requireChange
   discardQuestion={{
     title: 'Discard your changes?',
     description: 'Your edits to this story will be lost.',

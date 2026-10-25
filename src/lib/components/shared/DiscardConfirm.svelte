@@ -25,10 +25,11 @@
 
   const uid = $props.id()
 
-  let cancelButton = $state<HTMLElement | null>(null)
+  let box = $state<HTMLElement | null>(null)
 
+  // The question takes the focus off the inert modal behind it, but no answer is preselected.
   $effect(() => {
-    if (open) cancelButton?.focus()
+    if (open) box?.focus()
   })
 </script>
 
@@ -44,7 +45,9 @@
     onclick={(e) => e.target === e.currentTarget && onCancel()}
   >
     <div
-      class="bg-card w-full max-w-sm rounded-lg border p-5 shadow-lg"
+      bind:this={box}
+      tabindex="-1"
+      class="bg-card w-full max-w-sm rounded-lg border p-5 shadow-lg outline-none"
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="{uid}-title"
@@ -58,7 +61,6 @@
       <!-- The same pair as an action modal's footer: neutral to stay, the delete tone to go. -->
       <div class="mt-5 flex flex-wrap gap-2 sm:flex-nowrap sm:justify-end">
         <Button
-          bind:ref={cancelButton}
           variant="outline"
           class="basis-pair grow sm:grow-0 sm:basis-auto"
           onclick={onCancel}

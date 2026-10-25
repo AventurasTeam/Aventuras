@@ -8,6 +8,7 @@
   import { Trash2 } from '@lucide/svelte'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { setTextareaUncapped } from '#lib/components/ui/textarea/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
   import { releaseOrphanScrollLock } from '#lib/utils/scrollLock.ts'
   import { claimBackPress } from '#lib/utils/backPress.ts'
   import { MODAL_CLOSE_TRANSITION_MS } from '#lib/constants/layout.ts'
@@ -59,7 +60,10 @@
     /** The modal holds something that would be lost; see the catalog for when that is. */
     dirty?: boolean
     discardQuestion?: Question
-    size?: 'md' | 'lg'
+    /** The action waits for an edit: for a modal that edits values that already exist. */
+    requireChange?: boolean
+    /** See the catalog's width scale. */
+    size?: 'md' | 'lg' | '2xl'
     /**
      * A sheet on a phone, only for a tool with no text field, nothing to lose and an action Cancel
      * can stop: `vaul` closes a sheet on a handle tap without asking. See the catalog.
@@ -85,6 +89,7 @@
       title: 'Discard your changes?',
       description: 'What you have entered here will be lost.',
     },
+    requireChange = false,
     size = 'md',
     presentation = 'dialog',
   }: Props = $props()
@@ -105,6 +110,7 @@
     '[data-state="open"]:is([role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"])'
 
   const locked = $derived(busy && !cancelWhileBusy)
+  const actionDisabled = $derived(action.disabled || (requireChange && !dirty))
   const shown = $derived(
     question === 'remove' && removal
       ? removal.question
@@ -206,7 +212,7 @@
     if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey) || e.isComposing) return
     if (!(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) return
     e.preventDefault()
-    if (!action.disabled && !busy) action.onConfirm()
+    if (!actionDisabled && !busy) action.onConfirm()
   }
 
   function answer(confirmed: boolean) {
@@ -227,7 +233,7 @@
   <ResponsiveModal.Content
     class={cn(
       'flex max-h-[85dvh] flex-col gap-0 p-0',
-      size === 'lg' ? 'max-w-lg' : 'max-w-md',
+      { md: 'max-w-md', lg: 'max-w-lg', '2xl': 'max-w-2xl' }[size],
       // Inset from a phone's edges, where the dialog would otherwise run full width.
       presentation === 'dialog' && 'w-[calc(100%-2rem)] rounded-lg',
       // Held near the top on a phone when it has a text field, so the keyboard shortening the
@@ -276,25 +282,23 @@
         {/if}
         {#if removal}
           <div class="px-6 pb-4">
-            <button
-              type="button"
-              class={cn(
-                'flex items-center gap-1.5 text-sm font-medium disabled:opacity-50',
-                FEATURE_COLORS.delete.text,
-              )}
+            <Button
+              variant="outline"
+              size="sm"
+              class={cn('gap-1.5', FEATURE_COLORS.delete.text, FEATURE_COLORS.delete.hoverText)}
               disabled={busy}
               onclick={() => (question = 'remove')}
             >
               <Trash2 class="h-4 w-4" />
               {removal.label}
-            </button>
+            </Button>
           </div>
         {/if}
         <ModalActions
           label={action.label}
           icon={action.icon}
           tone={action.tone}
-          disabled={action.disabled}
+          disabled={actionDisabled}
           onConfirm={action.onConfirm}
           onCancel={() => request('cancel')}
           {busy}

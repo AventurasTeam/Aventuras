@@ -29,20 +29,39 @@ rest:
 - **The busy lock.** While `busy`, no way out closes the modal or asks anything, unless
   `cancelWhileBusy` says Cancel stops the running action.
 
-| Prop                       | For                                                                             |
-| -------------------------- | ------------------------------------------------------------------------------- |
-| `open` / `onCancel`        | `onCancel` runs when the user leaves without the action; it defaults to closing |
-| `onClosed`                 | after the close transition, for a caller that unmounts the modal then           |
-| `title` / `description`    | `description` is a string or a snippet                                          |
-| `children`                 | the body; a confirmation whose description says it all has none                 |
-| `action`                   | `{ label, icon?, tone?, disabled?, onConfirm }`                                 |
-| `busy`, `cancelWhileBusy`  | the busy lock                                                                   |
-| `dirty`, `discardQuestion` | see below                                                                       |
-| `cancelLabel`              | only when Cancel ends more than the modal: "Cancel import"                      |
-| `titleIcon`                | only for a risk beyond the action itself; see Wording                           |
-| `removal`                  | removing the thing the modal edits; see below                                   |
-| `size`                     | `md` (the default) or `lg`                                                      |
-| `presentation`             | `sheet` only for a tool with no text field; see below                           |
+| Prop                       | For                                                                              |
+| -------------------------- | -------------------------------------------------------------------------------- |
+| `open` / `onCancel`        | `onCancel` runs when the user leaves without the action; it defaults to closing  |
+| `onClosed`                 | after the close transition, for a caller that unmounts the modal then            |
+| `title` / `description`    | `description` is a string or a snippet                                           |
+| `children`                 | the body; a confirmation whose description says it all has none                  |
+| `action`                   | `{ label, icon?, tone?, disabled?, onConfirm }`                                  |
+| `busy`, `cancelWhileBusy`  | the busy lock                                                                    |
+| `dirty`, `discardQuestion` | see below                                                                        |
+| `cancelLabel`              | only when Cancel ends more than the modal: "Cancel import"                       |
+| `titleIcon`                | only for a risk beyond the action itself; see Wording                            |
+| `removal`                  | removing the thing the modal edits; see below                                    |
+| `size`                     | `md` (the default), `lg` or `2xl`; see the width scale below                     |
+| `requireChange`            | for a modal that edits existing values: the action waits until something changed |
+| `presentation`             | `sheet` only for a tool with no text field; see below                            |
+
+### Width
+
+A modal's width follows what it does, not its content on the day it was written. On desktop:
+
+| Width       | For                                              | Examples                                                                               |
+| ----------- | ------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `md`        | a question, a command, a short options form      | Delete entry, Create a branch, Create a checkpoint, Replace this pack, Lorebook export |
+| `lg`        | an editor of a few fields, or a step with a list | Edit story, the time edit, the anchor editor, Manual chapter, Sync, the imports        |
+| `2xl`       | a large form, a list or an inspector             | the character editors, Duplicates, Timeline anomalies, Tag manager                     |
+| `3xl`–`4xl` | a multi-step surface or an image viewer          | the wizards, the reconciliation, the gallery, Debug log                                |
+| `6xl`–`7xl` | a workspace                                      | Settings, the lorebook editor, Discovery                                               |
+
+A list of results a command shows does not make it wider: Create a checkpoint and Refresh
+templates list a lot, but stay `md`.
+
+An editor of existing values passes `requireChange`, so Save stays inactive until something was
+changed. The discard and removal question preselects neither answer.
 
 ### When to pass `dirty`
 
@@ -70,7 +89,7 @@ question when there is something to lose, or by the busy lock while the action r
 
 ### Removing the thing the modal edits
 
-`removal` puts a small red text button after the body, before Cancel and the action, so it
+`removal` puts a small outlined button in the `delete` red after the body, before Cancel and the action, so it
 scrolls with the content and is read after what it would remove. It asks inside the modal before
 running. Use it only to remove the thing the modal edits, never as a general third action.
 
@@ -156,8 +175,8 @@ cannot live in the shell's one scroller.
 These end in Cancel plus an action but are still assembled by hand: `LorebookExportModal`,
 `LorebookImportModal`, `LorebookVaultImportModal`, `ResummarizeModal`, `SyncModal`,
 `VaultExportModal`, `STChatImportModal`, and in `vault/prompts/` `CreatePackDialog`,
-`ExportIntoFolderDialog`, `ImportPreviewDialog`, `RefreshTemplatesDialog`, `TestVariablesModal`,
-`UpdatePackDialog` and the pack deletion in `PromptPackList`. Move one onto the shell when you
+`ExportIntoFolderDialog`, `ImportPreviewDialog`, `TestVariablesModal` and the pack deletion in
+`PromptPackList`. Move one onto the shell when you
 are in it anyway.
 
 These are not Cancel plus one action, and stay as they are: `TimelineAnomaliesModal` (a list with

@@ -149,6 +149,7 @@
   action={{ label: 'Save', disabled: !canSave, onConfirm: () => void save() }}
   busy={saving}
   {dirty}
+  requireChange
   removal={existing && usableEntry
     ? {
         label: 'Delete this anchor',

@@ -98,6 +98,7 @@
   action={{ label: 'Save', disabled: !canSave, onConfirm: () => void save() }}
   busy={saving}
   {dirty}
+  requireChange
 >
   <!-- The header stays pinned, so the folds, which open long, sit here with the fields. -->
   <ExplanationFold id="entry_time_help" summary="What this changes">
