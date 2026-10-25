@@ -424,18 +424,21 @@ describe('entityMergeActions — collision flags', () => {
     })
 
     it("judges the loser's partner against the merged row, not the canonical before it", () => {
-      const brannoc = entity('char_a', 'character', { name: 'Brannoc', ...flaggedWith('char_b') })
-      const loser = loserNaming('char_t')
+      const loser = entity('char_b', 'character', {
+        name: 'Kael Stormborn',
+        ...flaggedWith('char_t', 'in-scene'),
+      })
+      const stormborn = entity('char_t', 'character', { name: 'Stormborn' })
       const { actions } = merge({
-        canonical: brannoc,
+        canonical,
         loser,
-        branchEntities: [brannoc, loser, third],
+        branchEntities: [canonical, loser, stormborn],
         fromLoser: ['name'],
       })
       expect(actions).toStrictEqual([
         updateOf('char_a', {
-          name: 'Kael',
-          keywords: ['Brannoc'],
+          name: 'Kael Stormborn',
+          keywords: ['Kael'],
           nameCollisionPartnerId: 'char_t',
           nameCollisionReason: 'in-scene',
         }),

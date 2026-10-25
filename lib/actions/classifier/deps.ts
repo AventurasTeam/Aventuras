@@ -33,3 +33,12 @@ export async function resetStuckClassifierRunState(
         WHERE json_extract(classifier_status, '$.state') = 'running'${quarantine}`,
   )
 }
+
+/** Stories with a branch whose classifier state is `running`: Send refuses there until a boot frees it. */
+export async function readHeldClassifierStoryIds(ctx: DbCtx): Promise<string[]> {
+  const rows = await ctx.db
+    .selectDistinct({ storyId: branches.storyId })
+    .from(branches)
+    .where(sql`json_extract(${branches.classifierStatus}, '$.state') = 'running'`)
+  return rows.map((r) => r.storyId)
+}

@@ -1181,6 +1181,8 @@ describe('buildPiggybackActions', () => {
     ])
   })
 
+  // piggyback.md → A bad ref in the two writers: a place that isn't the scene's holds nothing, so
+  // the blade stays with Kael while the coins, paid to no character, still leave him.
   it('drops visual changes and transfers targeting a non-character entity even though it exists', () => {
     const activeChar = mockEntity({ id: 'char_kael', status: 'active' })
     const location = mockEntity({
@@ -1209,15 +1211,7 @@ describe('buildPiggybackActions', () => {
     })
 
     expect(result.actions.filter((a) => a.kind === 'updateEntityVisualState')).toEqual([])
-    // char_kael is still the `from` side of both transfers — draining its
-    // inventory/stackables is valid even though the `to` side (a location) is dropped.
-    expect(result.actions.filter((a) => a.kind === 'updateEntityInventory')).toEqual([
-      {
-        kind: 'updateEntityInventory',
-        source: 'ai_classifier',
-        payload: { branchId: 'main', id: 'char_kael', equipped_items: [], inventory: [] },
-      },
-    ])
+    expect(result.actions.filter((a) => a.kind === 'updateEntityInventory')).toEqual([])
     expect(result.actions.filter((a) => a.kind === 'updateEntityStackables')).toEqual([
       {
         kind: 'updateEntityStackables',
@@ -1366,6 +1360,7 @@ describe('buildPiggybackActions', () => {
         ).toEqual({ visualChanges: 1, items: 0, stackables: 0 })
       })
 
+      // To the Keep, not the scene's place: a move elsewhere stays prose and leaves the blade held.
       it('counts an item move only when a character gives or takes it', () => {
         expect(
           landed({
@@ -1378,7 +1373,7 @@ describe('buildPiggybackActions', () => {
               ],
             }),
           }),
-        ).toEqual({ visualChanges: 0, items: 2, stackables: 0 })
+        ).toEqual({ visualChanges: 0, items: 1, stackables: 0 })
       })
 
       it('counts no release from a character who does not hold the item', () => {
@@ -1909,7 +1904,6 @@ describe('buildPiggybackActions — conditions and drops', () => {
         })
         expect(moves(result)).toEqual([
           holdings('char_3', [], []),
-          holdings('char_1', [], []),
           position('item_blade', 'loc_dock'),
         ])
         expect(result.applied.drops).toEqual([{ id: 'item_blade', from: 'char_1', at: 'loc_dock' }])
@@ -2028,11 +2022,7 @@ describe('buildPiggybackActions — conditions and drops', () => {
         },
         handOff(),
       )
-      expect(moves(result)).toEqual([
-        holdings('char_2', [], []),
-        holdings('char_1', [], []),
-        position('item_rope', 'loc_dock'),
-      ])
+      expect(moves(result)).toEqual([holdings('char_2', [], []), position('item_rope', 'loc_dock')])
       expect(result.applied.drops).toEqual([{ id: 'item_rope', from: 'char_1', at: 'loc_dock' }])
     })
 
@@ -2082,11 +2072,215 @@ describe('buildPiggybackActions — conditions and drops', () => {
         },
         handOff(),
       )
-      expect(moves(result)).toEqual([
-        holdings('char_2', [], []),
-        holdings('char_1', [], []),
-        position('item_rope', 'loc_dock'),
-      ])
+      expect(moves(result)).toEqual([holdings('char_2', [], []), position('item_rope', 'loc_dock')])
     })
+  })
+})
+
+// piggyback.md → A bad ref in the two writers: until containers exist only a character holds
+// anything, so a transfer's other holder reads by what it names.
+describe('buildPiggybackActions — holders read by what they name', () => {
+  const characterAt = (id: string, held: Partial<CharacterState>): Entity =>
+    mockEntity({
+      id,
+      state: {
+        ...(mockEntity({}).state as CharacterState),
+        current_location_id: 'loc_dock',
+        ...held,
+      },
+    })
+  const item = (id: string, at: string | null): Entity =>
+    mockEntity({ id, kind: 'item', name: id, state: { at_location_id: at } })
+  const place = (id: string): Entity =>
+    mockEntity({ id, kind: 'location', name: id, state: { parent_location_id: null } })
+  const world = (): Entity[] => [
+    characterAt('char_mira', {
+      equipped_items: ['item_blade'],
+      inventory: ['item_pouch'],
+      stackables: { gold: 10 },
+    }),
+    characterAt('char_bob', { inventory: ['item_satchel'], stackables: { gold: 3 } }),
+    item('item_blade', null),
+    item('item_pouch', null),
+    item('item_satchel', null),
+    item('item_chest', 'loc_dock'),
+    item('item_crate', 'loc_mill'),
+    place('loc_dock'),
+    place('loc_mill'),
+    mockEntity({ id: 'fac_guild', kind: 'faction', name: 'the Guild', state: {} }),
+  ]
+  const run = (transfers: Partial<ParsedTransfers>) =>
+    buildPiggybackActions({
+      log: logger,
+      source: 'per_turn_classifier',
+      entryId: 'entry_2',
+      turn: planned({ transfers: { items: [], stackables: [], drops: [], ...transfers } }),
+      entities: world(),
+      previousMetadata: {
+        sceneEntities: ['char_mira', 'char_bob'],
+        currentLocationId: 'loc_dock',
+        worldTime: 100,
+      },
+      branchId: 'main',
+    })
+  const writes = (result: ReturnType<typeof buildPiggybackActions>, kind: string) =>
+    result.actions.flatMap((a) => (a.kind === kind ? [a.payload] : []))
+  const blade = (to: string) => ({
+    items: [{ id: 'item_blade', from: 'char_mira', to, slot: 'inventory' as const, seq: 0 }],
+  })
+
+  it('moves an item into a satchel to whoever holds the satchel', () => {
+    const result = run(blade('item_satchel'))
+    expect(writes(result, 'updateEntityInventory')).toEqual([
+      { branchId: 'main', id: 'char_mira', equipped_items: [], inventory: ['item_pouch'] },
+      {
+        branchId: 'main',
+        id: 'char_bob',
+        equipped_items: [],
+        inventory: ['item_satchel', 'item_blade'],
+      },
+    ])
+    expect(result.applied.itemsLanded).toBe(1)
+  })
+
+  it("moves an item into the giver's own pouch as a change of slot", () => {
+    const result = run(blade('item_pouch'))
+    expect(writes(result, 'updateEntityInventory')).toEqual([
+      {
+        branchId: 'main',
+        id: 'char_mira',
+        equipped_items: [],
+        inventory: ['item_pouch', 'item_blade'],
+      },
+    ])
+  })
+
+  it.each([
+    ["the scene's place", 'loc_dock'],
+    ['a chest lying there', 'item_chest'],
+  ])('puts an item moved into %s down there, not as a reported drop', (_label, to) => {
+    const result = run(blade(to))
+    expect(writes(result, 'updateEntityInventory')).toEqual([
+      { branchId: 'main', id: 'char_mira', equipped_items: [], inventory: ['item_pouch'] },
+    ])
+    expect(writes(result, 'updateItemPosition')).toEqual([
+      { branchId: 'main', id: 'item_blade', atLocationId: 'loc_dock' },
+    ])
+    expect(result.applied.itemsLanded).toBe(1)
+    expect(result.applied.drops).toEqual([])
+  })
+
+  it.each([
+    ['another place', 'loc_mill'],
+    ['a crate lying elsewhere', 'item_crate'],
+  ])('leaves an item moved into %s where it was', (_label, to) => {
+    const result = run(blade(to))
+    expect(writes(result, 'updateEntityInventory')).toEqual([])
+    expect(writes(result, 'updateItemPosition')).toEqual([])
+    expect(result.applied.itemsLanded).toBe(0)
+  })
+
+  it('leaves an item given to a faction unplaced, as given away off-scene', () => {
+    const result = run(blade('fac_guild'))
+    expect(writes(result, 'updateEntityInventory')).toEqual([
+      { branchId: 'main', id: 'char_mira', equipped_items: [], inventory: ['item_pouch'] },
+    ])
+    expect(writes(result, 'updateItemPosition')).toEqual([])
+    expect(result.applied.itemsLanded).toBe(1)
+  })
+
+  it.each([
+    [
+      'from a chest lying here, as found loot',
+      { key: 'gold', amount: 5, from: 'item_chest', to: 'char_mira' },
+      { char_mira: 15 },
+    ],
+    [
+      'into a chest lying here, as stashed',
+      { key: 'gold', amount: 4, from: 'char_mira', to: 'item_chest' },
+      { char_mira: 6 },
+    ],
+    [
+      "into Bob's satchel, to Bob",
+      { key: 'gold', amount: 2, from: 'char_mira', to: 'item_satchel' },
+      { char_mira: 8, char_bob: 5 },
+    ],
+    [
+      "out of Bob's satchel, from Bob",
+      { key: 'gold', amount: 1, from: 'item_satchel', to: 'char_mira' },
+      { char_mira: 11, char_bob: 2 },
+    ],
+  ])('moves a stackable %s', (_label, transfer, balances) => {
+    const result = run({ stackables: [transfer] })
+    expect(
+      Object.fromEntries(
+        writes(result, 'updateEntityStackables').map((p) => [
+          (p as { id: string }).id,
+          (p as { stackables: Record<string, number> }).stackables.gold,
+        ]),
+      ),
+    ).toEqual(balances)
+  })
+})
+
+// principles.md → Injection / retrieval rules: the in-scene invariant seats a disabled row once the
+// scene holds it, so the turn records which ones it brought into the narrator's view.
+describe('buildPiggybackActions — disabled rows a turn seats', () => {
+  const place = (id: string, parent: string | null, mode: Entity['injectionMode'] = 'auto') =>
+    mockEntity({
+      id,
+      kind: 'location',
+      name: id,
+      injectionMode: mode,
+      state: { parent_location_id: parent },
+    })
+  const world = (): Entity[] => [
+    mockEntity({ id: 'char_mira' }),
+    mockEntity({ id: 'char_spy', injectionMode: 'disabled' }),
+    place('loc_dock', null),
+    place('loc_lair', null, 'disabled'),
+    place('loc_vault', null, 'disabled'),
+    place('loc_cell', 'loc_vault'),
+  ]
+  const seated = (
+    block: ParsedStateBlock,
+    previous: { sceneEntities: string[]; currentLocationId: string | null } = {
+      sceneEntities: ['char_mira'],
+      currentLocationId: 'loc_dock',
+    },
+  ) =>
+    buildPiggybackActions({
+      log: logger,
+      source: 'per_turn_classifier',
+      entryId: 'entry_2',
+      turn: planned(block),
+      entities: world(),
+      previousMetadata: { ...previous, worldTime: 100 },
+      branchId: 'main',
+    }).applied.seatedDisabled
+
+  it('records a disabled place the scene moves into', () => {
+    expect(seated({ sceneEntities: ['char_mira'], currentLocation: 'loc_lair' })).toEqual([
+      'loc_lair',
+    ])
+  })
+
+  it('records a place disabled through its ancestor', () => {
+    expect(seated({ sceneEntities: ['char_mira'], currentLocation: 'loc_cell' })).toEqual([
+      'loc_cell',
+    ])
+  })
+
+  it('records a disabled member the scene brings in', () => {
+    expect(seated({ sceneEntities: ['char_mira', 'char_spy'] })).toEqual(['char_spy'])
+  })
+
+  it('records nothing the scene already held, nor a place around the story', () => {
+    expect(
+      seated(
+        { sceneEntities: ['char_mira', 'char_spy'], currentLocation: 'loc_cell' },
+        { sceneEntities: ['char_mira', 'char_spy'], currentLocationId: 'loc_vault' },
+      ),
+    ).toEqual([])
   })
 })

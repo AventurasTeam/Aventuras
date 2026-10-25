@@ -13,6 +13,7 @@ import { generateId } from '@/lib/ids'
 import {
   buildPiggybackActions,
   buildStateReport,
+  isDroppedRefField,
   MAX_RETRIEVAL_QUERIES,
   normalizeCreates,
   normalizeStackableTransfer,
@@ -20,6 +21,7 @@ import {
   resolveSuggestionItems,
   substitutePiggybackIds,
   suggestionRefSchema,
+  type DroppedRef,
   type ParsedTransfers,
   type PiggybackApplied,
   type SubstitutedStateBlock,
@@ -36,6 +38,7 @@ import type {
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore } from '@/lib/stores'
 
+import { toPipelineError } from '../call-error'
 import { classifierEmbedder } from './description-embedder'
 import { readLastTurns, readStoryPlace } from './entry-reads'
 import { buildGenerationContext } from './generation-context'
@@ -99,6 +102,10 @@ function readableEntries(value: unknown, entry: z.ZodType): unknown[] | undefine
     .filter((item) => entry.safeParse(item).success)
 }
 
+// A null single-value field reads as absent; not .nullable(), which changes the JSON Schema shown.
+const nullAsOmitted = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((value) => (value === null ? undefined : value), schema)
+
 const conditionEntry = z.object({
   id: z.string().describe('The ID of a place or item shown above with its state.'),
   text: z
@@ -112,6 +119,36 @@ const conditionEntry = z.object({
 // out unlogged: the schema has no logger.
 const namesPlace = (item: unknown): boolean =>
   isRecord(item) && 'to' in item && typeof item.to === 'string' && item.to.trim() !== ''
+
+const visualChangeEntry = z.object({
+  id: z.string(),
+  type: z.enum(VISUAL_CHANGE_TYPES),
+  text: z
+    .string()
+    .describe(
+      'The category named in `type` as it is now, restated from its current value shown above: keep what still applies, drop what no longer does, in about 60 words. It replaces the stored value whole.',
+    ),
+})
+
+const itemMoveEntry = z.object({
+  id: z.string().describe("The item's ID from the list, or the handle of an item in newItems."),
+  slot: z.enum(['equipped_items', 'inventory']),
+  to: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
+  from: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
+})
+
+const stackableEntry = z.object({
+  key: z
+    .string()
+    .describe(
+      "The key exactly as the holder's Stackables line shows it, or a new lowercase name, e.g. gold, only for something they don't hold yet.",
+    ),
+  amount: z
+    .number()
+    .describe('Quantity moved, not the resulting total, and never more than the payer holds.'),
+  to: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
+  from: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
+})
 
 const dropEntry = z.object({
   id: z.string().describe("The item's ID from the list."),
@@ -150,26 +187,19 @@ export const fallbackClassifierSchema = z.object({
   ).describe(
     'Places this turn creates, when the scene settles somewhere not in Places. A new place is kept only as currentLocation or a place currentLocation is part of; any other is dropped.',
   ),
-  currentLocation: z
-    .string()
-    .optional()
-    .describe(
-      'The ID of the place this scene happens at: its ID from Places when Places lists it, or the handle of a location in newLocations.',
-    ),
+  currentLocation: nullAsOmitted(
+    z
+      .string()
+      .optional()
+      .describe(
+        'The ID of the place this scene happens at: its ID from Places when Places lists it, or the handle of a location in newLocations.',
+      ),
+  ),
   worldTimeDelta: z.number(),
-  visualChanges: z
-    .array(
-      z.object({
-        id: z.string(),
-        type: z.enum(VISUAL_CHANGE_TYPES),
-        text: z
-          .string()
-          .describe(
-            'The category named in `type` as it is now, restated from its current value shown above: keep what still applies, drop what no longer does, in about 60 words. It replaces the stored value whole.',
-          ),
-      }),
-    )
-    .optional(),
+  visualChanges: z.preprocess(
+    (value) => readableEntries(value, visualChangeEntry),
+    z.array(visualChangeEntry).optional(),
+  ),
   conditions: z
     .preprocess(
       (value) => readableEntries(value, conditionEntry),
@@ -192,55 +222,41 @@ export const fallbackClassifierSchema = z.object({
   ).describe(
     'Items this turn creates, when a character takes or receives something new. A new item is kept only when the last transfers.items entry naming it gives it to a character; any other is dropped.',
   ),
-  transfers: z
-    .object({
-      items: z
-        .array(
-          z.object({
-            id: z
-              .string()
-              .describe("The item's ID from the list, or the handle of an item in newItems."),
-            slot: z.enum(['equipped_items', 'inventory']),
-            to: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
-            from: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
-          }),
-        )
-        .default([]),
-      stackables: z
-        .array(
-          z.object({
-            key: z
-              .string()
-              .describe(
-                "The key exactly as the holder's Stackables line shows it, or a new lowercase name, e.g. gold, only for something they don't hold yet.",
-              ),
-            amount: z
-              .number()
-              .describe(
-                'Quantity moved, not the resulting total, and never more than the payer holds.',
-              ),
-            to: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
-            from: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
-          }),
-        )
-        .default([]),
-      drops: z
-        .preprocess(
-          (value) => readableEntries(value, dropEntry)?.filter((drop) => !namesPlace(drop)) ?? [],
-          z.array(dropEntry),
-        )
-        .default([])
-        .describe(
-          'Items someone holding them put down where the scene is and still lying there when the turn ends. An item picked up again, or put down anywhere else, is left out.',
-        ),
-    })
-    .optional(),
-  summary: z
-    .string()
-    .optional()
-    .describe(
-      'One sentence summarizing what happened in this turn. Used verbatim as a retrieval query next turn, so identify the people, places and things that mattered by name, not ID.',
-    ),
+  transfers: nullAsOmitted(
+    z
+      .object({
+        items: z
+          .preprocess(
+            (value) => readableEntries(value, itemMoveEntry) ?? [],
+            z.array(itemMoveEntry),
+          )
+          .default([]),
+        stackables: z
+          .preprocess(
+            (value) => readableEntries(value, stackableEntry) ?? [],
+            z.array(stackableEntry),
+          )
+          .default([]),
+        drops: z
+          .preprocess(
+            (value) => readableEntries(value, dropEntry)?.filter((drop) => !namesPlace(drop)) ?? [],
+            z.array(dropEntry),
+          )
+          .default([])
+          .describe(
+            'Items someone holding them put down where the scene is and still lying there when the turn ends. An item picked up again, or put down anywhere else, is left out.',
+          ),
+      })
+      .optional(),
+  ),
+  summary: nullAsOmitted(
+    z
+      .string()
+      .optional()
+      .describe(
+        'One sentence summarizing what happened in this turn. Used verbatim as a retrieval query next turn, so identify the people, places and things that mattered by name, not ID.',
+      ),
+  ),
   // retrieval.md → Q4: must never raise the parse — a raise costs a full extra classifier
   // call and, on failure, takes the mandatory summary down with it. Drops over-emission rather
   // than truncating: truncation needs .transform(), which breaks z.toJSONSchema.
@@ -290,7 +306,10 @@ async function generateClassifierState<T extends { worldTimeDelta: number }>(
   const first = await classify()
   if (first.status !== 'ok' || first.value.worldTimeDelta >= 0) return first
   const reroll = await classify()
-  return reroll.status === 'ok' ? reroll : first
+  const chosen = reroll.status === 'ok' ? reroll : first
+  // Each call's retried attempts are reported, whichever result the turn keeps.
+  const retried = reroll.status === 'not-configured' ? [] : reroll.recoverable
+  return { ...chosen, recoverable: [...first.recoverable, ...retried] }
 }
 
 type FallbackReply = z.infer<typeof fallbackClassifierSchema>
@@ -306,24 +325,40 @@ function orderedTransfers(transfers: NonNullable<FallbackReply['transfers']>): P
   }
 }
 
+type ReportedTransfers = NonNullable<StateReport['transfers']>
+
+// Item moves, stackables and drops each carry over on their own, so a fallback drop doesn't hide
+// the fold's landed move; rows from the two writers never share one list.
+function carriedTransfers(
+  own: ReportedTransfers | undefined,
+  prior: ReportedTransfers,
+  applied: PiggybackApplied,
+): ReportedTransfers {
+  const drops = applied.dropsLanded > 0 ? own?.drops : prior.drops
+  return {
+    items: applied.itemsLanded > 0 ? (own?.items ?? []) : prior.items,
+    stackables: applied.stackablesLanded > 0 ? (own?.stackables ?? []) : prior.stackables,
+    ...(drops !== undefined ? { drops } : {}),
+  }
+}
+
 // A failed fold lands its visual changes, conditions and transfers (bar drops it can't place), so
-// each record stays unless something in this reply's field landed too, as apply.ts reports it.
+// each record stays unless something in this reply's list changed World too, as apply.ts counts it.
 function withFoldChanges(
   report: StateReport | undefined,
   prior: StateReport | undefined,
   applied: PiggybackApplied,
 ): StateReport | undefined {
-  const transfersApplied =
-    applied.itemsLanded > 0 || applied.stackablesLanded > 0 || applied.drops.length > 0
-  const conditionsApplied = (report?.conditions ?? []).some((c) => c.rejected !== true)
   const carried: Pick<StateReport, 'visualChanges' | 'conditions' | 'transfers'> = {
     ...(applied.visualChangesLanded === 0 && prior?.visualChanges !== undefined
       ? { visualChanges: prior.visualChanges }
       : {}),
-    ...(!conditionsApplied && prior?.conditions !== undefined
+    ...(applied.conditionsLanded === 0 && prior?.conditions !== undefined
       ? { conditions: prior.conditions }
       : {}),
-    ...(!transfersApplied && prior?.transfers !== undefined ? { transfers: prior.transfers } : {}),
+    ...(prior?.transfers !== undefined
+      ? { transfers: carriedTransfers(report?.transfers, prior.transfers, applied) }
+      : {}),
   }
   if (Object.keys(carried).length === 0) return report
   return { ...(report ?? { layer: 'per_turn_classifier' as const }), ...carried }
@@ -382,7 +417,10 @@ export async function* piggybackFallbackClassifierPhase(
   }
   // Only the turn's regular classifier recurs per turn, so only it caches the system prefix;
   // a failed-piggyback recovery doesn't (piggyback.md → Fallback classifier context).
-  const callOptions: StructuredCallOptions = { cacheSystemPrefix: !outcome?.attempted }
+  const callOptions: StructuredCallOptions = {
+    cacheSystemPrefix: !outcome?.attempted,
+    actionId: ctx.actionId,
+  }
   const result = askForSuggestions
     ? await generateClassifierState(
         prompt,
@@ -398,6 +436,10 @@ export async function* piggybackFallbackClassifierPhase(
         ctx.abortSignal,
         callOptions,
       )
+
+  // generation-pipeline.md → Two retry tiers: one event per retried attempt, however the call ended.
+  for (const attempt of result.status === 'not-configured' ? [] : result.recoverable)
+    yield { type: 'recoverable_error', error: toPipelineError(attempt) }
 
   // A cancelled run discards its writes rather than recording them as a classifier
   // failure. The signal as well as the status: generateClassifierState returns the
@@ -462,14 +504,24 @@ export async function* piggybackFallbackClassifierPhase(
       layer: 'per_turn_classifier',
     })
   }
-  // Nothing rereads this reply, so a transfer with a bad ref drops alone.
+  // Nothing rereads this reply, so an entry with a bad ref drops alone, recorded in the report.
   const {
     block: substituted,
     failures,
-    droppedTransfers,
+    droppedRefs: refDrops,
   } = substitutePiggybackIds(normalized.block, idMap, { entities, badRef: 'drop' })
-  for (const dropped of droppedTransfers) {
-    ctx.log.warn('classifier.transfer_dropped', { entryId: tail.id, ...dropped })
+  // failedFields describes the narrative's attempt (data-model.md → Entry metadata shape), so this
+  // reply's own field failures are recorded with its dropped refs.
+  const droppedRefs: DroppedRef[] = [
+    ...refDrops,
+    ...failures.flatMap((f): DroppedRef[] =>
+      isDroppedRefField(f.field)
+        ? [{ field: f.field, reason: 'unreadable', detail: f.detail }]
+        : [],
+    ),
+  ]
+  for (const dropped of refDrops) {
+    ctx.log.warn('classifier.ref_dropped', { entryId: tail.id, ...dropped })
   }
   // The schema can't reject one bad stackable without failing the whole call, so the
   // transfers parseTransfers would drop are dropped here, before the actions and report.
@@ -540,10 +592,8 @@ export async function* piggybackFallbackClassifierPhase(
     buildStateReport({
       layer: 'per_turn_classifier',
       turn: { block: plan.block, report: reportedCreates },
-      failures: [
-        ...(priorReport?.failedFields ?? []),
-        ...failures.map((f) => ({ field: f.field, detail: f.detail })),
-      ],
+      failures: priorReport?.failedFields ?? [],
+      droppedRefs,
       applied,
       ...(priorReport?.raw !== undefined ? { raw: priorReport.raw } : {}),
     }),

@@ -200,6 +200,14 @@ export function stateOf<K extends EntityKind>(
   return { ...emptyEntityState(kind), ...(row?.state ?? {}) } as EntityStateByKind[K]
 }
 
+/** A row's state read as `kind`'s, checked: another kind, or no row, reads as `kind`'s empty state. */
+export function stateAs<K extends EntityKind>(
+  row: Pick<Entity, 'kind' | 'state'> | null | undefined,
+  kind: K,
+): EntityStateByKind[K] {
+  return row?.kind === kind ? stateOf(row, kind) : stateOf(null, kind)
+}
+
 /** `state.faction_id` of a character; null for any other kind, whatever its state holds. */
 export function characterFactionId(row: Pick<Entity, 'kind' | 'state'>): string | null {
   return row.kind === 'character' ? stateOf(row, 'character').faction_id : null

@@ -183,6 +183,7 @@ const SCENE_VARIABLES = [
   'currentLocationId',
   'locationMap',
   'locationMapUnplaced',
+  'placesListed',
   'heldItems',
   'entities',
   'structuralLocation',
@@ -497,6 +498,7 @@ export async function buildGenerationContext(
     // Layer A, so a move can name any known place, an unplaced one included.
     locationMap: placesMap.rows,
     locationMapUnplaced: placesMap.unplacedRows,
+    placesListed: [...placesMap.rows, ...placesMap.unplacedRows].some((row) => row.id !== null),
     currentLocationChain:
       structuralLocationId === null
         ? []

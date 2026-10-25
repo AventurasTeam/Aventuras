@@ -23,7 +23,7 @@ import {
 } from './reconcile'
 
 // The decision reads id / kind / name / description / status / keywords, and the
-// partner order reads nameCollisionFlag / createdAt.
+// partner order reads the flag / createdAt.
 const row = (over: Partial<Entity> = {}): Entity =>
   ({
     id: 'char_1',
@@ -43,8 +43,8 @@ const namesake = (
   match: ScoredNamesake['match'],
   similarity: number | null,
   inScene = false,
-  over: Partial<Entity> = {},
-): ScoredNamesake => ({ entity: row({ id, ...over }), match, similarity, inScene })
+  { flagged = false, ...over }: Partial<Entity> & { flagged?: boolean } = {},
+): ScoredNamesake => ({ entity: row({ id, ...over }), match, similarity, inScene, flagged })
 
 const flagOf = (partnerId: string, reason: string) => ({
   kind: 'create',
@@ -223,7 +223,7 @@ describe('decideReconcile', () => {
     it('then ranks an unflagged row before a flagged one', () => {
       expect(
         decideReconcile([
-          namesake('char_flagged', 'exact', 0.3, false, { nameCollisionFlag: 1 }),
+          namesake('char_flagged', 'exact', 0.3, false, { flagged: true }),
           namesake('char_plain', 'exact', 0.3),
         ]),
       ).toEqual(flagOf('char_plain', 'distinct'))
@@ -258,7 +258,7 @@ describe('decideReconcile', () => {
       expect(
         decideReconcile([
           namesake('char_part', 'partial', 0.6),
-          namesake('char_exact', 'exact', 0.6, false, { nameCollisionFlag: 1 }),
+          namesake('char_exact', 'exact', 0.6, false, { flagged: true }),
         ]),
       ).toEqual(flagOf('char_exact', 'ambiguous'))
     })
@@ -266,7 +266,7 @@ describe('decideReconcile', () => {
     it('ranks the unflagged ahead of the older', () => {
       expect(
         decideReconcile([
-          namesake('char_old', 'exact', 0.3, false, { nameCollisionFlag: 1, createdAt: 1 }),
+          namesake('char_old', 'exact', 0.3, false, { flagged: true, createdAt: 1 }),
           namesake('char_new', 'exact', 0.3, false, { createdAt: 5 }),
         ]),
       ).toEqual(flagOf('char_new', 'distinct'))
@@ -377,7 +377,10 @@ describe('reconcileNewEntity', () => {
     })
     expect(decision).toMatchObject({ kind: 'known', entityId: 'char_real' })
     expect(embed).toHaveBeenCalledTimes(1)
-    expect(embed).toHaveBeenCalledWith(['The keeper, ink on his hands.', 'A blacksmith.', KEEPER])
+    expect(embed).toHaveBeenCalledWith(
+      ['The keeper, ink on his hands.', 'A blacksmith.', KEEPER],
+      undefined,
+    )
   })
 
   it('leaves a namesake with a blank description unscored, and out of the call', async () => {
@@ -393,9 +396,34 @@ describe('reconcileNewEntity', () => {
       log: logger,
       scene: null,
     })
-    expect(embed).toHaveBeenCalledWith(['The keeper, ink on his hands.', KEEPER])
+    expect(embed).toHaveBeenCalledWith(['The keeper, ink on his hands.', KEEPER], undefined)
     // The one scored row ranks ahead of the older unscored ones.
     expect(decision).toEqual(flagOf('char_kept', 'distinct'))
+  })
+
+  // classifier.md → Partner and reason: "unflagged" reads a live flag (world.md → Surfacing).
+  it.each([
+    ['its partner is gone', 'char_gone', 'char_old'],
+    ['its partner is no longer a namesake', 'char_mira', 'char_old'],
+    ['its flag is live', 'char_new', 'char_new'],
+  ])('ranks an older row whose flag names a row when %s', async (_, partnerId, expected) => {
+    const flagged = {
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: partnerId,
+      nameCollisionReason: 'distinct',
+    } as const
+    const decision = await reconcileNewEntity(candidate({ name: 'Kael', description: '' }), {
+      kind: 'character',
+      entities: [
+        row({ id: 'char_new', name: 'Kael', createdAt: 5 }),
+        row({ id: 'char_old', name: 'Kael', createdAt: 1, ...flagged }),
+        row({ id: 'char_mira', name: 'Mira', createdAt: 0 }),
+      ],
+      embedDescriptions: embedder({}),
+      log: logger,
+      scene: null,
+    })
+    expect(decision).toEqual(flagOf(expected, 'no-signal'))
   })
 
   it('makes no call when no namesake has a description', async () => {
@@ -558,7 +586,7 @@ describe('scoreDescriptions', () => {
       0.8,
       null,
     ])
-    expect(embed).toHaveBeenCalledWith(['The keeper.', KEEPER])
+    expect(embed).toHaveBeenCalledWith(['The keeper.', KEEPER], undefined)
   })
 
   it('makes no call for a blank candidate', async () => {
@@ -613,6 +641,30 @@ describe('a description embed that throws', () => {
     expect(warned()).toEqual([
       { level: 'warn', actionId: 'act_pass', fields: { error: 'embedder offline' } },
     ])
+  })
+
+  // A cancel is no embedder fault: the embed ends with it and nothing warns.
+  it("ends an embed when the caller's signal aborts, unscored and unwarned", async () => {
+    const controller = new AbortController()
+    const embed = vi.fn<EmbedDescriptions>(
+      (_texts, signal) =>
+        new Promise((_resolve, reject) => {
+          if (signal === undefined) return reject(new Error('no signal'))
+          signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+          controller.abort()
+        }),
+    )
+    const decision = await reconcileNewEntity(candidate(), {
+      kind: 'character',
+      entities: [row()],
+      embedDescriptions: embed,
+      log: makeLogger('act_pass'),
+      scene: null,
+      signal: controller.signal,
+    })
+    expect(embed).toHaveBeenCalledWith(expect.any(Array), controller.signal)
+    expect(decision).toEqual(flagOf('char_1', 'no-signal'))
+    expect(warned()).toEqual([])
   })
 })
 

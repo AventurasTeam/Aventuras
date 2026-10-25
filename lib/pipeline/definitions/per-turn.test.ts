@@ -5,7 +5,7 @@ import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { reverseAndPruneDeltaRows } from '@/lib/actions/delta/reverse-replay'
 import { resolveSweep } from '@/lib/actions/story-entries/operational'
 import { undoLastAction } from '@/lib/actions/story-entries/undo'
-import type { PromptHalves } from '@/lib/ai'
+import type { generateStructured, streamText } from '@/lib/ai'
 import {
   APP_SETTINGS_DEFAULTS,
   deltas,
@@ -35,9 +35,10 @@ import { getPipeline } from '../authoring/registry'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
 const { streamTextMock, renderTemplateMock, generateStructuredMock } = vi.hoisted(() => ({
-  streamTextMock: vi.fn(),
+  // Typed by its parameters only: the fake streams below stand in for the SDK's result shape.
+  streamTextMock: vi.fn<(...args: Parameters<typeof streamText>) => unknown>(),
   renderTemplateMock: vi.fn(),
-  generateStructuredMock: vi.fn(),
+  generateStructuredMock: vi.fn<typeof generateStructured>(),
 }))
 
 vi.mock('@/lib/ai', async (importOriginal) => {
@@ -1239,7 +1240,7 @@ async function runNarrativeWith(opts: {
     throw new Error('expected a createStoryEntry delta')
   const { metadata } = created.action.payload.entry
   if (!metadata) throw new Error('expected entry metadata')
-  const halves = streamTextMock.mock.calls.at(-1)?.[1]?.prompt as PromptHalves
+  const halves = streamTextMock.mock.calls.at(-1)![1].prompt
   return {
     events,
     metadata,
@@ -2025,6 +2026,7 @@ describe('narrative fold — creates', () => {
 
     generateStructuredMock.mockResolvedValueOnce({
       status: 'ok',
+      recoverable: [],
       value: fallbackClassifierSchema.parse({ sceneEntities: ['c1'], worldTimeDelta: 30 }),
     })
     const fallback = await drain(phaseAt(3)(phaseCtx(intermediates)))
@@ -2180,6 +2182,7 @@ describe('narrative fold — creates', () => {
     await applyEvents(fold.events)
     generateStructuredMock.mockResolvedValueOnce({
       status: 'ok',
+      recoverable: [],
       value: fallbackClassifierSchema.parse({
         sceneEntities: ['c1'],
         newLocations: [
@@ -2228,6 +2231,54 @@ describe('narrative fold — creates', () => {
     expect(rows.find((r) => r.id === HERO)?.state).toMatchObject(HERO_BEFORE)
     expect(await storedEntry(replyId)).toBeUndefined()
     expect(await storedEntry(USER_ACTION_ID)).toBeDefined()
+  })
+
+  // piggyback.md → Parse strategy and failure recovery: stackables add, so a failed fold holds its
+  // back for the fallback, which would otherwise move the same amount a second time.
+  describe('a failed fold with a stackable', () => {
+    const goldReply =
+      'Aria pockets the purse.\n<state><scene_entities>c1</scene_entities>' +
+      '<transfers><stackable key="gold" amount="10" to="c1" /></transfers>' +
+      '<world_time_delta>soon</world_time_delta></state>'
+
+    it('moves the gold once, through the fallback', async () => {
+      await seedTurn([
+        worldRow({
+          id: HERO,
+          kind: 'character',
+          name: 'Aria',
+          state: { ...emptyEntityState('character'), current_location_id: TOWN },
+        }),
+        worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }),
+      ])
+      const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+      const fold = await foldTurn(goldReply, { log })
+      expect(fold.intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: false })
+      expect(
+        fold.events.filter(
+          (e) => e.type === 'delta_emitted' && e.action.kind === 'updateEntityStackables',
+        ),
+      ).toEqual([])
+      expect(log.debug).toHaveBeenCalledWith('classifier.stackables_held', {
+        entryId: replyOf(fold.events).id,
+        keys: ['gold'],
+      })
+      await applyEvents(fold.events)
+
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'ok',
+        recoverable: [],
+        value: fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          worldTimeDelta: 30,
+          transfers: { items: [], stackables: [{ key: 'gold', amount: 10, to: 'c1' }], drops: [] },
+        }),
+      })
+      const fallback = await drain(phaseAt(3)(phaseCtx(fold.intermediates)))
+      await applyEvents(fallback.events)
+      const hero = (await branchRows()).find((r) => r.id === HERO)
+      expect(hero?.state).toMatchObject({ stackables: { gold: 10 } })
+    })
   })
 
   // piggyback.md → Parse strategy and failure recovery: a failed fold that can't use its own place
@@ -2284,7 +2335,7 @@ describe('narrative fold — creates', () => {
 
     async function fallbackReplies(
       fold: { intermediates: Record<string, unknown> },
-      reply: unknown,
+      reply: Awaited<ReturnType<typeof generateStructuredMock>>,
     ) {
       generateStructuredMock.mockResolvedValueOnce(reply)
       const fallback = await drain(phaseAt(3)(phaseCtx(fold.intermediates)))
@@ -2309,6 +2360,7 @@ describe('narrative fold — creates', () => {
 
       const events = await fallbackReplies(fold, {
         status: 'ok',
+        recoverable: [],
         value: fallbackClassifierSchema.parse({
           sceneEntities: ['c1'],
           newLocations: [
@@ -2343,11 +2395,15 @@ describe('narrative fold — creates', () => {
       [
         'a fallback reply without the drop',
         {
-          status: 'ok',
+          status: 'ok' as const,
           value: fallbackClassifierSchema.parse({ sceneEntities: ['c1'], worldTimeDelta: 30 }),
+          recoverable: [],
         },
       ],
-      ['a failed fallback call', { status: 'failed', detail: 'LLM error' }],
+      [
+        'a failed fallback call',
+        { status: 'failed' as const, detail: 'LLM error', recoverable: [] },
+      ],
     ])(
       'a failed fold leaves the item held after %s, with no drop on the record',
       async (_label, reply) => {
@@ -2363,7 +2419,8 @@ describe('narrative fold — creates', () => {
     )
 
     const docksFallback = {
-      status: 'ok',
+      status: 'ok' as const,
+      recoverable: [],
       value: fallbackClassifierSchema.parse({
         sceneEntities: ['c1'],
         newLocations: [

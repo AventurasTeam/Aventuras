@@ -74,6 +74,7 @@ const TURN_A: Record<string, unknown> = {
     name: 'The Drowned Keep',
     description: 'Half sunk into the marsh.',
   },
+  placesListed: true,
   locationMap: [
     { id: 'l2', name: 'The Marsh', depth: 0 },
     { id: 'l1', name: 'The Drowned Keep', depth: 1 },
@@ -142,6 +143,7 @@ const TURN_B: Record<string, unknown> = {
     name: 'The Ford',
     description: 'Shallow and cold.',
   },
+  placesListed: false,
   locationMap: [
     { id: 'l3', name: 'The Ford', depth: 0 },
     { id: 'l2', name: 'The Marsh', depth: 0 },

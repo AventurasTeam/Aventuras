@@ -43,7 +43,12 @@ export {
   type RunCtxFor,
 } from './runtime/orchestrator'
 export { recoverInFlightRuns } from './runtime/recovery'
-export type { RecoveredRun, RecoveryFailure, RecoveryReport } from './runtime/recovery'
+export type {
+  BootRecoveryReport,
+  RecoveredRun,
+  RecoveryFailure,
+  RecoveryReport,
+} from './runtime/recovery'
 export type {
   ConcurrencyPolicy,
   PhaseContext,

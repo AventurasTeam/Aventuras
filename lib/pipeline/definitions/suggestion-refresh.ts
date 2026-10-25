@@ -14,6 +14,7 @@ import { buildGenerationContext } from './generation-context'
 import { PER_TURN_KIND } from './per-turn'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
+import { toPipelineError } from '../call-error'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult, PipelineInputMap } from '../types'
 
 export const SUGGESTION_REFRESH_KIND = 'suggestion-refresh'
@@ -124,7 +125,11 @@ async function* suggestionEmissionPhase(
     suggestionRefreshSchema,
     config,
     ctx.abortSignal,
+    { actionId: ctx.actionId },
   )
+  // generation-pipeline.md → Two retry tiers: one event per retried attempt, however the call ended.
+  for (const attempt of result.status === 'not-configured' ? [] : result.recoverable)
+    yield { type: 'recoverable_error', error: toPipelineError(attempt) }
   if (result.status === 'aborted') return { status: 'aborted' }
   // Pre-flight halts before this phase on a broken resolver, so a failure here
   // only covers a resolver-time race the pre-flight snapshot missed.

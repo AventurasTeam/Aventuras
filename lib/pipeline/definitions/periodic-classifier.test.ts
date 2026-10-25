@@ -469,7 +469,8 @@ describe('periodicClassifierPhase', () => {
   })
 
   // architecture.md → System and user halves.
-  it('sends no cache marker: the call takes no sixth argument', async () => {
+  // observability.md → actionId threading: no cache marker, and the pass's action id.
+  it("sends no cache marker, and the pass's action id", async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 1 })
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
@@ -479,7 +480,7 @@ describe('periodicClassifierPhase', () => {
 
     await drain(h.ctx)
 
-    expect(vi.mocked(generateStructured).mock.calls[0]![5]).toBeUndefined()
+    expect(vi.mocked(generateStructured).mock.calls[0]![5]).toEqual({ actionId: 'a1' })
   })
 
   // classifier.md → Persistence: a system row is no prose to process, and a trailing one's
@@ -791,6 +792,51 @@ describe('periodicClassifierPhase', () => {
     expect(result).toEqual({ status: 'aborted' })
     expect(h.status()).toMatchObject({ state: 'running', processedThrough: 0 })
     expect(embedder).toHaveBeenCalledTimes(1)
+  })
+
+  // An embed that settles only when the run's signal aborts: Cancel reaches it.
+  it('returns aborted on a cancel during a reconcile embed, the embed ended and unwarned', async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    const controller = new AbortController()
+    const embedder = vi.fn(
+      (_texts: string[], signal?: AbortSignal) =>
+        new Promise<never>((_resolve, reject) => {
+          if (signal === undefined) return reject(new Error('no signal'))
+          signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+          controller.abort()
+        }),
+    )
+    configureClassifierEmbedder(embedder)
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction({
+        newCharacters: [{ handle: 'nc1', name: 'Kael', description: 'A courier.', keywords: [] }],
+      }),
+    })
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'Kael, described.',
+      keywords: [],
+      state: null,
+      createdAt: 1,
+    } as unknown as Entity
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael] })
+    h.ctx.abortSignal = controller.signal
+    const { events, result } = await drain(h.ctx)
+    expect(result).toEqual({ status: 'aborted' })
+    expect(events).toEqual([])
+    expect(embedder).toHaveBeenCalledOnce()
+    expect(
+      getDiagnosticsSnapshot().logEntries.filter(
+        (e) => e.kind === 'classifier.description_embed_failed',
+      ),
+    ).toEqual([])
   })
 
   // classifier.md → Failure policy: a never-answering provider expires as a failure, not an abort.
@@ -1179,7 +1225,10 @@ describe('periodicClassifierPhase', () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [staged] })
     const { events } = await drain(h.ctx)
 
-    expect(embedder).toHaveBeenCalledWith(['The courier from the ford.', 'A courier.'])
+    expect(embedder).toHaveBeenCalledWith(
+      ['The courier from the ford.', 'A courier.'],
+      h.ctx.abortSignal,
+    )
     const actions = events.map((e) => (e as { action: { kind: string; payload: unknown } }).action)
     // Promote, not create: the namesake exists and the descriptions match.
     expect(actions.map((a) => a.kind)).toEqual([
@@ -2030,7 +2079,10 @@ describe('periodicClassifierPhase via runPipeline', () => {
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
       value: extraction(),
-      recoverable: [{ tier: 'parse', detail: 'Unexpected end of JSON input', attempt: 0 }],
+      recoverable: [
+        { tier: 'parse', detail: 'Unexpected end of JSON input', attempt: 0 },
+        { tier: 'provider', reason: 'timeout' },
+      ],
     })
     const result = await runPipeline(PERIODIC_CLASSIFIER_KIND, {
       storyId: 's1',
@@ -2043,8 +2095,10 @@ describe('periodicClassifierPhase via runPipeline', () => {
     const logged = getDiagnosticsSnapshot().logEntries.filter(
       (e) => e.kind === 'pipeline.recoverable_error',
     )
+    // The reason too: a timeout carries no detail, and logging its kind alone lost why it retried.
     expect(logged.map((e) => [e.level, e.fields, e.actionId])).toEqual([
-      ['warn', { detail: 'Unexpected end of JSON input' }, result.actionId],
+      ['warn', { kind: 'phase-logic', detail: 'Unexpected end of JSON input' }, result.actionId],
+      ['warn', { kind: 'provider', reason: 'timeout' }, result.actionId],
     ])
   })
 
@@ -3459,7 +3513,7 @@ describe('periodicClassifierPhase — the writer map', () => {
     expect(logged('classifier.unresolved_refs')).toEqual([])
   })
 
-  it('logs a blank rename and thread, a moved close and each text it cuts, under their keys', async () => {
+  it('logs a blank rename, create and thread, a moved close and each text it cuts, under their keys', async () => {
     clearBuffers()
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
     const FACT_WATCH = 'fact_77777777-7777-7777-7777-777777777777'
@@ -3478,6 +3532,13 @@ describe('periodicClassifierPhase — the writer map', () => {
             sourceTurn: 't1',
             visual: { face: long },
           },
+          { handle: 'new:blank', name: ' ', description: 'x', keywords: [], sourceTurn: 't1' },
+        ],
+        newFactions: [
+          { handle: 'new:ilsa', name: 'The Ferry Guild', description: 'x', keywords: [] },
+        ],
+        happenings: [
+          { title: ' ', sourceTurn: 't2', involvements: [{ ref: 'c1' }], awareness: [] },
         ],
         renames: [{ ref: 'c1', name: ' ', sourceTurn: 't1' }],
         newThreads: [
@@ -3516,8 +3577,15 @@ describe('periodicClassifierPhase — the writer map', () => {
       ['warn', { ref: CHAR_KAEL, cause: 'blank-name' }],
     ])
     expect(logged('classifier.create_dropped')).toEqual([
+      ['warn', { kind: 'character', handle: 'new:blank', name: ' ', cause: 'blank-name' }],
+      [
+        'warn',
+        { kind: 'faction', handle: 'new:ilsa', name: 'The Ferry Guild', cause: 'handle-taken' },
+      ],
       ['warn', { kind: 'thread', sourceTurn: 't1', cause: 'blank-title' }],
+      ['warn', { kind: 'happening', sourceTurn: 't2', cause: 'blank-title' }],
     ])
+    expect(logged('classifier.unresolved_refs')).toEqual([])
     expect(logged('classifier.thread_close_moved')).toEqual([
       ['warn', { title: 'Cross the river', resolvedAtTurn: 't1', sourceTurn: 't2' }],
     ])

@@ -288,18 +288,25 @@ bracketed handle (`[new:a]`) reads as the bare handle.
 `key="value"` pairs; any other text drops the create and counts it
 malformed, so a reference to its handle then fails its field and the
 fallback fires. The five XML entities are decoded in a create's name,
-condition and description, and a raw `<` or `>` in a name or condition
+condition and description, and so are numeric references (`&#39;`,
+`&#x27;`); a raw `<` or `>` in a name or condition
 or a raw `<` in a description drops the create, so the prompt asks the
 model to write a double quote, `<` or `>` inside a name or condition as
 `&quot;`, `&lt;` or `&gt;`, and a `<` inside a description as
-`&lt;`. A malformed create in a closed block only logs a warning,
+`&lt;`. Every other entry holds no `<` either, in its attributes or its
+text: a visual change, condition, move, stackable, query or suggestion
+that a self-closed or unclosed tag leaves malformed drops alone rather
+than reading the next tag into itself. A malformed create in a closed block only logs a warning,
 unless the block held nothing but
 creates: that block counts as empty and fails `state`, so the fallback
 fires. A `<state>` the stream cut off (no `</state>`) that declares
 any create, whole or not, fails the `state` field instead, because the
 cut may have lost the tags that name it (a `<current_location>`, a
-transfer), so the fallback fires and creates. A cut that falls between
-tags still parses clean in a block that declares no creates.
+transfer), so the fallback fires and creates. A cut-off block that
+names no `<current_location>` but drops an item fails `state` the same
+way, since the cut may have lost the place the scene moved to. A cut
+that falls between tags still parses clean when the block declares no
+create and holds no drop.
 
 **Kept only if used.** A new location is created only as the turn's
 `<current_location>` or an ancestor of it, and a new item only when
@@ -325,6 +332,11 @@ as empty: it fails `state`, the fallback fires, and its creates report
 > something that matters beyond this moment: a weapon, a key, a letter,
 > a relic. Not food eaten on the spot, not money (use a stackable), not
 > scenery.
+
+The sentence about an existing place's ID, and every other line that
+points the model at an ID in Places, renders only while Places lists a
+place with one (`placesListed`): a branch whose places are all retired
+shows them by name alone, so there is no ID to use.
 
 **Parent.** `top` makes the location top-level, and no parent leaves
 it unplaced. The prompt asks for `top` only when nothing on the map
@@ -460,9 +472,15 @@ JSON.
 If a top-level tag parses, its fields are used. If a tag is missing
 or its content doesn't parse, that field is skipped for this turn —
 per-field best-effort, one failing tag never blocks another. There
-are three exceptions. A failing field keeps the block's own creates
+are four exceptions. A failing field keeps the block's own creates
 from landing
 ([Creating a place or an item](#creating-a-place-or-an-item)). It
+keeps the block's stackables from landing as well, since an amount
+adds rather than replaces and the fallback, which reads the store
+after the fold, would move it a second time: they're logged
+(`classifier.stackables_held`) and the report lists none of them, so
+the fallback alone moves them, and nothing moves when it leaves one out
+or fails too. It
 keeps the block's drops from landing too when the block's own place
 can't be used: its `<current_location>` names a place the block
 creates, which a failed block doesn't create, or the
@@ -470,10 +488,14 @@ creates, which a failed block doesn't create, or the
 (`classifier.drops_held`) and the report lists none of them; the item
 stays held for the fallback to put down where it resolves the scene,
 and stays held when the fallback leaves the drop out or fails too. A
+block the stream cut off before any `<current_location>` holds its
+drops the same way, logged with reason `cut_off`, and fails for the
+fallback to put them down: a closed block naming no place means the
+scene stays, but a cut one may have lost the place it moved to. A
 place that can't be entered (an item's id, a retired place) doesn't
 count: it keeps the previous location on any block, as below, and the
 drops land there, as they do wherever a failed block's place stands.
-The fallback's transfers are the third: there a transfer with a bad
+The fallback's entries are the fourth: there an entry with a bad
 ref drops alone and the rest of the field applies, as below.
 
 An empty `<state>` counts as a missing one, since no turn has no
@@ -525,21 +547,44 @@ so it fails no field. So does a `<drop>` kept out of the block for its
 item: an existing item's id, or the handle of a `<new_item>` the block
 declares. Any other id or handle there (a place's, a character's, a
 lore entry's) is of the wrong kind, and so is a new item's handle as
-the `<current_location>`. The two writers treat a bad ref differently:
+the `<current_location>`. A scene entry must name a character or an
+item, a new item's handle included, and a visual change a character:
+a place or a faction there is of the wrong kind too. The two writers
+treat a bad ref differently:
 
 - **The tagged block** fails the field it sits in, whether the ref is
   unknown, undeclared or of the wrong kind, so the fallback fires and
   is the turn's only creator.
-- **The fallback**, whose reply nothing rereads, drops a transfer
-  where it stands when its item or a holder is unknown, undeclared or
-  of the wrong kind, item, stackable and drop transfers alike,
-  logging `classifier.transfer_dropped`, and applies the rest of the
-  field. Its scene list, visual changes and conditions keep the
-  per-field rule, so one unknown id there still drops the whole list.
+- **The fallback**, whose reply nothing rereads, drops an entry where
+  it stands when a ref in it is unknown, undeclared or of the wrong
+  kind, and applies the rest of the field: a scene entry, a visual
+  change, a condition, and item, stackable and drop transfers alike
+  (a holder is never of the wrong kind, below).
+  An unknown `currentLocation` drops the same way and the previous
+  location stays. Each drop is logged as `classifier.ref_dropped` and
+  recorded in the report's `droppedRefs`
+  ([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)),
+  where the reader shows it; the report's `failedFields` keeps
+  describing the narrative's attempt alone.
   A new item's handle as the `currentLocation` is rejected the way an
   item's id is: the previous location stays, the report records
   `currentLocationRejected`, and its `currentLocation` holds the new
   item's id, or the emitted handle when the item isn't created.
+
+**A holder is read by what it names, never refused for its kind.**
+Until containers exist only a character holds anything, so a
+transfer's other holder stands for what the app can track. An item
+someone holds stands for that character: an item moved into a satchel
+lands with whoever holds it, and into the giver's own pouch it changes
+slot. The scene's place, or an item lying there, takes an item moved
+into it as a put-down there, as `<drop>` does, and holds no stackable,
+which reads as found or stashed. Another place, or an item lying
+elsewhere, leaves a moved item where it was, as a drop elsewhere
+stays prose. Anything else, a faction or a lore entry, reads as an
+omitted holder, so an item given to it is unplaced. A holder that
+resolves to no entity at all is still a bad ref. A drop's holder is
+read for the record only, since a drop lands wherever its item is: one
+that names no one is left off, never costing the drop.
 
 An existing item's id as the location is rejected that way on both
 paths
@@ -745,11 +790,14 @@ transfer with a bad ref, which it drops rather than fails
 ([Parse strategy and failure recovery](#parse-strategy-and-failure-recovery)).
 A create there may omit its description or parent, or give either as
 `null`, which reads as omitted; one with no description is created
-without one, as a self-closed tag is. Its conditions and drops read
-`null`, or any other value that isn't a list, as none, and a lone entry
-as a list of one; an entry it can't read (no id, a condition with no
-text, a drop given as a bare string) drops alone, its `null` fields
-read as absent first.
+without one, as a self-closed tag is. Its visual changes, conditions,
+item moves, stackables and drops read `null`, or any other value that
+isn't a list, as none, and a lone entry as a list of one; an entry it
+can't read (no id, a condition with no text, a slot or category outside
+its list, an amount that isn't a number, a drop given as a bare string)
+drops alone, its `null` fields read as absent first. A `null` current
+location, summary or transfers object reads as omitted, so a model
+answering `null` for a field it has nothing for never fails the reply.
 
 ## Mode-mixing across a story
 

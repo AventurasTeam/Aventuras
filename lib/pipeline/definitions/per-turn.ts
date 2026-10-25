@@ -49,8 +49,9 @@ export type PerTurnPhaseName =
   | 'narrative'
   | typeof PIGGYBACK_FALLBACK_PHASE_NAME
 
-// piggyback.md → Parse strategy and failure recovery: a failed fold that can't use its own place
-// leaves its drops to the fallback, which may resolve that place; here they'd land at the last one.
+// piggyback.md → Parse strategy and failure recovery: a failed fold holds back for the fallback what
+// isn't idempotent, as it holds its creates: stackables add, so a repeat would move them twice, and
+// drops it can't place, which here would land at the last place the fallback may yet resolve.
 function skipFailedFold(
   block: SubstitutedStateBlock,
   failures: readonly ParseFieldFailure[],
@@ -58,14 +59,27 @@ function skipFailedFold(
   log: Logger,
 ): TurnCreatePlan {
   const turn = skipTurnCreates(block, log)
+  const transfers = turn.block.transfers
+  if (!transfers) return turn
   const locationFailed = failures.some((f) => f.field === 'currentLocation')
   const locationSkipped =
     block.currentLocation !== undefined && turn.block.currentLocation === undefined
-  const transfers = turn.block.transfers
-  if (!(locationFailed || locationSkipped) || !transfers || transfers.drops.length === 0)
-    return turn
-  log.debug('classifier.drops_held', { entryId, itemIds: transfers.drops.map((d) => d.id) })
-  return { ...turn, block: { ...turn.block, transfers: { ...transfers, drops: [] } } }
+  const holdDrops = (locationFailed || locationSkipped) && transfers.drops.length > 0
+  const holdStackables = transfers.stackables.length > 0
+  if (holdDrops)
+    log.debug('classifier.drops_held', { entryId, itemIds: transfers.drops.map((d) => d.id) })
+  if (holdStackables)
+    log.debug('classifier.stackables_held', {
+      entryId,
+      keys: transfers.stackables.map((s) => s.key),
+    })
+  if (!holdDrops && !holdStackables) return turn
+  const held = {
+    ...transfers,
+    ...(holdDrops ? { drops: [] } : {}),
+    ...(holdStackables ? { stackables: [] } : {}),
+  }
+  return { ...turn, block: { ...turn.block, transfers: held } }
 }
 
 async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
@@ -252,6 +266,12 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       })
     for (const drop of parsedState.dropsElsewhere)
       ctx.log.warn('classifier.drop_dropped', { entryId, drop, reason: 'to_named' })
+    if (parsedState.dropsCutOff.length > 0)
+      ctx.log.debug('classifier.drops_held', {
+        entryId,
+        itemIds: parsedState.dropsCutOff.map((d) => d.id),
+        reason: 'cut_off',
+      })
     // A failed fold creates nothing: creates aren't idempotent, and the fallback that fires
     // rewrites this turn's state, so a create made by both would leave a duplicate row.
     const turn = piggybackParseSucceeded

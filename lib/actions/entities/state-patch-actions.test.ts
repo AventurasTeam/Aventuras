@@ -1063,8 +1063,9 @@ describe('setCharacterFaction', () => {
     const { db, ctx } = await setup()
     await db.insert(entities).values([
       faction('fact_circle'),
-      faction('fact_crown'),
+      faction('fact_crown', { name: 'The Crown' }),
       faction('fact_crown_2', {
+        name: 'The Crown',
         nameCollisionFlag: 1,
         nameCollisionPartnerId: 'fact_crown',
         nameCollisionReason: 'alike',

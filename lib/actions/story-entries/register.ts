@@ -19,6 +19,7 @@ export const STORY_ENTRY_REJECTION = {
   noMetadata: 'no-metadata',
   notTailEntry: 'not-tail-entry',
   retiredPlace: PLACE_REFUSAL.retiredPlace,
+  notALocation: 'not-a-location',
   deltaFailed: 'delta-failed',
   countsChanged: 'counts-changed',
 } as const

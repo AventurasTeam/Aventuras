@@ -71,7 +71,7 @@ Here:{% for i in looseItems %}{% include 'macro_item_line', item: i, condition: 
 If any off-scene character above enters the scene, include their ID (without brackets) in the trailing <scene_entities> block.
 
 {% endif -%}
-{% if locationMap.size > 0 or locationMapUnplaced.size > 0 -%}
+{% if placesListed -%}
 Use an ID from Places for <current_location>, or declare a new one with <new_location> in the state block below when the scene settles somewhere new.
 
 {% endif -%}

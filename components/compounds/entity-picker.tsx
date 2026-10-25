@@ -13,7 +13,7 @@ import { Text } from '@/components/ui/text'
 import type { Entity, EntityKind } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { normalizeTerm } from '@/lib/keyword-terms'
-import { collate, compareId } from '@/lib/list-modules'
+import { collate, compareAge } from '@/lib/list-modules'
 
 import { PickerField } from './picker-field'
 
@@ -41,7 +41,7 @@ type EntityPickerProps = {
 const KIND_ORDER: readonly EntityKind[] = ['character', 'location', 'item', 'faction']
 
 function compareEntityRows(a: Entity, b: Entity): number {
-  return collate(a.name, b.name) || a.createdAt - b.createdAt || compareId(a.id, b.id)
+  return collate(a.name, b.name) || compareAge(a, b)
 }
 
 /**

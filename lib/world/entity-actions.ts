@@ -296,7 +296,7 @@ function positionActions(args: EntityActionArgs): PipelineAction[] {
   const actions: PipelineAction[] = []
   for (const other of branchEntities) {
     if (other.kind !== 'character') continue
-    const state = other.state as CharacterState
+    const state = stateOf(other, 'character')
     const held = heldItems(state)
     if (!held.some((itemId) => items.has(itemId))) continue
     actions.push({
@@ -313,7 +313,7 @@ function positionActions(args: EntityActionArgs): PipelineAction[] {
   if (clearLocation) {
     for (const item of branchEntities) {
       if (!items.has(item.id) || item.kind !== 'item') continue
-      if ((item.state as ItemState).at_location_id == null) continue
+      if (stateOf(item, 'item').at_location_id == null) continue
       actions.push({
         kind: 'updateItemPosition',
         source: 'user_edit',

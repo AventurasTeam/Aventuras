@@ -1213,13 +1213,19 @@ reverses the orphan
 So this is not an observability-only state:
 
 - The title reads _"Recovery incomplete"_ unless every orphan
-  reversed. A boot that reversed one orphan and failed another has
-  still left writes behind, and _"Story recovered"_ would over-claim
-  it.
-- A `periodic-classifier` failure is the one kind that can promise
-  the branch's turns stop until then, because it writes
-  `state: 'running'` before any delta and so definitionally stops
-  them. Other kinds describe the fault without promising a stop.
+  reversed and no branch is held. A boot that reversed one orphan and
+  failed another has still left writes behind, and _"Story recovered"_
+  would over-claim it.
+- The copy promises a branch's turns stop only where the boot left it
+  held: classifier state still `running` once the reset ran, read
+  after it rather than inferred from the failures. A pass failure
+  usually is held, since the pass writes `state: 'running'` before any
+  delta, but not always: the reset frees a branch whose failed orphan
+  left no deltas, and a pass that had already written its outcome
+  holds nothing. A held branch no failure explains, because the reset
+  threw or never ran, gets its own line. Other kinds describe the
+  fault without promising a stop; if the hold can't be read, every
+  pass failure reads as held, and the title can't claim recovery.
 - Every variant says the story's content is intact. Each also says
   that restarting the app retries automatically, unless the reversal
   was refused as an integrity error (`ReversalIntegrityError`): every
@@ -1382,7 +1388,9 @@ the chain's last run ends. Submit and regenerate await only `origin`,
 so they release the branch queue at the turn's commit while a
 chained pass runs on, and a head reversal reaches the pass to
 interrupt it rather than queueing behind it. A successor whose marker
-insert fails is unwound, and the chain ends there.
+insert fails is unwound, and the chain ends there. So is any run whose
+drive throws before it ends, which would otherwise hold the gate until
+a restart; an origin's `origin` still rejects with the throw.
 
 (Invariant depends on Zustand's setState being synchronous; pin
 in tests if a state-library swap ever happens.)

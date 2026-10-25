@@ -968,13 +968,16 @@ classifier's rule
 ([`classifier.md → Disambiguation`](../../../memory/classifier.md#disambiguation-on-new-character-mentions)):
 same kind, and the same name trimmed and case-folded, one name's
 words inside the other's, or one name among the other's keywords;
-staged and retired rows included. A location pair flagged
-`same-parent` is a pair only while the two share a parent
-([`piggyback.md → Matching before creating`](../../../memory/piggyback.md#matching-before-creating)). A flag whose partner the branch no
-longer has is dormant: it has nothing to pair with, so it gets no
-strip and counts toward no pill or badge. Writes keep dormant flags
-from forming, each in the same action and delta-logged, so CTRL-Z
-re-flags the row:
+staged and retired rows included. A flag is live while its partner is
+on the branch, the two are still namesakes, and, for a `same-parent`
+flag, the two still share a parent
+([`piggyback.md → Matching before creating`](../../../memory/piggyback.md#matching-before-creating)).
+Any other flag is dormant: it gets no strip and counts toward no pill
+or badge, and every reader of a flag counts it as none, the
+classifier's partner order and its rename's raise included
+([`classifier.md → What the classifier writes`](../../../memory/classifier.md#what-the-classifier-writes)).
+World's writes keep dormant flags from forming, each in the same
+action and delta-logged, so CTRL-Z re-flags the row:
 
 - a [delete](#delete) clears the flag of every row whose partner it
   removes;
@@ -991,9 +994,11 @@ re-flags the row:
   instead ([Reversibility](#reversibility)).
 
 A reversal can still leave one, such as undoing the partner's
-create. It stays hidden until the partner returns (ids are never
-reused, so only the same row can) or until resolving a pair that
-includes its row clears it
+create, and so can a pass's rename, which writes no flag columns. It
+stays hidden until its pair holds again (the partner returns, and ids
+are never reused, so only the same row can, or a later rename or move
+makes the two a pair again), until a pass re-points it at a new
+holder, or until resolving a pair that includes its row clears it
 ([Authorship and 3+ collisions](#authorship-and-3-collisions)).
 
 A "Needs review" filter chip was considered and rejected:
@@ -1043,7 +1048,7 @@ When the open row has unsaved edits, `Resolve →` routes through
 the pane's Save / Discard / Cancel guard first, as [Delete](#delete)
 does. While open, the dialog reads both rows live: it closes on its
 own once either row is gone or the pair stops being flagged (a
-rename on another surface that clears it), and when the screen loses
+rename on another surface that clears the flag or leaves it dormant), and when the screen loses
 focus. A refusal shows inline in the dialog, which stays open. A resolution that lands
 closes it and toasts the result ("Merged into <name>.", "Names
 saved.", "Kept as distinct."); a refusal that arrives after the
@@ -1309,11 +1314,11 @@ both continue to exist. The flag clears; no other writes." The
 same-name limitation doesn't apply, so it isn't cited.
 
 Confirming clears the flag on each row of the pair whose partner is
-the other row or is gone, one delta per row, without writing
-anything else. Clearing only the row the strip was opened from would
-leave a flag on the other row that names it, or names a row that's
-gone, with nothing left to resolve it; a flag naming a live third row
-stays, as its own question. On a same-name pair the user is opting
+the other row, or whose flag is [dormant](#surfacing), one delta per
+row, without writing anything else. Clearing only the row the strip
+was opened from would leave a flag on the other row that names it, or
+a dormant one, with nothing left to resolve it; a live flag naming a
+third row stays, as its own question. On a same-name pair the user is opting
 into the v1 limitation with eyes open.
 
 ### Reversibility
@@ -1452,9 +1457,8 @@ written.
 The dialog handles two-side merges only. When 3+ entities are
 namesakes, the user iterates: each flagged row's strip names its own
 stored partner, and resolving a pair clears only the flags of that
-pair that name each other or name a row that's gone. A flag on a row
-of the pair that names a live third row stays, since it is a separate
-question, and a merge that deletes a flagged row's partner re-points
+pair that name each other or are dormant. A live flag on a row of the
+pair that names a third row stays, since it is a separate question, and a merge that deletes a flagged row's partner re-points
 the flag at the surviving row. A surviving row whose own partner was
 the deleted row takes the deleted row's live partner and reason
 instead, when that row pairs with the merged row under that reason (a

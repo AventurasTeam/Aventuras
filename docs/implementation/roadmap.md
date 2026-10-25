@@ -751,39 +751,6 @@ code before it moved; resolve with the slice it names.
   blocks at turn 5 and malformed ones at turn 80 would silently move a
   story onto the expensive path exactly as it gets long. Surfaced
   2026-09-06 designing the query stack.
-- **M7.1 — The fallback classifier can re-apply stackable transfers the
-  narrative fold already wrote.** The fold applies whatever the tagged
-  block parsed even when another field failed
-  (`lib/pipeline/definitions/per-turn.ts`), and any parse failure fires
-  the fallback, whose schema asks for transfers again. Item moves and
-  visual changes overwrite, so a repeat is harmless; stackable amounts
-  add, so a transfer both layers report lands twice. Verified by
-  reading in the 2026-10-05 triage pass and reproduced 2026-10-11 by a
-  unit probe through the real fold and fallback: a block giving `c1`
-  10 gold as a stackable beside an unparseable `<world_time_delta>`
-  (`soon`) fails the parse, the fallback emits the same stackable, and
-  Aria's gold goes 10 → 20. The fallback reads the post-fold store
-  (`per-turn-piggyback.ts`) and `lib/piggyback/apply.ts` adds the
-  amount to the current count, with no dedupe; any failing field
-  beside a valid `<transfers>` is enough, a made-up id in
-  `<scene_entities>` among them. Reasoned, not probed: the same read
-  renders the fallback prompt's `Holds:` and `Here:` lines with the
-  fold's transfers already applied, under the template's "the world as
-  it stands going into that turn"; the same read renders each holder's
-  `Stackables:` balances too, and the fallback is told not to move more
-  than a payer holds
-  ([`architecture.md → Entity state on the template surface`](../architecture.md#entity-state-on-the-template-surface)).
-  Unreachable until this slice:
-  `piggybackMode` defaults to `'off'` and only the dev seed turns it
-  on. Canon decides the fold half
-  ([`piggyback.md → Parse strategy and failure recovery`](../memory/piggyback.md#parse-strategy-and-failure-recovery))
-  and frames the fallback as a from-scratch, last-writer-wins
-  re-extraction, but never addresses fields that are deltas rather
-  than values. Options: the fallback drops transfers when the fold
-  applied them; it bases stackables on the pre-fold state, so last
-  writer wins does hold; or the fold applies nothing on a partial
-  parse, which contradicts canon. Raised by the post-4.2b triage pass
-  (2026-10-04), routed 2026-10-05.
 - **M7.1 — Every future model-removal path must evict the native session cache.**
   `lib/embedder/local/runtime.native.ts` holds a lazy `bundles`
   `Map<modelId, SessionBundle>`; a removed then re-downloaded model reuses
@@ -1221,6 +1188,19 @@ code before it moved; resolve with the slice it names.
   (`passFailure`, e.g. `timeout after 600000ms`). The panel slice picks
   one form. Predates the pass failure policy slice; raised 2026-10-23
   by its slice review.
+- **M7.1 — Embed calls have no timeout of their own.** Reconcile's
+  description embeds (`scoreDescriptions` in
+  `lib/classifier/reconcile.ts`, through `embedClassifierDescriptions`
+  in `lib/embedder-swap/app-deps.ts`) and retrieval's embeds end on a
+  cancel but nothing bounds them:
+  [`classifier.md → Failure policy`](../memory/classifier.md#failure-policy)
+  bounds only the pass's structured call, so a hung remote embedder
+  holds the pass, and the gate, until it returns or the user cancels.
+  Options: extend the pass bound over reconcile, one deadline for the
+  call and its matching, or an embed timeout read from the embedder
+  profile, which the embedder settings would carry. Raised 2026-10-23
+  by the pass failure policy slice review; routed by the 2026-10-24
+  triage pass.
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware

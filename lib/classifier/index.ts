@@ -38,7 +38,7 @@ export type {
   ReconciledKind,
   ReconcileDecision,
 } from './reconcile'
-export { buildClassifierActions, clampEmbeddedCharacter, RECONCILED_KINDS } from './plan'
+export { buildClassifierActions, clampEmbeddedText, RECONCILED_KINDS } from './plan'
 export type { PlanDeps, PlannedWrite, PlanResult } from './plan'
 export {
   IDLE_STATUS_JSON,

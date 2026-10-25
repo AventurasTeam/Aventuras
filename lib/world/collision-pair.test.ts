@@ -77,13 +77,16 @@ describe('flaggedSideOf', () => {
 })
 
 describe('collisionPairOf', () => {
-  it('returns a flagged pair in the order asked for, whatever the names', () => {
+  it('returns a flagged pair in the order asked for', () => {
     expect(collisionPairOf([OLDER, NEWER], ['char_b', 'char_a'])).toEqual({
       pair: [NEWER, OLDER],
     })
+  })
+
+  it('misses a flagged pair that are no longer namesakes', () => {
     const renamed = row('char_b', 'Brannoc', flaggedWith('char_a'))
     expect(collisionPairOf([OLDER, renamed], ['char_a', 'char_b'])).toEqual({
-      pair: [OLDER, renamed],
+      miss: COLLISION_PAIR_MISS.notFlagged,
     })
   })
 

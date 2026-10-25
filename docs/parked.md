@@ -208,6 +208,23 @@ The other three Group D surfaces (story-settings, app-settings,
 vault calendars) landed; this one was always pending its desktop
 design and is now confirmed post-v1 in scope.
 
+#### The seen-before-written set mirrors the bundled templates
+
+`shownWithState` in `lib/pipeline/definitions/generation-context.ts`
+builds the ids a per-turn condition may land on from the rows the
+bundled per-turn and fallback templates render with their state. A
+pack template that renders state for other rows, or hides it for
+some, drifts from that set: a condition is refused for a row the
+model was shown, or lands on one it wasn't. Gating the set's sources
+on the template's `reads`, or deriving it from the rendered prompt,
+would close it. Raised 2026-10-23 by the AI writer map's Task 12
+review; filed by its slice review.
+
+It lands with user-authored packs, the
+[prompt-pack editor](#prompt-pack-editor-desktop-spec--mobile-retrofit)
+above: the app ships only the bundled pack, so until then no template
+can drift from the set. Routed from triage 2026-10-24.
+
 #### Pack validation contract
 
 [`architecture.md → Prompt templates and authoring`](./architecture.md#prompt-templates-and-authoring)
@@ -1582,6 +1599,60 @@ a pending proposal means to the next close and to retrieval. Today a
 user edit made after the cited prose stands, and CTRL-Z of the close
 reverses all of it. Parked 2026-10-20 with the AI writer map; the
 signal is users undoing whole closes to keep one description.
+
+#### A keyword write's undo restores the whole prior list
+
+`appendEntityKeywords` and `renameEntity`
+(`lib/actions/entities/state-patch-actions.ts`) store the row's
+pre-write keywords as undo. Reversing a write that landed before an
+earlier turn's keyword write, which the reversal spares, restores the
+list from before it and takes the spared write's terms away too, and
+the watermark clamp means that turn is never re-read
+([`memory/classifier.md → Provenance attribution`](./memory/classifier.md#provenance-attribution)
+says reversal spares facts about surviving turns). Within one reply
+the planner plans every keyword write to a row in turn order (its
+renames, aliases, a known or promoted mention's terms and a reused
+place's), and the periodic classifier, their only writer, lands its
+passes in turn order, so the loss needs a later reply carrying an
+earlier turn's term than one already written. The general fix is an
+undo that removes only the terms its own write added.
+
+Parked 2026-10-24; the signal is a keyword of a surviving turn lost to
+a reversal, or a second keyword writer, such as chapter close, landing
+terms out of turn order.
+
+#### An unattributed pass fact can be lost to a reversal
+
+A pass fact whose reply named no source turn falls back to the window
+head as its survival anchor
+([`memory/classifier.md → Provenance attribution`](./memory/classifier.md#provenance-attribution)),
+so any reversal into the window reverses it. When its real source turn
+sits below the reversal point, the watermark clamps to that point less
+one ([`data-model.md → Survival anchor`](./data-model.md#survival-anchor)),
+the source turn is never re-read, and the fact is lost. Since the AI
+writer map, an unattributed thread a pass opens and closes is one such
+fact. A candidate fix clamps the watermark to the window's start when a
+fallback-anchored fact reverses, so the whole window is read again; the
+cost is re-extracting the window's attributed facts too, duplicates
+unless reconciliation catches them.
+
+Parked 2026-10-24; the signal is the unattributed fallback
+(`classifier.window_head_fallback`) firing often enough to measure.
+
+#### A zero or NaN embedding is stored as it comes
+
+`l2Normalize` (`lib/embedder/local/pooling.ts`) returns a zero vector
+unchanged and turns NaN input into an all-NaN vector, and `embedTexts`
+(`lib/embedder/service.ts`) stores either: nothing on the write path
+enforces the unit norm `lib/retrieval/vector.ts` assumes it does. A
+retrieval pass that scores such a row throws `VectorInvariantError`,
+which the reader shows as an embedder failure with Switch embedder as
+its fix, on every pass that meets the row. Reconciliation is safe:
+`scoreDescriptions` (`lib/classifier/reconcile.ts`) reads a zero or
+NaN vector as unscored. The fix is a write-side guard in `embedTexts`
+that fails the embed on a vector it can't normalize instead of storing
+it. Parked 2026-10-24; the signal is a provider returning zero or NaN
+vectors.
 
 ### UX (parked)
 
@@ -3310,3 +3381,15 @@ each handler catches its own failure, so none can reject unhandled.
 Declined by the developer on that cost for no real hit; `return-await`
 was not probed. The signal to revisit is a shipped bug from a dropped
 `await`.
+
+#### AI SDK v7 migration
+
+`@ai-sdk/anthropic` 4.x belongs to the AI SDK's v7 line, so moving to it
+means moving `ai` and `@ai-sdk/openai-compatible` to their v7 releases
+too: an SDK migration, not a one-package bump. The 4.0.0 changelog also
+makes the package ESM-only and drops `cacheCreationInputTokens` from
+`providerMetadata`, which the app doesn't read. The 3.x line the app is
+on still gets releases under the `ai-v6` dist-tag, and neither line
+sends Anthropic's browser-access header, which the app now sets itself.
+Parked 2026-10-24; the signal is a v7-only feature or fix the app needs,
+or the `ai-v6` line going unmaintained.

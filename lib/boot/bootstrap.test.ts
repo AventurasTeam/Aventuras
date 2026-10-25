@@ -148,19 +148,20 @@ describe('runBootstrap', () => {
   it("holds a branch on its pass's failed orphan, not on a turn's", async () => {
     await seedRow()
     await ctx.db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await ctx.db.insert(stories).values({ id: 's2', title: 'U', createdAt: 1, updatedAt: 1 })
     const running = {
       state: 'running' as const,
       lastSuccessAt: null,
       lastError: null,
       processedThrough: 2,
     }
-    for (const [branchId, kind] of [
-      ['b-pass', PERIODIC_CLASSIFIER_KIND],
-      ['b-turn', 'per-turn'],
+    for (const [branchId, kind, storyId] of [
+      ['b-pass', PERIODIC_CLASSIFIER_KIND, 's1'],
+      ['b-turn', 'per-turn', 's2'],
     ] as const) {
       await ctx.db.insert(branches).values({
         id: branchId,
-        storyId: 's1',
+        storyId,
         name: branchId,
         createdAt: 1,
         classifierStatus: running,
@@ -169,7 +170,7 @@ describe('runBootstrap', () => {
         runId: `r-${branchId}`,
         kind,
         actionId: `a-${branchId}`,
-        storyId: 's1',
+        storyId,
         startedAt: 1,
         finishedAt: null,
         outcome: null,
@@ -202,6 +203,77 @@ describe('runBootstrap', () => {
       )[0]?.status
     expect(await status('b-pass')).toEqual(running)
     expect(await status('b-turn')).toEqual({ ...running, state: 'idle' })
+    expect(recoveryReportStore.getSnapshot().pendingRecoveryReport?.heldStoryIds).toEqual(['s1'])
+  })
+
+  // The copy promises a stop only where one exists: a pass orphan whose branch had already left
+  // `running` (it wrote its outcome before the crash) holds nothing.
+  it('reports no hold for a pass failure whose branch is not running', async () => {
+    await seedRow()
+    await ctx.db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await ctx.db.insert(branches).values({
+      id: 'b1',
+      storyId: 's1',
+      name: 'm',
+      createdAt: 1,
+      classifierStatus: { state: 'idle', lastSuccessAt: 5, lastError: null, processedThrough: 2 },
+    })
+    await ctx.db.insert(pipelineRuns).values({
+      runId: 'r-pass',
+      kind: PERIODIC_CLASSIFIER_KIND,
+      actionId: 'a-pass',
+      storyId: 's1',
+      startedAt: 1,
+      finishedAt: null,
+      outcome: null,
+    })
+    await ctx.db.insert(deltas).values({
+      id: 'd-pass',
+      branchId: 'b1',
+      entryId: null,
+      actionId: 'a-pass',
+      logPosition: 1,
+      source: 'ai_classifier',
+      targetTable: 'not_registered' as never,
+      targetId: 'missing',
+      op: 'create',
+      undoPayload: null,
+      encodingVersion: 1,
+      createdAt: 1,
+    })
+
+    await runBootstrap(ctx)
+
+    const published = recoveryReportStore.getSnapshot().pendingRecoveryReport
+    expect(published?.failures).toMatchObject([{ kind: PERIODIC_CLASSIFIER_KIND, storyId: 's1' }])
+    expect(published?.heldStoryIds).toEqual([])
+  })
+
+  // With no report the reset never runs, so every running branch stays held: say so.
+  it('reports the held stories when recovery itself fails', async () => {
+    await seedRow()
+    await ctx.db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await ctx.db.insert(branches).values({
+      id: 'b1',
+      storyId: 's1',
+      name: 'm',
+      createdAt: 1,
+      classifierStatus: {
+        state: 'running',
+        lastSuccessAt: null,
+        lastError: null,
+        processedThrough: 0,
+      },
+    })
+    ctx.sqlite.exec('DROP TABLE pipeline_runs')
+
+    expect(await runBootstrap(ctx)).toEqual({ status: 'ok' })
+
+    expect(recoveryReportStore.getSnapshot().pendingRecoveryReport).toEqual({
+      reversed: [],
+      failures: [],
+      heldStoryIds: ['s1'],
+    })
   })
 
   // Guards the load-bearing registerAllDomains()-before-recovery order. Simulate a

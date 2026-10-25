@@ -3,6 +3,7 @@ import {
   describeDeltaReplayError,
   holdBranchWriteExclusive,
   normalizeAppSettingsRow,
+  readHeldClassifierStoryIds,
   registerAllDomains,
   releaseBranchWriteExclusive,
   resetStuckClassifierRunState,
@@ -95,7 +96,6 @@ export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
   let recovery: RecoveryReport | null = null
   try {
     recovery = await recoverInFlightRuns(ctx)
-    recoveryReportStore.publish(recovery)
   } catch (err) {
     logger.error('bootstrap.recovery_failed', {
       error: err instanceof Error ? err.message : String(err),
@@ -116,6 +116,21 @@ export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
       })
     }
   }
+  // Read, not inferred from the failures: a reset that freed a branch, or one that threw or never
+  // ran, would otherwise make the copy promise a hold that isn't there or miss one that is.
+  let heldStoryIds: string[] | null = null
+  try {
+    heldStoryIds = await readHeldClassifierStoryIds(ctx)
+  } catch (err) {
+    logger.error('bootstrap.classifier_hold_read_failed', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+  recoveryReportStore.publish({
+    reversed: recovery?.reversed ?? [],
+    failures: recovery?.failures ?? [],
+    heldStoryIds,
+  })
   // ctx.db (not the module-level default) so recovery and hydrate hit the
   // same instance.
   const result = await rehydrateAppSettings(ctx.db)

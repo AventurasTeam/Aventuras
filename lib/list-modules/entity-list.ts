@@ -9,7 +9,7 @@ import {
 } from '@/lib/db'
 import { normalizeTerm } from '@/lib/keyword-terms'
 
-import { collate, compareId } from './collate'
+import { collate, compareAge } from './collate'
 import { textIncludes } from './search-text'
 import {
   ENTITY_TIERS,
@@ -116,7 +116,7 @@ export function compareEntities(a: Entity, b: Entity, signals: EntityListSignals
     const bIn = signals.inScene.has(b.id)
     if (aIn !== bIn) return aIn ? -1 : 1
   }
-  return collate(a.name, b.name) || a.createdAt - b.createdAt || compareId(a.id, b.id)
+  return collate(a.name, b.name) || compareAge(a, b)
 }
 
 export function queryEntities(

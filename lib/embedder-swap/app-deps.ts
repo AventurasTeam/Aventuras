@@ -386,12 +386,13 @@ export function composeRetrievalEmbedDeps(config: EmbedderConfig): {
  */
 export async function embedClassifierDescriptions(
   texts: string[],
+  signal?: AbortSignal,
 ): Promise<{ vectors: Float32Array[]; dim: number }> {
   const storyId = currentStoryStore.getCurrentStory()?.storyId
   if (storyId == null) return { vectors: [], dim: 0 }
   const resolution = resolveDrainConfig(storyId)
   if (!resolution.ok) return { vectors: [], dim: 0 }
-  return embedTexts(resolution.config, texts, 'document', providerFor(resolution.config))
+  return embedTexts(resolution.config, texts, 'document', providerFor(resolution.config), signal)
 }
 
 function composeSwapDeps(storyId: string, ctx: DbCtx): SwapDeps {

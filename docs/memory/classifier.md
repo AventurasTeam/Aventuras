@@ -66,7 +66,8 @@ alias list (the keywords bullet below).
   awareness row may also name a happening Known happenings lists, when
   the turns show a character learning of it ("Kael tells Aria about
   the massacre"); a pair the reply repeats lands at its earliest
-  learning turn.
+  learning turn. A happening with a blank title creates nothing, its
+  involvements and awareness with it, and is logged.
 - **Status transitions** — `entities.status` flips:
   - `staged → active` when prose mentions a staged entity in scene
     (the slow path; see
@@ -128,12 +129,11 @@ alias list (the keywords bullet below).
   stand when it lands, since a write the pass counted on may have been
   refused by then: a holder found only then leaves the rename unwritten,
   with no keyword and no flag. An entity already flagged keeps its flag
-  and gets the keyword only. A flag whose partner is gone, whose pair
-  are no longer namesakes once the keyword is counted (World may still
-  show the latter's strip), or whose `same-parent` pair no longer share
-  a parent
-  ([`world.md → Surfacing`](../ui/screens/world/world.md#surfacing))
-  counts as no flag: the pass re-points it at the holder.
+  and gets the keyword only. A dormant flag
+  ([`world.md → Surfacing`](../ui/screens/world/world.md#surfacing)),
+  its partner gone, its pair no longer namesakes once the keyword is
+  counted, or a `same-parent` pair no longer sharing a parent, counts
+  as no flag: the pass re-points it at the holder.
 - **Where a place sits** — a listed place's parent, when the turns
   place one the Places list shows unplaced or move one; and the
   top-level mark for an unplaced place nothing on the map could
@@ -200,7 +200,13 @@ turn that narrated the learning, not the happening's.
 - **Status flip / first-introduction** → the triggering / introducing
   turn.
 - **Unattributed fallback** → the window head, so the fact reverses on any
-  reversal into its window (re-derivable) but never survives as an orphan.
+  reversal into its window but never survives as an orphan. It is
+  re-derived only when the reversal reaches back to its real source
+  turn: the watermark clamps to the reversal point less one
+  ([`data-model.md → Survival anchor`](../data-model.md#survival-anchor)),
+  so a source turn below that point is never re-read and the fact is
+  lost
+  ([`parked.md → An unattributed pass fact can be lost to a reversal`](../parked.md#an-unattributed-pass-fact-can-be-lost-to-a-reversal)).
 
 Provenance is a **distinct axis** from the narrative anchors
 `happenings.occurred_at_entry_id` (where an event sits in story time; `null`
@@ -231,7 +237,9 @@ temporary handle to the newly-allocated UUID for the rest of that
 reply, outside the idMap. A handle declared twice keeps its first
 declaration, and the later entry plans nothing; across the lists that
 share the namespace, `newCharacters` claim first, then `newFactions`,
-then `newPlaces`.
+then `newPlaces`. An entry of those lists whose name is blank plans
+nothing either, and each entry that plans nothing is logged as a
+dropped create.
 
 This separation keeps the LLM's surface area small (no UUID
 copying) while preserving the existing disambiguation flow below
@@ -334,7 +342,8 @@ description stays, per the first-introduction rule above.
 first of the namesakes that qualified to flag it (every exact one, and
 a partial one under the third row's conditions), ordered by score with
 the unscored last, then in-scene first, then exact before partial, then
-unflagged, older and by id. `name_collision_reason` records why, read
+without a live flag (a [dormant](../ui/screens/world/world.md#surfacing)
+one counts as none), older and by id. `name_collision_reason` records why, read
 from that partner:
 
 | Reason      | Partner                              |
@@ -753,15 +762,18 @@ or the wrong type, they read as absent. They are a new
 character's visual categories, traits, drives and voice, a new
 faction's standing and agenda, a happening's or a new thread's category
 and icon, a new thread's `resolvedAtTurn` and a new place's condition.
-In the renames, placements, standings, new threads, thread statuses and
-known awareness, a `null` list reads as empty, a `null` field as absent,
-and an enum value is read trimmed and lowercased first, so a `null`
-source turn leaves the fact unattributed and `"Resolved"` lands as
-`resolved`. An entry there that still doesn't fit, a required field
+In every list of the reply, a `null` list reads as empty, a `null`
+field as absent (a membership's `null` faction stays a value: no
+faction), and an enum value is read trimmed and lowercased first, so a
+`null` source turn leaves the fact unattributed and `"Resolved"` lands
+as `resolved`. An entry that still doesn't fit, a required field
 missing or an enum value outside the list (a status change to
-`pending`), is dropped alone and logged with its list, and the rest of
-the reply lands. In the older lists, a
-required field or an enum the model gets wrong still fails the reply.
+`pending`, a status flip to `staged`, a new character without a
+description), is dropped alone and logged with its list, and the rest
+of the reply lands. A list inside an entry keeps the same rule: a
+happening's involvement or awareness row that doesn't fit, or a keyword
+that is no string, drops alone and its entry lands, while a happening
+without a title drops whole, its rows with it.
 A chained pass that still fails leaves the watermark where it was,
 records the failure in the status, and shows a warning toast,
 `Memory update failed. It runs again before your next turn.` Nothing

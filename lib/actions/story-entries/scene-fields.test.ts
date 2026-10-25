@@ -213,16 +213,86 @@ describe('updateEntrySceneFields', () => {
 
   // char_b is in this entry's ORIGINAL scene but not the previous entry's, so only
   // the three-way diff visits them at all.
+  // data-model.md → lastSeenAt: from the entry they were last in, e1 for char_a.
   it('closes location tracking for a character the edit removed', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seed(db)
 
-    await updateEntrySceneFields('b1', 'e2', { sceneEntities: ['char_a'] }, ctx)
-    expect((await entityState(db, 'char_b')).lastSeenAt).toMatchObject({
+    await updateEntrySceneFields('b1', 'e2', { sceneEntities: ['char_b'] }, ctx)
+    expect((await entityState(db, 'char_a')).lastSeenAt).toMatchObject({
       entryId: 'e1',
       locationId: LOC_A,
     })
+  })
+
+  // char_b came in at e2, at LOC_B, so e1's LOC_A is a place they were never seen at; retired, it
+  // can't be entered at all (data-model.md → LocationState shape).
+  it("never writes a character the tail brought in into the previous entry's place", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db.update(entities).set({ status: 'retired' }).where(eq(entities.id, LOC_A))
+    await db
+      .update(storyEntries)
+      .set({
+        metadata: { sceneEntities: ['char_a', 'char_b'], currentLocationId: LOC_B, worldTime: 120 },
+      })
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e2')))
+    const charB = character('char_b', LOC_B)
+    await db.update(entities).set({ state: charB.state }).where(eq(entities.id, 'char_b'))
+    entitiesStore.hydrate('b1', [
+      character('char_a', LOC_B),
+      charB,
+      { ...location(LOC_A), status: 'retired' },
+      location(LOC_B),
+    ] as never)
+
+    expect(await updateEntrySceneFields('b1', 'e2', { sceneEntities: ['char_a'] }, ctx)).toEqual({
+      status: 'ok',
+    })
+    const state = await entityState(db, 'char_b')
+    expect(state.current_location_id).toBe(LOC_B)
+    expect(state.lastSeenAt).toBeNull()
+  })
+
+  // entry-card.md → Scene editor: promoted exactly as the generation fold promotes it, the place
+  // the scene moves to included.
+  it('promotes a staged place the edit moves the scene to', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db.update(entities).set({ status: 'staged' }).where(eq(entities.id, LOC_B))
+    entitiesStore.hydrate('b1', [
+      character('char_a', LOC_A),
+      character('char_b', LOC_A),
+      location(LOC_A),
+      { ...location(LOC_B), status: 'staged' },
+    ] as never)
+
+    await updateEntrySceneFields(
+      'b1',
+      'e2',
+      { sceneEntities: ['char_a', 'char_b'], currentLocationId: LOC_B },
+      ctx,
+    )
+    const [row] = await db.select().from(entities).where(eq(entities.id, LOC_B))
+    expect(row.status).toBe('active')
+  })
+
+  it('refuses a location id that names no place, writing nothing', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+
+    const result = await updateEntrySceneFields(
+      'b1',
+      'e2',
+      { sceneEntities: ['char_a'], currentLocationId: 'char_b' },
+      ctx,
+    )
+    expect(result).toMatchObject({ status: 'rejected', code: 'not-a-location' })
+    expect(await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).toHaveLength(0)
   })
 
   // A delete clears the location from the tail only; the previous entry still names it,

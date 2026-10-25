@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { Entity } from '@/lib/db'
 import { storyPlaceOf } from '@/lib/world'
 
-import { buildClassifierActions, clampEmbeddedCharacter, type PlannedWrite } from './plan'
+import { buildClassifierActions, clampEmbeddedText, type PlanDeps, type PlannedWrite } from './plan'
 import type { ReconcileDecision } from './reconcile'
 import type { ClassifierExtraction, ClassifierPlacesExtraction, NewPlace } from './schema'
 import { buildClassifierWindow } from './window'
@@ -45,6 +45,8 @@ const nonCharacterRow = (id: string, kind: string) =>
     keywords: [],
   }) as never
 
+const NO_DECISIONS: PlanDeps['decisions'] = { character: new Map(), faction: new Map() }
+
 const base = {
   branchId: 'branch_1',
   window: window(),
@@ -54,8 +56,7 @@ const base = {
     entityRow('char_kael'),
     entityRow('char_aria'),
   ] as never[],
-  decisions: new Map(),
-  factionDecisions: new Map(),
+  decisions: NO_DECISIONS,
   now: () => 1_700_000_000_000,
   newId: (() => {
     let n = 0
@@ -66,6 +67,16 @@ const base = {
   awareness: [],
   story: storyPlaceOf({ tail: null, sceneSource: null }),
 }
+
+// PlanDeps.decisions is keyed by kind; a case names the kind it decides.
+const forCharacters = (decided: ReadonlyMap<string, ReconcileDecision>): PlanDeps['decisions'] => ({
+  character: decided,
+  faction: new Map(),
+})
+const forFactions = (decided: ReadonlyMap<string, ReconcileDecision>): PlanDeps['decisions'] => ({
+  character: new Map(),
+  faction: decided,
+})
 
 // data-model.md → The story's place: the tail's and the scene source's location.
 const storyAt = (locationId: string) =>
@@ -103,6 +114,25 @@ describe('buildClassifierActions', () => {
     )
     const anchors = planned.filter((p) => p.action.kind === 'createHappening').map((p) => p.entryId)
     expect(anchors).toEqual(['e1', 'e3'])
+  })
+
+  it('drops a happening with a blank title, its rows with it, and reports it', () => {
+    const { planned, droppedHappenings } = buildClassifierActions(
+      reply({
+        happenings: [
+          {
+            title: '  ',
+            sourceTurn: 't2',
+            involvements: [{ ref: 'char_a' }],
+            awareness: [{ ref: 'char_a', source: 'saw it', severity: 0.5 }],
+          },
+          { title: 'B', involvements: [], awareness: [] },
+        ],
+      }),
+      base,
+    )
+    expect(planned.map((p) => p.action.kind)).toEqual(['createHappening'])
+    expect(droppedHappenings).toEqual([{ sourceTurn: 't2', cause: 'blank-title' }])
   })
 
   it('falls back to the window head for an unattributed fact and reports it', () => {
@@ -329,7 +359,7 @@ describe('buildClassifierActions', () => {
           },
         ],
       }),
-      { ...base, decisions },
+      { ...base, decisions: forCharacters(decisions) },
     )
     expect(planned[0].action).toMatchObject({
       kind: 'createEntity',
@@ -361,7 +391,7 @@ describe('buildClassifierActions', () => {
           },
         ],
       }),
-      { ...base, decisions: new Map([['h1', { kind: 'create', flag: null }]]) },
+      { ...base, decisions: forCharacters(new Map([['h1', { kind: 'create', flag: null }]])) },
     )
     expect(planned[0].action).toMatchObject({
       kind: 'createEntity',
@@ -387,7 +417,7 @@ describe('buildClassifierActions', () => {
           },
         ],
       }),
-      { ...base, decisions },
+      { ...base, decisions: forCharacters(decisions) },
     )
     expect(planned).toHaveLength(1)
     expect(planned[0].action).toMatchObject({
@@ -413,7 +443,7 @@ describe('buildClassifierActions', () => {
           },
         ],
       }),
-      { ...base, decisions },
+      { ...base, decisions: forCharacters(decisions) },
     )
     const created = planned.find((p) => p.action.kind === 'createEntity')
     const involvement = planned.find((p) => p.action.kind === 'createHappeningInvolvement')
@@ -446,7 +476,7 @@ describe('buildClassifierActions', () => {
           { handle: 'h1', name: 'Eldrin', description: 'x', keywords: [], sourceTurn: 't1' },
         ],
       }),
-      { ...base, decisions },
+      { ...base, decisions: forCharacters(decisions) },
     )
     const kinds = planned.map((p) => p.action.kind)
     expect(kinds.indexOf('createEntity')).toBeLessThan(kinds.indexOf('createHappening'))
@@ -573,16 +603,19 @@ describe('buildClassifierActions', () => {
     })
 
     it('drops a blank-named character even when reconcile decided create', () => {
-      const { planned, unresolvedRefs } = buildClassifierActions(
+      const { planned, unresolvedRefs, droppedCreates } = buildClassifierActions(
         reply({
           newCharacters: [
             { handle: 'h1', name: '  ', description: 'x', keywords: [], sourceTurn: 't1' },
           ],
         }),
-        { ...base, decisions: new Map([['h1', { kind: 'create', flag: null }]]) },
+        { ...base, decisions: forCharacters(new Map([['h1', { kind: 'create', flag: null }]])) },
       )
       expect(planned).toHaveLength(0)
-      expect(unresolvedRefs).toEqual(['h1'])
+      expect(droppedCreates).toEqual([
+        { kind: 'character', handle: 'h1', name: '  ', cause: 'blank-name' },
+      ])
+      expect(unresolvedRefs).toEqual([])
     })
 
     it('emits nothing for a known decision but still resolves the handle', () => {
@@ -595,7 +628,7 @@ describe('buildClassifierActions', () => {
             { handle: 'h1', name: 'char_a', description: 'x', keywords: [], sourceTurn: 't1' },
           ],
         }),
-        { ...base, decisions },
+        { ...base, decisions: forCharacters(decisions) },
       )
       expect(planned).toHaveLength(0)
       expect(handleMap.get('h1')).toBe('char_a')
@@ -605,14 +638,14 @@ describe('buildClassifierActions', () => {
     // including ones the model wrote for the first character.
     it('keeps the first binding when a handle is reused, and reports the collision', () => {
       const decisions = new Map<string, ReconcileDecision>([['h1', { kind: 'create', flag: null }]])
-      const { planned, handleMap, unresolvedRefs } = buildClassifierActions(
+      const { planned, handleMap, unresolvedRefs, droppedCreates } = buildClassifierActions(
         reply({
           newCharacters: [
             { handle: 'h1', name: 'First', description: 'x', keywords: [], sourceTurn: 't1' },
             { handle: 'h1', name: 'Second', description: 'y', keywords: [], sourceTurn: 't1' },
           ],
         }),
-        { ...base, decisions },
+        { ...base, decisions: forCharacters(decisions) },
       )
       const creates = planned.filter((p) => p.action.kind === 'createEntity')
       expect(creates).toHaveLength(1)
@@ -623,7 +656,32 @@ describe('buildClassifierActions', () => {
       expect(handleMap.get('h1')).toBe(
         (creates[0].action as { payload: { entry: { id: string } } }).payload.entry.id,
       )
-      expect(unresolvedRefs).toEqual(['h1'])
+      expect(droppedCreates).toEqual([
+        { kind: 'character', handle: 'h1', name: 'Second', cause: 'handle-taken' },
+      ])
+      expect(unresolvedRefs).toEqual([])
+    })
+
+    it('counts no fallback for an unattributed known mention that writes no term', () => {
+      const plan = (keywords: string[]) =>
+        buildClassifierActions(
+          reply({
+            newCharacters: [{ handle: 'h1', name: 'Aria', description: 'x', keywords }],
+          }),
+          {
+            ...base,
+            entities: [entityRow('char_aria', 'active', 'Aria', ['the singer'])],
+            decisions: forCharacters(
+              new Map([['h1', { kind: 'known', entityId: 'char_aria', similarity: 0.9 }]]),
+            ),
+          },
+        )
+      expect(plan(['the singer'])).toMatchObject({ planned: [], fellBackCount: 0 })
+      const { planned, fellBackCount } = plan(['the singer', 'the bard'])
+      expect(planned.map((p) => [p.action.kind, p.entryId])).toEqual([
+        ['appendEntityKeywords', 'e3'],
+      ])
+      expect(fellBackCount).toBe(1)
     })
   })
 
@@ -756,7 +814,7 @@ describe('buildClassifierActions', () => {
             { handle: 'h1', name: 'char_s', description: 'x', keywords: [], sourceTurn: 't1' },
           ],
         }),
-        { ...base, decisions, entities: [entityRow('char_s', 'staged')] },
+        { ...base, decisions: forCharacters(decisions), entities: [entityRow('char_s', 'staged')] },
       )
       expect(planned.map((p) => p.action.kind)).toEqual(['promoteStagedEntity', 'retireEntity'])
       expect(planned[1].action).toMatchObject({
@@ -773,7 +831,7 @@ describe('buildClassifierActions', () => {
             { handle: 'h1', name: 'Eldrin', description: 'x', keywords: [], sourceTurn: 't1' },
           ],
         }),
-        { ...base, decisions },
+        { ...base, decisions: forCharacters(decisions) },
       )
       const createdId = payloadOf<{ entry: { id: string } }>(planned[0]).entry.id
       expect(planned[1].action).toMatchObject({
@@ -796,7 +854,7 @@ describe('entity keywords', () => {
   it('seeds keywords on a created character', () => {
     const { planned } = buildClassifierActions(candidate(['the grey wolf']), {
       ...base,
-      decisions: decide({ kind: 'create', flag: null }),
+      decisions: forCharacters(decide({ kind: 'create', flag: null })),
     })
     expect(payloadOf<{ entry: { keywords: string[] } }>(planned[0]).entry.keywords).toEqual([
       'the grey wolf',
@@ -808,7 +866,7 @@ describe('entity keywords', () => {
     const { planned } = buildClassifierActions(candidate(['the grey wolf', 'The Innkeeper']), {
       ...base,
       entities: [entityRow('char_kael', 'active', 'Kael', ['the innkeeper'])] as never[],
-      decisions: decide({ kind: 'known', entityId: 'char_kael', similarity: 0.9 }),
+      decisions: forCharacters(decide({ kind: 'known', entityId: 'char_kael', similarity: 0.9 })),
     })
     expect(planned).toHaveLength(1)
     expect(planned[0].action).toMatchObject({
@@ -821,7 +879,7 @@ describe('entity keywords', () => {
     const { planned } = buildClassifierActions(candidate(['the grey wolf', 'The Innkeeper']), {
       ...base,
       entities: [entityRow('char_kael', 'staged', 'Kael', ['the innkeeper'])] as never[],
-      decisions: decide({ kind: 'promote', entityId: 'char_kael', similarity: 0.9 }),
+      decisions: forCharacters(decide({ kind: 'promote', entityId: 'char_kael', similarity: 0.9 })),
     })
     expect(planned.map((p) => p.action.kind)).toEqual([
       'promoteStagedEntity',
@@ -834,7 +892,7 @@ describe('entity keywords', () => {
     const { planned } = buildClassifierActions(candidate(['  the grey wolf ']), {
       ...base,
       entities: [entityRow('char_kael', 'active', 'Kael')] as never[],
-      decisions: decide({ kind: 'known', entityId: 'char_kael', similarity: 0.9 }),
+      decisions: forCharacters(decide({ kind: 'known', entityId: 'char_kael', similarity: 0.9 })),
     })
     expect(payloadOf<{ keywords: string[] }>(planned[0]).keywords).toEqual(['the grey wolf'])
   })
@@ -845,7 +903,7 @@ describe('entity keywords', () => {
     const { planned } = buildClassifierActions(candidate(['the grey wolf']), {
       ...base,
       entities: [entityRow('char_kael', 'active', 'Kael', ['The Grey Wolf'])] as never[],
-      decisions: decide({ kind: 'known', entityId: 'char_kael', similarity: 0.9 }),
+      decisions: forCharacters(decide({ kind: 'known', entityId: 'char_kael', similarity: 0.9 })),
     })
     expect(planned).toEqual([])
   })
@@ -872,10 +930,12 @@ describe('entity keywords', () => {
       {
         ...base,
         entities: [entityRow('char_kael', 'active', 'Kael')] as never[],
-        decisions: new Map<string, ReconcileDecision>([
-          ['new:k1', { kind: 'known', entityId: 'char_kael', similarity: 0.9 }],
-          ['new:k2', { kind: 'known', entityId: 'char_kael', similarity: 0.9 }],
-        ]),
+        decisions: forCharacters(
+          new Map<string, ReconcileDecision>([
+            ['new:k1', { kind: 'known', entityId: 'char_kael', similarity: 0.9 }],
+            ['new:k2', { kind: 'known', entityId: 'char_kael', similarity: 0.9 }],
+          ]),
+        ),
       },
     )
     const appends = planned.filter((p) => p.action.kind === 'appendEntityKeywords')
@@ -909,10 +969,12 @@ describe('entity keywords', () => {
       {
         ...base,
         entities: [entityRow('char_kael', 'staged', 'Kael')] as never[],
-        decisions: new Map<string, ReconcileDecision>([
-          ['new:k1', { kind: 'promote', entityId: 'char_kael', similarity: 0.9 }],
-          ['new:k2', { kind: 'promote', entityId: 'char_kael', similarity: 0.9 }],
-        ]),
+        decisions: forCharacters(
+          new Map<string, ReconcileDecision>([
+            ['new:k1', { kind: 'promote', entityId: 'char_kael', similarity: 0.9 }],
+            ['new:k2', { kind: 'promote', entityId: 'char_kael', similarity: 0.9 }],
+          ]),
+        ),
       },
     )
     // A mention's terms plan with the row's other keyword writes, after the creates.
@@ -945,7 +1007,9 @@ describe('entity keywords', () => {
       {
         ...base,
         entities: [entityRow('char_kael', 'staged', 'Kael')] as never[],
-        decisions: decide({ kind: 'promote', entityId: 'char_kael', similarity: 0.9 }),
+        decisions: forCharacters(
+          decide({ kind: 'promote', entityId: 'char_kael', similarity: 0.9 }),
+        ),
       },
     )
     expect(planned.map((p) => p.action.kind)).toEqual([
@@ -1008,7 +1072,7 @@ describe('alias list', () => {
         [{ ref: 'new:j', terms: ['the ferryman'], sourceTurn: 't1' }],
         [{ handle: 'new:j', name: 'Jorin', description: 'x', keywords: [], sourceTurn: 't1' }],
       ),
-      { ...base, decisions: new Map([['new:j', { kind: 'create', flag: null }]]) },
+      { ...base, decisions: forCharacters(new Map([['new:j', { kind: 'create', flag: null }]])) },
     )
     expect(planned.map((p) => p.action.kind)).toEqual(['createEntity'])
     expect(unresolvedRefs).toEqual(['new:j'])
@@ -1032,7 +1096,9 @@ describe('alias list', () => {
       {
         ...base,
         entities: [kael],
-        decisions: new Map([['new:k', { kind: 'known', entityId: 'char_kael', similarity: 0.9 }]]),
+        decisions: forCharacters(
+          new Map([['new:k', { kind: 'known', entityId: 'char_kael', similarity: 0.9 }]]),
+        ),
       },
     )
     expect(planned).toEqual([appendOf('char_kael', ['the Grey Wolf'], 'e1')])
@@ -1118,7 +1184,9 @@ describe('alias list', () => {
       {
         ...base,
         entities: [kael],
-        decisions: new Map([['new:k', { kind: 'known', entityId: 'char_kael', similarity: 0.9 }]]),
+        decisions: forCharacters(
+          new Map([['new:k', { kind: 'known', entityId: 'char_kael', similarity: 0.9 }]]),
+        ),
       },
     )
     expect(planned).toEqual([
@@ -1154,10 +1222,12 @@ describe('prose source on guarded writes', () => {
           entityRow('char_kael'),
           entityRow('char_aria'),
         ] as never[],
-        decisions: new Map<string, ReconcileDecision>([
-          ['h1', { kind: 'promote', entityId: 'char_p', similarity: 0.9 }],
-          ['h2', { kind: 'known', entityId: 'char_a', similarity: 0.95 }],
-        ]),
+        decisions: forCharacters(
+          new Map<string, ReconcileDecision>([
+            ['h1', { kind: 'promote', entityId: 'char_p', similarity: 0.9 }],
+            ['h2', { kind: 'known', entityId: 'char_a', similarity: 0.95 }],
+          ]),
+        ),
       },
     )
     expect(
@@ -1193,9 +1263,11 @@ describe('prose source on guarded writes', () => {
           entityRow('char_kael'),
           entityRow('char_aria'),
         ] as never[],
-        decisions: new Map<string, ReconcileDecision>([
-          ['h1', { kind: 'promote', entityId: 'char_p', similarity: 0.9 }],
-        ]),
+        decisions: forCharacters(
+          new Map<string, ReconcileDecision>([
+            ['h1', { kind: 'promote', entityId: 'char_p', similarity: 0.9 }],
+          ]),
+        ),
       },
     )
     expect(
@@ -1221,7 +1293,7 @@ describe('embedded-column bounds', () => {
     reply({ newCharacters: [{ handle: 'h1', name, description, keywords: [], sourceTurn: 't1' }] })
   const deps = {
     ...base,
-    decisions: new Map([['h1', { kind: 'create', flag: null }]]),
+    decisions: forCharacters(new Map([['h1', { kind: 'create', flag: null }]])),
   } as never
   const entryOf = (planned: PlannedWrite[]) =>
     payloadOf<{ entry: { name: string; description: string } }>(planned[0]).entry
@@ -1238,14 +1310,12 @@ describe('embedded-column bounds', () => {
   // surrogate, which renders as a replacement character wherever the name is shown.
   it('backs off a cut that would split a surrogate pair', () => {
     const name = 'A'.repeat(119) + '\u{1F409}' + 'B'.repeat(40)
-    expect(clampEmbeddedCharacter({ name, description: '' }).name).toBe('A'.repeat(119))
+    expect(clampEmbeddedText({ name, description: '' }).name).toBe('A'.repeat(119))
   })
 
   it('keeps an astral character the cut clears whole', () => {
     const name = 'A'.repeat(118) + '\u{1F409}' + 'B'.repeat(40)
-    expect(clampEmbeddedCharacter({ name, description: '' }).name).toBe(
-      'A'.repeat(118) + '\u{1F409}',
-    )
+    expect(clampEmbeddedText({ name, description: '' }).name).toBe('A'.repeat(118) + '\u{1F409}')
   })
 
   it('cuts an over-long character description at 1200 characters', () => {
@@ -1307,6 +1377,22 @@ describe('embedded-column bounds', () => {
       base,
     )
     expect(payloadOf<{ entry: { description: null } }>(planned[0]).entry.description).toBeNull()
+  })
+})
+
+// tsc checks these; the run only keeps them from reading as unused.
+describe('PlanDeps.decisions', () => {
+  it('keys a decision map by each kind, so a missing kind, a stray key or no map fails', () => {
+    const m = new Map<string, ReconcileDecision>()
+    // @ts-expect-error every reconciled kind needs its map
+    const missing: PlanDeps['decisions'] = { character: m }
+    // @ts-expect-error a key that is no reconciled kind
+    const stray: PlanDeps['decisions'] = { character: m, faction: m, factions: m }
+    // @ts-expect-error a list of decisions is no map
+    const listed: PlanDeps['decisions'] = { character: m, faction: [...m.values()] }
+    // @ts-expect-error the faction map has no field of its own beside the kinds
+    const sibling: Pick<PlanDeps, 'decisions'> = { decisions: NO_DECISIONS, factionDecisions: m }
+    expect([missing, stray, listed, sibling]).toHaveLength(4)
   })
 })
 
@@ -1430,9 +1516,7 @@ describe('mentioned places', () => {
       deps([]),
     )
     const [ash, birch] = createdPlaces(planned)
-    expect(ash.description).toBe(
-      clampEmbeddedCharacter({ name: 'Ash', description: long }).description,
-    )
+    expect(ash.description).toBe(clampEmbeddedText({ name: 'Ash', description: long }).description)
     expect(birch.description).toBeNull()
   })
 
@@ -1737,10 +1821,33 @@ describe('mentioned places', () => {
         deps([REACH, VARN]),
       )
       expect(planned.map((p) => [p.action.kind, p.entryId])).toEqual([
-        ['appendEntityKeywords', 'e3'],
         ['placeLocation', 'e3'],
+        ['appendEntityKeywords', 'e3'],
       ])
       expect(fellBackCount).toBe(1)
+    })
+
+    // A keyword write's undo is the whole prior list, so a reuse's terms plan in turn order too.
+    it("plans a reused place's terms in turn order with an earlier turn's alias of it", () => {
+      const { planned } = buildClassifierActions(
+        placesReply(
+          [
+            newPlace('new:mill', 'The Old Mill', {
+              parent: 'loc_town',
+              keywords: ['the grinding house'],
+              sourceTurn: 't3',
+            }),
+          ],
+          { aliases: [{ ref: 'loc_mill', terms: ['the wheelhouse'], sourceTurn: 't1' }] },
+        ),
+        deps([TOWN, MILL]),
+      )
+      expect(
+        planned.map((p) => [p.entryId, payloadOf<{ keywords: string[] }>(p).keywords]),
+      ).toEqual([
+        ['e1', ['the wheelhouse']],
+        ['e3', ['the grinding house']],
+      ])
     })
 
     it('places a reused place under a new place the reply creates, after its create', () => {
@@ -2643,7 +2750,9 @@ describe('mentioned places', () => {
             ],
           },
         ),
-        deps([], { decisions: new Map([['new:x', { kind: 'create', flag: null }]]) }),
+        deps([], {
+          decisions: forCharacters(new Map([['new:x', { kind: 'create', flag: null }]])),
+        }),
       )
       expect(createdPlaces(planned).map((e) => e.name)).toEqual(['Birchmoor'])
       expect(handleMap.get('new:x')).toMatch(/^char_/)
@@ -2667,7 +2776,7 @@ describe('mentioned places', () => {
             },
           ],
         }),
-        deps([], { factionDecisions: new Map([['new:x', { kind: 'create', flag: null }]]) }),
+        deps([], { decisions: forFactions(new Map([['new:x', { kind: 'create', flag: null }]])) }),
       )
       expect(createdPlaces(planned)).toEqual([])
       expect(handleMap.get('new:x')).toMatch(/^fact_/)
@@ -2767,7 +2876,7 @@ describe('factions', () => {
     it('creates an active, auto faction from the prose, stale, anchored on its turn', () => {
       const { planned, handleMap } = buildClassifierActions(
         reply({ newFactions: [circle] }),
-        deps([], { factionDecisions: decided(create) } as never),
+        deps([], { decisions: forFactions(decided(create)) } as never),
       )
       expect(planned).toHaveLength(1)
       const { entry } = payloadOf<{ entry: Record<string, unknown> }>(planned[0])
@@ -2794,10 +2903,12 @@ describe('factions', () => {
       const { planned } = buildClassifierActions(
         reply({ newFactions: [circle] }),
         deps([factionRow('fact_old')], {
-          factionDecisions: decided({
-            kind: 'create',
-            flag: { partnerId: 'fact_old', reason: 'ambiguous' },
-          }),
+          decisions: forFactions(
+            decided({
+              kind: 'create',
+              flag: { partnerId: 'fact_old', reason: 'ambiguous' },
+            }),
+          ),
         } as never),
       )
       expect(payloadOf<{ entry: Record<string, unknown> }>(planned[0]).entry).toMatchObject({
@@ -2812,7 +2923,7 @@ describe('factions', () => {
         reply({
           newFactions: [{ ...circle, name: `  ${'N'.repeat(130)}`, description: 'D'.repeat(1300) }],
         }),
-        deps([], { factionDecisions: decided(create) } as never),
+        deps([], { decisions: forFactions(decided(create)) } as never),
       )
       const { entry } = payloadOf<{ entry: { name: string; description: string } }>(planned[0])
       expect(entry.name).toBe('N'.repeat(120))
@@ -2823,7 +2934,9 @@ describe('factions', () => {
       const { planned, handleMap } = buildClassifierActions(
         reply({ newFactions: [{ ...circle, keywords: ['the Circle', 'the smiths'] }] }),
         deps([factionRow('fact_old', 'staged', ['the smiths'])], {
-          factionDecisions: decided({ kind: 'promote', entityId: 'fact_old', similarity: 0.9 }),
+          decisions: forFactions(
+            decided({ kind: 'promote', entityId: 'fact_old', similarity: 0.9 }),
+          ),
         } as never),
       )
       expect(kinds(planned)).toEqual(['promoteStagedEntity', 'appendEntityKeywords'])
@@ -2835,7 +2948,7 @@ describe('factions', () => {
       const { planned } = buildClassifierActions(
         reply({ newFactions: [circle] }),
         deps([factionRow('fact_old')], {
-          factionDecisions: decided({ kind: 'known', entityId: 'fact_old', similarity: 0.9 }),
+          decisions: forFactions(decided({ kind: 'known', entityId: 'fact_old', similarity: 0.9 })),
         } as never),
       )
       expect(kinds(planned)).toEqual(['appendEntityKeywords'])
@@ -2843,25 +2956,30 @@ describe('factions', () => {
     })
 
     it("keeps a handle a new character claimed, ignoring the faction's decision for it", () => {
-      const { planned, handleMap, unresolvedRefs } = buildClassifierActions(
+      const { planned, handleMap, unresolvedRefs, droppedCreates } = buildClassifierActions(
         reply({
           newCharacters: [{ ...circle, name: 'Circe' }],
           newFactions: [circle],
         }),
-        deps([], { decisions: decided(create), factionDecisions: decided(create) } as never),
+        deps([], { decisions: { character: decided(create), faction: decided(create) } } as never),
       )
       expect(planned).toHaveLength(1)
       expect(payloadOf<{ entry: { kind: string } }>(planned[0]).entry.kind).toBe('character')
       expect(handleMap.get('new:circle')).toBe('char_new1')
-      expect(unresolvedRefs).toEqual(['new:circle'])
+      expect(droppedCreates).toEqual([
+        { kind: 'faction', handle: 'new:circle', name: circle.name, cause: 'handle-taken' },
+      ])
+      expect(unresolvedRefs).toEqual([])
     })
 
     it("decides a faction by its own decision, never the character's for its handle", () => {
       const { planned, handleMap } = buildClassifierActions(
         reply({ newFactions: [circle] }),
         deps([member('char_kael', null)], {
-          decisions: decided({ kind: 'known', entityId: 'char_kael', similarity: 0.9 }),
-          factionDecisions: decided(create),
+          decisions: {
+            character: decided({ kind: 'known', entityId: 'char_kael', similarity: 0.9 }),
+            faction: decided(create),
+          },
         } as never),
       )
       expect(kinds(planned)).toEqual(['createEntity'])
@@ -2881,7 +2999,7 @@ describe('factions', () => {
             },
           ],
         }),
-        deps([], { factionDecisions: decided(create) } as never),
+        deps([], { decisions: forFactions(decided(create)) } as never),
       )
       expect(kinds(planned)).toEqual([
         'createEntity',
@@ -2894,12 +3012,15 @@ describe('factions', () => {
     })
 
     it('reports a faction with no decision or a blank name, creating nothing', () => {
-      const { planned, unresolvedRefs } = buildClassifierActions(
+      const { planned, unresolvedRefs, droppedCreates } = buildClassifierActions(
         reply({ newFactions: [circle, { ...circle, handle: 'new:blank', name: '  ' }] }),
-        deps([], { factionDecisions: decided(create, 'new:blank') } as never),
+        deps([], { decisions: forFactions(decided(create, 'new:blank')) } as never),
       )
       expect(planned).toEqual([])
-      expect(unresolvedRefs).toEqual(['new:circle', 'new:blank'])
+      expect(unresolvedRefs).toEqual(['new:circle'])
+      expect(droppedCreates).toEqual([
+        { kind: 'faction', handle: 'new:blank', name: '  ', cause: 'blank-name' },
+      ])
     })
   })
 
@@ -3026,8 +3147,7 @@ describe('factions', () => {
           memberships: [{ character: 'new:mara', faction: 'new:circle', sourceTurn: 't2' }],
         }),
         deps([], {
-          decisions: decided(create, 'new:mara'),
-          factionDecisions: decided(create),
+          decisions: { character: decided(create, 'new:mara'), faction: decided(create) },
         } as never),
       )
       expect(kinds(planned)).toEqual(['createEntity', 'createEntity', 'setCharacterFaction'])
@@ -3067,7 +3187,9 @@ describe('factions', () => {
           memberships: [{ character: 'char_kael', faction: 'new:circle', sourceTurn: 't2' }],
         }),
         deps([member('char_kael', null)], {
-          factionDecisions: decided({ kind: 'known', entityId: 'fact_deleted', similarity: 0.9 }),
+          decisions: forFactions(
+            decided({ kind: 'known', entityId: 'fact_deleted', similarity: 0.9 }),
+          ),
         } as never),
       )
       expect(memberships(planned)).toEqual([])
@@ -3158,7 +3280,7 @@ describe('first profiles', () => {
           },
         ],
       }),
-      deps({ decisions: decided('new:ilsa') }),
+      deps({ decisions: forCharacters(decided('new:ilsa')) }),
     )
     expect(stateOf(planned)).toEqual({
       ...EMPTY_CHARACTER,
@@ -3176,7 +3298,7 @@ describe('first profiles', () => {
           { handle: 'new:ilsa', name: 'Ilsa', description: 'x', keywords: [], sourceTurn: 't1' },
         ],
       }),
-      deps({ decisions: decided('new:ilsa') }),
+      deps({ decisions: forCharacters(decided('new:ilsa')) }),
     )
     expect(stateOf(planned)).toEqual(EMPTY_CHARACTER)
   })
@@ -3195,7 +3317,7 @@ describe('first profiles', () => {
           },
         ],
       }),
-      deps({ decisions: decided('new:ilsa') }),
+      deps({ decisions: forCharacters(decided('new:ilsa')) }),
     )
     expect((stateOf(planned) as { visual: { face: string } }).visual.face).toBe('f'.repeat(300))
     expect(cutTexts).toEqual([
@@ -3219,7 +3341,7 @@ describe('first profiles', () => {
           },
         ],
       }),
-      deps({ decisions: decided('new:ilsa') }),
+      deps({ decisions: forCharacters(decided('new:ilsa')) }),
     )
     const state = stateOf(planned) as { visual: { face: string }; traits: string[]; voice: string }
     expect(state.visual.face).toBe('f'.repeat(499))
@@ -3246,7 +3368,7 @@ describe('first profiles', () => {
           },
         ],
       }),
-      deps({ factionDecisions: decided('new:circle') }),
+      deps({ decisions: forFactions(decided('new:circle')) }),
     )
     expect(stateOf(withProfile.planned)).toEqual({
       standing: 's'.repeat(500),
@@ -3257,7 +3379,7 @@ describe('first profiles', () => {
     ])
     const bare = buildClassifierActions(
       reply({ newFactions: [circle] }),
-      deps({ factionDecisions: decided('new:circle') }),
+      deps({ decisions: forFactions(decided('new:circle')) }),
     )
     expect(stateOf(bare.planned)).toEqual({})
     expect(bare.cutTexts).toEqual([])
@@ -3281,9 +3403,9 @@ describe('first profiles', () => {
         entities: [
           { id: 'char_ilsa', kind: 'character', name: 'Ilsa', status: 'active', keywords: [] },
         ],
-        decisions: new Map([
-          ['new:ilsa', { kind: 'known', entityId: 'char_ilsa', similarity: 0.9 }],
-        ]),
+        decisions: forCharacters(
+          new Map([['new:ilsa', { kind: 'known', entityId: 'char_ilsa', similarity: 0.9 }]]),
+        ),
       }),
     )
     expect(kindsOf(planned)).toEqual(['appendEntityKeywords'])
@@ -3474,9 +3596,9 @@ describe('renames', () => {
         renames: [{ ref: 'char_stranger', name: 'Corvin', sourceTurn: 't2' }],
       }),
       deps([STRANGER], {
-        decisions: new Map([
-          ['new:corvin', { kind: 'known', entityId: 'char_stranger', similarity: 0.9 }],
-        ]),
+        decisions: forCharacters(
+          new Map([['new:corvin', { kind: 'known', entityId: 'char_stranger', similarity: 0.9 }]]),
+        ),
       }),
     )
     expect(
@@ -3698,7 +3820,7 @@ describe('renames', () => {
         ],
       }),
       deps([STRANGER, KAEL, row('char_third', 'character', 'the third man')], {
-        decisions: new Map([['new:mira', { kind: 'create', flag: null }]]),
+        decisions: forCharacters(new Map([['new:mira', { kind: 'create', flag: null }]])),
         newId: () => 'char_new1',
       }),
     )
@@ -3794,7 +3916,9 @@ describe('renames', () => {
           { ref: 'new:mira', name: 'Mirabel', sourceTurn: 't1' },
         ],
       }),
-      deps([STRANGER], { decisions: new Map([['new:mira', { kind: 'create', flag: null }]]) }),
+      deps([STRANGER], {
+        decisions: forCharacters(new Map([['new:mira', { kind: 'create', flag: null }]])),
+      }),
     )
     expect(kindsOf(planned)).toEqual(['createEntity'])
     expect(unseenRefs).toEqual([

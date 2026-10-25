@@ -1,5 +1,5 @@
 import type { CollisionReason, Entity, LocationState } from '@/lib/db'
-import { compareId } from '@/lib/list-modules'
+import { compareAge } from '@/lib/list-modules'
 
 import type { LocationMatchView } from './location-map'
 import { nameBasis, namesakeBasis } from './namesakes'
@@ -25,10 +25,6 @@ export type PlaceMatch =
 type PlaceCandidate = { name: string; placement: PlacePlacement; keywords?: readonly string[] }
 
 type PlacementAt = (id: string) => PlacePlacement
-
-function byAge(a: Entity, b: Entity): number {
-  return a.createdAt - b.createdAt || compareId(a.id, b.id)
-}
 
 const sameName = (candidate: PlaceCandidate, entity: Entity): boolean =>
   nameBasis(candidate.name, entity.name) === 'same-name'
@@ -56,7 +52,7 @@ function flagPartner(
   reason: PlaceFlagReason,
 ): PlaceMatch {
   const among: FlagSide[] = [
-    ...[...rows].sort(byAge),
+    ...[...rows].sort(compareAge),
     ...creates.map((p) => ({
       id: p.id,
       name: p.name,
@@ -92,7 +88,7 @@ function matchPlaced(
       const real = samePlacement(placementAt(entity.id), candidate.placement) ? 0 : 1
       return [{ entity, real, hidden }]
     })
-    .sort((a, b) => a.real - b.real || a.hidden - b.hidden || byAge(a.entity, b.entity))
+    .sort((a, b) => a.real - b.real || a.hidden - b.hidden || compareAge(a.entity, b.entity))
   if (reused !== undefined) return { kind: 'reuse', id: reused.entity.id, place: false }
 
   const [unplaced] = locations
@@ -100,7 +96,7 @@ function matchPlaced(
       (e) =>
         e.status !== 'retired' && placementAt(e.id).kind === 'unplaced' && sameName(candidate, e),
     )
-    .sort(byAge)
+    .sort(compareAge)
   if (unplaced !== undefined) return { kind: 'reuse', id: unplaced.id, place: true }
 
   const beside = (placement: PlacePlacement) => samePlacement(placement, candidate.placement)
@@ -163,7 +159,7 @@ function matchUnplaced(
   const liveCount = live.length + earlier.length
   const namesakes = [
     ...(liveCount > 0 ? live : exact)
-      .sort(byAge)
+      .sort(compareAge)
       .map((e) => ({ id: e.id, unplaced: placementAt(e.id).kind === 'unplaced' })),
     ...earlier.map((p) => ({ id: p.id, unplaced: p.placement.kind === 'unplaced' })),
   ]
@@ -222,7 +218,14 @@ export function matchNewPlace(
     if (!stored.has(p.id) && !created.has(p.id))
       created.set(p.id, { ...p, placement: placedHere.get(p.id) ?? p.placement })
   const creates = [...created.values()]
-  const placementAt = realPlacementOf(view.locations)
+  // A row this reply placed under one of its creates is placed, not unplaced.
+  const placementAt = realPlacementOf([
+    ...view.locations,
+    ...creates.map((p) => ({
+      id: p.id,
+      state: withPlacement({ parent_location_id: null }, p.placement),
+    })),
+  ])
 
   const { placement } = candidate
   if (placement.kind === 'unplaced') {
@@ -242,5 +245,5 @@ export function matchNewPlace(
 export function itemNamesakes(name: string, entities: readonly Entity[]): Entity[] {
   return entities
     .filter((e) => e.kind === 'item' && nameBasis(name, e.name) === 'same-name')
-    .sort(byAge)
+    .sort(compareAge)
 }

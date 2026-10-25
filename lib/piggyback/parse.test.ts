@@ -1233,6 +1233,46 @@ describe('conditions and drops', () => {
     })
   })
 
+  // piggyback.md → Parse strategy and failure recovery: a cut may have taken the place the scene
+  // moved to, so a cut-off block naming none holds its drops rather than land them where it left.
+  describe('a block the stream cut off', () => {
+    const transfers = '<transfers><drop id="i2" from="c1" /></transfers>'
+
+    it('holds its drops when it names no current location, and fails for the fallback', () => {
+      const { block, dropsCutOff, failures } = parseStateBlock(
+        `<state><scene_entities>c1</scene_entities>${transfers}<world_time_delta>30`,
+      )
+      expect(block.transfers?.drops).toEqual([])
+      expect(dropsCutOff).toEqual([{ id: 'i2', from: 'c1', seq: 0 }])
+      expect(failures).toEqual([{ field: 'state', detail: 'block with drops cut off' }])
+    })
+
+    it('fails once when the cut block also declares a create', () => {
+      const { failures } = parseStateBlock(
+        `<state><scene_entities>c1</scene_entities>${transfers}<new_item handle="new:map" name="map">a folded map</new_item><world_time_delta>30`,
+      )
+      expect(failures).toEqual([{ field: 'state', detail: 'block with creates cut off' }])
+    })
+
+    it('keeps its drops when its current location came before the cut', () => {
+      const { block, dropsCutOff, failures } = parseStateBlock(
+        `<state><current_location>l1</current_location>${transfers}<world_time_delta>30`,
+      )
+      expect(block.transfers?.drops).toEqual([{ id: 'i2', from: 'c1', seq: 0 }])
+      expect(dropsCutOff).toEqual([])
+      expect(failures).toEqual([])
+    })
+
+    it('keeps the drops of a closed block that names no current location', () => {
+      const { block, dropsCutOff, failures } = parseStateBlock(
+        `<state><scene_entities>c1</scene_entities>${transfers}</state>`,
+      )
+      expect(block.transfers?.drops).toEqual([{ id: 'i2', from: 'c1', seq: 0 }])
+      expect(dropsCutOff).toEqual([])
+      expect(failures).toEqual([])
+    })
+  })
+
   // piggyback.md → Trailing block format: a drop away from the scene stays prose.
   it('drops a drop that names a place, reporting it, and leaves it no place in the order', () => {
     const { block, failures, dropsElsewhere } = parseStateBlock(`<state>
@@ -1310,5 +1350,64 @@ describe('conditions and drops', () => {
     expect(block.newItems).toEqual([
       { handle: 'new:k', name: 'key', description: '', condition: 'rusted' },
     ])
+  })
+})
+
+// No `<` inside an entry's attributes or text, as conditions and moves already read: a malformed
+// entry drops alone instead of swallowing the next one, and an unclosed opener can't make the
+// scan run to the end of the segment.
+describe('an entry that never closes swallows nothing', () => {
+  it('keeps the next visual change whole after a self-closed one', () => {
+    const { block } = parseStateBlock(
+      '<state><visual_changes><entity id="c1" type="attire"/><entity id="c2" type="hair">wet hair</entity></visual_changes></state>',
+    )
+    expect(block.visualChanges).toEqual([{ id: 'c2', type: 'hair', text: 'wet hair' }])
+  })
+
+  it('keeps the next stackable whole after one missing its `>`', () => {
+    const { block } = parseStateBlock(
+      '<state><transfers><stackable key="gold" amount="5" from="c1"<stackable key="silver" amount="3" to="c2" /></transfers></state>',
+    )
+    expect(block.transfers?.stackables).toEqual([{ key: 'silver', amount: 3, to: 'c2' }])
+  })
+
+  it('keeps the next retrieval query whole after an unclosed one', () => {
+    const { block } = parseStateBlock(
+      '<state><scene_entities>c1</scene_entities><retrieval_queries><query>the old bell<query>who rang it</query></retrieval_queries></state>',
+    )
+    expect(block.retrievalQueries).toEqual(['who rang it'])
+  })
+
+  it('keeps the next suggestion whole after an unclosed one', () => {
+    const { items } = parseSuggestionsBlock(
+      '<suggestions><item category="cat1">Ask the bell-ringer<item category="cat2">Climb the tower</item></suggestions>',
+    )
+    expect(items).toEqual([{ categoryRef: 'cat2', text: 'Climb the tower' }])
+  })
+
+  it('scans 20,000 unclosed visual openers without running to the segment end each time', () => {
+    const openers = '<entity id="c1" type="hair">'.repeat(20_000)
+    const started = performance.now()
+    parseStateBlock(
+      `<state><scene_entities>c1</scene_entities><visual_changes>${openers}</visual_changes></state>`,
+    )
+    // Quadratic, this took about 800 ms; linear, a few ms. A generous bound keeps CI from flaking.
+    expect(performance.now() - started).toBeLessThan(250)
+  })
+})
+
+describe('a create name with a numeric character reference', () => {
+  it('decodes decimal and hex references as it does the named five', () => {
+    const { block } = parseStateBlock(
+      '<state><scene_entities>c1</scene_entities><new_location handle="new:inn" name="O&#39;Malley&#x27;s &amp; Sons">an inn</new_location><current_location>new:inn</current_location></state>',
+    )
+    expect(block.newLocations?.[0]?.name).toBe("O'Malley's & Sons")
+  })
+
+  it('leaves an unknown named entity as written', () => {
+    const { block } = parseStateBlock(
+      '<state><scene_entities>c1</scene_entities><new_location handle="new:inn" name="the &QUOT;Bell&QUOT;">an inn</new_location><current_location>new:inn</current_location></state>',
+    )
+    expect(block.newLocations?.[0]?.name).toBe('the &QUOT;Bell&QUOT;')
   })
 })

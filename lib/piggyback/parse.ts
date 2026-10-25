@@ -120,7 +120,9 @@ function assertNotTruncated(segment: string, extractedCount: number, tagLabel: s
 // one entry per changed category (docs/memory/piggyback.md → Trailing block format).
 function parseVisualChanges(segment: string): VisualChangeNote[] {
   const notes: VisualChangeNote[] = []
-  const re = /<entity\s+([^>]*)>([\s\S]*?)<\/entity>/g
+  // No `<` inside, so a self-closed or unclosed entry can't swallow the next one, and an unclosed
+  // opener can't make the scan run to the segment's end.
+  const re = /<entity\s+([^<>]*)>([^<]*)<\/entity>/g
   for (const match of segment.matchAll(re)) {
     const [, attrText, text] = match
     if (attrText === undefined || text === undefined) continue
@@ -185,7 +187,7 @@ function parseTransfers(segment: string, notes: ParseNotes): ParsedTransfers {
   }
 
   const stackables: StackableTransfer[] = []
-  const stackableRe = /<stackable\s+([^>]*)\/?>/g
+  const stackableRe = /<stackable\s+([^<>]*)\/?>/g
   for (const match of segment.matchAll(stackableRe)) {
     const [, attrText] = match
     if (attrText === undefined) continue
@@ -213,10 +215,7 @@ function parseTransfers(segment: string, notes: ParseNotes): ParsedTransfers {
 function parseRetrievalQueries(segment: string): string[] | undefined {
   const seen = new Set<string>()
   const out: string[] = []
-  const re = new RegExp(
-    `<${RETRIEVAL_QUERY_ITEM_TAG}>([\\s\\S]*?)</${RETRIEVAL_QUERY_ITEM_TAG}>`,
-    'g',
-  )
+  const re = new RegExp(`<${RETRIEVAL_QUERY_ITEM_TAG}>([^<]*)</${RETRIEVAL_QUERY_ITEM_TAG}>`, 'g')
   for (const match of segment.matchAll(re)) {
     const text = match[1]?.trim()
     if (text === undefined || text === '' || seen.has(text)) continue
@@ -279,8 +278,12 @@ const XML_ENTITIES = {
 // `<conditions>` text is read raw.
 function decodeEntities(text: string): string {
   return text.replace(
-    /&(quot|apos|lt|gt|amp);/g,
-    (_, entity: keyof typeof XML_ENTITIES) => XML_ENTITIES[entity],
+    /&(?:(quot|apos|lt|gt|amp)|#(\d+)|#x([0-9a-fA-F]+));/g,
+    (match, named: keyof typeof XML_ENTITIES | undefined, decimal?: string, hex?: string) => {
+      if (named !== undefined) return XML_ENTITIES[named]
+      const code = decimal !== undefined ? Number(decimal) : parseInt(hex ?? '', 16)
+      return code <= 0x10ffff ? String.fromCodePoint(code) : match
+    },
   )
 }
 
@@ -432,6 +435,7 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
       blockFound: false,
       malformedCreates: 0,
       dropsElsewhere: [],
+      dropsCutOff: [],
     }
 
   const block: ParsedStateBlock = {}
@@ -484,12 +488,27 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
       ),
     })
 
+  // Held, not landed at the place the scene left: a closed block naming no place means the scene
+  // stays, but a cut one may have lost it. A cut after <current_location> keeps them. Failed like a
+  // cut with creates, so the fallback fires to resolve the scene and put them down.
+  const transfers = normalized.block.transfers
+  const holdDrops =
+    !stateClosed(raw) && normalized.block.currentLocation === undefined && transfers !== undefined
+  const dropsCutOff = holdDrops ? transfers.drops : []
+  if (dropsCutOff.length > 0 && !failures.some((f) => f.field === 'state'))
+    failures.push({ field: 'state', detail: 'block with drops cut off' })
+  const kept =
+    holdDrops && dropsCutOff.length > 0
+      ? { ...normalized.block, transfers: { ...transfers, drops: [] } }
+      : normalized.block
+
   return {
-    block: normalized.block,
+    block: kept,
     failures,
     blockFound: true,
     malformedCreates,
     dropsElsewhere: notes.dropsElsewhere,
+    dropsCutOff,
   }
 }
 
@@ -502,10 +521,7 @@ export function parseSuggestionsBlock(raw: string): ParseSuggestionsBlockResult 
     return { items: [], blockFound: false, failed: false, malformedCount: 0 }
 
   const items: SuggestionRef[] = []
-  const re = new RegExp(
-    `<${SUGGESTION_ITEM_TAG}\\s+([^>]*)>([\\s\\S]*?)</${SUGGESTION_ITEM_TAG}>`,
-    'g',
-  )
+  const re = new RegExp(`<${SUGGESTION_ITEM_TAG}\\s+([^<>]*)>([^<]*)</${SUGGESTION_ITEM_TAG}>`, 'g')
   for (const match of segment.matchAll(re)) {
     const [, attrText, text] = match
     if (attrText === undefined || text === undefined) continue

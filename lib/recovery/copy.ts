@@ -1,11 +1,17 @@
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { t } from '@/lib/i18n'
-import type { RecoveredRun, RecoveryFailure, RecoveryReport } from '@/lib/pipeline'
+import {
+  PER_TURN_KIND,
+  type BootRecoveryReport,
+  type RecoveredRun,
+  type RecoveryFailure,
+} from '@/lib/pipeline'
 
 export type RecoveryStoryNames = Readonly<Record<string, string>>
 
 function formatRun(run: RecoveredRun, storyName: string | undefined): string {
   switch (run.kind) {
-    case 'per-turn':
+    case PER_TURN_KIND:
       return storyName
         ? t('crashRecovery.perTurnNamed', { storyName })
         : t('crashRecovery.perTurnUnnamed')
@@ -13,7 +19,7 @@ function formatRun(run: RecoveredRun, storyName: string | undefined): string {
       return storyName
         ? t('crashRecovery.chapterCloseNamed', { storyName })
         : t('crashRecovery.chapterCloseUnnamed')
-    case 'periodic-classifier':
+    case PERIODIC_CLASSIFIER_KIND:
       return storyName
         ? t('crashRecovery.periodicClassifierNamed', { storyName })
         : t('crashRecovery.periodicClassifierUnnamed')
@@ -24,11 +30,15 @@ function formatRun(run: RecoveredRun, storyName: string | undefined): string {
   }
 }
 
-// The classifier writes `state: 'running'` before any delta, so an orphan of that kind that won't
-// reverse holds its branch (Send refuses until a boot reverses it): the one failure that can
-// promise its turns stop, not describe the fault. An integrity refusal recurs every boot: no retry.
-function formatFailure(failure: RecoveryFailure, storyName: string | undefined): string {
-  const held = failure.kind === 'periodic-classifier'
+// A pass failure holds its branch only while the boot left the branch `running` (Send refuses until
+// a later boot frees it), so the copy promises a stop only then. An integrity refusal recurs every
+// boot: no retry.
+function formatFailure(
+  failure: RecoveryFailure,
+  storyName: string | undefined,
+  isHeld: (storyId: string | null) => boolean,
+): string {
+  const held = failure.kind === PERIODIC_CLASSIFIER_KIND && isHeld(failure.storyId)
   const refused = failure.refusal !== null
   if (held && refused)
     return storyName
@@ -47,20 +57,43 @@ function formatFailure(failure: RecoveryFailure, storyName: string | undefined):
     : t('crashRecovery.incompleteUnnamed')
 }
 
-/** "Story recovered" over-claims while any orphan's writes are still on disk. */
-export function formatRecoveryTitle(report: RecoveryReport): string {
-  return report.reversed.length > 0 && report.failures.length === 0
+// A held story no pass failure explains: the reset threw or never ran.
+const formatUnclearedHold = (storyName: string | undefined): string =>
+  storyName
+    ? t('crashRecovery.branchHeldUnclearedNamed', { storyName })
+    : t('crashRecovery.branchHeldUnclearedUnnamed')
+
+// With the read failed, every pass failure reads as held, the conservative answer.
+const heldTest =
+  (report: BootRecoveryReport) =>
+  (storyId: string | null): boolean =>
+    report.heldStoryIds === null || (storyId !== null && report.heldStoryIds.includes(storyId))
+
+function unexplainedHolds(report: BootRecoveryReport): readonly string[] {
+  const explained = new Set(
+    report.failures.filter((f) => f.kind === PERIODIC_CLASSIFIER_KIND).map((f) => f.storyId),
+  )
+  return (report.heldStoryIds ?? []).filter((storyId) => !explained.has(storyId))
+}
+
+/** "Story recovered" over-claims while any orphan's writes are still on disk or a branch may be held. */
+export function formatRecoveryTitle(report: BootRecoveryReport): string {
+  return report.reversed.length > 0 &&
+    report.failures.length === 0 &&
+    report.heldStoryIds?.length === 0
     ? t('crashRecovery.title')
     : t('crashRecovery.titleIncomplete')
 }
 
 export function formatRecoveryReport(
-  report: RecoveryReport,
+  report: BootRecoveryReport,
   storyNames: RecoveryStoryNames,
 ): string {
   const named = (storyId: string | null) => (storyId === null ? undefined : storyNames[storyId])
+  const isHeld = heldTest(report)
   return [
     ...report.reversed.map((run) => formatRun(run, named(run.storyId))),
-    ...report.failures.map((failure) => formatFailure(failure, named(failure.storyId))),
+    ...report.failures.map((failure) => formatFailure(failure, named(failure.storyId), isHeld)),
+    ...unexplainedHolds(report).map((storyId) => formatUnclearedHold(named(storyId))),
   ].join(' ')
 }

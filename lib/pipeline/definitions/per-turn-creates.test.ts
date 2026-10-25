@@ -97,6 +97,7 @@ function runPlanner(
     mapCurrentLocationId?: string | null
     story?: StoryPlace
     log?: Logger
+    signal?: AbortSignal
   } = {},
 ) {
   // Deterministic per-prefix ids, so a case can name the rows it expects.
@@ -112,6 +113,7 @@ function runPlanner(
     now: () => 1000,
     newId: (prefix) => `${prefix}_new_${++counts[prefix]}`,
     log: opts.log ?? logger,
+    signal: opts.signal,
   })
 }
 
@@ -1278,7 +1280,7 @@ describe('planTurnCreates — matching', () => {
       embed,
     })
     expect(embed).toHaveBeenCalledOnce()
-    expect(embed).toHaveBeenCalledWith(['an iron key, flaked with rust', 'an iron key'])
+    expect(embed).toHaveBeenCalledWith(['an iron key, flaked with rust', 'an iron key'], undefined)
     expect(createdEntries(creates(plan))).toEqual([
       expect.objectContaining({
         id: 'item_new_1',
@@ -1334,6 +1336,31 @@ describe('planTurnCreates — matching', () => {
     ])
   })
 
+  // A cancel is no embedder fault: the embed ends with it and nothing warns.
+  it("ends an item's match embed when the run's signal aborts, unwarned", async () => {
+    const warn = vi.fn()
+    const controller = new AbortController()
+    const embed = vi.fn<EmbedDescriptions>(
+      (_texts, signal) =>
+        new Promise((_resolve, reject) => {
+          if (signal === undefined) return reject(new Error('no signal'))
+          signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+          controller.abort()
+        }),
+    )
+    const plan = await runPlanner(keyCreate('an iron key, flaked with rust'), {
+      entities: world(oldKey()),
+      embed,
+      log: { ...logger, warn },
+      signal: controller.signal,
+    })
+    expect(embed).toHaveBeenCalledWith(expect.any(Array), controller.signal)
+    expect(warn).not.toHaveBeenCalledWith('classifier.description_embed_failed', expect.anything())
+    expect(createdEntries(creates(plan))).toEqual([
+      expect.objectContaining({ id: 'item_new_1', nameCollisionFlag: 0 }),
+    ])
+  })
+
   it('makes no embed call for an item with no namesake', async () => {
     const embed = vi.fn(noEmbed)
     await runPlanner(keyCreate('salt-stained', 'sea chart'), { entities: world(oldKey()), embed })
@@ -1353,7 +1380,10 @@ describe('planTurnCreates — matching', () => {
       ),
       embed,
     })
-    expect(embed).toHaveBeenCalledWith(['an iron key, flaked with rust', 'bronze', 'iron'])
+    expect(embed).toHaveBeenCalledWith(
+      ['an iron key, flaked with rust', 'bronze', 'iron'],
+      undefined,
+    )
     expect(createdEntries(creates(plan))).toEqual([
       expect.objectContaining({ nameCollisionPartnerId: IRON_KEY, nameCollisionReason: 'alike' }),
     ])
@@ -1381,7 +1411,10 @@ describe('planTurnCreates — matching', () => {
       },
       { entities: world(oldKey()), embed },
     )
-    expect(embed.mock.calls).toEqual([[['small', 'an iron key']], [['large', 'an iron key']]])
+    expect(embed.mock.calls).toEqual([
+      [['small', 'an iron key'], undefined],
+      [['large', 'an iron key'], undefined],
+    ])
   })
 
   // The turn is hard-gated, so the embeds overlap; the first resolving last checks order holds.

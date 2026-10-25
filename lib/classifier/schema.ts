@@ -21,19 +21,25 @@ const icon = tolerated(z.string()).describe(
 
 const sourceTurn = z.string().optional()
 
-const withoutNulls = (value: unknown): unknown =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? Object.fromEntries(Object.entries(value).filter(([, field]) => field !== null))
-    : value
+const withoutNulls =
+  (kept: readonly string[]) =>
+  (value: unknown): unknown =>
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+      ? Object.fromEntries(
+          Object.entries(value).filter(([key, field]) => field !== null || kept.includes(key)),
+        )
+      : value
 
 // classifier.md → Failure policy: an entry that doesn't fit reads as a hole, a null field as
 // absent first, so one bad entry drops alone; readClassifierReply removes and counts the holes.
-// A null list reads as an empty one.
-const tolerantList = <T extends z.ZodType>(entry: T) =>
+// A null list reads as an empty one. `nullable`: fields whose null is a value, not an absence.
+const tolerantList = <T extends z.ZodType>(entry: T, nullable: readonly string[] = []) =>
   z.preprocess(
     (value) => (value === null ? undefined : value),
-    z.array(z.preprocess(withoutNulls, entry).optional().catch(undefined)).default([]),
+    z.array(z.preprocess(withoutNulls(nullable), entry).optional().catch(undefined)).default([]),
   )
+
+const terms = tolerantList(z.string())
 
 // A tolerant list's enum value is read trimmed and lowercased, so "Resolved" lands as resolved.
 const foldedEnum = <T extends z.ZodEnum>(values: T) =>
@@ -59,114 +65,94 @@ const happening = z.object({
   occurredAtTurn: z.string().optional(),
   category: tolerated(z.string()),
   icon,
-  involvements: z.array(involvement).default([]),
-  awareness: z.array(awareness).default([]),
+  involvements: tolerantList(involvement),
+  awareness: tolerantList(awareness),
   sourceTurn: z.string().optional(),
 })
 
 export const classifierExtractionSchema = z.object({
-  happenings: z.array(happening).default([]),
-  relationships: z
-    .array(
-      z.object({
-        subject: z.string(),
-        object: z.string(),
-        /** Subject's view of object only — never the inferred inverse. */
-        kind: z.string(),
-        sourceTurn: z.string().optional(),
-      }),
-    )
-    .default([]),
-  statusFlips: z
-    .array(
-      z.object({
-        ref: z.string(),
-        to: z.enum(['active', 'retired']),
-        reason: z.string().optional(),
-        sourceTurn: z.string().optional(),
-      }),
-    )
-    .default([]),
-  newCharacters: z
-    .array(
-      z.object({
-        /** Temporary handle the model picks; later refs in the same reply use it. */
-        handle: z.string(),
-        name: z.string(),
-        description: z.string(),
-        keywords: z
-          .array(z.string())
-          .default([])
-          .describe(
-            'Titles, epithets and relational references the prose used for this character alongside the name — "the Grey Wolf", "the innkeeper". Not the name itself.',
-          ),
-        sourceTurn: z.string().optional(),
-        // classifier.md → What the classifier writes → First profiles; the planner clamps them.
-        visual: tolerated(
-          z.object({
-            physique: tolerated(z.string()),
-            face: tolerated(z.string()),
-            hair: tolerated(z.string()),
-            eyes: tolerated(z.string()),
-            attire: tolerated(z.string()),
-            distinguishing: tolerated(z.string()),
-          }),
+  happenings: tolerantList(happening),
+  relationships: tolerantList(
+    z.object({
+      subject: z.string(),
+      object: z.string(),
+      /** Subject's view of object only — never the inferred inverse. */
+      kind: z.string(),
+      sourceTurn,
+    }),
+  ),
+  statusFlips: tolerantList(
+    z.object({
+      ref: z.string(),
+      to: foldedEnum(z.enum(['active', 'retired'])),
+      reason: z.string().optional(),
+      sourceTurn,
+    }),
+  ),
+  newCharacters: tolerantList(
+    z.object({
+      /** Temporary handle the model picks; later refs in the same reply use it. */
+      handle: z.string(),
+      name: z.string(),
+      description: z.string(),
+      keywords: terms.describe(
+        'Titles, epithets and relational references the prose used for this character alongside the name — "the Grey Wolf", "the innkeeper". Not the name itself.',
+      ),
+      sourceTurn,
+      // classifier.md → What the classifier writes → First profiles; the planner clamps them.
+      visual: tolerated(
+        z.object({
+          physique: tolerated(z.string()),
+          face: tolerated(z.string()),
+          hair: tolerated(z.string()),
+          eyes: tolerated(z.string()),
+          attire: tolerated(z.string()),
+          distinguishing: tolerated(z.string()),
+        }),
+      ),
+      traits: tolerated(z.array(z.string())),
+      drives: tolerated(z.array(z.string())),
+      voice: tolerated(z.string()),
+    }),
+  ),
+  newFactions: tolerantList(
+    z.object({
+      /** Temporary handle in the newCharacters namespace; later refs in the same reply use it. */
+      handle: z.string(),
+      name: z.string(),
+      description: z.string(),
+      keywords: terms.describe(
+        'Other names, titles or epithets the prose used for this faction alongside its name. Not the name itself.',
+      ),
+      sourceTurn,
+      standing: tolerated(z.string()),
+      agenda: tolerated(z.array(z.string())),
+    }),
+  ),
+  memberships: tolerantList(
+    z.object({
+      /** Character placeholder or a newCharacters handle. */
+      character: z.string(),
+      faction: z
+        .string()
+        .nullable()
+        .describe(
+          "ID of the faction from Known entities or a new faction's handle; null when they now belong to none.",
         ),
-        traits: tolerated(z.array(z.string())),
-        drives: tolerated(z.array(z.string())),
-        voice: tolerated(z.string()),
-      }),
-    )
-    .default([]),
-  newFactions: z
-    .array(
-      z.object({
-        /** Temporary handle in the newCharacters namespace; later refs in the same reply use it. */
-        handle: z.string(),
-        name: z.string(),
-        description: z.string(),
-        keywords: z
-          .array(z.string())
-          .default([])
-          .describe(
-            'Other names, titles or epithets the prose used for this faction alongside its name. Not the name itself.',
-          ),
-        sourceTurn: z.string().optional(),
-        standing: tolerated(z.string()),
-        agenda: tolerated(z.array(z.string())),
-      }),
-    )
-    .default([]),
-  memberships: z
-    .array(
-      z.object({
-        /** Character placeholder or a newCharacters handle. */
-        character: z.string(),
-        faction: z
-          .string()
-          .nullable()
-          .describe(
-            "ID of the faction from Known entities or a new faction's handle; null when they now belong to none.",
-          ),
-        sourceTurn: z.string().optional(),
-      }),
-    )
-    .default([]),
-  aliases: z
-    .array(
-      z.object({
-        /** Placeholder of a listed entity, any kind. */
-        ref: z.string(),
-        terms: z
-          .array(z.string())
-          .default([])
-          .describe(
-            'Titles, epithets or name forms the prose used for this entity that its line does not show.',
-          ),
-        sourceTurn: z.string().optional(),
-      }),
-    )
-    .default([]),
+      sourceTurn,
+    }),
+    ['faction'],
+  ),
+  aliases: tolerantList(
+    z.object({
+      /** Placeholder of a listed entity, any kind. */
+      ref: z.string(),
+      terms: terms.describe(
+        'Titles, epithets or name forms the prose used for this entity that its line does not show.',
+      ),
+      sourceTurn,
+    }),
+  ),
   // classifier.md → What the classifier writes: the planner drops an update on an unlisted target.
   renames: tolerantList(z.object({ ref: z.string(), name: z.string(), sourceTurn })),
   placements: tolerantList(
@@ -222,13 +208,10 @@ const newPlace = z.object({
   handle: z.string(),
   name: z.string(),
   description: z.string(),
-  keywords: z
-    .array(z.string())
-    .default([])
-    .describe(
-      'Other names, titles or epithets the prose used for this place alongside its name. Not the name itself.',
-    ),
-  sourceTurn: z.string().optional(),
+  keywords: terms.describe(
+    'Other names, titles or epithets the prose used for this place alongside its name. Not the name itself.',
+  ),
+  sourceTurn,
   condition: tolerated(z.string()),
   parent: z
     .string()
@@ -240,16 +223,18 @@ const newPlace = z.object({
 
 /** classifier.md → Mentioned places: the reply's schema when the story's setting is on. */
 export const classifierExtractionWithPlacesSchema = classifierExtractionSchema.extend({
-  newPlaces: z.array(newPlace).default([]),
+  newPlaces: tolerantList(newPlace),
 })
 
 /** A reply as the schema reads it: a tolerant list holds a hole where an entry didn't fit. */
 type ParsedExtraction = z.infer<typeof classifierExtractionSchema>
 type ParsedPlacesExtraction = z.infer<typeof classifierExtractionWithPlacesSchema>
 export type ParsedClassifierReply = ParsedExtraction | ParsedPlacesExtraction
-type WellFormed<T> = {
-  [K in keyof T]: T[K] extends readonly (infer E)[] ? Exclude<E, undefined>[] : T[K]
-}
+type WellFormed<T> = T extends readonly (infer E)[]
+  ? WellFormed<Exclude<E, undefined>>[]
+  : T extends object
+    ? { [K in keyof T]: WellFormed<T[K]> }
+    : T
 export type ClassifierExtraction = WellFormed<ParsedExtraction>
 export type ClassifierPlacesExtraction = WellFormed<ParsedPlacesExtraction>
 export type NewPlace = ClassifierPlacesExtraction['newPlaces'][number]
@@ -271,14 +256,28 @@ export function classifierReplySchema(mentionedPlaces: boolean): z.ZodType<Parse
   return mentionedPlaces ? classifierExtractionWithPlacesSchema : classifierExtractionSchema
 }
 
-/** The lists whose malformed entry drops alone (tolerantList). */
+/** The lists whose malformed entry drops alone (tolerantList): every list, nested ones included. */
 export type TolerantList =
+  | 'happenings'
+  | 'happenings.involvements'
+  | 'happenings.awareness'
+  | 'relationships'
+  | 'statusFlips'
+  | 'newCharacters'
+  | 'newCharacters.keywords'
+  | 'newFactions'
+  | 'newFactions.keywords'
+  | 'memberships'
+  | 'aliases'
+  | 'aliases.terms'
   | 'renames'
   | 'placements'
   | 'standings'
   | 'newThreads'
   | 'threadStatuses'
   | 'knownAwareness'
+  | 'newPlaces'
+  | 'newPlaces.keywords'
 
 /** How many entries of a tolerant list didn't fit. */
 export type MalformedEntries = { list: TolerantList; count: number }
@@ -288,14 +287,36 @@ export function readClassifierReply(parsed: ParsedClassifierReply): {
   reply: ClassifierReply
   malformed: MalformedEntries[]
 } {
-  const malformed: MalformedEntries[] = []
+  const counts = new Map<TolerantList, number>()
   const present = <T>(list: TolerantList, entries: readonly (T | undefined)[]): T[] => {
     const kept = entries.filter((entry) => entry !== undefined)
-    if (kept.length < entries.length) malformed.push({ list, count: entries.length - kept.length })
+    const holes = entries.length - kept.length
+    if (holes > 0) counts.set(list, (counts.get(list) ?? 0) + holes)
     return kept
   }
-  const reply = {
-    ...parsed,
+  const withKeywords = <E extends { keywords: readonly (string | undefined)[] }>(
+    list: 'newCharacters' | 'newFactions' | 'newPlaces',
+    entries: readonly (E | undefined)[],
+  ): (Omit<E, 'keywords'> & { keywords: string[] })[] =>
+    present(list, entries).map((entry) => ({
+      ...entry,
+      keywords: present(`${list}.keywords`, entry.keywords),
+    }))
+  const reply: ClassifierExtraction = {
+    happenings: present('happenings', parsed.happenings).map((happening) => ({
+      ...happening,
+      involvements: present('happenings.involvements', happening.involvements),
+      awareness: present('happenings.awareness', happening.awareness),
+    })),
+    relationships: present('relationships', parsed.relationships),
+    statusFlips: present('statusFlips', parsed.statusFlips),
+    newCharacters: withKeywords('newCharacters', parsed.newCharacters),
+    newFactions: withKeywords('newFactions', parsed.newFactions),
+    memberships: present('memberships', parsed.memberships),
+    aliases: present('aliases', parsed.aliases).map((alias) => ({
+      ...alias,
+      terms: present('aliases.terms', alias.terms),
+    })),
     renames: present('renames', parsed.renames),
     placements: present('placements', parsed.placements),
     standings: present('standings', parsed.standings),
@@ -303,7 +324,14 @@ export function readClassifierReply(parsed: ParsedClassifierReply): {
     threadStatuses: present('threadStatuses', parsed.threadStatuses),
     knownAwareness: present('knownAwareness', parsed.knownAwareness),
   }
-  return { reply, malformed }
+  const withPlaces: ClassifierReply =
+    'newPlaces' in parsed
+      ? { ...reply, newPlaces: withKeywords('newPlaces', parsed.newPlaces) }
+      : reply
+  return {
+    reply: withPlaces,
+    malformed: [...counts].map(([list, count]) => ({ list, count })),
+  }
 }
 
 export function newPlacesOf(reply: ClassifierReply): readonly NewPlace[] {

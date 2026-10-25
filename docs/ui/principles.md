@@ -849,11 +849,21 @@ For a place, `disabled` covers every place inside it too, with the
 places around the story exempt while the story is inside
 ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
 
-The mode governs what the narrator sees. The periodic classifier,
-which extracts from prose rather than writing it, sees every row
-whatever its mode, so it can attribute a fact to a disabled row
-rather than create it again as new
-([`memory/classifier.md → What the classifier reads`](../memory/classifier.md#what-the-classifier-reads)).
+The mode governs what the narrator sees. The extractors, which read
+prose rather than write it, see every row whatever its mode, so they
+can attribute a fact to a disabled row rather than create it again as
+new: the periodic classifier
+([`memory/classifier.md → What the classifier reads`](../memory/classifier.md#what-the-classifier-reads)),
+and the per-turn fallback classifier, whose roster lists every active
+and staged row
+([`memory/piggyback.md → Fallback classifier context`](../memory/piggyback.md#fallback-classifier-context)).
+The fallback also moves the scene, so a disabled row it names there
+enters the scene, and the structural invariant below then seats it in
+front of the narrator; a disabled region the story enters is one the
+model walked into through the prose
+([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
+The turn records each row it seated that way (`stateReport.seatedDisabled`)
+and the reader says so on the entry.
 
 **Default: `auto`.** `happenings` deliberately don't expose this —
 the `happening_awareness` graph IS their structural injection rule.

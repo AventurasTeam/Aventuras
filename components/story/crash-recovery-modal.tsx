@@ -13,12 +13,12 @@ import {
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
-import type { RecoveryReport } from '@/lib/pipeline'
+import type { BootRecoveryReport } from '@/lib/pipeline'
 import { formatRecoveryReport, formatRecoveryTitle, type RecoveryStoryNames } from '@/lib/recovery'
 
 type CrashRecoveryModalProps = {
   open: boolean
-  report: RecoveryReport
+  report: BootRecoveryReport
   storyNames: RecoveryStoryNames
   onAcknowledge: () => void
 }

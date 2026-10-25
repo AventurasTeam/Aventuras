@@ -3,13 +3,13 @@ import { StrictMode, useEffect, useState } from 'react'
 import { expect, fn, screen, spyOn, userEvent, waitFor } from 'storybook/test'
 
 import { logger } from '@/lib/diagnostics'
-import type { RecoveryReport } from '@/lib/pipeline'
+import type { BootRecoveryReport } from '@/lib/pipeline'
 import { recoveryReportStore } from '@/lib/stores'
 
 import { CrashRecoveryModal } from './crash-recovery-modal'
 import { CrashRecoveryModalHost } from './crash-recovery-modal-host'
 
-const singleReport: RecoveryReport = {
+const singleReport: BootRecoveryReport = {
   reversed: [
     {
       runId: 'run-per-turn',
@@ -20,9 +20,10 @@ const singleReport: RecoveryReport = {
     },
   ],
   failures: [],
+  heldStoryIds: [],
 }
 
-const multiReport: RecoveryReport = {
+const multiReport: BootRecoveryReport = {
   reversed: [
     ...singleReport.reversed,
     {
@@ -34,10 +35,11 @@ const multiReport: RecoveryReport = {
     },
   ],
   failures: [],
+  heldStoryIds: [],
 }
 
 // Nothing reversed (orphan's writes survive, branch held): must not title itself "Story recovered".
-const degradedReport: RecoveryReport = {
+const degradedReport: BootRecoveryReport = {
   reversed: [],
   failures: [
     {
@@ -49,12 +51,14 @@ const degradedReport: RecoveryReport = {
       refusal: null,
     },
   ],
+  heldStoryIds: ['s1'],
 }
 
 // Every boot refuses it again, so the copy must not promise that restarting retries.
-const refusedReport: RecoveryReport = {
+const refusedReport: BootRecoveryReport = {
   reversed: [],
   failures: [{ ...degradedReport.failures[0], refusal: 'write-back' }],
+  heldStoryIds: ['s1'],
 }
 
 const meta: Meta<typeof CrashRecoveryModal> = {

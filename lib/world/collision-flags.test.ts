@@ -378,6 +378,16 @@ describe('pairFlagsToClear', () => {
     const rows = [naming, newer, third]
     expect(pairFlagsToClear(pairOf(rows, ['char_a', 'char_b']), rows)).toStrictEqual(['char_b'])
   })
+
+  it('returns a pair row whose flag on a live third row is dormant, the two no namesakes', () => {
+    const mira = entity('char_m', 'Mira')
+    const naming = flagged('char_a', 'Kael', 'char_m')
+    const rows = [naming, newer, mira]
+    expect(pairFlagsToClear(pairOf(rows, ['char_a', 'char_b']), rows)).toStrictEqual([
+      'char_a',
+      'char_b',
+    ])
+  })
 })
 
 describe('withFlagWrites', () => {

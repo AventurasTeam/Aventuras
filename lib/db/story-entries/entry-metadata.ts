@@ -104,6 +104,20 @@ export const entryMetadataSchema = z.object({
       newLocations: z.array(newLocationReportSchema).optional(),
       newItems: z.array(newItemReportSchema).optional(),
       failedFields: z.array(z.object({ field: z.string(), detail: z.string() })).optional(),
+      // Rows the narrator was kept from that this turn's scene seats, by id: the reader says so.
+      seatedDisabled: z.array(z.string()).optional(),
+      // The fallback's entries discarded before apply (piggyback.md → A bad ref in the two writers).
+      // Open strings, as failedFields: an unknown future value degrades, not a failed parse.
+      droppedRefs: z
+        .array(
+          z.object({
+            field: z.string(),
+            ref: z.string().optional(),
+            reason: z.string(),
+            detail: z.string(),
+          }),
+        )
+        .optional(),
       // Redundant on the happy path; the only inspectable remnant when a parse failed.
       raw: z.string().optional(),
     })

@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react'
 
 import { db } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import type { RecoveryReport } from '@/lib/pipeline'
+import type { BootRecoveryReport } from '@/lib/pipeline'
 import { loadRecoveryStoryNames, type RecoveryStoryNames } from '@/lib/recovery'
 import { recoveryReportStore } from '@/lib/stores'
 
 import { CrashRecoveryModal } from './crash-recovery-modal'
 
 export function CrashRecoveryModalHost() {
-  const [report, setReport] = useState<RecoveryReport | null>(null)
+  const [report, setReport] = useState<BootRecoveryReport | null>(null)
   const [storyNames, setStoryNames] = useState<RecoveryStoryNames>({})
   const [ready, setReady] = useState(false)
 

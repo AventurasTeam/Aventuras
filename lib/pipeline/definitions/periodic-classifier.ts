@@ -12,7 +12,7 @@ import {
   buildClassifierActions,
   buildClassifierWindow,
   classifierReplySchema,
-  clampEmbeddedCharacter,
+  clampEmbeddedText,
   IDLE_STATUS_JSON,
   nextStatusOnFailure,
   nextStatusOnStart,
@@ -300,6 +300,7 @@ export async function* periodicClassifierPhase(
       classifierReplySchema(mentionedPlaces),
       modelConfig,
       bounded.signal,
+      { actionId: ctx.actionId },
     )
   } finally {
     bounded.dispose()
@@ -333,7 +334,12 @@ export async function* periodicClassifierPhase(
     ]),
   )
 
-  const deps = { entities, embedDescriptions: classifierEmbedder(), log: ctx.log }
+  const deps = {
+    entities,
+    embedDescriptions: classifierEmbedder(),
+    log: ctx.log,
+    signal: ctx.abortSignal,
+  }
   const reconcile = async (
     kind: ReconciledKind,
     // A handle a character already claimed plans nothing as a faction (plan.ts).
@@ -346,7 +352,7 @@ export async function* periodicClassifierPhase(
       if (decided.has(candidate.handle) || claimed.has(candidate.handle)) continue
       // Reconcile the clamped row, not the raw reply: plan.ts bounds both embedded
       // fields, so a key built from an unbounded one measures text no row holds.
-      const stored = clampEmbeddedCharacter(candidate)
+      const stored = clampEmbeddedText(candidate)
       // The planner drops a blank name, yet its keywords can still name a row: reconciling
       // it would spend an embed call on a decision nothing reads.
       if (stored.name === '') continue
@@ -362,17 +368,16 @@ export async function* periodicClassifierPhase(
     }
     return decided
   }
-  const decisions = await reconcile('character')
-  if (decisions === null) return { status: 'aborted' }
-  const factionDecisions = await reconcile('faction', new Set(decisions.keys()))
+  const characterDecisions = await reconcile('character')
+  if (characterDecisions === null) return { status: 'aborted' }
+  const factionDecisions = await reconcile('faction', new Set(characterDecisions.keys()))
   if (factionDecisions === null) return { status: 'aborted' }
 
   const plan = buildClassifierActions(substituted, {
     branchId: ctx.branchId,
     window,
     entities,
-    decisions,
-    factionDecisions,
+    decisions: { character: characterDecisions, faction: factionDecisions },
     now: () => Date.now(),
     newId: (kind) => generateId(kind),
     threads,
@@ -389,6 +394,7 @@ export async function* periodicClassifierPhase(
   // The per-turn writer's keys (per-turn-creates.ts).
   for (const drop of plan.droppedPlaces)
     ctx.log.warn('classifier.create_dropped', { kind: 'location', ...drop })
+  for (const drop of plan.droppedCreates) ctx.log.warn('classifier.create_dropped', drop)
   for (const drop of plan.parentDrops) ctx.log.warn('classifier.create_parent_dropped', drop)
   for (const clash of plan.renameClashes) ctx.log.warn('classifier.rename_clash', clash)
   for (const unseen of plan.unseenRefs) ctx.log.warn('classifier.unseen_ref', unseen)
@@ -398,6 +404,8 @@ export async function* periodicClassifierPhase(
   for (const drop of plan.droppedReturns) ctx.log.warn('classifier.return_dropped', drop)
   for (const drop of plan.droppedThreads)
     ctx.log.warn('classifier.create_dropped', { kind: 'thread', ...drop })
+  for (const drop of plan.droppedHappenings)
+    ctx.log.warn('classifier.create_dropped', { kind: 'happening', ...drop })
   for (const moved of plan.earlyCloses) ctx.log.warn('classifier.thread_close_moved', moved)
   for (const { kind, ...cut } of plan.cutTexts) ctx.log.warn(CUT_KEYS[kind], cut)
 

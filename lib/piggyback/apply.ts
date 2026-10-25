@@ -2,6 +2,7 @@ import type { DeltaSource, PipelineAction } from '@/lib/actions'
 import type { CharacterState, Entity, EntryMetadata } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import { foldStackables } from '@/lib/keyword-terms'
+import { placeModes, stateAs } from '@/lib/world'
 
 import { boundStateText } from './bound-text'
 import { itemMoveActions } from './item-moves'
@@ -50,10 +51,18 @@ export type PiggybackApplied = {
   drops: ReportedDrop[]
   /** Positions in `block.conditions` refused, not ids: an id can repeat in one block. */
   conditionsRejected: number[]
-  // How many of each wrote anything: one naming no character as its target or a party writes none.
+  // How many of each changed what World stores: one naming no character as its target or a party
+  // writes none, and one restating the stored value changes nothing. The fallback's report carries
+  // a failed fold's record over per list on these (data-model.md → Entry metadata shape).
   visualChangesLanded: number
+  conditionsLanded: number
   itemsLanded: number
+  dropsLanded: number
   stackablesLanded: number
+  /** Rows the narrator was kept from that this turn's scene now seats: a place it moved into
+   *  that was disabled, or a disabled member it brought in (principles.md → Injection /
+   *  retrieval rules). */
+  seatedDisabled: string[]
 }
 
 type BuildResult = {
@@ -110,6 +119,19 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   const currentLocationId = namedIsLocation ? named : previousMetadata.currentLocationId
 
   const metadata: BuildResult['metadata'] = { sceneEntities, currentLocationId, worldTime }
+  // Judged from where the story stood: a place around it was never disabled for the narrator.
+  const wasDisabled = placeModes(entities, previousMetadata.currentLocationId).isDisabled
+  const seatedDisabled = [
+    ...(currentLocationId !== null &&
+    currentLocationId !== previousMetadata.currentLocationId &&
+    wasDisabled(currentLocationId)
+      ? [currentLocationId]
+      : []),
+    ...sceneEntities.filter(
+      (id) =>
+        !previousMetadata.sceneEntities.includes(id) && byId.get(id)?.injectionMode === 'disabled',
+    ),
+  ]
   if (block.summary !== undefined) metadata.summary = block.summary
   const retrievalQueries = normalizeRetrievalQueries(block.retrievalQueries ?? [])
   if (retrievalQueries.length > 0) metadata.retrievalQueries = retrievalQueries
@@ -118,8 +140,6 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   // those fields merged onto its state unvalidated (state-patch-actions.ts never
   // parses the merged result against the target's own kind-specific schema).
   const isCharacter = (id: string): boolean => byId.get(id)?.kind === 'character'
-  const characterOf = (id: string | undefined): string | undefined =>
-    id !== undefined && isCharacter(id) ? id : undefined
 
   actions.push(
     ...scenePromotionActions({
@@ -153,8 +173,9 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   let visualChangesLanded = 0
   for (const note of block.visualChanges ?? []) {
     if (isCharacter(note.id)) {
-      visualChangesLanded += 1
       const { text, cut } = boundStateText(note.text)
+      if (text !== stateAs(byId.get(note.id), 'character').visual?.[note.type])
+        visualChangesLanded += 1
       // The writer is asked for about 60 words; a cut says it overran the 500-character bound.
       if (cut)
         log.warn('classifier.visual_truncated', {
@@ -179,6 +200,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
 
   // data-model.md → Authorship contract (seen before written): only shown places and items.
   const conditionsRejected: number[] = []
+  let conditionsLanded = 0
   for (const [position, change] of (block.conditions ?? []).entries()) {
     const condition = change.text.trim()
     if (condition === '') {
@@ -199,6 +221,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
       continue
     }
     const { text, cut } = boundStateText(condition)
+    if (text !== stateAs(row, row.kind).condition) conditionsLanded += 1
     if (cut)
       log.warn('classifier.condition_truncated', {
         entryId,
@@ -218,6 +241,8 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     actions: moveActions,
     drops,
     itemsLanded,
+    dropsLanded,
+    holderOf,
   } = itemMoveActions({
     transfers: block.transfers,
     entities,
@@ -239,14 +264,13 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     const patched = stackablePatches.get(id)
     if (patched) return new Map(patched)
     // The patch carries the folded keys, so the first transfer to touch a holder heals its row.
-    const state = byId.get(id)?.state as CharacterState | undefined
-    return foldStackables(state?.stackables)
+    return foldStackables(stateAs(byId.get(id), 'character').stackables)
   }
 
   let stackablesLanded = 0
   for (const transfer of block.transfers?.stackables ?? []) {
-    const payer = characterOf(transfer.from)
-    const payee = characterOf(transfer.to)
+    const payer = holderOf(transfer.from)
+    const payee = holderOf(transfer.to)
     if (payer !== undefined || payee !== undefined) stackablesLanded += 1
     if (payer !== undefined) {
       const next = currentStackables(payer)
@@ -292,8 +316,11 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
       drops,
       conditionsRejected,
       visualChangesLanded,
+      conditionsLanded,
       itemsLanded,
+      dropsLanded,
       stackablesLanded,
+      seatedDisabled,
     },
   }
 }

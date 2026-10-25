@@ -8,6 +8,7 @@ import {
   itemNamesakes,
   matchNewLocation as matchAgainst,
   matchNewPlace as matchInReply,
+  replyMatchView,
   type SettledNewPlace,
 } from './new-entity-match'
 import type { PlacedPlacement, PlacePlacement } from './placement'
@@ -832,6 +833,30 @@ describe('matchNewPlace', () => {
           ),
         ).toEqual(flaggedWith('loc_new1'))
       })
+    })
+
+    // A row placed under a create reads as placed there, not as unplaced and free to reuse.
+    it('reads a row this reply placed under an earlier create as placed under it', () => {
+      const placedHere = new Map([['loc_old', under('loc_new1')]])
+      const rows = replyMatchView(
+        unhiddenLocationView([
+          place('loc_inn', 'The Inn', null),
+          unplaced('loc_old', 'the Old Cellar'),
+        ]),
+        placedHere,
+      )
+      const earlier = [
+        { name: 'Cellar', placement: under('loc_inn'), id: 'loc_new1' },
+        { name: 'the Old Cellar', placement: under('loc_new1'), id: 'loc_old' },
+      ]
+      expect(
+        matchNewPlace(
+          { name: 'the Old Cellar', placement: under('loc_inn') },
+          earlier,
+          rows,
+          placedHere,
+        ),
+      ).toEqual(flaggedWith('loc_new1'))
     })
 
     it('maps an unplaced place to its one earlier create beside a retired namesake', () => {

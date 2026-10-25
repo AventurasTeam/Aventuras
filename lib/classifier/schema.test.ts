@@ -7,6 +7,8 @@ import {
   classifierReplySchema,
   newPlacesOf,
   readClassifierReply,
+  type ClassifierPlacesExtraction,
+  type ClassifierReply,
   type ParsedClassifierReply,
 } from './schema'
 
@@ -56,20 +58,22 @@ describe('classifierExtractionSchema', () => {
     ])
   })
 
-  it('parses a membership to a faction or to none, and requires the faction key', () => {
-    const parsed = classifierExtractionSchema.parse({
-      memberships: [
-        { character: 'c1', faction: 'new:circle', sourceTurn: 't1' },
-        { character: 'new:mara', faction: null },
-      ],
-    })
-    expect(parsed.memberships).toEqual([
+  // A null faction is a value (leaving one), so it is never read as an absent field.
+  it('parses a membership to a faction or to none, and drops one without the faction key', () => {
+    const { reply, malformed } = readClassifierReply(
+      classifierExtractionSchema.parse({
+        memberships: [
+          { character: 'c1', faction: 'new:circle', sourceTurn: 't1' },
+          { character: 'new:mara', faction: null, sourceTurn: null },
+          { character: 'c2' },
+        ],
+      }),
+    )
+    expect(reply.memberships).toEqual([
       { character: 'c1', faction: 'new:circle', sourceTurn: 't1' },
       { character: 'new:mara', faction: null },
     ])
-    expect(
-      classifierExtractionSchema.safeParse({ memberships: [{ character: 'c1' }] }).success,
-    ).toBe(false)
+    expect(malformed).toEqual([{ list: 'memberships', count: 1 }])
   })
 
   it('carries both lists in the places schema too', () => {
@@ -104,7 +108,7 @@ describe('classifierExtractionSchema', () => {
         },
       ],
     })
-    expect(parsed.happenings[0].awareness[0].severity).toBe(0.9)
+    expect(parsed.happenings[0]?.awareness[0]?.severity).toBe(0.9)
   })
 
   it("passes severity through unclamped - the clamp is the planner's job", () => {
@@ -117,22 +121,31 @@ describe('classifierExtractionSchema', () => {
         },
       ],
     })
-    expect(parsed.happenings[0].awareness[0].severity).toBe(4)
+    expect(parsed.happenings[0]?.awareness[0]?.severity).toBe(4)
   })
 
   it('defaults a missing severity to 0', () => {
     const parsed = classifierExtractionSchema.parse({
       happenings: [{ title: 'x', sourceTurn: 't1', awareness: [{ ref: 'c1', source: 's' }] }],
     })
-    expect(parsed.happenings[0].awareness[0].severity).toBe(0)
+    expect(parsed.happenings[0]?.awareness[0]?.severity).toBe(0)
   })
 
-  it('accepts only the two canon status transitions', () => {
-    expect(() =>
+  it('takes only the two canon status transitions, read trimmed and case-folded', () => {
+    const { reply, malformed } = readClassifierReply(
       classifierExtractionSchema.parse({
-        statusFlips: [{ ref: 'c1', to: 'staged', sourceTurn: 't1' }],
+        statusFlips: [
+          { ref: 'c1', to: 'staged', sourceTurn: 't1' },
+          { ref: 'c2', to: ' Retired ' },
+          { ref: 'c3', to: 'active' },
+        ],
       }),
-    ).toThrow()
+    )
+    expect(reply.statusFlips).toEqual([
+      { ref: 'c2', to: 'retired' },
+      { ref: 'c3', to: 'active' },
+    ])
+    expect(malformed).toEqual([{ list: 'statusFlips', count: 1 }])
   })
 
   it('is representable as JSON schema for the structured call', () => {
@@ -143,7 +156,7 @@ describe('classifierExtractionSchema', () => {
     const parsed = classifierExtractionSchema.parse({
       happenings: [{ title: 'x', sourceTurn: 't1', commonKnowledge: true }],
     })
-    expect('commonKnowledge' in parsed.happenings[0]).toBe(false)
+    expect('commonKnowledge' in parsed.happenings[0]!).toBe(false)
   })
 })
 
@@ -198,7 +211,7 @@ describe('classifierExtractionSchema — the writer map', () => {
         { title: 'A lamp lit', icon: 'lantern' },
       ],
     })
-    expect(parsed.happenings.map((h) => [h.category, h.icon])).toEqual([
+    expect(parsed.happenings.map((h) => [h?.category, h?.icon])).toEqual([
       ['battle', 'swords'],
       [undefined, 'lantern'],
     ])
@@ -233,6 +246,26 @@ describe('classifierExtractionSchema — the writer map', () => {
 
   // Required-vs-optional reaches the model as the prompt's TS block, so each key is pinned.
   const REQUIRED_KEYS = {
+    happenings: { item: { title: 'The ford ambush' }, keys: ['title'] },
+    relationships: {
+      item: { subject: 'c1', object: 'c2', kind: 'trusts' },
+      keys: ['subject', 'object', 'kind'],
+    },
+    statusFlips: { item: { ref: 'c1', to: 'retired' }, keys: ['ref', 'to'] },
+    newCharacters: {
+      item: { handle: 'new:mira', name: 'Mira', description: 'A ferrywoman.' },
+      keys: ['handle', 'name', 'description'],
+    },
+    newFactions: {
+      item: { handle: 'new:circle', name: 'The Iron Circle', description: 'Smiths.' },
+      keys: ['handle', 'name', 'description'],
+    },
+    memberships: { item: { character: 'c1', faction: 'f1' }, keys: ['character', 'faction'] },
+    aliases: { item: { ref: 'c1' }, keys: ['ref'] },
+    newPlaces: {
+      item: { handle: 'new:varn', name: 'Varn', description: 'A salt town.' },
+      keys: ['handle', 'name', 'description'],
+    },
     renames: { item: { ref: 'c1', name: 'Mira' }, keys: ['ref', 'name'] },
     placements: { item: { ref: 'l2', parent: 'l1' }, keys: ['ref', 'parent'] },
     standings: { item: { ref: 'f1', standing: 'outlawed' }, keys: ['ref', 'standing'] },
@@ -251,18 +284,18 @@ describe('classifierExtractionSchema — the writer map', () => {
   it.each(Object.entries(REQUIRED_KEYS))(
     'asks for every required key of a %s entry, and drops one missing any, counted',
     (list, { item, keys }) => {
-      expect(jsonOf(classifierExtractionSchema).properties?.[list]?.items?.required).toEqual(
-        expect.arrayContaining([...keys]),
-      )
+      expect(
+        jsonOf(classifierExtractionWithPlacesSchema).properties?.[list]?.items?.required,
+      ).toEqual(expect.arrayContaining([...keys]))
       const read = (entries: unknown[]) =>
-        readClassifierReply(classifierExtractionSchema.parse({ [list]: entries }))
-      expect(read([item]).reply[list as keyof typeof REQUIRED_KEYS], 'whole').toHaveLength(1)
+        readClassifierReply(classifierExtractionWithPlacesSchema.parse({ [list]: entries }))
+      const entriesOf = (reply: ClassifierReply) =>
+        (reply as ClassifierPlacesExtraction)[list as keyof typeof REQUIRED_KEYS]
+      expect(entriesOf(read([item]).reply), 'whole').toHaveLength(1)
       for (const key of keys) {
         const { [key as keyof typeof item]: _dropped, ...rest } = item
         const { reply, malformed } = read([rest, item])
-        expect(reply[list as keyof typeof REQUIRED_KEYS], key).toEqual([
-          expect.objectContaining(item),
-        ])
+        expect(entriesOf(reply), key).toEqual([expect.objectContaining(item)])
         expect(malformed, key).toEqual([{ list, count: 1 }])
       }
     },
@@ -374,7 +407,7 @@ describe('classifierExtractionWithPlacesSchema', () => {
     const parsed = classifierExtractionWithPlacesSchema.parse({
       newPlaces: [{ ...place, condition: 'half flooded' }],
     })
-    expect(parsed.newPlaces[0].condition).toBe('half flooded')
+    expect(parsed.newPlaces[0]?.condition).toBe('half flooded')
   })
 
   // The setting off sends the base schema, so a reply's places never reach the planner.
@@ -455,9 +488,17 @@ describe('optional profile and plot fields the model fills wrongly', () => {
   )
 })
 
-// classifier.md → Failure policy: the writer map's lists drop an entry that doesn't fit alone.
-describe('an entry of a writer-map list that does not fit', () => {
+// classifier.md → Failure policy: every list drops an entry that doesn't fit alone.
+describe('an entry of a reply list that does not fit', () => {
   const MALFORMED = {
+    happenings: { title: 7, involvements: [{ ref: 'c1' }] },
+    relationships: { subject: 'c1', object: 'c2' },
+    statusFlips: { ref: 'c1', to: 'staged' },
+    newCharacters: { handle: 'new:mira', name: 'Mira' },
+    newFactions: { handle: 'new:circle', name: ['The Iron Circle'], description: 'Smiths.' },
+    memberships: { faction: 'f1' },
+    aliases: { ref: 4, terms: ['the Grey Wolf'] },
+    newPlaces: { handle: 'new:varn', description: 'A salt town.' },
     renames: { ref: 'c1', name: 7 },
     placements: { ref: 'l2', parent: ['l1'] },
     standings: { ref: 'f1' },
@@ -466,6 +507,14 @@ describe('an entry of a writer-map list that does not fit', () => {
     knownAwareness: { happening: 'hp1', ref: 'c2', source: 'told', severity: 'high' },
   } as const
   const WELL_FORMED = {
+    happenings: { title: 'The ford ambush', involvements: [], awareness: [] },
+    relationships: { subject: 'c1', object: 'c3', kind: 'trusts' },
+    statusFlips: { ref: 'c2', to: 'retired' },
+    newCharacters: { handle: 'new:bren', name: 'Bren', description: 'A boy.', keywords: [] },
+    newFactions: { handle: 'new:guild', name: 'The Guild', description: 'Weavers.', keywords: [] },
+    memberships: { character: 'c2', faction: null },
+    aliases: { ref: 'c3', terms: ['the courier'] },
+    newPlaces: { handle: 'new:inn', name: 'The Inn', description: 'Low beams.', keywords: [] },
     renames: { ref: 'c2', name: 'Mira' },
     placements: { ref: 'l3', parent: 'l1' },
     standings: { ref: 'f2', standing: 'outlawed' },
@@ -478,14 +527,16 @@ describe('an entry of a writer-map list that does not fit', () => {
   it.each(Object.keys(MALFORMED) as List[])(
     'drops a malformed %s entry alone, counted, and keeps the rest of the reply',
     (list) => {
+      const sibling = list === 'standings' ? 'renames' : 'standings'
       const parsed = classifierExtractionWithPlacesSchema.safeParse({
         [list]: [MALFORMED[list], WELL_FORMED[list], 'not an entry'],
-        relationships: [{ subject: 'c1', object: 'c2', kind: 'trusts' }],
+        [sibling]: [WELL_FORMED[sibling]],
       })
       expect(parsed.success).toBe(true)
       const { reply, malformed } = readClassifierReply(parsed.data!)
-      expect(reply[list]).toEqual([WELL_FORMED[list]])
-      expect(reply.relationships).toHaveLength(1)
+      const lists = reply as ClassifierPlacesExtraction
+      expect(lists[list]).toEqual([WELL_FORMED[list]])
+      expect(lists[sibling]).toEqual([WELL_FORMED[sibling]])
       expect(malformed).toEqual([{ list, count: 2 }])
     },
   )
@@ -523,27 +574,81 @@ describe('an entry of a writer-map list that does not fit', () => {
     expect(malformed).toEqual([{ list: 'standings', count: 1 }])
   })
 
-  it('reads a null list as empty, and still fails a null older list', () => {
+  it('reads a null list as empty', () => {
     const lists = Object.fromEntries(Object.keys(MALFORMED).map((list) => [list, null]))
-    const parsed = classifierExtractionSchema.safeParse(lists)
+    const parsed = classifierExtractionWithPlacesSchema.safeParse(lists)
     expect(parsed.success).toBe(true)
     const { reply, malformed } = readClassifierReply(parsed.data!)
-    for (const list of Object.keys(MALFORMED) as List[]) expect(reply[list], list).toEqual([])
+    for (const list of Object.keys(MALFORMED) as List[])
+      expect((reply as ClassifierPlacesExtraction)[list], list).toEqual([])
     expect(malformed).toEqual([])
-    expect(classifierExtractionSchema.safeParse({ statusFlips: null }).success).toBe(false)
   })
 
   it('counts nothing for a reply whose entries all fit', () => {
     const lists = Object.fromEntries(
       Object.entries(WELL_FORMED).map(([list, entry]) => [list, [entry]]),
     )
-    expect(readClassifierReply(classifierExtractionSchema.parse(lists)).malformed).toEqual([])
+    expect(
+      readClassifierReply(classifierExtractionWithPlacesSchema.parse(lists)).malformed,
+    ).toEqual([])
   })
 
-  it('still fails the reply on a malformed entry of an older list', () => {
-    expect(
-      classifierExtractionSchema.safeParse({ statusFlips: [{ ref: 'c1', to: 'staged' }] }).success,
-    ).toBe(false)
+  it("drops a happening's malformed involvement or awareness alone, keeping the happening", () => {
+    const { reply, malformed } = readClassifierReply(
+      classifierExtractionSchema.parse({
+        happenings: [
+          {
+            title: 'The ford ambush',
+            involvements: [{ ref: 'c1', role: 'victim' }, { role: 'bandit' }],
+            awareness: [
+              { ref: 'c1', source: 'witnessed', severity: 'high' },
+              { ref: 'c2', source: 'told by Jorin', severity: 0.4 },
+            ],
+          },
+          { involvements: [{ ref: 'c3' }], awareness: [{ ref: 'c3', source: 'saw it' }] },
+          { title: 'A lamp lit', involvements: [7] },
+        ],
+      }),
+    )
+    expect(reply.happenings).toEqual([
+      {
+        title: 'The ford ambush',
+        involvements: [{ ref: 'c1', role: 'victim' }],
+        awareness: [{ ref: 'c2', source: 'told by Jorin', severity: 0.4 }],
+      },
+      { title: 'A lamp lit', involvements: [], awareness: [] },
+    ])
+    expect(malformed).toEqual([
+      { list: 'happenings', count: 1 },
+      { list: 'happenings.involvements', count: 2 },
+      { list: 'happenings.awareness', count: 1 },
+    ])
+  })
+
+  it('drops a keyword term that is no string alone, keeping its entry', () => {
+    const { reply, malformed } = readClassifierReply(
+      classifierExtractionWithPlacesSchema.parse({
+        newCharacters: [
+          { handle: 'new:mira', name: 'Mira', description: 'A ferrywoman.', keywords: [7, 'Mi'] },
+        ],
+        newFactions: [
+          { handle: 'new:circle', name: 'The Circle', description: 'Smiths.', keywords: [null] },
+        ],
+        aliases: [{ ref: 'c1', terms: ['the Grey Wolf', { term: 'x' }] }],
+        newPlaces: [{ handle: 'new:varn', name: 'Varn', description: '', keywords: [['Varn']] }],
+      }),
+    )
+    const lists = reply as ClassifierPlacesExtraction
+    expect(lists.newCharacters.map((c) => c.keywords)).toEqual([['Mi']])
+    expect(lists.newFactions.map((f) => f.keywords)).toEqual([[]])
+    expect(lists.aliases).toEqual([{ ref: 'c1', terms: ['the Grey Wolf'] }])
+    expect(lists.newPlaces.map((p) => p.keywords)).toEqual([[]])
+    expect(malformed).toEqual([
+      { list: 'newCharacters.keywords', count: 1 },
+      { list: 'newFactions.keywords', count: 1 },
+      { list: 'aliases.terms', count: 1 },
+      { list: 'newPlaces.keywords', count: 1 },
+    ])
   })
 })
 

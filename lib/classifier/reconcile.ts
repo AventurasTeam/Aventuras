@@ -1,7 +1,7 @@
 import type { CollisionReason, Entity } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
-import { compareId } from '@/lib/list-modules'
-import { namesakeBasis } from '@/lib/world'
+import { compareAge } from '@/lib/list-modules'
+import { flagStillHolds, namesakeBasis } from '@/lib/world'
 
 // Canon's starting ranges (classifier.md -> Disambiguation). Hardcoded: the
 // tuning surface is parked until the M7.5 probe work.
@@ -27,10 +27,14 @@ export type ScoredNamesake = {
   /** Cosine against the candidate; null when unscored. */
   similarity: number | null
   inScene: boolean
+  /** A live flag (world.md → Surfacing): a dormant one counts as none. */
+  flagged: boolean
 }
 
+/** `signal`: the run's, so a cancel ends a slow embed instead of waiting it out. */
 export type EmbedDescriptions = (
   texts: string[],
+  signal?: AbortSignal,
 ) => Promise<{ vectors: Float32Array[]; dim: number }>
 
 /** Cosine similarity in [-1, 1], rounded to 6 decimals to absorb Float32Array storage noise. */
@@ -48,7 +52,7 @@ export function cosine(a: Float32Array, b: Float32Array): number {
   return Math.round((dot / (Math.sqrt(na) * Math.sqrt(nb))) * 1e6) / 1e6
 }
 
-// classifier.md -> Partner and reason: score (unscored last), in scene, exact, unflagged,
+// classifier.md -> Partner and reason: score (unscored last), in scene, exact, no live flag,
 // older, id.
 function partnerOrder(a: ScoredNamesake, b: ScoredNamesake): number {
   if (a.similarity !== b.similarity) {
@@ -58,10 +62,8 @@ function partnerOrder(a: ScoredNamesake, b: ScoredNamesake): number {
   }
   if (a.inScene !== b.inScene) return a.inScene ? -1 : 1
   if (a.match !== b.match) return a.match === 'exact' ? -1 : 1
-  if (a.entity.nameCollisionFlag !== b.entity.nameCollisionFlag)
-    return a.entity.nameCollisionFlag - b.entity.nameCollisionFlag
-  if (a.entity.createdAt !== b.entity.createdAt) return a.entity.createdAt - b.entity.createdAt
-  return a.entity.id < b.entity.id ? -1 : a.entity.id > b.entity.id ? 1 : 0
+  if (a.flagged !== b.flagged) return a.flagged ? 1 : -1
+  return compareAge(a.entity, b.entity)
 }
 
 function absorbs(n: ScoredNamesake): n is ScoredNamesake & { similarity: number } {
@@ -112,12 +114,7 @@ export function decideNewItem(
       (s): s is { entity: Entity; similarity: number } =>
         s.similarity !== null && s.similarity >= TAU_LOW,
     )
-    .sort(
-      (a, b) =>
-        b.similarity - a.similarity ||
-        a.entity.createdAt - b.entity.createdAt ||
-        compareId(a.entity.id, b.entity.id),
-    )
+    .sort((a, b) => b.similarity - a.similarity || compareAge(a.entity, b.entity))
   if (best === undefined) return null
   return { partnerId: best.entity.id, reason: best.similarity >= TAU_HIGH ? 'alike' : 'ambiguous' }
 }
@@ -137,6 +134,7 @@ export async function scoreDescriptions(
   embed: EmbedDescriptions,
   /** The run's, so a failed embed's warn carries its actionId. */
   log: Pick<Logger, 'warn'>,
+  signal?: AbortSignal,
 ): Promise<(number | null)[]> {
   const unscored = descriptions.map(() => null)
   if (!hasText(candidate)) return unscored
@@ -144,12 +142,14 @@ export async function scoreDescriptions(
   if (sent.length === 0) return unscored
   let vectors: Float32Array[]
   try {
-    vectors = (await embed([candidate, ...sent.map((s) => s.text)])).vectors
+    vectors = (await embed([candidate, ...sent.map((s) => s.text)], signal)).vectors
   } catch (e) {
-    // Matching degrades to unscored rather than failing its caller, so only the log shows it.
-    log.warn('classifier.description_embed_failed', {
-      error: e instanceof Error ? e.message : String(e),
-    })
+    // Matching degrades to unscored rather than failing its caller, so only the log shows it. A
+    // cancel is no embedder fault; its caller sees the abort and discards the decision.
+    if (signal?.aborted !== true)
+      log.warn('classifier.description_embed_failed', {
+        error: e instanceof Error ? e.message : String(e),
+      })
     return unscored
   }
   // A short reply or a dim mismatch mid embedder-swap would otherwise be scored on
@@ -171,6 +171,7 @@ type ReconcileDeps = {
   entities: readonly Entity[]
   embedDescriptions: EmbedDescriptions
   log: Pick<Logger, 'warn'>
+  signal?: AbortSignal
 } & (
   | {
       kind: 'character'
@@ -189,11 +190,18 @@ export async function reconcileNewEntity(
   candidate: { name: string; description: string; keywords: readonly string[] },
   deps: ReconcileDeps,
 ): Promise<ReconcileDecision> {
+  const byId = new Map(deps.entities.map((e) => [e.id, e]))
   const matched: Omit<ScoredNamesake, 'similarity' | 'inScene'>[] = []
   for (const entity of deps.entities) {
     if (entity.kind !== deps.kind) continue
     const basis = namesakeBasis(candidate, entity)?.basis
-    if (basis != null) matched.push({ entity, match: basis === 'same-name' ? 'exact' : 'partial' })
+    if (basis == null) continue
+    const partnerId = entity.nameCollisionPartnerId
+    matched.push({
+      entity,
+      match: basis === 'same-name' ? 'exact' : 'partial',
+      flagged: flagStillHolds(entity, partnerId == null ? undefined : byId.get(partnerId)),
+    })
   }
   if (matched.length === 0) return { kind: 'create', flag: null }
 
@@ -202,6 +210,7 @@ export async function reconcileNewEntity(
     matched.map((m) => m.entity.description),
     deps.embedDescriptions,
     deps.log,
+    deps.signal,
   )
   return decideReconcile(
     matched.map((m, i) => ({

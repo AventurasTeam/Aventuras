@@ -73,6 +73,8 @@
     "titleIncomplete": "Recovery incomplete",
     "branchHeldNamed": "An interrupted memory update in {{storyName}} could not be undone. Its branch can't take turns until it is — your story content is intact, and restarting the app retries automatically.",
     "branchHeldUnnamed": "An interrupted memory update could not be undone. That story's branch can't take turns until it is — your story content is intact, and restarting the app retries automatically.",
+    "branchHeldUnclearedNamed": "A memory update in {{storyName}} was left unfinished at startup. Its branch can't take turns until it is cleared — your story content is intact, and restarting the app retries automatically.",
+    "branchHeldUnclearedUnnamed": "A memory update was left unfinished at startup. That story's branch can't take turns until it is cleared — your story content is intact, and restarting the app retries automatically.",
     "incompleteNamed": "An interrupted background update in {{storyName}} could not be undone. Your story content is intact, and restarting the app retries automatically.",
     "incompleteUnnamed": "An interrupted background update could not be undone. Your story content is intact, and restarting the app retries automatically.",
     "branchHeldRefusedNamed": "An interrupted memory update in {{storyName}} could not be undone without breaking later changes. Its branch can't take turns — your story content is intact.",

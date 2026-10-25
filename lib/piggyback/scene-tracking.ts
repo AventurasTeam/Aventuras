@@ -1,5 +1,6 @@
 import type { DeltaSource, PipelineAction } from '@/lib/actions'
 import type { Entity } from '@/lib/db'
+import { stateAs } from '@/lib/world'
 
 type SceneFields = { sceneEntities: string[]; currentLocationId: string | null }
 
@@ -12,6 +13,8 @@ type Args = {
     entryId: string
     currentLocationId: string | null
     worldTime: number
+    /** Who it showed: only they were last seen at its place. */
+    sceneEntities: readonly string[]
   }
   /** This entry's scene as it stands now. On the generation path it equals `previous`. */
   before: SceneFields
@@ -76,6 +79,7 @@ export function sceneTrackingActions(args: Args): PipelineAction[] {
 
   const wasInScene = new Set(before.sceneEntities)
   const nowInScene = new Set(after.sceneEntities)
+  const seenBefore = new Set(previous.sceneEntities)
 
   for (const character of entities.filter((e) => e.kind === 'character')) {
     if (nowInScene.has(character.id)) {
@@ -91,6 +95,20 @@ export function sceneTrackingActions(args: Args): PipelineAction[] {
         })
       }
     } else if (wasInScene.has(character.id)) {
+      // data-model.md → lastSeenAt: from the entry they were last in. Someone the previous entry
+      // didn't show was never at its place (which may be retired), so an edit taking them out puts
+      // them back at their own older anchor.
+      if (!seenBefore.has(character.id)) {
+        const anchor = stateAs(character, 'character').lastSeenAt?.locationId
+        // With no anchor the stored location stands: the wizard places characters without one.
+        if (anchor != null)
+          actions.push({
+            kind: 'updateEntityLocationTracking',
+            source,
+            payload: { branchId, id: character.id, currentLocationId: anchor },
+          })
+        continue
+      }
       // A lastSeenAt anchored at an unknown location records nothing useful.
       if (previous.currentLocationId !== null) {
         actions.push({

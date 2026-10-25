@@ -132,6 +132,7 @@ describe('lib/stores public surface', () => {
         },
       ],
       failures: [],
+      heldStoryIds: [],
     })
     const claimedReport = recoveryReportStore.claim()
     expect(claimedReport).not.toBeNull()

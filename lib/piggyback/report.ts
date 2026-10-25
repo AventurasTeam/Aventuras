@@ -1,7 +1,7 @@
 import type { EntryMetadata } from '@/lib/db'
 
 import type { PiggybackApplied } from './apply'
-import type { ParsedTransfers, PlannedTurn, ReportedDrop } from './types'
+import type { DroppedRef, ParsedTransfers, PlannedTurn, ReportedDrop } from './types'
 
 type StateReport = NonNullable<EntryMetadata['stateReport']>
 type ReportedTransfers = NonNullable<StateReport['transfers']>
@@ -28,12 +28,14 @@ type BuildReportArgs = {
   /** Widened to plain strings: a report read back from the column has already lost
    *  the `keyof ParsedStateBlock` narrowing, and the fallback re-supplies its own. */
   failures: { field: string; detail: string }[]
+  /** The fallback's entries discarded before apply; the narrative fold fails a field instead. */
+  droppedRefs?: readonly DroppedRef[]
   /** The trailing block's own text. Retained only when a field failed. */
   raw?: string
   /** What apply.ts did with the emitted values. Absent when nothing was applied. */
   applied?: Pick<
     PiggybackApplied,
-    'worldTimeDelta' | 'currentLocationRejected' | 'drops' | 'conditionsRejected'
+    'worldTimeDelta' | 'currentLocationRejected' | 'drops' | 'conditionsRejected' | 'seatedDisabled'
   >
 }
 
@@ -42,7 +44,7 @@ type BuildReportArgs = {
  * `summary`/`retrievalQueries` omitted: they already live top-level on EntryMetadata.
  */
 export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateReport'] {
-  const { layer, failures, raw, applied } = args
+  const { layer, failures, raw, applied, droppedRefs = [] } = args
   const { block, report } = args.turn
   const { newLocations, newItems } = report
   // Emptiness is judged on the block as emitted, summary included: suppressing a summary-only
@@ -51,6 +53,7 @@ export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateRep
   if (
     Object.keys(block).length === 0 &&
     failures.length === 0 &&
+    droppedRefs.length === 0 &&
     newLocations.length === 0 &&
     newItems.length === 0
   )
@@ -84,6 +87,10 @@ export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateRep
     ...(newItems.length > 0 ? { newItems } : {}),
     ...(failures.length > 0
       ? { failedFields: failures.map((f) => ({ field: f.field, detail: f.detail })) }
+      : {}),
+    ...(droppedRefs.length > 0 ? { droppedRefs: droppedRefs.map((d) => ({ ...d })) } : {}),
+    ...(applied !== undefined && applied.seatedDisabled.length > 0
+      ? { seatedDisabled: [...applied.seatedDisabled] }
       : {}),
     // Redundant on the happy path; the only inspectable remnant when a parse failed.
     ...(failures.length > 0 && raw !== undefined ? { raw } : {}),

@@ -1072,7 +1072,18 @@ describe('embedClassifierDescriptions', () => {
       ['a knight', 'a sellsword'],
       'document',
       undefined,
+      undefined,
     )
+  })
+
+  it("hands the caller's signal to the embed, so a cancel ends it", async () => {
+    await openLocalStory()
+    vi.mocked(embedTexts).mockResolvedValue({ vectors: [], dim: 384, truncated: [] })
+    const { signal } = new AbortController()
+
+    await embedClassifierDescriptions(['a knight'], signal)
+
+    expect(vi.mocked(embedTexts).mock.lastCall?.[4]).toBe(signal)
   })
 
   it('resolves the provider instance a provider-backed config is served by', async () => {
@@ -1090,6 +1101,7 @@ describe('embedClassifierDescriptions', () => {
       ['a knight'],
       'document',
       expect.objectContaining({ id: 'prov1' }),
+      undefined,
     )
   })
 

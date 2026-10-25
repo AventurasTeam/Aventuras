@@ -579,6 +579,30 @@ describe('one position per item', () => {
       },
     ])
   })
+
+  // `state` is a nullable column: a character with none holds nothing, and reading it can't throw.
+  it('reads a character with no state as holding nothing', () => {
+    const stateless: Entity = { ...MIRA, id: 'char_bare', state: null }
+    const draft = { ...itemDraftFrom(BLADE), atLocationId: 'loc_hollow' }
+    expect(
+      positions(
+        entityActions({
+          branchEntities: [KAEL, stateless, BLADE],
+          kind: 'item',
+          row: BLADE,
+          draft,
+          ...AT,
+          id: 'item_blade',
+        }),
+      ),
+    ).toStrictEqual([
+      {
+        kind: 'updateEntityInventory',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'char_kael', equipped_items: [], inventory: [] },
+      },
+    ])
+  })
 })
 
 describe('collision flags a rename breaks', () => {

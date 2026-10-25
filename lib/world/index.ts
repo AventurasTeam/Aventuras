@@ -21,6 +21,7 @@ export {
   locationDraftFrom,
   locationDraftSchema,
   stackableKey,
+  stateAs,
   stateOf,
   VISUAL_DRAFT_FIELDS,
 } from './entity-draft'

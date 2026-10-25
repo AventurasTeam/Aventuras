@@ -291,10 +291,16 @@ drive materialized derived state — per-character `current_location_id`,
 editing the tail re-folds one step with nothing downstream to
 invalidate. The re-fold writes only the characters the edit touches:
 those in the edited scene, and those it drops from the entry's original
-scene. A character who left the scene at this entry and stays out keeps
-any location set since. Promotion is shared with the generation fold rather than
-reimplemented: a staged entity the edit names in the scene is promoted
-exactly as the classifier would promote it. On any non-tail entry the panel renders the same fields
+scene. A character it drops is closed out where they were last seen
+([`data-model.md → lastSeenAt`](../../data-model.md#characterstate-shape)):
+at the previous entry's place when that entry showed them, and
+otherwise back at their own older last-seen place, never at a place
+they weren't seen at; one with none keeps the location stored. The
+editor refuses a location that isn't a place. A character who left the
+scene at this entry and stays out keeps any location set since.
+Promotion is shared with the generation fold rather than reimplemented:
+a staged entity the edit names in the scene or as its location is
+promoted exactly as the classifier would promote it. On any non-tail entry the panel renders the same fields
 with **no edit control at all**, not a disabled one: a control present
 everywhere but effective only at the tail repeats the failure mode
 the panel exists to remove. The same holds for a row whose `metadata`

@@ -23,6 +23,12 @@ export type RecoveryFailure = {
   refusal: IntegrityRefusal | null
 }
 export type RecoveryReport = { reversed: RecoveredRun[]; failures: RecoveryFailure[] }
+/**
+ * What boot tells the user: the report, plus the stories whose branch it left held (classifier
+ * state still `running` after the reset). `null` when that read failed: every pass failure then
+ * reads as holding its branch.
+ */
+export type BootRecoveryReport = RecoveryReport & { heldStoryIds: readonly string[] | null }
 
 // Per-orphan failures are logged and reported, so one bad orphan can't block the rest; an
 // uncommitted one keeps its marker open for the next boot. Only the orphan query itself can throw.

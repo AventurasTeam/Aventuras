@@ -109,8 +109,27 @@ function reserveRun(kind: string, ctx: RunCtx): RunState {
   return run
 }
 
-// A failed marker insert unwinds the reservation, so it can't gate edits or block a retry, and
-// run_complete reports the idle: a successor's predecessor sent its own while this was registered.
+// Releases a run that can't end through abortRun or commitRun, so it can't gate edits or block a
+// retry, and run_complete reports the idle and the failure.
+function unwindRun(run: RunState, detail: string): void {
+  generationStore.abortRun(run.runId, 'unwound')
+  // A capture left open is never evicted. Before beginTurn (a failed marker insert) there is none.
+  turnCaptureSink.endTurn(run.actionId, 'failed', 'unwound')
+  pipelineEventBus.emit({
+    type: 'run_complete',
+    runId: run.runId,
+    kind: run.kind,
+    actionId: run.actionId,
+    beforeTurn: run.beforeTurn,
+    outcome: 'failed',
+    error: { kind: 'orchestrator', detail },
+  })
+  run.resolveTerminal()
+}
+
+const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e))
+
+// A successor's predecessor sent its own run_complete while this one was registered.
 async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
   try {
     await ctx.db.insert(pipelineRuns).values({
@@ -121,20 +140,7 @@ async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
       startedAt: Date.now(),
     })
   } catch (e) {
-    generationStore.abortRun(run.runId, 'unwound')
-    pipelineEventBus.emit({
-      type: 'run_complete',
-      runId: run.runId,
-      kind: run.kind,
-      actionId: run.actionId,
-      beforeTurn: run.beforeTurn,
-      outcome: 'failed',
-      error: {
-        kind: 'orchestrator',
-        detail: `marker insert failed: ${e instanceof Error ? e.message : String(e)}`,
-      },
-    })
-    run.resolveTerminal()
+    unwindRun(run, `marker insert failed: ${messageOf(e)}`)
     throw e
   }
   turnCaptureSink.beginTurn({ actionId: run.actionId, kind: run.kind, branchId: run.branchId })
@@ -185,9 +191,14 @@ async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx)
       turnCaptureSink.recordTargetEntry(run.actionId, event.entryId)
     }
   } else if (event.type === 'recoverable_error') {
+    const { error } = event
     logger.warn(
       'pipeline.recoverable_error',
-      { detail: event.error.detail ?? event.error.kind },
+      {
+        kind: error.kind,
+        ...('reason' in error ? { reason: error.reason } : {}),
+        ...(error.detail !== undefined ? { detail: error.detail } : {}),
+      },
       { actionId: run.actionId },
     )
   }
@@ -405,8 +416,12 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
     // Marker rides the reversal's transaction: never records an uncommitted reversal.
     await reverseReplayDeltas(run.actionId, ctx, () => [markerOp(outcome).toSQL()])
   } catch (e) {
-    const failure = describeReplayError(e)
-    if (failure === undefined) throw e
+    // An error it doesn't recognise counts as uncommitted: the marker rides the reversal's
+    // transaction, so boot recovery reads the truth either way, and the run must still end here.
+    const failure = describeReplayError(e) ?? {
+      committed: false,
+      detail: e instanceof Error ? e.message : String(e),
+    }
     const stage = failure.committed ? 'post-commit store sync' : 'reverse-replay'
     error = { kind: 'orchestrator', detail: `${stage} failed: ${failure.detail}` }
     outcome = 'failed'
@@ -575,8 +590,15 @@ async function driveOrigin(
   // reserveRun raised it could still commit under this run's reads. A chain's successor needs no
   // settle: the gate stayed up across the handoff.
   if (run.gateBehavior === 'hard-gate') await settleUserWrites()
-  const { tx, successor } = await driveRun(run, ctx)
-  return { result: tx, successor }
+  try {
+    const { tx, successor } = await driveRun(run, ctx)
+    return { result: tx, successor }
+  } catch (e) {
+    // Unwound as a successor is, or it holds the gate until a restart; the caller still gets the throw.
+    if (generationStore.getTxState().runs.has(run.runId))
+      unwindRun(run, `run threw: ${messageOf(e)}`)
+    throw e
+  }
 }
 
 // Each successor is already in txState, swapped in at its predecessor's commit. Nothing here
@@ -604,13 +626,12 @@ async function driveSuccessors(first: RunState | undefined, ctx: RunCtx): Promis
     } catch (e) {
       logger.error(
         'pipeline.chain_run_failed',
-        {
-          runId: current.runId,
-          kind: current.kind,
-          error: e instanceof Error ? e.message : String(e),
-        },
+        { runId: current.runId, kind: current.kind, error: messageOf(e) },
         { actionId: current.actionId },
       )
+      // A throw that escaped before the run ended would otherwise hold the gate until a restart.
+      if (generationStore.getTxState().runs.has(current.runId))
+        unwindRun(current, `run threw: ${messageOf(e)}`)
       return
     }
   }

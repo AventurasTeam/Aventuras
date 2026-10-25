@@ -1,11 +1,12 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
-import type { PromptHalves } from '@/lib/ai'
+import type { generateStructured, PromptHalves } from '@/lib/ai'
 import {
   APP_SETTINGS_DEFAULTS,
   emptyEntityState,
   STORY_SETTINGS_DEFAULTS,
+  type CharacterState,
   type Entity,
   type EntryMetadata,
   type StoryEntry,
@@ -64,7 +65,7 @@ const SUGGESTION_CATEGORIES = [
 ]
 
 const { generateStructuredMock } = vi.hoisted(() => ({
-  generateStructuredMock: vi.fn(),
+  generateStructuredMock: vi.fn<typeof generateStructured>(),
 }))
 
 vi.mock('@/lib/ai', async (importOriginal) => {
@@ -321,7 +322,11 @@ describe('per-turn-piggyback', () => {
       ])
       entitiesStore.hydrate('b1', [])
 
-      generateStructuredMock.mockResolvedValueOnce({ status: 'failed', detail: 'LLM error' })
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'failed',
+        recoverable: [],
+        detail: 'LLM error',
+      })
 
       const ctx = {
         actionId: 'act_1',
@@ -352,7 +357,7 @@ describe('per-turn-piggyback', () => {
         expect.anything(),
         expect.anything(),
         ctx.abortSignal,
-        { cacheSystemPrefix: true },
+        { cacheSystemPrefix: true, actionId: 'act_1' },
       )
 
       // With the narrative fold having written no report, this phase is the only writer:
@@ -404,7 +409,11 @@ describe('per-turn-piggyback', () => {
       ])
       entitiesStore.hydrate('b1', [])
 
-      generateStructuredMock.mockResolvedValueOnce({ status: 'failed', detail: 'LLM error' })
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'failed',
+        recoverable: [],
+        detail: 'LLM error',
+      })
 
       const gen = piggybackFallbackClassifierPhase({
         actionId: 'act_1',
@@ -464,7 +473,7 @@ describe('per-turn-piggyback', () => {
       ])
       entitiesStore.hydrate('b1', [])
 
-      generateStructuredMock.mockResolvedValueOnce({ status: 'aborted' })
+      generateStructuredMock.mockResolvedValueOnce({ status: 'aborted', recoverable: [] })
 
       const gen = piggybackFallbackClassifierPhase({
         actionId: 'act_1',
@@ -518,7 +527,11 @@ describe('per-turn-piggyback', () => {
         } as never,
       ])
       entitiesStore.hydrate('b1', [])
-      generateStructuredMock.mockResolvedValueOnce({ status: 'failed', detail: 'LLM error' })
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'failed',
+        recoverable: [],
+        detail: 'LLM error',
+      })
 
       const ctx = {
         actionId: 'act_1',
@@ -533,7 +546,7 @@ describe('per-turn-piggyback', () => {
 
       await piggybackFallbackClassifierPhase(ctx).next()
 
-      const prompt = (generateStructuredMock.mock.calls.at(-1)?.[1] as PromptHalves).user
+      const prompt = generateStructuredMock.mock.calls.at(-1)![1].user
       expect(prompt).toContain('I put the sword away.')
       expect(prompt).toContain('The blade slides home.')
     })
@@ -572,6 +585,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -595,7 +609,7 @@ describe('per-turn-piggyback', () => {
       const gen = piggybackFallbackClassifierPhase(ctx)
       const first = await gen.next()
 
-      const prompt = (generateStructuredMock.mock.calls.at(-1)?.[1] as PromptHalves).user
+      const prompt = generateStructuredMock.mock.calls.at(-1)![1].user
       expect(prompt).toContain('The blade slides home.')
       expect(first.value).toEqual({
         type: 'delta_emitted',
@@ -639,6 +653,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -723,7 +738,7 @@ describe('per-turn-piggyback', () => {
         transfers: { items: [], stackables: [] },
         retrievalQueries: ['House Eldrin sigil'],
       })
-      generateStructuredMock.mockResolvedValueOnce({ status: 'ok', value })
+      generateStructuredMock.mockResolvedValueOnce({ status: 'ok', recoverable: [], value })
 
       const ctx = {
         actionId: 'act_1',
@@ -800,6 +815,7 @@ describe('per-turn-piggyback', () => {
       // narrative model — it emits 'c1' back, never heroId directly.
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: ['c1'],
           currentLocation: undefined,
@@ -834,7 +850,7 @@ describe('per-turn-piggyback', () => {
         expect.anything(),
         expect.anything(),
         ctx.abortSignal,
-        { cacheSystemPrefix: true },
+        { cacheSystemPrefix: true, actionId: 'act_1' },
       )
       expect(events[0]).toEqual({
         type: 'delta_emitted',
@@ -884,6 +900,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: ['c1'],
           currentLocation: undefined,
@@ -957,6 +974,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: ['c1'],
           currentLocation: undefined,
@@ -1026,6 +1044,7 @@ describe('per-turn-piggyback', () => {
       generateStructuredMock
         .mockResolvedValueOnce({
           status: 'ok',
+          recoverable: [],
           value: {
             sceneEntities: [],
             currentLocation: undefined,
@@ -1036,6 +1055,7 @@ describe('per-turn-piggyback', () => {
         })
         .mockResolvedValueOnce({
           status: 'ok',
+          recoverable: [],
           value: {
             sceneEntities: [],
             currentLocation: undefined,
@@ -1098,6 +1118,7 @@ describe('per-turn-piggyback', () => {
       generateStructuredMock
         .mockResolvedValueOnce({
           status: 'ok',
+          recoverable: [],
           value: {
             sceneEntities: [],
             currentLocation: undefined,
@@ -1108,6 +1129,7 @@ describe('per-turn-piggyback', () => {
         })
         .mockResolvedValueOnce({
           status: 'failed',
+          recoverable: [],
           detail: 'provider timeout on reroll',
         })
 
@@ -1152,10 +1174,7 @@ describe('per-turn-piggyback', () => {
         transfers: { items: [], stackables: [] },
       }
 
-      async function callOptionsAfter(
-        outcome: PiggybackOutcome | undefined,
-        { worldTimeDeltas = [15], withChips = false } = {},
-      ): Promise<unknown[]> {
+      function seedClearing(withChips: boolean): void {
         currentStoryStore.set({
           storyId: 's1',
           branchId: 'b1',
@@ -1181,12 +1200,9 @@ describe('per-turn-piggyback', () => {
           } as never,
         ])
         entitiesStore.hydrate('b1', [])
-        for (const worldTimeDelta of worldTimeDeltas)
-          generateStructuredMock.mockResolvedValueOnce({
-            status: 'ok',
-            value: { ...REPORT, worldTimeDelta, ...(withChips ? { suggestions: [] } : {}) },
-          })
+      }
 
+      async function drainPhase(outcome?: PiggybackOutcome): Promise<PhaseEmittedEvent[]> {
         const gen = piggybackFallbackClassifierPhase({
           actionId: 'act_1',
           abortSignal: new AbortController().signal,
@@ -1200,10 +1216,56 @@ describe('per-turn-piggyback', () => {
           storyId: 's1',
           branchId: 'b1',
         })
+        const events: PhaseEmittedEvent[] = []
         let result = await gen.next()
-        while (!result.done) result = await gen.next()
+        while (!result.done) {
+          events.push(result.value)
+          result = await gen.next()
+        }
+        return events
+      }
+
+      async function callOptionsAfter(
+        outcome: PiggybackOutcome | undefined,
+        { worldTimeDeltas = [15], withChips = false } = {},
+      ): Promise<unknown[]> {
+        seedClearing(withChips)
+        for (const worldTimeDelta of worldTimeDeltas)
+          generateStructuredMock.mockResolvedValueOnce({
+            status: 'ok',
+            recoverable: [],
+            value: { ...REPORT, worldTimeDelta, ...(withChips ? { suggestions: [] } : {}) },
+          })
+        await drainPhase(outcome)
         return generateStructuredMock.mock.calls.map((call) => call[5])
       }
+
+      // generation-pipeline.md → Two retry tiers: each call's retried attempts are reported,
+      // the re-rolled first call's included, whichever result the turn keeps.
+      it('reports the retried attempts of both calls when it re-rolls a negative delta', async () => {
+        const first = { tier: 'parse', detail: 'Unexpected end of JSON input', attempt: 0 } as const
+        const second = { tier: 'provider', reason: 'network', detail: '503' } as const
+        seedClearing(false)
+        generateStructuredMock
+          .mockResolvedValueOnce({
+            status: 'ok',
+            value: { ...REPORT, worldTimeDelta: -10 },
+            recoverable: [first],
+          })
+          .mockResolvedValueOnce({
+            status: 'ok',
+            value: { ...REPORT, worldTimeDelta: 15 },
+            recoverable: [second],
+          })
+        const events = await drainPhase()
+        expect(events.filter((e) => e.type === 'recoverable_error')).toEqual([
+          { type: 'recoverable_error', error: { kind: 'phase-logic', detail: first.detail } },
+          {
+            type: 'recoverable_error',
+            error: { kind: 'provider', reason: 'network', detail: '503' },
+          },
+        ])
+      })
 
       // Both schema branches: a recovery that also asks for chips stays unmarked.
       describe.each([
@@ -1215,14 +1277,14 @@ describe('per-turn-piggyback', () => {
           ['a piggyback that never fired', { attempted: false, succeeded: false }],
         ])('marks the regular classifier call after %s', async (_label, outcome) => {
           expect(await callOptionsAfter(outcome, { withChips })).toEqual([
-            { cacheSystemPrefix: true },
+            { cacheSystemPrefix: true, actionId: 'act_1' },
           ])
         })
 
         it('leaves a call recovering from a failed piggyback parse unmarked', async () => {
           expect(
             await callOptionsAfter({ attempted: true, succeeded: false }, { withChips }),
-          ).toEqual([{ cacheSystemPrefix: false }])
+          ).toEqual([{ cacheSystemPrefix: false, actionId: 'act_1' }])
         })
 
         it.each([
@@ -1233,7 +1295,10 @@ describe('per-turn-piggyback', () => {
           async (_label, outcome, cacheSystemPrefix) => {
             expect(
               await callOptionsAfter(outcome, { worldTimeDeltas: [-10, 15], withChips }),
-            ).toEqual([{ cacheSystemPrefix }, { cacheSystemPrefix }])
+            ).toEqual([
+              { cacheSystemPrefix, actionId: 'act_1' },
+              { cacheSystemPrefix, actionId: 'act_1' },
+            ])
           },
         )
       })
@@ -1320,7 +1385,11 @@ describe('per-turn-piggyback', () => {
         const intermediates: Record<string, unknown> = { idMap: new IdBiMap() }
         if (over.retrieval) intermediates[RETRIEVAL_INTERMEDIATE_KEY] = over.retrieval
 
-        generateStructuredMock.mockResolvedValueOnce({ status: 'failed', detail: 'LLM error' })
+        generateStructuredMock.mockResolvedValueOnce({
+          status: 'failed',
+          recoverable: [],
+          detail: 'LLM error',
+        })
         await piggybackFallbackClassifierPhase({
           actionId: 'act_1',
           abortSignal: new AbortController().signal,
@@ -1335,7 +1404,7 @@ describe('per-turn-piggyback', () => {
         // A phase that grew a yield before the render would otherwise surface as a
         // TypeError inside toContain rather than as a failed expectation.
         expect(generateStructuredMock).toHaveBeenCalledOnce()
-        return generateStructuredMock.mock.calls[0]![1] as PromptHalves
+        return generateStructuredMock.mock.calls[0]![1]
       }
 
       it('renders the memory blocks, in-scene and location sections, and the calendar', async () => {
@@ -1409,6 +1478,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -1448,7 +1518,7 @@ describe('per-turn-piggyback', () => {
         fallbackClassifierWithSuggestionsSchema,
         expect.anything(),
         ctx.abortSignal,
-        { cacheSystemPrefix: true },
+        { cacheSystemPrefix: true, actionId: 'act_1' },
       )
       // One delta carries both scene state and chips — a second
       // updateStoryEntryMetadata delta here would mean the fold is patching
@@ -1489,6 +1559,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -1528,7 +1599,7 @@ describe('per-turn-piggyback', () => {
         fallbackClassifierSchema,
         expect.anything(),
         ctx.abortSignal,
-        { cacheSystemPrefix: false },
+        { cacheSystemPrefix: false, actionId: 'act_1' },
       )
       const created = events[0]
       if (
@@ -1570,6 +1641,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -1652,6 +1724,7 @@ describe('per-turn-piggyback', () => {
       // than defaulting to empty.
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: { sceneEntities: [], currentLocation: undefined, worldTimeDelta: 60 },
       })
 
@@ -1735,6 +1808,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -1816,6 +1890,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -1919,6 +1994,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -1953,9 +2029,9 @@ describe('per-turn-piggyback', () => {
         fallbackClassifierSchema,
         expect.anything(),
         ctx.abortSignal,
-        { cacheSystemPrefix: true },
+        { cacheSystemPrefix: true, actionId: 'act_1' },
       )
-      const prompt = (generateStructuredMock.mock.calls[0]?.[1] as PromptHalves).user
+      const prompt = generateStructuredMock.mock.calls[0]![1].user
       expect(prompt).not.toContain('Action')
       const created = events[0]
       if (
@@ -1993,6 +2069,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -2019,7 +2096,7 @@ describe('per-turn-piggyback', () => {
         result = await gen.next()
       }
 
-      const prompt = (generateStructuredMock.mock.calls[0]?.[1] as PromptHalves).user
+      const prompt = generateStructuredMock.mock.calls[0]![1].user
       expect(prompt).toContain('exactly 2 distinct entries')
       expect(prompt).toContain('id "cat1" = Action — use it for: act')
       expect(prompt).toContain('id "cat2" = Dialogue — use it for: say')
@@ -2044,6 +2121,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -2105,6 +2183,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -2171,6 +2250,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -2227,6 +2307,7 @@ describe('per-turn-piggyback', () => {
       // is even constructed — there is no blockFound signal on this path.
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -2272,6 +2353,7 @@ describe('per-turn-piggyback', () => {
 
       generateStructuredMock.mockResolvedValueOnce({
         status: 'ok',
+        recoverable: [],
         value: {
           sceneEntities: [],
           currentLocation: undefined,
@@ -2421,7 +2503,7 @@ describe('per-turn-piggyback', () => {
       value: unknown,
       over: { intermediates?: Record<string, unknown>; log?: Logger; signal?: AbortSignal } = {},
     ) {
-      generateStructuredMock.mockResolvedValueOnce({ status: 'ok', value })
+      generateStructuredMock.mockResolvedValueOnce({ status: 'ok', recoverable: [], value })
       const idMap = new IdBiMap()
       for (const id of [HERO, TOWN, MARKET]) idMap.allocate(id)
       const gen = piggybackFallbackClassifierPhase({
@@ -2881,13 +2963,19 @@ describe('per-turn-piggyback', () => {
       )
       const [docks, key] = createdEntries(events)
       if (!docks || !key) throw new Error('expected a location create and an item create')
-      expect(log.warn).toHaveBeenCalledWith('classifier.transfer_dropped', {
-        entryId: 'entry-2',
-        transfer: { id: ref, to: 'c1', slot: 'inventory', seq: 1 },
+      const dropped = {
+        field: 'transfers',
+        ref,
+        reason: 'wrong-kind',
         detail: expect.stringContaining('not an item'),
+      }
+      expect(log.warn).toHaveBeenCalledWith('classifier.ref_dropped', {
+        entryId: 'entry-2',
+        ...dropped,
       })
       const patch = metadataPatch(events)
       expect(patch.stateReport?.failedFields).toBeUndefined()
+      expect(patch.stateReport?.droppedRefs).toEqual([dropped])
       expect(patch.stateReport?.transfers).toEqual({
         items: [{ id: key.id, to: HERO, slot: 'inventory' }],
         stackables: [{ key: 'gold', amount: 5, to: HERO }],
@@ -2927,24 +3015,65 @@ describe('per-turn-piggyback', () => {
       )
       const [, key] = createdEntries(events)
       if (!key) throw new Error('expected the item create')
-      expect(log.warn).toHaveBeenCalledWith('classifier.transfer_dropped', {
-        entryId: 'entry-2',
-        transfer: { ...unknownItem, seq: 1 },
+      const droppedItem = {
+        field: 'transfers',
+        ref: 'i9',
+        reason: 'unknown',
         detail: expect.stringContaining('i9'),
-      })
-      expect(log.warn).toHaveBeenCalledWith('classifier.transfer_dropped', {
-        entryId: 'entry-2',
-        transfer: unknownHolder,
+      }
+      const droppedHolder = {
+        field: 'transfers',
+        ref: 'c9',
+        reason: 'unknown',
         detail: expect.stringContaining('c9'),
+      }
+      expect(log.warn).toHaveBeenCalledWith('classifier.ref_dropped', {
+        entryId: 'entry-2',
+        ...droppedItem,
+      })
+      expect(log.warn).toHaveBeenCalledWith('classifier.ref_dropped', {
+        entryId: 'entry-2',
+        ...droppedHolder,
       })
       const patch = metadataPatch(events)
       expect(patch.stateReport?.failedFields).toBeUndefined()
+      expect(patch.stateReport?.droppedRefs).toEqual([droppedItem, droppedHolder])
       expect(patch.stateReport?.transfers).toEqual({
         items: [{ id: key.id, to: HERO, slot: 'inventory' }],
         stackables: [{ key: 'gold', amount: 5, to: HERO }],
       })
     })
 
+    // One hallucinated id costs only itself: the rest of the scene still lands, the previous
+    // place stays, and both drops are recorded for the reader, not in failedFields.
+    it('keeps the rest of the scene and the previous place over one unknown id', async () => {
+      seedFallbackTurn()
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1', 'c9'],
+          currentLocation: 'l9',
+          worldTimeDelta: 10,
+        }),
+      )
+      const patch = metadataPatch(events)
+      expect(patch.sceneEntities).toEqual([HERO])
+      expect(patch.currentLocationId).toBe(TOWN)
+      expect(patch.stateReport?.failedFields).toBeUndefined()
+      expect(patch.stateReport?.droppedRefs).toEqual([
+        {
+          field: 'sceneEntities',
+          ref: 'c9',
+          reason: 'unknown',
+          detail: expect.stringContaining('c9'),
+        },
+        {
+          field: 'currentLocation',
+          ref: 'l9',
+          reason: 'unknown',
+          detail: expect.stringContaining('l9'),
+        },
+      ])
+    })
     it("rejects a new item's handle as the location when the item isn't kept", async () => {
       const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
       seedFallbackTurn()
@@ -3637,31 +3766,66 @@ describe('per-turn-piggyback', () => {
           expect(metadataPatch(events).stateReport?.transfers).toEqual(foldReport.transfers)
         })
 
-        // A holder isn't kind-checked, so these resolve; naming no character, they write nothing.
-        it.each([
-          [
-            'an item moved to a place',
-            { items: [{ id: 'i1', to: 'l1', slot: 'inventory' }], stackables: [], drops: [] },
-          ],
-          [
-            'a stackable paid to a place',
-            { items: [], stackables: [{ key: 'gold', amount: 5, to: 'l1' }], drops: [] },
-          ],
-        ])("keeps the fold's transfers when its only transfer is %s", async (_label, transfers) => {
+        // A place holds no stackable, so a stackable paid to one reads as spent and pays no one.
+        it("keeps the fold's transfers when its only transfer is a stackable paid to a place", async () => {
           seedFallbackTurn(
             [keyHeld(), worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }), keyRow()],
             foldReport,
           )
-          const { events } = await fallbackAfterFold({ transfers })
+          const { events } = await fallbackAfterFold({
+            transfers: {
+              items: [],
+              stackables: [{ key: 'gold', amount: 5, to: 'l1' }],
+              drops: [],
+            },
+          })
           expect(payloads(events, 'updateEntityInventory')).toEqual([])
           expect(payloads(events, 'updateEntityStackables')).toEqual([])
           expect(metadataPatch(events).stateReport?.transfers).toEqual(foldReport.transfers)
+        })
+
+        // Moved into the scene's place, the key is put down there: a landed move of its own.
+        it('reports its own item move when it moves the key into the scene’s place', async () => {
+          seedFallbackTurn(
+            [keyHeld(), worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }), keyRow()],
+            foldReport,
+          )
+          const { events } = await fallbackAfterFold({
+            transfers: {
+              items: [{ id: 'i1', to: 'l1', slot: 'inventory' }],
+              stackables: [],
+              drops: [],
+            },
+          })
+          expect(payloads(events, 'updateItemPosition')).toEqual([
+            { branchId: 'b1', id: OLD_KEY, atLocationId: TOWN },
+          ])
+          expect(metadataPatch(events).stateReport?.transfers).toEqual({
+            items: [{ id: OLD_KEY, to: TOWN, slot: 'inventory' }],
+            stackables: [],
+          })
         })
 
         const visualFold: NonNullable<EntryMetadata['stateReport']> = {
           ...foldReport,
           visualChanges: [{ id: HERO, type: 'attire', text: 'a torn cloak' }],
         }
+
+        it("keeps the fold's visual changes when its one restates the stored value", async () => {
+          const world = fallbackWorld()
+          world[0] = {
+            ...world[0],
+            state: {
+              ...(world[0].state as CharacterState),
+              visual: { ...(world[0].state as CharacterState).visual, hair: 'shorn short' },
+            },
+          }
+          seedFallbackTurn(world, visualFold)
+          const { events } = await fallbackAfterFold({
+            visualChanges: [{ id: 'c1', type: 'hair', text: 'shorn short' }],
+          })
+          expect(metadataPatch(events).stateReport?.visualChanges).toEqual(visualFold.visualChanges)
+        })
 
         it("keeps the fold's visual changes when its only one names a place", async () => {
           seedFallbackTurn(fallbackWorld(), visualFold)
@@ -3672,6 +3836,8 @@ describe('per-turn-piggyback', () => {
           expect(metadataPatch(events).stateReport?.visualChanges).toEqual(visualFold.visualChanges)
         })
 
+        // A place has no visual state: its change drops alone, recorded rather than reported as
+        // a change that never landed.
         it('reports its own visual changes when one of them is written', async () => {
           seedFallbackTurn(fallbackWorld(), visualFold)
           const visualChanges = [
@@ -3679,13 +3845,22 @@ describe('per-turn-piggyback', () => {
             { id: 'c1', type: 'hair', text: 'shorn short' },
           ]
           const { events } = await fallbackAfterFold({ visualChanges })
-          expect(metadataPatch(events).stateReport?.visualChanges).toEqual([
-            { id: TOWN, type: 'attire', text: 'weathered stonework' },
+          const { stateReport } = metadataPatch(events)
+          expect(stateReport?.visualChanges).toEqual([
             { id: HERO, type: 'hair', text: 'shorn short' },
+          ])
+          expect(stateReport?.droppedRefs).toEqual([
+            {
+              field: 'visualChanges',
+              ref: 'l1',
+              reason: 'wrong-kind',
+              detail: expect.stringContaining('not a character'),
+            },
           ])
         })
 
-        // Each part of the transfers check on its own: a move, a stackable or an applied drop.
+        // Each list carries over on its own (data-model.md → Entry metadata shape), so the
+        // fallback's own landed list never hides the fold's landed lamp move.
         it.each([
           [
             'an item move',
@@ -3695,20 +3870,63 @@ describe('per-turn-piggyback', () => {
           [
             'a stackable',
             { items: [], stackables: [{ key: 'gold', amount: 5, to: 'c1' }], drops: [] },
-            { items: [], stackables: [{ key: 'gold', amount: 5, to: HERO }] },
+            {
+              items: [{ id: LAMP, to: HERO, slot: 'inventory' }],
+              stackables: [{ key: 'gold', amount: 5, to: HERO }],
+            },
           ],
           [
             'an applied drop',
             { items: [], stackables: [], drops: [{ id: 'i1', from: 'c1' }] },
-            { items: [], stackables: [], drops: [{ id: OLD_KEY, from: HERO, at: TOWN }] },
+            {
+              items: [{ id: LAMP, to: HERO, slot: 'inventory' }],
+              stackables: [],
+              drops: [{ id: OLD_KEY, from: HERO, at: TOWN }],
+            },
           ],
-        ])('reports its own transfers when it has %s', async (_label, transfers, reported) => {
+        ])(
+          'reports its own %s beside the fold’s other lists',
+          async (_label, transfers, reported) => {
+            seedFallbackTurn(
+              [keyHeld(), worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }), keyRow()],
+              foldReport,
+            )
+            const { events } = await fallbackAfterFold({ transfers })
+            expect(metadataPatch(events).stateReport?.transfers).toEqual(reported)
+          },
+        )
+
+        // Restating what World already stores changes nothing, so the fold's record stays.
+        it("keeps the fold's transfers when its drop names an item already lying here", async () => {
           seedFallbackTurn(
-            [keyHeld(), worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }), keyRow()],
+            [...fallbackWorld(), worldRow({ ...keyRow(), state: { at_location_id: TOWN } })],
             foldReport,
           )
-          const { events } = await fallbackAfterFold({ transfers })
-          expect(metadataPatch(events).stateReport?.transfers).toEqual(reported)
+          const { events } = await fallbackAfterFold({
+            transfers: { items: [], stackables: [], drops: [{ id: 'i1' }] },
+          })
+          expect(metadataPatch(events).stateReport?.transfers).toEqual(foldReport.transfers)
+        })
+
+        it("keeps the fold's conditions when its condition restates the stored one", async () => {
+          seedFallbackTurn(
+            [
+              keyHeld(),
+              worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }),
+              worldRow({
+                ...keyRow(),
+                state: { at_location_id: null, condition: 'bent at the bit' },
+              }),
+            ],
+            foldReport,
+          )
+          const { events } = await fallbackAfterFold({
+            conditions: [{ id: 'i1', text: 'bent at the bit' }],
+          })
+          const { stateReport } = metadataPatch(events)
+          // Not refused: the write goes out and the report keeps no `rejected` mark for it.
+          expect(payloads(events, 'updateEntityCondition')).toHaveLength(1)
+          expect(stateReport?.conditions).toEqual(foldReport.conditions)
         })
       })
     })
@@ -3976,6 +4194,86 @@ describe('per-turn-piggyback', () => {
       expect(parsed.retrievalQueries).toBeUndefined()
       expect(parsed.summary).toBe('Kael drew.')
       expect(parsed.sceneEntities).toEqual(['char_a'])
+    })
+
+    // The prompt-injection path shows the model a JSON Schema, where null is the natural answer
+    // for a field it has nothing for: one must not fail the parse and cost the turn its scene.
+    it.each([
+      ['currentLocation', { currentLocation: null }],
+      ['visualChanges', { visualChanges: null }],
+      ['summary', { summary: null }],
+      ['transfers', { transfers: null }],
+      ['transfers.items', { transfers: { items: null } }],
+      ['transfers.stackables', { transfers: { stackables: null } }],
+      [
+        'transfers.items[].to and .from',
+        { transfers: { items: [{ id: 'i1', slot: 'inventory', to: null, from: null }] } },
+      ],
+      [
+        'transfers.stackables[].to and .from',
+        { transfers: { stackables: [{ key: 'gold', amount: 3, to: null, from: null }] } },
+      ],
+    ] as const)('reads a null %s as omitted', (_field, nulled) => {
+      const result = fallbackClassifierSchema.safeParse({
+        sceneEntities: ['char_a'],
+        worldTimeDelta: 30,
+        ...nulled,
+      })
+      expect(result.success).toBe(true)
+      expect(result.data?.sceneEntities).toEqual(['char_a'])
+      expect(result.data?.worldTimeDelta).toBe(30)
+      expect(JSON.stringify(result.data)).not.toContain('null')
+    })
+
+    // As conditions and drops already are: one entry the schema can't read drops alone.
+    it.each([
+      [
+        'visualChanges',
+        {
+          visualChanges: [
+            { id: 'c1', type: 'mood', text: 'x' },
+            { id: 'c2', type: 'hair', text: 'wet' },
+          ],
+        },
+        (d: z.infer<typeof fallbackClassifierSchema>) => d.visualChanges,
+        [{ id: 'c2', type: 'hair', text: 'wet' }],
+      ],
+      [
+        'transfers.items',
+        {
+          transfers: {
+            items: [
+              { id: 'i1', slot: 'pocket', to: 'c1' },
+              { id: 'i2', slot: 'inventory', to: 'c1' },
+            ],
+          },
+        },
+        (d: z.infer<typeof fallbackClassifierSchema>) => d.transfers?.items,
+        [{ id: 'i2', slot: 'inventory', to: 'c1' }],
+      ],
+      [
+        'transfers.stackables',
+        {
+          transfers: {
+            stackables: [
+              { key: 'gold', amount: 'five', to: 'c1' },
+              { key: 'arrows', amount: 4, to: 'c1' },
+            ],
+          },
+        },
+        (d: z.infer<typeof fallbackClassifierSchema>) => d.transfers?.stackables,
+        [{ key: 'arrows', amount: 4, to: 'c1' }],
+      ],
+    ] as const)('drops a malformed %s entry alone', (_list, reply, read, kept) => {
+      const result = fallbackClassifierSchema.safeParse({
+        sceneEntities: ['char_a'],
+        worldTimeDelta: 30,
+        summary: 'Kael drew.',
+        ...reply,
+      })
+      expect(result.success).toBe(true)
+      expect(read(result.data!)).toEqual(kept)
+      expect(result.data?.summary).toBe('Kael drew.')
     })
   })
 

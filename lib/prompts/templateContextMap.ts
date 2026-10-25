@@ -164,6 +164,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: true,
     },
     {
+      name: 'placesListed',
+      type: 'boolean',
+      category: 'Entities',
+      description:
+        'True when locationMap or locationMapUnplaced lists a place with an id, one a move can name. A branch whose only places are retired lists them by name alone, so gate any line telling the model to use an ID from Places on this rather than on the lists being non-empty.',
+      required: true,
+    },
+    {
       name: 'currentLocationChain',
       type: 'string[]',
       category: 'Entities',
@@ -543,6 +551,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'currentLocationId',
     'locationMap',
     'locationMapUnplaced',
+    'placesListed',
     'places',
     'placesUnplaced',
     'currentLocationChain',

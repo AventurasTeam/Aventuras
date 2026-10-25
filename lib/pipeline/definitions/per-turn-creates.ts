@@ -1,6 +1,6 @@
 import type { PipelineAction } from '@/lib/actions'
 import {
-  clampEmbeddedCharacter,
+  clampEmbeddedText,
   decideNewItem,
   scoreDescriptions,
   type EmbedDescriptions,
@@ -67,7 +67,7 @@ type RowShape = { kind: 'location'; state: LocationState } | { kind: 'item'; sta
 
 // piggyback.md → Creating a place or an item: the bounds a classifier character create uses.
 function storedText(emission: StoredText): StoredText {
-  return clampEmbeddedCharacter({ name: emission.name, description: emission.description.trim() })
+  return clampEmbeddedText({ name: emission.name, description: emission.description.trim() })
 }
 
 function newRow(args: {
@@ -290,6 +290,7 @@ async function itemFlag(
   entities: readonly Entity[],
   embed: EmbedDescriptions,
   log: Logger,
+  signal: AbortSignal | undefined,
 ): Promise<ItemMatchFlag | null> {
   const namesakes = itemNamesakes(text.name, entities)
   if (namesakes.length === 0) return null
@@ -298,6 +299,7 @@ async function itemFlag(
     namesakes.map((n) => n.description),
     embed,
     log,
+    signal,
   )
   return decideNewItem(namesakes.map((entity, i) => ({ entity, similarity: scores[i] })))
 }
@@ -311,13 +313,15 @@ async function planItems(args: {
   now: () => number
   newId: (prefix: 'item') => string
   log: Logger
+  signal: AbortSignal | undefined
 }): Promise<{ ids: Map<string, string>; rows: Entity[] }> {
   const scored = await Promise.all(
     args.emissions
       .filter((emission) => args.kept.has(emission.handle))
       .map(async (emission) => {
         const text = storedText(emission)
-        return { emission, text, flag: await itemFlag(text, args.entities, args.embed, args.log) }
+        const flag = await itemFlag(text, args.entities, args.embed, args.log, args.signal)
+        return { emission, text, flag }
       }),
   )
   // Ids are drawn once every score is in, so they follow emission order, not embed timing.
@@ -450,6 +454,8 @@ export async function planTurnCreates(input: {
   newId: (prefix: 'loc' | 'item') => string
   /** The phase's logger, so a dropped create's entry carries the action. */
   log: Logger
+  /** The run's, so a cancel ends an item's slow match embed. */
+  signal?: AbortSignal
 }): Promise<TurnCreatePlan> {
   const { block, entities, mapCurrentLocationId, story, branchId, source, embed, now, newId, log } =
     input
@@ -487,6 +493,7 @@ export async function planTurnCreates(input: {
     now,
     newId,
     log,
+    signal: input.signal,
   })
 
   const ids = new Map(things.ids)
