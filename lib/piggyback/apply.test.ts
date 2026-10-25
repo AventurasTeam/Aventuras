@@ -2104,6 +2104,7 @@ describe('buildPiggybackActions — holders read by what they name', () => {
     item('item_satchel', null),
     item('item_chest', 'loc_dock'),
     item('item_crate', 'loc_mill'),
+    item('item_box', null),
     place('loc_dock'),
     place('loc_mill'),
     mockEntity({ id: 'fac_guild', kind: 'faction', name: 'the Guild', state: {} }),
@@ -2174,6 +2175,24 @@ describe('buildPiggybackActions — holders read by what they name', () => {
     ['a crate lying elsewhere', 'item_crate'],
   ])('leaves an item moved into %s where it was', (_label, to) => {
     const result = run(blade(to))
+    expect(writes(result, 'updateEntityInventory')).toEqual([])
+    expect(writes(result, 'updateItemPosition')).toEqual([])
+    expect(result.applied.itemsLanded).toBe(0)
+  })
+
+  it('leaves an item moved into a box nobody holds that lies nowhere unplaced', () => {
+    const result = run(blade('item_box'))
+    expect(writes(result, 'updateEntityInventory')).toEqual([
+      { branchId: 'main', id: 'char_mira', equipped_items: [], inventory: ['item_pouch'] },
+    ])
+    expect(writes(result, 'updateItemPosition')).toEqual([])
+    expect(result.applied.itemsLanded).toBe(1)
+  })
+
+  it("counts nothing landed for an item moved into the scene's place where it already lies", () => {
+    const result = run({
+      items: [{ id: 'item_chest', to: 'loc_dock', slot: 'inventory', seq: 0 }],
+    })
     expect(writes(result, 'updateEntityInventory')).toEqual([])
     expect(writes(result, 'updateItemPosition')).toEqual([])
     expect(result.applied.itemsLanded).toBe(0)
