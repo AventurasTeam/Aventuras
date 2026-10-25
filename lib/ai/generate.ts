@@ -2,6 +2,8 @@ import { wrapLanguageModel, type LanguageModel, type LanguageModelMiddleware } f
 import { jsonrepair } from 'jsonrepair'
 import { z } from 'zod'
 
+import { boundedSignal } from '@/lib/abort'
+
 import type { ProviderInstance } from '../db'
 import type { ResolveTarget } from './agents'
 import { anthropicCacheMarkerMiddleware } from './cache-marker'
@@ -18,12 +20,12 @@ import {
   type ResolvedParams,
 } from './resolve-model'
 import { callWithRetry, type CallRetryError } from './transport/call-with-retry'
+import { ProviderTimeoutError } from './transport/classify-provider-error'
 import { runProviderCall, streamProviderCall } from './transport/provider-call'
 
 export type CallSettings = {
   temperature?: number
   maxOutputTokens?: number
-  timeout?: { totalMs: number }
   providerOptions?: {
     anthropic: { thinking: { type: 'enabled'; budgetTokens: number } | { type: 'disabled' } }
   }
@@ -39,12 +41,12 @@ export function profileTimeoutMs(seconds: number | undefined): number | undefine
 }
 
 // Single owner of the ResolvedParams → SDK call-settings mapping. Thinking is
-// anthropic-only: other provider types would reject the providerOptions key.
+// anthropic-only: other provider types would reject the providerOptions key. No `timeout`: the
+// SDK builds AbortSignal.timeout from it, which React Native's AbortController lacks.
 export function buildCallSettings(
   params: ResolvedParams,
   providerType: ProviderInstance['type'] | undefined,
 ): CallSettings {
-  const timeoutMs = profileTimeoutMs(params.timeout)
   return {
     ...(params.temperature !== undefined ? { temperature: params.temperature } : {}),
     ...(params.maxOutput !== undefined ? { maxOutputTokens: params.maxOutput } : {}),
@@ -60,7 +62,6 @@ export function buildCallSettings(
           },
         }
       : {}),
-    ...(timeoutMs !== undefined ? { timeout: { totalMs: timeoutMs } } : {}),
   }
 }
 
@@ -69,6 +70,8 @@ export type PreparedGeneration =
       ok: true
       model: LanguageModel
       callSettings: CallSettings
+      /** The profile's `timeout`, bounded by the caller's own signal rather than the SDK's. */
+      timeoutMs: number | undefined
       providerId: string
       modelId: string
       params: ResolvedParams
@@ -88,6 +91,7 @@ export function prepareGeneration(
     ok: true,
     model: getModel(resolved.providerId, resolved.modelId, actionId),
     callSettings: buildCallSettings(resolved.params, resolved.providerType),
+    timeoutMs: profileTimeoutMs(resolved.params.timeout),
     providerId: resolved.providerId,
     modelId: resolved.modelId,
     params: resolved.params,
@@ -140,7 +144,14 @@ export type StreamTextOptions = {
 }
 
 export type StreamTextResult =
-  | { ok: true; stream: ReturnType<typeof streamProviderCall>; modelId: string; providerId: string }
+  | {
+      ok: true
+      stream: ReturnType<typeof streamProviderCall>
+      modelId: string
+      providerId: string
+      /** The profile's `timeout` ended the stream, which then closes as if cancelled. */
+      timedOut: () => boolean
+    }
   | { ok: false; kind: ResolveFailureKind; target: ResolveTarget }
 
 /**
@@ -151,16 +162,30 @@ export type StreamTextResult =
 export function streamText(target: ResolveTarget, opts: StreamTextOptions): StreamTextResult {
   const resolved = prepareGeneration(target, opts.config, opts.actionId)
   if (!resolved.ok) return resolved
+  const bounded =
+    resolved.timeoutMs === undefined ? null : boundedSignal(opts.abortSignal, resolved.timeoutMs)
+  const abortSignal = bounded?.signal ?? opts.abortSignal
   const stream = streamProviderCall({
     model: marksSystemPrefix(opts.cacheSystemPrefix, resolved.providerType)
       ? withMiddleware(resolved.model, [anthropicCacheMarkerMiddleware()])
       : resolved.model,
     ...promptParams(opts.prompt),
-    ...(opts.abortSignal !== undefined ? { abortSignal: opts.abortSignal } : {}),
+    ...(abortSignal !== undefined ? { abortSignal } : {}),
     ...(opts.onError !== undefined ? { onError: opts.onError } : {}),
+    // Not on an error: the SDK reports each error part and reads on, so a stall can follow. After a
+    // fatal one the stream is over, and the timer lapses on a call nothing awaits.
+    ...(bounded === null
+      ? {}
+      : { onFinish: () => bounded.dispose(), onAbort: () => bounded.dispose() }),
     ...resolved.callSettings,
   })
-  return { ok: true, stream, modelId: resolved.modelId, providerId: resolved.providerId }
+  return {
+    ok: true,
+    stream,
+    modelId: resolved.modelId,
+    providerId: resolved.providerId,
+    timedOut: () => bounded?.expired() ?? false,
+  }
 }
 
 /** Parse a model's raw text into `schema`, recovering common LLM JSON slop (fences, trailing commas) via jsonrepair before validating. */
@@ -233,16 +258,26 @@ export async function generateStructured<T>(
       : []),
   ])
 
+  const { timeoutMs } = resolved
   const result = await callWithRetry<T>(
-    async (sig) =>
-      (
-        await runProviderCall({
+    async (sig) => {
+      // Per attempt, so a retry gets the whole bound again.
+      const bounded = timeoutMs === undefined ? null : boundedSignal(sig, timeoutMs)
+      try {
+        const call = await runProviderCall({
           model,
           ...promptParams(prompt),
-          abortSignal: sig,
+          abortSignal: bounded?.signal ?? sig,
           ...resolved.callSettings,
         })
-      ).text,
+        return call.text
+      } catch (error) {
+        if (bounded?.expired()) throw new ProviderTimeoutError()
+        throw error
+      } finally {
+        bounded?.dispose()
+      }
+    },
     (raw) => parseStructured(raw, schema),
     { maxProviderAttempts: 2, maxParseAttempts: 2, signal },
   )

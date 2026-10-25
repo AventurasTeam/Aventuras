@@ -84,9 +84,9 @@ describe('memory-blocks macro — empty-guard contract', () => {
   })
 
   const blocks: [header: string, key: string, row: unknown][] = [
-    ['# Elsewhere in the world', 'structuralPinnedEntities', floorEntity],
-    ['# Elsewhere in the world', 'structuralSceneFactions', floorEntity],
-    ['# Elsewhere in the world', 'retrievedEntities', rankedMira],
+    ['# The wider world', 'structuralPinnedEntities', floorEntity],
+    ['# The wider world', 'structuralSceneFactions', floorEntity],
+    ['# The wider world', 'retrievedEntities', rankedMira],
     ['# Relevant lore', 'structuralPinnedLore', floorLore],
     ['# Relevant lore', 'retrievedLore', ranked('lore_1', 'Veilstone', 'Veilstone\nA shard.')],
     [
@@ -189,7 +189,7 @@ describe('memory-blocks macro — row content', () => {
       retrievedEntities: [rankedMira],
     })
     expect(out).toBe(
-      '# Elsewhere in the world\n\n[char_9] Old Sesk: A ferryman long dead.\n\n[fact_1] The Silver Hand\n\n[char_2] Mira (not in the scene): A courier.\n\n',
+      '# The wider world\n\n[char_9] Old Sesk: A ferryman long dead.\n\n[fact_1] The Silver Hand\n\n[char_2] Mira (not in the scene): A courier.\n\n',
     )
   })
 
@@ -221,6 +221,23 @@ describe('memory-blocks macro — row content', () => {
       '[char_9] Old Sesk: A ferryman long dead.',
     )
     expect(renderMacro({ ...EMPTY, structuralSceneFactions: [faction] })).not.toContain('(')
+  })
+
+  // retrieval.md → Three-sub-pool entity model: "Veil's Hollow (not in the scene)" read wrong
+  // while the scene stood inside it.
+  it('leaves an active place unframed, as the mirror does', () => {
+    const place = {
+      ...floorEntity,
+      id: 'loc_1',
+      kind: 'location',
+      name: "Veil's Hollow",
+      description: 'A drowned valley.',
+      status: 'active',
+      state: emptyEntityView('location'),
+    }
+    const out = renderMacro({ ...EMPTY, structuralPinnedEntities: [place] })
+    expect(out).toContain("[loc_1] Veil's Hollow: A drowned valley.")
+    expect(out).not.toContain('not in the scene')
   })
 
   it('puts pinned and ranked non-active threads under one header, pinned first', () => {
@@ -270,7 +287,7 @@ describe('memory-blocks macro — row content', () => {
       'structuralPinnedEntities',
       floorEntity,
       { ...floorEntity, description: null },
-      '# Elsewhere in the world\n\n[char_9] Old Sesk\n\n',
+      '# The wider world\n\n[char_9] Old Sesk\n\n',
     ],
     [
       'structuralPinnedLore',
@@ -568,7 +585,7 @@ describe('memory-blocks macro — entity rows equal their measured mirror', () =
       const entity = measured(id)
       const row = entityRowOf('c1', entity, list === 'retrievedEntities')
       expect(asMeasured(renderMacro({ ...EMPTY, [list]: [row] }), entity)).toBe(
-        `# Elsewhere in the world\n\n[c1] ${entityRenderedText(entity)}\n\n`,
+        `# The wider world\n\n[c1] ${entityRenderedText(entity)}\n\n`,
       )
     },
   )

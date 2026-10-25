@@ -9,16 +9,12 @@ import {
   isEmbeddedSourceTable,
   rowsPerInsert,
 } from '@/lib/db'
+import { isJsonObject } from '@/lib/json-object'
 import { withPlacement, type PlacePlacement } from '@/lib/world'
 
 import type { DbCtx } from '../types'
 import { capturedChildren, vecSweepIdsOps, vecTableLister } from './delete-cascade'
-import {
-  applyUndoPayload,
-  isPayloadMetaKey,
-  isPlainObject,
-  pruneUndoPartial,
-} from './delta-encoding'
+import { applyUndoPayload, isPayloadMetaKey, pruneUndoPartial } from './delta-encoding'
 import { deletedRow, heldKey, type HeldRow } from './held-rows'
 import { withKeyLocks } from './key-lock'
 import { liveLinkFilter, type LiveLinkFilter } from './live-link-filter'
@@ -190,7 +186,7 @@ function undoneValue(schema: ZodType | undefined, partial: unknown, current: unk
 function undoneColumn(entry: TableEntry, col: string, partial: unknown, current: unknown): unknown {
   const undone = undoneValue(entry.columnSchemas[col], partial, current)
   if (entry.table !== 'entities' || col !== 'state') return undone
-  if (!isPlainObject(partial) || !isPlainObject(undone)) return undone
+  if (!isJsonObject(partial) || !isJsonObject(undone)) return undone
   if (!PLACEMENT_PATHS.some((key) => Object.hasOwn(partial, key))) return undone
   return withPlacement(undone as LocationState, undonePlacement(partial))
 }

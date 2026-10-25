@@ -287,7 +287,7 @@ for World-panel review, or create it plain. Candidates in one reply
 are not compared with each other.
 
 **Namesakes.** Names compare under the keyword-term normalization
-(trimmed, case-folded, NFC), split into words on whitespace.
+(trimmed, lowercased, NFC), split into words on whitespace.
 
 - **Exact** — the two names are equal.
 - **Partial** — not exact, and either one name's words appear inside

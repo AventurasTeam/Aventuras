@@ -27,5 +27,5 @@ pre-commit:
 
 commit-msg:
   commands:
-    body-length:
+    message-shape:
       run: ./scripts/check-commit-msg.sh {1}

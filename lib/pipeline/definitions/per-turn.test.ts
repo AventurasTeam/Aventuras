@@ -18,6 +18,7 @@ import {
   type StorySettings,
 } from '@/lib/db'
 import { logger, makeLogger, type Logger } from '@/lib/diagnostics'
+import { spyLogger } from '@/lib/diagnostics/__tests__/spy-logger'
 import { IdBiMap } from '@/lib/ids'
 import type { RenderedPrompt, TemplateId } from '@/lib/prompts'
 import type { Candidate, RetrievalSuccess } from '@/lib/retrieval'
@@ -99,6 +100,7 @@ function failingStreamCall() {
     ok: true,
     modelId: 'model-1',
     providerId: 'prov-1',
+    timedOut: () => false,
     stream: {
       fullStream: (async function* () {
         throw new Error('stop after call')
@@ -276,6 +278,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           controller.abort()
@@ -286,6 +289,33 @@ describe('per-turn pipeline declaration', () => {
     const result = await runNarrativePhase(controller.signal)
 
     expect(result).toEqual({ status: 'aborted' })
+  })
+
+  // The profile's timeout ends the stream the same graceful way, and what arrived is no reply.
+  it('fails as a provider timeout when the timeout ends the stream', async () => {
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition,
+      settings: baseSettings({ partialChapterBuffer: 3 }),
+    })
+    hydrateEntries(phaseDb, 'b1', [])
+    entitiesStore.hydrate('b1', [])
+    streamTextMock.mockReturnValue({
+      ok: true,
+      modelId: 'model-1',
+      providerId: 'prov-1',
+      timedOut: () => true,
+      stream: {
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'The lantern gutt' }
+        })(),
+      },
+    })
+
+    const result = await runNarrativePhase()
+
+    expect(result).toEqual({ status: 'failed', error: { kind: 'provider', reason: 'timeout' } })
   })
 
   it('surfaces a resolve failure as a config-resolver phase error', async () => {
@@ -365,6 +395,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield {
@@ -481,6 +512,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield {
@@ -564,6 +596,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield { type: 'text-delta', text: raw }
@@ -636,6 +669,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield {
@@ -720,6 +754,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield {
@@ -759,7 +794,7 @@ describe('per-turn pipeline declaration', () => {
   })
 
   it("clamps negative worldTimeDelta to 0 and logs classifier.delta_clamped on the run's logger", async () => {
-    const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+    const log = spyLogger()
 
     currentStoryStore.set({
       storyId: 's1',
@@ -797,6 +832,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield {
@@ -875,6 +911,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield {
@@ -962,6 +999,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield { type: 'text-delta', text: 'Narrative text\n<state></state>' }
@@ -1042,6 +1080,7 @@ describe('per-turn pipeline declaration', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield { type: 'text-delta', text: 'Narrative text and nothing else.' }
@@ -1206,6 +1245,7 @@ async function runNarrativeWith(opts: {
     ok: true,
     modelId: 'model-1',
     providerId: 'prov-1',
+    timedOut: () => false,
     stream: {
       fullStream: (async function* () {
         yield { type: 'text-delta', text: opts.narrative }
@@ -1675,6 +1715,7 @@ describe('narrative fold — creates', () => {
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
+      timedOut: () => false,
       stream: {
         fullStream: (async function* () {
           yield { type: 'text-delta', text }
@@ -2251,7 +2292,7 @@ describe('narrative fold — creates', () => {
         }),
         worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }),
       ])
-      const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+      const log = spyLogger()
       const fold = await foldTurn(goldReply, { log })
       expect(fold.intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: false })
       expect(
@@ -2305,7 +2346,7 @@ describe('narrative fold — creates', () => {
 
     it('a parsed fold puts the item down at the place it creates', async () => {
       await seedTurn(swordWorld())
-      const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+      const log = spyLogger()
       const { events, intermediates } = await foldTurn(dropReply('30'), { log })
       expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: true })
       await applyEvents(events)
@@ -2326,7 +2367,7 @@ describe('narrative fold — creates', () => {
 
     async function failedFold(reply = dropReply('soon')) {
       await seedTurn(swordWorld())
-      const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+      const log = spyLogger()
       const fold = await foldTurn(reply, { log })
       expect(fold.intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: false })
       await applyEvents(fold.events)
@@ -2466,7 +2507,7 @@ describe('narrative fold — creates', () => {
       ['nothing', 'l99'],
     ])('leaves the item held when its drop names %s', async (_label, to) => {
       await seedTurn(swordWorld())
-      const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+      const log = spyLogger()
       const { events, intermediates } = await foldTurn(
         'Aria throws her sword into the market well.\n<state><scene_entities>c1</scene_entities>' +
           `<transfers><drop id="i1" from="c1" to="${to}" /></transfers>` +
@@ -2592,7 +2633,7 @@ describe('narrative fold — creates', () => {
 
   it("logs dropped creates through the phase's logger, so the entries carry the action", async () => {
     await seedTurn()
-    const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+    const log = spyLogger()
     await foldTurn(
       'Aria glances at the sea.\n<state><scene_entities>c1</scene_entities>' +
         '<new_location handle="new:cove" parent="l1" name="Hidden Cove">a quiet inlet</new_location>' +
@@ -2648,7 +2689,7 @@ describe('narrative fold — creates', () => {
       }),
       worldRow({ id: SWORD, kind: 'item', name: 'worn sword', state: { at_location_id: null } }),
     ])
-    const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+    const log = spyLogger()
     // c1 HERO, l1 TOWN and l2 MARKET (foldTurn allocates them); the sword, the one item, is i1.
     const { events } = await foldTurn(
       'Aria nicks the blade on the rail.\n<state><world_time_delta>5</world_time_delta>' +

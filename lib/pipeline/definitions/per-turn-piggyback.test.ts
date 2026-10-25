@@ -13,6 +13,7 @@ import {
   type StorySettings,
 } from '@/lib/db'
 import { logger, makeLogger, type Logger } from '@/lib/diagnostics'
+import { spyLogger } from '@/lib/diagnostics/__tests__/spy-logger'
 import { IdBiMap } from '@/lib/ids'
 import { runPreflight } from '@/lib/pipeline/runtime/preflight'
 import type { PhaseEmittedEvent, Pipeline, PreflightSnapshot } from '@/lib/pipeline/types'
@@ -2947,7 +2948,7 @@ describe('per-turn-piggyback', () => {
       ["a character's id", 'c1'],
     ])('drops only a transfer naming %s as its item, with a warning', async (_label, ref) => {
       seedFallbackTurn()
-      const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+      const log = spyLogger()
       const { events } = await runFallback(
         fallbackClassifierSchema.parse({
           ...docksAndKey(),
@@ -3000,7 +3001,7 @@ describe('per-turn-piggyback', () => {
 
     it('drops only the transfers with an unknown ref, with a warning, applying the rest', async () => {
       seedFallbackTurn()
-      const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+      const log = spyLogger()
       const unknownItem = { id: 'i9', to: 'c1', slot: 'inventory' as const }
       const unknownHolder = { key: 'silver', amount: 2, from: 'c9' }
       const { events } = await runFallback(
@@ -3044,6 +3045,20 @@ describe('per-turn-piggyback', () => {
       })
     })
 
+    // A cancel during an item's match embed must end it rather than wait out a slow provider.
+    it("hands the run's signal to the create planner, so a cancel ends an item's match embed", async () => {
+      const creates = await import('./per-turn-creates')
+      const planSpy = vi.spyOn(creates, 'planTurnCreates')
+      seedFallbackTurn()
+      const controller = new AbortController()
+      await runFallback(
+        fallbackClassifierSchema.parse({ sceneEntities: ['c1'], worldTimeDelta: 10 }),
+        { signal: controller.signal },
+      )
+      expect(planSpy).toHaveBeenCalledWith(expect.objectContaining({ signal: controller.signal }))
+      planSpy.mockRestore()
+    })
+
     // One hallucinated id costs only itself: the rest of the scene still lands, the previous
     // place stays, and both drops are recorded for the reader, not in failedFields.
     it('keeps the rest of the scene and the previous place over one unknown id', async () => {
@@ -3075,7 +3090,7 @@ describe('per-turn-piggyback', () => {
       ])
     })
     it("rejects a new item's handle as the location when the item isn't kept", async () => {
-      const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+      const log = spyLogger()
       seedFallbackTurn()
       const { events } = await runFallback(
         fallbackClassifierSchema.parse({
@@ -3143,7 +3158,7 @@ describe('per-turn-piggyback', () => {
 
     it("logs a dropped create through the phase's logger", async () => {
       seedFallbackTurn()
-      const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+      const log = spyLogger()
       await runFallback(
         fallbackClassifierSchema.parse({
           sceneEntities: ['c1'],
@@ -3513,7 +3528,7 @@ describe('per-turn-piggyback', () => {
           worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }),
           keyRow(),
         ])
-        const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+        const log = spyLogger()
         const { events } = await runFallback(
           fallbackClassifierSchema.parse({
             sceneEntities: ['c1'],

@@ -6,23 +6,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import { STORY_SETTINGS_DEFAULTS } from '@/lib/db'
 
-const MIGRATIONS_DIR = 'lib/db/migrations'
+import { applyMigration, MIGRATIONS_DIR, migrationTags } from './test-db'
+
 const TAG = '0013_classifier_context_entries'
-
-function migrationTags(): string[] {
-  const journal = JSON.parse(readFileSync(`${MIGRATIONS_DIR}/meta/_journal.json`, 'utf8')) as {
-    entries: { idx: number; tag: string }[]
-  }
-  return [...journal.entries].sort((a, b) => a.idx - b.idx).map((e) => e.tag)
-}
-
-function applyMigration(sqlite: DatabaseSync, tag: string): void {
-  const sql = readFileSync(`${MIGRATIONS_DIR}/${tag}.sql`, 'utf8')
-  for (const statement of sql.split('--> statement-breakpoint')) {
-    const trimmed = statement.trim()
-    if (trimmed) sqlite.exec(trimmed)
-  }
-}
 
 // No classifierContextEntries key, plus enough siblings to prove the migration writes one key.
 const LEGACY_SETTINGS = {

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { queryApp } from '../harness/db'
+import { currentBranchId, queryApp } from '../harness/db'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { chrome } from '../locators/chrome'
@@ -30,9 +30,7 @@ test.describe('reader — edit an entry', () => {
     await home.openStory(app.window, 'The Veilstone Courier').click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
 
-    const branchId = (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
+    const branchId = await currentBranchId(app.window, 'story_hero')
     // The most-recent ai_reply — recent, so it's inside the loaded window.
     const entryId = (
       await queryApp(

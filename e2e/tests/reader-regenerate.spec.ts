@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { queryApp } from '../harness/db'
+import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
@@ -54,10 +54,8 @@ test.describe('reader — regenerate a reply', () => {
     removeUserDataDir(userDataDir)
   })
 
-  async function branchId(): Promise<string> {
-    return (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
+  function branchId(): Promise<string> {
+    return currentBranchId(app.window, 'story_hero')
   }
 
   // per-turn.ts yields stream_chunk during streaming and the reader renders it

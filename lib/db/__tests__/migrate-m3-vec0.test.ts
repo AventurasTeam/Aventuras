@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { getLoadablePath } from 'sqlite-vec'
 import { beforeAll, describe, expect, it } from 'vitest'
 
-const MIGRATIONS_DIR = 'lib/db/migrations'
+import { applyMigration, MIGRATIONS_DIR, migrationTags } from './test-db'
 
 const VEC_TABLES_384 = [
   'entities_vec_384',
@@ -13,21 +13,6 @@ const VEC_TABLES_384 = [
   'threads_vec_384',
   'chapter_summaries_vec_384',
 ]
-
-function migrationTags(): string[] {
-  const journal = JSON.parse(readFileSync(`${MIGRATIONS_DIR}/meta/_journal.json`, 'utf8')) as {
-    entries: { idx: number; tag: string }[]
-  }
-  return [...journal.entries].sort((a, b) => a.idx - b.idx).map((e) => e.tag)
-}
-
-function applyMigration(sqlite: DatabaseSync, tag: string): void {
-  const sql = readFileSync(`${MIGRATIONS_DIR}/${tag}.sql`, 'utf8')
-  for (const statement of sql.split('--> statement-breakpoint')) {
-    const trimmed = statement.trim()
-    if (trimmed) sqlite.exec(trimmed)
-  }
-}
 
 function vec(dim: number, seed: number): Buffer {
   const arr = new Float32Array(dim)

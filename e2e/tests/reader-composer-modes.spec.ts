@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { queryApp } from '../harness/db'
+import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
@@ -54,9 +54,7 @@ test.describe('reader — composer modes', () => {
       timeout: 30_000,
     })
 
-    const branchId = (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
+    const branchId = await currentBranchId(app.window, 'story_hero')
     const rows = await queryApp(
       app.window,
       `SELECT content FROM story_entries WHERE branch_id = ? AND kind = 'user_action' AND content LIKE '%E2E-MODES%'`,

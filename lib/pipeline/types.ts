@@ -171,12 +171,12 @@ export type Pipeline = {
   onInterrupt?: InterruptHook
 }
 
-export type TxResult = {
-  runId: string
-  actionId: string
-  outcome: 'completed' | 'aborted' | 'failed'
-  error?: PipelineError
-}
+type TxRun = { runId: string; actionId: string }
+
+/** A run's end: a failed run always says why, and a completed or cancelled one never does. */
+export type TxResult =
+  | (TxRun & { outcome: 'completed' | 'aborted'; error?: never })
+  | (TxRun & { outcome: 'failed'; error: PipelineError })
 
 // A start blocked by the concurrency contract produces no run (no runId/actionId).
 export type RejectedStart = { outcome: 'rejected'; blockedBy: string }

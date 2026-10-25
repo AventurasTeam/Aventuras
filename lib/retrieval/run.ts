@@ -9,6 +9,7 @@ import {
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { EmbedderCancelledError, type EmbedderErrorKind } from '@/lib/embedder'
+import { placeModes } from '@/lib/world'
 
 import { loadAwarenessForScene, type AwarenessRow } from './awareness'
 import { KNN_K, RANKER_DEFAULTS, REDUNDANCY_K } from './constants'
@@ -80,13 +81,9 @@ export type RetrievalParams = {
   sceneEntityIds: readonly string[]
   currentLocationId: string | null
   /**
-   * Places effectively disabled around the scene (lib/world placeModes), kept out of the `always`
-   * seat and every pool. The caller computes it: source rows carry no parent to walk.
-   */
-  disabledPlaceIds: ReadonlySet<string>
-  /**
    * The branch's store entities: source rows carry no state, so the floor builds this pass's scene
-   * views from these, reading factions and items; entity rows are measured and rendered by them.
+   * views from these, reading factions and items, and reads the place tree off them for the places
+   * disabled around the scene; entity rows are measured and rendered by them.
    */
   storeEntities: readonly Entity[]
   /** Un-classified buffer prose, for Layer-A suppression. */
@@ -311,6 +308,14 @@ async function runRetrievalPass(
       countStaleHappenings(deps.queryAll, params.branchId),
     ])
   const index = entityNameIndexFrom(sourceRows.entities)
+  // Around the same location the prompt's map is built from, so a place the map hides stays out
+  // of the `always` seat, the pools and keyword injection.
+  const modes = placeModes(params.storeEntities, params.currentLocationId)
+  const disabledPlaceIds = new Set(
+    params.storeEntities
+      .filter((e) => e.kind === 'location' && modes.isDisabled(e.id))
+      .map((e) => e.id),
+  )
 
   const floor = buildStructuralFloor({
     entities: sourceRows.entities,
@@ -319,7 +324,7 @@ async function runRetrievalPass(
     threads: sourceRows.threads,
     sceneEntityIds: params.sceneEntityIds,
     currentLocationId: params.currentLocationId,
-    disabledPlaceIds: params.disabledPlaceIds,
+    disabledPlaceIds,
   })
   partial.floor = floor
 
@@ -353,7 +358,7 @@ async function runRetrievalPass(
     happenings: [] as readonly LoadedHappeningRow[],
     awareness,
     recentProse: params.recentProse,
-    disabledPlaceIds: params.disabledPlaceIds,
+    disabledPlaceIds,
     scanText: params.scanText,
   }
 
@@ -417,7 +422,7 @@ async function runRetrievalPass(
     lore: sourceRows.lore,
     floorIds: floor.seatedIds,
     recentProse: params.recentProse,
-    disabledPlaceIds: params.disabledPlaceIds,
+    disabledPlaceIds,
     entityViews: floor.views,
     scanText: params.scanText,
     budgets: params.budgets,

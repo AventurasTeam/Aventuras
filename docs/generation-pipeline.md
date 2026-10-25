@@ -137,7 +137,7 @@ type PipelineEvent =
   | { type: 'run_deferred'; runId: string; kind: string; branchId: string; work: 'pass' | 'close' }
   // phase-emitted core
   | { type: 'stream_chunk'; targetEntryId: string; text: string; channel: 'text' | 'reasoning' }
-  | { type: 'delta_emitted'; action: PipelineAction }
+  | { type: 'delta_emitted'; action: PipelineAction; entryId?: string | null }
   | { type: 'recoverable_error'; error: PipelineError }
   // phase-emitted specific — grows additively
   | { type: 'lore_mgmt_subjob_complete'; jobName: string; done: number; total: number }
@@ -370,7 +370,11 @@ to a single LLM call.
 3. Liquid templates render against placeholder-bearing context
    — pack authors read `entity.id` and get the placeholder
 4. LLM call streams; emits placeholders in structured output (names in prose)
-5. parseAndSubstitute(rawOutput, idMap) — reverse swap
+5. Reverse swap, placeholders → UUIDs, field by field, each caller with
+   its own rule for a ref that doesn't resolve: the per-turn writers'
+   substitutePiggybackIds, the periodic classifier's
+   substituteClassifierIds, and parseAndSubstitute for the wizard's
+   opening refs
 6. Action layer receives UUIDs as it always does
 ```
 
@@ -416,7 +420,10 @@ emission from the LLM is a prompt bug, not a runtime case to handle.
 
 - `delta_emitted` — every persisted write. Orchestrator routes
   through the action layer with `source: 'pipeline'` + the current
-  `actionId`. Phase doesn't touch delta log / SQLite / undo_payload.
+  `actionId`, and the event's `entryId` (the entry the write belongs
+  to, `null` when none) onto the delta row; a `createStoryEntry` with
+  one also records the turn capture's target entry. Phase doesn't
+  touch delta log / SQLite / undo_payload.
 - `stream_chunk` — display-token path (`channel` splits narrative
   text from streamed reasoning). Orchestrator dispatches a
   side-channel append action; **no delta** until stream completion
@@ -1496,7 +1503,12 @@ reversals that run after later user edits take only a pass's or a
 close's facts, whose `state` writes are all whole values (a
 character's faction, a faction's standing, a place's parent, unplaced
 mark and condition, an item's condition); it needs a guard once one of
-them takes a write to a record.
+them takes a write to a record. The same reach keeps the rule from
+splitting one move across two rows: undoing a turn's `<item>` or
+`<drop>` after the user moved the item in World would restore the
+holder's inventory but keep the user's position, so the item would be
+held and lying somewhere at once. No reversal that keeps a later user
+write takes a turn's facts.
 The rule has one exception. A machine `create`
 still deletes its row, since an entity or happening exists only
 because of the reversed write, and takes every later write to that row
@@ -1743,6 +1755,14 @@ failed attempt yields a `recoverable_error` event. Retries are
 transparent — the phase eventually returns success or fatal; no
 user surfacing in between.
 
+A profile's `timeout` bounds each attempt of a structured call, and a
+streamed reply as a whole, by the app's own signal rather than the
+SDK's `timeout` option, which builds `AbortSignal.timeout` and React
+Native's `AbortController` has none. An expired attempt is a provider
+timeout. An expired stream closes the way a cancel does, so the
+narrative phase fails it as a provider timeout instead of committing
+the reply so far.
+
 ```ts
 type CallRetryError =
   | { tier: 'provider'; reason: 'auth' | 'network' | 'timeout' | 'unknown'; detail?: string }
@@ -1820,6 +1840,13 @@ User cancel is not an error. Orchestrator triggers
 aborted; reverse-replay runs; `run_complete` emits with
 `outcome: 'aborted'`. UI distinguishes cancel from failure by
 reading outcome.
+
+A phase may finish past its last check and return completed, so the
+orchestrator checks the signal before each later phase too: a cancel
+between phases aborts the run. One that lands inside the last phase,
+past that phase's own checks, finds no later phase to stop: the run
+commits its turn and chains nothing, which a head reversal can still
+undo.
 
 ### Fatal error categories
 

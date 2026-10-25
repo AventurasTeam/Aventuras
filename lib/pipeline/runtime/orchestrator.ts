@@ -401,8 +401,9 @@ type AbortCause =
 
 async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<TxResult> {
   run.abortController.abort()
-  let outcome: 'aborted' | 'failed' = cause.reason === 'user-cancel' ? 'aborted' : 'failed'
-  let error = cause.reason === 'user-cancel' ? undefined : cause.error
+  // The run is failed exactly when it has a failure to report; a cancel with none is aborted.
+  let failure = cause.reason === 'user-cancel' ? undefined : cause.error
+  const outcomeOf = (): 'aborted' | 'failed' => (failure === undefined ? 'aborted' : 'failed')
   const markerOp = (settled: 'aborted' | 'failed') =>
     ctx.db
       .update(pipelineRuns)
@@ -414,23 +415,23 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
   if (run.interruptible) await holdBranchWriteExclusive(run.branchId, run.actionId)
   try {
     // Marker rides the reversal's transaction: never records an uncommitted reversal.
-    await reverseReplayDeltas(run.actionId, ctx, () => [markerOp(outcome).toSQL()])
+    await reverseReplayDeltas(run.actionId, ctx, () => [markerOp(outcomeOf()).toSQL()])
   } catch (e) {
     // An error it doesn't recognise counts as uncommitted: the marker rides the reversal's
     // transaction, so boot recovery reads the truth either way, and the run must still end here.
-    const failure = describeReplayError(e) ?? {
+    const replayFailure = describeReplayError(e) ?? {
       committed: false,
       detail: e instanceof Error ? e.message : String(e),
     }
-    const stage = failure.committed ? 'post-commit store sync' : 'reverse-replay'
-    error = { kind: 'orchestrator', detail: `${stage} failed: ${failure.detail}` }
-    outcome = 'failed'
-    reversalFailed = !failure.committed
+    const stage = replayFailure.committed ? 'post-commit store sync' : 'reverse-replay'
+    failure = { kind: 'orchestrator', detail: `${stage} failed: ${replayFailure.detail}` }
+    reversalFailed = !replayFailure.committed
   } finally {
     // An uncommitted reversal releases it too: recovery owns those writes, and a held lock
     // would stall every write to the branch until boot.
     if (run.interruptible) releaseBranchWriteExclusive(run.branchId, run.actionId)
   }
+  const outcome = outcomeOf()
   // Must run once the rollback has committed: arming a retry over writes still on disk would
   // race it into re-reading them; an uncommitted reversal leaves recovery to own the branch.
   // Must precede generationStore.abortRun below — that release drops the gate serializing this.
@@ -452,7 +453,7 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
       runId: run.runId,
       outcome,
       reason: cause.reason,
-      ...(error ? { errorKind: error.kind, errorDetail: error.detail } : {}),
+      ...(failure ? { errorKind: failure.kind, errorDetail: failure.detail } : {}),
     },
     { actionId: run.actionId },
   )
@@ -463,7 +464,7 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
     actionId: run.actionId,
     beforeTurn: run.beforeTurn,
     outcome,
-    ...(error ? { error } : {}),
+    ...(failure ? { error: failure } : {}),
   })
   if (newlyDeferred)
     pipelineEventBus.emit({
@@ -474,7 +475,10 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
       work: newlyDeferred,
     })
   run.resolveTerminal()
-  return { runId: run.runId, actionId: run.actionId, outcome, ...(error ? { error } : {}) }
+  const { runId, actionId } = run
+  return failure === undefined
+    ? { runId, actionId, outcome: 'aborted' }
+    : { runId, actionId, outcome: 'failed', error: failure }
 }
 
 type PhaseOutcome = { kind: 'completed' } | { kind: 'aborted'; cause: AbortCause }
@@ -482,7 +486,11 @@ type PhaseOutcome = { kind: 'completed' } | { kind: 'aborted'; cause: AbortCause
 async function runPhases(run: RunState, ctx: RunCtx): Promise<PhaseOutcome> {
   const pipeline = getPipeline(run.kind)
   try {
-    for (const node of pipeline.phases) {
+    for (const [index, node] of pipeline.phases.entries()) {
+      // generation-pipeline.md → User cancel = abort: a phase that finished past the cancel hands
+      // nothing on. After the last phase the run commits (commitRun), chaining nothing.
+      if (index > 0 && run.abortController.signal.aborted)
+        return { kind: 'aborted', cause: { reason: 'user-cancel' } }
       const result = await runNode(node, run, ctx)
       if (result.status === 'failed') {
         logger.error(
@@ -550,8 +558,10 @@ async function driveRun(
     // that serializes this write against the phases' own status writes.
     const onPreflightFailure = getPipeline(run.kind).onPreflightFailure
     if (onPreflightFailure)
+      // Built from the run, as runPhaseExceptionHook's is: a chained successor shares its
+      // origin's ctx, so anything read off ctx would be the origin's.
       await runHook(run, 'pipeline.preflight_hook_failed', () =>
-        onPreflightFailure(ctx, preflightError),
+        onPreflightFailure({ db: ctx.db, branchId: run.branchId }, preflightError),
       )
     return { tx: await abortRun(run, ctx, { reason: 'preflight-failure', error: preflightError }) }
   }

@@ -76,6 +76,26 @@ module.exports = defineConfig([
         },
       ],
 
+      // A mutator on an exported store object, which the boundaries rule can't see: only the
+      // orchestrator and the prose-reversal bracket drive a run, since a stray caller can leave
+      // the hard gate or the reversal barrier stuck. See docs/code-conventions.md.
+      'no-restricted-properties': [
+        'error',
+        ...[
+          'startRun',
+          'finishRun',
+          'abortRun',
+          'setReversalInProgress',
+          'setCurrentPhase',
+          'recordPhaseResult',
+        ].map((property) => ({
+          object: 'generationStore',
+          property,
+          message:
+            'Only the orchestrator and the prose-reversal bracket drive a run. See docs/code-conventions.md → Syncing a store after a write.',
+        })),
+      ],
+
       // lib/* modules expose a public API via index.ts; any importer
       // outside the module (incl. outside lib/) must import the bare module
       // path, never a deep internal file. See docs/code-conventions.md.
@@ -197,6 +217,20 @@ module.exports = defineConfig([
     files: ['**/*.test.{ts,tsx}', '**/__tests__/**', 'vitest.setup.ts'],
     rules: {
       'boundaries/dependencies': 'off',
+    },
+  },
+
+  // The run's owners, plus tests and story fixtures that stage a run in progress.
+  {
+    files: [
+      'lib/pipeline/runtime/**',
+      'lib/actions/story-entries/prose-reversal.ts',
+      '**/*.test.{ts,tsx}',
+      '**/__tests__/**',
+      '**/*.stories.tsx',
+    ],
+    rules: {
+      'no-restricted-properties': 'off',
     },
   },
 

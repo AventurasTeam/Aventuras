@@ -1,9 +1,41 @@
+diff --git a/android/CMakeLists.txt b/android/CMakeLists.txt
+index 2f814e871ad773c46a958c99ac5efc90d8e64357..64bfe8fff0e97c984aa5e37cd735c75cf5a3ff65 100644
+--- a/android/CMakeLists.txt
++++ b/android/CMakeLists.txt
+@@ -13,10 +13,17 @@ option(USE_QNN "Use QNN" NO)
+ file(GLOB libfbjni_link_DIRS "${BUILD_DIR}/fbjni-*.aar/jni/${ANDROID_ABI}")
+ file(GLOB libfbjni_include_DIRS "${BUILD_DIR}/fbjni-*-headers.jar/")
+ 
+-file(GLOB onnxruntime_include_DIRS
+-     "${BUILD_DIR}/onnxruntime-android-*.aar/headers")
+-file(GLOB onnxruntime_link_DIRS
+-     "${BUILD_DIR}/onnxruntime-android-*.aar/jni/${ANDROID_ABI}/")
++if(USE_QNN)
++  # build.gradle leaves the QNN runtime at latest.integration, so its wildcard stays.
++  file(GLOB onnxruntime_include_DIRS
++       "${BUILD_DIR}/onnxruntime-android-qnn-*.aar/headers")
++  file(GLOB onnxruntime_link_DIRS
++       "${BUILD_DIR}/onnxruntime-android-qnn-*.aar/jni/${ANDROID_ABI}/")
++else()
++  # The version build.gradle pins: a wildcard takes the first of every version ever extracted.
++  set(onnxruntime_include_DIRS "${BUILD_DIR}/onnxruntime-android-1.31.0.aar/headers")
++  set(onnxruntime_link_DIRS "${BUILD_DIR}/onnxruntime-android-1.31.0.aar/jni/${ANDROID_ABI}")
++endif()
+ 
+ if(ORT_EXTENSIONS_ENABLED)
+   add_definitions(-DORT_ENABLE_EXTENSIONS)
 diff --git a/android/build.gradle b/android/build.gradle
-index 41b43599a9af6ef1c170047d39db1f3baa6ca682..cb30837e45e900e9793e06bb9304a71429626e4b 100644
+index 41b43599a9af6ef1c170047d39db1f3baa6ca682..c8492ba6ff2d636c30728e430c6afd4bb80a1507 100644
 --- a/android/build.gradle
 +++ b/android/build.gradle
-@@ -247,10 +247,9 @@ dependencies {
-     extractLibs "com.microsoft.onnxruntime:onnxruntime-android:latest.integration@aar"
+@@ -244,13 +244,14 @@ dependencies {
+   if (useQnn) {
+     extractLibs "com.microsoft.onnxruntime:onnxruntime-android-qnn:latest.integration@aar"
+   } else {
+-    extractLibs "com.microsoft.onnxruntime:onnxruntime-android:latest.integration@aar"
++    // Pinned, not latest.integration, so a clean build ships the tested runtime. CMakeLists.txt
++    // names the same version: its glob would take the first of every version ever extracted.
++    extractLibs "com.microsoft.onnxruntime:onnxruntime-android:1.31.0@aar"
    }
  
 -  if (VersionNumber.parse(REACT_NATIVE_VERSION) < VersionNumber.parse("0.71")) {

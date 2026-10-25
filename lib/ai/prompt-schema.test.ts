@@ -180,6 +180,62 @@ describe('promptSchemaMiddleware', () => {
     })
   })
 
+  // A user-authored half may end in blank lines; the contract still sits one blank line below it.
+  it('trims a half before appending, so one blank line separates it from what follows', async () => {
+    const out = await transform(promptSchemaMiddleware(), {
+      prompt: [
+        { role: 'system', content: '# Setting\nA drowned city.\n\n\n' },
+        { role: 'user', content: [{ type: 'text', text: 'Go.\n' }] },
+      ],
+      responseFormat,
+    })
+    expect(out.prompt).toEqual([
+      { role: 'system', content: `# Setting\nA drowned city.\n\n${CONTRACT}` },
+      { role: 'user', content: [{ type: 'text', text: `Go.\n\n${CLOSING}` }] },
+    ])
+  })
+
+  // A later cache marker on a user part must survive, so no part is folded or moved.
+  it('appends the closing line to the last text part, keeping every part and its options', async () => {
+    const image = { type: 'file', data: 'aGk=', mediaType: 'image/png' }
+    const marker = { anthropic: { cacheControl: { type: 'ephemeral' } } }
+    const out = await transform(promptSchemaMiddleware(), {
+      prompt: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Earlier.', providerOptions: marker },
+            image,
+            { type: 'text', text: 'Now.' },
+          ],
+        },
+      ],
+      responseFormat,
+    })
+    expect(out.prompt[1]).toEqual({
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Earlier.', providerOptions: marker },
+        image,
+        { type: 'text', text: `Now.\n\n${CLOSING}` },
+      ],
+    })
+  })
+
+  // String.replace reads `$&` and `$$` in a plain replacement string as patterns.
+  it('carries a description holding `$` patterns into the contract as written', async () => {
+    const dollars = {
+      type: 'object',
+      properties: { cost: { type: 'string', description: 'in $$, e.g. $& or $1' } },
+      required: ['cost'],
+    }
+    const out = await transform(promptSchemaMiddleware(), {
+      prompt: userPrompt('Price it.'),
+      responseFormat: { type: 'json', schema: dollars },
+    })
+    expect((out.prompt[0] as { content: string }).content).toContain('in $$, e.g. $& or $1')
+  })
+
   it('adds a user message for the closing line when the prompt has none', async () => {
     const out = await transform(promptSchemaMiddleware(), {
       prompt: [{ role: 'system', content: 'Rules.' }],

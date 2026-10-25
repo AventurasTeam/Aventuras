@@ -1,6 +1,7 @@
 import { isPayloadMetaKey } from '@/lib/actions'
 import type { Delta } from '@/lib/db'
 import { relativeTimeLabel, t } from '@/lib/i18n'
+import { isJsonObject } from '@/lib/json-object'
 
 import {
   fieldPathLabel,
@@ -30,14 +31,10 @@ export type HistoryRowView = {
 const NESTED_COLUMNS = new Set(['state', 'metadata'])
 const DESCEND = new Set(['state.visual'])
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
 function nestedPaths(prefix: string, value: Record<string, unknown>): string[] {
   return Object.entries(value).flatMap(([key, child]) => {
     const path = `${prefix}.${key}`
-    return DESCEND.has(path) && isPlainObject(child) ? nestedPaths(path, child) : [path]
+    return DESCEND.has(path) && isJsonObject(child) ? nestedPaths(path, child) : [path]
   })
 }
 
@@ -46,7 +43,7 @@ export function changedPaths(delta: Pick<Delta, 'op' | 'undoPayload'>): string[]
   if (delta.op !== 'update' || delta.undoPayload == null) return []
   return Object.entries(delta.undoPayload).flatMap(([key, value]) => {
     if (isPayloadMetaKey(key)) return []
-    if (!NESTED_COLUMNS.has(key) || !isPlainObject(value)) return [key]
+    if (!NESTED_COLUMNS.has(key) || !isJsonObject(value)) return [key]
     const inner = nestedPaths(key, value)
     return inner.length > 0 ? inner : [key]
   })

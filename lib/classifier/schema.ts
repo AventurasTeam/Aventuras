@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { isJsonObject } from '@/lib/json-object'
 import { PLOT_ICON_KEYS } from '@/lib/plot'
 
 // No .transform() on a parsed value: z.toJSONSchema (used by generateStructured) throws on one,
@@ -24,7 +25,7 @@ const sourceTurn = z.string().optional()
 const withoutNulls =
   (kept: readonly string[]) =>
   (value: unknown): unknown =>
-    typeof value === 'object' && value !== null && !Array.isArray(value)
+    isJsonObject(value)
       ? Object.fromEntries(
           Object.entries(value).filter(([key, field]) => field !== null || kept.includes(key)),
         )

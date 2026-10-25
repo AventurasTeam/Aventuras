@@ -232,11 +232,7 @@ const ACTION_LINES = [
   'I bargain with the watchman for a name.',
   'I climb toward the keep before the gate-lamps are lit.',
 ]
-const SYSTEM_LINES = [
-  'A new era turns over the Hollow.',
-  'The chapter draws to its close.',
-  'Time slips forward; the watch changes.',
-]
+const SYSTEM_LINE = 'A new era turns over the Hollow.'
 const OPENING_TEXT =
   'You arrive in Veil’s Hollow with an amulet you cannot explain and a name the Syndicate would kill to bury. The rain has not stopped in nine days. Neither, it seems, has the city’s appetite for you.'
 
@@ -245,13 +241,14 @@ const LOC_POOL = [ID.hollow, ID.market, ID.keep]
 
 function heroKind(i: number): NewStoryEntry['kind'] {
   if (i === 1) return 'opening'
-  if (i % 12 === 0) return 'system'
+  // data-model.md → System entries: the branch-tail singleton, which the classifier window relies on.
+  if (i === N_HERO) return 'system'
   return i % 2 === 0 ? 'user_action' : 'ai_reply'
 }
 
 function heroContent(i: number, kind: NewStoryEntry['kind']): string {
   if (kind === 'opening') return OPENING_TEXT
-  if (kind === 'system') return SYSTEM_LINES[i % SYSTEM_LINES.length]
+  if (kind === 'system') return SYSTEM_LINE
   if (kind === 'user_action') return `${ACTION_LINES[i % ACTION_LINES.length]}`
   return `${REPLY_LINES[i % REPLY_LINES.length]} ${REPLY_BEATS[i % REPLY_BEATS.length]}`
 }

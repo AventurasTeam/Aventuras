@@ -237,7 +237,9 @@ over tool calls sends the pair first and appends its steps after it.
 **The system half is stable.** It holds what stays the same across a
 story's calls of that template, its standing instructions and the
 story definition, and must render byte-identically from one call to the
-next unless the user edits the story. Everything that changes per call
+next unless the user changes what it reads: the story, or a setting it
+resolves through, as reassigning the narrative model in App Settings
+changes `piggybackFires`. Everything that changes per call
 goes in the user half: the scene, retrieval, the history, and a format
 directive that depends on a per-call flag. Providers send the system
 message first and cache from the start of the request, so one per-call
@@ -292,7 +294,8 @@ The injected contract is split across the
 [two halves](#system-and-user-halves). Its lead-in and the interface
 block go at the end of the system message, which the middleware
 creates when the template's system half is blank: the contract is
-fixed per call site, so it belongs to the stable prefix. Its closing
+fixed by the call site and the story's settings, so it belongs to the
+stable prefix. Its closing
 "Output ONLY the JSON object" line goes at the end of the user message,
 where the models that need the prompt-injection path follow a format
 instruction best.

@@ -67,6 +67,14 @@ export type HandlerOutcome =
       patch: StorePatch | null
     }
 
+/**
+ * A refusal the turn survives: the action was well-formed and merely redundant, or a user edit
+ * won (orchestrator handleEvent). A plain rejection reverses the whole turn.
+ */
+export function noopRefusal(reason: string): HandlerOutcome {
+  return { status: 'rejected', reason, code: 'noop' }
+}
+
 export type ActionHandler = (
   action: PipelineAction,
   branchId: string,

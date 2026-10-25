@@ -50,7 +50,10 @@ export async function branchStaleTotal(page: Page, branchId: string): Promise<nu
 
 export async function currentBranchId(page: Page, storyId: string): Promise<string> {
   const rows = await queryApp(page, `SELECT current_branch_id FROM stories WHERE id = ?`, [storyId])
-  return rows[0]?.[0] as string
+  const id = rows[0]?.[0]
+  // Not a cast: every per-branch query after a missing story would read empty and pass.
+  if (typeof id !== 'string') throw new Error(`story ${storyId} has no current branch`)
+  return id
 }
 
 const TAIL_METADATA_SQL = `SELECT metadata FROM story_entries WHERE branch_id = ? AND kind = 'ai_reply'

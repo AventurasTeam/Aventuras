@@ -19,21 +19,6 @@ slice-planning gate forces its resolution before that slice is planned.
 
 ## Inbox
 
-- **ONNX Runtime's Android native library is unpinned.**
-  `onnxruntime-react-native`'s `android/build.gradle` resolves the
-  native AAR as `latest.integration`, and every version it has ever
-  resolved stays extracted under the package's `android/build/`. The
-  2026-10-20 debug APK shipped 1.28.0 (matched by size and GNU
-  build-id) although 1.31.0 is the newest resolved, so the shipped
-  runtime depends on stale local build state; the likely mechanism,
-  unconfirmed, is its `CMakeLists.txt` globbing every extracted AAR and
-  taking the first. A clean clone or CI build ships whatever Maven
-  serves that day, untested against the app and the 1.24.3 JS binding,
-  and 1.28 to 1.31 already grew the arm64 library by 5.6 MB. Fix: pin
-  the version in `patches/onnxruntime-react-native.patch` (npm's 1.24.3
-  or the tested 1.28.0 is the open choice) and clear the stale
-  extracts.
-
 - **Story isolation leaks across files under
   `--fileParallelism=false`.** Serializing puts every story file in one
   page, and some app-level DOM state survives the file that set it.
@@ -72,208 +57,12 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **Keyword-term comparison lowercases instead of case-folding.**
-  `normalizeTerm` (`lib/keyword-terms.ts`) uses `toLowerCase()` while
-  canon says "case-folded", so "Strauß" and "STRAUSS", or Turkish "İ"
-  and "i", don't match. Pre-existing; it affects every keyword-term
-  comparison and the namesake matcher. Raised 2026-10-10 by the
-  partial-name collisions code review.
-
 - **The resolve dialog's Rename body keeps its input names when a row
   is renamed elsewhere.** `RenameBody` in
   `components/compounds/collision-resolve-dialog.tsx` resets only when
   the pair's ids change, so an untouched form then reads as changed and
   Save could send the old name back. Reasoned, not reproduced; rare.
   Raised 2026-10-10 by the partial-name collisions code review.
-
-- **The item-match embed in the per-turn writers can't be cancelled.**
-  `planTurnCreates` (`lib/pipeline/definitions/per-turn-creates.ts`)
-  now takes an optional `signal` that reaches the item-match embed, but
-  neither caller passes `ctx.abortSignal` (`per-turn.ts` and
-  `per-turn-piggyback.ts`), so a cancel during a slow provider embed
-  still takes effect only once it settles, while the hard gate holds
-  the branch. Raised 2026-10-11 in the locations-and-items-from-prose
-  PR; narrowed 2026-10-24 by the triage pass.
-
-- **A cancel after the last abort check still returns `completed`.**
-  In `lib/pipeline/definitions/per-turn.ts` (~line 322) a cancel
-  landing during the position SELECT or the yields leaves the phase
-  returning `completed`. Pre-existing; surfaced 2026-10-11 in the
-  locations-and-items-from-prose PR.
-
-- **The mock LLM's validator doesn't check the newer state fields.**
-  `scripts/mock-llm/respond/tagged-block.ts` renders every field the
-  parser reads, but `stateBlockSchema` in `scripts/mock-llm/validate.ts`
-  knows nothing of creates, conditions, drops or retrieval queries, so
-  a malformed authored one passes validation and fails the app's
-  parser at serve time (a drop with no id renders `id="undefined"`).
-  Raised 2026-10-11 in the locations-and-items-from-prose PR; the
-  rendering half was closed by the AI writer map.
-
-- **The narrative person never reaches a prompt.**
-  `definition.narration` (first, second or third person) is in the
-  generation context, but no bundled template renders it, the per-turn
-  narrative and the wizard opening included, so the narrator is never
-  told which person to write in. Raised 2026-10-11 by the system and
-  user prompt halves design.
-
-- **`generation-pipeline.md`'s lifecycle names a reverse swap nothing
-  calls.** Step 5 of the substitution lifecycle is
-  `parseAndSubstitute(rawOutput, idMap)`, but `parseAndSubstitute`
-  (`lib/ids/parse.ts`) has no production caller: the per-turn writers
-  resolve placeholders field by field in `substitutePiggybackIds`
-  (`lib/piggyback/substitute.ts`) and the periodic classifier in
-  `lib/classifier/substitute.ts`. Either the step names those, or the
-  export goes. Predates this PR. Raised 2026-10-11 by the
-  locations-and-items-from-prose slice review.
-
-- **The registry describes `piggybackFires` as per-turn.**
-  `lib/prompts/templateContextMap.ts` says "True when this turn
-  expects…", but the value is settings-derived (`piggybackMode` and the
-  narrative model's `taggedBlockReliable`, `resolvePiggybackFires` in
-  `lib/pipeline/definitions/per-turn-piggyback.ts`), which is why the
-  narrative's system half may read it. The bundled stability test
-  (`lib/prompts/bundled/system-half-stability.test.ts`) treats it as
-  story-fixed. Canon's "unless the user edits the story"
-  ([`architecture.md → System and user halves`](../architecture.md#system-and-user-halves))
-  is also narrower than the truth: the value follows whichever narrative
-  model resolves, so reassigning the narrative model in App Settings
-  changes the system half without a story edit, as a capability override
-  will once one exists. And
-  [`→ Structured output`](../architecture.md#structured-output--the-json-contract-is-not-pack-content)
-  calls the contract "fixed per call site", but the fallback classifier
-  switches between its plain and with-chips schemas with
-  `askForSuggestions`, inside its marked system block, so a turn that
-  flips it misses the cache. Reword all three. Raised 2026-10-11 by the
-  system and user halves PR's Task 9 review and its slice review.
-
-- **`promptSchemaMiddleware` joins the contract onto the halves as
-  rendered.** In `lib/ai/prompt-schema.ts`, `appendToLastSystem` adds
-  `\n\n` and the contract to the system message untrimmed, as the system
-  and user halves PR designed it. No bundled system half ends on a blank
-  line (the suggestion refresh `rstrip`s its capture for exactly this),
-  but a user-authored one, once M7.2's pack tab edits live packs
-  ([`roadmap.md → M7`](./roadmap.md#m7--app-settings--diagnostics--onboarding)),
-  would put three blank lines before the contract. `appendToLastUser`,
-  carried over unchanged from before that PR, does the same to a user
-  half that ends in a newline, and it folds every text part into one,
-  which drops each part's `providerOptions` and moves file parts after
-  the text: a later cache marker on a user part would vanish silently.
-  The contract itself is built with `String.replace`, which reads `$&`,
-  `$$` and the other `$` patterns in the schema block as replacement
-  patterns, so a `.describe()` text holding one would reach the model
-  mangled; none does today. Candidate fix: `trimEnd` the half before
-  each append, keep the parts, and pass the block through a replacer
-  function. Raised 2026-10-11 by that PR's task reviews and its slice
-  review.
-
-- **Two save-confirm dialogs repeat one shell.** `RowConfirmDialog`
-  (`components/compounds/row-save-session-chrome.tsx`) and Story
-  Settings' `DefinitionalChangeDialog`
-  (`components/story-settings/definitional-change-dialog.tsx`) build
-  the same AlertDialog: a dismiss that cancels unless the write is
-  running, Cancel disabled while saving, a plain confirm button rather
-  than `AlertDialogAction` so it doesn't also fire a cancel, and the
-  bullets inside the description so screen readers announce them. A
-  compound in `components/compounds/` taking the title, lines, items
-  as `ReactNode`, confirm label, `saving` and `onAnswer` would serve
-  both; it simplifies anything only once Story Settings adopts it.
-  `delete-confirm-dialog.tsx` shares only the bullet rendering. Raised
-  2026-10-15 by the retired and disabled places slice review's
-  simplifier pass.
-
-- **The generation store's run mutators are public.**
-  `generationStore.startRun`, `finishRun`, `abortRun` and
-  `setReversalInProgress` (`lib/stores/generation/generation.ts`) are
-  exported to every module. Only the orchestrator and the
-  prose-reversal bracket should call them, and a stray caller can leave
-  the hard gate or the reversal barrier stuck. The mentioned-places
-  slice review closed the same gap for the pending-turn mark by
-  exposing it only as a bracket. A `boundaries` lint rule limiting
-  these to `lib/pipeline/runtime` and `lib/actions` is the route
-  [`code-conventions.md → Syncing a store after a write`](../code-conventions.md#syncing-a-store-after-a-write)
-  names for a package-private mutator. Raised 2026-10-16 by the
-  mentioned places slice review.
-
-- **Nine migration tests carry their own copy of two helpers.**
-  `migrationTags` and `applyMigration` are copied byte for byte into the
-  seven migration tests under `lib/db/__tests__/`, plus
-  `lib/db/embeddings/stale.test.ts` and `lib/embedder/service.test.ts`.
-  They belong in `lib/db/__tests__/test-db.ts`, which tests in other
-  modules already import. One `refactor(test):` commit would move them
-  and replace the copies with an import. Raised 2026-10-16 by the
-  mentioned places slice review's simplifier pass, which skipped it as
-  outside that slice.
-
-- **Three copies of `isPlainObject`.** `lib/actions/delta/delta-encoding.ts`
-  exports one, which `user-precedence.ts` now shares;
-  `lib/actions/settings/normalize.ts` keeps its own copy inside the same
-  module, and `lib/history/humanize.ts` another. The settings copy can
-  import the delta one today; the History one needs a home every module
-  may import, and `lib/utils.ts` pulls in UI and toast dependencies the
-  delta code shouldn't take. Raised 2026-10-18 by the classifier
-  factions slice review's simplifier pass, which skipped it as outside
-  the slice.
-
-- **An ancestor of the current location is framed "not in the scene".**
-  The floor seats the current location alone. Its ancestors appear only
-  by name in its head ("The Drowned Market — in Veil's Hollow", from
-  `currentLocationChain`), and `filterEntityPool` keeps them in the
-  ranked pool (`lib/retrieval/pools.ts`). A ranked or `always` ancestor
-  then renders in the memory blocks as "Veil's Hollow (not in the
-  scene): …" while the scene stands inside it. In the dev seed, a scene
-  at the Drowned Market would show it: Veil's Hollow is `always`. The
-  words are
-  [`retrieval.md → Three-sub-pool entity model`](../memory/retrieval.md#three-sub-pool-entity-model)'s,
-  and the old "currently elsewhere" was as wrong. Both obvious fixes
-  reach the ranker's mirror, which must keep rendering exactly what it
-  measures: seat the chain on the
-  [structural floor](../memory/retrieval.md#structural-floor--always-inject)
-  and render it outside the memory blocks, since a seated row still
-  takes the memory blocks' framing (Veil's Hollow, `always`, is seated
-  already), or give an ancestor its own framing, which makes
-  `entityFraming` read the scene. Raised 2026-10-19 by the entity-state
-  smoke check.
-
-- **Retrieval takes its disabled places beside the scene they derive
-  from.** `per-turn-retrieval.ts` computes `disabledPlaceIds` with
-  `placeModes` around the scene's location and passes it to
-  `runRetrieval` beside `sceneEntityIds` and `currentLocationId`, and
-  only the caller keeps the two in step. The pass now takes the store's
-  entities and builds its views over its own scene, so it could derive
-  the set itself and drop the parameter
-  ([`code-conventions.md → Type design`](../code-conventions.md#type-design),
-  an invariant kept by convention). Older than entity state, so its
-  slice review filed it rather than tightening it. Raised 2026-10-20 by
-  the entity-state slice review.
-
-- **Five copies of whitespace collapsing.** `lib/text/one-line.ts`
-  exports `oneLine`, which the `one_line` filter and the entity-state
-  mirror share. `classifier-context.ts` keeps its own `flat`,
-  `lib/history/field-labels.ts` its `collapseSpaces`, and
-  `location-map.ts` (a retired reason), `lib/text/excerpt.ts` and
-  `lib/entry-refs/read.ts` inline the same `replace(/\s+/g, ' ')`. Each
-  could call `oneLine`; all sit outside the entity-state slice. Raised
-  2026-10-20 by its slice review's simplifier pass, which skipped it as
-  outside the slice.
-
-- **Test helpers the slices keep re-rolling.** A logger stand-in
-  (`{ error: vi.fn(), warn: vi.fn(), debug: vi.fn() }`) is written out
-  in `lib/piggyback/apply.test.ts`, `world-time.test.ts` and about six
-  pipeline tests, and suites wrap `makeEntity` in per-file `character`,
-  `item` and `faction` builders. Both want a shared test-helper home no
-  module boundary objects to. Raised 2026-10-20 by the entity-state
-  slice review's simplifier pass, which skipped them for want of one.
-
-- **Era flips have no writer.** Canon has the user create a flip from
-  the reader's entry card ("Flip era") and the wizard's era picker
-  write one at world time 0
-  ([`data-model.md → Authorship contract`](../data-model.md#authorship-contract)),
-  but nothing dispatches a `branch_era_flips` write: the entry card's
-  `onFlipEra` prop is unwired, and the wizard's Finish steps
-  (`wizard.md`) omit the flip its era picker promises. Found 2026-10-20
-  by the AI writers design's inventory; not reproduced in the running
-  app.
 
 - **The head turn's membership test is written out four times.**
   `resolveHeadTurn` in `lib/head-turn` is the one definition of the
@@ -305,22 +94,6 @@ slice-planning gate forces its resolution before that slice is planned.
   its disabled-controls rule).
   Raised 2026-10-21 by the gated classifier slice's task reviews.
 
-- **The `sseFetch` fixture answers non-streaming calls with SSE.**
-  `lib/actions/turns/__tests__/fixtures.ts` stubs every request with an
-  event stream. The piggyback fallback's non-streaming call gets that
-  body, fails as a retryable JSON error, and costs each per-turn test
-  a 500 ms backoff (`BACKOFF_BASE_MS` in
-  `lib/ai/transport/call-with-retry.ts`), plus a
-  `classifier.piggyback_fallback_failed` warning in the logs. Raised
-  2026-10-21 by the gated classifier slice's task reviews.
-
-- **Android: keyboard input pops the reader.** On the emulator,
-  `adb input text` leaves touch mode, and with focus on the top bar's
-  back arrow a space presses it, so `router.back()` pops the reader
-  and logs two "GO_BACK was not handled" warnings. Seen before and
-  after the gated classifier's changes, so the branch didn't cause it.
-  Raised 2026-10-21 by the gated classifier slice's task reviews.
-
 - **The reader's bottom pin ignores scrollbar drags and keyboard
   scrolls.**
   [`reader-document.md → Entry list`](../ui/patterns/reader-document.md#entry-list-fully-rendered-flow-layout)
@@ -333,18 +106,6 @@ slice-planning gate forces its resolution before that slice is planned.
   opens mid-stream. Pre-existing for the landing pin; the gated
   classifier branch extends the same pin to stream end. Raised
   2026-10-21 by the gated classifier slice's task reviews.
-
-- **E2E in a scratch worktree can bundle with no routes.** A worktree
-  with symlinked `node_modules` built a web bundle that found no routes
-  ("No routes found"), so every test timed out at 30 s. The suspected
-  cause: the shared `/tmp/metro-cache` keys expo-router's context
-  transform by project-relative path, so two worktrees at the same
-  depth share an entry pointing at a deleted `app/`. Worked around
-  with a scratch-only `cacheStores` override. Reported by a review
-  agent and not reproduced here. Owner: dev tooling
-  ([`dev-environment.md`](../dev-environment.md) or
-  [lessons-learned](lessons-learned/README.md)). Raised 2026-10-21 by
-  the gated classifier slice's task reviews.
 
 - **On an Android phone the keyboard hides the reader's inline editor.**
   Pre-existing: main behaves the same. On an emulator (411×914 dp, the
@@ -385,25 +146,6 @@ slice-planning gate forces its resolution before that slice is planned.
   entry's submission onto the next entry. Raised 2026-10-22 in the
   pass failure policy slice's Task 7 review.
 
-- **`onPreflightFailure` gets the caller's `RunCtx`, not the run's
-  identity.** The orchestrator passes `ctx` straight through
-  (`lib/pipeline/runtime/orchestrator.ts:537-541`), and a chained
-  successor shares its origin's `ctx`, so any `actionId` read off it
-  would be the origin's. `PreflightFailureHook`
-  (`lib/pipeline/types.ts:132`) takes only `db` and `branchId`, so
-  nothing can read one today. Widening it to carry
-  `actionId` would reintroduce the bug `runPhaseExceptionHook` avoids by
-  building its context from the `RunState`; build the hook's context
-  the same way first. Raised 2026-10-22 in the pass failure policy
-  slice's Task 2 review.
-
-- **The `delta_emitted` event sketch lacks `entryId`.**
-  [`generation-pipeline.md`](../generation-pipeline.md) (the
-  `PipelineEvent` union, near the `delta_emitted` line) shows
-  `{ type: 'delta_emitted'; action: PipelineAction }`, while
-  `lib/pipeline/types.ts:49` carries `entryId?: string | null` as well.
-  Raised 2026-10-22 in the pass failure policy slice's Task 2 review.
-
 - **A refused Send destroys the earlier failure entry's text.**
   `runSubmit` drops the system tail before it dispatches
   (`app/reader-composer/[branchId].tsx`), and `dropSystemTail`'s own
@@ -419,13 +161,6 @@ slice-planning gate forces its resolution before that slice is planned.
   earlier entry can't simply be put back beside the new one. Raised
   2026-10-22 in the pass failure policy slice's Task 7 review.
 
-- **`retries: 1` also applies to the opt-in real-provider smoke.**
-  `playwright.config.ts:20` sets it for every spec, and
-  `e2e/tests/classifier-real-provider.smoke.spec.ts` sets only a
-  timeout. A model failure there doubles the run's worst case, and one
-  that passes on the retry reports as flaky rather than failed. Raised
-  2026-10-22 in the pass failure policy slice's Task 11 review.
-
 - **The pass and turn failure copy resolvers repeat each other.**
   `describePassFailure` and `toPassFailureMeta`
   (`components/reader/system-entry-actions.tsx:89`, `:112`) repeat
@@ -437,14 +172,6 @@ slice-planning gate forces its resolution before that slice is planned.
   exhaustive. Raised 2026-10-22 in the pass failure policy slice's
   branch review.
 
-- **The seeded hero branch holds six system rows.** `heroKind` in
-  `lib/db/devtools/seed-dataset.ts:246-250` makes every twelfth of the
-  72 hero entries `system`, against
-  [`data-model.md`](../data-model.md)'s system entry as a branch-tail
-  singleton, which `lib/classifier/window.ts:59-61`'s truncated-window
-  argument relies on. Raised 2026-10-22 in the pass failure policy
-  slice's branch review.
-
 - **A completed regenerate drops a cleared failure entry's
   submission.** `runRegenerate` in `app/reader-composer/[branchId].tsx`
   clears the system tail before dispatching (`:789`); the throw arm
@@ -453,60 +180,6 @@ slice-planning gate forces its resolution before that slice is planned.
   (`components/reader/regenerate-outcome.ts:39`) and the submission is
   not handed back. Raised 2026-10-22 in the pass failure policy
   slice's branch review.
-
-- **A pass bound that expires during a retry backoff reports a
-  timeout.** `callWithRetry` (`lib/ai/transport/call-with-retry.ts`)
-  returns `aborted` when the signal fires in its backoff, and
-  `generateStructured` (`lib/ai/generate.ts`) drops the attempts'
-  recoverable errors, so a pass that met a 503 or 429 near its bound
-  records `timeout after Nms` on the entry and in the status. Only the
-  diagnostic is lost: the pass fails either way. Raised 2026-10-23 by
-  the pass failure policy slice review.
-
-- **`TxResult` lets a `failed` outcome carry no error.** `TxResult`
-  (`lib/pipeline/types.ts`) has an optional `error` on every outcome,
-  though every failed run sets one, so readers such as `passRefusalOf`
-  (`components/reader/send-run.ts`) carry `PipelineError | undefined`.
-  A union with `{ outcome: 'failed'; error: PipelineError }` would make
-  it required
-  ([`code-conventions.md → Type design`](../code-conventions.md#type-design)).
-  Raised 2026-10-23 by the pass failure policy slice review.
-
-- **The commit-msg hook doesn't check the subject.**
-  `scripts/check-commit-msg.sh` counts only the body's lines, while
-  `CLAUDE.md` caps the subject at 72 characters. Four of the pass
-  failure policy slice's commits ran 73 to 75 (`28950818`, `042c011c`,
-  `0f8086c0`, `21ae1f2f`). Raised 2026-10-23 by its slice review.
-
-- **On Android a profile `timeout` may fail every call.** React
-  Native's global `AbortController` (abort-controller@3) has no
-  `AbortSignal.timeout`, as `lib/abort.ts` notes, yet the AI SDK builds
-  one whenever a call sets `timeout` (`AbortSignal.timeout(totalMs)` in
-  `node_modules/ai/dist/index.mjs`), and `buildCallSettings`
-  (`lib/ai/generate.ts`) sets it from the profile. Read, not run on a
-  device. Nothing writes a profile timeout before M7's settings UI;
-  under the pass failure policy a classifier profile with one would
-  fail every pass, and so every Send at cadence. Raised 2026-10-23 by
-  the pass failure policy slice review.
-
-- **The embed-failure spec builds its system-entry selectors inline.**
-  `e2e/tests/retrieval-embed-failure.spec.ts` (~:104, :108) calls
-  `getByText(t('reader:systemEntry.failure.embed'))` and the
-  `failureMessage` twin in the spec, against
-  [`testing.md → Selector strategy`](../testing.md#selector-strategy)'s
-  "compose from `e2e/locators/`". `reader.systemEntryFailure`
-  (`e2e/locators/reader.ts`) now covers the pass copies; widening its
-  key union takes these too. Predates the pass failure policy slice;
-  raised 2026-10-23 by its slice review.
-
-- **E2E specs inline the current-branch query.** About fifteen specs
-  (`periodic-classifier.spec.ts` five times, `turn.spec.ts`,
-  `reader-*.spec.ts`, the real-provider smoke and others) run
-  `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`
-  through `queryApp` beside `currentBranchId` in `e2e/harness/db.ts`,
-  which does the same. Predates the pass failure policy slice; its
-  slice review's simplifier pass moved only the slice's own copy.
-  Raised 2026-10-23.
 
 - **The Select's segment and radio branches go uncontrolled on an
   `undefined` value.** `components/ui/select.tsx`'s `SegmentBranch` and
@@ -536,21 +209,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `Unaffiliated` shows only beside other factions, so its empty state
   offers no choice at all. Raised 2026-10-23 by the AI writer map's final PR 1
   review.
-
-- **A merge's story reads two ways.** `lib/world/entity-delete.ts`'s
-  `deleteTailOf` reads the tail entry's raw `metadata.currentLocationId`,
-  while `storyPlaceOf` (`lib/world/place-rules.ts`) reads it through
-  `inheritedEntryMetadata`; `EntityMergeInput` now carries both, and
-  they can name different places. Predates the AI writer map; raised
-  2026-10-23 by its merge-adoption review.
-
-- **Undoing a take or a drop after a World move leaves the item held
-  and placed.** Reverse-replay keeps a field the user wrote since, so
-  undoing a turn's `<item>` or `<drop>` after the user moved the item
-  in World restores the holder's inventory but keeps the user's
-  position: the item ends both held and lying somewhere. Pre-existing
-  for takes; drops add one more instance. Raised 2026-10-23 by the AI
-  writer map's final review.
 
 - **A cast row's dangling faction selects nothing.** In
   `components/wizard/cast-editors.tsx`, a character whose `factionId`
@@ -584,25 +242,5 @@ slice-planning gate forces its resolution before that slice is planned.
   - `hooks/use-story-place.ts` builds a new value on every entries-store
     change; the review stabilised its one consumer
     (`components/world/use-collision-resolve.ts`) instead of the hook.
-  - `PlacementPicker` (`components/world/detail/placement-field.tsx`)
-    copies `EntityPicker`'s row markup; sharing it means exporting a
-    row component from `components/compounds/entity-picker.tsx`.
-  - `components/ui/select.tsx` exports `resolveMode` for the cast
-    editor's reserved `Unknown` slot; dropping the export needs `Select`
-    to take a mode for a wider option list.
-  - Seeded ids use two hashes: the dataset's `canonicalSeedId` and
-    `seedUnplacedPlace`'s UUIDv5 (`e2e/harness/seed.ts`); one hash
-    needs `canonicalSeedId` exported from `lib/db` and a throw where it
-    returns null.
-  - The narrow actions in `lib/actions/entities/state-patch-actions.ts`
-    each repeat a kind check, a branch check and a row load; a shared
-    opening needs typing over every action kind. `setThreadStatus`
-    (`lib/actions/threads/register.ts`) still picks `wroteThreadStatus`
-    by hand where the entity handlers now go through `wroteField`, and
-    the other domains (relationships, threads, happenings, lore) spell
-    their noop refusals out in full.
-  - `buildStatePatchOutcome` merges a state patch without validating
-    the result, so each condition writer bounds its text itself;
-    validating the merged state once would cover every writer.
 
   Raised 2026-10-24 by the AI writer map's slice review.

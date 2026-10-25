@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { queryApp } from '../harness/db'
+import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
@@ -48,9 +48,7 @@ test.describe('reader — undo / redo a turn', () => {
   })
 
   async function replyCount(): Promise<number> {
-    const branchId = (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
+    const branchId = await currentBranchId(app.window, 'story_hero')
     const rows = await queryApp(
       app.window,
       `SELECT id FROM story_entries WHERE branch_id = ? AND content LIKE '%E2E-UNDO-REPLY%'`,
@@ -134,10 +132,8 @@ test.describe('reader — undo of a turn covered by a two-turn classifier pass',
     removeUserDataDir(userDataDir)
   })
 
-  async function branchId(): Promise<string> {
-    return (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
+  function branchId(): Promise<string> {
+    return currentBranchId(app.window, 'story_hero')
   }
 
   async function happeningCount(branch: string, title: string): Promise<number> {

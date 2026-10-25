@@ -7,6 +7,7 @@ import { characterRelationshipsStore } from '@/lib/stores'
 
 import { missingRef, MISSING_REF } from '../delta/live-refs'
 import {
+  noopRefusal,
   register,
   type ActionHandler,
   type GroupScope,
@@ -148,8 +149,7 @@ async function bothPovOutcome(
     set.inverseKind = columns.inverseKind
     undoPayload.inverseKind = current.inverseKind
   }
-  if (Object.keys(set).length === 0)
-    return { status: 'rejected', reason: 'relationship unchanged', code: 'noop' }
+  if (Object.keys(set).length === 0) return noopRefusal('relationship unchanged')
   return {
     status: 'ok',
     targetTable: 'character_relationships',
@@ -206,13 +206,13 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
 
   // Only the classifier reaches this path; a case/whitespace-only repeat is the same view.
   if (current && current[povCol]?.trim().toLowerCase() === kind?.trim().toLowerCase())
-    return { status: 'rejected', reason: 'relationship unchanged', code: 'noop' }
+    return noopRefusal('relationship unchanged')
 
   if (
     proseEntryId != null &&
     (await userWroteViewSince(ctx, bid, { aId, bId }, current, povCol, proseEntryId))
   )
-    return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
+    return noopRefusal(USER_EDITED_SINCE_PROSE)
 
   // A delete arm cascades the link under this lock, so an existing one skips the ref check;
   // a create's reversal can still orphan it.
@@ -286,12 +286,7 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .where(and(eq(characterRelationships.branchId, bid), eq(characterRelationships.id, id)))
   // Only the user deletes a pair, and a pair already gone is the state they asked for; a
   // refusal would fail the rest of their Save with it.
-  if (!current)
-    return {
-      status: 'rejected',
-      reason: `delete target relationship ${bid}:${id} not found`,
-      code: 'noop',
-    }
+  if (!current) return noopRefusal(`delete target relationship ${bid}:${id} not found`)
   return {
     status: 'ok',
     targetTable: 'character_relationships',

@@ -966,7 +966,7 @@ writer compared it against, so the strip names exactly that row
 and nothing is guessed from names. Two rows are namesakes under the
 classifier's rule
 ([`classifier.md → Disambiguation`](../../../memory/classifier.md#disambiguation-on-new-character-mentions)):
-same kind, and the same name trimmed and case-folded, one name's
+same kind, and the same name trimmed and lowercased, one name's
 words inside the other's, or one name among the other's keywords;
 staged and retired rows included. A flag is live while its partner is
 on the branch, the two are still namesakes, and, for a `same-parent`
@@ -1277,7 +1277,7 @@ exist. Names save trimmed.
 
 Validation: a name must change, both trimmed names must be
 non-empty, and they must stop matching by name: neither the same
-name trimmed and case-folded, nor one name's words inside the
+name trimmed and lowercased, nor one name's words inside the
 other's. So a change of letter case alone still collides. Keywords
 don't count, since the form edits names only, so a pair that matched
 through a keyword passes once a name changes. Save disables until that holds, and the help line says
@@ -1285,7 +1285,7 @@ which rule fails (an untouched form shows the plain prompt to change
 a name).
 
 A name another row outside the pair already has, the same name
-trimmed and case-folded, shows `Another row already has that name.`
+trimmed and lowercased, shows `Another row already has that name.`
 under its field. It's a hint, not a block: the user may keep it, as Keep as
 distinct allows, and the save writes no flag for the new pair. The
 detail pane's name field shows the same hint for a typed name that

@@ -31,6 +31,7 @@ import {
 
 import { computeUndoPayload } from '../delta/delta-encoding'
 import {
+  noopRefusal,
   createdKey,
   type ActionHandler,
   type GroupScope,
@@ -149,10 +150,6 @@ function priorTerms(edits: readonly Delta[]): Set<string> {
     for (const term of prior) if (typeof term === 'string') terms.add(normalizeTerm(term))
   }
   return terms
-}
-
-function noopRefusal(reason: string): HandlerOutcome {
-  return { status: 'rejected', reason, code: 'noop' }
 }
 
 async function loadCurrent(branchId: string, id: string, ctx: DbCtx): Promise<Entity | undefined> {

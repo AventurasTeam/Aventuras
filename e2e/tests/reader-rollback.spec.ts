@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { queryApp } from '../harness/db'
+import { currentBranchId, queryApp } from '../harness/db'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { home } from '../locators/home'
@@ -28,9 +28,7 @@ test.describe('reader — roll back to an entry', () => {
     await home.openStory(app.window, 'The Veilstone Courier').click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
 
-    const branchId = (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
+    const branchId = await currentBranchId(app.window, 'story_hero')
     // Third from the tail: recent enough to be in the loaded window, with two
     // successors to prove the cascade.
     const tail = await queryApp(

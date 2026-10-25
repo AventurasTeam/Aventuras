@@ -1,10 +1,10 @@
 # The seeded branch tip moves at the first Send, so a pre-launch position is not the app's
 
-The dev fixture ends the hero branch on a **`system` row** (position 72:
-`heroKind` makes every twelfth entry one). Before a Send whose loaded tail
+The dev fixture ends the hero branch on a **`system` row** (position 72,
+the branch-tail singleton `heroKind` writes). Before a Send whose loaded tail
 holds a `system` row, the reader deletes every system row on the branch
-(`dropSystemTail` → `clearSystemEntry`; six on the hero branch, 12 through
-72), and the new `user_action` takes `MAX(position) + 1`, which is 72 again. The row
+(`dropSystemTail` → `clearSystemEntry`), and the new `user_action` takes
+`MAX(position) + 1`, which is 72 again. The row
 is gone by the time the spec's first turn commits, and its `position` is
 handed to that turn.
 

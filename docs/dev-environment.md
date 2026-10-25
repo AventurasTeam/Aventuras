@@ -46,6 +46,12 @@ Slot 0 lands where Electron puts the dev app by itself, so
 `pnpm db:seed` and `pnpm db:studio:desktop` open the same database the
 app does.
 
+Metro's transform cache is not split: every checkout shares
+`os.tmpdir()/metro-cache`. That is harmless for a worktree with its own
+`node_modules`, and suspected of serving a stale route tree to one that
+symlinks it; see
+[a worktree with symlinked `node_modules` needs its own Metro cache](./implementation/lessons-learned/metro-cache-shared-across-worktrees.md).
+
 The DevTools port is what the `electron-app` MCP server attaches to:
 `.mcp.json` points it at `AVENTURAS_DEVTOOLS_PORT`, defaulting to 9222,
 so each worker's agent drives its own app. A tool that discovers apps

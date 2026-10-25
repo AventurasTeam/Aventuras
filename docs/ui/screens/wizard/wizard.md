@@ -896,7 +896,9 @@ One SQLite transaction, all or none:
 1. Insert `stories` row with `status='active'`, `definition` JSON,
    `settings` JSON copied from
    `app_settings.default_story_settings`, identity columns.
-2. Insert initial `branches` row.
+2. Insert initial `branches` row, and, when the picked calendar has
+   eras, its `branch_era_flips` row for the chosen era at
+   `at_worldtime = 0` ([Calendar swap inside wizard](#calendar-swap-inside-wizard)).
 3. Insert wizard-authored `entities` rows (initial cast). Per-row:
    `kind`, `name`, `description`, `status`, `state` JSON, and embed
    the `name + description` composite into `entities_vec` **in the

@@ -19,6 +19,7 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import type { Logger } from '@/lib/diagnostics'
+import { spyLogger } from '@/lib/diagnostics/__tests__/spy-logger'
 import { __resetCaptureMode, armDeepCapture, decompressPayload } from '@/lib/probe'
 import {
   buildStructuralFloor,
@@ -223,9 +224,7 @@ async function runRetrievalPhase(
   const node = getPipeline(PER_TURN_KIND).phases.find((n) => n.name === RETRIEVAL_PHASE_NAME)
   if (!node || !('run' in node)) throw new Error('expected a single-run retrieval phase node')
   const intermediates: Record<string, unknown> = {}
-  // A fake logger rather than makeLogger: the real one drops everything when the
-  // diagnostics gate is off, which is the default in unit tests.
-  const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+  const log = spyLogger()
   const gen = node.run({
     actionId: 'act_1',
     abortSignal,
@@ -1087,33 +1086,6 @@ describe('retrieval phase — RetrievalParams assembly', () => {
 
   // retrieval.md → Pool exclusions: the places effectively disabled around the scene's location,
   // the same one the prompt's map is built from.
-  it('passes the places disabled around the scene, suspended for a region the scene is inside', async () => {
-    const place = (id: string, parent: string | null, over: Partial<Entity> = {}): Entity => ({
-      ...entity(id, 'location', id),
-      state: { parent_location_id: parent },
-      ...over,
-    })
-    seedOpenStory({
-      entries: [entry(1, 'opening', 'The keep stands.', meta({ currentLocationId: 'loc_anchor' }))],
-      entities: [
-        place('loc_eldra', null),
-        place('loc_vellis', 'loc_eldra', { injectionMode: 'disabled' }),
-        place('loc_anchor', 'loc_vellis'),
-        place('loc_market', 'loc_vellis'),
-        place('loc_thorn', null, { injectionMode: 'disabled' }),
-        place('loc_shrine', 'loc_thorn'),
-      ],
-    })
-
-    await runRetrievalPhase()
-
-    expect([...lastParams().disabledPlaceIds].sort()).toEqual([
-      'loc_shrine',
-      'loc_thorn',
-      'loc_vellis',
-    ])
-  })
-
   // The pass builds its views from these: source rows carry no state.
   it("passes the branch's store entities to the pass", async () => {
     seedOpenStory({
@@ -1586,7 +1558,7 @@ describe('retrieval phase — probe capture', () => {
           threads: [],
           sceneEntityIds: params.sceneEntityIds,
           currentLocationId: params.currentLocationId,
-          disabledPlaceIds: params.disabledPlaceIds,
+          disabledPlaceIds: new Set(),
         }),
       }),
     )

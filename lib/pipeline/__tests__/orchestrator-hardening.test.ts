@@ -289,6 +289,36 @@ describe('orchestrator hardening', () => {
     expect(result.outcome).toBe('aborted')
   })
 
+  // generation-pipeline.md → User cancel = abort: a phase that finished past its last check
+  // returns completed, and the next phase must not run on.
+  it('aborts at the next phase when a cancel lands after a phase finished', async () => {
+    const { ctx } = await makeHarness()
+    const ran: string[] = []
+    // The user's Cancel lands just as the phase returns, after its last check.
+    async function* finishesPastTheCancel(): AsyncGenerator<never, PhaseResult> {
+      ran.push('first')
+      for (const run of generationStore.getTxState().runs.values()) run.abortController.abort()
+      return { status: 'completed' }
+    }
+    async function* second(): AsyncGenerator<never, PhaseResult> {
+      ran.push('second')
+      return { status: 'completed' }
+    }
+    definePipeline({
+      kind: 'cancel-between',
+      phases: [
+        { name: 'first', run: finishesPastTheCancel },
+        { name: 'second', run: second },
+      ],
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('cancel-between', ctx))
+
+    expect(ran).toEqual(['first'])
+    expect(result.outcome).toBe('aborted')
+  })
+
   it('winds the run down even when onInterrupt throws', async () => {
     const { ctx } = await makeHarness()
     definePipeline({

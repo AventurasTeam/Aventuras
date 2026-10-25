@@ -32,10 +32,12 @@ public entry. Everything else in the module is internal.
 - **Types are part of the public API.** A deep `import type` from a
   module's internals is banned the same as a value import. Re-export
   public types from the root `index.ts`.
-- **Test files follow the boundary of their location.** A test
-  inside a module (`lib/foo/bar.test.ts`) is part of the module and
-  deep-imports freely; a test outside `lib/` uses the public API
-  like any other outside importer.
+- **Tests and their fixtures are exempt.** A test file, or a fixture
+  under a `__tests__/` folder, may import any module's internals: a
+  test stages state the public API has no reason to expose. A helper
+  the tests of several modules share lives in the `__tests__/` folder
+  of the module whose thing it fakes, as `lib/db/__tests__/test-db.ts`
+  and `lib/diagnostics/__tests__/spy-logger.ts` do.
 - **Build scripts are exempt.** Files under `scripts/**` run through
   `tsx` (Node) and legitimately read module internals for data and
   logic; they cannot import the React-Native-coupled public barrels.
@@ -148,7 +150,12 @@ desktop IPC bridge. A store hot enough that re-reading it per edit
 shows up in a profile may apply the change optimistically instead —
 but that mutator stays **package-private to the action layer**
 (boundaries-lint, like a raw store handle), never reachable from a
-component.
+component. A mutator that lives on an exported store object is
+invisible to the boundaries rule, which sees imports, not property
+access, so it is restricted with `no-restricted-properties` in
+`eslint.config.js` instead: `generationStore`'s run mutators belong to
+the orchestrator and the prose-reversal bracket, since a stray caller
+can leave the hard gate or the reversal barrier stuck.
 
 Failure handling is **not** part of this mechanism — it is a
 per-store, per-context policy, and the mechanism itself carries no

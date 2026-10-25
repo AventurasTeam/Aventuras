@@ -395,6 +395,17 @@ describe('seeded classifier watermarks', () => {
     }
   })
 
+  it('seeds at most one system row per branch, at its tail', () => {
+    const entries = rowsOf('story_entries') as EntryRow[]
+    for (const branch of rowsOf('branches') as BranchRow[]) {
+      const rows = entries.filter((e) => e.branchId === branch.id)
+      const tail = Math.max(...rows.map((e) => e.position))
+      const system = rows.filter((e) => e.kind === 'system').map((e) => e.position)
+      expect(system.length, branch.id).toBeLessThanOrEqual(1)
+      for (const position of system) expect(position, branch.id).toBe(tail)
+    }
+  })
+
   // A watermark at 72 would cover the user_action the first Send writes there, unread by any pass.
   it('parks br_hero_main on its last reply, below the system row it ends on', () => {
     const tail = (rowsOf('story_entries') as EntryRow[])

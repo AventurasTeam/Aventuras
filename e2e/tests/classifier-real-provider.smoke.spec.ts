@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite'
 
 import { expect, test } from '@playwright/test'
 
-import { queryApp } from '../harness/db'
+import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { createSeededUserDataDir, setClassifierCadence } from '../harness/seed'
@@ -39,6 +39,8 @@ const PROMPTS = [
 ]
 
 test.describe('periodic classifier — real provider smoke', () => {
+  // A model failure must fail the run, not pass as flaky on a retry that doubles its worst case.
+  test.describe.configure({ retries: 0 })
   test.skip(!LLM_URL || !LLM_MODEL, 'set SMOKE_LLM_URL and SMOKE_LLM_MODEL to run')
 
   let app: LaunchedApp
@@ -164,9 +166,7 @@ test.describe('periodic classifier — real provider smoke', () => {
     await home.openStory(app.window, 'The Veilstone Courier').click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: COMPOSER_VISIBLE_MS })
 
-    const branchId = (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
+    const branchId = await currentBranchId(app.window, 'story_hero')
     const count = async (sql: string, params: unknown[] = []): Promise<number> =>
       (await queryApp(app.window, sql, params))[0][0] as number
     // Counted on ai_reply alone: submitting a turn prunes the branch's `system`

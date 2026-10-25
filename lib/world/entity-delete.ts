@@ -1,5 +1,5 @@
 import type { PipelineAction } from '@/lib/actions'
-import type { Entity, StoryEntry } from '@/lib/db'
+import { inheritedEntryMetadata, type Entity, type StoryEntry } from '@/lib/db'
 
 import { brokenFlags, flagsNaming, withFlagClears } from './collision-flags'
 import { pairSideOf, type PairSide } from './collision-pair'
@@ -12,18 +12,13 @@ export type DeleteTail = {
   currentLocationId: string | null
 }
 
-/** The head turn's tail as a delete or merge plans against it. */
+/** The head turn's tail as a delete or merge plans against it, read as storyPlaceOf reads it. */
 export function deleteTailOf(
   head: { tail: Pick<StoryEntry, 'id' | 'metadata'> } | null,
 ): DeleteTail | null {
-  const metadata = head?.tail.metadata
-  return head == null || metadata == null
-    ? null
-    : {
-        id: head.tail.id,
-        sceneEntities: metadata.sceneEntities,
-        currentLocationId: metadata.currentLocationId,
-      }
+  if (head?.tail.metadata == null) return null
+  const { sceneEntities, currentLocationId } = inheritedEntryMetadata(head.tail.metadata)
+  return { id: head.tail.id, sceneEntities, currentLocationId }
 }
 
 export type EntityDeleteInput = {

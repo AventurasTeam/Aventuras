@@ -10,7 +10,8 @@ import type { makeHarness } from '../../../pipeline/__tests__/harness'
 // fetch (a call-time seam, unlike a module mock of the AI/provider graph, which
 // the setup-file's eager load of that graph would defeat) with a canned OpenAI
 // SSE stream so the happy path gets deterministic streamed tokens without a
-// network round-trip.
+// network round-trip. A non-streaming call is the piggyback fallback's, which these tests
+// don't exercise: a 400 fails it at once, where an SSE body would retry through backoff.
 export function sseFetch(tokens: readonly string[]): typeof fetch {
   const chunks = tokens.map(
     (content) =>
@@ -26,13 +27,20 @@ export function sseFetch(tokens: readonly string[]): typeof fetch {
     })}\n\n`,
     'data: [DONE]\n\n',
   )
-  return vi.fn(
-    async () =>
-      new Response(chunks.join(''), {
-        status: 200,
-        headers: { 'content-type': 'text/event-stream' },
-      }),
-  ) as unknown as typeof fetch
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init)
+    const body = (await request.clone().json()) as { stream?: boolean }
+    if (body.stream !== true) {
+      return new Response(JSON.stringify({ error: { message: 'not streamed' } }), {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    return new Response(chunks.join(''), {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    })
+  }) as unknown as typeof fetch
 }
 
 export const WORKING_CONFIG = {

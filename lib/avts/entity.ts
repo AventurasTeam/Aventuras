@@ -11,6 +11,7 @@ import {
   type LocationState,
 } from '@/lib/db'
 import { t } from '@/lib/i18n'
+import { isJsonObject } from '@/lib/json-object'
 import { ENTITY_STATUSES, stackableKey, stateOf } from '@/lib/world'
 
 import { avtsEnvelope, type AvtsFile } from './envelope'
@@ -60,10 +61,7 @@ const stackableKeyCheckGate = {
 // record: zod's record skips a "__proto__" key, which the pane and piggyback store as data.
 const stackablesField = z
   .preprocess(
-    (value) =>
-      typeof value === 'object' && value !== null && !Array.isArray(value)
-        ? new Map(Object.entries(value))
-        : value,
+    (value) => (isJsonObject(value) ? new Map(Object.entries(value)) : value),
     z
       .map(z.string(), characterState.shape.stackables.unwrap().valueType)
       .superRefine((stackables, ctx) => {

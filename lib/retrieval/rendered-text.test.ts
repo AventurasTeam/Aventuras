@@ -24,6 +24,14 @@ describe('entityFraming', () => {
     expect(entityFraming('faction', 'active')).toBeNull()
     expect(entityFraming('character', 'retired')).toBeNull()
   })
+
+  // retrieval.md → Three-sub-pool entity model: a place the scene stands inside would read as
+  // "not in the scene" while the scene is in it.
+  it('leaves an active place bare, as an active faction is, but frames a staged one', () => {
+    expect(entityFraming('location', 'active')).toBeNull()
+    expect(entityFraming('location', 'staged')).toBe('available to introduce')
+    expect(entityFraming('item', 'active')).toBe('not in the scene')
+  })
 })
 
 describe('entityHead', () => {

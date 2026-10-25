@@ -659,7 +659,10 @@ the underlying configuration surfaces.
   Era-flip reader affordances (time-chip popover, per-entry
   icon, Actions menu entry, flip-era modal) land here paired
   with the calendar tab's era-flips list (the `branch_era_flips`
-  table + CRUD landed in M1.5). Any flow here that batches multiple
+  table + CRUD landed in M1.5). Nothing dispatches a flip yet, and the
+  readers that would show its era hard-code none: generation's
+  `eraName` (`per-turn-retrieval.ts`) and the probe's
+  (`probe/payload.ts`) read `null`, so the flip writer wires both. Any flow here that batches multiple
   `at_worldtime` updates into one action must handle the
   non-`DEFERRABLE` `uniqueIndex(branch_id, at_worldtime)` (migration
   `0003`): batched reverse-replay can transiently violate uniqueness
@@ -1347,6 +1350,15 @@ each names.
   source text, as suggestion chips are) and fixes the canon to match.
   No translation phase runs before this slice, so nothing is stale yet.
   Raised by the AI writer map's planning (2026-10-22).
+- **M8.3 — The wizard's era picker and its Finish-time flip are
+  unbuilt.** [`wizard.md → Calendar swap inside wizard`](../ui/screens/wizard/wizard.md#calendar-swap-inside-wizard)
+  promises an era selector when the picked calendar has eras, and Finish
+  writes the chosen era's `branch_era_flips` row at `at_worldtime = 0`
+  ([`→ What Finish does`](../ui/screens/wizard/wizard.md#what-finish-does--atomic-commit)).
+  Today `step-calendar.tsx` renders an `EraStub` ("coming soon") and
+  Finish writes no flip; unreachable while `earth-gregorian`, with
+  `eras: null`, is the only calendar the wizard offers, which this slice
+  changes. Routed 2026-10-24 by the triage pass.
 - **M8.3 — `getCalendar` consults only code builtins, never the
   `vault_calendars` table.** The registry holds only
   `earth-gregorian`, so a story configured with a `vault_calendars`
@@ -1622,6 +1634,26 @@ own.
   and `description` each live in one row. So on an Android phone a
   disabled World or Plot `[+]` row shows no reason. Routed from triage
   2026-10-09.
+- **M9.2 — Two save-confirm dialogs repeat one shell.** `RowConfirmDialog`
+  (`components/compounds/row-save-session-chrome.tsx`) and Story
+  Settings' `DefinitionalChangeDialog`
+  (`components/story-settings/definitional-change-dialog.tsx`) build
+  the same AlertDialog: a dismiss that cancels unless the write is
+  running, Cancel disabled while saving, a plain confirm button rather
+  than `AlertDialogAction` so it doesn't also fire a cancel, and the
+  bullets inside the description so screen readers announce them. A
+  compound in `components/compounds/` taking the title, lines, items
+  as `ReactNode`, confirm label, `saving` and `onAnswer` would serve
+  both; it simplifies anything only once Story Settings adopts it.
+  `delete-confirm-dialog.tsx` shares only the bullet rendering. Raised
+  2026-10-15 by the retired and disabled places slice review's
+  simplifier pass. Routed from triage 2026-10-25.
+- **M9.2 — `PlacementPicker` copies `EntityPicker`'s row markup.**
+  `PlacementPicker` (`components/world/detail/placement-field.tsx`)
+  copies `EntityPicker`'s row markup; sharing it means exporting a row
+  component from `components/compounds/entity-picker.tsx`. Raised
+  2026-10-24 by the AI writer map's slice review. Routed from triage
+  2026-10-25.
 - **M9.2 — `ListRow`'s `aria-label` hides its channel content.** The
   row's `aria-label` replaces its child content, so status, lead and
   in-scene never reach screen readers. Only part of that is the label:
@@ -2007,9 +2039,10 @@ the screen its goal requires; later milestones extend.
   - **M7.1 / M7.2** — Pack selection across multi-provider config;
     provider-plurality in model picker; full settings reflection.
   - **M8.3** — Step 2 picker gains vault-imported calendars once
-    the registry merges `vault_calendars` rows. Picker code
-    unchanged; this is a registry-side extension, not a wizard
-    slice.
+    the registry merges `vault_calendars` rows, a registry-side
+    extension. The first calendar with eras arrives with them, so the
+    wizard's era picker and the Finish-time flip it promises land here
+    too (see the M8.3 open item below).
 - **Reader-composer**
   ([reader-composer.md](../ui/screens/reader-composer/reader-composer.md)).
   - **M2.5** — Entry list (load-older pagination +

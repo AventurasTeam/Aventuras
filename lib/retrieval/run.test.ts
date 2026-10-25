@@ -213,7 +213,6 @@ const BASE: RetrievalParams = {
   sceneCharacterIds: ['char_a'],
   sceneEntityIds: ['char_a'],
   currentLocationId: null,
-  disabledPlaceIds: new Set(),
   storeEntities: [],
   recentProse: '',
   scanText: 'I ask about the amulet.\nKara Vex drew the blade.',
@@ -976,24 +975,48 @@ describe('runRetrieval — query stack', () => {
     )
   })
 
+  // The disabling reaches the shrine through its region; the region the scene stands inside
+  // keeps its own row out but not the market beside the scene.
   it('keeps the places disabled around the scene off the floor and out of the pool', async () => {
+    const tree: [id: string, parent: string | null, mode: 'auto' | 'always' | 'disabled'][] = [
+      ['loc_eldra', null, 'auto'],
+      ['loc_vellis', 'loc_eldra', 'disabled'],
+      ['loc_anchor', 'loc_vellis', 'auto'],
+      ['loc_market', 'loc_vellis', 'auto'],
+      ['loc_thorn', null, 'disabled'],
+      ['loc_shrine', 'loc_thorn', 'always'],
+    ]
     const out = await runRetrieval(
       deps({
         queryAll: makeQueryAll({
           entities: [
-            entityRow('loc_room', 'Vault Room', { kind: 'location', mode: 'always' }),
-            entityRow('loc_hall', 'Vault Hall', { kind: 'location' }),
+            ...tree.map(([id, , mode]) => entityRow(id, id, { kind: 'location', mode })),
             entityRow('char_b', 'Mira'),
           ],
-          knn: [hit('loc_hall'), hit('char_b')],
+          knn: [...tree.map(([id]) => hit(id)), hit('char_b')],
         }),
       }),
-      params({ disabledPlaceIds: new Set(['loc_room', 'loc_hall']) }),
+      params({
+        currentLocationId: 'loc_anchor',
+        storeEntities: tree.map(([id, parent, injectionMode]) =>
+          makeEntity({
+            id,
+            kind: 'location',
+            name: id,
+            injectionMode,
+            state: { parent_location_id: parent },
+          }),
+        ),
+      }),
     )
 
     const ok = expectOk(out)
     expect(ok.floor.alwaysEntities).toEqual([])
-    expect(ok.bundles.entities.selected.map((r) => r.id)).toEqual(['char_b'])
+    expect(ok.bundles.entities.selected.map((r) => r.id).sort()).toEqual([
+      'char_b',
+      'loc_eldra',
+      'loc_market',
+    ])
   })
 
   it('skips the embed call when every query is empty', async () => {
@@ -2020,7 +2043,7 @@ describe('runRetrieval — keyword injection', () => {
     expect(out.selectedLocationIds).toEqual(['loc_1'])
   })
 
-  // Vault Room's own mode is auto: only the ids the caller passes carry its ancestor's disabling.
+  // Vault Room's own mode is auto: its wing's disabling reaches it through the store's tree.
   it('does not seat a place disabled through an ancestor that the scan text names', async () => {
     const queryAll = makeQueryAll({
       entities: [
@@ -2037,7 +2060,21 @@ describe('runRetrieval — keyword injection', () => {
           keywordRetrieval: injecting,
           sceneEntityIds: [],
           sceneCharacterIds: [],
-          disabledPlaceIds: new Set(['loc_room']),
+          storeEntities: [
+            makeEntity({
+              id: 'loc_wing',
+              kind: 'location',
+              name: 'Vault Wing',
+              injectionMode: 'disabled',
+            }),
+            makeEntity({
+              id: 'loc_room',
+              kind: 'location',
+              name: 'Vault Room',
+              state: { parent_location_id: 'loc_wing' },
+            }),
+            makeEntity({ id: 'loc_hall', kind: 'location', name: 'Vault Hall' }),
+          ],
           scanText: 'Rain over the Vault Room and the Vault Hall.',
         }),
       ),
