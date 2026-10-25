@@ -14,7 +14,7 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
-import { generateOpenAICompatibleImage } from './openaiCompatibleProvider'
+import { generateOpenAICompatibleImage } from './openaiCompatible'
 
 const GENERATION_BASE_URL = 'https://gen.pollinations.ai/v1'
 const MODELS_ENDPOINT = 'https://gen.pollinations.ai/image/models'

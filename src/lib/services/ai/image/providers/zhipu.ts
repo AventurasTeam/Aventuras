@@ -14,7 +14,7 @@ import type {
   ImageGenerateResult,
   ImageModelInfo,
 } from './types'
-import { generateOpenAICompatibleImage } from './openaiCompatibleProvider'
+import { generateOpenAICompatibleImage } from './openaiCompatible'
 
 const DEFAULT_BASE_URL = 'https://api.z.ai/api/paas/v4'
 

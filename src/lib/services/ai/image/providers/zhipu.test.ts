@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('./openaiCompatibleProvider', () => ({
+vi.mock('./openaiCompatible', () => ({
   generateOpenAICompatibleImage: vi.fn(async () => ({ base64: 'RESULT' })),
 }))
 
@@ -10,7 +10,7 @@ vi.mock('#lib/utils/url.ts', async (importOriginal) => {
 })
 
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
-import { generateOpenAICompatibleImage } from './openaiCompatibleProvider'
+import { generateOpenAICompatibleImage } from './openaiCompatible'
 import { createZhipuProvider } from './zhipu'
 import type { ImageGenerateOptions } from './types'
 

@@ -3,11 +3,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('./fetchAdapter', () => ({
   imageGetFetch: vi.fn(),
 }))
-vi.mock('./openaiCompatibleProvider', () => ({
+vi.mock('./openaiCompatible', () => ({
   generateOpenAICompatibleImage: vi.fn(async () => ({ base64: 'RESULT' })),
 }))
 
-import { generateOpenAICompatibleImage } from './openaiCompatibleProvider'
+import { generateOpenAICompatibleImage } from './openaiCompatible'
 import { createPollinationsProvider } from './pollinations'
 import type { ImageGenerateOptions } from './types'
 
