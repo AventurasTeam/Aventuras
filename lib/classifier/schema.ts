@@ -31,10 +31,17 @@ const withoutNulls =
         )
       : value
 
+type NullableKey<T> = {
+  [K in keyof T]-?: null extends T[K] ? (K extends string ? K : never) : never
+}[keyof T]
+
 // classifier.md → Failure policy: an entry that doesn't fit reads as a hole, a null field as
 // absent first, so one bad entry drops alone; readClassifierReply removes and counts the holes.
 // A null list reads as an empty one. `nullable`: fields whose null is a value, not an absence.
-const tolerantList = <T extends z.ZodType>(entry: T, nullable: readonly string[] = []) =>
+const tolerantList = <T extends z.ZodType>(
+  entry: T,
+  nullable: readonly NullableKey<z.input<T>>[] = [],
+) =>
   z.preprocess(
     (value) => (value === null ? undefined : value),
     z.array(z.preprocess(withoutNulls(nullable), entry).optional().catch(undefined)).default([]),
