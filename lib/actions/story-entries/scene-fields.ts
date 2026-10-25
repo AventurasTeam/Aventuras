@@ -9,6 +9,7 @@ import { applyDeltaActionGroup } from '../delta/apply-delta-action'
 import type { DbCtx, PipelineAction } from '../types'
 import { withEntryMetadataLock } from './entry-metadata-lock'
 import type { StoryEntryRejection } from './operational'
+import { firstLocationWrites, preEntryLocations } from './pre-entry-locations'
 import { STORY_ENTRY_REJECTION } from './register'
 
 export type SceneFieldsEdit = {
@@ -84,7 +85,16 @@ async function updateEntrySceneFieldsLocked(
   )
     return { status: 'ok' }
 
-  // Re-checked after the awaited read: the gate above is a TOCTOU window, and a
+  const firstWrites = await firstLocationWrites(
+    {
+      branchId,
+      entryId: id,
+      characterIds: before.sceneEntities.filter((member) => !after.sceneEntities.includes(member)),
+    },
+    ctx,
+  )
+
+  // Re-checked after the awaited reads: the gate above is a TOCTOU window, and a
   // hard-gate run starting inside it would race this write.
   if (generationStore.isUserEditBlocked())
     return rejected(STORY_ENTRY_REJECTION.inFlight, 'generation in flight')
@@ -155,6 +165,7 @@ async function updateEntrySceneFieldsLocked(
       },
       before,
       after,
+      restoredLocations: preEntryLocations(firstWrites, before.currentLocationId, branchEntities),
     }).filter(
       (action) =>
         unplacedLocation === null ||

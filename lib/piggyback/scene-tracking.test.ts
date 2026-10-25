@@ -85,6 +85,31 @@ describe('sceneTrackingActions', () => {
     ])
   })
 
+  it('closes a character the previous entry showed out there, whatever is restored', () => {
+    const actions = sceneTrackingActions({
+      branchId,
+      source: 'user_edit',
+      entities,
+      previous: {
+        entryId: 'ent_0',
+        currentLocationId: 'loc_a',
+        worldTime: 100,
+        sceneEntities: ['char_a', 'char_b'],
+      },
+      before: { sceneEntities: ['char_a', 'char_b'], currentLocationId: 'loc_b' },
+      after: { sceneEntities: ['char_a'], currentLocationId: 'loc_b' },
+      restoredLocations: new Map([['char_b', 'loc_c']]),
+    })
+    expect(payloadsFor(actions, 'char_b')).toEqual([
+      {
+        branchId,
+        id: 'char_b',
+        currentLocationId: 'loc_a',
+        lastSeenAt: { entryId: 'ent_0', locationId: 'loc_a', worldTime: 100 },
+      },
+    ])
+  })
+
   // Promotion is a semantic event; no demote action exists and retiring an entity
   // over a scene-list typo is the worse failure. Asserted as what IS written rather
   // than as the absence of a kind the function has no branch for.
@@ -236,7 +261,7 @@ describe('sceneTrackingActions — a removed character the previous entry did no
     { id: 'loc_old', kind: 'location', status: 'active' },
     { id: 'loc_b', kind: 'location', status: 'active' },
   ] as unknown as Entity[]
-  const removeC = (character: Entity) =>
+  const removeC = (character: Entity, restoredLocations?: ReadonlyMap<string, string | null>) =>
     sceneTrackingActions({
       branchId,
       source: 'user_edit',
@@ -249,6 +274,7 @@ describe('sceneTrackingActions — a removed character the previous entry did no
       },
       before: { sceneEntities: ['char_c'], currentLocationId: 'loc_b' },
       after: { sceneEntities: [], currentLocationId: 'loc_b' },
+      ...(restoredLocations ? { restoredLocations } : {}),
     })
 
   it('puts them back at their own older anchor, leaving that anchor as it was', () => {
@@ -258,9 +284,29 @@ describe('sceneTrackingActions — a removed character the previous entry did no
     ])
   })
 
-  // The wizard places characters with no lastSeenAt: that location stands.
+  // The wizard places characters with no lastSeenAt: with nothing restored, that location stands.
   it('leaves their stored location alone when they have no older anchor', () => {
     expect(payloadsFor(removeC(seen(null)), 'char_c')).toEqual([])
+  })
+
+  it.each([
+    ['a place', 'loc_old'],
+    ['no place', null],
+  ])('puts them at a restored location naming %s when they have no anchor', (_label, restored) => {
+    const actions = removeC(seen(null), new Map([['char_c', restored]]))
+    expect(payloadsFor(actions, 'char_c')).toEqual([
+      { branchId, id: 'char_c', currentLocationId: restored },
+    ])
+  })
+
+  it('keeps their older anchor over a restored location', () => {
+    const actions = removeC(
+      seen({ entryId: 'ent_old', locationId: 'loc_old', worldTime: 10 }),
+      new Map([['char_c', null]]),
+    )
+    expect(payloadsFor(actions, 'char_c')).toEqual([
+      { branchId, id: 'char_c', currentLocationId: 'loc_old' },
+    ])
   })
 
   // A delete leaves a lastSeenAt naming the place it removed.
