@@ -803,7 +803,11 @@ writes (a rejected write rolls the whole pass back) is a failed run too.
 
 The structured call is bounded by the classifier profile's `timeout`
 when the user set one, longer or shorter, and by ten minutes otherwise,
-so a hung provider ends in an error the user can act on.
+so a hung provider ends in an error the user can act on. A `timeout`
+the user set also bounds each attempt inside the call
+([`generation-pipeline.md → Two retry tiers`](../generation-pipeline.md#two-retry-tiers-both-at-phase-level)),
+with the same number of ms, so an attempt that runs out ends the pass
+as well, and no retry follows it.
 
 A branch held `running`, a pass left unfinished whose reversal hasn't
 committed, can't run a pass, so its Send fails with the recovery error,
