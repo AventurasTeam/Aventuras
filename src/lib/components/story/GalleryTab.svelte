@@ -5,6 +5,7 @@
   import { imageExportService } from '#lib/services/imageExport.ts'
   import { retryImageGeneration } from '#lib/services/ai/image/index.ts'
   import { errMessage } from '#lib/utils/error.ts'
+  import { normalizeImageDataUrl } from '#lib/utils/image.ts'
   import type { EmbeddedImageMeta } from '#lib/types/index.ts'
   import {
     Download,
@@ -231,8 +232,7 @@
       )
 
       if (success) {
-        const message =
-          imagesToSave === 1 ? 'Saved 1 image as PNG' : `Saved ${imagesToSave} images as ZIP`
+        const message = imagesToSave === 1 ? 'Saved 1 image' : `Saved ${imagesToSave} images as ZIP`
         ui.showToast(message, 'info')
         resetSelection()
       }
@@ -242,10 +242,6 @@
     } finally {
       isSaving = false
     }
-  }
-
-  function getImagePreview(imageData: string): string {
-    return imageData.startsWith('data:') ? imageData : `data:image/png;base64,${imageData}`
   }
 
   function openLightbox(index: number) {
@@ -509,7 +505,7 @@
             >
               {#if imageDataCache.has(image.id)}
                 <img
-                  src={getImagePreview(imageDataCache.get(image.id)!)}
+                  src={normalizeImageDataUrl(imageDataCache.get(image.id)) ?? ''}
                   alt={`Generated image ${index + 1}`}
                   class="h-full w-full object-contain"
                 />
@@ -617,7 +613,7 @@
         <div class="relative">
           {#if imageDataCache.has(images[lightboxImageIndex].id)}
             <img
-              src={getImagePreview(imageDataCache.get(images[lightboxImageIndex].id)!)}
+              src={normalizeImageDataUrl(imageDataCache.get(images[lightboxImageIndex].id)) ?? ''}
               alt={`Generated image ${lightboxImageIndex + 1}`}
               class={[
                 'max-h-[40vh] max-w-full rounded object-contain sm:max-h-[50vh]',

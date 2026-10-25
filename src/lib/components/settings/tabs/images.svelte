@@ -33,6 +33,7 @@
     detectWorkflowFields,
     fetchModelList,
     clearComfyCacheForUrl,
+    resolveComfyBaseUrl,
   } from '#lib/services/ai/image/providers/comfy.ts'
   import ImageModelSelect from '#lib/components/settings/ImageModelSelect.svelte'
   import type { ImageProfile, ImageProviderType, APIProfile } from '#lib/types/index.ts'
@@ -43,7 +44,7 @@
   import { SvelteSet } from 'svelte/reactivity'
   import IconRow from '#lib/components/ui/icon-row.svelte'
   import ImageResolutionSelector from '#lib/components/settings/ImageResolutionSelector.svelte'
-  import { defaultImageSpec, type ImageSpec } from '#lib/utils/image.ts'
+  import { defaultImageSpec, normalizeImageDataUrl, type ImageSpec } from '#lib/utils/image.ts'
 
   const imageStyles = [
     { value: 'image-style-soft-anime', label: 'Soft Anime' },
@@ -694,7 +695,7 @@
 
   async function loadUnetModels() {
     if (profileProviderType !== 'comfyui') return
-    const baseUrl = profileBaseUrl?.trim() || 'http://localhost:8188'
+    const baseUrl = resolveComfyBaseUrl(profileBaseUrl)
     const reqId = ++unetModelsReqId
     isLoadingUnetModels = true
     try {
@@ -722,7 +723,7 @@
   // Also clear availableClips/Vaes so the auto-load effect can trigger a fresh fetch.
   $effect(() => {
     if (profileProviderType === 'comfyui') {
-      const currentUrl = profileBaseUrl.trim() || 'http://localhost:8188'
+      const currentUrl = resolveComfyBaseUrl(profileBaseUrl)
       if (prevComfyBaseUrl !== null && prevComfyBaseUrl !== currentUrl) {
         clearComfyCacheForUrl(prevComfyBaseUrl)
         availableClips = []
@@ -1121,7 +1122,7 @@
                 <Label>Result Image</Label>
                 <div class="overflow-hidden rounded-lg border bg-black/5">
                   <img
-                    src="data:image/png;base64,{testImageResult}"
+                    src={normalizeImageDataUrl(testImageResult) ?? ''}
                     alt="Generated test"
                     class="mx-auto block h-auto max-w-full"
                   />

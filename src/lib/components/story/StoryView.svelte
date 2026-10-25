@@ -20,6 +20,7 @@
   import { eventBus, type BranchSwitchedEvent } from '#lib/services/events.ts'
   import { repinDecision, type PinSnapshot } from '#lib/utils/storyPin.ts'
   import { contextLift } from '#lib/utils/storyNavigation.ts'
+  import { normalizeImageDataUrl } from '#lib/utils/image.ts'
   import DeleteEntryModal from './DeleteEntryModal.svelte'
   import RegenerateEntryModal from './RegenerateEntryModal.svelte'
   import CreateCheckpointModal from './CreateCheckpointModal.svelte'
@@ -554,12 +555,9 @@
     })
   })
 
-  // Format background image URL (handling raw base64 vs data URL)
   const bgImageUrl = $derived.by(() => {
-    const raw = story.currentBgImage
-    if (!raw) return null
-    if (raw.startsWith('data:')) return `url(${raw})`
-    return `url(data:image/png;base64,${raw})`
+    const url = normalizeImageDataUrl(story.currentBgImage)
+    return url && `url(${url})`
   })
 </script>
 

@@ -1,18 +1,30 @@
 import type { ImageGenerationMode, StorySettings } from '#lib/types/index.ts'
 
+// Whole base64 quanta; covers any real `ftyp` box. An APNG whose `acTL` sits further in labels as PNG, which renders the same.
+const LABEL_SNIFF_CHARS = 128
+const BASE64_MARKER = ';base64,'
+
+/**
+ * A displayable URL for stored image data, labelled by what the bytes are rather than by what
+ * was stored beside them. A recognised type replaces a mismatched `data:` label; bytes that
+ * match no signature keep their label, and bare base64 is read as PNG.
+ */
 export function normalizeImageDataUrl(imageData: string | null | undefined): string | null {
   if (!imageData) {
     return null
   }
-  if (
-    imageData.startsWith('data:image/') ||
-    imageData.startsWith('http://') ||
-    imageData.startsWith('https://')
-  ) {
+  if (imageData.startsWith('http://') || imageData.startsWith('https://')) {
     return imageData
   }
-  // Backward compatibility: stored as raw base64 without a data URL prefix.
-  return `data:image/png;base64,${imageData}`
+  if (imageData.startsWith('data:')) {
+    const marker = imageData.indexOf(BASE64_MARKER)
+    if (marker === -1) return imageData
+    const bodyStart = marker + BASE64_MARKER.length
+    const mime = sniffImageMime(imageData.slice(bodyStart, bodyStart + LABEL_SNIFF_CHARS))
+    if (!mime || imageData.slice(5, marker) === mime) return imageData
+    return `data:${mime}${BASE64_MARKER}${imageData.slice(bodyStart)}`
+  }
+  return `data:${sniffImageMime(imageData.slice(0, LABEL_SNIFF_CHARS)) ?? 'image/png'};base64,${imageData}`
 }
 
 /**

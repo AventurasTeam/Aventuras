@@ -12,7 +12,13 @@ vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
   createSdkFetch: vi.fn(() => sdkFetch),
 }))
 
+vi.mock('#lib/utils/url.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
+  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
+})
+
 import { createSdkFetch } from '#lib/services/ai/sdk/providers/sdkFetch.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { createA1111Provider } from './a1111'
 import type { ImageGenerateOptions } from './types'
 
@@ -108,13 +114,19 @@ describe('A1111 adapter', () => {
     expect(sentRequest().body.steps).toBe(12)
   })
 
-  it.each(['http://192.168.1.5:7860', 'http://192.168.1.5:7860/'])(
-    'keeps the configured base URL %s and sends the key',
-    async (baseUrl) => {
-      await createA1111Provider({ apiKey: 'k', baseUrl }).generate(options())
-      const { url, headers } = sentRequest()
-      expect(url).toBe('http://192.168.1.5:7860/sdapi/v1/txt2img')
-      expect(headers.get('Authorization')).toBe('Bearer k')
-    },
-  )
+  it('sends the key to the configured base URL', async () => {
+    await createA1111Provider({ apiKey: 'k', baseUrl: 'http://192.168.1.5:7860' }).generate(
+      options(),
+    )
+    const { url, headers } = sentRequest()
+    expect(url).toBe('http://192.168.1.5:7860/sdapi/v1/txt2img')
+    expect(headers.get('Authorization')).toBe('Bearer k')
+  })
+
+  it('sends its requests to the normalized base URL', async () => {
+    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('http://normalized.test')
+    await createA1111Provider({ apiKey: '', baseUrl: ' http://raw.test// ' }).generate(options())
+    expect(normalizeBaseUrl).toHaveBeenCalledWith(' http://raw.test// ')
+    expect(sentRequest().url).toBe('http://normalized.test/sdapi/v1/txt2img')
+  })
 })

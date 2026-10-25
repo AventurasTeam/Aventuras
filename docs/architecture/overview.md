@@ -572,8 +572,8 @@ Nine backends live under `src/lib/services/ai/image/providers/` — NanoGPT, Ope
 OpenRouter, Google, Z.AI, Pollinations, plus local ComfyUI (workflow-based) and A1111. All of them
 generate through the AI SDK's `generateImage` (`sdkImage.ts`), so retry, abort and the result shape
 are the same everywhere. OpenAI, OpenAI Compatible (a user-supplied proxy), OpenRouter and Google use
-their SDK providers; Pollinations and Z.AI speak the OpenAI image API and reuse the OpenAI
-Compatible helper. Three backends have no usable SDK provider and get a small custom
+their SDK providers; Pollinations and Z.AI speak the OpenAI image API and reuse the shared
+OpenAI-compatible request (`openaiCompatible.ts`). Three backends have no usable SDK provider and get a small custom
 `ImageModelV4` each:
 
 - **NanoGPT** (`nanogptImage.ts`): its unified `/images` endpoint covers text-to-image and edits in

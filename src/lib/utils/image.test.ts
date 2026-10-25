@@ -194,6 +194,35 @@ describe('normalizeImageDataUrl', () => {
   it('prefixes bare base64, which is how older saves stored it', () => {
     expect(normalizeImageDataUrl('AAA')).toBe('data:image/png;base64,AAA')
   })
+
+  describe('labelling by content', () => {
+    const JPEG = bytesToBase64(Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46]))
+
+    it('labels bare base64 by its bytes', () => {
+      expect(normalizeImageDataUrl(JPEG)).toBe(`data:image/jpeg;base64,${JPEG}`)
+    })
+
+    it('relabels a data URL whose label disagrees with its bytes', () => {
+      expect(normalizeImageDataUrl(`data:image/png;base64,${JPEG}`)).toBe(
+        `data:image/jpeg;base64,${JPEG}`,
+      )
+    })
+
+    it('leaves a matching label alone', () => {
+      const url = `data:image/jpeg;base64,${JPEG}`
+      expect(normalizeImageDataUrl(url)).toBe(url)
+    })
+
+    it('keeps the label of bytes it does not recognise', () => {
+      const svg = `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg"/>')}`
+      expect(normalizeImageDataUrl(svg)).toBe(svg)
+    })
+
+    it('passes through a data URL that is not base64', () => {
+      const url = 'data:image/svg+xml,%3Csvg%2F%3E'
+      expect(normalizeImageDataUrl(url)).toBe(url)
+    })
+  })
 })
 
 describe('storyImageMode', () => {

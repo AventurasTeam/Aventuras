@@ -6,6 +6,7 @@
 
 import type { ProviderType, TextModel } from '#lib/types/index.ts'
 import { dedupeTextModels } from '#lib/utils/dedupeTextModels.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { createLogger } from '#lib/log.ts'
 import { getBaseUrl, PROVIDERS } from './config'
 import { createTimeoutFetch } from './fetch'
@@ -15,13 +16,8 @@ const log = createLogger('ModelFetcher')
 /** URLs that don't require authentication for model fetching */
 const NO_AUTH_PATTERNS = ['nano-gpt.com', 'gen.pollinations.ai', '127.0.0.1', 'localhost']
 
-function normalizeBaseUrl(baseUrl?: string): string | undefined {
-  const trimmed = baseUrl?.trim()
-  return trimmed ? trimmed.replace(/\/$/, '') : undefined
-}
-
 function buildOpenRouterModelsUrl(baseUrl?: string): string {
-  const effectiveBase = normalizeBaseUrl(baseUrl) || 'https://openrouter.ai/api/v1'
+  const effectiveBase = baseUrl || 'https://openrouter.ai/api/v1'
   if (effectiveBase.endsWith('/api')) {
     return `${effectiveBase}/v1/models`
   }
@@ -33,9 +29,11 @@ function buildOpenRouterModelsUrl(baseUrl?: string): string {
  */
 export async function fetchModelsFromProvider(
   providerType: ProviderType,
-  baseUrl?: string,
+  configuredBaseUrl?: string,
   apiKey?: string,
 ): Promise<TextModel[]> {
+  const baseUrl = normalizeBaseUrl(configuredBaseUrl) || undefined
+
   // Provider-specific fetch logic
   if (providerType === 'nanogpt') return fetchNanoGptModels(baseUrl, apiKey)
   if (providerType === 'openrouter') return fetchOpenRouterModels(baseUrl)
@@ -50,14 +48,14 @@ export async function fetchModelsFromProvider(
   if (providerType === 'nvidia-nim') return fetchNimModels(baseUrl, apiKey)
 
   // Standard OpenAI-compatible endpoint
-  const effectiveBaseUrl = normalizeBaseUrl(baseUrl) || getBaseUrl(providerType)
+  const effectiveBaseUrl = baseUrl || getBaseUrl(providerType)
   if (!effectiveBaseUrl) {
     throw new Error(`No base URL available for provider: ${providerType}`)
   }
 
   const requiresAuth = !NO_AUTH_PATTERNS.some((p) => effectiveBaseUrl.toLowerCase().includes(p))
   const fetch = createTimeoutFetch(30000, 'model-fetch')
-  const modelsUrl = effectiveBaseUrl.replace(/\/$/, '') + '/models'
+  const modelsUrl = effectiveBaseUrl + '/models'
 
   const response = await fetch(modelsUrl, {
     method: 'GET',
@@ -151,7 +149,7 @@ function isNimTextGenModel(modelId: string): boolean {
 }
 
 async function fetchNimModels(baseUrl?: string, apiKey?: string): Promise<TextModel[]> {
-  const effectiveBaseUrl = normalizeBaseUrl(baseUrl) || 'https://integrate.api.nvidia.com/v1'
+  const effectiveBaseUrl = baseUrl || 'https://integrate.api.nvidia.com/v1'
   const fetch = createTimeoutFetch(30000, 'model-fetch')
   const response = await fetch(`${effectiveBaseUrl}/models`, {
     method: 'GET',
@@ -191,7 +189,7 @@ interface NanoGptModelEntry {
 async function fetchNanoGptModels(baseUrl?: string, apiKey?: string): Promise<TextModel[]> {
   // Use the detailed API to get capabilities including reasoning
   const effectiveBase = baseUrl || 'https://nano-gpt.com/api/v1'
-  const modelsUrl = effectiveBase.replace(/\/$/, '') + '/models?detailed=true'
+  const modelsUrl = effectiveBase + '/models?detailed=true'
 
   const fetchFn = createTimeoutFetch(30000, 'model-fetch')
   const response = await fetchFn(modelsUrl, {
@@ -256,7 +254,7 @@ async function fetchOpenRouterModels(baseUrl?: string): Promise<TextModel[]> {
 
 async function fetchAnthropicModels(baseUrl?: string, apiKey?: string): Promise<string[]> {
   const effectiveBaseUrl = baseUrl || 'https://api.anthropic.com/v1'
-  const modelsUrl = effectiveBaseUrl.replace(/\/$/, '') + '/models'
+  const modelsUrl = effectiveBaseUrl + '/models'
 
   const fetchFn = createTimeoutFetch(30000, 'model-fetch')
   const headers: Record<string, string> = { 'anthropic-version': '2023-06-01' }
@@ -303,11 +301,7 @@ async function fetchGoogleModels(baseUrl?: string, apiKey?: string): Promise<Tex
     return []
   }
 
-  const modelsUrl =
-    effectiveBaseUrl.replace(/\/$/, '') +
-    '/models?key=' +
-    encodeURIComponent(apiKey) +
-    '&pageSize=200'
+  const modelsUrl = effectiveBaseUrl + '/models?key=' + encodeURIComponent(apiKey) + '&pageSize=200'
 
   const fetchFn = createTimeoutFetch(30000, 'model-fetch')
   const response = await fetchFn(modelsUrl, { method: 'GET' })
@@ -350,7 +344,7 @@ async function fetchChutesModels(baseUrl?: string, apiKey?: string): Promise<str
   }
 
   const effectiveBaseUrl = 'https://api.chutes.ai'
-  const chutesUrl = effectiveBaseUrl.replace(/\/$/, '') + '/chutes/?include_public=true&limit=200'
+  const chutesUrl = effectiveBaseUrl + '/chutes/?include_public=true&limit=200'
 
   const fetchFn = createTimeoutFetch(30000, 'model-fetch')
   const response = await fetchFn(chutesUrl, {
@@ -378,7 +372,8 @@ async function fetchChutesModels(baseUrl?: string, apiKey?: string): Promise<str
 
 async function fetchOllamaModels(baseUrl?: string): Promise<string[]> {
   const effectiveBaseUrl = baseUrl || PROVIDERS.ollama.baseUrl
-  const tagsUrl = effectiveBaseUrl.replace(/\/$/, '').replace(/\/api$/, '') + '/api/tags'
+  // `/api/tags` is served at the root, while the profile's base URL ends in `/v1` or `/api`.
+  const tagsUrl = effectiveBaseUrl.replace(/\/(?:api|v1)$/, '') + '/api/tags'
 
   const fetchFn = createTimeoutFetch(10000, 'model-fetch')
   const response = await fetchFn(tagsUrl, { method: 'GET' })
@@ -409,7 +404,7 @@ async function fetchZhipuModels(baseUrl?: string, apiKey?: string): Promise<stri
   }
 
   const effectiveBaseUrl = baseUrl || PROVIDERS.zhipu.baseUrl
-  const modelsUrl = effectiveBaseUrl.replace(/\/$/, '') + '/models'
+  const modelsUrl = effectiveBaseUrl + '/models'
 
   const fetchFn = createTimeoutFetch(30000, 'model-fetch')
   const response = await fetchFn(modelsUrl, {
@@ -441,7 +436,7 @@ async function fetchMistralModels(baseUrl?: string, apiKey?: string): Promise<st
   }
 
   const effectiveBaseUrl = baseUrl || PROVIDERS.mistral.baseUrl
-  const modelsUrl = effectiveBaseUrl.replace(/\/$/, '') + '/models'
+  const modelsUrl = effectiveBaseUrl + '/models'
 
   const fetchFn = createTimeoutFetch(30000, 'model-fetch')
   const response = await fetchFn(modelsUrl, {

@@ -8,6 +8,7 @@
 import { createOpenAI } from '@ai-sdk/openai'
 import * as z from 'zod'
 import { specToPixels, formatImageSize } from '#lib/utils/image.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -27,7 +28,7 @@ const IMAGE_MODEL_PREFIXES = ['gpt-image-', 'chatgpt-image-']
 const ModelEntry = z.object({ id: z.string() })
 
 export function createOpenAIProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = config.baseUrl?.trim().replace(/\/$/, '') || DEFAULT_BASE_URL
+  const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL
   const openai = createOpenAI({
     apiKey: config.apiKey,
     baseURL: baseUrl,

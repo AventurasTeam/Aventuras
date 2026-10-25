@@ -16,6 +16,7 @@ import { settings } from '#lib/stores/settings.svelte.ts'
 import type { EmbeddedImage, StorySettings } from '#lib/types/index.ts'
 import { emitImageQueued, emitImageReady, emitImageAnalysisFailed } from '#lib/services/events.ts'
 import { createLogger } from '#lib/log.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import {
   expectedPixels,
   defaultImageSpec,
@@ -81,7 +82,8 @@ export function missingCredential(
   if (!profile || !supportsImageGeneration(profile.providerType)) return 'profile'
 
   if (requiresApiKey(profile.providerType) && !profile.apiKey) return 'apiKey'
-  if (baseUrlMode(profile.providerType) === 'required' && !profile.baseUrl?.trim()) return 'baseUrl'
+  if (baseUrlMode(profile.providerType) === 'required' && !normalizeBaseUrl(profile.baseUrl))
+    return 'baseUrl'
   return undefined
 }
 

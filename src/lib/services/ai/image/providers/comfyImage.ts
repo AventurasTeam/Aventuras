@@ -28,6 +28,7 @@ export type Json = z.infer<typeof Json>
 type Graph = Record<string, Json>
 
 interface ComfyImageSettings {
+  /** Normalized by the provider factory. */
   baseURL: string
   fetch: Fetch
   /** For polls and cancels, whose requests share one debug entry. */
@@ -224,7 +225,7 @@ function missingOutputFailure(graph: Graph, outputNodeId: string, job: Job): Err
 }
 
 export function createComfyImage(settings: ComfyImageSettings) {
-  const baseURL = settings.baseURL.replace(/\/+$/, '')
+  const { baseURL } = settings
   const jobUrl = (id: string) => `${baseURL}/api/jobs/${encodeURIComponent(id)}`
 
   async function failure(response: Response, url: string, body?: unknown) {

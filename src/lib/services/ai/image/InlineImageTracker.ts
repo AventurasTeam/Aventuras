@@ -37,7 +37,6 @@ interface PendingImage {
   profileId: string
   model: string
   size: ImageSpec
-  referenceImageUrls?: string[]
   /** Promise that resolves to base64 image data or null on failure */
   generationPromise: Promise<{ base64: string | null; error?: string }>
 }
@@ -176,7 +175,6 @@ export class InlineImageTracker {
       profileId,
       model: modelToUse,
       size: sizeToUse,
-      referenceImageUrls,
       generationPromise,
     })
   }

@@ -19,7 +19,8 @@ mod world_state_delta_migration;
 mod world_state_marks_migration;
 
 use backup::{
-    backup_database, export_images_zip, export_single_image, export_story_avt, restore_database,
+    backup_database, embedded_image_extension, export_images_zip, export_single_image,
+    export_story_avt, restore_database,
 };
 use sync::commands::{
     clear_received_stories, get_received_stories, start_sync_server, stop_sync_server,
@@ -352,6 +353,7 @@ pub fn run() {
             is_ios,
             backup_database,
             restore_database,
+            embedded_image_extension,
             export_images_zip,
             export_single_image,
             export_story_avt,

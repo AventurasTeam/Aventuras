@@ -8,6 +8,7 @@
 import * as z from 'zod'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { specToAspectRatio, type ImageSizeTier } from '#lib/utils/image.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -83,7 +84,7 @@ const OPENROUTER_IMAGE_SIZE: Record<ImageSizeTier, OpenRouterResolution> = {
 }
 
 export function createOpenRouterProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = config.baseUrl || DEFAULT_BASE_URL
+  const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL
   const openrouter = createOpenRouter({
     apiKey: config.apiKey,
     baseURL: baseUrl,

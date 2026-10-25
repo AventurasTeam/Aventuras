@@ -1,6 +1,7 @@
 // Image generation through `@ai-sdk/google`.
 
 import { specToAspectRatio } from '#lib/utils/image.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -16,7 +17,7 @@ import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
 
 export function createGoogleProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = config.baseUrl || DEFAULT_BASE_URL
+  const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL
   const googleSDK = createGoogleGenerativeAI({
     apiKey: config.apiKey,
     baseURL: baseUrl,
@@ -69,8 +70,7 @@ const GOOGLE_ASPECT_RATIOS = [
 async function fetchGoogleImageModels(baseUrl: string, apiKey?: string): Promise<ImageModelInfo[]> {
   if (!apiKey) return []
 
-  const url =
-    baseUrl.replace(/\/$/, '') + '/models?key=' + encodeURIComponent(apiKey) + '&pageSize=200'
+  const url = baseUrl + '/models?key=' + encodeURIComponent(apiKey) + '&pageSize=200'
 
   const fetchFn = createTimeoutFetch(30000, 'google-image-models')
   const response = await fetchFn(url)

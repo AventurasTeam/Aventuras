@@ -9,6 +9,7 @@
 
 import { PROVIDERS } from './config'
 import { httpFetch } from '#lib/utils/http.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type { APIProfile } from '#lib/types/index.ts'
 import {
   HEALTHY_THRESHOLD_MS,
@@ -18,10 +19,7 @@ import {
 } from '#lib/constants/modelHealth.ts'
 
 export function getEffectiveBaseUrl(profile: APIProfile): string {
-  const fromProfile = profile.baseUrl?.trim()
-  if (fromProfile) return normalizeBaseUrl(fromProfile)
-  const fallback = PROVIDERS[profile.providerType]?.baseUrl
-  return fallback ? normalizeBaseUrl(fallback) : ''
+  return normalizeBaseUrl(profile.baseUrl) || PROVIDERS[profile.providerType].baseUrl
 }
 
 function classify(httpCode: number, latencyMs: number, quota: number | null): PingResult {
@@ -61,10 +59,6 @@ export function extractQuotaPercent(headers: Headers): number | null {
   return null
 }
 
-export function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.trim().replace(/\/+$/, '')
-}
-
 export async function pingModel(
   baseUrl: string,
   apiKey: string,
@@ -74,8 +68,7 @@ export async function pingModel(
   const timer = setTimeout(() => ctrl.abort(), PING_TIMEOUT_MS)
   const t0 = performance.now()
   try {
-    const url = `${normalizeBaseUrl(baseUrl)}/chat/completions`
-    const resp = await httpFetch(url, {
+    const resp = await httpFetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

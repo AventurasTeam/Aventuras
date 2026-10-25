@@ -100,12 +100,6 @@ describe('request', () => {
     expect(result).toEqual({ base64: 'AAA' })
   })
 
-  it('tolerates a trailing slash on the base URL', async () => {
-    const trailing = createA1111Image({ baseURL: `${BASE_URL}/`, fetch: fetchMock })
-    await generateSdkImage({ model: trailing.imageModel('m'), prompt: 'p', size: '512x512' })
-    expect(sent().url).toBe(`${BASE_URL}/sdapi/v1/txt2img`)
-  })
-
   it('leaves the loaded checkpoint alone when no model is set', async () => {
     await model('').doGenerate(callOptions())
     const { body } = sent()

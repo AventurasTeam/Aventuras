@@ -18,6 +18,7 @@ import {
 } from './imageModelUtils'
 
 interface A1111ImageSettings {
+  /** Normalized by the provider factory. */
   baseURL: string
   apiKey?: string
   fetch: Fetch
@@ -46,7 +47,7 @@ function errorMessage(parsed: unknown, text: string, status: number): string {
 }
 
 export function createA1111Image(settings: A1111ImageSettings) {
-  const url = `${settings.baseURL.replace(/\/+$/, '')}/sdapi/v1/txt2img`
+  const url = `${settings.baseURL}/sdapi/v1/txt2img`
 
   return {
     imageModel(modelId: string): ImageModelV4 {

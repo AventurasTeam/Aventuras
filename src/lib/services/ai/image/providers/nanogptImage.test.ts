@@ -86,16 +86,6 @@ describe('request', () => {
     expect(result).toEqual({ base64: 'AAA' })
   })
 
-  it('tolerates a trailing slash on the base URL', async () => {
-    const trailing = createNanoGPTImage({
-      apiKey: 'k',
-      baseURL: `${BASE_URL}/`,
-      fetch: fetchMock,
-    })
-    await generateSdkImage({ model: trailing.imageModel('m'), prompt: 'p' })
-    expect(sent().url).toBe(`${BASE_URL}/images`)
-  })
-
   it('sends references as input_references data URLs with their sniffed type', async () => {
     await generateSdkImage({
       model: model(),

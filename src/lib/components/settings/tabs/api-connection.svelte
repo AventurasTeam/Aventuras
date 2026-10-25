@@ -7,6 +7,7 @@
   import { PROVIDERS } from '#lib/services/ai/sdk/providers/config.ts'
   import { pingProfileModels, isPingEligible } from '#lib/services/modelHealthOrchestrator.ts'
   import { isPingEligibleProvider } from '#lib/constants/modelHealth.ts'
+  import { normalizeBaseUrl } from '#lib/utils/url.ts'
   import { Plus, Check, ChevronRight, Key as KeyIcon, Star } from '@lucide/svelte'
 
   import { Button } from '#lib/components/ui/button/index.ts'
@@ -354,7 +355,7 @@
               <Button
                 onclick={handleSave}
                 disabled={!formName.trim() ||
-                  (formProviderType === 'openai-compatible' && !formBaseUrl.trim())}
+                  (formProviderType === 'openai-compatible' && !normalizeBaseUrl(formBaseUrl))}
                 class="flex-1"
               >
                 <Check class="h-4 w-4" />

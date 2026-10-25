@@ -7,6 +7,7 @@
  */
 
 import { formatImageSize, specToPixels } from '#lib/utils/image.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -27,7 +28,7 @@ export const a1111ReferenceLimit = (
 ): number => (providerOptions?.takesReferences === true ? Infinity : 0)
 
 export function createA1111Provider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = config.baseUrl?.trim().replace(/\/$/, '') || DEFAULT_BASE_URL
+  const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL
   const a1111 = createA1111Image({
     baseURL: baseUrl,
     apiKey: config.apiKey,

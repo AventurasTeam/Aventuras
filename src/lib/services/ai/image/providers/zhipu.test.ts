@@ -1,10 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('./openaiCompatibleProvider', () => ({
+vi.mock('./openaiCompatible', () => ({
   generateOpenAICompatibleImage: vi.fn(async () => ({ base64: 'RESULT' })),
 }))
 
-import { generateOpenAICompatibleImage } from './openaiCompatibleProvider'
+vi.mock('#lib/utils/url.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
+  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
+})
+
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
+import { generateOpenAICompatibleImage } from './openaiCompatible'
 import { createZhipuProvider } from './zhipu'
 import type { ImageGenerateOptions } from './types'
 
@@ -33,17 +39,16 @@ describe('Z.AI adapter', () => {
     })
   })
 
-  it.each([undefined, '', '   '])('falls back to the default host for %j', async (baseUrl) => {
+  it.each([undefined, ''])('falls back to the default host for %j', async (baseUrl) => {
     await createZhipuProvider({ apiKey: 'k', baseUrl }).generate(options())
     expect(lastImageCall().baseUrl).toBe('https://api.z.ai/api/paas/v4')
   })
 
-  it('uses a configured base URL, trimming whitespace and trailing slashes', async () => {
-    await createZhipuProvider({
-      apiKey: 'k',
-      baseUrl: ' https://open.bigmodel.cn/api/paas/v4// ',
-    }).generate(options())
-    expect(lastImageCall().baseUrl).toBe('https://open.bigmodel.cn/api/paas/v4')
+  it('uses the normalized base URL', async () => {
+    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v4')
+    await createZhipuProvider({ apiKey: 'k', baseUrl: ' https://raw.test// ' }).generate(options())
+    expect(normalizeBaseUrl).toHaveBeenCalledWith(' https://raw.test// ')
+    expect(lastImageCall().baseUrl).toBe('https://normalized.test/v4')
   })
 
   it('passes the model through without a fallback', async () => {
