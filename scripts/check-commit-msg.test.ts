@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-const HOOK = fileURLToPath(new URL('./check-commit-msg.sh', import.meta.url))
+const HOOK = fileURLToPath(new URL('./check-commit-msg.sh', import.meta.url).href)
 
 // The tail git writes under `git commit -v`, captured from a real run.
 const VERBOSE_TAIL = [
