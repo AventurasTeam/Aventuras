@@ -8,6 +8,7 @@ import {
   offersUserAction,
   planRegenerateOutcome,
   runBehindTailDrop,
+  settleRegenerateArm,
   settleWithDroppedHandback,
   shouldRestoreUserActionAfterHandlingFailure,
   type RegenerateOutcomeAction,
@@ -111,7 +112,117 @@ describe('offersUserAction', () => {
 
 describe('outcome handling failure recovery', () => {
   it('does not restore text for an unconverged action that still stands', () => {
-    expect(shouldRestoreUserActionAfterHandlingFailure('refuse-unconverged', true)).toBe(false)
+    expect(
+      shouldRestoreUserActionAfterHandlingFailure({
+        action: 'refuse-unconverged',
+        draftEmpty: true,
+        landed: false,
+      }),
+    ).toBe(false)
+  })
+
+  it.each(['write-failure-entry', 'write-blocked-entry', 'restore-draft'] as const)(
+    '%s restores to an empty draft when its own text never landed',
+    (action) => {
+      expect(
+        shouldRestoreUserActionAfterHandlingFailure({ action, draftEmpty: true, landed: false }),
+      ).toBe(true)
+    },
+  )
+
+  // Its entry and Retry stand, or the draft already holds it: a second copy runs the turn twice.
+  it.each(['write-failure-entry', 'write-blocked-entry', 'restore-draft'] as const)(
+    '%s restores nothing once its own text landed',
+    (action) => {
+      expect(
+        shouldRestoreUserActionAfterHandlingFailure({ action, draftEmpty: true, landed: true }),
+      ).toBe(false)
+    },
+  )
+
+  it('leaves an occupied draft alone', () => {
+    expect(
+      shouldRestoreUserActionAfterHandlingFailure({
+        action: 'write-failure-entry',
+        draftEmpty: false,
+        landed: false,
+      }),
+    ).toBe(false)
+  })
+})
+
+describe('settleRegenerateArm', () => {
+  const TEXT = 'I draw the blade.'
+  const BOOM = new Error('boom')
+
+  function harness(
+    over: {
+      action?: RegenerateOutcomeAction
+      arm?: () => Promise<void>
+      /** Rejects the first resync only, as a store read that fails once. */
+      resyncFailsOnce?: boolean
+      draftFree?: boolean
+    } = {},
+  ) {
+    const calls: unknown[] = []
+    let resyncs = 0
+    return {
+      calls,
+      deps: {
+        action: over.action ?? 'write-failure-entry',
+        userActionContent: TEXT,
+        arm: async () => {
+          calls.push('arm')
+          await over.arm?.()
+        },
+        resync: async () => {
+          calls.push('resync')
+          if (over.resyncFailsOnce && resyncs++ === 0) throw BOOM
+        },
+        onThrow: (error: unknown) => {
+          calls.push(['onThrow', error])
+        },
+        draftFree: () => over.draftFree ?? true,
+        restoreDraft: (text: string) => {
+          calls.push(['restore', text])
+        },
+      },
+    }
+  }
+
+  it("settles the arm's text once its write and the resync land", async () => {
+    const h = harness()
+    expect(await settleRegenerateArm(h.deps)).toBe(TEXT)
+    expect(h.calls).toEqual(['arm', 'resync'])
+  })
+
+  // The entry never committed, so the draft is the only place the text can go.
+  it('restores the text to a free draft when the arm throws before its text landed', async () => {
+    const h = harness({ arm: () => Promise.reject(BOOM) })
+    expect(await settleRegenerateArm(h.deps)).toBe(TEXT)
+    expect(h.calls).toEqual(['arm', ['onThrow', BOOM], ['restore', TEXT], 'resync'])
+  })
+
+  it('leaves an occupied draft alone when the arm throws', async () => {
+    const h = harness({ arm: () => Promise.reject(BOOM), draftFree: false })
+    expect(await settleRegenerateArm(h.deps)).toBeNull()
+    expect(h.calls).toEqual(['arm', ['onThrow', BOOM], 'resync'])
+  })
+
+  // The entry holding the text stands with its Retry, or the draft holds it already.
+  it.each(['write-failure-entry', 'write-blocked-entry', 'restore-draft'] as const)(
+    '%s puts no second copy in the draft when the resync after its text throws',
+    async (action) => {
+      const h = harness({ action, resyncFailsOnce: true })
+      expect(await settleRegenerateArm(h.deps)).toBe(TEXT)
+      expect(h.calls).toEqual(['arm', 'resync', ['onThrow', BOOM], 'resync'])
+    },
+  )
+
+  it('lets a second failed resync through', async () => {
+    const h = harness({ arm: () => Promise.reject(BOOM) })
+    const deps = { ...h.deps, resync: () => Promise.reject(new Error('still failing')) }
+    await expect(settleRegenerateArm(deps)).rejects.toThrow('still failing')
   })
 })
 

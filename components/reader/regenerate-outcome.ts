@@ -142,9 +142,47 @@ export async function settleWithDroppedHandback(deps: {
   }
 }
 
-export function shouldRestoreUserActionAfterHandlingFailure(
-  action: RegenerateOutcomeAction,
-  draftEmpty: boolean,
-): boolean {
-  return draftEmpty && offersUserAction(action)
+/**
+ * Whether a regenerate arm that threw hands its action's text to the draft: only while the text
+ * is nowhere else, since beside an entry holding it with Retry a draft copy runs the turn twice.
+ */
+export function shouldRestoreUserActionAfterHandlingFailure(args: {
+  action: RegenerateOutcomeAction
+  draftEmpty: boolean
+  /** The arm's own text already sits on its committed entry or in the draft. */
+  landed: boolean
+}): boolean {
+  return !args.landed && args.draftEmpty && offersUserAction(args.action)
+}
+
+/** Runs a regenerate arm and its resync, and resolves to the text the arm settled. */
+export async function settleRegenerateArm(deps: {
+  action: RegenerateOutcomeAction
+  userActionContent: string
+  /** The arm's own write, resolving once its text is committed or in the draft: no resync inside. */
+  arm: () => Promise<void>
+  resync: () => Promise<void>
+  onThrow: (error: unknown) => void
+  /** Read after the arm's awaits: an empty composer, still on the branch. */
+  draftFree: () => boolean
+  restoreDraft: (text: string) => void
+}): Promise<string | null> {
+  const { action, userActionContent } = deps
+  let landed = false
+  try {
+    await deps.arm()
+    landed = true
+    await deps.resync()
+    return armSettledText({ action, userActionContent, landed, restored: false })
+  } catch (error) {
+    deps.onThrow(error)
+    const restored = shouldRestoreUserActionAfterHandlingFailure({
+      action,
+      draftEmpty: deps.draftFree(),
+      landed,
+    })
+    if (restored) deps.restoreDraft(userActionContent)
+    await deps.resync()
+    return armSettledText({ action, userActionContent, landed, restored })
+  }
 }

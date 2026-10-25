@@ -39,12 +39,11 @@ import {
   loadRegenerateCountsIfCurrent,
 } from '@/components/reader/regenerate-gate'
 import {
-  armSettledText,
   latestReplyOf,
   planRegenerateOutcome,
   runBehindTailDrop,
+  settleRegenerateArm,
   settleWithDroppedHandback,
-  shouldRestoreUserActionAfterHandlingFailure,
 } from '@/components/reader/regenerate-outcome'
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
 import { editGateOf, rowGateReason } from '@/components/reader/row-reversal-flags'
@@ -570,7 +569,7 @@ export default function ReaderComposerRoute() {
     [storyRows, storyId],
   )
 
-  const showTurnFailure = useCallback(
+  const writeTurnFailure = useCallback(
     async (
       error: PipelineError | undefined,
       submission: { content: string; composerMode: string },
@@ -585,9 +584,19 @@ export default function ReaderComposerRoute() {
         },
         ctx,
       )
+    },
+    [branchId],
+  )
+
+  const showTurnFailure = useCallback(
+    async (
+      error: PipelineError | undefined,
+      submission: { content: string; composerMode: string },
+    ) => {
+      await writeTurnFailure(error, submission)
       await reload()
     },
-    [branchId, reload],
+    [writeTurnFailure, reload],
   )
 
   const showPassFailure = useCallback(
@@ -911,74 +920,57 @@ export default function ReaderComposerRoute() {
         // text returns under 'free' (no re-wrap on send), same as cancel-restore.
         const submission = { content: regen.userActionContent, composerMode: 'free' }
         // Every arm below destroyed the dropped entry for good, so its text follows the arm's own.
-        await droppedHandback(dropped?.failure?.submission, async () => {
-          let landed = false
-          try {
-            if (plan.action === 'refuse-unconverged') {
-              // The unwind didn't land, so the user_action is still in the branch.
-              // Neither a Retry nor a draft-restore can offer its text without
-              // duplicating it — the same hazard the throw arm above refuses.
-              logger.error('pipeline.regenerate_unconverged', {
+        await droppedHandback(dropped?.failure?.submission, () =>
+          settleRegenerateArm({
+            action: plan.action,
+            userActionContent: regen.userActionContent,
+            arm: async () => {
+              if (plan.action === 'refuse-unconverged') {
+                // The unwind didn't land, so the user_action is still in the branch.
+                // Neither a Retry nor a draft-restore can offer its text without
+                // duplicating it — the same hazard the throw arm above refuses.
+                logger.error('pipeline.regenerate_unconverged', {
+                  branchId,
+                  entryId: targetId,
+                  outcome: result.outcome,
+                })
+                toast.error(t('reader:regenerateFailed'))
+              } else if (plan.action === 'write-failure-entry' && result.outcome === 'failed') {
+                if (stillHere) setLastSubmission(submission)
+                await writeTurnFailure(result.error, submission)
+              } else if (plan.action === 'write-blocked-entry' && result.outcome === 'rejected') {
+                if (stillHere) setLastSubmission(submission)
+                await writeTurnFailure(
+                  {
+                    kind: 'orchestrator',
+                    detail: t('reader:systemEntry.blockedDetail', { reason: result.blockedBy }),
+                  },
+                  submission,
+                )
+              } else if (plan.action === 'restore-draft') {
+                composerRef.current?.restoreDraft(regen.userActionContent, 'free')
+              } else if (plan.action === 'keep-draft' && stillHere) {
+                // The swept action is unrecoverable either way, but they asked to
+                // discard it; the draft they typed they never agreed to lose.
+                toast.info(t('reader:regenerateCancelledDraftKept'))
+              }
+            },
+            resync: () => (plan.resync ? reload() : Promise.resolve()),
+            onThrow: (err) => {
+              logger.error('pipeline.regenerate_outcome_handling_threw', {
                 branchId,
                 entryId: targetId,
                 outcome: result.outcome,
+                error: err instanceof Error ? err.message : String(err),
               })
               toast.error(t('reader:regenerateFailed'))
-            } else if (plan.action === 'write-failure-entry' && result.outcome === 'failed') {
-              if (stillHere) setLastSubmission(submission)
-              await showTurnFailure(result.error, submission)
-            } else if (plan.action === 'write-blocked-entry' && result.outcome === 'rejected') {
-              if (stillHere) setLastSubmission(submission)
-              await showTurnFailure(
-                {
-                  kind: 'orchestrator',
-                  detail: t('reader:systemEntry.blockedDetail', { reason: result.blockedBy }),
-                },
-                submission,
-              )
-            } else if (plan.action === 'restore-draft') {
-              composerRef.current?.restoreDraft(regen.userActionContent, 'free')
-            } else if (plan.action === 'keep-draft' && stillHere) {
-              // The swept action is unrecoverable either way, but they asked to
-              // discard it; the draft they typed they never agreed to lose.
-              toast.info(t('reader:regenerateCancelledDraftKept'))
-            }
-            landed = true
-            if (plan.resync) await reload()
-            return armSettledText({
-              action: plan.action,
-              userActionContent: regen.userActionContent,
-              landed,
-              restored: false,
-            })
-          } catch (err) {
-            // Reached only once the action returned, so unlike the arm above the
-            // user's text is still in hand — hand it back rather than losing it
-            // with the failure entry that was being written.
-            logger.error('pipeline.regenerate_outcome_handling_threw', {
-              branchId,
-              entryId: targetId,
-              outcome: result.outcome,
-              error: err instanceof Error ? err.message : String(err),
-            })
-            toast.error(t('reader:regenerateFailed'))
-            // Re-read rather than reuse `stillHere`: the arms above awaited.
-            const restore =
-              branchUnchanged(branchId) &&
-              shouldRestoreUserActionAfterHandlingFailure(
-                plan.action,
-                isDraftEmpty(composerRef.current?.getDraft()),
-              )
-            if (restore) composerRef.current?.restoreDraft(regen.userActionContent, 'free')
-            await reload()
-            return armSettledText({
-              action: plan.action,
-              userActionContent: regen.userActionContent,
-              landed,
-              restored: restore,
-            })
-          }
-        })
+            },
+            // Re-read rather than reuse `stillHere`: the arm awaited.
+            draftFree: () =>
+              branchUnchanged(branchId) && isDraftEmpty(composerRef.current?.getDraft()),
+            restoreDraft: (text) => composerRef.current?.restoreDraft(text, 'free'),
+          }),
+        )
         return null
       } finally {
         endDispatch()
@@ -991,7 +983,7 @@ export default function ReaderComposerRoute() {
       systemTail,
       restoreSystemTail,
       reload,
-      showTurnFailure,
+      writeTurnFailure,
       beginDispatch,
       endDispatch,
       branchUnchanged,
