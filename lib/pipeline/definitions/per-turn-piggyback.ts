@@ -15,7 +15,6 @@ import {
   buildPiggybackActions,
   buildStateReport,
   CLASSIFIER_FAILURE_FIELD,
-  isDroppedRefField,
   MAX_RETRIEVAL_QUERIES,
   normalizeCreates,
   normalizeStackableTransfer,
@@ -610,10 +609,8 @@ export async function* piggybackFallbackClassifierPhase(
   const droppedRefs: DroppedRef[] = [
     ...unreadable,
     ...refDrops,
-    ...failures.flatMap((f): DroppedRef[] =>
-      isDroppedRefField(f.field)
-        ? [{ field: f.field, reason: 'unreadable', detail: f.detail }]
-        : [],
+    ...failures.map(
+      (f): DroppedRef => ({ field: f.field, reason: 'unreadable', detail: f.detail }),
     ),
   ]
   for (const dropped of [...unreadable, ...refDrops]) {

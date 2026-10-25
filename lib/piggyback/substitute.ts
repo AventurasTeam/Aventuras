@@ -5,12 +5,12 @@ import { TOP_LEVEL } from '@/lib/world'
 import { isCreateHandle, unwrapBracket } from './tags'
 import type {
   DroppedRef,
+  DroppedRefField,
   ItemDrop,
   ItemTransfer,
   NewLocationEmission,
   NormalizedStateBlock,
   ParsedTransfers,
-  ParseFieldFailure,
   ParsedStateBlock,
   StackableTransfer,
   SubstitutedStateBlock,
@@ -18,15 +18,17 @@ import type {
 
 type EntityKind = Entity['kind']
 
+type FieldFailure = { field: DroppedRefField; detail: string }
+
 type SubstituteResult = {
   block: SubstitutedStateBlock
-  failures: ParseFieldFailure[]
+  failures: FieldFailure[]
   /** Empty unless `badRef` is `'drop'`. */
   droppedRefs: DroppedRef[]
 }
 
 type SubstituteOptions = {
-  /** The branch's entities, so a transfer's item can be checked to name an item. */
+  /** The branch's entities, to kind-check scene ids, visual changes and a transfer's item. */
   entities: readonly Pick<Entity, 'id' | 'kind'>[]
   /**
    * `'fail'` (the narrative fold, whose failure fires the fallback): a bad or wrong-kind ref fails
@@ -147,7 +149,7 @@ function resolveStackable(s: StackableTransfer, idMap: IdBiMap): StackableTransf
   }
 }
 
-type Settle = <T>(field: DroppedRef['field'], entry: T, resolve: (entry: T) => T) => T[]
+type Settle = <T>(field: DroppedRefField, entry: T, resolve: (entry: T) => T) => T[]
 
 // Under `'drop'` an entry with a ref that doesn't resolve or names the wrong kind drops alone and is
 // recorded; under `'fail'`, or for any other error, it throws and fails the field.
@@ -197,12 +199,12 @@ function resolveLocation(ref: string, refs: Refs, badRef: SubstituteOptions['bad
   return resolved
 }
 
-function resolveField<K extends keyof ParsedStateBlock>(
+function resolveField<K extends DroppedRefField>(
   block: ParsedStateBlock,
   field: K,
   resolve: (value: NonNullable<ParsedStateBlock[K]>, idMap: IdBiMap) => ParsedStateBlock[K],
   idMap: IdBiMap,
-  failures: ParseFieldFailure[],
+  failures: FieldFailure[],
 ): void {
   const value = block[field]
   if (value === undefined) return
@@ -223,7 +225,7 @@ export function substitutePiggybackIds(
   options: SubstituteOptions,
 ): SubstituteResult {
   const result: ParsedStateBlock = { ...block }
-  const failures: ParseFieldFailure[] = []
+  const failures: FieldFailure[] = []
   const droppedRefs: DroppedRef[] = []
   const settle = settler(options.badRef, droppedRefs)
   const refs: Refs = {
