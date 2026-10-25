@@ -186,11 +186,12 @@ fork point", opens again each time, since what it says changes with the item.
 
 ## Story-time fields
 
-A field that takes a story time is a `shared/StoryTimeField`: its label above, the input, and below
-it what the text reads as ("= Y1 D4 14:30"), the format when it is empty ("year, day, clock"), or
-the error, with example spellings, when it is not a time. The reading sits under the field, not
-beside it, so a long one never widens the form. `normalize` shows the time carried over as it will
-be stored. The caller's own help text goes below the field.
+A field that takes a story time is a `shared/StoryTimeField`: its label above and the input, with
+the error under it, example spellings included, when the text is not a time. Times are stored
+carried over, so when what was typed overflows (D400 is Y2 D35), an (i) beside the input opens
+what it is stored as (`convertedStoryTime` in `services/storyTime`). Otherwise the field shows
+nothing more: a reading of every time repeated the input and, beside it, widened the form. The
+caller's own help text goes below the field.
 
 ## Feature colours
 

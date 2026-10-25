@@ -342,7 +342,6 @@
             <StoryTimeField
               id="starting-time"
               label="Starting Time"
-              normalize
               placeholder="e.g. Y1 D1 19:00"
               bind:value={startingTimeText}
             />

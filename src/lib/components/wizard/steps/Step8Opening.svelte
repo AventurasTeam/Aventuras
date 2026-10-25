@@ -175,7 +175,6 @@
       {id}
       {label}
       {disabled}
-      normalize
       value={text}
       oninput={(e) => onChange(e.currentTarget.value)}
       placeholder="e.g. Y1 D1 19:00"
