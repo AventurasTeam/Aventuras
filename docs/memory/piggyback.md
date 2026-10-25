@@ -800,7 +800,8 @@ its list, an amount that isn't a number, a drop given as a bare string),
 or a stackable whose key or amount the tags would refuse, drops alone,
 its `null` fields read as absent first. Each is logged as
 `classifier.ref_dropped` and recorded in the report's `droppedRefs` as
-`unreadable`, so the reader still sees it. A `null` current
+`unreadable`, so the reader still sees it; a `null` entry reads as
+none, recorded nowhere. A `null` current
 location, summary or transfers object reads as omitted, so a model
 answering `null` for a field it has nothing for never fails the reply.
 

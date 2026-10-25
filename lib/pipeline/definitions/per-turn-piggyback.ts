@@ -91,10 +91,12 @@ const createList = <T extends z.ZodType>(create: T) =>
 const withoutNulls = (value: object): object =>
   Object.fromEntries(Object.entries(value).filter(([, field]) => field !== null))
 
-// Read as a create list is, an entry's null field as absent.
+// Read as a create list is; a null entry, like an entry's null field, reads as absent.
 function listEntries(value: unknown): unknown[] | undefined {
   const list = Array.isArray(value) ? value : isJsonObject(value) ? [value] : undefined
-  return list?.map((item) => (isJsonObject(item) ? withoutNulls(item) : item))
+  return list
+    ?.filter((item) => item !== null)
+    .map((item) => (isJsonObject(item) ? withoutNulls(item) : item))
 }
 
 /** A list entry the schema couldn't read, left in its place for the phase to record. */

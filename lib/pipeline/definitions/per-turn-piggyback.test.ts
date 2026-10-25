@@ -3182,6 +3182,7 @@ describe('per-turn-piggyback', () => {
           'visualChanges',
         ],
         ['a condition with no text', { conditions: [{ id: 'l1' }] }, 'conditions', 'conditions'],
+        ['an empty visual change', { visualChanges: [{}] }, 'visualChanges', 'visualChanges'],
         [
           'an item move to slot "pocket"',
           { transfers: { items: [{ id: 'l1', slot: 'pocket', to: 'c1' }] } },
@@ -3252,6 +3253,29 @@ describe('per-turn-piggyback', () => {
           unreadable('transfers', 'transfers.items'),
           unreadable('transfers', 'transfers.stackables'),
         ])
+      })
+
+      // As a null field or list reads as absent.
+      it('reads a null entry as none, applying the rest of its list', async () => {
+        seedFallbackTurn()
+        const log = spyLogger()
+        const { events } = await runFallback(
+          fallbackClassifierSchema.parse({
+            sceneEntities: ['c1'],
+            worldTimeDelta: 10,
+            visualChanges: [null, { id: 'c1', type: 'hair', text: 'soaked through' }],
+            transfers: { stackables: [null, { key: 'gold', amount: 4, to: 'c1' }] },
+          }),
+          { log },
+        )
+        const report = metadataPatch(events).stateReport
+        expect(report?.visualChanges).toEqual([{ id: HERO, type: 'hair', text: 'soaked through' }])
+        expect(report?.transfers).toEqual({
+          items: [],
+          stackables: [{ key: 'gold', amount: 4, to: HERO }],
+        })
+        expect(report?.droppedRefs).toBeUndefined()
+        expect(log.warn).not.toHaveBeenCalled()
       })
 
       // A drop with a `to` is prose the turn kept out, not a model error.
