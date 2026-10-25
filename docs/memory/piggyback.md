@@ -302,8 +302,11 @@ creates: that block counts as empty and fails `state`, so the fallback
 fires. A `<state>` the stream cut off (no `</state>`) that declares
 any create, whole or not, fails the `state` field instead, because the
 cut may have lost the tags that name it (a `<current_location>`, a
-transfer), so the fallback fires and creates. A cut that falls between
-tags still parses clean in a block that declares no creates.
+transfer), so the fallback fires and creates. A cut-off block that
+names no `<current_location>` but drops an item fails `state` the same
+way, since the cut may have lost the place the scene moved to. A cut
+that falls between tags still parses clean when the block declares no
+create and holds no drop.
 
 **Kept only if used.** A new location is created only as the turn's
 `<current_location>` or an ancestor of it, and a new item only when
@@ -486,9 +489,9 @@ creates, which a failed block doesn't create, or the
 stays held for the fallback to put down where it resolves the scene,
 and stays held when the fallback leaves the drop out or fails too. A
 block the stream cut off before any `<current_location>` holds its
-drops the same way, logged with reason `cut_off`, failed or not: a
-closed block naming no place means the scene stays, but a cut one may
-have lost the place it moved to. A
+drops the same way, logged with reason `cut_off`, and fails for the
+fallback to put them down: a closed block naming no place means the
+scene stays, but a cut one may have lost the place it moved to. A
 place that can't be entered (an item's id, a retired place) doesn't
 count: it keeps the previous location on any block, as below, and the
 drops land there, as they do wherever a failed block's place stands.

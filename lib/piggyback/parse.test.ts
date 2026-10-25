@@ -1238,28 +1238,38 @@ describe('conditions and drops', () => {
   describe('a block the stream cut off', () => {
     const transfers = '<transfers><drop id="i2" from="c1" /></transfers>'
 
-    it('holds its drops when it names no current location', () => {
-      const { block, dropsCutOff } = parseStateBlock(
+    it('holds its drops when it names no current location, and fails for the fallback', () => {
+      const { block, dropsCutOff, failures } = parseStateBlock(
         `<state><scene_entities>c1</scene_entities>${transfers}<world_time_delta>30`,
       )
       expect(block.transfers?.drops).toEqual([])
       expect(dropsCutOff).toEqual([{ id: 'i2', from: 'c1', seq: 0 }])
+      expect(failures).toEqual([{ field: 'state', detail: 'block with drops cut off' }])
+    })
+
+    it('fails once when the cut block also declares a create', () => {
+      const { failures } = parseStateBlock(
+        `<state><scene_entities>c1</scene_entities>${transfers}<new_item handle="new:map" name="map">a folded map</new_item><world_time_delta>30`,
+      )
+      expect(failures).toEqual([{ field: 'state', detail: 'block with creates cut off' }])
     })
 
     it('keeps its drops when its current location came before the cut', () => {
-      const { block, dropsCutOff } = parseStateBlock(
+      const { block, dropsCutOff, failures } = parseStateBlock(
         `<state><current_location>l1</current_location>${transfers}<world_time_delta>30`,
       )
       expect(block.transfers?.drops).toEqual([{ id: 'i2', from: 'c1', seq: 0 }])
       expect(dropsCutOff).toEqual([])
+      expect(failures).toEqual([])
     })
 
     it('keeps the drops of a closed block that names no current location', () => {
-      const { block, dropsCutOff } = parseStateBlock(
+      const { block, dropsCutOff, failures } = parseStateBlock(
         `<state><scene_entities>c1</scene_entities>${transfers}</state>`,
       )
       expect(block.transfers?.drops).toEqual([{ id: 'i2', from: 'c1', seq: 0 }])
       expect(dropsCutOff).toEqual([])
+      expect(failures).toEqual([])
     })
   })
 
