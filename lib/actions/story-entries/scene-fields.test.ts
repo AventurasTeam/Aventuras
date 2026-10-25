@@ -211,8 +211,6 @@ describe('updateEntrySceneFields', () => {
     expect((await entityState(db, 'char_b')).current_location_id).toBe(LOC_A)
   })
 
-  // char_b is in this entry's ORIGINAL scene but not the previous entry's, so only
-  // the three-way diff visits them at all.
   // data-model.md → lastSeenAt: from the entry they were last in, e1 for char_a.
   it('closes location tracking for a character the edit removed', async () => {
     const { db, runInTransaction } = await createTestDb()
@@ -278,6 +276,37 @@ describe('updateEntrySceneFields', () => {
     )
     const [row] = await db.select().from(entities).where(eq(entities.id, LOC_B))
     expect(row.status).toBe('active')
+  })
+
+  it('leaves a staged place the scene stays in staged', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db.update(entities).set({ status: 'staged' }).where(eq(entities.id, LOC_B))
+    await db
+      .update(storyEntries)
+      .set({
+        metadata: { sceneEntities: ['char_a', 'char_b'], currentLocationId: LOC_B, worldTime: 120 },
+      })
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e2')))
+    entitiesStore.hydrate('b1', [
+      character('char_a', LOC_B),
+      character('char_b', LOC_B),
+      location(LOC_A),
+      { ...location(LOC_B), status: 'staged' },
+    ] as never)
+
+    expect(
+      await updateEntrySceneFields(
+        'b1',
+        'e2',
+        { sceneEntities: ['char_a'], currentLocationId: LOC_B },
+        ctx,
+      ),
+    ).toEqual({ status: 'ok' })
+    expect((await storedMetadata(db, 'e2'))?.sceneEntities).toEqual(['char_a'])
+    const [row] = await db.select().from(entities).where(eq(entities.id, LOC_B))
+    expect(row.status).toBe('staged')
   })
 
   it('refuses a location id that names no place, writing nothing', async () => {
