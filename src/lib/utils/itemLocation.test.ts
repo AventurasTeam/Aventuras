@@ -83,6 +83,7 @@ describe('newItemLocation', () => {
       'around her neck',
       'worn on her left wrist',
       'equipped (main hand)',
+      'is worn',
     ]) {
       expect(newItemLocation({ location: said }, world)).toEqual({
         location: 'inventory',
@@ -115,6 +116,8 @@ describe('newItemLocation', () => {
       'in her saddlebag',
       'picked up from the floor',
       'given to you',
+      'given to Aria',
+      'being carried',
     ]) {
       expect(newItemLocation({ location: said }, world)).toEqual({
         location: 'inventory',
@@ -146,6 +149,10 @@ describe('newItemLocation', () => {
       'around the neck of her horse',
       'not in inventory',
       'not carried',
+      'no longer carried',
+      'given to her',
+      'handed to the guard',
+      'handed over',
     ]) {
       expect(newItemLocation({ location: said }, world)).toEqual({
         location: tavern.id,
@@ -256,6 +263,20 @@ describe('newItemLocation', () => {
     expect(newItemLocation({ location: 'Crystal Caverns' }, nowhere).location).toBe(cave.id)
   })
 
+  it("does not equip someone else's item that has nowhere else to go", () => {
+    const nowhere = { ...world, currentLocationId: null }
+    expect(newItemLocation({ location: 'worn by Borin', equipped: true }, nowhere)).toEqual({
+      location: 'inventory',
+      equipped: false,
+    })
+    expect(
+      resolveItemLocation({ location: 'worn by Borin', equipped: true }, nowhere, item('Axe')),
+    ).toEqual({
+      location: 'inventory',
+      equipped: false,
+    })
+  })
+
   it('resolves a location created in the same response', () => {
     // The store resolves items after the response's locations and scene change are applied.
     const newCave = location('Sunken Grotto', { current: true })
@@ -324,6 +345,8 @@ describe('resolveItemLocation', () => {
       'inventory, not equipped',
       'unequipped',
       'not worn',
+      'no longer equipped',
+      'is not equipped',
     ]) {
       expect(resolveItemLocation({ location: said }, world, equipped)).toEqual({
         location: 'inventory',

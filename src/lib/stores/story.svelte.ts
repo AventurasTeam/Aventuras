@@ -2785,18 +2785,21 @@ class StoryStore {
     const statements: (DbStatement | null)[] = []
     if (!locationId) return { statements, records: [], publish: () => {} }
     const records: (WorldStateRecord | null)[] = []
-    const publishes: (() => void)[] = []
+    const cows: (() => void)[] = []
+    const moved: string[] = []
     const updates = { location: itemLocationId(locationId, this.locations) }
     for (const item of items) {
       const cow = this.cowPlan('item', item, ctx)
       statements.push(...cow.statements, database.updateItemStatement(cow.entity.id, updates))
       records.push(...cow.records, this.updateRecord(ctx, 'item', cow.entity, updates))
-      publishes.push(() => {
-        cow.publish()
-        this.items = this.items.map((i) => (i.id === cow.entity.id ? { ...i, ...updates } : i))
-      })
+      cows.push(cow.publish)
+      moved.push(cow.entity.id)
     }
-    return { statements, records, publish: () => publishes.forEach((p) => p()) }
+    const publish = () => {
+      for (const p of cows) p()
+      this.items = this.items.map((i) => (moved.includes(i.id) ? { ...i, ...updates } : i))
+    }
+    return { statements, records, publish }
   }
 
   // Add an item to inventory

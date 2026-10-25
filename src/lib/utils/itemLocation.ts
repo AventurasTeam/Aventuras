@@ -1,9 +1,5 @@
-/**
- * An item's `location` is `'inventory'` or a location id, and `equipped` is only ever true in
- * the inventory. The classifier speaks names, so its text is converted here on the way in;
- * legacy free text is converted once, when a story's world state loads (`normalizeItems`).
- * Rules: docs/architecture/overview.md, World state.
- */
+// An item's `location` is `'inventory'` or a location id; `equipped` is true only in the
+// inventory. Rules: docs/architecture/overview.md, World state.
 
 import type { Character, Item, Location } from '#lib/types/index.ts'
 import { normalizeName } from '#lib/services/duplicates/index.ts'
@@ -13,7 +9,7 @@ export const INVENTORY = 'inventory'
 
 /** What an item's `location` accepts from the classifier. */
 export const ITEM_LOCATION_OPTIONS =
-  'inventory, worn, ground (where the scene is), or the exact name of a listed location'
+  'inventory, worn, ground (where the passage ends), or a location name spelled exactly as listed under Locations'
 
 type ItemPlacement =
   | { kind: 'inventory'; equipped: boolean }
@@ -41,9 +37,10 @@ const CARRY = words(
 )
 /** Words that say whose it is, or how it is held, and nothing about where. */
 const FILLER = words(
-  'in on at by from into onto inside within around under over with of to the a an and it his her hers their its my your our own left right both back shoulder shoulders strapped slung tucked stowed kept main off currently still safely securely now',
+  'in on at by from into onto inside within around under over with of to the a an and it his her hers their its my your our own left right both back shoulder shoulders strapped slung tucked stowed kept main off currently still safely securely now is are was were being been',
 )
 const POSSESSIVE = words('his her hers their my your our own')
+const ARTICLES = words('the a an')
 /** Beside a container, or passed on: "next to her pack", "in her hand, then given to the guard". */
 const AWAY = words('beside next near then towards')
 /** Shared by several characters, so they name none of them. */
@@ -75,13 +72,7 @@ const tokens = (name: string) => foldName(name).split(' ').filter(Boolean)
 const has = (set: Set<string>, w: string) =>
   set.has(w) || (w.endsWith('s') && set.has(w.slice(0, -1)))
 
-/**
- * The placement `text` states, or null when it names somewhere or someone else. Every word
- * must be a placement word, filler or the protagonist ("in Aria's left hand", "on the floor"),
- * or a carry word must follow the protagonist's possessive ("tucked in her belt behind the
- * buckle"). So "the holding cells" and "the Worn Bridge" are places, and "worn by Sir Gareth"
- * — a name capitalised in the text, belonging to someone else — is not the protagonist's.
- */
+/** The placement `text` states, or null when it names somewhere or someone else. */
 function statedPlacement(text: string, people: ItemLocationPeople): Stated | null {
   // A title names someone only when it is all of their name: "The Captain", not "Sir Gareth".
   const named = (name: string) => {
@@ -99,10 +90,18 @@ function statedPlacement(text: string, people: ItemLocationPeople): Stated | nul
   const capitalised = written.filter((w) => /^\p{Lu}/u.test(w)).flatMap(tokens)
   if (capitalised.some((w) => has(others, w))) return null
 
-  const all = tokens(text)
+  const all = tokens(text.replace(/\bno longer\b/giu, 'not'))
   // "not carried" means it left; "not worn" only unequips.
   if (all.some((w, i) => w === 'not' && !WORN.has(all[i + 1] ?? ''))) return null
   const taken = all.some((w) => TAKEN.has(w))
+  // "given to her" or "handed over": passed to someone, unless that is the protagonist.
+  const recipient = (i: number) => all.slice(i + 1).find((w) => !ARTICLES.has(w)) ?? ''
+  const passedOn = all.some(
+    (w, i) =>
+      (w === 'to' && all.slice(0, i).some((t) => TAKEN.has(t)) && !isOwn(recipient(i))) ||
+      (w === 'over' && TAKEN.has(all[i - 1] ?? '')),
+  )
+  if (passedOn) return null
   if (!taken && all.some((w) => HERE.has(w))) return { kind: 'here' }
 
   const unworn = all.some((w) => w === 'not' || UNWORN.has(w))
@@ -215,6 +214,8 @@ export function newItemLocation(said: Said, world: ItemLocationWorld): StoredPla
   const text = said.location?.trim() ?? ''
   const target: Target = text ? targetOf(text, world) : { kind: 'none' }
   if (target.kind === 'location') return { location: target.id, equipped: false }
+  // Text that names no placement of the protagonist's ("worn by Sir Gareth") is never equipped.
+  if (target.kind === 'none' && text) return { location: INVENTORY, equipped: false }
   const worn = target.kind === 'inventory' ? target.worn : undefined
   return { location: INVENTORY, equipped: said.equipped ?? worn ?? false }
 }
@@ -243,7 +244,7 @@ export function resolveItemLocation(
   switch (target.kind) {
     case 'none':
       if (equipped === undefined) return {}
-      return { location: existing.location, equipped: equipped && wasHeld }
+      return { location: existing.location, equipped: equipped && wasHeld && !text }
     case 'location':
       return { location: target.id, equipped: false }
     case 'inventory':
