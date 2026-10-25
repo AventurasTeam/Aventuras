@@ -178,8 +178,9 @@ describe('failure copy', () => {
       },
       { story_1: 'Mornstone' },
     )
-    expect(text).toContain('was reverted')
-    expect(text).toContain("can't take turns")
+    expect(text).toBe(
+      "An interrupted shutdown was detected in Mornstone. Your last AI response was reverted to keep the story consistent. An interrupted memory update in Mornstone could not be undone. Its branch can't take turns until it is — your story content is intact, and restarting the app retries automatically.",
+    )
   })
 })
 
@@ -231,7 +232,8 @@ describe('the hold the boot left', () => {
     )
   })
 
-  it('keeps the stop for a pass failure whose branch is still held', () => {
+  // The failure explains the hold, so the hold isn't listed again as one left unfinished.
+  it('keeps the stop for a pass failure whose branch is still held, naming the hold once', () => {
     expect(
       formatRecoveryReport(
         {
@@ -241,7 +243,25 @@ describe('the hold the boot left', () => {
         },
         names,
       ),
-    ).toContain("Its branch can't take turns until it is")
+    ).toBe(
+      "An interrupted memory update in Mornstone could not be undone. Its branch can't take turns until it is — your story content is intact, and restarting the app retries automatically.",
+    )
+  })
+
+  // Only a pass holds a branch, so a turn's failure there leaves the hold unexplained.
+  it('names a held story whose only failure is a turn, beside that failure', () => {
+    expect(
+      formatRecoveryReport(
+        {
+          reversed: [],
+          failures: [failed('per-turn', 'story_2')],
+          heldStoryIds: ['story_2'],
+        },
+        names,
+      ),
+    ).toBe(
+      "An interrupted background update in Vellaby could not be undone. Your story content is intact, and restarting the app retries automatically. A memory update in Vellaby was left unfinished at startup. Its branch can't take turns until it is cleared — your story content is intact, and restarting the app retries automatically.",
+    )
   })
 
   it('names a held story no pass failure explains, as when the reset threw', () => {
