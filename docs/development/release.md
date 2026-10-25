@@ -348,8 +348,8 @@ On Windows, Defender's real-time scanning can grab a freshly written archive in
 `scripts\defender-build-exclusion.ps1 -Action Add` (or `-Action Remove`), run from an administrator
 PowerShell, excludes that checkout's build output only; sources, `node_modules` and the cargo
 registry stay scanned. Each worktree has its own `target`, so run the copy in each. `-Action Scan`
-lists every exclusion with "Aventuras" in its path, and whether its checkout is a live git
-worktree or was removed and left the rule behind.
+lists every exclusion that is a `src-tauri\target` or has "Aventuras" in its path, and whether its
+checkout is a live worktree of this repository, another checkout, or gone with the rule left behind.
 
 ### Building iOS
 
