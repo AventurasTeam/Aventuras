@@ -2,7 +2,7 @@
 # Enforces CLAUDE.md → Workflow rules → Commit messages.
 # Blocks commits whose subject exceeds MAX_SUBJECT_CHARS or runs onto a
 # second line, or whose body exceeds MAX_BODY_LINES.
-# Skips merge/revert commits (auto-generated bodies).
+# Skips merge/revert commits (auto-generated bodies) and autosquash markers.
 
 set -eu
 
@@ -12,12 +12,14 @@ MAX_BODY_LINES=6
 
 first_line=$(head -n1 "$msgfile" 2>/dev/null || true)
 case "$first_line" in
-  Merge\ *|Revert\ *|"fixup! "*|"squash! "*) exit 0 ;;
+  Merge\ *|Revert\ *|"fixup! "*|"squash! "*|"amend! "*) exit 0 ;;
 esac
 
-# Judge the message git will store: its cleanup drops comments, trailing
-# whitespace and leading blank lines.
-message=$(sed -e '/^#/d' -e 's/[[:space:]]*$//' "$msgfile" | sed -e '/./,$!d')
+# Judge the message git will store: it drops everything from the scissors line
+# down (`commit -v` puts the diff there), comments, trailing whitespace and
+# leading blank lines.
+kept=$(sed '/^# ------------------------ >8 ------------------------$/,$d' "$msgfile")
+message=$(printf '%s\n' "$kept" | sed -e '/^#/d' -e 's/[[:space:]]*$//' | sed -e '/./,$!d')
 subject=$(printf '%s\n' "$message" | sed -n 1p)
 second_line=$(printf '%s\n' "$message" | sed -n 2p)
 
@@ -41,12 +43,12 @@ EOF
   exit 1
 fi
 
-body_lines=$(awk '
+body_lines=$(printf '%s\n' "$kept" | awk '
   NR == 1 { next }
   /^#/ { next }
   !found && /^$/ { found = 1; next }
   found { print }
-' "$msgfile" | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}' | wc -l)
+' | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}' | wc -l)
 
 if [ "$body_lines" -gt "$MAX_BODY_LINES" ]; then
   cat >&2 <<EOF
