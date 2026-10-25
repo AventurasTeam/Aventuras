@@ -1404,6 +1404,25 @@ describe('a create name with a numeric character reference', () => {
     expect(block.newLocations?.[0]?.name).toBe("O'Malley's & Sons")
   })
 
+  const nameOf = (name: string) =>
+    parseStateBlock(
+      `<state><scene_entities>c1</scene_entities><new_location handle="new:inn" name="${name}">an inn</new_location><current_location>new:inn</current_location></state>`,
+    ).block.newLocations?.[0]?.name
+
+  it.each([
+    ['NUL', '&#0;'],
+    ['NUL in hex', '&#x0;'],
+    ['a lone high surrogate', '&#xD800;'],
+    ['a lone low surrogate', '&#57343;'],
+    ['a code past U+10FFFF', '&#1114112;'],
+  ])('leaves a reference to %s as written', (_label, ref) => {
+    expect(nameOf(`Gem${ref}`)).toBe(`Gem${ref}`)
+  })
+
+  it('decodes the codes either side of the surrogates, and the last code', () => {
+    expect(nameOf('&#xD7FF;&#xE000;&#x10FFFF;')).toBe('퟿\u{10FFFF}')
+  })
+
   it('leaves an unknown named entity as written', () => {
     const { block } = parseStateBlock(
       '<state><scene_entities>c1</scene_entities><new_location handle="new:inn" name="the &QUOT;Bell&QUOT;">an inn</new_location><current_location>new:inn</current_location></state>',

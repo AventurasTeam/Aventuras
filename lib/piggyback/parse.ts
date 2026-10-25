@@ -282,7 +282,9 @@ function decodeEntities(text: string): string {
     (match, named: keyof typeof XML_ENTITIES | undefined, decimal?: string, hex?: string) => {
       if (named !== undefined) return XML_ENTITIES[named]
       const code = decimal !== undefined ? Number(decimal) : parseInt(hex ?? '', 16)
-      return code <= 0x10ffff ? String.fromCodePoint(code) : match
+      // NUL and a lone surrogate are no text, and past U+10FFFF fromCodePoint throws.
+      const isText = code > 0 && code <= 0x10ffff && (code < 0xd800 || code > 0xdfff)
+      return isText ? String.fromCodePoint(code) : match
     },
   )
 }
