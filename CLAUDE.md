@@ -72,8 +72,9 @@ layer's floor allows. Check the installed version's docs, not memory, for what i
 | SQL              | the SQLite `libsqlite3-sys` bundles on every platform (3.46)     |
 | Rust             | edition 2024                                                     |
 
-- Svelte: `{@attach}` over `use:` actions, `cn(…)` over `class:` directives, snippets and
-  callback props over slots and dispatched events.
+- Svelte: `{@attach}` over `use:` actions for new code — an attachment re-runs when state it reads
+  changes, an action does not — and `fromAction` to convert an existing action unchanged.
+  `cn(…)` over `class:` directives, snippets and callback props over slots and dispatched events.
 - HTML: the native element over a `div` with ARIA and key handlers — `<button>`, not
   `role="button"` plus `tabindex` and `onkeydown`. Where a bits-ui component exists for the job
   (dialog, popover, select), use it.
@@ -105,9 +106,9 @@ attribute, `text-wrap: balance`, subgrid, `@starting-style`, `Object.groupBy`,
 This applies to code you are already changing, not to a hunt through the codebase. When you edit
 a function or component, modernize the dated idioms in it and in the code it directly touches,
 keeping its behaviour the same. Some swaps change behaviour on their own:
-`ON CONFLICT … DO UPDATE` keeps unlisted columns and skips the delete triggers and cascades
-`INSERT OR REPLACE` fires; `async` turns a synchronous throw into a rejection. Make one only where
-it behaves the same here — every column is set, nothing depends on the delete, no caller relies on
+`ON CONFLICT … DO UPDATE` keeps unlisted columns and the existing row, which `INSERT OR REPLACE`
+deletes and re-inserts; `async` turns a synchronous throw into a rejection. Make one only where it
+behaves the same here — every column is set, nothing depends on the delete, no caller relies on
 the throw — and keep the old idiom otherwise rather than adjusting other code to fit. Leave
 untouched files alone. Modernizations stay out of the commit message: it describes only the
 functional change.
@@ -138,10 +139,11 @@ The index is [docs/README.md](docs/README.md).
 
 ## External documentation
 
-Check these `llms.txt` sitemaps for Tauri and AI SDK behaviour before a general web search:
+Check these indexes for Tauri and AI SDK behaviour before a general web search:
 
 - Tauri: <https://v2.tauri.app/llms.txt>
-- AI SDK: <https://ai-sdk.dev/sitemap.md>
+- AI SDK: <https://ai-sdk.dev/sitemap.md> — an index of the current docs; fetch a page from it with
+  `.md` appended. Not `llms.txt`, which is the whole corpus in one file.
 
 ## Prompt template changes
 
