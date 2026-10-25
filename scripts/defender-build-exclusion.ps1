@@ -43,7 +43,8 @@ function Get-NormalPath([string]$Path) {
 }
 
 function Test-OpaqueRule([string]$Path) {
-  $Path -match '[*?%]' -or -not [IO.Path]::IsPathRooted($Path)
+  # IsPathRooted also accepts `C:x` and `\x`, which GetFullPath resolves against this shell.
+  $Path -match '[*?%]' -or $Path -notmatch '^([A-Za-z]:\\|\\\\)'
 }
 
 # Reading the exclusions needs an administrator too: otherwise Defender returns a notice in their place.
