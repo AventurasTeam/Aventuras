@@ -333,16 +333,18 @@ describe('per-turn pipeline declaration', () => {
     })
     hydrateEntries(phaseDb, 'b1', [])
     entitiesStore.hydrate('b1', [])
+    let expired = false
     streamTextMock.mockImplementation((_target, opts) => ({
       ok: true,
       modelId: 'model-1',
       providerId: 'prov-1',
-      timedOut: () => true,
+      timedOut: () => expired,
       timeoutMs: 45_000,
       stream: {
         fullStream: (async function* () {
           yield { type: 'text-delta', text: 'The lantern gutt' }
           opts.onError?.({ error: new Error('upstream overloaded') })
+          expired = true
         })(),
       },
     }))
@@ -356,6 +358,40 @@ describe('per-turn pipeline declaration', () => {
         reason: 'timeout',
         detail: 'narrative: timeout after 45000ms; earlier stream error: upstream overloaded',
       },
+    })
+  })
+
+  // Native fetch rejects an aborted read with a plain error, which the SDK then reports.
+  it("doesn't name the error the timeout's own abort raised", async () => {
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition,
+      settings: baseSettings({ partialChapterBuffer: 3 }),
+    })
+    hydrateEntries(phaseDb, 'b1', [])
+    entitiesStore.hydrate('b1', [])
+    let expired = false
+    streamTextMock.mockImplementation((_target, opts) => ({
+      ok: true,
+      modelId: 'model-1',
+      providerId: 'prov-1',
+      timedOut: () => expired,
+      timeoutMs: 45_000,
+      stream: {
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'The lantern gutt' }
+          expired = true
+          opts.onError?.({ error: new Error('fetch failed: The operation was aborted.') })
+        })(),
+      },
+    }))
+
+    const result = await runNarrativePhase()
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'provider', reason: 'timeout', detail: 'narrative: timeout after 45000ms' },
     })
   })
 
