@@ -264,7 +264,7 @@ erDiagram
     deltas {
         text id PK
         text branch_id FK
-        text entry_id FK "survival anchor: reverse this delta iff this entry is reversed. The entry the delta is about, whoever wrote it. Foreground turn delta → its own turn; periodic_classifier fact → its provenance entry; translation → its target's content-defining-delta anchor; user edit → the entry it edits, or null when it edits no entry; null (chapter close, entity / lore / thread / happening edits) → reverse positionally by own commit position. See Entry mutability & rollback → Survival anchor"
+        text entry_id FK "survival anchor: reverse this delta iff this entry is reversed. The entry the delta is about, whoever wrote it. Foreground turn: its entry's create → that entry, the fold's state writes → null (they sit in the turn's own suffix, so either anchor reverses them); periodic_classifier fact → its provenance entry; translation → its target's content-defining-delta anchor; user edit → the entry it edits, or null when it edits no entry; null (chapter close, entity / lore / thread / happening edits) → reverse positionally by own commit position. See Entry mutability & rollback → Survival anchor"
         text action_id "groups deltas into one user-visible action (used for CTRL-Z batching)"
         integer log_position "append-only ordering within branch"
         text source "ai_classifier | piggyback_tagged_block | per_turn_classifier | periodic_classifier | user_edit | lore_agent | chapter_close"
@@ -2953,9 +2953,13 @@ the sweep reverses
 log_position ≥ N  AND  ( entry_id IS NULL OR position(entry_id) ≥ position(B) )
 ```
 
-where `position()` reads `story_entries.position`. Foreground deltas
-anchor to their own turn (≥ B), and `null`-anchor deltas always reverse,
-exactly as before; only a lagging background
+where `position()` reads `story_entries.position`. A foreground turn
+anchors only its entry's create to the turn; its fold's state writes
+carry a `null` anchor. Both reverse with the turn, since a turn's own
+deltas sit at or after its first `log_position`, and `null`-anchor
+deltas always reverse, exactly as before. To find a turn's writes, read
+its run's `action_id`, which every delta of the turn shares. Only a
+lagging background
 delta whose anchor is below `B` is spared. A background delta therefore
 survives only if its anchor entry survives — no orphans or dangling
 anchors by construction. The one exception runs the other way: a
