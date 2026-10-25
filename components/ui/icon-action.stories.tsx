@@ -186,8 +186,8 @@ export const DisabledBlocksPress: Story = {
   },
 }
 
-// The reader disables every row's icons at once as a turn starts: a wrapper that came and went
-// with the reason remounted each button.
+// The reader disables every row's icons at once as a turn starts, so the reason's tooltip must not
+// remount the button it wraps.
 function DisablingAction() {
   const [disabled, setDisabled] = useState(false)
   return (

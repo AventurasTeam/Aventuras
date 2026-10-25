@@ -592,7 +592,7 @@ export const ShrinkWhileEditingHolds: Story = {
   },
 }
 
-// The keyboard's share of a phone's reader (the triage measurement left 180 CSS px above it).
+// A phone keyboard's share of the reader: on a 411×914 dp emulator it leaves the reader 180 CSS px.
 const KEYBOARD_HEIGHT_PX = 260
 
 /** The keyboard hides the last row's editor; the reader brings its row, Save included, back up. */
