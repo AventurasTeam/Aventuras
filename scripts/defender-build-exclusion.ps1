@@ -107,11 +107,7 @@ switch ($Action) {
         } else {
           'not a checkout'
         }
-        $notes = @()
-        if ($path -eq $target) { $notes += 'this checkout' }
-        if ($status -ne 'left behind' -and -not (Test-Path -LiteralPath $path)) { $notes += 'no target' }
-        $line = "  $_"
-        if ($notes) { $line += "  ($($notes -join ', '))" }
+        $line = if ($path -eq $target) { "  $_  (this checkout)" } else { "  $_" }
         [pscustomobject]@{ Status = $status; Line = $line }
       }
 
