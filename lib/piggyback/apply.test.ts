@@ -1429,8 +1429,8 @@ describe('buildPiggybackActions', () => {
             transfers: transfers({
               stackables: [
                 { key: 'coins', amount: 5, to: 'loc_keep' },
-                { key: 'coins', amount: 5, from: 'char_kael' },
                 { key: 'coins', amount: 5, to: 'char_kael' },
+                { key: 'coins', amount: 5, from: 'char_kael' },
                 { key: 'coins', amount: 5 },
               ],
             }),
@@ -2276,6 +2276,29 @@ describe('buildPiggybackActions — holders read by what they name', () => {
     })
     expect(log.warn).not.toHaveBeenCalled()
     expect(log.error).not.toHaveBeenCalled()
+  })
+
+  // Bob holds 3 gold and the satchel: the shortfall rule would credit the payee in full.
+  it.each([
+    ['into his own satchel, past his purse', { from: 'char_bob', to: 'item_satchel', amount: 20 }],
+    ['into his own satchel, within his purse', { from: 'char_bob', to: 'item_satchel', amount: 2 }],
+    ['to himself by name', { from: 'char_bob', to: 'char_bob', amount: 20 }],
+    ['out of his own satchel to himself', { from: 'item_satchel', to: 'char_bob', amount: 20 }],
+  ])('changes nothing for a stackable Bob pays %s', (_label, parties) => {
+    const log = spyLogger()
+    const result = run({ stackables: [{ key: 'gold', ...parties }] }, log)
+    expect(writes(result, 'updateEntityStackables')).toEqual([])
+    expect(result.applied.stackablesLanded).toBe(0)
+    expect(log.warn).not.toHaveBeenCalled()
+  })
+
+  // Mira holds 10 gold and no silver; a chest lying here holds no stackable.
+  it.each([
+    ['gold', 1],
+    ['silver', 0],
+  ])('counts a stash of %s into a chest as %i landed', (key, landed) => {
+    const result = run({ stackables: [{ key, amount: 4, from: 'char_mira', to: 'item_chest' }] })
+    expect(result.applied.stackablesLanded).toBe(landed)
   })
 
   it('logs no reading for a character holder', () => {
