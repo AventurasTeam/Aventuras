@@ -232,8 +232,7 @@
       )
 
       if (success) {
-        const message =
-          imagesToSave === 1 ? 'Saved 1 image as PNG' : `Saved ${imagesToSave} images as ZIP`
+        const message = imagesToSave === 1 ? 'Saved 1 image' : `Saved ${imagesToSave} images as ZIP`
         ui.showToast(message, 'info')
         resetSelection()
       }
