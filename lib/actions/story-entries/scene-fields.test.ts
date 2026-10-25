@@ -295,6 +295,34 @@ describe('updateEntrySceneFields', () => {
     expect(await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).toHaveLength(0)
   })
 
+  // As a scene already in a retired place keeps it: refusing would block every member-only edit.
+  it('saves a member-only edit on a tail whose location names no place', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db
+      .update(storyEntries)
+      .set({
+        metadata: {
+          sceneEntities: ['char_a', 'char_b'],
+          currentLocationId: 'loc_gone',
+          worldTime: 120,
+        },
+      })
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e2')))
+
+    const result = await updateEntrySceneFields(
+      'b1',
+      'e2',
+      { sceneEntities: ['char_a'], currentLocationId: 'loc_gone' },
+      ctx,
+    )
+    expect(result).toEqual({ status: 'ok' })
+    const meta = await storedMetadata(db, 'e2')
+    expect(meta?.sceneEntities).toEqual(['char_a'])
+    expect(meta?.currentLocationId).toBe('loc_gone')
+  })
+
   // A delete clears the location from the tail only; the previous entry still names it,
   // and it is the previous entry that anchors a removed character's lastSeenAt.
   it('does not restore a deleted location to a character the edit removed', async () => {

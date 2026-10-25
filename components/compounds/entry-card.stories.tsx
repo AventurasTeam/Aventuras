@@ -1997,6 +1997,33 @@ export const WorldStateSaveRefusedRetiredPlace: StoryT = {
   },
 }
 
+// A terminal refusal: the generic copy's "Try again" would loop on it.
+export const WorldStateSaveRefusedNotALocation: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...reportedProps,
+    sceneOptions,
+    onEditScene: fn(async () => ({ ok: false, code: 'not-a-location' }) as const),
+  },
+  play: async () => {
+    await openPanel()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit scene' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible())
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Corin' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "That place no longer exists or isn't a place, so the story can't move there.",
+        ),
+      ).toBeVisible(),
+    )
+    expect(screen.queryByText('Could not save the scene. Try again.')).not.toBeInTheDocument()
+  },
+}
+
 /** The guard's Save writes the draft, and the guard closes with the overlay it guarded. */
 export const WorldStateEditGuardSaves: StoryT = {
   ...wrap,

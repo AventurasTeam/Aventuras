@@ -96,12 +96,14 @@ async function updateEntrySceneFieldsLocked(
   const branchEntities = [...entitiesStore.getEntities().values()].filter(
     (e) => e.branchId === branchId,
   )
-  // The editor offers places only; the action layer holds the line for any other caller.
-  const location =
-    after.currentLocationId === null
-      ? undefined
-      : branchEntities.find((e) => e.id === after.currentLocationId)
-  if (after.currentLocationId !== null && location?.kind !== 'location')
+  // The editor offers places only; the action layer holds the line for any other caller. A scene
+  // already at an id that names no place keeps it until it is changed, as a retired place does.
+  const locationChanged = after.currentLocationId !== before.currentLocationId
+  if (
+    locationChanged &&
+    after.currentLocationId !== null &&
+    branchEntities.find((e) => e.id === after.currentLocationId)?.kind !== 'location'
+  )
     return rejected(
       STORY_ENTRY_REJECTION.notALocation,
       `${after.currentLocationId} is not a location on branch ${branchId}`,
@@ -126,16 +128,13 @@ async function updateEntrySceneFieldsLocked(
       payload: { branchId, id, metadata: after },
     },
     // Promotion first: a staged scene member, or a staged place the edit moves the scene to, is
-    // promoted as the generation fold promotes one; a location the edit leaves names nothing.
+    // promoted as the generation fold promotes one; an unchanged location promotes nothing.
     ...scenePromotionActions({
       branchId,
       source: 'user_edit',
       entities: branchEntities,
       sceneEntities: after.sceneEntities,
-      alsoIds:
-        after.currentLocationId !== null && after.currentLocationId !== before.currentLocationId
-          ? [after.currentLocationId]
-          : [],
+      alsoIds: locationChanged && after.currentLocationId !== null ? [after.currentLocationId] : [],
     }),
     ...sceneTrackingActions({
       branchId,

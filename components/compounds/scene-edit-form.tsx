@@ -26,6 +26,7 @@ type SceneSaveErrorKey =
   | 'reader:sceneEdit.failedNoMetadata'
   | 'reader:sceneEdit.failedNotFound'
   | 'reader:sceneEdit.failedRetiredPlace'
+  | 'reader:sceneEdit.failedNotALocation'
 
 export function sceneSaveErrorKey(code: string | undefined): SceneSaveErrorKey {
   switch (code) {
@@ -39,6 +40,8 @@ export function sceneSaveErrorKey(code: string | undefined): SceneSaveErrorKey {
       return 'reader:sceneEdit.failedNotFound'
     case 'retired-place':
       return 'reader:sceneEdit.failedRetiredPlace'
+    case 'not-a-location':
+      return 'reader:sceneEdit.failedNotALocation'
     default:
       return 'reader:sceneEdit.failed'
   }
