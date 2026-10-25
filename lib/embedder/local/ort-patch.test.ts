@@ -44,7 +44,7 @@ describe('onnxruntime-react-native patch guard', () => {
   })
 
   // A dynamic version ships whatever Maven serves, and CMake's wildcard links the first of every
-  // version ever extracted: the 2026-10-20 APK shipped a stale 1.28.0 that way.
+  // version ever extracted.
   it('the installed build pins the runtime AAR and links that same version', () => {
     const gradle = readFileSync(`${PKG_DIR}/android/build.gradle`, 'utf8')
     const cmake = readFileSync(`${PKG_DIR}/android/CMakeLists.txt`, 'utf8')
