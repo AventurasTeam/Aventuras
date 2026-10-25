@@ -136,6 +136,13 @@ that area, and update it in the same commit when behaviour it describes changes.
 
 The index is [docs/README.md](docs/README.md).
 
+## External documentation
+
+Check these `llms.txt` sitemaps for Tauri and AI SDK behaviour before a general web search:
+
+- Tauri: <https://v2.tauri.app/llms.txt>
+- AI SDK: <https://ai-sdk.dev/sitemap.md>
+
 ## Things that bite
 
 - Migrations are checksummed by `sqlx`: LF line endings only, and never edit a migration
