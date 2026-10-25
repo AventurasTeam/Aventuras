@@ -32,15 +32,18 @@ Run from an administrator PowerShell.
   exit 1
 }
 
-# Defender keeps each rule as typed and expands %VAR% itself, so `%USERPROFILE%\x\` and
-# `C:\Users\me\x` are the same folder. A relative or wildcard rule is left as typed: resolving it
-# against this shell's folder would match by accident, and GetFullPath rejects `*` and `?`.
+# Defender keeps each rule as typed, so `...\target\` and `...\target` are the same folder.
+# Relative, wildcard and %VAR% rules stay as typed and never match: Defender expands variables as
+# LocalSystem, not as this shell's user, and GetFullPath rejects `*` and `?`.
 function Get-NormalPath([string]$Path) {
-  $expanded = [Environment]::ExpandEnvironmentVariables($Path)
-  if ($expanded -match '[*?]' -or -not [IO.Path]::IsPathRooted($expanded)) {
-    return $expanded.TrimEnd('\')
+  if (Test-OpaqueRule $Path) {
+    return $Path.TrimEnd('\')
   }
-  [IO.Path]::GetFullPath($expanded).TrimEnd('\')
+  [IO.Path]::GetFullPath($Path).TrimEnd('\')
+}
+
+function Test-OpaqueRule([string]$Path) {
+  $Path -match '[*?%]' -or -not [IO.Path]::IsPathRooted($Path)
 }
 
 # Reading the exclusions needs an administrator too: otherwise Defender returns a notice in their place.
@@ -102,7 +105,7 @@ switch ($Action) {
       $rows = $found | ForEach-Object {
         $path = Get-NormalPath $_
         $root = if ($path -like '*\src-tauri\target') { Split-Path (Split-Path $path) } else { $path }
-        $status = if ($path -match '[*?]') {
+        $status = if (Test-OpaqueRule $path) {
           'unknown'
         } elseif (-not (Test-Path -LiteralPath $root)) {
           'left behind'
