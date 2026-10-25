@@ -771,9 +771,9 @@ missing or an enum value outside the list (a status change to
 `pending`, a status flip to `staged`, a new character without a
 description), is dropped alone and logged with its list, and the rest
 of the reply lands. A list inside an entry keeps the same rule: a
-happening's involvement or awareness row that doesn't fit, or a keyword
-that is no string, drops alone and its entry lands, while a happening
-without a title drops whole, its rows with it.
+happening's involvement or awareness row that doesn't fit, or a keyword,
+trait, drive or agenda item that is no string, drops alone and its entry
+lands, while a happening without a title drops whole, its rows with it.
 A chained pass that still fails leaves the watermark where it was,
 records the failure in the status, and shows a warning toast,
 `Memory update failed. It runs again before your next turn.` Nothing
