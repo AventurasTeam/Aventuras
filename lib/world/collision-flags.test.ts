@@ -30,6 +30,7 @@ import {
   withFlagWrites,
 } from './collision-flags'
 import { collisionPairOf, pairSideOf, type PairSide } from './collision-pair'
+import { entityRenameActions } from './collision-resolve'
 import { entityActions } from './entity-actions'
 import { entityDeleteActions } from './entity-delete'
 import { characterDraftFrom, locationDraftFrom } from './entity-draft'
@@ -387,6 +388,53 @@ describe('pairFlagsToClear', () => {
       'char_a',
       'char_b',
     ])
+  })
+
+  describe('judged on the rows after the write', () => {
+    const mira = entity('char_m', 'Mira')
+    const renamed = (name: string, row: Entity) =>
+      new Map<string, PairSide>([[row.id, { ...pairSideOf(row), name }]])
+
+    it('keeps a pair row’s dormant flag on a third row that the write makes a pair again', () => {
+      const naming = flagged('char_a', 'Kael', 'char_m')
+      const rows = [naming, newer, mira]
+      expect(
+        pairFlagsToClear(pairOf(rows, ['char_a', 'char_b']), rows, renamed('Mira Vell', naming)),
+      ).toStrictEqual(['char_b'])
+    })
+
+    it('returns a pair row whose live flag on a third row the write ends', () => {
+      const third = entity('char_c', 'Kael')
+      const naming = flagged('char_a', 'Kael', 'char_c')
+      const rows = [naming, newer, third]
+      expect(
+        pairFlagsToClear(pairOf(rows, ['char_a', 'char_b']), rows, renamed('Brannoc', naming)),
+      ).toStrictEqual(['char_a', 'char_b'])
+    })
+
+    it('a dialog Rename keeps the flag it revives on a third row, and clears the pair’s', () => {
+      const naming = flagged('char_a', 'Kael', 'char_m')
+      const rows = [naming, newer, mira]
+      const plan = entityRenameActions({
+        branchId: 'b1',
+        pair: pairOf(rows, ['char_a', 'char_b']),
+        renames: [{ id: 'char_a', name: 'Mira Vell' }],
+        branchEntities: rows,
+      })
+      if ('issue' in plan) throw new Error(`unexpected rename issue: ${plan.issue}`)
+      expect(plan.actions).toStrictEqual([
+        {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: { branchId: 'b1', id: 'char_a', patch: { name: 'Mira Vell' } },
+        },
+        {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: { branchId: 'b1', id: 'char_b', patch: { ...FLAG_CLEAR } },
+        },
+      ])
+    })
   })
 })
 

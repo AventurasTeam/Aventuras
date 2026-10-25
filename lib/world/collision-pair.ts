@@ -57,12 +57,17 @@ export function stillPaired(reason: CollisionReason, a: PairSide, b: PairSide): 
  * world.md → Surfacing, the one test of a live flag: it names `partner` (undefined when gone) and
  * the two still pair under `stillPaired`. A flag that fails it is dormant and counts as none.
  */
-export function flagStillHolds(row: Entity, partner: Entity | undefined): row is FlaggedEntity {
+export function flagStillHolds(
+  row: Entity,
+  partner: Entity | undefined,
+  /** Each row's side as a planned write leaves it; stored rows by default. */
+  sideOf: (row: Entity) => PairSide = pairSideOf,
+): row is FlaggedEntity {
   return (
     row.nameCollisionFlag === 1 &&
     row.nameCollisionReason != null &&
     partner?.id === row.nameCollisionPartnerId &&
-    stillPaired(row.nameCollisionReason, pairSideOf(row), pairSideOf(partner))
+    stillPaired(row.nameCollisionReason, sideOf(row), sideOf(partner))
   )
 }
 
