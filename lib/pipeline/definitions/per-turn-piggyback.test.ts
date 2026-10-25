@@ -865,6 +865,87 @@ describe('per-turn-piggyback', () => {
       })
     })
 
+    it('keeps the previous scene when every scene entry the reply names drops', async () => {
+      const heroId = 'char_00000000-0000-4000-8000-000000000001'
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {} }),
+      })
+      hydrateEntries(phaseDb, 'b1', [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          content: 'Hero waits',
+          metadata: { sceneEntities: [heroId], currentLocationId: null, worldTime: 100 },
+        } as never,
+        {
+          id: 'entry-2',
+          branchId: 'b1',
+          position: 2,
+          content: 'Hero steps into the clearing',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+      ])
+      entitiesStore.hydrate('b1', [
+        {
+          id: heroId,
+          branchId: 'b1',
+          kind: 'character',
+          status: 'active',
+          name: 'Hero',
+          keywords: [],
+          state: emptyEntityState('character'),
+        } as never,
+      ])
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'ok',
+        recoverable: [],
+        value: {
+          sceneEntities: ['Hero'],
+          currentLocation: undefined,
+          worldTimeDelta: 5,
+          visualChanges: [],
+          transfers: { items: [], stackables: [] },
+        },
+      })
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      const gen = piggybackFallbackClassifierPhase(ctx)
+      const events = []
+      let result = await gen.next()
+      while (!result.done) {
+        events.push(result.value)
+        result = await gen.next()
+      }
+
+      expect(events[0]).toEqual({
+        type: 'delta_emitted',
+        action: expect.objectContaining({
+          kind: 'updateStoryEntryMetadata',
+          payload: expect.objectContaining({
+            metadata: expect.objectContaining({
+              sceneEntities: [heroId],
+              stateReport: expect.objectContaining({
+                droppedRefs: [expect.objectContaining({ field: 'sceneEntities', ref: 'Hero' })],
+              }),
+            }),
+          }),
+        }),
+      })
+    })
+
     it('safely ignores unknown entity IDs in visualChanges when classifier emits unmapped placeholders', async () => {
       const heroId = 'char_00000000-0000-4000-8000-000000000001'
       currentStoryStore.set({

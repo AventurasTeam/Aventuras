@@ -233,17 +233,21 @@ export function substitutePiggybackIds(
     kinds: new Map(options.entities.map((e) => [e.id, e.kind])),
   }
 
+  // A list every entry dropped from reads as omitted, as a dropped location does: the previous
+  // scene stays rather than emptying on a reply that named no one usably.
   resolveField(
     result,
     'sceneEntities',
-    (ids) =>
-      ids.flatMap((id) =>
+    (ids) => {
+      const kept = ids.flatMap((id) =>
         settle('sceneEntities', id, (ref) => {
           const resolved = resolveRefOrHandle(ref, refs)
           requireKind(ref, resolved, refs, SCENE_KINDS)
           return resolved
         }),
-      ),
+      )
+      return ids.length > 0 && kept.length === 0 ? undefined : kept
+    },
     failures,
   )
   // A dropped location reads as omitted: the previous one stays, as a field failure would leave it.

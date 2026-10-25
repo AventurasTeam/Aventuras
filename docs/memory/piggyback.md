@@ -561,7 +561,9 @@ treat a bad ref differently:
   change, a condition, and item, stackable and drop transfers alike
   (a holder is never of the wrong kind, below).
   An unknown `currentLocation` drops the same way and the previous
-  location stays. Each drop is logged as `classifier.ref_dropped` and
+  location stays. So does a scene list every entry dropped from: a reply that
+  named no one usably is no evidence the scene emptied, so the previous
+  scene stays, while one that sends an empty list empties it. Each drop is logged as `classifier.ref_dropped` and
   recorded in the report's `droppedRefs`
   ([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)),
   where the reader shows it. The report's `failedFields` keeps
