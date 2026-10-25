@@ -330,7 +330,11 @@ export class WorldStateInjector extends BaseAIService {
     const all = [...tier1, ...tier2, ...tier3].sort((a, b) => b.priority - a.priority)
 
     // Build the context block
-    const contextBlock = this.buildContextBlock(tier1, tier2, tier3)
+    const locationOf = (itemId: string) => {
+      const item = worldState.items.find((i) => i.id === itemId)
+      return item ? itemLocationLabel(readItemPlacement(item, worldState.locations)) : null
+    }
+    const contextBlock = this.buildContextBlock(tier1, tier2, tier3, locationOf)
 
     return { tier1, tier2, tier3, all, contextBlock }
   }
@@ -639,10 +643,7 @@ export class WorldStateInjector extends BaseAIService {
           tier: 2,
           priority: 40 - priorityPenalty,
           viaScene: priorityPenalty > 0,
-          metadata: {
-            quantity: item.quantity,
-            location: itemLocationLabel(readItemPlacement(item, worldState.locations)),
-          },
+          metadata: { quantity: item.quantity },
         })
       }
     }
@@ -865,6 +866,7 @@ export class WorldStateInjector extends BaseAIService {
     tier1: WorldStateContextEntry[],
     tier2: WorldStateContextEntry[],
     tier3: WorldStateContextEntry[],
+    locationOf: (itemId: string) => string | null,
   ): string {
     let block = ''
 
@@ -960,9 +962,8 @@ export class WorldStateInjector extends BaseAIService {
         if (item.description) {
           block += `: ${item.description}`
         }
-        if (typeof item.metadata?.location === 'string') {
-          block += ` — Location: ${item.metadata.location}`
-        }
+        const location = locationOf(item.id)
+        if (location) block += ` — Location: ${location}`
       }
     }
 

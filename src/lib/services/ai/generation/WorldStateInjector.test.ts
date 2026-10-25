@@ -130,6 +130,9 @@ describe('WorldStateInjector', () => {
     expect(result.tier1.find((e) => e.name === 'Cloak')?.metadata?.equipped).toBe(true)
     expect(result.tier1.map((e) => e.name)).not.toContain('Anvil')
     expect(result.contextBlock).toContain('Cloak [equipped]')
+    // Not mentioned, so Tier 3, which names its location too.
+    expect(result.tier3.map((e) => e.name)).toContain('Anvil')
+    expect(result.contextBlock).toContain('• Anvil — Location: Iron Mountain')
   })
 
   it('names the location of an item it matched', async () => {
@@ -139,7 +142,6 @@ describe('WorldStateInjector', () => {
     } as typeof worldState
     const result = await injector.buildContext(lying, 'the Anvil', [], { storyId: undefined })
 
-    expect(result.tier2.find((e) => e.name === 'Anvil')?.metadata?.location).toBe('Iron Mountain')
     expect(result.contextBlock).toContain('• Anvil — Location: Iron Mountain')
   })
 
