@@ -3083,6 +3083,11 @@ class DatabaseService {
     const rawTranslatedDescriptors = row.translated_visual_descriptors
       ? JSON.parse(row.translated_visual_descriptors)
       : null
+    // Translations were once saved as one string, which reads as no categories: none, so the
+    // panel falls back to the appearance rather than showing nothing.
+    const translatedDescriptors = rawTranslatedDescriptors
+      ? migrateVisualDescriptors(rawTranslatedDescriptors)
+      : {}
     const rawTranslatedTraits = row.translated_traits ? JSON.parse(row.translated_traits) : null
 
     return {
@@ -3106,9 +3111,8 @@ class DatabaseService {
       translatedTraits: Array.isArray(rawTranslatedTraits)
         ? uniqueTerms(rawTranslatedTraits)
         : null,
-      translatedVisualDescriptors: rawTranslatedDescriptors
-        ? migrateVisualDescriptors(rawTranslatedDescriptors)
-        : null,
+      translatedVisualDescriptors:
+        Object.keys(translatedDescriptors).length > 0 ? translatedDescriptors : null,
       translationLanguage: row.translation_language || null,
     }
   }

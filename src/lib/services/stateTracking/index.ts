@@ -45,6 +45,7 @@ export {
   headerRecord,
   markId,
   markRecord,
+  staleTranslations,
   type RecordContext,
   type RecordScope,
 } from './record'

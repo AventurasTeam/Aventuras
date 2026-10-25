@@ -68,6 +68,7 @@ import {
   type ReversalPlan,
   type TrackedRow,
   type TrackedState,
+  staleTranslations,
 } from '#lib/services/stateTracking/index.ts'
 import {
   DELETE_ROW,
@@ -5937,54 +5938,41 @@ class StoryStore {
     }
 
     const snapshotById = new Map(snapshots.map((snapshot) => [snapshot.id, snapshot]))
-    const updates: Array<{ id: string; updates: Partial<Character> }> = []
+    const updates = new Map(
+      this.characters.flatMap((character): Array<[string, Partial<Character>]> => {
+        const snapshot = snapshotById.get(character.id)
+        if (!snapshot) return []
 
-    for (const character of this.characters) {
-      const snapshot = snapshotById.get(character.id)
-      if (!snapshot) continue
+        let relationship = snapshot.relationship ?? character.relationship
+        if (character.relationship === 'self' && relationship !== 'self') {
+          relationship = 'self'
+        }
 
-      let relationship = snapshot.relationship ?? character.relationship
-      if (character.relationship === 'self' && relationship !== 'self') {
-        relationship = 'self'
-      }
-
-      updates.push({
-        id: character.id,
-        updates: {
-          traits: snapshot.traits ?? [],
+        const restored: Partial<Character> = {
+          ...(snapshot.name !== undefined && { name: snapshot.name }),
+          ...(snapshot.description !== undefined && { description: snapshot.description }),
+          traits: uniqueTerms(snapshot.traits ?? []),
           status: snapshot.status ?? character.status,
           relationship,
           visualDescriptors: snapshot.visualDescriptors ?? {},
-          portrait: snapshot.portrait,
-        },
-      })
-    }
+          portrait: snapshot.portrait, // null means no portrait
+        }
+        const stale = staleTranslations('character', { ...character }, { ...restored })
+        return [[character.id, { ...restored, ...stale }]]
+      }),
+    )
 
-    for (const update of updates) {
-      await database.updateCharacter(update.id, update.updates)
+    for (const [id, update] of updates) {
+      await database.updateCharacter(id, update)
     }
 
     this.characters = this.characters.map((character) => {
-      const snapshot = snapshotById.get(character.id)
-      if (!snapshot) return character
-
-      let relationship = snapshot.relationship ?? character.relationship
-      if (character.relationship === 'self' && relationship !== 'self') {
-        relationship = 'self'
-      }
-
-      return {
-        ...character,
-        traits: snapshot.traits ? uniqueTerms(snapshot.traits) : character.traits,
-        status: snapshot.status ?? character.status,
-        relationship,
-        visualDescriptors: snapshot.visualDescriptors ?? character.visualDescriptors,
-        portrait: snapshot.portrait, // Use snapshot value directly (null means no portrait)
-      }
+      const update = updates.get(character.id)
+      return update ? { ...character, ...update } : character
     })
 
     log('restoreCharacterSnapshots complete', {
-      updatedCount: updates.length,
+      updatedCount: updates.size,
       finalCharacters: this.characters.map((c) => ({
         id: c.id,
         name: c.name,

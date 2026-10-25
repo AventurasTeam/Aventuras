@@ -822,6 +822,8 @@ class UIStore {
     const storyBeatIds = storyBeats.map((sb) => sb.id)
     const characterSnapshots: PersistentCharacterSnapshot[] = characters.map((c) => ({
       id: c.id,
+      name: c.name,
+      description: c.description ?? null,
       traits: [...(c.traits ?? [])],
       status: c.status,
       relationship: c.relationship ?? null,

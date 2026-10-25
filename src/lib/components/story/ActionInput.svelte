@@ -21,6 +21,7 @@
   import { database } from '#lib/services/database.ts'
   import { SimpleActivationTracker } from '#lib/services/ai/retrieval/EntryRetrievalService.ts'
   import { TranslationService } from '#lib/services/ai/utils/TranslationService.ts'
+  import { sameEntityName } from '#lib/utils/text.ts'
   import { Send, Wand2, MessageSquare, Brain, Sparkles, PenLine, Square } from '@lucide/svelte'
   import Suggestions from './Suggestions.svelte'
   import GrammarCheck from './GrammarCheck.svelte'
@@ -872,9 +873,15 @@
                     storyBeats: story.storyBeats,
                   },
                   targetLanguage: translationSettings.targetLanguage,
+                  updatedCharacters: story.characters.filter((c) =>
+                    event.result.entryUpdates.characterUpdates.some((u) =>
+                      sameEntityName(u.name, c.name),
+                    ),
+                  ),
                 },
                 {
-                  updateCharacter: (id, data) => database.updateCharacter(id, data as any),
+                  updateCharacter: (id, data) => database.updateCharacter(id, data),
+                  getCharacter: (id) => story.characters.find((c) => c.id === id),
                   updateLocation: (id, data) => database.updateLocation(id, data as any),
                   updateItem: (id, data) => database.updateItem(id, data as any),
                   updateStoryBeat: (id, data) => database.updateStoryBeat(id, data as any),

@@ -23,6 +23,39 @@ export const UNRECORDED_FIELDS: ReadonlySet<string> = new Set([
   'portrait',
 ])
 
+// Each translation and the field it translates.
+const TRANSLATED_FROM: Partial<Record<TrackedEntityType, Record<string, string>>> = {
+  character: {
+    translatedName: 'name',
+    translatedDescription: 'description',
+    translatedRelationship: 'relationship',
+    translatedTraits: 'traits',
+    translatedVisualDescriptors: 'visualDescriptors',
+  },
+  location: { translatedName: 'name', translatedDescription: 'description' },
+  item: { translatedName: 'name', translatedDescription: 'description' },
+  story_beat: { translatedTitle: 'title', translatedDescription: 'description' },
+}
+
+/**
+ * The translations of `from` that writing `to` over it leaves describing other text. Each
+ * takes the one `saved` holds — a whole row a record saved, whose translation is of its own
+ * text — or none.
+ */
+export function staleTranslations(
+  type: TrackedEntityType,
+  from: Record<string, unknown>,
+  to: Record<string, unknown>,
+  saved: Record<string, unknown> | null = null,
+): Record<string, unknown> {
+  const stale: Record<string, unknown> = {}
+  for (const [translated, source] of Object.entries(TRANSLATED_FROM[type] ?? {})) {
+    if (source in to && !sameValue(from[source], to[source]))
+      stale[translated] = saved?.[translated] ?? null
+  }
+  return stale
+}
+
 // Image data would ride along into every export, sync and load of the records.
 const UNRECORDED_ROW_FIELDS = ['portrait']
 

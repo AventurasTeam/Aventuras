@@ -155,6 +155,43 @@ describe('planReversal', () => {
     })
   })
 
+  it('drops the translation of text a revert changes', () => {
+    const live = character('c', {
+      description: 'Recovered.',
+      translatedDescription: 'Guarita.',
+      traits: ['wry'],
+      translatedTraits: ['ironica'],
+    })
+    const plan = planReversal({
+      state: state([live]),
+      records: [change('e2', 'update', 'c', { description: 'Wounded.' })],
+      entryPositions: positions,
+      keep: { manual: false, tidy: false },
+    })
+    expect(plan.state.characters[0]).toMatchObject({
+      description: 'Wounded.',
+      translatedDescription: null,
+      translatedTraits: ['ironica'],
+    })
+    expect(plan.ops).toContainEqual({
+      kind: 'update',
+      entityType: 'character',
+      id: 'c',
+      fields: { description: 'Wounded.', translatedDescription: null },
+    })
+  })
+
+  it('keeps a translation whose text the revert leaves as it is', () => {
+    const live = character('c', { description: 'Same.', translatedDescription: 'Uguale.' })
+    const plan = planReversal({
+      state: state([live]),
+      records: [change('e2', 'update', 'c', { description: 'Same.', relationship: 'ally' })],
+      entryPositions: positions,
+      keep: { manual: false, tidy: false },
+    })
+    expect(plan.state.characters[0].translatedDescription).toBe('Uguale.')
+  })
+
   it('brings back the row an undone override was shadowing', () => {
     const parent = character('p', { relationship: 'old' })
     const override = character('o', { relationship: 'new', overridesId: 'p', branchId: 'b' })
@@ -279,6 +316,35 @@ describe('planReversal', () => {
       expect.objectContaining({ id: 'o', description: 'mine', overridesId: 'p' }),
     ])
     expect(plan.unkeepable).toEqual([])
+  })
+
+  it("does not carry the parent's translation onto an override written again", () => {
+    const parent = character('p', { description: 'parent', translatedDescription: 'genitore' })
+    const override = character('o', {
+      description: 'mine',
+      translatedDescription: 'mio',
+      overridesId: 'p',
+      branchId: 'b',
+    })
+    const plan = planReversal({
+      state: state([override]),
+      records: [
+        change('e2', 'create', 'o', { ...parent }),
+        change(
+          'e3',
+          'update',
+          'o',
+          { description: 'parent' },
+          { origin: 'manual', after: { description: 'kept' } },
+        ),
+      ],
+      entryPositions: positions,
+      keep: { manual: true, tidy: false },
+    })
+    expect(plan.state.characters[0]).toMatchObject({
+      description: 'kept',
+      translatedDescription: null,
+    })
   })
 
   it('applies late changes before undoing', () => {

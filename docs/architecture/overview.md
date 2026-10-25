@@ -304,8 +304,12 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   without the list showed nobody. A rewrite of a field
   that was not listed is dropped and logged, an empty description, trait list or appearance
   never erases one, and a rewrite or status equal to the current value writes nothing.
-  A rewritten field drops its translation, which would otherwise be shown in its place; nothing
-  translates it again, so the panel shows the source text. The protagonist's appearance is
+  A rewritten field drops its translation, which would otherwise be shown in its place, and
+  with world-state translation on it is translated again after the turn, as a new character's
+  fields are (`WorldStateTranslationService`, `updatedCharacters`). Characters are translated
+  from their stored rows, traits one by one and appearance by category, and a field is written
+  only whole and only while the character still holds the text that was sent, so a revert
+  landing mid-translation is not overwritten. The protagonist's appearance is
   listed, but not their description or traits: those are usually the reader's own setup, and
   the protagonist is in every scene, so every turn would be a chance to rewrite them. Traits
   and descriptions are replaced whole, like appearance; there is no add or remove.

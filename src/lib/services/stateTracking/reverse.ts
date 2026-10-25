@@ -12,7 +12,7 @@ import {
   type TrackedRow,
   type TrackedState,
 } from './state'
-import { UNRECORDED_FIELDS, recordedRow } from './record'
+import { UNRECORDED_FIELDS, recordedRow, staleTranslations } from './record'
 
 /** A database write that carries the live state along with the plan. */
 export type ReversalOp =
@@ -93,16 +93,24 @@ class Workspace {
 
   /**
    * A row written again from a record takes the columns records leave out (a portrait, the
-   * translations) from the row as it was, where it existed.
+   * translations) from the row as it was, where it existed, except a translation of text the
+   * row no longer has: that one comes from `saved`, the whole row the record holds, or is
+   * dropped.
    */
-  withUnrecorded(type: TrackedEntityType, row: TrackedRow): TrackedRow {
+  withUnrecorded(type: TrackedEntityType, row: TrackedRow, saved: object | null = row): TrackedRow {
     const was = rowsOf(this.original, type).find((r) => r.id === row.id) as
       Record<string, unknown> | undefined
     if (!was) return row
     const kept = Object.fromEntries(
       [...UNRECORDED_FIELDS].filter((key) => key in was).map((key) => [key, was[key]]),
     )
-    return { ...row, ...kept } as TrackedRow
+    const stale = staleTranslations(
+      type,
+      was,
+      row as unknown as Record<string, unknown>,
+      saved as Record<string, unknown> | null,
+    )
+    return { ...row, ...kept, ...stale } as TrackedRow
   }
 
   find(type: TrackedEntityType, id: string): TrackedRow | undefined {
@@ -125,8 +133,12 @@ class Workspace {
   patch(type: TrackedEntityType, id: string, fields: Record<string, unknown>): boolean {
     const row = this.find(type, id)
     if (!row) return false
-    this.put(type, { ...row, ...fields } as TrackedRow)
-    this.ops.push({ kind: 'update', entityType: type, id, fields })
+    const written = {
+      ...fields,
+      ...staleTranslations(type, row as unknown as Record<string, unknown>, fields),
+    }
+    this.put(type, { ...row, ...written } as TrackedRow)
+    this.ops.push({ kind: 'update', entityType: type, id, fields: written })
     return true
   }
 
@@ -204,14 +216,21 @@ class Workspace {
         const shadow = this.shadowed.get(id)
         const visible = shadow && this.find(type, shadow.id)
         if (!visible) return null
-        const override = this.withUnrecorded(type, {
-          ...visible,
-          ...record.after,
-          id,
-          branchId: record.branchId,
-          overridesId: canonicalId(visible),
-          deleted: false,
-        } as TrackedRow)
+        // `visible`'s translations are of the parent's text, not of what this update wrote.
+        const visibleFields = visible as unknown as Record<string, unknown>
+        const override = this.withUnrecorded(
+          type,
+          {
+            ...visible,
+            ...record.after,
+            ...staleTranslations(type, visibleFields, record.after, record.after),
+            id,
+            branchId: record.branchId,
+            overridesId: canonicalId(visible),
+            deleted: false,
+          } as TrackedRow,
+          record.after,
+        )
         this.remove(type, visible.id)
         this.put(type, override)
         this.ops.push({ kind: 'restore', entityType: type, row: override })
