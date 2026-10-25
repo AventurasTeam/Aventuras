@@ -116,14 +116,16 @@ function assertNotTruncated(segment: string, extractedCount: number, tagLabel: s
   }
 }
 
+// An entry's text holds no `<` that opens a tag, so a self-closed or unclosed entry can't swallow
+// the next one, and only one path matches each `<`, so an unclosed opener's scan stays linear.
+const ENTRY_TEXT = '[^<]*(?:<(?![A-Za-z/!?])[^<]*)*'
+const ENTITY_ENTRY = `<entity\\s+([^<>]*)>(${ENTRY_TEXT})</entity>`
+
 // <entity id="..." type="...">text</entity> — full-replace visual change,
 // one entry per changed category (docs/memory/piggyback.md → Trailing block format).
 function parseVisualChanges(segment: string): VisualChangeNote[] {
   const notes: VisualChangeNote[] = []
-  // No `<` inside, so a self-closed or unclosed entry can't swallow the next one, and an unclosed
-  // opener can't make the scan run to the segment's end.
-  const re = /<entity\s+([^<>]*)>([^<]*)<\/entity>/g
-  for (const match of segment.matchAll(re)) {
+  for (const match of segment.matchAll(new RegExp(ENTITY_ENTRY, 'g'))) {
     const [, attrText, text] = match
     if (attrText === undefined || text === undefined) continue
     const attrs = parseAttributes(attrText)
@@ -138,9 +140,7 @@ function parseVisualChanges(segment: string): VisualChangeNote[] {
 // piggyback.md → Trailing block format. A blank condition is kept for apply.ts to refuse.
 function parseConditions(segment: string): ConditionChange[] {
   const changes: ConditionChange[] = []
-  // No `<` inside, so a self-closed or unclosed entry can't swallow the next one.
-  const re = /<entity\s+([^<>]*)>([^<]*)<\/entity>/g
-  for (const match of segment.matchAll(re)) {
+  for (const match of segment.matchAll(new RegExp(ENTITY_ENTRY, 'g'))) {
     const [, attrText, text] = match
     if (attrText === undefined || text === undefined) continue
     const { id } = parseAttributes(attrText)
@@ -215,7 +215,10 @@ function parseTransfers(segment: string, notes: ParseNotes): ParsedTransfers {
 function parseRetrievalQueries(segment: string): string[] | undefined {
   const seen = new Set<string>()
   const out: string[] = []
-  const re = new RegExp(`<${RETRIEVAL_QUERY_ITEM_TAG}>([^<]*)</${RETRIEVAL_QUERY_ITEM_TAG}>`, 'g')
+  const re = new RegExp(
+    `<${RETRIEVAL_QUERY_ITEM_TAG}>(${ENTRY_TEXT})</${RETRIEVAL_QUERY_ITEM_TAG}>`,
+    'g',
+  )
   for (const match of segment.matchAll(re)) {
     const text = match[1]?.trim()
     if (text === undefined || text === '' || seen.has(text)) continue
@@ -523,7 +526,10 @@ export function parseSuggestionsBlock(raw: string): ParseSuggestionsBlockResult 
     return { items: [], blockFound: false, failed: false, malformedCount: 0 }
 
   const items: SuggestionRef[] = []
-  const re = new RegExp(`<${SUGGESTION_ITEM_TAG}\\s+([^<>]*)>([^<]*)</${SUGGESTION_ITEM_TAG}>`, 'g')
+  const re = new RegExp(
+    `<${SUGGESTION_ITEM_TAG}\\s+([^<>]*)>(${ENTRY_TEXT})</${SUGGESTION_ITEM_TAG}>`,
+    'g',
+  )
   for (const match of segment.matchAll(re)) {
     const [, attrText, text] = match
     if (attrText === undefined || text === undefined) continue

@@ -1353,7 +1353,7 @@ describe('conditions and drops', () => {
   })
 })
 
-// No `<` inside an entry's attributes or text, as conditions and moves already read: a malformed
+// No `<` in an entry's attributes and no tag in its text, as in conditions and moves: a malformed
 // entry drops alone instead of swallowing the next one, and an unclosed opener can't make the
 // scan run to the end of the segment.
 describe('an entry that never closes swallows nothing', () => {
@@ -1391,8 +1391,62 @@ describe('an entry that never closes swallows nothing', () => {
     parseStateBlock(
       `<state><scene_entities>c1</scene_entities><visual_changes>${openers}</visual_changes></state>`,
     )
-    // Quadratic, this took about 800 ms; linear, a few ms. A generous bound keeps CI from flaking.
+    // The bound sits far above a linear scan's few ms and below a quadratic one's ~800 ms.
     expect(performance.now() - started).toBeLessThan(250)
+  })
+})
+
+describe("an entry's text holding a `<` that opens no tag", () => {
+  const visual = (...entries: string[]) =>
+    parseStateBlock(
+      `<state><scene_entities>c1</scene_entities><visual_changes>${entries.join('')}</visual_changes></state>`,
+    )
+  const scar = '<entity id="c1" type="distinguishing">a scar shaped like <3</entity>'
+  const hair = '<entity id="c2" type="hair">wet hair</entity>'
+
+  it('keeps a visual change holding one beside a sibling', () => {
+    expect(visual(scar, hair).block.visualChanges).toEqual([
+      { id: 'c1', type: 'distinguishing', text: 'a scar shaped like <3' },
+      { id: 'c2', type: 'hair', text: 'wet hair' },
+    ])
+  })
+
+  it('reads a visual change holding one alone, failing no field', () => {
+    const { block, failures } = visual(scar)
+    expect(failures).toEqual([])
+    expect(block.visualChanges).toEqual([
+      { id: 'c1', type: 'distinguishing', text: 'a scar shaped like <3' },
+    ])
+  })
+
+  it.each(['<b>', '</b>', '<!-- x -->', '<?x?>'])(
+    'drops a visual change holding %s alone, as a tag',
+    (tag) => {
+      const tagged = `<entity id="c1" type="distinguishing">a scar ${tag} here</entity>`
+      expect(visual(tagged, hair).block.visualChanges).toEqual([
+        { id: 'c2', type: 'hair', text: 'wet hair' },
+      ])
+    },
+  )
+
+  it('still stops an unclosed visual change at the next tag after one', () => {
+    const unclosed = '<entity id="c1" type="distinguishing">a scar shaped like <3 and'
+    expect(visual(unclosed, hair).block.visualChanges).toEqual([
+      { id: 'c2', type: 'hair', text: 'wet hair' },
+    ])
+  })
+
+  it('reads a condition, a query and a suggestion holding one', () => {
+    const { block, failures } = parseStateBlock(
+      '<state><scene_entities>c1</scene_entities><conditions><entity id="i1">cracked, 2 < 3 pieces</entity></conditions><retrieval_queries><query>the <3 carving</query></retrieval_queries></state>',
+    )
+    expect(failures).toEqual([])
+    expect(block.conditions).toEqual([{ id: 'i1', text: 'cracked, 2 < 3 pieces' }])
+    expect(block.retrievalQueries).toEqual(['the <3 carving'])
+    expect(
+      parseSuggestionsBlock('<suggestions><item category="cat1">Carve a <3</item></suggestions>')
+        .items,
+    ).toEqual([{ categoryRef: 'cat1', text: 'Carve a <3' }])
   })
 })
 
