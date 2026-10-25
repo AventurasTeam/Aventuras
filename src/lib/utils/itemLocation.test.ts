@@ -118,6 +118,8 @@ describe('newItemLocation', () => {
       'given to you',
       'given to Aria',
       'being carried',
+      'picked up and added to her pack',
+      'handed over to you',
     ]) {
       expect(newItemLocation({ location: said }, world)).toEqual({
         location: 'inventory',
@@ -308,6 +310,24 @@ describe('resolveItemLocation', () => {
     expect(resolveItemLocation({ location: 'the back room' }, nowhere, held)).toEqual({})
   })
 
+  it('unequips an item that is dropped or taken with nowhere to put it', () => {
+    const nowhere = { ...world, currentLocationId: null }
+    const equipped = item('Sword', { equipped: true })
+    for (const said of ['dropped', 'worn by Borin']) {
+      expect(resolveItemLocation({ location: said }, nowhere, equipped)).toEqual({
+        location: 'inventory',
+        equipped: false,
+      })
+    }
+  })
+
+  it('moves nothing when the location it was shown is echoed back', () => {
+    const legacy = item('Chest', { location: 'Chest in Oakvale' })
+    expect(resolveItemLocation({ location: 'chest in oakvale' }, world, legacy)).toEqual({})
+    const lost = item('Map', { location: '0b9e7a52-1c1e-4f3a-9d2b-6a1f0e4c8d11' })
+    expect(resolveItemLocation({ location: 'Unknown location' }, world, lost)).toEqual({})
+  })
+
   it('picks an item up', () => {
     expect(resolveItemLocation({ location: 'inventory' }, world, lying)).toEqual({
       location: 'inventory',
@@ -347,6 +367,8 @@ describe('resolveItemLocation', () => {
       'not worn',
       'no longer equipped',
       'is not equipped',
+      'not currently worn',
+      'not being worn',
     ]) {
       expect(resolveItemLocation({ location: said }, world, equipped)).toEqual({
         location: 'inventory',

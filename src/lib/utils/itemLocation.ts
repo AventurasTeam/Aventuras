@@ -91,15 +91,23 @@ function statedPlacement(text: string, people: ItemLocationPeople): Stated | nul
   if (capitalised.some((w) => has(others, w))) return null
 
   const all = tokens(text.replace(/\bno longer\b/giu, 'not'))
-  // "not carried" means it left; "not worn" only unequips.
-  if (all.some((w, i) => w === 'not' && !WORN.has(all[i + 1] ?? ''))) return null
+  // "not carried" means it left; "not (currently) worn" only unequips.
+  const after = (i: number) => all.slice(i + 1).find((w) => !FILLER.has(w)) ?? ''
+  if (all.some((w, i) => w === 'not' && !WORN.has(after(i)))) return null
   const taken = all.some((w) => TAKEN.has(w))
-  // "given to her" or "handed over": passed to someone, unless that is the protagonist.
-  const recipient = (i: number) => all.slice(i + 1).find((w) => !ARTICLES.has(w)) ?? ''
+  // "given to her" or "handed over": passed to someone, unless to the protagonist or into
+  // a container ("added to her pack").
+  const isCarry = (w = '') => CARRY.has(w) || HELD.has(w)
+  const toSomeone = (i: number) => {
+    const [who = '', next] = all.slice(i + 1).filter((w) => !ARTICLES.has(w))
+    if (isOwn(who) || isCarry(who)) return false
+    return !(POSSESSIVE.has(who) && isCarry(next))
+  }
+  const toOwn = all.some((w, i) => w === 'to' && isOwn(all[i + 1] ?? ''))
   const passedOn = all.some(
     (w, i) =>
-      (w === 'to' && all.slice(0, i).some((t) => TAKEN.has(t)) && !isOwn(recipient(i))) ||
-      (w === 'over' && TAKEN.has(all[i - 1] ?? '')),
+      (w === 'to' && all.slice(0, i).some((t) => TAKEN.has(t)) && toSomeone(i)) ||
+      (w === 'over' && TAKEN.has(all[i - 1] ?? '') && !toOwn),
   )
   if (passedOn) return null
   if (!taken && all.some((w) => HERE.has(w))) return { kind: 'here' }
@@ -231,7 +239,10 @@ export function resolveItemLocation(
 ): Partial<StoredPlacement> {
   const wasHeld = existing.location === INVENTORY
   const equippedSaid = said.equipped ?? undefined
-  const text = said.location?.trim() ?? ''
+  const raw = said.location?.trim() ?? ''
+  // The classifier is shown this label, so echoing it back moves nothing.
+  const shown = itemLocationLabel(readItemPlacement(existing, world.locations))
+  const text = foldName(raw) === foldName(shown) ? '' : raw
 
   let target: Target
   if (text) target = targetOf(text, world)
@@ -243,6 +254,8 @@ export function resolveItemLocation(
 
   switch (target.kind) {
     case 'none':
+      // Nowhere to put it ("dropped", "worn by Sir Gareth"), but it is no longer worn.
+      if (text && existing.equipped) return { location: existing.location, equipped: false }
       if (equipped === undefined) return {}
       return { location: existing.location, equipped: equipped && wasHeld && !text }
     case 'location':
