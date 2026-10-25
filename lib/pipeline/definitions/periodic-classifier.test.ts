@@ -839,6 +839,51 @@ describe('periodicClassifierPhase', () => {
     ).toEqual([])
   })
 
+  it('plans nothing after a cancel that ends the last reconcile embed', async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    const controller = new AbortController()
+    const embedder = vi.fn(
+      (_texts: string[], signal?: AbortSignal) =>
+        new Promise<never>((_resolve, reject) => {
+          if (signal === undefined) return reject(new Error('no signal'))
+          signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+          controller.abort()
+        }),
+    )
+    configureClassifierEmbedder(embedder)
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction({
+        newCharacters: [
+          { handle: 'nc0', name: '', description: 'Nobody named.', keywords: [] },
+          { handle: 'nc1', name: 'Kael', description: 'A courier.', keywords: [] },
+        ],
+      }),
+    })
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'Kael, described.',
+      keywords: [],
+      state: null,
+      createdAt: 1,
+    } as unknown as Entity
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael] })
+    h.ctx.abortSignal = controller.signal
+    const { events, result } = await drain(h.ctx)
+    expect(result).toEqual({ status: 'aborted' })
+    expect(events).toEqual([])
+    expect(embedder).toHaveBeenCalledOnce()
+    expect(
+      getDiagnosticsSnapshot().logEntries.filter((e) => e.kind === 'classifier.create_dropped'),
+    ).toEqual([])
+  })
+
   // classifier.md → Failure policy: a never-answering provider expires as a failure, not an abort.
   describe('the bound on the call', () => {
     // Resolves with the fake-clock ms in flight when its signal aborts: the bound the phase armed.

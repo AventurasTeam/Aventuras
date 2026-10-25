@@ -372,6 +372,7 @@ export async function* periodicClassifierPhase(
   if (characterDecisions === null) return { status: 'aborted' }
   const factionDecisions = await reconcile('faction', new Set(characterDecisions.keys()))
   if (factionDecisions === null) return { status: 'aborted' }
+  if (ctx.abortSignal.aborted) return { status: 'aborted' }
 
   const plan = buildClassifierActions(substituted, {
     branchId: ctx.branchId,
