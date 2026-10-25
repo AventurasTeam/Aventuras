@@ -113,6 +113,8 @@ function reserveRun(kind: string, ctx: RunCtx): RunState {
 // retry, and run_complete reports the idle and the failure.
 function unwindRun(run: RunState, detail: string): void {
   generationStore.abortRun(run.runId, 'unwound')
+  // A capture left open is never evicted. Before beginTurn (a failed marker insert) there is none.
+  turnCaptureSink.endTurn(run.actionId, 'failed', 'unwound')
   pipelineEventBus.emit({
     type: 'run_complete',
     runId: run.runId,

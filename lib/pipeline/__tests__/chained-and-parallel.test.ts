@@ -674,6 +674,11 @@ describe('split start', () => {
     ])
     expect(ended).toBe('ended')
     expect(generationStore.isUserEditBlocked()).toBe(false)
+    // An open capture is never evicted, so enough of these would fill the buffer.
+    const capture = getDiagnosticsSnapshot().turnCaptures.find(
+      (t) => t.actionId === successor!.actionId,
+    )
+    expect(capture).toMatchObject({ outcome: 'failed', outcomeReason: 'unwound' })
   })
 })
 
