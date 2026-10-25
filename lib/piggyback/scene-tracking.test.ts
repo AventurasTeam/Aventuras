@@ -35,9 +35,8 @@ describe('sceneTrackingActions', () => {
     ])
   })
 
-  // The trap the three-way shape exists for: char_b was in this entry's ORIGINAL scene but
-  // not the edited one. Folding from `previous` alone never visits them, leaving the location
-  // the first fold wrote.
+  // char_b was in the previous scene and this entry's original one, not the edited one: they
+  // close out at the previous entry.
   it('closes tracking for a character the edit removed from the scene', () => {
     const actions = sceneTrackingActions({
       branchId,

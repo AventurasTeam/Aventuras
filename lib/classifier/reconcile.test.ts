@@ -416,7 +416,7 @@ describe('reconcileNewEntity', () => {
     ['its partner is gone', 'char_gone', 'char_old'],
     ['its partner is no longer a namesake', 'char_mira', 'char_old'],
     ['its flag is live', 'char_new', 'char_new'],
-  ])('ranks an older row whose flag names a row when %s', async (_, partnerId, expected) => {
+  ])('picks the older row unless its flag is live: %s', async (_, partnerId, expected) => {
     const flagged = {
       nameCollisionFlag: 1,
       nameCollisionPartnerId: partnerId,
