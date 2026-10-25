@@ -680,6 +680,37 @@ describe('split start', () => {
     )
     expect(capture).toMatchObject({ outcome: 'failed', outcomeReason: 'unwound' })
   })
+
+  // Same contrived trigger on the starting run: its caller gets the throw, and the run still ends.
+  it('unwinds an origin whose drive throws, then rejects its caller', async () => {
+    const { ctx } = await makeHarness()
+    async function* dropsRegistry(): AsyncGenerator<never, PhaseResult> {
+      __resetRegistry()
+      return { status: 'completed' }
+    }
+    definePipeline({ kind: 'solo', phases: [{ name: 'p', run: dropsRegistry }], ...base })
+    let origin: RunState | undefined
+    pipelineEventBus.subscribe('run_start', () => {
+      origin = [...generationStore.getTxState().runs.values()][0]
+    })
+    const completes = recordCompletes()
+
+    await expect(startPipeline('solo', ctx).origin).rejects.toThrow()
+
+    expect(completes).toEqual([
+      {
+        kind: 'solo',
+        outcome: 'failed',
+        idle: true,
+        error: { kind: 'orchestrator', detail: expect.stringMatching(/^run threw: /) },
+      },
+    ])
+    expect(generationStore.isUserEditBlocked()).toBe(false)
+    const capture = getDiagnosticsSnapshot().turnCaptures.find(
+      (t) => t.actionId === origin!.actionId,
+    )
+    expect(capture).toMatchObject({ outcome: 'failed', outcomeReason: 'unwound' })
+  })
 })
 
 describe('parallel group', () => {

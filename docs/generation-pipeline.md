@@ -1388,7 +1388,9 @@ the chain's last run ends. Submit and regenerate await only `origin`,
 so they release the branch queue at the turn's commit while a
 chained pass runs on, and a head reversal reaches the pass to
 interrupt it rather than queueing behind it. A successor whose marker
-insert fails is unwound, and the chain ends there.
+insert fails is unwound, and the chain ends there. So is any run whose
+drive throws before it ends, which would otherwise hold the gate until
+a restart; an origin's `origin` still rejects with the throw.
 
 (Invariant depends on Zustand's setState being synchronous; pin
 in tests if a state-library swap ever happens.)
