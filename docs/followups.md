@@ -15,24 +15,6 @@ for the placement rule.
 
 ## Data-model
 
-- **Classifier parse rate under the AI writer map's schema.** A pass's
-  parse rate under the larger schema needs watching, since a pass
-  whose reply won't parse fails a Send rather than costing memory:
-  `pnpm probe:classifier` measures the first-attempt rate on a real
-  provider
-  ([`testing.md → Real-provider checks`](./testing.md#real-provider-checks)),
-  and splitting the pass into two calls is the remedy if it falls.
-  Raised by the AI writer map; taken out of the entity-state play-check
-  2026-10-25, since a structural remedy found at the end of the cycle
-  costs the most.
-
-  Measured 2026-10-26 on the seeded `br_hero_main` (20 turns, a
-  14–15k-character prompt) against a local Gemma 4 26B A4B: 20 of 20
-  first-attempt parses with mentioned places off, 19 of 20 with them
-  on, the miss a JSON syntax slip a parse retry recovered; no run
-  failed. The seed's graph is small, so a played story's longer
-  replies are the open case.
-
 - **Generation prompts aren't checked against the model's window.**
   Nothing compares a generation prompt against the model's window
   (`maxInputTokens` is read by the embedder only), while the
@@ -276,9 +258,19 @@ breakdown under [UX](#ux).
   when the prose changes it, puts `top` only where nothing could
   contain a place, and puts an item down only when it stays there at
   the turn's end, since a drop records where the item ends up; a pass
-  tells a reveal from an alias and a return from a memory. The pass's
-  parse rate, which can't wait for play, is under
-  [Data-model](#data-model).
+  tells a reveal from an alias and a return from a memory.
+
+  A pass's parse rate under the larger schema held on the seed
+  (2026-10-26, a local Gemma 4 26B A4B on `br_hero_main`: 20 of 20
+  first-attempt parses with mentioned places off, 19 of 20 with them
+  on, the miss a JSON syntax slip a parse retry recovered), but a
+  played story's longer replies are untested. A pass whose reply won't
+  parse fails a Send rather than costing memory, so play re-runs
+  `pnpm probe:classifier` on a played branch
+  ([`testing.md → Real-provider checks`](./testing.md#real-provider-checks)),
+  and splitting the pass into two calls is the remedy if the rate
+  falls. A parse proves only the reply's shape, so play also checks
+  that replies fill the schema's new fields.
 
 - **Retrieval tuning.** The ranker's defaults are starting guesses:
   decay rates (`λ_type`), MMR diversity (`λ_div`), the similarity
