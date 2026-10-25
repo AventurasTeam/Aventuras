@@ -1034,9 +1034,12 @@ without the re-pin, the reply's last lines would stay hidden for the
 whole pass. A draft that grows the composer is another trigger.
 Further from the bottom the user keeps their position, and a
 viewport that grows needs nothing. An entry's inline editor that has
-focus holds the position too: on Android the keyboard opening under
-it shrinks the viewport, and pinning the bottom then would push the
-editor up under the top bar.
+focus doesn't re-pin: on Android the keyboard opening under it
+shrinks the viewport, and pinning the bottom then would push the
+editor up under the top bar. The reader instead scrolls just far
+enough to bring the editor's row, Save and Cancel included, back
+into view, since Android's WebView never scrolls a focused field into
+view itself; an editor already in view holds its position.
 
 **Streaming while in a non-recent window.** Pipeline writes happen
 in the data layer regardless of which window is rendered. The

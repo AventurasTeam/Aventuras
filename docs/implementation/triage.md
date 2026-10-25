@@ -56,25 +56,3 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
-
-- **On an Android phone the keyboard hides the reader's inline editor.**
-  Pre-existing: main behaves the same. On an emulator (411×914 dp, the
-  suggestion strip open), Edit on an entry near the bottom autofocuses
-  its `Textarea` (`components/compounds/entry-card.tsx`), and the
-  keyboard leaves the reader 180 CSS px above the suggestion strip and
-  composer. The editor grows the row, so the reader has already left the
-  bottom and the viewport-shrink re-pin doesn't fire. The textarea
-  then sits at 162–386 px, only its top 18 px above the strip. For
-  a long last row it sits at 211–435 px, fully hidden. Nothing scrolls
-  it into view: Android's WebView never scrolled a focused field into
-  view in any run, and the reader has no code that does. A fix that
-  keeps a focused inline editor in view when the reader shrinks would
-  also cover two cases where the re-pin had helped. The re-pin now
-  holds for a focused editor
-  ([`reader-composer.md → Autoscroll`](../ui/screens/reader-composer/reader-composer.md#autoscroll)),
-  so they behave as on main again. On the stock phone, a long last
-  row's editor kept its lower half and Save in view (79 px of the
-  textarea, against 13 px without the re-pin). On a very tall reader
-  (density 300), the whole textarea stayed in view, against 149 of
-  its 224 px. Raised 2026-10-21 by the gated classifier slice review's
-  R1 probe.

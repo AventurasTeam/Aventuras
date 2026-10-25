@@ -515,11 +515,18 @@ export function ReaderSurface({
       const previousClientHeight = lastClientHeight
       lastClientHeight = el.clientHeight
       if (el.clientHeight >= previousClientHeight || gestureActiveRef.current) return
-      // The Android keyboard opening under an in-row editor would push the editor up under
-      // the top. hasFocus: a tap on the native composer leaves activeElement on an open editor.
+      // Pinning the bottom under an in-row editor would push it up under the top, yet the Android
+      // keyboard can still hide it, which its WebView never scrolls into view: bring the editor's
+      // row, Save included, just into view. hasFocus: a tap on the native composer leaves
+      // activeElement on an open editor.
       const doc = el.ownerDocument
       const active = doc.activeElement
-      if (active instanceof HTMLTextAreaElement && el.contains(active) && doc.hasFocus()) return
+      if (active instanceof HTMLTextAreaElement && el.contains(active) && doc.hasFocus()) {
+        const row = active.closest('[data-entry-row]') ?? active
+        const hiddenPx = row.getBoundingClientRect().bottom - el.getBoundingClientRect().bottom
+        if (hiddenPx > 0) el.scrollTop += hiddenPx
+        return
+      }
       // Read from geometry, not lastDistanceRef: content can grow below without a scroll
       // event, and a shrink never clamps scrollTop.
       const distanceBeforePx = el.scrollHeight - el.scrollTop - previousClientHeight

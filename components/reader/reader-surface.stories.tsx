@@ -592,6 +592,32 @@ export const ShrinkWhileEditingHolds: Story = {
   },
 }
 
+// The keyboard's share of a phone's reader (the triage measurement left 180 CSS px above it).
+const KEYBOARD_HEIGHT_PX = 260
+
+/** The keyboard hides the last row's editor; the reader brings its row, Save included, back up. */
+export const ShrinkWhileEditingRevealsTheEditor: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await userEvent.click(rowButton('o14', t('reader:entryCard.editEntry')))
+    const textarea = await waitFor(() =>
+      screen.getByRole('textbox', { name: t('reader:entryCard.editContent') }),
+    )
+    await waitFor(() => expect(textarea).toHaveFocus())
+    await scrollToDistance(scroller, 0)
+    await resizeViewport(scroller, -KEYBOARD_HEIGHT_PX)
+    expect(textarea).toHaveFocus()
+    const save = within(entryRow('o14')).getByRole('button', { name: t('save') })
+    await waitFor(() =>
+      expect(save.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        scroller.getBoundingClientRect().bottom,
+      ),
+    )
+  },
+}
+
 /**
  * On native the composer is a native view: tapping it leaves the reader document's activeElement
  * on an open editor but takes the document's focus, so the re-pin applies again.
