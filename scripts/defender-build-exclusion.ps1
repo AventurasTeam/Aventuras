@@ -77,11 +77,11 @@ switch ($Action) {
         }
       } catch {}
       if ($null -eq $worktrees) {
-        Write-Warning 'git worktree list failed, so Status cannot tell worktrees apart.'
+        Write-Warning 'git worktree list failed, so checkouts that still exist are listed as unknown.'
       }
 
       # A missing `target` alone only means a clean; a missing checkout is a rule left behind.
-      $found | ForEach-Object {
+      $rows = $found | ForEach-Object {
         $path = Get-NormalPath $_
         $root = if ($path -like '*\src-tauri\target') { Split-Path (Split-Path $path) } else { $path }
         $status = if (-not (Test-Path -LiteralPath $root)) {
@@ -95,13 +95,21 @@ switch ($Action) {
         } else {
           'not a checkout'
         }
-        [pscustomobject]@{
-          Path = $_
-          Status = $status
-          TargetExists = Test-Path -LiteralPath $path
-          ThisCheckout = $path -eq $target
+        $notes = @()
+        if ($path -eq $target) { $notes += 'this checkout' }
+        if ($status -ne 'left behind' -and -not (Test-Path -LiteralPath $path)) { $notes += 'no target' }
+        $line = "  $_"
+        if ($notes) { $line += "  ($($notes -join ', '))" }
+        [pscustomobject]@{ Status = $status; Line = $line }
+      }
+
+      foreach ($status in 'live', 'other checkout', 'not a checkout', 'unknown', 'left behind') {
+        $group = @($rows | Where-Object Status -eq $status)
+        if ($group.Count -gt 0) {
+          $status
+          $group.Line
         }
-      } | Format-Table -AutoSize -Wrap
+      }
     }
   }
 }
