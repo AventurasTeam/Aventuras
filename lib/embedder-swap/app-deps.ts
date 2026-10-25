@@ -386,7 +386,7 @@ export function composeRetrievalEmbedDeps(config: EmbedderConfig): {
  */
 export async function embedClassifierDescriptions(
   texts: string[],
-  signal?: AbortSignal,
+  signal: AbortSignal,
 ): Promise<{ vectors: Float32Array[]; dim: number }> {
   const storyId = currentStoryStore.getCurrentStory()?.storyId
   if (storyId == null) return { vectors: [], dim: 0 }

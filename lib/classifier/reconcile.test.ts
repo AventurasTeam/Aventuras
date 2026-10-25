@@ -288,6 +288,8 @@ function embedder(similarityOf: Record<string, number>) {
 }
 
 const KEEPER = 'A tavern keeper with ink-stained hands.'
+// Matching outside a run: nothing aborts it.
+const signal = new AbortController().signal
 const candidate = (
   over: Partial<{ name: string; description: string; keywords: string[] }> = {},
 ) => ({
@@ -305,6 +307,7 @@ describe('reconcileNewEntity', () => {
       entities: [row({ name: 'Johnson' }), row({ id: 'loc_1', kind: 'location', name: 'John' })],
       embedDescriptions: embed,
       log: logger,
+      signal,
       scene: null,
     })
     expect(decision).toEqual({ kind: 'create', flag: null })
@@ -317,6 +320,7 @@ describe('reconcileNewEntity', () => {
       entities: [row({ name: 'Eldrin' })],
       embedDescriptions: embedder({ [KEEPER]: 0.9 }),
       log: logger,
+      signal,
       scene: null,
     })
     expect(spaced).toEqual({ kind: 'known', entityId: 'char_1', similarity: 0.9 })
@@ -325,6 +329,7 @@ describe('reconcileNewEntity', () => {
       entities: [row({ name: 'Zoë' })],
       embedDescriptions: embedder({ [KEEPER]: 0.9 }),
       log: logger,
+      signal,
       scene: null,
     })
     expect(decomposed).toEqual({ kind: 'known', entityId: 'char_1', similarity: 0.9 })
@@ -336,6 +341,7 @@ describe('reconcileNewEntity', () => {
       entities: [row({ name: 'Eldrin Vane' })],
       embedDescriptions: embedder({ [KEEPER]: 0.9 }),
       log: logger,
+      signal,
       scene: null,
     })
     expect(decision).toEqual(flagOf('char_1', 'alike'))
@@ -349,6 +355,7 @@ describe('reconcileNewEntity', () => {
         entities: [row({ name: 'The Innkeeper' })],
         embedDescriptions: embedder({ [KEEPER]: 0.6 }),
         log: logger,
+        signal,
         scene: null,
       },
     )
@@ -358,6 +365,7 @@ describe('reconcileNewEntity', () => {
       entities: [row({ name: 'Aric', keywords: ['The Grey Wolf'] })],
       embedDescriptions: embedder({ [KEEPER]: 0.6 }),
       log: logger,
+      signal,
       scene: null,
     })
     expect(wolf).toEqual(flagOf('char_1', 'ambiguous'))
@@ -373,13 +381,14 @@ describe('reconcileNewEntity', () => {
       ],
       embedDescriptions: embed,
       log: logger,
+      signal,
       scene: null,
     })
     expect(decision).toMatchObject({ kind: 'known', entityId: 'char_real' })
     expect(embed).toHaveBeenCalledTimes(1)
     expect(embed).toHaveBeenCalledWith(
       ['The keeper, ink on his hands.', 'A blacksmith.', KEEPER],
-      undefined,
+      signal,
     )
   })
 
@@ -394,9 +403,10 @@ describe('reconcileNewEntity', () => {
       ],
       embedDescriptions: embed,
       log: logger,
+      signal,
       scene: null,
     })
-    expect(embed).toHaveBeenCalledWith(['The keeper, ink on his hands.', KEEPER], undefined)
+    expect(embed).toHaveBeenCalledWith(['The keeper, ink on his hands.', KEEPER], signal)
     // The one scored row ranks ahead of the older unscored ones.
     expect(decision).toEqual(flagOf('char_kept', 'distinct'))
   })
@@ -421,6 +431,7 @@ describe('reconcileNewEntity', () => {
       ],
       embedDescriptions: embedder({}),
       log: logger,
+      signal,
       scene: null,
     })
     expect(decision).toEqual(flagOf(expected, 'no-signal'))
@@ -433,6 +444,7 @@ describe('reconcileNewEntity', () => {
       entities: [row({ description: null })],
       embedDescriptions: embed,
       log: logger,
+      signal,
       scene: null,
     })
     expect(embed).not.toHaveBeenCalled()
@@ -447,6 +459,7 @@ describe('reconcileNewEntity', () => {
       entities: [row({ id: 'char_part', name: 'Eldrin Vane' }), row({ id: 'char_exact' })],
       embedDescriptions: embed,
       log: logger,
+      signal,
       scene: null,
     })
     const partial = await reconcileNewEntity(candidate({ description: '' }), {
@@ -454,6 +467,7 @@ describe('reconcileNewEntity', () => {
       entities: [row({ id: 'char_part', name: 'Eldrin Vane' })],
       embedDescriptions: embed,
       log: logger,
+      signal,
       scene: null,
     })
     expect(embed).not.toHaveBeenCalled()
@@ -468,6 +482,7 @@ describe('reconcileNewEntity', () => {
         entities: [row()],
         embedDescriptions,
         log: logger,
+        signal,
         scene: null,
       })
 
@@ -527,6 +542,7 @@ describe('reconcileNewEntity', () => {
           dim: 2,
         }),
         log: logger,
+        signal,
         scene: null,
       })
 
@@ -546,6 +562,7 @@ describe('reconcileNewEntity', () => {
         entities: [row({ status: 'staged' })],
         embedDescriptions: embedder({ [KEEPER]: 0.6 }),
         log: logger,
+        signal,
         scene,
       })
 
@@ -581,17 +598,15 @@ describe('thresholds', () => {
 describe('scoreDescriptions', () => {
   it('scores each description index-aligned, leaving a blank one unscored and out of the call', async () => {
     const embed = embedder({ [KEEPER]: 0.8 })
-    expect(await scoreDescriptions('The keeper.', [null, KEEPER, '  '], embed, logger)).toEqual([
-      null,
-      0.8,
-      null,
-    ])
-    expect(embed).toHaveBeenCalledWith(['The keeper.', KEEPER], undefined)
+    expect(
+      await scoreDescriptions('The keeper.', [null, KEEPER, '  '], embed, logger, signal),
+    ).toEqual([null, 0.8, null])
+    expect(embed).toHaveBeenCalledWith(['The keeper.', KEEPER], signal)
   })
 
   it('makes no call for a blank candidate', async () => {
     const embed = embedder({ [KEEPER]: 0.8 })
-    expect(await scoreDescriptions('  ', [KEEPER], embed, logger)).toEqual([null])
+    expect(await scoreDescriptions('  ', [KEEPER], embed, logger, signal)).toEqual([null])
     expect(embed).not.toHaveBeenCalled()
   })
 })
@@ -621,6 +636,7 @@ describe('a description embed that throws', () => {
         [KEEPER, 'A courier.'],
         offline,
         makeLogger('act_turn'),
+        signal,
       ),
     ).toEqual([null, null])
     expect(warned()).toEqual([
@@ -636,6 +652,7 @@ describe('a description embed that throws', () => {
       embedDescriptions: offline,
       log: makeLogger('act_pass'),
       scene: null,
+      signal,
     })
     expect(decision).toEqual(flagOf('char_1', 'no-signal'))
     expect(warned()).toEqual([
@@ -649,7 +666,6 @@ describe('a description embed that throws', () => {
     const embed = vi.fn<EmbedDescriptions>(
       (_texts, signal) =>
         new Promise((_resolve, reject) => {
-          if (signal === undefined) return reject(new Error('no signal'))
           signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
           controller.abort()
         }),
@@ -736,6 +752,7 @@ describe('reconcileNewEntity — a faction', () => {
       entities: namesakes,
       embedDescriptions: embedder(similarity === null ? {} : { [KEEPER]: similarity }),
       log: logger,
+      signal,
       scene: null,
     })
 

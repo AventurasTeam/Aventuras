@@ -78,6 +78,8 @@ const oldKey = (): Entity =>
   row({ id: OLD_KEY, kind: 'item', name: 'rusted key', description: 'an iron key' })
 
 const noEmbed: EmbedDescriptions = async () => ({ vectors: [], dim: 0 })
+// A run nothing cancels; the cancel case passes its own.
+const runSignal = new AbortController().signal
 
 // Cast, not substituted: these blocks are built already holding ids and normalized creates.
 const assumeSubstituted = (block: ParsedStateBlock) => block as SubstitutedStateBlock
@@ -113,7 +115,7 @@ function runPlanner(
     now: () => 1000,
     newId: (prefix) => `${prefix}_new_${++counts[prefix]}`,
     log: opts.log ?? logger,
-    signal: opts.signal,
+    signal: opts.signal ?? runSignal,
   })
 }
 
@@ -1321,7 +1323,7 @@ describe('planTurnCreates — matching', () => {
       embed,
     })
     expect(embed).toHaveBeenCalledOnce()
-    expect(embed).toHaveBeenCalledWith(['an iron key, flaked with rust', 'an iron key'], undefined)
+    expect(embed).toHaveBeenCalledWith(['an iron key, flaked with rust', 'an iron key'], runSignal)
     expect(createdEntries(creates(plan))).toEqual([
       expect.objectContaining({
         id: 'item_new_1',
@@ -1384,7 +1386,6 @@ describe('planTurnCreates — matching', () => {
     const embed = vi.fn<EmbedDescriptions>(
       (_texts, signal) =>
         new Promise((_resolve, reject) => {
-          if (signal === undefined) return reject(new Error('no signal'))
           signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
           controller.abort()
         }),
@@ -1423,7 +1424,7 @@ describe('planTurnCreates — matching', () => {
     })
     expect(embed).toHaveBeenCalledWith(
       ['an iron key, flaked with rust', 'bronze', 'iron'],
-      undefined,
+      runSignal,
     )
     expect(createdEntries(creates(plan))).toEqual([
       expect.objectContaining({ nameCollisionPartnerId: IRON_KEY, nameCollisionReason: 'alike' }),
@@ -1453,8 +1454,8 @@ describe('planTurnCreates — matching', () => {
       { entities: world(oldKey()), embed },
     )
     expect(embed.mock.calls).toEqual([
-      [['small', 'an iron key'], undefined],
-      [['large', 'an iron key'], undefined],
+      [['small', 'an iron key'], runSignal],
+      [['large', 'an iron key'], runSignal],
     ])
   })
 

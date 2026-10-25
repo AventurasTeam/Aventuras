@@ -298,7 +298,7 @@ async function itemFlag(
   entities: readonly Entity[],
   embed: EmbedDescriptions,
   log: Logger,
-  signal: AbortSignal | undefined,
+  signal: AbortSignal,
 ): Promise<ItemMatchFlag | null> {
   const namesakes = itemNamesakes(text.name, entities)
   if (namesakes.length === 0) return null
@@ -321,7 +321,7 @@ async function planItems(args: {
   now: () => number
   newId: (prefix: 'item') => string
   log: Logger
-  signal: AbortSignal | undefined
+  signal: AbortSignal
 }): Promise<{ ids: Map<string, string>; rows: Entity[] }> {
   const scored = await Promise.all(
     args.emissions
@@ -463,7 +463,7 @@ export async function planTurnCreates(input: {
   /** The phase's logger, so a dropped create's entry carries the action. */
   log: Logger
   /** The run's, so a cancel ends an item's slow match embed. */
-  signal?: AbortSignal
+  signal: AbortSignal
 }): Promise<TurnCreatePlan> {
   const { block, entities, mapCurrentLocationId, story, branchId, source, embed, now, newId, log } =
     input

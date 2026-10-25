@@ -34,7 +34,7 @@ export type ScoredNamesake = {
 /** `signal`: the run's, so a cancel ends a slow embed instead of waiting it out. */
 export type EmbedDescriptions = (
   texts: string[],
-  signal?: AbortSignal,
+  signal: AbortSignal,
 ) => Promise<{ vectors: Float32Array[]; dim: number }>
 
 /** Cosine similarity in [-1, 1], rounded to 6 decimals to absorb Float32Array storage noise. */
@@ -134,7 +134,7 @@ export async function scoreDescriptions(
   embed: EmbedDescriptions,
   /** The run's, so a failed embed's warn carries its actionId. */
   log: Pick<Logger, 'warn'>,
-  signal?: AbortSignal,
+  signal: AbortSignal,
 ): Promise<(number | null)[]> {
   const unscored = descriptions.map(() => null)
   if (!hasText(candidate)) return unscored
@@ -146,7 +146,7 @@ export async function scoreDescriptions(
   } catch (e) {
     // Matching degrades to unscored rather than failing its caller, so only the log shows it. A
     // cancel is no embedder fault; its caller sees the abort and discards the decision.
-    if (signal?.aborted !== true)
+    if (!signal.aborted)
       log.warn('classifier.description_embed_failed', {
         error: e instanceof Error ? e.message : String(e),
       })
@@ -171,7 +171,7 @@ type ReconcileDeps = {
   entities: readonly Entity[]
   embedDescriptions: EmbedDescriptions
   log: Pick<Logger, 'warn'>
-  signal?: AbortSignal
+  signal: AbortSignal
 } & (
   | {
       kind: 'character'
