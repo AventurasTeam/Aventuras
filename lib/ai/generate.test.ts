@@ -485,6 +485,43 @@ describe('generateStructured', () => {
     }
   })
 
+  // Left armed, a bound would hold a timer per attempt and a listener on the caller's signal.
+  it("disarms an attempt's bound once the attempt settles", async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(resolveModel).mockReturnValueOnce({
+        ok: true,
+        providerId: structuredProvider.id,
+        providerType: structuredProvider.type,
+        modelId: 'm',
+        params: { timeout: 30 },
+      })
+      const attempts: AbortSignal[] = []
+      vi.mocked(runProviderCall).mockImplementation(({ abortSignal }) => {
+        if (abortSignal === undefined) throw new Error('expected a bound')
+        attempts.push(abortSignal)
+        return Promise.resolve({ text: '{"description":"A tale."}' } as never)
+      })
+      const outer = new AbortController()
+
+      const res = await generateStructured(
+        'wizard-assist',
+        PROMPT,
+        schema,
+        STRUCTURED_CFG,
+        outer.signal,
+        { actionId: null },
+      )
+
+      expect(res.status).toBe('ok')
+      expect(vi.getTimerCount()).toBe(0)
+      outer.abort()
+      expect(attempts.map((signal) => signal.aborted)).toEqual([false])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('returns not-configured when the resolver fails', async () => {
     vi.mocked(resolveModel).mockReturnValueOnce({
       ok: false,
