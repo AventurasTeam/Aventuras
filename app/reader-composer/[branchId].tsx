@@ -610,11 +610,8 @@ export default function ReaderComposerRoute() {
   // A prior failure leaves a system entry as the branch tail; drop it (and
   // resync the store) before a dispatch so the pipeline's prompt/position reads
   // the real content tail, not the failure singleton.
-  //
-  // Read before the drop, so the caller holds what it removed even when the drop or its resync
-  // throws: that entry's `submission` is the only copy of the earlier failed turn's text that
-  // outlives a restart, because the turn's own user_action was reverse-replayed with its action
-  // group. A dispatch that then refuses has destroyed it for nothing unless it puts this back.
+  // Read before the drop, so a caller whose drop or resync throws still holds the entry's text
+  // (composer-draft.ts → SubmissionHandback).
   const systemTail = useCallback((): DroppedSystemEntry | null => {
     const tail = [...entriesStore.getEntries().values()].find(
       (e) => e.branchId === branchId && e.kind === 'system',
