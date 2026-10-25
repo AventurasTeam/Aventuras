@@ -89,3 +89,21 @@ slice-planning gate forces its resolution before that slice is planned.
   more than World holds. Canon doesn't say which the panel shows.
   Raised by the 2026-10-24 triage pass's verification; filed by its
   slice review.
+
+- **Small shared helpers the simplifier left for a home.** The 2026-10-24
+  triage pass's slice review ran the simplifier and skipped four
+  duplications that predate the range or need a new module:
+  - The expression that reads an unknown throw's message (an
+    `instanceof Error` check falling back to `String`) appears 60+ times across `lib`, `app` and `components`,
+    beside eight local `messageOf` / `errorMessage` helpers; five of
+    the copies sit in `lib/pipeline/runtime/orchestrator.ts` next to its
+    own `messageOf`.
+  - The orchestrator builds `run_complete` by hand at three sites
+    (`unwindRun`, `commitRun`, `abortRun`).
+  - The per-attempt `recoverable_error` loop is written three times
+    (`per-turn-piggyback.ts`, `suggestion-refresh.ts`,
+    `periodic-classifier.ts`); `call-error.ts` is the natural home.
+  - `lib/classifier/schema.ts`'s happening entry writes
+    `sourceTurn: z.string().optional()` inline while every other entry
+    uses the shared `sourceTurn` const; sharing the instance wants the
+    prompt-schema snapshots to confirm it.
