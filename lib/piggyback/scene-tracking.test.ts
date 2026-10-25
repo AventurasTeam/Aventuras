@@ -233,11 +233,15 @@ describe('sceneTrackingActions — a removed character the previous entry did no
       status: 'active',
       state: { lastSeenAt },
     }) as unknown as Entity
+  const places = [
+    { id: 'loc_old', kind: 'location', status: 'active' },
+    { id: 'loc_b', kind: 'location', status: 'active' },
+  ] as unknown as Entity[]
   const removeC = (character: Entity) =>
     sceneTrackingActions({
       branchId,
       source: 'user_edit',
-      entities: [character],
+      entities: [character, ...places],
       previous: {
         entryId: 'ent_0',
         currentLocationId: 'loc_retired',
@@ -258,6 +262,15 @@ describe('sceneTrackingActions — a removed character the previous entry did no
   // The wizard places characters with no lastSeenAt: that location stands.
   it('leaves their stored location alone when they have no older anchor', () => {
     expect(payloadsFor(removeC(seen(null)), 'char_c')).toEqual([])
+  })
+
+  // A delete leaves a lastSeenAt naming the place it removed.
+  it.each([
+    ['a deleted place', 'loc_deleted'],
+    ['a row that is no place', 'char_c'],
+  ])('reads an anchor at %s as no anchor', (_label, locationId) => {
+    const actions = removeC(seen({ entryId: 'ent_old', locationId, worldTime: 10 }))
+    expect(payloadsFor(actions, 'char_c')).toEqual([])
   })
 })
 

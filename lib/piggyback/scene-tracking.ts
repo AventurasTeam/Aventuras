@@ -100,8 +100,9 @@ export function sceneTrackingActions(args: Args): PipelineAction[] {
       // them back at their own older anchor.
       if (!seenBefore.has(character.id)) {
         const anchor = stateAs(character, 'character').lastSeenAt?.locationId
-        // With no anchor the stored location stands: the wizard places characters without one.
-        if (anchor != null)
+        // With no anchor the stored location stands: the wizard places characters without one. A
+        // delete leaves the anchor naming the removed place, which reads as none.
+        if (anchor != null && entities.some((e) => e.id === anchor && e.kind === 'location'))
           actions.push({
             kind: 'updateEntityLocationTracking',
             source,
