@@ -115,8 +115,11 @@ swipe scrolls the tree and changes no tab and no panel. At the tree's edge the s
 `vaul` offers no veto over a close: a swipe past `closeThreshold` (0.75, set in `drawer.svelte`) or
 a tap on the handle closes a sheet, even one that is not dismissible. So nothing with unsaved work
 is a sheet: the action modals that hold edits are dialogs on a phone too (see
-[ui-components.md](../development/ui-components.md)), and Escape, an outside click and Android's
-back press reach their guard through bits-ui, which can be vetoed. A close driven from our side
+[ui-components.md](../development/ui-components.md)). Escape and an outside click reach their guard
+through bits-ui, which can be vetoed. Android's back press does not rely on that: an open action
+modal claims it (`utils/backPress.ts`), and the layout's back handler gives it to the latest claim
+before it tries anything else. The synthetic Escape the handler sends to other dialogs closed a
+dirty action modal without asking. A close driven from our side
 never reaches `vaul`'s restore, so the scroll lock is released by hand (see `utils/scrollLock`).
 
 Sheets open and close in 180ms, set in `app.css` over `vaul`'s 0.5s animation. Only the open and

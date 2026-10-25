@@ -9,6 +9,7 @@
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { setTextareaUncapped } from '#lib/components/ui/textarea/index.ts'
   import { releaseOrphanScrollLock } from '#lib/utils/scrollLock.ts'
+  import { claimBackPress } from '#lib/utils/backPress.ts'
   import { MODAL_CLOSE_TRANSITION_MS } from '#lib/constants/layout.ts'
   import { cn } from '#lib/utils/cn.ts'
   import ModalActions from './ModalActions.svelte'
@@ -127,6 +128,12 @@
       releaseOrphanScrollLock()
       onClosed?.()
     })
+  })
+
+  // Android's back press reaches this as Escape directly, not through a synthetic key event.
+  $effect(() => {
+    if (!open) return
+    return claimBackPress(() => request('escape'))
   })
 
   // A pending timer would otherwise act on whichever modal has taken this one's place.

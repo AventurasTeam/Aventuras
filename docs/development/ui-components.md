@@ -21,7 +21,8 @@ rest:
   with a handle (see below), where only the handle drags and the content scrolls.
 - **Buttons.** An outlined Cancel and the action, side by side on a phone and at the trailing edge
   on desktop. The action's icon turns into a spinner while it runs.
-- **Ways out.** Cancel, Escape (which Android's back press sends) and a click outside all go
+- **Ways out.** Cancel, Escape, Android's back press (claimed by the open modal through
+  `utils/backPress.ts`, and decided as Escape) and a click outside all go
   through one decision, `shared/actionModalClose.ts`, which has its own tests. A sheet's swipe or
   handle tap closes it without asking, which is why a sheet holds nothing to lose.
 - **The busy lock.** While `busy`, no way out closes the modal or asks anything, unless

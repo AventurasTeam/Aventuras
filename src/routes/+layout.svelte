@@ -6,6 +6,7 @@
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { story } from '#lib/stores/story.svelte.ts'
   import { isAndroid } from '#lib/utils/platform.ts'
+  import { dispatchBackPress } from '#lib/utils/backPress.ts'
   import { errMessage } from '#lib/utils/error.ts'
 
   let { children } = $props()
@@ -28,6 +29,9 @@
     let lastBackAttemptAt = 0
 
     ;(window as any).__aventuraBackHandler = () => {
+      // An action modal decides the press itself, as Escape: it asks before discarding edits.
+      if (dispatchBackPress()) return
+
       // Close open dialog/drawer via Escape key so vaul-svelte/bits-ui
       // run their proper close sequence (animations, body style cleanup)
       const openDialog = document.querySelector('[data-state="open"][role="dialog"]')
