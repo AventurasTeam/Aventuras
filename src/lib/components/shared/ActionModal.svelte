@@ -50,6 +50,8 @@
     description?: string | Snippet
     /** Only for a confirmation that warns, drawn before the title. */
     titleIcon?: Snippet
+    /** A way to do the job other than this modal, such as asking the assistant; beside the title. */
+    headerAction?: Snippet
     /** The body; a confirmation whose description says it all has none. */
     children?: Snippet
     action: Action
@@ -78,6 +80,7 @@
     title,
     description,
     titleIcon,
+    headerAction,
     children,
     action,
     cancelLabel,
@@ -260,17 +263,26 @@
     >
       <!-- Left-aligned at every width: a title or description that wraps reads badly centred. -->
       <ResponsiveModal.Header class="border-b px-6 py-4 text-left" closeButton={false}>
-        <ResponsiveModal.Title class={cn('text-left', titleIcon && 'flex items-center gap-2')}>
-          {@render titleIcon?.()}
-          {title}
-        </ResponsiveModal.Title>
-        {#if typeof description === 'string'}
-          <ResponsiveModal.Description class="text-left">{description}</ResponsiveModal.Description>
-        {:else if description}
-          <ResponsiveModal.Description class="text-left">
-            {@render description()}
-          </ResponsiveModal.Description>
-        {/if}
+        <div class="flex items-center gap-3">
+          <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+            <ResponsiveModal.Title class={cn('text-left', titleIcon && 'flex items-center gap-2')}>
+              {@render titleIcon?.()}
+              {title}
+            </ResponsiveModal.Title>
+            {#if typeof description === 'string'}
+              <ResponsiveModal.Description class="text-left"
+                >{description}</ResponsiveModal.Description
+              >
+            {:else if description}
+              <ResponsiveModal.Description class="text-left">
+                {@render description()}
+              </ResponsiveModal.Description>
+            {/if}
+          </div>
+          {#if headerAction}
+            <div class="shrink-0">{@render headerAction()}</div>
+          {/if}
+        </div>
       </ResponsiveModal.Header>
 
       <!-- The one scroller: the buttons scroll with the content, so what they do is read first. -->

@@ -40,6 +40,7 @@ rest:
 | `dirty`, `discardQuestion` | see below                                                                        |
 | `cancelLabel`              | only when Cancel ends more than the modal: "Cancel import"                       |
 | `titleIcon`                | only for a risk beyond the action itself; see Wording                            |
+| `headerAction`             | an alternative to this modal, right of the title; see Wording                    |
 | `removal`                  | removing the thing the modal edits; see below                                    |
 | `size`                     | `md` (the default), `lg` or `2xl`; see the width scale below                     |
 | `requireChange`            | for a modal that edits existing values: the action waits until something changed |
@@ -143,7 +144,9 @@ a modifier. A phone keyboard has no such key, so it cannot save by accident.
 
 The header is left-aligned at every width, since a title or description that wraps reads badly
 centred. It holds only the title and a short description; a control, even a switch that changes
-what the body says, goes at the top of the body. The body never repeats the title: "Entry 47 will
+what the body says, goes at the top of the body. The one exception is `headerAction`: a way to do
+the job other than this modal, such as the character editor's "Ask assistant", sits right of the
+title, as an icon alone on a phone. The body never repeats the title: "Entry 47 will
 be deleted" under "Delete entry 47" says nothing.
 
 - **Sentence case** for titles and buttons.

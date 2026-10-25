@@ -40,7 +40,8 @@
 <ActionModal
   {open}
   {onCancel}
-  title="Replace this pack"
+  title={`Replace the pack “${pack?.name ?? ''}”`}
+  description={packData?.author ? `By ${packData.author}` : undefined}
   action={{
     label: 'Replace',
     tone: 'overwrite',
@@ -49,22 +50,17 @@
   }}
   busy={updating}
 >
-  <ExplanationFold id="pack_update_help" summary="What it changes">
-    <p>
-      The pack keeps its name and every story stays bound to it. Its templates and variables are
-      replaced by the file's.
-    </p>
-  </ExplanationFold>
-
   {#if pack && packData && summary}
     <div class="flex flex-wrap items-center gap-2">
-      <span class="text-sm font-medium">{pack.name}</span>
       <Badge variant="secondary">{packData.templates.length} templates</Badge>
       <Badge variant="secondary">{packData.variables.length} variables</Badge>
-      {#if packData.author}
-        <span class="text-muted-foreground text-sm">By {packData.author}</span>
-      {/if}
     </div>
+    <ExplanationFold id="pack_update_help" summary="What it changes">
+      <p>
+        The pack keeps its name and every story stays bound to it. Its templates and variables are
+        replaced by the file's.
+      </p>
+    </ExplanationFold>
 
     {#if edited > 0}
       <Alert.Root variant="destructive">
@@ -78,10 +74,11 @@
             {edited === 1 ? 'It' : 'They'} will be replaced by the file's version. Export the pack first
             if you want to keep {edited === 1 ? 'it' : 'them'}.
           </span>
+          <!-- The safe way out of the warning, so it wears Cancel's look, not the alert's red. -->
           <Button
             variant="outline"
             size="sm"
-            class="gap-1.5"
+            class="text-foreground gap-1.5"
             onclick={onExportFirst}
             disabled={exporting || updating}
           >

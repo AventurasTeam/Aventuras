@@ -126,25 +126,30 @@
   requireChange={isEditing}
   size="2xl"
 >
-  {#if isEditing && onOpenAssistant}
-    <Button
-      variant="outline"
-      size="sm"
-      class="gap-1.5"
-      disabled={saving}
-      onclick={() => {
-        if (!character) return
-        onOpenAssistant({
-          entityType: 'character',
-          entityId: character.id,
-          entityName: character.name,
-        })
-      }}
-    >
-      <Bot class="h-4 w-4" />
-      Ask assistant
-    </Button>
-  {/if}
+  {#snippet headerAction()}
+    {#if isEditing && onOpenAssistant}
+      <!-- An alternative to editing by hand, so it sits by the title rather than in the form. -->
+      <Button
+        variant="outline"
+        size="sm"
+        class="gap-1.5"
+        title="Ask assistant"
+        aria-label="Ask assistant"
+        disabled={saving}
+        onclick={() => {
+          if (!character) return
+          onOpenAssistant({
+            entityType: 'character',
+            entityId: character.id,
+            entityName: character.name,
+          })
+        }}
+      >
+        <Bot class="h-4 w-4" />
+        <span class="hidden md:inline">Ask assistant</span>
+      </Button>
+    {/if}
+  {/snippet}
   <VaultCharacterFormFields data={formData} onUpdate={(newData) => (formData = newData)} />
 </ActionModal>
 
