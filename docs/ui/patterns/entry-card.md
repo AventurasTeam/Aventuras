@@ -285,13 +285,14 @@ line names it from the report. Create lines are one per distinct id.
 
 ### State problems
 
-The group lists what the turn's model said that wasn't applied, one
-line each: a failed field, a dropped ref, a rejected location and a
-rejected condition, with the raw block under them when a parse failed.
-A wrong-kind ref is named from its row and its kind ("Ashfen Marshes
-(Location) can't go in the scene"), or from the turn's create for a
-handle; an unknown one shows as the model wrote it, since it names
-nothing; an unreadable one names only its field.
+The group lists what the turn's model said that wasn't applied: one
+line for the failed fields, and one for each other problem (a dropped
+ref, the rejected location, a rejected condition), with the raw block
+under them when a parse failed. The lines take the box's tone; the raw
+block stays muted. A wrong-kind ref is named from its row and its kind
+("Ashfen Marshes (Location) can't go in the scene"), or from the turn's
+create for a handle; an unknown one shows as the model wrote it, since
+it names nothing; an unreadable one names only its field.
 
 **The world-state toggle turns alert** whenever the group holds a line
 the turn didn't recover from: the
@@ -300,10 +301,11 @@ in `danger` with a dot in its corner, and an accessible name that says
 part of the state wasn't applied. The card then shows a problem without
 the panel open, on the turn it belongs to, and the group's box is
 `danger` to match. A narrative failure the fallback recovered still
-lists its fields, as recovered and in the warning tone, and leaves the
-toggle plain: the turn's state did apply. A clamped delta, a dropped
-create and an item moved to a holder that isn't a character don't
-count. They're corrections, or fine as they are.
+lists its fields, as recovered, and leaves the toggle plain: the turn's
+state did apply. On its own it leaves the box in the warning tone. A
+clamped delta, a dropped create and an item moved to a holder that
+isn't a character don't count. They're corrections, or fine as they
+are.
 
 **A turn that ends alert also toasts**, once, as the Send or the
 regenerate completes on the branch the user is still reading. The
