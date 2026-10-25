@@ -35,7 +35,7 @@ Send one only when:
 - The passage establishes something new or changed that lasts: a revealed past, a new role, a lasting change of heart
 - The story resolves a condition the listed description still mentions: take it out
 - The listed traits are more than 8, duplicated, or hold events and moods: consolidate them
-- An active character is listed with no \`description:\` at all: write one
+- An active character other than {{ protagonistName }} is listed with no \`description:\` at all: write one
 
 Your version must:
 - Keep every listed detail that is still true
