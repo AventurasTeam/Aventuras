@@ -7,7 +7,7 @@
  */
 
 import { settings } from '#lib/stores/settings.svelte.ts'
-import type { ImageProfile, ImageProviderType } from '#lib/types/index.ts'
+import type { ImageModelCapabilities, ImageProfile, ImageProviderType } from '#lib/types/index.ts'
 import { parseImageSpec, describeImageSpec, type ImageSpec } from '#lib/utils/image.ts'
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type {
@@ -329,6 +329,26 @@ export async function listImageModelsByProvider(
     log('Error listing models by provider', { providerType, error })
     throw error
   }
+}
+
+/**
+ * One model's capabilities: the provider's own per-model lookup when it has one, otherwise
+ * the model's entry in its list. A failed request rethrows; `undefined` means an unknown model.
+ */
+export async function lookupModelCapabilities(
+  providerType: ImageProviderType,
+  apiKey: string,
+  model: string,
+  baseUrl?: string,
+): Promise<ImageModelCapabilities | undefined> {
+  const provider = PROVIDER_FACTORIES[providerType]({
+    apiKey,
+    baseUrl,
+    timeoutMs: settings.apiSettings.llmTimeoutMs,
+  })
+  if (provider.getModelCapabilities) return provider.getModelCapabilities(model)
+  const models = await listImageModelsByProvider(providerType, apiKey, false, baseUrl)
+  return models.find((m) => m.id === model)
 }
 
 /**

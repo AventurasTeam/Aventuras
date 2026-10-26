@@ -63,6 +63,7 @@ import {
   supportsReferenceImages,
   listImageModels,
   listImageModelsByProvider,
+  lookupModelCapabilities,
 } from './registry'
 import { settings } from '#lib/stores/settings.svelte.ts'
 import type { ImageProviderType } from '#lib/types/index.ts'
@@ -477,6 +478,38 @@ describe('Image Provider Registry', () => {
       expect(await supportsReferenceImages('p', 'm')).toBe(false)
     })
   })
+  describe('lookupModelCapabilities', () => {
+    let counter = 0
+    function setup(models: () => Promise<ImageModelInfo[]>) {
+      vi.mocked(createOpenAIProvider).mockReturnValue({
+        id: 'openai',
+        name: 'openai',
+        generate: vi.fn(),
+        listModels: vi.fn(models),
+      })
+      return `sk-lookup-${counter++}`
+    }
+
+    it('finds the model in the list of a provider without a per-model lookup', async () => {
+      const key = setup(async () => [{ id: 'm', name: 'm', maxReferenceImages: 4 }])
+      expect(await lookupModelCapabilities('openai', key, 'm')).toMatchObject({
+        maxReferenceImages: 4,
+      })
+    })
+
+    it('is undefined for a model the list lacks', async () => {
+      const key = setup(async () => [{ id: 'other', name: 'other' }])
+      expect(await lookupModelCapabilities('openai', key, 'm')).toBeUndefined()
+    })
+
+    it('rejects when the list fails', async () => {
+      const key = setup(async () => {
+        throw new Error('503')
+      })
+      await expect(lookupModelCapabilities('openai', key, 'm')).rejects.toThrow('503')
+    })
+  })
+
   describe('model listing failures', () => {
     function failingProvider() {
       vi.mocked(createOpenAIProvider).mockReturnValue({
