@@ -138,7 +138,8 @@ export const reader = {
   // A config-resolver failure's fix row (system-entry-actions.tsx, useConfigFixAction).
   assignProfileFix: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:systemEntry.assignProfile') }),
-  // `Fix profile` on a system entry: a cut-off's, or a missing profile's (system-entry-actions.tsx).
+  // `Fix profile`: a cut-off or resolver system entry's fix, or a cut-off notice's link; scope it to
+  // a row where both can show.
   fixProfile: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:systemEntry.fixProfile') }),
   // An ai_reply row's cut-off notice (entry-card.tsx); `limit` fills the causes whose copy names it.
