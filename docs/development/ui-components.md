@@ -156,12 +156,13 @@ question first when the modal holds edits and then runs `next`, since leaving fo
 drops what was typed here.
 
 A body more than 2.5 screens long, measured against the tallest it has been while open so a phone's
-keyboard does not show and hide them, gets round buttons floating at the bottom right of the body:
-jump to the top once it has scrolled down, jump to the bottom under it while it is not there
-(`shared/scrollJump.ts`). Each keeps its place and fades, so the other never moves. A jump hides both
-and fades in what applies at the far end: on a phone, the end of the body is above the footer. They come with the shell, so no caller adds them. Jumping to the bottom
-with a phone's keyboard up closes the keyboard first and waits for the body to regain its height,
-so the jump lands where the keyboard no longer is.
+keyboard does not show and hide them, gets chevron buttons floating at the bottom right of the body,
+styled like the story screen's: jump to the top once it has scrolled down, jump to the bottom under
+it while it is not there (`shared/scrollJump.ts`). Each keeps its place and fades, so the other
+never moves. A jump hides both and fades in what applies at the far end: on a phone, the end of the
+body is above the footer. They come with the shell, so no caller adds them. Jumping to the bottom
+with a phone's keyboard up closes the keyboard first and waits for the body to regain its height, so
+the jump lands where the keyboard no longer is.
 
 The body never repeats the title: "Entry 47 will
 be deleted" under "Delete entry 47" says nothing.

@@ -6,7 +6,7 @@
 <script lang="ts">
   import { onDestroy, untrack, type Component, type Snippet } from 'svelte'
   import { fade } from 'svelte/transition'
-  import { ArrowDownToLine, ArrowUpToLine, Trash2 } from '@lucide/svelte'
+  import { ChevronDown, ChevronUp, Trash2 } from '@lucide/svelte'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { setTextareaUncapped } from '#lib/components/ui/textarea/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
@@ -344,21 +344,21 @@
 {#snippet jumpButton(edge: 'top' | 'bottom', shown: boolean)}
   {@const label = edge === 'top' ? 'Jump to the top' : 'Jump to the bottom'}
   <!-- A slot of its own, so the other button keeps its place while this one fades. -->
-  <span class="flex size-9">
+  <span class="flex size-8 sm:size-9">
     {#if shown}
       <span class="pointer-events-auto flex" transition:fade={{ duration: jumping ? 0 : 150 }}>
         <Button
-          variant="outline"
+          variant="secondary"
           size="icon"
-          class="bg-background size-9 rounded-full shadow-md"
+          class="size-8 rounded-full shadow-lg sm:size-9"
           aria-label={label}
           title={label}
           onclick={() => void jumpTo(edge)}
         >
           {#if edge === 'top'}
-            <ArrowUpToLine class="size-4" />
+            <ChevronUp class="size-4 sm:size-5" />
           {:else}
-            <ArrowDownToLine class="size-4" />
+            <ChevronDown class="size-4 sm:size-5" />
           {/if}
         </Button>
       </span>
