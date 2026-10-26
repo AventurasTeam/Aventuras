@@ -94,14 +94,20 @@ export async function resolveContentEditInvalidation(
   return { ...(await invalidationForScope(branchId, scope, ctx)), scope }
 }
 
-/** The content delta's payload: prior prose, and the scope its invalidation covered. */
+/**
+ * The content delta's payload: prior prose, the metadata partial when the edit also wrote the
+ * column (a cleared cut-off mark), and the scope its invalidation covered.
+ */
 export function contentEditUndoPayload(
   previousContent: string,
   scope: InvalidationScope | null,
+  metadataUndo?: Record<string, unknown>,
 ): Record<string, unknown> {
-  return scope
-    ? { content: previousContent, [INVALIDATION_SCOPE_KEY]: scope }
-    : { content: previousContent }
+  return {
+    content: previousContent,
+    ...(metadataUndo !== undefined ? { metadata: metadataUndo } : {}),
+    ...(scope ? { [INVALIDATION_SCOPE_KEY]: scope } : {}),
+  }
 }
 
 /**

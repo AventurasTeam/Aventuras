@@ -343,3 +343,32 @@ describe('stateReport conditions and drops', () => {
     expect(applyUndoPayload(entryMetadataSchema, next, undo)).toEqual(current)
   })
 })
+
+// data-model.md → Entry metadata shape → Cut-off mark.
+describe('cutOff', () => {
+  const base = { sceneEntities: [], currentLocationId: null, worldTime: 0 }
+
+  it.each([
+    { cause: 'max-output', outputTokens: 4096, limit: 4096 },
+    { cause: 'window', outputTokens: 1200, limit: 65536 },
+    { cause: 'unknown' },
+  ])('keeps a $cause mark with its numbers', (mark) => {
+    expect(entryMetadataSchema.parse({ ...base, cutOff: mark }).cutOff).toEqual(mark)
+  })
+
+  it('rejects a cause it does not know', () => {
+    expect(entryMetadataSchema.safeParse({ ...base, cutOff: { cause: 'context' } }).success).toBe(
+      false,
+    )
+  })
+
+  // The schema is the metadata undo encoder: a key it lacks would outlive the undo.
+  it('undoes a cleared mark back onto the metadata', () => {
+    const marked = {
+      ...base,
+      cutOff: { cause: 'max-output' as const, outputTokens: 512, limit: 512 },
+    }
+    const undo = computeUndoPayload(entryMetadataSchema, marked, base)
+    expect(applyUndoPayload(entryMetadataSchema, base, undo)).toEqual(marked)
+  })
+})

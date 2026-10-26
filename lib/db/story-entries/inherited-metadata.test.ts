@@ -49,4 +49,15 @@ describe('inheritedEntryMetadata', () => {
     }
     expect(inheritedEntryMetadata(tail)).not.toHaveProperty('retrievalQueries')
   })
+
+  // Authored, never inherited (data-model.md → Entry metadata shape): the next reply wasn't cut.
+  it('does not carry cutOff forward', () => {
+    const tail: EntryMetadata = {
+      sceneEntities: ['char_a'],
+      currentLocationId: 'loc_a',
+      worldTime: 10,
+      cutOff: { cause: 'max-output', outputTokens: 512, limit: 512 },
+    }
+    expect(inheritedEntryMetadata(tail)).not.toHaveProperty('cutOff')
+  })
 })

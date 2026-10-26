@@ -37,6 +37,15 @@ export const entryMetadataSchema = z.object({
   model: z.string().optional(),
   generationTimingMs: z.number().optional(),
   reasoning: z.string().optional(),
+  // The server cut the story text off at its limit; authored, never inherited (data-model.md →
+  // Entry metadata shape). `limit` is the number the cause names, absent for `unknown`.
+  cutOff: z
+    .object({
+      cause: z.enum(['max-output', 'window', 'unknown']),
+      outputTokens: z.number().optional(),
+      limit: z.number().optional(),
+    })
+    .optional(),
   // Feeds the NEXT turn's Q3 retrieval query (docs/memory/retrieval.md#q3-piggyback-summary).
   // Optional — absent on parse failure or restart is fine per docs/memory/piggyback.md.
   summary: z.string().optional(),
@@ -149,3 +158,4 @@ export const entryMetadataSchema = z.object({
 
 export type EntryMetadata = z.infer<typeof entryMetadataSchema>
 export type SystemFailureMeta = NonNullable<EntryMetadata['systemFailure']>
+export type CutOffMark = NonNullable<EntryMetadata['cutOff']>

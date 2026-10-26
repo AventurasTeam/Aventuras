@@ -1,13 +1,14 @@
 import { and, desc, eq, sql, type SQL } from 'drizzle-orm'
 
-import type { Delta, SqlOp } from '@/lib/db'
-import { deltas, storyEntries } from '@/lib/db'
+import type { Delta, EntryMetadata, SqlOp } from '@/lib/db'
+import { deltas, entryMetadataSchema, storyEntries } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { headTurnEntries } from '@/lib/head-turn'
 import { generateId } from '@/lib/ids'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { withBranchWriteShared } from '../delta/branch-write-lock'
+import { computeUndoPayload } from '../delta/delta-encoding'
 import { deltaRowOp } from '../delta/delta-row'
 import {
   DeltaReplayError,
@@ -105,6 +106,23 @@ function inFlightRejection(): StoryEntryRejection {
   }
 }
 
+// data-model.md → Entry metadata shape: the text is the user's now, so the cut-off mark leaves in
+// the edit's own delta, and an undo of the edit restores both.
+function contentEditColumns(
+  content: string,
+  metadata: EntryMetadata | null,
+): {
+  columns: { content: string; metadata?: EntryMetadata }
+  metadataUndo?: Record<string, unknown>
+} {
+  if (metadata?.cutOff === undefined) return { columns: { content } }
+  const { cutOff: _cutOff, ...cleared } = metadata
+  return {
+    columns: { content, metadata: cleared },
+    metadataUndo: computeUndoPayload(entryMetadataSchema, metadata, cleared),
+  }
+}
+
 /**
  * Prose is the classifier's only input, so a rewrite leaves the facts it took from the
  * old text standing on nothing. Reversal and clamp ride one scope and neither runs
@@ -138,6 +156,7 @@ async function updateStoryEntryContentBracketed(
     }
 
   const invalidation = await resolveContentEditInvalidation(branchId, id, ctx)
+  const edit = contentEditColumns(content, current.metadata)
 
   // In scope the clamp is unconditional: a pass that read the entry and extracted
   // nothing still advanced the watermark past it, and the op no-ops when the watermark
@@ -149,7 +168,7 @@ async function updateStoryEntryContentBracketed(
     await commitNewAction(set, ctx, [
       ctx.db
         .update(storyEntries)
-        .set({ content })
+        .set(edit.columns)
         .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
         .toSQL(),
       // Spliced, not dispatched: applyDeltaAction's own transaction isn't atomic with the reversal,
@@ -166,7 +185,11 @@ async function updateStoryEntryContentBracketed(
           targetTable: 'story_entries',
           targetId: id,
           op: 'update',
-          undoPayload: contentEditUndoPayload(current.content, invalidation.scope),
+          undoPayload: contentEditUndoPayload(
+            current.content,
+            invalidation.scope,
+            edit.metadataUndo,
+          ),
         },
       }),
       ...invalidation.clampOps,
@@ -176,7 +199,7 @@ async function updateStoryEntryContentBracketed(
     throw e
   }
 
-  entriesStore.patch(branchId, { op: 'update', id, columns: { content } })
+  entriesStore.patch(branchId, { op: 'update', id, columns: edit.columns })
   return { status: 'ok' }
 }
 
