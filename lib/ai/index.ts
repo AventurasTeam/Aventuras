@@ -10,6 +10,7 @@ export { fetchModelCatalog, normalizeModelCatalog } from './catalog'
 export { embedViaProvider } from './embedding'
 export type { ProviderInstanceWithStub } from './types'
 export {
+  describeCallRetryError,
   generateStructured,
   parseStructured,
   profileTimeoutMs,

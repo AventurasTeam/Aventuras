@@ -1,11 +1,14 @@
 import { APICallError } from 'ai'
 
+import type { ReplyCutOffFailure } from '../reply-cut-off'
+
 // lib/ai-local error vocabulary. The pipeline layer maps these to PipelineError
 // when it yields recoverable_error events — keeps lib/ai free of an upward
 // lib/pipeline type dependency.
 export type CallRetryError =
   | { tier: 'provider'; reason: 'auth' | 'network' | 'timeout' | 'unknown'; detail?: string }
   | { tier: 'parse'; detail: string; attempt: number }
+  | ({ tier: 'reply-cut-off' } & ReplyCutOffFailure)
 
 // Thrown by a callFn when its own per-attempt timeout fires (so callWithRetry
 // classifies it as a retryable provider timeout, not a user-cancel abort).

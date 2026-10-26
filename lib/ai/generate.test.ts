@@ -4,6 +4,7 @@ import { z } from 'zod'
 import type { ProviderInstance } from '../db'
 import {
   buildCallSettings,
+  describeCallRetryError,
   generateStructured,
   parseStructured,
   profileTimeoutMs,
@@ -688,5 +689,35 @@ describe('cache marker', () => {
     })
 
     expect(vi.mocked(streamProviderCall).mock.calls.at(-1)?.[0].model).toBe(inner.model)
+  })
+})
+
+describe('describeCallRetryError', () => {
+  it('reads a provider failure as its detail, or its reason when it has none', () => {
+    expect(
+      describeCallRetryError({ tier: 'provider', reason: 'network', detail: '503 upstream' }),
+    ).toBe('503 upstream')
+    expect(describeCallRetryError({ tier: 'provider', reason: 'timeout' })).toBe('timeout')
+  })
+
+  it('reads a parse failure as its detail', () => {
+    expect(describeCallRetryError({ tier: 'parse', detail: 'bad json', attempt: 1 })).toBe(
+      'bad json',
+    )
+  })
+
+  it('describes a cut-off, naming its cause', () => {
+    expect(
+      describeCallRetryError({
+        tier: 'reply-cut-off',
+        cause: 'unknown',
+        outputTokens: 4096,
+        reasoningTokens: null,
+        maxOutput: null,
+        window: null,
+        providerId: 'prov-1',
+        modelId: 'model-1',
+      }),
+    ).toBe('reply cut off (unknown): 4096 output tokens; model model-1 on provider prov-1')
   })
 })

@@ -1,5 +1,5 @@
 import type { PipelineAction } from '@/lib/actions/types'
-import type { ResolveFailureKind, ResolveTarget } from '@/lib/ai'
+import type { ReplyCutOffFailure, ResolveFailureKind, ResolveTarget } from '@/lib/ai'
 import type { DbCtx, StorySettings } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import type { EmbedderErrorKind } from '@/lib/embedder'
@@ -28,6 +28,8 @@ export type PipelineError =
   // whose retry story is the LLM's. `staleCount` is null when there is no
   // magnitude to report — see RetrievalFailure in lib/retrieval.
   | { kind: 'embedder'; reason: EmbedderErrorKind; detail: string; staleCount: number | null }
+  // generation-pipeline.md → Fatal error categories: a cut reply the caller couldn't use.
+  | ({ kind: 'reply-cut-off'; target: ResolveTarget } & ReplyCutOffFailure)
 
 export type PhaseResult =
   | { status: 'completed' }

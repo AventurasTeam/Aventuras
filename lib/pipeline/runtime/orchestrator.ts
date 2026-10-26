@@ -7,6 +7,7 @@ import { generateId } from '@/lib/ids'
 import { appSettingsStore, currentStoryStore, generationStore, type RunState } from '@/lib/stores'
 
 import { getPipeline, getPipelineSafe } from '../authoring/registry'
+import { pipelineErrorDetail } from '../call-error'
 import type {
   PhaseContext,
   PhaseEmittedEvent,
@@ -197,12 +198,13 @@ async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx)
     }
   } else if (event.type === 'recoverable_error') {
     const { error } = event
+    const detail = pipelineErrorDetail(error)
     logger.warn(
       'pipeline.recoverable_error',
       {
         kind: error.kind,
         ...('reason' in error ? { reason: error.reason } : {}),
-        ...(error.detail !== undefined ? { detail: error.detail } : {}),
+        ...(detail !== undefined ? { detail } : {}),
       },
       { actionId: run.actionId },
     )
@@ -455,7 +457,7 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
       runId: run.runId,
       outcome,
       reason: cause.reason,
-      ...(failure ? { errorKind: failure.kind, errorDetail: failure.detail } : {}),
+      ...(failure ? { errorKind: failure.kind, errorDetail: pipelineErrorDetail(failure) } : {}),
     },
     { actionId: run.actionId },
   )
@@ -501,7 +503,7 @@ async function runPhases(run: RunState, ctx: RunCtx): Promise<PhaseOutcome> {
             runId: run.runId,
             phase: node.name,
             errorKind: result.error.kind,
-            errorDetail: result.error.detail,
+            errorDetail: pipelineErrorDetail(result.error),
           },
           { actionId: run.actionId },
         )

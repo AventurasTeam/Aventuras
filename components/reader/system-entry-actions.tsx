@@ -6,6 +6,7 @@ import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import {
   CLASSIFIER_HELD,
+  pipelineErrorDetail,
   type PipelineError,
   type RejectedStart,
   type TxResult,
@@ -110,7 +111,10 @@ export function describeTurnFailure(error: PipelineError | undefined): {
       detail: `${error.reason}: ${error.detail}${magnitude}`,
     }
   }
-  return { content: t('reader:systemEntry.failureMessage'), detail: error?.detail }
+  return {
+    content: t('reader:systemEntry.failureMessage'),
+    detail: error !== undefined ? pipelineErrorDetail(error) : undefined,
+  }
 }
 
 export function toSystemFailureMeta(
@@ -142,7 +146,10 @@ export function describePassFailure(
   if (error?.kind === 'config-resolver') {
     return { content: t(PASS_RESOLVER_COPY[error.failure]), detail: error.detail }
   }
-  return { content: t('reader:systemEntry.failure.memory'), detail: error?.detail }
+  return {
+    content: t('reader:systemEntry.failure.memory'),
+    detail: error !== undefined ? pipelineErrorDetail(error) : undefined,
+  }
 }
 
 export function toPassFailureMeta(

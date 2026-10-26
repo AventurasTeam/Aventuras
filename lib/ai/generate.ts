@@ -13,6 +13,7 @@ import {
   promptSchemaMiddleware,
   type JsonSchema,
 } from './prompt-schema'
+import { describeReplyCutOff } from './reply-cut-off'
 import {
   resolveModel,
   type ResolveFailureKind,
@@ -216,8 +217,16 @@ export type GenerateStructuredResult<T> =
   | { status: 'failed'; detail: string; recoverable: readonly CallRetryError[] }
   | { status: 'aborted'; recoverable: readonly CallRetryError[] }
 
-function describeCallRetryError(error: CallRetryError): string {
-  return error.tier === 'provider' ? (error.detail ?? error.reason) : error.detail
+/** A failure as one line, for logs and failure details. */
+export function describeCallRetryError(error: CallRetryError): string {
+  switch (error.tier) {
+    case 'provider':
+      return error.detail ?? error.reason
+    case 'parse':
+      return error.detail
+    case 'reply-cut-off':
+      return describeReplyCutOff(error)
+  }
 }
 
 /**

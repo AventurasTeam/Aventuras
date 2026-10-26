@@ -533,7 +533,7 @@ export async function* piggybackFallbackClassifierPhase(
 
   // generation-pipeline.md → Two retry tiers: one event per retried attempt, however the call ended.
   for (const attempt of result.status === 'not-configured' ? [] : result.recoverable)
-    yield { type: 'recoverable_error', error: toPipelineError(attempt) }
+    yield { type: 'recoverable_error', error: toPipelineError(attempt, 'classifier') }
 
   // A cancelled run discards its writes rather than recording them as a classifier
   // failure. The signal as well as the status: generateClassifierState returns the

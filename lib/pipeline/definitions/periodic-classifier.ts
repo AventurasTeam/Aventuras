@@ -55,7 +55,7 @@ import { readClassifierStatus } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
-import { toPipelineError } from '../call-error'
+import { pipelineErrorDetail, toPipelineError } from '../call-error'
 import type {
   PhaseContext,
   PhaseEmittedEvent,
@@ -308,7 +308,7 @@ export async function* periodicClassifierPhase(
   // generation-pipeline.md → Two retry tiers: one event per retried attempt, however the call ended.
   const retried = result.status === 'not-configured' ? [] : result.recoverable
   for (const attempt of retried)
-    yield { type: 'recoverable_error', error: toPipelineError(attempt) }
+    yield { type: 'recoverable_error', error: toPipelineError(attempt, 'classifier') }
   // An interrupt leaves the watermark; onInterrupt restores the pre-run status.
   if (result.status === 'aborted' && !bounded.expired()) return { status: 'aborted' }
   if (result.status !== 'ok') {
@@ -443,7 +443,7 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
       ],
       affordance: 'pill-and-banner',
       onPreflightFailure: async (ctx, error) => {
-        const detail = error.kind === 'config-resolver' ? error.failure : error.detail
+        const detail = error.kind === 'config-resolver' ? error.failure : pipelineErrorDetail(error)
         await recordFailure(ctx, `classifier: ${detail}`)
       },
       // A rejected write throws past the phase (orchestrator.ts runPhases) rather than

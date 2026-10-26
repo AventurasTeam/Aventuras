@@ -129,7 +129,7 @@ async function* suggestionEmissionPhase(
   )
   // generation-pipeline.md → Two retry tiers: one event per retried attempt, however the call ended.
   for (const attempt of result.status === 'not-configured' ? [] : result.recoverable)
-    yield { type: 'recoverable_error', error: toPipelineError(attempt) }
+    yield { type: 'recoverable_error', error: toPipelineError(attempt, 'suggestion') }
   if (result.status === 'aborted') return { status: 'aborted' }
   // Pre-flight halts before this phase on a broken resolver, so a failure here
   // only covers a resolver-time race the pre-flight snapshot missed.

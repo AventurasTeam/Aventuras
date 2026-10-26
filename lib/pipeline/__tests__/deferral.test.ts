@@ -342,7 +342,10 @@ describe('deferred work', () => {
 
     const tx = expectRan(await start.origin)
     expect(tx.outcome).toBe('failed')
-    expect(tx.error?.detail).toMatch(/^reverse-replay failed/)
+    expect(tx.error).toMatchObject({
+      kind: 'orchestrator',
+      detail: expect.stringMatching(/^reverse-replay failed/),
+    })
     expect(generationStore.getTxState().deferred.size).toBe(0)
     expect(seen.map((e) => e.type)).toEqual(['run_complete'])
   })
