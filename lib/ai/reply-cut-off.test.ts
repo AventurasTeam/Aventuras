@@ -197,6 +197,20 @@ describe('describeReplyCutOff', () => {
       describeReplyCutOff({ ...FAILURE, cause: 'unknown', reasoningTokens: null, maxOutput: 600 }),
     ).toBe('reply cut off (unknown): 512 output tokens; model model-1 on provider prov-1')
   })
+
+  it('leaves a known window out of a max-output line', () => {
+    expect(describeReplyCutOff({ ...FAILURE, window: 8192 })).toBe(
+      'reply cut off (max-output): 512 output tokens, 400 reasoning, max output 512; ' +
+        'model model-1 on provider prov-1',
+    )
+  })
+
+  it('shows a reported reasoning count of 0', () => {
+    expect(describeReplyCutOff({ ...FAILURE, reasoningTokens: 0 })).toBe(
+      'reply cut off (max-output): 512 output tokens, 0 reasoning, max output 512; ' +
+        'model model-1 on provider prov-1',
+    )
+  })
 })
 
 describe('ReplyCutOffError', () => {
