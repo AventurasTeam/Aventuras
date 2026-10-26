@@ -138,6 +138,11 @@
     "editNoticeFrozenNoBranch": "Only the newest entry's scene details can be updated. Rewording is safe — but if this changes who was present or what happened, the recorded world state won't follow. Rolling back is the only remedy, and it deletes this entry and everything after.",
     "editNoticeFrozenNoRollback": "Only the newest entry's scene details can be updated. Rewording is safe — but if this changes who was present or what happened, the recorded world state won't follow. Branching from here is the only remedy — the opening can't be rolled back."
   },
+  "cutOffNotice": {
+    "maxOutput": "Cut off at the narrative profile's {{limit, number}}-token max output.",
+    "window": "Cut off where the prompt and reply filled the model's {{limit, number}}-token window.",
+    "unknown": "The server stopped the reply at its own limit. Setting a max output on the profile overrides it."
+  },
   "worldTimeEdit": {
     "title": "Edit time",
     "failed": "Couldn't update the entry's time.",
@@ -178,7 +183,19 @@
       "memoryProviderMissing": "Memory update failed: the classifier model's provider is missing.",
       "memoryOverrideProviderMissing": "Memory update failed: this story's classifier model override names a provider that no longer exists.",
       "memoryHeld": "An earlier memory update on this branch couldn't be undone, so it can't take turns yet. Restarting the app retries the undo. Your text is kept on this entry; Dismiss hands it back to the composer.",
-      "memoryHeldNoText": "An earlier memory update on this branch couldn't be undone, so it can't take turns yet. Restarting the app retries the undo."
+      "memoryHeldNoText": "An earlier memory update on this branch couldn't be undone, so it can't take turns yet. Restarting the app retries the undo.",
+      "emptyReply": "The model returned no text. Nothing was committed; Retry resends your turn.",
+      "replyCutOff": {
+        "maxOutput": "The reply was cut off at the narrative profile's {{limit, number}}-token max output before any story text. Raise the max output, then Retry.",
+        "maxOutputReasoning": "The reply was cut off at the narrative profile's {{limit, number}}-token max output before any story text; reasoning used {{reasoning, number}} of them. Raise the max output, or lower the thinking budget, then Retry.",
+        "window": "The reply was cut off where the prompt and reply filled the model's {{limit, number}}-token window, before any story text.",
+        "unknown": "The server stopped the reply at its own limit before any story text. Setting a max output on the profile overrides it."
+      },
+      "memoryCutOff": {
+        "maxOutput": "Memory update failed, so your turn didn't start. The update's reply was cut off at the classifier profile's {{limit, number}}-token max output. Raise it, then Retry.",
+        "window": "Memory update failed, so your turn didn't start. The update's reply was cut off where the prompt and reply filled the model's {{limit, number}}-token window.",
+        "unknown": "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit. Setting a max output on the classifier profile overrides it."
+      }
     }
   },
   "actions": {

@@ -1,11 +1,13 @@
 import { useRouter } from 'expo-router'
+import { useMemo } from 'react'
 
-import type { ResolveFailureKind } from '@/lib/ai'
+import { describeReplyCutOff, type ResolveFailureKind } from '@/lib/ai'
 import type { SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import {
   CLASSIFIER_HELD,
+  EMPTY_REPLY,
   pipelineErrorDetail,
   type PipelineError,
   type RejectedStart,
@@ -13,6 +15,7 @@ import {
 } from '@/lib/pipeline'
 import { openEmbedderSwapDialog } from '@/lib/stores'
 
+import { passCutOffContent, turnCutOffContent } from './cut-off-copy'
 import type { PassRefusal } from './send-run'
 
 export type SystemEntryFixAction = { label: string; onPress: () => void } | undefined
@@ -74,14 +77,22 @@ function providerDetail(error: Extract<PipelineError, { kind: 'provider' }>): st
   return error.detail != null ? `${error.reason}: ${error.detail}` : error.reason
 }
 
+// What picks the entry's fix action after a restart: the resolver's failure, or a cut-off's cause.
+function failureTagOf(error: PipelineError | undefined): string | undefined {
+  if (error?.kind === 'config-resolver') return error.failure
+  if (error?.kind === 'reply-cut-off') return error.cause
+  return undefined
+}
+
 function failureMetaOf(
   error: PipelineError | undefined,
   detail: string | undefined,
   submission: SystemFailureMeta['submission'],
 ): SystemFailureMeta {
+  const failure = failureTagOf(error)
   return {
     kind: error?.kind ?? 'orchestrator',
-    ...(error?.kind === 'config-resolver' ? { failure: error.failure } : {}),
+    ...(failure != null ? { failure } : {}),
     ...(detail != null ? { detail } : {}),
     ...(submission != null ? { submission } : {}),
   }
@@ -110,6 +121,12 @@ export function describeTurnFailure(error: PipelineError | undefined): {
       content: t('reader:systemEntry.failure.embed'),
       detail: `${error.reason}: ${error.detail}${magnitude}`,
     }
+  }
+  if (error?.kind === 'reply-cut-off') {
+    return { content: turnCutOffContent(error), detail: describeReplyCutOff(error) }
+  }
+  if (error?.kind === 'phase-logic' && error.subsystem === EMPTY_REPLY) {
+    return { content: t('reader:systemEntry.failure.emptyReply') }
   }
   return {
     content: t('reader:systemEntry.failureMessage'),
@@ -145,6 +162,9 @@ export function describePassFailure(
   }
   if (error?.kind === 'config-resolver') {
     return { content: t(PASS_RESOLVER_COPY[error.failure]), detail: error.detail }
+  }
+  if (error?.kind === 'reply-cut-off') {
+    return { content: passCutOffContent(error), detail: describeReplyCutOff(error) }
   }
   return {
     content: t('reader:systemEntry.failure.memory'),
@@ -247,6 +267,27 @@ export function useEmbedderFixAction(storyId: string | null): SystemEntryFixActi
   }
 }
 
+/**
+ * `Fix profile` for a reply cut off at a limit the profile sets, through the story-leave guard.
+ * Memoized: the reader hands it to every row, so a fresh identity would re-render each per chunk.
+ */
+export function useProfileFixAction(
+  enabled: boolean,
+  leaveStory: LeaveStory,
+): SystemEntryFixAction {
+  const router = useRouter()
+  return useMemo(
+    () =>
+      enabled
+        ? {
+            label: t('reader:systemEntry.fixProfile'),
+            onPress: () => leaveStory(() => router.push('/settings?tab=providers')),
+          }
+        : undefined,
+    [enabled, leaveStory, router],
+  )
+}
+
 export function useSystemEntryActions(
   failure: SystemFailureMeta | undefined,
   onRetry: () => void,
@@ -259,10 +300,15 @@ export function useSystemEntryActions(
     leaveStory,
   )
   const embedderFix = useEmbedderFixAction(failure?.kind === 'embedder' ? storyId : null)
+  // A window cut-off's remedy is `Set window`, not the profile.
+  const cutOffFix = useProfileFixAction(
+    failure?.kind === 'reply-cut-off' && failure.failure !== 'window',
+    leaveStory,
+  )
   // A held branch can't run a pass, and a resolved entry's pass has run, so either offers Dismiss
-  // alone. The two fix gates are kind-exclusive, so the `??` order carries no meaning.
+  // alone. The fix gates are kind-exclusive, so the `??` order carries no meaning.
   return {
     onRetry: failure?.pass === 'held' || failure?.pass === 'resolved' ? undefined : onRetry,
-    fixAction: embedderFix ?? configFix,
+    fixAction: embedderFix ?? configFix ?? cutOffFix,
   }
 }

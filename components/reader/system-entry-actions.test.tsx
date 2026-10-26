@@ -2,12 +2,14 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { describeReplyCutOff } from '@/lib/ai'
 import { entryMetadataSchema, type SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { hasCopy } from '@/lib/i18n/__tests__/locale-keys'
 import {
   CLASSIFIER_HELD,
+  EMPTY_REPLY,
   type PipelineError,
   type RejectedStart,
   type TxResult,
@@ -25,6 +27,7 @@ import {
   toSystemFailureMeta,
   useConfigFixAction,
   useEmbedderFixAction,
+  useProfileFixAction,
   useSystemEntryActions,
 } from './system-entry-actions'
 
@@ -51,6 +54,33 @@ const EMBEDDER_INIT: PipelineError = {
   detail: 'no model',
   staleCount: 3,
 }
+
+const CUT_FIELDS = {
+  cause: 'max-output',
+  outputTokens: 4096,
+  reasoningTokens: 3900,
+  maxOutput: 4096,
+  window: null,
+  providerId: 'prov_local',
+  modelId: 'qwen3-32b',
+} as const
+
+// A narrative reply cut before any prose: the turn failed, and Retry resends the held input.
+const TURN_CUT = {
+  kind: 'reply-cut-off',
+  target: 'narrative',
+  ...CUT_FIELDS,
+} satisfies PipelineError
+
+// A pass reply cut on a server whose profile sets no limit: the server's own default stopped it.
+const PASS_CUT = {
+  kind: 'reply-cut-off',
+  target: 'classifier',
+  ...CUT_FIELDS,
+  cause: 'unknown',
+  reasoningTokens: null,
+  maxOutput: null,
+} satisfies PipelineError
 
 describe('describeTurnFailure', () => {
   it('renders embedder-specific copy with the stale row count', () => {
@@ -124,6 +154,37 @@ describe('describeTurnFailure', () => {
     expect(hasCopy(key)).toBe(true)
     expect(out.content).not.toBe(t('reader:systemEntry.failure.providerMissing'))
   })
+
+  it('names the limit a reply was cut off at before any story text', () => {
+    const out = describeTurnFailure(TURN_CUT)
+    expect(out.content).toBe(
+      "The reply was cut off at the narrative profile's 4,096-token max output before any story text; reasoning used 3,900 of them. Raise the max output, or lower the thinking budget, then Retry.",
+    )
+    expect(out.detail).toBe(describeReplyCutOff(TURN_CUT))
+    expect(out.detail).toContain('max-output')
+  })
+
+  it('says the model returned no text for an empty reply', () => {
+    expect(
+      describeTurnFailure({
+        kind: 'phase-logic',
+        subsystem: EMPTY_REPLY,
+        detail: 'the model returned no text',
+      }),
+    ).toEqual({
+      content: 'The model returned no text. Nothing was committed; Retry resends your turn.',
+    })
+  })
+
+  it('keeps the generic copy for any other phase-logic failure', () => {
+    expect(
+      describeTurnFailure({
+        kind: 'phase-logic',
+        subsystem: 'narrative-parse',
+        detail: 'bad block',
+      }),
+    ).toEqual({ content: t('reader:systemEntry.failureMessage'), detail: 'bad block' })
+  })
 })
 
 describe('toSystemFailureMeta', () => {
@@ -138,6 +199,24 @@ describe('toSystemFailureMeta', () => {
     const meta = toSystemFailureMeta(EMBEDDER_INIT, {
       content: 'I open the door',
       composerMode: 'do',
+    })
+    const parsed = entryMetadataSchema.parse({
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: 0,
+      systemFailure: meta,
+    })
+    expect(parsed.systemFailure).toEqual(meta)
+  })
+
+  it("persists a cut-off's cause and its diagnostic line", () => {
+    const submission = { content: 'I open the door', composerMode: 'do' }
+    const meta = toSystemFailureMeta(TURN_CUT, submission)
+    expect(meta).toEqual({
+      kind: 'reply-cut-off',
+      failure: 'max-output',
+      detail: describeReplyCutOff(TURN_CUT),
+      submission,
     })
     const parsed = entryMetadataSchema.parse({
       sceneEntities: [],
@@ -249,6 +328,14 @@ describe('describePassFailure', () => {
         .content,
     ).not.toBe(t('reader:systemEntry.failure.llmCall'))
   })
+
+  it("names the limit a cut pass reply hit, in the pass's own words", () => {
+    expect(describePassFailure({ held: false, error: PASS_CUT }, undefined)).toEqual({
+      content:
+        "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit. Setting a max output on the classifier profile overrides it.",
+      detail: describeReplyCutOff(PASS_CUT),
+    })
+  })
 })
 
 describe('toPassFailureMeta', () => {
@@ -327,6 +414,15 @@ describe('toPassFailureMeta', () => {
     })
     expect(parsed.systemFailure).toEqual(meta)
     expect(parsed.systemFailure?.pass).toBe('failed')
+  })
+
+  it("persists a cut pass's cause beside the failed marker", () => {
+    expect(toPassFailureMeta({ held: false, error: PASS_CUT }, undefined)).toEqual({
+      kind: 'reply-cut-off',
+      failure: 'unknown',
+      detail: describeReplyCutOff(PASS_CUT),
+      pass: 'failed',
+    })
   })
 })
 
@@ -641,6 +737,50 @@ describe('useConfigFixAction', () => {
   })
 })
 
+describe('useProfileFixAction', () => {
+  it('offers nothing when disabled', () => {
+    const { result } = renderHook(() => useProfileFixAction(false, leaveAtOnce))
+    expect(result.current).toBeUndefined()
+  })
+
+  it('sends the user to App Settings through the story-leave guard', () => {
+    const held: (() => void)[] = []
+    const leaveStory = vi.fn((proceed: () => void) => {
+      held.push(proceed)
+    })
+    const { result } = renderHook(() => useProfileFixAction(true, leaveStory))
+    expect(result.current?.label).toBe('Fix profile')
+
+    act(() => result.current?.onPress())
+    expect(leaveStory).toHaveBeenCalledTimes(1)
+    expect(router.push).not.toHaveBeenCalled()
+
+    act(() => held.forEach((proceed) => proceed()))
+    expect(router.push).toHaveBeenCalledWith('/settings?tab=providers')
+  })
+
+  // Every reader row takes this action: a fresh identity per render re-renders them all per chunk.
+  it('keeps its identity across renders with unchanged inputs', () => {
+    const { result, rerender } = renderHook(() => useProfileFixAction(true, leaveAtOnce))
+    const first = result.current
+    rerender()
+    expect(result.current).toBe(first)
+  })
+
+  it('follows a new story-leave guard', () => {
+    const firstGuard = vi.fn()
+    const secondGuard = vi.fn()
+    const { result, rerender } = renderHook(
+      ({ guard }: { guard: (proceed: () => void) => void }) => useProfileFixAction(true, guard),
+      { initialProps: { guard: firstGuard } },
+    )
+    rerender({ guard: secondGuard })
+    act(() => result.current?.onPress())
+    expect(secondGuard).toHaveBeenCalledTimes(1)
+    expect(firstGuard).not.toHaveBeenCalled()
+  })
+})
+
 describe('useSystemEntryActions', () => {
   const onRetry = () => {}
 
@@ -721,5 +861,42 @@ describe('useSystemEntryActions', () => {
     act(() => result.current.fixAction?.onPress())
     expect(leaveStory).toHaveBeenCalledTimes(1)
     expect(router.push).not.toHaveBeenCalled()
+  })
+
+  it.each(['max-output', 'unknown'])(
+    'offers Fix profile beside Retry for a %s cut-off',
+    (cause) => {
+      const actions = actionsFor({ kind: 'reply-cut-off', failure: cause })
+      expect(actions.fixAction?.label).toBe('Fix profile')
+      expect(actions.onRetry).toBe(onRetry)
+    },
+  )
+
+  // The window's remedy is `Set window`, not the profile.
+  it('offers no fix action for a cut-off at the window', () => {
+    const actions = actionsFor({ kind: 'reply-cut-off', failure: 'window' })
+    expect(actions.fixAction).toBeUndefined()
+    expect(actions.onRetry).toBe(onRetry)
+  })
+
+  it("keeps a cut pass's Fix profile beside its Retry", () => {
+    const actions = actionsFor({ kind: 'reply-cut-off', failure: 'max-output', pass: 'failed' })
+    expect(actions.fixAction?.label).toBe('Fix profile')
+    expect(actions.onRetry).toBe(onRetry)
+  })
+
+  it("routes a cut-off's Fix profile through the story-leave guard to App Settings", () => {
+    const leaveStory = vi.fn((proceed: () => void) => proceed())
+    const { result } = renderHook(() =>
+      useSystemEntryActions(
+        { kind: 'reply-cut-off', failure: 'unknown' },
+        onRetry,
+        'story_1',
+        leaveStory,
+      ),
+    )
+    act(() => result.current.fixAction?.onPress())
+    expect(leaveStory).toHaveBeenCalledTimes(1)
+    expect(router.push).toHaveBeenCalledWith('/settings?tab=providers')
   })
 })
