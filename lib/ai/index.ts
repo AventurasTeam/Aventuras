@@ -35,4 +35,11 @@ export {
   type ResolvedParams,
 } from './resolve-model'
 export { resolveModelCapabilities, type ModelCapabilities } from './model-capabilities'
+export {
+  describeReplyCutOff,
+  isCutOff,
+  replyCutOff,
+  type CutOffCause,
+  type ReplyCutOffFailure,
+} from './reply-cut-off'
 export { schemaToTypeScriptBlock, type JsonSchema } from './prompt-schema'
