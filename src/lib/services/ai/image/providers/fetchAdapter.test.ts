@@ -182,6 +182,27 @@ describe('imageGetFetch body timeout', () => {
   })
 })
 
+describe('imageGetFetch allowStatuses', () => {
+  beforeEach(() => {
+    mockFetch.mockReset()
+    mockFetch.mockImplementation(async () => new Response('missing', { status: 404 }))
+  })
+
+  it('returns a listed error status instead of throwing', async () => {
+    const response = await imageGetFetch('https://img.test/a', undefined, {
+      allowStatuses: [404],
+    })
+    expect(response.status).toBe(404)
+    await response.body?.cancel()
+  })
+
+  it('still throws on an error status that is not listed', async () => {
+    await expect(
+      imageGetFetch('https://img.test/a', undefined, { allowStatuses: [410] }),
+    ).rejects.toThrow('Image API error 404')
+  })
+})
+
 describe('request headers', () => {
   beforeEach(() => {
     mockFetch.mockReset()

@@ -42,6 +42,7 @@ export async function fetchPublicImageBase64(
 /**
  * GET-based image fetch (for providers like Pollinations that use URL params).
  * With `followRedirects: false` a 3xx is returned to the caller instead of followed or thrown.
+ * A status in `allowStatuses` is returned the same way; the caller reads or cancels its body.
  */
 export async function imageGetFetch(
   url: string,
@@ -51,6 +52,7 @@ export async function imageGetFetch(
     timeoutMs?: number
     serviceId?: string
     followRedirects?: boolean
+    allowStatuses?: number[]
   },
 ): Promise<Response> {
   const {
@@ -58,6 +60,7 @@ export async function imageGetFetch(
     timeoutMs = IMAGE_TIMEOUT_DEFAULT,
     serviceId = 'image-gen',
     followRedirects = true,
+    allowStatuses = [],
   } = options ?? {}
 
   const guard = createRequestGuard({ timeoutMs, what: 'Image fetch', callerSignal: signal })
@@ -73,7 +76,11 @@ export async function imageGetFetch(
     })
 
     const isRedirect = response.status >= 300 && response.status < 400
-    if (!response.ok && !(isRedirect && !followRedirects)) {
+    if (
+      !response.ok &&
+      !(isRedirect && !followRedirects) &&
+      !allowStatuses.includes(response.status)
+    ) {
       const errorText = await response.text()
       debug.addDebugResponse(
         debugId,
