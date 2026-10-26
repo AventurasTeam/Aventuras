@@ -33,6 +33,12 @@ export {
   type ImageModelInfo,
 } from './providers/registry'
 
+export {
+  IMAGE_MODEL_SNAPSHOT_VERSION,
+  chooseModelSnapshot,
+  snapshotModel,
+} from './providers/modelSnapshot'
+
 // Image generation utilities
 export {
   isImageGenerationEnabled,
