@@ -1,3 +1,4 @@
+import { APICallError } from 'ai'
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { z } from 'zod'
 
@@ -699,7 +700,7 @@ describe('generateStructured', () => {
       },
     )
 
-    it('warns on a refusal with the cause, the numbers, the target and the action', async () => {
+    it('warns once on a refusal, with the numbers, the action and the syntax error', async () => {
       reply('{"description":"A ta', 'length', 256)
       await call('act_1')
       expect(cutOffLogs()).toEqual([
@@ -715,10 +716,46 @@ describe('generateStructured', () => {
             window: null,
             providerId: 'prov-1',
             modelId: 'model-1',
+            parseError: expect.stringContaining('Unterminated string in JSON'),
           },
           { actionId: 'act_1' },
         ],
       ])
+    })
+
+    it('warns once on refusing a document of the wrong shape, with the schema error', async () => {
+      reply('{"wrong":1}', 'length', 256)
+      await call('act_1')
+      expect(cutOffLogs()).toEqual([
+        [
+          'provider.reply_cut_off',
+          expect.objectContaining({
+            outcome: 'refused',
+            parseError: expect.stringMatching(/"code": "invalid_type"[\s\S]*"description"/),
+          }),
+          { actionId: 'act_1' },
+        ],
+      ])
+    })
+
+    it('logs no cut-off when a call runs out of parse retries on finished replies', async () => {
+      reply('not json <<<', 'stop', 256)
+      expect(await call()).toMatchObject({ status: 'failed', error: { tier: 'parse' } })
+      expect(runProviderCall).toHaveBeenCalledTimes(2)
+      expect(cutOffLogs()).toEqual([])
+    })
+
+    it('logs no cut-off when the provider call fails', async () => {
+      vi.mocked(runProviderCall).mockRejectedValue(
+        new APICallError({
+          message: 'unauthorized',
+          url: 'u',
+          requestBodyValues: {},
+          statusCode: 401,
+        }),
+      )
+      expect(await call()).toMatchObject({ status: 'failed', error: { tier: 'provider' } })
+      expect(cutOffLogs()).toEqual([])
     })
 
     it('warns on a strict accept at the limit, a sign the limit is tight', async () => {

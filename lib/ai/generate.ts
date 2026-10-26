@@ -304,10 +304,13 @@ export async function generateStructured<T>(
       : []),
   ])
 
-  const logCutOff = (outcome: 'accepted' | 'refused', failure: ReplyCutOffFailure): void => {
+  const logCutOff = (
+    failure: ReplyCutOffFailure,
+    outcome: { outcome: 'accepted' } | { outcome: 'refused'; parseError: string },
+  ): void => {
     logger.warn(
       'provider.reply_cut_off',
-      { outcome, target, ...failure },
+      { ...outcome, target, ...failure },
       options.actionId === null ? undefined : { actionId: options.actionId },
     )
   }
@@ -326,10 +329,15 @@ export async function generateStructured<T>(
     let value: T
     try {
       value = parseStructured(reply.text, schema, { repair: false })
-    } catch {
+    } catch (error) {
+      // The message tells a truncation (a syntax error) from a document of the wrong shape.
+      logCutOff(failure, {
+        outcome: 'refused',
+        parseError: error instanceof Error ? error.message : String(error),
+      })
       throw new ReplyCutOffError(failure)
     }
-    logCutOff('accepted', failure)
+    logCutOff(failure, { outcome: 'accepted' })
     return value
   }
 
@@ -360,9 +368,5 @@ export async function generateStructured<T>(
   const { recoverable } = result
   if (result.status === 'ok') return { status: 'ok', value: result.result, recoverable }
   if (result.status === 'aborted') return { status: 'aborted', recoverable }
-  if (result.error.tier === 'reply-cut-off') {
-    const { tier: _tier, ...failure } = result.error
-    logCutOff('refused', failure)
-  }
   return { status: 'failed', error: result.error, recoverable }
 }
