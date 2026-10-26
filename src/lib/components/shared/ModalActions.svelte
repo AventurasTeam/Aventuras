@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Component } from 'svelte'
+  import type { Component, Snippet } from 'svelte'
   import { Loader2 } from '@lucide/svelte'
   import { Button } from '#lib/components/ui/button/index.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
@@ -17,6 +17,7 @@
     disabled = false,
     tone = 'default',
     cancelLabel = 'Cancel',
+    alternative,
   }: {
     label: string
     icon?: Component<{ class?: string }>
@@ -29,10 +30,15 @@
     tone?: ActionTone
     /** Only when Cancel ends more than the modal, as "Cancel import" does. */
     cancelLabel?: string
+    /** Another way to do the job, at the left; under the pair on a phone. */
+    alternative?: Snippet
   } = $props()
 </script>
 
-<ResponsiveModal.Footer class="bg-muted/40 border-t px-6 py-4">
+<ResponsiveModal.Footer class="bg-muted/40 gap-2 border-t px-6 py-4 sm:space-x-0">
+  {#if alternative}
+    <span class="flex w-full sm:mr-auto sm:w-auto">{@render alternative()}</span>
+  {/if}
   <!-- Half the width each, until a label does not fit: then they stack in reading order. -->
   <span class="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
     <Button

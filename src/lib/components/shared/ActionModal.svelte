@@ -5,6 +5,7 @@
 -->
 <script lang="ts">
   import { onDestroy, untrack, type Component, type Snippet } from 'svelte'
+  import { fade } from 'svelte/transition'
   import { ArrowDownToLine, ArrowUpToLine, Trash2 } from '@lucide/svelte'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { setTextareaUncapped } from '#lib/components/ui/textarea/index.ts'
@@ -52,10 +53,10 @@
     /** Only for a confirmation that warns, drawn before the title. */
     titleIcon?: Snippet
     /**
-     * A way to do the job other than this modal, such as asking the assistant; beside the title.
+     * A way to do the job other than this modal, such as asking the assistant; left of the buttons.
      * It gets `leaveFor`, which asks before discarding edits and then runs what it is given.
      */
-    headerAction?: Snippet<[leaveFor: (next: () => void) => void]>
+    alternative?: Snippet<[leaveFor: (next: () => void) => void]>
     /** The body; a confirmation whose description says it all has none. */
     children?: Snippet
     action: Action
@@ -84,7 +85,7 @@
     title,
     description,
     titleIcon,
-    headerAction,
+    alternative,
     children,
     action,
     cancelLabel,
@@ -141,10 +142,36 @@
     })
   }
 
-  function jumpTo(edge: 'top' | 'bottom') {
+  async function jumpTo(edge: 'top' | 'bottom') {
     const el = activeScroller()
     if (!el) return
+    // Jumping down while a phone's keyboard is up would land short of the bottom once it closes.
+    if (
+      edge === 'bottom' &&
+      el.clientHeight < tallestScroller &&
+      matchMedia('(pointer: coarse)').matches
+    ) {
+      const field = document.activeElement
+      if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) field.blur()
+      await untilRestored(el)
+    }
     el.scrollTo({ top: edge === 'top' ? 0 : el.scrollHeight })
+  }
+
+  /** Resolves once the scroller is back to its tallest, or after `KEYBOARD_CLOSE_MS`. */
+  function untilRestored(el: HTMLElement): Promise<void> {
+    return new Promise((resolve) => {
+      const done = () => {
+        observer.disconnect()
+        clearTimeout(fallback)
+        resolve()
+      }
+      const observer = new ResizeObserver(() => {
+        if (el.clientHeight >= tallestScroller) done()
+      })
+      const fallback = setTimeout(done, KEYBOARD_CLOSE_MS)
+      observer.observe(el)
+    })
   }
 
   // Remeasured as the content or the window changes size, not only on scroll.
@@ -159,6 +186,7 @@
     measureJump()
     return () => observer.disconnect()
   })
+  const KEYBOARD_CLOSE_MS = 600
   // What bits-ui's open focus could land on: a hidden form input or a disabled control cannot.
   const FOCUSABLE =
     'input:not([type=hidden]):not([aria-hidden=true]):enabled, textarea:enabled, select:enabled, button:enabled, [href], [tabindex="0"]'
@@ -296,6 +324,30 @@
   }
 </script>
 
+{#snippet leaveVia()}
+  {@render alternative?.(leaveFor)}
+{/snippet}
+
+{#snippet jumpButton(edge: 'top' | 'bottom')}
+  {@const label = edge === 'top' ? 'Jump to the top' : 'Jump to the bottom'}
+  <span class="pointer-events-auto flex" transition:fade={{ duration: 150 }}>
+    <Button
+      variant="outline"
+      size="icon"
+      class="bg-background size-9 rounded-full shadow-md"
+      aria-label={label}
+      title={label}
+      onclick={() => void jumpTo(edge)}
+    >
+      {#if edge === 'top'}
+        <ArrowUpToLine class="size-4" />
+      {:else}
+        <ArrowDownToLine class="size-4" />
+      {/if}
+    </Button>
+  </span>
+{/snippet}
+
 <ResponsiveModal.Root
   bind:open={shownOpen}
   dismissible={!locked}
@@ -333,57 +385,17 @@
       <!-- Left-aligned at every width: a title or description that wraps reads badly centred. -->
       <!-- Tinted like the buttons' panel, so both read as a frame around the body. -->
       <ResponsiveModal.Header class="bg-muted/40 border-b px-6 py-4 text-left" closeButton={false}>
-        <div class="flex items-start gap-3">
-          <div class="flex min-w-0 flex-1 flex-col gap-1.5">
-            <ResponsiveModal.Title class={cn('text-left', titleIcon && 'flex items-center gap-2')}>
-              {@render titleIcon?.()}
-              {title}
-            </ResponsiveModal.Title>
-            {#if typeof description === 'string'}
-              <ResponsiveModal.Description class="text-left"
-                >{description}</ResponsiveModal.Description
-              >
-            {:else if description}
-              <ResponsiveModal.Description class="text-left">
-                {@render description()}
-              </ResponsiveModal.Description>
-            {/if}
-          </div>
-          {#if jump.long || headerAction}
-            <!-- On the title's line, nudged up to centre 32px buttons on its 18px text. -->
-            <div class="-mt-1.5 flex shrink-0 items-center gap-1">
-              {#if jump.long}
-                <!-- Dimmed at the edge it leads to, so they also say where the reader is. -->
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="size-8"
-                  aria-label="Jump to the top"
-                  title="Jump to the top"
-                  disabled={jump.atTop}
-                  onclick={() => jumpTo('top')}
-                >
-                  <ArrowUpToLine class="size-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="size-8"
-                  aria-label="Jump to the bottom"
-                  title="Jump to the bottom"
-                  disabled={jump.atBottom}
-                  onclick={() => jumpTo('bottom')}
-                >
-                  <ArrowDownToLine class="size-4" />
-                </Button>
-                {#if headerAction}
-                  <span class="bg-border mx-1 h-5 w-px" aria-hidden="true"></span>
-                {/if}
-              {/if}
-              {@render headerAction?.(leaveFor)}
-            </div>
-          {/if}
-        </div>
+        <ResponsiveModal.Title class={cn('text-left', titleIcon && 'flex items-center gap-2')}>
+          {@render titleIcon?.()}
+          {title}
+        </ResponsiveModal.Title>
+        {#if typeof description === 'string'}
+          <ResponsiveModal.Description class="text-left">{description}</ResponsiveModal.Description>
+        {:else if description}
+          <ResponsiveModal.Description class="text-left">
+            {@render description()}
+          </ResponsiveModal.Description>
+        {/if}
       </ResponsiveModal.Header>
 
       <!--
@@ -420,6 +432,22 @@
               </Button>
             </div>
           {/if}
+          {#if jump.long}
+            <!--
+              Sticks to the bottom of whichever scroller this width uses, and never below the body,
+              so on a phone it stops above the buttons as they scroll into view.
+            -->
+            <div class="pointer-events-none sticky bottom-0 h-0">
+              <div class="absolute right-3 bottom-3 flex flex-col gap-2">
+                {#if !jump.atTop}
+                  {@render jumpButton('top')}
+                {/if}
+                {#if !jump.atBottom}
+                  {@render jumpButton('bottom')}
+                {/if}
+              </div>
+            </div>
+          {/if}
         </div>
         <ModalActions
           label={action.label}
@@ -431,6 +459,7 @@
           {busy}
           {cancelWhileBusy}
           {cancelLabel}
+          alternative={alternative ? leaveVia : undefined}
         />
       </div>
     </div>

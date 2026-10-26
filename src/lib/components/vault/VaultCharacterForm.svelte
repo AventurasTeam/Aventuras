@@ -112,6 +112,23 @@
   }
 </script>
 
+{#snippet askAssistant(leaveFor: (next: () => void) => void)}
+  <Button
+    variant="outline"
+    class="w-full sm:w-auto"
+    disabled={saving}
+    onclick={() => {
+      if (!character) return
+      const { id, name } = character
+      // The assistant works on the stored character, so unsaved edits are asked about first.
+      leaveFor(() => onOpenAssistant?.({ entityType: 'character', entityId: id, entityName: name }))
+    }}
+  >
+    <Bot class="h-4 w-4" />
+    Ask assistant
+  </Button>
+{/snippet}
+
 <ActionModal
   open={true}
   onCancel={onClose}
@@ -125,31 +142,8 @@
   dirty={hasChanges}
   requireChange={isEditing}
   size="2xl"
+  alternative={isEditing && onOpenAssistant ? askAssistant : undefined}
 >
-  {#snippet headerAction(leaveFor: (next: () => void) => void)}
-    {#if isEditing && onOpenAssistant}
-      <!-- An alternative to editing by hand, so it sits by the title rather than in the form. -->
-      <Button
-        variant="outline"
-        size="sm"
-        class="gap-1.5"
-        title="Ask assistant"
-        aria-label="Ask assistant"
-        disabled={saving}
-        onclick={() => {
-          if (!character) return
-          const { id, name } = character
-          // The assistant works on the stored character, so unsaved edits are asked about first.
-          leaveFor(() =>
-            onOpenAssistant({ entityType: 'character', entityId: id, entityName: name }),
-          )
-        }}
-      >
-        <Bot class="h-4 w-4" />
-        <span class="hidden md:inline">Ask assistant</span>
-      </Button>
-    {/if}
-  {/snippet}
   <VaultCharacterFormFields data={formData} onUpdate={(newData) => (formData = newData)} />
 </ActionModal>
 

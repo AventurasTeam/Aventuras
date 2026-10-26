@@ -42,7 +42,7 @@ rest:
 | `dirty`, `discardQuestion` | see below                                                                        |
 | `cancelLabel`              | only when Cancel ends more than the modal: "Cancel import"                       |
 | `titleIcon`                | only for a risk beyond the action itself; see Wording                            |
-| `headerAction`             | an alternative to this modal, right of the title; see Wording                    |
+| `alternative`              | another way to do the job, left of the buttons; see Wording                      |
 | `removal`                  | removing the thing the modal edits; see below                                    |
 | `size`                     | `md` (the default), `lg` or `2xl`; see the width scale below                     |
 | `requireChange`            | for a modal that edits existing values: the action waits until something changed |
@@ -149,17 +149,20 @@ a modifier. A phone keyboard has no such key, so it cannot save by accident.
 
 The header is left-aligned at every width, since a title or description that wraps reads badly
 centred. It holds only the title and a short description; a control, even a switch that changes
-what the body says, goes at the top of the body. The one exception is `headerAction`: a way to do
-the job other than this modal, such as the character editor's "Ask assistant", sits right of the
-title, as an icon alone on a phone. The snippet gets `leaveFor(next)`, which asks the discard
+what the body says, goes at the top of the body. A way to do the job other than this modal, such
+as the character editor's "Ask assistant", is an `alternative`: it sits left of Cancel, and on a
+phone on a full-width row under them. The snippet gets `leaveFor(next)`, which asks the discard
 question first when the modal holds edits and then runs `next`, since leaving for the other route
 drops what was typed here.
 
 A body more than 2.5 screens long, measured against the tallest it has been while open so a phone's
-keyboard does not show and hide them, gets two plain icons on the title's line, jump to the top and jump
-to the bottom (`shared/scrollJump.ts`), before any `headerAction` and set off from it by a thin
-rule. Each dims at the edge it leads to, so together they also say where the reader is. They come
-with the shell, so no caller adds them. The body never repeats the title: "Entry 47 will
+keyboard does not show and hide them, gets round buttons floating at the bottom right of the body:
+jump to the top once it has scrolled down, jump to the bottom while it is not there
+(`shared/scrollJump.ts`). They come with the shell, so no caller adds them. Jumping to the bottom
+with a phone's keyboard up closes the keyboard first and waits for the body to regain its height,
+so the jump lands where the keyboard no longer is.
+
+The body never repeats the title: "Entry 47 will
 be deleted" under "Delete entry 47" says nothing.
 
 - **Sentence case** for titles and buttons.
