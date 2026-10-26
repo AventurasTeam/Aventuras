@@ -111,7 +111,7 @@ function logCutOff(
   entryId: string,
   outcome: CutOffOutcome,
 ): void {
-  log.warn('provider.reply_cut_off', { ...failure, entryId, outcome })
+  log.warn('provider.reply_cut_off', { ...failure, target: 'narrative', entryId, outcome })
 }
 
 // data-model.md → Entry metadata shape: `limit` is the number its cause names; none for `unknown`.
@@ -278,7 +278,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // so a provider that omits usage/reasoning simply yields undefined.
   const usage = await Promise.resolve(stream.usage).catch(() => undefined)
   const reasoningText = await Promise.resolve(stream.reasoningText).catch(() => undefined)
-  // Only 'length' is a cut; a finish reason that never settles reads as finished.
+  // Only 'length' is a cut; a finish reason the SDK rejects, unread, reads as finished.
   const finishReason = await Promise.resolve(stream.finishReason).catch(() => undefined)
   let cut: { failure: ReplyCutOffFailure; inBlock: boolean } | undefined
   if (isCutOff(finishReason)) {
@@ -474,7 +474,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       : {}),
   }
 
-  // Here, past the fold's last abort exit, so a logged commit is one that happens.
+  // Past the phase's last abort exit; a later cancel can still discard the entry.
   if (cut !== undefined)
     logCutOff(ctx.log, cut.failure, entryId, cut.inBlock ? 'in-block' : 'marked')
 

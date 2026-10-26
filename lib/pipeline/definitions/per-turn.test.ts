@@ -2911,8 +2911,8 @@ describe('narrative — how the reply ended', () => {
   const PROSE = 'The lantern guttered as Kael reached for the'
   const BLOCK = '<state><world_time_delta>30</world_time_delta></state>'
 
-  // A finish reason the SDK never settles. Rejects only once read: an eager Promise.reject would be
-  // reported unhandled before the phase reaches it.
+  // A finish reason that can't be read: the SDK rejects it when no step was recorded. Rejects only
+  // once read: an eager Promise.reject would be reported unhandled before the phase reaches it.
   const unreadable = {
     then: (_settle: unknown, fail: (error: unknown) => void) => fail(new Error('no finish part')),
   }
@@ -2922,6 +2922,7 @@ describe('narrative — how the reply ended', () => {
     window: null,
     providerId: 'prov-1',
     modelId: 'model-1',
+    target: 'narrative',
     entryId: expect.any(String),
     ...fields,
   })
