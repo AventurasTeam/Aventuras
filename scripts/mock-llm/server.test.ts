@@ -66,6 +66,16 @@ async function narrativeText(response: Response): Promise<string> {
   return collectSseContent(await response.text())
 }
 
+async function structuredReply(): Promise<{ content: string; finishReason: string }> {
+  const body = (await (await post(structuredRequest(fallbackClassifierSchema))).json()) as {
+    choices: { message: { content: string }; finish_reason: string }[]
+  }
+  return {
+    content: body.choices[0]?.message.content ?? '',
+    finishReason: body.choices[0]?.finish_reason ?? '',
+  }
+}
+
 describe('structured calls', () => {
   it("answers with the lane's active response, parseable by the app's schema", async () => {
     const response = await post(structuredRequest(fallbackClassifierSchema))
@@ -207,6 +217,42 @@ describe('failure injection', () => {
 
     lane.sequence.enabled = false
   })
+
+  it('stops a structured reply halfway with finish_reason length, then answers whole again', async () => {
+    const lane = mock.ctx.lane('per-turn-classifier')
+    const whole = await structuredReply()
+    expect(whole.finishReason).toBe('stop')
+    lane.failure = { kind: 'length', status: 500, remaining: 1 }
+
+    const cut = await structuredReply()
+
+    expect(cut.finishReason).toBe('length')
+    expect(cut.content).toBe(whole.content.slice(0, Math.floor(whole.content.length / 2)))
+    expect(() => JSON.parse(cut.content)).toThrow()
+    expect(await structuredReply()).toEqual(whole)
+    lane.failure = { kind: 'none', status: 500, remaining: 0 }
+  })
+
+  it.each([0, 100_000])(
+    'stops a narrative stream halfway with finish_reason length and [DONE] (%i chars/s)',
+    async (charsPerSecond) => {
+      const lane = mock.ctx.lane('narrative')
+      lane.stream = { charsPerSecond, chunkSize: 6 }
+      const whole = await narrativeText(
+        await post({ model: 'seed/narrative', stream: true, messages: [] }),
+      )
+      lane.failure = { kind: 'length', status: 500, remaining: 1 }
+
+      const raw = await (await post({ model: 'seed/narrative', stream: true, messages: [] })).text()
+
+      expect(collectSseContent(raw)).toBe(whole.slice(0, Math.floor(whole.length / 2)))
+      expect(raw).toContain('"finish_reason":"length"')
+      expect(raw).not.toContain('"finish_reason":"stop"')
+      expect(raw).toContain('data: [DONE]')
+      expect(lane.failure.remaining).toBe(0)
+      lane.failure = { kind: 'none', status: 500, remaining: 0 }
+    },
+  )
 })
 
 describe('client abort', () => {
@@ -346,5 +392,20 @@ describe('lane PUT', () => {
     mock.ctx.lane('narrative').stream = { charsPerSecond: 40, chunkSize: 6 }
     expect((await put({ stream: 5 })).status).toBe(400)
     expect(mock.ctx.lane('narrative').stream).toEqual({ charsPerSecond: 40, chunkSize: 6 })
+  })
+
+  it('accepts the length failure kind', async () => {
+    const response = await fetch(`${base()}/api/lanes/per-turn-classifier`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ failure: { kind: 'length', remaining: 1 } }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(mock.ctx.lane('per-turn-classifier').failure).toMatchObject({
+      kind: 'length',
+      remaining: 1,
+    })
+    mock.ctx.lane('per-turn-classifier').failure = { kind: 'none', status: 500, remaining: 0 }
   })
 })

@@ -59,20 +59,20 @@ export function contentFrame(content: string): string {
   return sse({ ...CHUNK_BASE, choices: [{ index: 0, delta: { content }, finish_reason: null }] })
 }
 
-export function stopFrames(): string {
+export function stopFrames(finishReason: 'stop' | 'length' = 'stop'): string {
   return (
-    sse({ ...CHUNK_BASE, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) +
+    sse({ ...CHUNK_BASE, choices: [{ index: 0, delta: {}, finish_reason: finishReason }] }) +
     'data: [DONE]\n\n'
   )
 }
 
-export function completionBody(content: string): string {
+export function completionBody(content: string, finishReason: 'stop' | 'length' = 'stop'): string {
   return JSON.stringify({
     id: 'chatcmpl-mock',
     object: 'chat.completion',
     created: 0,
     model: 'mock',
-    choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+    choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: finishReason }],
   })
 }
 

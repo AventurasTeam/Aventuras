@@ -391,8 +391,8 @@
         ['Slow', 10],
       ]
       const FAILURES = {
-        narrative: ['none', 'http', 'stream-cut', 'malformed', 'hang'],
-        structured: ['none', 'http', 'malformed', 'hang'],
+        narrative: ['none', 'http', 'stream-cut', 'malformed', 'hang', 'length'],
+        structured: ['none', 'http', 'malformed', 'hang', 'length'],
       }
 
       // Nav sections, in display order; `id` matches laneCatalog's group.
@@ -668,7 +668,10 @@
             </div>
 
             ${
-              !isNarrative && lane.failure.kind !== 'none' && lane.failure.remaining === 1
+              !isNarrative &&
+              lane.failure.kind !== 'none' &&
+              lane.failure.kind !== 'length' &&
+              lane.failure.remaining === 1
                 ? `<p class="hint" style="color:var(--warn)">Structured calls retry once (<code>maxProviderAttempts: 2</code>), so a single injected failure is swallowed before the app sees it. Use 2 or more.</p>`
                 : ''
             }

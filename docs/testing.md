@@ -379,18 +379,25 @@ prompt pack the app itself renders, so a template edit moves the marker
 in the same edit. The marker is consulted only when the block is
 ambiguous.
 
-Two one-shot narrative controls model the boundary states a running turn
-can hit: `failNextNarrative()` makes the next streaming call return HTTP
-500 (the failed-turn → retriable-system-entry path), and
+Three one-shot narrative controls model the boundary states a running
+turn can hit: `failNextNarrative()` makes the next streaming call return
+HTTP 500 (the failed-turn → retriable-system-entry path),
 `holdNextNarrative()` opens the stream but holds it unfinished until
 `releaseNarrative()` or a client abort — the deterministic in-flight
-window the cancel spec cancels into, with no sleep-based wait.
+window the cancel spec cancels into, with no sleep-based wait — and
+`cutNextNarrative()` streams the current narrative and ends it with
+`finish_reason: 'length'`, a reply the server stopped at its length
+limit ([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)).
 
 `holdNextStructured(name)` does the same for the next structured call
 whose prompt matches that shape: the call is recorded in `requests`,
 then answered only at `releaseStructured()`, with the reply set by
 then — the in-flight window the gated pass's interrupt and Cancel
 specs act in.
+
+`cutNextStructured(name, raw)` answers the next call of that shape with
+`raw` verbatim and `finish_reason: 'length'`, so a spec can hand the app
+a document cut partway through that it must refuse rather than repair.
 
 Block-matching keys on the **auto** (prompt-injection) path the fixture
 uses — the only path E2E relies on. A `force-on` profile takes the

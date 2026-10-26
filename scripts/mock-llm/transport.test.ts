@@ -99,4 +99,27 @@ describe('the app transport against the mock', () => {
 
     await expect(runProviderCall({ model, prompt: 'Classify the turn.' })).rejects.toThrow()
   })
+
+  it("reports a lane's length failure as the SDK's finishReason on both paths", async () => {
+    mock.ctx.lane('per-turn-classifier').failure = { kind: 'length', status: 500, remaining: 1 }
+    const structured = await runProviderCall({
+      model: classifierModel(),
+      prompt: 'Classify the turn.',
+    })
+    expect(structured.finishReason).toBe('length')
+    expect(() => JSON.parse(structured.text)).toThrow()
+
+    const lane = mock.ctx.lane('narrative')
+    lane.stream = { charsPerSecond: 100_000, chunkSize: 6 }
+    lane.failure = { kind: 'length', status: 500, remaining: 1 }
+    const stream = streamProviderCall({
+      model: createProviderModel(provider(), 'seed/narrative'),
+      prompt: 'Continue the scene.',
+    })
+    let assembled = ''
+    for await (const delta of stream.textStream) assembled += delta
+
+    expect(await stream.finishReason).toBe('length')
+    expect(assembled.length).toBeGreaterThan(0)
+  })
 })

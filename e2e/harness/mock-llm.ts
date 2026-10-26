@@ -142,6 +142,10 @@ export type MockLlm = {
   holdNextStructured: (agentName: string) => void
   /** Answer every held structured call with its shape's reply as set now. */
   releaseStructured: () => void
+  /** One-shot: the next narrative (streaming) call streams the current narrative, then finish_reason 'length'. */
+  cutNextNarrative: () => void
+  /** One-shot: the next structured call matching `agentName` answers `raw` verbatim with finish_reason 'length'. */
+  cutNextStructured: (agentName: string, raw: string) => void
   /** Every completion request received, in order. */
   requests: MockRequest[]
   close: () => Promise<void>
@@ -171,31 +175,27 @@ function narrativeRoleFrame(): string {
   })
 }
 
-function narrativeTail(content: string): string {
+type FinishReason = 'stop' | 'length'
+
+function narrativeTail(content: string, finishReason: FinishReason): string {
   const frames = [
     { ...CHUNK_BASE, choices: [{ index: 0, delta: { content }, finish_reason: null }] },
-    { ...CHUNK_BASE, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
+    { ...CHUNK_BASE, choices: [{ index: 0, delta: {}, finish_reason: finishReason }] },
   ]
   return frames.map(sse).join('') + 'data: [DONE]\n\n'
 }
 
-function narrativeSse(content: string): string {
-  return narrativeRoleFrame() + narrativeTail(content)
+function narrativeSse(content: string, finishReason: FinishReason): string {
+  return narrativeRoleFrame() + narrativeTail(content, finishReason)
 }
 
-function structuredCompletion(value: unknown): string {
+function completion(content: string, finishReason: FinishReason): string {
   return JSON.stringify({
     id: 'chatcmpl-mock',
     object: 'chat.completion',
     created: 0,
     model: 'mock',
-    choices: [
-      {
-        index: 0,
-        message: { role: 'assistant', content: JSON.stringify(value) },
-        finish_reason: 'stop',
-      },
-    ],
+    choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: finishReason }],
   })
 }
 
@@ -240,6 +240,16 @@ export async function startMockLlm(): Promise<MockLlm> {
   let holdStructuredNext: string | null = null
   // res → shape name to answer with; a client abort drops it, like heldResponses.
   const heldStructured = new Map<ServerResponse, string>()
+  let cutNarrativeNext = false
+  // Shape name → the raw reply its next answered call sends.
+  const cutStructured = new Map<string, string>()
+
+  // Spent by the next stream to finish, so a held stream released later takes it.
+  const narrativeFinish = (): FinishReason => {
+    if (!cutNarrativeNext) return 'stop'
+    cutNarrativeNext = false
+    return 'length'
+  }
 
   // The renderer fetches cross-origin (its own origin → this server), which
   // triggers a CORS preflight; answer it and tag every response, so the call
@@ -251,9 +261,18 @@ export async function startMockLlm(): Promise<MockLlm> {
   }
 
   const answerStructured = (res: ServerResponse, agentName: string | null): void => {
-    const value = agentName !== null ? (overrides.get(agentName) ?? EXAMPLES[agentName]) : {}
     res.writeHead(200, { ...cors, 'content-type': 'application/json' })
-    res.end(structuredCompletion(value))
+    if (agentName === null) {
+      res.end(completion('{}', 'stop'))
+      return
+    }
+    const cut = cutStructured.get(agentName)
+    cutStructured.delete(agentName)
+    res.end(
+      cut !== undefined
+        ? completion(cut, 'length')
+        : completion(JSON.stringify(overrides.get(agentName) ?? EXAMPLES[agentName]), 'stop'),
+    )
   }
 
   const releaseHeldStructured = (): void => {
@@ -301,7 +320,7 @@ export async function startMockLlm(): Promise<MockLlm> {
           res.on('close', () => heldResponses.delete(res))
           return
         }
-        res.end(narrativeSse(narrative))
+        res.end(narrativeSse(narrative, narrativeFinish()))
         return
       }
 
@@ -336,18 +355,24 @@ export async function startMockLlm(): Promise<MockLlm> {
       holdNarrativeNext = true
     },
     releaseNarrative: () => {
-      for (const res of heldResponses) res.end(narrativeTail(narrative))
+      for (const res of heldResponses) res.end(narrativeTail(narrative, narrativeFinish()))
       heldResponses.clear()
     },
     holdNextStructured: (agentName) => {
       holdStructuredNext = agentName
     },
     releaseStructured: releaseHeldStructured,
+    cutNextNarrative: () => {
+      cutNarrativeNext = true
+    },
+    cutNextStructured: (agentName, raw) => {
+      cutStructured.set(agentName, raw)
+    },
     requests,
     close: () =>
       new Promise<void>((resolve) => {
         // Finish held calls first, else an open socket hangs server.close().
-        for (const res of heldResponses) res.end(narrativeTail(narrative))
+        for (const res of heldResponses) res.end(narrativeTail(narrative, narrativeFinish()))
         heldResponses.clear()
         releaseHeldStructured()
         server.close(() => resolve())

@@ -13,6 +13,8 @@ export type StreamOptions = StreamPacing & {
   content: string
   /** Stop partway and close the socket without a stop frame or [DONE]. */
   cut?: boolean
+  /** The terminal frame's finish_reason; `'length'` is a reply the server stopped at its limit. */
+  finishReason?: 'stop' | 'length'
   aborted: () => boolean
 }
 
@@ -51,7 +53,7 @@ export async function streamNarrative(res: ServerResponse, opts: StreamOptions):
 
   if (opts.charsPerSecond <= 0 && opts.cut !== true) {
     await write(res, contentFrame(opts.content))
-    if (!opts.aborted()) res.end(stopFrames())
+    if (!opts.aborted()) res.end(stopFrames(opts.finishReason))
     return
   }
 
@@ -72,5 +74,5 @@ export async function streamNarrative(res: ServerResponse, opts: StreamOptions):
   // The cut path closes without a stop frame or [DONE] on purpose: that is the
   // truncated-stream failure the app has to survive.
   if (opts.cut === true) res.end()
-  else res.end(stopFrames())
+  else res.end(stopFrames(opts.finishReason))
 }
