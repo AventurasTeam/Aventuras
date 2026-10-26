@@ -58,6 +58,7 @@
     type GenerationContext,
     type RetrievalResult,
     type BackgroundTaskDependencies,
+    type WrittenCharacter,
     type BackgroundTaskInput,
     type PipelineUICallbacks,
     type PipelineEventState,
@@ -830,6 +831,7 @@
           }
           const entryId = narrationEntry.id
           const { _error, _salvaged } = event.result
+          let written: WrittenCharacter[] = []
           // A failed result still runs the entry's bookkeeping: its end time, and with state
           // tracking its header and maybe a snapshot.
           await trackStep(
@@ -844,7 +846,7 @@
                   : 'fallback bookkeeping only',
             },
             async () => {
-              await story.applyClassificationResult(event.result, entryId)
+              written = await story.applyClassificationResult(event.result, entryId)
               await story.updateEntryTimeEnd(entryId)
             },
           )
@@ -860,7 +862,6 @@
                 {
                   storyId: currentStoryRef.id,
                   classificationResult: {
-                    newCharacters: event.result.entryUpdates.newCharacters,
                     newLocations: event.result.entryUpdates.newLocations,
                     newItems: event.result.entryUpdates.newItems,
                     newStoryBeats: event.result.entryUpdates.newStoryBeats,
@@ -872,9 +873,11 @@
                     storyBeats: story.storyBeats,
                   },
                   targetLanguage: translationSettings.targetLanguage,
+                  characters: written,
                 },
                 {
-                  updateCharacter: (id, data) => database.updateCharacter(id, data as any),
+                  updateCharacter: (id, data) => database.updateCharacter(id, data),
+                  getCharacter: (id) => story.characters.find((c) => c.id === id),
                   updateLocation: (id, data) => database.updateLocation(id, data as any),
                   updateItem: (id, data) => database.updateItem(id, data as any),
                   updateStoryBeat: (id, data) => database.updateStoryBeat(id, data as any),

@@ -90,11 +90,25 @@ export interface PersistentRetryState {
 
 export interface PersistentCharacterSnapshot {
   id: string
+  /** Left as they are by a restore when the snapshot does not hold them. */
+  name?: string
+  description?: string | null
   traits: string[]
   status: 'active' | 'inactive' | 'deceased'
   relationship: string | null
   visualDescriptors: VisualDescriptors
   portrait: string | null // Data URL (data:image/...) or legacy base64
+  /** The translations of the text above, so a restore can put them back with it. */
+  translations?: Partial<
+    Pick<
+      Character,
+      | 'translatedName'
+      | 'translatedDescription'
+      | 'translatedRelationship'
+      | 'translatedTraits'
+      | 'translatedVisualDescriptors'
+    >
+  >
 }
 
 // Persistent style review state - saved per-story for style analysis tracking

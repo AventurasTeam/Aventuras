@@ -45,6 +45,7 @@ export {
   headerRecord,
   markId,
   markRecord,
+  sameValue,
   type RecordContext,
   type RecordScope,
 } from './record'

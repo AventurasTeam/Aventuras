@@ -3,23 +3,77 @@
  * Extracts from ActionInput.svelte translateWorldStateElements() logic.
  */
 
-import type { Character, Location, Item, StoryBeat } from '#lib/types/index.ts'
+import type { Character, Location, Item, StoryBeat, VisualDescriptors } from '#lib/types/index.ts'
 import type { UITranslationItem } from '#lib/services/ai/utils/TranslationService.ts'
-import { hasDescriptors, descriptorsToString } from '#lib/utils/visualDescriptors.ts'
 import { createLogger } from '#lib/log.ts'
-import { parseTerms } from '#lib/utils/text.ts'
+import { sameValue } from '#lib/services/stateTracking/index.ts'
+import { DESCRIPTOR_CATEGORIES } from '#lib/utils/visualDescriptors.ts'
 
 const log = createLogger('WorldStateTranslationService')
 
+/** The character fields that carry text to translate. */
+export const CHARACTER_TEXT_FIELDS = [
+  'name',
+  'description',
+  'relationship',
+  'traits',
+  'visualDescriptors',
+] as const satisfies readonly (keyof Character)[]
+
+export type CharacterTextField = (typeof CHARACTER_TEXT_FIELDS)[number]
+
+const TRANSLATION_FIELD = {
+  name: 'translatedName',
+  description: 'translatedDescription',
+  relationship: 'translatedRelationship',
+  traits: 'translatedTraits',
+  visualDescriptors: 'translatedVisualDescriptors',
+} as const satisfies { [F in CharacterTextField]: keyof Character }
+
+export type CharacterTranslations = Partial<
+  Pick<Character, (typeof TRANSLATION_FIELD)[CharacterTextField]>
+>
+
+/**
+ * The saved translations of the fields a restore changes. A field it leaves as it is keeps its
+ * current translation, which may have finished after the save.
+ */
+export function translationsToRestore(
+  current: Character,
+  restored: Partial<Character>,
+  saved: CharacterTranslations | undefined,
+): CharacterTranslations {
+  const result: CharacterTranslations = {}
+  if (!saved) return result
+  for (const field of CHARACTER_TEXT_FIELDS) {
+    const key = TRANSLATION_FIELD[field]
+    if (field in restored && key in saved && !sameValue(restored[field], current[field]))
+      Object.assign(result, { [key]: saved[key] })
+  }
+  return result
+}
+
+/** A character a classification wrote: the text fields it changed, or all of one it created. */
+export interface WrittenCharacter {
+  id: string
+  fields: 'all' | readonly CharacterTextField[]
+}
+
+/** One entry per character, with every field any of `written` changed. */
+export function mergeWritten(written: readonly WrittenCharacter[]): WrittenCharacter[] {
+  const byId = new Map<string, WrittenCharacter['fields']>()
+  for (const { id, fields } of written) {
+    const before = byId.get(id) ?? []
+    byId.set(
+      id,
+      fields === 'all' || before === 'all' ? 'all' : [...new Set([...before, ...fields])],
+    )
+  }
+  return [...byId].map(([id, fields]) => ({ id, fields }))
+}
+
 /** New entities from classification result. */
 export interface ClassificationNewEntities {
-  newCharacters: Array<{
-    name: string
-    description?: string
-    relationship?: string
-    traits?: string[]
-    visualDescriptors?: Record<string, string>
-  }>
   newLocations: Array<{ name: string; description?: string }>
   newItems: Array<{ name: string; description?: string }>
   newStoryBeats: Array<{ title: string; description?: string }>
@@ -35,7 +89,9 @@ export interface WorldStateEntities {
 
 /** Callbacks for persisting translations. */
 export interface WorldStateTranslationCallbacks {
-  updateCharacter: (id: string, data: Record<string, string | string[] | null>) => Promise<void>
+  updateCharacter: (id: string, data: Partial<Character>) => Promise<void>
+  /** The character as it is now; a translation is not written over text that changed since. */
+  getCharacter: (id: string) => Character | undefined
   updateLocation: (id: string, data: Record<string, string | null>) => Promise<void>
   updateItem: (id: string, data: Record<string, string | null>) => Promise<void>
   updateStoryBeat: (id: string, data: Record<string, string | null>) => Promise<void>
@@ -56,6 +112,8 @@ export interface WorldStateTranslationInput {
   classificationResult: ClassificationNewEntities
   worldState: WorldStateEntities
   targetLanguage: string
+  /** The characters the classification wrote; the fields it changed are translated. */
+  characters?: readonly WrittenCharacter[]
 }
 
 export interface WorldStateTranslationResult {
@@ -64,10 +122,29 @@ export interface WorldStateTranslationResult {
 
 type EntityType = 'character' | 'location' | 'item' | 'storyBeat'
 
+type TranslatedField =
+  | 'translatedName'
+  | 'translatedDescription'
+  | 'translatedTitle'
+  | 'translatedRelationship'
+  | 'translatedTraits'
+  | 'translatedVisualDescriptors'
+
 interface TranslationItem extends UITranslationItem {
   entityType: EntityType
-  field: string
-  isArray?: boolean
+  entityId: string
+  field: TranslatedField
+  /** For traits, translated one per item: the trait's index. */
+  trait?: number
+  /** For appearance, translated one category per item: the category. */
+  category?: keyof VisualDescriptors
+  /** Whether a character still holds the text this item was made from. */
+  stillCurrent?: (c: Character) => boolean
+}
+
+interface TranslatedPart {
+  item: TranslationItem
+  text: string
 }
 
 export class WorldStateTranslationService {
@@ -80,50 +157,10 @@ export class WorldStateTranslationService {
     const { storyId, classificationResult, worldState, targetLanguage } = input
     const items: TranslationItem[] = []
 
-    // Collect character fields
-    for (const char of classificationResult.newCharacters) {
-      const db = worldState.characters.find((c) => c.name === char.name)
-      if (!db) continue
-      items.push({
-        id: `${db.id}:name`,
-        text: char.name,
-        type: 'name',
-        entityType: 'character',
-        field: 'translatedName',
-      })
-      if (char.description)
-        items.push({
-          id: `${db.id}:desc`,
-          text: char.description,
-          type: 'description',
-          entityType: 'character',
-          field: 'translatedDescription',
-        })
-      if (char.relationship)
-        items.push({
-          id: `${db.id}:rel`,
-          text: char.relationship,
-          type: 'description',
-          entityType: 'character',
-          field: 'translatedRelationship',
-        })
-      if (char.traits?.length)
-        items.push({
-          id: `${db.id}:traits`,
-          text: char.traits.join(', '),
-          type: 'description',
-          entityType: 'character',
-          field: 'translatedTraits',
-          isArray: true,
-        })
-      if (hasDescriptors(char.visualDescriptors))
-        items.push({
-          id: `${db.id}:visual`,
-          text: descriptorsToString(char.visualDescriptors),
-          type: 'description',
-          entityType: 'character',
-          field: 'translatedVisualDescriptors',
-        })
+    // Characters are translated from their stored rows.
+    for (const { id, fields } of input.characters ?? []) {
+      const char = worldState.characters.find((c) => c.id === id)
+      if (char) items.push(...characterItems(char, fields))
     }
 
     // Collect location fields
@@ -132,6 +169,7 @@ export class WorldStateTranslationService {
       if (!db) continue
       items.push({
         id: `${db.id}:name`,
+        entityId: db.id,
         text: loc.name,
         type: 'name',
         entityType: 'location',
@@ -140,6 +178,7 @@ export class WorldStateTranslationService {
       if (loc.description)
         items.push({
           id: `${db.id}:desc`,
+          entityId: db.id,
           text: loc.description,
           type: 'description',
           entityType: 'location',
@@ -153,6 +192,7 @@ export class WorldStateTranslationService {
       if (!db) continue
       items.push({
         id: `${db.id}:name`,
+        entityId: db.id,
         text: item.name,
         type: 'name',
         entityType: 'item',
@@ -161,6 +201,7 @@ export class WorldStateTranslationService {
       if (item.description)
         items.push({
           id: `${db.id}:desc`,
+          entityId: db.id,
           text: item.description,
           type: 'description',
           entityType: 'item',
@@ -174,6 +215,7 @@ export class WorldStateTranslationService {
       if (!db) continue
       items.push({
         id: `${db.id}:title`,
+        entityId: db.id,
         text: beat.title,
         type: 'title',
         entityType: 'storyBeat',
@@ -182,6 +224,7 @@ export class WorldStateTranslationService {
       if (beat.description)
         items.push({
           id: `${db.id}:desc`,
+          entityId: db.id,
           text: beat.description,
           type: 'description',
           entityType: 'storyBeat',
@@ -198,29 +241,116 @@ export class WorldStateTranslationService {
       storyId,
     )
 
-    // Apply translations
+    // One write per field. A field translated in parts (traits, appearance) is written only
+    // whole, and a character's only while it still holds the text that was sent.
+    const fieldKey = (i: TranslationItem) => `${i.entityId} ${i.field}`
+    const fields = new Map<string, { expected: number; parts: TranslatedPart[] }>()
+    for (const item of items) {
+      const group = fields.get(fieldKey(item))
+      if (group) group.expected++
+      else fields.set(fieldKey(item), { expected: 1, parts: [] })
+    }
+    const byId = new Map(items.map((i) => [i.id, i]))
     for (const t of translated) {
-      const [entityId] = t.id.split(':')
-      const orig = items.find((i) => i.id === t.id)
-      if (!orig) continue
+      const item = byId.get(t.id)
+      if (item) fields.get(fieldKey(item))?.parts.push({ item, text: t.text })
+    }
 
-      const value = orig.isArray ? parseTerms(t.text) : t.text
-      const data: Record<string, string | string[] | null> = {
-        [orig.field]: value,
-        translationLanguage: targetLanguage,
+    for (const { expected, parts } of fields.values()) {
+      if (parts.length === 0 || parts.length !== expected) continue
+      const { entityType, entityId, field } = parts[0].item
+
+      if (entityType === 'character') {
+        const current = callbacks.getCharacter(entityId)
+        if (!current) continue
+        if (parts.some(({ item }) => item.stillCurrent && !item.stillCurrent(current))) continue
+        await callbacks.updateCharacter(entityId, {
+          [field]: assemble(field, parts),
+          translationLanguage: targetLanguage,
+        })
+        continue
       }
-
-      if (orig.entityType === 'character') await callbacks.updateCharacter(entityId, data)
-      else if (orig.entityType === 'location')
-        await callbacks.updateLocation(entityId, data as Record<string, string | null>)
-      else if (orig.entityType === 'item')
-        await callbacks.updateItem(entityId, data as Record<string, string | null>)
-      else if (orig.entityType === 'storyBeat')
-        await callbacks.updateStoryBeat(entityId, data as Record<string, string | null>)
+      const data = { [field]: parts[0].text, translationLanguage: targetLanguage }
+      if (entityType === 'location') await callbacks.updateLocation(entityId, data)
+      else if (entityType === 'item') await callbacks.updateItem(entityId, data)
+      else if (entityType === 'storyBeat') await callbacks.updateStoryBeat(entityId, data)
     }
 
     await callbacks.refreshWorldState()
     log('World state elements translated', { count: translated.length })
     return { translatedCount: translated.length }
+  }
+}
+
+// Traits and appearance go one trait or category per item, so a comma inside one cannot split
+// it and the appearance comes back as categories.
+function characterItems(char: Character, fields: WrittenCharacter['fields']): TranslationItem[] {
+  const items: TranslationItem[] = []
+  const wanted = (field: CharacterTextField) => fields === 'all' || fields.includes(field)
+  const add = (
+    field: TranslatedField,
+    key: string,
+    text: string,
+    stillCurrent: (c: Character) => boolean,
+    part: Pick<TranslationItem, 'trait' | 'category'> = {},
+  ) =>
+    items.push({
+      id: `${char.id}:${key}`,
+      text,
+      type: field === 'translatedName' ? 'name' : 'description',
+      entityType: 'character',
+      entityId: char.id,
+      field,
+      stillCurrent,
+      ...part,
+    })
+
+  if (char.name && wanted('name'))
+    add('translatedName', 'name', char.name, (c) => c.name === char.name)
+  if (char.description && wanted('description'))
+    add(
+      'translatedDescription',
+      'desc',
+      char.description,
+      (c) => c.description === char.description,
+    )
+  if (char.relationship && wanted('relationship'))
+    add(
+      'translatedRelationship',
+      'rel',
+      char.relationship,
+      (c) => c.relationship === char.relationship,
+    )
+  if (wanted('traits')) {
+    const sameTraits = (c: Character) => sameValue(c.traits, char.traits)
+    ;(char.traits ?? []).forEach((text, trait) =>
+      add('translatedTraits', `trait:${trait}`, text, sameTraits, { trait }),
+    )
+  }
+  if (wanted('visualDescriptors')) {
+    const sameLook = (c: Character) => sameValue(c.visualDescriptors, char.visualDescriptors)
+    for (const category of DESCRIPTOR_CATEGORIES) {
+      const value = char.visualDescriptors?.[category]
+      if (value?.trim())
+        add('translatedVisualDescriptors', `visual:${category}`, value, sameLook, { category })
+    }
+  }
+  return items
+}
+
+function assemble(
+  field: TranslatedField,
+  parts: TranslatedPart[],
+): string | string[] | VisualDescriptors {
+  switch (field) {
+    case 'translatedTraits':
+      return parts.toSorted((a, b) => (a.item.trait ?? 0) - (b.item.trait ?? 0)).map((p) => p.text)
+    case 'translatedVisualDescriptors': {
+      const look: VisualDescriptors = {}
+      for (const { item, text } of parts) if (item.category) look[item.category] = text
+      return look
+    }
+    default:
+      return parts[0].text
   }
 }

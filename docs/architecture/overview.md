@@ -280,16 +280,62 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
 [inactive]` came back as the name, missed `sameEntityName`, and created a second
   character — four of thirty-eight on a measured 41-chapter save, two carrying the
   subject's own `relationship` verbatim. Name and attributes are now separate lines
-  (`relationship:`, `status:`, `appearance:`), in every list `ClassifierService` renders —
-  characters, locations, items, story beats — and in `WorldStateInjector`'s narrator block,
-  whose prose the classifier also reads. One name per line also holds names a
-  comma-separated list could not: locations and items were CSV until they carried state.
+  (`relationship:`, `status:`, `description:`, `traits:`, `appearance:`), in every list the
+  classifier is shown — characters (`classifierCharacters.ts`), locations, items, story beats
+  (`ClassifierService`) — and in `WorldStateInjector`'s narrator block, whose prose the
+  classifier also reads. Every further line of a character's value is indented under it, blank
+  lines kept, and a rewrite has the indent taken off again; traits are listed as a JSON list,
+  since the model writes the list back whole and a trait may hold a comma. One
+  name per line also holds names a comma-separated list could not: locations and items were
+  CSV until they carried state.
 
-  **State reaches the classifier only where it can act on it.** `appearance:` goes with a
-  character in the scene, `description:` with the current location, and an item's
-  `quantity`/`equipped`/`location` only when they differ from the default — because each of
-  those is a whole-value replacement, and a model cannot rewrite what it was not shown. The
-  same rule sizes the prompt: on a large cast the omitted halves are most of it.
+  **State reaches the classifier only where it can act on it.** `description:`, `traits:` and
+  `appearance:` go with a character in the scene, `description:` with the current location, and
+  an item's `quantity`/`equipped`/`location` only when they differ from the default — because
+  each of those is a whole-value replacement, and a model cannot rewrite what it was not shown.
+  The same rule sizes the prompt: on a large cast the omitted halves are most of it.
+
+  For characters the rule is enforced as well as stated: `classifierCharacterView`
+  (`services/ai/generation/classifierCharacters.ts`) decides both what is listed and which
+  rewrites `applyClassificationResult` takes. The classifier attaches what it listed to its
+  result (`_shownCharacters`), so a status changed while it ran does not widen the gate, and
+  lists nobody, with a console warning, when the rendered prompt does not carry
+  `existingCharacters` as given: a custom template that leaves it out or filters it. A result
+  without the list showed nobody. A rewrite of a field
+  that was not listed is dropped and logged, an empty description, trait list or appearance
+  never erases one, and a rewrite or status equal to the current value writes nothing.
+  A rewritten field drops its translation, which would otherwise be shown in its place, and
+  with world-state translation on it is translated again after the turn, as a new character's
+  fields are: `applyClassificationResult` returns the characters it wrote and the text fields
+  it changed (`WrittenCharacter`), and only those are translated; batch chapterization
+  translates what its chapters wrote once it ends, cancelled or failed included, in the
+  background and ten characters per request. Characters are translated
+  from their stored rows, traits one by one and appearance by category, and a field is written
+  only whole and only while the character still holds the text that was sent, so a revert
+  landing mid-translation is not overwritten. Answers are matched to what was sent by id, and a
+  failed request returns none, so a source text is never saved as its translation. The
+  protagonist's appearance is
+  listed, but not their description or traits: those are usually the reader's own setup, and
+  the protagonist is in every scene, so every turn would be a chance to rewrite them. Traits
+  and descriptions are replaced whole, like appearance; there is no add or remove. A trait list
+  is cut to the first 8, the most the prompt asks for (`traitList`), and a rewrite that loses
+  traits that way is logged with the other ignored rewrites. A new character takes the status
+  its entry gives, `active` when it gives none. The presence pass counts a character the
+  response creates as in the scene, unless it is created away: then only `presentCharacterNames`
+  brings it in.
+
+  **A character listed under a placeholder is renamed when the story reveals their name.**
+  `characterUpdates[].changes.newName` carries it, under the listed name (`planRename`).
+  What a response does to the cast is planned whole before anything is written
+  (`planCharacterResponse`), and the store, the presence pass and the scene image all read the
+  same plan. Renames apply first, and the rest of the response may name the character either
+  way. A listed name means the character listed under it, so two renames in one response (Bob
+  to Robert, the stranger to Bob) keep two characters, in either order. Each character gets one
+  write, its rename included. A name another character still holds once the other renames are
+  done is refused and logged, because that is a duplicate to merge, not a rename; so is any
+  rename of the protagonist. An update whose
+  listed name matches no one goes to the character holding its new name, or creates one under
+  it from the `newCharacters` entry filed under either name, and answers to both.
 
   **`scene.currentLocationName` is the only thing that moves the scene.** It creates the
   location if the name is new, marks it `current` and `visited`, and clears the previous
@@ -307,9 +353,9 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   the list carries no signal: a salvaged or failed classification, or an empty array — which the
   schema defaults, so "the model said nobody" and "the model did not answer" arrive identically.
   `characterUpdates.status` stays for what the scene states outright, `deceased` above all, and
-  wins over the inference. `appearance:` is sent to the classifier only for characters in the
-  scene, and the template forbids rewriting an appearance it was not shown, so a returning
-  character keeps the descriptors it accumulated.
+  wins over the inference. A character's description, traits and appearance are sent to the
+  classifier only while they are in the scene, and a rewrite of one it was not shown is
+  dropped, so a returning character keeps what it accumulated.
 
 - **State Tracking** (Labs) records every world and lorebook change in `world_state_changes`,
   which is what makes retry, time-travel delete and regenerate reversible (`rollbackService`) and

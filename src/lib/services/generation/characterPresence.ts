@@ -19,7 +19,7 @@ export interface PresenceInput {
   characters: Character[]
   /** `scene.presentCharacterNames`, exactly as the classifier returned it. */
   presentNames: string[]
-  /** Names of characters created by this same classification; present by construction. */
+  /** Characters this classification creates as `active` or lists again as new; present. */
   newNames: string[]
   /** Names carrying an explicit `changes.status`, which decides for itself. */
   explicitStatusNames: string[]

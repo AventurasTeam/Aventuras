@@ -59,6 +59,7 @@ import {
 import type { PackExport } from '#lib/services/packs/validation.ts'
 import { readStorySettings } from '#lib/utils/storySettings.ts'
 import { uniqueTerms } from '#lib/utils/text.ts'
+import { stringToDescriptors } from '#lib/utils/visualDescriptors.ts'
 import {
   uniqueInjectionTerms,
   withUniqueEntryTerms,
@@ -3084,6 +3085,13 @@ class DatabaseService {
     const rawTranslatedDescriptors = row.translated_visual_descriptors
       ? JSON.parse(row.translated_visual_descriptors)
       : null
+    // A translation stored as one "Face: …, Hair: …" string is read back by category.
+    const translatedDescriptors =
+      typeof rawTranslatedDescriptors === 'string'
+        ? stringToDescriptors(rawTranslatedDescriptors)
+        : rawTranslatedDescriptors
+          ? migrateVisualDescriptors(rawTranslatedDescriptors)
+          : {}
     const rawTranslatedTraits = row.translated_traits ? JSON.parse(row.translated_traits) : null
 
     return {
@@ -3107,9 +3115,8 @@ class DatabaseService {
       translatedTraits: Array.isArray(rawTranslatedTraits)
         ? uniqueTerms(rawTranslatedTraits)
         : null,
-      translatedVisualDescriptors: rawTranslatedDescriptors
-        ? migrateVisualDescriptors(rawTranslatedDescriptors)
-        : null,
+      translatedVisualDescriptors:
+        Object.keys(translatedDescriptors).length > 0 ? translatedDescriptors : null,
       translationLanguage: row.translation_language || null,
     }
   }

@@ -20,8 +20,38 @@ Note: The story may be in Adventure mode (player as protagonist) or Creative Wri
 - Example: "Elena, the blacksmith's daughter who offers a task" = YES
 - Example: "the innkeeper who served a drink" = NO
 
+### Revealed Names
+A character may be listed under a placeholder ("weapon vendor", "the hooded woman") until the story reveals their real name. When it does, send a \`characterUpdates\` entry with the LISTED name in \`name\` and the revealed name in \`changes.newName\`, and put that character's other changes in the same entry. Never add them to \`newCharacters\` under the new name: that makes a second character. Only for a name the story establishes, not a nickname, title or guess, and never for {{ protagonistName }}.
+
+### Character Description and Traits
+Every NEW character gets a \`description\`: one sentence saying who they are.
+
+**\`traits\` are lasting personality only, at most 8** — how the character is, not what they did or how they feel right now. Events, actions, temporary moods, injuries and illnesses never go in traits; what happened belongs in story beats.
+- Example: "stubborn", "fiercely loyal to her sister", "distrusts magic" = YES
+- Example: "fought off the bandits", "furious", "grieving", "wounded", "has a fever" = NO
+
+**\`description\` is who the character is and their current lasting state.** A condition that outlasts the scene (injured, sick, imprisoned, cursed) goes here, and comes out again once the story resolves it.
+
+**For EXISTING characters:** \`description\` and \`traits\` each REPLACE the whole field. Only send them for a character listed \`status: active\`, and never for {{ protagonistName }}. Anyone else is listed without them because they are withheld, not because they are empty, and rewriting what you cannot see discards it.
+
+Send one only when:
+- The passage establishes something new or changed that lasts: a revealed past, a new role, a lasting change of heart
+- The story resolves a condition the listed description still mentions: take it out
+- The listed traits are more than 8, duplicated, or hold events and moods: consolidate them
+- An active character other than {{ protagonistName }} is listed with no \`description:\` at all: write one
+
+Your version must:
+- Keep every listed detail that is still true
+- Keep the description about as long as the listed one: never shorten it to tidy it, and add only what lasts
+- Keep traits at 8 or fewer short phrases: to make room, merge or drop the weakest
+- Never append this passage's events
+
 ### Visual Descriptors (CRITICAL for image generation)
 Visual descriptors enable consistent character visualization. The goal is to build a COMPLETE PICTURE of each character - someone reading ONLY the descriptors should be able to clearly visualize and draw that character as if they had never seen them before.
+
+They are objective appearance only: what someone looking at the character sees. Never what happened to them, why they look that way, or how they feel.
+- Example: "thin scar across the forehead" = YES
+- Example: "scar from the fight at the bridge", "exhausted after the battle" = NO
 
 **For NEW characters:** You MUST provide a COMPREHENSIVE visual description. Every new character MUST have descriptors covering ALL of these categories:
 - Face: skin tone, facial features, expression, age indicators
@@ -41,7 +71,7 @@ Never leave a character without complete visual descriptors - invent plausible d
 **For EXISTING characters:** \`visualDescriptors\` REPLACES every category at once. Only send it for a character listed \`status: active\`. The others are listed without their \`appearance:\` because it is withheld, not because it is empty, and rewriting one you cannot see discards everything already recorded about how that character looks.
 
 When to send it:
-- ANY visual change (new outfit, new accessory, injury)
+- ANY lasting visual change (new outfit, new accessory, a visible wound or scar)
 - The listed appearance is bloated or self-contradictory (consolidate it)
 - An active character is listed with no \`appearance:\` at all — they have none yet, so invent one now, on the same terms as a new character
 
@@ -142,7 +172,8 @@ Determine how much narrative time elapsed during this passage. Consider what act
 4. Use names exactly as the text and the entity list spell them
 5. ALWAYS check if active story beats should be marked completed or failed
 6. ALWAYS assess timeProgression - prefer incrementing time over "none" when activities occur
-7. ALWAYS list who is in the scene in \`presentCharacterNames\` - it is never optional`,
+7. ALWAYS list who is in the scene in \`presentCharacterNames\` - it is never optional
+8. Traits are personality and appearance is what can be seen: neither records what happened`,
   // Ordered by how often each block changes, not by how the task reads.
   //
   // With prefix KV caching, everything up to the first token that differs from the previous
@@ -200,7 +231,7 @@ appended to it creates a second copy of the same character.
 """
 
 ## Your Task
-1. Check if any EXISTING entities need updates (new info learned, a death, an appearance that changed)
+1. Check if any EXISTING entities need updates (a revealed name, a lasting change to who a character is, a condition the story resolved, an appearance that changed, a death). Rewrite a description, traits or appearance only where it is listed above
 {% if hasStoryBeats %}2. **IMPORTANT**: Check if any active story beats have been COMPLETED or FAILED in this passage - mark them accordingly to keep the list clean
 {% endif %}3. Identify any NEW significant entities introduced (apply the extraction rules strictly)
 4. Set \`presentCharacterNames\`, \`currentLocationName\` and \`timeProgression\`

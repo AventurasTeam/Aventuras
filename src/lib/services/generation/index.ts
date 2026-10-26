@@ -133,14 +133,22 @@ export type {
 } from './BackgroundTaskCoordinator'
 
 // World state translation service
-export { WorldStateTranslationService } from './WorldStateTranslationService'
+export {
+  WorldStateTranslationService,
+  CHARACTER_TEXT_FIELDS,
+  mergeWritten,
+  translationsToRestore,
+} from './WorldStateTranslationService'
 export type {
+  CharacterTextField,
+  CharacterTranslations,
   ClassificationNewEntities,
   WorldStateEntities,
   WorldStateTranslationCallbacks,
   WorldStateTranslationDependencies,
   WorldStateTranslationInput,
   WorldStateTranslationResult,
+  WrittenCharacter,
 } from './WorldStateTranslationService'
 
 // Suggestions refresh service

@@ -83,7 +83,7 @@ export function breakRecord(scope: RecordScope): WorldStateBreakRecord {
   return { id: crypto.randomUUID(), ...scope, seq: 0, createdAt: Date.now(), kind: 'break' }
 }
 
-const sameValue = (a: unknown, b: unknown) =>
+export const sameValue = (a: unknown, b: unknown) =>
   JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
 
 /** Previous and new values of the fields `updates` actually changes on `row`. */

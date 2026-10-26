@@ -24,6 +24,11 @@ export {
 
 // Classification
 export { ClassifierService, type ClassificationContext } from './ClassifierService'
+export {
+  planCharacterResponse,
+  type CharacterResponsePlan,
+  type CharacterSource,
+} from './classifierCharacters'
 
 // Memory
 export {

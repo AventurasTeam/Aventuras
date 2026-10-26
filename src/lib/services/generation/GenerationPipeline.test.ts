@@ -23,7 +23,7 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
   },
 }))
 
-import { GenerationPipeline } from './GenerationPipeline'
+import { GenerationPipeline, presentInScene } from './GenerationPipeline'
 
 describe('GenerationPipeline', () => {
   const mockDeps = {
@@ -48,5 +48,32 @@ describe('GenerationPipeline', () => {
     const pipeline = new GenerationPipeline(mockDeps as any)
     const gen = pipeline.execute({} as any, {} as any)
     expect(gen[Symbol.asyncIterator]).toBeDefined()
+  })
+})
+
+describe('presentInScene', () => {
+  const cast = [
+    { id: 'me', name: 'Me', relationship: 'self' },
+    { id: 'vendor', name: 'weapon vendor', relationship: null },
+    { id: 'mira', name: 'Mira', relationship: null },
+  ] as any[]
+  const result = (present: string[], characterUpdates: any[] = []) =>
+    ({ scene: { presentCharacterNames: present }, entryUpdates: { characterUpdates } }) as any
+  const ids = (chars: { id: string }[]) => chars.map((c) => c.id)
+
+  it('finds the named characters and always the protagonist', () => {
+    expect(ids(presentInScene(cast, result(['mira'])))).toEqual(['me', 'mira'])
+  })
+
+  it('finds a character renamed this turn, under its new name', () => {
+    const renamed = result(['Darek'], [{ name: 'weapon vendor', changes: { newName: 'Darek' } }])
+    const present = presentInScene(cast, renamed)
+    expect(ids(present)).toEqual(['me', 'vendor'])
+    expect(present[1].name).toBe('Darek')
+  })
+
+  it('does not bring in a renamed character that is not in the scene', () => {
+    const renamed = result(['Mira'], [{ name: 'weapon vendor', changes: { newName: 'Darek' } }])
+    expect(ids(presentInScene(cast, renamed))).toEqual(['me', 'mira'])
   })
 })

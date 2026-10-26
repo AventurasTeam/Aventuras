@@ -822,11 +822,22 @@ class UIStore {
     const storyBeatIds = storyBeats.map((sb) => sb.id)
     const characterSnapshots: PersistentCharacterSnapshot[] = characters.map((c) => ({
       id: c.id,
+      name: c.name,
+      description: c.description ?? null,
       traits: [...(c.traits ?? [])],
       status: c.status,
       relationship: c.relationship ?? null,
       visualDescriptors: { ...(c.visualDescriptors ?? {}) },
       portrait: c.portrait,
+      translations: {
+        translatedName: c.translatedName ?? null,
+        translatedDescription: c.translatedDescription ?? null,
+        translatedRelationship: c.translatedRelationship ?? null,
+        translatedTraits: c.translatedTraits ? [...c.translatedTraits] : null,
+        translatedVisualDescriptors: c.translatedVisualDescriptors
+          ? { ...c.translatedVisualDescriptors }
+          : null,
+      },
     }))
 
     // Create new backup and store by story ID
