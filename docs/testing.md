@@ -395,9 +395,10 @@ then answered only at `releaseStructured()`, with the reply set by
 then — the in-flight window the gated pass's interrupt and Cancel
 specs act in.
 
-`cutNextStructured(name, raw)` answers the next call of that shape with
-`raw` verbatim and `finish_reason: 'length'`, so a spec can hand the app
-a document cut partway through that it must refuse rather than repair.
+`cutNextStructured(name, raw)` makes the next call of that shape it
+answers, a held one at its release, reply with `raw` verbatim and
+`finish_reason: 'length'`, so a spec can hand the app a document cut
+partway through that it must refuse rather than repair.
 
 Block-matching keys on the **auto** (prompt-injection) path the fixture
 uses — the only path E2E relies on. A `force-on` profile takes the
