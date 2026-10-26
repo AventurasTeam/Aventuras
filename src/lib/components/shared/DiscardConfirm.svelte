@@ -37,11 +37,12 @@
   Belongs inside its modal's own content, not in a nested modal: a second modal layer would
   take over the dismissible and escape layers this prompt exists to intercept.
 -->
+<!-- Past the modal's border by a few pixels, with a wider radius, so its edge is covered too. -->
 {#if open}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="bg-background/80 absolute inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+    class="bg-background/80 absolute -inset-1 z-50 flex items-center justify-center rounded-xl p-5 backdrop-blur-sm"
     onclick={(e) => e.target === e.currentTarget && onCancel()}
   >
     <div
