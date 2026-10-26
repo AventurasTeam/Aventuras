@@ -25,6 +25,7 @@
     referenceInputsOf,
     referenceLimit,
     suggestReferenceInputs,
+    chooseModelSnapshot,
     type ComfyCustomWorkflow,
     type ImageModelInfo,
   } from '#lib/services/ai/image/index.ts'
@@ -379,6 +380,17 @@
     return opts
   }
 
+  function buildModelSnapshot() {
+    return chooseModelSnapshot({
+      model: profileModel,
+      providerType: profileProviderType,
+      baseUrl: profileBaseUrl || undefined,
+      models: profileModels,
+      settled: !isLoadingProfileModels && !profileModelsError,
+      stored: editingProfileId ? settings.getImageProfile(editingProfileId) : undefined,
+    })
+  }
+
   // Save current profile edits (called when collapsible closes)
   async function autoSaveProfile() {
     if (isNewProfile || !editingProfileId || !canSaveProfile) return
@@ -389,6 +401,7 @@
       apiKey: profileApiKey,
       baseUrl: profileBaseUrl || undefined,
       model: profileModel,
+      modelSnapshot: buildModelSnapshot(),
       providerOptions: buildProviderOptions(),
     })
   }
@@ -402,6 +415,7 @@
         profileApiKey,
         profileBaseUrl,
         profileModel,
+        profileModels,
         profileSampler,
         profileScheduler,
         profileMode,
@@ -553,6 +567,7 @@
       apiKey: profileApiKey,
       baseUrl: profileBaseUrl || undefined,
       model: profileModel,
+      modelSnapshot: buildModelSnapshot(),
       providerOptions: buildProviderOptions(),
     })
 
