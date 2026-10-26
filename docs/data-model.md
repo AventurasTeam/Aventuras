@@ -1995,11 +1995,13 @@ story_entries.metadata: {
   model?: string
   generationTimingMs?: number
   reasoning?: string                // persisted reasoning text from providers that expose it; mirrors `tokens.reasoning` (the count). Optional — undefined when the provider doesn't surface reasoning.
-  cutOff?: {                        // the server stopped this reply at its limit inside the prose; authored, never inherited. See "Cut-off mark" below
-    cause: 'max-output' | 'window' | 'unknown'
-    outputTokens?: number           // as the provider reported
-    limit?: number                  // the profile's max output, or the model's window, that the cause names
-  }
+  cutOff?:                          // the server stopped this reply at its limit inside the prose; authored, never inherited. See "Cut-off mark" below
+    | {
+        cause: 'max-output' | 'window'
+        outputTokens?: number       // as the provider reported
+        limit: number               // the profile's max output, or the model's window, that the cause names
+      }
+    | { cause: 'unknown'; outputTokens?: number }  // no limit the call knew of was reached
 
   // Scene presence — classifier-authored, user-editable
   sceneEntities: string[]           // entity IDs present in this entry's scene (characters + items)

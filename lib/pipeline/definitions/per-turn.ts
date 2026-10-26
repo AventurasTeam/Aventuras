@@ -114,19 +114,19 @@ function logCutOff(
   log.warn('provider.reply_cut_off', { ...failure, target: 'narrative', entryId, outcome })
 }
 
-// data-model.md → Entry metadata shape: `limit` is the number its cause names; none for `unknown`.
+// data-model.md → Entry metadata shape: `limit` is the number its cause names, so a cause without
+// one reads as `unknown`.
 function cutOffMark(failure: ReplyCutOffFailure): CutOffMark {
+  const outputTokens = failure.outputTokens !== null ? { outputTokens: failure.outputTokens } : {}
   const limit =
     failure.cause === 'max-output'
       ? failure.maxOutput
       : failure.cause === 'window'
         ? failure.window
         : null
-  return {
-    cause: failure.cause,
-    ...(failure.outputTokens !== null ? { outputTokens: failure.outputTokens } : {}),
-    ...(limit !== null ? { limit } : {}),
-  }
+  return failure.cause !== 'unknown' && limit !== null
+    ? { cause: failure.cause, ...outputTokens, limit }
+    : { cause: 'unknown', ...outputTokens }
 }
 
 async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {

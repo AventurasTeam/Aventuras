@@ -3236,4 +3236,23 @@ describe('narrative — how the reply ended', () => {
       cutWarning({ cause: 'unknown', outputTokens: null, maxOutput: null, outcome: 'marked' }),
     )
   })
+
+  it.each([
+    ['max output', { cause: 'max-output' as const }],
+    ['window', { cause: 'window' as const }],
+  ])('marks a %s cut whose limit is missing as unknown', async (_label, failure) => {
+    const ai = await import('@/lib/ai')
+    vi.spyOn(ai, 'replyCutOff').mockReturnValue({
+      ...failure,
+      outputTokens: null,
+      reasoningTokens: null,
+      maxOutput: null,
+      window: null,
+      providerId: 'prov-1',
+      modelId: 'model-1',
+    })
+    const { entry } = await runReply({ text: PROSE, finishReason: 'length' })
+
+    expect(entry?.metadata?.cutOff).toStrictEqual({ cause: 'unknown' })
+  })
 })

@@ -35,16 +35,15 @@ export function passCutOffContent(failure: ReplyCutOffFailure): string {
 
 /** The notice on an `ai_reply` card whose prose the server cut off. */
 export function cutOffNoticeText(mark: CutOffMark): string {
-  if (mark.cause === 'max-output' && mark.limit != null) {
-    return t('reader:cutOffNotice.maxOutput', { limit: mark.limit })
-  }
-  if (mark.cause === 'window' && mark.limit != null) {
-    return t('reader:cutOffNotice.window', { limit: mark.limit })
-  }
+  if (mark.cause === 'max-output') return t('reader:cutOffNotice.maxOutput', { limit: mark.limit })
+  if (mark.cause === 'window') return t('reader:cutOffNotice.window', { limit: mark.limit })
   return t('reader:cutOffNotice.unknown')
 }
 
-/** A window cut-off's remedy is `Set window`, not the profile. */
-export function offersProfileFix(cause: string | undefined): boolean {
-  return cause !== 'window'
+/**
+ * A window cut-off's remedy is `Set window`, not the profile. Widened past the cause set: a
+ * system entry's cause is a persisted `z.string()`.
+ */
+export function offersProfileFix(cause: CutOffMark['cause'] | (string & {}) | undefined): boolean {
+  return cause !== ('window' satisfies CutOffMark['cause'])
 }

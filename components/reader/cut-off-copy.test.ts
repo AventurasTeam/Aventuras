@@ -117,11 +117,6 @@ describe('cutOffNoticeText', () => {
   it("points at the server's own limit for an unknown cause", () => {
     expect(cutOffNoticeText({ cause: 'unknown', outputTokens: 2048 })).toBe(NOTICE_UNKNOWN)
   })
-
-  it('reads as the server limit when the mark carries no limit', () => {
-    expect(cutOffNoticeText({ cause: 'max-output' })).toBe(NOTICE_UNKNOWN)
-    expect(cutOffNoticeText({ cause: 'window' })).toBe(NOTICE_UNKNOWN)
-  })
 })
 
 describe('offersProfileFix', () => {

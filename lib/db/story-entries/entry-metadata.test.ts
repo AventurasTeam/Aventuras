@@ -362,12 +362,21 @@ describe('cutOff', () => {
     )
   })
 
-  // The schema is the metadata undo encoder: a key it lacks would outlive the undo.
-  it('undoes a cleared mark back onto the metadata', () => {
-    const marked = {
-      ...base,
-      cutOff: { cause: 'max-output' as const, outputTokens: 512, limit: 512 },
-    }
+  it.each([
+    { cause: 'max-output', outputTokens: 512 },
+    { cause: 'window' },
+    { cause: 'unknown', limit: 5 },
+  ])('rejects a $cause mark whose limit does not match its cause', (mark) => {
+    expect(entryMetadataSchema.safeParse({ ...base, cutOff: mark }).success).toBe(false)
+  })
+
+  // The schema drives the metadata undo encoder: a key missing from it is left out of the undo,
+  // so the mark would be lost.
+  it.each([
+    { cause: 'max-output' as const, outputTokens: 512, limit: 512 },
+    { cause: 'unknown' as const, outputTokens: 300 },
+  ])('undoes a cleared $cause mark back onto the metadata', (cutOff) => {
+    const marked = { ...base, cutOff }
     const undo = computeUndoPayload(entryMetadataSchema, marked, base)
     expect(applyUndoPayload(entryMetadataSchema, base, undo)).toEqual(marked)
   })
