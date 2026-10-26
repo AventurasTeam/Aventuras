@@ -579,9 +579,15 @@ describe('readCutOffReply', () => {
     expect(readCutOffReply(raw)).toEqual({ content: raw, inBlock: true })
   })
 
-  it('reads a cut in an unclosed block bounded by a closed sibling as in the block', () => {
+  it('reads a closed block after an unclosed sibling, with nothing after it, as in the block', () => {
     const raw = `${PROSE}<state><summary>x\n<suggestions><item category="a">go</item></suggestions>`
     expect(readCutOffReply(raw)).toEqual({ content: raw, inBlock: true })
+  })
+
+  // State is emitted first, so a closed <state> block is the usual `<` before a cut <sugg.
+  it('reads an opener cut after a closed block as in the block, and removes it', () => {
+    const closed = `${PROSE}<state>\n<summary>x</summary>\n</state>\n`
+    expect(readCutOffReply(`${closed}<sugg`)).toEqual({ content: closed, inBlock: true })
   })
 
   describe.each([
