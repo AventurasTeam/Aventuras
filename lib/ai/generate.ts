@@ -166,6 +166,8 @@ export type StreamTextResult =
       timedOut: () => boolean
       /** The bound `timedOut` reports on, in ms; `undefined` when the profile sets none. */
       timeoutMs: number | undefined
+      /** The profile's max output (ResolvedParams.maxOutput); undefined when unset. */
+      maxOutput: number | undefined
     }
   | { ok: false; kind: ResolveFailureKind; target: ResolveTarget }
 
@@ -201,6 +203,7 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
     providerId: resolved.providerId,
     timedOut: () => bounded?.expired() ?? false,
     timeoutMs: resolved.timeoutMs,
+    maxOutput: resolved.params.maxOutput,
   }
 }
 

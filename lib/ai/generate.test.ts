@@ -164,6 +164,26 @@ describe('streamText', () => {
     })
   })
 
+  // generation-pipeline.md → Cut-off replies: the narrative's cause rule needs the profile's limit.
+  it("returns the profile's max output, and undefined when it sets none", () => {
+    const untimed = STREAM_CFG.profiles.map(({ timeout: _, ...profile }) => profile)
+    const set = streamText('narrative', {
+      prompt: PROMPT,
+      config: { ...STREAM_CFG, profiles: untimed },
+    })
+    const unset = streamText('narrative', {
+      prompt: PROMPT,
+      config: {
+        ...STREAM_CFG,
+        profiles: untimed.map(({ maxOutput: _, ...profile }) => profile),
+      },
+    })
+
+    expect(set.ok && set.maxOutput).toBe(2048)
+    expect(unset.ok).toBe(true)
+    if (unset.ok) expect(unset.maxOutput).toBeUndefined()
+  })
+
   describe("a profile's timeout", () => {
     beforeEach(() => {
       vi.useFakeTimers()

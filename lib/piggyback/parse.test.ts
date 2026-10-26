@@ -8,6 +8,7 @@ import {
   normalizeStackableTransfer,
   parseStateBlock,
   parseSuggestionsBlock,
+  readCutOffReply,
   stripTrailingBlocks,
 } from './parse'
 import { MAX_RETRIEVAL_QUERIES, VISUAL_TEXT_MAX } from './types'
@@ -534,6 +535,93 @@ describe('stripTrailingBlocks', () => {
     expect(stateRaw).not.toContain('cat1')
     expect(suggestionsRaw).toContain('cat1')
     expect(suggestionsRaw).not.toContain('<summary>')
+  })
+})
+
+// generation-pipeline.md → Cut-off replies: called only for a reply that stopped at 'length'.
+describe('readCutOffReply', () => {
+  const PROSE = 'The knight drew his sword.\n'
+
+  it('reads a cut in plain prose as in the prose, leaving the text alone', () => {
+    expect(readCutOffReply('The knight drew his sw')).toEqual({
+      content: 'The knight drew his sw',
+      inBlock: false,
+    })
+  })
+
+  it('reads an empty reply as in the prose', () => {
+    expect(readCutOffReply('')).toEqual({ content: '', inBlock: false })
+  })
+
+  // findBlockSpan opens no span on a mention followed by prose, so neither does the cut.
+  it('reads prose that mentions a root tag in passing as prose', () => {
+    const raw = 'The city declared a <state> of emergency that mor'
+    expect(readCutOffReply(raw)).toEqual({ content: raw, inBlock: false })
+  })
+
+  it('reads a literal < earlier in the prose as prose', () => {
+    const raw = 'She wrote 3 < 4 on the slate and then wa'
+    expect(readCutOffReply(raw)).toEqual({ content: raw, inBlock: false })
+  })
+
+  it('reads a cut in prose after an out-of-position block as in the prose', () => {
+    const raw = 'Before.<state><summary>x</summary></state>After, the knight rode to'
+    expect(readCutOffReply(raw)).toEqual({ content: raw, inBlock: false })
+  })
+
+  it('reads a bare trailing < as a block begun, and removes it', () => {
+    expect(readCutOffReply(`${PROSE}<`)).toEqual({ content: PROSE, inBlock: true })
+  })
+
+  // The span that ends last decides, not the first one.
+  it('reads a cut in a block that follows a closed one as in the block', () => {
+    const raw = `${PROSE}<state><summary>x</summary></state>\n<suggestions>\n<item category="a">Dr`
+    expect(readCutOffReply(raw)).toEqual({ content: raw, inBlock: true })
+  })
+
+  it('reads a cut in an unclosed block bounded by a closed sibling as in the block', () => {
+    const raw = `${PROSE}<state><summary>x\n<suggestions><item category="a">go</item></suggestions>`
+    expect(readCutOffReply(raw)).toEqual({ content: raw, inBlock: true })
+  })
+
+  describe.each([
+    {
+      root: 'state',
+      truncated: '<state>\n<scene_entities>c1',
+      closed: '<state>\n<summary>x</summary>\n</state>',
+      prefix: '<sta',
+    },
+    {
+      root: 'suggestions',
+      truncated: '<suggestions>\n<item category="a">Dr',
+      closed: '<suggestions>\n<item category="a">Run.</item>\n</suggestions>',
+      prefix: '<sugg',
+    },
+  ])('the <$root> block', ({ root, truncated, closed, prefix }) => {
+    it('reads a cut inside it as in the block, leaving the text alone', () => {
+      expect(readCutOffReply(`${PROSE}${truncated}`)).toEqual({
+        content: `${PROSE}${truncated}`,
+        inBlock: true,
+      })
+    })
+
+    it('reads a closed block with nothing after it as in the block, never stripping it', () => {
+      expect(readCutOffReply(`${PROSE}${closed}`)).toEqual({
+        content: `${PROSE}${closed}`,
+        inBlock: true,
+      })
+      expect(readCutOffReply(`${PROSE}${closed}\n\n`)).toEqual({
+        content: `${PROSE}${closed}\n\n`,
+        inBlock: true,
+      })
+    })
+
+    it.each([prefix, `<${root}`])(
+      'reads an opener cut mid-name (%s) as in the block, and removes it',
+      (fragment) => {
+        expect(readCutOffReply(`${PROSE}${fragment}`)).toEqual({ content: PROSE, inBlock: true })
+      },
+    )
   })
 })
 
