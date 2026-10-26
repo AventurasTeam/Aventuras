@@ -158,9 +158,10 @@ Serializable props in (native → document):
   state and re-lands the scroll at the bottom.
 - `editGate`, `jumpButtonEnabled`,
   `systemFixLabel` (present only when the system entry has a
-  kind-specific fix route), `cutOffFixLabel` (present only when
-  the host offers Fix profile for a cut-off notice), theme id + token values, and other
-  settings-derived flags.
+  kind-specific fix route), `cutOffFixLabel` (the cut-off notice's
+  `Fix profile` label, which the reader host always supplies; the
+  document drops the action for a `window` cut-off), theme id and
+  token values, and other settings-derived flags.
 - `syncNonce` — bumped by the host whenever it must force a full
   prop re-emission (see handshake).
 
