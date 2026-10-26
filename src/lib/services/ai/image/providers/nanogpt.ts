@@ -1,3 +1,5 @@
+import * as z from 'zod'
+import type { ImageModelCapabilities, ReferenceImageConstraints } from '#lib/types/index.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -7,6 +9,7 @@ import type {
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
 import { createNanoGPTImage } from './nanogptImage'
+import { parseModelList } from './parseModelList'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 import {
   specToPixels,
@@ -18,13 +21,159 @@ import {
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 
 const DEFAULT_BASE_URL = 'https://api.nano-gpt.com/api/v1'
-const MODELS_ENDPOINT = 'https://nano-gpt.com/api/models'
+const DISCOVERY_SERVICE_ID = 'nanogpt-image-models'
 
 // Keeps `w:h` ratios; the catalogue also lists values like `auto` and `match_input_image`.
 const ASPECT_RATIO = /^\d+(\.\d+)?:\d+(\.\d+)?$/
 
-// Known img2img capable models/tags
-const IMG2IMG_TAGS = new Set(['image-to-image', 'image-edit'])
+const optionalString = z.string().optional().catch(undefined)
+const optionalNumber = z.number().optional().catch(undefined)
+const modalities = z.array(z.string()).optional().catch(undefined)
+
+// The catalogue lists these as flat arrays; its docs describe `{ type: 'enum', values }`.
+const stringList = z
+  .union([
+    z.array(z.string()),
+    z.object({ values: z.array(z.string()) }).transform((o) => o.values),
+  ])
+  .optional()
+  .catch(undefined)
+
+const constraintSide = z
+  .object({
+    min_width: optionalNumber,
+    min_height: optionalNumber,
+    max_width: optionalNumber,
+    max_height: optionalNumber,
+    max_bytes: optionalNumber,
+    formats: z.array(z.string()).optional().catch(undefined),
+  })
+  .optional()
+  .catch(undefined)
+
+const imageConstraints = z
+  .object({ max_items: optionalNumber, route: constraintSide, provider: constraintSide })
+  .optional()
+  .catch(undefined)
+
+const supportedParameters = z
+  .object({
+    resolutions: stringList,
+    resolution: stringList,
+    aspect_ratio: stringList,
+    max_input_images: optionalNumber,
+    input_image_constraints: imageConstraints,
+    input_references: z
+      .object({ min: optionalNumber, max: optionalNumber })
+      .optional()
+      .catch(undefined),
+  })
+  .catch({})
+
+const featureFlags = z
+  .object({ image_to_image: z.boolean().optional().catch(undefined) })
+  .optional()
+  .catch(undefined)
+
+const NanoGptModel = z.object({
+  id: z.string(),
+  name: optionalString,
+  description: optionalString,
+  architecture: z
+    .object({ input_modalities: modalities, output_modalities: modalities })
+    .optional()
+    .catch(undefined),
+  pricing: z
+    .object({ per_image: z.record(z.string(), z.unknown()).optional().catch(undefined) })
+    .optional()
+    .catch(undefined),
+  capabilities: featureFlags,
+  supported_parameters: supportedParameters,
+})
+
+type NanoGptModel = z.output<typeof NanoGptModel>
+type ModelFacts = Pick<NanoGptModel, 'architecture' | 'capabilities' | 'supported_parameters'>
+type ImageConstraints = z.output<typeof imageConstraints>
+
+const nonEmpty = (list?: string[]) => (list?.length ? list : undefined)
+
+function boundOf(values: (number | undefined)[], pick: (...n: number[]) => number) {
+  const present = values.filter((v): v is number => v !== undefined)
+  return present.length ? pick(...present) : undefined
+}
+
+/** The tighter of NanoGPT's route limits and the provider's; a side that lists nothing does not restrict. */
+function toReferenceConstraints(
+  constraints: ImageConstraints,
+): ReferenceImageConstraints | undefined {
+  const sides = [constraints?.route, constraints?.provider].filter((side) => !!side)
+  if (!sides.length) return undefined
+
+  const formatLists = sides.flatMap((side) => (side.formats?.length ? [side.formats] : []))
+  const formats = formatLists.reduce<string[] | undefined>(
+    (common, list) => (common ? common.filter((f) => list.includes(f)) : list),
+    undefined,
+  )
+
+  const result: ReferenceImageConstraints = {
+    maxBytes: boundOf(
+      sides.map((side) => side.max_bytes),
+      Math.min,
+    ),
+    minSide: boundOf(
+      sides.flatMap((side) => [side.min_width, side.min_height]),
+      Math.max,
+    ),
+    maxSide: boundOf(
+      sides.flatMap((side) => [side.max_width, side.max_height]),
+      Math.min,
+    ),
+    mimeTypes: formats?.length ? formats.map((f) => `image/${f.toLowerCase()}`) : undefined,
+  }
+  return Object.values(result).some((v) => v !== undefined) ? result : undefined
+}
+
+function toCapabilities({
+  architecture,
+  capabilities: flags,
+  supported_parameters: params,
+}: ModelFacts): ImageModelCapabilities {
+  const maxReferenceImages =
+    params.max_input_images ??
+    params.input_references?.max ??
+    params.input_image_constraints?.max_items
+
+  // A text-to-image model that lists a reference count still takes references.
+  const supportsImg2Img = (maxReferenceImages ?? 0) > 0 ? true : flags?.image_to_image
+
+  // Only a model that takes images and no text is reference-only; an unreadable
+  // `architecture` must not mark a text-to-image model as one.
+  const inputs = architecture?.input_modalities
+  const editsOnly = !!inputs?.includes('image') && !inputs.includes('text')
+  const requiresReferenceImage = editsOnly || (params.input_references?.min ?? 0) >= 1
+
+  return {
+    supportsImg2Img,
+    maxReferenceImages,
+    requiresReferenceImage: requiresReferenceImage ? true : undefined,
+    referenceConstraints: toReferenceConstraints(params.input_image_constraints),
+    supportedResolutions: nonEmpty(params.resolutions) ?? nonEmpty(params.resolution),
+    supportedAspectRatios: nonEmpty(params.aspect_ratio?.filter((v) => ASPECT_RATIO.test(v))),
+  }
+}
+
+function toModelInfo(m: NanoGptModel): ImageModelInfo {
+  const prices = Object.values(m.pricing?.per_image ?? {}).filter((c) => typeof c === 'number')
+  return {
+    id: m.id,
+    name: m.name || m.id,
+    description: m.description,
+    costPerImage: prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : undefined,
+    inputModalities: m.architecture?.input_modalities,
+    outputModalities: m.architecture?.output_modalities,
+    ...toCapabilities(m),
+  }
+}
 
 export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvider {
   const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL
@@ -33,6 +182,19 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
     baseURL: baseUrl,
     fetch: createImageSdkFetch('nanogpt-image'),
   })
+
+  // Discovery works without a key; it is sent when set in case NanoGPT starts to vary the list by account.
+  const discoveryHeaders = (apiKey?: string) => {
+    const key = apiKey || config.apiKey
+    return key ? { Authorization: `Bearer ${key}` } : undefined
+  }
+
+  async function fetchModels(apiKey?: string): Promise<NanoGptModel[]> {
+    const response = await imageGetFetch(`${baseUrl}/images/models`, discoveryHeaders(apiKey), {
+      serviceId: DISCOVERY_SERVICE_ID,
+    })
+    return parseModelList(await response.json(), NanoGptModel)
+  }
 
   return {
     id: 'nanogpt',
@@ -57,48 +219,8 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
       })
     },
 
-    async listModels(): Promise<ImageModelInfo[]> {
-      const response = await imageGetFetch(MODELS_ENDPOINT)
-      const data = await response.json()
-      const imageModels = data?.models?.image || {}
-      const entries = Object.values(imageModels) as Array<{
-        name?: string
-        model?: string
-        description?: string
-        cost?: Record<string, number>
-        resolutions?: Array<{ value: string; comment?: string }>
-        additionalParams?: { aspect_ratio?: { options?: Array<{ value?: string }> } }
-        tags?: string[]
-        supportsMultipleImg2Img?: boolean
-      }>
-
-      return entries.map((m) => {
-        const supportsImg2Img =
-          m.tags?.some((t) => IMG2IMG_TAGS.has(t)) || m.supportsMultipleImg2Img || false
-
-        let costPerImage: number | undefined
-        if (m.cost && typeof m.cost === 'object') {
-          const costs = Object.values(m.cost).filter((c) => typeof c === 'number')
-          if (costs.length > 0) costPerImage = costs.reduce((a, b) => a + b, 0) / costs.length
-        }
-
-        const resolutions = m.resolutions?.map((r) => r.value).filter(Boolean) ?? []
-        const aspectRatios =
-          m.additionalParams?.aspect_ratio?.options
-            ?.map((o) => o.value)
-            .filter((v): v is string => !!v && ASPECT_RATIO.test(v)) ?? []
-
-        return {
-          id: m.model || m.name || '',
-          name: m.name || m.model || '',
-          description: m.description,
-          supportsImg2Img,
-          maxReferenceImages: supportsImg2Img && !m.supportsMultipleImg2Img ? 1 : undefined,
-          costPerImage,
-          supportedResolutions: resolutions.length > 0 ? resolutions : undefined,
-          supportedAspectRatios: aspectRatios.length > 0 ? aspectRatios : undefined,
-        }
-      })
+    async listModels(apiKey?: string): Promise<ImageModelInfo[]> {
+      return (await fetchModels(apiKey)).map(toModelInfo)
     },
   }
 }

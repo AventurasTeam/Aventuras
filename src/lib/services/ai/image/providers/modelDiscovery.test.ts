@@ -17,7 +17,7 @@ const reply = (body: unknown) => ({ ok: true, json: async () => body }) as unkno
 
 // A successful fetch that lists no image model, per adapter.
 const EMPTY: [string, () => ImageProvider, unknown][] = [
-  ['NanoGPT', () => createNanoGPTProvider({ apiKey: 'k' }), { models: { image: {} } }],
+  ['NanoGPT', () => createNanoGPTProvider({ apiKey: 'k' }), { data: [] }],
   ['OpenRouter', () => createOpenRouterProvider({ apiKey: 'k' }), { data: [] }],
   ['Pollinations', () => createPollinationsProvider({ apiKey: 'k' }), []],
   ['OpenAI', () => createOpenAIProvider({ apiKey: 'k' }), { data: [{ id: 'gpt-4o' }] }],
