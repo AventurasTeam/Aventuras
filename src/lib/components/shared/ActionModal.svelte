@@ -5,7 +5,6 @@
 -->
 <script lang="ts">
   import { onDestroy, untrack, type Component, type Snippet } from 'svelte'
-  import { fade } from 'svelte/transition'
   import { ArrowDownToLine, ArrowUpToLine, Trash2 } from '@lucide/svelte'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { setTextareaUncapped } from '#lib/components/ui/textarea/index.ts'
@@ -145,7 +144,7 @@
   async function jumpTo(edge: 'top' | 'bottom') {
     const el = activeScroller()
     if (!el) return
-    // The tapped button disappears at the edge it leads to, and the dialog's focus trap would
+    // The tapped button turns inert at the edge it leads to, and the dialog's focus trap would
     // scroll the focus it loses back into view; this also closes a phone's keyboard.
     frame?.focus({ preventScroll: true })
     // Jumping down while a phone's keyboard is up would land short of the bottom once it closes.
@@ -329,9 +328,13 @@
   {@render alternative?.(leaveFor)}
 {/snippet}
 
-{#snippet jumpButton(edge: 'top' | 'bottom')}
+{#snippet jumpButton(edge: 'top' | 'bottom', shown: boolean)}
   {@const label = edge === 'top' ? 'Jump to the top' : 'Jump to the bottom'}
-  <span class="pointer-events-auto flex" transition:fade={{ duration: 150 }}>
+  <!-- Faded rather than removed, so the other button keeps its place. -->
+  <span
+    class={cn('flex transition-opacity duration-150', shown ? 'pointer-events-auto' : 'opacity-0')}
+    inert={!shown}
+  >
     <Button
       variant="outline"
       size="icon"
@@ -440,12 +443,8 @@
             -->
             <div class="pointer-events-none sticky bottom-0 h-0">
               <div class="absolute right-3 bottom-3 flex flex-col gap-2">
-                {#if !jump.atTop}
-                  {@render jumpButton('top')}
-                {/if}
-                {#if !jump.atBottom}
-                  {@render jumpButton('bottom')}
-                {/if}
+                {@render jumpButton('top', !jump.atTop)}
+                {@render jumpButton('bottom', !jump.atBottom)}
               </div>
             </div>
           {/if}
