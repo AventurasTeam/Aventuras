@@ -1794,8 +1794,9 @@ type ContextWindowFailure = {
 
 type ReplyCutOffFailure = {
   cause: 'max-output' | 'window' | 'unknown' // see Cut-off replies
-  outputTokens: number | null // as the provider reported; null when it reported none
-  reasoningTokens: number | null // the part of outputTokens spent thinking, when reported
+  // OpenAI-compatible reports a missing count as 0
+  outputTokens: number | null // as the provider reported; null when it reported none, or 0
+  reasoningTokens: number | null // the part of outputTokens spent thinking; 0 can mean unreported
   maxOutput: number | null // the profile's limit; null when it sets none
   window: number | null // the model's known window; null when unknown
   providerId: string

@@ -5,9 +5,11 @@ export type CutOffCause = 'max-output' | 'window' | 'unknown'
 /** generation-pipeline.md → Two retry tiers: a reply the server stopped at its limit. */
 export type ReplyCutOffFailure = {
   cause: CutOffCause
-  /** As the provider reported; null when it reported none. Includes reasoning. */
+  /** As the provider reported, reasoning included; null when it reported none, or 0, which is
+   *  how OpenAI-compatible reports a missing count. */
   outputTokens: number | null
-  /** The part of `outputTokens` spent thinking, when reported. */
+  /** The part of `outputTokens` spent thinking, when reported; 0 can mean unreported on
+   *  OpenAI-compatible. */
   reasoningTokens: number | null
   /** The profile's limit; null when it sets none. */
   maxOutput: number | null
@@ -36,7 +38,9 @@ export type ReplyCutOffInput = {
 
 /** generation-pipeline.md → Cut-off replies: the cause comes from what the call knows. */
 export function replyCutOff(input: ReplyCutOffInput): ReplyCutOffFailure {
-  const outputTokens = input.usage?.outputTokens ?? null
+  // OpenAI-compatible reports a missing count as 0, and a cut reply with truly none is rare.
+  const reportedOutput = input.usage?.outputTokens ?? null
+  const outputTokens = reportedOutput === 0 ? null : reportedOutput
   const reasoningTokens = input.usage?.outputTokenDetails?.reasoningTokens ?? null
   const maxOutput = input.maxOutput ?? null
   const { window, promptEstimate } = input
@@ -73,7 +77,8 @@ export function describeReplyCutOff(failure: ReplyCutOffFailure): string {
     failure.outputTokens !== null
       ? `${failure.outputTokens} output tokens`
       : 'output tokens not reported',
-    ...(failure.reasoningTokens !== null ? [`${failure.reasoningTokens} reasoning`] : []),
+    // 0 reads as unreported: OpenAI-compatible reports a missing count as 0.
+    ...((failure.reasoningTokens ?? 0) > 0 ? [`${failure.reasoningTokens} reasoning`] : []),
     ...(failure.cause === 'max-output' && failure.maxOutput !== null
       ? [`max output ${failure.maxOutput}`]
       : []),

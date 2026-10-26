@@ -105,6 +105,13 @@ describe('replyCutOff', () => {
     expect(replyCutOff({ ...BASE, usage: usage(512, 0) }).reasoningTokens).toBe(0)
   })
 
+  // OpenAI-compatible reports a usage object's missing completion count as 0.
+  it('reads a reported output of 0 as unreported, so a profile limit names max-output', () => {
+    const failure = replyCutOff({ ...BASE, usage: usage(0), maxOutput: 512 })
+    expect(failure.outputTokens).toBeNull()
+    expect(failure.cause).toBe('max-output')
+  })
+
   describe('the window branch', () => {
     it('reads window when the prompt estimate plus the output reach the window', () => {
       expect(
@@ -205,9 +212,9 @@ describe('describeReplyCutOff', () => {
     )
   })
 
-  it('shows a reported reasoning count of 0', () => {
+  it('leaves out a reasoning count of 0, which OpenAI-compatible reports when it has none', () => {
     expect(describeReplyCutOff({ ...FAILURE, reasoningTokens: 0 })).toBe(
-      'reply cut off (max-output): 512 output tokens, 0 reasoning, max output 512; ' +
+      'reply cut off (max-output): 512 output tokens, max output 512; ' +
         'model model-1 on provider prov-1',
     )
   })
