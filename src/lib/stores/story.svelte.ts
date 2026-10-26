@@ -170,6 +170,16 @@ import { clearImageMarkerCache } from '#lib/services/image/index.ts'
 import { GenerationLease } from '#lib/utils/generationLease.ts'
 import { findLiveCharacter, sameBranchScope, type BranchScope } from '#lib/utils/branchScope.ts'
 import {
+  INVENTORY,
+  copiedLocationIds,
+  itemLocationId,
+  itemsAt,
+  itemsToMoveOnDelete,
+  newItemLocation,
+  normalizeItems,
+  resolveItemLocation,
+} from '#lib/utils/itemLocation.ts'
+import {
   CLOSING_SNAPSHOT_PREFIX,
   checkpointDeletionBlocker,
   entryNumber,
@@ -400,7 +410,7 @@ class StoryStore {
   }
 
   get inventoryItems(): Item[] {
-    return this.items.filter((i) => i.location === 'inventory')
+    return this.items.filter((i) => i.location === INVENTORY)
   }
 
   get equippedItems(): Item[] {
@@ -1805,6 +1815,7 @@ class StoryStore {
       this.items = this.items.filter((i) => !i.deleted)
       this.storyBeats = this.storyBeats.filter((b) => !b.deleted)
     }
+    this.items = normalizeItems(this.items, this.locations)
 
     log('World state refreshed', {
       characters: characters.length,
@@ -2760,16 +2771,78 @@ class StoryStore {
   }
 
   // Delete a location
+  canDeleteLocation(locationId: string): boolean {
+    return (
+      itemsToMoveOnDelete(this.items, this.locations, locationId, this.currentLocation?.id) !== null
+    )
+  }
+
   async deleteLocation(locationId: string, opts?: RecordOptions): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const location = this.locations.find((l) => l.id === locationId)
     if (!location) throw new Error('Location not found')
 
-    const removal = this.deletePlan('location', location, this.recordContext(opts))
-    await this.commit(removal.statements, removal.records)
+    const scene = this.currentLocation
+    const strays = itemsToMoveOnDelete(this.items, this.locations, locationId, scene?.id)
+    if (!strays) throw new Error('Location holds items and there is no other scene location')
+    const ctx = this.recordContext(opts)
+    const move = this.moveItemsPlan(strays, scene?.id, ctx)
+    const removal = this.deletePlan('location', location, ctx)
+    await this.commit(
+      [...move.statements, ...removal.statements],
+      [...move.records, ...removal.records],
+    )
+    move.publish()
     this.locations = this.locations.filter((l) => l.id !== locationId)
-    log('Location deleted:', location.name)
+    log('Location deleted:', location.name, { itemsMoved: strays.length })
+  }
+
+  /** Moves every item at any of `fromIds` to `toId`, in one transaction. */
+  async moveItemsBetweenLocations(
+    fromIds: readonly string[],
+    toId: string,
+    opts?: RecordOptions,
+  ): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+
+    const to = itemLocationId(toId, this.locations)
+    const items = itemsAt(this.items, this.locations, new Set(fromIds)).filter(
+      (i) => i.location !== to,
+    )
+    if (items.length === 0) return
+    const move = this.moveItemsPlan(items, toId, this.recordContext(opts))
+    await this.commit(move.statements, move.records)
+    move.publish()
+  }
+
+  private moveItemsPlan(
+    items: readonly Item[],
+    locationId: string | undefined,
+    ctx: RecordContext | null,
+  ): {
+    statements: (DbStatement | null)[]
+    records: (WorldStateRecord | null)[]
+    publish: () => void
+  } {
+    const statements: (DbStatement | null)[] = []
+    if (!locationId) return { statements, records: [], publish: () => {} }
+    const records: (WorldStateRecord | null)[] = []
+    const cows: (() => void)[] = []
+    const moved: string[] = []
+    const updates = { location: itemLocationId(locationId, this.locations), equipped: false }
+    for (const item of items) {
+      const cow = this.cowPlan('item', item, ctx)
+      statements.push(...cow.statements, database.updateItemStatement(cow.entity.id, updates))
+      records.push(...cow.records, this.updateRecord(ctx, 'item', cow.entity, updates))
+      cows.push(cow.publish)
+      moved.push(cow.entity.id)
+    }
+    const publish = () => {
+      for (const p of cows) p()
+      this.items = this.items.map((i) => (moved.includes(i.id) ? { ...i, ...updates } : i))
+    }
+    return { statements, records, publish }
   }
 
   // Add an item to inventory
@@ -3439,65 +3512,6 @@ class StoryStore {
       })
     }
 
-    // Apply item updates
-    for (const update of result.entryUpdates.itemUpdates) {
-      await this.wrapUpdate('Update item', update.name, async () => {
-        let existing = this.items.find((i) => sameEntityName(i.name, update.name))
-
-        // If item doesn't exist yet, create it first
-        if (!existing) {
-          const newItemData = result.entryUpdates.newItems.find((ni) =>
-            sameEntityName(ni.name, update.name),
-          )
-          log('Creating item from update (not found):', update.name)
-          const itemMetadata: Record<string, unknown> = { source: 'classifier' }
-          if (newItemData) {
-            const newItemInlineVars = extractInlineCustomVars(
-              newItemData as unknown as Record<string, unknown>,
-              defsByName,
-            )
-            if (Object.keys(newItemInlineVars).length > 0) {
-              Object.assign(itemMetadata, mergeRuntimeVars(null, newItemInlineVars, defsByName))
-            }
-          }
-          const item: Item = {
-            id: crypto.randomUUID(),
-            storyId,
-            name: newItemData?.name ?? update.name,
-            description: newItemData?.description ?? null,
-            quantity: newItemData?.quantity ?? 1,
-            equipped: false,
-            location: newItemData?.location ?? 'inventory',
-            metadata: itemMetadata,
-            branchId: this.currentStory?.currentBranchId ?? null,
-          }
-          await database.addItem(item)
-          this.items = [...this.items, item]
-          existing = item
-        }
-
-        if (existing) {
-          log('Updating item:', update.name, update.changes)
-          const changes: Partial<Item> = {}
-          if (update.changes.quantity !== undefined) changes.quantity = update.changes.quantity
-          if (update.changes.equipped !== undefined) changes.equipped = update.changes.equipped
-          if (update.changes.location) changes.location = update.changes.location
-          // Merge inline runtime variable values into metadata if present
-          const itemInlineVars = extractInlineCustomVars(
-            update.changes as unknown as Record<string, unknown>,
-            defsByName,
-          )
-          if (Object.keys(itemInlineVars).length > 0) {
-            changes.metadata = mergeRuntimeVars(existing.metadata, itemInlineVars, defsByName)
-          }
-          // COW: ensure entity is owned by current branch before updating
-          const { entity: ownedItem } = await this.cowTracked('item', existing)
-          await database.updateItem(ownedItem.id, changes)
-          this.items = this.items.map((i) => (i.id === ownedItem.id ? { ...i, ...changes } : i))
-        }
-      })
-    }
-
     // Apply story beat updates (mark as completed/failed)
     for (const update of result.entryUpdates.storyBeatUpdates) {
       await this.wrapUpdate('Update story beat', update.title, async () => {
@@ -3693,6 +3707,69 @@ class StoryStore {
       })
     }
 
+    // Items after the locations and the scene change, so a place named this turn resolves.
+    const itemWorld = () => ({
+      locations: this.locations,
+      currentLocationId: this.currentLocation?.id ?? null,
+    })
+
+    // Apply item updates
+    for (const update of result.entryUpdates.itemUpdates) {
+      await this.wrapUpdate('Update item', update.name, async () => {
+        let existing = this.items.find((i) => sameEntityName(i.name, update.name))
+
+        // If item doesn't exist yet, create it first
+        if (!existing) {
+          const newItemData = result.entryUpdates.newItems.find((ni) =>
+            sameEntityName(ni.name, update.name),
+          )
+          log('Creating item from update (not found):', update.name)
+          const itemMetadata: Record<string, unknown> = { source: 'classifier' }
+          if (newItemData) {
+            const newItemInlineVars = extractInlineCustomVars(
+              newItemData as unknown as Record<string, unknown>,
+              defsByName,
+            )
+            if (Object.keys(newItemInlineVars).length > 0) {
+              Object.assign(itemMetadata, mergeRuntimeVars(null, newItemInlineVars, defsByName))
+            }
+          }
+          const item: Item = {
+            id: crypto.randomUUID(),
+            storyId,
+            name: newItemData?.name ?? update.name,
+            description: newItemData?.description ?? null,
+            quantity: newItemData?.quantity ?? 1,
+            ...newItemLocation(newItemData ?? {}, itemWorld()),
+            metadata: itemMetadata,
+            branchId: this.currentStory?.currentBranchId ?? null,
+          }
+          await database.addItem(item)
+          this.items = [...this.items, item]
+          existing = item
+        }
+
+        if (existing) {
+          log('Updating item:', update.name, update.changes)
+          const changes: Partial<Item> = {}
+          if (update.changes.quantity !== undefined) changes.quantity = update.changes.quantity
+          Object.assign(changes, resolveItemLocation(update.changes, itemWorld(), existing))
+          // Merge inline runtime variable values into metadata if present
+          const itemInlineVars = extractInlineCustomVars(
+            update.changes as unknown as Record<string, unknown>,
+            defsByName,
+          )
+          if (Object.keys(itemInlineVars).length > 0) {
+            changes.metadata = mergeRuntimeVars(existing.metadata, itemInlineVars, defsByName)
+          }
+          // COW: ensure entity is owned by current branch before updating
+          const { entity: ownedItem } = await this.cowTracked('item', existing)
+          await database.updateItem(ownedItem.id, changes)
+          this.items = this.items.map((i) => (i.id === ownedItem.id ? { ...i, ...changes } : i))
+        }
+      })
+    }
+
     // Add new items (check for duplicates)
     for (const newItem of result.entryUpdates.newItems) {
       await this.wrapUpdate('Add item', newItem.name, async () => {
@@ -3713,8 +3790,7 @@ class StoryStore {
             name: newItem.name,
             description: newItem.description ?? null,
             quantity: newItem.quantity ?? 1,
-            equipped: false,
-            location: newItem.location ?? 'inventory',
+            ...newItemLocation(newItem, itemWorld()),
             metadata: itemMetadata,
             branchId: this.currentStory?.currentBranchId ?? null,
           }
@@ -5068,10 +5144,7 @@ class StoryStore {
       }
 
       // Copy locations — remap connection IDs to new location IDs
-      const locationIdMap = new SvelteMap<string, string>()
-      for (const loc of checkpoint.locationsSnapshot) {
-        locationIdMap.set(loc.id, crypto.randomUUID())
-      }
+      const locationIdMap = copiedLocationIds(checkpoint.locationsSnapshot)
       for (const loc of checkpoint.locationsSnapshot) {
         const newId = locationIdMap.get(loc.id)!
         const branchLoc: Location = {
@@ -5172,11 +5245,7 @@ class StoryStore {
       }
 
       // Copy locations - need to remap connection IDs to new location IDs
-      const locationIdMap = new SvelteMap<string, string>() // old ID -> new ID
-      for (const loc of checkpoint.locationsSnapshot) {
-        const newId = crypto.randomUUID()
-        locationIdMap.set(loc.id, newId)
-      }
+      const locationIdMap = copiedLocationIds(checkpoint.locationsSnapshot)
       for (const loc of checkpoint.locationsSnapshot) {
         const newId = locationIdMap.get(loc.id)!
         const branchLoc: Location = {
@@ -5573,7 +5642,7 @@ class StoryStore {
       this.chapters = chapters
       this.characters = world.characters
       this.locations = world.locations
-      this.items = world.items
+      this.items = normalizeItems(world.items, world.locations)
       this.storyBeats = world.storyBeats
       this.lorebookEntries = world.lorebookEntries
     } else {
@@ -5647,7 +5716,7 @@ class StoryStore {
 
       this.characters = characters
       this.locations = locations
-      this.items = items
+      this.items = normalizeItems(items, locations)
       this.storyBeats = storyBeats
       this.lorebookEntries = lorebookEntries
 

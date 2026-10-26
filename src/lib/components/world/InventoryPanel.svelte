@@ -25,6 +25,12 @@
   import IconRow from '#lib/components/ui/icon-row.svelte'
   import { cn } from '#lib/utils/cn.ts'
   import { database } from '#lib/services/database.ts'
+  import {
+    INVENTORY,
+    itemLocationId,
+    itemLocationLabel,
+    readItemPlacement,
+  } from '#lib/utils/itemLocation.ts'
   import RuntimeVariableDisplay from './RuntimeVariableDisplay.svelte'
 
   let showAddForm = $state(false)
@@ -74,7 +80,8 @@
     }
   }
 
-  const worldItems = $derived(story.items.filter((item) => item.location !== 'inventory'))
+  const carriedItems = $derived(story.inventoryItems.filter((item) => !item.equipped))
+  const worldItems = $derived(story.items.filter((item) => item.location !== INVENTORY))
 
   function toggleCollapse(itemId: string) {
     const isCollapsed = ui.isEntityCollapsed(itemId)
@@ -135,7 +142,9 @@
       name,
       description: editDescription.trim() || null,
       quantity,
-      equipped: item.location === 'inventory' ? editEquipped : false,
+      // Written with `equipped`, so a row still holding legacy text is rewritten too.
+      location: item.location,
+      equipped: item.location === INVENTORY && editEquipped,
       metadata: updatedMetadata,
     })
 
@@ -148,7 +157,8 @@
 
   function beginDrop(item: Item) {
     droppingItemId = item.id
-    const preferredLocation = story.locations.find((loc) => loc.id === item.location)?.id
+    const placement = readItemPlacement(item, story.locations)
+    const preferredLocation = placement.kind === 'location' ? placement.location.id : undefined
     dropLocationId = preferredLocation || story.currentLocation?.id || story.locations[0]?.id || ''
     // Reset other modes
     editingId = null
@@ -162,7 +172,7 @@
   async function dropItem(item: Item) {
     if (!dropLocationId) return
     await story.updateItem(item.id, {
-      location: dropLocationId,
+      location: itemLocationId(dropLocationId, story.locations),
       equipped: false,
     })
     cancelDrop()
@@ -170,22 +180,22 @@
 
   async function pickUpItem(item: Item) {
     await story.updateItem(item.id, {
-      location: 'inventory',
+      location: INVENTORY,
+      equipped: false,
     })
   }
 
   async function moveItemToLocation(item: Item) {
     if (!dropLocationId) return
     await story.updateItem(item.id, {
-      location: dropLocationId,
+      location: itemLocationId(dropLocationId, story.locations),
+      equipped: false,
     })
     cancelDrop()
   }
 
-  function getLocationLabel(locationId: string) {
-    if (locationId === 'inventory') return 'Inventory'
-    const location = story.locations.find((loc) => loc.id === locationId)
-    return location?.name || 'Unknown location'
+  function getLocationLabel(item: Item) {
+    return itemLocationLabel(readItemPlacement(item, story.locations), { translated: true })
   }
 
   function hasDescription(item: Item): boolean {
@@ -478,14 +488,14 @@
   {/if}
 
   <!-- Inventory Items -->
-  {#if story.inventoryItems.filter((item) => !item.equipped).length > 0}
+  {#if carriedItems.length > 0}
     <div class="space-y-2">
       {#if story.equippedItems.length > 0}
         <h4 class="text-muted-foreground mt-4 pl-1 text-xs font-semibold tracking-wider uppercase">
           Backpack
         </h4>
       {/if}
-      {#each story.inventoryItems.filter((item) => !item.equipped) as item (item.id)}
+      {#each carriedItems as item (item.id)}
         {@const isCollapsed = ui.isEntityCollapsed(item.id)}
         {@const isEditing = editingId === item.id}
 
@@ -882,7 +892,7 @@
                     variant="secondary"
                     class="text-muted-foreground h-4 w-fit px-1.5 py-0 text-[10px] font-normal"
                   >
-                    {getLocationLabel(item.location)}
+                    {getLocationLabel(item)}
                   </Badge>
                   {#if item.quantity > 1}
                     <Badge variant="secondary" class="h-4 w-fit px-1.5 text-[10px]">

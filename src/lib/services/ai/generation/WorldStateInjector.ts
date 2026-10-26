@@ -37,6 +37,7 @@ import { BaseAIService } from '../BaseAIService'
 import { WORLD_STATE_INJECTION_DEFAULTS } from '../core/defaults'
 import { createLogger } from '#lib/log.ts'
 import { entityNameMatches, measureMatching } from '#lib/utils/text.ts'
+import { INVENTORY, itemLocationLabel, readItemPlacement } from '#lib/utils/itemLocation.ts'
 import { activity } from '#lib/stores/activity.svelte.ts'
 import {
   runTier3Selection,
@@ -329,7 +330,11 @@ export class WorldStateInjector extends BaseAIService {
     const all = [...tier1, ...tier2, ...tier3].sort((a, b) => b.priority - a.priority)
 
     // Build the context block
-    const contextBlock = this.buildContextBlock(tier1, tier2, tier3)
+    const locationOf = (itemId: string) => {
+      const item = worldState.items.find((i) => i.id === itemId)
+      return item ? itemLocationLabel(readItemPlacement(item, worldState.locations)) : null
+    }
+    const contextBlock = this.buildContextBlock(tier1, tier2, tier3, locationOf)
 
     return { tier1, tier2, tier3, all, contextBlock }
   }
@@ -425,8 +430,8 @@ export class WorldStateInjector extends BaseAIService {
     }
 
     // Inventory items
-    const inventoryItems = worldState.items.filter((i) => i.location === 'inventory')
-    for (const item of inventoryItems) {
+    for (const item of worldState.items) {
+      if (item.location !== INVENTORY) continue
       entries.push({
         type: 'item',
         id: item.id,
@@ -638,7 +643,7 @@ export class WorldStateInjector extends BaseAIService {
           tier: 2,
           priority: 40 - priorityPenalty,
           viaScene: priorityPenalty > 0,
-          metadata: { quantity: item.quantity, location: item.location },
+          metadata: { quantity: item.quantity },
         })
       }
     }
@@ -861,6 +866,7 @@ export class WorldStateInjector extends BaseAIService {
     tier1: WorldStateContextEntry[],
     tier2: WorldStateContextEntry[],
     tier3: WorldStateContextEntry[],
+    locationOf: (itemId: string) => string | null,
   ): string {
     let block = ''
 
@@ -956,6 +962,8 @@ export class WorldStateInjector extends BaseAIService {
         if (item.description) {
           block += `: ${item.description}`
         }
+        const location = locationOf(item.id)
+        if (location) block += ` — Location: ${location}`
       }
     }
 

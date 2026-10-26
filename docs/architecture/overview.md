@@ -344,6 +344,29 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   places kept whichever ran last — and the merge path set a second `current` without
   clearing the first. Both are gone from the schema.
 
+  **An item's `location` is `'inventory'` or a location id; the classifier speaks names.**
+  `utils/itemLocation.ts` converts the options the schema lists (`ITEM_LOCATION_OPTIONS`) and
+  nothing else: `inventory`, `worn` (the inventory, equipped), `ground` (the scene's location),
+  or a listed location's name, matched by `sameEntityName` and then without a leading article
+  (`normalizeName`, so "Taverna" is "La Taverna"). Other text is not guessed at: an update
+  ignores it and a new item goes to the inventory, the template's default. An explicit
+  `equipped` wins over `worn`, equipping an item takes it, and only a held item can be
+  equipped. With no scene location `ground` changes nothing. Items are applied after the
+  response's locations and scene change, so a place named in the same response resolves and
+  `ground` is where the passage ends. The id stored is the root a branch override stands in
+  for, which every branch resolves (`overridesId`).
+
+  Legacy free text is converted in memory when a story or branch loads (`normalizeItems`), so
+  every reader uses the plain fields: empty text and `inventory` become the inventory, `worn`
+  the inventory equipped, a location's name its id, and anything else ("ground", "in her pack")
+  stays as text and is unequipped. The classifier is shown that text, so a legacy `ground`
+  it sends back unchanged is not read as a move to the scene's location.
+  An update writes `location` and `equipped` together, so the row is rewritten the first time
+  either changes or the item is saved in the panel; until then it is converted again on each
+  load, against the locations as they are then. Deleting a location moves its items to the
+  scene's location. A location holding items cannot be deleted while it is the scene's, or
+  while there is none: the panel hides its delete button and `deleteLocation` refuses.
+
   **Presence is reported, departure is inferred.** The classifier answers one question about the
   cast — `scene.presentCharacterNames`, every _other_ character in the scene at the end of the
   passage; the protagonist is in every scene by definition and is added by the consumers — and

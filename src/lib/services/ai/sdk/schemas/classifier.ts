@@ -7,6 +7,7 @@
 
 import * as z from 'zod'
 import type { RuntimeVariable } from '#lib/services/packs/types.ts'
+import { ITEM_LOCATION_OPTIONS } from '#lib/utils/itemLocation.ts'
 
 /** The most traits a character keeps; the default prompt asks for the same. */
 export const MAX_TRAITS = 8
@@ -139,7 +140,7 @@ export const itemUpdateSchema = z.object({
   name: z.string().describe('Exact name of existing item'),
   changes: z.object({
     quantity: z.number().describe('New quantity').optional(),
-    location: z.string().describe('inventory, worn, or location name').optional(),
+    location: z.string().describe(ITEM_LOCATION_OPTIONS).optional(),
     equipped: z.boolean().describe('true if currently worn/wielded').optional(),
   }),
 })
@@ -148,7 +149,7 @@ export const newItemSchema = z.object({
   name: z.string().describe('Item name'),
   description: z.string().describe('One sentence description').optional(),
   quantity: z.number().describe('How many (default 1)').optional(),
-  location: z.string().describe('inventory, worn, or location name').optional(),
+  location: z.string().describe(ITEM_LOCATION_OPTIONS).optional(),
   equipped: z.boolean().describe('true if currently worn/wielded').optional(),
 })
 

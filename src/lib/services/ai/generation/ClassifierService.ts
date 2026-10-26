@@ -33,6 +33,11 @@ import {
   type ClassificationResult,
 } from '../sdk/schemas/classifier'
 import {
+  ITEM_LOCATION_OPTIONS,
+  itemLocationLabel,
+  readItemPlacement,
+} from '#lib/utils/itemLocation.ts'
+import {
   buildExtendedClassificationSchema,
   salvageClassification,
 } from '../sdk/schemas/runtime-variables'
@@ -109,7 +114,7 @@ export class ClassifierService extends BaseAIService {
     // Format existing entities for the prompt
     const existingCharacters = formatExistingCharacters(context.existingCharacters)
     const existingLocations = this.formatExistingLocations(context.existingLocations)
-    const existingItems = this.formatExistingItems(context.existingItems)
+    const existingItems = this.formatExistingItems(context.existingItems, context.existingLocations)
     const existingBeats = this.formatExistingBeats(context.existingStoryBeats)
 
     // Build chat history block if entries provided
@@ -142,7 +147,7 @@ export class ClassifierService extends BaseAIService {
       existingBeats,
       hasStoryBeats: existingBeats !== '(none)',
       storyBeatTypes: 'milestone, quest, revelation, event, plot_point',
-      itemLocationOptions: 'inventory, worn, ground, or specific location name',
+      itemLocationOptions: ITEM_LOCATION_OPTIONS,
       defaultItemLocation: 'inventory',
       sceneLocationDesc: 'Name of current location if identifiable, null otherwise',
       customVariableInstructions,
@@ -446,15 +451,19 @@ export class ClassifierService extends BaseAIService {
    * State is printed only where it differs from the default, so the list stays short: an
    * unequipped single item sitting in the inventory is just its name.
    */
-  private formatExistingItems(items: Item[]): string {
+  private formatExistingItems(items: Item[], locations: Location[]): string {
     if (items.length === 0) return '(none)'
 
     return items
       .map((i) => {
+        const placement = readItemPlacement(i, locations)
         let entry = `- ${i.name}`
         if (i.quantity > 1) entry += `\n  quantity: ${i.quantity}`
-        if (i.equipped) entry += `\n  equipped: true`
-        if (i.location && i.location !== 'inventory') entry += `\n  location: ${i.location}`
+        if (placement.kind === 'inventory') {
+          if (placement.equipped) entry += `\n  equipped: true`
+        } else {
+          entry += `\n  location: ${itemLocationLabel(placement)}`
+        }
         return entry
       })
       .join('\n')
