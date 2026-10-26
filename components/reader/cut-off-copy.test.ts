@@ -6,7 +6,7 @@ import { cutOffNoticeText, passCutOffContent, turnCutOffContent } from './cut-of
 
 const AT_MAX_OUTPUT: ReplyCutOffFailure = {
   cause: 'max-output',
-  outputTokens: 4096,
+  outputTokens: 4100,
   reasoningTokens: null,
   maxOutput: 4096,
   window: null,
@@ -73,7 +73,7 @@ describe('turnCutOffContent', () => {
 describe('passCutOffContent', () => {
   const PASS_MAX_OUTPUT =
     "Memory update failed, so your turn didn't start. The update's reply was cut off at the classifier profile's 1,024-token max output. Raise it, then Retry."
-  const atClassifierLimit = { ...AT_MAX_OUTPUT, outputTokens: 1024, maxOutput: 1024 }
+  const atClassifierLimit = { ...AT_MAX_OUTPUT, outputTokens: 1030, maxOutput: 1024 }
 
   it("names the classifier profile's max output", () => {
     expect(passCutOffContent(atClassifierLimit)).toBe(PASS_MAX_OUTPUT)
@@ -98,7 +98,7 @@ describe('passCutOffContent', () => {
 
 describe('cutOffNoticeText', () => {
   it("names the narrative profile's max output", () => {
-    expect(cutOffNoticeText({ cause: 'max-output', outputTokens: 4096, limit: 4096 })).toBe(
+    expect(cutOffNoticeText({ cause: 'max-output', outputTokens: 4100, limit: 4096 })).toBe(
       "Cut off at the narrative profile's 4,096-token max output.",
     )
   })

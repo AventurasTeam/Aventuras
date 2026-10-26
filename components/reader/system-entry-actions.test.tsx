@@ -57,7 +57,7 @@ const EMBEDDER_INIT: PipelineError = {
 
 const CUT_FIELDS = {
   cause: 'max-output',
-  outputTokens: 4096,
+  outputTokens: 4100,
   reasoningTokens: 3900,
   maxOutput: 4096,
   window: null,
@@ -864,7 +864,7 @@ describe('useSystemEntryActions', () => {
   })
 
   it.each(['max-output', 'unknown'])(
-    'offers Fix profile beside Retry for a %s cut-off',
+    'offers Fix profile beside Retry for a cut-off with cause %s',
     (cause) => {
       const actions = actionsFor({ kind: 'reply-cut-off', failure: cause })
       expect(actions.fixAction?.label).toBe('Fix profile')
