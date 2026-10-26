@@ -48,6 +48,8 @@ export type ReaderSurfaceProps = {
   jumpButtonEnabled: boolean
   /** Present when the system entry has a kind-specific fix route (host-derived label). */
   systemFixLabel?: string
+  /** `Fix profile`'s label for a cut-off notice; the notice shows no action when unset. */
+  cutOffFixLabel?: string
   onNearTop: () => Promise<void>
   onCommitEdit: (entryId: string, content: string) => Promise<EditResult>
   onRequestRollback: (entryId: string) => Promise<void>
@@ -75,4 +77,5 @@ export type ReaderSurfaceProps = {
   onRetrySystemEntry: (() => Promise<void>) | undefined
   onDismissSystemEntry: () => Promise<void>
   onFixSystemEntry: () => Promise<void>
+  onFixCutOff: () => Promise<void>
 }
