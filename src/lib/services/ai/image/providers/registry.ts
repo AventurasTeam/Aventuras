@@ -319,6 +319,10 @@ export async function generateImage(options: {
         })
       : undefined
 
+  if (capabilities?.requiresReferenceImage && !cleanRefs?.length) {
+    throw new Error(`${model} needs a reference image, and none could be sent`)
+  }
+
   return provider.generate({
     model,
     prompt,

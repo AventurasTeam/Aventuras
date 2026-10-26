@@ -647,6 +647,19 @@ describe('Image Provider Registry', () => {
       expect(send).toHaveBeenCalledWith(expect.objectContaining({ modelInfo: undefined }))
     })
 
+    it('refuses a model that edits only when no reference could be sent', async () => {
+      const { generate: send } = setup({
+        modelSnapshot: snapshot({ requiresReferenceImage: true }),
+      })
+      vi.mocked(fetchPublicImageBase64).mockRejectedValue(new Error('refused'))
+
+      await expect(generate()).rejects.toThrow('needs a reference image')
+      await expect(generate('m', ['https://img.test/a.png'])).rejects.toThrow(
+        'needs a reference image',
+      )
+      expect(send).not.toHaveBeenCalled()
+    })
+
     it('saves no snapshot for a model other than the profile’s', async () => {
       const { listModels } = setup({ model: 'current' })
 
