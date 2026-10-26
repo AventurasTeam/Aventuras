@@ -80,6 +80,8 @@ type SceneOptions = {
   items: EntityOption[]
   locations: EntityOption[]
 }
+/** The host builds the copy from the stored mark; `action` is its route, rendered as an inline link. */
+type CutOffNoticeContent = { text: string; action?: { label: string; onPress: () => void } }
 
 type EntryCardProps = {
   kind: EntryKind
@@ -143,6 +145,8 @@ type EntryCardProps = {
   onBranch?: () => void
   /** user, ai, opening. Host hides when active calendar has no eras. */
   onFlipEra?: () => void
+  /** ai_reply only: the server cut the prose off at its limit. Not dismissible; shown while editing. */
+  cutOffNotice?: CutOffNoticeContent
 
   /** Streaming-only — drives the top-line indicator. */
   streamingPhase?: 'reasoning' | 'reply'
@@ -938,6 +942,33 @@ function NarrativeContent({
   return <RichEntryContent markedHtml={marked} />
 }
 
+// Not gated by `disabled`: leaving the story never is, and the host's story-leave guard confirms
+// a leave while a run is in flight.
+function CutOffNoticeLine({ text, action }: CutOffNoticeContent) {
+  return (
+    <View className="mt-2 flex-row flex-wrap items-center gap-x-1.5 gap-y-0.5">
+      <Icon as={AlertTriangle} size={12} className="shrink-0 text-warning" />
+      <Text size="xs" className="shrink text-warning">
+        {text}
+      </Text>
+      {action != null ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={action.label}
+          onPress={action.onPress}
+          className={Platform.select({
+            web: 'cursor-pointer rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+          })}
+        >
+          <Text size="xs" className="font-medium text-fg-primary underline">
+            {action.label}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  )
+}
+
 export function EntryCard({
   kind,
   content,
@@ -964,6 +995,7 @@ export function EntryCard({
   onRegen,
   onBranch,
   onFlipEra,
+  cutOffNotice,
   streamingPhase,
   detail,
   fixAction,
@@ -1247,6 +1279,10 @@ export function EntryCard({
           allowRich={kind === 'user_action' || kind === 'ai_reply' || kind === 'opening'}
         />
       )}
+
+      {kind === 'ai_reply' && cutOffNotice != null ? (
+        <CutOffNoticeLine text={cutOffNotice.text} action={cutOffNotice.action} />
+      ) : null}
 
       {showActions ? (
         <View className="absolute right-2 top-4 flex-row items-center gap-0.5">
