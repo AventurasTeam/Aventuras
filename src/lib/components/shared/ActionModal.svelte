@@ -5,6 +5,7 @@
 -->
 <script lang="ts">
   import { onDestroy, untrack, type Component, type Snippet } from 'svelte'
+  import { fade } from 'svelte/transition'
   import { ArrowDownToLine, ArrowUpToLine, Trash2 } from '@lucide/svelte'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { setTextareaUncapped } from '#lib/components/ui/textarea/index.ts'
@@ -144,7 +145,7 @@
   async function jumpTo(edge: 'top' | 'bottom') {
     const el = activeScroller()
     if (!el) return
-    // The tapped button turns inert at the edge it leads to, and the dialog's focus trap would
+    // The tapped button goes at the edge it leads to, and the dialog's focus trap would
     // scroll the focus it loses back into view; this also closes a phone's keyboard.
     frame?.focus({ preventScroll: true })
     // Jumping down while a phone's keyboard is up would land short of the bottom once it closes.
@@ -330,25 +331,26 @@
 
 {#snippet jumpButton(edge: 'top' | 'bottom', shown: boolean)}
   {@const label = edge === 'top' ? 'Jump to the top' : 'Jump to the bottom'}
-  <!-- Faded rather than removed, so the other button keeps its place. -->
-  <span
-    class={cn('flex transition-opacity duration-150', shown ? 'pointer-events-auto' : 'opacity-0')}
-    inert={!shown}
-  >
-    <Button
-      variant="outline"
-      size="icon"
-      class="bg-background size-9 rounded-full shadow-md"
-      aria-label={label}
-      title={label}
-      onclick={() => void jumpTo(edge)}
-    >
-      {#if edge === 'top'}
-        <ArrowUpToLine class="size-4" />
-      {:else}
-        <ArrowDownToLine class="size-4" />
-      {/if}
-    </Button>
+  <!-- A slot of its own, so the other button keeps its place while this one fades. -->
+  <span class="flex size-9">
+    {#if shown}
+      <span class="pointer-events-auto flex" transition:fade={{ duration: 150 }}>
+        <Button
+          variant="outline"
+          size="icon"
+          class="bg-background size-9 rounded-full shadow-md"
+          aria-label={label}
+          title={label}
+          onclick={() => void jumpTo(edge)}
+        >
+          {#if edge === 'top'}
+            <ArrowUpToLine class="size-4" />
+          {:else}
+            <ArrowDownToLine class="size-4" />
+          {/if}
+        </Button>
+      </span>
+    {/if}
   </span>
 {/snippet}
 
