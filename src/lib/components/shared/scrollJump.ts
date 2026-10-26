@@ -10,6 +10,14 @@ export interface ScrollMetrics {
   clientHeight: number
 }
 
+/**
+ * `tallest` is the largest height the scroller has had while open. A phone's keyboard shortens it,
+ * and judging length by the shortened height would show and hide the buttons with the keyboard.
+ */
+export interface JumpInput extends ScrollMetrics {
+  tallest: number
+}
+
 export interface JumpState {
   /** The body is long enough to show the jump buttons. */
   long: boolean
@@ -17,9 +25,15 @@ export interface JumpState {
   atBottom: boolean
 }
 
-export function readJumpState({ scrollTop, scrollHeight, clientHeight }: ScrollMetrics): JumpState {
+export function readJumpState({
+  scrollTop,
+  scrollHeight,
+  clientHeight,
+  tallest,
+}: JumpInput): JumpState {
+  const screen = Math.max(tallest, clientHeight)
   return {
-    long: clientHeight > 0 && scrollHeight > clientHeight * JUMP_SCREENS,
+    long: screen > 0 && scrollHeight > screen * JUMP_SCREENS,
     atTop: scrollTop <= SLACK,
     atBottom: scrollTop + clientHeight >= scrollHeight - SLACK,
   }

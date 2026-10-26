@@ -155,7 +155,8 @@ title, as an icon alone on a phone. The snippet gets `leaveFor(next)`, which ask
 question first when the modal holds edits and then runs `next`, since leaving for the other route
 drops what was typed here.
 
-A body more than 2.5 screens long gets two plain icons right of the title, jump to the top and jump
+A body more than 2.5 screens long, measured against the tallest it has been while open so a phone's
+keyboard does not show and hide them, gets two plain icons on the title's line, jump to the top and jump
 to the bottom (`shared/scrollJump.ts`), before any `headerAction` and set off from it by a thin
 rule. Each dims at the edge it leads to, so together they also say where the reader is. They come
 with the shell, so no caller adds them. The body never repeats the title: "Entry 47 will

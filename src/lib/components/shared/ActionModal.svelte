@@ -116,6 +116,7 @@
   /** Scrolls from 768px up, between the pinned header and buttons. */
   let bodyScroller = $state<HTMLDivElement | null>(null)
   let jump = $state<JumpState>({ long: false, atTop: true, atBottom: false })
+  let tallestScroller = 0
 
   /** Whichever of the two scrollers this width uses. */
   function activeScroller(): HTMLDivElement | null {
@@ -127,7 +128,17 @@
 
   function measureJump() {
     const el = activeScroller()
-    jump = el ? readJumpState(el) : { long: false, atTop: true, atBottom: false }
+    if (!el) {
+      jump = { long: false, atTop: true, atBottom: false }
+      return
+    }
+    tallestScroller = Math.max(tallestScroller, el.clientHeight)
+    jump = readJumpState({
+      scrollTop: el.scrollTop,
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+      tallest: tallestScroller,
+    })
   }
 
   function jumpTo(edge: 'top' | 'bottom') {
@@ -176,6 +187,7 @@
     wasOpen = open
     if (open) {
       shownOpen = true
+      tallestScroller = 0
       return
     }
     shownOpen = false
@@ -321,7 +333,7 @@
       <!-- Left-aligned at every width: a title or description that wraps reads badly centred. -->
       <!-- Tinted like the buttons' panel, so both read as a frame around the body. -->
       <ResponsiveModal.Header class="bg-muted/40 border-b px-6 py-4 text-left" closeButton={false}>
-        <div class="flex items-center gap-3">
+        <div class="flex items-start gap-3">
           <div class="flex min-w-0 flex-1 flex-col gap-1.5">
             <ResponsiveModal.Title class={cn('text-left', titleIcon && 'flex items-center gap-2')}>
               {@render titleIcon?.()}
@@ -338,7 +350,8 @@
             {/if}
           </div>
           {#if jump.long || headerAction}
-            <div class="flex shrink-0 items-center gap-1">
+            <!-- On the title's line, nudged up to centre 32px buttons on its 18px text. -->
+            <div class="-mt-1.5 flex shrink-0 items-center gap-1">
               {#if jump.long}
                 <!-- Dimmed at the edge it leads to, so they also say where the reader is. -->
                 <Button
