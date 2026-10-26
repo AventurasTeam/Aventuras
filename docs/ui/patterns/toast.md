@@ -29,6 +29,11 @@ Used by:
   — a pass or a chapter close interrupted and moved to the next turn,
   info severity, no action; a pass that failed, warning severity, no
   action.
+- Any surface whose generation call came back with far fewer input
+  tokens than were sent
+  ([`architecture.md → Truncation cross-check`](../../architecture.md#truncation-cross-check))
+  — warning severity, once per model per app session, `Set window`
+  action opening the model's row in App Settings.
 
 Toasts deliberately do **not** cover:
 

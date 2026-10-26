@@ -26,6 +26,8 @@ Cross-cutting principles that govern this surface are in
 - [Persistent app-level banners](../../patterns/banners.md)
   (the global broken-config / unconfigured banners route to this
   surface)
+- [Sheet and Popover](../../patterns/overlays.md) (the
+  [context-window](#context-window) editor on a text model row)
 
 ## Layout
 
@@ -108,9 +110,9 @@ configured provider renders as a collapsible row:
   ▸ Custom headers
   ─────
   Models   12 cached · last 2h ago · ⟳
-  ★ claude-sonnet-4-7    🧠 ⚙              [×]
-  ☆ claude-haiku-4-5     ⚙                 [×]
-  ★ claude-opus-4-7      🧠 ⚙              [×]
+  ★ claude-sonnet-4-7    🧠 ⚙   200k       [×]
+  ☆ claude-haiku-4-5     ⚙      200k       [×]
+  ★ claude-opus-4-7      🧠 ⚙   200k       [×]
   …
   + Add custom model id
 
@@ -156,7 +158,8 @@ models →` toggle that expands to a search + filter view of the
     unified list.
   - **Per-row actions** — favorite star (☆ / ★), capability badges
     (🧠 reasoning, ⚙ structured output where capability data is
-    available), remove-from-cache (×).
+    available), the [context-window chip](#context-window) on text
+    models, remove-from-cache (×).
   - **Threshold for showing "View all"** — providers with very few
     models (e.g., a local Ollama instance with 3 models) skip the
     favorites/all distinction and just show the full list inline. The
@@ -181,6 +184,10 @@ The OpenAI-compatible type differs from the others:
   (conservative); reasoning slider visible but with the
   `capability data unavailable` info text. User can flip per profile
   if they know the model supports it.
+- **Context window often unknown** — most compatible servers publish
+  no usable figure, and several cut an overlong prompt silently, so
+  the [context-window chip](#context-window) reads `ctx ?` until the
+  user sets it.
 - **Custom model id is more prominent** — auto-discovery may return
   no models or partial lists; manual entry is the primary path.
 
@@ -234,16 +241,47 @@ The badge itself is the only knob here — actual per-story dim
 selection happens at [story creation](../wizard/wizard.md#memory-cost--matryoshka-effective-dim);
 Models tab is just the capability-toggle layer.
 
+### Context window
+
+Each text model row carries a **window chip** after its capability
+badges: the model's context window, which every generation call is
+checked against
+([`architecture.md → Model context window`](../../../architecture.md#model-context-window)).
+It reads in the badges' visual states:
+
+- **Detected** (filled), e.g. `64k`: the server published it.
+- **Set by you** (filled, marked): the user's figure, which wins over
+  a detected one.
+- **Unknown** (outline), `ctx ?`: no check runs for this model. Kept
+  visible on purpose: on a server that cuts an overlong prompt
+  silently, the user's figure is the only check, so its absence has
+  to show before anything fails.
+
+Clicking the chip opens a [Popover](../../patterns/overlays.md) (a
+Sheet at phone width) with a number input, the detected value when
+there is one (`Server reports 65,536`), and `Reset to detected` or
+`Clear`. Custom model ids carry the chip too: their figure is stored
+by model id on the provider, not on the catalog row. Embedding models
+have no chip: the embedder's input window is its own user-supplied
+`maxInputTokens`
+([`retrieval.md → Capability flags — provider-side`](../../../memory/retrieval.md#capability-flags--provider-side)),
+whose editor lands with the embedder tab in M7.1. Lowering a figure below the
+model's maximum caps every role using the model and refuses calls
+past it rather than shortening them.
+
 ### Override semantic — trust-the-user
 
 Capability overrides are trust-the-user. Auto-detection is
 advisory; the user may override either direction (mark a
 claimed-supported capability as off, or force-on a capability the
 provider didn't advertise). The app makes requests as-configured
-and surfaces whatever the provider returns. No runtime pre-check,
-no probe call, no override-time warning dialog — providers
+and surfaces whatever the provider returns. No runtime capability
+pre-check, no probe call, no override-time warning dialog — providers
 themselves are unreliable about capability reporting, so we don't
-pretend we can validate intent.
+pretend we can validate intent. A generation call's
+[context window](#context-window) is the one model figure checked
+before the call, and it enforces the user's own visible value rather
+than second-guessing it.
 
 If a request later fails for what looks like a capability mismatch,
 the orchestrator's provider-error mapper does best-effort keyword
@@ -341,7 +379,12 @@ Fields:
     sticky-footer custom-add composer.
 - **temperature** — 0–2 slider.
 - **max output** — slider with `[✎ custom]` for direct numeric input
-  beyond the slider's range.
+  beyond the slider's range. A muted line beneath gives the model's
+  [context window](#context-window) and its source
+  (`Context window 65,536 · detected`, `· set by you`), or
+  `Context window unknown · set it in Providers`. Max output is not
+  checked against the window: it is a ceiling, and calls are checked
+  on the prompt alone.
 - **thinking** — slider, **conditional** rendering rules:
   - Provider known + model supports → slider visible.
   - Provider known + model doesn't → slider hidden, info text

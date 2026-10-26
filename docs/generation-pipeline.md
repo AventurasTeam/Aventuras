@@ -1769,6 +1769,17 @@ send an error part and then go quiet.
 type CallRetryError =
   | { tier: 'provider'; reason: 'auth' | 'network' | 'timeout' | 'unknown'; detail?: string }
   | { tier: 'parse'; detail: string; attempt: number }
+  | ({ tier: 'context-window' } & ContextWindowFailure)
+
+type ContextWindowFailure = {
+  detectedBy: 'check' | 'provider' // the pre-send check, or a recognized provider rejection
+  estimate: number // countTokens over the request as sent
+  window: number | null // null when unknown, which only a provider rejection can report
+  windowSource: 'configured' | 'detected' | 'unknown'
+  providerId: string
+  modelId: string
+  detail?: string // the provider's message verbatim; provider-detected only
+}
 
 type CallWithRetryResult<T> =
   | { status: 'ok'; result: T; recoverable: CallRetryError[] }
@@ -1797,7 +1808,9 @@ framework), and keeping that layer's error type independent of
 phase maps `CallRetryError → PipelineError` when it surfaces the events.
 
 Non-retryable errors short-circuit: auth failures (401 / 403) skip
-retry. Same for 4xx client errors.
+retry. Same for 4xx client errors, and for a `context-window` failure
+on any status: the same prompt overflows the same window again
+([`architecture.md → Model context window`](./architecture.md#model-context-window)).
 
 ### Phase-level recovery is the v1 transparency goal
 
@@ -1889,6 +1902,7 @@ type PipelineError =
       detail: string
       staleCount: number | null // rows the blocking sync was embedding; null when unknown
     }
+  | ({ kind: 'context-window'; target: ResolveTarget } & ContextWindowFailure)
 ```
 
 **`embedder`** covers the blocking pre-retrieval sync stage and the
@@ -1900,6 +1914,15 @@ carry it. A failure inside the retrieval pass that says nothing about
 the stored vectors — a locked database, a bug — escapes as
 `orchestrator` instead, which surfaces the generic message with no
 misleading fix action.
+
+**`context-window`** is a prompt larger than the model's window,
+caught by the pre-send check or recognized in the provider's
+rejection, per
+[`architecture.md → Model context window`](./architecture.md#model-context-window).
+Distinct from `provider` because its remedy is the user's: a larger
+window figure, a shorter prompt or a larger model, which a retry can't
+supply. `providerId` and `modelId` route its `Set window` action to
+the model's row in App Settings.
 
 Categories drive how UI surfaces them — toast for transient,
 banner / dialog for persistent.

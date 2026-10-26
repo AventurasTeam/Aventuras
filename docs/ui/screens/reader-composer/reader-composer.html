@@ -703,7 +703,11 @@
     <button class="rb-btn" data-err="memory">memory update error</button>
     <button class="rb-btn" data-err="memoryHeld">memory update held</button>
     <button class="rb-btn" data-err="memoryHeldNoText">memory update held, no text</button>
+    <button class="rb-btn" data-err="window">prompt over window</button>
+    <button class="rb-btn" data-err="windowProvider">provider overflow</button>
+    <button class="rb-btn" data-err="memoryWindow">memory update over window</button>
     <button class="rb-btn" data-pass-failed>pass-failed toast</button>
+    <button class="rb-btn" data-truncated>truncation toast</button>
   </div>
 
   <div class="rb-group">
@@ -1823,6 +1827,13 @@
     });
   });
 
+  // Truncation cross-check: the provider counted far fewer input tokens than were sent.
+  document.querySelectorAll('[data-truncated]').forEach(b => {
+    b.addEventListener('click', () => {
+      showToast('⚠ qwen2.5-coder:32b may have dropped part of the prompt: it counted 4,096 tokens where about 12,300 were sent. Set its context window.   [Set window]');
+    });
+  });
+
   // Pill click toggles the cancel popover (only meaningful when pill is visible)
   genStatus.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1979,6 +1990,24 @@
       kind: '⚠ System · memory update error',
       content: "<b>An earlier memory update on this branch couldn't be undone, so it can't take turns yet.</b> Restarting the app retries the undo.",
       actions: '<span class="err-btn" id="err-dismiss">Dismiss</span>',
+    },
+    // The pre-send check refused the call (architecture.md -> Model context window); nothing was sent.
+    window: {
+      kind: '⚠ System · prompt too large',
+      content: "<b>This prompt is about 71,200 tokens; llama3.1:70b's context window is 65,536 (set by you).</b> Nothing was sent. Shorten the prompt in Story Settings (memory budgets, history buffer), raise the window if the model allows more, or switch to a model with a larger one.",
+      actions: '<span class="err-btn primary">Retry</span><span class="err-btn">Set window</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+    },
+    // A provider rejection recognized as an overflow; the window was unknown, so nothing was checked.
+    windowProvider: {
+      kind: '⚠ System · prompt too large',
+      content: "<b>The provider rejected the prompt. Its message suggests it exceeded the model's context window:</b> “request (71834 tokens) exceeds the available context size (65536 tokens), try increasing it”. Our estimate: about 71,200 tokens. Shorten the prompt in Story Settings (memory budgets, history buffer), raise the window if the model allows more, or switch to a model with a larger one.",
+      actions: '<span class="err-btn primary">Retry</span><span class="err-btn">Set window</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+    },
+    // An owed pass refused by the check: the Send fails as for any pass failure.
+    memoryWindow: {
+      kind: '⚠ System · memory update error',
+      content: "<b>Memory update failed, so your turn didn't start.</b> The update's prompt is about 41,800 tokens; qwen2.5:14b's context window is 32,768 (detected). Raise the window if the model allows more, or switch the classifier to a model with a larger one.",
+      actions: '<span class="err-btn primary">Retry</span><span class="err-btn">Set window</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
   };
   function setErr(state) {

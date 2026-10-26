@@ -107,3 +107,15 @@ slice-planning gate forces its resolution before that slice is planned.
     `sourceTurn: z.string().optional()` inline while every other entry
     uses the shared `sourceTurn` const; sharing the instance wants the
     prompt-schema snapshots to confirm it.
+
+- **`possibleCapabilityMismatch` is canon without code.**
+  [`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories)
+  and
+  [`app-settings.md → Override semantic`](../ui/screens/app-settings/app-settings.md#override-semantic--trust-the-user)
+  describe a provider-error mapper that matches capability words
+  (`tool_use`, `thinking`, `vision`) in a rejection's body and threads
+  the hit through `PipelineError.provider`; nothing in `lib/`
+  implements it, and no ledger tracks the gap. The context window
+  check's overflow recognition will be the first such matching in
+  `classifyProviderError`, the natural home for this one too. Raised
+  2026-10-26 by the context window design.

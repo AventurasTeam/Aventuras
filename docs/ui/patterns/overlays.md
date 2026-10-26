@@ -50,6 +50,9 @@ Used by:
   a right Sheet on desktop and tablet whose open and close focus
   override the defaults below; on phone the peek is a level of the
   rail's bottom Sheet, not a Sheet of its own.
+- [App Settings · Context window](../screens/app-settings/app-settings.md#context-window):
+  a Popover anchored on a text model row's window chip, a bottom
+  Sheet on phone, holding the figure's number input.
 
 The Used-by list grows as primitives and patterns adopt the
 overlays. Future consumers will include the Branch chip popover,

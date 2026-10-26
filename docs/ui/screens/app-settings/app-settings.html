@@ -196,6 +196,17 @@
       .model-row .m-name { flex: 1; font-family: ui-monospace, monospace; color: var(--ink); }
       .model-row .m-caps { display: inline-flex; gap: 6px; }
       .model-row .remove { cursor: pointer; color: var(--ink-faint); opacity: 0.5; font-size: 14px; padding: 0 4px; }
+      /* context-window chip — detected (filled) / set by you (filled, marked) / unknown (outline) */
+      .win-chip { font-size: 10px; font-family: ui-monospace, monospace; min-width: 44px; text-align: center; padding: 1px 6px; border-radius: 3px; border: 1px solid var(--line-soft); background: var(--line-soft); color: var(--ink); cursor: pointer; user-select: none; }
+      .win-chip.set::after { content: ' \2022'; }
+      .win-chip.unknown { background: transparent; border: 1px dashed var(--line); color: var(--ink-faint); }
+      .win-popover { margin: 2px 8px 8px auto; width: 270px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); box-shadow: 0 6px 24px rgba(0,0,0,0.18); font-size: 11px; color: var(--ink-muted); }
+      .win-popover .win-title { font-weight: 600; color: var(--ink); margin-bottom: 8px; }
+      .win-popover .win-input { width: 120px; padding: 4px 8px; border: 1px solid var(--line-soft); border-radius: 3px; font-family: ui-monospace, monospace; font-size: 12px; background: var(--bg-region); color: var(--ink); }
+      .win-popover .win-note { margin: 8px 0; line-height: 1.5; }
+      .win-popover .win-actions { display: flex; gap: 8px; justify-content: flex-end; }
+      .win-popover .win-actions span { padding: 3px 8px; border: 1px solid var(--line-soft); border-radius: 3px; cursor: pointer; color: var(--ink); }
+      .win-popover .win-actions span.disabled { color: var(--ink-faint); cursor: default; }
       .model-row .remove:hover { opacity: 1; }
       .add-custom-model { padding: 6px 12px; font-size: 11px; color: var(--ink-muted); border: 1px dashed var(--line); border-radius: 3px; cursor: pointer; display: inline-block; }
       .add-custom-model:hover { color: var(--ink); }
@@ -551,7 +562,14 @@
                         <span class="cap-badge on" title="reasoning">&#129504;</span>
                         <span class="cap-badge on" title="structured output">&#9881;</span>
                       </span>
+                      <span class="win-chip" data-win="sonnet" title="context window &middot; detected">200k</span>
                       <span class="remove" title="remove from cache">&times;</span>
+                    </div>
+                    <div class="win-popover" data-win-popover="sonnet" hidden>
+                      <div class="win-title">Context window &middot; claude-sonnet-4-7</div>
+                      <input class="win-input" placeholder="200000" /> tokens
+                      <div class="win-note">Server reports 200,000. A lower figure caps every role on this model: calls past it are refused, not shortened.</div>
+                      <div class="win-actions"><span class="disabled">Reset to detected</span></div>
                     </div>
                     <div class="model-row">
                       <span class="pin on" title="pinned">&#9733;</span>
@@ -560,6 +578,7 @@
                         <span class="cap-badge on" title="reasoning">&#129504;</span>
                         <span class="cap-badge on" title="structured output">&#9881;</span>
                       </span>
+                      <span class="win-chip" title="context window &middot; detected">200k</span>
                       <span class="remove" title="remove from cache">&times;</span>
                     </div>
                   </div>
@@ -577,24 +596,28 @@
                           <span class="pin on">&#9733;</span>
                           <span class="m-name">claude-sonnet-4-7</span>
                           <span class="m-caps"><span class="cap-badge on">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                          <span class="win-chip">200k</span>
                           <span class="remove">&times;</span>
                         </div>
                         <div class="model-row">
                           <span class="pin on">&#9733;</span>
                           <span class="m-name">claude-opus-4-7</span>
                           <span class="m-caps"><span class="cap-badge on">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                          <span class="win-chip">200k</span>
                           <span class="remove">&times;</span>
                         </div>
                         <div class="model-row">
                           <span class="pin">&#9734;</span>
                           <span class="m-name">claude-haiku-4-5</span>
                           <span class="m-caps"><span class="cap-badge">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                          <span class="win-chip">200k</span>
                           <span class="remove">&times;</span>
                         </div>
                         <div class="model-row">
                           <span class="pin">&#9734;</span>
                           <span class="m-name">claude-3-5-haiku</span>
                           <span class="m-caps"><span class="cap-badge">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                          <span class="win-chip">200k</span>
                           <span class="remove">&times;</span>
                         </div>
                         <div style="font-size: 10px; color: var(--ink-faint); padding: 6px 8px; text-align: center;">&hellip; 8 more &hellip;</div>
@@ -706,7 +729,14 @@
                         <span class="cap-badge" title="capability data unavailable">&#129504;</span>
                         <span class="cap-badge" title="capability data unavailable">&#9881;</span>
                       </span>
+                      <span class="win-chip set" data-win="llama" title="context window &middot; set by you">32k</span>
                       <span class="remove">&times;</span>
+                    </div>
+                    <div class="win-popover" data-win-popover="llama" hidden>
+                      <div class="win-title">Context window &middot; llama3.1:70b</div>
+                      <input class="win-input" value="32768" /> tokens
+                      <div class="win-note">Server reports nothing. Set by you: calls whose prompt is larger are refused before they're sent.</div>
+                      <div class="win-actions"><span>Clear</span></div>
                     </div>
                     <div class="model-row">
                       <span class="pin">&#9734;</span>
@@ -715,7 +745,14 @@
                         <span class="cap-badge">&#129504;</span>
                         <span class="cap-badge">&#9881;</span>
                       </span>
+                      <span class="win-chip unknown" data-win="qwen" title="context window &middot; unknown">ctx ?</span>
                       <span class="remove">&times;</span>
+                    </div>
+                    <div class="win-popover" data-win-popover="qwen" hidden>
+                      <div class="win-title">Context window &middot; qwen2.5-coder:32b</div>
+                      <input class="win-input" placeholder="e.g. 32768" /> tokens
+                      <div class="win-note">Server reports nothing. Until it's set, calls to this model aren't checked, and a server that cuts long prompts silently won't say so.</div>
+                      <div class="win-actions"><span class="disabled">Clear</span></div>
                     </div>
                     <div class="model-row">
                       <span class="pin">&#9734;</span>
@@ -724,12 +761,16 @@
                         <span class="cap-badge">&#129504;</span>
                         <span class="cap-badge">&#9881;</span>
                       </span>
+                      <span class="win-chip unknown" title="context window &middot; unknown">ctx ?</span>
                       <span class="remove">&times;</span>
                     </div>
                   </div>
                   <span class="add-custom-model">+ Add custom model id</span>
                   <div style="font-size: 10px; color: var(--ink-faint); margin-top: 6px; font-style: italic;">
                     Capability data unavailable for OpenAI-compatible &mdash; auto resolves to force-off; flip per-profile if your model supports it.
+                  </div>
+                  <div style="font-size: 10px; color: var(--ink-faint); margin-top: 4px; font-style: italic;">
+                    ctx ? = context window unknown &mdash; most local servers publish none; click a chip to set it. 32k&bull; = set by you.
                   </div>
                 </div>
               </div>
@@ -884,9 +925,12 @@
               <div class="field-label">max output
                 <span class="hint">tokens &middot; per-request cap</span>
               </div>
-              <div class="slider-row">
-                <div class="slider"><span class="slider-thumb" style="left: 50%;"></span></div>
-                <input class="slider-value-input" value="4096" />
+              <div>
+                <div class="slider-row">
+                  <div class="slider"><span class="slider-thumb" style="left: 50%;"></span></div>
+                  <input class="slider-value-input" value="4096" />
+                </div>
+                <div class="ctx-info"><b>Context window:</b> 200,000 &middot; detected</div>
               </div>
             </div>
 
@@ -965,9 +1009,12 @@
               </div>
               <div class="field-row">
                 <div class="field-label">max output</div>
-                <div class="slider-row">
-                  <div class="slider"><span class="slider-thumb" style="left: 12%;"></span></div>
-                  <input class="slider-value-input" value="1024" />
+                <div>
+                  <div class="slider-row">
+                    <div class="slider"><span class="slider-thumb" style="left: 12%;"></span></div>
+                    <input class="slider-value-input" value="1024" />
+                  </div>
+                  <div class="ctx-info"><b>Context window:</b> unknown &middot; set it in Providers</div>
                 </div>
               </div>
               <div class="field-row">
@@ -1721,6 +1768,14 @@
             if (!body) return;
             body.hidden = !body.hidden;
             if (chev) chev.innerHTML = body.hidden ? '&#9656;' : '&#9662;';
+          });
+        });
+
+        // Context-window chip → its editor popover
+        document.querySelectorAll('[data-win]').forEach((chip) => {
+          chip.addEventListener('click', () => {
+            const pop = document.querySelector('[data-win-popover="' + chip.dataset.win + '"]');
+            if (pop) pop.hidden = !pop.hidden;
           });
         });
 

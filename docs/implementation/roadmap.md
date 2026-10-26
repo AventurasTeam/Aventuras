@@ -632,8 +632,13 @@ the underlying configuration surfaces.
   capability-section model lists with virtual scrolling for large
   catalogs like OpenRouter 340+, capability badge click-to-
   override, per-section staggered refresh, `Add custom model id`,
+  the text models' context-window chip and its editor, Anthropic's
+  typed catalog reading `max_input_tokens` into the detected window,
   provider `⋯` menu with deletion-semantics AlertDialog,
-  reset-profiles action) — deletion runs the full embedding-story
+  reset-profiles action, and the profile line under max output that
+  gives the model's window, per
+  [`app-settings.md → Context window`](../ui/screens/app-settings/app-settings.md#context-window))
+  — deletion runs the full embedding-story
   block + `assignments` key removal + `providers[].length ≥ 1`
   invariant per
   [`data-model.md → App settings storage`](../data-model.md#app-settings-storage);
@@ -641,8 +646,9 @@ the underlying configuration surfaces.
   custom-file import paths, per-model EP picker, cross-story
   staleness aggregate, download dialog with license fetch +
   SHA256 verify + `.attestation`, remove / test flows, plus the two
-  provider-model values nothing can detect: the **input window** and
-  the **tokenizer** the composer counts against, both set by hand per
+  provider-model values the embedder doesn't detect: the **input
+  window** and the **tokenizer** the composer counts against, both set
+  by hand per
   [`retrieval.md → Capability flags`](../memory/retrieval.md#capability-flags--provider-side));
   **models tab** (agent-to-profile assignments including the
   `suggestion` slot from M3.7); **appearance tab** (theme picker
@@ -964,18 +970,20 @@ code before it moved; resolve with the slice it names.
   describes.** Routed from the Slice 3.12 split (2026-08-19).
   [`retrieval.md → Structural floor takes budget first`](../memory/retrieval.md#structural-floor-takes-budget-first)
   wants floor-then-reservation-then-budgets over a tracked context
-  window; absent on two of the three counts — no window figure exists
-  anywhere (model profiles carry no input-window field) and no
-  prompt-overhead reservation exists (`promptBufferTokens` is computed
-  only for probe captures). The third has changed: the budget editor
-  the original entry described ships since Slice 4.4 as five plain
+  window. The window figure is now specced, per model with its source
+  ([`architecture.md → Model context window`](../architecture.md#model-context-window)),
+  but nothing derives budgets from it, and no prompt-overhead
+  reservation exists (`promptBufferTokens` is computed only for probe
+  captures). The budget editor the original entry
+  described ships since Slice 4.4 as five plain
   number inputs with no relationship to any window. Most stories still
   run on the conservative 5,500-token defaults, but the editor shipping
   makes
   the failure mode — budgets with no relationship to the model's
   window overflowing the prompt — reachable by hand today. It lands
   with M7.2's Memory tab rather than sooner because the accounting
-  needs a per-model input window that no settings surface carries yet.
+  needs the per-model window, which the user can set only once M7.1's
+  providers tab ships.
   It is also an ordering problem, not just arithmetic: retrieval runs
   before the prompt is assembled, so overhead has to be estimated ahead
   of assembly or a pre-pass has to render the scaffolding; and changing

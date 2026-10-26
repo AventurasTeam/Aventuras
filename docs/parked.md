@@ -1317,6 +1317,50 @@ Turkish-specific fold does. Parked 2026-10-24; the signal is a story
 whose names or terms differ only by a folding pair and get treated as
 different things.
 
+#### Calibrating the token estimate per model
+
+The context window check compares an o200k estimate against the window
+with no margin
+([`architecture.md → The pre-send check`](./architecture.md#the-pre-send-check)),
+and the estimate drifts by model and language: Gemma 4 counts English
+6 to 7% higher than o200k and Japanese 25% lower. A Japanese story is
+then refused up to a quarter before the real limit, and the only
+workaround is a figure above the true window. A calibration would scale
+the estimate per model by the ratio of reported to estimated input
+tokens, which every call already logs at debug level; it needs a rule
+for how many calls to trust and how fast the ratio moves. The same
+ratios set the truncation cross-check's `0.5` threshold
+([`architecture.md → Truncation cross-check`](./architecture.md#truncation-cross-check)),
+a starting value that sits clear of the drift measured so far. Parked
+2026-10-26; the signal is refusals near the window, a truncation
+warning on a server that didn't truncate, or the logged ratios sitting
+far from 1 for a model in use.
+
+#### A per-provider switch for stream usage
+
+The OpenAI-compatible provider always asks for streamed usage through
+`stream_options`, which the truncation cross-check needs
+([`architecture.md → Truncation cross-check`](./architecture.md#truncation-cross-check)).
+A server that rejected the field would fail every streamed call to it,
+with no way for the user to turn it off; none of the servers surveyed
+does. The fix is a boolean on the provider instance, on by default.
+Parked 2026-10-26; the signal is a report of a server that rejects
+`stream_options`.
+
+#### Pre-filling the embedder's window from the catalog
+
+The embedder's `maxInputTokens` is user-supplied only
+([`memory/retrieval.md → Capability flags — provider-side`](./memory/retrieval.md#capability-flags--provider-side)),
+while the generation window is pre-filled from `max_model_len` and
+`meta.n_ctx` where a server publishes them
+([`architecture.md → Detection`](./architecture.md#detection)). For an
+embedding model served by vLLM, `max_model_len` is its input limit, so
+the same read could pre-fill the embedder's window; what llama.cpp's
+`meta.n_ctx` means for an embedding model, whose batch size also bounds
+an input, is unchecked. Parked 2026-10-26; the signal is users of
+self-hosted embedders leaving the window unset and hitting the silent
+truncation it warns about.
+
 ### Memory pipeline (parked)
 
 Subsystem-scoped deferrals for the memory pipeline (retrieval,

@@ -507,18 +507,33 @@ and action buttons. Rationale: these errors need to be visible,
 actionable, and part of the narrative log as context, not a silent
 chrome blip.
 
-| Failure                                                                                                                                                                                                                | Action buttons                                    |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| **LLM call failed**                                                                                                                                                                                                    | `Retry` · `View details` · `Dismiss`              |
-| **Memory update failed** before the turn, failing the Send ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy))                                                                   | `Retry` · `View details` · `Dismiss`              |
-| **Memory update failed**, branch held (an earlier update couldn't be undone, so Send is refused)                                                                                                                       | `Dismiss`                                         |
-| **Memory updated** on `Retry`, its text kept on the entry ([Custody of the turn's text](#custody-of-the-turns-text))                                                                                                   | `Dismiss`                                         |
-| **Embed call failed** mid-turn (blocking per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle); the composer is not gated — a resubmit re-runs the same blocking sync stage) | `Switch embedder` · `Retry` · `Dismiss`           |
-| **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `View details` · `Dismiss`        |
-| **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `View details` · `Dismiss`        |
-| **Agent has no profile assigned** (`assignments[agentId]` unset)                                                                                                                                                       | `Assign profile` · `View details` · `Dismiss`     |
-| **Agent default model's provider missing**                                                                                                                                                                             | `Fix default` · `View details` · `Dismiss`        |
-| **Story override's provider missing** (pre-flight or resolver-time)                                                                                                                                                    | `Fix story override` · `View details` · `Dismiss` |
+| Failure                                                                                                                                                                                                                | Action buttons                                      |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| **LLM call failed**                                                                                                                                                                                                    | `Retry` · `View details` · `Dismiss`                |
+| **Prompt too large for the model's window** ([`architecture.md → Model context window`](../../../architecture.md#model-context-window))                                                                                | `Retry` · `Set window` · `View details` · `Dismiss` |
+| **Memory update failed** before the turn, failing the Send ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy))                                                                   | `Retry` · `View details` · `Dismiss`                |
+| **Memory update failed**, branch held (an earlier update couldn't be undone, so Send is refused)                                                                                                                       | `Dismiss`                                           |
+| **Memory updated** on `Retry`, its text kept on the entry ([Custody of the turn's text](#custody-of-the-turns-text))                                                                                                   | `Dismiss`                                           |
+| **Embed call failed** mid-turn (blocking per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle); the composer is not gated — a resubmit re-runs the same blocking sync stage) | `Switch embedder` · `Retry` · `Dismiss`             |
+| **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `View details` · `Dismiss`          |
+| **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `View details` · `Dismiss`          |
+| **Agent has no profile assigned** (`assignments[agentId]` unset)                                                                                                                                                       | `Assign profile` · `View details` · `Dismiss`       |
+| **Agent default model's provider missing**                                                                                                                                                                             | `Fix default` · `View details` · `Dismiss`          |
+| **Story override's provider missing** (pre-flight or resolver-time)                                                                                                                                                    | `Fix story override` · `View details` · `Dismiss`   |
+
+The window entry's text gives the prompt's estimated size and the
+model's window with its source, or, when the provider rejected the
+prompt, says the provider's message suggests an overflow and quotes
+it. Either way it adds the remedies: shorten the prompt (Story
+Settings memory budgets and history buffer), raise the window if the
+model allows more, or switch to a model with a larger one. `Retry`
+stays, since it resends the held text once something has changed;
+`Set window` opens the model's row in
+[App Settings](../app-settings/app-settings.md#context-window). A
+**Memory update failed** entry whose cause is the window gives the same
+numbers and gains `Set window`; its remedies are a larger window or a
+classifier model with one, since the memory budgets don't reach a
+pass's prompt.
 
 The embed-failure system entry follows the same visual shape as the
 LLM-failure entry — the contract is "transient pipeline failure

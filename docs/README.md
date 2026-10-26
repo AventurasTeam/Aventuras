@@ -9,7 +9,7 @@ implementation, and the open questions tracked across the project.
 - **[architecture.md](./architecture.md)** — cross-cutting code
   shape: prompt templates and authoring, settings, agent
   orchestration overview, translation as a pipeline concern,
-  retrieval phase invariants.
+  retrieval phase invariants, the model context window.
 - **[generation-pipeline.md](./generation-pipeline.md)** — the
   generation pipeline framework: phases, orchestrator, action layer,
   event bus, transactions, concurrency model. The shape every

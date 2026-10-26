@@ -15,14 +15,29 @@ for the placement rule.
 
 ## Data-model
 
-- **Generation prompts aren't checked against the model's window.**
-  Nothing compares a generation prompt against the model's window
-  (`maxInputTokens` is read by the embedder only), while the
-  structural floor now seats more, and how a provider's overflow error
-  reaches the user is unverified. It comes before
-  [retrieval tuning](#tuning-and-play-testing), which raises the
-  budgets severalfold and makes an overflow likelier. Raised 2026-10-19
-  by the entity-state design.
+- **Implement the context window check.** Designed 2026-10-26
+  ([`architecture.md → Model context window`](./architecture.md#model-context-window)):
+  the window figure with its detected and configured sources, the
+  pre-send check in `lib/ai`, overflow recognition in
+  `classifyProviderError`, and the truncation cross-check. The
+  cross-check needs `includeUsage` on the OpenAI-compatible provider,
+  which also stops streamed turns recording their prompt tokens as
+  `0`. It comes before [retrieval tuning](#tuning-and-play-testing),
+  which raises the budgets severalfold. The window chip, the profile
+  line and `Set window`'s target land with M7.1's providers tab; until
+  then a figure is detected only and the failure shows without a
+  route. The plan measures the count's cost on Android, and gives the
+  mock LLM a usage report and an overflow rejection for E2E.
+
+- **Nothing reads a reply's `finish_reason`.** A reply the server
+  stops at `length`, having reached `maxOutput` or the model's window,
+  is treated as finished: a turn commits its prose cut short, and a
+  structured reply cut short fails as a parse failure, retried and
+  reported with no hint of the cause. The context window check makes
+  the window case reachable near the limit, since it compares the
+  prompt alone
+  ([`architecture.md → The pre-send check`](./architecture.md#the-pre-send-check)).
+  Raised 2026-10-26 by the context window design.
 
 - **Periodic classifier context grows with the story.** A pass lists
   every entity, place, relationship view and happening on the branch
@@ -196,7 +211,9 @@ for the placement rule.
   each section of its prompt used (in-scene and retrieved entities, the
   location map, the story history, retrieved happenings, lore, threads,
   the instructions and so on) in its entry's metadata, and a UI shows
-  them. Today an entry keeps only totals (`metadata.tokens`), and the
+  them. Today an entry keeps only totals (`metadata.tokens`), whose
+  prompt total reads `0` on OpenAI-compatible streams until the context
+  window check sets `includeUsage` (under [Data-model](#data-model)), and the
   Memory probe's per-pool numbers
   ([`memory/probe.md`](./memory/probe.md)) cover only retrieval's pools
   and the structural floor, and only on captured turns; the design
@@ -286,8 +303,9 @@ breakdown under [UX](#ux).
   entity budget, which budget fill skips permanently
   ([`retrieval.md → Budget-fill termination`](./memory/retrieval.md#budget-fill-termination)):
   the characters a user invested in most become the ones retrieval
-  can't seat. The budgets rise only after the window check under
-  [Data-model](#data-model) lands, and the
+  can't seat. The budgets rise only after the
+  [context window check](./architecture.md#model-context-window) is
+  implemented (under [Data-model](#data-model)), and the
   [Tier-2 knob surface](./parked.md#tier-2-retrieval-ranker-knob-tuning-surface)
   waits on these defaults settling. Raised 2026-10-19 by the
   entity-state design (the budgets).
@@ -308,3 +326,4 @@ breakdown under [UX](#ux).
   - [Recency-bias diversity mitigation for suggestion category mix](./parked.md#recency-bias-diversity-mitigation-for-suggestion-category-mix)
   - [Multi-axis salience](./parked.md#multi-axis-salience)
   - [Prompt-cache optimization](./parked.md#prompt-cache-optimization)
+  - [Calibrating the token estimate per model](./parked.md#calibrating-the-token-estimate-per-model)

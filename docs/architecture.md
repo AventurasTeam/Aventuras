@@ -13,8 +13,9 @@ event bus, transactions, concurrency model — lives in its own doc at
 covers the surrounding pieces: prompt-authoring (templates, packs,
 macros, filters), the settings shape templates consume, translation
 as a pipeline concern, the retrieval-phase contract the rest of the
-pipeline depends on, and agent-orchestration overview (with detail
-pointing into [`memory/`](./memory/README.md)).
+pipeline depends on, agent-orchestration overview (with detail
+pointing into [`memory/`](./memory/README.md)), and the model context
+window every generation call is checked against.
 
 ---
 
@@ -847,6 +848,144 @@ reversal or Cancel interrupts it and defers it to the next turn, as
 for a pass. The framework-level transaction +
 gate mechanism lives in
 [`generation-pipeline.md → Transaction lifecycle`](./generation-pipeline.md#transaction-lifecycle).
+
+---
+
+## Model context window
+
+Every generation call is held against its model's context window
+before it is sent. The window is a figure per model that the user
+declares and detection pre-fills where a server publishes it without
+ambiguity. OpenAI-compatible endpoints, the common case, have no
+standard field for it, so a model's window is often unknown, and an
+unknown window is never guessed. The user sets it on the model's row
+in App Settings
+([`app-settings.md → Context window`](./ui/screens/app-settings/app-settings.md#context-window)).
+Embedding calls are outside this section: the embedder holds its input
+against its own `maxInputTokens`
+([`memory/retrieval.md → Capability flags — provider-side`](./memory/retrieval.md#capability-flags--provider-side)).
+
+### The window figure
+
+The figure is the most tokens the server holds for one call, prompt
+and reply together, kept per model on a provider instance in two
+places
+([`data-model.md → App settings storage`](./data-model.md#app-settings-storage)):
+
+- **Detected**: `cachedModels[].capabilities.contextWindow`, written
+  only by the catalog fetch. A fresh value replaces the stored one,
+  unlike every other capability, whose stored value wins; a fetch that
+  reports none keeps the last seen, since a llama.cpp router model
+  unloaded at refresh publishes nothing and its window hasn't changed.
+- **Configured**: `contextWindowOverrides[modelId]` on the provider,
+  for any model id on it, listed by the catalog or added by hand. A
+  refresh never touches it; removing the key falls back to the
+  detected value.
+
+`generationWindow` resolves the figure as `{ tokens, source }`: the
+configured value, else the detected one, else `tokens: null` with
+source `unknown`. There is no assumed fallback, unlike the embedder's:
+the check refuses calls, so a guessed window would refuse calls the
+server accepts.
+
+The figure belongs to the model, not to a profile, because a story
+override swaps a profile's model. A user who lowers it, as a cost
+ceiling say, caps every role on that model, and turns stop once the
+story's prompt outgrows it: nothing fits the prompt to the figure.
+Fitting it is the window-relative accounting of
+[`memory/retrieval.md → Structural floor takes budget first`](./memory/retrieval.md#structural-floor-takes-budget-first),
+not yet implemented.
+
+### Detection
+
+The catalog fetch reads two fields per `/models` entry, whose names
+mean the enforced window on every server known to use them:
+`max_model_len` (vLLM, SGLang, TabbyAPI), then `meta.n_ctx`
+(llama.cpp's per-slot size, present on a loaded model, and TabbyAPI).
+A value that isn't a positive integer is ignored. `context_length` is
+not read: local servers use it for the model's trained maximum, where
+llama.cpp's router reports 262,144 for a model it runs at 65,536, and
+hosted catalogs for the served limit. Anthropic's typed catalog adapter
+reads `max_input_tokens` the same way. Nothing fingerprints a server.
+
+Ollama, LM Studio, KoboldCpp and text-generation-webui publish no
+usable figure on `/v1/models`, and by default cut an overlong prompt
+silently instead of rejecting it. On them the user's figure is the only
+check, and the [truncation cross-check](#truncation-cross-check) the
+only sign that one is missing.
+
+### The pre-send check
+
+`lib/ai` checks every call made through `streamText` and
+`generateStructured`, so every caller is covered without opting in. It
+counts the request as sent, after middleware, the JSON contract
+injected for structured output included, with `countTokens`: o200k, an
+estimate for every provider. When the window is known and the estimate
+exceeds it, the call is not sent and not retried.
+
+The prompt alone is compared, with no reserve for the reply. A
+profile's `maxOutput` is a ceiling, not the reply's size, and many
+servers check only the prompt and stop the reply at the window; a
+server that checks prompt plus `max_tokens` rejects the call itself,
+and the rejection is [recognized](#recognizing-an-overflow-rejection).
+The estimate is compared as it is, with no margin. Its error has no
+known direction per model (Gemma 4 counts English 6 to 7% higher than
+o200k and Japanese 25% lower), and a false refusal stops the call
+outright, where a false pass ends in a recognized rejection or a small
+truncation.
+
+The failure is the `context-window` arm of `CallRetryError` and
+[`PipelineError`](./generation-pipeline.md#fatal-error-categories),
+carrying `detectedBy: 'check'`, the estimate, the window and its
+source, and the target, provider and model ids. Each caller surfaces it
+on its existing failure path:
+
+- a turn's failure entry, which keeps the held input
+  ([`reader-composer.md → Transient pipeline failures`](./ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat));
+- a pass's failure, which stops the branch's turns until the figure or
+  the model changes
+  ([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy));
+- suggestion refresh, the fallback classifier and wizard-assist on
+  their own.
+
+### Recognizing an overflow rejection
+
+`classifyProviderError` recognizes an overflow on any `APICallError`
+with a status. By code first: `context_length_exceeded` or
+`exceed_context_size_error` in the body's `error.code`, `error.type`
+or a top-level `code`. Then by a short keyword list on the body:
+maximum context length, context size, context window, prompt is too
+long, input token count, and `max_new_tokens` must be. The result is
+the `context-window` failure with `detectedBy: 'provider'`, the
+provider's message verbatim, the estimate, and the window when known.
+It is not retried, on a 5xx too.
+
+Nothing is parsed out of the message or stored. Servers phrase the
+limit differently per server and per version, and a figure learned
+wrong would refuse calls that work; the message names the limit on most
+servers for the user to read. A match is a hint, so the copy says the
+provider's message suggests an overflow rather than asserting one, as
+for `possibleCapabilityMismatch`.
+
+### Truncation cross-check
+
+After a call whose provider reported input tokens, the reported count
+(`usage.inputTokens`, cached tokens included) is divided by the
+pre-send estimate. Below `0.5`, the server likely dropped part of the
+prompt, or a configured figure is above the real window. `lib/ai`
+signals it; the app shows a warning toast once per model per app
+session, naming both counts with a `Set window` action, and logs a
+warning. The committed result is untouched and nothing is stored. The
+threshold sits well clear of tokenizer differences and is a starting
+value for tuning. The ratio itself is logged at debug level on every
+call, the evidence a calibration of the estimate would start from
+([`parked.md → Calibrating the token estimate per model`](./parked.md#calibrating-the-token-estimate-per-model)).
+
+The OpenAI-compatible provider is built with `includeUsage`, so a
+streamed call asks for usage through `stream_options`; without it most
+servers report none on a stream. A server that rejected
+`stream_options` would fail every streamed call to it; none known does
+([`parked.md → A per-provider switch for stream usage`](./parked.md#a-per-provider-switch-for-stream-usage)).
 
 ---
 

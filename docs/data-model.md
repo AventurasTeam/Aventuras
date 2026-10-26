@@ -1664,9 +1664,12 @@ app_settings.providers: Array<{
       embeddingDim?: number                  // positive native output dimension, persisted from a successful native-dimension probe when this model is selected
       matryoshkaSupported?: boolean          // NEW: model supports Matryoshka representation truncation. See docs/memory/retrieval.md → Matryoshka effective dim
       matryoshkaDims?: number[]              // NEW: curated dim ladder declared by the model card (e.g., [256, 512, 1024, 1536, 2048, 3072]). Picker surfaces these first; Custom… accepts any N up to native.
+      maxInputTokens?: number                // embedder input window; user-supplied. See docs/memory/retrieval.md → Capability flags — provider-side
+      contextWindow?: number                 // generation window as the server published it (max_model_len, meta.n_ctx; Anthropic's max_input_tokens). Detected only: a fresh value replaces it, a fetch without one keeps it. See docs/architecture.md → Model context window
     }
   }>
   customModelIds?: string[]                  // user-added model ids not in the fetched catalog (custom OpenAI-compatible deployments, fine-tunes). Bare ids without capability data; picker walks cachedModels + customModelIds to compose its row source.
+  contextWindowOverrides?: Record<string, number>  // user-set generation window per model id, listed or custom; wins over the detected contextWindow and survives catalog refresh
   cachedAt?: number                          // last successful /models fetch timestamp
 }>
 ```

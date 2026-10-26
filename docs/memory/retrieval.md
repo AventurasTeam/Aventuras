@@ -699,6 +699,7 @@ app_settings.providers[].cachedModels[].capabilities = {
   matryoshkaSupported?: boolean,
   matryoshkaDims?: number[],        // curated ladder, e.g. [256, 512, 1024, 1536, 2048, 3072]
   maxInputTokens?: number,          // longest accepted input; user-supplied, never detected
+  contextWindow?: number,           // generation window, detected; not the embedder's (architecture.md → Model context window)
 }
 ```
 
@@ -719,11 +720,17 @@ declare is a power-user assertion: the system honors it, and
 quality is the user's problem if the model wasn't actually
 trained for it.
 
-**`maxInputTokens` is the exception to detection.** Nothing in the
-OpenAI-compatible surface reports it: `/v1/models` carries id, object,
-created and owned_by, and `usage.prompt_tokens` prices a call that has
-already succeeded. So the field is user-supplied only, and its absence
-means unestablished rather than unlimited. Until it is set,
+**`maxInputTokens` is the exception to detection.** The
+OpenAI-compatible surface has no standard field for it: most servers'
+`/v1/models` carries id, object, created and owned_by, and
+`usage.prompt_tokens` prices a call that has already succeeded. A few
+publish a window (vLLM's `max_model_len`, llama.cpp's `meta.n_ctx`),
+which the generation window reads
+([`architecture.md → Detection`](../architecture.md#detection)); the
+embedder doesn't read them yet
+([`parked.md → Pre-filling the embedder's window from the catalog`](../parked.md#pre-filling-the-embedders-window-from-the-catalog)).
+So the field is user-supplied only, and its absence means
+unestablished rather than unlimited. Until it is set,
 `embedderInputWindow` answers with an assumption — 8192, matching the
 dominant hosted models — and labels it `assumed`, which a surface must
 not render as the endpoint's own answer. A local model's window needs
