@@ -425,11 +425,16 @@ another chains behind it, and checks the rows the passes write.
 test: it renders the real pass prompt from a branch of the dev slot's
 database, opened read-only (`AVENTURAS_DB_PATH` picks another
 database, `PROBE_BRANCH_ID` a branch other than `br_hero_main`), and
-sends it
-`PROBE_RUNS` times, 20 by default. It prints each run's outcome with
-its parse and provider retries, its first parse failure by field path
-and the entries a reply that parsed dropped for not fitting, by list,
-then the first-attempt parse rate.
+sends it `PROBE_RUNS` times, 20 by default, under a profile with no max
+output unless `PROBE_MAX_OUTPUT` sets one, so a run can test what a
+real profile sends. It prints each run's outcome with its parse and
+provider retries, its first parse failure by field path and the
+entries a reply that parsed dropped for not fitting, by list, then the
+first-attempt parse rate. A reply the server stopped at its length
+limit that doesn't parse strictly is refused, not repaired
+([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)):
+its run prints the cut-off's cause and numbers, and the summary counts
+it as cut off at length rather than as a failed run.
 
 ## Selector strategy
 
