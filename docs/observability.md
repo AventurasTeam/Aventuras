@@ -217,7 +217,11 @@ convention, and the expectation that subsystems route through
 - `provider.*` — `retry_succeeded`, `rate_limited`,
   `stream_interrupted`, `request_failed`, `url_redaction_failed`
   (the URL pass failed to parse a span and left it unredacted —
-  it fails open, so it must not fail silently)
+  it fails open, so it must not fail silently), `reply_cut_off` (warn:
+  the server stopped a reply at its length limit; logged with the
+  cause, the numbers and an `outcome`, `refused` or `accepted` for a
+  structured call and `failed`, `marked` or `in-block` for the
+  narrative)
 - `embedder.*` — `offline`, `compute_failed`, `staleness_detected`
 - `translation.*` — `soft_failed` (when that followup lands)
 - `memory.*` — periodic-classifier + chapter-close phase

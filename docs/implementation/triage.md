@@ -107,3 +107,50 @@ slice-planning gate forces its resolution before that slice is planned.
     `sourceTurn: z.string().optional()` inline while every other entry
     uses the shared `sourceTurn` const; sharing the instance wants the
     prompt-schema snapshots to confirm it.
+
+- **A profile's max output accepts any number.** `maxOutput` in
+  `lib/db/app-settings/app-settings-schema.ts` is
+  `z.number().optional()`, so `0`, negative and fractional limits pass
+  validation and are sent as `maxOutputTokens`. Since the cut-off
+  replies work, the cause rule reads any output at or over the limit
+  as `max-output` ([`generation-pipeline.md → Cut-off replies`](../generation-pipeline.md#cut-off-replies)),
+  so a limit of `0` makes every cut-off read `max-output` and its copy
+  quote a 0-token max output. Raised by the cut-off replies Task 1
+  review.
+
+- **Failure details the pipeline logs have no test.** The `errorDetail`
+  of `pipeline.run_aborted` and `pipeline.phase_failed`
+  (`lib/pipeline/runtime/orchestrator.ts`) is asserted nowhere, and the
+  periodic classifier's `onPreflightFailure` hook
+  (`lib/pipeline/definitions/periodic-classifier.ts`) is tested only for
+  a resolver failure, not for its other branch, which records
+  `pipelineErrorDetail(error)`. Setting either detail to `undefined`
+  passes the suite. Raised by the cut-off replies Task 2 review.
+
+- **The `provider.*` log kinds in `observability.md` are stale.**
+  [`observability.md`](../observability.md) lists `retry_succeeded`,
+  `rate_limited`, `stream_interrupted`, `request_failed` and
+  `url_redaction_failed`. The code also logs `http_call_buffer_full`,
+  `narrative_stream_failed`, `wizard_assist_failed`,
+  `wizard_assist_threw`, `wizard_opening_unresolved_refs` and four
+  `setup_*` kinds, and logs no `rate_limited`, `stream_interrupted` or
+  `request_failed` by those names. The cut-off replies PR adds its own
+  `reply_cut_off`. Raised by the cut-off replies Task 4 review.
+
+- **Two trailing-block shapes leak markup into the prose.**
+  `findBlockSpan` (`lib/piggyback/parse.ts`) pairs the last close tag
+  with the opener before it, so in `<state>a</state>` followed by an
+  unclosed `<state>` it never sees the second block, which stays in the
+  prose and sets `outOfPosition`; on a cut-off reply the entry is also
+  marked. When one block nests inside the other, `stripTrailingBlocks`'
+  cursor moves backwards and the outer block's tail (its close tag
+  included) is left in the prose. Both are rare model outputs. Raised by
+  the cut-off replies Task 5 review.
+
+- **System entries show their detail inline, with no `View details`.**
+  The reader-composer failure table gives most rows a `View details`
+  action
+  ([`reader-composer.md → Transient pipeline failures`](../ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)),
+  but `EntryCard` renders a system entry's `detail` as muted text under
+  its content (`components/compounds/entry-card.tsx`), and no code
+  offers the action. Raised by the cut-off replies Task 8 review.
