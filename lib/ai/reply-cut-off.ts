@@ -7,11 +7,10 @@ export type CutOffCause = CutOffMark['cause']
 /** generation-pipeline.md → Two retry tiers: a reply the server stopped at its limit. */
 export type ReplyCutOffFailure = {
   cause: CutOffCause
-  /** As the provider reported, reasoning included; null when it reported none, or 0, which is
-   *  how OpenAI-compatible reports a missing count. */
+  /** As the provider reported; null when it reported none. Includes reasoning. */
   outputTokens: number | null
   /** The part of `outputTokens` spent thinking, when reported; 0 can mean unreported on
-   *  OpenAI-compatible. */
+   *  OpenAI-compatible, so the description leaves a 0 out. */
   reasoningTokens: number | null
   /** The profile's limit; null when it sets none. */
   maxOutput: number | null
@@ -40,9 +39,7 @@ export type ReplyCutOffInput = {
 
 /** generation-pipeline.md → Cut-off replies: the cause comes from what the call knows. */
 export function replyCutOff(input: ReplyCutOffInput): ReplyCutOffFailure {
-  // OpenAI-compatible reports a missing count as 0, and a cut reply with truly none is rare.
-  const reportedOutput = input.usage?.outputTokens ?? null
-  const outputTokens = reportedOutput === 0 ? null : reportedOutput
+  const outputTokens = input.usage?.outputTokens ?? null
   const reasoningTokens = input.usage?.outputTokenDetails?.reasoningTokens ?? null
   const maxOutput = input.maxOutput ?? null
   const { window, promptEstimate } = input

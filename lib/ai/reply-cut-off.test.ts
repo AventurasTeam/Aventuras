@@ -105,13 +105,6 @@ describe('replyCutOff', () => {
     expect(replyCutOff({ ...BASE, usage: usage(512, 0) }).reasoningTokens).toBe(0)
   })
 
-  // OpenAI-compatible reports a usage object's missing completion count as 0.
-  it('reads a reported output of 0 as unreported, so a profile limit names max-output', () => {
-    const failure = replyCutOff({ ...BASE, usage: usage(0), maxOutput: 512 })
-    expect(failure.outputTokens).toBeNull()
-    expect(failure.cause).toBe('max-output')
-  })
-
   describe('the window branch', () => {
     it('reads window when the prompt estimate plus the output reach the window', () => {
       expect(
@@ -140,6 +133,19 @@ describe('replyCutOff', () => {
       expect(
         replyCutOff({ ...BASE, usage: undefined, window: 8192, promptEstimate: 8191 }).cause,
       ).toBe('unknown')
+    })
+
+    // A prompt that fills the window leaves no room for output.
+    it('keeps a reported output of 0 as 0, so a full window outranks the profile limit', () => {
+      const failure = replyCutOff({
+        ...BASE,
+        usage: usage(0),
+        maxOutput: 512,
+        window: 8192,
+        promptEstimate: 8192,
+      })
+      expect(failure.outputTokens).toBe(0)
+      expect(failure.cause).toBe('window')
     })
 
     it('needs both the window and the prompt estimate', () => {
