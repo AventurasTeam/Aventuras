@@ -118,7 +118,8 @@
   let bodyScroller = $state<HTMLDivElement | null>(null)
   let jump = $state<JumpState>({ long: false, atTop: true, atBottom: false })
   let tallestScroller = 0
-  let jumping = false
+  /** Hides the buttons through a jump, which can move them by the height of the footer. */
+  let jumping = $state(false)
 
   /** Whichever of the two scrollers this width uses. */
   function activeScroller(): HTMLDivElement | null {
@@ -158,8 +159,6 @@
     ) {
       await untilRestored(el)
     }
-    // The buttons change only once the jump has painted: a phone can spend longer than the fade
-    // drawing the far end, and would show the buttons already changed.
     jumping = true
     el.scrollTo({ top: edge === 'top' ? 0 : el.scrollHeight })
     await nextFrame()
@@ -347,7 +346,7 @@
   <!-- A slot of its own, so the other button keeps its place while this one fades. -->
   <span class="flex size-9">
     {#if shown}
-      <span class="pointer-events-auto flex" transition:fade={{ duration: 150 }}>
+      <span class="pointer-events-auto flex" transition:fade={{ duration: jumping ? 0 : 150 }}>
         <Button
           variant="outline"
           size="icon"
@@ -458,8 +457,8 @@
             -->
             <div class="pointer-events-none sticky bottom-0 h-0">
               <div class="absolute right-3 bottom-3 flex flex-col gap-2">
-                {@render jumpButton('top', !jump.atTop)}
-                {@render jumpButton('bottom', !jump.atBottom)}
+                {@render jumpButton('top', !jumping && !jump.atTop)}
+                {@render jumpButton('bottom', !jumping && !jump.atBottom)}
               </div>
             </div>
           {/if}
