@@ -237,7 +237,7 @@ slice-planning gate forces its resolution before that slice is planned.
   move. In `e2e/locators/reader.ts`, `dismissSystemEntry` is scoped to
   the entry rows while `retrySystemEntry`, `systemEntryFailure` and
   `fixProfile` match page-wide; `fixProfile`'s comment says to scope it
-  to a row, and both its callers don't. Playwright's strict mode fails
+  to a row, and neither of its callers does. Playwright's strict mode fails
   loudly on a second match, so nothing passes by accident today. Raised
   by the cut-off replies slice review; the simplifier left the lift for
   a home.
