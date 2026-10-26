@@ -189,3 +189,16 @@ slice-planning gate forces its resolution before that slice is planned.
   "a single injected failure is swallowed" hint also shows for an HTTP
   401 or 403, which the app doesn't retry. Raised by the cut-off
   replies Task 12 review.
+
+- **A profile's `customJson` is never sent.** `resolveModel`
+  (`lib/ai/resolve-model.ts`) carries a profile's `customJson` into the
+  resolved params, and nothing reads it after that: `buildCallSettings`
+  (`lib/ai/generate.ts`) maps only temperature, max output and the
+  Anthropic-only thinking budget, for every provider. Canon calls it a
+  per-field merge over the constructed payload
+  ([`data-model.md`](../data-model.md)). On an OpenAI-compatible
+  reasoning model nothing can then disable or cap thinking: the cut-off
+  replies smoke on the dev LLM spent a narrative max output of 64, 512,
+  1024 and 2200 entirely on reasoning, so every turn failed as cut off
+  before any text until the limit (8192) covered the reasoning. Raised by
+  the coordinator from the cut-off replies Task 15 smoke.
