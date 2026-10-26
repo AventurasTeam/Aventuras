@@ -274,8 +274,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     }
   }
 
-  // Provenance is best-effort — every field below is optional on EntryMetadata,
-  // so a provider that omits usage/reasoning simply yields undefined.
+  // Provenance is best-effort: usage or reasoning a provider omits stays off the optional metadata.
   const usage = await Promise.resolve(stream.usage).catch(() => undefined)
   const reasoningText = await Promise.resolve(stream.reasoningText).catch(() => undefined)
   // Only 'length' is a cut; a finish reason the SDK rejects, unread, reads as finished.
@@ -332,6 +331,9 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       error: { kind: 'reply-cut-off', target: 'narrative', ...cut.failure },
     }
   }
+  // Before the fold, whose reads can throw and fail the turn.
+  if (cut !== undefined)
+    logCutOff(ctx.log, cut.failure, entryId, cut.inBlock ? 'in-block' : 'marked')
   if (cut === undefined && content.trim() === '')
     return {
       status: 'failed',
@@ -477,10 +479,6 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       ? { nextTurnSuggestions: { items: suggestionItems, source: 'piggyback' as const } }
       : {}),
   }
-
-  // Past the phase's last abort exit; a later cancel can still discard the entry.
-  if (cut !== undefined)
-    logCutOff(ctx.log, cut.failure, entryId, cut.inBlock ? 'in-block' : 'marked')
 
   const [next] = await ctx.db
     .select({ next: sql<number>`COALESCE(MAX(${storyEntries.position}), 0) + 1` })

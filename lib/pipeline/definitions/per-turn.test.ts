@@ -2933,6 +2933,7 @@ describe('narrative — how the reply ended', () => {
     usage?: unknown
     maxOutput?: number
     piggyback?: boolean
+    log?: ReturnType<typeof spyLogger>
   }) {
     currentStoryStore.set({
       storyId: 's1',
@@ -2978,7 +2979,7 @@ describe('narrative — how the reply ended', () => {
       },
     })
 
-    const log = spyLogger()
+    const log = opts.log ?? spyLogger()
     const intermediates: Record<string, unknown> = {}
     ensurePerTurnPipelineRegistered()
     const phase = getPipeline(PER_TURN_KIND).phases[2]
@@ -3196,5 +3197,43 @@ describe('narrative — how the reply ended', () => {
     expect(entry?.content).toBe(PROSE)
     expect(entry?.metadata).not.toHaveProperty('cutOff')
     expect(log.warn).not.toHaveBeenCalledWith('provider.reply_cut_off', expect.anything())
+  })
+
+  it('commits a finished reply ending in a root opener prefix as written', async () => {
+    const text = `${PROSE}\n<s`
+    const { result, entry } = await runReply({ text, finishReason: 'stop' })
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(entry?.content).toBe(text)
+  })
+
+  it('commits no newline the removed opener stood behind', async () => {
+    const { result, entry } = await runReply({
+      text: 'The knight drew his sword.\n<sta',
+      finishReason: 'length',
+      piggyback: true,
+    })
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(entry?.content).toBe('The knight drew his sword.')
+  })
+
+  it('logs a cut in the prose even when the fold after it throws', async () => {
+    const entryReads = await import('./entry-reads')
+    vi.spyOn(entryReads, 'readStoryPlace').mockRejectedValue(new Error('place read failed'))
+    const log = spyLogger()
+
+    await expect(
+      runReply({
+        text: `The knight drew his sword.\n${BLOCK}\n${PROSE}`,
+        finishReason: 'length',
+        piggyback: true,
+        log,
+      }),
+    ).rejects.toThrow('place read failed')
+    expect(log.warn).toHaveBeenCalledWith(
+      'provider.reply_cut_off',
+      cutWarning({ cause: 'unknown', outputTokens: null, maxOutput: null, outcome: 'marked' }),
+    )
   })
 })
