@@ -214,3 +214,16 @@ slice-planning gate forces its resolution before that slice is planned.
   refresh's exhausted parse retries reach this bare arm, where they
   used to be relabelled `provider`. Raised by the cut-off replies slice
   review.
+
+- **A narrative stream that ends without its final frame commits as
+  finished.** Canon fails the phase on a mid-stream provider error
+  ([`generation-pipeline.md → Streaming resilience — thin v1`](../generation-pipeline.md#streaming-resilience--thin-v1)),
+  but when the SSE body just ends, with no finish frame and no
+  `[DONE]`, the OpenAI-compatible provider raises nothing: it reports
+  the finish reason as `other` and hands back the partial text (probed
+  through the app's transport against the dev mock's `stream-cut`).
+  The narrative phase reads anything but `length` as finished, so the
+  truncated prose commits with no cut-off notice; read from
+  `lib/pipeline/definitions/per-turn.ts`, not run end to end. The logger
+  has no `stream_interrupted` kind either, though `observability.md`
+  lists one. Raised by the cut-off replies slice review.
