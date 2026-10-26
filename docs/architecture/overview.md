@@ -320,7 +320,9 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   and descriptions are replaced whole, like appearance; there is no add or remove. A trait list
   is cut to the first 8, the most the prompt asks for (`traitList`), and a rewrite that loses
   traits that way is logged with the other ignored rewrites. A new character takes the status
-  its entry gives, `active` when it gives none.
+  its entry gives, `active` when it gives none. The presence pass counts a character the
+  response creates as in the scene, unless it is created away: then only `presentCharacterNames`
+  brings it in.
 
   **A character listed under a placeholder is renamed when the story reveals their name.**
   `characterUpdates[].changes.newName` carries it, under the listed name (`planRename`).

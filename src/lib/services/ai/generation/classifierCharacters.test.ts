@@ -238,6 +238,35 @@ describe('planCharacterResponse', () => {
     expect(result.creates[0].fields.status).toBe('deceased')
   })
 
+  it('places a new character in the scene only when its entry leaves it active', () => {
+    const result = plan({
+      updates: [update('the hooded woman', { newName: 'Mara' })],
+      newCharacters: [
+        { name: 'the guard', status: 'inactive' },
+        { name: 'the hooded woman', status: 'deceased' },
+        { name: 'Tobin' },
+        { name: 'Ilse', status: 'active' },
+      ],
+      presentNames: ['Mira'],
+    })
+    expect(result.newNames).toEqual(['Tobin', 'Ilse'])
+    expect(result.explicitStatusNames).toEqual([])
+  })
+
+  it('reads presence from the created row, not from each entry naming it', () => {
+    const result = plan({
+      updates: [update('Ilse', { description: 'A smith.' })],
+      newCharacters: [
+        { name: 'Tobin', status: 'inactive' },
+        { name: 'Tobin' },
+        { name: 'mira' },
+        { name: 'weapon vendor', status: 'inactive' },
+      ],
+      presentNames: ['Me'],
+    })
+    expect(result.newNames).toEqual(['Ilse', 'Mira'])
+  })
+
   it('gates rewrites by what the classifier was shown under the listed name', () => {
     const hidden = character('the guard', { status: 'inactive', description: 'Bored.' })
     const result = planCharacterResponse(

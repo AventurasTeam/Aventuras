@@ -118,7 +118,10 @@ export interface CharacterResponsePlan {
   refusedRenames: Array<{ name: string; newName: string; reason: RenameRefusal }>
   /** Who the response places in the scene, by the names they have once it is applied. */
   presentNames: string[]
-  /** The `newCharacters` entries, by the names they have once it is applied. */
+  /**
+   * The characters it creates as `active`, and existing ones `newCharacters` lists again without
+   * another status, by the names they have once it is applied.
+   */
   newNames: string[]
   /** The characters an update gave a status, by the names they have once it is applied. */
   explicitStatusNames: string[]
@@ -278,7 +281,12 @@ export function planCharacterResponse(
     }),
     refusedRenames,
     presentNames: response.presentNames.map(finalName),
-    newNames: response.newCharacters.map((nc) => finalName(nc.name)),
+    newNames: [
+      ...planned.filter((p) => !p.original && p.row.status === 'active').map((p) => p.row.name),
+      ...response.newCharacters
+        .filter((nc) => (nc.status ?? 'active') === 'active' && find(nc.name)?.original)
+        .map((nc) => finalName(nc.name)),
+    ],
     explicitStatusNames: statusTargets.map((p) => p.row.name),
     presentIds: response.presentNames.flatMap((name) => {
       const original = find(name)?.original
