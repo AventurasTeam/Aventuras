@@ -2905,3 +2905,296 @@ describe('narrative fold — prompt halves', () => {
     expect(user).not.toContain('# Calendar')
   })
 })
+
+// generation-pipeline.md → Cut-off replies.
+describe('narrative — how the reply ended', () => {
+  const PROSE = 'The lantern guttered as Kael reached for the'
+  const BLOCK = '<state><world_time_delta>30</world_time_delta></state>'
+
+  // A finish reason the SDK never settles. Rejects only once read: an eager Promise.reject would be
+  // reported unhandled before the phase reaches it.
+  const unreadable = {
+    then: (_settle: unknown, fail: (error: unknown) => void) => fail(new Error('no finish part')),
+  }
+
+  const cutWarning = (fields: Record<string, unknown>) => ({
+    reasoningTokens: null,
+    window: null,
+    providerId: 'prov-1',
+    modelId: 'model-1',
+    entryId: expect.any(String),
+    ...fields,
+  })
+
+  async function runReply(opts: {
+    text: string
+    finishReason?: unknown
+    usage?: unknown
+    maxOutput?: number
+    piggyback?: boolean
+  }) {
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition,
+      settings: baseSettings({
+        partialChapterBuffer: 3,
+        piggybackMode: opts.piggyback ? 'on' : 'off',
+      }),
+    })
+    hydrateEntries(phaseDb, 'b1', [])
+    entitiesStore.hydrate('b1', [])
+    vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
+      ...APP_SETTINGS_DEFAULTS,
+      providers: [
+        {
+          ...provider,
+          cachedModels: [{ id: 'model-1', capabilities: { taggedBlockReliable: true } }],
+        },
+      ],
+      profiles: [
+        {
+          id: 'prof-narrative',
+          kind: 'narrative',
+          name: 'Narrative',
+          modelRef: { providerId: provider.id, modelId: 'model-1' },
+        },
+      ],
+      defaultProviderId: provider.id,
+    })
+    streamTextMock.mockReturnValue({
+      ok: true,
+      modelId: 'model-1',
+      providerId: 'prov-1',
+      timedOut: () => false,
+      maxOutput: opts.maxOutput,
+      stream: {
+        fullStream: (async function* () {
+          if (opts.text !== '') yield { type: 'text-delta', text: opts.text }
+        })(),
+        finishReason: opts.finishReason,
+        usage: opts.usage,
+      },
+    })
+
+    const log = spyLogger()
+    const intermediates: Record<string, unknown> = {}
+    ensurePerTurnPipelineRegistered()
+    const phase = getPipeline(PER_TURN_KIND).phases[2]
+    if (!phase || !('run' in phase)) throw new Error('expected narrative phase')
+    const gen = phase.run({
+      actionId: 'act_1',
+      abortSignal: new AbortController().signal,
+      intermediates,
+      log,
+      runInTransaction: async () => undefined,
+      db: phaseDb.db,
+      storyId: 's1',
+      branchId: 'b1',
+    })
+    const events: PhaseEmittedEvent[] = []
+    let next = await gen.next()
+    while (!next.done) {
+      events.push(next.value)
+      next = await gen.next()
+    }
+    const created = events.find(
+      (e) => e.type === 'delta_emitted' && e.action.kind === 'createStoryEntry',
+    )
+    const entry =
+      created?.type === 'delta_emitted' && created.action.kind === 'createStoryEntry'
+        ? created.action.payload.entry
+        : undefined
+    return { result: next.value, events, entry, intermediates, log }
+  }
+
+  it.each([
+    [
+      'no max output, no usage',
+      {},
+      { cause: 'unknown' },
+      { cause: 'unknown', outputTokens: null, maxOutput: null },
+    ],
+    [
+      'a max output it reached',
+      { maxOutput: 512, usage: { outputTokens: 512 } },
+      { cause: 'max-output', outputTokens: 512, limit: 512 },
+      { cause: 'max-output', outputTokens: 512, maxOutput: 512 },
+    ],
+    [
+      'a max output and no count',
+      { maxOutput: 512 },
+      { cause: 'max-output', limit: 512 },
+      { cause: 'max-output', outputTokens: null, maxOutput: 512 },
+    ],
+    [
+      'a max output it fell short of',
+      { maxOutput: 512, usage: { outputTokens: 300 } },
+      { cause: 'unknown', outputTokens: 300 },
+      { cause: 'unknown', outputTokens: 300, maxOutput: 512 },
+    ],
+  ])('marks a reply cut in its prose (%s)', async (_label, call, mark, warned) => {
+    const { result, entry, log } = await runReply({ text: PROSE, finishReason: 'length', ...call })
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(entry?.content).toBe(PROSE)
+    expect(entry?.metadata?.cutOff).toStrictEqual(mark)
+    expect(log.warn).toHaveBeenCalledWith(
+      'provider.reply_cut_off',
+      cutWarning({ ...warned, entryId: entry?.id, outcome: 'marked' }),
+    )
+  })
+
+  // piggyback.md → Parse strategy: a cut between tags of a block holding no create or drop parses
+  // clean, as any block the stream cut off.
+  it('marks nothing when the cut falls in the trailing block, which reads as before', async () => {
+    const { result, entry, intermediates, log } = await runReply({
+      text: 'The knight drew his sword.\n<state><world_time_delta>30</world_time_delta>',
+      finishReason: 'length',
+      piggyback: true,
+    })
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(entry?.content).toBe('The knight drew his sword.')
+    expect(entry?.metadata).not.toHaveProperty('cutOff')
+    expect(entry?.metadata?.stateReport).toMatchObject({
+      layer: 'piggyback_tagged_block',
+      worldTimeDelta: 30,
+    })
+    expect(entry?.metadata?.stateReport?.failedFields).toBeUndefined()
+    expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: true })
+    expect(log.warn).toHaveBeenCalledWith(
+      'provider.reply_cut_off',
+      cutWarning({
+        cause: 'unknown',
+        outputTokens: null,
+        maxOutput: null,
+        entryId: entry?.id,
+        outcome: 'in-block',
+      }),
+    )
+  })
+
+  // Uncut, the fragment would sit after the closed block and read as prose out of position.
+  it('drops a root opener the cut fell inside, before anything parses the reply', async () => {
+    const { result, entry, log } = await runReply({
+      text: `The knight drew his sword.\n${BLOCK}\n<sugg`,
+      finishReason: 'length',
+      piggyback: true,
+    })
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(entry?.content).toBe('The knight drew his sword.')
+    expect(entry?.metadata).not.toHaveProperty('cutOff')
+    expect(log.warn).not.toHaveBeenCalledWith(
+      'classifier.state_block_out_of_position',
+      expect.anything(),
+    )
+    expect(log.warn).toHaveBeenCalledWith(
+      'provider.reply_cut_off',
+      cutWarning({
+        cause: 'unknown',
+        outputTokens: null,
+        maxOutput: null,
+        entryId: entry?.id,
+        outcome: 'in-block',
+      }),
+    )
+  })
+
+  // Developer decision 1: a cut reply that is only a block fails too, or the entry is markup.
+  it.each([
+    ['no text', ''],
+    ['only whitespace', '\n\n'],
+    ['only a trailing block', BLOCK],
+    ['only a root opener cut mid-name', '<sta'],
+  ])('fails a cut reply with %s as reply-cut-off, committing nothing', async (_label, text) => {
+    const { result, events, log } = await runReply({
+      text,
+      finishReason: 'length',
+      maxOutput: 512,
+      usage: { outputTokens: 512, outputTokenDetails: { reasoningTokens: 200 } },
+      piggyback: true,
+    })
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: {
+        kind: 'reply-cut-off',
+        target: 'narrative',
+        cause: 'max-output',
+        outputTokens: 512,
+        reasoningTokens: 200,
+        maxOutput: 512,
+        window: null,
+        providerId: 'prov-1',
+        modelId: 'model-1',
+      },
+    })
+    expect(events.filter((e) => e.type === 'delta_emitted')).toEqual([])
+    expect(log.warn).toHaveBeenCalledWith(
+      'provider.reply_cut_off',
+      cutWarning({
+        cause: 'max-output',
+        outputTokens: 512,
+        reasoningTokens: 200,
+        maxOutput: 512,
+        outcome: 'failed',
+      }),
+    )
+  })
+
+  // Developer decision 2: any stop but 'length', or none, is finished; no blank ai_reply commits.
+  it.each([
+    ['stop', '', 'stop'],
+    ['stop, as whitespace', ' \n', 'stop'],
+    ['content-filter', '', 'content-filter'],
+    ['other', '', 'other'],
+    ['error', '', 'error'],
+    ['tool-calls', '', 'tool-calls'],
+    ['no finish reason', '', undefined],
+    ['an unreadable finish reason', '', unreadable],
+  ])(
+    'fails a blank reply that finished with %s as an empty reply',
+    async (_label, text, finishReason) => {
+      const { result, events, log } = await runReply({ text, finishReason })
+
+      expect(result).toEqual({
+        status: 'failed',
+        error: {
+          kind: 'phase-logic',
+          subsystem: 'empty-reply',
+          detail: 'the model returned no text',
+        },
+      })
+      expect(events.filter((e) => e.type === 'delta_emitted')).toEqual([])
+      expect(log.warn).not.toHaveBeenCalledWith('provider.reply_cut_off', expect.anything())
+    },
+  )
+
+  it('keeps the raw text of a finished reply that is only a trailing block', async () => {
+    const { result, entry } = await runReply({ text: BLOCK, finishReason: 'stop', piggyback: true })
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(entry?.content).toBe(BLOCK)
+  })
+
+  // The output reached the max output, so only the finish reason can tell these apart from a cut.
+  it.each([
+    ['stop', 'stop'],
+    ['content-filter', 'content-filter'],
+    ['an unreadable finish reason', unreadable],
+  ])('commits a reply with text that finished with %s, unmarked', async (_label, finishReason) => {
+    const { result, entry, log } = await runReply({
+      text: PROSE,
+      finishReason,
+      maxOutput: 512,
+      usage: { outputTokens: 512 },
+    })
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(entry?.content).toBe(PROSE)
+    expect(entry?.metadata).not.toHaveProperty('cutOff')
+    expect(log.warn).not.toHaveBeenCalledWith('provider.reply_cut_off', expect.anything())
+  })
+})

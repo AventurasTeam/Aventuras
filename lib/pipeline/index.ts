@@ -1,6 +1,7 @@
 export { pipelineErrorDetail, toPipelineError } from './call-error'
 export { definePhase, definePipeline } from './authoring/define'
 export {
+  EMPTY_REPLY,
   ensurePerTurnPipelineRegistered,
   PER_TURN_KIND,
   type PerTurnPhaseName,

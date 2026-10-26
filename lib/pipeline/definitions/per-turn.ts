@@ -1,9 +1,17 @@
 import { APICallError } from 'ai'
 import { eq, sql } from 'drizzle-orm'
 
-import { describeProviderError, resolveModel, resolveModelCapabilities, streamText } from '@/lib/ai'
+import {
+  describeProviderError,
+  isCutOff,
+  replyCutOff,
+  resolveModel,
+  resolveModelCapabilities,
+  streamText,
+  type ReplyCutOffFailure,
+} from '@/lib/ai'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
+import { inheritedEntryMetadata, storyEntries, type CutOffMark, type EntryMetadata } from '@/lib/db'
 import { redactUrl, type Logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import {
@@ -12,6 +20,7 @@ import {
   parseStateBlock,
   parseSuggestionsBlock,
   type ParseFieldFailure,
+  readCutOffReply,
   resolveSuggestionEmission,
   resolveSuggestionItems,
   stripTrailingBlocks,
@@ -39,6 +48,9 @@ import { getPipeline } from '../authoring/registry'
 import type { PhaseContext, PhaseEmittedEvent, PhaseNode, PhaseResult } from '../types'
 
 export const PER_TURN_KIND = 'per-turn'
+
+// Tags the phase-logic failure of a reply that finished with no text, so the reader can say so.
+export const EMPTY_REPLY = 'empty-reply'
 
 // The status pill's phase mapping is exhaustive over this union and the phase
 // list below is typed by it, so a phase added to the turn cannot reach the
@@ -88,6 +100,33 @@ function narrativeTimeoutDetail(timeoutMs: number | undefined, earlierError: unk
   return earlierError === undefined
     ? timeout
     : `${timeout}; earlier stream error: ${describeProviderError(earlierError)}`
+}
+
+type CutOffOutcome = 'failed' | 'marked' | 'in-block'
+
+// generation-pipeline.md → Cut-off replies: every cut-off logs, committed or failed.
+function logCutOff(
+  log: Logger,
+  failure: ReplyCutOffFailure,
+  entryId: string,
+  outcome: CutOffOutcome,
+): void {
+  log.warn('provider.reply_cut_off', { ...failure, entryId, outcome })
+}
+
+// data-model.md → Entry metadata shape: `limit` is the number its cause names; none for `unknown`.
+function cutOffMark(failure: ReplyCutOffFailure): CutOffMark {
+  const limit =
+    failure.cause === 'max-output'
+      ? failure.maxOutput
+      : failure.cause === 'window'
+        ? failure.window
+        : null
+  return {
+    cause: failure.cause,
+    ...(failure.outputTokens !== null ? { outputTokens: failure.outputTokens } : {}),
+    ...(limit !== null ? { limit } : {}),
+  }
 }
 
 async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
@@ -239,6 +278,25 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // so a provider that omits usage/reasoning simply yields undefined.
   const usage = await Promise.resolve(stream.usage).catch(() => undefined)
   const reasoningText = await Promise.resolve(stream.reasoningText).catch(() => undefined)
+  // Only 'length' is a cut; a finish reason that never settles reads as finished.
+  const finishReason = await Promise.resolve(stream.finishReason).catch(() => undefined)
+  let cut: { failure: ReplyCutOffFailure; inBlock: boolean } | undefined
+  if (isCutOff(finishReason)) {
+    // Before anything parses the reply: a root opener cut mid-name would otherwise read as prose.
+    const read = readCutOffReply(content)
+    content = read.content
+    cut = {
+      failure: replyCutOff({
+        usage,
+        maxOutput: call.maxOutput,
+        window: null,
+        promptEstimate: null,
+        providerId: call.providerId,
+        modelId: call.modelId,
+      }),
+      inBlock: read.inBlock,
+    }
+  }
   const tail = entries.at(-1)
   const inherited = inheritedEntryMetadata(tail?.metadata)
 
@@ -265,6 +323,20 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // The column stores prose only (docs/memory/piggyback.md → Persistence and
   // stripping); everything the block carried is persisted structurally instead.
   const { prose, stateRaw, outOfPosition } = stripTrailingBlocks(content)
+  // Ahead of the fold, so no create is planned for a reply that commits nothing. Trimmed: with no
+  // block span, stripTrailingBlocks hands back the raw text.
+  if (cut !== undefined && prose.trim() === '') {
+    logCutOff(ctx.log, cut.failure, entryId, 'failed')
+    return {
+      status: 'failed',
+      error: { kind: 'reply-cut-off', target: 'narrative', ...cut.failure },
+    }
+  }
+  if (cut === undefined && content.trim() === '')
+    return {
+      status: 'failed',
+      error: { kind: 'phase-logic', subsystem: EMPTY_REPLY, detail: 'the model returned no text' },
+    }
   if (outOfPosition) ctx.log.warn('classifier.state_block_out_of_position', { entryId })
   // A reply that is nothing but a block strips to nothing. Persist the raw text
   // instead of committing a blank row: the reader strips it again at display, so
@@ -394,12 +466,17 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     model: call.modelId,
     generationTimingMs: Date.now() - startedAt,
     ...(reasoningText ? { reasoning: reasoningText } : {}),
+    ...(cut !== undefined && !cut.inBlock ? { cutOff: cutOffMark(cut.failure) } : {}),
     ...(fold?.metadata ?? inherited),
     ...(stateReport !== undefined ? { stateReport } : {}),
     ...(suggestionsCaptured
       ? { nextTurnSuggestions: { items: suggestionItems, source: 'piggyback' as const } }
       : {}),
   }
+
+  // Here, past the fold's last abort exit, so a logged commit is one that happens.
+  if (cut !== undefined)
+    logCutOff(ctx.log, cut.failure, entryId, cut.inBlock ? 'in-block' : 'marked')
 
   const [next] = await ctx.db
     .select({ next: sql<number>`COALESCE(MAX(${storyEntries.position}), 0) + 1` })
