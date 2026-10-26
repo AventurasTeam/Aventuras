@@ -144,7 +144,10 @@ export type MockLlm = {
   releaseStructured: () => void
   /** One-shot: the next stream to finish (held: at release) sends the narrative, then 'length'. */
   cutNextNarrative: () => void
-  /** One-shot: next `agentName` structured call answers `raw` verbatim, finish_reason 'length'. */
+  /**
+   * One-shot: the next `agentName` call answered (held: at release) sends `raw` verbatim, then
+   * 'length'.
+   */
   cutNextStructured: (agentName: string, raw: string) => void
   /** Every completion request received, in order. */
   requests: MockRequest[]
