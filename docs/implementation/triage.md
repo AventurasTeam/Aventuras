@@ -202,3 +202,15 @@ slice-planning gate forces its resolution before that slice is planned.
   1024 and 2200 entirely on reasoning, so every turn failed as cut off
   before any text until the limit (8192) covered the reasoning. Raised by
   the coordinator from the cut-off replies Task 15 smoke.
+
+- **The orchestrator never fills a phase-logic error's `phaseName` or
+  `retryAttempt`.** Canon has it fill both when it wraps a phase's
+  error
+  ([`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories)),
+  but nothing in `lib/pipeline/runtime/orchestrator.ts` sets either,
+  the `phase-logic` arm in `lib/pipeline/types.ts` has no
+  `retryAttempt`, and `toPipelineError` drops a parse failure's
+  `attempt`. Since the cut-off replies work, a pass's or a suggestion
+  refresh's exhausted parse retries reach this bare arm, where they
+  used to be relabelled `provider`. Raised by the cut-off replies slice
+  review.

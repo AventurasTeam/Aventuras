@@ -940,7 +940,17 @@ code before it moved; resolve with the slice it names.
   minimum — that conversion also changes what the auto path accepts,
   so it needs its own care). `e2e/tests/structured-force-on.spec.ts`
   pins current behavior and flags the change. Surfaced by the M3 E2E
-  harness work (2026-07-24); verified 2026-08-19.
+  harness work (2026-07-24); verified 2026-08-19. Under force-on, an
+  Anthropic model without native structured output answers through a
+  JSON tool, and `@ai-sdk/anthropic` returns the tool's input
+  re-serialised as the reply text, which always parses. So the strict
+  parse that refuses a cut-off structured reply
+  ([`generation-pipeline.md → Cut-off replies`](../generation-pipeline.md#cut-off-replies))
+  can't refuse one there, and the periodic pass's reply schema accepts
+  an empty object, so a cut pass would commit what's left and advance
+  the watermark. Wiring force-on needs to refuse a `length` stop on that
+  path outright. What Anthropic sends as a cut tool call's input is
+  unverified. Raised by the cut-off replies slice review (2026-10-26).
 - **M7.1 — The blocking embed path has no per-request token budget.**
   Routed from the Slice 3.12 split (2026-08-19), which keeps the cheap
   halves (a `maxParallelCalls` cap, chunking the local backend) in
