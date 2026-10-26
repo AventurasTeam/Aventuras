@@ -606,6 +606,14 @@ describe('readCutOffReply', () => {
     expect(readCutOffReply(`${closed}<sugg`)).toEqual({ content: closed.trimEnd(), inBlock: true })
   })
 
+  it.each(['', '  '])(
+    'reads an opener cut right after a closed block on its line (%j between) as in the block',
+    (gap) => {
+      const closed = `${PROSE}<state><summary>x</summary></state>`
+      expect(readCutOffReply(`${closed}${gap}<sugg`)).toEqual({ content: closed, inBlock: true })
+    },
+  )
+
   describe.each([
     {
       root: 'state',
