@@ -9,8 +9,7 @@ export type ReplyCutOffFailure = {
   cause: CutOffCause
   /** As the provider reported; null when it reported none. Includes reasoning. */
   outputTokens: number | null
-  /** The part of `outputTokens` spent thinking, when reported; 0 can mean unreported on
-   *  OpenAI-compatible, so the description leaves a 0 out. */
+  /** The part of `outputTokens` spent thinking; unreported is null, or 0 on OpenAI-compatible. */
   reasoningTokens: number | null
   /** The profile's limit; null when it sets none. */
   maxOutput: number | null

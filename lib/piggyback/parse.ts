@@ -596,9 +596,8 @@ function trailingBlockSpans(raw: string): BlockSpan[] {
  * `inBlock` once a trailing block had begun. A root opener cut mid-name is removed from `content`.
  */
 export function readCutOffReply(raw: string): { content: string; inBlock: boolean } {
-  // `<sta` opens no span findBlockSpan can see. The model opens a block on a line of its own or right
-  // after a closed one, so only a fragment that begins a line, or follows a root close tag on its
-  // line, says a block had begun; one after prose is prose.
+  // `<sta` opens no span findBlockSpan sees. The model opens a block at a line start or right
+  // after a root close tag, so only a fragment there means a block had begun.
   const lt = raw.lastIndexOf('<')
   if (lt !== -1) {
     const fragment = raw.slice(lt + 1)

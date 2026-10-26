@@ -370,8 +370,7 @@ describe('cutOff', () => {
     expect(entryMetadataSchema.safeParse({ ...base, cutOff: mark }).success).toBe(false)
   })
 
-  // The schema drives the metadata undo encoder: a key missing from it is left out of the undo,
-  // so the mark would be lost.
+  // The schema drives the metadata undo encoder: a key it lacks is lost on undo.
   it.each([
     { cause: 'max-output' as const, outputTokens: 512, limit: 512 },
     { cause: 'unknown' as const, outputTokens: 300 },

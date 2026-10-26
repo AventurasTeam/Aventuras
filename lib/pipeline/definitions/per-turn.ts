@@ -114,8 +114,7 @@ function logCutOff(
   log.warn('provider.reply_cut_off', { ...failure, target: 'narrative', entryId, outcome })
 }
 
-// data-model.md → Entry metadata shape: `limit` is the number its cause names, so a cause without
-// one reads as `unknown`.
+// data-model.md → Entry metadata shape: a cause without the limit it names reads as `unknown`.
 function cutOffMark(failure: ReplyCutOffFailure): CutOffMark {
   const outputTokens = failure.outputTokens !== null ? { outputTokens: failure.outputTokens } : {}
   const limit =

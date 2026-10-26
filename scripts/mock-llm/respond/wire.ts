@@ -1,6 +1,5 @@
-// OpenAI-compatible wire frames, and the socket write every sender pushes them
-// through. Shared with e2e/harness/mock-llm.ts, so a frame change here reaches
-// the E2E suite; the real transport (lib/ai/transport) consumes these shapes.
+// OpenAI-compatible frames, shared with e2e/harness/mock-llm.ts: a change here
+// reaches the E2E suite; the real transport (lib/ai/transport) consumes them.
 
 import type { ServerResponse } from 'node:http'
 

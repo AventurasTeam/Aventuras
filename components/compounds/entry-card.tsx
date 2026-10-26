@@ -958,8 +958,8 @@ function CutOffNoticeLine({ text, action, tier }: CutOffNoticeContent & { tier: 
             onPress={action.onPress}
             className={cn(
               'group/fix-profile',
-              // The 44 px phone tap floor, margins cancelling the padding so nothing moves. The
-              // bottom stops inside the footer's 12 px gap: the footer paints over anything past it.
+              // 44 px phone tap floor; margins cancel the padding so nothing moves. Bottom stops
+              // inside the footer's 12 px gap: the footer paints over anything past it.
               tier === 'phone' && '-mb-3 -mt-4 pb-3 pt-4',
               Platform.select({ web: 'cursor-pointer outline-none' }),
             )}
