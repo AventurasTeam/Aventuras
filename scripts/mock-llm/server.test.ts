@@ -263,6 +263,11 @@ describe('firstHalf', () => {
     expect(firstHalf('a')).toBe('a')
     expect(firstHalf('')).toBe('')
   })
+
+  it('counts a character outside the BMP as one, never splitting its surrogate pair', () => {
+    expect(firstHalf('ab😀cd')).toBe('ab')
+    expect(firstHalf('😀')).toBe('😀')
+  })
 })
 
 describe('client abort', () => {

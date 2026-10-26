@@ -34,7 +34,8 @@ const MALFORMED_STRUCTURED = "I'm sorry, I can't produce that JSON."
 
 // What a server that stopped at its length limit sent before the cut.
 export function firstHalf(text: string): string {
-  return text.slice(0, Math.max(1, Math.floor(text.length / 2)))
+  const chars = Array.from(text)
+  return chars.slice(0, Math.max(1, Math.floor(chars.length / 2))).join('')
 }
 
 function asNarrativeValue(value: unknown): NarrativeValue {
