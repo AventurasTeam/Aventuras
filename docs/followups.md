@@ -15,22 +15,6 @@ for the placement rule.
 
 ## Data-model
 
-- **Implement cut-off reply handling.** Designed 2026-10-26
-  ([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)):
-  `finishReason` read on every call, a structured reply cut off refused
-  unless it parses strictly, a narrative reply cut off in its prose
-  marked with a notice, and a reply with no text failing its turn.
-  Today `jsonrepair` closes a cut-off pass reply into a valid shorter
-  one, so the pass succeeds and the facts at its end are lost, which
-  makes this the first of the two. It builds the typed failure arm
-  `generateStructured` lacks (it flattens a failure to a string), which
-  the window check reuses. Until the window check lands no window is
-  known, so the `window` cause can't occur and its `Set window` route
-  waits with it. `pnpm probe:classifier` counts a repaired
-  cut-off reply as parsed until this lands; it gains a count of
-  `length` stops and a max-output option, so it can test what real
-  profiles send.
-
 - **Implement the context window check.** Designed 2026-10-26
   ([`architecture.md → Model context window`](./architecture.md#model-context-window)):
   the window figure with its detected and configured sources, the
@@ -291,14 +275,10 @@ breakdown under [UX](#ux).
   (2026-10-26, a local Gemma 4 26B A4B on `br_hero_main`: 20 of 20
   first-attempt parses with mentioned places off, 19 of 20 with them
   on, the miss a JSON syntax slip a parse retry recovered), but a
-  played story's longer replies are untested, and the probe counts a
-  reply the server cut off and `jsonrepair` closed as parsed, so a cut
-  would have read as a parse; that run's lack of a max output made one
-  unlikely, not impossible (cut-off reply handling, under
-  [Data-model](#data-model), adds the count). A pass
-  whose reply won't parse fails a Send rather than costing memory, so
-  play re-runs
-  `pnpm probe:classifier` on a played branch
+  played story's longer replies are untested. A pass whose reply won't
+  parse fails a Send rather than costing memory, so play re-runs
+  `pnpm probe:classifier` on a played branch, with `PROBE_MAX_OUTPUT`
+  at the classifier profile's max output
   ([`testing.md → Real-provider checks`](./testing.md#real-provider-checks)),
   and splitting the pass into two calls is the remedy if the rate
   falls. A parse proves only the reply's shape, so play also checks
