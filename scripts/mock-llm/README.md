@@ -95,7 +95,22 @@ obvious.
 `callWithRetry` with `maxProviderAttempts: 2`, so a failure budget of 1 on a
 structured lane is swallowed before the app ever sees it. Use 2 or more.
 `length` is the exception: a cut reply is never retried, so a budget of 1
-reaches the app. Narrative has no such wrapper — one failure fails the run.
+reaches the app.
+
+Narrative has no such wrapper, so one `http` failure fails the run, as does a
+`hang` once the client times out. The other kinds commit: `malformed` through
+piggyback parse recovery, `stream-cut` as a finished reply holding what
+arrived (the SDK reports the missing stop frame as `other`, and only `length`
+counts as cut off), and `length` as below.
+
+Where a narrative `length` cut lands depends on the active response: the mock
+halves the rendered reply, prose plus its trailing blocks. On "Long scene" the
+half falls in the prose, so the turn commits with a cut-off notice. On a
+response whose blocks are longer than its prose, such as "With suggestions",
+it falls inside the trailing blocks: the prose is whole and the turn commits
+with no notice. The default "Short beat" stops just after its prose, before
+any block opens, which still reads as a cut in the prose, so the notice shows
+though no text is missing.
 
 ## Passthrough and recording
 
