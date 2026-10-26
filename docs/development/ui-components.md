@@ -16,8 +16,7 @@ rest:
   Below it, one scroller holds the body and the two buttons, so the action is reached by reading
   down to it. The header stays pinned. Nothing inside scrolls on its own: an autosizing `Textarea`
   in the body drops its height cap and lets the modal scroll.
-- **Phone.** Below 768px an action modal is a dialog inset from the screen's edges, placed by insets
-  and auto margins rather than a -50% translate that can land it between device pixels: centred, or
+- **Phone.** Below 768px an action modal is a dialog inset from the screen's edges: centred, or
   held near the top when it has a text field. Only a tool with no text field is a bottom sheet
   with a handle (see below), where only the handle drags and the content scrolls.
 - **Buttons.** An outlined Cancel and the action, side by side on a phone and at the trailing edge

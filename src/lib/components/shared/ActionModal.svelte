@@ -258,14 +258,10 @@
       { md: 'max-w-md', lg: 'max-w-lg', '2xl': 'max-w-2xl' }[size],
       // Inset from a phone's edges, where the dialog would otherwise run full width.
       presentation === 'dialog' && 'w-[calc(100%-2rem)] rounded-lg',
-      // Placed on a phone by insets and auto margins, not the -50% translate, which can land it
-      // between device pixels and soften its border on the curves.
-      presentation === 'dialog' &&
-        'max-md:inset-x-4 max-md:inset-y-0 max-md:m-auto max-md:h-fit max-md:w-auto max-md:translate-x-0 max-md:translate-y-0',
       // Held near the top on a phone when it has a text field, so the keyboard shortening the
       // screen does not move it; only its bottom edge comes up, and the content scrolls.
       presentation === 'dialog' &&
-        'max-md:has-[input:not([type=hidden]):not([aria-hidden=true]),textarea]:top-[calc(var(--safe-top)+1rem)] max-md:has-[input:not([type=hidden]):not([aria-hidden=true]),textarea]:bottom-auto max-md:has-[input:not([type=hidden]):not([aria-hidden=true]),textarea]:mt-0',
+        'max-md:has-[input:not([type=hidden]):not([aria-hidden=true]),textarea]:top-[calc(var(--safe-top)+1rem)] max-md:has-[input:not([type=hidden]):not([aria-hidden=true]),textarea]:translate-y-0',
     )}
     onInteractOutside={(e: PointerEvent) => {
       e.preventDefault()

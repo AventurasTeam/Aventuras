@@ -30,7 +30,8 @@
 {:else}
   <div
     class={cn(
-      'border-border bg-background relative z-10 flex items-center justify-between border-b py-4 sm:rounded-t-lg',
+      // Rounded at every width: a square corner would paint over the dialog's rounded border.
+      'border-border bg-background relative z-10 flex items-center justify-between rounded-t-lg border-b py-4',
       className,
     )}
   >
