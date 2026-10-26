@@ -77,7 +77,7 @@ function providerDetail(error: Extract<PipelineError, { kind: 'provider' }>): st
   return error.detail != null ? `${error.reason}: ${error.detail}` : error.reason
 }
 
-// What picks the entry's fix action after a restart: the resolver's failure, or a cut-off's cause.
+// The entry's persisted fix-action tag: the resolver's failure, or a cut-off's cause.
 function failureTagOf(error: PipelineError | undefined): string | undefined {
   if (error?.kind === 'config-resolver') return error.failure
   if (error?.kind === 'reply-cut-off') return error.cause
@@ -126,7 +126,10 @@ export function describeTurnFailure(error: PipelineError | undefined): {
     return { content: turnCutOffContent(error), detail: describeReplyCutOff(error) }
   }
   if (error?.kind === 'phase-logic' && error.subsystem === EMPTY_REPLY) {
-    return { content: t('reader:systemEntry.failure.emptyReply') }
+    return {
+      content: t('reader:systemEntry.failure.emptyReply'),
+      detail: pipelineErrorDetail(error),
+    }
   }
   return {
     content: t('reader:systemEntry.failureMessage'),

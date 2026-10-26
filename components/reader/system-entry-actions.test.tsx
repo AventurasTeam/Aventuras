@@ -82,6 +82,12 @@ const PASS_CUT = {
   maxOutput: null,
 } satisfies PipelineError
 
+const EMPTY_REPLY_FILTERED = {
+  kind: 'phase-logic',
+  subsystem: EMPTY_REPLY,
+  detail: 'the model returned no text (finish reason: content-filter)',
+} satisfies PipelineError
+
 describe('describeTurnFailure', () => {
   it('renders embedder-specific copy with the stale row count', () => {
     const out = describeTurnFailure(EMBEDDER_INIT)
@@ -164,15 +170,11 @@ describe('describeTurnFailure', () => {
     expect(out.detail).toContain('max-output')
   })
 
-  it('says the model returned no text for an empty reply', () => {
-    expect(
-      describeTurnFailure({
-        kind: 'phase-logic',
-        subsystem: EMPTY_REPLY,
-        detail: 'the model returned no text (finish reason: stop)',
-      }),
-    ).toEqual({
+  // A moderation stop likely repeats on Retry, so the finish reason must reach the entry.
+  it('says the model returned no text for an empty reply, keeping the finish reason', () => {
+    expect(describeTurnFailure(EMPTY_REPLY_FILTERED)).toEqual({
       content: 'The model returned no text. Nothing was committed; Retry resends your turn.',
+      detail: 'the model returned no text (finish reason: content-filter)',
     })
   })
 
@@ -225,6 +227,15 @@ describe('toSystemFailureMeta', () => {
       systemFailure: meta,
     })
     expect(parsed.systemFailure).toEqual(meta)
+  })
+
+  it("persists an empty reply's finish reason as its detail", () => {
+    const submission = { content: 'I open the door', composerMode: 'do' }
+    expect(toSystemFailureMeta(EMPTY_REPLY_FILTERED, submission)).toEqual({
+      kind: 'phase-logic',
+      detail: 'the model returned no text (finish reason: content-filter)',
+      submission,
+    })
   })
 })
 
