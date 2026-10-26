@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
     getImageProfile: vi.fn(),
+    updateImageProfile: vi.fn(),
     apiSettings: {
       llmTimeoutMs: 30000,
     },
@@ -66,7 +67,8 @@ import {
   lookupModelCapabilities,
 } from './registry'
 import { settings } from '#lib/stores/settings.svelte.ts'
-import type { ImageProviderType } from '#lib/types/index.ts'
+import type { ImageModelCapabilities, ImageProfile, ImageProviderType } from '#lib/types/index.ts'
+import { IMAGE_MODEL_SNAPSHOT_VERSION } from './modelSnapshot'
 
 describe('Image Provider Registry', () => {
   beforeEach(() => {
@@ -478,6 +480,237 @@ describe('Image Provider Registry', () => {
       expect(await supportsReferenceImages('p', 'm')).toBe(false)
     })
   })
+  describe('model snapshot', () => {
+    // The failure set and the model cache outlive a test, so each case gets its own profile.
+    let counter = 0
+    function setup(
+      over: Partial<ImageProfile> = {},
+      {
+        listModels = vi.fn(async (): Promise<ImageModelInfo[]> => []),
+        getModelCapabilities,
+      }: {
+        listModels?: () => Promise<ImageModelInfo[]>
+        getModelCapabilities?: (model: string) => Promise<ImageModelCapabilities | undefined>
+      } = {},
+    ) {
+      const n = counter++
+      const generate = vi.fn(async (_options: unknown) => ({ base64: 'RESULT' }))
+      vi.mocked(createOpenAIProvider).mockReturnValue({
+        id: 'openai',
+        name: 'openai',
+        generate,
+        listModels,
+        getModelCapabilities,
+      })
+      const profile = {
+        id: `snap-${n}`,
+        providerType: 'openai',
+        apiKey: `sk-snap-${n}`,
+        model: 'm',
+        providerOptions: {},
+        ...over,
+      } as ImageProfile
+      vi.mocked(settings.getImageProfile).mockReturnValue(profile)
+      vi.mocked(settings.updateImageProfile).mockResolvedValue(undefined)
+      vi.mocked(fetchPublicImageBase64).mockResolvedValue('DOWNLOADED')
+      return { profile, generate, listModels }
+    }
+
+    const failingList = () =>
+      vi.fn(async (): Promise<ImageModelInfo[]> => {
+        throw new Error('503')
+      })
+
+    const snapshot = (
+      capabilities: ImageModelCapabilities,
+      over: { model?: string; version?: number } = {},
+    ) => ({
+      model: 'm',
+      version: IMAGE_MODEL_SNAPSHOT_VERSION,
+      capturedAt: 1,
+      capabilities,
+      ...over,
+    })
+
+    const generate = (model = 'm', referenceImages?: string[]) =>
+      generateImage({ profileId: 'p', model, prompt: 'x', referenceImages })
+
+    it('reads a current snapshot without listing models', async () => {
+      const capabilities = { maxReferenceImages: 1, supportedResolutions: ['1k'] }
+      const { generate: send, listModels } = setup({ modelSnapshot: snapshot(capabilities) })
+
+      await generate('m', ['https://img.test/a.png', 'https://img.test/b.png'])
+
+      expect(listModels).not.toHaveBeenCalled()
+      expect(fetchPublicImageBase64).toHaveBeenCalledTimes(1)
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ modelInfo: capabilities }))
+    })
+
+    it('looks a legacy profile up once and saves the result', async () => {
+      const { profile, listModels } = setup(
+        {},
+        {
+          listModels: vi.fn(async () => [
+            { id: 'm', name: 'm', supportsImg2Img: true, maxReferenceImages: 2 },
+          ]),
+        },
+      )
+
+      await generate()
+
+      expect(listModels).toHaveBeenCalledTimes(1)
+      expect(settings.updateImageProfile).toHaveBeenCalledWith(profile.id, {
+        modelSnapshot: expect.objectContaining({
+          model: 'm',
+          version: IMAGE_MODEL_SNAPSHOT_VERSION,
+          capabilities: expect.objectContaining({ maxReferenceImages: 2 }),
+        }),
+      })
+
+      const saved = vi.mocked(settings.updateImageProfile).mock.calls[0][1].modelSnapshot
+      vi.mocked(settings.getImageProfile).mockReturnValue({ ...profile, modelSnapshot: saved })
+      await generate()
+      expect(listModels).toHaveBeenCalledTimes(1)
+    })
+
+    it('saves an empty snapshot for a model the list does not know', async () => {
+      const { profile } = setup()
+
+      await generate()
+
+      expect(settings.updateImageProfile).toHaveBeenCalledWith(profile.id, {
+        modelSnapshot: expect.objectContaining({ capabilities: {} }),
+      })
+    })
+
+    it('generates without capabilities, saves nothing and looks up once when the list fails', async () => {
+      const listModels = failingList()
+      const { generate: send } = setup({}, { listModels })
+
+      await generate()
+      await generate()
+
+      expect(settings.updateImageProfile).not.toHaveBeenCalled()
+      expect(listModels).toHaveBeenCalledTimes(1)
+      expect(send).toHaveBeenCalledTimes(2)
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ modelInfo: undefined }))
+    })
+
+    it('shares one lookup between concurrent generations', async () => {
+      const { listModels } = setup()
+
+      await Promise.all([generate(), generate(), generate()])
+
+      expect(listModels).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not hold a generation past the lookup bound', async () => {
+      vi.useFakeTimers()
+      try {
+        const { generate: send } = setup(
+          {},
+          { listModels: vi.fn(() => new Promise<ImageModelInfo[]>(() => {})) },
+        )
+
+        const done = generate()
+        await vi.advanceTimersByTimeAsync(10_000)
+        await done
+
+        expect(send).toHaveBeenCalledTimes(1)
+        expect(settings.updateImageProfile).not.toHaveBeenCalled()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('falls back to a stale snapshot of the same model when the lookup fails', async () => {
+      const stale = { supportedResolutions: ['2k'] }
+      const { generate: send } = setup(
+        { modelSnapshot: snapshot(stale, { version: IMAGE_MODEL_SNAPSHOT_VERSION - 1 }) },
+        { listModels: failingList() },
+      )
+
+      await generate()
+
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ modelInfo: stale }))
+    })
+
+    it('ignores a snapshot of another model', async () => {
+      const { generate: send, listModels } = setup(
+        { modelSnapshot: snapshot({ supportedResolutions: ['2k'] }, { model: 'other' }) },
+        { listModels: failingList() },
+      )
+
+      await generate()
+
+      expect(listModels).toHaveBeenCalledTimes(1)
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ modelInfo: undefined }))
+    })
+
+    it('saves no snapshot for a model other than the profile’s', async () => {
+      const { listModels } = setup({ model: 'current' })
+
+      await generate('queued')
+
+      expect(listModels).toHaveBeenCalledTimes(1)
+      expect(settings.updateImageProfile).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['key', { apiKey: 'sk-edited' }],
+      ['base URL', { baseUrl: 'https://edited.test/v1' }],
+    ])('saves nothing when the %s changed during the lookup', async (_name, edit) => {
+      let finish: (models: ImageModelInfo[]) => void = () => {}
+      const { profile } = setup(
+        {},
+        { listModels: vi.fn(() => new Promise<ImageModelInfo[]>((resolve) => (finish = resolve))) },
+      )
+
+      const done = generate()
+      await vi.waitFor(() => expect(settings.getImageProfile).toHaveBeenCalled())
+      vi.mocked(settings.getImageProfile).mockReturnValue({ ...profile, ...edit })
+      finish([{ id: 'm', name: 'm' }])
+      await done
+
+      expect(settings.updateImageProfile).not.toHaveBeenCalled()
+    })
+
+    it('uses a provider’s own per-model lookup instead of its list', async () => {
+      const getModelCapabilities = vi.fn(async () => ({ supportedAspectRatios: ['1:1'] }))
+      const { profile, listModels } = setup({}, { getModelCapabilities })
+
+      await generate()
+
+      expect(getModelCapabilities).toHaveBeenCalledWith('m')
+      expect(listModels).not.toHaveBeenCalled()
+      expect(settings.updateImageProfile).toHaveBeenCalledWith(profile.id, {
+        modelSnapshot: expect.objectContaining({
+          capabilities: expect.objectContaining({ supportedAspectRatios: ['1:1'] }),
+        }),
+      })
+    })
+
+    it('does not fall back to the list when the per-model lookup fails', async () => {
+      const getModelCapabilities = vi.fn(async (): Promise<undefined> => {
+        throw new Error('503')
+      })
+      const { listModels, generate: send } = setup({}, { getModelCapabilities })
+
+      await generate()
+
+      expect(listModels).not.toHaveBeenCalled()
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(settings.updateImageProfile).not.toHaveBeenCalled()
+    })
+
+    it('reads a snapshot in supportsReferenceImages', async () => {
+      const { listModels } = setup({ modelSnapshot: snapshot({ supportsImg2Img: false }) })
+
+      expect(await supportsReferenceImages('p', 'm')).toBe(false)
+      expect(listModels).not.toHaveBeenCalled()
+    })
+  })
+
   describe('lookupModelCapabilities', () => {
     let counter = 0
     function setup(models: () => Promise<ImageModelInfo[]>) {

@@ -18,6 +18,7 @@ import type {
 } from './types'
 import { createLogger } from '#lib/log.ts'
 import { fetchPublicImageBase64 } from './fetchAdapter'
+import { IMAGE_MODEL_SNAPSHOT_VERSION, snapshotModel } from './modelSnapshot'
 
 // Provider factory imports (lazy)
 import { createNanoGPTProvider } from './nanogpt'
@@ -141,6 +142,69 @@ function getCacheKey(providerType: ImageProviderType, apiKey?: string, baseUrl?:
 }
 
 // ============================================================================
+// Model Capabilities
+// ============================================================================
+
+const BACKFILL_TIMEOUT_MS = 10_000
+const failedBackfills = new Set<string>()
+const pendingBackfills = new Map<string, Promise<ImageModelCapabilities | undefined>>()
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timed out after ${ms} ms`)), ms)
+  })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+}
+
+/** What a profile's model can do, from its snapshot; a legacy or outdated one is looked up once. */
+async function modelCapabilities(
+  profile: ImageProfile,
+  model: string,
+): Promise<ImageModelCapabilities | undefined> {
+  const snapshot = profile.modelSnapshot?.model === model ? profile.modelSnapshot : undefined
+  if (snapshot?.version === IMAGE_MODEL_SNAPSHOT_VERSION) return snapshot.capabilities
+
+  const key = `${profile.id}:${model}`
+  if (failedBackfills.has(key)) return snapshot?.capabilities
+
+  const pending = pendingBackfills.get(key)
+  if (pending) return pending
+
+  const lookup = (async () => {
+    try {
+      const found = await withTimeout(
+        lookupModelCapabilities(profile.providerType, profile.apiKey, model, profile.baseUrl),
+        BACKFILL_TIMEOUT_MS,
+      )
+      const next = snapshotModel(model, found)
+      const current = settings.getImageProfile(profile.id)
+      if (
+        current?.model === model &&
+        current.providerType === profile.providerType &&
+        current.apiKey === profile.apiKey &&
+        normalizeBaseUrl(current.baseUrl) === normalizeBaseUrl(profile.baseUrl)
+      ) {
+        try {
+          await settings.updateImageProfile(profile.id, { modelSnapshot: next })
+        } catch (error) {
+          log('Error saving model snapshot', { profileId: profile.id, error })
+        }
+      }
+      return next.capabilities
+    } catch (error) {
+      log('Error looking up model capabilities', { profileId: profile.id, model, error })
+      failedBackfills.add(key)
+      return snapshot?.capabilities
+    } finally {
+      pendingBackfills.delete(key)
+    }
+  })()
+  pendingBackfills.set(key, lookup)
+  return lookup
+}
+
+// ============================================================================
 // Public API
 // ============================================================================
 
@@ -182,8 +246,8 @@ export function baseUrlMode(providerType: string): FieldMode {
 export async function supportsReferenceImages(profileId: string, model: string): Promise<boolean> {
   const profile = settings.getImageProfile(profileId)
   if (!profile || referenceLimit(profile.providerType, profile.providerOptions) === 0) return false
-  const modelInfo = (await listImageModels(profileId)).find((m) => m.id === model)
-  return modelInfo?.supportsImg2Img !== false
+  const capabilities = await modelCapabilities(profile, model)
+  return capabilities?.supportsImg2Img !== false
 }
 
 /** Adapters take raw base64; a reference can arrive as a data URL or a remote URL. */
@@ -236,13 +300,12 @@ export async function generateImage(options: {
 
   const provider = PROVIDER_FACTORIES[profile.providerType](config)
 
-  // The model's own accepted sizes, when it publishes them. Served from the same TTL cache
-  // the settings UI fills, and absent is fine: the adapter falls back to canonical pixels.
-  const modelInfo = (await listImageModels(profileId).catch(() => [])).find((m) => m.id === model)
+  // The model's sizes and reference limit, from the profile's snapshot.
+  const capabilities = await modelCapabilities(profile, model)
 
   // A reference that cannot be fetched is dropped; the scene is still worth drawing without it.
   const providerLimit = referenceLimit(profile.providerType, profile.providerOptions)
-  const limit = Math.min(modelInfo?.maxReferenceImages ?? Infinity, providerLimit)
+  const limit = Math.min(capabilities?.maxReferenceImages ?? Infinity, providerLimit)
   const cleanRefs =
     referenceImages && providerLimit > 0
       ? (
@@ -260,7 +323,7 @@ export async function generateImage(options: {
     model,
     prompt,
     spec,
-    modelInfo,
+    modelInfo: capabilities,
     referenceImages: cleanRefs,
     signal,
     providerOptions: profile.providerOptions,

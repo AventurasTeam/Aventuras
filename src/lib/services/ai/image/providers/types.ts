@@ -42,8 +42,8 @@ export interface ImageGenerateOptions {
   prompt: string
   /** What the user asked for. Each adapter turns it into whatever its backend takes. */
   spec: ImageSpec
-  /** The selected model's catalogue entry, when the provider publishes one. */
-  modelInfo?: ImageModelInfo
+  /** The selected model's capabilities, from the profile's snapshot. */
+  modelInfo?: ImageModelCapabilities
   referenceImages?: string[] // raw base64 (no data: prefix)
   signal?: AbortSignal
   providerOptions?: Record<string, unknown>
