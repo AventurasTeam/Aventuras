@@ -756,6 +756,10 @@ turn generated over unclassified prose is memory the story has lost.
 A pass's only retries are the structured call's own provider and parse
 attempts
 ([`generation-pipeline.md → Error, cancel, and retry`](../generation-pipeline.md#error-cancel-and-retry)).
+A reply the server cut off at its length limit fails the pass unless it
+parses strictly as a complete reply; it is never repaired into a shorter
+one, since the facts it lost would be lost for good
+([`generation-pipeline.md → Cut-off replies`](../generation-pipeline.md#cut-off-replies)).
 A reply that still doesn't parse fails the pass, so the reply's
 optional profile and plot fields never fail the parse: sent as `null`
 or the wrong type, they read as absent. They are a new

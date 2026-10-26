@@ -1995,6 +1995,11 @@ story_entries.metadata: {
   model?: string
   generationTimingMs?: number
   reasoning?: string                // persisted reasoning text from providers that expose it; mirrors `tokens.reasoning` (the count). Optional — undefined when the provider doesn't surface reasoning.
+  cutOff?: {                        // the server stopped this reply at its limit inside the prose; authored, never inherited. See "Cut-off mark" below
+    cause: 'max-output' | 'window' | 'unknown'
+    outputTokens?: number           // as the provider reported
+    limit?: number                  // the profile's max output, or the model's window, that the cause names
+  }
 
   // Scene presence — classifier-authored, user-editable
   sceneEntities: string[]           // entity IDs present in this entry's scene (characters + items)
@@ -2057,6 +2062,16 @@ expands the brain-toggle reasoning body from this field;
 export/backup includes it as part of the entry record. Search
 scope intentionally excludes it (provenance, not searchable
 narrative content).
+
+**Cut-off mark.** `cutOff` is written on an `ai_reply` whose reply the
+server stopped at `length` before any trailing block began, so the story
+text itself ends early
+([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)).
+The card shows it as a notice
+([`entry-card.md → Cut-off notice`](./ui/patterns/entry-card.md#cut-off-notice)).
+A content edit removes it in the same delta as the new content, so an
+undo of the edit restores both; a regenerate replaces the entry and the
+mark with it. Untranslated, like `model`.
 
 **Scene presence is kind-aware.** `sceneEntities` carries characters
 and items — the things that come and go. `currentLocationId` is the

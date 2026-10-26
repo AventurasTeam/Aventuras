@@ -69,6 +69,9 @@ type EntryCardProps = {
   onBranch?: () => void // ai, opening
   onFlipEra?: () => void // user, ai, opening — host hides when eras: null
 
+  // ai_reply only — the server cut the prose off at its limit (see Cut-off notice):
+  cutOffNotice?: { text: string; action?: { label: string; onPress: () => void } }
+
   // Streaming-only:
   streamingPhase?: 'reasoning' | 'reply'
 
@@ -115,6 +118,7 @@ Two structural choices:
 | Reasoning body             | —                                | conditional (`reasoning` set, expanded)   | conditional                            | —                                                                   | live-streaming on `streamingPhase`    |
 | World-state panel          | —                                | conditional (expanded)                    | conditional                            | —                                                                   | —                                     |
 | Content                    | prose (or textarea if `editing`) | prose                                     | prose                                  | error description with inline buttons (`fixAction`, retry, dismiss) | partial prose tokens                  |
+| Cut-off notice             | —                                | conditional (`cutOff` set)                | —                                      | —                                                                   | —                                     |
 | Action cluster (top-right) | edit, `[flip era]`, delete       | edit, regen, branch, `[flip era]`, delete | edit, branch, `[flip era]` (no delete) | — (uses inline buttons)                                             | —                                     |
 | World-time footer          | shown                            | shown                                     | shown                                  | hidden                                                              | hidden                                |
 | Bubble styling             | `bg-bg-sunken border-border`     | `bg-bg-raised border-border`              | same as ai_reply                       | `bg-bg-base border-warning`                                         | same as ai_reply                      |
@@ -462,6 +466,9 @@ When `editing === true`:
 - **Inline Save / Cancel buttons** render right-aligned below the
   textarea, wired to `onCommitEdit` / `onCancelEdit`. Esc-to-cancel
   also bound on the textarea.
+- A committed edit of an entry carrying a
+  [cut-off notice](#cut-off-notice) clears it: the text is the user's
+  now.
 - The full [`<SaveBar>` compound](./save-sessions.md) is NOT
   rendered inside EntryCard — that's the page-level sticky
   pattern, not a per-entry control. A host that needs cross-entry
@@ -645,6 +652,30 @@ and reports as it does for a plain Save, and no generation is spent on prose
 the branch never took. Once the write lands the editor closes and the
 regenerate goes through the same host path the `↻` takes, confirm gates
 included.
+
+## Cut-off notice
+
+An `ai_reply` whose story text the server cut off at its length limit
+carries `metadata.cutOff`
+([`data-model.md → Entry metadata shape`](../../data-model.md#entry-metadata-shape)),
+and the card shows it as one muted, warning-tinted line under the
+prose, above the world-time footer. The host builds the copy from the
+cause and passes the route as an inline link:
+
+- **`max-output`**: "Cut off at the narrative profile's 4,096-token max
+  output." with `Fix profile`, the route the reader's configuration
+  rows use.
+- **`window`**: "Cut off where the prompt and reply filled the model's
+  65,536-token window." with `Set window`
+  ([`app-settings.md → Context window`](../screens/app-settings/app-settings.md#context-window)).
+- **`unknown`**: "The server stopped the reply at its own limit.
+  Setting a max output on the profile overrides it." with `Fix profile`.
+
+Regenerate is already in the action cluster. The notice is not
+dismissible: a committed edit clears it
+([Edit mode](#edit-mode)), and a regenerate replaces the entry. A cut
+inside the trailing block leaves the prose whole and marks nothing
+([`generation-pipeline.md → Cut-off replies`](../../generation-pipeline.md#cut-off-replies)).
 
 ## World-time footer
 

@@ -284,14 +284,18 @@ before the call, and it enforces the user's own visible value rather
 than second-guessing it.
 
 If a request later fails for what looks like a capability mismatch,
-the orchestrator's provider-error mapper does best-effort keyword
-matching against the response body (`tool_use`, `thinking`,
-`streaming`, `vision`, etc.) and threads the substring through
+the provider-error mapper does best-effort keyword matching against the
+response body for the two capabilities a request carries — `thinking`,
+`reasoning` or `budget_tokens` for reasoning, `response_format` or
+`json_schema` for structured output — and threads the capability and
+the matched word through
 `PipelineError.provider.possibleCapabilityMismatch` (see
 [`generation-pipeline.md → Fatal error categories`](../../../generation-pipeline.md#fatal-error-categories)).
-The error surface phrases it as a hint, never an assertion — "the
-provider mentioned X; here's where to look if that's relevant" —
-because provider error strings aren't standardized.
+The error surface phrases it as a hint, never an assertion, because
+provider error strings aren't standardized. It points at the two places
+the capability lives: the profile's per-call setting (the thinking
+slider, the structured-output mode), which its `Fix profile` opens, and
+the model's badge on this tab.
 
 ### Model fetching strategy
 

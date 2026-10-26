@@ -130,6 +130,11 @@
   .gen-toast { display: none; position: fixed; top: 16px; left: 50%; transform: translateX(-50%); max-width: 400px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); box-shadow: 0 4px 12px rgba(0,0,0,0.12); font-size: 12px; color: var(--ink); z-index: 200; }
   .gen-toast.visible { display: block; }
 
+  /* cut-off notice — ai_reply whose prose the server stopped at its length limit (entry-card.md -> Cut-off notice) */
+  .cutoff-notice { margin-top: 8px; font-size: 11px; color: var(--warn); }
+  .cutoff-notice a { color: var(--ink); text-decoration: underline; cursor: pointer; margin-left: 4px; }
+  body[data-cutoff="off"] .cutoff-notice { display: none; }
+
   /* per-entry world-time footer — bottom-right of bubble; click-to-edit on AI/opening */
   .wt-footer { margin-top: 8px; display: flex; justify-content: flex-end; align-items: center; gap: 4px; font-size: 10.5px; color: var(--ink-muted); cursor: pointer; user-select: none; }
   .wt-footer:hover { color: var(--ink); }
@@ -636,7 +641,7 @@
   }
 </style>
 </head>
-<body data-probe="off">
+<body data-probe="off" data-cutoff="off">
 
 <div class="screen-label"><strong>Wireframe:</strong> Reader / Composer &mdash; responsive across phone / tablet / desktop</div>
 
@@ -706,8 +711,18 @@
     <button class="rb-btn" data-err="window">prompt over window</button>
     <button class="rb-btn" data-err="windowProvider">provider overflow</button>
     <button class="rb-btn" data-err="memoryWindow">memory update over window</button>
+    <button class="rb-btn" data-err="cutOff">reply cut off, no text</button>
+    <button class="rb-btn" data-err="empty">empty reply</button>
+    <button class="rb-btn" data-err="memoryCutOff">memory update cut off</button>
+    <button class="rb-btn" data-err="capability">capability hint</button>
     <button class="rb-btn" data-pass-failed>pass-failed toast</button>
     <button class="rb-btn" data-truncated>truncation toast</button>
+  </div>
+
+  <div class="rb-group">
+    <span class="gl">cut-off notice:</span>
+    <button class="rb-btn active" data-cutoff="off">off</button>
+    <button class="rb-btn" data-cutoff="on">on (reply cut at max output)</button>
   </div>
 
   <div class="rb-group">
@@ -974,6 +989,8 @@
             <span class="entry-action probe" title="Probe this turn — open the memory probe scoped to this entry (visible only when probe mode is on)">&#128270;</span>
             <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
           </div>
+          <!-- cut-off notice: the prose ended at the narrative profile's max output; an edit clears it -->
+          <div class="cutoff-notice">&#9888; Cut off at the narrative profile's 4,096-token max output.<a>Fix profile</a></div>
           <!-- per-entry world-time footer (normal state) — click to edit -->
           <div class="wt-footer" title="Edit in-world time" onclick="document.getElementById('wt-edit-popover').classList.add('open')">
             <span class="wt-icon">&#9201;</span>Day 12 &middot; 14:30
@@ -1995,19 +2012,43 @@
     window: {
       kind: '⚠ System · prompt too large',
       content: "<b>This prompt is about 71,200 tokens; llama3.1:70b's context window is 65,536 (set by you).</b> Nothing was sent. Shorten the prompt in Story Settings (memory budgets, history buffer), raise the window if the model allows more, or switch to a model with a larger one.",
-      actions: '<span class="err-btn primary">Retry</span><span class="err-btn">Set window</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+      actions: '<span class="err-btn primary">Set window</span><span class="err-btn">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
     // A provider rejection recognized as an overflow; the window was unknown, so nothing was checked.
     windowProvider: {
       kind: '⚠ System · prompt too large',
       content: "<b>The provider rejected the prompt. Its message suggests it exceeded the model's context window:</b> “request (71834 tokens) exceeds the available context size (65536 tokens), try increasing it”. Our estimate: about 71,200 tokens. Shorten the prompt in Story Settings (memory budgets, history buffer), raise the window if the model allows more, or switch to a model with a larger one.",
-      actions: '<span class="err-btn primary">Retry</span><span class="err-btn">Set window</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+      actions: '<span class="err-btn primary">Set window</span><span class="err-btn">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+    },
+    // A narrative reply cut off before any prose (generation-pipeline.md -> Cut-off replies); the held text returns.
+    cutOff: {
+      kind: '⚠ System · reply cut off',
+      content: "<b>The reply was cut off at the narrative profile's 4,096-token max output before any story text; reasoning used 4,096 of them.</b> Raise the max output, or lower the thinking budget, then Retry.",
+      actions: '<span class="err-btn primary">Fix profile</span><span class="err-btn">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+    },
+    // The model stopped normally with no text at all.
+    empty: {
+      kind: '⚠ System · generation error',
+      content: '<b>The model returned no text.</b> Nothing was committed; Retry resends your turn.',
+      actions: '<span class="err-btn primary">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+    },
+    // An owed pass whose reply was cut off: refused, not repaired, so the Send fails.
+    memoryCutOff: {
+      kind: '⚠ System · memory update error',
+      content: "<b>Memory update failed, so your turn didn't start.</b> The update's reply was cut off at the classifier profile's 1,024-token max output. Raise it, then Retry.",
+      actions: '<span class="err-btn primary">Fix profile</span><span class="err-btn">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+    },
+    // A 4xx whose body names a capability (generation-pipeline.md -> Fatal error categories).
+    capability: {
+      kind: '⚠ System · generation error',
+      content: "<b>The provider rejected the request.</b> Its message mentions <code>thinking</code>. That can mean this model doesn't support reasoning: check the profile's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
+      actions: '<span class="err-btn primary">Fix profile</span><span class="err-btn">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
     // An owed pass refused by the check: the Send fails as for any pass failure.
     memoryWindow: {
       kind: '⚠ System · memory update error',
       content: "<b>Memory update failed, so your turn didn't start.</b> The update's prompt is about 41,800 tokens; qwen2.5:14b's context window is 32,768 (detected). Raise the window if the model allows more, or switch the classifier to a model with a larger one.",
-      actions: '<span class="err-btn primary">Retry</span><span class="err-btn">Set window</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+      actions: '<span class="err-btn primary">Set window</span><span class="err-btn">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
   };
   function setErr(state) {
@@ -2033,6 +2074,16 @@
   });
   const initialDismissBtn = document.getElementById('err-dismiss');
   if (initialDismissBtn) initialDismissBtn.addEventListener('click', () => setErr('hidden'));
+
+  // cut-off notice toggle — show / hide the notice on the reply card
+  document.querySelectorAll('.review-bar [data-cutoff]').forEach(b => {
+    b.addEventListener('click', () => {
+      document.body.dataset.cutoff = b.dataset.cutoff;
+      document.querySelectorAll('.review-bar [data-cutoff]').forEach(x => {
+        x.classList.toggle('active', x.dataset.cutoff === b.dataset.cutoff);
+      });
+    });
+  });
 
   // probe-mode toggle — show / hide the per-entry probe icon
   document.querySelectorAll('.review-bar [data-probe]').forEach(b => {

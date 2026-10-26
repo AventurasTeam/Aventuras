@@ -928,6 +928,9 @@ profile's `maxOutput` is a ceiling, not the reply's size, and many
 servers check only the prompt and stop the reply at the window; a
 server that checks prompt plus `max_tokens` rejects the call itself,
 and the rejection is [recognized](#recognizing-an-overflow-rejection).
+A reply that then fills the window stops at `length` and is a cut-off
+reply
+([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)).
 The estimate is compared as it is, with no margin. Its error has no
 known direction per model (Gemma 4 counts English 6 to 7% higher than
 o200k and Japanese 25% lower), and a false refusal stops the call

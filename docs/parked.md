@@ -3378,6 +3378,18 @@ beside it, which nothing here can test without a macOS desktop. Parked
 2026-10-25 from a review of the triage pass; the signal to revisit is a
 macOS desktop build in testing.
 
+#### Continuing a cut-off reply
+
+A narrative reply the server cut off in its prose commits with a notice
+offering a profile fix or a regenerate
+([`entry-card.md → Cut-off notice`](./ui/patterns/entry-card.md#cut-off-notice)),
+not a way to finish it. A Continue action would generate more text onto
+the same entry: a new kind of turn, with piggyback and suggestions run
+over the joined text, the fallback reading which reply, and its own
+regenerate and undo rules. Parked 2026-10-26 by the cut-off replies
+design; the signal is users regenerating cut-off replies to finish them,
+or asking to continue one.
+
 ### Code structure (parked)
 
 #### Unsaved-changes guard folder placement

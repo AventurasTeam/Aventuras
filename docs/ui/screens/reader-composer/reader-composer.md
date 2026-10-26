@@ -507,19 +507,20 @@ and action buttons. Rationale: these errors need to be visible,
 actionable, and part of the narrative log as context, not a silent
 chrome blip.
 
-| Failure                                                                                                                                                                                                                | Action buttons                                      |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| **LLM call failed**                                                                                                                                                                                                    | `Retry` · `View details` · `Dismiss`                |
-| **Prompt too large for the model's window** ([`architecture.md → Model context window`](../../../architecture.md#model-context-window))                                                                                | `Retry` · `Set window` · `View details` · `Dismiss` |
-| **Memory update failed** before the turn, failing the Send ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy))                                                                   | `Retry` · `View details` · `Dismiss`                |
-| **Memory update failed**, branch held (an earlier update couldn't be undone, so Send is refused)                                                                                                                       | `Dismiss`                                           |
-| **Memory updated** on `Retry`, its text kept on the entry ([Custody of the turn's text](#custody-of-the-turns-text))                                                                                                   | `Dismiss`                                           |
-| **Embed call failed** mid-turn (blocking per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle); the composer is not gated — a resubmit re-runs the same blocking sync stage) | `Switch embedder` · `Retry` · `Dismiss`             |
-| **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `View details` · `Dismiss`          |
-| **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `View details` · `Dismiss`          |
-| **Agent has no profile assigned** (`assignments[agentId]` unset)                                                                                                                                                       | `Assign profile` · `View details` · `Dismiss`       |
-| **Agent default model's provider missing**                                                                                                                                                                             | `Fix default` · `View details` · `Dismiss`          |
-| **Story override's provider missing** (pre-flight or resolver-time)                                                                                                                                                    | `Fix story override` · `View details` · `Dismiss`   |
+| Failure                                                                                                                                                                                                                | Action buttons                                       |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| **LLM call failed**                                                                                                                                                                                                    | `Retry` · `View details` · `Dismiss`                 |
+| **Prompt too large for the model's window** ([`architecture.md → Model context window`](../../../architecture.md#model-context-window))                                                                                | `Set window` · `Retry` · `View details` · `Dismiss`  |
+| **Reply cut off before any text** ([`generation-pipeline.md → Cut-off replies`](../../../generation-pipeline.md#cut-off-replies))                                                                                      | `Fix profile` · `Retry` · `View details` · `Dismiss` |
+| **Memory update failed** before the turn, failing the Send ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy))                                                                   | `Retry` · `View details` · `Dismiss`                 |
+| **Memory update failed**, branch held (an earlier update couldn't be undone, so Send is refused)                                                                                                                       | `Dismiss`                                            |
+| **Memory updated** on `Retry`, its text kept on the entry ([Custody of the turn's text](#custody-of-the-turns-text))                                                                                                   | `Dismiss`                                            |
+| **Embed call failed** mid-turn (blocking per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle); the composer is not gated — a resubmit re-runs the same blocking sync stage) | `Switch embedder` · `Retry` · `Dismiss`              |
+| **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `View details` · `Dismiss`           |
+| **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `View details` · `Dismiss`           |
+| **Agent has no profile assigned** (`assignments[agentId]` unset)                                                                                                                                                       | `Assign profile` · `View details` · `Dismiss`        |
+| **Agent default model's provider missing**                                                                                                                                                                             | `Fix default` · `View details` · `Dismiss`           |
+| **Story override's provider missing** (pre-flight or resolver-time)                                                                                                                                                    | `Fix story override` · `View details` · `Dismiss`    |
 
 The window entry's text gives the prompt's estimated size and the
 model's window with its source, or, when the provider rejected the
@@ -534,6 +535,28 @@ stays, since it resends the held text once something has changed;
 numbers and gains `Set window`; its remedies are a larger window or a
 classifier model with one, since the memory budgets don't reach a
 pass's prompt.
+
+The cut-off entry names the limit the reply hit: the narrative
+profile's max output, with how much of it reasoning used when the
+provider reported it ("cut off at the 4,096-token max output before any
+story text; reasoning used 4,096 of them"), the model's window, or the
+server's own default. `Fix profile` opens the narrative profile, or
+`Set window` replaces it when the window was the limit. A reply cut off
+after some prose commits instead, with a
+[cut-off notice](../../patterns/entry-card.md#cut-off-notice) on its
+card. A reply with no text at all, the model stopping normally, is an
+**LLM call failed** entry reading "The model returned no text." A
+**Memory update failed** entry whose pass reply was cut off gives the
+limit it hit and gains `Fix profile`, which opens the profile the
+`classifier` agent is assigned, or `Set window` when the window was the
+limit. A fix action precedes `Retry` on every row, as on the embed
+row.
+
+When a provider's rejection names a capability
+([`generation-pipeline.md → Fatal error categories`](../../../generation-pipeline.md#fatal-error-categories)),
+the **LLM call failed** or **Memory update failed** entry adds the
+hedged hint naming the profile's setting and the model's badge, and
+gains `Fix profile`.
 
 The embed-failure system entry follows the same visual shape as the
 LLM-failure entry — the contract is "transient pipeline failure

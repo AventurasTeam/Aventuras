@@ -15,6 +15,22 @@ for the placement rule.
 
 ## Data-model
 
+- **Implement cut-off reply handling.** Designed 2026-10-26
+  ([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)):
+  `finishReason` read on every call, a structured reply cut off refused
+  unless it parses strictly, a narrative reply cut off in its prose
+  marked with a notice, and a reply with no text failing its turn.
+  Today `jsonrepair` closes a cut-off pass reply into a valid shorter
+  one, so the pass succeeds and the facts at its end are lost, which
+  makes this the first of the two. It builds the typed failure arm
+  `generateStructured` lacks (it flattens a failure to a string), which
+  the window check reuses. Until the window check lands no window is
+  known, so the `window` cause can't occur and its `Set window` route
+  waits with it. `pnpm probe:classifier` counts a repaired
+  cut-off reply as parsed until this lands; it gains a count of
+  `length` stops and a max-output option, so it can test what real
+  profiles send.
+
 - **Implement the context window check.** Designed 2026-10-26
   ([`architecture.md → Model context window`](./architecture.md#model-context-window)):
   the window figure with its detected and configured sources, the
@@ -22,22 +38,16 @@ for the placement rule.
   `classifyProviderError`, and the truncation cross-check. The
   cross-check needs `includeUsage` on the OpenAI-compatible provider,
   which also stops streamed turns recording their prompt tokens as
-  `0`. It comes before [retrieval tuning](#tuning-and-play-testing),
+  `0`. The same `classifyProviderError` work implements the
+  capability hint canon already describes and code lacks
+  ([`generation-pipeline.md → Fatal error categories`](./generation-pipeline.md#fatal-error-categories)).
+  It follows cut-off reply handling, whose typed failure arm it
+  reuses, and comes before [retrieval tuning](#tuning-and-play-testing),
   which raises the budgets severalfold. The window chip, the profile
   line and `Set window`'s target land with M7.1's providers tab; until
   then a figure is detected only and the failure shows without a
   route. The plan measures the count's cost on Android, and gives the
   mock LLM a usage report and an overflow rejection for E2E.
-
-- **Nothing reads a reply's `finish_reason`.** A reply the server
-  stops at `length`, having reached `maxOutput` or the model's window,
-  is treated as finished: a turn commits its prose cut short, and a
-  structured reply cut short fails as a parse failure, retried and
-  reported with no hint of the cause. The context window check makes
-  the window case reachable near the limit, since it compares the
-  prompt alone
-  ([`architecture.md → The pre-send check`](./architecture.md#the-pre-send-check)).
-  Raised 2026-10-26 by the context window design.
 
 - **Periodic classifier context grows with the story.** A pass lists
   every entity, place, relationship view and happening on the branch
@@ -281,8 +291,13 @@ breakdown under [UX](#ux).
   (2026-10-26, a local Gemma 4 26B A4B on `br_hero_main`: 20 of 20
   first-attempt parses with mentioned places off, 19 of 20 with them
   on, the miss a JSON syntax slip a parse retry recovered), but a
-  played story's longer replies are untested. A pass whose reply won't
-  parse fails a Send rather than costing memory, so play re-runs
+  played story's longer replies are untested, and the probe counts a
+  reply the server cut off and `jsonrepair` closed as parsed, so a cut
+  would have read as a parse; that run's lack of a max output made one
+  unlikely, not impossible (cut-off reply handling, under
+  [Data-model](#data-model), adds the count). A pass
+  whose reply won't parse fails a Send rather than costing memory, so
+  play re-runs
   `pnpm probe:classifier` on a played branch
   ([`testing.md → Real-provider checks`](./testing.md#real-provider-checks)),
   and splitting the pass into two calls is the remedy if the rate

@@ -1767,9 +1767,20 @@ send an error part and then go quiet.
 
 ```ts
 type CallRetryError =
-  | { tier: 'provider'; reason: 'auth' | 'network' | 'timeout' | 'unknown'; detail?: string }
+  | {
+      tier: 'provider'
+      reason: 'auth' | 'network' | 'timeout' | 'unknown'
+      detail?: string
+      possibleCapabilityMismatch?: CapabilityHint // see Fatal error categories
+    }
   | { tier: 'parse'; detail: string; attempt: number }
   | ({ tier: 'context-window' } & ContextWindowFailure)
+  | ({ tier: 'reply-cut-off' } & ReplyCutOffFailure)
+
+type CapabilityHint = {
+  capability: 'reasoning' | 'structuredOutput'
+  matched: string // the substring that matched, for the copy
+}
 
 type ContextWindowFailure = {
   detectedBy: 'check' | 'provider' // the pre-send check, or a recognized provider rejection
@@ -1779,6 +1790,16 @@ type ContextWindowFailure = {
   providerId: string
   modelId: string
   detail?: string // the provider's message verbatim; provider-detected only
+}
+
+type ReplyCutOffFailure = {
+  cause: 'max-output' | 'window' | 'unknown' // see Cut-off replies
+  outputTokens: number | null // as the provider reported; null when it reported none
+  reasoningTokens: number | null // the part of outputTokens spent thinking, when reported
+  maxOutput: number | null // the profile's limit; null when it sets none
+  window: number | null // the model's known window; null when unknown
+  providerId: string
+  modelId: string
 }
 
 type CallWithRetryResult<T> =
@@ -1811,6 +1832,63 @@ Non-retryable errors short-circuit: auth failures (401 / 403) skip
 retry. Same for 4xx client errors, and for a `context-window` failure
 on any status: the same prompt overflows the same window again
 ([`architecture.md → Model context window`](./architecture.md#model-context-window)).
+A `reply-cut-off` failure isn't retried either: the same prompt and
+limit cut the reply again ([Cut-off replies](#cut-off-replies)).
+
+### Cut-off replies
+
+Every call through `lib/ai` reads the SDK's `finishReason`. Both
+providers report a reply the server stopped at its output limit or at
+the model's window as `'length'`: Anthropic's `max_tokens` and
+`model_context_window_exceeded`, OpenAI-compatible `length`. Any other
+value, or none, is treated as finished.
+
+**A structured reply cut off is refused, not repaired.** On `'length'`
+the reply is accepted only if it parses strictly, with no repair: a
+complete document that happened to end at the limit. Otherwise the call
+fails with `reply-cut-off`, not retried. `jsonrepair` closes a truncated
+document instead of rejecting it, turning a reply cut inside an id
+into a valid but wrong value and one cut at a list into a shorter list,
+and the pass's tolerant schema accepts both; so the repair keeps its
+job only on replies the model finished. Each structured caller surfaces
+the failure on its usual path: a pass fails, so the Send fails and the
+watermark stays
+([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy));
+the fallback classifier fails and the turn commits with the failure in
+its state report; suggestion refresh and wizard-assist show their own
+errors.
+
+**A narrative reply cut off in its prose commits with a mark.** When
+no trailing block had begun, so the cut falls in the story text, the
+entry records `metadata.cutOff`
+([`data-model.md → Entry metadata shape`](./data-model.md#entry-metadata-shape))
+and its card says so
+([`entry-card.md → Cut-off notice`](./ui/patterns/entry-card.md#cut-off-notice)).
+A cut inside the trailing block leaves the prose whole and marks
+nothing; the block is read like any block the stream cut off, failing
+`state` for the fallback when the cut may have lost a create, a drop or
+the scene's place, and parsing clean when it fell between tags of a
+block that held neither
+([`memory/piggyback.md → Parse strategy and failure recovery`](./memory/piggyback.md#parse-strategy-and-failure-recovery)).
+A reply with no prose fails the turn: with `reply-cut-off` when cut off,
+and with `phase-logic` (subsystem `empty-reply`) when the model stopped
+normally with no text at all. A reply that is only a trailing block
+keeps its raw text, as before.
+
+**The cause** comes from what the call knows: `max-output` when the
+profile sets `maxOutput` and the output tokens reached it, or the
+provider reported none; `window` when the model's window is known and
+the prompt estimate plus the output tokens reach it; `unknown`
+otherwise, on hosted servers usually their own default `max_tokens`,
+which a profile max output overrides. Output tokens include reasoning
+on both providers, so a model that spends its allowance thinking reads
+as `max-output`, with `reasoningTokens` saying how much went there.
+
+Every cut-off, committed or failed, logs a warning with the cause and
+the numbers. A plain-text call other than the narrative, such as a
+future translation call, reads `finishReason` itself and decides what
+a cut reply means for it. A `content-filter` stop is not a cut-off and
+commits as before.
 
 ### Phase-level recovery is the v1 transparency goal
 
@@ -1871,7 +1949,7 @@ type PipelineError =
       kind: 'provider'
       reason: 'auth' | 'network' | 'timeout' | 'unknown'
       detail?: string
-      possibleCapabilityMismatch?: string // best-effort substring extraction
+      possibleCapabilityMismatch?: CapabilityHint // carried over from CallRetryError
     }
   | {
       kind: 'phase-logic'
@@ -1903,6 +1981,7 @@ type PipelineError =
       staleCount: number | null // rows the blocking sync was embedding; null when unknown
     }
   | ({ kind: 'context-window'; target: ResolveTarget } & ContextWindowFailure)
+  | ({ kind: 'reply-cut-off'; target: ResolveTarget } & ReplyCutOffFailure)
 ```
 
 **`embedder`** covers the blocking pre-retrieval sync stage and the
@@ -1924,22 +2003,35 @@ window figure, a shorter prompt or a larger model, which a retry can't
 supply. `providerId` and `modelId` route its `Set window` action to
 the model's row in App Settings.
 
+**`reply-cut-off`** is a reply the server stopped at its limit that the
+caller couldn't use: a structured reply, or a narrative reply with no
+prose ([Cut-off replies](#cut-off-replies)). Its remedy is the reply's
+limit, so its surfaces route to the model's window (`Set window`) for
+`window`, and to the profile (`Fix profile`) for `max-output` and
+`unknown`, where a profile max output overrides the server's default.
+
 Categories drive how UI surfaces them — toast for transient,
 banner / dialog for persistent.
 
 **`provider.possibleCapabilityMismatch`** (best-effort hint, A5).
-The orchestrator's provider-error mapper does keyword matching
-against the response body for capability-shaped substrings
-(`tool_use`, `thinking`, `streaming`, `vision`, etc.). When a hit
-lands, the field carries the substring; otherwise omitted.
+`classifyProviderError` matches a 4xx body against words naming the
+two capabilities a request can carry: `thinking`, `reasoning` and
+`budget_tokens` for **reasoning**, `response_format` and `json_schema`
+for **structured output**. It runs after overflow recognition, so a
+body recognized as an overflow carries no hint. A hit sets the field
+on the `provider` `CallRetryError` to the capability and the matched
+word, and the phase copies it onto `PipelineError.provider` as it maps
+the error; otherwise it's omitted.
 Best-effort only — provider error messages are not standardised;
 the field is a hint for the UI, never an assertion that a user
-override was wrong. UI copy reflects this uncertainty (e.g.,
-"Provider returned an error. The response mentioned
-`<possibleCapabilityMismatch>`, which can mean a capability
-override is wrong — check Story Settings · Models. It can also
-mean the provider rejected the request for other reasons."). See
-[`app-settings.md → Override semantic — trust-the-user`](./ui/screens/app-settings/app-settings.md#override-semantic--trust-the-user).
+override was wrong. The copy names the setting and hedges: "The
+provider's message mentions `thinking`. That can mean this model
+doesn't support reasoning: check the profile's thinking setting and
+the model's 🧠 badge. The provider may also have rejected the request
+for another reason." Its action is `Fix profile`, since the profile
+holds the per-call setting and App Settings · Providers the model's
+badge
+([`app-settings.md → Override semantic — trust-the-user`](./ui/screens/app-settings/app-settings.md#override-semantic--trust-the-user)).
 
 **Structured-context fields on `phase-logic` and `action-layer`**
 (O4). All optional so existing call sites keep compiling.
