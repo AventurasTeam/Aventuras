@@ -72,6 +72,9 @@ A modal asks before it is closed when it holds something that would be lost:
 - more than one field to fill in,
 - values that already existed and have been edited, or
 - a result that is costly to produce again, such as a read import file.
+- an AI run in progress that Cancel would stop, such as Manual chapter's summary: it spends
+  tokens, so Cancel asks "Stop creating the chapter?" and only then aborts it. Pass
+  `dirty={running}` with `cancelWhileBusy`, and abort the run in `onCancel`.
 
 A field is something the user fills in: text, or a choice the action saves. A toggle that only
 shapes what the action does is not a field. So the only modal that never asks is one whose single
@@ -97,8 +100,8 @@ running. Use it only to remove the thing the modal edits, never as a general thi
 ### Sheet or dialog
 
 On a phone an action modal is a **dialog**, unless it is a **tool with no text field and nothing to
-lose**, which is a sheet: Manual chapter, which picks from a list. Pass `presentation="sheet"` for
-that one kind.
+lose**, which may be a sheet with `presentation="sheet"`. None is today: Manual chapter, which picks
+from a list, became a dialog once its running summary counted as something to lose.
 
 A bottom sheet reads as more of the page it rises from, so it suits controls tied to that content,
 and it is dismissed casually. But an editor in a sheet moves with the keyboard: the sheet sits on

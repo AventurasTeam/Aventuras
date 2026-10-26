@@ -19,6 +19,7 @@ export abstract class BaseAIService {
     prompt: string,
     templateId: string,
     activityParentId?: string,
+    signal?: AbortSignal,
   ): Promise<T> {
     return generateStructured(
       {
@@ -27,6 +28,7 @@ export abstract class BaseAIService {
         system,
         prompt,
         activityParentId,
+        signal,
       },
       templateId,
     )

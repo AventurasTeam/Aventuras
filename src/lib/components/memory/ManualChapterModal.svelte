@@ -44,8 +44,8 @@
   }
 </script>
 
+<!-- A dialog, not a sheet: a running summary is something to lose, and a sheet cannot ask. -->
 <ActionModal
-  presentation="sheet"
   open={true}
   onCancel={onClose}
   title="Create a chapter"
@@ -58,6 +58,14 @@
   }}
   busy={ui.memoryLoading}
   cancelWhileBusy
+  dirty={ui.memoryLoading}
+  discardQuestion={{
+    title: 'Stop creating the chapter?',
+    description:
+      'The summary being written is dropped, and the tokens it has used may still be billed.',
+    keepLabel: 'Keep creating',
+    confirmLabel: 'Stop',
+  }}
   size="lg"
 >
   {#if entries.length === 0}

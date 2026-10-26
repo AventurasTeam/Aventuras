@@ -4348,7 +4348,11 @@ class StoryStore {
    * deterministic boundary and a single summarizeChapter call, never
    * analyzeForChapter.
    */
-  private async buildAndSaveChapter(startIndex: number, endIndex: number): Promise<Chapter> {
+  private async buildAndSaveChapter(
+    startIndex: number,
+    endIndex: number,
+    signal?: AbortSignal,
+  ): Promise<Chapter> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const chapterEntries = this.entries.slice(startIndex, endIndex)
@@ -4368,6 +4372,8 @@ class StoryStore {
       this.pov,
       this.tense,
       this.memoryConfig.summaryDetail,
+      undefined,
+      signal,
     )
 
     // Get the next chapter number
@@ -4406,7 +4412,7 @@ class StoryStore {
 
   // Create a manual chapter at a specific entry index
   /** @returns the chapter written; null is a refusal, not a failure. */
-  async createManualChapter(endEntryIndex: number): Promise<Chapter | null> {
+  async createManualChapter(endEntryIndex: number, signal?: AbortSignal): Promise<Chapter | null> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     // The button is disabled while a turn's background tasks run, but that is the visible
@@ -4431,7 +4437,7 @@ class StoryStore {
       throw new Error('Invalid entry index for chapter creation')
     }
 
-    const chapter = await this.buildAndSaveChapter(startIndex, endEntryIndex)
+    const chapter = await this.buildAndSaveChapter(startIndex, endEntryIndex, signal)
     log('Manual chapter created:', chapter.number, chapter.title)
     return chapter
   }
