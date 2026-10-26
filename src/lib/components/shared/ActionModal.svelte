@@ -453,10 +453,11 @@
           {#if jump.long}
             <!--
               Sticks to the bottom of whichever scroller this width uses, and never below the body,
-              so on a phone it stops above the buttons as they scroll into view.
+              so on a phone it stops above the buttons as they scroll into view. Centred on the
+              body's padding edge, where its fields' borders run.
             -->
             <div class="pointer-events-none sticky bottom-0 h-0">
-              <div class="absolute right-3 bottom-3 flex flex-col gap-2">
+              <div class="absolute right-1.5 bottom-3 flex flex-col gap-2">
                 {@render jumpButton('top', !jumping && !jump.atTop)}
                 {@render jumpButton('bottom', !jumping && !jump.atBottom)}
               </div>
