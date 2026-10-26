@@ -9,7 +9,7 @@ import type { ImageModelInfo } from './types'
 
 export const IMAGE_MODEL_SNAPSHOT_VERSION = 1
 
-function pickCapabilities(info?: ImageModelInfo): ImageModelCapabilities {
+function pickCapabilities(info?: ImageModelCapabilities): ImageModelCapabilities {
   if (!info) return {}
   const { referenceConstraints, supportedResolutions, supportedAspectRatios } = info
   return {
@@ -26,7 +26,7 @@ function pickCapabilities(info?: ImageModelInfo): ImageModelCapabilities {
 }
 
 /** The model's generation-relevant fields; a model the list does not know snapshots as `{}`. */
-export function snapshotModel(model: string, info?: ImageModelInfo): ImageModelSnapshot {
+export function snapshotModel(model: string, info?: ImageModelCapabilities): ImageModelSnapshot {
   return {
     model,
     version: IMAGE_MODEL_SNAPSHOT_VERSION,
