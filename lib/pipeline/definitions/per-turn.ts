@@ -335,7 +335,11 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   if (cut === undefined && content.trim() === '')
     return {
       status: 'failed',
-      error: { kind: 'phase-logic', subsystem: EMPTY_REPLY, detail: 'the model returned no text' },
+      error: {
+        kind: 'phase-logic',
+        subsystem: EMPTY_REPLY,
+        detail: `the model returned no text (finish reason: ${finishReason ?? 'none'})`,
+      },
     }
   if (outOfPosition) ctx.log.warn('classifier.state_block_out_of_position', { entryId })
   // A reply that is nothing but a block strips to nothing. Persist the raw text

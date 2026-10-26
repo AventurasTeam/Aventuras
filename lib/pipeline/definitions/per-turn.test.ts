@@ -3147,17 +3147,17 @@ describe('narrative — how the reply ended', () => {
 
   // Developer decision 2: any stop but 'length', or none, is finished; no blank ai_reply commits.
   it.each([
-    ['stop', '', 'stop'],
-    ['stop, as whitespace', ' \n', 'stop'],
-    ['content-filter', '', 'content-filter'],
-    ['other', '', 'other'],
-    ['error', '', 'error'],
-    ['tool-calls', '', 'tool-calls'],
-    ['no finish reason', '', undefined],
-    ['an unreadable finish reason', '', unreadable],
+    ['stop', '', 'stop', 'stop'],
+    ['stop, as whitespace', ' \n', 'stop', 'stop'],
+    ['content-filter', '', 'content-filter', 'content-filter'],
+    ['other', '', 'other', 'other'],
+    ['error', '', 'error', 'error'],
+    ['tool-calls', '', 'tool-calls', 'tool-calls'],
+    ['no finish reason', '', undefined, 'none'],
+    ['an unreadable finish reason', '', unreadable, 'none'],
   ])(
     'fails a blank reply that finished with %s as an empty reply',
-    async (_label, text, finishReason) => {
+    async (_label, text, finishReason, named) => {
       const { result, events, log } = await runReply({ text, finishReason })
 
       expect(result).toEqual({
@@ -3165,7 +3165,7 @@ describe('narrative — how the reply ended', () => {
         error: {
           kind: 'phase-logic',
           subsystem: 'empty-reply',
-          detail: 'the model returned no text',
+          detail: `the model returned no text (finish reason: ${named})`,
         },
       })
       expect(events.filter((e) => e.type === 'delta_emitted')).toEqual([])

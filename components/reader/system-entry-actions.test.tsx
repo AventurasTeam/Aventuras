@@ -169,7 +169,7 @@ describe('describeTurnFailure', () => {
       describeTurnFailure({
         kind: 'phase-logic',
         subsystem: EMPTY_REPLY,
-        detail: 'the model returned no text',
+        detail: 'the model returned no text (finish reason: stop)',
       }),
     ).toEqual({
       content: 'The model returned no text. Nothing was committed; Retry resends your turn.',
