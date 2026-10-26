@@ -56,4 +56,22 @@ describe('describeSuggestionFailure', () => {
     expect(describeSuggestionFailure(undefined)).toBe(t('reader:suggestions.errorBody'))
     expect(describeSuggestionFailure(null)).toBe(t('reader:suggestions.errorBody'))
   })
+
+  // A cut suggestion reply is refused, not repaired, so the strip says why it has nothing.
+  it('says the suggestion reply was cut off at its limit', () => {
+    const cut = {
+      kind: 'reply-cut-off',
+      target: 'suggestion',
+      cause: 'unknown',
+      outputTokens: 2048,
+      reasoningTokens: null,
+      maxOutput: null,
+      window: null,
+      providerId: 'prov_local',
+      modelId: 'qwen3-32b',
+    } satisfies PipelineError
+    expect(describeSuggestionFailure(cut)).toBe(
+      "The suggestion model's reply was cut off at its limit.",
+    )
+  })
 })

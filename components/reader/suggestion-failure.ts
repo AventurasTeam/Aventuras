@@ -15,6 +15,7 @@ const SUGGESTION_RESOLVER_COPY = {
 export function describeSuggestionFailure(error: PipelineError | null | undefined): string {
   if (error?.kind === 'phase-logic' && error.subsystem === SUGGESTIONS_UNUSABLE)
     return t('reader:suggestions.failure.unusable')
+  if (error?.kind === 'reply-cut-off') return t('reader:suggestions.failure.cutOff')
   if (error?.kind === 'provider') return t('reader:suggestions.failure.llmCall')
   if (error?.kind === 'config-resolver') return t(SUGGESTION_RESOLVER_COPY[error.failure])
   return t('reader:suggestions.errorBody')

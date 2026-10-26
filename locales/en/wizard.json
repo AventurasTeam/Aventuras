@@ -201,6 +201,7 @@
     "notConfigured": "AI is not configured.",
     "loading": "Generating with {{model}}…",
     "failure": "Couldn't generate. {{reason}}.",
+    "cutOff": "The reply was cut off at its limit",
     "refine": {
       "label": "How should this change?",
       "placeholder": "e.g. make it darker"

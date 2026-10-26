@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
+import type { CallRetryError } from '@/lib/ai'
+
 import {
+  assistFailureReason,
   composeKey,
   itemKey,
   mergePages,
@@ -110,5 +113,34 @@ describe('composeKey', () => {
     expect(itemKey({ name: 'x', dedupeKey: rawKey('location:  Ashfall  ') })).not.toBe(
       cleanExistingKey,
     )
+  })
+})
+
+describe('assistFailureReason', () => {
+  it('gives a cut-off reply its own sentence', () => {
+    const cut: CallRetryError = {
+      tier: 'reply-cut-off',
+      cause: 'max-output',
+      outputTokens: 1024,
+      reasoningTokens: null,
+      maxOutput: 1024,
+      window: null,
+      providerId: 'prov_local',
+      modelId: 'qwen3-32b',
+    }
+    expect(assistFailureReason(cut)).toBe('The reply was cut off at its limit')
+  })
+
+  it("passes any other failure's own line through", () => {
+    expect(
+      assistFailureReason({
+        tier: 'provider',
+        reason: 'timeout',
+        detail: 'Provider request timed out after 3 retries',
+      }),
+    ).toBe('Provider request timed out after 3 retries')
+    expect(
+      assistFailureReason({ tier: 'parse', detail: 'Unexpected end of JSON input', attempt: 2 }),
+    ).toBe('Unexpected end of JSON input')
   })
 })

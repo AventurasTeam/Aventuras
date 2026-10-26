@@ -1,10 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect, useState } from 'react'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fn, screen, spyOn, userEvent, waitFor, within } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
-import type { GenerateStructuredResult } from '@/lib/ai'
+import type { CallRetryError, GenerateStructuredResult } from '@/lib/ai'
+import { logger } from '@/lib/diagnostics'
 
 import { AiAssist } from './ai-assist'
 import { composeKey, nameKey, type AssistListItem, type DedupeKey } from './ai-assist-logic'
@@ -139,6 +140,25 @@ function excludeCapturingRun<T>(pages: T[], calls: (readonly string[])[]) {
     call += 1
     return { status: 'ok', recoverable: [], value }
   }
+}
+
+function failWithErrorRun<T>(error: CallRetryError) {
+  return async (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => ({
+    status: 'failed',
+    error,
+    recoverable: [],
+  })
+}
+
+const CUT_OFF_ERROR: CallRetryError = {
+  tier: 'reply-cut-off',
+  cause: 'max-output',
+  outputTokens: 1024,
+  reasoningTokens: null,
+  maxOutput: 1024,
+  window: null,
+  providerId: 'prov_story',
+  modelId: MODEL_ID,
 }
 
 type DescriptionValue = { description: string }
@@ -736,6 +756,34 @@ export const FailureThenRetrySucceeds: Story = {
 
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(await screen.findByText('Recovered description after retry.')).toBeInTheDocument()
+  },
+}
+
+// A cut reply reads as its own sentence, and the log carries the reason the user saw.
+export const FailureCutOff: Story = {
+  beforeEach: () => {
+    const log = spyOn(logger, 'error').mockImplementation(() => {})
+    return () => log.mockRestore()
+  },
+  render: () => (
+    <ProseDemo
+      resolveModelId={() => MODEL_ID}
+      run={failWithErrorRun<DescriptionValue>(CUT_OFF_ERROR)}
+      onSetup={fn()}
+      onUse={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    expect(
+      await screen.findByText("Couldn't generate. The reply was cut off at its limit."),
+    ).toBeInTheDocument()
+    await expect(logger.error).toHaveBeenCalledWith('provider.wizard_assist_failed', {
+      modelId: MODEL_ID,
+      ariaLabel: 'Suggest description',
+      detail: 'The reply was cut off at its limit',
+    })
   },
 }
 

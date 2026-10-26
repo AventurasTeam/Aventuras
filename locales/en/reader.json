@@ -39,7 +39,8 @@
       "noProfileAssigned": "The suggestion agent has no profile assigned.",
       "profileMissing": "The suggestion agent's assigned profile is missing.",
       "providerMissing": "The suggestion model's provider is missing.",
-      "overrideProviderMissing": "This story's suggestion model override names a provider that no longer exists."
+      "overrideProviderMissing": "This story's suggestion model override names a provider that no longer exists.",
+      "cutOff": "The suggestion model's reply was cut off at its limit."
     }
   },
   "editFailed": "Couldn't save your edit. Please try again.",

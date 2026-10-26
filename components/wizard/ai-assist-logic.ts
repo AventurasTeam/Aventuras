@@ -1,3 +1,6 @@
+import { describeCallRetryError, type CallRetryError } from '@/lib/ai'
+import { t } from '@/lib/i18n'
+
 declare const DedupeKeyBrand: unique symbol
 
 /**
@@ -88,4 +91,14 @@ export function mergePages<P>(
     merged.push(item)
   }
   return merged
+}
+
+/**
+ * The reason the failure state renders inside `aiAssist.failure`. A cut-off gets a sentence of its
+ * own: the diagnostic line names a cause tag and token counts.
+ */
+export function assistFailureReason(error: CallRetryError): string {
+  return error.tier === 'reply-cut-off'
+    ? t('wizard:aiAssist.cutOff')
+    : describeCallRetryError(error)
 }
