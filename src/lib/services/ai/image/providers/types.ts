@@ -70,6 +70,11 @@ export interface ImageProvider {
   readonly name: string
   generate(options: ImageGenerateOptions): Promise<ImageGenerateResult>
   listModels(apiKey?: string): Promise<ImageModelInfo[]>
+  /**
+   * One model's capabilities, for providers that can describe a model without listing them all.
+   * Rejects on failure; `undefined` means the provider does not know the model.
+   */
+  getModelCapabilities?(model: string): Promise<ImageModelCapabilities | undefined>
   // ComfyUI specific
   getSamplerInfo?(): Promise<ComfySamplerInfo>
   listLoras?(): Promise<string[]>
