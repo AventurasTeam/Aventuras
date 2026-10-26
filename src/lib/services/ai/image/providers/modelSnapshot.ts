@@ -38,7 +38,8 @@ export function snapshotModel(model: string, info?: ImageModelCapabilities): Ima
 /**
  * The snapshot a profile should save. A list still loading may belong to the previous provider,
  * so only a settled one is read; otherwise the stored snapshot survives while the provider, base
- * URL and model are unchanged.
+ * URL and model are unchanged. A model a settled list lacks may still be served (an alias), so it
+ * is left to the generation-time lookup rather than captured as empty.
  */
 export function chooseModelSnapshot(args: {
   model: string
@@ -50,12 +51,9 @@ export function chooseModelSnapshot(args: {
 }): ImageModelSnapshot | undefined {
   const { model, providerType, baseUrl, models, settled, stored } = args
   if (!model) return undefined
-  if (settled && models.length > 0) {
-    return snapshotModel(
-      model,
-      models.find((m) => m.id === model),
-    )
-  }
+  const listed = settled ? models.find((m) => m.id === model) : undefined
+  if (listed) return snapshotModel(model, listed)
+
   const sameEndpoint =
     stored?.providerType === providerType &&
     normalizeBaseUrl(stored.baseUrl) === normalizeBaseUrl(baseUrl)

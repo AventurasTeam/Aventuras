@@ -82,9 +82,14 @@ describe('chooseModelSnapshot', () => {
     expect(snap?.capabilities.maxReferenceImages).toBe(3)
   })
 
-  it('captures an unlisted model as empty', () => {
-    const snap = chooseModelSnapshot({ ...base, model: 'other' })
-    expect(snap).toMatchObject({ model: 'other', capabilities: {} })
+  it('leaves a model the settled list lacks to the lookup when nothing is stored for it', () => {
+    expect(chooseModelSnapshot({ ...base, model: 'other' })).toBeUndefined()
+  })
+
+  it('keeps the stored snapshot when a settled list lacks the model', () => {
+    const profile = stored({ model: 'alias', modelSnapshot: snapshotModel('alias', info()) })
+    const snap = chooseModelSnapshot({ ...base, model: 'alias', stored: profile })
+    expect(snap).toBe(profile.modelSnapshot)
   })
 
   it('keeps the stored snapshot while the list is unsettled', () => {
