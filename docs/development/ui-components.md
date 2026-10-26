@@ -13,8 +13,9 @@ Use `shared/ActionModal.svelte`. A caller passes what the modal says and does; t
 rest:
 
 - **Layout.** A header with the title and description and no close button: Cancel is the way out.
-  Below it, one scroller holds the body and the two buttons, so the action is reached by reading
-  down to it. The header stays pinned. Nothing inside scrolls on its own: an autosizing `Textarea`
+  The header stays pinned. On desktop the buttons are pinned under the body too, and only the body
+  scrolls; on a phone the body and the buttons scroll together, leaving the small screen to the
+  content. Nothing inside scrolls on its own: an autosizing `Textarea`
   in the body drops its height cap and lets the modal scroll.
 - **Phone.** Below 768px an action modal is a dialog inset from the screen's edges: centred, or
   held near the top when it has a text field. Only a tool with no text field is a bottom sheet
@@ -160,8 +161,9 @@ be deleted" under "Delete entry 47" says nothing.
   its question: "Which prompt pack should this story use?"
 - **The description says what the title cannot,** a consequence or context, and never repeats it.
   No deletion says "This cannot be undone": none can be, and each says what is lost instead.
-- **The action repeats the title's verb without the article,** "Create branch", "Delete all
-  entries", and is never "Continue" or "OK".
+- **The action repeats the title's verb without the article,** "Create branch", "Save", and is
+  never "Continue" or "OK". When verb and object would not fit half a phone's width beside Cancel,
+  the verb alone does: Manual chapter's "Create", the lorebook's "Delete".
 - **The discard and removal questions name both outcomes:** "Keep editing" or "Discard", "Keep
   anchor" or "Delete anchor". Their buttons are the footer's pair: Outline to stay, and the
   `feature` variant in the `delete` tone to go.

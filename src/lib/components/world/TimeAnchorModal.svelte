@@ -146,7 +146,7 @@
     : usableEntry
       ? `Create an anchor on entry ${entryNumber(usableEntry)}`
       : 'Create an anchor'}
-  action={{ label: 'Save', disabled: !canSave, onConfirm: () => void save() }}
+  action={{ label: existing ? 'Save' : 'Create', disabled: !canSave, onConfirm: () => void save() }}
   busy={saving}
   {dirty}
   requireChange

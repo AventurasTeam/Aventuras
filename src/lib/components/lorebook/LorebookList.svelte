@@ -325,7 +325,7 @@
           ? "The one entry in this story's lorebook will be deleted."
           : `All ${story.lorebookEntries.length} entries in this story's lorebook will be deleted.`}
         action={{
-          label: 'Delete all entries',
+          label: 'Delete',
           icon: Trash2,
           tone: 'delete',
           onConfirm: () => void handleDeleteAll(),

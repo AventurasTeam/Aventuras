@@ -49,9 +49,11 @@
   open={true}
   onCancel={onClose}
   title="Create a chapter"
-  description="Select where to end this chapter. All entries up to and including the selected entry will be summarized."
+  description={entries.length > 0
+    ? `The chapter will include ${selectedIndex + 1} of ${entries.length} entries.`
+    : undefined}
   action={{
-    label: 'Create chapter',
+    label: 'Create',
     icon: BookPlus,
     disabled: entries.length === 0,
     onConfirm: handleConfirm,
@@ -68,6 +70,10 @@
   }}
   size="lg"
 >
+  <p class="text-muted-foreground text-sm">
+    Select where to end this chapter. All entries up to and including the selected entry will be
+    summarized.
+  </p>
   {#if entries.length === 0}
     <div class="text-muted-foreground flex h-40 items-center justify-center">
       No entries available for chapter creation.
@@ -99,9 +105,6 @@
       {/each}
     </div>
 
-    <p class="text-muted-foreground text-xs">
-      Chapter will include {selectedIndex + 1} of {entries.length} entries
-    </p>
     <label class="flex items-center gap-2 text-sm">
       <Switch bind:checked={readAfter} disabled={ui.memoryLoading} />
       Lore management reads the story after this chapter

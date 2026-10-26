@@ -304,27 +304,33 @@
         </div>
       </ResponsiveModal.Header>
 
-      <!-- The one scroller: the buttons scroll with the content, so what they do is read first. -->
-      <div class="min-h-0 flex-1 overflow-y-auto">
-        {#if children}
-          <div class="space-y-3 px-6 py-4">
-            {@render children()}
-          </div>
-        {/if}
-        {#if removal}
-          <div class="px-6 pb-4">
-            <Button
-              variant="outline"
-              size="sm"
-              class={cn('gap-1.5', FEATURE_COLORS.delete.text, FEATURE_COLORS.delete.hoverText)}
-              disabled={busy}
-              onclick={() => (question = 'remove')}
-            >
-              <Trash2 class="h-4 w-4" />
-              {removal.label}
-            </Button>
-          </div>
-        {/if}
+      <!--
+        On a phone the buttons scroll with the content, which leaves the small screen to it. From
+        768px up the body scrolls alone and the buttons stay pinned under it. Either way there is
+        one scroller.
+      -->
+      <div class="flex min-h-0 flex-1 flex-col max-md:overflow-y-auto">
+        <div class="md:min-h-0 md:flex-1 md:overflow-y-auto">
+          {#if children}
+            <div class="space-y-3 px-6 py-4">
+              {@render children()}
+            </div>
+          {/if}
+          {#if removal}
+            <div class="px-6 pb-4">
+              <Button
+                variant="outline"
+                size="sm"
+                class={cn('gap-1.5', FEATURE_COLORS.delete.text, FEATURE_COLORS.delete.hoverText)}
+                disabled={busy}
+                onclick={() => (question = 'remove')}
+              >
+                <Trash2 class="h-4 w-4" />
+                {removal.label}
+              </Button>
+            </div>
+          {/if}
+        </div>
         <ModalActions
           label={action.label}
           icon={action.icon}
