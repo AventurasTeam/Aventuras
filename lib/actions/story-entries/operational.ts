@@ -156,6 +156,8 @@ async function updateStoryEntryContentBracketed(
     }
 
   const invalidation = await resolveContentEditInvalidation(branchId, id, ctx)
+  // Read before the reversal: safe while no swept pass writes reply metadata, else this whole-blob
+  // write would restore what it undid.
   const edit = contentEditColumns(content, current.metadata)
 
   // In scope the clamp is unconditional: a pass that read the entry and extracted

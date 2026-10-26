@@ -676,6 +676,62 @@ describe('a content edit of a cut-off reply', () => {
     expect(edit.undoPayload).not.toHaveProperty('metadata')
   })
 
+  it('undoes an edit of a marked reply below the head turn, which records no scope', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranch(
+      db,
+      [
+        { id: 'e_open', position: 1, kind: 'opening', content: 'once upon a time' },
+        { id: 'e_act', position: 2, kind: 'user_action', content: 'i ride north' },
+        {
+          id: 'e_reply',
+          position: 3,
+          kind: 'ai_reply',
+          content: 'the courier rode north',
+          metadata: { ...REPLY_META, cutOff: MARK },
+        },
+        { id: 'e_act2', position: 4, kind: 'user_action', content: 'i ride on' },
+        { id: 'e_reply2', position: 5, kind: 'ai_reply', content: 'the road forked' },
+      ],
+      5,
+    )
+
+    await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
+
+    const [edit] = await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))
+    expect(edit.undoPayload).toEqual({
+      content: 'the courier rode north',
+      metadata: { cutOff: MARK },
+    })
+    expect((await replyRow(db)).metadata).toEqual(REPLY_META)
+
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+
+    const row = await replyRow(db)
+    expect(row.content).toBe('the courier rode north')
+    expect(row.metadata).toEqual({ ...REPLY_META, cutOff: MARK })
+    expect(entriesStore.getById('e_reply')?.metadata?.cutOff).toEqual(MARK)
+  })
+
+  it('undoes an unknown cause, which carries no numbers', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    const unknown: CutOffMark = { cause: 'unknown' }
+    await seedReplyWith(db, { ...REPLY_META, cutOff: unknown })
+
+    await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
+    expect((await replyRow(db)).metadata).toEqual(REPLY_META)
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+
+    const row = await replyRow(db)
+    expect(row.metadata).toStrictEqual({ ...REPLY_META, cutOff: unknown })
+    expect(entriesStore.getById('e_reply')?.metadata).toStrictEqual({
+      ...REPLY_META,
+      cutOff: unknown,
+    })
+  })
+
   it('keeps the mark on a save that changes nothing', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
