@@ -281,7 +281,8 @@
       inert={question !== null}
     >
       <!-- Left-aligned at every width: a title or description that wraps reads badly centred. -->
-      <ResponsiveModal.Header class="border-b px-6 py-4 text-left" closeButton={false}>
+      <!-- Tinted like the buttons' panel, so both read as a frame around the body. -->
+      <ResponsiveModal.Header class="bg-muted/40 border-b px-6 py-4 text-left" closeButton={false}>
         <div class="flex items-center gap-3">
           <div class="flex min-w-0 flex-1 flex-col gap-1.5">
             <ResponsiveModal.Title class={cn('text-left', titleIcon && 'flex items-center gap-2')}>

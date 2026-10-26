@@ -32,7 +32,7 @@
   } = $props()
 </script>
 
-<ResponsiveModal.Footer class="border-t px-6 py-4">
+<ResponsiveModal.Footer class="bg-muted/40 border-t px-6 py-4">
   <!-- Half the width each, until a label does not fit: then they stack in reading order. -->
   <span class="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
     <Button

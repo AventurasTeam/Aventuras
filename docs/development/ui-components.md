@@ -13,7 +13,8 @@ Use `shared/ActionModal.svelte`. A caller passes what the modal says and does; t
 rest:
 
 - **Layout.** A header with the title and description and no close button: Cancel is the way out.
-  The header stays pinned. On desktop the buttons are pinned under the body too, and only the body
+  The header and the buttons' panel are tinted (`bg-muted/40`) with a rule each, so they frame the
+  body. The header stays pinned. On desktop the buttons are pinned under the body too, and only the body
   scrolls; on a phone the body and the buttons scroll together, leaving the small screen to the
   content. Nothing inside scrolls on its own: an autosizing `Textarea`
   in the body drops its height cap and lets the modal scroll.
