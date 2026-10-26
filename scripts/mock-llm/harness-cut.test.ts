@@ -89,6 +89,18 @@ describe('startMockLlm — a cut narrative', () => {
     expect((await held).finishReason).toBe('length')
   })
 
+  it('gives a held stream a cut armed after it arrived', async () => {
+    const llm = await started()
+    llm.holdNextNarrative()
+    const held = narrativeCall(llm)
+    await vi.waitFor(() => expect(llm.requests).toHaveLength(1))
+
+    llm.cutNextNarrative()
+    llm.releaseNarrative()
+
+    expect((await held).finishReason).toBe('length')
+  })
+
   it('keeps the cut through a failed call for the next stream', async () => {
     const llm = await started()
     llm.failNextNarrative()
