@@ -5,7 +5,7 @@
  * Each provider makes direct HTTP calls instead of going through the Vercel AI SDK.
  */
 
-import type { ImageProviderType } from '#lib/types/index.ts'
+import type { ImageModelCapabilities, ImageProviderType } from '#lib/types/index.ts'
 import type { ImageSpec } from '#lib/utils/image.ts'
 import type { Json } from './comfyImage'
 // Provider specific types
@@ -54,23 +54,10 @@ export interface ImageGenerateResult {
   revisedPrompt?: string
 }
 
-export interface ImageModelInfo {
+export interface ImageModelInfo extends ImageModelCapabilities {
   id: string
   name: string
   description?: string
-  /** Absent means unknown. */
-  supportsImg2Img?: boolean
-  /** How many reference images one request takes; absent means no known limit. */
-  maxReferenceImages?: number
-  /**
-   * The exact values this model accepts for its size parameter, verbatim.
-   *
-   * Not normalised: NanoGPT's catalogue mixes `1024x1024` with `square_hd`, `auto` and
-   * `1k`/`2k`/`4k`, and a model offering only the latter has no dimensions to normalise to.
-   */
-  supportedResolutions?: string[]
-  /** The `w:h` ratios this model accepts, verbatim; options like `auto` are left out. */
-  supportedAspectRatios?: string[]
   costPerImage?: number
   costPerTextToken?: number
   costPerImageToken?: number

@@ -854,6 +854,42 @@ export type ImageProviderType =
   | 'comfyui'
   | 'a1111'
 
+export interface ReferenceImageConstraints {
+  maxBytes?: number
+  /** Pixels, applied to each side. */
+  minSide?: number
+  maxSide?: number
+  mimeTypes?: string[]
+}
+
+export interface ImageModelCapabilities {
+  /** Absent means unknown. */
+  supportsImg2Img?: boolean
+  /** How many reference images one request takes; absent means no known limit. */
+  maxReferenceImages?: number
+  /** The model edits only: a request without a reference fails. */
+  requiresReferenceImage?: boolean
+  referenceConstraints?: ReferenceImageConstraints
+  /**
+   * The exact values this model accepts for its size parameter, verbatim.
+   *
+   * Not normalised: NanoGPT's catalogue mixes `1024x1024` with `square_hd`, `auto` and
+   * `1k`/`2k`/`4k`, and a model offering only the latter has no dimensions to normalise to.
+   */
+  supportedResolutions?: string[]
+  /** The `w:h` ratios this model accepts, verbatim; options like `auto` are left out. */
+  supportedAspectRatios?: string[]
+}
+
+/** What generation needs from the profile's model, captured when the model is picked. */
+export interface ImageModelSnapshot {
+  model: string
+  version: number
+  capturedAt: number
+  /** `{}` means captured with nothing known. */
+  capabilities: ImageModelCapabilities
+}
+
 export interface ImageProfile {
   id: string
   name: string
@@ -861,6 +897,8 @@ export interface ImageProfile {
   apiKey: string
   baseUrl?: string
   model: string
+  /** Absent means never captured. */
+  modelSnapshot?: ImageModelSnapshot
   providerOptions: Record<string, unknown>
   createdAt: number
 }
