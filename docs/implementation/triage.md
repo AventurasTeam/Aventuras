@@ -154,3 +154,26 @@ slice-planning gate forces its resolution before that slice is planned.
   but `EntryCard` renders a system entry's `detail` as muted text under
   its content (`components/compounds/entry-card.tsx`), and no code
   offers the action. Raised by the cut-off replies Task 8 review.
+
+- **Warning text fails contrast in Catppuccin Latte.** Latte's
+  `--warning` (`#df8e1d`) on `--bg-raised` (`#e6e9ef`) is 2.15:1, so every
+  `text-warning` line on a card (the state-problems box, the cut-off
+  notice) misses AA. Every other theme passes. The
+  [contrast audit](../ui/foundations/color.md) has no warning
+  text-on-surface pair, and its Latte exemption covers only the pill
+  fills. Raised by the cut-off replies Task 9 review.
+
+- **On native, the reader rows' memo misses on every host render.**
+  expo-dom hands every function prop a new identity per prop emission
+  and emits on every host render (`node_modules/expo/src/dom/`:
+  `dom-entry.tsx`, `marshal.tsx`, `webview-wrapper.tsx`), so the
+  stable-callback reasoning in `components/reader/reader-surface.tsx`
+  holds on web only. Read from the expo source, not measured on a
+  device. Raised by the cut-off replies Task 10 review.
+
+- **Wizard-assist shows raw diagnostics to the user.** For any failure
+  other than a cut-off, `ai-assist.tsx` puts `describeCallRetryError`'s
+  line into "Couldn't generate. {{reason}}.": a provider error's
+  `label ← cause` chain or a JSON or Zod parse message, untranslated,
+  possibly ending in a doubled period. Raised by the cut-off replies
+  Task 11 review.
