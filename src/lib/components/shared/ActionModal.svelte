@@ -118,6 +118,7 @@
   let bodyScroller = $state<HTMLDivElement | null>(null)
   let jump = $state<JumpState>({ long: false, atTop: true, atBottom: false })
   let tallestScroller = 0
+  let jumping = false
 
   /** Whichever of the two scrollers this width uses. */
   function activeScroller(): HTMLDivElement | null {
@@ -128,6 +129,7 @@
   }
 
   function measureJump() {
+    if (jumping) return
     const el = activeScroller()
     if (!el) {
       jump = { long: false, atTop: true, atBottom: false }
@@ -156,7 +158,18 @@
     ) {
       await untilRestored(el)
     }
+    // The buttons change only once the jump has painted: a phone can spend longer than the fade
+    // drawing the far end, and would show the buttons already changed.
+    jumping = true
     el.scrollTo({ top: edge === 'top' ? 0 : el.scrollHeight })
+    await nextFrame()
+    await nextFrame()
+    jumping = false
+    measureJump()
+  }
+
+  function nextFrame(): Promise<void> {
+    return new Promise((resolve) => requestAnimationFrame(() => resolve()))
   }
 
   /** Resolves once the scroller is back to its tallest, or after `KEYBOARD_CLOSE_MS`. */
