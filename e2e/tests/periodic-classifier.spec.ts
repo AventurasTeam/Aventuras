@@ -1372,9 +1372,8 @@ test.describe('periodic classifier — failure policy', () => {
   })
 })
 
-// classifier.md → Failure policy with generation-pipeline.md → Cut-off replies: a pass reply the
-// server stopped at its limit fails the pass unrepaired, chained or owed. Serial: the second test's
-// Send owes the pass the first left failed.
+// classifier.md → Failure policy, generation-pipeline.md → Cut-off replies: a length-stopped pass
+// reply fails the pass unrepaired, chained or owed. Serial: test 2's Send owes test 1's pass.
 test.describe('periodic classifier — a pass reply cut off at its length limit', () => {
   test.describe.configure({ mode: 'serial' })
 
@@ -1419,7 +1418,6 @@ test.describe('periodic classifier — a pass reply cut off at its length limit'
   const U2 = 'E2E-CUTPASS-U2 I wade into the ford.'
   const streamedCalls = () => mock.requests.filter((r) => r.streamed).length
 
-  // The branch's system entries as the reader persisted them.
   async function systemFailures(branch: string): Promise<unknown[][]> {
     return queryApp(
       app.window,

@@ -587,7 +587,6 @@ const REPLY_META: EntryMetadata = {
 }
 const MARK: CutOffMark = { cause: 'max-output', outputTokens: 512, limit: 512 }
 
-// seedTurn's opening and committed turn, the reply carrying `metadata`.
 async function seedReplyWith(db: TestDb, metadata: EntryMetadata | null) {
   await seedBranch(
     db,

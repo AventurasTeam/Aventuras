@@ -138,11 +138,10 @@ export const reader = {
   // A config-resolver failure's fix row (system-entry-actions.tsx, useConfigFixAction).
   assignProfileFix: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:systemEntry.assignProfile') }),
-  // `Fix profile`: a cut-off or resolver system entry's fix, or a cut-off notice's link; scope it to
-  // a row where both can show.
+  // `Fix profile` is both a system entry's fix and a cut-off notice's link: scope it to a row.
   fixProfile: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:systemEntry.fixProfile') }),
-  // An ai_reply row's cut-off notice (entry-card.tsx); `limit` fills the causes whose copy names it.
+  // An ai_reply row's cut-off notice (entry-card.tsx); `limit` fills causes whose copy names it.
   cutOffNotice: (
     page: Page,
     entryId: string,

@@ -88,9 +88,8 @@ test.describe('reader — turn failure then retry', () => {
   })
 })
 
-// generation-pipeline.md → Cut-off replies, at the seam unit tests can't reach: a finish_reason
-// 'length' read off the real SSE transport. Serial: the second test sends from the reader the
-// first opened.
+// generation-pipeline.md → Cut-off replies, at the seam unit tests can't reach: finish_reason
+// 'length' off the real SSE transport. Serial: test 2 sends from the reader test 1 opened.
 test.describe('reader — a reply cut off at its length limit', () => {
   test.describe.configure({ mode: 'serial' })
 
@@ -144,7 +143,6 @@ test.describe('reader — a reply cut off at its length limit', () => {
     return rows[0][0] as number
   }
 
-  // The branch's system entries as the reader persisted them.
   async function systemFailures(branchId: string): Promise<unknown[][]> {
     return queryApp(
       app.window,

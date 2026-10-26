@@ -93,10 +93,7 @@ export function mergePages<P>(
   return merged
 }
 
-/**
- * The reason the failure state renders inside `aiAssist.failure`. A cut-off gets a sentence of its
- * own: the diagnostic line names a cause tag and token counts.
- */
+/** Failure-state reason: a cut-off gets a plain sentence, not the diagnostic's tags and counts. */
 export function assistFailureReason(error: CallRetryError): string {
   return error.tier === 'reply-cut-off'
     ? t('wizard:aiAssist.cutOff')

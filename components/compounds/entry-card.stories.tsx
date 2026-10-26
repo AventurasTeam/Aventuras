@@ -289,7 +289,7 @@ const NOTICE_MAX_OUTPUT = cutOffNoticeText({ cause: 'max-output', outputTokens: 
 const NOTICE_WINDOW = cutOffNoticeText({ cause: 'window', outputTokens: 1200, limit: 65536 })
 const NOTICE_UNKNOWN = cutOffNoticeText({ cause: 'unknown', outputTokens: 2048 })
 
-// Under the prose, above the world-time footer (entry-card.md → Cut-off notice).
+// entry-card.md → Cut-off notice.
 function expectNoticeBetweenProseAndFooter(text: string) {
   const notice = screen.getByText(text)
   const prose = screen.getByText(aiEntry.content)
@@ -302,7 +302,7 @@ function expectNoticeBetweenProseAndFooter(text: string) {
   )
 }
 
-/** Cut at the narrative profile's max output: the notice offers `Fix profile`, and nothing dismisses it. */
+/** Max-output cut: the notice offers `Fix profile` and has no dismiss. */
 export const CutOffNoticeMaxOutput: StoryT = {
   ...wrap,
   args: {
@@ -380,7 +380,7 @@ export const CutOffNoticeWhileEditing: StoryT = {
   },
 }
 
-/** `Fix profile` is navigation: the story-leave guard confirms a leave mid-run, so the card never gates it. */
+/** `Fix profile` is navigation (the story-leave guard confirms mid-run); the card never gates. */
 export const CutOffNoticeActionWhileDisabled: StoryT = {
   ...wrap,
   args: {

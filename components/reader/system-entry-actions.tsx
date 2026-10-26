@@ -268,9 +268,8 @@ export function useEmbedderFixAction(storyId: string | null): SystemEntryFixActi
 }
 
 /**
- * `Fix profile` for a reply cut off at a profile's max output or the server's own limit, through
- * the story-leave guard. Memoized: the reader hands it to every row, so a fresh identity would
- * re-render each per chunk.
+ * `Fix profile` for a max-output or server-limit cut-off, via the story-leave guard. Memoized: the
+ * reader hands it to every row, so a fresh identity would re-render each per chunk.
  */
 export function useProfileFixAction(
   enabled: boolean,

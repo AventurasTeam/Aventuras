@@ -1110,7 +1110,7 @@ export const CutOffNoticeFixProfile: Story = {
   },
 }
 
-/** An unknown cut-off is fixed through the profile too: it offers `Fix profile` like a max-output one. */
+/** An unknown cut-off offers `Fix profile` too, like a max-output one. */
 export const CutOffNoticeUnknownFixProfile: Story = {
   args: {
     rows: cutOffRows({ cause: 'unknown', outputTokens: 2048 }),
@@ -1129,7 +1129,7 @@ export const CutOffNoticeUnknownFixProfile: Story = {
   },
 }
 
-/** A window cut-off's route is `Set window`, so the row offers no `Fix profile` even with a label. */
+/** A window cut-off is fixed via `Set window`: no `Fix profile`, even with a label. */
 export const CutOffNoticeWindowHasNoFix: Story = {
   args: {
     rows: cutOffRows({ cause: 'window', outputTokens: 1200, limit: 65536 }),

@@ -80,7 +80,7 @@ type SceneOptions = {
   items: EntityOption[]
   locations: EntityOption[]
 }
-/** The host builds the copy from the stored mark; `action` is its route, rendered as an inline link. */
+/** Host-built from the stored mark; `action` is its route, rendered as an inline link. */
 type CutOffNoticeContent = { text: string; action?: { label: string; onPress: () => void } }
 
 type EntryCardProps = {
@@ -145,7 +145,7 @@ type EntryCardProps = {
   onBranch?: () => void
   /** user, ai, opening. Host hides when active calendar has no eras. */
   onFlipEra?: () => void
-  /** ai_reply only: the server cut the prose off at its limit. Not dismissible; shown while editing. */
+  /** ai_reply only: prose cut off at the server's limit. Not dismissible; shown while editing. */
   cutOffNotice?: CutOffNoticeContent
 
   /** Streaming-only — drives the top-line indicator. */
@@ -942,8 +942,7 @@ function NarrativeContent({
   return <RichEntryContent markedHtml={marked} />
 }
 
-// Not gated by `disabled`: leaving the story never is, and the host's story-leave guard confirms
-// a leave while a run is in flight.
+// Not gated by `disabled`: leaving the story never is; the host's leave guard confirms mid-run.
 function CutOffNoticeLine({ text, action }: CutOffNoticeContent) {
   return (
     <View className="mt-2 flex-row items-start gap-1.5">

@@ -260,9 +260,8 @@ async function main(): Promise<void> {
   const firstAttempt = outcomes.filter((o) => o.status === 'ok' && parseRetries(o) === 0).length
   const afterRetry = outcomes.filter((o) => o.status === 'ok' && parseRetries(o) > 0).length
   const cutOff = outcomes.filter((o) => o.cutOff === true)
-  // callWithRetry keeps a call's final error out of `recoverable`, so a failed run with a parse
-  // entry is one whose first reply didn't parse; its re-call failed at the provider or parse tier.
-  // A run cut off at length counts only as cut off, whichever call was cut.
+  // callWithRetry keeps a call's final error out of `recoverable`: a failed run with a parse entry
+  // had an unparseable first reply, then a failed re-call. A cut-off run counts only as cut off.
   const failedAfterParseRetry = outcomes.filter(
     (o) => o.status === 'failed' && o.cutOff !== true && parseRetries(o) > 0,
   )

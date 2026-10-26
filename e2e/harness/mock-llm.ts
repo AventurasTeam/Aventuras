@@ -133,7 +133,7 @@ export type MockLlm = {
    * in-flight window the cancel test needs.
    */
   holdNextNarrative: () => void
-  /** Finish any held narrative streams with the current narrative content; a pending cut applies. */
+  /** Finish any held narrative streams with the current narrative; a pending cut applies. */
   releaseNarrative: () => void
   /**
    * One-shot: the next structured call matching the `agentName` shape is recorded in `requests`,
@@ -142,9 +142,9 @@ export type MockLlm = {
   holdNextStructured: (agentName: string) => void
   /** Answer every held structured call with its shape's reply as set now. */
   releaseStructured: () => void
-  /** One-shot: the next narrative stream to finish (a held one, at release) streams the current narrative, then finish_reason 'length'. */
+  /** One-shot: the next stream to finish (held: at release) sends the narrative, then 'length'. */
   cutNextNarrative: () => void
-  /** One-shot: the next structured call matching `agentName` answers `raw` verbatim with finish_reason 'length'. */
+  /** One-shot: next `agentName` structured call answers `raw` verbatim, finish_reason 'length'. */
   cutNextStructured: (agentName: string, raw: string) => void
   /** Every completion request received, in order. */
   requests: MockRequest[]
@@ -165,9 +165,8 @@ const CHUNK_BASE = {
   model: 'mock',
 }
 
-// The opening role frame, emitted on its own to hold a stream open — a
-// started-but-unfinished narrative call, so the cancel test has an in-flight
-// window. The tail (content, the finish frame, [DONE]) completes it.
+// The role frame alone holds a stream open (the cancel test's in-flight window); the tail
+// (content, finish frame, [DONE]) completes it.
 function narrativeRoleFrame(): string {
   return sse({
     ...CHUNK_BASE,

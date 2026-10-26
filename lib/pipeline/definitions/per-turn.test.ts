@@ -3046,8 +3046,7 @@ describe('narrative — how the reply ended', () => {
     )
   })
 
-  // piggyback.md → Parse strategy: a cut between tags of a block holding no create or drop parses
-  // clean, as any block the stream cut off.
+  // piggyback.md → Parse strategy: a cut block holding no create or drop parses clean.
   it('marks nothing when the cut falls in the trailing block, which reads as before', async () => {
     const { result, entry, intermediates, log } = await runReply({
       text: 'The knight drew his sword.\n<state><world_time_delta>30</world_time_delta>',
@@ -3103,7 +3102,7 @@ describe('narrative — how the reply ended', () => {
     )
   })
 
-  // Developer decision 1: a cut reply that is only a block fails too, or the entry is markup.
+  // A cut reply that is only a block fails too, or the entry would be markup.
   it.each([
     ['no text', ''],
     ['only whitespace', '\n\n'],
@@ -3145,7 +3144,7 @@ describe('narrative — how the reply ended', () => {
     )
   })
 
-  // Developer decision 2: any stop but 'length', or none, is finished; no blank ai_reply commits.
+  // Any finish but 'length', or none, is finished; no blank ai_reply commits.
   it.each([
     ['stop', '', 'stop', 'stop'],
     ['stop, as whitespace', ' \n', 'stop', 'stop'],
