@@ -943,7 +943,7 @@ function NarrativeContent({
 }
 
 // Not gated by `disabled`: leaving the story never is; the host's leave guard confirms mid-run.
-function CutOffNoticeLine({ text, action }: CutOffNoticeContent) {
+function CutOffNoticeLine({ text, action, tier }: CutOffNoticeContent & { tier: Tier }) {
   return (
     <View className="mt-2 flex-row items-start gap-1.5">
       <Icon as={AlertTriangle} size={12} className="mt-0.5 shrink-0 text-warning" />
@@ -956,11 +956,23 @@ function CutOffNoticeLine({ text, action }: CutOffNoticeContent) {
             accessibilityRole="button"
             accessibilityLabel={action.label}
             onPress={action.onPress}
-            className={Platform.select({
-              web: 'cursor-pointer rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
-            })}
+            className={cn(
+              'group/fix-profile',
+              // The 44 px phone tap floor, margins cancelling the padding so nothing moves. The
+              // bottom stops inside the footer's 12 px gap: the footer paints over anything past it.
+              tier === 'phone' && '-mb-3 -mt-4 pb-3 pt-4',
+              Platform.select({ web: 'cursor-pointer outline-none' }),
+            )}
           >
-            <Text size="xs" className="font-medium text-fg-primary underline">
+            <Text
+              size="xs"
+              className={cn(
+                'font-medium text-fg-primary underline',
+                Platform.select({
+                  web: 'rounded-sm group-focus-visible/fix-profile:ring-2 group-focus-visible/fix-profile:ring-focus-ring',
+                }),
+              )}
+            >
               {action.label}
             </Text>
           </Pressable>
@@ -1282,7 +1294,7 @@ export function EntryCard({
       )}
 
       {kind === 'ai_reply' && cutOffNotice != null ? (
-        <CutOffNoticeLine text={cutOffNotice.text} action={cutOffNotice.action} />
+        <CutOffNoticeLine text={cutOffNotice.text} action={cutOffNotice.action} tier={tier} />
       ) : null}
 
       {showActions ? (

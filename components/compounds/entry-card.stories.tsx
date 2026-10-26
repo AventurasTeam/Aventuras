@@ -314,7 +314,10 @@ export const CutOffNoticeMaxOutput: StoryT = {
     await expect(screen.getByText(NOTICE_MAX_OUTPUT)).toBeVisible()
     expectNoticeBetweenProseAndFooter(NOTICE_MAX_OUTPUT)
     expect(screen.queryByRole('button', { name: /dismiss/i })).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Fix profile' }))
+    // The phone tap floor stays off desktop, where the grown box would reach the block above.
+    const link = screen.getByRole('button', { name: 'Fix profile' })
+    expect(link.getBoundingClientRect().height).toBeLessThan(44)
+    await userEvent.click(link)
     await waitFor(() => expect(args.cutOffNotice?.action?.onPress).toHaveBeenCalledTimes(1))
   },
 }
@@ -402,7 +405,10 @@ const phoneWidthDecorator = (Story: () => ReactElement) => (
   </View>
 )
 
-/** A sentence too long for one line wraps beside the glyph; the glyph never sits alone above it. */
+/**
+ * A sentence too long for one line wraps beside the glyph; the glyph never sits alone above it.
+ * `Fix profile` takes the phone's 44 px tap floor without moving anything.
+ */
 export const CutOffNoticePhoneWidth: StoryT = {
   decorators: [phoneWidthDecorator],
   args: {
@@ -425,6 +431,20 @@ export const CutOffNoticePhoneWidth: StoryT = {
     expect(textRect.height).toBeGreaterThan(lineHeight * 1.5)
     expect(glyphRect.left).toBeLessThan(textRect.left)
     expect(Math.abs(glyphRect.top - textRect.top)).toBeLessThan(lineHeight)
+
+    // docs/ui/foundations/mobile/touch.md: the reader is a web document on native, so no hitSlop.
+    const link = screen.getByRole('button', { name: FIX_PROFILE })
+    const linkRect = link.getBoundingClientRect()
+    const labelRect = within(link).getByText(FIX_PROFILE).getBoundingClientRect()
+    expect(linkRect.height).toBeGreaterThanOrEqual(44)
+    // Hit-tested at both edges: a later sibling painting over the box would take that strip.
+    const x = linkRect.left + linkRect.width / 2
+    expect(link.contains(document.elementFromPoint(x, linkRect.top + 1))).toBe(true)
+    expect(link.contains(document.elementFromPoint(x, linkRect.bottom - 1))).toBe(true)
+    // The label keeps its place: right under the sentence, the footer's own margin below it.
+    const footerRect = screen.getByText(baseProps.worldTimeLabel).getBoundingClientRect()
+    expect(labelRect.top - textRect.bottom).toBeLessThan(lineHeight / 2)
+    expect(footerRect.top - labelRect.bottom).toBeLessThan(lineHeight)
   },
 }
 
