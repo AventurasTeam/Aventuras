@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
   import { onDestroy, untrack, type Component, type Snippet } from 'svelte'
-  import { Trash2 } from '@lucide/svelte'
+  import { ArrowDownToLine, ArrowUpToLine, Trash2 } from '@lucide/svelte'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { setTextareaUncapped } from '#lib/components/ui/textarea/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
@@ -16,6 +16,7 @@
   import ModalActions from './ModalActions.svelte'
   import DiscardConfirm from './DiscardConfirm.svelte'
   import { decideClose, type CloseSource } from './actionModalClose'
+  import { readJumpState, type JumpState } from './scrollJump'
   import { FEATURE_COLORS, type ActionTone } from './featureColors'
 
   interface Action {
@@ -110,6 +111,43 @@
   let wasOpen = untrack(() => open)
   let timer: ReturnType<typeof setTimeout> | null = null
   let frame = $state<HTMLDivElement | null>(null)
+  /** Scrolls on a phone, where the buttons scroll with the body. */
+  let outerScroller = $state<HTMLDivElement | null>(null)
+  /** Scrolls from 768px up, between the pinned header and buttons. */
+  let bodyScroller = $state<HTMLDivElement | null>(null)
+  let jump = $state<JumpState>({ long: false, atTop: true, atBottom: false })
+
+  /** Whichever of the two scrollers this width uses. */
+  function activeScroller(): HTMLDivElement | null {
+    for (const el of [bodyScroller, outerScroller]) {
+      if (el && getComputedStyle(el).overflowY === 'auto') return el
+    }
+    return null
+  }
+
+  function measureJump() {
+    const el = activeScroller()
+    jump = el ? readJumpState(el) : { long: false, atTop: true, atBottom: false }
+  }
+
+  function jumpTo(edge: 'top' | 'bottom') {
+    const el = activeScroller()
+    if (!el) return
+    el.scrollTo({ top: edge === 'top' ? 0 : el.scrollHeight })
+  }
+
+  // Remeasured as the content or the window changes size, not only on scroll.
+  $effect(() => {
+    const scrollers = [outerScroller, bodyScroller].filter((el) => el !== null)
+    if (scrollers.length === 0) return
+    const observer = new ResizeObserver(measureJump)
+    for (const el of scrollers) {
+      observer.observe(el)
+      if (el.firstElementChild) observer.observe(el.firstElementChild)
+    }
+    measureJump()
+    return () => observer.disconnect()
+  })
   // What bits-ui's open focus could land on: a hidden form input or a disabled control cannot.
   const FOCUSABLE =
     'input:not([type=hidden]):not([aria-hidden=true]):enabled, textarea:enabled, select:enabled, button:enabled, [href], [tabindex="0"]'
@@ -299,8 +337,38 @@
               </ResponsiveModal.Description>
             {/if}
           </div>
-          {#if headerAction}
-            <div class="shrink-0">{@render headerAction(leaveFor)}</div>
+          {#if jump.long || headerAction}
+            <div class="flex shrink-0 items-center gap-1">
+              {#if jump.long}
+                <!-- Dimmed at the edge it leads to, so they also say where the reader is. -->
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="size-8"
+                  aria-label="Jump to the top"
+                  title="Jump to the top"
+                  disabled={jump.atTop}
+                  onclick={() => jumpTo('top')}
+                >
+                  <ArrowUpToLine class="size-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="size-8"
+                  aria-label="Jump to the bottom"
+                  title="Jump to the bottom"
+                  disabled={jump.atBottom}
+                  onclick={() => jumpTo('bottom')}
+                >
+                  <ArrowDownToLine class="size-4" />
+                </Button>
+                {#if headerAction}
+                  <span class="bg-border mx-1 h-5 w-px" aria-hidden="true"></span>
+                {/if}
+              {/if}
+              {@render headerAction?.(leaveFor)}
+            </div>
           {/if}
         </div>
       </ResponsiveModal.Header>
@@ -310,8 +378,16 @@
         768px up the body scrolls alone and the buttons stay pinned under it. Either way there is
         one scroller.
       -->
-      <div class="flex min-h-0 flex-1 flex-col max-md:overflow-y-auto">
-        <div class="md:min-h-0 md:flex-1 md:overflow-y-auto">
+      <div
+        bind:this={outerScroller}
+        class="flex min-h-0 flex-1 flex-col max-md:overflow-y-auto"
+        onscroll={measureJump}
+      >
+        <div
+          bind:this={bodyScroller}
+          class="md:min-h-0 md:flex-1 md:overflow-y-auto"
+          onscroll={measureJump}
+        >
           {#if children}
             <div class="space-y-3 px-6 py-4">
               {@render children()}
