@@ -7,6 +7,7 @@ import { fallbackClassifierSchema } from '@/lib/pipeline'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { labeledPromptOutputSchema } from '@/lib/wizard'
 
+import { firstHalf } from './completions'
 import { collectSseContent } from './passthrough'
 import { startMockServer, type MockServer } from './server'
 
@@ -253,6 +254,15 @@ describe('failure injection', () => {
       lane.failure = { kind: 'none', status: 500, remaining: 0 }
     },
   )
+})
+
+describe('firstHalf', () => {
+  it('keeps the floor of half the characters, and at least one', () => {
+    expect(firstHalf('abcde')).toBe('ab')
+    expect(firstHalf('abcd')).toBe('ab')
+    expect(firstHalf('a')).toBe('a')
+    expect(firstHalf('')).toBe('')
+  })
 })
 
 describe('client abort', () => {

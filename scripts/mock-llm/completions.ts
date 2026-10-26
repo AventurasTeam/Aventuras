@@ -33,7 +33,7 @@ const TRUNCATED_STATE_BLOCK = '\n\n<state>\n  <transfers><item id='
 const MALFORMED_STRUCTURED = "I'm sorry, I can't produce that JSON."
 
 // What a server that stopped at its length limit sent before the cut.
-function firstHalf(text: string): string {
+export function firstHalf(text: string): string {
   return text.slice(0, Math.max(1, Math.floor(text.length / 2)))
 }
 

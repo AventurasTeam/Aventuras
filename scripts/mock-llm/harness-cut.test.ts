@@ -36,10 +36,14 @@ function provider(llm: MockLlm): Parameters<typeof createProviderModel>[0] {
   }
 }
 
-async function narrativeCall(llm: MockLlm): Promise<{ text: string; finishReason: string }> {
+async function narrativeCall(
+  llm: MockLlm,
+  onError?: () => void,
+): Promise<{ text: string; finishReason: string }> {
   const stream = streamProviderCall({
     model: createProviderModel(provider(llm), 'mock'),
     prompt: 'Continue the scene.',
+    ...(onError ? { onError } : {}),
   })
   let text = ''
   for await (const delta of stream.textStream) text += delta
@@ -91,7 +95,7 @@ describe('startMockLlm — a cut narrative', () => {
     llm.cutNextNarrative()
 
     // The 500 streams nothing; how the SDK surfaces it is beside the point here.
-    await narrativeCall(llm).catch(() => null)
+    await narrativeCall(llm, () => {}).catch(() => null)
 
     expect((await narrativeCall(llm)).finishReason).toBe('length')
     expect(llm.requests).toHaveLength(2)

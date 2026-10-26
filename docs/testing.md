@@ -385,9 +385,9 @@ HTTP 500 (the failed-turn → retriable-system-entry path),
 `holdNextNarrative()` opens the stream but holds it unfinished until
 `releaseNarrative()` or a client abort — the deterministic in-flight
 window the cancel spec cancels into, with no sleep-based wait — and
-`cutNextNarrative()` streams the current narrative and ends it with
-`finish_reason: 'length'`, a reply the server stopped at its length
-limit ([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)).
+`cutNextNarrative()` makes the next narrative stream to finish, a held
+one at its release, end with `finish_reason: 'length'`, a reply the
+server stopped at its length limit ([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)).
 
 `holdNextStructured(name)` does the same for the next structured call
 whose prompt matches that shape: the call is recorded in `requests`,
