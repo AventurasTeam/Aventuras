@@ -221,7 +221,9 @@ convention, and the expectation that subsystems route through
   the server stopped a reply at its length limit; logged with the
   cause, the numbers and an `outcome`, `refused` or `accepted` for a
   structured call and `failed`, `marked` or `in-block` for the
-  narrative)
+  narrative; a refused structured call also carries `parseError`,
+  the strict parse's error message, which tells a truncated reply
+  from a complete one of the wrong shape)
 - `embedder.*` — `offline`, `compute_failed`, `staleness_detected`
 - `translation.*` — `soft_failed` (when that followup lands)
 - `memory.*` — periodic-classifier + chapter-close phase
