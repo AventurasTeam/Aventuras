@@ -24,5 +24,19 @@ export function toPipelineError(e: CallRetryError, target: ResolveTarget): Pipel
 
 /** A failure's one-line detail for logs and status: the arm's own, or the cut-off described. */
 export function pipelineErrorDetail(e: PipelineError): string | undefined {
-  return e.kind === 'reply-cut-off' ? describeReplyCutOff(e) : e.detail
+  switch (e.kind) {
+    case 'reply-cut-off':
+      return describeReplyCutOff(e)
+    case 'provider':
+    case 'phase-logic':
+    case 'action-layer':
+    case 'orchestrator':
+    case 'config-resolver':
+    case 'embedder':
+      return e.detail
+    default: {
+      const _exhaustive: never = e
+      return _exhaustive
+    }
+  }
 }
