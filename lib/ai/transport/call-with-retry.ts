@@ -1,3 +1,4 @@
+import { ReplyCutOffError } from '../reply-cut-off'
 import { type CallRetryError, classifyProviderError } from './classify-provider-error'
 
 // Re-export so consumers can treat CallRetryError as the retry helper's vocabulary.
@@ -39,10 +40,11 @@ type CallWithRetryOpts = {
 // Two-tier transparent retry: provider-side (network/5xx/timeout) and
 // parse/data-shape. Each retried failure goes in recoverable[]; the failure that
 // exhausts a budget (or is non-retryable) becomes the terminal `error`. Aborts
-// short-circuit — a user cancel is not an error.
-export async function callWithRetry<T>(
-  callFn: (signal: AbortSignal) => Promise<string>,
-  parseFn: (raw: string) => T,
+// short-circuit — a user cancel is not an error. A ReplyCutOffError from parseFn
+// ends the call at once: the same prompt and limit would cut the reply again.
+export async function callWithRetry<T, R = string>(
+  callFn: (signal: AbortSignal) => Promise<R>,
+  parseFn: (raw: R) => T,
   opts: CallWithRetryOpts,
 ): Promise<CallWithRetryResult<T>> {
   const recoverable: CallRetryError[] = []
@@ -52,7 +54,7 @@ export async function callWithRetry<T>(
   for (;;) {
     if (opts.signal.aborted) return { status: 'aborted', recoverable }
 
-    let raw: string
+    let raw: R
     try {
       raw = await callFn(opts.signal)
     } catch (e) {
@@ -76,6 +78,9 @@ export async function callWithRetry<T>(
     try {
       return { status: 'ok', result: parseFn(raw), recoverable }
     } catch (e) {
+      if (e instanceof ReplyCutOffError) {
+        return { status: 'failed', error: { tier: 'reply-cut-off', ...e.failure }, recoverable }
+      }
       const parseError: CallRetryError = {
         tier: 'parse',
         detail: e instanceof Error ? e.message : String(e),
