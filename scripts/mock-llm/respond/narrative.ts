@@ -9,12 +9,16 @@ export type StreamPacing = {
   jitterMs: number
 }
 
+/**
+ * `'stop'` and `'length'` name the terminal frame's finish_reason (`'length'` is a reply the
+ * server stopped at its limit); `'stream-cut'` stops partway and closes the socket without a
+ * stop frame or [DONE].
+ */
+export type StreamEnding = 'stop' | 'length' | 'stream-cut'
+
 export type StreamOptions = StreamPacing & {
   content: string
-  /** Stop partway and close the socket without a stop frame or [DONE]. */
-  cut?: boolean
-  /** The terminal frame's finish_reason; `'length'` is a reply the server stopped at its limit. */
-  finishReason?: 'stop' | 'length'
+  ending: StreamEnding
   aborted: () => boolean
 }
 
@@ -48,18 +52,19 @@ function jittered(ms: number, jitterMs: number): number {
 
 /** Emits the SSE body. Headers must already be written by the caller. */
 export async function streamNarrative(res: ServerResponse, opts: StreamOptions): Promise<void> {
+  const { ending } = opts
   await write(res, roleFrame())
   if (opts.aborted()) return
 
-  if (opts.charsPerSecond <= 0 && opts.cut !== true) {
+  if (opts.charsPerSecond <= 0 && ending !== 'stream-cut') {
     await write(res, contentFrame(opts.content))
-    if (!opts.aborted()) res.end(stopFrames(opts.finishReason))
+    if (!opts.aborted()) res.end(stopFrames(ending))
     return
   }
 
   const chunks = chunkContent(opts.content, opts.chunkSize)
   const emit =
-    opts.cut === true ? chunks.slice(0, Math.max(1, Math.floor(chunks.length / 2))) : chunks
+    ending === 'stream-cut' ? chunks.slice(0, Math.max(1, Math.floor(chunks.length / 2))) : chunks
 
   for (const chunk of emit) {
     if (opts.aborted()) return
@@ -73,6 +78,6 @@ export async function streamNarrative(res: ServerResponse, opts: StreamOptions):
   if (opts.aborted()) return
   // The cut path closes without a stop frame or [DONE] on purpose: that is the
   // truncated-stream failure the app has to survive.
-  if (opts.cut === true) res.end()
-  else res.end(stopFrames(opts.finishReason))
+  if (ending === 'stream-cut') res.end()
+  else res.end(stopFrames(ending))
 }

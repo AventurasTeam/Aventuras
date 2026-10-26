@@ -230,8 +230,7 @@ export async function handleCompletion(
       charsPerSecond: lane.stream.charsPerSecond,
       chunkSize: lane.stream.chunkSize,
       jitterMs: lane.delay.jitterMs,
-      ...(failure === 'stream-cut' ? { cut: true } : {}),
-      ...(failure === 'length' ? { finishReason: 'length' as const } : {}),
+      ending: failure === 'stream-cut' || failure === 'length' ? failure : 'stop',
       aborted: () => clientGone,
     })
     finish()
