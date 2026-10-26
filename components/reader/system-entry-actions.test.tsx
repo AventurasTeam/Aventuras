@@ -164,7 +164,7 @@ describe('describeTurnFailure', () => {
   it('names the limit a reply was cut off at before any story text', () => {
     const out = describeTurnFailure(TURN_CUT)
     expect(out.content).toBe(
-      "The reply was cut off at the narrative profile's 4,096-token max output before any story text; reasoning used 3,900 of them. Raise the max output, or lower the thinking budget, then Retry.",
+      "The reply was cut off at the narrative profile's 4,096-token max output before any story text; reasoning used 3,900 of them. Raise the max output, then Retry.",
     )
     expect(out.detail).toBe(describeReplyCutOff(TURN_CUT))
     expect(out.detail).toContain('max-output')

@@ -50,7 +50,7 @@ describe('turnCutOffContent', () => {
 
   it('says how much of the limit reasoning used when the provider counted it', () => {
     expect(turnCutOffContent({ ...AT_MAX_OUTPUT, reasoningTokens: 3900 })).toBe(
-      "The reply was cut off at the narrative profile's 4,096-token max output before any story text; reasoning used 3,900 of them. Raise the max output, or lower the thinking budget, then Retry.",
+      "The reply was cut off at the narrative profile's 4,096-token max output before any story text; reasoning used 3,900 of them. Raise the max output, then Retry.",
     )
   })
 
