@@ -859,7 +859,8 @@ describe('suggestion-refresh emission phase', () => {
     expect(events).toEqual([])
   })
 
-  it('fails an exhausted parse retry as phase-logic, not as a provider error', async () => {
+  // A reply that never parsed is one with no usable suggestions, so the strip says that.
+  it('fails an exhausted parse retry as unusable suggestions, not as a provider error', async () => {
     openStory()
     hydrate()
     wireAppSettings()
@@ -869,12 +870,20 @@ describe('suggestion-refresh emission phase', () => {
       error: { tier: 'parse', detail: 'still bad json', attempt: 1 },
     })
 
-    const { result } = await runEmission()
+    const { events, result } = await runEmission()
 
     expect(result).toEqual({
       status: 'failed',
-      error: { kind: 'phase-logic', detail: 'still bad json' },
+      error: {
+        kind: 'phase-logic',
+        subsystem: SUGGESTIONS_UNUSABLE,
+        phaseName: SUGGESTION_EMISSION_PHASE,
+        detail: 'still bad json',
+      },
     })
+    expect(events).toEqual([
+      { type: 'recoverable_error', error: { kind: 'phase-logic', detail: 'bad json' } },
+    ])
   })
 
   it('anchors to the branch tail and prompts with the whole loaded branch', async () => {
