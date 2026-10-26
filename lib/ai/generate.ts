@@ -248,7 +248,7 @@ export type GenerateStructuredResult<T> =
   | { status: 'failed'; error: CallRetryError; recoverable: readonly CallRetryError[] }
   | { status: 'aborted'; recoverable: readonly CallRetryError[] }
 
-/** A failure as one line, for logs and failure details. */
+/** A failure as text for logs and failure details; a parse failure's may span lines. */
 export function describeCallRetryError(error: CallRetryError): string {
   switch (error.tier) {
     case 'provider':
