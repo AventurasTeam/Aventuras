@@ -2520,7 +2520,11 @@ describe('narrative fold — creates', () => {
       ],
       [
         'a failed fallback call',
-        { status: 'failed' as const, detail: 'LLM error', recoverable: [] },
+        {
+          status: 'failed' as const,
+          error: { tier: 'provider' as const, reason: 'unknown' as const, detail: 'LLM error' },
+          recoverable: [],
+        },
       ],
     ])(
       'a failed fold leaves the item held after %s, with no drop on the record',

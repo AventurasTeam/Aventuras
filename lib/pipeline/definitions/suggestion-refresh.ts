@@ -144,12 +144,7 @@ async function* suggestionEmissionPhase(
       },
     }
   if (result.status === 'failed')
-    return {
-      status: 'failed',
-      // generateStructured collapses provider-tier and parse-tier exhaustion into
-      // one detail string; 'unknown' is the honest reason for either.
-      error: { kind: 'provider', reason: 'unknown', detail: result.detail },
-    }
+    return { status: 'failed', error: toPipelineError(result.error, 'suggestion') }
 
   // A cancel that lands between the call returning and the write must discard the
   // result, not commit it (generation-pipeline.md → Abort: poll at every

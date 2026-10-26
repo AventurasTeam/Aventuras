@@ -816,15 +816,65 @@ describe('suggestion-refresh emission phase', () => {
     openStory()
     hydrate()
     wireAppSettings()
-    generateStructuredMock.mockResolvedValue({ status: 'failed', recoverable: [], detail: 'boom' })
+    generateStructuredMock.mockResolvedValue({
+      status: 'failed',
+      recoverable: [],
+      error: { tier: 'provider', reason: 'network', detail: 'boom' },
+    })
 
     const { events, result } = await runEmission()
 
     expect(result).toEqual({
       status: 'failed',
-      error: { kind: 'provider', reason: 'unknown', detail: 'boom' },
+      error: { kind: 'provider', reason: 'network', detail: 'boom' },
     })
     expect(events).toEqual([])
+  })
+
+  it('fails a cut-off reply as reply-cut-off for the suggestion target', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    const cut = {
+      cause: 'unknown',
+      outputTokens: 300,
+      reasoningTokens: null,
+      maxOutput: null,
+      window: null,
+      providerId: 'prov-1',
+      modelId: 'model-1',
+    } as const
+    generateStructuredMock.mockResolvedValue({
+      status: 'failed',
+      recoverable: [],
+      error: { tier: 'reply-cut-off', ...cut },
+    })
+
+    const { events, result } = await runEmission()
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'reply-cut-off', target: 'suggestion', ...cut },
+    })
+    expect(events).toEqual([])
+  })
+
+  it('fails an exhausted parse retry as phase-logic, not as a provider error', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue({
+      status: 'failed',
+      recoverable: [{ tier: 'parse', detail: 'bad json', attempt: 0 }],
+      error: { tier: 'parse', detail: 'still bad json', attempt: 1 },
+    })
+
+    const { result } = await runEmission()
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'phase-logic', detail: 'still bad json' },
+    })
   })
 
   it('anchors to the branch tail and prompts with the whole loaded branch', async () => {

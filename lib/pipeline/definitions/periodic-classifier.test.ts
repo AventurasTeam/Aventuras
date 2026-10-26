@@ -1037,7 +1037,7 @@ describe('periodicClassifierPhase', () => {
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'failed',
       recoverable: [],
-      detail: 'rate limited',
+      error: { tier: 'provider', reason: 'unknown', detail: 'rate limited' },
     })
     const h = await ctxWith({
       processedThrough: 0,
@@ -1048,12 +1048,48 @@ describe('periodicClassifierPhase', () => {
     expect(events).toEqual([])
     expect(result).toEqual({
       status: 'failed',
-      error: { kind: 'provider', reason: 'unknown', detail: 'classifier: rate limited' },
+      error: { kind: 'provider', reason: 'unknown', detail: 'rate limited' },
     })
     expect(watermarks).toEqual([])
     expect(h.status()).toMatchObject({
       state: 'failed',
       lastError: 'rate limited',
+      processedThrough: 0,
+    })
+  })
+
+  // classifier.md → Failure policy: a cut reply is never repaired into a shorter one.
+  it('fails a cut-off reply as reply-cut-off, leaving the watermark', async () => {
+    const watermarks: number[] = []
+    const cut = {
+      cause: 'max-output',
+      outputTokens: 1024,
+      reasoningTokens: null,
+      maxOutput: 1024,
+      window: null,
+      providerId: 'prov-1',
+      modelId: 'm',
+    } as const
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'failed',
+      recoverable: [],
+      error: { tier: 'reply-cut-off', ...cut },
+    })
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      onWatermark: (n: number) => watermarks.push(n),
+    })
+    const { events, result } = await drain(h.ctx)
+    expect(events).toEqual([])
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'reply-cut-off', target: 'classifier', ...cut },
+    })
+    expect(watermarks).toEqual([])
+    expect(h.status()).toMatchObject({
+      state: 'failed',
+      lastError: expect.stringContaining('reply cut off (max-output)'),
       processedThrough: 0,
     })
   })
@@ -3700,7 +3736,7 @@ describe('periodicClassifierPhase — retried attempts', () => {
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'failed',
-      detail: 'Unexpected end of JSON input',
+      error: { tier: 'parse', detail: 'Unexpected end of JSON input', attempt: 1 },
       recoverable: [PARSE_RETRY],
     })
     const h = await ctxWith({ processedThrough: 0, headPosition: 2 })

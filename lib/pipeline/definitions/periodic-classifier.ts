@@ -2,6 +2,7 @@ import { and, asc, eq, gt, sql, type SQL } from 'drizzle-orm'
 
 import { boundedSignal } from '@/lib/abort'
 import {
+  describeCallRetryError,
   generateStructured,
   profileTimeoutMs,
   resolveModel,
@@ -133,10 +134,11 @@ function passFailure(
           phaseName: CLASSIFY_PHASE,
         },
       }
+    // A cut reply fails as reply-cut-off, so the reader's entry can name the limit.
     case 'failed':
       return {
-        lastError: result.detail,
-        error: { kind: 'provider', reason: 'unknown', detail: `classifier: ${result.detail}` },
+        lastError: describeCallRetryError(result.error),
+        error: toPipelineError(result.error, 'classifier'),
       }
   }
 }

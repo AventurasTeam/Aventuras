@@ -4,7 +4,12 @@ import { DatabaseSync } from 'node:sqlite'
 import { and, asc, eq, gt } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 
-import { generateStructured, type CallRetryError, type ResolveModelConfig } from '@/lib/ai'
+import {
+  describeCallRetryError,
+  generateStructured,
+  type CallRetryError,
+  type ResolveModelConfig,
+} from '@/lib/ai'
 import { buildClassifierWindow, classifierReplySchema, readClassifierReply } from '@/lib/classifier'
 import {
   branches,
@@ -219,7 +224,7 @@ async function main(): Promise<void> {
     const outcome: Outcome = {
       status: result.status,
       recoverable: result.recoverable,
-      ...(result.status === 'failed' ? { detail: result.detail } : {}),
+      ...(result.status === 'failed' ? { detail: describeCallRetryError(result.error) } : {}),
       ...(malformed.length > 0
         ? { dropped: malformed.map(({ list, count }) => `${list} ${count}`).join(', ') }
         : {}),

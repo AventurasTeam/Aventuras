@@ -26,7 +26,7 @@ function okRun<T>(value: T) {
 function failRun<T>(detail: string) {
   return async (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => ({
     status: 'failed',
-    detail,
+    error: { tier: 'provider', reason: 'unknown', detail },
     recoverable: [],
   })
 }
@@ -37,7 +37,12 @@ function flakyThenOkRun<T>(value: T, detail: string) {
   let calls = 0
   return async (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => {
     calls += 1
-    if (calls === 1) return { status: 'failed', recoverable: [], detail }
+    if (calls === 1)
+      return {
+        status: 'failed',
+        recoverable: [],
+        error: { tier: 'provider', reason: 'unknown', detail },
+      }
     return { status: 'ok', recoverable: [], value }
   }
 }
@@ -88,7 +93,12 @@ function flakyThenOkRefine<T>(
   ): Promise<GenerateStructuredResult<T>> => {
     calls.push({ current, instruction })
     attempts += 1
-    if (attempts === 1) return { status: 'failed', recoverable: [], detail }
+    if (attempts === 1)
+      return {
+        status: 'failed',
+        recoverable: [],
+        error: { tier: 'provider', reason: 'unknown', detail },
+      }
     return { status: 'ok', recoverable: [], value }
   }
 }
@@ -1153,7 +1163,15 @@ export const ListResult_FailedGenerateMoreKeepsPageAndAppendsOnRetry: Story = {
       resolveModelId={() => MODEL_ID}
       run={sequentialRun<ListItemValue>([
         { status: 'ok', recoverable: [], value: { items: [RUIN_ITEM] } },
-        { status: 'failed', recoverable: [], detail: 'Provider request timed out after 3 retries' },
+        {
+          status: 'failed',
+          recoverable: [],
+          error: {
+            tier: 'provider',
+            reason: 'timeout',
+            detail: 'Provider request timed out after 3 retries',
+          },
+        },
         { status: 'ok', recoverable: [], value: { items: [PAGE_TWO_ITEM] } },
       ])}
       onSetup={fn()}
@@ -1187,7 +1205,15 @@ export const ListResult_FailedFirstGenerateThenRetrySucceedsWithExactPage: Story
     <ListDemo
       resolveModelId={() => MODEL_ID}
       run={sequentialRun<ListItemValue>([
-        { status: 'failed', recoverable: [], detail: 'Provider request timed out after 3 retries' },
+        {
+          status: 'failed',
+          recoverable: [],
+          error: {
+            tier: 'provider',
+            reason: 'timeout',
+            detail: 'Provider request timed out after 3 retries',
+          },
+        },
         { status: 'ok', recoverable: [], value: { items: [RUIN_ITEM, FACTION_ITEM] } },
       ])}
       onSetup={fn()}
@@ -1448,7 +1474,15 @@ export const FailureCancelKeepingAListAsksBeforeDiscarding: Story = {
       resolveModelId={() => MODEL_ID}
       run={sequentialRun<ListItemValue>([
         { status: 'ok', recoverable: [], value: { items: [RUIN_ITEM] } },
-        { status: 'failed', recoverable: [], detail: 'Provider request timed out after 3 retries' },
+        {
+          status: 'failed',
+          recoverable: [],
+          error: {
+            tier: 'provider',
+            reason: 'timeout',
+            detail: 'Provider request timed out after 3 retries',
+          },
+        },
         { status: 'ok', recoverable: [], value: { items: [PAGE_TWO_ITEM] } },
       ])}
       onSetup={fn()}
@@ -1565,7 +1599,15 @@ export const FailureCancelKeepingAnUntouchedListAsksBeforeDiscarding: Story = {
       resolveModelId={() => MODEL_ID}
       run={sequentialRun<ListItemValue>([
         { status: 'ok', recoverable: [], value: { items: [RUIN_ITEM] } },
-        { status: 'failed', recoverable: [], detail: 'Provider request timed out after 3 retries' },
+        {
+          status: 'failed',
+          recoverable: [],
+          error: {
+            tier: 'provider',
+            reason: 'timeout',
+            detail: 'Provider request timed out after 3 retries',
+          },
+        },
         { status: 'ok', recoverable: [], value: { items: [PAGE_TWO_ITEM] } },
       ])}
       onSetup={fn()}

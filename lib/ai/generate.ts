@@ -1,8 +1,15 @@
-import { wrapLanguageModel, type LanguageModel, type LanguageModelMiddleware } from 'ai'
+import {
+  wrapLanguageModel,
+  type FinishReason,
+  type LanguageModel,
+  type LanguageModelMiddleware,
+  type LanguageModelUsage,
+} from 'ai'
 import { jsonrepair } from 'jsonrepair'
 import { z } from 'zod'
 
 import { boundedSignal } from '@/lib/abort'
+import { logger } from '@/lib/diagnostics'
 
 import type { ProviderInstance } from '../db'
 import type { ResolveTarget } from './agents'
@@ -13,7 +20,13 @@ import {
   promptSchemaMiddleware,
   type JsonSchema,
 } from './prompt-schema'
-import { describeReplyCutOff } from './reply-cut-off'
+import {
+  describeReplyCutOff,
+  isCutOff,
+  ReplyCutOffError,
+  replyCutOff,
+  type ReplyCutOffFailure,
+} from './reply-cut-off'
 import {
   resolveModel,
   type ResolveFailureKind,
@@ -191,12 +204,20 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
   }
 }
 
-/** Parse a model's raw text into `schema`, recovering common LLM JSON slop (fences, trailing commas) via jsonrepair before validating. */
-export function parseStructured<T>(raw: string, schema: z.ZodType<T>): T {
+/**
+ * Parse a model's raw text into `schema`, recovering common LLM JSON slop (fences, trailing commas)
+ * via jsonrepair before validating. `repair: false` accepts only a strict document.
+ */
+export function parseStructured<T>(
+  raw: string,
+  schema: z.ZodType<T>,
+  opts: { repair?: boolean } = {},
+): T {
   let obj: unknown
   try {
     obj = JSON.parse(raw)
-  } catch {
+  } catch (error) {
+    if (opts.repair === false) throw error
     obj = JSON.parse(jsonrepair(raw))
   }
   return schema.parse(obj)
@@ -210,11 +231,18 @@ export type StructuredCallOptions = {
   actionId: string | null
 }
 
+// Optional: a reply without them reads as finished, with no counts.
+type StructuredReply = {
+  text: string
+  finishReason: FinishReason | undefined
+  usage: LanguageModelUsage | undefined
+}
+
 /** generation-pipeline.md → Two retry tiers: `recoverable` holds each retried attempt. */
 export type GenerateStructuredResult<T> =
   | { status: 'ok'; value: T; recoverable: readonly CallRetryError[] }
   | { status: 'not-configured'; kind: ResolveFailureKind }
-  | { status: 'failed'; detail: string; recoverable: readonly CallRetryError[] }
+  | { status: 'failed'; error: CallRetryError; recoverable: readonly CallRetryError[] }
   | { status: 'aborted'; recoverable: readonly CallRetryError[] }
 
 /** A failure as one line, for logs and failure details. */
@@ -254,7 +282,11 @@ export async function generateStructured<T>(
   } catch (err) {
     return {
       status: 'failed',
-      detail: err instanceof Error ? err.message : String(err),
+      error: {
+        tier: 'parse',
+        detail: err instanceof Error ? err.message : String(err),
+        attempt: 0,
+      },
       recoverable: [],
     }
   }
@@ -269,8 +301,37 @@ export async function generateStructured<T>(
       : []),
   ])
 
+  const logCutOff = (outcome: 'accepted' | 'refused', failure: ReplyCutOffFailure): void => {
+    logger.warn(
+      'provider.reply_cut_off',
+      { outcome, target, ...failure },
+      options.actionId === null ? undefined : { actionId: options.actionId },
+    )
+  }
+  // generation-pipeline.md → Cut-off replies: a cut reply is accepted only as a strict document,
+  // since jsonrepair would close a truncated one into a valid but shorter reply.
+  const parse = (reply: StructuredReply): T => {
+    if (!isCutOff(reply.finishReason)) return parseStructured(reply.text, schema)
+    const failure = replyCutOff({
+      usage: reply.usage,
+      maxOutput: resolved.params.maxOutput,
+      window: null,
+      promptEstimate: null,
+      providerId: resolved.providerId,
+      modelId: resolved.modelId,
+    })
+    let value: T
+    try {
+      value = parseStructured(reply.text, schema, { repair: false })
+    } catch {
+      throw new ReplyCutOffError(failure)
+    }
+    logCutOff('accepted', failure)
+    return value
+  }
+
   const { timeoutMs } = resolved
-  const result = await callWithRetry<T>(
+  const result = await callWithRetry<T, StructuredReply>(
     async (sig) => {
       // Per attempt, so a retry gets the whole bound again.
       const bounded = timeoutMs === undefined ? null : boundedSignal(sig, timeoutMs)
@@ -281,7 +342,7 @@ export async function generateStructured<T>(
           abortSignal: bounded?.signal ?? sig,
           ...resolved.callSettings,
         })
-        return call.text
+        return { text: call.text, finishReason: call.finishReason, usage: call.usage }
       } catch (error) {
         if (bounded?.expired()) throw new ProviderTimeoutError()
         throw error
@@ -289,12 +350,16 @@ export async function generateStructured<T>(
         bounded?.dispose()
       }
     },
-    (raw) => parseStructured(raw, schema),
+    parse,
     { maxProviderAttempts: 2, maxParseAttempts: 2, signal },
   )
 
   const { recoverable } = result
   if (result.status === 'ok') return { status: 'ok', value: result.result, recoverable }
   if (result.status === 'aborted') return { status: 'aborted', recoverable }
-  return { status: 'failed', detail: describeCallRetryError(result.error), recoverable }
+  if (result.error.tier === 'reply-cut-off') {
+    const { tier: _tier, ...failure } = result.error
+    logCutOff('refused', failure)
+  }
+  return { status: 'failed', error: result.error, recoverable }
 }
