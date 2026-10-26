@@ -37,8 +37,8 @@ export function snapshotModel(model: string, info?: ImageModelInfo): ImageModelS
 
 /**
  * The snapshot a profile should save. A list still loading may belong to the previous provider,
- * so only a settled one is read; otherwise the stored snapshot survives while the provider and
- * base URL are unchanged.
+ * so only a settled one is read; otherwise the stored snapshot survives while the provider, base
+ * URL and model are unchanged.
  */
 export function chooseModelSnapshot(args: {
   model: string
@@ -59,5 +59,5 @@ export function chooseModelSnapshot(args: {
   const sameEndpoint =
     stored?.providerType === providerType &&
     normalizeBaseUrl(stored.baseUrl) === normalizeBaseUrl(baseUrl)
-  return sameEndpoint ? stored.modelSnapshot : undefined
+  return sameEndpoint && stored.modelSnapshot?.model === model ? stored.modelSnapshot : undefined
 }

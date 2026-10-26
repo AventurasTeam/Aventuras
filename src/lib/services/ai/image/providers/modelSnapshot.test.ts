@@ -114,6 +114,11 @@ describe('chooseModelSnapshot', () => {
     expect(snap).toBeUndefined()
   })
 
+  it('drops it when the model changes while the list is unsettled', () => {
+    const snap = chooseModelSnapshot({ ...base, settled: false, models: [], model: 'other' })
+    expect(snap).toBeUndefined()
+  })
+
   it('keeps it across a trailing-slash edit', () => {
     const profile = stored({ baseUrl: 'https://x.example/v1' })
     const snap = chooseModelSnapshot({
