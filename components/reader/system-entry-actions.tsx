@@ -15,7 +15,7 @@ import {
 } from '@/lib/pipeline'
 import { openEmbedderSwapDialog } from '@/lib/stores'
 
-import { passCutOffContent, turnCutOffContent } from './cut-off-copy'
+import { offersProfileFix, passCutOffContent, turnCutOffContent } from './cut-off-copy'
 import type { PassRefusal } from './send-run'
 
 export type SystemEntryFixAction = { label: string; onPress: () => void } | undefined
@@ -301,9 +301,8 @@ export function useSystemEntryActions(
     leaveStory,
   )
   const embedderFix = useEmbedderFixAction(failure?.kind === 'embedder' ? storyId : null)
-  // A window cut-off's remedy is `Set window`, not the profile.
   const cutOffFix = useProfileFixAction(
-    failure?.kind === 'reply-cut-off' && failure.failure !== 'window',
+    failure?.kind === 'reply-cut-off' && offersProfileFix(failure.failure),
     leaveStory,
   )
   // A held branch can't run a pass, and a resolved entry's pass has run, so either offers Dismiss

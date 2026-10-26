@@ -43,3 +43,8 @@ export function cutOffNoticeText(mark: CutOffMark): string {
   }
   return t('reader:cutOffNotice.unknown')
 }
+
+/** A window cut-off's remedy is `Set window`, not the profile. */
+export function offersProfileFix(cause: string | undefined): boolean {
+  return cause !== 'window'
+}

@@ -158,7 +158,8 @@ Serializable props in (native → document):
   state and re-lands the scroll at the bottom.
 - `editGate`, `jumpButtonEnabled`,
   `systemFixLabel` (present only when the system entry has a
-  kind-specific fix route), theme id + token values, and other
+  kind-specific fix route), `cutOffFixLabel` (present only when
+  the host offers Fix profile for a cut-off notice), theme id + token values, and other
   settings-derived flags.
 - `syncNonce` — bumped by the host whenever it must force a full
   prop re-emission (see handshake).
@@ -166,7 +167,8 @@ Serializable props in (native → document):
 Async function props out (document → native):
 
 - Entry actions: edit commit, regenerate, branch, delete, flip era,
-  system-entry retry/dismiss/fix, and world-time edits —
+  system-entry retry/dismiss/fix, the cut-off notice's fix
+  (`onFixCutOff`), and world-time edits —
   `onEditWorldTime` carries the desktop/tablet Dialog's Save, and
   `onRequestEditWorldTime` asks native to present the phone Sheet.
   The document requests; native confirms (modals) and executes

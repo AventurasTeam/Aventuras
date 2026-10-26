@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest'
 
 import type { ReplyCutOffFailure } from '@/lib/ai'
 
-import { cutOffNoticeText, passCutOffContent, turnCutOffContent } from './cut-off-copy'
+import {
+  cutOffNoticeText,
+  offersProfileFix,
+  passCutOffContent,
+  turnCutOffContent,
+} from './cut-off-copy'
 
 const AT_MAX_OUTPUT: ReplyCutOffFailure = {
   cause: 'max-output',
@@ -116,5 +121,15 @@ describe('cutOffNoticeText', () => {
   it('reads as the server limit when the mark carries no limit', () => {
     expect(cutOffNoticeText({ cause: 'max-output' })).toBe(NOTICE_UNKNOWN)
     expect(cutOffNoticeText({ cause: 'window' })).toBe(NOTICE_UNKNOWN)
+  })
+})
+
+describe('offersProfileFix', () => {
+  it.each(['max-output', 'unknown', undefined])('offers the profile for cause %s', (cause) => {
+    expect(offersProfileFix(cause)).toBe(true)
+  })
+
+  it('offers no profile for a window cut-off', () => {
+    expect(offersProfileFix('window')).toBe(false)
   })
 })

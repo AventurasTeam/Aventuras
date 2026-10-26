@@ -19,7 +19,7 @@ import {
 import { EntryCard } from '@/components/compounds/entry-card'
 import type { SceneEdit, SceneOptions } from '@/components/compounds/scene-edit-form'
 import { resolveContentEditNotice } from '@/components/reader/content-edit-notice'
-import { cutOffNoticeText } from '@/components/reader/cut-off-copy'
+import { cutOffNoticeText, offersProfileFix } from '@/components/reader/cut-off-copy'
 import { JumpButtons } from '@/components/reader/jump-buttons'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useTier } from '@/hooks/use-tier'
@@ -161,9 +161,8 @@ const ReaderRow = memo(function ReaderRow({
     cutOff != null
       ? {
           text: cutOffNoticeText(cutOff),
-          // A window cut-off's remedy is `Set window`, not the profile.
           action:
-            cutOff.cause !== 'window' && cutOffFixLabel != null
+            offersProfileFix(cutOff.cause) && cutOffFixLabel != null
               ? { label: cutOffFixLabel, onPress: () => void onFixCutOff() }
               : undefined,
         }

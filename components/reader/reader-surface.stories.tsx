@@ -1110,6 +1110,25 @@ export const CutOffNoticeFixProfile: Story = {
   },
 }
 
+/** An unknown cut-off is fixed through the profile too: it offers `Fix profile` like a max-output one. */
+export const CutOffNoticeUnknownFixProfile: Story = {
+  args: {
+    rows: cutOffRows({ cause: 'unknown', outputTokens: 2048 }),
+    cutOffFixLabel: t('reader:systemEntry.fixProfile'),
+    onFixCutOff: fn(async () => {}),
+  },
+  play: async ({ args }) => {
+    const row = entryRow('e6')
+    await expect(
+      within(row).getByText(
+        'The server stopped the reply at its own limit. Setting a max output on the profile overrides it.',
+      ),
+    ).toBeVisible()
+    await userEvent.click(within(row).getByRole('button', { name: 'Fix profile' }))
+    await waitFor(() => expect(args.onFixCutOff).toHaveBeenCalledTimes(1))
+  },
+}
+
 /** A window cut-off's route is `Set window`, so the row offers no `Fix profile` even with a label. */
 export const CutOffNoticeWindowHasNoFix: Story = {
   args: {
