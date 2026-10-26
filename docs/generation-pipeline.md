@@ -1803,13 +1803,13 @@ type ReplyCutOffFailure = {
 }
 
 type CallWithRetryResult<T> =
-  | { status: 'ok'; result: T; recoverable: CallRetryError[] }
-  | { status: 'failed'; error: CallRetryError; recoverable: CallRetryError[] }
-  | { status: 'aborted'; recoverable: CallRetryError[] }
+  | { status: 'ok'; result: T; recoverable: readonly CallRetryError[] }
+  | { status: 'failed'; error: CallRetryError; recoverable: readonly CallRetryError[] }
+  | { status: 'aborted'; recoverable: readonly CallRetryError[] }
 
-async function callWithRetry<T>(
-  callFn: (signal: AbortSignal) => Promise<string>,
-  parseFn: (raw: string) => T,
+async function callWithRetry<T, R = string>(
+  callFn: (signal: AbortSignal) => Promise<R>, // a structured call's reply: text, finishReason, usage
+  parseFn: (raw: R) => T, // a ReplyCutOffError fails the call at once (Cut-off replies)
   opts: {
     maxProviderAttempts: number
     maxParseAttempts: number
