@@ -570,7 +570,23 @@ describe('readCutOffReply', () => {
   })
 
   it('reads a bare trailing < as a block begun, and removes it', () => {
-    expect(readCutOffReply(`${PROSE}<`)).toEqual({ content: PROSE, inBlock: true })
+    expect(readCutOffReply(`${PROSE}<`)).toEqual({ content: PROSE.trimEnd(), inBlock: true })
+  })
+
+  // The model opens its trailing block on a line of its own.
+  it.each([
+    'She whispered <',
+    'He sighed <su',
+    'Before.\n<state><summary>x</summary></state>\nAfter, more prose <',
+  ])('reads a < cut mid-line (%j) as prose, leaving the text alone', (raw) => {
+    expect(readCutOffReply(raw)).toEqual({ content: raw, inBlock: false })
+  })
+
+  it('reads an opener cut after an indented line start as in the block, trimming what it leaves', () => {
+    expect(readCutOffReply(`${PROSE}\n \t<sta`)).toEqual({
+      content: PROSE.trimEnd(),
+      inBlock: true,
+    })
   })
 
   // The span that ends last decides, not the first one.
@@ -587,7 +603,7 @@ describe('readCutOffReply', () => {
   // State is emitted first, so a closed <state> block is the usual `<` before a cut <sugg.
   it('reads an opener cut after a closed block as in the block, and removes it', () => {
     const closed = `${PROSE}<state>\n<summary>x</summary>\n</state>\n`
-    expect(readCutOffReply(`${closed}<sugg`)).toEqual({ content: closed, inBlock: true })
+    expect(readCutOffReply(`${closed}<sugg`)).toEqual({ content: closed.trimEnd(), inBlock: true })
   })
 
   describe.each([
@@ -623,9 +639,12 @@ describe('readCutOffReply', () => {
     })
 
     it.each([prefix, `<${root}`])(
-      'reads an opener cut mid-name (%s) as in the block, and removes it',
+      'reads an opener cut mid-name (%s) as in the block, and removes it with the newline before it',
       (fragment) => {
-        expect(readCutOffReply(`${PROSE}${fragment}`)).toEqual({ content: PROSE, inBlock: true })
+        expect(readCutOffReply(`${PROSE}${fragment}`)).toEqual({
+          content: PROSE.trimEnd(),
+          inBlock: true,
+        })
       },
     )
   })
