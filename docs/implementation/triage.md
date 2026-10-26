@@ -227,3 +227,17 @@ slice-planning gate forces its resolution before that slice is planned.
   `lib/pipeline/definitions/per-turn.ts`, not run end to end. The logger
   has no `stream_interrupted` kind either, though `observability.md`
   lists one. Raised by the cut-off replies slice review.
+
+- **E2E entry-id helpers are copied per spec, and reader locators scope
+  unevenly.** `entryIdByContent` and `pollEntryId` live in three specs
+  (`reader-regenerate`, `periodic-classifier` and, since the cut-off
+  replies work, `reader-failure-retry`), with different poll timeouts
+  and a `page()` getter in one, so lifting them into
+  `e2e/harness/db.ts` needs page and timeout parameters rather than a
+  move. In `e2e/locators/reader.ts`, `dismissSystemEntry` is scoped to
+  the entry rows while `retrySystemEntry`, `systemEntryFailure` and
+  `fixProfile` match page-wide; `fixProfile`'s comment says to scope it
+  to a row, and both its callers don't. Playwright's strict mode fails
+  loudly on a second match, so nothing passes by accident today. Raised
+  by the cut-off replies slice review; the simplifier left the lift for
+  a home.
