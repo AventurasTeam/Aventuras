@@ -660,6 +660,33 @@ describe('a content edit of a cut-off reply', () => {
     expect(remaining.filter(isContentEditDelta)).toHaveLength(1)
   })
 
+  it('keeps the metadata its own reversal writes to the row', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedReplyWith(db, { ...REPLY_META, worldTime: 7, cutOff: MARK })
+    // A pass write anchored to the reply: the edit's reversal winds its clock back in the edit's
+    // own transaction, after the edit read the row.
+    await db.insert(deltas).values({
+      id: 'd_clock',
+      branchId: 'b1',
+      actionId: 'act_classifier',
+      op: 'update',
+      targetTable: 'story_entries',
+      targetId: 'e_reply',
+      entryId: 'e_reply',
+      source: 'periodic_classifier',
+      undoPayload: { metadata: { worldTime: 0 } },
+      logPosition: 2,
+      encodingVersion: 1,
+      createdAt: 3,
+    })
+
+    await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
+
+    expect((await replyRow(db)).metadata).toEqual(REPLY_META)
+    expect(entriesStore.getById('e_reply')?.metadata).toStrictEqual(REPLY_META)
+  })
+
   it.each([
     ['no metadata', null],
     ['metadata and no mark', REPLY_META],
