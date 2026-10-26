@@ -380,6 +380,60 @@ describe('per-turn-piggyback', () => {
       ])
     })
 
+    it('records an unresolved classifier model in the failure report, naming its kind', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {} }),
+      })
+      hydrateEntries(phaseDb, 'b1', [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          content: 'The hero enters the dark forest.',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+      ])
+      entitiesStore.hydrate('b1', [])
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'not-configured',
+        kind: 'profile-missing',
+      })
+
+      const gen = piggybackFallbackClassifierPhase({
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      })
+      const events = []
+      let next = await gen.next()
+      while (!next.done) {
+        events.push(next.value)
+        next = await gen.next()
+      }
+
+      expect(next.value).toEqual({ status: 'completed' })
+      const written = events.find(
+        (e) => e.type === 'delta_emitted' && e.action.kind === 'updateStoryEntryMetadata',
+      )
+      if (
+        !written ||
+        written.type !== 'delta_emitted' ||
+        written.action.kind !== 'updateStoryEntryMetadata'
+      )
+        throw new Error('expected a metadata delta recording the failure')
+      expect(written.action.payload.metadata.stateReport?.failedFields).toEqual([
+        { field: 'classifier', detail: 'classifier call not-configured: profile-missing' },
+      ])
+    })
+
     // generation-pipeline.md → Cut-off replies: the fallback fails and the turn commits.
     it('records a cut-off reply in the failure report, naming its cause, and commits', async () => {
       currentStoryStore.set({

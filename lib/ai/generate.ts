@@ -231,7 +231,7 @@ export type StructuredCallOptions = {
   actionId: string | null
 }
 
-// Optional: a reply without them reads as finished, with no counts.
+// A reply without them (a fake returning only text) reads as finished, with no counts.
 type StructuredReply = {
   text: string
   finishReason: FinishReason | undefined

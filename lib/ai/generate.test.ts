@@ -651,6 +651,12 @@ describe('generateStructured', () => {
       expect(runProviderCall).toHaveBeenCalledOnce()
     })
 
+    it('refuses a complete document of the wrong shape, after one call', async () => {
+      reply('{"wrong":1}', 'length', 256)
+      expect(await call()).toMatchObject({ status: 'failed', error: { tier: 'reply-cut-off' } })
+      expect(runProviderCall).toHaveBeenCalledOnce()
+    })
+
     it('accepts a reply that parses strictly, a complete document at the limit', async () => {
       reply('{"description":"A tale."}', 'length', 256)
       expect(await call()).toEqual({
