@@ -145,14 +145,15 @@
   async function jumpTo(edge: 'top' | 'bottom') {
     const el = activeScroller()
     if (!el) return
+    // The tapped button disappears at the edge it leads to, and the dialog's focus trap would
+    // scroll the focus it loses back into view; this also closes a phone's keyboard.
+    frame?.focus({ preventScroll: true })
     // Jumping down while a phone's keyboard is up would land short of the bottom once it closes.
     if (
       edge === 'bottom' &&
       el.clientHeight < tallestScroller &&
       matchMedia('(pointer: coarse)').matches
     ) {
-      const field = document.activeElement
-      if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) field.blur()
       await untilRestored(el)
     }
     el.scrollTo({ top: edge === 'top' ? 0 : el.scrollHeight })
