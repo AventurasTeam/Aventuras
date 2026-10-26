@@ -91,6 +91,17 @@ const NanoGptModel = z.object({
   supported_parameters: supportedParameters,
 })
 
+const ModelEndpoints = z.object({
+  id: z.string(),
+  endpoints: z.array(
+    z.object({
+      supported_parameters: supportedParameters,
+      input_reference_constraints: imageConstraints,
+      capabilities: featureFlags,
+    }),
+  ),
+})
+
 type NanoGptModel = z.output<typeof NanoGptModel>
 type ModelFacts = Pick<NanoGptModel, 'architecture' | 'capabilities' | 'supported_parameters'>
 type ImageConstraints = z.output<typeof imageConstraints>
@@ -221,6 +232,42 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
 
     async listModels(apiKey?: string): Promise<ImageModelInfo[]> {
       return (await fetchModels(apiKey)).map(toModelInfo)
+    },
+
+    // The list omits some ids that `/images` still serves, under a shorter name; those resolve here.
+    async getModelCapabilities(model: string): Promise<ImageModelCapabilities | undefined> {
+      const models = await fetchModels()
+      const listed = models.find((m) => m.id === model)
+      if (listed) return toCapabilities(listed)
+
+      const path = model.split('/').map(encodeURIComponent).join('/')
+      const response = await imageGetFetch(
+        `${baseUrl}/images/models/${path}/endpoints`,
+        discoveryHeaders(),
+        { serviceId: DISCOVERY_SERVICE_ID, allowStatuses: [404] },
+      )
+      if (response.status === 404) {
+        await response.body?.cancel()
+        return undefined
+      }
+
+      const reply = ModelEndpoints.safeParse(await response.json())
+      if (!reply.success) throw new Error(`NanoGPT sent an unreadable endpoint reply for ${model}`)
+      const [endpoint] = reply.data.endpoints
+      if (!endpoint) return undefined
+
+      // The list entry also knows the model's input modalities, which an endpoint does not.
+      const canonical = models.find((m) => m.id === reply.data.id)
+      if (canonical) return toCapabilities(canonical)
+      return toCapabilities({
+        capabilities: endpoint.capabilities,
+        supported_parameters: {
+          ...endpoint.supported_parameters,
+          input_image_constraints:
+            endpoint.supported_parameters.input_image_constraints ??
+            endpoint.input_reference_constraints,
+        },
+      })
     },
   }
 }
