@@ -946,25 +946,27 @@ function NarrativeContent({
 // a leave while a run is in flight.
 function CutOffNoticeLine({ text, action }: CutOffNoticeContent) {
   return (
-    <View className="mt-2 flex-row flex-wrap items-center gap-x-1.5 gap-y-0.5">
-      <Icon as={AlertTriangle} size={12} className="shrink-0 text-warning" />
-      <Text size="xs" className="shrink text-warning">
-        {text}
-      </Text>
-      {action != null ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={action.label}
-          onPress={action.onPress}
-          className={Platform.select({
-            web: 'cursor-pointer rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
-          })}
-        >
-          <Text size="xs" className="font-medium text-fg-primary underline">
-            {action.label}
-          </Text>
-        </Pressable>
-      ) : null}
+    <View className="mt-2 flex-row items-start gap-1.5">
+      <Icon as={AlertTriangle} size={12} className="mt-0.5 shrink-0 text-warning" />
+      <View className="flex-1 flex-row flex-wrap items-center gap-x-1.5 gap-y-0.5">
+        <Text size="xs" className="shrink text-warning">
+          {text}
+        </Text>
+        {action != null ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={action.label}
+            onPress={action.onPress}
+            className={Platform.select({
+              web: 'cursor-pointer rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+            })}
+          >
+            <Text size="xs" className="font-medium text-fg-primary underline">
+              {action.label}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   )
 }
