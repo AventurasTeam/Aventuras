@@ -1282,7 +1282,8 @@ test.describe('periodic classifier — failure policy', () => {
     expect(passCalls()).toBeGreaterThan(calls)
     expect(streamedCalls()).toBe(narratives)
     // The draft was empty, so the text went back to the composer and the entry carries none.
-    expect(await systemFailures(branch)).toEqual([['failed', 'provider', null]])
+    // The reply fails the schema, a parse-tier failure, so the kind is phase-logic.
+    expect(await systemFailures(branch)).toEqual([['failed', 'phase-logic', null]])
     const [state, , watermark] = await classifierStatus(branch)
     expect(state).toBe('failed')
     expect(watermark).toBe(parked)
@@ -1305,7 +1306,7 @@ test.describe('periodic classifier — failure policy', () => {
     expect(passCalls()).toBeGreaterThan(calls)
     // A new row for the new cause, still the pass's, still without the text the composer holds.
     await expect.poll(() => systemEntryIds(branch)).not.toEqual([before])
-    expect(await systemFailures(branch)).toEqual([['failed', 'provider', null]])
+    expect(await systemFailures(branch)).toEqual([['failed', 'phase-logic', null]])
     await expect(reader.retrySystemEntry(page)).toBeVisible()
     expect(streamedCalls()).toBe(narratives)
     await expect(reader.composer(page)).toHaveValue(U2)
