@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router'
 import { useMemo } from 'react'
 
-import { describeReplyCutOff, type ResolveFailureKind } from '@/lib/ai'
+import type { ResolveFailureKind } from '@/lib/ai'
 import type { SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
@@ -69,6 +69,8 @@ const FIX_LABEL = {
   'override-provider-missing': 'reader:systemEntry.fixOverride',
 } as const satisfies Record<ResolveFailureKind, string>
 
+const PROVIDER_SETTINGS_ROUTE = '/settings?tab=providers'
+
 function isResolveFailureKind(failure: string): failure is ResolveFailureKind {
   return Object.hasOwn(FIX_LABEL, failure)
 }
@@ -123,7 +125,7 @@ export function describeTurnFailure(error: PipelineError | undefined): {
     }
   }
   if (error?.kind === 'reply-cut-off') {
-    return { content: turnCutOffContent(error), detail: describeReplyCutOff(error) }
+    return { content: turnCutOffContent(error), detail: pipelineErrorDetail(error) }
   }
   if (error?.kind === 'phase-logic' && error.subsystem === EMPTY_REPLY) {
     return {
@@ -167,7 +169,7 @@ export function describePassFailure(
     return { content: t(PASS_RESOLVER_COPY[error.failure]), detail: error.detail }
   }
   if (error?.kind === 'reply-cut-off') {
-    return { content: passCutOffContent(error), detail: describeReplyCutOff(error) }
+    return { content: passCutOffContent(error), detail: pipelineErrorDetail(error) }
   }
   return {
     content: t('reader:systemEntry.failure.memory'),
@@ -251,7 +253,7 @@ export function useConfigFixAction(
   }
   return {
     label: t(isResolveFailureKind(failure) ? FIX_LABEL[failure] : 'reader:systemEntry.fixDefault'),
-    onPress: () => leaveStory(() => router.push('/settings?tab=providers')),
+    onPress: () => leaveStory(() => router.push(PROVIDER_SETTINGS_ROUTE)),
   }
 }
 
@@ -284,7 +286,7 @@ export function useProfileFixAction(
       enabled
         ? {
             label: t('reader:systemEntry.fixProfile'),
-            onPress: () => leaveStory(() => router.push('/settings?tab=providers')),
+            onPress: () => leaveStory(() => router.push(PROVIDER_SETTINGS_ROUTE)),
           }
         : undefined,
     [enabled, leaveStory, router],

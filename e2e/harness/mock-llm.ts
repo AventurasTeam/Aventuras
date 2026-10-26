@@ -1,6 +1,13 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 
+import {
+  completionBody,
+  contentFrame,
+  roleFrame,
+  stopFrames,
+  type FinishReason,
+} from '../../scripts/mock-llm/respond/wire'
 import { matchShape } from '../../scripts/mock-llm/routing'
 
 // A local OpenAI-compatible endpoint. The whole pipeline talks to one URL
@@ -157,48 +164,14 @@ export type MockLlm = {
 const DEFAULT_NARRATIVE =
   'The blade rasps free of its sheath. Somewhere in the drowned city, a bell answers, and the rain leans closer to listen.'
 
-function sse(obj: unknown): string {
-  return `data: ${JSON.stringify(obj)}\n\n`
-}
-
-const CHUNK_BASE = {
-  id: 'chatcmpl-mock',
-  object: 'chat.completion.chunk',
-  created: 0,
-  model: 'mock',
-}
-
 // The role frame alone holds a stream open (the cancel test's in-flight window); the tail
 // (content, finish frame, [DONE]) completes it.
-function narrativeRoleFrame(): string {
-  return sse({
-    ...CHUNK_BASE,
-    choices: [{ index: 0, delta: { role: 'assistant', content: '' }, finish_reason: null }],
-  })
-}
-
-type FinishReason = 'stop' | 'length'
-
 function narrativeTail(content: string, finishReason: FinishReason): string {
-  const frames = [
-    { ...CHUNK_BASE, choices: [{ index: 0, delta: { content }, finish_reason: null }] },
-    { ...CHUNK_BASE, choices: [{ index: 0, delta: {}, finish_reason: finishReason }] },
-  ]
-  return frames.map(sse).join('') + 'data: [DONE]\n\n'
+  return contentFrame(content) + stopFrames(finishReason)
 }
 
 function narrativeSse(content: string, finishReason: FinishReason): string {
-  return narrativeRoleFrame() + narrativeTail(content, finishReason)
-}
-
-function completion(content: string, finishReason: FinishReason): string {
-  return JSON.stringify({
-    id: 'chatcmpl-mock',
-    object: 'chat.completion',
-    created: 0,
-    model: 'mock',
-    choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: finishReason }],
-  })
+  return roleFrame() + narrativeTail(content, finishReason)
 }
 
 // The injected schema block lives in the message content (the app's auto path
@@ -265,15 +238,15 @@ export async function startMockLlm(): Promise<MockLlm> {
   const answerStructured = (res: ServerResponse, agentName: string | null): void => {
     res.writeHead(200, { ...cors, 'content-type': 'application/json' })
     if (agentName === null) {
-      res.end(completion('{}', 'stop'))
+      res.end(completionBody('{}', 'stop'))
       return
     }
     const cut = cutStructured.get(agentName)
     cutStructured.delete(agentName)
     res.end(
       cut !== undefined
-        ? completion(cut, 'length')
-        : completion(JSON.stringify(overrides.get(agentName) ?? EXAMPLES[agentName]), 'stop'),
+        ? completionBody(cut, 'length')
+        : completionBody(JSON.stringify(overrides.get(agentName) ?? EXAMPLES[agentName]), 'stop'),
     )
   }
 
@@ -317,7 +290,7 @@ export async function startMockLlm(): Promise<MockLlm> {
           holdNarrativeNext = false
           // Open the stream but don't finish it: the run stays in-flight
           // (isGenerating) until release or the client aborts on cancel.
-          res.write(narrativeRoleFrame())
+          res.write(roleFrame())
           heldResponses.add(res)
           res.on('close', () => heldResponses.delete(res))
           return

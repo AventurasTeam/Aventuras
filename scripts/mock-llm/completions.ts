@@ -241,10 +241,10 @@ export async function handleCompletion(
   // contract the E2E mock uses, so a schema with defaults still parses.
   const value = canned?.value ?? {}
   const broken = failure === 'malformed' || failure === 'stream-cut'
-  const json = JSON.stringify(value)
-  const content = broken ? MALFORMED_STRUCTURED : failure === 'length' ? firstHalf(json) : json
+  const full = broken ? MALFORMED_STRUCTURED : JSON.stringify(value)
+  const content = failure === 'length' ? firstHalf(full) : full
 
-  entry.served = broken || failure === 'length' ? content : value
+  entry.served = failure === 'none' ? value : content
   res.writeHead(200, { ...CORS_HEADERS, 'content-type': 'application/json' })
   res.end(completionBody(content, failure === 'length' ? 'length' : 'stop'))
   finish()

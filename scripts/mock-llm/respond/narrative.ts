@@ -1,6 +1,6 @@
 import type { ServerResponse } from 'node:http'
 
-import { contentFrame, roleFrame, stopFrames, write } from './wire'
+import { contentFrame, roleFrame, stopFrames, write, type FinishReason } from './wire'
 
 export type StreamPacing = {
   /** 0 delivers the whole reply in a single frame. */
@@ -14,7 +14,7 @@ export type StreamPacing = {
  * server stopped at its limit); `'stream-cut'` stops partway and closes the socket without a
  * stop frame or [DONE].
  */
-export type StreamEnding = 'stop' | 'length' | 'stream-cut'
+export type StreamEnding = FinishReason | 'stream-cut'
 
 export type StreamOptions = StreamPacing & {
   content: string

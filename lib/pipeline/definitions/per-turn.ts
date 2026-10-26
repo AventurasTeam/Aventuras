@@ -322,19 +322,19 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // The column stores prose only (docs/memory/piggyback.md → Persistence and
   // stripping); everything the block carried is persisted structurally instead.
   const { prose, stateRaw, outOfPosition } = stripTrailingBlocks(content)
-  // Ahead of the fold, so no create is planned for a reply that commits nothing. Trimmed: with no
-  // block span, stripTrailingBlocks hands back the raw text.
-  if (cut !== undefined && prose.trim() === '') {
-    logCutOff(ctx.log, cut.failure, entryId, 'failed')
-    return {
-      status: 'failed',
-      error: { kind: 'reply-cut-off', target: 'narrative', ...cut.failure },
+  if (cut !== undefined) {
+    // Ahead of the fold, so no create is planned for a reply that commits nothing. Trimmed: with no
+    // block span, stripTrailingBlocks hands back the raw text.
+    if (prose.trim() === '') {
+      logCutOff(ctx.log, cut.failure, entryId, 'failed')
+      return {
+        status: 'failed',
+        error: { kind: 'reply-cut-off', target: 'narrative', ...cut.failure },
+      }
     }
-  }
-  // Before the fold, whose reads can throw and fail the turn.
-  if (cut !== undefined)
+    // Before the fold, whose reads can throw and fail the turn.
     logCutOff(ctx.log, cut.failure, entryId, cut.inBlock ? 'in-block' : 'marked')
-  if (cut === undefined && content.trim() === '')
+  } else if (content.trim() === '') {
     return {
       status: 'failed',
       error: {
@@ -343,11 +343,12 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
         detail: `the model returned no text (finish reason: ${finishReason ?? 'none'})`,
       },
     }
+  }
   if (outOfPosition) ctx.log.warn('classifier.state_block_out_of_position', { entryId })
   // A reply that is nothing but a block strips to nothing. Persist the raw text
   // instead of committing a blank row: the reader strips it again at display, so
   // the entry reads the same either way, but the text stays recoverable.
-  const proseEmpty = prose === '' && content.trim() !== ''
+  const proseEmpty = prose === ''
   if (proseEmpty) ctx.log.warn('classifier.reply_had_no_prose', { entryId })
   const persistedContent = proseEmpty ? content : prose
 

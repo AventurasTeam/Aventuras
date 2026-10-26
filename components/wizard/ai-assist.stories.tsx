@@ -24,12 +24,16 @@ function okRun<T>(value: T) {
   })
 }
 
-function failRun<T>(detail: string) {
+function failWithErrorRun<T>(error: CallRetryError) {
   return async (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => ({
     status: 'failed',
-    error: { tier: 'provider', reason: 'unknown', detail },
+    error,
     recoverable: [],
   })
+}
+
+function failRun<T>(detail: string) {
+  return failWithErrorRun<T>({ tier: 'provider', reason: 'unknown', detail })
 }
 
 // Fails once (drives the Failure state), then succeeds — exercises "Try
@@ -140,14 +144,6 @@ function excludeCapturingRun<T>(pages: T[], calls: (readonly string[])[]) {
     call += 1
     return { status: 'ok', recoverable: [], value }
   }
-}
-
-function failWithErrorRun<T>(error: CallRetryError) {
-  return async (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => ({
-    status: 'failed',
-    error,
-    recoverable: [],
-  })
 }
 
 const CUT_OFF_ERROR: CallRetryError = {
