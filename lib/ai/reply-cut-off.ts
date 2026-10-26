@@ -1,6 +1,8 @@
 import type { FinishReason, LanguageModelUsage } from 'ai'
 
-export type CutOffCause = 'max-output' | 'window' | 'unknown'
+import type { CutOffMark } from '../db'
+
+export type CutOffCause = CutOffMark['cause']
 
 /** generation-pipeline.md → Two retry tiers: a reply the server stopped at its limit. */
 export type ReplyCutOffFailure = {
