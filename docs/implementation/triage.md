@@ -244,7 +244,12 @@ slice-planning gate forces its resolution before that slice is planned.
   (`context-window.spec.ts`), and `e2e/harness/seed.ts` now repeats
   its providers read-modify-write block three times
   (`setProviderEndpoint`, `addProviderCustomModel`,
-  `setContextWindowOverride`).
+  `setContextWindowOverride`). `e2e/tests/periodic-classifier.spec.ts`
+  repeats one describe setup in each of its twelve `beforeAll` blocks
+  (the seed, `passProbe`, the stream and failure counts); the window
+  check's overflow describe is a near-copy of the cut-off one. A setup
+  factory is a change to the whole file, which the slice review's
+  simplifier left alone.
 
 - **Overflow recognition misses shapes beyond llama.cpp's and OpenAI's.**
   [`architecture.md → Recognizing an overflow rejection`](../architecture.md#recognizing-an-overflow-rejection)
@@ -348,6 +353,13 @@ slice-planning gate forces its resolution before that slice is planned.
   bad body with a 400), and its one-shot controls are never reset
   between tests in a describe, so one armed in a test that fails before
   its call carries into the next. Raised by the context window check.
+  The harness's own tests repeat their helpers too:
+  `scripts/mock-llm/harness-usage.test.ts` copies `provider()` and
+  `classifierCall()` from `harness-cut.test.ts`, and `blockOf`,
+  `structuredCall` and `started()` from `harness-hold.test.ts`; a
+  shared `scripts/mock-llm/harness-calls.ts` beside them would hold one
+  copy (the slice review's simplifier left it, as it touches files the
+  slice didn't change).
 
 - **A cut-off's `window` cause reads the estimate, not the server's
   count.** `replyCutOff` (`lib/ai/reply-cut-off.ts`) gives `window` only
