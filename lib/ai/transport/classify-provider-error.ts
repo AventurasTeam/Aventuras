@@ -3,13 +3,6 @@ import { APICallError } from 'ai'
 import type { ContextWindowFailure } from '../context-window'
 import type { ReplyCutOffFailure } from '../reply-cut-off'
 
-/** generation-pipeline.md → Fatal error categories: a best-effort hint, never an assertion. */
-export type CapabilityHint = {
-  capability: 'reasoning' | 'structuredOutput'
-  /** The keyword that matched, for the copy. */
-  matched: string
-}
-
 // lib/ai-local error vocabulary. The pipeline layer maps these to PipelineError
 // when it yields recoverable_error events — keeps lib/ai free of an upward
 // lib/pipeline type dependency.
@@ -88,9 +81,9 @@ function parseRetryAfter(headers: Record<string, string> | undefined): number | 
   return undefined
 }
 
-export const OVERFLOW_CODES = ['context_length_exceeded', 'exceed_context_size_error'] as const
+const OVERFLOW_CODES = ['context_length_exceeded', 'exceed_context_size_error'] as const
 
-export const OVERFLOW_KEYWORDS = [
+const OVERFLOW_KEYWORDS = [
   'maximum context length',
   'context size',
   'context window',
@@ -101,13 +94,19 @@ export const OVERFLOW_KEYWORDS = [
 
 // Parameter names before generic words, so "json_schema not supported for reasoning models"
 // points at structured output.
-export const CAPABILITY_HINT_KEYWORDS = [
+const CAPABILITY_HINT_KEYWORDS = [
   { matched: 'response_format', capability: 'structuredOutput' },
   { matched: 'json_schema', capability: 'structuredOutput' },
   { matched: 'budget_tokens', capability: 'reasoning' },
   { matched: 'thinking', capability: 'reasoning' },
   { matched: 'reasoning', capability: 'reasoning' },
-] as const satisfies readonly CapabilityHint[]
+] as const satisfies readonly { matched: string; capability: 'reasoning' | 'structuredOutput' }[]
+
+/**
+ * generation-pipeline.md → Fatal error categories: a best-effort hint, never an assertion.
+ * `matched` is the keyword that matched, for the copy.
+ */
+export type CapabilityHint = (typeof CAPABILITY_HINT_KEYWORDS)[number]
 
 // A 2xx APICallError is a successful reply the SDK couldn't read: its body is the model's own text.
 function isRejection(error: unknown): error is APICallError & { statusCode: number } {
@@ -184,7 +183,7 @@ export function capabilityHintOf(error: unknown): CapabilityHint | undefined {
   if (recognizeOverflow(error) !== null) return undefined
   const text = searchableText(error)
   const hit = CAPABILITY_HINT_KEYWORDS.find(({ matched }) => text.includes(matched))
-  return hit === undefined ? undefined : { capability: hit.capability, matched: hit.matched }
+  return hit === undefined ? undefined : { ...hit }
 }
 
 type ProviderFailure = Extract<CallRetryError, { tier: 'provider' }>

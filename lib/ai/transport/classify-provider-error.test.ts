@@ -419,4 +419,9 @@ describe('capabilityHintOf', () => {
   it('gives no hint for anything but an APICallError', () => {
     expect(capabilityHintOf(new Error('thinking is not supported'))).toBeUndefined()
   })
+
+  it('hands out a fresh hint each time, never the keyword table row', () => {
+    const error = rejection(400, errorBody('thinking is not supported'))
+    expect(capabilityHintOf(error)).not.toBe(capabilityHintOf(error))
+  })
 })
