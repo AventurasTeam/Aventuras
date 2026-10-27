@@ -325,14 +325,77 @@ describe('recognizeOverflow', () => {
   it('finds a keyword outside the message and quotes the message', () => {
     const body = JSON.stringify({
       error: {
-        message: 'Provider returned error',
-        code: 400,
-        metadata: {
-          raw: "This model's maximum context length is 8192 tokens. However, you requested 9000.",
-        },
+        message: 'Invalid request',
+        details: "This model's maximum context length is 8192 tokens. However, you requested 9000.",
       },
     })
-    expect(recognizeOverflow(rejection(400, body))).toEqual({ detail: 'Provider returned error' })
+    expect(recognizeOverflow(rejection(400, body))).toEqual({ detail: 'Invalid request' })
+  })
+
+  // OpenRouter's own message for an upstream rejection is generic; the provider's is metadata.raw.
+  function openRouterBody(raw: unknown, message = 'Provider returned error'): string {
+    return JSON.stringify({
+      error: { code: 400, message, metadata: { raw, provider_name: 'OpenAI' } },
+    })
+  }
+
+  it("quotes OpenRouter's upstream text, not its envelope message", () => {
+    const raw = "This model's maximum context length is 8192 tokens. However, you requested 9000."
+    expect(recognizeOverflow(rejection(400, openRouterBody(raw)))).toEqual({ detail: raw })
+  })
+
+  it("trims OpenRouter's upstream text", () => {
+    expect(
+      recognizeOverflow(rejection(400, openRouterBody('  Prompt is too long: 9000 tokens\n'))),
+    ).toEqual({ detail: 'Prompt is too long: 9000 tokens' })
+  })
+
+  it.each([
+    [
+      "OpenAI's error.message",
+      OPENAI_BODY,
+      "This model's maximum context length is 128000 tokens. However, your messages resulted in 130000 tokens.",
+    ],
+    [
+      "TGI's error string",
+      JSON.stringify({ error: 'Input validation error: max_new_tokens must be <= 4096' }),
+      'Input validation error: max_new_tokens must be <= 4096',
+    ],
+    [
+      "vLLM's top-level message",
+      JSON.stringify({ object: 'error', message: 'maximum context length is 4096 tokens' }),
+      'maximum context length is 4096 tokens',
+    ],
+  ])('quotes %s from an upstream body OpenRouter passes as JSON text', (_label, raw, detail) => {
+    expect(recognizeOverflow(rejection(400, openRouterBody(raw)))).toEqual({ detail })
+  })
+
+  it('quotes the message of an upstream body OpenRouter passes as an object', () => {
+    const raw = { error: { message: 'prompt is too long: 210000 tokens > 200000 maximum' } }
+    expect(recognizeOverflow(rejection(400, openRouterBody(raw)))).toEqual({
+      detail: 'prompt is too long: 210000 tokens > 200000 maximum',
+    })
+  })
+
+  it('quotes upstream JSON text that holds no message as it stands', () => {
+    const raw = ' {"detail":"Input exceeds the context window"} '
+    expect(recognizeOverflow(rejection(400, openRouterBody(raw)))).toEqual({
+      detail: '{"detail":"Input exceeds the context window"}',
+    })
+  })
+
+  it("falls back to the envelope's message for an upstream object with no message", () => {
+    const raw = { detail: 'Input exceeds the context window' }
+    expect(recognizeOverflow(rejection(400, openRouterBody(raw)))).toEqual({
+      detail: 'Provider returned error',
+    })
+  })
+
+  it.each(['', '   '])("falls back to the envelope's message for upstream text %j", (raw) => {
+    const message = "This endpoint's maximum context length is 8192 tokens."
+    expect(recognizeOverflow(rejection(400, openRouterBody(raw, message)))).toEqual({
+      detail: message,
+    })
   })
 
   it('does not recognize a 400 that names no overflow', () => {

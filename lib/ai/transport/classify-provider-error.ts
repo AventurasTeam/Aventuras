@@ -123,15 +123,19 @@ function searchableText(error: APICallError): string {
   return bodyText(error).toLowerCase().replace(/`/g, '')
 }
 
-function parsedBody(error: APICallError): unknown {
-  if (error.responseBody !== undefined) {
-    try {
-      return JSON.parse(error.responseBody)
-    } catch {
-      // Not JSON: what the SDK parsed, if anything, is all there is.
-    }
+// JSON.parse never yields undefined, so undefined means the text is not JSON.
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
   }
-  return error.data
+}
+
+function parsedBody(error: APICallError): unknown {
+  const parsed = error.responseBody === undefined ? undefined : parseJson(error.responseBody)
+  // Not JSON: what the SDK parsed, if anything, is all there is.
+  return parsed === undefined ? error.data : parsed
 }
 
 function field(value: unknown, key: string): unknown {
@@ -149,16 +153,24 @@ function stringField(value: unknown, key: string): string | undefined {
   return nonBlank(field(value, key))
 }
 
-// OpenAI's and llama.cpp's error.message, TGI's error string, vLLM's top-level message; else the
-// body itself, since the SDK's message for a body it couldn't parse is only the status text.
-function providerMessage(error: APICallError, body: unknown): string {
+// OpenAI's and llama.cpp's error.message, TGI's error string, vLLM's top-level message.
+function messageOf(body: unknown): string | undefined {
   const inner = field(body, 'error')
-  return (
-    stringField(inner, 'message') ??
-    nonBlank(inner) ??
-    stringField(body, 'message') ??
-    bodyText(error)
-  )
+  return stringField(inner, 'message') ?? nonBlank(inner) ?? stringField(body, 'message')
+}
+
+// OpenRouter's message for a provider's rejection is only "Provider returned error"; the
+// provider's own body is error.metadata.raw, as JSON text, plain text or an object.
+function upstreamMessage(body: unknown): string | undefined {
+  const raw = field(field(field(body, 'error'), 'metadata'), 'raw')
+  if (typeof raw !== 'string') return messageOf(raw)
+  const text = raw.trim()
+  return text === '' ? undefined : (messageOf(parseJson(text)) ?? text)
+}
+
+// The body itself last: the SDK's message for a body it couldn't parse is only the status text.
+function providerMessage(error: APICallError, body: unknown): string {
+  return upstreamMessage(body) ?? messageOf(body) ?? bodyText(error)
 }
 
 /** architecture.md → Recognizing an overflow rejection: by code, then keyword, on any 4xx/5xx. */
