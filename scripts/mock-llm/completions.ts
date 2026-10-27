@@ -73,10 +73,15 @@ function sendHttpFailure(res: ServerResponse, status: number): void {
   res.end(errorBody(`mock injected HTTP ${status}`))
 }
 
-const OVERFLOW_SHAPES: Partial<Record<FailureKind, OverflowShape>> = {
+type OverflowKind = Extract<FailureKind, `overflow-${string}`>
+
+const OVERFLOW_SHAPES = {
   'overflow-llamacpp': 'llamacpp',
   'overflow-openai': 'openai',
-}
+} as const satisfies Record<OverflowKind, OverflowShape>
+
+const isOverflowKind = (kind: FailureKind): kind is OverflowKind =>
+  Object.hasOwn(OVERFLOW_SHAPES, kind)
 
 function resolveUpstream(ctx: MockContext, lane: Lane) {
   if (lane.mode !== 'passthrough') return null
@@ -183,12 +188,11 @@ export async function handleCompletion(
     return
   }
 
-  const overflow = OVERFLOW_SHAPES[failure]
-  if (overflow !== undefined) {
+  if (isOverflowKind(failure)) {
     // A server refuses an overlong prompt before generating, whatever status the lane names.
     entry.status = 400
     res.writeHead(400, { ...CORS_HEADERS, 'content-type': 'application/json' })
-    res.end(overflowBody(overflow, overflowCounts(prompt)))
+    res.end(overflowBody(OVERFLOW_SHAPES[failure], overflowCounts(prompt)))
     finish()
     return
   }
