@@ -1777,20 +1777,20 @@ type CallRetryError =
   | ({ tier: 'context-window' } & ContextWindowFailure)
   | ({ tier: 'reply-cut-off' } & ReplyCutOffFailure)
 
-type CapabilityHint = {
-  capability: 'reasoning' | 'structuredOutput'
-  matched: string // the substring that matched, for the copy
-}
+type CapabilityHint = // matched: the keyword that matched, for the copy
+  | { capability: 'structuredOutput'; matched: 'response_format' | 'json_schema' }
+  | { capability: 'reasoning'; matched: 'budget_tokens' | 'thinking' | 'reasoning' }
 
 type ContextWindowFailure = {
   detectedBy: 'check' | 'provider' // the pre-send check, or a recognized provider rejection
   estimate: number // countTokens over the request as sent
-  window: number | null // null when unknown, which only a provider rejection can report
-  windowSource: 'configured' | 'detected' | 'unknown'
   providerId: string
   modelId: string
   detail?: string // the provider's message verbatim; provider-detected only
-}
+} & (
+  | { window: number; windowSource: 'configured' | 'detected' }
+  | { window: null; windowSource: 'unknown' } // unknown: only a provider rejection can report it
+)
 
 type ReplyCutOffFailure = {
   cause: 'max-output' | 'window' | 'unknown' // see Cut-off replies
