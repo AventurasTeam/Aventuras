@@ -466,7 +466,19 @@ values), then the first-attempt parse rate. A reply the server stopped at its le
 limit that doesn't parse strictly is refused, not repaired
 ([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)):
 its run prints the cut-off's cause and numbers, and the summary counts
-it as cut off at length rather than as a failed run.
+it as cut off at length rather than as a failed run. `SMOKE_LLM_KEY`
+sets the provider's API key, for a hosted server.
+
+`PROBE_EVAL` (`all`, or window names) sends the classifier's
+evaluation set instead: hand-written windows in
+`scripts/classifier-eval/`, each built in memory and rendered as the
+pass renders a branch, `PROBE_RUNS` times each, 5 by default. Each
+window carries checks of the facts its prose should and shouldn't
+yield, marked by whether a rule in the prompt asks for the fact or
+only the window's author judges it; the probe prints each run's
+misses, then how often each check held, and `PROBE_OUT` saves each
+window's prompt and each reply. A unit test proves each check can
+hold and can fail.
 
 ## Selector strategy
 

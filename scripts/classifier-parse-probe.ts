@@ -1,3 +1,4 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
@@ -38,18 +39,23 @@ import {
   PASS_TIMEOUT_DEFAULT_MS,
   readKnownHappenings,
 } from '@/lib/pipeline/definitions/periodic-classifier'
-import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
+import { renderTemplate, TEMPLATE_IDS, type RenderedPrompt } from '@/lib/prompts'
 import { appSettingsStore, hydrateAppSettings } from '@/lib/stores'
 
+import { EVAL_WINDOWS, renderWindow, type EvalWindow } from './classifier-eval'
 import { resolveDevSlot } from './dev-slot/resolve'
 
 // Opt-in: the real pass prompt, sent N times to a real provider, for a first-attempt parse rate.
 //   SMOKE_LLM_URL=http://host:port/v1 SMOKE_LLM_MODEL=<id> pnpm probe:classifier
-// PROBE_RUNS (20), PROBE_MAX_OUTPUT (unset), PROBE_BRANCH_ID (br_hero_main), AVENTURAS_DB_PATH
-// (dev slot db, read-only).
+// SMOKE_LLM_KEY (none), PROBE_RUNS (20, or 5 a window), PROBE_MAX_OUTPUT (unset), PROBE_BRANCH_ID
+// (br_hero_main), AVENTURAS_DB_PATH (dev slot db, read-only). PROBE_EVAL (all, or window names)
+// sends the evaluation set's windows instead and scores each reply; PROBE_OUT saves the replies.
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
-const RUNS = Number(process.env.PROBE_RUNS ?? 20)
+const LLM_KEY = process.env.SMOKE_LLM_KEY ?? ''
+const EVAL = process.env.PROBE_EVAL
+const OUT = process.env.PROBE_OUT
+const RUNS = Number(process.env.PROBE_RUNS ?? (EVAL == null ? 20 : 5))
 const MAX_OUTPUT =
   process.env.PROBE_MAX_OUTPUT === undefined ? undefined : Number(process.env.PROBE_MAX_OUTPUT)
 const BRANCH_ID = process.env.PROBE_BRANCH_ID ?? 'br_hero_main'
@@ -186,6 +192,191 @@ function anchorCounts(
   )
 }
 
+type ReplySchema = ReturnType<typeof classifierReplySchema>
+type ParsedReply = Parameters<typeof readClassifierReply>[0]
+
+// One pass call, printed as a run line; the parsed reply when the call returned one.
+async function attempt(
+  run: number,
+  prompt: RenderedPrompt,
+  schema: ReplySchema,
+  config: ResolveModelConfig,
+): Promise<{ outcome: Outcome; parsed: ParsedReply | null }> {
+  const startedAt = Date.now()
+  const result = await generateStructured(
+    'classifier',
+    prompt,
+    schema,
+    config,
+    AbortSignal.timeout(PASS_TIMEOUT_DEFAULT_MS),
+    { actionId: null },
+  )
+  if (result.status === 'not-configured')
+    throw new Error(`[probe] the classifier target did not resolve: ${result.kind}`)
+  const malformed = result.status === 'ok' ? readClassifierReply(result.value).malformed : []
+  const outcome: Outcome = {
+    status: result.status,
+    recoverable: result.recoverable,
+    ...(result.status === 'failed'
+      ? {
+          detail: describeCallRetryError(result.error),
+          ...(result.error.tier === 'reply-cut-off' ? { cutOff: true as const } : {}),
+        }
+      : {}),
+    ...(malformed.length > 0
+      ? { dropped: malformed.map(({ list, count }) => `${list} ${count}`).join(', ') }
+      : {}),
+  }
+  console.log(
+    `[probe] run ${run}: ${outcome.cutOff === true ? 'cut off at length' : outcome.status} in ` +
+      `${((Date.now() - startedAt) / 1000).toFixed(1)} s, ` +
+      `${parseRetries(outcome)} parse / ${providerRetries(outcome)} provider retries` +
+      (outcome.detail ? ` — ${oneLine(outcome.detail)}` : ''),
+  )
+  if (outcome.dropped != null)
+    console.log(`[probe]   dropped entries that didn't fit: ${outcome.dropped}`)
+  const firstParse = outcome.recoverable.find((e): e is ParseRetryError => e.tier === 'parse')
+  if (firstParse != null)
+    console.log(`[probe]   first parse failure: ${oneLine(parseFailureText(firstParse.detail))}`)
+  return { outcome, parsed: result.status === 'ok' ? result.value : null }
+}
+
+async function probeBranch(config: ResolveModelConfig, maxEntries: number): Promise<Outcome[]> {
+  const dbPath = resolveDbPath()
+  const branch = await readBranch(dbPath, maxEntries)
+  const { window } = branch
+  const prompt = renderTemplate(
+    TEMPLATE_IDS.periodicClassifier,
+    buildClassifierContext({
+      window,
+      entities: branch.entities,
+      happenings: branch.happenings,
+      relationships: branch.relationships,
+      threads: branch.threads,
+      mentionedPlaces: branch.mentionedPlaces,
+      idMap: new IdBiMap(),
+    }),
+  )
+  const schema = classifierReplySchema(branch.mentionedPlaces)
+  console.log(
+    `[probe] ${dbPath} ${BRANCH_ID}: ${window.turns.length} turns, ` +
+      `mentioned places ${branch.mentionedPlaces ? 'on' : 'off'}, ` +
+      `prompt ${prompt.system.length + prompt.user.length} chars, ` +
+      `max output ${MAX_OUTPUT ?? 'unset'}; ${RUNS} runs of ${LLM_MODEL}`,
+  )
+
+  const outcomes: Outcome[] = []
+  for (let run = 1; run <= RUNS; run++) {
+    const { outcome, parsed } = await attempt(run, prompt, schema, config)
+    outcomes.push(outcome)
+    if (parsed != null)
+      console.log(`[probe]   ${anchorCounts(readClassifierReply(parsed).reply.happenings, window)}`)
+  }
+  return outcomes
+}
+
+function selectWindows(names: string): readonly EvalWindow[] {
+  if (names === 'all') return EVAL_WINDOWS
+  return names.split(',').map((name) => {
+    const window = EVAL_WINDOWS.find((w) => w.name === name.trim())
+    if (window == null)
+      throw new Error(
+        `[probe] no eval window ${name}; one of: ${EVAL_WINDOWS.map((w) => w.name).join(', ')}`,
+      )
+    return window
+  })
+}
+
+const listCounts = (reply: object) =>
+  Object.entries(reply)
+    .filter(([, list]) => Array.isArray(list) && list.length > 0)
+    .map(([name, list]) => `${name} ${(list as unknown[]).length}`)
+    .join(', ') || 'every list empty'
+
+async function probeEvalSet(
+  names: string,
+  config: ResolveModelConfig,
+  maxEntries: number,
+): Promise<Outcome[]> {
+  const windows = selectWindows(names)
+  if (OUT != null) mkdirSync(OUT, { recursive: true })
+  const outcomes: Outcome[] = []
+  const scores: { window: EvalWindow; parsedRuns: number; held: number[] }[] = []
+  for (const w of windows) {
+    const rendered = renderWindow(w, maxEntries)
+    const { prompt } = rendered
+    console.log(
+      `[probe] eval ${w.name}, ${w.about}: prompt ${prompt.system.length + prompt.user.length} ` +
+        `chars, max output ${MAX_OUTPUT ?? 'unset'}; ${RUNS} runs of ${LLM_MODEL}`,
+    )
+    if (OUT != null)
+      writeFileSync(join(OUT, `${w.name}.prompt.txt`), `${prompt.system}\n\n${prompt.user}\n`)
+    const held = w.checks.map(() => 0)
+    let parsedRuns = 0
+    for (let run = 1; run <= RUNS; run++) {
+      const { outcome, parsed } = await attempt(run, prompt, rendered.schema, config)
+      outcomes.push(outcome)
+      if (parsed == null) continue
+      parsedRuns++
+      const { reply } = rendered.read(parsed)
+      const holds = w.checks.map((c) => c.holds(reply))
+      holds.forEach((h, i) => (held[i] += h ? 1 : 0))
+      console.log(`[probe]   ${listCounts(reply)}`)
+      const missed = w.checks.filter((_, i) => !holds[i]).map((c) => c.name)
+      if (missed.length > 0) console.log(`[probe]   missed: ${missed.join('; ')}`)
+      if (OUT != null)
+        writeFileSync(join(OUT, `${w.name}.${run}.json`), `${JSON.stringify(reply, null, 2)}\n`)
+    }
+    scores.push({ window: w, parsedRuns, held })
+  }
+
+  console.log('[probe] eval scores, each over the runs that parsed:')
+  for (const { window, parsedRuns, held } of scores) {
+    console.log(`[probe] ${window.name}: ${parsedRuns}/${RUNS} parsed`)
+    window.checks.forEach((c, i) =>
+      console.log(`[probe]   ${held[i]}/${parsedRuns} ${c.kind} ${c.basis}: ${c.name}`),
+    )
+  }
+  for (const basis of ['rule', 'judgment'] as const) {
+    let held = 0
+    let total = 0
+    for (const score of scores)
+      score.window.checks.forEach((c, i) => {
+        if (c.basis !== basis) return
+        held += score.held[i]!
+        total += score.parsedRuns
+      })
+    console.log(`[probe] ${basis} checks held ${held}/${total}`)
+  }
+  return outcomes
+}
+
+function summarizeParses(outcomes: readonly Outcome[]): void {
+  const runs = outcomes.length
+  const firstAttempt = outcomes.filter((o) => o.status === 'ok' && parseRetries(o) === 0).length
+  const afterRetry = outcomes.filter((o) => o.status === 'ok' && parseRetries(o) > 0).length
+  const cutOff = outcomes.filter((o) => o.cutOff === true)
+  // callWithRetry keeps a call's final error out of `recoverable`: a failed run with a parse entry
+  // had an unparseable first reply, then a failed re-call. A cut-off run counts only as cut off.
+  const failedAfterParseRetry = outcomes.filter(
+    (o) => o.status === 'failed' && o.cutOff !== true && parseRetries(o) > 0,
+  )
+  const failedOther = outcomes.filter(
+    (o) => o.status === 'failed' && o.cutOff !== true && parseRetries(o) === 0,
+  )
+  const aborted = outcomes.filter((o) => o.status === 'aborted')
+  console.log(
+    `[probe] first-attempt parse ${firstAttempt}/${runs} ` +
+      `(${((100 * firstAttempt) / runs).toFixed(0)}%; ` +
+      `a failed, cut-off or aborted run counts as no success), ` +
+      `ok after a parse retry ${afterRetry}, failed after a parse retry ${failedAfterParseRetry.length}, ` +
+      `failed with no parse retry ${failedOther.length}, cut off at length ${cutOff.length}, ` +
+      `aborted ${aborted.length}, ` +
+      `ok with dropped entries ${outcomes.filter((o) => o.dropped != null).length}, ` +
+      `provider retries ${outcomes.reduce((n, o) => n + providerRetries(o), 0)}`,
+  )
+}
+
 async function main(): Promise<void> {
   if (!LLM_URL || !LLM_MODEL) {
     console.log('[probe] skipped: set SMOKE_LLM_URL and SMOKE_LLM_MODEL to run')
@@ -202,7 +393,7 @@ async function main(): Promise<void> {
         id: PROVIDER_ID,
         type: 'openai-compatible',
         displayName: 'Classifier probe',
-        apiKey: '',
+        apiKey: LLM_KEY,
         endpoint: LLM_URL,
         favoriteModelIds: [LLM_MODEL],
       },
@@ -229,95 +420,12 @@ async function main(): Promise<void> {
     assignments: settings.assignments,
   }
 
-  const dbPath = resolveDbPath()
   const maxEntries = settings.classifierWindowMaxEntries
-  const branch = await readBranch(dbPath, maxEntries)
-  const { window } = branch
-  const prompt = renderTemplate(
-    TEMPLATE_IDS.periodicClassifier,
-    buildClassifierContext({
-      window,
-      entities: branch.entities,
-      happenings: branch.happenings,
-      relationships: branch.relationships,
-      threads: branch.threads,
-      mentionedPlaces: branch.mentionedPlaces,
-      idMap: new IdBiMap(),
-    }),
-  )
-  const schema = classifierReplySchema(branch.mentionedPlaces)
-  console.log(
-    `[probe] ${dbPath} ${BRANCH_ID}: ${window.turns.length} turns, ` +
-      `mentioned places ${branch.mentionedPlaces ? 'on' : 'off'}, ` +
-      `prompt ${prompt.system.length + prompt.user.length} chars, ` +
-      `max output ${MAX_OUTPUT ?? 'unset'}; ${RUNS} runs of ${LLM_MODEL}`,
-  )
-
-  const outcomes: Outcome[] = []
-  for (let run = 1; run <= RUNS; run++) {
-    const startedAt = Date.now()
-    const result = await generateStructured(
-      'classifier',
-      prompt,
-      schema,
-      config,
-      AbortSignal.timeout(PASS_TIMEOUT_DEFAULT_MS),
-      { actionId: null },
-    )
-    if (result.status === 'not-configured')
-      throw new Error(`[probe] the classifier target did not resolve: ${result.kind}`)
-    const read = result.status === 'ok' ? readClassifierReply(result.value) : null
-    const malformed = read?.malformed ?? []
-    const outcome: Outcome = {
-      status: result.status,
-      recoverable: result.recoverable,
-      ...(result.status === 'failed'
-        ? {
-            detail: describeCallRetryError(result.error),
-            ...(result.error.tier === 'reply-cut-off' ? { cutOff: true as const } : {}),
-          }
-        : {}),
-      ...(malformed.length > 0
-        ? { dropped: malformed.map(({ list, count }) => `${list} ${count}`).join(', ') }
-        : {}),
-    }
-    outcomes.push(outcome)
-    console.log(
-      `[probe] run ${run}: ${outcome.cutOff === true ? 'cut off at length' : outcome.status} in ` +
-        `${((Date.now() - startedAt) / 1000).toFixed(1)} s, ` +
-        `${parseRetries(outcome)} parse / ${providerRetries(outcome)} provider retries` +
-        (outcome.detail ? ` — ${oneLine(outcome.detail)}` : ''),
-    )
-    if (outcome.dropped != null)
-      console.log(`[probe]   dropped entries that didn't fit: ${outcome.dropped}`)
-    if (read != null) console.log(`[probe]   ${anchorCounts(read.reply.happenings, window)}`)
-    const firstParse = outcome.recoverable.find((e): e is ParseRetryError => e.tier === 'parse')
-    if (firstParse != null)
-      console.log(`[probe]   first parse failure: ${oneLine(parseFailureText(firstParse.detail))}`)
-  }
-
-  const firstAttempt = outcomes.filter((o) => o.status === 'ok' && parseRetries(o) === 0).length
-  const afterRetry = outcomes.filter((o) => o.status === 'ok' && parseRetries(o) > 0).length
-  const cutOff = outcomes.filter((o) => o.cutOff === true)
-  // callWithRetry keeps a call's final error out of `recoverable`: a failed run with a parse entry
-  // had an unparseable first reply, then a failed re-call. A cut-off run counts only as cut off.
-  const failedAfterParseRetry = outcomes.filter(
-    (o) => o.status === 'failed' && o.cutOff !== true && parseRetries(o) > 0,
-  )
-  const failedOther = outcomes.filter(
-    (o) => o.status === 'failed' && o.cutOff !== true && parseRetries(o) === 0,
-  )
-  const aborted = outcomes.filter((o) => o.status === 'aborted')
-  console.log(
-    `[probe] first-attempt parse ${firstAttempt}/${RUNS} ` +
-      `(${((100 * firstAttempt) / RUNS).toFixed(0)}%; ` +
-      `a failed, cut-off or aborted run counts as no success), ` +
-      `ok after a parse retry ${afterRetry}, failed after a parse retry ${failedAfterParseRetry.length}, ` +
-      `failed with no parse retry ${failedOther.length}, cut off at length ${cutOff.length}, ` +
-      `aborted ${aborted.length}, ` +
-      `ok with dropped entries ${outcomes.filter((o) => o.dropped != null).length}, ` +
-      `provider retries ${outcomes.reduce((n, o) => n + providerRetries(o), 0)}`,
-  )
+  const outcomes =
+    EVAL == null
+      ? await probeBranch(config, maxEntries)
+      : await probeEvalSet(EVAL, config, maxEntries)
+  summarizeParses(outcomes)
 }
 
 main().catch((err) => {
