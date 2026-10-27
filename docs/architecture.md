@@ -953,18 +953,19 @@ on its existing failure path:
 
 ### Recognizing an overflow rejection
 
-`classifyProviderError` recognizes an overflow (`recognizeOverflow`, in
-`lib/ai/transport/classify-provider-error.ts`) on any `APICallError`
-with an error status (400 and up; a 2xx one is a reply the SDK couldn't
+`recognizeOverflow` (`lib/ai/transport/classify-provider-error.ts`)
+recognizes an overflow on any `APICallError` with an error status (400 and up; a 2xx one is a reply the SDK couldn't
 read, whose body is the model's text). By code first:
 `context_length_exceeded` or `exceed_context_size_error` in the body's
 `error.code`, `error.type`
 or a top-level `code`. Then by a short keyword list on the body:
 maximum context length, context size, context window, prompt is too
-long, input token count, and `max_new_tokens` must be. The result is
-the `context-window` failure with `detectedBy: 'provider'`, the
-provider's message verbatim, the estimate, and the window when known.
-It is not retried, on a 5xx too.
+long, input token count, and `max_new_tokens` must be. A structured
+call's attempt and the narrative's stream error turn a match into the
+`context-window` failure with `detectedBy: 'provider'`, the provider's
+message verbatim, the estimate, and the window when known.
+`classifyProviderError` reads the same match to mark the failure not
+retryable, on a 5xx too.
 
 Nothing is parsed out of the message or stored. Servers phrase the
 limit differently per server and per version, and a figure learned

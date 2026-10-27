@@ -1959,7 +1959,7 @@ type PipelineError =
       kind: 'provider'
       reason: 'auth' | 'network' | 'timeout' | 'unknown'
       detail?: string
-      possibleCapabilityMismatch?: CapabilityHint // carried over from CallRetryError
+      possibleCapabilityMismatch?: CapabilityHint // from CallRetryError, or the narrative's stream error
     }
   | {
       kind: 'phase-logic'
@@ -2033,7 +2033,9 @@ for **structured output**. It runs after overflow recognition, so a
 body recognized as an overflow carries no hint. A hit sets the field
 on the `provider` `CallRetryError` to the capability and the matched
 word, and the phase copies it onto `PipelineError.provider` as it maps
-the error; otherwise it's omitted.
+the error; otherwise it's omitted. The narrative's stream error never
+passes through `callWithRetry`, so the narrative phase matches it with
+the same rule (`capabilityHintOf`) and sets the field itself.
 Best-effort only — provider error messages are not standardised;
 the field is a hint for the UI, never an assertion that a user
 override was wrong. The copy names the setting and hedges: "The

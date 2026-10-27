@@ -258,7 +258,9 @@ slice-planning gate forces its resolution before that slice is planned.
   whole JSON as the provider's message. The capability hint matches any
   4xx, a 429 included, so an aggregator's rate-limit body that echoes a
   model id containing `thinking` or `reasoning` gets the hint and
-  `Fix profile`. Reproduced through the real SDK (Task 10 review): an
+  `Fix profile`; a 401 or 403 that mentions a capability ("no access to
+  reasoning models") gets it too, since the hint is matched before the
+  status branches. Reproduced through the real SDK: an
   overflow sent as an in-stream error part, then a stall, fails the turn
   as a provider timeout, because an expired stream fails as a timeout
   ([`generation-pipeline.md → Two retry tiers, both at phase level`](../generation-pipeline.md#two-retry-tiers-both-at-phase-level));
@@ -272,10 +274,10 @@ slice-planning gate forces its resolution before that slice is planned.
   includes the KV-cache tokens it reused. If it doesn't, a cached story
   prefix puts the ratio under 0.5 on most turns: a warn log each call
   and a false toast once per model per session. llama.cpp counts them
-  (`prompt_tokens` 913 with `cached_tokens` 908, Task 6 review). Raised
-  by the context window check.
+  (`prompt_tokens` 913 with `cached_tokens` 908). Raised by the context
+  window check.
 
-- **Detected windows on embedding models and parallel slots.** vLLM
+- **Detected windows: embedding models, parallel slots, staleness.** vLLM
   publishes `max_model_len` on an embedding model too, so the catalog
   now stores it as that model's `contextWindow`, while the embedder
   reads only `maxInputTokens` (`lib/embedder/input-window.ts`), whose
@@ -287,7 +289,14 @@ slice-planning gate forces its resolution before that slice is planned.
   `--parallel N` and no unified KV cache it may be the total across
   slots, which overstates the window and ends in a recognized rejection
   rather than a refusal. The dev router runs `--parallel 1`, so this is
-  unchecked. Raised by the context window check's Task 2 review.
+  unchecked. Raised by the context window check.
+  A detected window can also go stale and lock a model out: canon keeps
+  the last detected figure when a fetch publishes none, so after a
+  llama.cpp router restarts the model with a larger context, a prompt
+  between the old and new figures is refused before it is sent. If the
+  router loads a model only on a request (believed, not checked), the
+  model never loads, a refresh never sees its new `meta.n_ctx`, and
+  until M7.1's override the user's only exit is another model.
 
 - **A capability editor must store an explicit `false`.**
   `normalizeModelCatalog` (`lib/ai/catalog.ts`) lets a stored capability
@@ -298,7 +307,7 @@ slice-planning gate forces its resolution before that slice is planned.
   window check compressed it; no canon does.
 
 - **Window-failure copy has rough edges.** From the context window
-  check's Task 11 and 12 reviews:
+  check's reviews:
   - The provider's message is quoted in the entry's content, which
     renders through `marked`, so markdown in it (`*x*`, a `#` line)
     changes the quote. It is sanitized, so not a security issue.
@@ -336,8 +345,7 @@ slice-planning gate forces its resolution before that slice is planned.
   `JSON.parse` of a request body is unguarded (the dev mock answers a
   bad body with a 400), and its one-shot controls are never reset
   between tests in a describe, so one armed in a test that fails before
-  its call carries into the next. Raised by the context window check's
-  Task 14 review.
+  its call carries into the next. Raised by the context window check.
 
 - **A cut-off's `window` cause reads the estimate, not the server's
   count.** `replyCutOff` (`lib/ai/reply-cut-off.ts`) gives `window` only
@@ -349,4 +357,4 @@ slice-planning gate forces its resolution before that slice is planned.
   points at `Fix profile`. With `includeUsage` on, a cut-off reply now
   usually carries the provider's own input count, which would make the
   cause exact. A canon design change. Raised by the context window
-  check's Task 16 review.
+  check.
