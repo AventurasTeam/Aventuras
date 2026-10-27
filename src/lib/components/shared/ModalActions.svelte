@@ -30,14 +30,14 @@
     tone?: ActionTone
     /** Only when Cancel ends more than the modal, as "Cancel import" does. */
     cancelLabel?: string
-    /** Another way to do the job, at the left; under the pair on a phone. */
+    /** Another way to do the job, at the left; above the pair on a phone. */
     alternative?: Snippet
   } = $props()
 </script>
 
 <ResponsiveModal.Footer class="bg-muted/40 gap-2 border-t px-6 py-4 sm:space-x-0">
   {#if alternative}
-    <span class="flex w-full sm:mr-auto sm:w-auto">{@render alternative()}</span>
+    <span class="flex w-full max-sm:order-1 sm:mr-auto sm:w-auto">{@render alternative()}</span>
   {/if}
   <!-- Half the width each, until a label does not fit: then they stack in reading order. -->
   <span class="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">

@@ -151,7 +151,7 @@ The header is left-aligned at every width, since a title or description that wra
 centred. It holds only the title and a short description; a control, even a switch that changes
 what the body says, goes at the top of the body. A way to do the job other than this modal, such
 as the character editor's "Ask assistant", is an `alternative`: it sits left of Cancel, and on a
-phone on a full-width row under them. The snippet gets `leaveFor(next)`, which asks the discard
+phone on a full-width row above them. The snippet gets `leaveFor(next)`, which asks the discard
 question first when the modal holds edits and then runs `next`, since leaving for the other route
 drops what was typed here.
 
