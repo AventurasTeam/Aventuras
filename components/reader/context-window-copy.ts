@@ -7,7 +7,7 @@ import {
 import { t } from '@/lib/i18n'
 
 /** The source label copy prints after a window figure. */
-export function windowSourceLabel(source: ContextWindowFailure['windowSource']): string {
+export function windowSourceLabel(source: 'configured' | 'detected'): string {
   return t(`common:contextWindowSource.${source}`)
 }
 

@@ -14,7 +14,6 @@ export {
   generationWindow,
   type ContextWindowFailure,
   type GenerationWindow,
-  type WindowSource,
 } from './context-window'
 export { embedViaProvider } from './embedding'
 export type { ProviderInstanceWithStub } from './types'

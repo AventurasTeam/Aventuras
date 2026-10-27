@@ -165,7 +165,6 @@ describe('windowSourceLabel', () => {
   it.each([
     ['configured', 'set by you'],
     ['detected', 'detected'],
-    ['unknown', 'unknown'],
   ] as const)('labels a %s window "%s"', (source, label) => {
     expect(windowSourceLabel(source)).toBe(label)
   })

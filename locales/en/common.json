@@ -55,8 +55,7 @@
   "deleteUndoHint": "You can undo this from the reader: {{action}} in its menu, or Cmd/Ctrl-Z.",
   "contextWindowSource": {
     "configured": "set by you",
-    "detected": "detected",
-    "unknown": "unknown"
+    "detected": "detected"
   },
   "recovery": {
     "title": "Couldn't load settings",

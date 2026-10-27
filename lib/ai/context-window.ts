@@ -10,7 +10,14 @@ import { recognizeOverflow } from './transport/classify-provider-error'
 export type GenerationWindow =
   | { tokens: number; source: 'configured' | 'detected' }
   | { tokens: null; source: 'unknown' }
-export type WindowSource = GenerationWindow['source']
+
+type FailureWindow =
+  | { window: number; windowSource: 'configured' | 'detected' }
+  | {
+      /** Null when unknown, which only a provider rejection can report. */
+      window: null
+      windowSource: 'unknown'
+    }
 
 /** generation-pipeline.md → Two retry tiers. */
 export type ContextWindowFailure = {
@@ -18,13 +25,16 @@ export type ContextWindowFailure = {
   detectedBy: 'check' | 'provider'
   /** countTokens over the request as sent. */
   estimate: number
-  /** Null when unknown, which only a provider rejection can report. */
-  window: number | null
-  windowSource: WindowSource
   providerId: string
   modelId: string
   /** The provider's message verbatim; provider-detected only. */
   detail?: string
+} & FailureWindow
+
+function failureWindow(window: GenerationWindow): FailureWindow {
+  return window.source === 'unknown'
+    ? { window: null, windowSource: 'unknown' }
+    : { window: window.tokens, windowSource: window.source }
 }
 
 /** architecture.md → The window figure: configured, else detected, else unknown; never assumed. */
@@ -118,8 +128,7 @@ export function windowCheckMiddleware(opts: {
       throw new ContextWindowError({
         detectedBy: 'check',
         estimate,
-        window: window.tokens,
-        windowSource: window.source,
+        ...failureWindow(window),
         providerId,
         modelId,
       })
@@ -133,8 +142,7 @@ export function windowCheckMiddleware(opts: {
       throw new ContextWindowError({
         detectedBy: 'provider',
         estimate,
-        window: window.tokens,
-        windowSource: window.source,
+        ...failureWindow(window),
         providerId,
         modelId,
         detail: overflow.detail,
