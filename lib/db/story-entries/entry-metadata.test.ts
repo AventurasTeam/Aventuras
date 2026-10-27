@@ -352,6 +352,7 @@ describe('cutOff', () => {
     { cause: 'max-output', outputTokens: 4096, limit: 4096 },
     { cause: 'window', outputTokens: 1200, limit: 65536 },
     { cause: 'unknown' },
+    { cause: 'unknown', outputTokens: 300, maxOutput: 512 },
   ])('keeps a $cause mark with its numbers', (mark) => {
     expect(entryMetadataSchema.parse({ ...base, cutOff: mark }).cutOff).toEqual(mark)
   })

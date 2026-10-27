@@ -1797,7 +1797,7 @@ type ReplyCutOffFailure = {
   outputTokens: number | null // as the provider reported; null when it reported none
   // 0 can mean unreported (OpenAI-compatible reports a missing count as 0); described as absent
   reasoningTokens: number | null // the part of outputTokens spent thinking, when reported
-  maxOutput: number | null // the profile's limit; null when it sets none
+  maxOutput: number | null // the max output the call sent; null when it sent none
   window: number | null // the model's known window; null when unknown
   providerId: string
   modelId: string
@@ -1884,6 +1884,13 @@ otherwise, on hosted servers usually their own default `max_tokens`,
 which a profile max output overrides. Output tokens include reasoning
 on both providers, so a model that spends its allowance thinking reads
 as `max-output`, with `reasoningTokens` saying how much went there.
+An `unknown` cut-off on a call that sent a max output stopped short of
+it: most likely at a full window, until the window check reads it as
+`window`, or at a provider's own ceiling below it (`@ai-sdk/anthropic`
+lowers `max_tokens` to a known model's maximum). The failure carries
+the limit in `maxOutput` and the entry's mark keeps it, so each surface
+says the server stopped short of that limit instead of telling the user
+to set one.
 
 Every cut-off, committed or failed, logs a warning with the cause and
 the numbers. A plain-text call other than the narrative, such as a
@@ -2010,6 +2017,8 @@ prose ([Cut-off replies](#cut-off-replies)). Its remedy is the reply's
 limit, so its surfaces route to the model's window (`Set window`) for
 `window`, and to the profile (`Fix profile`) for `max-output` and
 `unknown`, where a profile max output overrides the server's default.
+An `unknown` cut short of a max output the call sent keeps
+`Fix profile` too.
 
 Categories drive how UI surfaces them — toast for transient,
 banner / dialog for persistent.

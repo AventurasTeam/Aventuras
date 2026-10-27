@@ -38,7 +38,8 @@ export const entryMetadataSchema = z.object({
   generationTimingMs: z.number().optional(),
   reasoning: z.string().optional(),
   // The server cut the story text off at its limit; authored, never inherited (data-model.md →
-  // Entry metadata shape). `limit` is the number the cause names.
+  // Entry metadata shape). `limit` is the number the cause names; an `unknown` cut's `maxOutput`
+  // is the one the call sent and the reply fell short of.
   cutOff: z
     .discriminatedUnion('cause', [
       z.strictObject({
@@ -46,7 +47,11 @@ export const entryMetadataSchema = z.object({
         outputTokens: z.number().optional(),
         limit: z.number(),
       }),
-      z.strictObject({ cause: z.literal('unknown'), outputTokens: z.number().optional() }),
+      z.strictObject({
+        cause: z.literal('unknown'),
+        outputTokens: z.number().optional(),
+        maxOutput: z.number().optional(),
+      }),
     ])
     .optional(),
   // Feeds the NEXT turn's Q3 retrieval query (docs/memory/retrieval.md#q3-piggyback-summary).

@@ -2001,7 +2001,11 @@ story_entries.metadata: {
         outputTokens?: number       // as the provider reported
         limit: number               // the profile's max output, or the model's window, that the cause names
       }
-    | { cause: 'unknown'; outputTokens?: number }  // no limit the call knew of was reached
+    | {
+        cause: 'unknown'            // no limit the call knew of was reached
+        outputTokens?: number
+        maxOutput?: number          // the max output the call sent, which the reply fell short of; absent when it sent none
+      }
 
   // Scene presence — classifier-authored, user-editable
   sceneEntities: string[]           // entity IDs present in this entry's scene (characters + items)

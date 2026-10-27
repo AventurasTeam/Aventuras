@@ -1037,8 +1037,11 @@ code before it moved; resolve with the slice it names.
   Models instead, which changes the `ReplyCutOffFailure` and `cutOff`
   shapes canon prints; or let overrides carry parameters such as a max
   output, which changes the insulation rule above. No interim measure
-  until then (developer, 2026-10-27). Raised by the cut-off replies
-  slice review (2026-10-26).
+  until then (developer, 2026-10-27). The same pass revisits
+  `Fix profile` on an `unknown` cut-off that carries the max output the
+  reply fell short of, where raising that limit can't help and only the
+  profile's model can (kept for now, developer, 2026-10-27). Raised by
+  the cut-off replies slice review (2026-10-26).
 - **M7.2 — Story Settings → Memory's embedder block departs from
   canon.** [`story-settings.md → Memory tab`](../ui/screens/story-settings/story-settings.md#memory-tab)
   puts [Embedding status](../ui/screens/story-settings/story-settings.md#embedding-status)

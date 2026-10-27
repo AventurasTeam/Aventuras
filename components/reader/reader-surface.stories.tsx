@@ -1129,6 +1129,25 @@ export const CutOffNoticeUnknownFixProfile: Story = {
   },
 }
 
+/** An unknown cut-off short of the profile's max output names that limit and keeps `Fix profile`. */
+export const CutOffNoticeShortOfMaxOutput: Story = {
+  args: {
+    rows: cutOffRows({ cause: 'unknown', outputTokens: 300, maxOutput: 4096 }),
+    cutOffFixLabel: t('reader:systemEntry.fixProfile'),
+    onFixCutOff: fn(async () => {}),
+  },
+  play: async ({ args }) => {
+    const row = entryRow('e6')
+    await expect(
+      within(row).getByText(
+        "The server stopped the reply at its own limit, short of the narrative profile's 4,096-token max output.",
+      ),
+    ).toBeVisible()
+    await userEvent.click(within(row).getByRole('button', { name: 'Fix profile' }))
+    await waitFor(() => expect(args.onFixCutOff).toHaveBeenCalledTimes(1))
+  },
+}
+
 /** A window cut-off is fixed via `Set window`: no `Fix profile`, even with a label. */
 export const CutOffNoticeWindowHasNoFix: Story = {
   args: {

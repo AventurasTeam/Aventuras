@@ -123,9 +123,13 @@ function cutOffMark(failure: ReplyCutOffFailure): CutOffMark {
       : failure.cause === 'window'
         ? failure.window
         : null
-  return failure.cause !== 'unknown' && limit !== null
-    ? { cause: failure.cause, ...outputTokens, limit }
-    : { cause: 'unknown', ...outputTokens }
+  if (failure.cause !== 'unknown' && limit !== null)
+    return { cause: failure.cause, ...outputTokens, limit }
+  return {
+    cause: 'unknown',
+    ...outputTokens,
+    ...(failure.maxOutput !== null ? { maxOutput: failure.maxOutput } : {}),
+  }
 }
 
 async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {

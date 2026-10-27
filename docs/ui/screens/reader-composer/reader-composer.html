@@ -134,6 +134,7 @@
   .cutoff-notice { margin-top: 8px; font-size: 11px; color: var(--warn); }
   .cutoff-notice a { color: var(--ink); text-decoration: underline; cursor: pointer; margin-left: 4px; }
   body[data-cutoff="off"] .cutoff-notice { display: none; }
+  body[data-cutoff="on"] .cutoff-notice.short, body[data-cutoff="short"] .cutoff-notice.at-limit { display: none; }
 
   /* per-entry world-time footer — bottom-right of bubble; click-to-edit on AI/opening */
   .wt-footer { margin-top: 8px; display: flex; justify-content: flex-end; align-items: center; gap: 4px; font-size: 10.5px; color: var(--ink-muted); cursor: pointer; user-select: none; }
@@ -712,6 +713,7 @@
     <button class="rb-btn" data-err="windowProvider">provider overflow</button>
     <button class="rb-btn" data-err="memoryWindow">memory update over window</button>
     <button class="rb-btn" data-err="cutOff">reply cut off, no text</button>
+    <button class="rb-btn" data-err="cutOffShort">reply cut off short of max output, no text</button>
     <button class="rb-btn" data-err="empty">empty reply</button>
     <button class="rb-btn" data-err="memoryCutOff">memory update cut off</button>
     <button class="rb-btn" data-err="capability">capability hint</button>
@@ -723,6 +725,7 @@
     <span class="gl">cut-off notice:</span>
     <button class="rb-btn active" data-cutoff="off">off</button>
     <button class="rb-btn" data-cutoff="on">on (reply cut at max output)</button>
+    <button class="rb-btn" data-cutoff="short">on (server stopped short of max output)</button>
   </div>
 
   <div class="rb-group">
@@ -990,7 +993,9 @@
             <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
           </div>
           <!-- cut-off notice: the prose ended at the narrative profile's max output; an edit clears it -->
-          <div class="cutoff-notice">&#9888; Cut off at the narrative profile's 4,096-token max output.<a>Fix profile</a></div>
+          <div class="cutoff-notice at-limit">&#9888; Cut off at the narrative profile's 4,096-token max output.<a>Fix profile</a></div>
+          <!-- an unknown cut on a call that sent a max output: the mark carries the limit the server stopped short of -->
+          <div class="cutoff-notice short">&#9888; The server stopped the reply at its own limit, short of the narrative profile's 4,096-token max output.<a>Fix profile</a></div>
           <!-- per-entry world-time footer (normal state) — click to edit -->
           <div class="wt-footer" title="Edit in-world time" onclick="document.getElementById('wt-edit-popover').classList.add('open')">
             <span class="wt-icon">&#9201;</span>Day 12 &middot; 14:30
@@ -2024,6 +2029,12 @@
     cutOff: {
       kind: '⚠ System · reply cut off',
       content: "<b>The reply was cut off at the narrative profile's 4,096-token max output before any story text; reasoning used 4,096 of them.</b> Raise the max output, then Retry.",
+      actions: '<span class="err-btn primary">Fix profile</span><span class="err-btn">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+    },
+    // The server stopped short of the max output the call sent: the entry names it, not a remedy.
+    cutOffShort: {
+      kind: '⚠ System · reply cut off',
+      content: "<b>The server stopped the reply at its own limit before any story text, short of the narrative profile's 4,096-token max output.</b>",
       actions: '<span class="err-btn primary">Fix profile</span><span class="err-btn">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
     // The model stopped normally with no text at all.

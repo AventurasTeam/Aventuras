@@ -540,14 +540,19 @@ The cut-off entry names the limit the reply hit: the narrative
 profile's max output, with how much of it reasoning used when the
 provider reported it ("cut off at the 4,096-token max output before any
 story text; reasoning used 4,096 of them"), the model's window, or the
-server's own default. `Fix profile` opens the narrative profile, or
-`Set window` replaces it when the window was the limit. A reply cut off
+server's own default. When the server stopped short of a max output
+the profile set, the entry names that limit rather than suggesting one
+("stopped the reply at its own limit before any story text, short of
+the narrative profile's 4,096-token max output"). `Fix profile` opens
+the narrative profile, or `Set window` replaces it when the window was
+the limit. A reply cut off
 after some prose commits instead, with a
 [cut-off notice](../../patterns/entry-card.md#cut-off-notice) on its
 card. A reply with no text at all, the model stopping normally, is an
 **LLM call failed** entry reading "The model returned no text." A
 **Memory update failed** entry whose pass reply was cut off gives the
-limit it hit and gains `Fix profile`, which opens the profile the
+limit it hit, or the classifier profile's max output it fell short of,
+and gains `Fix profile`, which opens the profile the
 `classifier` agent is assigned, or `Set window` when the window was the
 limit. A fix action precedes `Retry` on every row, as on the embed
 row.

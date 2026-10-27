@@ -142,7 +142,8 @@
   "cutOffNotice": {
     "maxOutput": "Cut off at the narrative profile's {{limit, number}}-token max output.",
     "window": "Cut off where the prompt and reply filled the model's {{limit, number}}-token window.",
-    "unknown": "The server stopped the reply at its own limit. Setting a max output on the profile overrides it."
+    "unknown": "The server stopped the reply at its own limit. Setting a max output on the profile overrides it.",
+    "unknownWithMaxOutput": "The server stopped the reply at its own limit, short of the narrative profile's {{limit, number}}-token max output."
   },
   "worldTimeEdit": {
     "title": "Edit time",
@@ -190,12 +191,14 @@
         "maxOutput": "The reply was cut off at the narrative profile's {{limit, number}}-token max output before any story text. Raise the max output, then Retry.",
         "maxOutputReasoning": "The reply was cut off at the narrative profile's {{limit, number}}-token max output before any story text; reasoning used {{reasoning, number}} of them. Raise the max output, then Retry.",
         "window": "The reply was cut off where the prompt and reply filled the model's {{limit, number}}-token window, before any story text.",
-        "unknown": "The server stopped the reply at its own limit before any story text. Setting a max output on the profile overrides it."
+        "unknown": "The server stopped the reply at its own limit before any story text. Setting a max output on the profile overrides it.",
+        "unknownWithMaxOutput": "The server stopped the reply at its own limit before any story text, short of the narrative profile's {{limit, number}}-token max output."
       },
       "memoryCutOff": {
         "maxOutput": "Memory update failed, so your turn didn't start. The update's reply was cut off at the classifier profile's {{limit, number}}-token max output. Raise it, then Retry.",
         "window": "Memory update failed, so your turn didn't start. The update's reply was cut off where the prompt and reply filled the model's {{limit, number}}-token window.",
-        "unknown": "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit. Setting a max output on the classifier profile overrides it."
+        "unknown": "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit. Setting a max output on the classifier profile overrides it.",
+        "unknownWithMaxOutput": "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit, short of the classifier profile's {{limit, number}}-token max output."
       }
     }
   },

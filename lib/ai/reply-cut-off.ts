@@ -11,7 +11,7 @@ export type ReplyCutOffFailure = {
   outputTokens: number | null
   /** The part of `outputTokens` spent thinking; unreported is null, or 0 on OpenAI-compatible. */
   reasoningTokens: number | null
-  /** The profile's limit; null when it sets none. */
+  /** The max output the call sent; null when it sent none, as under a story model override. */
   maxOutput: number | null
   /** The model's known window; null when unknown. */
   window: number | null

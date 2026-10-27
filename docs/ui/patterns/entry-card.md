@@ -670,6 +670,10 @@ cause and passes the route as an inline link:
   ([`app-settings.md → Context window`](../screens/app-settings/app-settings.md#context-window)).
 - **`unknown`**: "The server stopped the reply at its own limit.
   Setting a max output on the profile overrides it." with `Fix profile`.
+  When the call sent a max output the reply fell short of, the mark
+  carries it and the notice names it instead: "The server stopped the
+  reply at its own limit, short of the narrative profile's 4,096-token
+  max output." with `Fix profile`.
 
 Regenerate is already in the action cluster. The notice is not
 dismissible: a committed edit clears it

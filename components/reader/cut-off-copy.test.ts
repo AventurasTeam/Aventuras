@@ -34,12 +34,21 @@ const AT_SERVER_DEFAULT: ReplyCutOffFailure = {
   maxOutput: null,
 }
 
+// generation-pipeline.md → Cut-off replies: the call sent a max output the reply fell short of.
+const SHORT_OF_MAX_OUTPUT: ReplyCutOffFailure = {
+  ...AT_MAX_OUTPUT,
+  cause: 'unknown',
+  outputTokens: 300,
+}
+
 const TURN_MAX_OUTPUT =
   "The reply was cut off at the narrative profile's 4,096-token max output before any story text. Raise the max output, then Retry."
 const TURN_UNKNOWN =
   'The server stopped the reply at its own limit before any story text. Setting a max output on the profile overrides it.'
 const PASS_UNKNOWN =
   "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit. Setting a max output on the classifier profile overrides it."
+const TURN_SHORT =
+  "The server stopped the reply at its own limit before any story text, short of the narrative profile's 4,096-token max output."
 const NOTICE_UNKNOWN =
   'The server stopped the reply at its own limit. Setting a max output on the profile overrides it.'
 
@@ -73,6 +82,12 @@ describe('turnCutOffContent', () => {
     expect(turnCutOffContent({ ...AT_MAX_OUTPUT, maxOutput: null })).toBe(TURN_UNKNOWN)
     expect(turnCutOffContent({ ...AT_WINDOW, window: null })).toBe(TURN_UNKNOWN)
   })
+
+  it('names the max output the server stopped short of, without telling the user to set one', () => {
+    expect(turnCutOffContent(SHORT_OF_MAX_OUTPUT)).toBe(TURN_SHORT)
+    expect(turnCutOffContent({ ...SHORT_OF_MAX_OUTPUT, reasoningTokens: 280 })).toBe(TURN_SHORT)
+    expect(turnCutOffContent({ ...SHORT_OF_MAX_OUTPUT, cause: 'window' })).toBe(TURN_SHORT)
+  })
 })
 
 describe('passCutOffContent', () => {
@@ -99,6 +114,12 @@ describe('passCutOffContent', () => {
     expect(passCutOffContent({ ...AT_MAX_OUTPUT, maxOutput: null })).toBe(PASS_UNKNOWN)
     expect(passCutOffContent({ ...AT_WINDOW, window: null })).toBe(PASS_UNKNOWN)
   })
+
+  it('names the max output the server stopped short of', () => {
+    expect(passCutOffContent({ ...SHORT_OF_MAX_OUTPUT, maxOutput: 1024 })).toBe(
+      "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit, short of the classifier profile's 1,024-token max output.",
+    )
+  })
 })
 
 describe('cutOffNoticeText', () => {
@@ -116,6 +137,12 @@ describe('cutOffNoticeText', () => {
 
   it("points at the server's own limit for an unknown cause", () => {
     expect(cutOffNoticeText({ cause: 'unknown', outputTokens: 2048 })).toBe(NOTICE_UNKNOWN)
+  })
+
+  it('names the max output the server stopped short of', () => {
+    expect(cutOffNoticeText({ cause: 'unknown', outputTokens: 300, maxOutput: 4096 })).toBe(
+      "The server stopped the reply at its own limit, short of the narrative profile's 4,096-token max output.",
+    )
   })
 })
 

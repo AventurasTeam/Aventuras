@@ -3032,7 +3032,7 @@ describe('narrative — how the reply ended', () => {
     [
       'a max output it fell short of',
       { maxOutput: 512, usage: { outputTokens: 300 } },
-      { cause: 'unknown', outputTokens: 300 },
+      { cause: 'unknown', outputTokens: 300, maxOutput: 512 },
       { cause: 'unknown', outputTokens: 300, maxOutput: 512 },
     ],
   ])('marks a reply cut in its prose (%s)', async (_label, call, mark, warned) => {
@@ -3254,5 +3254,25 @@ describe('narrative — how the reply ended', () => {
     const { entry } = await runReply({ text: PROSE, finishReason: 'length' })
 
     expect(entry?.metadata?.cutOff).toStrictEqual({ cause: 'unknown' })
+  })
+
+  it('keeps the max output a cut fell short of when its window is missing', async () => {
+    const ai = await import('@/lib/ai')
+    vi.spyOn(ai, 'replyCutOff').mockReturnValue({
+      cause: 'window',
+      outputTokens: 300,
+      reasoningTokens: null,
+      maxOutput: 512,
+      window: null,
+      providerId: 'prov-1',
+      modelId: 'model-1',
+    })
+    const { entry } = await runReply({ text: PROSE, finishReason: 'length' })
+
+    expect(entry?.metadata?.cutOff).toStrictEqual({
+      cause: 'unknown',
+      outputTokens: 300,
+      maxOutput: 512,
+    })
   })
 })
