@@ -4,11 +4,20 @@ import type { AddressInfo } from 'node:net'
 import {
   completionBody,
   contentFrame,
+  mockUsage,
+  overflowBody,
+  overflowCounts,
   roleFrame,
   stopFrames,
+  wantsStreamUsage,
   type FinishReason,
+  type MockUsage,
+  type OverflowShape,
 } from '../../scripts/mock-llm/respond/wire'
 import { matchShape } from '../../scripts/mock-llm/routing'
+
+/** The counter behind every usage the harness reports, for specs that assert a count. */
+export { mockUsage }
 
 // A local OpenAI-compatible endpoint. The whole pipeline talks to one URL
 // (POST …/chat/completions) but a turn fans out into calls with different
@@ -153,6 +162,12 @@ export type MockLlm = {
   cutNextNarrative: () => void
   /** One-shot: the next `agentName` call answered (held: at release) sends `raw`, then 'length'. */
   cutNextStructured: (agentName: string, raw: string) => void
+  /** One-shot: the next narrative stream reports a tenth of its counted prompt tokens. */
+  underReportNextUsage: () => void
+  /** One-shot: the next narrative call is rejected with an overflow 400 in `shape`. */
+  overflowNextNarrative: (shape?: OverflowShape) => void
+  /** One-shot: the next call matching `agentName`, a STRUCTURED_SHAPES name like cutNextStructured's, is rejected with an overflow 400 in `shape`. */
+  overflowNextStructured: (agentName: string, shape?: OverflowShape) => void
   /** Every completion request received, in order. */
   requests: MockRequest[]
   close: () => Promise<void>
@@ -162,13 +177,13 @@ const DEFAULT_NARRATIVE =
   'The blade rasps free of its sheath. Somewhere in the drowned city, a bell answers, and the rain leans closer to listen.'
 
 // The role frame alone holds a stream open (the cancel test's in-flight window); the tail
-// (content, finish frame, [DONE]) completes it.
-function narrativeTail(content: string, finishReason: FinishReason): string {
-  return contentFrame(content) + stopFrames(finishReason)
+// (content, finish frame, usage when asked, [DONE]) completes it.
+function narrativeTail(content: string, finishReason: FinishReason, usage?: MockUsage): string {
+  return contentFrame(content) + stopFrames(finishReason, usage)
 }
 
-function narrativeSse(content: string, finishReason: FinishReason): string {
-  return roleFrame() + narrativeTail(content, finishReason)
+function narrativeSse(content: string, finishReason: FinishReason, usage?: MockUsage): string {
+  return roleFrame() + narrativeTail(content, finishReason, usage)
 }
 
 // The injected schema block lives in the message content (the app's auto path
@@ -206,21 +221,43 @@ export async function startMockLlm(): Promise<MockLlm> {
   const requests: MockRequest[] = []
   let failNarrativeNext = false
   let holdNarrativeNext = false
-  // Streams held open (hold mode): tracked so release/close can finish them and
-  // a client abort can drop them — an unfinished socket would hang server.close().
-  const heldResponses = new Set<ServerResponse>()
+  // Streams held open (hold mode), each with the request it answers: tracked so release/close can
+  // finish them and a client abort can drop them — an unfinished socket would hang server.close().
+  const heldResponses = new Map<ServerResponse, Record<string, unknown>>()
   let holdStructuredNext: string | null = null
-  // res → shape name to answer with; a client abort drops it, like heldResponses.
-  const heldStructured = new Map<ServerResponse, string>()
+  // res → the shape to answer with and the prompt its usage counts; a client abort drops it.
+  const heldStructured = new Map<ServerResponse, { agentName: string; prompt: string }>()
   let cutNarrativeNext = false
   // Shape name → the raw reply its next answered call sends.
   const cutStructured = new Map<string, string>()
+  let underReportNext = false
+  let overflowNarrativeNext: OverflowShape | null = null
+  // Shape name → the overflow shape its next call is rejected with.
+  const overflowStructured = new Map<string, OverflowShape>()
 
   // Spent by the next stream to finish, so a held stream released later takes it.
   const narrativeFinish = (): FinishReason => {
     if (!cutNarrativeNext) return 'stop'
     cutNarrativeNext = false
     return 'length'
+  }
+
+  // Spent like the cut, by the next stream that reports usage, so a held one released later takes it.
+  const narrativeUsage = (body: Record<string, unknown>): MockUsage | undefined => {
+    if (!wantsStreamUsage(body)) return undefined
+    const usage = mockUsage(promptText(body), narrative)
+    if (!underReportNext) return usage
+    underReportNext = false
+    const prompt = Math.max(1, Math.floor(usage.prompt_tokens / 10))
+    return { ...usage, prompt_tokens: prompt, total_tokens: prompt + usage.completion_tokens }
+  }
+
+  const finishHeldNarratives = (): void => {
+    const held = [...heldResponses]
+    heldResponses.clear()
+    for (const [res, body] of held) {
+      res.end(narrativeTail(narrative, narrativeFinish(), narrativeUsage(body)))
+    }
   }
 
   // The renderer fetches cross-origin (its own origin → this server), which
@@ -232,25 +269,34 @@ export async function startMockLlm(): Promise<MockLlm> {
     'access-control-allow-headers': '*',
   }
 
-  const answerStructured = (res: ServerResponse, agentName: string | null): void => {
+  // A server refuses an overlong prompt before generating, so nothing streams.
+  const rejectOverflow = (res: ServerResponse, shape: OverflowShape, prompt: string): void => {
+    res.writeHead(400, { ...cors, 'content-type': 'application/json' })
+    res.end(overflowBody(shape, overflowCounts(prompt)))
+  }
+
+  const answerStructured = (
+    res: ServerResponse,
+    agentName: string | null,
+    prompt: string,
+  ): void => {
     res.writeHead(200, { ...cors, 'content-type': 'application/json' })
     if (agentName === null) {
-      res.end(completionBody('{}', 'stop'))
+      res.end(completionBody('{}', 'stop', mockUsage(prompt, '{}')))
       return
     }
     const cut = cutStructured.get(agentName)
     cutStructured.delete(agentName)
+    const content = cut ?? JSON.stringify(overrides.get(agentName) ?? EXAMPLES[agentName])
     res.end(
-      cut !== undefined
-        ? completionBody(cut, 'length')
-        : completionBody(JSON.stringify(overrides.get(agentName) ?? EXAMPLES[agentName]), 'stop'),
+      completionBody(content, cut !== undefined ? 'length' : 'stop', mockUsage(prompt, content)),
     )
   }
 
   const releaseHeldStructured = (): void => {
     const held = [...heldStructured]
     heldStructured.clear()
-    for (const [res, agentName] of held) answerStructured(res, agentName)
+    for (const [res, { agentName, prompt }] of held) answerStructured(res, agentName, prompt)
   }
 
   const server = createServer((req, res) => {
@@ -269,6 +315,12 @@ export async function startMockLlm(): Promise<MockLlm> {
 
       if (streamed) {
         requests.push({ body, streamed, agent: null })
+        if (overflowNarrativeNext !== null) {
+          const shape = overflowNarrativeNext
+          overflowNarrativeNext = null
+          rejectOverflow(res, shape, promptText(body))
+          return
+        }
         if (failNarrativeNext) {
           failNarrativeNext = false
           res.writeHead(500, { ...cors, 'content-type': 'application/json' })
@@ -288,24 +340,30 @@ export async function startMockLlm(): Promise<MockLlm> {
           // Open the stream but don't finish it: the run stays in-flight
           // (isGenerating) until release or the client aborts on cancel.
           res.write(roleFrame())
-          heldResponses.add(res)
+          heldResponses.set(res, body)
           res.on('close', () => heldResponses.delete(res))
           return
         }
-        res.end(narrativeSse(narrative, narrativeFinish()))
+        res.end(narrativeSse(narrative, narrativeFinish(), narrativeUsage(body)))
         return
       }
 
       const text = promptText(body)
       const agent = matchShape(null, text)
       requests.push({ body, streamed, agent: agent?.name ?? null })
+      const overflow = agent !== null ? overflowStructured.get(agent.name) : undefined
+      if (agent !== null && overflow !== undefined) {
+        overflowStructured.delete(agent.name)
+        rejectOverflow(res, overflow, text)
+        return
+      }
       if (agent !== null && agent.name === holdStructuredNext) {
         holdStructuredNext = null
-        heldStructured.set(res, agent.name)
+        heldStructured.set(res, { agentName: agent.name, prompt: text })
         res.on('close', () => heldStructured.delete(res))
         return
       }
-      answerStructured(res, agent?.name ?? null)
+      answerStructured(res, agent?.name ?? null, text)
     })()
   })
 
@@ -326,10 +384,7 @@ export async function startMockLlm(): Promise<MockLlm> {
     holdNextNarrative: () => {
       holdNarrativeNext = true
     },
-    releaseNarrative: () => {
-      for (const res of heldResponses) res.end(narrativeTail(narrative, narrativeFinish()))
-      heldResponses.clear()
-    },
+    releaseNarrative: finishHeldNarratives,
     holdNextStructured: (agentName) => {
       holdStructuredNext = agentName
     },
@@ -340,12 +395,20 @@ export async function startMockLlm(): Promise<MockLlm> {
     cutNextStructured: (agentName, raw) => {
       cutStructured.set(agentName, raw)
     },
+    underReportNextUsage: () => {
+      underReportNext = true
+    },
+    overflowNextNarrative: (shape = 'llamacpp') => {
+      overflowNarrativeNext = shape
+    },
+    overflowNextStructured: (agentName, shape = 'llamacpp') => {
+      overflowStructured.set(agentName, shape)
+    },
     requests,
     close: () =>
       new Promise<void>((resolve) => {
         // Finish held calls first, else an open socket hangs server.close().
-        for (const res of heldResponses) res.end(narrativeTail(narrative, narrativeFinish()))
-        heldResponses.clear()
+        finishHeldNarratives()
         releaseHeldStructured()
         server.close(() => resolve())
       }),
