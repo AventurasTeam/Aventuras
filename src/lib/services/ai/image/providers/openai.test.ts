@@ -30,6 +30,7 @@ vi.mock('#lib/utils/url.ts', async (importOriginal) => {
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { imageGetFetch } from './fetchAdapter'
 import { createOpenAIProvider } from './openai'
+import { IMAGE_SIZE_TIERS, type ImageSpec } from '#lib/utils/image.ts'
 import type { ImageGenerateOptions } from './types'
 
 const json =
@@ -45,7 +46,7 @@ const PNG = 'iVBORw0KGgo='
 const JPEG = '/9j/4AAQSkZJRg=='
 
 const options = (over: Partial<ImageGenerateOptions> = {}): ImageGenerateOptions => ({
-  model: 'gpt-image-1',
+  model: 'gpt-image-2',
   prompt: 'a castle',
   spec: { orientation: 'square', size: 'medium' },
   ...over,
@@ -70,7 +71,7 @@ describe('OpenAI image generation', () => {
     expect(lastCall().init.method).toBe('POST')
     expect(new Headers(lastCall().init.headers).get('authorization')).toBe('Bearer k')
     expect(lastJson()).toEqual({
-      model: 'gpt-image-1',
+      model: 'gpt-image-2',
       prompt: 'a castle',
       n: 1,
       size: '1536x1536',
@@ -88,7 +89,7 @@ describe('OpenAI image generation', () => {
     expect(lastCall().url).toBe('https://api.openai.com/v1/images/edits')
     const form = lastForm()
     expect(form).toBeInstanceOf(FormData)
-    expect(form.get('model')).toBe('gpt-image-1')
+    expect(form.get('model')).toBe('gpt-image-2')
     expect(form.get('prompt')).toBe('a castle')
     expect(form.get('n')).toBe('1')
     expect(form.get('size')).toBe('1536x1536')
@@ -181,6 +182,74 @@ describe('OpenAI image generation', () => {
       )
       expect(sent.calls).toHaveLength(1)
     })
+  })
+})
+
+describe('OpenAI image size', () => {
+  const sizeFor = async (
+    model: string,
+    orientation: ImageSpec['orientation'],
+    size: ImageSpec['size'],
+    referenceImages?: string[],
+  ) => {
+    const provider = createOpenAIProvider({ apiKey: 'k' })
+    await provider.generate(
+      options({
+        model,
+        spec: { orientation, size },
+        modelInfo: await provider.getModelCapabilities!(model),
+        referenceImages,
+      }),
+    )
+    return referenceImages ? lastForm().get('size') : lastJson().size
+  }
+
+  it.each([
+    ['square', ['816x816', '1024x1024', '1536x1536', '2048x2048']],
+    ['landscape', ['1088x608', '1088x608', '1536x864', '2048x1152']],
+    ['portrait', ['608x1088', '608x1088', '864x1536', '1152x2048']],
+  ] as const)(
+    'sends a %s gpt-image-2 request real dimensions at or above the pixel floor',
+    async (orientation, expected) => {
+      for (const [i, tier] of IMAGE_SIZE_TIERS.entries()) {
+        expect(await sizeFor('gpt-image-2', orientation, tier)).toBe(expected[i])
+      }
+    },
+  )
+
+  it.each([
+    ['square', '1024x1024'],
+    ['landscape', '1536x1024'],
+    ['portrait', '1024x1536'],
+  ] as const)(
+    'sends a %s request to a fixed-size model its standard size',
+    async (orientation, expected) => {
+      for (const tier of IMAGE_SIZE_TIERS) {
+        expect(await sizeFor('gpt-image-1.5', orientation, tier)).toBe(expected)
+      }
+    },
+  )
+
+  it('sends the same size on the edits endpoint', async () => {
+    expect(await sizeFor('gpt-image-1.5', 'landscape', 'medium', [PNG])).toBe('1536x1024')
+    expect(await sizeFor('gpt-image-2', 'landscape', 'tiny', [PNG])).toBe('1088x608')
+  })
+
+  it('sends real dimensions to a model with no snapshot or an unlisted id', async () => {
+    const provider = createOpenAIProvider({ apiKey: 'k' })
+    await provider.generate(
+      options({ spec: { orientation: 'landscape', size: 'tiny' }, modelInfo: undefined }),
+    )
+    expect(lastJson().size).toBe('1088x608')
+
+    await provider.generate(
+      options({
+        model: 'gpt-image-9',
+        spec: { orientation: 'landscape', size: 'medium' },
+        modelInfo: await provider.getModelCapabilities!('gpt-image-9'),
+      }),
+    )
+    expect(lastJson().size).toBe('1536x864')
   })
 })
 
