@@ -41,6 +41,7 @@ export {
   ProviderTimeoutError,
   type CapabilityHint,
 } from './transport/classify-provider-error'
+export { configureTruncationNotice, type TruncationNotice } from './truncation-check'
 export {
   resolveModel,
   type AppChainFailureKind,
