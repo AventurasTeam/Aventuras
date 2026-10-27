@@ -1331,7 +1331,15 @@ tokens, which every call already logs at debug level; it needs a rule
 for how many calls to trust and how fast the ratio moves. The same
 ratios set the truncation cross-check's `0.5` threshold
 ([`architecture.md → Truncation cross-check`](./architecture.md#truncation-cross-check)),
-a starting value that sits clear of the drift measured so far. Parked
+a starting value that sits clear of the drift measured so far. A
+probe of single paragraphs through the dev router's `/tokenize`
+(Gemma 4, 2026-10-27) put Gemma's count over o200k's at 0.36 for
+Amharic and 1.49 for Armenian, outside that margin either way: an
+Amharic story would be refused well before its window and warned about
+on every call, and an Armenian one cut by up to two-thirds without a
+warning. The same probe read English at 0.98, not the 6 to 7% above;
+whole prompts, where the English instructions weigh in, weren't
+measured. Parked
 2026-10-26; the signal is refusals near the window, a truncation
 warning on a server that didn't truncate, or the logged ratios sitting
 far from 1 for a model in use.
@@ -1357,7 +1365,9 @@ while the generation window is pre-filled from `max_model_len` and
 embedding model served by vLLM, `max_model_len` is its input limit, so
 the same read could pre-fill the embedder's window; what llama.cpp's
 `meta.n_ctx` means for an embedding model, whose batch size also bounds
-an input, is unchecked. Parked 2026-10-26; the signal is users of
+an input, is unchecked. The catalog fetch already stores vLLM's
+`max_model_len` as an embedding model's `contextWindow`, so the read a
+pre-fill needs exists (the context window check, 2026-10-27). Parked 2026-10-26; the signal is users of
 self-hosted embedders leaving the window unset and hitting the silent
 truncation it warns about.
 

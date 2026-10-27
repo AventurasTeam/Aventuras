@@ -248,23 +248,42 @@ slice-planning gate forces its resolution before that slice is planned.
 
 - **Overflow recognition misses shapes beyond llama.cpp's and OpenAI's.**
   [`architecture.md → Recognizing an overflow rejection`](../architecture.md#recognizing-an-overflow-rejection)
-  is verified against those two servers only. Recalled by the context
+  is verified against those two servers only. Checked in SGLang's
+  source (`tokenizer_manager.py`), a server canon names under
+  [Detection](../architecture.md#detection): a prompt over its window
+  is a 400 reading "The input (N tokens) is longer than the model's
+  context length (M tokens).", which no canon keyword matches, so it
+  reads as a plain provider failure. A "context length" keyword would
+  catch it and LM Studio's wording, but may also catch a max-output
+  rejection phrased against the context length, whose remedy is a lower
+  max output, not a shorter prompt. Recalled by the context
   window check's reviews and not checked against each server:
   Anthropic rejects a prompt plus `max_tokens` with "input length and
   `max_tokens` exceed context limit", and LM Studio says "context
   length"; neither matches a canon keyword, so both read as a plain
-  provider failure. Gemini's OpenAI-compatible endpoint may wrap its
+  provider failure. `@ai-sdk/anthropic` sends the model's whole max
+  output as `max_tokens` when the profile sets none, and Anthropic's
+  docs say models from Claude 4.5 accept such a request and stop at the
+  window (`model_context_window_exceeded`, read as a `length` cut-off),
+  so only earlier models reject it. Gemini's OpenAI-compatible endpoint may wrap its
   error body in an array, which still matches by keyword but quotes the
-  whole JSON as the provider's message. The capability hint matches any
-  4xx, a 429 included, so an aggregator's rate-limit body that echoes a
+  whole JSON as the provider's message. An overflow sent inside the
+  stream after an HTTP 200 is never recognized:
+  `@ai-sdk/openai-compatible` hands it over as a plain string, not an
+  `APICallError`, so the turn fails as a provider `network` error, or,
+  reproduced through the real SDK, as a provider timeout when a stall
+  follows, because an expired stream fails as a timeout
+  ([`generation-pipeline.md → Two retry tiers, both at phase level`](../generation-pipeline.md#two-retry-tiers-both-at-phase-level));
+  the servers above reject an overflow with a 400 before streaming.
+  Raised by the context window check.
+
+- **The capability hint matches any 4xx body.** The hint
+  ([`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories))
+  matches any 4xx, a 429 included, so an aggregator's rate-limit body that echoes a
   model id containing `thinking` or `reasoning` gets the hint and
   `Fix profile`; a 401 or 403 that mentions a capability ("no access to
   reasoning models") gets it too, since the hint is matched before the
-  status branches. Reproduced through the real SDK: an
-  overflow sent as an in-stream error part, then a stall, fails the turn
-  as a provider timeout, because an expired stream fails as a timeout
-  ([`generation-pipeline.md → Two retry tiers, both at phase level`](../generation-pipeline.md#two-retry-tiers-both-at-phase-level));
-  the servers above reject an overflow with a 400 before streaming.
+  status branches. Raised by the context window check.
 
 - **The truncation cross-check may warn on every warm turn of a server
   that counts only uncached prompt tokens.** Canon names Ollama as a
@@ -277,34 +296,13 @@ slice-planning gate forces its resolution before that slice is planned.
   (`prompt_tokens` 913 with `cached_tokens` 908). Raised by the context
   window check.
 
-- **Detected windows: embedding models, parallel slots, staleness.** vLLM
-  publishes `max_model_len` on an embedding model too, so the catalog
-  now stores it as that model's `contextWindow`, while the embedder
-  reads only `maxInputTokens` (`lib/embedder/input-window.ts`), whose
-  schema comment says no OpenAI-compatible field publishes it. Whether
-  the embedder falls back to the detected window is a canon question.
-  Separately,
+- **A detected window on a `--parallel N` llama.cpp server.**
   [`architecture.md → Detection`](../architecture.md#detection) calls
   `meta.n_ctx` llama.cpp's per-slot size; on a server started with
   `--parallel N` and no unified KV cache it may be the total across
   slots, which overstates the window and ends in a recognized rejection
   rather than a refusal. The dev router runs `--parallel 1`, so this is
   unchecked. Raised by the context window check.
-  A detected window can also go stale and lock a model out: canon keeps
-  the last detected figure when a fetch publishes none, so after a
-  llama.cpp router restarts the model with a larger context, a prompt
-  between the old and new figures is refused before it is sent. If the
-  router loads a model only on a request (believed, not checked), the
-  model never loads, a refresh never sees its new `meta.n_ctx`, and
-  until M7.1's override the user's only exit is another model.
-
-- **A capability editor must store an explicit `false`.**
-  `normalizeModelCatalog` (`lib/ai/catalog.ts`) lets a stored capability
-  key, `false` included, beat detection, and re-detects a key the stored
-  entry lacks on every fetch. The M7 settings editor must therefore
-  write `false` to turn a detected flag off; deleting the key turns it
-  back on at the next refresh. A code comment said so until the context
-  window check compressed it; no canon does.
 
 - **Window-failure copy has rough edges.** From the context window
   check's reviews:
@@ -326,6 +324,9 @@ slice-planning gate forces its resolution before that slice is planned.
     that starts "The provider rejected the request.", where
     [`reader-composer.md → Transient pipeline failures`](../ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)
     says the entry adds the hint.
+  - The truncation toast names only the model, while it shows once per
+    provider and model, so one model id on two providers can show two
+    identical toasts.
 
 - **The narrative reports every non-window stream error as `network`.**
   `lib/pipeline/definitions/per-turn.ts` maps a stream error to
@@ -336,6 +337,7 @@ slice-planning gate forces its resolution before that slice is planned.
   union is also spelled twice, in
   `lib/ai/transport/classify-provider-error.ts` and
   `lib/pipeline/types.ts`, with nothing tying the copies together.
+  Raised by the context window check.
 
 - **The E2E mock repeats the dev mock's helpers.**
   `e2e/harness/mock-llm.ts` has its own `promptText` (the dev mock's is
@@ -352,9 +354,14 @@ slice-planning gate forces its resolution before that slice is planned.
   when the o200k estimate plus the output reaches the figure
   ([`generation-pipeline.md → Cut-off replies`](../generation-pipeline.md#cut-off-replies)).
   On a model whose tokenizer counts above o200k, as Gemma 4 does English
-  ([`parked.md`](../parked.md) records 6-7%), a genuinely full known
+  ([`parked.md → Calibrating the token estimate per model`](../parked.md#calibrating-the-token-estimate-per-model)
+  records 6-7%), a genuinely full known
   window lands below the figure and reads `unknown`, and the notice
-  points at `Fix profile`. With `includeUsage` on, a cut-off reply now
+  points at `Fix profile`, which the roadmap's M7.1 item on a cut-off
+  under a story's model override already revisits. On one that counts
+  below it, as Gemma 4 does Japanese (25%), a stop at the server's own
+  default can reach the figure and read `window`, whose notice offers no
+  action until M7.1 wires `Set window`. With `includeUsage` on, a cut-off reply now
   usually carries the provider's own input count, which would make the
   cause exact. A canon design change. Raised by the context window
   check.

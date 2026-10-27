@@ -643,8 +643,8 @@ the underlying configuration surfaces.
   `window` cut-off's notice and entries, the
   [truncation toast](../architecture.md#truncation-cross-check)),
   which needs the model target persisted on failure entries and the
-  cut-off mark (a `CutOffMark` change, per
-  [`generation-pipeline.md → Cut-off replies`](../generation-pipeline.md#cut-off-replies)))
+  cut-off mark (a change to both shapes in
+  [`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)))
   — deletion runs the full embedding-story
   block + `assignments` key removal + `providers[].length ≥ 1`
   invariant per
@@ -1051,6 +1051,28 @@ code before it moved; resolve with the slice it names.
   reply fell short of, where raising that limit can't help and only the
   profile's model can (kept for now, developer, 2026-10-27). Raised by
   the cut-off replies slice review (2026-10-26).
+- **M7.1 — A detected window can go stale and lock a model out.**
+  Canon keeps
+  the last detected figure when a fetch publishes none
+  ([`architecture.md → The window figure`](../architecture.md#the-window-figure)),
+  so after a
+  llama.cpp router restarts the model with a larger context, a prompt
+  between the old and new figures is refused before it is sent. If the
+  router loads a model only on a request (believed, not checked), the
+  model never loads, a refresh never sees its new `meta.n_ctx`, and
+  until M7.1's override the user's only exit is another model. Pointing
+  a saved provider at another server keeps the first server's figures
+  too: a model id the new server lists without a window inherits the
+  old one. The providers tab owns endpoint edits and the override, so
+  it decides when a detected figure is dropped. Raised by the context
+  window check and its slice review (2026-10-27).
+- **M7.1 — A capability editor must store an explicit `false`.**
+  `normalizeModelCatalog` (`lib/ai/catalog.ts`) lets a stored capability
+  key, `false` included, beat detection, and re-detects a key the stored
+  entry lacks on every fetch. The M7 settings editor must therefore
+  write `false` to turn a detected flag off; deleting the key turns it
+  back on at the next refresh. No canon says so. Raised by the context
+  window check (2026-10-27).
 - **M7.2 — Story Settings → Memory's embedder block departs from
   canon.** [`story-settings.md → Memory tab`](../ui/screens/story-settings/story-settings.md#memory-tab)
   puts [Embedding status](../ui/screens/story-settings/story-settings.md#embedding-status)
@@ -1185,8 +1207,9 @@ code before it moved; resolve with the slice it names.
   with the branch — every entity, staged and retired included, with its
   full description — and `generateStructured` (`lib/ai/generate.ts`)
   refuses the rendered prompt unsent over a known window; with an
-  unknown one, all a user has until M7.1, it goes out unguarded. No
-  memory doc sets a classifier-prompt budget;
+  unknown one (the server publishes none, and the user can't set one
+  until M7.1) it is sent unchecked. No memory doc sets a
+  classifier-prompt budget;
   [`architecture.md → Settings`](../architecture.md#settings-strict-types-defaults-at-load)
   names app-scope "classifier truncation caps", of which only the entry
   cap was built. A token-accurate budget needs budgets derived from

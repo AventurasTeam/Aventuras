@@ -288,7 +288,8 @@ breakdown under [UX](#ux).
   flags a server that cut one; until the
   [window-relative accounting](./memory/retrieval.md#structural-floor-takes-budget-first)
   fits a prompt to the window, a story whose prompt outgrows it stops
-  its turns. The
+  its turns where the window is known or the server rejects the prompt,
+  and is cut silently, with a warning toast, where neither holds. The
   [Tier-2 knob surface](./parked.md#tier-2-retrieval-ranker-knob-tuning-surface)
   waits on these defaults settling. Raised 2026-10-19 by the
   entity-state design (the budgets).
