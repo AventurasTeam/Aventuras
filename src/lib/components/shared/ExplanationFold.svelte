@@ -1,45 +1,49 @@
 <!--
-  A folding explanation of how something works, remembered folded or open across stories and
-  sessions. See docs/development/ui-components.md.
+  A folding section under a muted summary line. With an `id` it is remembered folded or open
+  across stories and sessions; without one, `open` is the caller's. See
+  docs/development/ui-components.md.
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte'
-  import { ChevronDown, ChevronRight } from '@lucide/svelte'
+  import { ChevronRight } from '@lucide/svelte'
+  import * as Collapsible from '#lib/components/ui/collapsible/index.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { cn } from '#lib/utils/cn.ts'
 
   interface Props {
     /** Names the saved fold state, so it must not be shared with another explanation. */
-    id: string
+    id?: string
+    /** Only without an `id`. */
+    open?: boolean
     summary: string
     class?: string
     children: Snippet
   }
 
-  let { id, summary, class: className, children }: Props = $props()
+  let { id, open = $bindable(true), summary, class: className, children }: Props = $props()
 
-  const uid = $props.id()
-  const folded = $derived(ui.explanationFolded.get(id) ?? false)
+  const shown = $derived(id ? !(ui.explanationFolded.get(id) ?? false) : open)
+
+  function toggle(next: boolean) {
+    if (id) void ui.setExplanationFolded(id, !next)
+    else open = next
+  }
 </script>
 
-<div class={cn('text-muted-foreground text-xs', className)}>
-  <button
-    type="button"
-    class="hover:text-foreground flex items-center gap-1 font-medium"
-    aria-expanded={!folded}
-    aria-controls="{uid}-explanation"
-    onclick={() => void ui.setExplanationFolded(id, !folded)}
-  >
-    {#if folded}
-      <ChevronRight class="h-3.5 w-3.5 shrink-0" />
-    {:else}
-      <ChevronDown class="h-3.5 w-3.5 shrink-0" />
-    {/if}
+<Collapsible.Root
+  open={shown}
+  onOpenChange={toggle}
+  class={cn('text-muted-foreground text-xs', className)}
+>
+  <Collapsible.Trigger class="group hover:text-foreground justify-start gap-1 text-xs">
+    <ChevronRight
+      class="h-3.5 w-3.5 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-90"
+    />
     {summary}
-  </button>
-  {#if !folded}
-    <div id="{uid}-explanation" class="mt-1 pl-[1.125rem]">
+  </Collapsible.Trigger>
+  <Collapsible.Content>
+    <div class="pt-1 pl-[1.125rem]">
       {@render children()}
     </div>
-  {/if}
-</div>
+  </Collapsible.Content>
+</Collapsible.Root>

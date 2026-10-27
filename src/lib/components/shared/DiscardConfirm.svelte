@@ -2,26 +2,12 @@
   import { Button } from '#lib/components/ui/button/index.ts'
   import { cn } from '#lib/utils/cn.ts'
   import { FEATURE_COLORS } from './featureColors'
+  import type { PendingQuestion } from './pendingQuestion.svelte'
 
-  interface Props {
-    open: boolean
-    title?: string
-    description?: string
-    keepLabel?: string
-    discardLabel?: string
-    onCancel: () => void
-    onDiscard: () => void
-  }
+  let { question }: { question: PendingQuestion } = $props()
 
-  let {
-    open,
-    title = 'Discard this story?',
-    description = 'Everything you have filled in so far will be lost.',
-    keepLabel = 'Keep editing',
-    discardLabel = 'Discard',
-    onCancel,
-    onDiscard,
-  }: Props = $props()
+  const shown = $derived(question.current)
+  const open = $derived(shown !== null)
 
   const uid = $props.id()
 
@@ -43,7 +29,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="bg-background/80 absolute -inset-1 z-50 flex items-center justify-center rounded-xl p-5 backdrop-blur-sm"
-    onclick={(e) => e.target === e.currentTarget && onCancel()}
+    onclick={(e) => e.target === e.currentTarget && question.answer(false)}
   >
     <div
       bind:this={box}
@@ -54,9 +40,9 @@
       aria-labelledby="{uid}-title"
       aria-describedby="{uid}-description"
     >
-      <h2 id="{uid}-title" class="font-semibold">{title}</h2>
+      <h2 id="{uid}-title" class="font-semibold">{shown?.title}</h2>
       <p id="{uid}-description" class="text-muted-foreground mt-1 text-sm">
-        {description}
+        {shown?.description}
       </p>
 
       <!-- The same pair as an action modal's footer: neutral to stay, the delete tone to go. -->
@@ -64,16 +50,16 @@
         <Button
           variant="outline"
           class="basis-pair grow sm:grow-0 sm:basis-auto"
-          onclick={onCancel}
+          onclick={() => question.answer(false)}
         >
-          {keepLabel}
+          {shown?.keepLabel ?? 'Keep editing'}
         </Button>
         <Button
           variant="feature"
           class={cn('basis-pair grow sm:grow-0 sm:basis-auto', FEATURE_COLORS.delete.vars)}
-          onclick={onDiscard}
+          onclick={() => question.answer(true)}
         >
-          {discardLabel}
+          {shown?.confirmLabel ?? 'Discard'}
         </Button>
       </div>
     </div>

@@ -17,6 +17,7 @@
   import { cn } from '#lib/utils/cn.ts'
   import ModalActions from './ModalActions.svelte'
   import DiscardConfirm from './DiscardConfirm.svelte'
+  import { PendingQuestion, type Question } from './pendingQuestion.svelte'
   import ScrollEdgeButton from './ScrollEdgeButton.svelte'
   import { decideClose, type CloseSource } from './actionModalClose'
   import { readJumpState, type JumpState } from './scrollJump'
@@ -28,13 +29,6 @@
     tone?: ActionTone
     disabled?: boolean
     onConfirm: () => void
-  }
-
-  interface Question {
-    title: string
-    description: string
-    keepLabel?: string
-    confirmLabel?: string
   }
 
   interface Removal {
@@ -106,9 +100,7 @@
 
   setTextareaUncapped()
 
-  let question = $state<'discard' | 'remove' | null>(null)
-  /** Run instead of closing when the discard was asked on the way somewhere else. */
-  let afterDiscard: (() => void) | null = null
+  const question = new PendingQuestion()
   /** What the modal shows; a close is routed through `leave` before `open` follows. */
   let shownOpen = $state(untrack(() => open))
   let wasOpen = untrack(() => open)
@@ -212,11 +204,6 @@
 
   const locked = $derived(busy && !cancelWhileBusy)
   const actionDisabled = $derived(action.disabled || (requireChange && !dirty))
-  const shown = $derived(
-    question === 'remove' && removal
-      ? removal.question
-      : { ...discardQuestion, confirmLabel: discardQuestion.confirmLabel ?? 'Discard' },
-  )
 
   function schedule(fn: () => void) {
     if (timer) clearTimeout(timer)
@@ -235,7 +222,7 @@
       return
     }
     shownOpen = false
-    question = null
+    question.answer(false)
     // Unmounting skips `vaul`'s own restore, so the lock is released here; see `utils/scrollLock`.
     schedule(() => {
       releaseOrphanScrollLock()
@@ -282,7 +269,6 @@
   }
 
   function leave() {
-    question = null
     if (onCancel) onCancel()
     else open = false
   }
@@ -292,15 +278,15 @@
       busy,
       cancelWhileBusy,
       dirty,
-      questionOpen: question !== null,
+      questionOpen: question.open,
     })
-    if (outcome === 'ask') {
-      afterDiscard = null
-      question = 'discard'
-    } else if (outcome === 'closeQuestion') {
-      question = null
-      afterDiscard = null
-    } else if (outcome === 'close') leave()
+    if (outcome === 'ask') void askThen(discardQuestion, leave)
+    else if (outcome === 'closeQuestion') question.answer(false)
+    else if (outcome === 'close') leave()
+  }
+
+  async function askThen(asked: Question, then: () => void) {
+    if (await question.ask(asked)) then()
   }
 
   // Only a sheet's swipe or handle tap reaches here: Escape and outside clicks are intercepted on
@@ -308,7 +294,7 @@
   // whatever `onCancel` does, and a running action it cannot stop is left to finish unseen.
   function handleOpenChange(next: boolean) {
     if (next || !open) return
-    question = null
+    question.answer(false)
     if (!locked) onCancel?.()
     open = false
   }
@@ -336,21 +322,9 @@
   }
 
   function leaveFor(next: () => void) {
-    if (locked || question !== null) return
+    if (locked || question.open) return
     if (!dirty) return next()
-    afterDiscard = next
-    question = 'discard'
-  }
-
-  function answer(confirmed: boolean) {
-    const asked = question
-    const then = afterDiscard
-    question = null
-    afterDiscard = null
-    if (!confirmed) return
-    if (then) return then()
-    if (asked === 'remove') removal?.onRemove()
-    else leave()
+    void askThen(discardQuestion, next)
   }
 </script>
 
@@ -405,7 +379,7 @@
       bind:this={frame}
       tabindex="-1"
       class="flex min-h-0 flex-1 flex-col outline-none"
-      inert={question !== null}
+      inert={question.open}
     >
       <!-- Left-aligned at every width: a title or description that wraps reads badly centred. -->
       <!-- Tinted like the buttons' panel, so both read as a frame around the body. -->
@@ -450,7 +424,7 @@
                 size="sm"
                 class={cn('gap-1.5', FEATURE_COLORS.delete.text, FEATURE_COLORS.delete.hoverText)}
                 disabled={busy}
-                onclick={() => (question = 'remove')}
+                onclick={() => void askThen(removal.question, removal.onRemove)}
               >
                 <Trash2 class="h-4 w-4" />
                 {removal.label}
@@ -485,14 +459,6 @@
       </div>
     </div>
 
-    <DiscardConfirm
-      open={question !== null}
-      title={shown.title}
-      description={shown.description}
-      keepLabel={shown.keepLabel}
-      discardLabel={shown.confirmLabel}
-      onCancel={() => answer(false)}
-      onDiscard={() => answer(true)}
-    />
+    <DiscardConfirm {question} />
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>

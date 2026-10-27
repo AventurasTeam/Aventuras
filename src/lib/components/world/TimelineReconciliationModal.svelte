@@ -1,6 +1,7 @@
 <script lang="ts">
   import StoryTimeField from '#lib/components/shared/StoryTimeField.svelte'
   import DiscardConfirm from '#lib/components/shared/DiscardConfirm.svelte'
+  import { PendingQuestion } from '#lib/components/shared/pendingQuestion.svelte.ts'
   import { story, type TimelineReconciliationPreview } from '#lib/stores/story.svelte.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
@@ -551,45 +552,25 @@
       [...Object.values(supplied), ...Object.values(gapWeights)].some((text) => text.trim() !== ''),
   )
 
-  interface DiscardQuestion {
-    title: string
-    description: string
-    resolve: (discard: boolean) => void
-  }
-
   /** Asked inside the screen, over its body, like an action modal's discard question. */
-  let question = $state<DiscardQuestion | null>(null)
-
-  /** A question already on screen answers for every attempt made while it is up. */
-  function askToDiscard(title: string, description: string): Promise<boolean> {
-    if (question) return Promise.resolve(false)
-    return new Promise((resolve) => {
-      question = { title, description, resolve }
-    })
-  }
-
-  function answer(discard: boolean) {
-    const asked = question
-    question = null
-    asked?.resolve(discard)
-  }
+  const question = new PendingQuestion()
 
   /** The one question before discarding what was typed. */
   async function confirmDiscard(): Promise<boolean> {
     if (!unapplied) return true
-    return askToDiscard(
-      'Discard the changes to this range?',
-      'The boundaries and weights you have set for this range will be lost.',
-    )
+    return question.ask({
+      title: 'Discard the changes to this range?',
+      description: 'The boundaries and weights you have set for this range will be lost.',
+    })
   }
 
   /** The question before dropping what the open editor holds. */
   function confirmDiscardEditor(): Promise<boolean> {
     if (!editorChanged) return Promise.resolve(true)
-    return askToDiscard(
-      'Discard the time you typed?',
-      'What you typed for this boundary will be lost.',
-    )
+    return question.ask({
+      title: 'Discard the time you typed?',
+      description: 'What you typed for this boundary will be lost.',
+    })
   }
 
   /** Escape on an open editor closes it, asking first when something was typed. */
@@ -874,13 +855,13 @@
     }}
     onEscapeKeydown={(event: KeyboardEvent) => {
       event.preventDefault()
-      if (question) answer(false)
+      if (question.open) question.answer(false)
       else if (editing) void escapeEditor()
       else void requestClose()
     }}
     onInteractOutside={(event: PointerEvent) => {
       event.preventDefault()
-      if (question) answer(false)
+      if (question.open) question.answer(false)
       else void requestClose()
     }}
     style={narrow
@@ -895,7 +876,7 @@
       a scroll container loses where the reader was, and returning to the top of a long ladder
       after reading one entry is the opposite of what the button is for.
     -->
-    <div inert={!!fullTextEntry || question !== null} class="flex min-h-0 flex-1 flex-col">
+    <div inert={!!fullTextEntry || question.open} class="flex min-h-0 flex-1 flex-col">
       {#if narrow}
         <div class="px-4 py-3 text-center">
           <Dialog.Title class="text-lg font-semibold">Reconcile a range</Dialog.Title>
@@ -996,13 +977,7 @@
       </div>
     {/if}
 
-    <DiscardConfirm
-      open={question !== null}
-      title={question?.title}
-      description={question?.description}
-      onCancel={() => answer(false)}
-      onDiscard={() => answer(true)}
-    />
+    <DiscardConfirm {question} />
   </Dialog.Content>
 </Dialog.Root>
 

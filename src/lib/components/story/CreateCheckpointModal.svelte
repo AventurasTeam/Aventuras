@@ -9,7 +9,7 @@
   import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
   import { RadioGroup, RadioGroupItem } from '#lib/components/ui/radio-group/index.ts'
-  import { Bookmark, Check, ChevronDown, ChevronRight, TriangleAlert, X } from '@lucide/svelte'
+  import { Bookmark, Check, TriangleAlert, X } from '@lucide/svelte'
   import ChangeList from './ChangeList.svelte'
   import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import ExplanationFold from '#lib/components/shared/ExplanationFold.svelte'
@@ -244,49 +244,33 @@
       {/if}
       {#if pastCheckpoint.overrides}
         {@const overrides = pastCheckpoint.overrides}
-        <div class="text-muted-foreground text-xs">
-          <button
-            type="button"
-            class="hover:text-foreground flex items-center gap-1 font-medium"
-            onclick={() => (advancedOpen = !advancedOpen)}
-            aria-expanded={advancedOpen}
-            aria-controls="past-checkpoint-advanced"
-          >
-            {#if advancedOpen}
-              <ChevronDown class="h-3.5 w-3.5 shrink-0" />
-            {:else}
-              <ChevronRight class="h-3.5 w-3.5 shrink-0" />
-            {/if}
-            Advanced
-          </button>
-          {#if advancedOpen}
-            <div id="past-checkpoint-advanced" class="mt-2 space-y-2 pl-[1.125rem]">
-              <label class="flex items-center gap-2">
-                <Checkbox
-                  checked={overruleGaps}
-                  onCheckedChange={(checked) => setOverruleGaps(checked === true)}
-                  disabled={saving}
-                />
-                Create it anyway:
-              </label>
-              <RadioGroup
-                value={gapOverride}
-                onValueChange={(v) => (gapOverride = v as GapOverride)}
-                disabled={!overruleGaps || saving}
-                class="gap-2 pl-6"
-              >
-                {@render option(
-                  'undoRecorded',
-                  'Use a partial rollback from the next full state',
-                  overrides.next,
-                  'Changes that were not recorded stay in.',
-                )}
-                {@render option('nextAsIs', 'Copy the next full state', overrides.next)}
-                {@render option('previousAsIs', 'Copy the previous full state', overrides.previous)}
-              </RadioGroup>
-            </div>
-          {/if}
-        </div>
+        <ExplanationFold summary="Advanced" bind:open={advancedOpen}>
+          <div class="space-y-2 pt-1">
+            <label class="flex items-center gap-2">
+              <Checkbox
+                checked={overruleGaps}
+                onCheckedChange={(checked) => setOverruleGaps(checked === true)}
+                disabled={saving}
+              />
+              Create it anyway:
+            </label>
+            <RadioGroup
+              value={gapOverride}
+              onValueChange={(v) => (gapOverride = v as GapOverride)}
+              disabled={!overruleGaps || saving}
+              class="gap-2 pl-6"
+            >
+              {@render option(
+                'undoRecorded',
+                'Use a partial rollback from the next full state',
+                overrides.next,
+                'Changes that were not recorded stay in.',
+              )}
+              {@render option('nextAsIs', 'Copy the next full state', overrides.next)}
+              {@render option('previousAsIs', 'Copy the previous full state', overrides.previous)}
+            </RadioGroup>
+          </div>
+        </ExplanationFold>
       {/if}
     {:else if pastCheckpoint.source}
       <div class="text-muted-foreground space-y-1 text-xs">

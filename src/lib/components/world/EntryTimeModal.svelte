@@ -5,7 +5,6 @@
   import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import ExplanationFold from '#lib/components/shared/ExplanationFold.svelte'
   import StoryTimeField from '#lib/components/shared/StoryTimeField.svelte'
-  import { ChevronDown, ChevronRight } from '@lucide/svelte'
   import {
     parseStoryTime,
     formatStoryTime,
@@ -72,14 +71,6 @@
   }
 </script>
 
-{#snippet foldIcon(isOpen: boolean)}
-  {#if isOpen}
-    <ChevronDown class="h-3 w-3 shrink-0" />
-  {:else}
-    <ChevronRight class="h-3 w-3 shrink-0" />
-  {/if}
-{/snippet}
-
 <ActionModal
   bind:open
   size="lg"
@@ -100,35 +91,27 @@
     </p>
   </ExplanationFold>
   {#if checkpointHere}
-    <div class="text-muted-foreground">
-      <button
-        type="button"
-        class="hover:text-foreground flex items-center gap-1 text-xs"
-        aria-expanded={noticeOpen}
-        onclick={() => (noticeOpen = !noticeOpen)}
-      >
-        {@render foldIcon(noticeOpen)}
-        {forkCount > 0 ? 'This entry is a fork point' : 'This entry carries a checkpoint'}
-      </button>
-      {#if noticeOpen}
-        <p class="text-foreground mt-1 text-sm">
-          {#if forkCount > 0}
-            {forkCount === 1 ? 'A branch was' : `${forkCount} branches were`} forked from entry {entry
-              ? entryNumber(entry)
-              : '?'}, and the checkpoint “{checkpointHere.name}” holds the clock
-            {forkCount === 1 ? 'it opens' : 'they open'} on, which this edit updates too. The edit affects
-            {forkCount + 2} intervals: the one ending at this entry, the one continuing on this branch,
-            and the one starting on {forkCount === 1
-              ? 'the branch'
-              : `each of the ${forkCount} 
+    <ExplanationFold
+      summary={forkCount > 0 ? 'This entry is a fork point' : 'This entry carries a checkpoint'}
+      bind:open={noticeOpen}
+    >
+      <p class="text-foreground text-sm">
+        {#if forkCount > 0}
+          {forkCount === 1 ? 'A branch was' : `${forkCount} branches were`} forked from entry {entry
+            ? entryNumber(entry)
+            : '?'}, and the checkpoint “{checkpointHere.name}” holds the clock
+          {forkCount === 1 ? 'it opens' : 'they open'} on, which this edit updates too. The edit affects
+          {forkCount + 2} intervals: the one ending at this entry, the one continuing on this branch,
+          and the one starting on {forkCount === 1
+            ? 'the branch'
+            : `each of the ${forkCount} 
             branches`} forked here. Running a reconciliation over each of them afterwards is advised.
-          {:else}
-            The checkpoint “{checkpointHere.name}” was taken here, and its clock is updated with the
-            new ending. Nothing has been forked from it yet, so no other branch is affected.
-          {/if}
-        </p>
-      {/if}
-    </div>
+        {:else}
+          The checkpoint “{checkpointHere.name}” was taken here, and its clock is updated with the
+          new ending. Nothing has been forked from it yet, so no other branch is affected.
+        {/if}
+      </p>
+    </ExplanationFold>
   {/if}
 
   <div class="grid gap-3 sm:grid-cols-2">

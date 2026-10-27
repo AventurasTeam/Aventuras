@@ -208,23 +208,30 @@ Close), `TimelineReconciliationModal` (a multi-step wizard), the unsaved-changes
 
 A screen like these that asks before discarding still asks the shell's way: `shared/DiscardConfirm`
 inside its own content, over an `inert` body, never the native `ask()` of
-`@tauri-apps/plugin-dialog`. `TimelineReconciliationModal` does, and answers Escape and an outside
-click with "keep" while the question is up.
+`@tauri-apps/plugin-dialog`. The question is a `PendingQuestion` (`shared/pendingQuestion.svelte.ts`):
+`await question.ask({ title, description })` is true when the reader discards, and an attempt made
+while one is up gets false. The action modal, both wizards and `TimelineReconciliationModal` use
+it, and each answers Escape and an outside click with "keep" while the question is up. Every
+caller names what is lost: the overlay has no wording of its own beyond "Keep editing" and
+"Discard".
 
 ## Folding explanations
 
 An explanation of how something works, which a reader needs once and then knows, is a
 `shared/ExplanationFold`: a muted summary line ("How past checkpoints work", "What an anchor does")
-that unfolds the text below it. It starts open, and whether the reader folded it is saved per
-explanation, across stories and sessions, under the `id` it is given, which no other
-explanation may share. A search for `ExplanationFold` finds them all.
+that unfolds the text below it, built on the bits-ui Collapsible, so it slides open and shut. It
+starts open, and whether the reader folded it is saved per explanation, across stories and
+sessions, under the `id` it is given, which no other explanation may share. A search for
+`ExplanationFold` finds them all.
 
 In an action modal it goes in the body, above the fields, not in the header's description: the
 header stays pinned, and an explanation the reader has read should not keep its height there. A
 description is for what the reader needs every time.
 
 Not every fold is one. A notice about this particular item, like the time edit's "This entry is a
-fork point", opens again each time, since what it says changes with the item.
+fork point", opens again each time, since what it says changes with the item. It is the same
+component without an `id`, its state bound by the caller through `open`, as is the past
+checkpoint's "Advanced".
 
 ## Story-time fields
 

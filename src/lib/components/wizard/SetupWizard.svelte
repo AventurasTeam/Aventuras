@@ -18,6 +18,7 @@
   import type { VaultCharacter } from '#lib/types/index.ts'
 
   import DiscardConfirm from '#lib/components/shared/DiscardConfirm.svelte'
+  import { PendingQuestion } from '#lib/components/shared/pendingQuestion.svelte.ts'
 
   // Step components
   import {
@@ -41,7 +42,7 @@
   const isMobile = createIsMobile()
 
   let isOpen = $state(true)
-  let showExitConfirm = $state(false)
+  const exitQuestion = new PendingQuestion()
 
   /**
    * A close driven from this side never reaches `vaul`'s restore, and `onClose()` unmounts
@@ -73,9 +74,15 @@
    */
   const allowSwipeDismiss = $derived(!guardDismiss && !wizard.isCreatingStory)
 
-  function requestDismiss() {
-    if (guardDismiss) showExitConfirm = true
-    else handleClose()
+  async function requestDismiss() {
+    if (guardDismiss) {
+      const confirmed = await exitQuestion.ask({
+        title: 'Discard this story?',
+        description: 'Everything you have filled in so far will be lost.',
+      })
+      if (!confirmed) return
+    }
+    handleClose()
   }
 
   // Auto-link embedded lorebook when selecting a vault character
@@ -157,16 +164,16 @@
     escapeKeydownBehavior={wizard.isCreatingStory ? 'ignore' : 'close'}
     onInteractOutside={(e: PointerEvent) => {
       e.preventDefault()
-      requestDismiss()
+      void requestDismiss()
     }}
     onEscapeKeydown={(e: KeyboardEvent) => {
       e.preventDefault()
-      if (showExitConfirm) showExitConfirm = false
-      else requestDismiss()
+      if (exitQuestion.open) exitQuestion.answer(false)
+      else void requestDismiss()
     }}
   >
     <!-- Header -->
-    <div class="flex flex-col border-b p-4 pb-4" inert={showExitConfirm}>
+    <div class="flex flex-col border-b p-4 pb-4" inert={exitQuestion.open}>
       <div class="mb-4 flex items-center justify-between gap-2">
         <div class="min-w-0">
           <ResponsiveModal.Title class="text-xl">Create New Story</ResponsiveModal.Title>
@@ -200,7 +207,7 @@
     </div>
 
     <!-- Content -->
-    <div class="min-h-0 flex-1 overflow-y-auto p-4" inert={showExitConfirm}>
+    <div class="min-h-0 flex-1 overflow-y-auto p-4" inert={exitQuestion.open}>
       {#if wizard.currentStep === 1}
         <Step1Mode
           selectedMode={wizard.narrative.selectedMode}
@@ -521,7 +528,7 @@
     </div>
 
     <!-- Footer Navigation -->
-    <div class="flex shrink-0 justify-between border-t p-4" inert={showExitConfirm}>
+    <div class="flex shrink-0 justify-between border-t p-4" inert={exitQuestion.open}>
       {#if wizard.currentStep > 1}
         <Button variant="secondary" class="gap-1 pl-2" onclick={() => wizard.prevStep()}>
           <ChevronLeft class="h-4 w-4" />
@@ -561,13 +568,6 @@
       {/if}
     </div>
 
-    <DiscardConfirm
-      open={showExitConfirm}
-      onCancel={() => (showExitConfirm = false)}
-      onDiscard={() => {
-        showExitConfirm = false
-        handleClose()
-      }}
-    />
+    <DiscardConfirm question={exitQuestion} />
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>
