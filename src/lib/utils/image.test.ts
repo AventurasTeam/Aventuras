@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   parseImageSpec,
   pickResolution,
+  pickSize,
   specFromPixels,
   specToPixels,
   specToAspectRatio,
@@ -205,6 +206,47 @@ describe('pickResolution', () => {
   it('sends nothing when the model lists no tiers', () => {
     expect(pick('medium')).toBeUndefined()
     expect(pick('medium', [])).toBeUndefined()
+  })
+})
+
+describe('pickSize', () => {
+  const pick = (
+    orientation: ImageOrientation,
+    size: ImageSizeTier,
+    listed?: string[],
+  ): string | undefined => pickSize({ orientation, size }, listed)
+
+  const standard = ['1024x1024', '1536x1024', '1024x1536']
+
+  it('matches orientation before long edge', () => {
+    expect(pick('landscape', 'tiny', standard)).toBe('1536x1024')
+    expect(pick('portrait', 'large', standard)).toBe('1024x1536')
+    expect(pick('square', 'large', standard)).toBe('1024x1024')
+  })
+
+  it('returns a model’s only option whatever it is', () => {
+    expect(pick('landscape', 'large', ['1024x1024'])).toBe('1024x1024')
+    expect(pick('square', 'small', ['auto'])).toBe('auto')
+  })
+
+  it('reads symbolic names, size tokens and bare ratios', () => {
+    expect(pick('landscape', 'small', ['square_hd', 'landscape_16_9'])).toBe('landscape_16_9')
+    expect(pick('square', 'large', ['1k', '2k', '4k'])).toBe('2k')
+    expect(pick('portrait', 'small', ['1:1', '16:9', '9:16'])).toBe('9:16')
+  })
+
+  it('falls to the widest option for a model with no landscape', () => {
+    expect(pick('landscape', 'small', ['512x512', '1024x1024'])).toBe('1024x1024')
+  })
+
+  it('prefers a readable option to one it cannot place', () => {
+    expect(pick('square', 'small', ['auto', '1024x1024'])).toBe('1024x1024')
+    expect(pick('square', 'small', ['auto', 'match_input_image'])).toBe('auto')
+  })
+
+  it('sends nothing when the model lists none', () => {
+    expect(pick('square', 'small')).toBeUndefined()
+    expect(pick('square', 'small', [])).toBeUndefined()
   })
 })
 

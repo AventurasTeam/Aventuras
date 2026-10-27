@@ -11,13 +11,7 @@ import { imageGetFetch } from './fetchAdapter'
 import { createNanoGPTImage } from './nanogptImage'
 import { parseModelList } from './parseModelList'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
-import {
-  specToPixels,
-  formatImageSize,
-  specFromPixels,
-  specToAspectRatio,
-  type ImageSpec,
-} from '#lib/utils/image.ts'
+import { specToPixels, formatImageSize, pickSize, specToAspectRatio } from '#lib/utils/image.ts'
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 
 const DEFAULT_BASE_URL = 'https://api.nano-gpt.com/api/v1'
@@ -218,7 +212,11 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
           ? (specToAspectRatio(spec, ratios) as `${number}:${number}`)
           : undefined,
         providerOptions: {
-          nanogpt: { resolution: resolveSize(spec, modelInfo?.supportedResolutions) },
+          nanogpt: {
+            resolution:
+              pickSize(spec, modelInfo?.supportedResolutions) ??
+              formatImageSize(specToPixels(spec)),
+          },
         },
         signal,
       })
@@ -264,78 +262,4 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
       })
     },
   }
-}
-
-/** Symbolic values NanoGPT models use in place of dimensions, and what they mean. */
-const SYMBOLIC: Record<string, { width: number; height: number }> = {
-  square_hd: { width: 1024, height: 1024 },
-  square: { width: 512, height: 512 },
-  landscape_4_3: { width: 1024, height: 768 },
-  landscape_16_9: { width: 1024, height: 576 },
-  portrait_4_3: { width: 768, height: 1024 },
-  portrait_16_9: { width: 576, height: 1024 },
-}
-
-const SIZE_TOKENS: Record<string, number> = { '1k': 1024, '2k': 2048, '4k': 4096, '8k': 8192 }
-
-/** Long edge a bare `w:h` is scored at, since a ratio carries no size of its own. */
-const RATIO_REFERENCE_EDGE = 1024
-
-/**
- * The value to send as `size`.
- *
- * Models publish their own list of accepted values and they do not agree — some offer a
- * single value, many use tokens that are not dimensions at all. Picks from that list when
- * it is known, scoring orientation first and long edge second, so a model that cannot do
- * landscape returns its widest option rather than a same-pixel square. Without a list, the
- * canonical pixels go through unchanged.
- */
-function resolveSize(spec: ImageSpec, options?: string[]): string {
-  const want = specToPixels(spec)
-  if (!options?.length) return formatImageSize(want)
-  if (options.length === 1) return options[0]
-
-  let best: string | null = null
-  let bestScore = Infinity
-  let firstUnreadable: string | null = null
-
-  for (const option of options) {
-    const dims = optionToPixels(option)
-    if (!dims) {
-      firstUnreadable ??= option
-      continue
-    }
-    const orientationMiss = specFromPixels(dims.width, dims.height).orientation !== spec.orientation
-    const edgeMiss = Math.abs(Math.max(dims.width, dims.height) - Math.max(want.width, want.height))
-    const score = (orientationMiss ? 1_000_000 : 0) + edgeMiss
-    if (score < bestScore) {
-      bestScore = score
-      best = option
-    }
-  }
-
-  // `auto` and friends: usable, but only if nothing readable was on offer.
-  return best ?? firstUnreadable ?? formatImageSize(want)
-}
-
-function optionToPixels(option: string): { width: number; height: number } | null {
-  const value = option.trim().toLowerCase()
-
-  const pixels = /^(\d+)\s*[x*]\s*(\d+)$/.exec(value)
-  if (pixels) return { width: Number(pixels[1]), height: Number(pixels[2]) }
-
-  const ratio = /^(\d+):(\d+)$/.exec(value)
-  if (ratio) {
-    const w = Number(ratio[1])
-    const h = Number(ratio[2])
-    const edge = RATIO_REFERENCE_EDGE
-    return w >= h
-      ? { width: edge, height: Math.round((edge * h) / w) }
-      : { width: Math.round((edge * w) / h), height: edge }
-  }
-
-  if (value in SYMBOLIC) return SYMBOLIC[value]
-  if (value in SIZE_TOKENS) return { width: SIZE_TOKENS[value], height: SIZE_TOKENS[value] }
-
-  return null
 }
