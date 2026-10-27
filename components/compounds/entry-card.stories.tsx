@@ -408,7 +408,7 @@ export const CutOffNoticeActionWhileDisabled: StoryT = {
 }
 
 const phoneWidthDecorator = (Story: () => ReactElement) => (
-  <View style={{ width: 360 }}>
+  <View testID="phone-frame" style={{ width: 360 }}>
     <Story />
   </View>
 )
@@ -807,22 +807,18 @@ export const SystemHeldTextShort: StoryT = {
     onDismiss: fn(),
   },
   play: async () => {
-    expect(await screen.findByText(HELD_SHORT)).toBeVisible()
+    const quote = await screen.findByText(HELD_SHORT)
+    expect(quote).toBeVisible()
     expect(screen.getByText(t('reader:systemEntry.heldTextLabel'))).toBeVisible()
     expect(screen.getByText(t('reader:systemEntry.heldTextCustody'))).toBeVisible()
     expect(
       screen.queryByRole('button', { name: t('reader:systemEntry.showAll') }),
     ).not.toBeInTheDocument()
     // Above the buttons; the disclosure under them.
-    const quote = screen.getByText(HELD_SHORT)
     const retry = screen.getByRole('button', { name: /Retry/ })
     const details = screen.getByRole('button', { name: t('reader:systemEntry.details') })
-    expect(quote.compareDocumentPosition(retry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(
-      0,
-    )
-    expect(
-      retry.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeGreaterThan(0)
+    expect(quote.compareDocumentPosition(retry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(retry.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   },
 }
 
@@ -1015,15 +1011,9 @@ function expectPhoneTapZone(button: HTMLElement) {
   expect(button.contains(document.elementFromPoint(x, rect.bottom - 1))).toBe(true)
 }
 
-const systemPhoneDecorator = (Story: () => ReactElement) => (
-  <View testID="phone-frame" style={{ width: 360 }}>
-    <Story />
-  </View>
-)
-
 /** At phone width: the toggles take the 44 px tap floor, open or closed, and a long URL wraps. */
 export const SystemPhoneWidth: StoryT = {
-  decorators: [systemPhoneDecorator],
+  decorators: [phoneWidthDecorator],
   args: {
     kind: 'system',
     tier: 'phone',
@@ -1042,11 +1032,8 @@ export const SystemPhoneWidth: StoryT = {
     // The buttons keep their own tap zones under the toggle's padding.
     const retry = screen.getByRole('button', { name: /Retry/ })
     const retryRect = retry.getBoundingClientRect()
-    expect(
-      retry.contains(
-        document.elementFromPoint(retryRect.left + retryRect.width / 2, retryRect.bottom - 1),
-      ),
-    ).toBe(true)
+    const retryX = retryRect.left + retryRect.width / 2
+    expect(retry.contains(document.elementFromPoint(retryX, retryRect.bottom - 1))).toBe(true)
 
     await userEvent.click(showAll)
     expectPhoneTapZone(
@@ -1058,11 +1045,8 @@ export const SystemPhoneWidth: StoryT = {
     expectPhoneTapZone(details)
     const copy = screen.getByRole('button', { name: t('reader:systemEntry.copyDetails') })
     const copyRect = copy.getBoundingClientRect()
-    expect(
-      copy.contains(
-        document.elementFromPoint(copyRect.left + copyRect.width / 2, copyRect.top + 1),
-      ),
-    ).toBe(true)
+    const copyX = copyRect.left + copyRect.width / 2
+    expect(copy.contains(document.elementFromPoint(copyX, copyRect.top + 1))).toBe(true)
     const frame = screen.getByTestId('phone-frame')
     expect(frame.scrollWidth).toBeLessThanOrEqual(frame.clientWidth)
     expect(detail.getBoundingClientRect().right).toBeLessThanOrEqual(
