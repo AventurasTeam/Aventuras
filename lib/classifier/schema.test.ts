@@ -233,6 +233,22 @@ describe('classifierExtractionSchema — the writer map', () => {
     expect(fields).not.toHaveProperty('occurredAtTurn')
   })
 
+  // The fields whose name alone doesn't say what they hold; the template's rules repeat each.
+  it('describes a status change, a relationship kind and a learned happening', () => {
+    expect(itemFields('statusFlips').to?.description).toBe(
+      'active for a staged character the prose brings into the scene or a retired one who returns; retired only on unambiguous finality.',
+    )
+    expect(itemFields('statusFlips').reason?.description).toBe(
+      'For a retirement: why, in a short phrase from the prose.',
+    )
+    expect(itemFields('relationships').kind?.description).toBe(
+      'How the subject sees the object, in a word or short phrase: sister, mentor, rival. Never the inverse.',
+    )
+    expect(itemFields('knownAwareness').happening?.description).toBe(
+      'ID from Known happenings of the happening the character learns of.',
+    )
+  })
+
   it('parses renames, placements and standings of listed rows', () => {
     const parsed = classifierExtractionSchema.parse({
       renames: [{ ref: 'c1', name: 'Mira', sourceTurn: 't2' }],

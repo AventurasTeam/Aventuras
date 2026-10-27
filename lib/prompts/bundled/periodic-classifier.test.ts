@@ -479,6 +479,10 @@ describe('periodic classifier template — standing and threads', () => {
 describe('periodic classifier template — the writer map rules', () => {
   const RULES = [
     [
+      'status changes',
+      '- Status changes. Put each move to active or retired in statusFlips, with the character\'s or faction\'s ID as ref, the new status as to, and the sourceTurn. Give a retirement its reason, a short phrase from the prose ("killed at the ford").\n',
+    ],
+    [
       'when it happened',
       '- When it happened. A happening sits at its sourceTurn. For an event from before the story or offstage that the turns only recount, set temporal to its time as the prose gives it ("ten winters ago", "before the war"); leave temporal out for an event the turns show happening.\n',
     ],

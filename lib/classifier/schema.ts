@@ -90,16 +90,28 @@ export const classifierExtractionSchema = z.object({
     z.object({
       subject: z.string(),
       object: z.string(),
-      /** Subject's view of object only — never the inferred inverse. */
-      kind: z.string(),
+      kind: z
+        .string()
+        .describe(
+          'How the subject sees the object, in a word or short phrase: sister, mentor, rival. Never the inverse.',
+        ),
       sourceTurn,
     }),
   ),
   statusFlips: tolerantList(
     z.object({
       ref: z.string(),
-      to: foldedEnum(z.enum(['active', 'retired'])),
-      reason: z.string().optional(),
+      to: foldedEnum(
+        z
+          .enum(['active', 'retired'])
+          .describe(
+            'active for a staged character the prose brings into the scene or a retired one who returns; retired only on unambiguous finality.',
+          ),
+      ),
+      reason: z
+        .string()
+        .optional()
+        .describe('For a retirement: why, in a short phrase from the prose.'),
       sourceTurn,
     }),
   ),
@@ -207,7 +219,9 @@ export const classifierExtractionSchema = z.object({
   ),
   knownAwareness: tolerantList(
     z.object({
-      happening: z.string(),
+      happening: z
+        .string()
+        .describe('ID from Known happenings of the happening the character learns of.'),
       /** Character placeholder or a newCharacters handle. */
       ref: z.string(),
       source: z.string(),
