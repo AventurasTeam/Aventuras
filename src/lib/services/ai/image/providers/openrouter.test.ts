@@ -53,24 +53,35 @@ describe('OpenRouter image provider', () => {
     sdkFetch.mockImplementation(async () => jsonResponse({ data: [{ b64_json: 'AAA' }] }))
   })
 
-  it('posts to /images with the ratio and resolution, and returns the image', async () => {
+  it('posts to /images with the ratio and a listed resolution, and returns the image', async () => {
     const result = await provider().generate({
-      model: 'google/gemini-2.5-flash-image',
+      model: 'google/gemini-3-pro-image',
       prompt: 'a castle',
       spec: landscapeMedium,
+      modelInfo: { supportedResolutions: ['1K', '2K', '4K'] },
     })
 
     const { url, headers, body } = sentRequest()
     expect(url).toBe('https://openrouter.ai/api/v1/images')
     expect(headers.get('Authorization')).toBe('Bearer k')
     expect(body).toEqual({
-      model: 'google/gemini-2.5-flash-image',
+      model: 'google/gemini-3-pro-image',
       prompt: 'a castle',
       n: 1,
       aspect_ratio: '16:9',
-      resolution: '1.5K',
+      resolution: '2K',
     })
     expect(result).toEqual({ base64: 'AAA' })
+  })
+
+  it.each([
+    [undefined],
+    [{}],
+    [{ supportedResolutions: [] }],
+    [{ supportedResolutions: ['auto'] }],
+  ])('sends no resolution when the model lists none (%j)', async (modelInfo) => {
+    await provider().generate({ model: 'm', prompt: 'p', spec: landscapeMedium, modelInfo })
+    expect(sentRequest().body).not.toHaveProperty('resolution')
   })
 
   it('posts to the normalized base URL', async () => {
@@ -100,15 +111,20 @@ describe('OpenRouter image provider', () => {
   })
 
   it.each([
-    ['tiny', '512'],
-    ['small', '1K'],
-    ['medium', '1.5K'],
-    ['large', '2K'],
-  ] as const)('maps the %s tier to resolution %s', async (size, resolution) => {
+    ['tiny', ['1K', '2K', '4K'], '1K'],
+    ['small', ['1K', '2K', '4K'], '1K'],
+    ['medium', ['1K', '2K', '4K'], '2K'],
+    ['large', ['1K', '2K'], '2K'],
+    ['tiny', ['2K', '4K'], '2K'],
+    ['large', ['1K'], '1K'],
+    ['medium', ['512', '768', '1K', '1.5K', '2K'], '1.5K'],
+    ['small', ['4K', '2K', 'auto', '1K'], '1K'],
+  ] as const)('maps the %s tier on %j to resolution %s', async (size, listed, resolution) => {
     await provider().generate({
       model: 'm',
       prompt: 'p',
       spec: { orientation: 'landscape', size },
+      modelInfo: { supportedResolutions: [...listed] },
     })
     expect(sentRequest().body.resolution).toBe(resolution)
   })
@@ -119,6 +135,34 @@ describe('OpenRouter image provider', () => {
   ] as const)('maps %s to aspect ratio %s', async (orientation, ratio) => {
     await provider().generate({ model: 'm', prompt: 'p', spec: { orientation, size: 'small' } })
     expect(sentRequest().body.aspect_ratio).toBe(ratio)
+  })
+
+  it.each([
+    ['landscape', ['1:1', '3:2', '2:3'], '3:2'],
+    ['portrait', ['1:1', '3:2', '2:3'], '2:3'],
+    ['landscape', ['1:1', '3:2', '2:3', 'auto'], '3:2'],
+    ['landscape', ['1:1', '16:9'], '16:9'],
+  ] as const)(
+    'sends the closest listed ratio for %s on %j: %s',
+    async (orientation, supportedAspectRatios, ratio) => {
+      await provider().generate({
+        model: 'm',
+        prompt: 'p',
+        spec: { orientation, size: 'small' },
+        modelInfo: { supportedAspectRatios: [...supportedAspectRatios] },
+      })
+      expect(sentRequest().body.aspect_ratio).toBe(ratio)
+    },
+  )
+
+  it('sends the spec ratio from the general list when the model lists none', async () => {
+    await provider().generate({
+      model: 'm',
+      prompt: 'p',
+      spec: landscapeMedium,
+      modelInfo: { supportedAspectRatios: [] },
+    })
+    expect(sentRequest().body.aspect_ratio).toBe('16:9')
   })
 
   it('labels its fetch openrouter-image', () => {

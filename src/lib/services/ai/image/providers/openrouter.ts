@@ -8,7 +8,7 @@
 import * as z from 'zod'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import type { ImageModelCapabilities } from '#lib/types/index.ts'
-import { specToAspectRatio, type ImageSizeTier } from '#lib/utils/image.ts'
+import { pickResolution, specToAspectRatio } from '#lib/utils/image.ts'
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type {
   ImageProvider,
@@ -91,7 +91,7 @@ function toModelInfo(m: OpenRouterModel): ImageModelInfo {
   }
 }
 
-/** The aspect ratios the `/images` API lists; OpenRouter clamps one to what the model supports. */
+/** The ratios `/images` accepts in general, for a model whose own list is unknown. */
 const OPENROUTER_ASPECT_RATIOS = [
   '1:1',
   '1:2',
@@ -120,16 +120,6 @@ const OPENROUTER_ASPECT_RATIOS = [
   '21:9',
 ] as const
 
-type OpenRouterResolution = '512' | '768' | '1K' | '1.5K' | '2K' | '4K'
-
-/** Each tier's resolution matches its pixel long edge. */
-const OPENROUTER_IMAGE_SIZE: Record<ImageSizeTier, OpenRouterResolution> = {
-  tiny: '512',
-  small: '1K',
-  medium: '1.5K',
-  large: '2K',
-}
-
 export function createOpenRouterProvider(config: ImageProviderConfig): ImageProvider {
   const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL
   const openrouter = createOpenRouter({
@@ -143,19 +133,25 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
     name: 'OpenRouter',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, spec, referenceImages, signal } = options
+      const { model, prompt, spec, modelInfo, referenceImages, signal } = options
+      const resolution = pickResolution(spec, modelInfo?.supportedResolutions)
 
       return generateSdkImage({
         model: openrouter.imageModel(model),
         prompt,
         referenceImages,
-        aspectRatio: specToAspectRatio(spec, OPENROUTER_ASPECT_RATIOS) as `${number}:${number}`,
-        providerOptions: { openrouter: { resolution: OPENROUTER_IMAGE_SIZE[spec.size] } },
-    // Discovery works without a key; it is sent when set.
+        aspectRatio: specToAspectRatio(
+          spec,
+          modelInfo?.supportedAspectRatios?.length
+            ? modelInfo.supportedAspectRatios
+            : OPENROUTER_ASPECT_RATIOS,
+        ) as `${number}:${number}`,
+        providerOptions: { openrouter: resolution ? { resolution } : {} },
         signal,
       })
     },
 
+    // Discovery works without a key; it is sent when set.
     async listModels(apiKey?: string): Promise<ImageModelInfo[]> {
       const key = apiKey || config.apiKey
       const response = await imageGetFetch(
