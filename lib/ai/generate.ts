@@ -141,8 +141,7 @@ function withMiddleware(
   })
 }
 
-// The window check, which a chain must put last, and its latest estimate: null until the SDK
-// built a request.
+// Must go last in a chain. `estimate()` is the latest count, null until the SDK built a request.
 function windowCheck(
   providers: readonly ProviderInstance[],
   providerId: string,
@@ -350,8 +349,7 @@ export async function generateStructured<T>(
   const check = windowCheck(config.providers, providerId, modelId, attribution)
   // 'auto' puts the schema in the prompt (no capability signal yet); 'force-on' sends it natively.
   // Marker after the contract: on a blank system half, promptSchemaMiddleware makes the system
-  // message. Window check last, so it counts the prompt with the contract injected
-  // (architecture.md → The pre-send check).
+  // message. Window check last, to count the contract too (architecture.md → The pre-send check).
   const model = withMiddleware(resolved.model, [
     jsonResponseFormatMiddleware(jsonSchema),
     ...(resolved.params.structuredOutput === 'force-on' ? [] : [promptSchemaMiddleware()]),

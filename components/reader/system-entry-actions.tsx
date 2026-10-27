@@ -342,7 +342,7 @@ export function useSystemEntryActions(
     leaveStory,
   )
   const embedderFix = useEmbedderFixAction(failure?.kind === 'embedder' ? storyId : null)
-  // No fix yet: `Set window` needs App Settings' window editor and a persisted model target.
+  // None for context-window: `Set window` needs App Settings' window editor and a model target.
   const profileFix = useProfileFixAction(
     (failure?.kind === 'reply-cut-off' && offersProfileFix(failure.failure)) ||
       (failure?.kind === 'provider' && isCapabilityHintTag(failure.failure)),
