@@ -3467,6 +3467,36 @@ describe('periodicClassifierPhase — the writer map', () => {
     for (const title of ['Before the reach-back', 'Never given']) expect(user).not.toContain(title)
   })
 
+  // classifierWindowMaxEntries defaults to 20, so the window ends at e20 and no turn in it saw e21.
+  it('leaves out a happening past the cut of a truncated window', async () => {
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction(),
+    } as never)
+    const h = await ctxWith({ processedThrough: 0, headPosition: 21 })
+    happeningsStore.hydrate('b1', [
+      {
+        ...fire,
+        id: 'hap_55555555-5555-5555-5555-555555555555',
+        title: 'At the cut',
+        occurredAtEntryId: 'e20',
+      },
+      {
+        ...fire,
+        id: 'hap_55555555-5555-5555-5555-555555555556',
+        title: 'Past the cut',
+        occurredAtEntryId: 'e21',
+      },
+    ])
+
+    await drain(h.ctx)
+
+    const { user } = vi.mocked(generateStructured).mock.calls[0][1]
+    expect(user).toContain('] At the cut\n')
+    expect(user).not.toContain('Past the cut')
+  })
+
   it("moves a listed thread's status at its turn, and logs one for a thread it never listed", async () => {
     clearBuffers()
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })

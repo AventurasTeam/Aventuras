@@ -85,8 +85,22 @@ describe('readRecentEntryIds', () => {
     ],
   ])('%s', async (_name, protectedBuffer, expected) => {
     const db = await seed()
-    expect(sorted(await readRecentEntryIds(db, 'b1', { firstTurn: 8, protectedBuffer }))).toEqual(
-      expected,
-    )
+    const ids = await readRecentEntryIds(db, 'b1', {
+      firstPosition: 8,
+      lastPosition: 9,
+      protectedBuffer,
+    })
+    expect(sorted(ids)).toEqual(expected)
+  })
+
+  // A window truncated at classifierWindowMaxEntries: no turn in it saw the entries past its cut.
+  it("stops at the window's last entry", async () => {
+    const db = await seed()
+    const ids = await readRecentEntryIds(db, 'b1', {
+      firstPosition: 8,
+      lastPosition: 8,
+      protectedBuffer: 0,
+    })
+    expect(sorted(ids)).toEqual(['e6', 'e7', 'e8'])
   })
 })

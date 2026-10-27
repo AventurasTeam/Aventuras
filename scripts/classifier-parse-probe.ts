@@ -119,7 +119,8 @@ async function readBranch(dbPath: string, maxEntries: number): Promise<Branch> {
       happenings: knownHappenings(branchHappenings, {
         recorded: window.injectedHappenings,
         recentEntryIds: await readRecentEntryIds(db, BRANCH_ID, {
-          firstTurn: window.turns[0]!.position,
+          firstPosition: window.turns[0]!.position,
+          lastPosition: window.turns.at(-1)!.position,
           protectedBuffer: settings.protectedBuffer,
         }),
       }),

@@ -268,7 +268,8 @@ export async function* periodicClassifierPhase(
     {
       recorded: window.injectedHappenings,
       recentEntryIds: await readRecentEntryIds(ctx.db, ctx.branchId, {
-        firstTurn: window.turns[0]!.position,
+        firstPosition: window.turns[0]!.position,
+        lastPosition: window.turns.at(-1)!.position,
         protectedBuffer: open.settings.protectedBuffer,
       }),
     },

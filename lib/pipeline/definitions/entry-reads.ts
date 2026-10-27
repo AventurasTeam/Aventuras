@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNull, lt, min, ne, type SQL } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, isNull, lt, lte, min, ne, type SQL } from 'drizzle-orm'
 
 import { storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
 import { NARRATIVE_KINDS } from '@/lib/piggyback'
@@ -69,27 +69,27 @@ export async function readStoryPlace(
 }
 
 /**
- * classifier.md → What the classifier reads → Known happenings: the entries the window's turns
- * could have as story history. From the open region's start, or from `protectedBuffer` entries
- * before the window's first turn when that is earlier, counting as the prompt buffer does.
+ * classifier.md → What the classifier reads → Known happenings: the non-system entries from the
+ * open region's start, or from `protectedBuffer` entries before the window's first entry when that
+ * is earlier, through the window's last entry.
  */
 export async function readRecentEntryIds(
   db: DbCtx['db'],
   branchId: string,
-  window: { firstTurn: number; protectedBuffer: number },
+  bounds: { firstPosition: number; lastPosition: number; protectedBuffer: number },
 ): Promise<Set<string>> {
-  const narrative = and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system'))
+  const nonSystem = and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system'))
   const [open] = await db
     .select({ start: min(storyEntries.position) })
     .from(storyEntries)
-    .where(and(narrative, isNull(storyEntries.chapterId)))
-  let floor = Math.min(open?.start ?? window.firstTurn, window.firstTurn)
-  const reach = settingsCount(window.protectedBuffer, 0)
+    .where(and(nonSystem, isNull(storyEntries.chapterId)))
+  let floor = Math.min(open?.start ?? bounds.firstPosition, bounds.firstPosition)
+  const reach = settingsCount(bounds.protectedBuffer, 0)
   if (reach > 0) {
     const [back] = await db
       .select({ position: storyEntries.position })
       .from(storyEntries)
-      .where(and(narrative, lt(storyEntries.position, window.firstTurn)))
+      .where(and(nonSystem, lt(storyEntries.position, bounds.firstPosition)))
       .orderBy(desc(storyEntries.position))
       .limit(1)
       .offset(reach - 1)
@@ -99,6 +99,12 @@ export async function readRecentEntryIds(
   const rows = await db
     .select({ id: storyEntries.id })
     .from(storyEntries)
-    .where(and(narrative, gte(storyEntries.position, floor)))
+    .where(
+      and(
+        nonSystem,
+        gte(storyEntries.position, floor),
+        lte(storyEntries.position, bounds.lastPosition),
+      ),
+    )
   return new Set(rows.map((r) => r.id))
 }
