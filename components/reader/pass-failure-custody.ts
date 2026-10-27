@@ -1,7 +1,7 @@
 import { wrapComposerText, type ComposerMode, type ComposerWrapPov } from '@/lib/composer-wrap'
 import type { SystemFailureMeta } from '@/lib/db'
 
-import { isDraftEmpty } from './composer-draft'
+import { isDraftEmpty, keptSubmissionText } from './composer-draft'
 
 /**
  * Where a Send's text goes when its pass refused it (reader-composer.md → Custody of the turn's
@@ -73,7 +73,7 @@ export async function settleCommittedPassRetry(deps: {
   handBack: (submission: Submission) => void
   keepNotice: (submission: Submission) => Promise<void>
 }): Promise<void> {
-  const { stored } = deps
+  const stored = keptSubmissionText(deps.stored) != null ? deps.stored : undefined
   const plan = () => planCommittedPassRetry({ entryHasText: stored != null, ...deps.custodyNow() })
   if (stored != null && plan() === 'keep-notice') return deps.keepNotice(stored)
   await deps.clear()
@@ -131,7 +131,7 @@ export async function settlePassRetryCustody(deps: {
   const draft = deps.draft()
   const plan = planPassRetryCustody({
     held: deps.held,
-    entryHasText: deps.stored != null,
+    entryHasText: keptSubmissionText(deps.stored) != null,
     stillOnBranch: deps.stillOnBranch(),
     draftEmpty: isDraftEmpty(draft),
   })

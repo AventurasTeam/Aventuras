@@ -15,6 +15,7 @@ import {
 } from '@/lib/pipeline'
 import { openEmbedderSwapDialog } from '@/lib/stores'
 
+import { keptSubmissionText } from './composer-draft'
 import {
   capabilityHintContent,
   passContextWindowContent,
@@ -44,7 +45,7 @@ export async function dismissSystemEntry(deps: {
     await deps.reload()
   } finally {
     if (deps.stillOnBranch()) deps.handBack(deps.submission)
-    else if (deps.submission != null)
+    else if (keptSubmissionText(deps.submission) != null)
       logger.warn('reader.handback_skipped_left_branch', {
         branchId: deps.branchId,
         source: 'dismiss',

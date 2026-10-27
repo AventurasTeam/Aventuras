@@ -124,6 +124,13 @@ describe('settleCommittedPassRetry', () => {
     await settleCommittedPassRetry({ ...h.deps, stored: undefined })
     expect(h.calls).toEqual(['clear', 'reload'])
   })
+
+  // The card shows no quote over blank text, so no notice may stand to hold it.
+  it('clears an entry whose stored text is blank and settles nothing', async () => {
+    const h = harness([OCCUPIED])
+    await settleCommittedPassRetry({ ...h.deps, stored: { content: ' \n ', composerMode: 'free' } })
+    expect(h.calls).toEqual(['clear', 'reload'])
+  })
 })
 
 describe('planPassFailureCustody', () => {
@@ -351,6 +358,12 @@ describe('settlePassRetryCustody', () => {
     const h = harness({ stored: STORED, drafts: [DRAFT] })
     await settlePassRetryCustody(h.deps)
     expect(h.calls).toEqual(['write:I wait.'])
+  })
+
+  it('writes the draft onto a held entry whose stored text is blank', async () => {
+    const h = harness({ stored: { content: ' \n ', composerMode: 'free' }, drafts: [DRAFT] })
+    await settlePassRetryCustody(h.deps)
+    expect(h.calls).toEqual(['write:wrapped:draw my blade', 'clear'])
   })
 
   it('writes a held entry without text when the composer is empty', async () => {

@@ -636,6 +636,15 @@ describe('dismissSystemEntry', () => {
 
     expect(warn).not.toHaveBeenCalled()
   })
+
+  it('warns of nothing off-branch when the entry held blank text', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const h = harness({ stillOnBranch: () => false })
+
+    await dismissSystemEntry({ ...h.deps, submission: { content: ' \n ', composerMode: 'free' } })
+
+    expect(warn).not.toHaveBeenCalled()
+  })
 })
 
 describe('useEmbedderFixAction', () => {
