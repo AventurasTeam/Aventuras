@@ -100,9 +100,9 @@ dedup at create are in
   (above). Summaries and close-written lore arrive with M5, so the
   effect today is near zero.
 - **Load-bearing, found while planning the implementation**: that a
-  pass's happenings carry a position. Neither the template nor the
-  reply schema asked for `occurredAtTurn`, and the planner set no
-  position without it, so a happening the model didn't anchor would
+  pass's happenings carry a position. The reply schema offered
+  `occurredAtTurn` without a description and the template never asked
+  for it, and the planner set no position without it, so a happening the model didn't anchor would
   have been listed only through a record. A happening now sits at its
   source turn unless the reply marks it recounted with a `temporal`,
   and the reply no longer has an `occurredAtTurn`: a happening's source

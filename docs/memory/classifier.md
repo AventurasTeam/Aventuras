@@ -97,8 +97,10 @@ alias list (the keywords bullet below).
   happening sits in story time at its source turn
   (`occurred_at_entry_id`), or, for an event from before the story or
   offstage that the turns only recount, at a free-form `temporal`
-  instead. A source turn outside the window leaves it with neither,
-  never at the window head: the
+  instead. One synthesised across turns sits at the latest, its
+  provenance turn ([Provenance attribution](#provenance-attribution)).
+  One without a `temporal` whose `sourceTurn` is missing or names no
+  window turn has neither, never the window head: the
   [recent happenings](#what-the-classifier-reads) a later pass lists,
   Plot's chapter grouping and the ranker's chapter boost all read the
   position. An
@@ -251,10 +253,12 @@ Provenance is a **distinct axis** from the narrative anchors
 `happenings.occurred_at_entry_id` (where an event sits in story time; `null`
 for the temporal / historical class) and
 `happening_awareness.learned_at_entry_id` (when a character learned a fact).
-They frequently coincide, but the classifier already had to map each
-extraction to a window entry to populate those — provenance formalizes the
-single per-fact attribution channel that feeds all three, the anchor read
-directly and the narrative fields the classifier's judgment on top.
+A happening's story-time position is its provenance turn unless the
+reply marks it recounted with a `temporal`
+([What the classifier writes](#what-the-classifier-writes)), so a
+happening built from several turns sits at the latest of them, not
+where it began. An awareness row's `learned_at_entry_id` is its own
+provenance turn: its `learnedAtTurn`, else the happening's.
 
 ## ID handling in classifier output
 

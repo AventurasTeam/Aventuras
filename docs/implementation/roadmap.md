@@ -923,7 +923,7 @@ code before it moved; resolve with the slice it names.
   it, so the refs it emits point at nothing. These are refs to entities that
   already exist, so the reserved `new:` namespace does not cover them.
   Consequence: the graph gains happenings with sound titles, descriptions
-  and resolved `occurredAtTurn` anchors, but almost no edges — involvements
+  and resolved story-time anchors, but almost no edges — involvements
   and awareness are what get dropped. **Caveat: two runs, one model.** Enough
   to redirect what M7.5 measures, not to set a threshold — and small-model
   placeholder compliance may not generalise to the frontier models the
