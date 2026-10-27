@@ -605,7 +605,7 @@ export default function ReaderComposerRoute() {
       await writeSystemEntry(
         {
           branchId,
-          content: describePassFailure(refusal, submission).content,
+          content: describePassFailure(refusal).content,
           failure: toPassFailureMeta(refusal, submission),
         },
         ctx,
