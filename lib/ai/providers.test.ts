@@ -1,5 +1,5 @@
 import { createAnthropic } from '@ai-sdk/anthropic'
-import { generateText } from 'ai'
+import { generateText, streamText } from 'ai'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createProviderModel } from './providers'
@@ -30,6 +30,58 @@ describe('createProviderModel · openai-compatible', () => {
   it('still throws for an unsupported provider type', () => {
     const google = { ...oai, type: 'google' as const }
     expect(() => createProviderModel(google, 'm')).toThrow()
+  })
+})
+
+const CHUNK = { id: 'chatcmpl-1', object: 'chat.completion.chunk', created: 0, model: 'my-model' }
+
+function eventStream(frames: readonly unknown[]): Response {
+  const body = frames.map((frame) => `data: ${JSON.stringify(frame)}\n\n`).join('')
+  return new Response(`${body}data: [DONE]\n\n`, {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  })
+}
+
+// architecture.md → Truncation cross-check: without stream_options most servers report no usage
+// on a stream, so the cross-check and the prompt total would read nothing.
+describe('createProviderModel · openai-compatible streams', () => {
+  it('asks for usage on a streamed call and reads the prompt count it gets back', async () => {
+    const bodies: { stream?: boolean; stream_options?: { include_usage?: boolean } }[] = []
+    vi.stubGlobal('fetch', async (request: Request) => {
+      const body = (await request.json()) as (typeof bodies)[number]
+      bodies.push(body)
+      return eventStream([
+        {
+          ...CHUNK,
+          choices: [{ index: 0, delta: { role: 'assistant', content: 'ok' }, finish_reason: null }],
+        },
+        { ...CHUNK, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
+        // As a server does: the usage chunk only when the request asked for it.
+        ...(body.stream_options?.include_usage === true
+          ? [
+              {
+                ...CHUNK,
+                choices: [],
+                usage: { prompt_tokens: 42, completion_tokens: 1, total_tokens: 43 },
+              },
+            ]
+          : []),
+      ])
+    })
+    try {
+      const result = streamText({
+        model: createProviderModel(oai, 'my-model'),
+        prompt: 'hi',
+        maxRetries: 0,
+      })
+      await result.consumeStream()
+      expect(bodies).toHaveLength(1)
+      expect(bodies[0]).toMatchObject({ stream: true, stream_options: { include_usage: true } })
+      expect((await result.usage).inputTokens).toBe(42)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
 

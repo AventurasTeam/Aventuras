@@ -65,6 +65,9 @@ export function createProviderModel(
         name: provider.displayName,
         apiKey: provider.apiKey,
         baseURL: endpoint,
+        // Without stream_options most servers report no usage on a stream (architecture.md →
+        // Truncation cross-check).
+        includeUsage: true,
         fetch: createFetchWithCapture({
           source: `provider:${provider.id}`,
           actionId,
