@@ -1459,21 +1459,33 @@ describe('narrative fold — retrieval handoff', () => {
 
   // data-model.md → Entry metadata shape: the periodic classifier lists what the turn was given.
   it('records the happenings the ranker seated on the reply, by id', async () => {
+    const seated = happeningCandidate('hap_00000000-0000-4000-8000-0000000000a1', 'The ford')
+    const unseated = happeningCandidate('hap_00000000-0000-4000-8000-0000000000a2', 'The fire')
+    const retrieval = retrievalIntermediate({ happenings: [seated] })
+    const ranked = retrieval.bundles.happenings
+    // The pool also holds a row the ranker scored and left out, which the turn was never given.
+    retrieval.bundles.happenings = {
+      ...ranked,
+      pool: [seated, unseated],
+      traces: [
+        ...ranked.traces,
+        {
+          ...ranked.traces[0]!,
+          id: unseated.id,
+          displayName: unseated.displayName,
+          renderedText: unseated.renderedText,
+          mmrRank: 1,
+          selected: false,
+          dropReason: 'below_threshold',
+        },
+      ],
+      funnel: { ...ranked.funnel, poolSize: 2, preFilteredSize: 2 },
+    }
     const { metadata } = await runNarrativeWith({
       narrative: 'prose',
-      intermediates: {
-        [RETRIEVAL_INTERMEDIATE_KEY]: retrievalIntermediate({
-          happenings: [
-            happeningCandidate('hap_00000000-0000-4000-8000-0000000000a1', 'The ford'),
-            happeningCandidate('hap_00000000-0000-4000-8000-0000000000a2', 'The fire'),
-          ],
-        }),
-      },
+      intermediates: { [RETRIEVAL_INTERMEDIATE_KEY]: retrieval },
     })
-    expect(metadata.injectedHappenings).toEqual([
-      'hap_00000000-0000-4000-8000-0000000000a1',
-      'hap_00000000-0000-4000-8000-0000000000a2',
-    ])
+    expect(metadata.injectedHappenings).toEqual(['hap_00000000-0000-4000-8000-0000000000a1'])
   })
 
   it.each([

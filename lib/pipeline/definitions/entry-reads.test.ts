@@ -50,7 +50,7 @@ describe('readStoryPlace', () => {
 
 // classifier.md → What the classifier reads → Known happenings.
 describe('readRecentEntryIds', () => {
-  // e1-e4 a closed chapter, e5 a system row, e6-e9 the open region; the window starts at e8.
+  // e1-e4 a closed chapter, e5 a system row, e6-e9 the open region.
   async function seed() {
     const { db } = await createTestDb()
     await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
@@ -71,26 +71,56 @@ describe('readRecentEntryIds', () => {
   const sorted = (ids: Set<string>) => [...ids].sort()
 
   it.each([
-    ['no reach-back stops at the open region', 0, ['e6', 'e7', 'e8', 'e9']],
-    ['a reach-back inside the open region keeps all of it', 1, ['e6', 'e7', 'e8', 'e9']],
+    ['no reach-back still takes the open region from its start', 8, 0, ['e6', 'e7', 'e8', 'e9']],
+    [
+      "no reach-back from the open region's first entry stays out of the closed chapter",
+      6,
+      0,
+      ['e6', 'e7', 'e8', 'e9'],
+    ],
+    ['a reach-back inside the open region keeps all of it', 8, 1, ['e6', 'e7', 'e8', 'e9']],
     [
       'a reach-back crosses the chapter boundary, skipping the system row',
+      8,
       4,
       ['e3', 'e4', 'e6', 'e7', 'e8', 'e9'],
     ],
     [
       'a reach-back past the branch start takes the whole branch',
+      8,
       20,
       ['e1', 'e2', 'e3', 'e4', 'e6', 'e7', 'e8', 'e9'],
     ],
-  ])('%s', async (_name, protectedBuffer, expected) => {
+  ])('%s', async (_name, firstPosition, protectedBuffer, expected) => {
     const db = await seed()
     const ids = await readRecentEntryIds(db, 'b1', {
-      firstPosition: 8,
+      firstPosition,
       lastPosition: 9,
       protectedBuffer,
     })
     expect(sorted(ids)).toEqual(expected)
+  })
+
+  it("leaves out another branch's entries", async () => {
+    const db = await seed()
+    await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'alt', createdAt: 1 })
+    await db.insert(storyEntries).values(
+      [1, 2].map((position) => ({
+        id: `b2-e${position}`,
+        branchId: 'b2',
+        position,
+        kind: 'ai_reply' as const,
+        content: 'x',
+        chapterId: null,
+        createdAt: position,
+      })),
+    )
+    const ids = await readRecentEntryIds(db, 'b1', {
+      firstPosition: 8,
+      lastPosition: 9,
+      protectedBuffer: 0,
+    })
+    expect(sorted(ids)).toEqual(['e6', 'e7', 'e8', 'e9'])
   })
 
   // A window truncated at classifierWindowMaxEntries: no turn in it saw the entries past its cut.
