@@ -958,6 +958,34 @@ code before it moved; resolve with the slice it names.
   the watermark. Wiring force-on needs to refuse a `length` stop on that
   path outright. What Anthropic sends as a cut tool call's input is
   unverified. Raised by the cut-off replies slice review (2026-10-26).
+- **M7.1 — A profile's `customJson` is never sent.** Routed from triage
+  (2026-10-27). `resolveModel` (`lib/ai/resolve-model.ts`) carries a
+  profile's `customJson` into the resolved params, and nothing reads it
+  after that: `buildCallSettings` (`lib/ai/generate.ts`) maps only
+  temperature, max output and the Anthropic-only thinking budget, for
+  every provider. Canon calls it a per-field merge over the constructed
+  payload
+  ([`data-model.md → App settings storage`](../data-model.md#app-settings-storage)).
+  On an OpenAI-compatible reasoning model nothing can then disable or
+  cap thinking: the cut-off replies smoke on the dev LLM spent a
+  narrative max output of 64, 512, 1024 and 2200 entirely on reasoning,
+  so every turn failed as cut off before any text until the limit
+  (8192) covered the reasoning. Nothing can set a profile's `customJson`
+  today: the profile writers the app calls, `quickWireModel` and
+  `resetAppSettings`, write none, `upsertProfile` has no caller, and the
+  dev seed sets none, so it is reachable only by hand-editing SQLite and
+  sending it now would change nothing anyone can observe. That is why it
+  lands with M7.1's profile editor, whose "Advanced — custom JSON
+  payload" field
+  ([`app-settings.md → GENERATION · Profiles`](../ui/screens/app-settings/app-settings.md#generation--profiles))
+  is the first thing that sets one. Once sent, its keys count as sent
+  for the capability hint
+  ([`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories)),
+  so `carriedCapabilities` in `lib/ai/generate.ts`, which reads only the
+  Anthropic thinking setting and the JSON response format today, must
+  read them too. Per-story `customJson` stays parked
+  ([`parked.md → Granular per-story model controls`](../parked.md#granular-per-story-model-controls)).
+  Raised by the coordinator from the cut-off replies Task 15 smoke.
 - **M7.1 — The blocking embed path has no per-request token budget.**
   Routed from the Slice 3.12 split (2026-08-19), which keeps the cheap
   halves (a `maxParallelCalls` cap, chunking the local backend) in
