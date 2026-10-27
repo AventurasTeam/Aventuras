@@ -1571,7 +1571,7 @@ test.describe('periodic classifier — a pass the provider rejects as over the w
 
     await expect(reader.retrySystemEntry(page)).toBeVisible({ timeout: 20_000 })
     await expect(reader.dismissSystemEntry(page)).toBeVisible()
-    // A window entry offers no profile fix, and `Set window` stays hidden until M7.1.
+    // A window entry offers no profile fix.
     await expect(reader.fixProfile(page)).toHaveCount(0)
     await expect(reader.composer(page)).toHaveValue(U2)
     expect(await entryIdByContent(branch, 'E2E-OVERPASS-U2')).toBeUndefined()

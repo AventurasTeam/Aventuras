@@ -94,7 +94,7 @@ function providerDetail(error: Extract<PipelineError, { kind: 'provider' }>): st
   return error.detail != null ? `${error.reason}: ${error.detail}` : error.reason
 }
 
-// The entry's persisted fix-action tag.
+// The persisted `failure` tag: resolver, cut-off and hinted provider entries pick their fix by it.
 function failureTagOf(error: PipelineError | undefined): string | undefined {
   if (error?.kind === 'config-resolver') return error.failure
   if (error?.kind === 'reply-cut-off') return error.cause
@@ -342,7 +342,7 @@ export function useSystemEntryActions(
     leaveStory,
   )
   const embedderFix = useEmbedderFixAction(failure?.kind === 'embedder' ? storyId : null)
-  // A context-window entry takes no fix: its `Set window` waits on App Settings' window editor.
+  // No fix yet: `Set window` needs App Settings' window editor and a persisted model target.
   const profileFix = useProfileFixAction(
     (failure?.kind === 'reply-cut-off' && offersProfileFix(failure.failure)) ||
       (failure?.kind === 'provider' && isCapabilityHintTag(failure.failure)),

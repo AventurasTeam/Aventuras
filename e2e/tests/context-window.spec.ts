@@ -141,13 +141,13 @@ test.describe('context window — a turn over a configured window', () => {
     }).exec(row.content)
     expect(copy, row.content).not.toBeNull()
     expect(copyNumber(copy, 'estimate')).toBeGreaterThan(WINDOW)
-    // The check runs before the request is built: nothing reached the server.
+    // The check refuses before anything is sent: nothing reached the server.
     expect(mock.requests).toHaveLength(0)
     expect(await entryIdByContent(page, branchId, 'E2E-WINDOW-CHECK-U1')).toBeUndefined()
 
     await expect(reader.retrySystemEntry(page)).toBeVisible()
     await expect(reader.dismissSystemEntry(page)).toBeVisible()
-    // `Set window` stays hidden until M7.1, and a window entry offers no profile fix.
+    // A window entry offers no profile fix.
     await expect(reader.fixProfile(page)).toHaveCount(0)
   })
 })
