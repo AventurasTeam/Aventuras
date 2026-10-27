@@ -36,6 +36,7 @@ export {
 export { getModel } from './model'
 export { callWithRetry, type CallRetryError } from './transport/call-with-retry'
 export {
+  capabilityHintOf,
   describeProviderError,
   ProviderTimeoutError,
   type CapabilityHint,

@@ -88,8 +88,105 @@ function parseRetryAfter(headers: Record<string, string> | undefined): number | 
   return undefined
 }
 
+export const OVERFLOW_CODES = ['context_length_exceeded', 'exceed_context_size_error'] as const
+
+export const OVERFLOW_KEYWORDS = [
+  'maximum context length',
+  'context size',
+  'context window',
+  'prompt is too long',
+  'input token count',
+  'max_new_tokens must be',
+] as const
+
+// Parameter names before generic words, so "json_schema not supported for reasoning models"
+// points at structured output.
+export const CAPABILITY_HINT_KEYWORDS = [
+  { matched: 'response_format', capability: 'structuredOutput' },
+  { matched: 'json_schema', capability: 'structuredOutput' },
+  { matched: 'budget_tokens', capability: 'reasoning' },
+  { matched: 'thinking', capability: 'reasoning' },
+  { matched: 'reasoning', capability: 'reasoning' },
+] as const satisfies readonly CapabilityHint[]
+
+// A 2xx APICallError is a successful reply the SDK couldn't read: its body is the model's own text.
+function isRejection(error: unknown): error is APICallError {
+  return APICallError.isInstance(error) && error.statusCode !== undefined && error.statusCode >= 400
+}
+
+function bodyText(error: APICallError): string {
+  const body = error.responseBody?.trim()
+  return body !== undefined && body !== '' ? body : error.message
+}
+
+// Backticks dropped: TGI writes "`max_new_tokens` must be".
+function searchableText(error: APICallError): string {
+  return bodyText(error).toLowerCase().replace(/`/g, '')
+}
+
+function parsedBody(error: APICallError): unknown {
+  if (error.responseBody !== undefined) {
+    try {
+      return JSON.parse(error.responseBody)
+    } catch {
+      // Not JSON: what the SDK parsed, if anything, is all there is.
+    }
+  }
+  return error.data
+}
+
+function field(value: unknown, key: string): unknown {
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)[key]
+    : undefined
+}
+
+function stringField(value: unknown, key: string): string | undefined {
+  const found = field(value, key)
+  return typeof found === 'string' ? found : undefined
+}
+
+// OpenAI's and llama.cpp's error.message, TGI's error string, vLLM's top-level message; else the
+// body itself, since the SDK's message for a body it couldn't parse is only the status text.
+function providerMessage(error: APICallError, body: unknown): string {
+  const inner = field(body, 'error')
+  return (
+    stringField(inner, 'message') ??
+    (typeof inner === 'string' ? inner : undefined) ??
+    stringField(body, 'message') ??
+    bodyText(error)
+  )
+}
+
+/** architecture.md → Recognizing an overflow rejection: by code, then keyword, on any error status. */
+export function recognizeOverflow(error: unknown): { detail: string } | null {
+  if (!isRejection(error)) return null
+  const body = parsedBody(error)
+  const inner = field(body, 'error')
+  const codes = [stringField(inner, 'code'), stringField(inner, 'type'), stringField(body, 'code')]
+  const byCode = codes.some(
+    (code) => code !== undefined && (OVERFLOW_CODES as readonly string[]).includes(code),
+  )
+  if (!byCode) {
+    const text = searchableText(error)
+    if (!OVERFLOW_KEYWORDS.some((keyword) => text.includes(keyword))) return null
+  }
+  return { detail: providerMessage(error, body) }
+}
+
+/** A 4xx body naming a capability the request carried; never on a body recognized as an overflow. */
+export function capabilityHintOf(error: unknown): CapabilityHint | undefined {
+  if (!isRejection(error) || (error.statusCode ?? 0) >= 500) return undefined
+  if (recognizeOverflow(error) !== null) return undefined
+  const text = searchableText(error)
+  const hit = CAPABILITY_HINT_KEYWORDS.find(({ matched }) => text.includes(matched))
+  return hit === undefined ? undefined : { capability: hit.capability, matched: hit.matched }
+}
+
+type ProviderFailure = Extract<CallRetryError, { tier: 'provider' }>
+
 export function classifyProviderError(error: unknown): {
-  error: Extract<CallRetryError, { tier: 'provider' }>
+  error: ProviderFailure
   retryable: boolean
   retryAfterMs?: number
 } {
@@ -99,28 +196,31 @@ export function classifyProviderError(error: unknown): {
   if (APICallError.isInstance(error)) {
     const status = error.statusCode
     const retryAfterMs = parseRetryAfter(error.responseHeaders)
+    const hint = capabilityHintOf(error)
+    const failure = (reason: ProviderFailure['reason']): ProviderFailure => ({
+      tier: 'provider',
+      reason,
+      detail: describeProviderError(error),
+      ...(hint !== undefined ? { possibleCapabilityMismatch: hint } : {}),
+    })
+    // An overflow recurs on every attempt, whatever its status.
+    const overflow = recognizeOverflow(error) !== null
     if (status === 401 || status === 403) {
-      return {
-        error: { tier: 'provider', reason: 'auth', detail: describeProviderError(error) },
-        retryable: false,
-      }
+      return { error: failure('auth'), retryable: false }
     }
     if (status === 429) {
       return {
-        error: { tier: 'provider', reason: 'network', detail: describeProviderError(error) },
-        retryable: true,
+        error: failure('network'),
+        retryable: !overflow,
         ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
       }
     }
     if (status !== undefined && status >= 400 && status < 500) {
-      return {
-        error: { tier: 'provider', reason: 'unknown', detail: describeProviderError(error) },
-        retryable: false,
-      }
+      return { error: failure('unknown'), retryable: false }
     }
     return {
-      error: { tier: 'provider', reason: 'network', detail: describeProviderError(error) },
-      retryable: true,
+      error: failure('network'),
+      retryable: !overflow,
       ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
     }
   }

@@ -168,6 +168,33 @@ describe('embedViaProvider', () => {
     expect((caught as EmbedderInitError).kind).toBe('init')
   })
 
+  // Embedding calls are outside the context window check: an overflow is a plain call error here.
+  it('maps an overflow 400 to a call error carrying the provider message', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: 400,
+            message: 'input (9000 tokens) exceeds the available context size (8192 tokens)',
+            type: 'exceed_context_size_error',
+          },
+        }),
+        { status: 400, headers: { 'content-type': 'application/json' } },
+      ),
+    )
+
+    let caught: unknown
+    try {
+      await embedViaProvider(provider, 'text-embedding-3-small', ['a'])
+    } catch (err) {
+      caught = err
+    }
+    expect(caught).toBeInstanceOf(EmbedderCallError)
+    expect((caught as EmbedderCallError).message).toBe(
+      'APICallError: input (9000 tokens) exceeds the available context size (8192 tokens)',
+    )
+  })
+
   it('maps a network failure during embedMany to a call error', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network down'))
 
