@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import type { CallRetryError } from '@/lib/ai'
+import { describeCallRetryError, describeContextWindow, type CallRetryError } from '@/lib/ai'
+import { t } from '@/lib/i18n'
 
 import {
   assistFailureReason,
@@ -167,5 +168,84 @@ describe('assistFailureReason', () => {
     expect(
       assistFailureReason({ tier: 'parse', detail: 'Unexpected end of JSON input', attempt: 2 }),
     ).toBe('Unexpected end of JSON input')
+  })
+})
+
+describe('assistFailureReason for a prompt over the context window', () => {
+  const LLAMACPP_MESSAGE =
+    'request (71834 tokens) exceeds the available context size (65536 tokens), try increasing it'
+
+  const refused = {
+    tier: 'context-window',
+    detectedBy: 'check',
+    estimate: 71_234,
+    window: 65_536,
+    windowSource: 'configured',
+    providerId: 'prov_local',
+    modelId: 'llama3.1:70b',
+  } satisfies CallRetryError
+
+  const rejected = {
+    ...refused,
+    detectedBy: 'provider',
+    window: null,
+    windowSource: 'unknown',
+    detail: LLAMACPP_MESSAGE,
+  } satisfies CallRetryError
+
+  const providerReason = (message: string) =>
+    `The provider rejected the prompt. Its message suggests it exceeded the model's context window: “${message}”`
+
+  it("names the rounded estimate and the model's window with its source", () => {
+    expect(assistFailureReason(refused)).toBe(
+      "The prompt is about 71,300 tokens, over llama3.1:70b's 65,536-token context window (set by you)",
+    )
+  })
+
+  it('names a detected window as detected', () => {
+    expect(assistFailureReason({ ...refused, windowSource: 'detected' })).toBe(
+      "The prompt is about 71,300 tokens, over llama3.1:70b's 65,536-token context window (detected)",
+    )
+  })
+
+  it("quotes the provider's message, hedged, when the provider rejected the prompt", () => {
+    expect(assistFailureReason(rejected)).toBe(providerReason(LLAMACPP_MESSAGE))
+  })
+
+  it('keeps the provider copy when the window was known as well', () => {
+    expect(assistFailureReason({ ...rejected, window: 65_536, windowSource: 'detected' })).toBe(
+      providerReason(LLAMACPP_MESSAGE),
+    )
+  })
+
+  it('quotes the diagnostic line when the provider gave no message', () => {
+    const { detail: _detail, ...unquoted } = rejected
+    expect(assistFailureReason(unquoted)).toBe(providerReason(describeContextWindow(unquoted)))
+  })
+
+  it('quotes the diagnostic line when the provider message is only whitespace', () => {
+    const { detail: _detail, ...unquoted } = rejected
+    expect(assistFailureReason({ ...rejected, detail: ' \n\t ' })).toBe(
+      providerReason(describeContextWindow(unquoted)),
+    )
+  })
+
+  it('passes the diagnostic line through for a check failure with no window to print', () => {
+    const windowless = {
+      ...refused,
+      window: null,
+      windowSource: 'unknown',
+    } satisfies CallRetryError
+    expect(assistFailureReason(windowless)).toBe(describeCallRetryError(windowless))
+  })
+
+  // The overlay wraps the reason in "Couldn't generate. {{reason}}.": one closing period.
+  it('reads as one sentence inside the failure template', () => {
+    expect(t('wizard:aiAssist.failure', { reason: assistFailureReason(refused) })).toBe(
+      "Couldn't generate. The prompt is about 71,300 tokens, over llama3.1:70b's 65,536-token context window (set by you).",
+    )
+    expect(t('wizard:aiAssist.failure', { reason: assistFailureReason(rejected) })).toBe(
+      `Couldn't generate. The provider rejected the prompt. Its message suggests it exceeded the model's context window: “${LLAMACPP_MESSAGE}”.`,
+    )
   })
 })

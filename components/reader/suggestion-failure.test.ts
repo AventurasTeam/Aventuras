@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { describeContextWindow } from '@/lib/ai'
 import { t } from '@/lib/i18n'
 import { hasCopy } from '@/lib/i18n/__tests__/locale-keys'
 import { SUGGESTIONS_UNUSABLE, type PipelineError } from '@/lib/pipeline'
@@ -97,5 +98,73 @@ describe('describeSuggestionFailure', () => {
         "The server stopped the suggestion model's reply at its own limit, short of the suggestion profile's 1,024-token max output.",
       )
     })
+  })
+})
+
+describe('describeSuggestionFailure for a prompt over the context window', () => {
+  const LLAMACPP_MESSAGE =
+    'request (71834 tokens) exceeds the available context size (65536 tokens), try increasing it'
+
+  const refused = {
+    kind: 'context-window',
+    target: 'suggestion',
+    detectedBy: 'check',
+    estimate: 71_234,
+    window: 65_536,
+    windowSource: 'configured',
+    providerId: 'prov_local',
+    modelId: 'llama3.1:70b',
+  } satisfies PipelineError
+
+  const rejected = {
+    ...refused,
+    detectedBy: 'provider',
+    window: null,
+    windowSource: 'unknown',
+    detail: LLAMACPP_MESSAGE,
+  } satisfies PipelineError
+
+  const providerCopy = (message: string) =>
+    `The provider rejected the suggestion prompt. Its message suggests it exceeded the model's context window: “${message}”.`
+
+  it("names the rounded estimate and the model's window with its source", () => {
+    expect(describeSuggestionFailure(refused)).toBe(
+      "The suggestion prompt is about 71,300 tokens, over llama3.1:70b's 65,536-token context window (set by you). Nothing was sent.",
+    )
+  })
+
+  it('names a detected window as detected', () => {
+    expect(describeSuggestionFailure({ ...refused, windowSource: 'detected' })).toBe(
+      "The suggestion prompt is about 71,300 tokens, over llama3.1:70b's 65,536-token context window (detected). Nothing was sent.",
+    )
+  })
+
+  it("quotes the provider's message, hedged, when the provider rejected the prompt", () => {
+    expect(describeSuggestionFailure(rejected)).toBe(providerCopy(LLAMACPP_MESSAGE))
+  })
+
+  it('keeps the provider copy when the window was known as well', () => {
+    expect(
+      describeSuggestionFailure({ ...rejected, window: 65_536, windowSource: 'detected' }),
+    ).toBe(providerCopy(LLAMACPP_MESSAGE))
+  })
+
+  it('quotes the diagnostic line when the provider gave no message', () => {
+    const { detail: _detail, ...unquoted } = rejected
+    expect(describeSuggestionFailure(unquoted)).toBe(providerCopy(describeContextWindow(unquoted)))
+  })
+
+  it('quotes the diagnostic line when the provider message is only whitespace', () => {
+    const { detail: _detail, ...unquoted } = rejected
+    expect(describeSuggestionFailure({ ...rejected, detail: ' \n\t ' })).toBe(
+      providerCopy(describeContextWindow(unquoted)),
+    )
+  })
+
+  it('falls back to the generic body for a check failure with no window to print', () => {
+    expect(describeSuggestionFailure({ ...refused, window: null, windowSource: 'unknown' })).toBe(
+      t('reader:suggestions.errorBody'),
+    )
+    expect(hasCopy('reader:suggestions.errorBody')).toBe(true)
   })
 })

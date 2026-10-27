@@ -45,6 +45,10 @@
         "window": "The suggestion model's reply was cut off where the prompt and reply filled the model's {{limit, number}}-token window.",
         "unknown": "The server stopped the suggestion model's reply at its own limit. Setting a max output on the suggestion profile overrides it.",
         "unknownWithMaxOutput": "The server stopped the suggestion model's reply at its own limit, short of the suggestion profile's {{limit, number}}-token max output."
+      },
+      "contextWindow": {
+        "check": "The suggestion prompt is about {{estimate, number}} tokens, over {{model}}'s {{window, number}}-token context window ({{source}}). Nothing was sent.",
+        "provider": "The provider rejected the suggestion prompt. Its message suggests it exceeded the model's context window: “{{message}}”."
       }
     }
   },

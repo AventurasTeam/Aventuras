@@ -207,6 +207,10 @@
       "unknown": "The server stopped the reply at its own limit. Setting a max output on the wizard-assist profile overrides it",
       "unknownWithMaxOutput": "The server stopped the reply at its own limit, short of the wizard-assist profile's {{limit, number}}-token max output"
     },
+    "contextWindow": {
+      "check": "The prompt is about {{estimate, number}} tokens, over {{model}}'s {{window, number}}-token context window ({{source}})",
+      "provider": "The provider rejected the prompt. Its message suggests it exceeded the model's context window: “{{message}}”"
+    },
     "refine": {
       "label": "How should this change?",
       "placeholder": "e.g. make it darker"
