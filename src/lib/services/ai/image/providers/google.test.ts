@@ -112,7 +112,7 @@ describe('Google model listing', () => {
     expect(createTimeoutFetch).not.toHaveBeenCalled()
   })
 
-  it('lists only the image models, each taking references', async () => {
+  it('lists only the image models the SDK can generate with, each taking references', async () => {
     respond({
       ok: true,
       json: async () => ({
@@ -129,9 +129,8 @@ describe('Google model listing', () => {
     const models = await createGoogleProvider({ apiKey: 'k' }).listModels()
 
     expect(models.map((m) => [m.id, m.supportsImg2Img, m.maxReferenceImages])).toEqual([
-      ['gemini-2.5-flash-image', true, undefined],
-      ['gemini-nano-banana-2.1', true, undefined],
-      ['nano-banana-pro-preview', true, undefined],
+      ['gemini-2.5-flash-image', true, 3],
+      ['gemini-nano-banana-2.1', true, 14],
     ])
   })
 
@@ -143,5 +142,61 @@ describe('Google model listing', () => {
   it('rejects when the request fails', async () => {
     respond({ ok: false, status: 503 })
     await expect(createGoogleProvider({ apiKey: 'k' }).listModels()).rejects.toThrow('HTTP 503')
+  })
+})
+  it('gives a preview its generally available model’s capabilities', async () => {
+    respond({
+      ok: true,
+      json: async () => ({
+        models: [
+          { name: 'models/gemini-3-pro-image' },
+          { name: 'models/gemini-3-pro-image-preview' },
+        ],
+      }),
+    })
+
+    const [ga, preview] = await createGoogleProvider({ apiKey: 'k' }).listModels()
+
+    expect(preview).toMatchObject({ id: 'gemini-3-pro-image-preview' })
+    expect(preview.supportedResolutions).toEqual(ga.supportedResolutions)
+    expect(preview.supportedAspectRatios).toEqual(ga.supportedAspectRatios)
+  })
+
+  it('knows only that an unlisted image model takes references', async () => {
+    respond({ ok: true, json: async () => ({ models: [{ name: 'models/gemini-9-image' }] }) })
+
+    const [model] = await createGoogleProvider({ apiKey: 'k' }).listModels()
+
+    expect(model.supportedResolutions).toBeUndefined()
+    expect(model.supportedAspectRatios).toBeUndefined()
+    expect(model.maxReferenceImages).toBeUndefined()
+    expect(model.supportsImg2Img).toBe(true)
+  })
+
+
+describe('Google model capabilities', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const capabilities = (model: string) =>
+    createGoogleProvider({ apiKey: '' }).getModelCapabilities!(model)
+
+  it('answers from the table without a request or a key', async () => {
+    expect(await capabilities('gemini-3.1-flash-image')).toMatchObject({
+      supportsImg2Img: true,
+      maxReferenceImages: 14,
+      supportedResolutions: ['512', '1K', '2K', '4K'],
+    })
+    expect(createTimeoutFetch).not.toHaveBeenCalled()
+  })
+
+  it('reads a preview as its generally available model', async () => {
+    expect(await capabilities('gemini-3.1-flash-image-preview')).toEqual(
+      await capabilities('gemini-3.1-flash-image'),
+    )
+  })
+
+  it('does not know a model the SDK cannot generate with', async () => {
+    expect(await capabilities('nano-banana-pro-preview')).toBeUndefined()
+    expect(await capabilities('gemini-3.5-flash')).toBeUndefined()
   })
 })
