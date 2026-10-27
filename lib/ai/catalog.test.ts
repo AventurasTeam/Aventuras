@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { providerInstanceSchema } from '@/lib/db'
+
 import { fetchModelCatalog, normalizeModelCatalog, readContextWindow } from './catalog'
 import type { ProviderInstanceWithStub } from './types'
 
@@ -174,5 +176,10 @@ describe('normalizeModelCatalog', () => {
     expect(result).toEqual([
       { id: 'text-embedding-3-small', capabilities: { embedding: false, contextWindow: 8192 } },
     ])
+  })
+
+  it('yields capabilities the stored schema accepts, at the largest safe window', () => {
+    const cachedModels = normalizeModelCatalog([{ id: 'm', contextWindow: 2 ** 53 - 1 }])
+    expect(() => providerInstanceSchema.partial().parse({ cachedModels })).not.toThrow()
   })
 })

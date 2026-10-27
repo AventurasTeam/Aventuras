@@ -34,28 +34,19 @@ function nCtxOf(meta: unknown): unknown {
   return typeof meta === 'object' && meta !== null && 'n_ctx' in meta ? meta.n_ctx : undefined
 }
 
-/** max_model_len, then meta.n_ctx; positive integers only (architecture.md → Detection). */
+/** max_model_len, then meta.n_ctx; positive safe integers only (architecture.md → Detection). */
 export function readContextWindow(raw: Record<string, unknown>): number | undefined {
   return asWindow(raw.max_model_len) ?? asWindow(nCtxOf(raw.meta))
 }
 
 /**
- * Normalize /models entries into `cachedModels` entries, merging
- * best-effort detection with any previously cached entry.
- *
- * Merge is `{ ...detected, ...existing?.capabilities }` per model: any key
- * already present on the existing entry — including an explicit `false` —
- * wins over a fresh detection pass. A key *absent* from the existing entry
- * re-detects on every fetch, so a future capability editor that lets users
- * turn a flag off must persist an explicit `false` there, not delete the
- * key — deleting it just lets detection turn the flag back on next refresh.
- *
- * `contextWindow` is the exception (architecture.md → The window figure): a
- * published value replaces the stored one; an entry that publishes none keeps it.
+ * Merges detection, then the cached entry (a stored key, even `false`, beats detection), then the
+ * fresh window: a published one replaces the stored one, an absent one keeps it (architecture.md →
+ * The window figure).
  */
 export function normalizeModelCatalog(
   entries: readonly CatalogEntry[],
-  existing?: CachedModel[],
+  existing?: readonly CachedModel[],
 ): CachedModel[] {
   const existingById = new Map((existing ?? []).map((model) => [model.id, model]))
   return entries.map(({ id, contextWindow }) => {
