@@ -58,6 +58,10 @@ describe('checkInputTokens', () => {
     ['an input count of 0, as OpenAI-compatible reports a missing one', usage(0), 100],
     ['no estimate', usage(10), null],
     ['an estimate of 0', usage(10), 0],
+    ['a NaN estimate', usage(10), NaN],
+    ['an infinite estimate', usage(10), Infinity],
+    ['a NaN input count', usage(NaN), 100],
+    ['an infinite input count', usage(Infinity), 100],
   ])('skips a call with %s', (_label, callUsage, estimate) => {
     configureTruncationNotice(sink)
     checkInputTokens({ ...CALL, usage: callUsage, estimate })
@@ -141,6 +145,19 @@ describe('checkInputTokens', () => {
       { ...CALL, error: 'toast host gone' },
       undefined,
     )
+  })
+
+  it('spends the once on a notice that threw', () => {
+    const throwing = vi.fn<(notice: TruncationNotice) => void>(() => {
+      throw new Error('toast host gone')
+    })
+    configureTruncationNotice(throwing)
+    checkInputTokens({ ...CALL, usage: usage(10), estimate: 100 })
+    checkInputTokens({ ...CALL, usage: usage(10), estimate: 100 })
+    expect(throwing).toHaveBeenCalledOnce()
+    expect(
+      warn.mock.calls.filter(([kind]) => kind === 'provider.truncation_notice_failed'),
+    ).toHaveLength(1)
   })
 
   it("attributes both logs to the call's action", () => {

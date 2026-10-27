@@ -12,11 +12,9 @@ export type TruncationNotice = {
   estimate: number
 }
 
-// In-module infrastructure state (code-conventions.md → State placement): the app session's once set.
 const notified = new Set<string>()
 let noticeSink: ((notice: TruncationNotice) => void) | null = null
 
-/** Boot wires the app's toast here. A throwing sink is caught and logged: it runs inside a call's attempt. */
 export function configureTruncationNotice(sink: ((notice: TruncationNotice) => void) | null): void {
   noticeSink = sink
 }
@@ -35,7 +33,9 @@ export function checkInputTokens(input: {
   const { estimate, providerId, modelId, actionId } = input
   const reported = input.usage?.inputTokens
   // 0 reads as unreported: OpenAI-compatible reports a missing count as 0.
-  if (estimate === null || estimate <= 0 || reported === undefined || reported <= 0) return
+  if (estimate === null || reported === undefined) return
+  if (!(Number.isFinite(estimate) && estimate > 0 && Number.isFinite(reported) && reported > 0))
+    return
   const ratio = reported / estimate
   const fields = { providerId, modelId, estimate, reported, ratio }
   const opts = actionId !== undefined ? { actionId } : undefined
