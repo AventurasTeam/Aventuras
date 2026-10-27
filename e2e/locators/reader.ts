@@ -133,6 +133,9 @@ export const reader = {
   // A toast's close button shares the name, so the entry rows scope it.
   dismissSystemEntry: (page: Page): Locator =>
     page.locator('[data-entry-row]').getByRole('button', { name: t('reader:systemEntry.dismiss') }),
+  // The collapsed disclosure a system entry's failure detail sits behind (entry-card-system.tsx).
+  systemEntryDetailsToggle: (page: Page): Locator =>
+    page.locator('[data-entry-row]').getByRole('button', { name: t('reader:systemEntry.details') }),
   switchEmbedderFix: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:systemEntry.switchEmbedder') }),
   // A config-resolver failure's fix row (system-entry-actions.tsx, useConfigFixAction).

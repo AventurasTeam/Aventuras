@@ -19,6 +19,7 @@ import {
   type RollbackRefusal,
 } from '@/components/reader/confirm-refusal'
 import { useContentEditing } from '@/components/reader/content-editing'
+import { copySystemText } from '@/components/reader/copy-system-text'
 import { readerPillPhase } from '@/components/reader/generation-phase'
 import {
   draftSubmission,
@@ -1505,6 +1506,7 @@ export default function ReaderComposerRoute() {
     // Undefined for a held pass entry: its branch can't run a pass.
     onRetrySystemEntry: retrySystemEntry != null ? handleRetrySystemEntry : undefined,
     onDismissSystemEntry: handleDismissSystemEntry,
+    onCopySystemText: copySystemText,
     onFixSystemEntry: handleFixSystemEntry,
     onFixCutOff: handleFixCutOff,
   }

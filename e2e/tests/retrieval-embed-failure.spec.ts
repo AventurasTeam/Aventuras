@@ -135,10 +135,10 @@ test.describe.serial('retrieval — a failed embed blocks the turn', () => {
     expect(failure.detail, 'the detail carries reason and magnitude').toMatch(
       new RegExp(`^(init|call): .+ \\(${staleBefore} rows\\)$`, 's'),
     )
-    await expect(
-      app.window.getByText(failure.detail!, { exact: false }),
-      'the detail line renders under the copy',
-    ).toBeVisible()
+    const detailLine = app.window.getByText(failure.detail!, { exact: false })
+    await expect(detailLine, 'the detail waits behind its disclosure').toHaveCount(0)
+    await reader.systemEntryDetailsToggle(app.window).click()
+    await expect(detailLine, 'the detail renders once Details opens').toBeVisible()
 
     // The fix action exists only because the reader hands the open story's id to
     // useSystemEntryActions; a null there drops the button silently, and no unit
