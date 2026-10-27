@@ -375,3 +375,16 @@ slice-planning gate forces its resolution before that slice is planned.
   also hold their own copies of the web/native clipboard split. Canon
   ([`data.md`](../ui/patterns/data.md)) doesn't say what the Diagnostics
   copy confirms. Raised by the held-text slice review.
+
+- **Two custody checks still count a blank submission as text.**
+  `keptSubmissionText` (`components/reader/composer-draft.ts`) now
+  decides both the held-text quote and Dismiss's hand-back, but
+  `components/reader/pass-failure-custody.ts` passes
+  `entryHasText: stored != null` to both of its planners, and
+  `dismissSystemEntry` (`components/reader/system-entry-actions.tsx`)
+  logs `reader.handback_skipped_left_branch` for any non-null
+  submission. A blank stored submission would keep the entry's "text"
+  on a held Retry instead of taking the draft, while the card shows no
+  quote. Unreachable today: the send gate and the take-draft path both
+  refuse blank text (`isDraftEmpty`). Routing both through the helper
+  closes it. Older code; raised by the held-text slice review.
