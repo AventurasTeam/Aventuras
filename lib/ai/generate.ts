@@ -14,7 +14,14 @@ import { logger } from '@/lib/diagnostics'
 import type { ProviderInstance } from '../db'
 import type { ResolveTarget } from './agents'
 import { anthropicCacheMarkerMiddleware } from './cache-marker'
-import { describeContextWindow } from './context-window'
+import {
+  ContextWindowError,
+  describeContextWindow,
+  generationWindow,
+  windowCheckMiddleware,
+  type ContextWindowFailure,
+  type GenerationWindow,
+} from './context-window'
 import { getModel } from './model'
 import {
   jsonResponseFormatMiddleware,
@@ -35,8 +42,9 @@ import {
   type ResolvedParams,
 } from './resolve-model'
 import { callWithRetry, type CallRetryError } from './transport/call-with-retry'
-import { ProviderTimeoutError } from './transport/classify-provider-error'
+import { ProviderTimeoutError, recognizeOverflow } from './transport/classify-provider-error'
 import { runProviderCall, streamProviderCall } from './transport/provider-call'
+import { checkInputTokens } from './truncation-check'
 
 export type CallSettings = {
   temperature?: number
@@ -131,6 +139,29 @@ function withMiddleware(
     model: model as Parameters<typeof wrapLanguageModel>[0]['model'],
     middleware,
   })
+}
+
+type WindowCall = {
+  window: GenerationWindow
+  estimate: number | null
+  providerId: string
+  modelId: string
+}
+
+// architecture.md → Recognizing an overflow rejection: the provider's message verbatim.
+function providerOverflow(error: unknown, call: WindowCall): ContextWindowFailure | null {
+  const overflow = recognizeOverflow(error)
+  if (overflow === null) return null
+  return {
+    detectedBy: 'provider',
+    // The check counts every request before it goes out, so a rejected one has an estimate.
+    estimate: call.estimate ?? 0,
+    window: call.window.tokens,
+    windowSource: call.window.source,
+    providerId: call.providerId,
+    modelId: call.modelId,
+    detail: overflow.detail,
+  }
 }
 
 /**
@@ -278,6 +309,8 @@ export async function generateStructured<T>(
 ): Promise<GenerateStructuredResult<T>> {
   const resolved = prepareGeneration(target, config, options.actionId ?? undefined)
   if (!resolved.ok) return { status: 'not-configured', kind: resolved.kind }
+  const { providerId, modelId } = resolved
+  const attribution = options.actionId === null ? undefined : { actionId: options.actionId }
 
   // z.toJSONSchema throws on unrepresentable schemas (transforms, refinements);
   // surface it as a typed failure rather than a raw rejection past the caller's
@@ -296,26 +329,34 @@ export async function generateStructured<T>(
       recoverable: [],
     }
   }
+  const window = generationWindow(config.providers, providerId, modelId)
+  let estimate: number | null = null
   // 'auto' injects the schema via the prompt (no capability signal yet); native responseFormat
-  // is opt-in via 'force-on'. The marker goes last: on a blank system half, the contract's
-  // system message exists only once promptSchemaMiddleware has run.
+  // is opt-in via 'force-on'. The marker follows the contract: on a blank system half, the
+  // contract's system message exists only once promptSchemaMiddleware has run. The window check
+  // goes last, to count the request as sent (architecture.md → The pre-send check).
   const model = withMiddleware(resolved.model, [
     jsonResponseFormatMiddleware(jsonSchema),
     ...(resolved.params.structuredOutput === 'force-on' ? [] : [promptSchemaMiddleware()]),
     ...(marksSystemPrefix(options.cacheSystemPrefix, resolved.providerType)
       ? [anthropicCacheMarkerMiddleware()]
       : []),
+    windowCheckMiddleware({
+      window,
+      providerId,
+      modelId,
+      onEstimate: (tokens) => {
+        estimate = tokens
+      },
+      ...(options.actionId !== null ? { actionId: options.actionId } : {}),
+    }),
   ])
 
   const logCutOff = (
     failure: ReplyCutOffFailure,
     outcome: { outcome: 'accepted' } | { outcome: 'refused'; parseError: string },
   ): void => {
-    logger.warn(
-      'provider.reply_cut_off',
-      { ...outcome, target, ...failure },
-      options.actionId === null ? undefined : { actionId: options.actionId },
-    )
+    logger.warn('provider.reply_cut_off', { ...outcome, target, ...failure }, attribution)
   }
   // generation-pipeline.md → Cut-off replies: a cut reply is accepted only as a strict document,
   // since jsonrepair would close a truncated one into a valid but shorter reply.
@@ -324,10 +365,10 @@ export async function generateStructured<T>(
     const failure = replyCutOff({
       usage: reply.usage,
       maxOutput: resolved.params.maxOutput,
-      window: null,
-      promptEstimate: null,
-      providerId: resolved.providerId,
-      modelId: resolved.modelId,
+      window: window.tokens,
+      promptEstimate: estimate,
+      providerId,
+      modelId,
     })
     let value: T
     try {
@@ -356,9 +397,19 @@ export async function generateStructured<T>(
           abortSignal: bounded?.signal ?? sig,
           ...resolved.callSettings,
         })
+        checkInputTokens({
+          usage: call.usage,
+          estimate,
+          providerId,
+          modelId,
+          ...(options.actionId !== null ? { actionId: options.actionId } : {}),
+        })
         return { text: call.text, finishReason: call.finishReason, usage: call.usage }
       } catch (error) {
         if (bounded?.expired()) throw new ProviderTimeoutError()
+        // As a ContextWindowError, so callWithRetry ends the call: the prompt would overflow again.
+        const overflow = providerOverflow(error, { window, estimate, providerId, modelId })
+        if (overflow !== null) throw new ContextWindowError(overflow)
         throw error
       } finally {
         bounded?.dispose()
@@ -371,5 +422,10 @@ export async function generateStructured<T>(
   const { recoverable } = result
   if (result.status === 'ok') return { status: 'ok', value: result.result, recoverable }
   if (result.status === 'aborted') return { status: 'aborted', recoverable }
-  return { status: 'failed', error: result.error, recoverable }
+  const { error } = result
+  if (error.tier === 'context-window') {
+    const { tier: _tier, ...failure } = error
+    logger.warn('provider.context_window', { target, ...failure }, attribution)
+  }
+  return { status: 'failed', error, recoverable }
 }
