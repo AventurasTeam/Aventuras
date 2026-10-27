@@ -1,15 +1,17 @@
-import { wrapLanguageModel } from 'ai'
+import { APICallError, wrapLanguageModel } from 'ai'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import { parseStructured } from '@/lib/ai'
+import { fetchModelCatalog, parseStructured } from '@/lib/ai'
 import type { JsonSchema } from '@/lib/ai'
 import { jsonResponseFormatMiddleware, promptSchemaMiddleware } from '@/lib/ai/prompt-schema'
 import { createProviderModel } from '@/lib/ai/providers'
+import { recognizeOverflow } from '@/lib/ai/transport/classify-provider-error'
 import { runProviderCall, streamProviderCall } from '@/lib/ai/transport/provider-call'
 import { parseStateBlock, parseSuggestionsBlock, stripTrailingBlocks } from '@/lib/piggyback'
 import { fallbackClassifierSchema } from '@/lib/pipeline'
 
+import { mockUsage } from './respond/wire'
 import { startMockServer, type MockServer } from './server'
 
 // The seam the other suites stop short of: the app's own provider construction
@@ -49,6 +51,12 @@ function classifierModel(): Parameters<typeof runProviderCall>[0]['model'] {
     ],
   })
 }
+
+// What each shape's message says, as recognizeOverflow hands it on verbatim.
+const OVERFLOW_PHRASE = {
+  'overflow-llamacpp': 'exceeds the available context size',
+  'overflow-openai': 'maximum context length',
+} as const
 
 describe('the app transport against the mock', () => {
   it('assembles a paced narrative stream back into prose and its trailing blocks', async () => {
@@ -122,4 +130,73 @@ describe('the app transport against the mock', () => {
     expect(await stream.finishReason).toBe('length')
     expect(assembled.length).toBeGreaterThan(0)
   })
+
+  it("hands the catalog fetch every model's window", async () => {
+    const entries = await fetchModelCatalog(provider())
+
+    expect(entries.map((e) => e.id)).toEqual(['seed/narrative', 'mock/no-tagged-block'])
+    expect(entries.map((e) => e.contextWindow)).toEqual([131072, 131072])
+  })
+
+  it('reports usage the SDK reads as input and output tokens, on both paths', async () => {
+    mock.ctx.log.clear()
+    const structured = await runProviderCall({
+      model: classifierModel(),
+      prompt: 'Classify the turn.',
+    })
+    const sent = mock.ctx.log.list()[0]
+    const expected = mockUsage(sent?.prompt ?? '', structured.text)
+    expect(expected.prompt_tokens).toBeGreaterThan(0)
+    expect(structured.usage).toMatchObject({
+      inputTokens: expected.prompt_tokens,
+      outputTokens: expected.completion_tokens,
+    })
+
+    mock.ctx.lane('narrative').stream = { charsPerSecond: 100_000, chunkSize: 6 }
+    const stream = streamProviderCall({
+      model: createProviderModel(provider(), 'seed/narrative'),
+      prompt: 'Continue the scene.',
+    })
+    let assembled = ''
+    for await (const delta of stream.textStream) assembled += delta
+
+    // 'Continue the scene.' is 4 o200k tokens; the stream reports usage only because the app's
+    // provider asks for it (includeUsage).
+    expect(await stream.usage).toMatchObject({
+      inputTokens: 4,
+      outputTokens: mockUsage('', assembled).completion_tokens,
+    })
+  })
+
+  it.each(['overflow-llamacpp', 'overflow-openai'] as const)(
+    'delivers a %s rejection as an APICallError the app recognizes, on both paths',
+    async (kind) => {
+      mock.ctx.lane('per-turn-classifier').failure = { kind, status: 500, remaining: 1 }
+      const structured = await runProviderCall({
+        model: classifierModel(),
+        prompt: 'Classify the turn.',
+      }).then(
+        () => null,
+        (error: unknown) => error,
+      )
+      expect(APICallError.isInstance(structured) ? structured.statusCode : null).toBe(400)
+      expect(recognizeOverflow(structured)?.detail).toContain(OVERFLOW_PHRASE[kind])
+
+      mock.ctx.lane('narrative').failure = { kind, status: 500, remaining: 1 }
+      let streamed: unknown
+      const stream = streamProviderCall({
+        model: createProviderModel(provider(), 'seed/narrative'),
+        prompt: 'Continue the scene.',
+        onError: ({ error }) => {
+          streamed = error
+        },
+      })
+      let text = ''
+      for await (const delta of stream.textStream) text += delta
+
+      expect(text).toBe('')
+      expect(APICallError.isInstance(streamed) ? streamed.statusCode : null).toBe(400)
+      expect(recognizeOverflow(streamed)?.detail).toContain(OVERFLOW_PHRASE[kind])
+    },
+  )
 })

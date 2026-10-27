@@ -6,7 +6,18 @@ import { extractPlaceholders, type LogEntry } from './log'
 import { passthrough } from './passthrough'
 import { streamNarrative } from './respond/narrative'
 import { hasStateContent, renderNarrative, type NarrativeValue } from './respond/tagged-block'
-import { CORS_HEADERS, SSE_HEADERS, completionBody, errorBody, roleFrame } from './respond/wire'
+import {
+  CORS_HEADERS,
+  SSE_HEADERS,
+  completionBody,
+  errorBody,
+  mockUsage,
+  overflowBody,
+  overflowCounts,
+  roleFrame,
+  wantsStreamUsage,
+  type OverflowShape,
+} from './respond/wire'
 import { classifyRequest, laneKeyOf, promptText, NARRATIVE_LANE } from './routing'
 import { nextResponse, takeFailure, type FailureKind, type Lane } from './state'
 
@@ -60,6 +71,11 @@ export function readBody(req: IncomingMessage): Promise<string> {
 function sendHttpFailure(res: ServerResponse, status: number): void {
   res.writeHead(status, { ...CORS_HEADERS, 'content-type': 'application/json' })
   res.end(errorBody(`mock injected HTTP ${status}`))
+}
+
+const OVERFLOW_SHAPES: Partial<Record<FailureKind, OverflowShape>> = {
+  'overflow-llamacpp': 'llamacpp',
+  'overflow-openai': 'openai',
 }
 
 function resolveUpstream(ctx: MockContext, lane: Lane) {
@@ -167,6 +183,16 @@ export async function handleCompletion(
     return
   }
 
+  const overflow = OVERFLOW_SHAPES[failure]
+  if (overflow !== undefined) {
+    // A server refuses an overlong prompt before generating, whatever status the lane names.
+    entry.status = 400
+    res.writeHead(400, { ...CORS_HEADERS, 'content-type': 'application/json' })
+    res.end(overflowBody(overflow, overflowCounts(prompt)))
+    finish()
+    return
+  }
+
   if (failure === 'hang') {
     // Opened but never finished: the deterministic in-flight window a cancel or
     // timeout test needs. The socket is released when the client gives up.
@@ -231,6 +257,7 @@ export async function handleCompletion(
       chunkSize: lane.stream.chunkSize,
       jitterMs: lane.delay.jitterMs,
       ending: failure === 'stream-cut' || failure === 'length' ? failure : 'stop',
+      ...(wantsStreamUsage(body) ? { usage: mockUsage(prompt, content) } : {}),
       aborted: () => clientGone,
     })
     finish()
@@ -246,6 +273,8 @@ export async function handleCompletion(
 
   entry.served = failure === 'none' ? value : content
   res.writeHead(200, { ...CORS_HEADERS, 'content-type': 'application/json' })
-  res.end(completionBody(content, failure === 'length' ? 'length' : 'stop'))
+  res.end(
+    completionBody(content, failure === 'length' ? 'length' : 'stop', mockUsage(prompt, content)),
+  )
   finish()
 }

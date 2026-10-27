@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { handleCompletion } from './completions'
 import { createContext, type MockContext } from './context'
 import { handleControl } from './control'
-import { CORS_HEADERS } from './respond/wire'
+import { CORS_HEADERS, MOCK_CONTEXT_WINDOW } from './respond/wire'
 
 const UI_PATH = join(dirname(fileURLToPath(import.meta.url)), 'ui', 'index.html')
 
@@ -55,7 +55,12 @@ export async function startMockServer(
           res.end(
             JSON.stringify({
               object: 'list',
-              data: MODEL_IDS.map((id) => ({ id, object: 'model', owned_by: 'aventuras-mock' })),
+              data: MODEL_IDS.map((id) => ({
+                id,
+                object: 'model',
+                owned_by: 'aventuras-mock',
+                meta: { n_ctx: MOCK_CONTEXT_WINDOW },
+              })),
             }),
           )
           return

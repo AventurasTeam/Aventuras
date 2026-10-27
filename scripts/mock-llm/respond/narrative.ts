@@ -1,6 +1,13 @@
 import type { ServerResponse } from 'node:http'
 
-import { contentFrame, roleFrame, stopFrames, write, type FinishReason } from './wire'
+import {
+  contentFrame,
+  roleFrame,
+  stopFrames,
+  write,
+  type FinishReason,
+  type MockUsage,
+} from './wire'
 
 export type StreamPacing = {
   /** 0 delivers the whole reply in a single frame. */
@@ -19,6 +26,8 @@ export type StreamEnding = FinishReason | 'stream-cut'
 export type StreamOptions = StreamPacing & {
   content: string
   ending: StreamEnding
+  /** Sent after the terminal frame, before [DONE]; a `stream-cut` ending sends neither. */
+  usage?: MockUsage
   aborted: () => boolean
 }
 
@@ -58,7 +67,7 @@ export async function streamNarrative(res: ServerResponse, opts: StreamOptions):
 
   if (opts.charsPerSecond <= 0 && ending !== 'stream-cut') {
     await write(res, contentFrame(opts.content))
-    if (!opts.aborted()) res.end(stopFrames(ending))
+    if (!opts.aborted()) res.end(stopFrames(ending, opts.usage))
     return
   }
 
@@ -79,5 +88,5 @@ export async function streamNarrative(res: ServerResponse, opts: StreamOptions):
   // The cut path closes without a stop frame or [DONE] on purpose: that is the
   // truncated-stream failure the app has to survive.
   if (ending === 'stream-cut') res.end()
-  else res.end(stopFrames(ending))
+  else res.end(stopFrames(ending, opts.usage))
 }
