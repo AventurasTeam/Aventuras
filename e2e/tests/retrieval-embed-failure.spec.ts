@@ -2,12 +2,14 @@ import { expect, test } from '@playwright/test'
 
 import { branchStaleTotal, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
+import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
 import { createSeededUserDataDir, removeUserDataDir, setProviderEndpoint } from '../harness/seed'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 import { storySettings } from '../locators/story-settings'
+import { toast } from '../locators/toast'
 
 const HERO_TITLE = 'The Veilstone Courier'
 const HERO_BRANCH = 'br_hero_main'
@@ -16,6 +18,7 @@ const USER_MARKER = 'E2E-EMBEDFAIL-USER'
 const REPLY_MARKER = 'E2E-EMBEDFAIL-REPLY'
 const REPLY = `${REPLY_MARKER} the amulet answers, memory restored.`
 const ACTION = `${USER_MARKER} I reach for the amulet.`
+const CLIPBOARD_SENTINEL = 'E2E-EMBEDFAIL-CLIPBOARD-SENTINEL'
 
 const MARKER_ENTRY_SQL = `SELECT count(*) FROM story_entries WHERE branch_id = ? AND content LIKE '%${USER_MARKER}%'`
 
@@ -33,6 +36,7 @@ test.describe.serial('retrieval — a failed embed blocks the turn', () => {
   let app: LaunchedApp
   let mock: MockLlm
   let userDataDir: string | undefined
+  let clipboardBefore: string | undefined
 
   test.beforeAll(async () => {
     const seeded = createSeededUserDataDir()
@@ -46,10 +50,27 @@ test.describe.serial('retrieval — a failed embed blocks the turn', () => {
   })
 
   test.afterAll(async () => {
-    await app?.close()
-    await mock?.close()
-    removeUserDataDir(userDataDir)
+    try {
+      if (clipboardBefore !== undefined) await swapClipboardText(clipboardBefore)
+    } finally {
+      await app?.close()
+      await mock?.close()
+      removeUserDataDir(userDataDir)
+    }
   })
+
+  // Off the Xvfb display this is the developer's clipboard, so afterAll writes back what it returns.
+  function swapClipboardText(text: string): Promise<string> {
+    return app.app.evaluate(({ clipboard }, next) => {
+      const previous = clipboard.readText()
+      clipboard.writeText(next)
+      return previous
+    }, text)
+  }
+
+  function clipboardText(): Promise<string> {
+    return app.app.evaluate(({ clipboard }) => clipboard.readText())
+  }
 
   async function scalar(sql: string, params: unknown[] = []): Promise<number> {
     const [[value]] = await queryApp(app.window, sql, params)
@@ -126,6 +147,26 @@ test.describe.serial('retrieval — a failed embed blocks the turn', () => {
     const failure = await systemFailureMeta()
     expect(failure.kind, 'the persisted discriminant drives the fix action').toBe('embedder')
     expect(failure.submission?.content, 'the reversed action is retained for retry').toBe(ACTION)
+
+    // The entry shows that text, and its copy reaches the OS clipboard through the reader's host and
+    // Electron, which no unit or story test runs. The sentinel keeps a stale ACTION from passing.
+    const [[systemEntryId]] = await queryApp(
+      app.window,
+      `SELECT id FROM story_entries WHERE branch_id = ? AND kind = 'system'`,
+      [HERO_BRANCH],
+    )
+    const entryId = String(systemEntryId)
+    await expect(
+      reader.systemEntryHeldText(app.window, entryId, ACTION),
+      'the entry quotes the text it keeps',
+    ).toBeVisible()
+    clipboardBefore = await swapClipboardText(CLIPBOARD_SENTINEL)
+    await reader.copySystemEntryHeldText(app.window, entryId).click()
+    await expect(
+      toast.withText(app.window, t('reader:systemEntry.copied')),
+      'the host reports the copy took',
+    ).toBeVisible()
+    await expect.poll(clipboardText, { message: 'the kept text is on the clipboard' }).toBe(ACTION)
 
     // A real staleCount from a real sync failure reaches the rendered detail:
     // reason prefix, cause, and the magnitude in rows. `(null rows)` — the shape

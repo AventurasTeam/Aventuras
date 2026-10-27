@@ -139,6 +139,13 @@ export const reader = {
     page
       .locator('[data-entry-row]')
       .getByRole('button', { name: t('reader:systemEntry.details'), exact: true }),
+  // The turn's text a system entry keeps (entry-card-system.tsx): the user's own words, so literal.
+  systemEntryHeldText: (page: Page, entryId: string, text: string): Locator =>
+    reader.row(page, entryId).getByText(text, { exact: true }),
+  copySystemEntryHeldText: (page: Page, entryId: string): Locator =>
+    reader
+      .row(page, entryId)
+      .getByRole('button', { name: t('reader:systemEntry.copyHeldText'), exact: true }),
   switchEmbedderFix: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:systemEntry.switchEmbedder') }),
   // A config-resolver failure's fix row (system-entry-actions.tsx, useConfigFixAction).
