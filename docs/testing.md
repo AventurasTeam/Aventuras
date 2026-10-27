@@ -400,6 +400,25 @@ answers, a held one at its release, reply with `raw` verbatim and
 `finish_reason: 'length'`, so a spec can hand the app a document cut
 partway through that it must refuse rather than repair.
 
+Both mocks report token usage as an OpenAI-compatible server does,
+counted with o200k over the request's message text and the reply: on
+every structured reply, and on a stream that asks with
+`stream_options.include_usage`, which the app's provider always does
+([`architecture.md → Truncation cross-check`](./architecture.md#truncation-cross-check)),
+in a last chunk before `[DONE]`. The counts sit near the app's own
+estimate, so the cross-check stays quiet unless a spec arms
+`underReportNextUsage()`: the next narrative stream then reports a
+tenth of its counted prompt tokens, as a server that dropped most of
+the prompt would.
+
+`overflowNextNarrative(shape)` and `overflowNextStructured(name, shape)`
+reject the next matching call with a 400 in llama.cpp's overflow shape
+(`'llamacpp'`, the default) or OpenAI's (`'openai'`)
+([`architecture.md → Recognizing an overflow rejection`](./architecture.md#recognizing-an-overflow-rejection)),
+recorded in `requests` like any call. The harness serves no `/models`,
+so a spec makes a model's window known through the user's figure,
+`setContextWindowOverride` in `e2e/harness/seed.ts`.
+
 Block-matching keys on the **auto** (prompt-injection) path the fixture
 uses — the only path E2E relies on. A `force-on` profile takes the
 native path instead, but the app doesn't set the openai-compatible
