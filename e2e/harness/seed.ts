@@ -80,6 +80,37 @@ export function addProviderCustomModel(dbPath: string, modelId: string): void {
   }
 }
 
+// The harness serves no /models, so a spec makes a model's window known through the user's figure.
+// Runs before launch.
+export function setContextWindowOverride(dbPath: string, modelId: string, tokens: number): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const row = db.prepare(`SELECT providers FROM app_settings WHERE id = 'singleton'`).get() as {
+      providers: string
+    }
+    const providers = JSON.parse(row.providers) as {
+      type: string
+      contextWindowOverrides?: Record<string, number>
+    }[]
+    const targets = providers.filter((provider) => provider.type === 'openai-compatible')
+    // An unwritten figure leaves the window unknown, where the check never refuses: the spec
+    // would time out waiting for a refusal, reading as a product bug.
+    if (targets.length === 0) {
+      throw new Error(
+        `cannot set ${modelId}'s window: the fixture has no openai-compatible provider`,
+      )
+    }
+    for (const provider of targets) {
+      provider.contextWindowOverrides = { ...provider.contextWindowOverrides, [modelId]: tokens }
+    }
+    db.prepare(`UPDATE app_settings SET providers = ? WHERE id = 'singleton'`).run(
+      JSON.stringify(providers),
+    )
+  } finally {
+    db.close()
+  }
+}
+
 // Move the app-level embedding default off the seeded stories' model, which is
 // the only difference the story-open upgrade prompt asks about. Runs before launch.
 export function setAppEmbeddingModelId(dbPath: string, modelId: string): void {

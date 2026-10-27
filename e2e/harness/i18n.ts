@@ -61,3 +61,54 @@ export const t: Translate = (key, options) => {
   }
   return cached(key, options)
 }
+
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+// `{{n, number}}` groups digits, so a number slot's sentinel is found as the app formats it.
+const NUMBER_SENTINEL = 987_654_000
+const formatNumber = new Intl.NumberFormat('en')
+
+/**
+ * `key`'s copy as an anchored pattern, for copy that interpolates values no spec can know: each
+ * `numbers` slot becomes a named group matching a formatted number, each `texts` slot one matching
+ * any text, and `fixed` values resolve as given. Throws when a slot doesn't render as expected.
+ */
+export function copyPattern(
+  key: string,
+  slots: {
+    fixed?: Record<string, unknown>
+    numbers?: readonly string[]
+    texts?: readonly string[]
+  },
+): RegExp {
+  const values: Record<string, unknown> = { ...slots.fixed }
+  const groups: { name: string; sentinel: string; group: string }[] = []
+  for (const [i, name] of (slots.numbers ?? []).entries()) {
+    values[name] = NUMBER_SENTINEL + i
+    groups.push({
+      name,
+      sentinel: formatNumber.format(NUMBER_SENTINEL + i),
+      group: `(?<${name}>[\\d,]+)`,
+    })
+  }
+  for (const [i, name] of (slots.texts ?? []).entries()) {
+    values[name] = `@@TEXT${i}@@`
+    groups.push({ name, sentinel: `@@TEXT${i}@@`, group: `(?<${name}>.+?)` })
+  }
+  let source = escapeRegExp(t(key, values))
+  for (const { name, sentinel, group } of groups) {
+    const escaped = escapeRegExp(sentinel)
+    if (!source.includes(escaped)) {
+      throw new Error(`${key} renders no {{${name}}} slot where copyPattern looks for it`)
+    }
+    source = source.replace(escaped, group)
+  }
+  return new RegExp(`^${source}$`, 's')
+}
+
+/** A `numbers` slot read back out of a copyPattern match. */
+export function copyNumber(match: RegExpExecArray | null, name: string): number {
+  const formatted = match?.groups?.[name]
+  if (formatted === undefined) throw new Error(`the copy carried no ${name}`)
+  return Number(formatted.replace(/,/g, ''))
+}
