@@ -1,4 +1,9 @@
-import { describeReplyCutOff, type CallRetryError, type ResolveTarget } from '@/lib/ai'
+import {
+  describeContextWindow,
+  describeReplyCutOff,
+  type CallRetryError,
+  type ResolveTarget,
+} from '@/lib/ai'
 
 import type { PipelineError } from './types'
 
@@ -12,9 +17,16 @@ export function toPipelineError(e: CallRetryError, target: ResolveTarget): Pipel
         kind: 'provider',
         reason: e.reason,
         ...(e.detail !== undefined ? { detail: e.detail } : {}),
+        ...(e.possibleCapabilityMismatch !== undefined
+          ? { possibleCapabilityMismatch: e.possibleCapabilityMismatch }
+          : {}),
       }
     case 'parse':
       return { kind: 'phase-logic', detail: e.detail }
+    case 'context-window': {
+      const { tier: _tier, ...failure } = e
+      return { kind: 'context-window', target, ...failure }
+    }
     case 'reply-cut-off': {
       const { tier: _tier, ...failure } = e
       return { kind: 'reply-cut-off', target, ...failure }
@@ -22,9 +34,11 @@ export function toPipelineError(e: CallRetryError, target: ResolveTarget): Pipel
   }
 }
 
-/** Detail for logs and status: the arm's own (may span lines), or the cut-off described. */
+/** Detail for logs and status: the arm's own (may span lines), or the window or cut-off described. */
 export function pipelineErrorDetail(e: PipelineError): string | undefined {
   switch (e.kind) {
+    case 'context-window':
+      return describeContextWindow(e)
     case 'reply-cut-off':
       return describeReplyCutOff(e)
     case 'provider':

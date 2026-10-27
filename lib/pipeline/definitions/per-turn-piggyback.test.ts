@@ -1,7 +1,12 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
-import type { generateStructured, PromptHalves } from '@/lib/ai'
+import {
+  describeContextWindow,
+  type ContextWindowFailure,
+  type generateStructured,
+  type PromptHalves,
+} from '@/lib/ai'
 import {
   APP_SETTINGS_DEFAULTS,
   emptyEntityState,
@@ -488,6 +493,77 @@ describe('per-turn-piggyback', () => {
       const detail =
         'reply cut off (max-output): 2048 output tokens, max output 2048; ' +
         'model model-1 on provider prov-1'
+      expect(next.value).toEqual({ status: 'completed' })
+      const written = events.find(
+        (e) => e.type === 'delta_emitted' && e.action.kind === 'updateStoryEntryMetadata',
+      )
+      if (
+        !written ||
+        written.type !== 'delta_emitted' ||
+        written.action.kind !== 'updateStoryEntryMetadata'
+      )
+        throw new Error('expected a metadata delta recording the failure')
+      expect(written.action.payload.metadata.stateReport?.failedFields).toEqual([
+        { field: 'classifier', detail: `classifier call failed: ${detail}` },
+      ])
+      expect(log.warn).toHaveBeenCalledWith('classifier.piggyback_fallback_failed', {
+        status: 'failed',
+        errorDetail: detail,
+      })
+    })
+
+    // architecture.md → The pre-send check: the fallback surfaces a refusal on its own path.
+    it('records a context-window refusal in the failure report and commits', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {} }),
+      })
+      hydrateEntries(phaseDb, 'b1', [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          content: 'The hero enters the dark forest.',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+      ])
+      entitiesStore.hydrate('b1', [])
+      const refusal: ContextWindowFailure = {
+        detectedBy: 'check',
+        estimate: 71_234,
+        window: 65_536,
+        windowSource: 'detected',
+        providerId: 'prov-1',
+        modelId: 'model-1',
+      }
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'failed',
+        recoverable: [],
+        error: { tier: 'context-window', ...refusal },
+      })
+      const log = spyLogger()
+
+      const gen = piggybackFallbackClassifierPhase({
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log,
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      })
+      const events = []
+      let next = await gen.next()
+      while (!next.done) {
+        events.push(next.value)
+        next = await gen.next()
+      }
+
+      const detail = describeContextWindow(refusal)
+      expect(detail).toContain('model-1')
       expect(next.value).toEqual({ status: 'completed' })
       const written = events.find(
         (e) => e.type === 'delta_emitted' && e.action.kind === 'updateStoryEntryMetadata',

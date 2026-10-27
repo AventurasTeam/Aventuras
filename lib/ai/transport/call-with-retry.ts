@@ -1,3 +1,4 @@
+import { ContextWindowError } from '../context-window'
 import { ReplyCutOffError } from '../reply-cut-off'
 import { type CallRetryError, classifyProviderError } from './classify-provider-error'
 
@@ -39,7 +40,8 @@ type CallWithRetryOpts = {
 
 // Two-tier retry: provider (network/5xx/timeout) and parse/data-shape. Retried failures
 // go in recoverable[]; the one exhausting a budget (or non-retryable) is the terminal
-// `error`. Aborts short-circuit, as does a parseFn ReplyCutOffError (it would recur).
+// `error`. Aborts short-circuit, as do a callFn ContextWindowError and a parseFn
+// ReplyCutOffError (each would recur).
 export async function callWithRetry<T, R = string>(
   callFn: (signal: AbortSignal) => Promise<R>,
   parseFn: (raw: R) => T,
@@ -57,6 +59,9 @@ export async function callWithRetry<T, R = string>(
       raw = await callFn(opts.signal)
     } catch (e) {
       if (opts.signal.aborted) return { status: 'aborted', recoverable }
+      if (e instanceof ContextWindowError) {
+        return { status: 'failed', error: { tier: 'context-window', ...e.failure }, recoverable }
+      }
       const classified = classifyProviderError(e)
       providerAttempt += 1
       if (!classified.retryable || providerAttempt >= opts.maxProviderAttempts) {

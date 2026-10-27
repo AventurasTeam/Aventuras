@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import type { CallRetryError, ReplyCutOffFailure } from '@/lib/ai'
+import {
+  describeContextWindow,
+  type CallRetryError,
+  type CapabilityHint,
+  type ContextWindowFailure,
+  type ReplyCutOffFailure,
+} from '@/lib/ai'
 
 import { pipelineErrorDetail, toPipelineError } from './call-error'
 import type { PipelineError } from './types'
@@ -14,6 +20,17 @@ const CUT: ReplyCutOffFailure = {
   providerId: 'prov-1',
   modelId: 'model-1',
 }
+
+const OVER: ContextWindowFailure = {
+  detectedBy: 'check',
+  estimate: 71_234,
+  window: 65_536,
+  windowSource: 'configured',
+  providerId: 'prov-1',
+  modelId: 'model-1',
+}
+
+const HINT: CapabilityHint = { capability: 'reasoning', matched: 'thinking' }
 
 describe('toPipelineError', () => {
   it('maps a provider CallRetryError to a provider PipelineError', () => {
@@ -52,6 +69,52 @@ describe('toPipelineError', () => {
       expect(toPipelineError(e, target)).toEqual({ kind: 'reply-cut-off', target, ...CUT })
     },
   )
+
+  // generation-pipeline.md → Fatal error categories: the phase copies the hint as it maps.
+  it('copies a capability hint onto the provider PipelineError', () => {
+    const e: CallRetryError = {
+      tier: 'provider',
+      reason: 'unknown',
+      detail: 'thinking is not supported',
+      possibleCapabilityMismatch: HINT,
+    }
+    expect(toPipelineError(e, 'classifier')).toEqual({
+      kind: 'provider',
+      reason: 'unknown',
+      detail: 'thinking is not supported',
+      possibleCapabilityMismatch: HINT,
+    })
+  })
+
+  it('omits the hint key when the provider CallRetryError has none, or an undefined one', () => {
+    const none: CallRetryError = { tier: 'provider', reason: 'unknown', detail: 'bad' }
+    const undefinedHint: CallRetryError = { ...none, possibleCapabilityMismatch: undefined }
+    expect('possibleCapabilityMismatch' in toPipelineError(none, 'classifier')).toBe(false)
+    expect('possibleCapabilityMismatch' in toPipelineError(undefinedHint, 'classifier')).toBe(false)
+  })
+
+  it.each(['classifier', 'suggestion', 'wizard-assist'] as const)(
+    'maps a context-window CallRetryError to the context-window kind for %s, every field kept',
+    (target) => {
+      const e: CallRetryError = { tier: 'context-window', ...OVER }
+      expect(toPipelineError(e, target)).toEqual({ kind: 'context-window', target, ...OVER })
+    },
+  )
+
+  it('keeps the provider message and an unknown window on a provider-detected overflow', () => {
+    const failure: ContextWindowFailure = {
+      ...OVER,
+      detectedBy: 'provider',
+      window: null,
+      windowSource: 'unknown',
+      detail: 'request (71834 tokens) exceeds the available context size (65536 tokens)',
+    }
+    expect(toPipelineError({ tier: 'context-window', ...failure }, 'classifier')).toEqual({
+      kind: 'context-window',
+      target: 'classifier',
+      ...failure,
+    })
+  })
 
   it('keeps null counts and a window on a reply-cut-off', () => {
     const failure: ReplyCutOffFailure = {
@@ -109,6 +172,12 @@ describe('pipelineErrorDetail', () => {
     ],
   ])('returns the detail of %s', (_label, error, expected) => {
     expect(pipelineErrorDetail(error)).toBe(expected)
+  })
+
+  it('describes a context-window failure as describeContextWindow does', () => {
+    const detail = pipelineErrorDetail({ kind: 'context-window', target: 'classifier', ...OVER })
+    expect(detail).toBe(describeContextWindow(OVER))
+    expect(detail).toContain('model-1')
   })
 
   it('describes a reply-cut-off, naming its cause and numbers', () => {

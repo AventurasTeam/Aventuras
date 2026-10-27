@@ -1,12 +1,24 @@
 import type { PipelineAction } from '@/lib/actions/types'
-import type { ReplyCutOffFailure, ResolveFailureKind, ResolveTarget } from '@/lib/ai'
+import type {
+  CapabilityHint,
+  ContextWindowFailure,
+  ReplyCutOffFailure,
+  ResolveFailureKind,
+  ResolveTarget,
+} from '@/lib/ai'
 import type { DbCtx, StorySettings } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import type { EmbedderErrorKind } from '@/lib/embedder'
 import type { AppSettingsSnapshot, DeferredWorkKind, RunState } from '@/lib/stores'
 
 export type PipelineError =
-  | { kind: 'provider'; reason: 'auth' | 'network' | 'timeout' | 'unknown'; detail?: string }
+  | {
+      kind: 'provider'
+      reason: 'auth' | 'network' | 'timeout' | 'unknown'
+      detail?: string
+      // Carried over from the provider CallRetryError (generation-pipeline.md → Fatal error categories).
+      possibleCapabilityMismatch?: CapabilityHint
+    }
   | { kind: 'phase-logic'; detail: string; phaseName?: string; subsystem?: string }
   | {
       kind: 'action-layer'
@@ -28,6 +40,8 @@ export type PipelineError =
   // whose retry story is the LLM's. `staleCount` is null when there is no
   // magnitude to report — see RetrievalFailure in lib/retrieval.
   | { kind: 'embedder'; reason: EmbedderErrorKind; detail: string; staleCount: number | null }
+  // architecture.md → Model context window: a prompt over the model's window, refused or rejected.
+  | ({ kind: 'context-window'; target: ResolveTarget } & ContextWindowFailure)
   // generation-pipeline.md → Fatal error categories: a cut reply the caller couldn't use.
   | ({ kind: 'reply-cut-off'; target: ResolveTarget } & ReplyCutOffFailure)
 

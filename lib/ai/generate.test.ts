@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { logger, type Logger } from '@/lib/diagnostics'
 
 import type { ProviderInstance } from '../db'
+import { describeContextWindow, type ContextWindowFailure } from './context-window'
 import {
   buildCallSettings,
   describeCallRetryError,
@@ -954,5 +955,20 @@ describe('describeCallRetryError', () => {
         modelId: 'model-1',
       }),
     ).toBe('reply cut off (unknown): 4096 output tokens; model model-1 on provider prov-1')
+  })
+
+  it('describes a context-window failure as describeContextWindow does', () => {
+    const failure: ContextWindowFailure = {
+      detectedBy: 'provider',
+      estimate: 71_234,
+      window: null,
+      windowSource: 'unknown',
+      providerId: 'prov-1',
+      modelId: 'model-1',
+      detail: 'prompt is too long',
+    }
+    const line = describeCallRetryError({ tier: 'context-window', ...failure })
+    expect(line).toBe(describeContextWindow(failure))
+    expect(line).toContain('model-1')
   })
 })

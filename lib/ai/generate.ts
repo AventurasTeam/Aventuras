@@ -14,6 +14,7 @@ import { logger } from '@/lib/diagnostics'
 import type { ProviderInstance } from '../db'
 import type { ResolveTarget } from './agents'
 import { anthropicCacheMarkerMiddleware } from './cache-marker'
+import { describeContextWindow } from './context-window'
 import { getModel } from './model'
 import {
   jsonResponseFormatMiddleware,
@@ -255,6 +256,8 @@ export function describeCallRetryError(error: CallRetryError): string {
       return error.detail ?? error.reason
     case 'parse':
       return error.detail
+    case 'context-window':
+      return describeContextWindow(error)
     case 'reply-cut-off':
       return describeReplyCutOff(error)
   }

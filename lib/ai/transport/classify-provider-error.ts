@@ -1,13 +1,27 @@
 import { APICallError } from 'ai'
 
+import type { ContextWindowFailure } from '../context-window'
 import type { ReplyCutOffFailure } from '../reply-cut-off'
+
+/** generation-pipeline.md → Fatal error categories: a best-effort hint, never an assertion. */
+export type CapabilityHint = {
+  capability: 'reasoning' | 'structuredOutput'
+  /** The keyword that matched, for the copy. */
+  matched: string
+}
 
 // lib/ai-local error vocabulary. The pipeline layer maps these to PipelineError
 // when it yields recoverable_error events — keeps lib/ai free of an upward
 // lib/pipeline type dependency.
 export type CallRetryError =
-  | { tier: 'provider'; reason: 'auth' | 'network' | 'timeout' | 'unknown'; detail?: string }
+  | {
+      tier: 'provider'
+      reason: 'auth' | 'network' | 'timeout' | 'unknown'
+      detail?: string
+      possibleCapabilityMismatch?: CapabilityHint
+    }
   | { tier: 'parse'; detail: string; attempt: number }
+  | ({ tier: 'context-window' } & ContextWindowFailure)
   | ({ tier: 'reply-cut-off' } & ReplyCutOffFailure)
 
 // Thrown by a callFn when its own per-attempt timeout fires (so callWithRetry
