@@ -71,9 +71,18 @@ const involvement = z.object({ ref: z.string(), role: z.string().optional() })
 const happening = z.object({
   title: z.string(),
   description: z.string().optional(),
-  /** Free-form anchor for out-of-narrative happenings; mutually exclusive with occurredAtTurn. */
-  temporal: z.string().optional(),
-  occurredAtTurn: z.string().optional(),
+  occurredAtTurn: z
+    .string()
+    .optional()
+    .describe(
+      'The turn whose prose shows it happening. Omit for an event the turns only recount from before the story or offstage, and set temporal instead.',
+    ),
+  temporal: z
+    .string()
+    .optional()
+    .describe(
+      'When it happened, as the prose gives it, for an event the turns only recount. Omit when occurredAtTurn is set.',
+    ),
   category: tolerated(z.string()),
   icon,
   involvements: tolerantList(involvement),

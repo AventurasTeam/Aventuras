@@ -479,6 +479,10 @@ describe('periodic classifier template — standing and threads', () => {
 describe('periodic classifier template — the writer map rules', () => {
   const RULES = [
     [
+      'when it happened',
+      '- When it happened. Set a happening\'s occurredAtTurn to the turn whose prose shows it happening. For an event from before the story or offstage that the turns only recount, leave occurredAtTurn out and set temporal to its time as the prose gives it ("ten winters ago", "before the war").\n',
+    ],
+    [
       'returns',
       "- Returns. Move a retired character back to active only when the turns put them in the scene now: not a memory, a flashback, a vision or someone's report of them. Never a place.\n",
     ],

@@ -93,7 +93,15 @@ alias list (the keywords bullet below).
   `happening_awareness`. New rows for events extracted from the prose
   window, each with a free-form `category` and an `icon` from the
   catalog, and `decay_resistance` set per awareness row from the
-  model's per-character severity judgment at extraction time. An
+  model's per-character severity judgment at extraction time. Each
+  happening sits in story time at the turn whose prose shows it
+  happening (`occurred_at_entry_id`), or, for an event the turns only
+  recount, at a free-form `temporal`. A reply that gives neither, or
+  names a turn outside the window and no `temporal`, places it at its
+  source turn, never at the window head: the
+  [recent happenings](#what-the-classifier-reads) a later pass lists,
+  Plot's chapter grouping and the ranker's chapter boost all read the
+  position. An
   awareness row may also name a happening Known happenings lists, when
   the turns show a character learning of it ("Kael tells Aria about
   the massacre"); a pair the reply repeats lands at its earliest

@@ -978,15 +978,22 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const parentAnchor = anchor(happening.sourceTurn)
     const happeningId = newId('hap')
     const timestamp = now()
-    // Deliberately not through anchor(): occurred_at_entry_id is a story-time
-    // claim retrieval and the Plot screen read as fact, not a survival anchor, so
-    // a head-fallback would assert the happening occurred at the newest window
-    // turn. A bogus handle degrades to the temporal string instead.
+    // Deliberately not through anchor(): occurred_at_entry_id is a story-time claim retrieval and
+    // the Plot screen read as fact, not a survival anchor, so a head-fallback would assert the
+    // happening occurred at the newest window turn.
     let occurredAtEntryId: string | null = null
     if (happening.occurredAtTurn != null) {
       const resolved = window.resolveHandle(happening.occurredAtTurn)
       if (resolved.fellBack) unresolvedRefs.push(happening.occurredAtTurn)
       else occurredAtEntryId = resolved.entryId
+    }
+    // Mutually exclusive per the table CHECK: an entry ref wins.
+    const temporal = occurredAtEntryId == null ? (nonBlank(happening.temporal) ?? null) : null
+    // classifier.md → What the classifier writes → Happenings: a bogus or absent occurredAtTurn
+    // falls to the temporal string, then to the source turn.
+    if (occurredAtEntryId == null && temporal == null) {
+      const source = window.resolveHandle(happening.sourceTurn)
+      if (!source.fellBack) occurredAtEntryId = source.entryId
     }
     const description = nonBlank(happening.description)
     planned.push({
@@ -1001,8 +1008,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
             description: description == null ? null : clampEmbedded(description, MAX_EMBEDDED_BODY),
             category: nonBlank(happening.category) ?? null,
             icon: iconOf(happening.icon, title),
-            // Mutually exclusive per the table CHECK: an entry ref wins.
-            temporal: occurredAtEntryId == null ? (nonBlank(happening.temporal) ?? null) : null,
+            temporal,
             occurredAtEntryId,
             embeddingStale: 1,
             createdAt: timestamp,

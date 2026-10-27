@@ -225,6 +225,17 @@ describe('classifierExtractionSchema — the writer map', () => {
     expect(itemFields('newThreads').icon?.description).toBe(expected)
   })
 
+  // classifier.md → What the classifier writes → Happenings: the story-time anchor is asked for.
+  it("tells the model a happening's turn, or its time when the turns only recount it", () => {
+    const fields = itemFields('happenings')
+    expect(fields.occurredAtTurn?.description).toBe(
+      'The turn whose prose shows it happening. Omit for an event the turns only recount from before the story or offstage, and set temporal instead.',
+    )
+    expect(fields.temporal?.description).toBe(
+      'When it happened, as the prose gives it, for an event the turns only recount. Omit when occurredAtTurn is set.',
+    )
+  })
+
   it('parses renames, placements and standings of listed rows', () => {
     const parsed = classifierExtractionSchema.parse({
       renames: [{ ref: 'c1', name: 'Mira', sourceTurn: 't2' }],

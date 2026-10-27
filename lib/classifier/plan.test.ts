@@ -539,6 +539,47 @@ describe('buildClassifierActions', () => {
       // provenance fallback.
       expect(fellBackCount).toBe(0)
     })
+
+    // t1 is not the window head (t3), so e1 can only come from the source turn.
+    it('anchors a happening given neither at its source turn', () => {
+      const { planned } = plan({ title: 'A', sourceTurn: 't1' })
+      expect(payloadOf<{ entry: HappeningEntry }>(planned[0]).entry).toMatchObject({
+        temporal: null,
+        occurredAtEntryId: 'e1',
+      })
+    })
+
+    it('reads a blank temporal as absent and anchors at the source turn', () => {
+      const { planned } = plan({ title: 'A', sourceTurn: 't2', temporal: '  ' })
+      expect(payloadOf<{ entry: HappeningEntry }>(planned[0]).entry).toMatchObject({
+        temporal: null,
+        occurredAtEntryId: 'e2',
+      })
+    })
+
+    it('anchors a bogus occurredAtTurn with no temporal at the source turn', () => {
+      const { planned, unresolvedRefs } = plan({
+        title: 'A',
+        sourceTurn: 't1',
+        occurredAtTurn: 't99',
+      })
+      expect(payloadOf<{ entry: HappeningEntry }>(planned[0]).entry).toMatchObject({
+        temporal: null,
+        occurredAtEntryId: 'e1',
+      })
+      expect(unresolvedRefs).toEqual(['t99'])
+    })
+
+    it.each([
+      ['an unresolvable source turn', { sourceTurn: 't99' }],
+      ['no source turn', {}],
+    ])('leaves a happening given neither with %s unanchored, not at the head', (_name, over) => {
+      const { planned } = plan({ title: 'A', ...over })
+      expect(payloadOf<{ entry: HappeningEntry }>(planned[0]).entry).toMatchObject({
+        temporal: null,
+        occurredAtEntryId: null,
+      })
+    })
   })
 
   describe('ref kind expectations', () => {

@@ -148,6 +148,18 @@ function parseFailureText(detail: string): string {
     .join('; ')
 }
 
+// classifier.md → What the classifier writes → Happenings: how often a reply gives the anchor
+// itself; the planner puts a happening given neither at its source turn.
+function anchorCounts(happenings: readonly { occurredAtTurn?: string; temporal?: string }[]) {
+  const given = (text: string | undefined) => text != null && text.trim() !== ''
+  const atTurn = happenings.filter((h) => given(h.occurredAtTurn)).length
+  const temporal = happenings.filter((h) => !given(h.occurredAtTurn) && given(h.temporal)).length
+  return (
+    `happenings: ${happenings.length} (occurredAtTurn ${atTurn}, temporal ${temporal}, ` +
+    `neither ${happenings.length - atTurn - temporal})`
+  )
+}
+
 async function main(): Promise<void> {
   if (!LLM_URL || !LLM_MODEL) {
     console.log('[probe] skipped: set SMOKE_LLM_URL and SMOKE_LLM_MODEL to run')
@@ -229,7 +241,8 @@ async function main(): Promise<void> {
     )
     if (result.status === 'not-configured')
       throw new Error(`[probe] the classifier target did not resolve: ${result.kind}`)
-    const malformed = result.status === 'ok' ? readClassifierReply(result.value).malformed : []
+    const read = result.status === 'ok' ? readClassifierReply(result.value) : null
+    const malformed = read?.malformed ?? []
     const outcome: Outcome = {
       status: result.status,
       recoverable: result.recoverable,
@@ -252,6 +265,7 @@ async function main(): Promise<void> {
     )
     if (outcome.dropped != null)
       console.log(`[probe]   dropped entries that didn't fit: ${outcome.dropped}`)
+    if (read != null) console.log(`[probe]   ${anchorCounts(read.reply.happenings)}`)
     const firstParse = outcome.recoverable.find((e): e is ParseRetryError => e.tier === 'parse')
     if (firstParse != null)
       console.log(`[probe]   first parse failure: ${oneLine(parseFailureText(firstParse.detail))}`)
