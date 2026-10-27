@@ -58,7 +58,7 @@ export class ContextWindowError extends Error {
 export function describeContextWindow(failure: ContextWindowFailure): string {
   const { detectedBy, estimate, window, windowSource, providerId, modelId, detail } = failure
   const windowPart = window !== null ? `, window ${window} (${windowSource})` : ''
-  const detailPart = detail !== undefined ? `: ${detail}` : ''
+  const detailPart = detail?.trim() ? `: ${detail}` : ''
   return (
     `prompt over the context window (${detectedBy}): estimate ${estimate} tokens${windowPart}; ` +
     `model ${modelId} on provider ${providerId}${detailPart}`

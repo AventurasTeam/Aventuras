@@ -284,6 +284,12 @@ describe('recognizeOverflow', () => {
     expect(recognizeOverflow(rejection(400, body))).toEqual({ detail: message })
   })
 
+  // A recognized code with an empty message must not quote nothing: the raw body is the next evidence.
+  it.each(['', '   '])('quotes the raw body when the provider message is %j', (message) => {
+    const body = JSON.stringify({ error: { message, code: 'context_length_exceeded' } })
+    expect(recognizeOverflow(rejection(400, body))).toEqual({ detail: body })
+  })
+
   // The SDK's message for a body it couldn't parse is the status text, which says nothing.
   it('quotes a body that is not JSON, not the status text', () => {
     expect(recognizeOverflow(rejection(400, 'Prompt is too long for this model.\n'))).toEqual({

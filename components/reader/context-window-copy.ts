@@ -21,7 +21,10 @@ function windowCopyOf(failure: ContextWindowFailure): WindowCopy | null {
   if (failure.detectedBy === 'provider') {
     return {
       key: 'provider',
-      values: { estimate, message: failure.detail ?? describeContextWindow(failure) },
+      values: {
+        estimate,
+        message: failure.detail?.trim() ? failure.detail : describeContextWindow(failure),
+      },
     }
   }
   if (failure.window === null) return null

@@ -141,9 +141,13 @@ function field(value: unknown, key: string): unknown {
     : undefined
 }
 
+// A blank string is no message: `error.message: ""` must fall through to the next candidate.
+function nonBlank(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() !== '' ? value : undefined
+}
+
 function stringField(value: unknown, key: string): string | undefined {
-  const found = field(value, key)
-  return typeof found === 'string' ? found : undefined
+  return nonBlank(field(value, key))
 }
 
 // OpenAI's and llama.cpp's error.message, TGI's error string, vLLM's top-level message; else the
@@ -152,7 +156,7 @@ function providerMessage(error: APICallError, body: unknown): string {
   const inner = field(body, 'error')
   return (
     stringField(inner, 'message') ??
-    (typeof inner === 'string' ? inner : undefined) ??
+    nonBlank(inner) ??
     stringField(body, 'message') ??
     bodyText(error)
   )

@@ -88,6 +88,12 @@ describe('turnContextWindowContent', () => {
     )
   })
 
+  it('quotes the diagnostic line when the provider message is blank', () => {
+    expect(turnContextWindowContent({ ...REJECTED_UNQUOTED, detail: '  ' })).toBe(
+      turnProviderCopy(describeContextWindow(REJECTED_UNQUOTED)),
+    )
+  })
+
   it('falls back to the generic turn copy for a check failure with no window to print', () => {
     expect(turnContextWindowContent(CHECKED_WINDOWLESS)).toBe(
       'Generation failed. Retry to try again.',

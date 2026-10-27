@@ -157,6 +157,13 @@ describe('describeContextWindow', () => {
       'prompt over the context window (provider): estimate 71234 tokens; model gemma on provider prov-1',
     )
   })
+
+  it('leaves a blank provider message off the line', () => {
+    expect(describeContextWindow({ ...CHECK_FAILURE, detectedBy: 'provider', detail: '  ' })).toBe(
+      'prompt over the context window (provider): estimate 71234 tokens, window 65536 (configured); ' +
+        'model gemma on provider prov-1',
+    )
+  })
 })
 
 describe('ContextWindowError', () => {

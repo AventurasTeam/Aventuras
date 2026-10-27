@@ -80,7 +80,7 @@ function isResolveFailureKind(failure: string): failure is ResolveFailureKind {
   return Object.hasOwn(FIX_LABEL, failure)
 }
 
-// The tags a provider hint persists; exhaustive, so a new capability needs a fix decision.
+// The tags a provider hint persists; keyed per capability, so a new one is a type error until listed.
 const HINT_FIX_TAGS = {
   reasoning: true,
   structuredOutput: true,
