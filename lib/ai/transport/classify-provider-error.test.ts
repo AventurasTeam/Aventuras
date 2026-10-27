@@ -290,6 +290,14 @@ describe('recognizeOverflow', () => {
     expect(recognizeOverflow(rejection(400, body))).toEqual({ detail: body })
   })
 
+  it.each(['', '   '])(
+    'falls through a blank error string to the top-level message (%j)',
+    (error) => {
+      const body = JSON.stringify({ error, message: 'prompt is too long' })
+      expect(recognizeOverflow(rejection(400, body))).toEqual({ detail: 'prompt is too long' })
+    },
+  )
+
   // The SDK's message for a body it couldn't parse is the status text, which says nothing.
   it('quotes a body that is not JSON, not the status text', () => {
     expect(recognizeOverflow(rejection(400, 'Prompt is too long for this model.\n'))).toEqual({
