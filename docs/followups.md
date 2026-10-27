@@ -198,25 +198,24 @@ for the placement rule.
   marker pays.
   Wanted in v1, design deferred. Raised by the developer 2026-10-10.
 
-- **Seeing a failure entry's held input.** A failure entry carries the
-  turn's text in `metadata.systemFailure.submission`
+- **Implement held text and the details disclosure.** A system entry
+  shows the turn's text it keeps as a clamped quote with a copy button
+  and a custody line, and folds its failure detail behind a collapsed
+  `Details` disclosure under the buttons
+  ([`entry-card.md → System entry`](./ui/patterns/entry-card.md#system-entry)).
+  Today `EntryCard` renders the detail inline and the text nowhere. The
+  work: `EntryCard`'s `heldText` and `onCopy`, the reader surface
+  reading the text from the row's metadata, the `onCopySystemText`
+  bridge action
+  ([`reader-document.md → Bridge contract`](./ui/patterns/reader-document.md#bridge-contract)),
+  the held entry's two strings merged and the pass notice's copy
+  trimmed
   ([`reader-composer.md → Custody of the turn's text`](./ui/screens/reader-composer/reader-composer.md#custody-of-the-turns-text)),
-  but no card shows it: not a turn's failure entry, not a **Memory
-  update failed** entry, not the notice a committed pass Retry leaves,
-  whose copy says the text is kept on it. Since a Send supersedes that
-  text, seeing it is how the user decides whether it's worth keeping
-  before sending something else. The design settles:
-  - The stored text is already wrapped by its composer mode (that's why
-    hand-back restores it as `Free`), so a preview shows the wrapped
-    text, not what was typed.
-  - How it fits a phone: a one- or two-line muted preview with expand,
-    or a copy action, without pushing the card's actions down.
-  - That one treatment covers all three entries.
-
-  Needs canon in reader-composer.md and
-  [`entry-card.md`](./ui/patterns/entry-card.md), and a wireframe.
-  Raised by the developer 2026-10-25 in the 2026-10-24 triage pass's
-  slice review.
+  with `memoryHeldNoText`'s users (`describePassFailure`, its test, the
+  reader-surface stories) and the unused `systemEntry.viewDetails` key
+  gone, and the E2E touch points: `retrieval-embed-failure.spec.ts`
+  asserts the embed detail visible, and the `memoryHeld` locator keys
+  the merged copy. Raised 2026-10-27 by the held-text design.
 
 ## Tuning and play testing
 

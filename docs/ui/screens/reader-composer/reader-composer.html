@@ -443,6 +443,19 @@
   .err-actions { margin-top: 8px; display: flex; gap: 6px; }
   .err-btn { padding: 4px 10px; border: 1px solid var(--warn); border-radius: 3px; background: var(--bg-region); color: var(--warn); font-size: 11px; font-weight: 500; cursor: pointer; }
   .err-btn.primary { background: var(--warn); color: #fff; }
+  /* system entry: the held-text quote above the buttons, the Details disclosure under them (entry-card.md -> System entry) */
+  .err-held { margin-top: 8px; }
+  .err-held-head { display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .err-held-text { margin-top: 3px; padding-left: 8px; border-left: 2px solid var(--line-soft); font-size: 12px; line-height: 1.5; color: var(--ink-muted); white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .err-held-text.open { display: block; }
+  .err-held-more { font-size: 11px; color: var(--ink); text-decoration: underline; cursor: pointer; }
+  .err-held-custody { margin-top: 3px; font-size: 11px; color: var(--ink-muted); }
+  .err-copy { font-size: 10px; border: 1px solid var(--line-soft); border-radius: 3px; padding: 1px 6px; cursor: pointer; text-transform: none; letter-spacing: 0; color: var(--ink-muted); background: var(--bg-region); }
+  .err-details { margin-top: 6px; }
+  .err-details-toggle { font-size: 11px; color: var(--ink-muted); cursor: pointer; }
+  .err-details-body { display: none; margin-top: 4px; gap: 6px; align-items: flex-start; }
+  .err-details.open .err-details-body { display: flex; }
+  .err-details-body code { flex: 1; font-family: monospace; font-size: 10.5px; color: var(--ink-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 
   /* per-entry actions: permanent (same on desktop and mobile), muted by default, full opacity on hover/focus */
   .entry-actions { position: absolute; top: 6px; right: 8px; display: flex; gap: 3px; opacity: 0.55; transition: opacity 0.15s; }
@@ -708,7 +721,7 @@
     <button class="rb-btn" data-err="embed">embed error</button>
     <button class="rb-btn" data-err="memory">memory update error</button>
     <button class="rb-btn" data-err="memoryHeld">memory update held</button>
-    <button class="rb-btn" data-err="memoryHeldNoText">memory update held, no text</button>
+    <button class="rb-btn" data-err="memoryResolved">memory updated, text kept</button>
     <button class="rb-btn" data-err="window">prompt over window</button>
     <button class="rb-btn" data-err="windowProvider">provider overflow</button>
     <button class="rb-btn" data-err="memoryWindow">memory update over window</button>
@@ -719,6 +732,13 @@
     <button class="rb-btn" data-err="capability">capability hint</button>
     <button class="rb-btn" data-pass-failed>pass-failed toast</button>
     <button class="rb-btn" data-truncated>truncation toast</button>
+  </div>
+
+  <div class="rb-group">
+    <span class="gl">error entry text:</span>
+    <button class="rb-btn active" data-held="short">kept, short</button>
+    <button class="rb-btn" data-held="long">kept, long (clamped)</button>
+    <button class="rb-btn" data-held="none">none kept</button>
   </div>
 
   <div class="rb-group">
@@ -1079,14 +1099,22 @@
       <div class="entry system error-entry" id="error-entry">
         <div class="bubble">
           <div class="bubble-kind" id="err-kind">&#9888; System &middot; generation error</div>
-          <div class="bubble-content" id="err-content">
-            <b>API rate limit hit.</b> Claude returned 429 after 3 retries.
-            The narrative stream stopped at paragraph 2; no entry was committed.
+          <div class="bubble-content" id="err-content"><b>LLM call failed.</b></div>
+          <!-- held-text quote: shown when the entry keeps the turn's text; plain text, as the composer would get it back -->
+          <div class="err-held" id="err-held">
+            <div class="err-held-head"><span>Your text</span><span class="err-copy" data-copy title="Copy your text">Copy</span></div>
+            <div class="err-held-text" id="err-held-text">I open the letter.</div>
+            <span class="err-held-more" id="err-held-more">Show all</span>
+            <div class="err-held-custody">Dismiss puts it back in the composer if it's empty. Sending a new turn discards it.</div>
           </div>
           <div class="err-actions" id="err-actions">
             <span class="err-btn primary">Retry</span>
-            <span class="err-btn">View details</span>
             <span class="err-btn" id="err-dismiss">Dismiss</span>
+          </div>
+          <!-- Details disclosure: collapsed by default, under the buttons so opening it never moves them -->
+          <div class="err-details" id="err-details">
+            <span class="err-details-toggle" id="err-details-toggle" aria-expanded="false">&#9656; Details</span>
+            <div class="err-details-body"><code id="err-details-text">rate-limit: APICallError: 429 Too Many Requests</code><span class="err-copy" data-copy title="Copy details">Copy</span></div>
           </div>
         </div>
       </div>
@@ -1986,82 +2014,152 @@
   const errVariants = {
     llm: {
       kind: '⚠ System · generation error',
-      content: '<b>API rate limit hit.</b> Claude returned 429 after 3 retries. The narrative stream stopped at paragraph 2; no entry was committed.',
-      actions: '<span class="err-btn primary">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+      content: '<b>LLM call failed.</b>',
+      detail: 'rate-limit: APICallError: 429 Too Many Requests',
+      actions: '<span class="err-btn primary">Retry</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
     embed: {
       kind: '⚠ System · embedding error',
-      content: "<b>The embedder failed, so memory retrieval couldn't run.</b> call: embedding request failed: 503 (2 rows). The turn was reverse-replayed, so there is nothing to roll back; the composer stays enabled because a resubmit re-runs the same blocking sync stage.",
+      // The turn was reverse-replayed, so there is nothing to roll back; the composer stays enabled
+      // because a resubmit re-runs the same blocking sync stage.
+      content: "<b>The embedder failed, so memory retrieval couldn't run.</b>",
+      detail: 'call: embedding request failed: 503 (2 rows)',
       actions: '<span class="err-btn primary">Switch embedder</span><span class="err-btn">Retry</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
     // An owed pass that fails at Send fails the Send (memory/classifier.md -> Failure policy).
     memory: {
       kind: '⚠ System · memory update error',
       content: "<b>Memory update failed, so your turn didn't start.</b> Retry it, or send again.",
-      actions: '<span class="err-btn primary">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+      detail: 'network: APICallError: fetch failed',
+      actions: '<span class="err-btn primary">Retry</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
-    // A Send refused held, or a held Retry that took the composer's draft. No pass can run, so
-    // there is no Retry.
+    // A Send refused held, or a held Retry. No pass can run, so there is no Retry. With text or
+    // without, the copy is the same: the quote is what shows the text is kept.
     memoryHeld: {
-      kind: '⚠ System · memory update error',
-      content: "<b>An earlier memory update on this branch couldn't be undone, so it can't take turns yet.</b> Restarting the app retries the undo. Your text is kept on this entry; Dismiss hands it back to the composer.",
-      actions: '<span class="err-btn" id="err-dismiss">Dismiss</span>',
-    },
-    // A Retry that comes back held with no text to keep: its entry had none, the composer was empty.
-    memoryHeldNoText: {
       kind: '⚠ System · memory update error',
       content: "<b>An earlier memory update on this branch couldn't be undone, so it can't take turns yet.</b> Restarting the app retries the undo.",
       actions: '<span class="err-btn" id="err-dismiss">Dismiss</span>',
+    },
+    // A committed pass Retry whose text the composer couldn't take back: a notice holding it.
+    memoryResolved: {
+      kind: '⚠ System · memory updated',
+      content: "Memory updated. The composer couldn't take your text back, so it's kept here.",
+      actions: '<span class="err-btn" id="err-dismiss">Dismiss</span>',
+      alwaysHeld: true,
     },
     // The pre-send check refused the call (architecture.md -> Model context window); nothing was sent.
     window: {
       kind: '⚠ System · prompt too large',
       content: "<b>This prompt is about 71,200 tokens; llama3.1:70b's context window is 65,536 (set by you).</b> Nothing was sent. Shorten the prompt in Story Settings (memory budgets, history buffer), raise the window if the model allows more, or switch to a model with a larger one.",
-      actions: '<span class="err-btn primary">Set window</span><span class="err-btn">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+      detail: "prompt over the context window (check): estimate 71200 tokens, window 65536 (configured); model llama3.1:70b on provider prov_7f3a",
+      actions: '<span class="err-btn primary">Set window</span><span class="err-btn">Retry</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
     // A provider rejection recognized as an overflow; the window was unknown, so nothing was checked.
     windowProvider: {
       kind: '⚠ System · prompt too large',
       content: "<b>The provider rejected the prompt. Its message suggests it exceeded the model's context window:</b> “request (71834 tokens) exceeds the available context size (65536 tokens), try increasing it”. Our estimate: about 71,200 tokens. Shorten the prompt in Story Settings (memory budgets, history buffer), raise the window if the model allows more, or switch to a model with a larger one.",
-      actions: '<span class="err-btn primary">Set window</span><span class="err-btn">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+      detail: "prompt over the context window (provider): estimate 71200 tokens; model llama3.1:70b on provider prov_7f3a: request (71834 tokens) exceeds the available context size (65536 tokens), try increasing it",
+      actions: '<span class="err-btn primary">Set window</span><span class="err-btn">Retry</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
     // A narrative reply cut off before any prose (generation-pipeline.md -> Cut-off replies); the held text returns.
     cutOff: {
       kind: '⚠ System · reply cut off',
       content: "<b>The reply was cut off at the narrative profile's 4,096-token max output before any story text; reasoning used 4,096 of them.</b> Raise the max output, then Retry.",
-      actions: '<span class="err-btn primary">Fix profile</span><span class="err-btn">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+      detail: "reply cut off (max-output): 4096 output tokens, 4096 reasoning, max output 4096; model qwq:32b on provider prov_7f3a",
+      actions: '<span class="err-btn primary">Fix profile</span><span class="err-btn">Retry</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
     // The server stopped short of the max output the call sent: the entry names it, not a remedy.
     cutOffShort: {
       kind: '⚠ System · reply cut off',
       content: "<b>The server stopped the reply at its own limit before any story text, short of the narrative profile's 4,096-token max output.</b>",
-      actions: '<span class="err-btn primary">Fix profile</span><span class="err-btn">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+      detail: "reply cut off (unknown): 2048 output tokens; model qwq:32b on provider prov_7f3a",
+      actions: '<span class="err-btn primary">Fix profile</span><span class="err-btn">Retry</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
     // The model stopped normally with no text at all.
     empty: {
       kind: '⚠ System · generation error',
       content: '<b>The model returned no text.</b> Nothing was committed; Retry resends your turn.',
-      actions: '<span class="err-btn primary">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+      detail: "phase-logic: empty-reply",
+      actions: '<span class="err-btn primary">Retry</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
     // An owed pass whose reply was cut off: refused, not repaired, so the Send fails.
     memoryCutOff: {
       kind: '⚠ System · memory update error',
       content: "<b>Memory update failed, so your turn didn't start.</b> The update's reply was cut off at the classifier profile's 1,024-token max output. Raise it, then Retry.",
-      actions: '<span class="err-btn primary">Fix profile</span><span class="err-btn">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+      detail: "reply cut off (max-output): 1024 output tokens, max output 1024; model qwen2.5:14b on provider prov_7f3a",
+      actions: '<span class="err-btn primary">Fix profile</span><span class="err-btn">Retry</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
     // A 4xx whose body names a capability the request carried (generation-pipeline.md -> Fatal error categories).
     capability: {
       kind: '⚠ System · generation error',
       content: "<b>The provider rejected the request.</b> Its message mentions <code>thinking</code>. That can mean this model doesn't support reasoning: check the profile's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
-      actions: '<span class="err-btn primary">Fix profile</span><span class="err-btn">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+      detail: "unknown: APICallError: 400 Bad Request: {\"error\":{\"message\":\"thinking is not supported for this model\"}}",
+      actions: '<span class="err-btn primary">Fix profile</span><span class="err-btn">Retry</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
     // An owed pass refused by the check: the Send fails as for any pass failure.
     memoryWindow: {
       kind: '⚠ System · memory update error',
       content: "<b>Memory update failed, so your turn didn't start.</b> The update's prompt is about 41,800 tokens; qwen2.5:14b's context window is 32,768 (detected). Raise the window if the model allows more, or switch the classifier to a model with a larger one.",
-      actions: '<span class="err-btn primary">Set window</span><span class="err-btn">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+      detail: "prompt over the context window (check): estimate 41800 tokens, window 32768 (detected); model qwen2.5:14b on provider prov_7f3a",
+      actions: '<span class="err-btn primary">Set window</span><span class="err-btn">Retry</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
   };
+  // held-text quote and Details disclosure (entry-card.md -> System entry)
+  const HELD_SAMPLES = {
+    short: 'I open the letter.',
+    long: '"Tomas, wait. Before you go, tell me what the captain said about the ledger, and why the seal on the letter was already broken when it reached me. If you knew, I\'d rather hear it from you now than from her tonight.\n\nAnd if you didn\'t know, then someone in this house opened it before you carried it up the stairs, and I want to know who had the key to the study last night." I said.',
+  };
+  let heldMode = 'short';
+  let currentErr = null;
+  const errHeld = document.getElementById('err-held');
+  const errHeldText = document.getElementById('err-held-text');
+  const errHeldMore = document.getElementById('err-held-more');
+  const errDetails = document.getElementById('err-details');
+  const errDetailsToggle = document.getElementById('err-details-toggle');
+  const errDetailsText = document.getElementById('err-details-text');
+  // Show all appears only when the text overflows its two lines; a width change re-measures.
+  function measureHeldOverflow() {
+    if (errHeldText.classList.contains('open')) return;
+    errHeldMore.style.display = errHeldText.scrollHeight > errHeldText.clientHeight + 1 ? '' : 'none';
+  }
+  new ResizeObserver(measureHeldOverflow).observe(errHeldText);
+  function renderErrExtras(v) {
+    currentErr = v;
+    const mode = v.alwaysHeld && heldMode === 'none' ? 'short' : heldMode;
+    errHeld.style.display = mode === 'none' ? 'none' : '';
+    errHeldText.textContent = HELD_SAMPLES[mode] || '';
+    errHeldText.classList.remove('open');
+    errHeldMore.textContent = 'Show all';
+    measureHeldOverflow();
+    errDetails.style.display = v.detail ? '' : 'none';
+    errDetailsText.textContent = v.detail || '';
+    errDetails.classList.remove('open');
+    errDetailsToggle.setAttribute('aria-expanded', 'false');
+    errDetailsToggle.innerHTML = '&#9656; Details';
+  }
+  errHeldMore.addEventListener('click', () => {
+    const open = errHeldText.classList.toggle('open');
+    errHeldMore.textContent = open ? 'Show less' : 'Show all';
+    // Opening reveals the block if it landed below the fold; collapsing moves nothing.
+    if (open) errHeldText.scrollIntoView({ block: 'nearest' });
+  });
+  errDetailsToggle.addEventListener('click', () => {
+    const open = errDetails.classList.toggle('open');
+    errDetailsToggle.setAttribute('aria-expanded', String(open));
+    errDetailsToggle.innerHTML = (open ? '&#9662;' : '&#9656;') + ' Details';
+    if (open) errDetails.scrollIntoView({ block: 'nearest' });
+  });
+  // The document requests the copy; native writes the clipboard and toasts.
+  document.querySelectorAll('#error-entry [data-copy]').forEach(b => {
+    b.addEventListener('click', () => showToast('Copied.'));
+  });
+  document.querySelectorAll('[data-held]').forEach(b => {
+    b.addEventListener('click', () => {
+      heldMode = b.dataset.held;
+      document.querySelectorAll('[data-held]').forEach(x => x.classList.toggle('active', x === b));
+      if (currentErr) renderErrExtras(currentErr);
+    });
+  });
   function setErr(state) {
     if (state === 'hidden') {
       errorEntry.classList.remove('visible');
@@ -2072,6 +2170,7 @@
         errKind.innerHTML = v.kind;
         errContent.innerHTML = v.content;
         errActions.innerHTML = v.actions;
+        renderErrExtras(v);
         const dismissBtn = document.getElementById('err-dismiss');
         if (dismissBtn) dismissBtn.addEventListener('click', () => setErr('hidden'));
       }

@@ -75,8 +75,10 @@ type EntryCardProps = {
   // Streaming-only:
   streamingPhase?: 'reasoning' | 'reply'
 
-  // System-only:
-  detail?: string
+  // System-only — see "System entry" below:
+  detail?: string // renders the Details disclosure under the buttons
+  heldText?: string // the turn's text the entry keeps; renders the Your text quote
+  onCopy?: (text: string) => void // the quote's and the detail's copy buttons; absent hides both
   fixAction?: { label: string; onPress: () => void } // kind-specific recovery route (e.g. "Fix profile" → settings); precedes Retry
   onRetry?: () => void
   onDismiss?: () => void
@@ -118,6 +120,8 @@ Two structural choices:
 | Reasoning body             | —                                | conditional (`reasoning` set, expanded)   | conditional                            | —                                                                   | live-streaming on `streamingPhase`    |
 | World-state panel          | —                                | conditional (expanded)                    | conditional                            | —                                                                   | —                                     |
 | Content                    | prose (or textarea if `editing`) | prose                                     | prose                                  | error description with inline buttons (`fixAction`, retry, dismiss) | partial prose tokens                  |
+| Held-text quote            | —                                | —                                         | —                                      | conditional (`heldText` set), above the buttons                     | —                                     |
+| Details disclosure         | —                                | —                                         | —                                      | conditional (`detail` set), under the buttons                       | —                                     |
 | Cut-off notice             | —                                | conditional (`cutOff` set)                | —                                      | —                                                                   | —                                     |
 | Action cluster (top-right) | edit, `[flip era]`, delete       | edit, regen, branch, `[flip era]`, delete | edit, branch, `[flip era]` (no delete) | — (uses inline buttons)                                             | —                                     |
 | World-time footer          | shown                            | shown                                     | shown                                  | hidden                                                              | hidden                                |
@@ -681,6 +685,59 @@ dismissible: a committed edit clears it
 inside the trailing block leaves the prose whole and marks nothing
 ([`generation-pipeline.md → Cut-off replies`](../../generation-pipeline.md#cut-off-replies)).
 
+## System entry
+
+A `system` entry is a pipeline failure or notice
+([`reader-composer.md → Transient pipeline failures`](../screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)),
+and its card stacks, top to bottom: the description, the held-text
+quote, the buttons, the Details disclosure. Nothing below the buttons
+can push them down, so opening the detail never moves them.
+
+**Held-text quote.** When the entry keeps the turn's text
+(`metadata.systemFailure.submission`, passed as `heldText` when its
+trimmed content isn't empty), the card shows it under a `Your text`
+label: a muted, indented quote of the stored text as plain text with its
+line breaks, the way the composer's input box shows it. It renders as a
+text node, never through the markdown pipeline the description takes,
+so markup the user typed stays literal, Think mode's asterisks included.
+The quote clamps to two lines; `Show all` / `Show less` appears only
+when the text overflows, re-measured when the card's width changes.
+Under it, a custody line says what Dismiss and a Send do to the text,
+in the screen's wording
+([`reader-composer.md → Custody of the turn's text`](../screens/reader-composer/reader-composer.md#custody-of-the-turns-text)).
+
+**Details disclosure.** When the entry has a `detail`, a muted `Details`
+text button with a chevron sits on its own line under the buttons,
+collapsed by default and carrying `aria-expanded`. Open, it shows the
+detail in muted extra-small monospace with its line breaks, long tokens
+wrapping (`overflow-wrap: anywhere`) rather than scrolling, so a JSON
+body or a URL never widens the card. The detail is diagnostic, read at
+a glance before acting or pasted into a report: for most kinds the
+run's English log line, ids included, and it may repeat what the
+description quotes.
+
+**Copy.** The quote's label line and the open detail each carry a copy
+button, labelled "Copy your text" and "Copy details" for assistive
+technology, which pass the stored string verbatim to `onCopy`. The card
+only requests: the host writes the clipboard and toasts `Copied.`, or an
+error when the write fails
+([`reader-document.md → Bridge contract`](./reader-document.md#bridge-contract)).
+Without `onCopy` both buttons hide.
+
+**Reveal on open.** A system entry sits at the branch tail, right above
+the composer, so a block it opens can land below the fold, and no
+autoscroll rule follows content growing at the tail
+([`reader-composer.md → Autoscroll`](../screens/reader-composer/reader-composer.md#autoscroll)).
+Opening `Details` or `Show all`
+scrolls the reader just enough to show the opened block (its nearest
+edge); the write follows a tap, so it never lands mid-gesture
+([`reader-document.md → Entry list`](./reader-document.md#entry-list-fully-rendered-flow-layout)).
+Collapsing moves nothing. Both open states are the card's own and not
+persisted, so a reload collapses them.
+
+**Live during a run.** Copy, `Show all` and `Details` change nothing,
+so `disabled` leaves them live ([Action cluster](#action-cluster)).
+
 ## World-time footer
 
 - Muted small text, bottom-right of bubble (`text-fg-muted text-xs`).
@@ -817,7 +874,8 @@ density-aware sizing inherit from icon-actions.
 so the gate splits in three. `reversalDisabled` gates regen and
 delete, `editDisabled` gates the pencil and every edit-mode control,
 and `disabled` gates the rest: branch, flip era, the world-time
-footer, the scene editor and the system-entry buttons. Save &
+footer, the scene editor and the system-entry buttons, though not the
+[system entry's](#system-entry) copy buttons and toggles. Save &
 regenerate saves, then regenerates, so it needs both flags clear. Each
 split prop falls back to `disabled` when absent. The reader leaves regen and
 delete live while only a pass or a close holds the gate, and the
@@ -837,7 +895,10 @@ EntryCard's contract for parent virtualized lists:
   `measureElement` (web) or `FlatList`'s native layout (mobile)
   reacts naturally.
 - **No layout effects fighting the parent.** EntryCard doesn't
-  measure itself or apply scroll fixes.
+  measure itself or apply scroll fixes. A system entry measures only
+  whether its quote overflows, and its reveal on open is a scroll the
+  user asked for with a tap, not a fix
+  ([System entry](#system-entry)).
 
 The reader narrative anchor-preservation concern is the parent
 list's responsibility, not EntryCard's. EntryCard ships
@@ -846,8 +907,11 @@ compatible.
 ## Storybook (EntryCard)
 
 Live demos for: user kind, ai kind (with reasoning expanded /
-collapsed), opening kind (no delete action), system kind (with
-detail expanded), streaming kind (reasoning-phase, reply-phase),
+collapsed), opening kind (no delete action), system kind (held
+text short, clamped and with `Show all` open; with and without a
+detail, `Details` open; a held entry with no detail; at phone width;
+copy and toggles live while a run holds the gate), streaming kind
+(reasoning-phase, reply-phase),
 edit mode (textarea, with and without `Save & regenerate`),
 disabled state, the gate split during a pass (older entry, head turn, head-turn edit), world-time footer
 shown/hidden by kind, world-state panel (reported, fallback-layer

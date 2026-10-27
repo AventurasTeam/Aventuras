@@ -226,7 +226,8 @@ Per-entry action sets:
 
 - **User entry:** edit, `[flip era]`, `[probe]`, delete
 - **AI entry:** edit, regen, branch, `[flip era]`, `[probe]`, delete
-- **System entry:** content-level buttons (Retry / Details / Dismiss)
+- **System entry:** content-level buttons (fix action / Retry /
+  Dismiss)
 - **Streaming entry:** no per-entry actions; cancel happens via the
   composer's Send→Cancel transform
 
@@ -507,20 +508,26 @@ and action buttons. Rationale: these errors need to be visible,
 actionable, and part of the narrative log as context, not a silent
 chrome blip.
 
-| Failure                                                                                                                                                                                                                | Action buttons                                       |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| **LLM call failed**                                                                                                                                                                                                    | `Retry` · `View details` · `Dismiss`                 |
-| **Prompt too large for the model's window** ([`architecture.md → Model context window`](../../../architecture.md#model-context-window))                                                                                | `Set window` · `Retry` · `View details` · `Dismiss`  |
-| **Reply cut off before any text** ([`generation-pipeline.md → Cut-off replies`](../../../generation-pipeline.md#cut-off-replies))                                                                                      | `Fix profile` · `Retry` · `View details` · `Dismiss` |
-| **Memory update failed** before the turn, failing the Send ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy))                                                                   | `Retry` · `View details` · `Dismiss`                 |
-| **Memory update failed**, branch held (an earlier update couldn't be undone, so Send is refused)                                                                                                                       | `Dismiss`                                            |
-| **Memory updated** on `Retry`, its text kept on the entry ([Custody of the turn's text](#custody-of-the-turns-text))                                                                                                   | `Dismiss`                                            |
-| **Embed call failed** mid-turn (blocking per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle); the composer is not gated — a resubmit re-runs the same blocking sync stage) | `Switch embedder` · `Retry` · `Dismiss`              |
-| **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `View details` · `Dismiss`           |
-| **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `View details` · `Dismiss`           |
-| **Agent has no profile assigned** (`assignments[agentId]` unset)                                                                                                                                                       | `Assign profile` · `View details` · `Dismiss`        |
-| **Agent default model's provider missing**                                                                                                                                                                             | `Fix default` · `View details` · `Dismiss`           |
-| **Story override's provider missing** (pre-flight or resolver-time)                                                                                                                                                    | `Fix story override` · `View details` · `Dismiss`    |
+| Failure                                                                                                                                                                                                                | Action buttons                          |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| **LLM call failed**                                                                                                                                                                                                    | `Retry` · `Dismiss`                     |
+| **Prompt too large for the model's window** ([`architecture.md → Model context window`](../../../architecture.md#model-context-window))                                                                                | `Set window` · `Retry` · `Dismiss`      |
+| **Reply cut off before any text** ([`generation-pipeline.md → Cut-off replies`](../../../generation-pipeline.md#cut-off-replies))                                                                                      | `Fix profile` · `Retry` · `Dismiss`     |
+| **Memory update failed** before the turn, failing the Send ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy))                                                                   | `Retry` · `Dismiss`                     |
+| **Memory update failed**, branch held (an earlier update couldn't be undone, so Send is refused)                                                                                                                       | `Dismiss`                               |
+| **Memory updated** on `Retry`, its text kept on the entry ([Custody of the turn's text](#custody-of-the-turns-text))                                                                                                   | `Dismiss`                               |
+| **Embed call failed** mid-turn (blocking per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle); the composer is not gated — a resubmit re-runs the same blocking sync stage) | `Switch embedder` · `Retry` · `Dismiss` |
+| **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `Dismiss`               |
+| **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `Dismiss`               |
+| **Agent has no profile assigned** (`assignments[agentId]` unset)                                                                                                                                                       | `Assign profile` · `Dismiss`            |
+| **Agent default model's provider missing**                                                                                                                                                                             | `Fix default` · `Dismiss`               |
+| **Story override's provider missing** (pre-flight or resolver-time)                                                                                                                                                    | `Fix story override` · `Dismiss`        |
+
+An entry keeping the turn's text shows it above its buttons, and an
+entry with a failure detail carries a collapsed `Details` disclosure
+under them, the embed row's included
+([`entry-card.md → System entry`](../../patterns/entry-card.md#system-entry)).
+Neither is an action, so the table lists neither.
 
 The window entry's text gives the prompt's estimated size and the
 model's window with its source, or, when the provider rejected the
@@ -567,9 +574,7 @@ The embed-failure system entry follows the same visual shape as the
 LLM-failure entry — the contract is "transient pipeline failure
 that blocks turn completion until resolved." `Switch embedder`
 routes to Story Settings · Memory · Switch and fires the
-[Model swap UX](../../../memory/retrieval.md#model-swap-ux) dialog;
-the bubble's failure detail renders as muted text beneath the
-message rather than behind `View details`.
+[Model swap UX](../../../memory/retrieval.md#model-swap-ux) dialog.
 
 This row carried a `Roll back this turn` action through the
 [rollback-confirm modal](./rollback-confirm/rollback-confirm.md)
@@ -607,6 +612,20 @@ A failure entry carries the submission that produced it
 `user_action` was reverse-replayed with the run, that copy is the only
 one left. It is a convenience for `Retry`, not a vault.
 
+**The entry shows the text it keeps**, as a quote above its buttons
+with a copy button
+([`entry-card.md → System entry`](../../patterns/entry-card.md#system-entry)):
+the stored text as the composer would get it back, wrapping included.
+Its custody line reads "Dismiss puts it back in the composer if it's
+empty. Sending a new turn discards it." That holds on every entry
+carrying text: a Send drops the entry before it runs, and one refused
+on a held branch writes its own text. A Send cancelled during its owed
+pass puts the entry back, which only leaves the line cautious. The
+quote shows whether text is kept, so a held entry's copy no longer
+mentions it and reads the same either way. The notice a committed pass
+`Retry` leaves still says why it stands: "Memory updated. The composer
+couldn't take your text back, so it's kept here."
+
 **A Send supersedes the entry's text.** The user wrote the Send's
 text while the entry and its `Retry` stood, so the entry's text is
 stale: the Send's pre-dispatch tail clear drops it with no hand-back
@@ -639,8 +658,8 @@ through it. Over an occupied draft, or once the user has left the
 branch, the entry stays as a notice holding the text, with no `Retry`
 and copy that says so, and its `Dismiss` hands the text back. A Send
 supersedes the notice's text as it does a failure entry's, and the
-notice's copy says that too, since emptying the composer by sending is
-the step it would otherwise invite.
+custody line under its quote says so, since emptying the composer by
+sending is the step the notice would otherwise invite.
 
 A **Memory update failed** entry carries the submission only where
 the composer can't hold the text. A Send refused on a held branch
@@ -651,7 +670,7 @@ the composer's draft instead, for the same reason. The entry is
 written first, then the composer empties, unless the draft changed
 during the write: it stays, since duplicated text beats lost text.
 With an empty composer, or once the user has left the branch, the held
-entry keeps no text and doesn't claim to. On a failed pass the entry carries the text
+entry keeps no text and shows no quote. On a failed pass the entry carries the text
 only when the composer couldn't take it back (the draft was occupied,
 or the user left the branch); otherwise the text goes straight back to
 the composer.
@@ -1109,6 +1128,13 @@ editor up under the top bar. The reader instead scrolls just far
 enough to bring the editor's row, Save and Cancel included, back
 into view, since Android's WebView never scrolls a focused field into
 view itself; an editor already in view holds its position.
+
+**A system entry's opened block.** Opening a system entry's
+`Details` or `Show all` scrolls just far enough to show the block it
+opened, since the entry sits at the tail and the block can open below
+the fold
+([`entry-card.md → System entry`](../../patterns/entry-card.md#system-entry)).
+Collapsing moves nothing.
 
 **Streaming while in a non-recent window.** Pipeline writes happen
 in the data layer regardless of which window is rendered. The

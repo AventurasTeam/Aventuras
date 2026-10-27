@@ -147,14 +147,6 @@ slice-planning gate forces its resolution before that slice is planned.
   included) is left in the prose. Both are rare model outputs. Raised by
   the cut-off replies Task 5 review.
 
-- **System entries show their detail inline, with no `View details`.**
-  The reader-composer failure table gives most rows a `View details`
-  action
-  ([`reader-composer.md → Transient pipeline failures`](../ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)),
-  but `EntryCard` renders a system entry's `detail` as muted text under
-  its content (`components/compounds/entry-card.tsx`), and no code
-  offers the action. Raised by the cut-off replies Task 8 review.
-
 - **Warning text fails contrast in Catppuccin Latte.** Latte's
   `--warning` (`#df8e1d`) on `--bg-raised` (`#e6e9ef`) is 2.15:1, so every
   `text-warning` line on a card (the state-problems box, the cut-off
@@ -303,9 +295,6 @@ slice-planning gate forces its resolution before that slice is planned.
   - The provider's message is quoted in the entry's content, which
     renders through `marked`, so markdown in it (`*x*`, a `#` line)
     changes the quote. It is sanitized, so not a security issue.
-  - The message shows twice: in the quote and in the muted detail line,
-    `describeContextWindow`'s, which also shows the internal provider
-    id.
   - A message that ends in a period renders as `….”.`.
   - `common:contextWindowSource.*` is a translated fragment slotted into
     sentences; a language with grammatical gender can't agree it with

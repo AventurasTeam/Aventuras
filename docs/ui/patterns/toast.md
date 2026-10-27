@@ -28,7 +28,9 @@ Used by:
 - [Reader](../screens/reader-composer/reader-composer.md#during-a-memory-update)
   — a pass or a chapter close interrupted and moved to the next turn,
   info severity, no action; a pass that failed, warning severity, no
-  action.
+  action; a system entry's text or detail copied, info severity, or
+  error when the clipboard write fails
+  ([`entry-card.md → System entry`](./entry-card.md#system-entry)).
 - Any surface whose generation call came back with far fewer input
   tokens than were sent
   ([`architecture.md → Truncation cross-check`](../../architecture.md#truncation-cross-check))

@@ -458,8 +458,9 @@ The user sees:
 > The embedder failed, so memory retrieval couldn't run.
 > `[Switch embedder]` `[Retry]` `[Dismiss]`
 
-with the failure detail rendered as muted text under the message
-rather than behind a `View details` button.
+with the failure detail behind the entry's `Details` disclosure, as
+on every system entry
+([`entry-card.md → System entry`](../ui/patterns/entry-card.md#system-entry)).
 
 - **Switch embedder** routes to Story Settings · Memory · Switch,
   firing the [Model swap UX](./retrieval.md#model-swap-ux) dialog.
