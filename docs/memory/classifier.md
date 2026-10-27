@@ -46,10 +46,12 @@ branch's world as lists the classifier addresses by placeholder id
     ([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)).
     A deliberate reference to an older happening comes from one the
     narrator was given;
-  - every happening that occurred from the open region's first entry
-    on, or from `protectedBuffer` entries before the window's first
-    entry when that is earlier, counting entries as the prompt buffer
-    does, system entries aside. The turns' story history carries these
+  - every happening that occurred from the open region's first entry,
+    or from `protectedBuffer` entries before the window's first entry
+    when that is earlier, through the window's last entry, counting
+    entries as the prompt buffer does, system entries aside. No turn
+    of the window had a later entry as history, so a truncated
+    window's cut bounds it too. The turns' story history carries these
     as prose, the whole open region in full-chapter mode and its tail
     otherwise, across a chapter boundary as far back as the buffer
     spills
