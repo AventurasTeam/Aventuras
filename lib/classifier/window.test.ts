@@ -193,3 +193,30 @@ describe('saved scene per turn', () => {
     expect(headed.sceneOf(undefined)).toBeNull()
   })
 })
+
+// classifier.md → What the classifier reads → Known happenings: the records of the turns it reads.
+describe('recorded happenings', () => {
+  const recording = (position: number, id: string, injectedHappenings: string[]) =>
+    ({
+      id,
+      position,
+      kind: 'ai_reply',
+      content: `prose ${position}`,
+      metadata: { sceneEntities: [], currentLocationId: null, worldTime: 0, injectedHappenings },
+    }) as never
+
+  it("unions the window's records, none from below the watermark or past the cut", () => {
+    const w = buildClassifierWindow({
+      entries: [
+        recording(1, 'e1', ['hap_classified']),
+        recording(2, 'e2', ['hap_a', 'hap_b']),
+        entry(3, 'e3', 'user_action'),
+        recording(4, 'e4', ['hap_b', 'hap_c']),
+        recording(5, 'e5', ['hap_next_pass']),
+      ],
+      processedThrough: 1,
+      maxEntries: 3,
+    })
+    expect([...w.injectedHappenings].sort()).toEqual(['hap_a', 'hap_b', 'hap_c'])
+  })
+})

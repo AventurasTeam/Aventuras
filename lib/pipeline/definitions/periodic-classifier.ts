@@ -15,6 +15,7 @@ import {
   classifierReplySchema,
   clampEmbeddedText,
   IDLE_STATUS_JSON,
+  knownHappenings,
   nextStatusOnFailure,
   nextStatusOnStart,
   nextStatusOnSuccess,
@@ -51,7 +52,7 @@ import {
 
 import { buildClassifierContext } from './classifier-context'
 import { classifierEmbedder } from './description-embedder'
-import { readStoryPlace } from './entry-reads'
+import { readRecentEntryIds, readStoryPlace } from './entry-reads'
 import { readClassifierStatus } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import { definePipeline } from '../authoring/define'
@@ -260,8 +261,17 @@ export async function* periodicClassifierPhase(
   const threads = [...threadsStore.getThreads().values()].filter((t) => t.branchId === ctx.branchId)
   // classifier.md → Mentioned places: read once, so prompt and reply schema agree.
   const mentionedPlaces = open.settings.classifierMentionedPlaces
-  const happenings = [...happeningsStore.getHappenings().values()].filter(
-    (h) => h.branchId === ctx.branchId,
+  // classifier.md → What the classifier reads → Known happenings: what the window's turns were
+  // given, and the recent ones, not every happening on the branch.
+  const happenings = knownHappenings(
+    [...happeningsStore.getHappenings().values()].filter((h) => h.branchId === ctx.branchId),
+    {
+      recorded: window.injectedHappenings,
+      recentEntryIds: await readRecentEntryIds(ctx.db, ctx.branchId, {
+        firstTurn: window.turns[0]!.position,
+        protectedBuffer: open.settings.protectedBuffer,
+      }),
+    },
   )
   // The stored pairs a listed happening's awareness skips (plan.ts → knownAwareness).
   const awareness = [...happeningAwarenessStore.getAwareness().values()].filter(

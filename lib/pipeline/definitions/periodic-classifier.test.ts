@@ -133,6 +133,8 @@ async function ctxWith(opts: {
   entryMetadata?: Record<number, StoryEntry['metadata']>
   onWatermark?: (n: number) => void
   mentionedPlaces?: boolean
+  /** stories.settings.protectedBuffer; unset reads as 0. */
+  protectedBuffer?: number
 }): Promise<Harness> {
   const { db, sqlite } = await createTestDb()
   await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
@@ -183,7 +185,11 @@ async function ctxWith(opts: {
     storyId: 's1',
     branchId: 'b1',
     definition: {} as never,
-    settings: { models: {}, classifierMentionedPlaces: opts.mentionedPlaces ?? false } as never,
+    settings: {
+      models: {},
+      classifierMentionedPlaces: opts.mentionedPlaces ?? false,
+      protectedBuffer: opts.protectedBuffer,
+    } as never,
   })
   entriesStore.hydrate('b1', entries)
   entitiesStore.hydrate('b1', opts.entities ?? [])
@@ -3377,7 +3383,20 @@ describe('periodicClassifierPhase — the writer map', () => {
         ],
       }),
     } as never)
-    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael, aria] })
+    // fire has no narrative position: it is listed because turn 1 was given it.
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      entities: [kael, aria],
+      entryMetadata: {
+        1: {
+          sceneEntities: [],
+          currentLocationId: null,
+          worldTime: 0,
+          injectedHappenings: [HAP_FIRE],
+        },
+      },
+    })
     happeningsStore.hydrate('b1', [fire])
     const stored: HappeningAwareness = {
       id: 'haw_1',
@@ -3407,6 +3426,45 @@ describe('periodicClassifierPhase — the writer map', () => {
         },
       },
     ])
+  })
+
+  // classifier.md → What the classifier reads → Known happenings.
+  it('lists the happenings the turns were given and the recent ones, not the rest', async () => {
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction(),
+    } as never)
+    const scene = { sceneEntities: [], currentLocationId: null, worldTime: 0 }
+    // Turns 4 and 5 to classify, one entry of reach-back, and 1-3 a closed chapter.
+    const h = await ctxWith({
+      processedThrough: 3,
+      headPosition: 5,
+      protectedBuffer: 1,
+      entryMetadata: { 4: { ...scene, injectedHappenings: [HAP_FIRE] } },
+    })
+    await h.ctx.db.run(sql`UPDATE story_entries SET chapter_id = 'ch1' WHERE position <= 3`)
+    const at = (id: string, title: string, occurredAtEntryId: string | null, temporal = null) => ({
+      ...fire,
+      id,
+      title,
+      occurredAtEntryId,
+      temporal,
+    })
+    happeningsStore.hydrate('b1', [
+      at('hap_55555555-5555-5555-5555-555555555551', 'Before the reach-back', 'e2'),
+      at('hap_55555555-5555-5555-5555-555555555552', 'In the reach-back', 'e3'),
+      at('hap_55555555-5555-5555-5555-555555555553', 'In the window', 'e5'),
+      { ...fire, temporal: 'years past' },
+      at('hap_55555555-5555-5555-5555-555555555554', 'Never given', null),
+    ])
+
+    await drain(h.ctx)
+
+    const { user } = vi.mocked(generateStructured).mock.calls[0][1]
+    for (const title of ['In the reach-back', 'In the window', 'The market fire'])
+      expect(user).toContain(`] ${title}\n`)
+    for (const title of ['Before the reach-back', 'Never given']) expect(user).not.toContain(title)
   })
 
   it("moves a listed thread's status at its turn, and logs one for a thread it never listed", async () => {

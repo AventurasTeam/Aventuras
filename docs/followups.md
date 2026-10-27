@@ -15,23 +15,6 @@ for the placement rule.
 
 ## Data-model
 
-- **Bound the pass's Known happenings.** A pass no longer lists every
-  happening on the branch
-  ([`classifier.md → What the classifier reads`](./memory/classifier.md#what-the-classifier-reads)).
-  Today `periodic-classifier.ts` reads them all for the prompt and for
-  the planner's `happenings`, and no entry records what its prompt
-  carried. The work: the turn writing the ids of the happenings the
-  ranker seated as `injectedHappenings` on the AI entry it creates,
-  with the entry metadata schema
-  ([`data-model.md → Entry metadata shape`](./data-model.md#entry-metadata-shape));
-  the pass reading the list canon gives, and the planner checking
-  `knownAwareness` against that same list; and the touch points: the
-  template's snapshot tests, the classifier probe, which builds the
-  same context, and any test whose older happening has no narrative
-  position, which is now listed only through a record. Raised 2026-10-27 by the Known happenings design; the roster
-  half of the growth is parked
-  ([`parked.md → The pass lists the whole roster`](./parked.md#the-pass-lists-the-whole-roster)).
-
 - **Chapter-close agent design.** Chapter close's write set is fixed
   by the
   [authorship contract](./data-model.md#authorship-contract), and

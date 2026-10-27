@@ -23,6 +23,8 @@ export type ClassifierWindow = {
   resolveHandle: (handle: string | undefined) => { entryId: string; fellBack: boolean }
   /** The saved scene of the turn `handle` names; null when the handle falls back to the window head. */
   sceneOf: (handle: string | undefined) => ReadonlySet<string> | null
+  /** Every happening the window's entries record as seated in their prompts. */
+  injectedHappenings: ReadonlySet<string>
 }
 
 // `entry_*` is deliberately absent from SUBSTITUTABLE_PREFIXES, so the id walker
@@ -84,5 +86,7 @@ export function buildClassifierWindow(args: {
       const hit = turnOf(handle)
       return hit ? new Set(hit.sceneEntities) : null
     },
+    // From the capped entries only: past the cut is the next pass's window.
+    injectedHappenings: new Set(capped.flatMap((e) => e.metadata?.injectedHappenings ?? [])),
   }
 }
