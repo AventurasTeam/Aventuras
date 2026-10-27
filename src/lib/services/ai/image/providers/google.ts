@@ -79,53 +79,25 @@ const STANDARD_ASPECT_RATIOS = [
  */
 const GOOGLE_ASPECT_RATIOS = [...STANDARD_ASPECT_RATIOS, '1:4', '1:8', '4:1', '8:1'] as const
 
+const imageModel = (
+  maxReferenceImages: number,
+  aspectRatios: readonly string[],
+  supportedResolutions?: readonly string[],
+): ImageModelCapabilities => ({
+  supportsImg2Img: true,
+  maxReferenceImages,
+  supportedAspectRatios: [...aspectRatios],
+  ...(supportedResolutions && { supportedResolutions: [...supportedResolutions] }),
+})
+
 // From the Gemini image generation guide. For Flash Lite the guide's prose (1K, ten ratios) and
 // tables (512, the wide ratios) disagree and nothing is probed, so it takes the narrower prose.
 const GOOGLE_IMAGE_MODELS = new Map<string, ImageModelCapabilities>([
-  [
-    'gemini-3.1-flash-image',
-    {
-      supportsImg2Img: true,
-      maxReferenceImages: 14,
-      supportedResolutions: ['512', '1K', '2K', '4K'],
-      supportedAspectRatios: [...GOOGLE_ASPECT_RATIOS],
-    },
-  ],
-  [
-    'gemini-nano-banana-2.1',
-    {
-      supportsImg2Img: true,
-      maxReferenceImages: 14,
-      supportedResolutions: ['1K', '2K', '4K'],
-      supportedAspectRatios: [...GOOGLE_ASPECT_RATIOS],
-    },
-  ],
-  [
-    'gemini-3-pro-image',
-    {
-      supportsImg2Img: true,
-      maxReferenceImages: 14,
-      supportedResolutions: ['1K', '2K', '4K'],
-      supportedAspectRatios: [...STANDARD_ASPECT_RATIOS],
-    },
-  ],
-  [
-    'gemini-3.1-flash-lite-image',
-    {
-      supportsImg2Img: true,
-      maxReferenceImages: 14,
-      supportedResolutions: ['1K'],
-      supportedAspectRatios: [...STANDARD_ASPECT_RATIOS],
-    },
-  ],
-  [
-    'gemini-2.5-flash-image',
-    {
-      supportsImg2Img: true,
-      maxReferenceImages: 3,
-      supportedAspectRatios: [...STANDARD_ASPECT_RATIOS],
-    },
-  ],
+  ['gemini-3.1-flash-image', imageModel(14, GOOGLE_ASPECT_RATIOS, ['512', '1K', '2K', '4K'])],
+  ['gemini-nano-banana-2.1', imageModel(14, GOOGLE_ASPECT_RATIOS, ['1K', '2K', '4K'])],
+  ['gemini-3-pro-image', imageModel(14, STANDARD_ASPECT_RATIOS, ['1K', '2K', '4K'])],
+  ['gemini-3.1-flash-lite-image', imageModel(14, STANDARD_ASPECT_RATIOS, ['1K'])],
+  ['gemini-2.5-flash-image', imageModel(3, STANDARD_ASPECT_RATIOS)],
 ])
 
 /** A preview without an entry of its own is its generally available model. */
