@@ -171,6 +171,13 @@
   "systemEntry": {
     "retry": "Retry",
     "dismiss": "Dismiss",
+    "heldTextLabel": "Your text",
+    "heldTextCustody": "Dismiss puts it back in the composer if it's empty. Sending a new turn discards it.",
+    "showAll": "Show all",
+    "showLess": "Show less",
+    "details": "Details",
+    "copyHeldText": "Copy your text",
+    "copyDetails": "Copy details",
     "assignProfile": "Assign profile",
     "fixProfile": "Fix profile",
     "fixDefault": "Fix default",

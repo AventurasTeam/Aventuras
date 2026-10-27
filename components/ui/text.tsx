@@ -1,6 +1,6 @@
 import { Slot } from '@rn-primitives/slot'
 import { cva, type VariantProps } from 'class-variance-authority'
-import { createContext, useContext } from 'react'
+import { createContext, useContext, type Ref } from 'react'
 import { Text as RNText, type TextProps as RNTextProps } from 'react-native'
 
 import { cn } from '@/lib/utils'
@@ -29,6 +29,7 @@ type TextProps = RNTextProps &
   VariantProps<typeof textVariants> & {
     className?: string
     asChild?: boolean
+    ref?: Ref<RNText>
   }
 
 export function Text({ className, variant, size, asChild = false, style, ...props }: TextProps) {
