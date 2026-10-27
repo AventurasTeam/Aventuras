@@ -755,7 +755,7 @@ export const FailureThenRetrySucceeds: Story = {
   },
 }
 
-// A cut reply reads as its own sentence, and the log carries the reason the user saw.
+// A cut reply names the limit that cut it, and the log carries the reason the user saw.
 export const FailureCutOff: Story = {
   beforeEach: () => {
     const log = spyOn(logger, 'error').mockImplementation(() => {})
@@ -772,13 +772,13 @@ export const FailureCutOff: Story = {
   play: async () => {
     await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
-    expect(
-      await screen.findByText("Couldn't generate. The reply was cut off at its limit."),
-    ).toBeInTheDocument()
+    const reason =
+      "The reply was cut off at the wizard-assist profile's 1,024-token max output. Raise it, then try again"
+    expect(await screen.findByText(`Couldn't generate. ${reason}.`)).toBeInTheDocument()
     await expect(logger.error).toHaveBeenCalledWith('provider.wizard_assist_failed', {
       modelId: MODEL_ID,
       ariaLabel: 'Suggest description',
-      detail: 'The reply was cut off at its limit',
+      detail: reason,
     })
   },
 }

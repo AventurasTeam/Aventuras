@@ -2,6 +2,8 @@ import type { ResolveFailureKind } from '@/lib/ai'
 import { t } from '@/lib/i18n'
 import { SUGGESTIONS_UNUSABLE, type PipelineError } from '@/lib/pipeline'
 
+import { cutOffCopyOf } from './cut-off-copy'
+
 const SUGGESTION_RESOLVER_COPY = {
   'no-profile-assigned': 'reader:suggestions.failure.noProfileAssigned',
   'profile-missing': 'reader:suggestions.failure.profileMissing',
@@ -15,7 +17,12 @@ const SUGGESTION_RESOLVER_COPY = {
 export function describeSuggestionFailure(error: PipelineError | null | undefined): string {
   if (error?.kind === 'phase-logic' && error.subsystem === SUGGESTIONS_UNUSABLE)
     return t('reader:suggestions.failure.unusable')
-  if (error?.kind === 'reply-cut-off') return t('reader:suggestions.failure.cutOff')
+  if (error?.kind === 'reply-cut-off') {
+    const copy = cutOffCopyOf(error)
+    return copy.key === 'unknown'
+      ? t('reader:suggestions.failure.cutOff.unknown')
+      : t(`reader:suggestions.failure.cutOff.${copy.key}`, { limit: copy.limit })
+  }
   if (error?.kind === 'provider') return t('reader:suggestions.failure.llmCall')
   if (error?.kind === 'config-resolver') return t(SUGGESTION_RESOLVER_COPY[error.failure])
   return t('reader:suggestions.errorBody')

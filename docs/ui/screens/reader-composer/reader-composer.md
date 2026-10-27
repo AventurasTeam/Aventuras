@@ -848,7 +848,13 @@ state — it is not an anchor, so the previous reply's chips hold.
   that keeps them under the `loading` spinner. A deterministic
   config failure (no profile assigned, profile or provider missing)
   shows the route to settings in place of Retry, which could not
-  succeed
+  succeed. A reply cut off at its limit names the limit, as the
+  reader's cut-off copy does: the suggestion profile's max output
+  ("…cut off at the suggestion profile's 1,024-token max output. Raise
+  it, then Retry."), the model's window, or the server's own limit,
+  with the max output it stopped short of when the call sent one
+  ([`generation-pipeline.md → Cut-off replies`](../../../generation-pipeline.md#cut-off-replies)).
+  It keeps Retry and gains no fix action
 - `collapsed` — user hid the list via chevron; chrome remains
 - `hidden` — user disabled suggestions in Story Settings
   (`stories.settings.suggestionsEnabled = false`); panel never

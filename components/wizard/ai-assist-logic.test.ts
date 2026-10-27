@@ -117,8 +117,9 @@ describe('composeKey', () => {
 })
 
 describe('assistFailureReason', () => {
-  it('gives a cut-off reply its own sentence', () => {
-    const cut: CallRetryError = {
+  // The overlay wraps the reason in "Couldn't generate. {{reason}}.", so none ends in a period.
+  describe('a cut-off reply', () => {
+    const cut = {
       tier: 'reply-cut-off',
       cause: 'max-output',
       outputTokens: 1024,
@@ -127,8 +128,32 @@ describe('assistFailureReason', () => {
       window: null,
       providerId: 'prov_local',
       modelId: 'qwen3-32b',
-    }
-    expect(assistFailureReason(cut)).toBe('The reply was cut off at its limit')
+    } satisfies CallRetryError
+    const UNKNOWN =
+      'The server stopped the reply at its own limit. Setting a max output on the wizard-assist profile overrides it'
+
+    it("names the wizard-assist profile's max output", () => {
+      expect(assistFailureReason(cut)).toBe(
+        "The reply was cut off at the wizard-assist profile's 1,024-token max output. Raise it, then try again",
+      )
+    })
+
+    it("names the model's window when the window was the limit", () => {
+      expect(assistFailureReason({ ...cut, cause: 'window', maxOutput: null, window: 65536 })).toBe(
+        "The reply was cut off where the prompt and reply filled the model's 65,536-token window",
+      )
+    })
+
+    it("points at the server's own limit when the call sent no max output", () => {
+      expect(assistFailureReason({ ...cut, cause: 'unknown', maxOutput: null })).toBe(UNKNOWN)
+      expect(assistFailureReason({ ...cut, maxOutput: null })).toBe(UNKNOWN)
+    })
+
+    it('names the max output the server stopped short of', () => {
+      expect(assistFailureReason({ ...cut, cause: 'unknown', outputTokens: 300 })).toBe(
+        "The server stopped the reply at its own limit, short of the wizard-assist profile's 1,024-token max output",
+      )
+    })
   })
 
   it("passes any other failure's own line through", () => {

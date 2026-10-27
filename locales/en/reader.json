@@ -40,7 +40,12 @@
       "profileMissing": "The suggestion agent's assigned profile is missing.",
       "providerMissing": "The suggestion model's provider is missing.",
       "overrideProviderMissing": "This story's suggestion model override names a provider that no longer exists.",
-      "cutOff": "The suggestion model's reply was cut off at its limit."
+      "cutOff": {
+        "maxOutput": "The suggestion model's reply was cut off at the suggestion profile's {{limit, number}}-token max output. Raise it, then Retry.",
+        "window": "The suggestion model's reply was cut off where the prompt and reply filled the model's {{limit, number}}-token window.",
+        "unknown": "The server stopped the suggestion model's reply at its own limit. Setting a max output on the suggestion profile overrides it.",
+        "unknownWithMaxOutput": "The server stopped the suggestion model's reply at its own limit, short of the suggestion profile's {{limit, number}}-token max output."
+      }
     }
   },
   "editFailed": "Couldn't save your edit. Please try again.",

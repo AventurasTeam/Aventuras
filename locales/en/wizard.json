@@ -201,7 +201,12 @@
     "notConfigured": "AI is not configured.",
     "loading": "Generating with {{model}}…",
     "failure": "Couldn't generate. {{reason}}.",
-    "cutOff": "The reply was cut off at its limit",
+    "cutOff": {
+      "maxOutput": "The reply was cut off at the wizard-assist profile's {{limit, number}}-token max output. Raise it, then try again",
+      "window": "The reply was cut off where the prompt and reply filled the model's {{limit, number}}-token window",
+      "unknown": "The server stopped the reply at its own limit. Setting a max output on the wizard-assist profile overrides it",
+      "unknownWithMaxOutput": "The server stopped the reply at its own limit, short of the wizard-assist profile's {{limit, number}}-token max output"
+    },
     "refine": {
       "label": "How should this change?",
       "placeholder": "e.g. make it darker"

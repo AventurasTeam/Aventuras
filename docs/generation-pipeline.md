@@ -1857,7 +1857,7 @@ watermark stays
 ([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy));
 the fallback classifier fails and the turn commits with the failure in
 its state report; suggestion refresh and wizard-assist show their own
-errors.
+errors, naming the limit as the reader does.
 
 **A narrative reply cut off in its prose commits with a mark.** When
 no trailing block had begun, so the cut falls in the story text, the

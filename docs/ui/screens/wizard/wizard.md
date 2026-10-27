@@ -1066,7 +1066,13 @@ usual.
 ### Failure
 
 Inline error in the overlay: `Couldn't generate. <reason>.
-[Try again] [Cancel]`. No silent failure.
+[Try again] [Cancel]`. No silent failure. A reply cut off at its limit
+gives the limit as the reason, as the reader's cut-off copy does: the
+wizard-assist profile's max output ("…cut off at the wizard-assist
+profile's 1,024-token max output. Raise it, then try again."), the
+model's window, or the server's own limit, with the max output it
+stopped short of when the call sent one
+([`generation-pipeline.md → Cut-off replies`](../../../generation-pipeline.md#cut-off-replies)).
 
 ### No provider configured
 

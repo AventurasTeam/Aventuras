@@ -1028,7 +1028,8 @@ code before it moved; resolve with the slice it names.
   even when the agent's profile sets a max output, and the copy tells
   the user that a max output on the profile overrides the server's
   limit and offers `Fix profile`, though that profile never reaches the
-  call. For the periodic pass, every Send fails again with the same
+  call; the suggestion strip's copy says the same, without the action.
+  For the periodic pass, every Send fails again with the same
   advice until the override goes or the server stops cutting. Revisit
   with M7.1's profile routing, when `Fix profile` stops landing on the
   interim providers tab. The slice review's options: record whether
