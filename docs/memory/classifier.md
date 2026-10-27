@@ -35,8 +35,39 @@ branch's world as lists the classifier addresses by placeholder id
   ([Mentioned places](#mentioned-places)).
 - **Known relationships** — the stored views, as the relationships
   bullet below describes.
-- **Known happenings** — the branch's happenings by id and title, so a
-  character can learn of one the pass didn't create.
+- **Known happenings** — by id and title, the happenings the window's
+  turns were given and the recent ones, not every happening on the
+  branch. The list does two jobs: a character can learn of a happening
+  the pass didn't create, and the pass doesn't create again one the
+  turns retell. Both need the happenings the window's prose refers to,
+  and the list holds:
+  - every happening named by the window's entries' `injectedHappenings`,
+    the rows the ranker seated in each turn's prompt
+    ([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)).
+    A deliberate reference to an older happening comes from one the
+    narrator was given;
+  - every happening that occurred from the open region's first entry
+    on, or from `protectedBuffer` entries before the window's first
+    entry when that is earlier, counting entries as the prompt buffer
+    does, system entries aside. The turns' story history carries these
+    as prose, the whole open region in full-chapter mode and its tail
+    otherwise, across a chapter boundary as far back as the buffer
+    spills
+    ([`cadence.md → Composition rule`](./cadence.md#composition-rule)),
+    so a scene that continues one the last pass classified finds its
+    happening listed.
+
+  A happening with no narrative position, a `temporal` one or one with
+  neither anchor, joins only through a record, and an id the branch no
+  longer has is left out. A happening
+  the turns mention without the narrator having it as a row or as
+  recent prose goes unlisted: a coincidental mention, or a retelling
+  from a chapter summary, a lore body or an entity description. Its
+  awareness link is lost, and a retelling the model extracts as an
+  event is a second row, which chapter close's merge doesn't reach
+  across chapters
+  ([`parked.md → Cross-chapter semantic dedup of happenings`](../parked.md#cross-chapter-semantic-dedup-of-happenings)).
+
 - **Threads** — the branch's threads by id, title and status
   ([Threads](#threads)).
 - **Turns to classify** — the window's entries by turn handle, each

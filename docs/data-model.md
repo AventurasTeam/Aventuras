@@ -2006,6 +2006,7 @@ story_entries.metadata: {
         outputTokens?: number
         maxOutput?: number          // the max output the call sent, which the reply fell short of; absent when it sent none
       }
+  injectedHappenings?: string[]     // the happenings the ranker seated in this turn's prompt; authored, never inherited, absent when it seated none. The periodic classifier lists them (memory/classifier.md#what-the-classifier-reads)
 
   // Scene presence — classifier-authored, user-editable
   sceneEntities: string[]           // entity IDs present in this entry's scene (characters + items)

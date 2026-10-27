@@ -1129,8 +1129,10 @@ reaches the other ids held inside JSON: `entities.state`'s
 `lastSeenAt.locationId` and `lastSeenAt.entryId`, its `equipped_items`
 and `inventory` arrays (all in
 `lib/db/entities/entity-state-schema.ts`), and
-`story_entries.metadata`'s `sceneEntities` and `currentLocationId`. A
-reversal that removes an entity could leave one of them naming it.
+`story_entries.metadata`'s `sceneEntities`, `currentLocationId` and
+`injectedHappenings`. A reversal that removes an entity or a happening
+could leave one of them naming it; the periodic classifier skips such
+an id in all three.
 
 Not reachable for `state`, verified by reading in the 2026-10-05
 triage pass: the periodic classifier created only characters then
@@ -1481,18 +1483,68 @@ uniform query bundle.
 Full structural support for meanwhile-style prose with multiple
 scenes per entry. v1 ships single-scene-per-entry.
 
+#### The pass lists the whole roster
+
+A periodic pass lists every entity, place, relationship view and thread
+on the branch; only its happenings are bounded
+([`classifier.md → What the classifier reads`](./memory/classifier.md#what-the-classifier-reads)),
+since happenings grow steadily in every story. These lists grow with a
+story's breadth, which depends on the story. At a few hundred entities
+and a large cast they may reach tens of thousands of tokens, an
+estimate rather than a measurement. A pass blocks the story and must
+succeed before its branch's next turn, so a prompt past the classifier
+model's window stops the story's turns.
+
+Bounding them, to the window's cast and region, say, costs the rules
+that need the whole roster: matching a new mention to a listed
+character
+([Disambiguation on new-character mentions](./memory/classifier.md#disambiguation-on-new-character-mentions)),
+deduplicating mentioned places, the `name-taken` check on a rename,
+and the prompt's rule that a relationship fact changes a listed view.
+A pass can't link what it can't see, and may not update a field it
+wasn't shown. Signal: a played story whose
+pass prompt nears the classifier's window, which the
+[context window check](./architecture.md#model-context-window) now
+reports as a refusal where the window is known, and the classifier
+probe (`probe:classifier`) shows as the prompt's size. Raised
+2026-10-20 by the
+AI writers design; parked 2026-10-27 when the happenings list was
+bounded.
+
 #### Cross-chapter semantic dedup of happenings
 
 Phase 3e
 ([`chapter-close.md → 3e happenings consolidation`](./memory/chapter-close.md#3e--happenings-consolidation))
-handles the within-chapter case (clusters happenings by similarity
+handles the within-chapter case: it clusters happenings by similarity,
+shared cast and nearness in time, the agent decides merge, keep
+distinct or delete redundant, and awareness rows merge as a side
+effect. Happenings that describe one event across chapters stay
+distinct, since 3e reads the closed range only and Plot has no
+happening merge.
 
-- cast + time, agent decides merge / keep distinct / delete
-  redundant; awareness rows merge as a side effect). The residual
-  case is happenings that describe related events across chapter
-  boundaries — phase 3e operates on the closed range only, so
-  cross-chapter related happenings stay distinct. Probably rare;
-  parked until signal.
+The bounded Known happenings list adds a source of such duplicates: a
+retelling of an older happening the pass doesn't list
+([`classifier.md → What the classifier reads`](./memory/classifier.md#what-the-classifier-reads))
+can be extracted as a new one.
+
+Detecting duplicates at create, with embeddings, is the remedy to
+weigh. Its compute is modest: on the Fold 7 PoC a vec0 query costs
+about 11 ms at 1k vectors and 43 ms at 10k, and a single-shot local
+embed about 30 ms
+([`retrieval.md → Performance characteristics`](./memory/retrieval.md#performance-characteristics--poc-findings)),
+so a pass's 3-10 new happenings cost about half a second on a
+flagship; low-end devices are unmeasured. The hard part is the
+decision: similarity alone can't tell "Aria swore the oath" from "Aria
+broke it", which 3e settles with an LLM judgment, so a deciding check
+needs another call in a pass the user waits on, or a review flag,
+which happenings have no column for. The cheaper shape decides
+nothing: it embeds the window's prose before the call and adds the
+nearest older happenings to Known happenings, leaving the judgment to
+the pass. Embedding during a pass has a precedent, the throwaway
+embeddings of
+[new-character disambiguation](./memory/classifier.md#disambiguation-on-new-character-mentions),
+and with the embedder unavailable the check is skipped. Signal:
+duplicate happenings in Plot in played stories.
 
 #### Lore-mgmt cross-arc callback detection
 

@@ -15,20 +15,22 @@ for the placement rule.
 
 ## Data-model
 
-- **Periodic classifier context grows with the story.** A pass lists
-  every entity, place, relationship view and happening on the branch
-  ([`classifier.md → What the classifier reads`](./memory/classifier.md#what-the-classifier-reads)),
-  and threads and happening ids now join them. A pass blocks the story,
-  so its call is the user's wait, and at the projected thousands of
-  happenings
-  ([`retrieval.md → Scale assumptions`](./memory/retrieval.md#scale-assumptions))
-  the lists alone may outgrow a Fast model's window, and a pass must
-  succeed before its branch's next turn
-  ([`classifier.md → Failure policy`](./memory/classifier.md#failure-policy)),
-  so a prompt past the window stops the story's turns. Bounding them, to
-  the window's cast and region, say, needs a design: a pass can't link
-  what it can't see, and may not update a field it wasn't shown. Raised
-  2026-10-20 by the AI writers design.
+- **Bound the pass's Known happenings.** A pass no longer lists every
+  happening on the branch
+  ([`classifier.md → What the classifier reads`](./memory/classifier.md#what-the-classifier-reads)).
+  Today `periodic-classifier.ts` reads them all for the prompt and for
+  the planner's `happenings`, and no entry records what its prompt
+  carried. The work: the turn writing the ids of the happenings the
+  ranker seated as `injectedHappenings` on the AI entry it creates,
+  with the entry metadata schema
+  ([`data-model.md → Entry metadata shape`](./data-model.md#entry-metadata-shape));
+  the pass reading the list canon gives, and the planner checking
+  `knownAwareness` against that same list; and the touch points: the
+  template's snapshot tests, the classifier probe, which builds the
+  same context, and any test whose older happening has no narrative
+  position, which is now listed only through a record. Raised 2026-10-27 by the Known happenings design; the roster
+  half of the growth is parked
+  ([`parked.md → The pass lists the whole roster`](./parked.md#the-pass-lists-the-whole-roster)).
 
 - **Chapter-close agent design.** Chapter close's write set is fixed
   by the
@@ -101,11 +103,11 @@ for the placement rule.
     blank line under its heading;
   - the Gregorian calendar line reads "time in seconds (1 seconds per
     second)", now inside the cached system half;
-  - the periodic classifier's Known relationships and Known happenings
-    lines print a character's name, a view's kind and a happening's
-    title as stored, so a newline in one starts a line the model may
-    read as another fact (`classifier-context.ts`); Known entities and
-    Places already collapse theirs with `oneLine` (raised
+  - the periodic classifier's Known relationships lines print a
+    character's name and a view's kind as stored, so a newline in one
+    starts a line the model may read as another fact
+    (`classifier-context.ts`); Known entities, Places and Known
+    happenings already collapse theirs with `oneLine` (raised
     2026-10-18 by the classifier factions slice review);
   - the fallback classifier's roster leaves a blank line between its
     active and staged entries;
