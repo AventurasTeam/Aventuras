@@ -104,6 +104,11 @@ const LLAMA_OVERFLOW = {
     n_ctx: 65536,
   },
 }
+const ANTHROPIC_MESSAGE = 'prompt is too long: 208310 tokens > 200000 maximum'
+const ANTHROPIC_OVERFLOW = {
+  type: 'error',
+  error: { type: 'invalid_request_error', message: ANTHROPIC_MESSAGE },
+}
 const PLAIN_500 = { error: { message: 'upstream exploded', type: 'server_error' } }
 
 const MODELS = {
@@ -502,6 +507,25 @@ describe('streamText: the window check', () => {
       expect(windowLogs()).toEqual([])
     },
   )
+
+  // Recognized only if the adapter throws the rejection from doStream, not as a stream part.
+  it('reads an anthropic overflow as a provider-detected failure', async () => {
+    answers = [rejection(400, ANTHROPIC_OVERFLOW)]
+
+    const { call, errors } = await narrative(useProvider('anthropic'))
+
+    expect(bodies).toHaveLength(1)
+    expect(errors).toHaveLength(1)
+    expect(call.contextWindowFailureOf(errors[0])).toEqual({
+      detectedBy: 'provider',
+      estimate: BARE,
+      window: null,
+      windowSource: 'unknown',
+      providerId: 'prov',
+      modelId: 'm',
+      detail: ANTHROPIC_MESSAGE,
+    })
+  })
 
   it('reads any other error as no window failure', async () => {
     answers = [rejection(500, PLAIN_500)]

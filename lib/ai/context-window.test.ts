@@ -1,4 +1,4 @@
-import { generateText, wrapLanguageModel, type LanguageModelMiddleware } from 'ai'
+import { APICallError, generateText, wrapLanguageModel, type LanguageModelMiddleware } from 'ai'
 import { MockLanguageModelV3 } from 'ai/test'
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { z } from 'zod'
@@ -24,8 +24,8 @@ import {
   type ModelPrompt,
 } from './prompt-schema'
 
-type CallOptions = Awaited<ReturnType<NonNullable<LanguageModelMiddleware['transformParams']>>>
 type GenerateResult = Awaited<ReturnType<MockLanguageModelV3['doGenerate']>>
+type StreamResult = Awaited<ReturnType<MockLanguageModelV3['doStream']>>
 
 const base = {
   type: 'openai-compatible' as const,
@@ -255,8 +255,63 @@ function checkMiddleware(window: GenerationWindow) {
   return { middleware, onEstimate }
 }
 
-function transform(middleware: LanguageModelMiddleware, params: CallOptions) {
-  return middleware.transformParams!({ type: 'generate', params, model: {} as never })
+const GENERATED: GenerateResult = {
+  content: [{ type: 'text', text: '{"summary":"A bell."}' }],
+  finishReason: { unified: 'stop', raw: 'stop' },
+  usage: {
+    inputTokens: {
+      total: undefined,
+      noCache: undefined,
+      cacheRead: undefined,
+      cacheWrite: undefined,
+    },
+    outputTokens: { total: undefined, text: undefined, reasoning: undefined },
+  },
+  warnings: [],
+}
+const STREAMED: StreamResult = { stream: new ReadableStream() }
+
+const HOOKS = ['generate', 'stream'] as const
+type Hook = (typeof HOOKS)[number]
+
+const unsent = (): never => {
+  throw new Error('the other hook sent the request')
+}
+
+// PROMPT through the middleware's `hook`, around a model call that answers, or throws `error`.
+function sendThrough(
+  middleware: LanguageModelMiddleware,
+  hook: Hook = 'generate',
+  error?: unknown,
+) {
+  const options = { params: { prompt: PROMPT }, model: {} as never }
+  if (hook === 'generate') {
+    const send = vi.fn(async () => {
+      if (error !== undefined) throw error
+      return GENERATED
+    })
+    const pending = middleware.wrapGenerate!({ ...options, doGenerate: send, doStream: unsent })
+    return { send, pending, answer: GENERATED }
+  }
+  const send = vi.fn(async () => {
+    if (error !== undefined) throw error
+    return STREAMED
+  })
+  const pending = middleware.wrapStream!({ ...options, doGenerate: unsent, doStream: send })
+  return { send, pending, answer: STREAMED }
+}
+
+const OVERFLOW_MESSAGE =
+  'request (71834 tokens) exceeds the available context size (65536 tokens), try increasing it'
+
+function rejection(statusCode: number, body: unknown): APICallError {
+  return new APICallError({
+    message: 'Bad Request',
+    url: 'http://127.0.0.1:9/v1/chat/completions',
+    requestBodyValues: {},
+    statusCode,
+    responseBody: JSON.stringify(body),
+  })
 }
 
 async function refusalOf(pending: PromiseLike<unknown>): Promise<ContextWindowError> {
@@ -284,9 +339,10 @@ describe('windowCheckMiddleware', () => {
       .filter(([kind]) => kind === 'provider.prompt_estimate')
       .map(([, fields]) => fields)
 
-  it('refuses a prompt over a known window with the check failure', async () => {
+  it.each(HOOKS)('refuses a prompt over a known window, unsent, on %s', async (hook) => {
     const { middleware } = checkMiddleware({ tokens: ESTIMATE - 1, source: 'configured' })
-    const error = await refusalOf(transform(middleware, { prompt: PROMPT }))
+    const { send, pending } = sendThrough(middleware, hook)
+    const error = await refusalOf(pending)
     expect(error.failure).toStrictEqual({
       detectedBy: 'check',
       estimate: ESTIMATE,
@@ -295,43 +351,39 @@ describe('windowCheckMiddleware', () => {
       providerId: 'prov-1',
       modelId: 'model-1',
     })
+    expect(send).not.toHaveBeenCalled()
   })
 
-  it('passes a prompt exactly at the window: only an estimate over it is refused', async () => {
+  it.each(HOOKS)('sends a prompt exactly at the window on %s', async (hook) => {
     const { middleware } = checkMiddleware({ tokens: ESTIMATE, source: 'detected' })
-    const params: CallOptions = { prompt: PROMPT }
-    expect(await transform(middleware, params)).toBe(params)
+    const { send, pending, answer } = sendThrough(middleware, hook)
+    expect(await pending).toBe(answer)
+    expect(send).toHaveBeenCalledOnce()
   })
 
-  it('passes a prompt under the window unchanged', async () => {
+  it('sends a prompt under the window', async () => {
     const { middleware } = checkMiddleware({ tokens: ESTIMATE + 1, source: 'detected' })
-    const params: CallOptions = { prompt: PROMPT }
-    expect(await transform(middleware, params)).toBe(params)
+    expect(await sendThrough(middleware).pending).toBe(GENERATED)
   })
 
   it('skips the comparison for an unknown window but still reports the estimate', async () => {
     const { middleware, onEstimate } = checkMiddleware({ tokens: null, source: 'unknown' })
-    const params: CallOptions = { prompt: PROMPT }
-    expect(await transform(middleware, params)).toBe(params)
+    expect(await sendThrough(middleware).pending).toBe(GENERATED)
     expect(onEstimate).toHaveBeenCalledTimes(1)
     expect(onEstimate).toHaveBeenCalledWith(ESTIMATE)
   })
 
   it('reports the estimate before refusing', async () => {
     const { middleware, onEstimate } = checkMiddleware({ tokens: 1, source: 'configured' })
-    await refusalOf(transform(middleware, { prompt: PROMPT }))
+    await refusalOf(sendThrough(middleware).pending)
     expect(onEstimate).toHaveBeenCalledTimes(1)
     expect(onEstimate).toHaveBeenCalledWith(ESTIMATE)
   })
 
   it('logs the estimate at debug on every call, a refused one included', async () => {
-    await transform(checkMiddleware({ tokens: null, source: 'unknown' }).middleware, {
-      prompt: PROMPT,
-    })
+    await sendThrough(checkMiddleware({ tokens: null, source: 'unknown' }).middleware).pending
     await refusalOf(
-      transform(checkMiddleware({ tokens: 1, source: 'configured' }).middleware, {
-        prompt: PROMPT,
-      }),
+      sendThrough(checkMiddleware({ tokens: 1, source: 'configured' }).middleware).pending,
     )
     expect(estimateLogs()).toEqual([
       {
@@ -354,41 +406,61 @@ describe('windowCheckMiddleware', () => {
   })
 
   it('attributes the estimate log to its run when given an actionId', async () => {
-    await transform(
-      windowCheckMiddleware({
-        window: { tokens: null, source: 'unknown' },
-        providerId: 'prov-1',
-        modelId: 'model-1',
-        onEstimate: () => {},
-        actionId: 'act-1',
-      }),
-      { prompt: PROMPT },
-    )
-    await transform(checkMiddleware({ tokens: null, source: 'unknown' }).middleware, {
-      prompt: PROMPT,
+    const attributed = windowCheckMiddleware({
+      window: { tokens: null, source: 'unknown' },
+      providerId: 'prov-1',
+      modelId: 'model-1',
+      onEstimate: () => {},
+      actionId: 'act-1',
     })
+    await sendThrough(attributed).pending
+    await sendThrough(checkMiddleware({ tokens: null, source: 'unknown' }).middleware).pending
     const calls = debug.mock.calls.filter(([kind]) => kind === 'provider.prompt_estimate')
     expect(calls.map((call) => call[2])).toEqual([{ actionId: 'act-1' }, undefined])
+  })
+
+  // architecture.md → Recognizing an overflow rejection.
+  it.each([
+    ['generate', { tokens: null, source: 'unknown' }, { window: null, windowSource: 'unknown' }],
+    ['stream', { tokens: null, source: 'unknown' }, { window: null, windowSource: 'unknown' }],
+    [
+      'generate',
+      { tokens: ESTIMATE + 1, source: 'detected' },
+      { window: ESTIMATE + 1, windowSource: 'detected' },
+    ],
+    [
+      'stream',
+      { tokens: ESTIMATE + 1, source: 'detected' },
+      { window: ESTIMATE + 1, windowSource: 'detected' },
+    ],
+  ] as const)(
+    'reads a recognized overflow on %s as provider-detected, under the window %o',
+    async (hook, window, known) => {
+      const overflow = rejection(400, {
+        error: { message: OVERFLOW_MESSAGE, type: 'exceed_context_size_error' },
+      })
+      const { pending } = sendThrough(checkMiddleware(window).middleware, hook, overflow)
+      expect((await refusalOf(pending)).failure).toStrictEqual({
+        detectedBy: 'provider',
+        estimate: ESTIMATE,
+        ...known,
+        providerId: 'prov-1',
+        modelId: 'model-1',
+        detail: OVERFLOW_MESSAGE,
+      })
+    },
+  )
+
+  it.each(HOOKS)('rethrows any other error from the model as it is, on %s', async (hook) => {
+    const failure = rejection(500, { error: { message: 'upstream exploded' } })
+    const { middleware } = checkMiddleware({ tokens: ESTIMATE + 1, source: 'detected' })
+    await expect(sendThrough(middleware, hook, failure).pending).rejects.toBe(failure)
   })
 })
 
 // A structured call's chain, as generateStructured builds it: the check runs last.
 describe('windowCheckMiddleware last in a chain', () => {
   const SCHEMA = z.toJSONSchema(z.object({ summary: z.string() })) as JsonSchema
-  const GENERATED: GenerateResult = {
-    content: [{ type: 'text', text: '{"summary":"A bell."}' }],
-    finishReason: { unified: 'stop', raw: 'stop' },
-    usage: {
-      inputTokens: {
-        total: undefined,
-        noCache: undefined,
-        cacheRead: undefined,
-        cacheWrite: undefined,
-      },
-      outputTokens: { total: undefined, text: undefined, reasoning: undefined },
-    },
-    warnings: [],
-  }
 
   function structuredCall(window: GenerationWindow) {
     const sent = new MockLanguageModelV3({ doGenerate: async () => GENERATED })

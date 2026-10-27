@@ -5,6 +5,7 @@ import { countTokens } from '@/lib/retrieval'
 
 import type { ProviderInstance } from '../db'
 import type { ModelPrompt } from './prompt-schema'
+import { recognizeOverflow } from './transport/classify-provider-error'
 
 export type GenerationWindow =
   | { tokens: number; source: 'configured' | 'detected' }
@@ -81,8 +82,9 @@ export function countPromptTokens(prompt: ModelPrompt): number {
 }
 
 /**
- * Counts the request as sent and refuses one over a known window (architecture.md → The pre-send
- * check). Must run last in its chain, so the count includes an injected JSON contract.
+ * Counts the prompt as sent and refuses one over a known window (architecture.md → The pre-send
+ * check), then reads a recognized overflow rejection as a provider-detected failure. Must run last
+ * in its chain, so the count includes an injected JSON contract.
  */
 export function windowCheckMiddleware(opts: {
   window: GenerationWindow
@@ -94,38 +96,55 @@ export function windowCheckMiddleware(opts: {
   actionId?: string
 }): LanguageModelMiddleware {
   const { window, providerId, modelId, onEstimate, actionId } = opts
+  const checked = async <R>(prompt: ModelPrompt, send: () => PromiseLike<R>): Promise<R> => {
+    const startedAt = performance.now()
+    const estimate = countPromptTokens(prompt)
+    const ms = Math.round(performance.now() - startedAt)
+    onEstimate(estimate)
+    logger.debug(
+      'provider.prompt_estimate',
+      {
+        providerId,
+        modelId,
+        estimate,
+        window: window.tokens,
+        windowSource: window.source,
+        ms,
+      },
+      actionId === undefined ? undefined : { actionId },
+    )
+    // Strictly over, with no reply reserve and no margin: architecture.md → The pre-send check.
+    if (window.tokens !== null && estimate > window.tokens) {
+      throw new ContextWindowError({
+        detectedBy: 'check',
+        estimate,
+        window: window.tokens,
+        windowSource: window.source,
+        providerId,
+        modelId,
+      })
+    }
+    try {
+      return await send()
+    } catch (error) {
+      const overflow = recognizeOverflow(error)
+      if (overflow === null) throw error
+      // architecture.md → Recognizing an overflow rejection: the provider's message verbatim.
+      throw new ContextWindowError({
+        detectedBy: 'provider',
+        estimate,
+        window: window.tokens,
+        windowSource: window.source,
+        providerId,
+        modelId,
+        detail: overflow.detail,
+      })
+    }
+  }
   return {
     specificationVersion: 'v3',
-    transformParams: async ({ params }) => {
-      const startedAt = performance.now()
-      const estimate = countPromptTokens(params.prompt)
-      const ms = Math.round(performance.now() - startedAt)
-      onEstimate(estimate)
-      logger.debug(
-        'provider.prompt_estimate',
-        {
-          providerId,
-          modelId,
-          estimate,
-          window: window.tokens,
-          windowSource: window.source,
-          ms,
-        },
-        actionId === undefined ? undefined : { actionId },
-      )
-      // Strictly over, with no reply reserve and no margin: architecture.md → The pre-send check.
-      if (window.tokens !== null && estimate > window.tokens) {
-        throw new ContextWindowError({
-          detectedBy: 'check',
-          estimate,
-          window: window.tokens,
-          windowSource: window.source,
-          providerId,
-          modelId,
-        })
-      }
-      return params
-    },
+    wrapGenerate: ({ params, doGenerate }) => checked(params.prompt, doGenerate),
+    wrapStream: ({ params, doStream }) => checked(params.prompt, doStream),
   }
 }
 

@@ -42,7 +42,7 @@ import {
   type ResolvedParams,
 } from './resolve-model'
 import { callWithRetry, type CallRetryError } from './transport/call-with-retry'
-import { ProviderTimeoutError, recognizeOverflow } from './transport/classify-provider-error'
+import { ProviderTimeoutError } from './transport/classify-provider-error'
 import { runProviderCall, streamProviderCall } from './transport/provider-call'
 import { checkInputTokens } from './truncation-check'
 
@@ -141,27 +141,26 @@ function withMiddleware(
   })
 }
 
-type WindowCall = {
-  window: GenerationWindow
-  estimate: number | null
-  providerId: string
-  modelId: string
-}
-
-// architecture.md → Recognizing an overflow rejection: the provider's message verbatim.
-function providerOverflow(error: unknown, call: WindowCall): ContextWindowFailure | null {
-  const overflow = recognizeOverflow(error)
-  if (overflow === null) return null
-  return {
-    detectedBy: 'provider',
-    // The check counts every request before it goes out, so a rejected one has an estimate.
-    estimate: call.estimate ?? 0,
-    window: call.window.tokens,
-    windowSource: call.window.source,
-    providerId: call.providerId,
-    modelId: call.modelId,
-    detail: overflow.detail,
-  }
+// The window check, which a chain must put last, and its latest estimate: null until the SDK
+// built a request.
+function windowCheck(
+  providers: readonly ProviderInstance[],
+  providerId: string,
+  modelId: string,
+  attribution: { actionId: string } | undefined,
+) {
+  const window = generationWindow(providers, providerId, modelId)
+  let estimate: number | null = null
+  const middleware = windowCheckMiddleware({
+    window,
+    providerId,
+    modelId,
+    onEstimate: (tokens) => {
+      estimate = tokens
+    },
+    ...attribution,
+  })
+  return { window, estimate: () => estimate, middleware }
 }
 
 /**
@@ -219,27 +218,18 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
   if (!resolved.ok) return resolved
   const { providerId, modelId } = resolved
   const attribution = opts.actionId === undefined ? undefined : { actionId: opts.actionId }
-  const window = generationWindow(opts.config.providers, providerId, modelId)
-  let estimate: number | null = null
+  const check = windowCheck(opts.config.providers, providerId, modelId, attribution)
   const bounded =
     resolved.timeoutMs === undefined ? null : boundedSignal(opts.abortSignal, resolved.timeoutMs)
   const abortSignal = bounded?.signal ?? opts.abortSignal
   const stream = streamProviderCall({
-    // The window check goes last, to count the request as sent (architecture.md → The pre-send
-    // check). Its refusal throws before any request and reaches onError as the stream's error.
+    // The check's refusal, thrown before any request, and a recognized overflow reach onError as
+    // a ContextWindowError (architecture.md → The pre-send check).
     model: withMiddleware(resolved.model, [
       ...(marksSystemPrefix(opts.cacheSystemPrefix, resolved.providerType)
         ? [anthropicCacheMarkerMiddleware()]
         : []),
-      windowCheckMiddleware({
-        window,
-        providerId,
-        modelId,
-        onEstimate: (tokens) => {
-          estimate = tokens
-        },
-        ...attribution,
-      }),
+      check.middleware,
     ]),
     ...promptParams(opts.prompt),
     ...(abortSignal !== undefined ? { abortSignal } : {}),
@@ -248,7 +238,7 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
     // follow. After a fatal one the timer lapses on a call nothing awaits.
     onFinish: ({ usage }) => {
       bounded?.dispose()
-      checkInputTokens({ usage, estimate, providerId, modelId, ...attribution })
+      checkInputTokens({ usage, estimate: check.estimate(), providerId, modelId, ...attribution })
     },
     ...(bounded === null ? {} : { onAbort: () => bounded.dispose() }),
     ...resolved.callSettings,
@@ -261,12 +251,9 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
     timedOut: () => bounded?.expired() ?? false,
     timeoutMs: resolved.timeoutMs,
     maxOutput: resolved.params.maxOutput,
-    window,
-    promptEstimate: () => estimate,
-    contextWindowFailureOf: (error) =>
-      error instanceof ContextWindowError
-        ? error.failure
-        : providerOverflow(error, { window, estimate, providerId, modelId }),
+    window: check.window,
+    promptEstimate: check.estimate,
+    contextWindowFailureOf: (error) => (error instanceof ContextWindowError ? error.failure : null),
   }
 }
 
@@ -360,26 +347,18 @@ export async function generateStructured<T>(
       recoverable: [],
     }
   }
-  const window = generationWindow(config.providers, providerId, modelId)
-  let estimate: number | null = null
+  const check = windowCheck(config.providers, providerId, modelId, attribution)
   // 'auto' puts the schema in the prompt (no capability signal yet); 'force-on' sends it natively.
   // Marker after the contract: on a blank system half, promptSchemaMiddleware makes the system
-  // message. Window check last, to count what is sent (architecture.md → The pre-send check).
+  // message. Window check last, so it counts the prompt with the contract injected
+  // (architecture.md → The pre-send check).
   const model = withMiddleware(resolved.model, [
     jsonResponseFormatMiddleware(jsonSchema),
     ...(resolved.params.structuredOutput === 'force-on' ? [] : [promptSchemaMiddleware()]),
     ...(marksSystemPrefix(options.cacheSystemPrefix, resolved.providerType)
       ? [anthropicCacheMarkerMiddleware()]
       : []),
-    windowCheckMiddleware({
-      window,
-      providerId,
-      modelId,
-      onEstimate: (tokens) => {
-        estimate = tokens
-      },
-      ...attribution,
-    }),
+    check.middleware,
   ])
 
   const logCutOff = (
@@ -395,8 +374,8 @@ export async function generateStructured<T>(
     const failure = replyCutOff({
       usage: reply.usage,
       maxOutput: resolved.params.maxOutput,
-      window: window.tokens,
-      promptEstimate: estimate,
+      window: check.window.tokens,
+      promptEstimate: check.estimate(),
       providerId,
       modelId,
     })
@@ -429,7 +408,7 @@ export async function generateStructured<T>(
         })
         checkInputTokens({
           usage: call.usage,
-          estimate,
+          estimate: check.estimate(),
           providerId,
           modelId,
           ...attribution,
@@ -437,9 +416,6 @@ export async function generateStructured<T>(
         return { text: call.text, finishReason: call.finishReason, usage: call.usage }
       } catch (error) {
         if (bounded?.expired()) throw new ProviderTimeoutError()
-        // As a ContextWindowError, so it fails in the context-window tier, not as a provider error.
-        const overflow = providerOverflow(error, { window, estimate, providerId, modelId })
-        if (overflow !== null) throw new ContextWindowError(overflow)
         throw error
       } finally {
         bounded?.dispose()
