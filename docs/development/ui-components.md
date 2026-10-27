@@ -139,11 +139,11 @@ there it waits for a tap.
 Enter in a single-line field moves to the next text field, with `enterkeyhint="next"`. In the
 last one, a modal that creates or adds performs its action (`enterkeyhint="go"`). A modal that
 edits existing values only drops the keyboard (`enterkeyhint="done"`): an edit is saved through the
-on-screen button, never by a key under the thumb.
+on-screen button, never by a key under the thumb. The shell does what the attribute says, so a
+caller sets only `enterkeyhint`; a field without one, such as a multi-line note, keeps its Enter.
 
 Ctrl+Enter (Cmd+Enter on a Mac) in any field of an action modal performs its action, unless the
-action is disabled or running. The shell owns it, so a field's own Enter handler ignores Enter with
-a modifier. A phone keyboard has no such key, so it cannot save by accident.
+action is disabled or running. A phone keyboard has no such key, so it cannot save by accident.
 
 ### Wording
 
@@ -158,11 +158,12 @@ drops what was typed here.
 A body more than 2.5 screens long, measured against the tallest it has been while open so a phone's
 keyboard does not show and hide them, gets chevron buttons floating at the bottom right of the body,
 styled like the story screen's: jump to the top once it has scrolled down, jump to the bottom under
-it while it is not there (`shared/scrollJump.ts`). Each keeps its place and fades, so the other
-never moves. A jump hides both and fades in what applies at the far end: on a phone, the end of the
-body is above the footer. They come with the shell, so no caller adds them. Jumping to the bottom
-with a phone's keyboard up closes the keyboard first and waits for the body to regain its height, so
-the jump lands where the keyboard no longer is.
+it while it is not there (`shared/scrollJump.ts`, drawn by `shared/ScrollEdgeButton.svelte`, which
+the story screen uses too). Each keeps its place and fades, so the other never moves. A jump hides
+both and fades in what applies at the far end: on a phone, the end of the body is above the footer.
+They come with the shell, so no caller adds them. Jumping to the bottom with a phone's keyboard up
+closes the keyboard first and waits for the body to regain its height, so the jump lands where the
+keyboard no longer is.
 
 The body never repeats the title: "Entry 47 will
 be deleted" under "Delete entry 47" says nothing.

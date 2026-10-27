@@ -83,16 +83,6 @@
     el.setSelectionRange(start, end)
     set(el.value)
   }
-
-  function handleKeydown(e: KeyboardEvent, nextFieldId?: string) {
-    if (e.key !== 'Enter' || e.isComposing || e.ctrlKey || e.metaKey) return
-    if (nextFieldId) {
-      // A single-value field takes no line break, and a phone's return key must not save a
-      // half-typed form. It moves on instead, which is what its "next" label promises.
-      e.preventDefault()
-      document.getElementById(nextFieldId)?.focus()
-    }
-  }
 </script>
 
 <ActionModal
@@ -124,7 +114,6 @@
       bind:value={title}
       enterkeyhint="next"
       oninput={(e) => singleLine(e, (v) => (title = v))}
-      onkeydown={(e) => handleKeydown(e, 'story-edit-genre')}
     />
   </div>
 
@@ -138,7 +127,6 @@
       bind:value={genre}
       enterkeyhint="next"
       oninput={(e) => singleLine(e, (v) => (genre = v))}
-      onkeydown={(e) => handleKeydown(e, 'story-edit-description')}
     />
 
     <button
@@ -200,11 +188,6 @@
 
   <div class="space-y-1.5">
     <Label for="story-edit-description">Description</Label>
-    <Textarea
-      id="story-edit-description"
-      placeholder="No description"
-      bind:value={description}
-      onkeydown={(e) => handleKeydown(e)}
-    />
+    <Textarea id="story-edit-description" placeholder="No description" bind:value={description} />
   </div>
 </ActionModal>

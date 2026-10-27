@@ -89,10 +89,20 @@
   let editMotivation = $state('')
   /** The edit as it opened, so the modal knows when it holds changes. */
   let editSeed = $state('')
+  let editPortraitSeed = $state<string | null>(null)
+  // The portrait, an image data URL, is compared by identity rather than serialised per keystroke.
   const editState = $derived(
-    JSON.stringify([editFormData, editRole, editRelationship, editBackground, editMotivation]),
+    JSON.stringify([
+      { ...editFormData, portrait: null },
+      editRole,
+      editRelationship,
+      editBackground,
+      editMotivation,
+    ]),
   )
-  const editDirty = $derived(editState !== editSeed)
+  const editDirty = $derived(
+    editState !== editSeed || (editFormData.portrait ?? null) !== editPortraitSeed,
+  )
   // Track which characters were saved to vault
   let savedToVault = $state<Set<number>>(new Set())
 
@@ -110,6 +120,7 @@
     editBackground = protagonist.background || ''
     editMotivation = protagonist.motivation || ''
     editSeed = editState
+    editPortraitSeed = editFormData.portrait ?? null
   }
 
   function startEdit(index: number) {
@@ -126,6 +137,7 @@
     editRole = char.role || ''
     editRelationship = char.relationship || ''
     editSeed = editState
+    editPortraitSeed = editFormData.portrait ?? null
   }
 
   function closeEdit() {

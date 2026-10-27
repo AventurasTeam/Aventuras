@@ -437,7 +437,7 @@
 
 /*
  * Sheets open and close in 180ms instead of vaul's 0.5s. Only the open and close animations
- * change: the settle after a drag is set inline by vaul and the swipe guard mirrors it.
+ * change: the settle after a drag is set inline by vaul.
  * Specificity beats vaul's own rules whatever order they load in.
  */
 [data-vaul-drawer][data-vaul-snap-points='false'],

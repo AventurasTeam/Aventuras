@@ -16,8 +16,6 @@
     label: string
     value?: string
     ref?: HTMLInputElement | null
-    /** Valid spellings named when the text is not a time. */
-    examples?: string
     compact?: boolean
   }
 
@@ -25,7 +23,6 @@
     label,
     value = $bindable(''),
     ref = $bindable(null),
-    examples = '14:30, D4 14:30, or Y1 D4 14:30',
     compact = false,
     id,
     disabled,
@@ -72,6 +69,6 @@
     {/if}
   </div>
   {#if invalid}
-    <p class="text-destructive text-xs">Not a story time. Try {examples}.</p>
+    <p class="text-destructive text-xs">Not a story time. Try 14:30, D4 14:30, or Y1 D4 14:30.</p>
   {/if}
 </div>

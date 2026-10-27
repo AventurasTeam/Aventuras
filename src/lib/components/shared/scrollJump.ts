@@ -4,17 +4,14 @@ export const JUMP_SCREENS = 2.5
 /** A pixel of slack, so a scroll that stops a fraction short still counts as at the end. */
 const SLACK = 1
 
-export interface ScrollMetrics {
+export interface JumpInput {
   scrollTop: number
   scrollHeight: number
   clientHeight: number
-}
-
-/**
- * `tallest` is the largest height the scroller has had while open. A phone's keyboard shortens it,
- * and judging length by the shortened height would show and hide the buttons with the keyboard.
- */
-export interface JumpInput extends ScrollMetrics {
+  /**
+   * The largest height the scroller has had while open. A phone's keyboard shortens it, and
+   * judging length by the shortened height would show and hide the buttons with the keyboard.
+   */
   tallest: number
 }
 

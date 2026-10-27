@@ -120,16 +120,14 @@
       {revertsOnDelete ? `Only entry ${number} will be deleted. ` : ''}The world state will stay as
       it is.
     </p>
-  {:else if number !== lastEntryNumber}
-    <p class="text-muted-foreground text-sm">
-      Entries {number} to {lastEntryNumber} will be deleted.
-    </p>
-  {/if}
-  {#if !rollsBack}
     {@const gone = deletedSnapshotsLine(snapshots.here)}
     {#if gone}
       <p class="text-muted-foreground text-sm">{gone}</p>
     {/if}
+  {:else if number !== lastEntryNumber}
+    <p class="text-muted-foreground text-sm">
+      Entries {number} to {lastEntryNumber} will be deleted.
+    </p>
   {/if}
   {#if rollsBack && preview === null}
     <p class="text-muted-foreground text-xs italic">Checking the recorded world state changes…</p>

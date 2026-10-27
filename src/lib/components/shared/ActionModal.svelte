@@ -6,7 +6,8 @@
 <script lang="ts">
   import { onDestroy, untrack, type Component, type Snippet } from 'svelte'
   import { fade } from 'svelte/transition'
-  import { ChevronDown, ChevronUp, Trash2 } from '@lucide/svelte'
+  import { MediaQuery } from 'svelte/reactivity'
+  import { Trash2 } from '@lucide/svelte'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { setTextareaUncapped } from '#lib/components/ui/textarea/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
@@ -16,6 +17,7 @@
   import { cn } from '#lib/utils/cn.ts'
   import ModalActions from './ModalActions.svelte'
   import DiscardConfirm from './DiscardConfirm.svelte'
+  import ScrollEdgeButton from './ScrollEdgeButton.svelte'
   import { decideClose, type CloseSource } from './actionModalClose'
   import { readJumpState, type JumpState } from './scrollJump'
   import { FEATURE_COLORS, type ActionTone } from './featureColors'
@@ -118,15 +120,16 @@
   let bodyScroller = $state<HTMLDivElement | null>(null)
   let jump = $state<JumpState>({ long: false, atTop: true, atBottom: false })
   let tallestScroller = 0
+  const KEYBOARD_CLOSE_MS = 600
   /** Hides the buttons through a jump, which can move them by the height of the footer. */
   let jumping = $state(false)
 
+  // The `md` breakpoint, where the body takes over scrolling from the outer scroller.
+  const wide = new MediaQuery('min-width: 768px')
+
   /** Whichever of the two scrollers this width uses. */
   function activeScroller(): HTMLDivElement | null {
-    for (const el of [bodyScroller, outerScroller]) {
-      if (el && getComputedStyle(el).overflowY === 'auto') return el
-    }
-    return null
+    return wide.current ? bodyScroller : outerScroller
   }
 
   function measureJump() {
@@ -199,10 +202,10 @@
     measureJump()
     return () => observer.disconnect()
   })
-  const KEYBOARD_CLOSE_MS = 600
   // What bits-ui's open focus could land on: a hidden form input or a disabled control cannot.
   const FOCUSABLE =
     'input:not([type=hidden]):not([aria-hidden=true]):enabled, textarea:enabled, select:enabled, button:enabled, [href], [tabindex="0"]'
+  const TEXT_FIELD = 'input:not([type=hidden]):not([aria-hidden=true]):enabled, textarea:enabled'
   // A popup layer bits-ui portals to the end of the body, latest opened last.
   const OPEN_LAYER =
     '[data-state="open"]:is([role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"])'
@@ -310,12 +313,26 @@
     open = false
   }
 
-  // Ctrl+Enter in any field acts, so a modal whose Enter only moves on still has a key to finish.
-  function handleShortcut(e: KeyboardEvent) {
-    if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey) || e.isComposing) return
-    if (!(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) return
+  /**
+   * Enter in a text field does what its `enterkeyhint` says: `next` focuses the next text field,
+   * `go` acts, `done` drops the keyboard; without one it is the field's own. Ctrl+Enter always acts,
+   * so a modal whose Enter only moves on still has a key to finish.
+   */
+  function handleEnter(e: KeyboardEvent) {
+    const field = e.target
+    if (e.key !== 'Enter' || e.isComposing) return
+    if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)) return
+    const hint = e.ctrlKey || e.metaKey ? 'go' : field.enterKeyHint
+    if (hint !== 'next' && hint !== 'go' && hint !== 'done') return
     e.preventDefault()
-    if (!actionDisabled && !busy) action.onConfirm()
+    if (hint === 'go') {
+      if (!actionDisabled && !busy) action.onConfirm()
+    } else if (hint === 'done') {
+      field.blur()
+    } else {
+      const fields = [...(frame?.querySelectorAll<HTMLElement>(TEXT_FIELD) ?? [])]
+      fields[fields.indexOf(field) + 1]?.focus()
+    }
   }
 
   function leaveFor(next: () => void) {
@@ -341,26 +358,16 @@
   {@render alternative?.(leaveFor)}
 {/snippet}
 
-{#snippet jumpButton(edge: 'top' | 'bottom', shown: boolean)}
-  {@const label = edge === 'top' ? 'Jump to the top' : 'Jump to the bottom'}
+{#snippet jumpButton(edge: 'top' | 'bottom', visible: boolean)}
   <!-- A slot of its own, so the other button keeps its place while this one fades. -->
   <span class="flex size-8 sm:size-9">
-    {#if shown}
+    {#if visible}
       <span class="pointer-events-auto flex" transition:fade={{ duration: jumping ? 0 : 150 }}>
-        <Button
-          variant="secondary"
-          size="icon"
-          class="size-8 rounded-full shadow-lg sm:size-9"
-          aria-label={label}
-          title={label}
+        <ScrollEdgeButton
+          {edge}
+          label={edge === 'top' ? 'Jump to the top' : 'Jump to the bottom'}
           onclick={() => void jumpTo(edge)}
-        >
-          {#if edge === 'top'}
-            <ChevronUp class="size-4 sm:size-5" />
-          {:else}
-            <ChevronDown class="size-4 sm:size-5" />
-          {/if}
-        </Button>
+        />
       </span>
     {/if}
   </span>
@@ -392,7 +399,7 @@
       request('escape')
     }}
     onOpenAutoFocus={focusMarkedField}
-    onkeydown={handleShortcut}
+    onkeydown={handleEnter}
   >
     <div
       bind:this={frame}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import ActionModal from '#lib/components/shared/ActionModal.svelte'
@@ -17,10 +18,9 @@
 
   let startText = $state('')
   let endText = $state('')
-  let seededStart = $state('')
-  let seededEnd = $state('')
+  /** The fields as this opening seeded them; null until then. */
+  let seeded = $state<{ start: string; end: string } | null>(null)
   let saving = $state(false)
-  let endField = $state<HTMLInputElement | null>(null)
 
   const entry = $derived(story.entries.find((candidate) => candidate.id === entryId) ?? null)
   const start = $derived(parseStoryTime(startText))
@@ -28,7 +28,7 @@
   const isLastEntry = $derived(!!entry && story.entries[story.entries.length - 1]?.id === entry.id)
   const backwards = $derived(!!start && !!end && toMinutes(end) < toMinutes(start))
   const canSave = $derived(!!start && !!end && !backwards && !saving)
-  const dirty = $derived(startText !== seededStart || endText !== seededEnd)
+  const dirty = $derived(seeded !== null && (startText !== seeded.start || endText !== seeded.end))
 
   /** `setEntryTimes` carries it along: an action is the instant the narration after it answers. */
   const precedingAction = $derived.by(() => {
@@ -45,29 +45,18 @@
   let noticeOpen = $state(true)
 
   /** Seeded once per opening: the fields are the reader's working copy, not a live view. */
-  let seeded = false
   $effect(() => {
     if (!open) {
-      seeded = false
+      seeded = null
       return
     }
-    if (seeded) return
-    seeded = true
+    if (untrack(() => seeded)) return
     const metadata = entry?.metadata
     startText = metadata?.timeStart ? formatStoryTime(metadata.timeStart) : ''
     endText = metadata?.timeEnd ? formatStoryTime(metadata.timeEnd) : ''
-    seededStart = startText
-    seededEnd = endText
+    seeded = { start: startText, end: endText }
     noticeOpen = true
   })
-
-  /** An edit is saved only through Save, so Enter moves on or drops the keyboard. */
-  function handleEnter(e: KeyboardEvent, next: HTMLElement | null) {
-    if (e.key !== 'Enter' || e.isComposing || e.ctrlKey || e.metaKey) return
-    e.preventDefault()
-    if (next) next.focus()
-    else if (e.currentTarget instanceof HTMLElement) e.currentTarget.blur()
-  }
 
   async function save() {
     if (!start || !end) return
@@ -148,15 +137,12 @@
       bind:value={startText}
       data-autofocus
       enterkeyhint="next"
-      onkeydown={(e: KeyboardEvent) => handleEnter(e, endField)}
       placeholder="Y1 D4 14:30"
     />
     <StoryTimeField
       label="Ends"
-      bind:ref={endField}
       bind:value={endText}
       enterkeyhint="done"
-      onkeydown={(e: KeyboardEvent) => handleEnter(e, null)}
       placeholder="Y1 D4 16:00"
     />
     <!-- An unreadable time is reported under its own field. -->

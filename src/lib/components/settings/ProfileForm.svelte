@@ -433,12 +433,6 @@
     bind:value={customModelDialogInput}
     data-autofocus
     enterkeyhint="go"
-    onkeydown={(e) => {
-      if (e.key === 'Enter' && !e.isComposing && !e.ctrlKey && !e.metaKey) {
-        e.preventDefault()
-        handleAddCustomModelFromDialog()
-      }
-    }}
   />
   {#if customModelDialogError}
     <p class="text-destructive text-xs">{customModelDialogError}</p>

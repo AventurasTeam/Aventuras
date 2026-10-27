@@ -176,9 +176,6 @@
       disabled={saving}
       data-autofocus
       enterkeyhint="go"
-      onkeydown={(e) => {
-        if (e.key === 'Enter' && !e.isComposing && !e.ctrlKey && !e.metaKey) create()
-      }}
     />
     <div class="text-muted-foreground space-y-1 text-xs">
       <p>Checkpoints save the story state and allow branching.</p>

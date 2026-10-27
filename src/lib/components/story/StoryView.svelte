@@ -2,7 +2,8 @@
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { settings, STORY_WIDTH_OPTIONS } from '#lib/stores/settings.svelte.ts'
-  import { Loader2, BookOpen, ChevronDown, ChevronUp } from '@lucide/svelte'
+  import { Loader2, BookOpen } from '@lucide/svelte'
+  import ScrollEdgeButton from '#lib/components/shared/ScrollEdgeButton.svelte'
   import { tick, untrack } from 'svelte'
   import { fade } from 'svelte/transition'
   import StoryEntry from './StoryEntry.svelte'
@@ -693,38 +694,16 @@
 
     <!-- Scroll navigation buttons (floating at bottom of scroll container) -->
     {#if story.entries.length > 0}
-      {@const buttonClasses = 'h-8 w-8 rounded-full shadow-lg disabled:opacity-50 sm:h-9 sm:w-9'}
-      {@const iconClasses = 'h-4 w-4 sm:h-5 sm:w-5'}
-
       <div class="pointer-events-none sticky right-0 bottom-0 left-0 z-20 flex justify-center py-2">
         <div class="pointer-events-auto flex gap-2">
-          <!-- Scroll to top button -->
           {#if settings.uiSettings.showScrollToTop && !atVeryTop}
             <div transition:fade={{ duration: 150 }}>
-              <Button
-                variant="secondary"
-                size="sm"
-                class={buttonClasses}
-                onclick={scrollToTop}
-                aria-label="Scroll to first message"
-              >
-                <ChevronUp class={iconClasses} />
-              </Button>
+              <ScrollEdgeButton edge="top" label="Scroll to first message" onclick={scrollToTop} />
             </div>
           {/if}
-
-          <!-- Scroll to bottom button -->
           {#if settings.uiSettings.showScrollToBottom && !atVeryBottom}
             <div transition:fade={{ duration: 150 }}>
-              <Button
-                variant="secondary"
-                size="sm"
-                class={buttonClasses}
-                onclick={scrollToBottom}
-                aria-label="Scroll to bottom"
-              >
-                <ChevronDown class={iconClasses} />
-              </Button>
+              <ScrollEdgeButton edge="bottom" label="Scroll to bottom" onclick={scrollToBottom} />
             </div>
           {/if}
         </div>

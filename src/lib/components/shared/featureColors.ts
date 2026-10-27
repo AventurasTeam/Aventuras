@@ -23,36 +23,30 @@ export interface FeatureColor {
   vars: string
 }
 
+const AMBER: FeatureColor = {
+  text: 'text-amber-700 dark:text-amber-500',
+  hoverText: 'hover:text-amber-800 dark:hover:text-amber-600',
+  revealText: 'hover:text-amber-700 dark:hover:text-amber-500',
+  vars: '[--feature:var(--color-amber-700)] dark:[--feature:var(--color-amber-500)]',
+}
+
+const RED: FeatureColor = {
+  text: 'text-red-600 dark:text-red-400',
+  hoverText: 'hover:text-red-700 dark:hover:text-red-500',
+  revealText: 'hover:text-red-600 dark:hover:text-red-400',
+  vars: '[--feature:var(--color-red-600)] dark:[--feature:var(--color-red-400)]',
+}
+
 export const FEATURE_COLORS: Record<FeatureTone, FeatureColor> = {
-  branch: {
-    text: 'text-amber-700 dark:text-amber-500',
-    hoverText: 'hover:text-amber-800 dark:hover:text-amber-600',
-    revealText: 'hover:text-amber-700 dark:hover:text-amber-500',
-    vars: '[--feature:var(--color-amber-700)] dark:[--feature:var(--color-amber-500)]',
-  },
-  regenerate: {
-    text: 'text-amber-700 dark:text-amber-500',
-    hoverText: 'hover:text-amber-800 dark:hover:text-amber-600',
-    revealText: 'hover:text-amber-700 dark:hover:text-amber-500',
-    vars: '[--feature:var(--color-amber-700)] dark:[--feature:var(--color-amber-500)]',
-  },
+  branch: AMBER,
+  regenerate: AMBER,
   checkpoint: {
     text: 'text-blue-700 dark:text-blue-400',
     hoverText: 'hover:text-blue-800 dark:hover:text-blue-500',
     revealText: 'hover:text-blue-700 dark:hover:text-blue-400',
     vars: '[--feature:var(--color-blue-700)] dark:[--feature:var(--color-blue-400)]',
   },
-  delete: {
-    text: 'text-red-600 dark:text-red-400',
-    hoverText: 'hover:text-red-700 dark:hover:text-red-500',
-    revealText: 'hover:text-red-600 dark:hover:text-red-400',
-    vars: '[--feature:var(--color-red-600)] dark:[--feature:var(--color-red-400)]',
-  },
+  delete: RED,
   // Shares delete's red until the feature palette decides whether it keeps a colour of its own.
-  overwrite: {
-    text: 'text-red-600 dark:text-red-400',
-    hoverText: 'hover:text-red-700 dark:hover:text-red-500',
-    revealText: 'hover:text-red-600 dark:hover:text-red-400',
-    vars: '[--feature:var(--color-red-600)] dark:[--feature:var(--color-red-400)]',
-  },
+  overwrite: RED,
 }
