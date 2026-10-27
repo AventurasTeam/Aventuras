@@ -159,8 +159,9 @@ export function DetailsDisclosure({
       <TextToggle
         expanded={open}
         onPress={() => setOpen((v) => !v)}
-        // Top fills the gap above, so the buttons keep their own tap zones; bottom, the card's padding.
-        tapClassName={tier === 'phone' && '-mb-4 -mt-3 pb-4 pt-3'}
+        // Top fills the gap above, so the buttons keep their own tap zones. Bottom overhangs the
+        // card's padding, or once open the detail, which z-10 keeps from winning that strip.
+        tapClassName={tier === 'phone' && 'z-10 -mb-4 -mt-3 pb-4 pt-3'}
       >
         <Icon as={open ? ChevronDown : ChevronRight} size={12} className="text-fg-muted" />
         <Text size="xs" variant="muted" className={toggleTextClass}>

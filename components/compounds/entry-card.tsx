@@ -153,7 +153,7 @@ type EntryCardProps = {
   streamingPhase?: 'reasoning' | 'reply'
 
   // system-only:
-  /** Renders the collapsed Details disclosure under the buttons. */
+  /** Renders the collapsed Details disclosure under the buttons when non-empty. */
   detail?: string
   /** The turn's text the entry keeps, shown verbatim as plain text; omit when blank. */
   heldText?: string

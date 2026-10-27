@@ -989,7 +989,7 @@ const systemPhoneDecorator = (Story: () => ReactElement) => (
   </View>
 )
 
-/** At phone width: the toggles take the 44 px tap floor, and a long URL wraps inside the card. */
+/** At phone width: the toggles take the 44 px tap floor, open or closed, and a long URL wraps. */
 export const SystemPhoneWidth: StoryT = {
   decorators: [systemPhoneDecorator],
   args: {
@@ -1016,8 +1016,21 @@ export const SystemPhoneWidth: StoryT = {
       ),
     ).toBe(true)
 
+    await userEvent.click(showAll)
+    expectPhoneTapZone(
+      await screen.findByRole('button', { name: t('reader:systemEntry.showLess') }),
+    )
     await userEvent.click(details)
     const detail = await screen.findByText(LONG_DETAIL)
+    // Open, the detail follows the toggle and would otherwise take its padding's strip.
+    expectPhoneTapZone(details)
+    const copy = screen.getByRole('button', { name: t('reader:systemEntry.copyDetails') })
+    const copyRect = copy.getBoundingClientRect()
+    expect(
+      copy.contains(
+        document.elementFromPoint(copyRect.left + copyRect.width / 2, copyRect.top + 1),
+      ),
+    ).toBe(true)
     const frame = screen.getByTestId('phone-frame')
     expect(frame.scrollWidth).toBeLessThanOrEqual(frame.clientWidth)
     expect(detail.getBoundingClientRect().right).toBeLessThanOrEqual(
