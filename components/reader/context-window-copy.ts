@@ -16,7 +16,7 @@ type WindowCopy =
   | { key: 'provider'; values: { estimate: number; message: string } }
 
 // null: a check failure without a window, which the check never writes, has no figure to print.
-function windowCopyOf(failure: ContextWindowFailure): WindowCopy | null {
+export function windowCopyOf(failure: ContextWindowFailure): WindowCopy | null {
   const estimate = displayEstimate(failure.estimate)
   if (failure.detectedBy === 'provider') {
     return {

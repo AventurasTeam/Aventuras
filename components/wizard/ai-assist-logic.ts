@@ -1,11 +1,6 @@
-import { windowSourceLabel } from '@/components/reader/context-window-copy'
+import { windowCopyOf } from '@/components/reader/context-window-copy'
 import { cutOffCopyOf } from '@/components/reader/cut-off-copy'
-import {
-  describeCallRetryError,
-  describeContextWindow,
-  displayEstimate,
-  type CallRetryError,
-} from '@/lib/ai'
+import { describeCallRetryError, type CallRetryError } from '@/lib/ai'
 import { t } from '@/lib/i18n'
 
 declare const DedupeKeyBrand: unique symbol
@@ -101,19 +96,11 @@ export function mergePages<P>(
 }
 
 function assistWindowReason(error: Extract<CallRetryError, { tier: 'context-window' }>): string {
-  if (error.detectedBy === 'provider') {
-    return t('wizard:aiAssist.contextWindow.provider', {
-      message: error.detail?.trim() ? error.detail : describeContextWindow(error),
-    })
-  }
+  const copy = windowCopyOf(error)
   // The check never refuses without a window; with no figure to print, the diagnostic line.
-  if (error.window === null) return describeCallRetryError(error)
-  return t('wizard:aiAssist.contextWindow.check', {
-    estimate: displayEstimate(error.estimate),
-    model: error.modelId,
-    window: error.window,
-    source: windowSourceLabel(error.windowSource),
-  })
+  return copy === null
+    ? describeCallRetryError(error)
+    : t(`wizard:aiAssist.contextWindow.${copy.key}`, copy.values)
 }
 
 /**

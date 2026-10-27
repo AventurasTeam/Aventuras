@@ -1,8 +1,8 @@
-import { describeContextWindow, displayEstimate, type ResolveFailureKind } from '@/lib/ai'
+import type { ResolveFailureKind } from '@/lib/ai'
 import { t } from '@/lib/i18n'
 import { SUGGESTIONS_UNUSABLE, type PipelineError } from '@/lib/pipeline'
 
-import { windowSourceLabel } from './context-window-copy'
+import { windowCopyOf } from './context-window-copy'
 import { cutOffCopyOf } from './cut-off-copy'
 
 const SUGGESTION_RESOLVER_COPY = {
@@ -13,19 +13,11 @@ const SUGGESTION_RESOLVER_COPY = {
 } as const satisfies Record<ResolveFailureKind, string>
 
 function suggestionWindowCopy(error: Extract<PipelineError, { kind: 'context-window' }>): string {
-  if (error.detectedBy === 'provider') {
-    return t('reader:suggestions.failure.contextWindow.provider', {
-      message: error.detail?.trim() ? error.detail : describeContextWindow(error),
-    })
-  }
+  const copy = windowCopyOf(error)
   // The check never refuses without a window; with no figure to print, the generic body.
-  if (error.window === null) return t('reader:suggestions.errorBody')
-  return t('reader:suggestions.failure.contextWindow.check', {
-    estimate: displayEstimate(error.estimate),
-    model: error.modelId,
-    window: error.window,
-    source: windowSourceLabel(error.windowSource),
-  })
+  return copy === null
+    ? t('reader:suggestions.errorBody')
+    : t(`reader:suggestions.failure.contextWindow.${copy.key}`, copy.values)
 }
 
 // Strip-scoped copy rather than describeTurnFailure's: that names the narrative
