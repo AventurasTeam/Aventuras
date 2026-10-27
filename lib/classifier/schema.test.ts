@@ -100,7 +100,6 @@ describe('classifierExtractionSchema', () => {
           title: 'The courier is ambushed',
           description: 'Bandits take the satchel.',
           sourceTurn: 't2',
-          occurredAtTurn: 't2',
           involvements: [{ ref: 'c1', role: 'victim' }],
           awareness: [
             { ref: 'c1', source: 'witnessed firsthand', severity: 0.9, learnedAtTurn: 't2' },
@@ -225,15 +224,13 @@ describe('classifierExtractionSchema — the writer map', () => {
     expect(itemFields('newThreads').icon?.description).toBe(expected)
   })
 
-  // classifier.md → What the classifier writes → Happenings: the story-time anchor is asked for.
-  it("tells the model a happening's turn, or its time when the turns only recount it", () => {
+  // classifier.md → What the classifier writes → Happenings: a happening sits at its source turn.
+  it('asks for a time only for a happening the turns recount, and for no turn of its own', () => {
     const fields = itemFields('happenings')
-    expect(fields.occurredAtTurn?.description).toBe(
-      'The turn whose prose shows it happening. Omit for an event the turns only recount from before the story or offstage, and set temporal instead.',
-    )
     expect(fields.temporal?.description).toBe(
-      'When it happened, as the prose gives it, for an event the turns only recount. Omit when occurredAtTurn is set.',
+      'Only for an event from before the story or offstage that the turns recount: when it happened, as the prose gives it. Omit for an event the turns show happening.',
     )
+    expect(fields).not.toHaveProperty('occurredAtTurn')
   })
 
   it('parses renames, placements and standings of listed rows', () => {

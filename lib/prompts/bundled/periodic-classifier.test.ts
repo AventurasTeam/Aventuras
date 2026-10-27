@@ -480,7 +480,7 @@ describe('periodic classifier template — the writer map rules', () => {
   const RULES = [
     [
       'when it happened',
-      '- When it happened. Set a happening\'s occurredAtTurn to the turn whose prose shows it happening. For an event from before the story or offstage that the turns only recount, leave occurredAtTurn out and set temporal to its time as the prose gives it ("ten winters ago", "before the war").\n',
+      '- When it happened. A happening sits at its sourceTurn. For an event from before the story or offstage that the turns only recount, set temporal to its time as the prose gives it ("ten winters ago", "before the war"); leave temporal out for an event the turns show happening.\n',
     ],
     [
       'returns',

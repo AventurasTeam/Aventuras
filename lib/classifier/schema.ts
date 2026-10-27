@@ -71,17 +71,11 @@ const involvement = z.object({ ref: z.string(), role: z.string().optional() })
 const happening = z.object({
   title: z.string(),
   description: z.string().optional(),
-  occurredAtTurn: z
-    .string()
-    .optional()
-    .describe(
-      'The turn whose prose shows it happening. Omit for an event the turns only recount from before the story or offstage, and set temporal instead.',
-    ),
   temporal: z
     .string()
     .optional()
     .describe(
-      'When it happened, as the prose gives it, for an event the turns only recount. Omit when occurredAtTurn is set.',
+      'Only for an event from before the story or offstage that the turns recount: when it happened, as the prose gives it. Omit for an event the turns show happening.',
     ),
   category: tolerated(z.string()),
   icon,

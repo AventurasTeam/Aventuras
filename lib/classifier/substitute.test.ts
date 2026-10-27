@@ -50,7 +50,6 @@ const NON_REF_FIELDS = [
   'kind',
   'learnedAtTurn',
   'name',
-  'occurredAtTurn',
   'physique',
   'reason',
   'resolvedAtTurn',

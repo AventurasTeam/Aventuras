@@ -168,15 +168,13 @@ function parseFailureText(detail: string): string {
     .join('; ')
 }
 
-// classifier.md → What the classifier writes → Happenings: how often a reply gives the anchor
-// itself; the planner puts a happening given neither at its source turn.
-function anchorCounts(happenings: readonly { occurredAtTurn?: string; temporal?: string }[]) {
-  const given = (text: string | undefined) => text != null && text.trim() !== ''
-  const atTurn = happenings.filter((h) => given(h.occurredAtTurn)).length
-  const temporal = happenings.filter((h) => !given(h.occurredAtTurn) && given(h.temporal)).length
+// classifier.md → What the classifier writes → Happenings: a recounted happening carries a
+// temporal; the rest sit at their source turn.
+function anchorCounts(happenings: readonly { temporal?: string }[]) {
+  const temporal = happenings.filter((h) => (h.temporal?.trim() ?? '') !== '').length
   return (
-    `happenings: ${happenings.length} (occurredAtTurn ${atTurn}, temporal ${temporal}, ` +
-    `neither ${happenings.length - atTurn - temporal})`
+    `happenings: ${happenings.length} (temporal ${temporal}, ` +
+    `at source turn ${happenings.length - temporal})`
   )
 }
 

@@ -94,11 +94,11 @@ alias list (the keywords bullet below).
   window, each with a free-form `category` and an `icon` from the
   catalog, and `decay_resistance` set per awareness row from the
   model's per-character severity judgment at extraction time. Each
-  happening sits in story time at the turn whose prose shows it
-  happening (`occurred_at_entry_id`), or, for an event the turns only
-  recount, at a free-form `temporal`. A reply that gives neither, or
-  names a turn outside the window and no `temporal`, places it at its
-  source turn, never at the window head: the
+  happening sits in story time at its source turn
+  (`occurred_at_entry_id`), or, for an event from before the story or
+  offstage that the turns only recount, at a free-form `temporal`
+  instead. A source turn outside the window leaves it with neither,
+  never at the window head: the
   [recent happenings](#what-the-classifier-reads) a later pass lists,
   Plot's chapter grouping and the ranker's chapter boost all read the
   position. An

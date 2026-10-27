@@ -53,7 +53,6 @@ test.describe('periodic classifier — graph population', () => {
           title: 'The courier is ambushed at the ford',
           description: 'Bandits take the satchel.',
           sourceTurn: 't1',
-          occurredAtTurn: 't1',
           involvements: [{ ref: 'newbie', role: 'attacker' }],
           awareness: [
             { ref: 'newbie', source: 'witnessed firsthand', severity: 0.9, learnedAtTurn: 't1' },
