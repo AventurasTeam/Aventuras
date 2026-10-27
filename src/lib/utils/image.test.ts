@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   parseImageSpec,
+  pickResolution,
   specFromPixels,
   specToPixels,
   specToAspectRatio,
@@ -13,6 +14,8 @@ import {
   storyImageMode,
   IMAGE_ORIENTATIONS,
   IMAGE_SIZE_TIERS,
+  type ImageOrientation,
+  type ImageSizeTier,
 } from './image'
 
 describe('specToPixels', () => {
@@ -166,6 +169,42 @@ describe('specToAspectRatio', () => {
       const [w, h] = specToRatioString(spec).split(':').map(Number)
       expect(width / height).toBeCloseTo(w / h, 5)
     }
+  })
+})
+
+describe('pickResolution', () => {
+  const pick = (size: ImageSizeTier, listed?: string[], orientation: ImageOrientation = 'square') =>
+    pickResolution({ orientation, size }, listed)
+
+  it('picks the smallest listed tier that covers the long edge', () => {
+    expect(pick('tiny', ['512', '1K', '2K'])).toBe('512')
+    expect(pick('small', ['512', '1K', '2K'])).toBe('1K')
+    expect(pick('medium', ['512', '1K', '2K'])).toBe('2K')
+    expect(pick('large', ['512', '1K', '2K', '4K'])).toBe('2K')
+  })
+
+  it('rounds up to the next listed tier when the exact one is missing', () => {
+    expect(pick('tiny', ['1K', '2K', '4K'])).toBe('1K')
+    expect(pick('medium', ['1K', '2K', '4K'])).toBe('2K')
+  })
+
+  it('falls back to the largest tier when none covers the long edge', () => {
+    expect(pick('large', ['512', '1K'])).toBe('1K')
+  })
+
+  it('measures the long edge, so a landscape tier needs the same tier as a square one', () => {
+    expect(pick('small', ['512', '1K', '2K'], 'landscape')).toBe('1K')
+    expect(pick('small', ['512', '1K', '2K'], 'portrait')).toBe('1K')
+  })
+
+  it('ignores tiers it cannot place and sorts the rest', () => {
+    expect(pick('small', ['auto', '2K', '1K'])).toBe('1K')
+    expect(pick('small', ['auto'])).toBeUndefined()
+  })
+
+  it('sends nothing when the model lists no tiers', () => {
+    expect(pick('medium')).toBeUndefined()
+    expect(pick('medium', [])).toBeUndefined()
   })
 })
 

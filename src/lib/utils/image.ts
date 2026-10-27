@@ -251,6 +251,36 @@ function ratioValue(ratio: string): number {
   return h > 0 ? w / h : NaN
 }
 
+/** Long edge in pixels of each resolution tier a ratio-plus-tier backend names. */
+const RESOLUTION_LONG_EDGE = new Map([
+  ['512', 512],
+  ['768', 768],
+  ['1K', 1024],
+  ['1.5K', 1536],
+  ['2K', 2048],
+  ['4K', 4096],
+])
+
+/**
+ * The model's smallest listed tier that covers the spec's long edge, else its largest; `undefined`
+ * when it lists none. A backend rejects a tier the model lists others without and ignores one on a
+ * model that lists none, so with nothing listed there is nothing to send.
+ */
+export function pickResolution(
+  spec: ImageSpec,
+  listed: readonly string[] = [],
+): string | undefined {
+  const { width, height } = specToPixels(spec)
+  const want = Math.max(width, height)
+  const tiers = listed
+    .flatMap((tier) => {
+      const edge = RESOLUTION_LONG_EDGE.get(tier)
+      return edge ? [{ tier, edge }] : []
+    })
+    .toSorted((a, b) => a.edge - b.edge)
+  return (tiers.find((t) => t.edge >= want) ?? tiers.at(-1))?.tier
+}
+
 /**
  * Read a stored size into a spec.
  *
