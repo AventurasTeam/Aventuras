@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router'
+import { useMemo } from 'react'
 
 import type { ResolveFailureKind } from '@/lib/ai'
 import type { SystemFailureMeta } from '@/lib/db'
@@ -6,12 +7,15 @@ import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import {
   CLASSIFIER_HELD,
+  EMPTY_REPLY,
+  pipelineErrorDetail,
   type PipelineError,
   type RejectedStart,
   type TxResult,
 } from '@/lib/pipeline'
 import { openEmbedderSwapDialog } from '@/lib/stores'
 
+import { offersProfileFix, passCutOffContent, turnCutOffContent } from './cut-off-copy'
 import type { PassRefusal } from './send-run'
 
 export type SystemEntryFixAction = { label: string; onPress: () => void } | undefined
@@ -65,6 +69,8 @@ const FIX_LABEL = {
   'override-provider-missing': 'reader:systemEntry.fixOverride',
 } as const satisfies Record<ResolveFailureKind, string>
 
+const PROVIDER_SETTINGS_ROUTE = '/settings?tab=providers'
+
 function isResolveFailureKind(failure: string): failure is ResolveFailureKind {
   return Object.hasOwn(FIX_LABEL, failure)
 }
@@ -73,14 +79,22 @@ function providerDetail(error: Extract<PipelineError, { kind: 'provider' }>): st
   return error.detail != null ? `${error.reason}: ${error.detail}` : error.reason
 }
 
+// The entry's persisted fix-action tag: the resolver's failure, or a cut-off's cause.
+function failureTagOf(error: PipelineError | undefined): string | undefined {
+  if (error?.kind === 'config-resolver') return error.failure
+  if (error?.kind === 'reply-cut-off') return error.cause
+  return undefined
+}
+
 function failureMetaOf(
   error: PipelineError | undefined,
   detail: string | undefined,
   submission: SystemFailureMeta['submission'],
 ): SystemFailureMeta {
+  const failure = failureTagOf(error)
   return {
     kind: error?.kind ?? 'orchestrator',
-    ...(error?.kind === 'config-resolver' ? { failure: error.failure } : {}),
+    ...(failure != null ? { failure } : {}),
     ...(detail != null ? { detail } : {}),
     ...(submission != null ? { submission } : {}),
   }
@@ -110,7 +124,19 @@ export function describeTurnFailure(error: PipelineError | undefined): {
       detail: `${error.reason}: ${error.detail}${magnitude}`,
     }
   }
-  return { content: t('reader:systemEntry.failureMessage'), detail: error?.detail }
+  if (error?.kind === 'reply-cut-off') {
+    return { content: turnCutOffContent(error), detail: pipelineErrorDetail(error) }
+  }
+  if (error?.kind === 'phase-logic' && error.subsystem === EMPTY_REPLY) {
+    return {
+      content: t('reader:systemEntry.failure.emptyReply'),
+      detail: pipelineErrorDetail(error),
+    }
+  }
+  return {
+    content: t('reader:systemEntry.failureMessage'),
+    detail: error !== undefined ? pipelineErrorDetail(error) : undefined,
+  }
 }
 
 export function toSystemFailureMeta(
@@ -142,7 +168,13 @@ export function describePassFailure(
   if (error?.kind === 'config-resolver') {
     return { content: t(PASS_RESOLVER_COPY[error.failure]), detail: error.detail }
   }
-  return { content: t('reader:systemEntry.failure.memory'), detail: error?.detail }
+  if (error?.kind === 'reply-cut-off') {
+    return { content: passCutOffContent(error), detail: pipelineErrorDetail(error) }
+  }
+  return {
+    content: t('reader:systemEntry.failure.memory'),
+    detail: error !== undefined ? pipelineErrorDetail(error) : undefined,
+  }
 }
 
 export function toPassFailureMeta(
@@ -221,7 +253,7 @@ export function useConfigFixAction(
   }
   return {
     label: t(isResolveFailureKind(failure) ? FIX_LABEL[failure] : 'reader:systemEntry.fixDefault'),
-    onPress: () => leaveStory(() => router.push('/settings?tab=providers')),
+    onPress: () => leaveStory(() => router.push(PROVIDER_SETTINGS_ROUTE)),
   }
 }
 
@@ -240,6 +272,27 @@ export function useEmbedderFixAction(storyId: string | null): SystemEntryFixActi
   }
 }
 
+/**
+ * `Fix profile` for a max-output or server-limit cut-off, via the story-leave guard. Memoized: the
+ * reader hands it to every row, so a fresh identity would re-render each per chunk.
+ */
+export function useProfileFixAction(
+  enabled: boolean,
+  leaveStory: LeaveStory,
+): SystemEntryFixAction {
+  const router = useRouter()
+  return useMemo(
+    () =>
+      enabled
+        ? {
+            label: t('reader:systemEntry.fixProfile'),
+            onPress: () => leaveStory(() => router.push(PROVIDER_SETTINGS_ROUTE)),
+          }
+        : undefined,
+    [enabled, leaveStory, router],
+  )
+}
+
 export function useSystemEntryActions(
   failure: SystemFailureMeta | undefined,
   onRetry: () => void,
@@ -252,10 +305,14 @@ export function useSystemEntryActions(
     leaveStory,
   )
   const embedderFix = useEmbedderFixAction(failure?.kind === 'embedder' ? storyId : null)
+  const cutOffFix = useProfileFixAction(
+    failure?.kind === 'reply-cut-off' && offersProfileFix(failure.failure),
+    leaveStory,
+  )
   // A held branch can't run a pass, and a resolved entry's pass has run, so either offers Dismiss
-  // alone. The two fix gates are kind-exclusive, so the `??` order carries no meaning.
+  // alone. The fix gates are kind-exclusive, so the `??` order carries no meaning.
   return {
     onRetry: failure?.pass === 'held' || failure?.pass === 'resolved' ? undefined : onRetry,
-    fixAction: embedderFix ?? configFix,
+    fixAction: embedderFix ?? configFix ?? cutOffFix,
   }
 }

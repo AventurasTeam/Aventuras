@@ -19,6 +19,7 @@ import {
 import { EntryCard } from '@/components/compounds/entry-card'
 import type { SceneEdit, SceneOptions } from '@/components/compounds/scene-edit-form'
 import { resolveContentEditNotice } from '@/components/reader/content-edit-notice'
+import { cutOffNoticeText, offersProfileFix } from '@/components/reader/cut-off-copy'
 import { JumpButtons } from '@/components/reader/jump-buttons'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useTier } from '@/hooks/use-tier'
@@ -70,6 +71,7 @@ type ReaderRowProps = {
   reversalDisabled: boolean
   disabledReason?: string
   systemFixLabel?: string
+  cutOffFixLabel?: string
   // Flat primitives rather than the decoration object: a fresh `{…}` per walk
   // would defeat the shallow memo compare the same way a merged row would.
   worldTimeLabel?: string
@@ -95,6 +97,7 @@ type ReaderRowProps = {
   onRequestRollback: (entryId: string) => Promise<void>
   onRegenerate: (entryId: string) => Promise<void>
   onFixSystemEntry: () => Promise<void>
+  onFixCutOff: () => Promise<void>
   onRetrySystemEntry?: () => Promise<void>
   onDismissSystemEntry: () => Promise<void>
 }
@@ -113,6 +116,7 @@ const ReaderRow = memo(function ReaderRow({
   reversalDisabled,
   disabledReason,
   systemFixLabel,
+  cutOffFixLabel,
   worldTimeLabel,
   worldTimeRaw,
   worldTimeBreakPreviousLabel,
@@ -133,6 +137,7 @@ const ReaderRow = memo(function ReaderRow({
   onRequestRollback,
   onRegenerate,
   onFixSystemEntry,
+  onFixCutOff,
   onRetrySystemEntry,
   onDismissSystemEntry,
 }: ReaderRowProps) {
@@ -151,6 +156,17 @@ const ReaderRow = memo(function ReaderRow({
   // primitive-valued so ReaderRow's memo compare still holds.
   const monotonicityBreak =
     worldTimeBreakPreviousLabel != null ? { previousLabel: worldTimeBreakPreviousLabel } : undefined
+  const cutOff = row.kind === 'ai_reply' ? row.metadata?.cutOff : undefined
+  const cutOffNotice =
+    cutOff != null
+      ? {
+          text: cutOffNoticeText(cutOff),
+          action:
+            offersProfileFix(cutOff.cause) && cutOffFixLabel != null
+              ? { label: cutOffFixLabel, onPress: () => void onFixCutOff() }
+              : undefined,
+        }
+      : undefined
   return (
     <EntryCard
       kind={row.kind}
@@ -184,6 +200,7 @@ const ReaderRow = memo(function ReaderRow({
       }
       onRetry={isSystem && onRetrySystemEntry != null ? () => void onRetrySystemEntry() : undefined}
       onDismiss={isSystem ? () => void onDismissSystemEntry() : undefined}
+      cutOffNotice={cutOffNotice}
       worldTimeLabel={worldTimeLabel}
       worldTimeRaw={timeEditable ? worldTimeRaw : undefined}
       worldTimeMonotonicityBreak={monotonicityBreak}
@@ -216,6 +233,7 @@ export function ReaderSurface({
   gateReason,
   jumpButtonEnabled,
   systemFixLabel,
+  cutOffFixLabel,
   entityNames,
   sceneOptions,
   tailEntryId,
@@ -230,6 +248,7 @@ export function ReaderSurface({
   onRetrySystemEntry,
   onDismissSystemEntry,
   onFixSystemEntry,
+  onFixCutOff,
   ref,
 }: ReaderSurfaceProps & { ref?: Ref<ReaderSurfaceHandle> }) {
   // One window subscription for the whole list. Resolved per card, every row would
@@ -635,6 +654,7 @@ export function ReaderSurface({
                 reversalDisabled={flags.reversalDisabled}
                 disabledReason={gateReason}
                 systemFixLabel={systemFixLabel}
+                cutOffFixLabel={cutOffFixLabel}
                 worldTimeLabel={decoration?.label}
                 worldTimeRaw={decoration?.raw}
                 worldTimeBreakPreviousLabel={decoration?.previousLabel}
@@ -655,6 +675,7 @@ export function ReaderSurface({
                 onRequestRollback={onRequestRollback}
                 onRegenerate={onRegenerate}
                 onFixSystemEntry={onFixSystemEntry}
+                onFixCutOff={onFixCutOff}
                 onRetrySystemEntry={onRetrySystemEntry}
                 onDismissSystemEntry={onDismissSystemEntry}
               />

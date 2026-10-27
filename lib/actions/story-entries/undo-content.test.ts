@@ -8,6 +8,8 @@ import {
   stories,
   storyEntries,
   type ClassifierStatus,
+  type CutOffMark,
+  type EntryMetadata,
   type NewStoryEntry,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -30,7 +32,7 @@ afterEach(() => {
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>['db']
 
-type SeedEntry = Pick<NewStoryEntry, 'id' | 'position' | 'kind' | 'content'>
+type SeedEntry = Pick<NewStoryEntry, 'id' | 'position' | 'kind' | 'content' | 'metadata'>
 
 const status = (processedThrough: number): ClassifierStatus => ({
   state: 'idle',
@@ -54,7 +56,7 @@ async function seedBranch(db: TestDb, entries: SeedEntry[], processed: number) {
   await db.insert(storyEntries).values(rows)
   entriesStore.hydrate(
     'b1',
-    rows.map((r) => ({ ...r, chapterId: null, metadata: null })),
+    rows.map((r) => ({ ...r, chapterId: null, metadata: r.metadata ?? null })),
   )
   await db.insert(deltas).values({
     id: 'd_turn',
@@ -574,5 +576,197 @@ describe('a content edit round trip', () => {
 
     const [row] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e_act'))
     expect(row.content).toBe('i ride north')
+  })
+})
+
+const REPLY_META: EntryMetadata = {
+  sceneEntities: [],
+  currentLocationId: null,
+  worldTime: 0,
+  model: 'model-1',
+}
+const MARK: CutOffMark = { cause: 'max-output', outputTokens: 512, limit: 512 }
+
+async function seedReplyWith(db: TestDb, metadata: EntryMetadata | null) {
+  await seedBranch(
+    db,
+    [
+      { id: 'e_open', position: 1, kind: 'opening', content: 'once upon a time' },
+      { id: 'e_reply', position: 2, kind: 'ai_reply', content: 'the courier rode north', metadata },
+    ],
+    2,
+  )
+}
+
+async function replyRow(db: TestDb) {
+  const [row] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e_reply'))
+  return row
+}
+
+// data-model.md → Entry metadata shape → Cut-off mark: the edited text is the user's.
+describe('a content edit of a cut-off reply', () => {
+  it('clears the mark in the same delta as the new text', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedReplyWith(db, { ...REPLY_META, cutOff: MARK })
+
+    const result = await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
+
+    expect(result.status).toBe('ok')
+    const row = await replyRow(db)
+    expect(row.content).toBe('the courier turned back')
+    expect(row.metadata).toEqual(REPLY_META)
+    // Strict: the store holds the patch as given, so a key left at undefined would stay on it.
+    expect(entriesStore.getById('e_reply')?.metadata).toStrictEqual(REPLY_META)
+    const edits = await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))
+    expect(edits).toHaveLength(1)
+    expect(edits[0].undoPayload).toEqual({
+      content: 'the courier rode north',
+      metadata: { cutOff: MARK },
+      $invalidationScope: { entryIds: ['e_reply'], editedPosition: 2 },
+    })
+  })
+
+  it('undo restores the text and the mark together', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedReplyWith(db, { ...REPLY_META, cutOff: MARK })
+    await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
+    expect((await replyRow(db)).metadata?.cutOff).toBeUndefined()
+
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+
+    const row = await replyRow(db)
+    expect(row.content).toBe('the courier rode north')
+    expect(row.metadata).toEqual({ ...REPLY_META, cutOff: MARK })
+    expect(entriesStore.getById('e_reply')?.metadata?.cutOff).toEqual(MARK)
+  })
+
+  it('redo clears the mark again', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedReplyWith(db, { ...REPLY_META, cutOff: MARK })
+    await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
+    await undoLastAction('b1', ctx)
+    expect((await replyRow(db)).metadata?.cutOff).toEqual(MARK)
+
+    expect((await redoLastAction('b1', ctx)).status).toBe('ok')
+
+    const row = await replyRow(db)
+    expect(row.content).toBe('the courier turned back')
+    expect(row.metadata).toEqual(REPLY_META)
+    expect(entriesStore.getById('e_reply')?.metadata).toEqual(REPLY_META)
+    const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
+    expect(remaining.filter(isContentEditDelta)).toHaveLength(1)
+  })
+
+  it('keeps the metadata its own reversal writes to the row', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedReplyWith(db, { ...REPLY_META, worldTime: 7, cutOff: MARK })
+    // A pass write anchored to the reply: the edit's reversal winds its clock back in the edit's
+    // own transaction, after the edit read the row.
+    await db.insert(deltas).values({
+      id: 'd_clock',
+      branchId: 'b1',
+      actionId: 'act_classifier',
+      op: 'update',
+      targetTable: 'story_entries',
+      targetId: 'e_reply',
+      entryId: 'e_reply',
+      source: 'periodic_classifier',
+      undoPayload: { metadata: { worldTime: 0 } },
+      logPosition: 2,
+      encodingVersion: 1,
+      createdAt: 3,
+    })
+
+    await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
+
+    expect((await replyRow(db)).metadata).toEqual(REPLY_META)
+    expect(entriesStore.getById('e_reply')?.metadata).toStrictEqual(REPLY_META)
+  })
+
+  it.each([
+    ['no metadata', null],
+    ['metadata and no mark', REPLY_META],
+  ])('leaves the metadata of a reply with %s alone', async (_label, metadata) => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedReplyWith(db, metadata)
+
+    await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
+
+    expect((await replyRow(db)).metadata).toEqual(metadata)
+    const [edit] = await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))
+    expect(edit.undoPayload).not.toHaveProperty('metadata')
+  })
+
+  it('undoes an edit of a marked reply below the head turn, which records no scope', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranch(
+      db,
+      [
+        { id: 'e_open', position: 1, kind: 'opening', content: 'once upon a time' },
+        { id: 'e_act', position: 2, kind: 'user_action', content: 'i ride north' },
+        {
+          id: 'e_reply',
+          position: 3,
+          kind: 'ai_reply',
+          content: 'the courier rode north',
+          metadata: { ...REPLY_META, cutOff: MARK },
+        },
+        { id: 'e_act2', position: 4, kind: 'user_action', content: 'i ride on' },
+        { id: 'e_reply2', position: 5, kind: 'ai_reply', content: 'the road forked' },
+      ],
+      5,
+    )
+
+    await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
+
+    const [edit] = await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))
+    expect(edit.undoPayload).toEqual({
+      content: 'the courier rode north',
+      metadata: { cutOff: MARK },
+    })
+    expect((await replyRow(db)).metadata).toEqual(REPLY_META)
+
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+
+    const row = await replyRow(db)
+    expect(row.content).toBe('the courier rode north')
+    expect(row.metadata).toEqual({ ...REPLY_META, cutOff: MARK })
+    expect(entriesStore.getById('e_reply')?.metadata?.cutOff).toEqual(MARK)
+  })
+
+  it('undoes an unknown cause, which carries no numbers', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    const unknown: CutOffMark = { cause: 'unknown' }
+    await seedReplyWith(db, { ...REPLY_META, cutOff: unknown })
+
+    await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
+    expect((await replyRow(db)).metadata).toEqual(REPLY_META)
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+
+    const row = await replyRow(db)
+    expect(row.metadata).toStrictEqual({ ...REPLY_META, cutOff: unknown })
+    expect(entriesStore.getById('e_reply')?.metadata).toStrictEqual({
+      ...REPLY_META,
+      cutOff: unknown,
+    })
+  })
+
+  it('keeps the mark on a save that changes nothing', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedReplyWith(db, { ...REPLY_META, cutOff: MARK })
+
+    const result = await updateStoryEntryContent('b1', 'e_reply', 'the courier rode north', ctx)
+
+    expect(result.status).toBe('ok')
+    expect((await replyRow(db)).metadata?.cutOff).toEqual(MARK)
+    expect(await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))).toEqual([])
   })
 })

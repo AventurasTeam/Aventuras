@@ -53,7 +53,7 @@ function failGenerate(detail: string): WizardAssistDeps['generate'] {
   return (async () => ({
     status: 'failed',
     recoverable: [],
-    detail,
+    error: { tier: 'provider', reason: 'unknown', detail },
   })) as WizardAssistDeps['generate']
 }
 function deps(value: unknown): WizardAssistDeps {
@@ -188,7 +188,11 @@ describe('runOpeningAssist', () => {
       resolveConfig: () => CONFIGURED,
       generate: failGenerate('boom'),
     })
-    expect(res).toEqual({ status: 'failed', recoverable: [], detail: 'boom' })
+    expect(res).toEqual({
+      status: 'failed',
+      recoverable: [],
+      error: { tier: 'provider', reason: 'unknown', detail: 'boom' },
+    })
   })
 })
 

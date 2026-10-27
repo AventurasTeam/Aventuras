@@ -72,6 +72,7 @@ import {
   toPassFailureMeta,
   toSystemFailureMeta,
   useConfigFixAction,
+  useProfileFixAction,
   useSystemEntryActions,
 } from '@/components/reader/system-entry-actions'
 import { useLiveRollbackCounts } from '@/components/reader/use-live-rollback-counts'
@@ -1402,6 +1403,9 @@ export default function ReaderComposerRoute() {
 
   const handleRetrySystemEntry = useCallback(async () => retrySystemEntry?.(), [retrySystemEntry])
   const handleFixSystemEntry = useCallback(async () => fixAction?.onPress(), [fixAction])
+  // One stable action for every row's notice: useProfileFixAction keeps its identity.
+  const cutOffFix = useProfileFixAction(true, guardLeave)
+  const handleFixCutOff = useCallback(async () => cutOffFix?.onPress(), [cutOffFix])
   // Editable-target exclusion keeps End moving the caret inside the composer.
   useGlobalHotkey(matchesJumpToBottomShortcut, jumpToBottom, {
     ignoreEditableTargets: true,
@@ -1486,6 +1490,7 @@ export default function ReaderComposerRoute() {
     gateReason: rowGateReason(editGate, { gate: gateReason, headReversal: headReversalReason }),
     jumpButtonEnabled,
     systemFixLabel: fixAction?.label,
+    cutOffFixLabel: cutOffFix?.label,
     onNearTop: loadOlderEntries,
     onCommitEdit: handleCommitEdit,
     onRequestRollback: openRollback,
@@ -1501,6 +1506,7 @@ export default function ReaderComposerRoute() {
     onRetrySystemEntry: retrySystemEntry != null ? handleRetrySystemEntry : undefined,
     onDismissSystemEntry: handleDismissSystemEntry,
     onFixSystemEntry: handleFixSystemEntry,
+    onFixCutOff: handleFixCutOff,
   }
 
   return (

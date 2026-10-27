@@ -459,7 +459,10 @@ describe('orchestrator hardening', () => {
     // Open, not settled — the poison delta survived and boot must still see it.
     const [marker] = await db.select().from(pipelineRuns)
     expect(marker.finishedAt).toBeNull()
-    expect(result.error?.detail).toMatch(/^reverse-replay failed/)
+    expect(result.error).toMatchObject({
+      kind: 'orchestrator',
+      detail: expect.stringMatching(/^reverse-replay failed/),
+    })
     expect(
       getDiagnosticsSnapshot().logEntries.some(
         (e) => e.kind === 'pipeline.orphan_left_for_recovery',
@@ -508,7 +511,10 @@ describe('orchestrator hardening', () => {
         (e) => e.kind === 'pipeline.orphan_left_for_recovery',
       ),
     ).toBe(false)
-    expect(result.error?.detail).toMatch(/^post-commit store sync failed/)
+    expect(result.error).toMatchObject({
+      kind: 'orchestrator',
+      detail: expect.stringMatching(/^post-commit store sync failed/),
+    })
   })
 
   it('a marker-write failure on abort finishes cleanly without leaking state', async () => {

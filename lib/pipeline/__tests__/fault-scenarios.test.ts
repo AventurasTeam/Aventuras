@@ -55,9 +55,11 @@ function stubPhase(scenario: StubScenario): PhaseFn {
       maxParseAttempts: 2,
       signal: abortSignal,
     })
-    for (const e of res.recoverable) yield { type: 'recoverable_error', error: toPipelineError(e) }
+    for (const e of res.recoverable)
+      yield { type: 'recoverable_error', error: toPipelineError(e, 'classifier') }
     if (res.status === 'aborted') return { status: 'aborted' }
-    if (res.status === 'failed') return { status: 'failed', error: toPipelineError(res.error) }
+    if (res.status === 'failed')
+      return { status: 'failed', error: toPipelineError(res.error, 'classifier') }
     if (res.result.refusal) {
       return { status: 'failed', error: { kind: 'phase-logic', detail: 'model refused' } }
     }

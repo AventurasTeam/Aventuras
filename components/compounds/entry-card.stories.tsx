@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactElement } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
+import { cutOffNoticeText } from '@/components/reader/cut-off-copy'
 import { Text } from '@/components/ui/text'
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 import { t } from '@/lib/i18n'
@@ -280,6 +281,219 @@ export const BranchActionOnAiReply: StoryT = {
   },
   play: async () => {
     await expect(screen.getByRole('button', { name: 'Branch from here' })).toBeVisible()
+  },
+}
+
+const FIX_PROFILE = t('reader:systemEntry.fixProfile')
+const NOTICE_MAX_OUTPUT = cutOffNoticeText({ cause: 'max-output', outputTokens: 4096, limit: 4096 })
+const NOTICE_WINDOW = cutOffNoticeText({ cause: 'window', outputTokens: 1200, limit: 65536 })
+const NOTICE_UNKNOWN = cutOffNoticeText({ cause: 'unknown', outputTokens: 2048 })
+
+// entry-card.md → Cut-off notice.
+function expectNoticeBetweenProseAndFooter(text: string) {
+  const notice = screen.getByText(text)
+  const prose = screen.getByText(aiEntry.content)
+  const footer = screen.getByText(baseProps.worldTimeLabel)
+  expect(prose.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(
+    0,
+  )
+  expect(notice.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(
+    0,
+  )
+}
+
+/** Max-output cut: the notice offers `Fix profile` and has no dismiss. */
+export const CutOffNoticeMaxOutput: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    cutOffNotice: { text: NOTICE_MAX_OUTPUT, action: { label: FIX_PROFILE, onPress: fn() } },
+  },
+  play: async ({ args }) => {
+    await expect(screen.getByText(NOTICE_MAX_OUTPUT)).toBeVisible()
+    expectNoticeBetweenProseAndFooter(NOTICE_MAX_OUTPUT)
+    expect(screen.queryByRole('button', { name: /dismiss/i })).not.toBeInTheDocument()
+    // The phone tap floor stays off desktop, where the grown box would reach the block above.
+    const link = screen.getByRole('button', { name: 'Fix profile' })
+    expect(link.getBoundingClientRect().height).toBeLessThan(44)
+    await userEvent.click(link)
+    await waitFor(() => expect(args.cutOffNotice?.action?.onPress).toHaveBeenCalledTimes(1))
+  },
+}
+
+/** Cut where the prompt and reply filled the window: the host passes no action. */
+export const CutOffNoticeWindow: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    cutOffNotice: { text: NOTICE_WINDOW },
+  },
+  play: async () => {
+    await expect(screen.getByText(NOTICE_WINDOW)).toBeVisible()
+    expectNoticeBetweenProseAndFooter(NOTICE_WINDOW)
+    expect(screen.queryByRole('button', { name: 'Fix profile' })).not.toBeInTheDocument()
+  },
+}
+
+/** Stopped at the server's own limit: `Fix profile`, since a profile max output overrides it. */
+export const CutOffNoticeUnknown: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    cutOffNotice: { text: NOTICE_UNKNOWN, action: { label: FIX_PROFILE, onPress: fn() } },
+  },
+  play: async ({ args }) => {
+    await expect(screen.getByText(NOTICE_UNKNOWN)).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Fix profile' }))
+    await waitFor(() => expect(args.cutOffNotice?.action?.onPress).toHaveBeenCalledTimes(1))
+  },
+}
+
+/** Editing hides the brain, the reasoning and the action cluster, not the notice. */
+export const CutOffNoticeWhileEditing: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    editing: true,
+    onContentChange: fn(),
+    onCommitEdit: fn(),
+    onCancelEdit: fn(),
+    cutOffNotice: { text: NOTICE_MAX_OUTPUT, action: { label: FIX_PROFILE, onPress: fn() } },
+  },
+  play: async () => {
+    await expect(
+      screen.getByRole('textbox', { name: t('reader:entryCard.editContent') }),
+    ).toBeVisible()
+    expect(screen.getByText(NOTICE_MAX_OUTPUT)).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Fix profile' })).toBeVisible()
+    // Under the editor's Save / Cancel row, above the footer.
+    const save = screen.getByRole('button', { name: t('save') })
+    const notice = screen.getByText(NOTICE_MAX_OUTPUT)
+    const footer = screen.getByText(baseProps.worldTimeLabel)
+    expect(save.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(
+      0,
+    )
+    expect(
+      notice.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeGreaterThan(0)
+  },
+}
+
+/** `Fix profile` is navigation (the story-leave guard confirms mid-run); the card never gates. */
+export const CutOffNoticeActionWhileDisabled: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    disabled: true,
+    disabledReason: 'Generation is in flight. Cancel to edit.',
+    cutOffNotice: { text: NOTICE_MAX_OUTPUT, action: { label: FIX_PROFILE, onPress: fn() } },
+  },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: 'Fix profile' }))
+    await waitFor(() => expect(args.cutOffNotice?.action?.onPress).toHaveBeenCalledTimes(1))
+  },
+}
+
+const phoneWidthDecorator = (Story: () => ReactElement) => (
+  <View style={{ width: 360 }}>
+    <Story />
+  </View>
+)
+
+/**
+ * A sentence too long for one line wraps beside the glyph; the glyph never sits alone above it.
+ * `Fix profile` takes the phone's 44 px tap floor without moving anything.
+ */
+export const CutOffNoticePhoneWidth: StoryT = {
+  decorators: [phoneWidthDecorator],
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    tier: 'phone',
+    cutOffNotice: { text: NOTICE_UNKNOWN, action: { label: FIX_PROFILE, onPress: fn() } },
+  },
+  play: async () => {
+    const text = screen.getByText(NOTICE_UNKNOWN)
+    // The nearest ancestor holding an svg is the notice row, whichever way it nests the text.
+    let row = text.parentElement
+    while (row != null && row.querySelector('svg') == null) row = row.parentElement
+    const glyph = row?.querySelector('svg')
+    if (glyph == null) throw new Error('cut-off glyph not found')
+    const textRect = text.getBoundingClientRect()
+    const glyphRect = glyph.getBoundingClientRect()
+    const lineHeight = parseFloat(getComputedStyle(text).lineHeight)
+    // The sentence is long enough to wrap at 360px.
+    expect(textRect.height).toBeGreaterThan(lineHeight * 1.5)
+    expect(glyphRect.left).toBeLessThan(textRect.left)
+    expect(Math.abs(glyphRect.top - textRect.top)).toBeLessThan(lineHeight)
+
+    // docs/ui/foundations/mobile/touch.md: the reader is a web document on native, so no hitSlop.
+    const link = screen.getByRole('button', { name: FIX_PROFILE })
+    const linkRect = link.getBoundingClientRect()
+    const labelRect = within(link).getByText(FIX_PROFILE).getBoundingClientRect()
+    expect(linkRect.height).toBeGreaterThanOrEqual(44)
+    // Hit-tested at both edges: a later sibling painting over the box would take that strip.
+    const x = linkRect.left + linkRect.width / 2
+    expect(link.contains(document.elementFromPoint(x, linkRect.top + 1))).toBe(true)
+    expect(link.contains(document.elementFromPoint(x, linkRect.bottom - 1))).toBe(true)
+    // The label keeps its place: right under the sentence, the footer's own margin below it.
+    const footerRect = screen.getByText(baseProps.worldTimeLabel).getBoundingClientRect()
+    expect(labelRect.top - textRect.bottom).toBeLessThan(lineHeight / 2)
+    expect(footerRect.top - labelRect.bottom).toBeLessThan(lineHeight)
+  },
+}
+
+const noticeAction = { label: FIX_PROFILE, onPress: fn() }
+
+/** The slot is `ai_reply`'s alone: every other kind given the prop renders no notice. */
+export const CutOffNoticeOnlyOnAiReply: StoryT = {
+  parameters: { layout: 'padded' },
+  render: () => (
+    <View className="flex-col gap-4" style={{ maxWidth: 700 }}>
+      <EntryCard
+        tier="desktop"
+        kind="ai_reply"
+        content="At the next bend, a figure in dust-grey waits."
+        cutOffNotice={{ text: 'Notice on ai_reply', action: noticeAction }}
+      />
+      <EntryCard
+        tier="desktop"
+        kind="user_action"
+        content="I keep riding."
+        cutOffNotice={{ text: 'Notice on user_action', action: noticeAction }}
+      />
+      <EntryCard
+        tier="desktop"
+        kind="opening"
+        content="The road from Ironshore is empty for a hundred miles."
+        cutOffNotice={{ text: 'Notice on opening', action: noticeAction }}
+      />
+      <EntryCard
+        tier="desktop"
+        kind="streaming"
+        streamingPhase="reply"
+        content="The figure raises a single gloved"
+        cutOffNotice={{ text: 'Notice on streaming', action: noticeAction }}
+      />
+      <EntryCard
+        tier="desktop"
+        kind="system"
+        content="Provider returned 503."
+        cutOffNotice={{ text: 'Notice on system', action: noticeAction }}
+      />
+    </View>
+  ),
+  play: async () => {
+    await expect(screen.getByText('Notice on ai_reply')).toBeVisible()
+    for (const kind of ['user_action', 'opening', 'streaming', 'system']) {
+      expect(screen.queryByText(`Notice on ${kind}`)).not.toBeInTheDocument()
+    }
+    expect(screen.getAllByRole('button', { name: 'Fix profile' })).toHaveLength(1)
   },
 }
 

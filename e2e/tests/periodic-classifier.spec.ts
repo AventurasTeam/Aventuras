@@ -726,6 +726,11 @@ function gatedPassReply(title: string) {
 // Valid JSON the pass's schema rejects, so both parse attempts fail and the pass fails.
 const UNPARSEABLE_PASS_REPLY = { happenings: 'not a list' }
 
+// The inert reply cut after its sixth list: jsonrepair would close it into a reply the schema
+// accepts, so only the strict parse a 'length' stop gets refuses it.
+const CUT_PASS_REPLY =
+  '{"happenings":[],"relationships":[],"statusFlips":[],"newCharacters":[],"newFactions":[],"memberships":[]'
+
 // The run, status and entry reads the pass describes share. Getters, since each describe's
 // beforeAll assigns its app and mock after this runs.
 function passProbe(page: () => Page, mockLlm: () => MockLlm) {
@@ -1277,7 +1282,8 @@ test.describe('periodic classifier — failure policy', () => {
     expect(passCalls()).toBeGreaterThan(calls)
     expect(streamedCalls()).toBe(narratives)
     // The draft was empty, so the text went back to the composer and the entry carries none.
-    expect(await systemFailures(branch)).toEqual([['failed', 'provider', null]])
+    // The reply fails the schema, a parse-tier failure, so the kind is phase-logic.
+    expect(await systemFailures(branch)).toEqual([['failed', 'phase-logic', null]])
     const [state, , watermark] = await classifierStatus(branch)
     expect(state).toBe('failed')
     expect(watermark).toBe(parked)
@@ -1300,7 +1306,7 @@ test.describe('periodic classifier — failure policy', () => {
     expect(passCalls()).toBeGreaterThan(calls)
     // A new row for the new cause, still the pass's, still without the text the composer holds.
     await expect.poll(() => systemEntryIds(branch)).not.toEqual([before])
-    expect(await systemFailures(branch)).toEqual([['failed', 'provider', null]])
+    expect(await systemFailures(branch)).toEqual([['failed', 'phase-logic', null]])
     await expect(reader.retrySystemEntry(page)).toBeVisible()
     expect(streamedCalls()).toBe(narratives)
     await expect(reader.composer(page)).toHaveValue(U2)
@@ -1363,6 +1369,112 @@ test.describe('periodic classifier — failure policy', () => {
     await expect
       .poll(passOutcomes, { timeout: 20_000 })
       .toEqual(['failed', 'failed', 'failed', 'completed', 'completed'])
+  })
+})
+
+// classifier.md → Failure policy, generation-pipeline.md → Cut-off replies: a length-stopped pass
+// reply fails the pass unrepaired, chained or owed. Serial: test 2's Send owes test 1's pass.
+test.describe('periodic classifier — a pass reply cut off at its length limit', () => {
+  test.describe.configure({ mode: 'serial' })
+
+  let app: LaunchedApp
+  let mock: MockLlm
+  let userDataDir: string | undefined
+  let parked: number
+
+  test.beforeAll(async () => {
+    // Retrieval blocks narrative: no installed embedder, no reply. Cold cache downloads ~24 MB.
+    test.setTimeout(180_000)
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    await installEmbedderModel(userDataDir)
+    mock = await startMockLlm()
+    setProviderEndpoint(seeded.dbPath, mock.url)
+    // A turn writes two entries, so with the watermark at the last reply each turn owes one pass.
+    setClassifierCadence(seeded.dbPath, 'story_hero', 2)
+    parked = parkClassifierWatermarkAtLastReply(seeded.dbPath, 'br_hero_main')
+    app = await launchApp({ userDataDir, cleanupUserData: true })
+  })
+
+  test.afterAll(async () => {
+    await app?.close()
+    await mock?.close()
+    removeUserDataDir(userDataDir)
+  })
+
+  const {
+    branchId,
+    entryIdByContent,
+    pollEntryId,
+    passOutcomes,
+    classifierStatus,
+    passCalls,
+    send,
+  } = passProbe(
+    () => app.window,
+    () => mock,
+  )
+
+  const U2 = 'E2E-CUTPASS-U2 I wade into the ford.'
+  const streamedCalls = () => mock.requests.filter((r) => r.streamed).length
+
+  async function systemFailures(branch: string): Promise<unknown[][]> {
+    return queryApp(
+      app.window,
+      `SELECT json_extract(metadata, '$.systemFailure.pass'),
+              json_extract(metadata, '$.systemFailure.kind'),
+              json_extract(metadata, '$.systemFailure.failure'),
+              json_extract(metadata, '$.systemFailure.submission')
+       FROM story_entries WHERE branch_id = ? AND kind = 'system'`,
+      [branch],
+    )
+  }
+
+  test('a chained pass whose reply is cut off fails after one call and leaves the watermark', async () => {
+    const page = app.window
+    await home.openStory(page, 'The Veilstone Courier').click()
+    await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
+    const branch = await branchId()
+    const calls = passCalls()
+
+    mock.cutNextStructured('periodic-classifier', CUT_PASS_REPLY)
+    await send('E2E-CUTPASS-U1 I ride for the ford.', 'E2E-CUTPASS-R1 the water runs high.')
+    await pollEntryId(branch, 'E2E-CUTPASS-R1')
+
+    await expect.poll(passOutcomes, { timeout: 20_000 }).toEqual(['failed'])
+    // Not retried: a second call would have drawn the inert default and completed.
+    expect(passCalls()).toBe(calls + 1)
+    const [state, lastError, watermark] = await classifierStatus(branch)
+    expect(state).toBe('failed')
+    expect(lastError).not.toBeNull()
+    expect(watermark).toBe(parked)
+  })
+
+  test('the owed pass at Send, cut off again, fails the Send with its own entry', async () => {
+    const page = app.window
+    const branch = await branchId()
+    const narratives = streamedCalls()
+    const calls = passCalls()
+
+    mock.cutNextStructured('periodic-classifier', CUT_PASS_REPLY)
+    await send(U2, 'E2E-CUTPASS-R2 the far bank comes up out of the mist.')
+
+    await expect(reader.systemEntryFailure(page, 'memoryCutOff.unknown')).toBeVisible({
+      timeout: 20_000,
+    })
+    await expect(reader.fixProfile(page)).toBeVisible()
+    await expect(reader.retrySystemEntry(page)).toBeVisible()
+    await expect(reader.dismissSystemEntry(page)).toBeVisible()
+    await expect(reader.composer(page)).toHaveValue(U2)
+    expect(await entryIdByContent(branch, 'E2E-CUTPASS-U2')).toBeUndefined()
+    expect(await passOutcomes()).toEqual(['failed', 'failed'])
+    expect(passCalls()).toBe(calls + 1)
+    expect(streamedCalls()).toBe(narratives)
+    // The draft was empty, so the text went back to the composer and the entry carries none.
+    expect(await systemFailures(branch)).toEqual([['failed', 'reply-cut-off', 'unknown', null]])
+    const [state, , watermark] = await classifierStatus(branch)
+    expect(state).toBe('failed')
+    expect(watermark).toBe(parked)
   })
 })
 

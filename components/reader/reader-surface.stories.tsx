@@ -3,7 +3,7 @@ import { useEffect, useState, type ComponentProps } from 'react'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { EARTH_GREGORIAN } from '@/lib/calendar'
-import type { StoryEntry, SystemFailureMeta } from '@/lib/db'
+import type { CutOffMark, StoryEntry, SystemFailureMeta } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
 import { ReaderSurface } from './reader-surface'
@@ -90,6 +90,7 @@ const noopHandlers = {
   onRetrySystemEntry: async () => {},
   onDismissSystemEntry: async () => {},
   onFixSystemEntry: async () => {},
+  onFixCutOff: async () => {},
 }
 
 const HEAD_TURN_ROWS = ROWS.slice(0, 3)
@@ -1075,5 +1076,107 @@ export const PassFailureRetry: Story = {
   play: async ({ args }) => {
     await userEvent.click(within(entryRow('e6')).getByRole('button', { name: /Retry/ }))
     await waitFor(() => expect(args.onRetrySystemEntry).toHaveBeenCalledTimes(1))
+  },
+}
+
+// A reply cut off in its prose, committed with the mark the narrative phase writes.
+function cutOffRows(cutOff: CutOffMark): StoryEntry[] {
+  return [
+    ...ROWS,
+    entry({
+      id: 'e6',
+      kind: 'ai_reply',
+      content: 'The east wing folds into the west, and the map in your hands',
+      position: 6,
+      metadata: { ...BASE_META, cutOff },
+    }),
+  ]
+}
+
+/** The row builds the notice from the stored mark, and `Fix profile` reaches the host. */
+export const CutOffNoticeFixProfile: Story = {
+  args: {
+    rows: cutOffRows({ cause: 'max-output', outputTokens: 4096, limit: 4096 }),
+    cutOffFixLabel: t('reader:systemEntry.fixProfile'),
+    onFixCutOff: fn(async () => {}),
+  },
+  play: async ({ args }) => {
+    const row = entryRow('e6')
+    await expect(
+      within(row).getByText("Cut off at the narrative profile's 4,096-token max output."),
+    ).toBeVisible()
+    await userEvent.click(within(row).getByRole('button', { name: 'Fix profile' }))
+    await waitFor(() => expect(args.onFixCutOff).toHaveBeenCalledTimes(1))
+  },
+}
+
+/** An unknown cut-off offers `Fix profile` too, like a max-output one. */
+export const CutOffNoticeUnknownFixProfile: Story = {
+  args: {
+    rows: cutOffRows({ cause: 'unknown', outputTokens: 2048 }),
+    cutOffFixLabel: t('reader:systemEntry.fixProfile'),
+    onFixCutOff: fn(async () => {}),
+  },
+  play: async ({ args }) => {
+    const row = entryRow('e6')
+    await expect(
+      within(row).getByText(
+        'The server stopped the reply at its own limit. Setting a max output on the profile overrides it.',
+      ),
+    ).toBeVisible()
+    await userEvent.click(within(row).getByRole('button', { name: 'Fix profile' }))
+    await waitFor(() => expect(args.onFixCutOff).toHaveBeenCalledTimes(1))
+  },
+}
+
+/** An unknown cut-off short of the profile's max output names that limit and keeps `Fix profile`. */
+export const CutOffNoticeShortOfMaxOutput: Story = {
+  args: {
+    rows: cutOffRows({ cause: 'unknown', outputTokens: 300, maxOutput: 4096 }),
+    cutOffFixLabel: t('reader:systemEntry.fixProfile'),
+    onFixCutOff: fn(async () => {}),
+  },
+  play: async ({ args }) => {
+    const row = entryRow('e6')
+    await expect(
+      within(row).getByText(
+        "The server stopped the reply at its own limit, short of the narrative profile's 4,096-token max output.",
+      ),
+    ).toBeVisible()
+    await userEvent.click(within(row).getByRole('button', { name: 'Fix profile' }))
+    await waitFor(() => expect(args.onFixCutOff).toHaveBeenCalledTimes(1))
+  },
+}
+
+/** A window cut-off is fixed via `Set window`: no `Fix profile`, even with a label. */
+export const CutOffNoticeWindowHasNoFix: Story = {
+  args: {
+    rows: cutOffRows({ cause: 'window', outputTokens: 1200, limit: 65536 }),
+    cutOffFixLabel: t('reader:systemEntry.fixProfile'),
+  },
+  play: async () => {
+    const row = entryRow('e6')
+    await expect(
+      within(row).getByText(
+        "Cut off where the prompt and reply filled the model's 65,536-token window.",
+      ),
+    ).toBeVisible()
+    expect(within(row).queryByRole('button', { name: 'Fix profile' })).not.toBeInTheDocument()
+  },
+}
+
+/** No label from the host, no action: the text alone. */
+export const CutOffNoticeWithoutFixLabel: Story = {
+  args: {
+    rows: cutOffRows({ cause: 'unknown', outputTokens: 2048 }),
+  },
+  play: async () => {
+    const row = entryRow('e6')
+    await expect(
+      within(row).getByText(
+        'The server stopped the reply at its own limit. Setting a max output on the profile overrides it.',
+      ),
+    ).toBeVisible()
+    expect(within(row).queryByRole('button', { name: 'Fix profile' })).not.toBeInTheDocument()
   },
 }

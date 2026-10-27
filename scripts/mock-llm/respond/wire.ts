@@ -1,6 +1,5 @@
-// OpenAI-compatible wire frames, and the socket write every sender pushes them
-// through. Mirrors the shapes e2e/harness/mock-llm.ts emits, which the real
-// transport (lib/ai/transport) already consumes.
+// OpenAI-compatible frames, shared with e2e/harness/mock-llm.ts: a change here
+// reaches the E2E suite; the real transport (lib/ai/transport) consumes them.
 
 import type { ServerResponse } from 'node:http'
 
@@ -59,20 +58,22 @@ export function contentFrame(content: string): string {
   return sse({ ...CHUNK_BASE, choices: [{ index: 0, delta: { content }, finish_reason: null }] })
 }
 
-export function stopFrames(): string {
+export type FinishReason = 'stop' | 'length'
+
+export function stopFrames(finishReason: FinishReason = 'stop'): string {
   return (
-    sse({ ...CHUNK_BASE, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) +
+    sse({ ...CHUNK_BASE, choices: [{ index: 0, delta: {}, finish_reason: finishReason }] }) +
     'data: [DONE]\n\n'
   )
 }
 
-export function completionBody(content: string): string {
+export function completionBody(content: string, finishReason: FinishReason = 'stop'): string {
   return JSON.stringify({
     id: 'chatcmpl-mock',
     object: 'chat.completion',
     created: 0,
     model: 'mock',
-    choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+    choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: finishReason }],
   })
 }
 

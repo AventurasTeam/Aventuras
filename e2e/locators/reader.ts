@@ -113,10 +113,17 @@ export const reader = {
   monotonicityIndicator: (page: Page, entryId: string): Locator =>
     reader.row(page, entryId).getByLabel(WORLD_TIME_BREAK_LABEL),
 
-  // System (failure) entry: its copy and actions.
+  // System (failure) entry: its copy and actions. Only copy with no interpolated numbers: `t`
+  // here passes no values.
   systemEntryFailure: (
     page: Page,
-    failure: 'embed' | 'memory' | 'memoryNoProfileAssigned' | 'memoryHeld',
+    failure:
+      | 'embed'
+      | 'memory'
+      | 'memoryNoProfileAssigned'
+      | 'memoryHeld'
+      | 'replyCutOff.unknown'
+      | 'memoryCutOff.unknown',
   ): Locator => page.getByText(t(`reader:systemEntry.failure.${failure}`), { exact: false }),
   // The copy of a turn failure no kind-specific arm claims (describeTurnFailure).
   systemEntryGenericFailure: (page: Page): Locator =>
@@ -131,6 +138,21 @@ export const reader = {
   // A config-resolver failure's fix row (system-entry-actions.tsx, useConfigFixAction).
   assignProfileFix: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:systemEntry.assignProfile') }),
+  // `Fix profile` is both a system entry's fix and a cut-off notice's link: scope it to a row.
+  fixProfile: (page: Page): Locator =>
+    page.getByRole('button', { name: t('reader:systemEntry.fixProfile') }),
+  // An ai_reply row's cut-off notice (entry-card.tsx); `limit` fills causes whose copy names it.
+  cutOffNotice: (
+    page: Page,
+    entryId: string,
+    cause: 'maxOutput' | 'window' | 'unknown',
+    limit?: number,
+  ): Locator =>
+    reader
+      .row(page, entryId)
+      .getByText(t(`reader:cutOffNotice.${cause}`, limit === undefined ? undefined : { limit }), {
+        exact: false,
+      }),
 
   // Undo / Redo live in the chrome Actions menu's contextual group (chrome.ts opens it).
   undoRow: (page: Page): Locator => page.getByText(t('reader:actions.undo'), { exact: true }),

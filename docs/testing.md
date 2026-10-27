@@ -379,18 +379,26 @@ prompt pack the app itself renders, so a template edit moves the marker
 in the same edit. The marker is consulted only when the block is
 ambiguous.
 
-Two one-shot narrative controls model the boundary states a running turn
-can hit: `failNextNarrative()` makes the next streaming call return HTTP
-500 (the failed-turn → retriable-system-entry path), and
+Three one-shot narrative controls model the boundary states a running
+turn can hit: `failNextNarrative()` makes the next streaming call return
+HTTP 500 (the failed-turn → retriable-system-entry path),
 `holdNextNarrative()` opens the stream but holds it unfinished until
 `releaseNarrative()` or a client abort — the deterministic in-flight
-window the cancel spec cancels into, with no sleep-based wait.
+window the cancel spec cancels into, with no sleep-based wait — and
+`cutNextNarrative()` makes the next narrative stream to finish, a held
+one at its release, end with `finish_reason: 'length'`, a reply the
+server stopped at its length limit ([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)).
 
 `holdNextStructured(name)` does the same for the next structured call
 whose prompt matches that shape: the call is recorded in `requests`,
 then answered only at `releaseStructured()`, with the reply set by
 then — the in-flight window the gated pass's interrupt and Cancel
 specs act in.
+
+`cutNextStructured(name, raw)` makes the next call of that shape it
+answers, a held one at its release, reply with `raw` verbatim and
+`finish_reason: 'length'`, so a spec can hand the app a document cut
+partway through that it must refuse rather than repair.
 
 Block-matching keys on the **auto** (prompt-injection) path the fixture
 uses — the only path E2E relies on. A `force-on` profile takes the
@@ -418,11 +426,16 @@ another chains behind it, and checks the rows the passes write.
 test: it renders the real pass prompt from a branch of the dev slot's
 database, opened read-only (`AVENTURAS_DB_PATH` picks another
 database, `PROBE_BRANCH_ID` a branch other than `br_hero_main`), and
-sends it
-`PROBE_RUNS` times, 20 by default. It prints each run's outcome with
-its parse and provider retries, its first parse failure by field path
-and the entries a reply that parsed dropped for not fitting, by list,
-then the first-attempt parse rate.
+sends it `PROBE_RUNS` times, 20 by default, under a profile with no max
+output unless `PROBE_MAX_OUTPUT` sets one, so a run can test what a
+real profile sends. It prints each run's outcome with its parse and
+provider retries, its first parse failure by field path and the
+entries a reply that parsed dropped for not fitting, by list, then the
+first-attempt parse rate. A reply the server stopped at its length
+limit that doesn't parse strictly is refused, not repaired
+([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)):
+its run prints the cut-off's cause and numbers, and the summary counts
+it as cut off at length rather than as a failed run.
 
 ## Selector strategy
 

@@ -816,15 +816,74 @@ describe('suggestion-refresh emission phase', () => {
     openStory()
     hydrate()
     wireAppSettings()
-    generateStructuredMock.mockResolvedValue({ status: 'failed', recoverable: [], detail: 'boom' })
+    generateStructuredMock.mockResolvedValue({
+      status: 'failed',
+      recoverable: [],
+      error: { tier: 'provider', reason: 'network', detail: 'boom' },
+    })
 
     const { events, result } = await runEmission()
 
     expect(result).toEqual({
       status: 'failed',
-      error: { kind: 'provider', reason: 'unknown', detail: 'boom' },
+      error: { kind: 'provider', reason: 'network', detail: 'boom' },
     })
     expect(events).toEqual([])
+  })
+
+  it('fails a cut-off reply as reply-cut-off for the suggestion target', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    const cut = {
+      cause: 'unknown',
+      outputTokens: 300,
+      reasoningTokens: null,
+      maxOutput: null,
+      window: null,
+      providerId: 'prov-1',
+      modelId: 'model-1',
+    } as const
+    generateStructuredMock.mockResolvedValue({
+      status: 'failed',
+      recoverable: [],
+      error: { tier: 'reply-cut-off', ...cut },
+    })
+
+    const { events, result } = await runEmission()
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'reply-cut-off', target: 'suggestion', ...cut },
+    })
+    expect(events).toEqual([])
+  })
+
+  // A reply that never parsed is one with no usable suggestions, so the strip says that.
+  it('fails an exhausted parse retry as unusable suggestions, not as a provider error', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue({
+      status: 'failed',
+      recoverable: [{ tier: 'parse', detail: 'bad json', attempt: 0 }],
+      error: { tier: 'parse', detail: 'still bad json', attempt: 1 },
+    })
+
+    const { events, result } = await runEmission()
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: {
+        kind: 'phase-logic',
+        subsystem: SUGGESTIONS_UNUSABLE,
+        phaseName: SUGGESTION_EMISSION_PHASE,
+        detail: 'still bad json',
+      },
+    })
+    expect(events).toEqual([
+      { type: 'recoverable_error', error: { kind: 'phase-logic', detail: 'bad json' } },
+    ])
   })
 
   it('anchors to the branch tail and prompts with the whole loaded branch', async () => {

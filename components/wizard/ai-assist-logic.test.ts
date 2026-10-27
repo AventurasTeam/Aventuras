@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
+import type { CallRetryError } from '@/lib/ai'
+
 import {
+  assistFailureReason,
   composeKey,
   itemKey,
   mergePages,
@@ -110,5 +113,59 @@ describe('composeKey', () => {
     expect(itemKey({ name: 'x', dedupeKey: rawKey('location:  Ashfall  ') })).not.toBe(
       cleanExistingKey,
     )
+  })
+})
+
+describe('assistFailureReason', () => {
+  // The overlay wraps the reason in "Couldn't generate. {{reason}}.", so none ends in a period.
+  describe('a cut-off reply', () => {
+    const cut = {
+      tier: 'reply-cut-off',
+      cause: 'max-output',
+      outputTokens: 1024,
+      reasoningTokens: null,
+      maxOutput: 1024,
+      window: null,
+      providerId: 'prov_local',
+      modelId: 'qwen3-32b',
+    } satisfies CallRetryError
+    const UNKNOWN =
+      'The server stopped the reply at its own limit. Setting a max output on the wizard-assist profile overrides it'
+
+    it("names the wizard-assist profile's max output", () => {
+      expect(assistFailureReason(cut)).toBe(
+        "The reply was cut off at the wizard-assist profile's 1,024-token max output. Raise it, then try again",
+      )
+    })
+
+    it("names the model's window when the window was the limit", () => {
+      expect(assistFailureReason({ ...cut, cause: 'window', maxOutput: null, window: 65536 })).toBe(
+        "The reply was cut off where the prompt and reply filled the model's 65,536-token window",
+      )
+    })
+
+    it("points at the server's own limit when the call sent no max output", () => {
+      expect(assistFailureReason({ ...cut, cause: 'unknown', maxOutput: null })).toBe(UNKNOWN)
+      expect(assistFailureReason({ ...cut, maxOutput: null })).toBe(UNKNOWN)
+    })
+
+    it('names the max output the server stopped short of', () => {
+      expect(assistFailureReason({ ...cut, cause: 'unknown', outputTokens: 300 })).toBe(
+        "The server stopped the reply at its own limit, short of the wizard-assist profile's 1,024-token max output",
+      )
+    })
+  })
+
+  it("passes any other failure's own line through", () => {
+    expect(
+      assistFailureReason({
+        tier: 'provider',
+        reason: 'timeout',
+        detail: 'Provider request timed out after 3 retries',
+      }),
+    ).toBe('Provider request timed out after 3 retries')
+    expect(
+      assistFailureReason({ tier: 'parse', detail: 'Unexpected end of JSON input', attempt: 2 }),
+    ).toBe('Unexpected end of JSON input')
   })
 })

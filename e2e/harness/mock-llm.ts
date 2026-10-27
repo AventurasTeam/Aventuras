@@ -1,6 +1,13 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 
+import {
+  completionBody,
+  contentFrame,
+  roleFrame,
+  stopFrames,
+  type FinishReason,
+} from '../../scripts/mock-llm/respond/wire'
 import { matchShape } from '../../scripts/mock-llm/routing'
 
 // A local OpenAI-compatible endpoint. The whole pipeline talks to one URL
@@ -133,7 +140,7 @@ export type MockLlm = {
    * in-flight window the cancel test needs.
    */
   holdNextNarrative: () => void
-  /** Finish any held narrative streams with the current narrative content. */
+  /** Finish any held narrative streams with the current narrative; a pending cut applies. */
   releaseNarrative: () => void
   /**
    * One-shot: the next structured call matching the `agentName` shape is recorded in `requests`,
@@ -142,6 +149,10 @@ export type MockLlm = {
   holdNextStructured: (agentName: string) => void
   /** Answer every held structured call with its shape's reply as set now. */
   releaseStructured: () => void
+  /** One-shot: the next stream to finish (held: at release) sends the narrative, then 'length'. */
+  cutNextNarrative: () => void
+  /** One-shot: the next `agentName` call answered (held: at release) sends `raw`, then 'length'. */
+  cutNextStructured: (agentName: string, raw: string) => void
   /** Every completion request received, in order. */
   requests: MockRequest[]
   close: () => Promise<void>
@@ -150,53 +161,14 @@ export type MockLlm = {
 const DEFAULT_NARRATIVE =
   'The blade rasps free of its sheath. Somewhere in the drowned city, a bell answers, and the rain leans closer to listen.'
 
-function sse(obj: unknown): string {
-  return `data: ${JSON.stringify(obj)}\n\n`
+// The role frame alone holds a stream open (the cancel test's in-flight window); the tail
+// (content, finish frame, [DONE]) completes it.
+function narrativeTail(content: string, finishReason: FinishReason): string {
+  return contentFrame(content) + stopFrames(finishReason)
 }
 
-const CHUNK_BASE = {
-  id: 'chatcmpl-mock',
-  object: 'chat.completion.chunk',
-  created: 0,
-  model: 'mock',
-}
-
-// The opening role frame, emitted on its own to hold a stream open — a
-// started-but-unfinished narrative call, so the cancel test has an in-flight
-// window. The tail (content + stop + [DONE]) completes it.
-function narrativeRoleFrame(): string {
-  return sse({
-    ...CHUNK_BASE,
-    choices: [{ index: 0, delta: { role: 'assistant', content: '' }, finish_reason: null }],
-  })
-}
-
-function narrativeTail(content: string): string {
-  const frames = [
-    { ...CHUNK_BASE, choices: [{ index: 0, delta: { content }, finish_reason: null }] },
-    { ...CHUNK_BASE, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
-  ]
-  return frames.map(sse).join('') + 'data: [DONE]\n\n'
-}
-
-function narrativeSse(content: string): string {
-  return narrativeRoleFrame() + narrativeTail(content)
-}
-
-function structuredCompletion(value: unknown): string {
-  return JSON.stringify({
-    id: 'chatcmpl-mock',
-    object: 'chat.completion',
-    created: 0,
-    model: 'mock',
-    choices: [
-      {
-        index: 0,
-        message: { role: 'assistant', content: JSON.stringify(value) },
-        finish_reason: 'stop',
-      },
-    ],
-  })
+function narrativeSse(content: string, finishReason: FinishReason): string {
+  return roleFrame() + narrativeTail(content, finishReason)
 }
 
 // The injected schema block lives in the message content (the app's auto path
@@ -240,6 +212,16 @@ export async function startMockLlm(): Promise<MockLlm> {
   let holdStructuredNext: string | null = null
   // res → shape name to answer with; a client abort drops it, like heldResponses.
   const heldStructured = new Map<ServerResponse, string>()
+  let cutNarrativeNext = false
+  // Shape name → the raw reply its next answered call sends.
+  const cutStructured = new Map<string, string>()
+
+  // Spent by the next stream to finish, so a held stream released later takes it.
+  const narrativeFinish = (): FinishReason => {
+    if (!cutNarrativeNext) return 'stop'
+    cutNarrativeNext = false
+    return 'length'
+  }
 
   // The renderer fetches cross-origin (its own origin → this server), which
   // triggers a CORS preflight; answer it and tag every response, so the call
@@ -251,9 +233,18 @@ export async function startMockLlm(): Promise<MockLlm> {
   }
 
   const answerStructured = (res: ServerResponse, agentName: string | null): void => {
-    const value = agentName !== null ? (overrides.get(agentName) ?? EXAMPLES[agentName]) : {}
     res.writeHead(200, { ...cors, 'content-type': 'application/json' })
-    res.end(structuredCompletion(value))
+    if (agentName === null) {
+      res.end(completionBody('{}', 'stop'))
+      return
+    }
+    const cut = cutStructured.get(agentName)
+    cutStructured.delete(agentName)
+    res.end(
+      cut !== undefined
+        ? completionBody(cut, 'length')
+        : completionBody(JSON.stringify(overrides.get(agentName) ?? EXAMPLES[agentName]), 'stop'),
+    )
   }
 
   const releaseHeldStructured = (): void => {
@@ -296,12 +287,12 @@ export async function startMockLlm(): Promise<MockLlm> {
           holdNarrativeNext = false
           // Open the stream but don't finish it: the run stays in-flight
           // (isGenerating) until release or the client aborts on cancel.
-          res.write(narrativeRoleFrame())
+          res.write(roleFrame())
           heldResponses.add(res)
           res.on('close', () => heldResponses.delete(res))
           return
         }
-        res.end(narrativeSse(narrative))
+        res.end(narrativeSse(narrative, narrativeFinish()))
         return
       }
 
@@ -336,18 +327,24 @@ export async function startMockLlm(): Promise<MockLlm> {
       holdNarrativeNext = true
     },
     releaseNarrative: () => {
-      for (const res of heldResponses) res.end(narrativeTail(narrative))
+      for (const res of heldResponses) res.end(narrativeTail(narrative, narrativeFinish()))
       heldResponses.clear()
     },
     holdNextStructured: (agentName) => {
       holdStructuredNext = agentName
     },
     releaseStructured: releaseHeldStructured,
+    cutNextNarrative: () => {
+      cutNarrativeNext = true
+    },
+    cutNextStructured: (agentName, raw) => {
+      cutStructured.set(agentName, raw)
+    },
     requests,
     close: () =>
       new Promise<void>((resolve) => {
         // Finish held calls first, else an open socket hangs server.close().
-        for (const res of heldResponses) res.end(narrativeTail(narrative))
+        for (const res of heldResponses) res.end(narrativeTail(narrative, narrativeFinish()))
         heldResponses.clear()
         releaseHeldStructured()
         server.close(() => resolve())

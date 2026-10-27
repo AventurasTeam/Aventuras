@@ -553,7 +553,7 @@ describe('per-turn chains the pass through the orchestrator', () => {
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'failed',
       recoverable: [],
-      detail: 'rate limited',
+      error: { tier: 'provider', reason: 'unknown', detail: 'rate limited' },
     })
 
     const states: ClassifierStatus['state'][] = []

@@ -56,4 +56,46 @@ describe('describeSuggestionFailure', () => {
     expect(describeSuggestionFailure(undefined)).toBe(t('reader:suggestions.errorBody'))
     expect(describeSuggestionFailure(null)).toBe(t('reader:suggestions.errorBody'))
   })
+
+  // A cut suggestion reply is refused, not repaired, so the strip says which limit cut it.
+  describe('a cut-off reply', () => {
+    const cut = {
+      kind: 'reply-cut-off',
+      target: 'suggestion',
+      cause: 'max-output',
+      outputTokens: 1030,
+      reasoningTokens: null,
+      maxOutput: 1024,
+      window: null,
+      providerId: 'prov_local',
+      modelId: 'qwen3-32b',
+    } satisfies PipelineError
+    const UNKNOWN =
+      "The server stopped the suggestion model's reply at its own limit. Setting a max output on the suggestion profile overrides it."
+
+    it("names the suggestion profile's max output", () => {
+      expect(describeSuggestionFailure(cut)).toBe(
+        "The suggestion model's reply was cut off at the suggestion profile's 1,024-token max output. Raise it, then Retry.",
+      )
+    })
+
+    it("names the model's window when the window was the limit", () => {
+      expect(
+        describeSuggestionFailure({ ...cut, cause: 'window', maxOutput: null, window: 65536 }),
+      ).toBe(
+        "The suggestion model's reply was cut off where the prompt and reply filled the model's 65,536-token window.",
+      )
+    })
+
+    it("points at the server's own limit when the call sent no max output", () => {
+      expect(describeSuggestionFailure({ ...cut, cause: 'unknown', maxOutput: null })).toBe(UNKNOWN)
+      expect(describeSuggestionFailure({ ...cut, maxOutput: null })).toBe(UNKNOWN)
+    })
+
+    it('names the max output the server stopped short of', () => {
+      expect(describeSuggestionFailure({ ...cut, cause: 'unknown', outputTokens: 300 })).toBe(
+        "The server stopped the suggestion model's reply at its own limit, short of the suggestion profile's 1,024-token max output.",
+      )
+    })
+  })
 })

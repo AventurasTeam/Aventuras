@@ -343,3 +343,41 @@ describe('stateReport conditions and drops', () => {
     expect(applyUndoPayload(entryMetadataSchema, next, undo)).toEqual(current)
   })
 })
+
+// data-model.md → Entry metadata shape → Cut-off mark.
+describe('cutOff', () => {
+  const base = { sceneEntities: [], currentLocationId: null, worldTime: 0 }
+
+  it.each([
+    { cause: 'max-output', outputTokens: 4096, limit: 4096 },
+    { cause: 'window', outputTokens: 1200, limit: 65536 },
+    { cause: 'unknown' },
+    { cause: 'unknown', outputTokens: 300, maxOutput: 512 },
+  ])('keeps a $cause mark with its numbers', (mark) => {
+    expect(entryMetadataSchema.parse({ ...base, cutOff: mark }).cutOff).toEqual(mark)
+  })
+
+  it('rejects a cause it does not know', () => {
+    expect(entryMetadataSchema.safeParse({ ...base, cutOff: { cause: 'context' } }).success).toBe(
+      false,
+    )
+  })
+
+  it.each([
+    { cause: 'max-output', outputTokens: 512 },
+    { cause: 'window' },
+    { cause: 'unknown', limit: 5 },
+  ])('rejects a $cause mark whose limit does not match its cause', (mark) => {
+    expect(entryMetadataSchema.safeParse({ ...base, cutOff: mark }).success).toBe(false)
+  })
+
+  // The schema drives the metadata undo encoder: a key it lacks is lost on undo.
+  it.each([
+    { cause: 'max-output' as const, outputTokens: 512, limit: 512 },
+    { cause: 'unknown' as const, outputTokens: 300 },
+  ])('undoes a cleared $cause mark back onto the metadata', (cutOff) => {
+    const marked = { ...base, cutOff }
+    const undo = computeUndoPayload(entryMetadataSchema, marked, base)
+    expect(applyUndoPayload(entryMetadataSchema, base, undo)).toEqual(marked)
+  })
+})

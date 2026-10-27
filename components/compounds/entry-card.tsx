@@ -80,6 +80,8 @@ type SceneOptions = {
   items: EntityOption[]
   locations: EntityOption[]
 }
+/** Host-built from the stored mark; `action` is its route, rendered as an inline link. */
+type CutOffNoticeContent = { text: string; action?: { label: string; onPress: () => void } }
 
 type EntryCardProps = {
   kind: EntryKind
@@ -143,6 +145,8 @@ type EntryCardProps = {
   onBranch?: () => void
   /** user, ai, opening. Host hides when active calendar has no eras. */
   onFlipEra?: () => void
+  /** ai_reply only: prose cut off at the server's limit. Not dismissible; shown while editing. */
+  cutOffNotice?: CutOffNoticeContent
 
   /** Streaming-only — drives the top-line indicator. */
   streamingPhase?: 'reasoning' | 'reply'
@@ -938,6 +942,46 @@ function NarrativeContent({
   return <RichEntryContent markedHtml={marked} />
 }
 
+// Not gated by `disabled`: leaving the story never is; the host's leave guard confirms mid-run.
+function CutOffNoticeLine({ text, action, tier }: CutOffNoticeContent & { tier: Tier }) {
+  return (
+    <View className="mt-2 flex-row items-start gap-1.5">
+      <Icon as={AlertTriangle} size={12} className="mt-0.5 shrink-0 text-warning" />
+      <View className="flex-1 flex-row flex-wrap items-center gap-x-1.5 gap-y-0.5">
+        <Text size="xs" className="shrink text-warning">
+          {text}
+        </Text>
+        {action != null ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={action.label}
+            onPress={action.onPress}
+            className={cn(
+              'group/fix-profile',
+              // 44 px phone tap floor; margins cancel the padding so nothing moves. Bottom stops
+              // inside the footer's 12 px gap: the footer paints over anything past it.
+              tier === 'phone' && '-mb-3 -mt-4 pb-3 pt-4',
+              Platform.select({ web: 'cursor-pointer outline-none' }),
+            )}
+          >
+            <Text
+              size="xs"
+              className={cn(
+                'font-medium text-fg-primary underline',
+                Platform.select({
+                  web: 'rounded-sm group-focus-visible/fix-profile:ring-2 group-focus-visible/fix-profile:ring-focus-ring',
+                }),
+              )}
+            >
+              {action.label}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  )
+}
+
 export function EntryCard({
   kind,
   content,
@@ -964,6 +1008,7 @@ export function EntryCard({
   onRegen,
   onBranch,
   onFlipEra,
+  cutOffNotice,
   streamingPhase,
   detail,
   fixAction,
@@ -1247,6 +1292,10 @@ export function EntryCard({
           allowRich={kind === 'user_action' || kind === 'ai_reply' || kind === 'opening'}
         />
       )}
+
+      {kind === 'ai_reply' && cutOffNotice != null ? (
+        <CutOffNoticeLine text={cutOffNotice.text} action={cutOffNotice.action} tier={tier} />
+      ) : null}
 
       {showActions ? (
         <View className="absolute right-2 top-4 flex-row items-center gap-0.5">

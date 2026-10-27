@@ -670,6 +670,10 @@ cause and passes the route as an inline link:
   ([`app-settings.md → Context window`](../screens/app-settings/app-settings.md#context-window)).
 - **`unknown`**: "The server stopped the reply at its own limit.
   Setting a max output on the profile overrides it." with `Fix profile`.
+  When the call sent a max output the reply fell short of, the mark
+  carries it and the notice names it instead: "The server stopped the
+  reply at its own limit, short of the narrative profile's 4,096-token
+  max output." with `Fix profile`.
 
 Regenerate is already in the action cluster. The notice is not
 dismissible: a committed edit clears it
@@ -849,7 +853,10 @@ disabled state, the gate split during a pass (older entry, head turn, head-turn 
 shown/hidden by kind, world-state panel (reported, fallback-layer
 badge, rejected location, clamped delta, state problems and the
 alert toggle, legacy row, unknown-entity chip), scene editor (tail entry
-editable, non-tail read-only). Belongs in
+editable, non-tail read-only), cut-off notice (per cause, with and
+without its route, at phone width, its route live while a run is in
+flight, shown in edit mode, absent on every kind but `ai_reply`).
+Belongs in
 `Patterns/Reader composer/EntryCard` when component
 implementation begins.
 

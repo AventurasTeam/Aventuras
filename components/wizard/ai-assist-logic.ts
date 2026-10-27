@@ -1,3 +1,7 @@
+import { cutOffCopyOf } from '@/components/reader/cut-off-copy'
+import { describeCallRetryError, type CallRetryError } from '@/lib/ai'
+import { t } from '@/lib/i18n'
+
 declare const DedupeKeyBrand: unique symbol
 
 /**
@@ -88,4 +92,13 @@ export function mergePages<P>(
     merged.push(item)
   }
   return merged
+}
+
+/** Failure-state reason: a cut-off gets a plain sentence, not the diagnostic's tags and counts. */
+export function assistFailureReason(error: CallRetryError): string {
+  if (error.tier !== 'reply-cut-off') return describeCallRetryError(error)
+  const copy = cutOffCopyOf(error)
+  return copy.key === 'unknown'
+    ? t('wizard:aiAssist.cutOff.unknown')
+    : t(`wizard:aiAssist.cutOff.${copy.key}`, { limit: copy.limit })
 }

@@ -540,14 +540,19 @@ The cut-off entry names the limit the reply hit: the narrative
 profile's max output, with how much of it reasoning used when the
 provider reported it ("cut off at the 4,096-token max output before any
 story text; reasoning used 4,096 of them"), the model's window, or the
-server's own default. `Fix profile` opens the narrative profile, or
-`Set window` replaces it when the window was the limit. A reply cut off
+server's own default. When the server stopped short of a max output
+the profile set, the entry names that limit rather than suggesting one
+("stopped the reply at its own limit before any story text, short of
+the narrative profile's 4,096-token max output"). `Fix profile` opens
+the narrative profile, or `Set window` replaces it when the window was
+the limit. A reply cut off
 after some prose commits instead, with a
 [cut-off notice](../../patterns/entry-card.md#cut-off-notice) on its
 card. A reply with no text at all, the model stopping normally, is an
 **LLM call failed** entry reading "The model returned no text." A
 **Memory update failed** entry whose pass reply was cut off gives the
-limit it hit and gains `Fix profile`, which opens the profile the
+limit it hit, or the classifier profile's max output it fell short of,
+and gains `Fix profile`, which opens the profile the
 `classifier` agent is assigned, or `Set window` when the window was the
 limit. A fix action precedes `Retry` on every row, as on the embed
 row.
@@ -843,7 +848,13 @@ state — it is not an anchor, so the previous reply's chips hold.
   that keeps them under the `loading` spinner. A deterministic
   config failure (no profile assigned, profile or provider missing)
   shows the route to settings in place of Retry, which could not
-  succeed
+  succeed. A reply cut off at its limit names the limit, as the
+  reader's cut-off copy does: the suggestion profile's max output
+  ("…cut off at the suggestion profile's 1,024-token max output. Raise
+  it, then Retry."), the model's window, or the server's own limit,
+  with the max output it stopped short of when the call sent one
+  ([`generation-pipeline.md → Cut-off replies`](../../../generation-pipeline.md#cut-off-replies)).
+  It keeps Retry and gains no fix action
 - `collapsed` — user hid the list via chevron; chrome remains
 - `hidden` — user disabled suggestions in Story Settings
   (`stories.settings.suggestionsEnabled = false`); panel never

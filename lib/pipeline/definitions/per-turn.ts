@@ -1,9 +1,17 @@
 import { APICallError } from 'ai'
 import { eq, sql } from 'drizzle-orm'
 
-import { describeProviderError, resolveModel, resolveModelCapabilities, streamText } from '@/lib/ai'
+import {
+  describeProviderError,
+  isCutOff,
+  replyCutOff,
+  resolveModel,
+  resolveModelCapabilities,
+  streamText,
+  type ReplyCutOffFailure,
+} from '@/lib/ai'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
+import { inheritedEntryMetadata, storyEntries, type CutOffMark, type EntryMetadata } from '@/lib/db'
 import { redactUrl, type Logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import {
@@ -12,6 +20,7 @@ import {
   parseStateBlock,
   parseSuggestionsBlock,
   type ParseFieldFailure,
+  readCutOffReply,
   resolveSuggestionEmission,
   resolveSuggestionItems,
   stripTrailingBlocks,
@@ -39,6 +48,9 @@ import { getPipeline } from '../authoring/registry'
 import type { PhaseContext, PhaseEmittedEvent, PhaseNode, PhaseResult } from '../types'
 
 export const PER_TURN_KIND = 'per-turn'
+
+// Tags the phase-logic failure of a reply that finished with no text, so the reader can say so.
+export const EMPTY_REPLY = 'empty-reply'
 
 // The status pill's phase mapping is exhaustive over this union and the phase
 // list below is typed by it, so a phase added to the turn cannot reach the
@@ -88,6 +100,36 @@ function narrativeTimeoutDetail(timeoutMs: number | undefined, earlierError: unk
   return earlierError === undefined
     ? timeout
     : `${timeout}; earlier stream error: ${describeProviderError(earlierError)}`
+}
+
+type CutOffOutcome = 'failed' | 'marked' | 'in-block'
+
+// generation-pipeline.md → Cut-off replies: every cut-off logs, committed or failed.
+function logCutOff(
+  log: Logger,
+  failure: ReplyCutOffFailure,
+  entryId: string,
+  outcome: CutOffOutcome,
+): void {
+  log.warn('provider.reply_cut_off', { ...failure, target: 'narrative', entryId, outcome })
+}
+
+// data-model.md → Entry metadata shape: a cause without the limit it names reads as `unknown`.
+function cutOffMark(failure: ReplyCutOffFailure): CutOffMark {
+  const outputTokens = failure.outputTokens !== null ? { outputTokens: failure.outputTokens } : {}
+  const limit =
+    failure.cause === 'max-output'
+      ? failure.maxOutput
+      : failure.cause === 'window'
+        ? failure.window
+        : null
+  if (failure.cause !== 'unknown' && limit !== null)
+    return { cause: failure.cause, ...outputTokens, limit }
+  return {
+    cause: 'unknown',
+    ...outputTokens,
+    ...(failure.maxOutput !== null ? { maxOutput: failure.maxOutput } : {}),
+  }
 }
 
 async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
@@ -235,10 +277,28 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     }
   }
 
-  // Provenance is best-effort — every field below is optional on EntryMetadata,
-  // so a provider that omits usage/reasoning simply yields undefined.
+  // Provenance is best-effort: usage or reasoning a provider omits stays off the optional metadata.
   const usage = await Promise.resolve(stream.usage).catch(() => undefined)
   const reasoningText = await Promise.resolve(stream.reasoningText).catch(() => undefined)
+  // Only 'length' is a cut; a finish reason the SDK rejects, unread, reads as finished.
+  const finishReason = await Promise.resolve(stream.finishReason).catch(() => undefined)
+  let cut: { failure: ReplyCutOffFailure; inBlock: boolean } | undefined
+  if (isCutOff(finishReason)) {
+    // Before anything parses the reply: a root opener cut mid-name would otherwise read as prose.
+    const read = readCutOffReply(content)
+    content = read.content
+    cut = {
+      failure: replyCutOff({
+        usage,
+        maxOutput: call.maxOutput,
+        window: null,
+        promptEstimate: null,
+        providerId: call.providerId,
+        modelId: call.modelId,
+      }),
+      inBlock: read.inBlock,
+    }
+  }
   const tail = entries.at(-1)
   const inherited = inheritedEntryMetadata(tail?.metadata)
 
@@ -265,11 +325,33 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // The column stores prose only (docs/memory/piggyback.md → Persistence and
   // stripping); everything the block carried is persisted structurally instead.
   const { prose, stateRaw, outOfPosition } = stripTrailingBlocks(content)
+  if (cut !== undefined) {
+    // Ahead of the fold, so no create is planned for a reply that commits nothing. Trimmed: with no
+    // block span, stripTrailingBlocks hands back the raw text.
+    if (prose.trim() === '') {
+      logCutOff(ctx.log, cut.failure, entryId, 'failed')
+      return {
+        status: 'failed',
+        error: { kind: 'reply-cut-off', target: 'narrative', ...cut.failure },
+      }
+    }
+    // Before the fold, whose reads can throw and fail the turn.
+    logCutOff(ctx.log, cut.failure, entryId, cut.inBlock ? 'in-block' : 'marked')
+  } else if (content.trim() === '') {
+    return {
+      status: 'failed',
+      error: {
+        kind: 'phase-logic',
+        subsystem: EMPTY_REPLY,
+        detail: `the model returned no text (finish reason: ${finishReason ?? 'none'})`,
+      },
+    }
+  }
   if (outOfPosition) ctx.log.warn('classifier.state_block_out_of_position', { entryId })
   // A reply that is nothing but a block strips to nothing. Persist the raw text
   // instead of committing a blank row: the reader strips it again at display, so
   // the entry reads the same either way, but the text stays recoverable.
-  const proseEmpty = prose === '' && content.trim() !== ''
+  const proseEmpty = prose === ''
   if (proseEmpty) ctx.log.warn('classifier.reply_had_no_prose', { entryId })
   const persistedContent = proseEmpty ? content : prose
 
@@ -394,6 +476,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     model: call.modelId,
     generationTimingMs: Date.now() - startedAt,
     ...(reasoningText ? { reasoning: reasoningText } : {}),
+    ...(cut !== undefined && !cut.inBlock ? { cutOff: cutOffMark(cut.failure) } : {}),
     ...(fold?.metadata ?? inherited),
     ...(stateReport !== undefined ? { stateReport } : {}),
     ...(suggestionsCaptured

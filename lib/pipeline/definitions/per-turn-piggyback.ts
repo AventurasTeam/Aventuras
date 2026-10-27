@@ -1,6 +1,11 @@
 import { z } from 'zod'
 
-import { generateStructured, resolveModel, resolveModelCapabilities } from '@/lib/ai'
+import {
+  describeCallRetryError,
+  generateStructured,
+  resolveModel,
+  resolveModelCapabilities,
+} from '@/lib/ai'
 import type {
   GenerateStructuredResult,
   ModelCapabilities,
@@ -333,7 +338,7 @@ async function generateClassifierState<T extends { worldTimeDelta: number }>(
     log.warn('classifier.delta_reroll_failed', {
       status: reroll.status,
       ...('kind' in reroll ? { errorKind: reroll.kind } : {}),
-      ...('detail' in reroll ? { errorDetail: reroll.detail } : {}),
+      ...(reroll.status === 'failed' ? { errorDetail: describeCallRetryError(reroll.error) } : {}),
       worldTimeDelta: first.value.worldTimeDelta,
     })
   const chosen = reroll.status === 'ok' ? reroll : first
@@ -533,7 +538,7 @@ export async function* piggybackFallbackClassifierPhase(
 
   // generation-pipeline.md → Two retry tiers: one event per retried attempt, however the call ended.
   for (const attempt of result.status === 'not-configured' ? [] : result.recoverable)
-    yield { type: 'recoverable_error', error: toPipelineError(attempt) }
+    yield { type: 'recoverable_error', error: toPipelineError(attempt, 'classifier') }
 
   // A cancelled run discards its writes rather than recording them as a classifier
   // failure. The signal as well as the status: generateClassifierState returns the
@@ -551,14 +556,14 @@ export async function* piggybackFallbackClassifierPhase(
     ctx.log.warn('classifier.piggyback_fallback_failed', {
       status: result.status,
       ...('kind' in result ? { errorKind: result.kind } : {}),
-      ...('detail' in result ? { errorDetail: result.detail } : {}),
+      ...(result.status === 'failed' ? { errorDetail: describeCallRetryError(result.error) } : {}),
     })
     const classifierFailure = {
       field: CLASSIFIER_FAILURE_FIELD,
       detail:
-        'kind' in result
-          ? `classifier call ${result.status}: ${result.kind}`
-          : `classifier call ${result.status}`,
+        result.status === 'failed'
+          ? `classifier call failed: ${describeCallRetryError(result.error)}`
+          : `classifier call ${result.status}: ${result.kind}`,
     }
     // Amended rather than rebuilt. The call returned nothing, so every field the report
     // carries is still the fold's — including the visual changes and transfers apply.ts

@@ -1,9 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { APICallError } from 'ai'
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { z } from 'zod'
+
+import { logger, type Logger } from '@/lib/diagnostics'
 
 import type { ProviderInstance } from '../db'
 import {
   buildCallSettings,
+  describeCallRetryError,
   generateStructured,
   parseStructured,
   profileTimeoutMs,
@@ -159,6 +163,26 @@ describe('streamText', () => {
       maxOutputTokens: 2048,
       providerOptions: { anthropic: { thinking: { type: 'enabled', budgetTokens: 1024 } } },
     })
+  })
+
+  // generation-pipeline.md → Cut-off replies: the narrative's cause rule needs the profile's limit.
+  it("returns the profile's max output, and undefined when it sets none", () => {
+    const untimed = STREAM_CFG.profiles.map(({ timeout: _, ...profile }) => profile)
+    const set = streamText('narrative', {
+      prompt: PROMPT,
+      config: { ...STREAM_CFG, profiles: untimed },
+    })
+    const unset = streamText('narrative', {
+      prompt: PROMPT,
+      config: {
+        ...STREAM_CFG,
+        profiles: untimed.map(({ maxOutput: _, ...profile }) => profile),
+      },
+    })
+
+    expect(set.ok && set.maxOutput).toBe(2048)
+    expect(unset.ok).toBe(true)
+    if (unset.ok) expect(unset.maxOutput).toBeUndefined()
   })
 
   describe("a profile's timeout", () => {
@@ -350,7 +374,7 @@ describe('generateStructured', () => {
     )
     expect(res).toEqual({
       status: 'failed',
-      detail: expect.any(String),
+      error: { tier: 'parse', detail: expect.any(String), attempt: 1 },
       recoverable: [{ tier: 'parse', detail: expect.any(String), attempt: 0 }],
     })
   })
@@ -474,7 +498,7 @@ describe('generateStructured', () => {
 
       expect(await pending).toEqual({
         status: 'failed',
-        detail: 'timeout',
+        error: { tier: 'provider', reason: 'timeout' },
         recoverable: [{ tier: 'provider', reason: 'timeout' }],
       })
       expect(attempts.map((signal) => signal.aborted)).toEqual([true, true])
@@ -561,7 +585,219 @@ describe('generateStructured', () => {
       new AbortController().signal,
       { actionId: null },
     )
-    expect(res).toEqual({ status: 'failed', detail: expect.any(String), recoverable: [] })
+    expect(res).toEqual({
+      status: 'failed',
+      error: { tier: 'parse', detail: expect.any(String), attempt: 0 },
+      recoverable: [],
+    })
+  })
+
+  // generation-pipeline.md → Cut-off replies: refused, not repaired.
+  describe('a reply the server cut off at its length limit', () => {
+    let warn: MockInstance<Logger['warn']>
+
+    beforeEach(() => {
+      warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+      vi.mocked(runProviderCall).mockClear()
+      vi.mocked(resolveModel).mockImplementation(() => ({
+        ok: true,
+        providerId: 'prov-1',
+        providerType: 'openai-compatible',
+        modelId: 'model-1',
+        params: { maxOutput: 256 },
+      }))
+    })
+    afterEach(() => {
+      warn.mockRestore()
+    })
+
+    function reply(text: string, finishReason: string | undefined, outputTokens?: number) {
+      vi.mocked(runProviderCall).mockResolvedValue({
+        text,
+        finishReason,
+        usage:
+          outputTokens === undefined
+            ? undefined
+            : { outputTokens, outputTokenDetails: { reasoningTokens: 40 } },
+      } as never)
+    }
+
+    function call(actionId: string | null = 'act_1') {
+      return generateStructured(
+        'classifier',
+        PROMPT,
+        schema,
+        STRUCTURED_CFG,
+        new AbortController().signal,
+        { actionId },
+      )
+    }
+
+    const cutOffLogs = () => warn.mock.calls.filter(([kind]) => kind === 'provider.reply_cut_off')
+
+    it('fails a reply that will not parse strictly after one call, with the numbers', async () => {
+      // jsonrepair would close this into {"description":"A ta"}.
+      reply('{"description":"A ta', 'length', 256)
+      expect(await call()).toEqual({
+        status: 'failed',
+        error: {
+          tier: 'reply-cut-off',
+          cause: 'max-output',
+          outputTokens: 256,
+          reasoningTokens: 40,
+          maxOutput: 256,
+          window: null,
+          providerId: 'prov-1',
+          modelId: 'model-1',
+        },
+        recoverable: [],
+      })
+      expect(runProviderCall).toHaveBeenCalledOnce()
+    })
+
+    it.each([
+      ['a trailing comma', '{"description":"A tale.",}', schema],
+      ['an unclosed list', '{"items":["a","b"', z.object({ items: z.array(z.string()) })],
+    ])('refuses a reply with %s that jsonrepair would fix', async (_label, text, replySchema) => {
+      reply(text, 'length', 256)
+      const res = await generateStructured(
+        'classifier',
+        PROMPT,
+        replySchema as z.ZodType<unknown>,
+        STRUCTURED_CFG,
+        new AbortController().signal,
+        { actionId: null },
+      )
+      expect(res).toMatchObject({ status: 'failed', error: { tier: 'reply-cut-off' } })
+      expect(runProviderCall).toHaveBeenCalledOnce()
+    })
+
+    it('refuses a complete document of the wrong shape, after one call', async () => {
+      reply('{"wrong":1}', 'length', 256)
+      expect(await call()).toMatchObject({ status: 'failed', error: { tier: 'reply-cut-off' } })
+      expect(runProviderCall).toHaveBeenCalledOnce()
+    })
+
+    it('accepts a reply that parses strictly, a complete document at the limit', async () => {
+      reply('{"description":"A tale."}', 'length', 256)
+      expect(await call()).toEqual({
+        status: 'ok',
+        value: { description: 'A tale.' },
+        recoverable: [],
+      })
+    })
+
+    it.each([['stop'], [undefined]])(
+      'still repairs a malformed reply whose finish reason is %s',
+      async (finishReason) => {
+        reply('{"description":"A tale.",}', finishReason, 256)
+        expect(await call()).toEqual({
+          status: 'ok',
+          value: { description: 'A tale.' },
+          recoverable: [],
+        })
+        expect(cutOffLogs()).toEqual([])
+      },
+    )
+
+    it('warns once on a refusal, with the numbers, the action and the syntax error', async () => {
+      reply('{"description":"A ta', 'length', 256)
+      await call('act_1')
+      expect(cutOffLogs()).toEqual([
+        [
+          'provider.reply_cut_off',
+          {
+            outcome: 'refused',
+            target: 'classifier',
+            cause: 'max-output',
+            outputTokens: 256,
+            reasoningTokens: 40,
+            maxOutput: 256,
+            window: null,
+            providerId: 'prov-1',
+            modelId: 'model-1',
+            parseError: expect.stringContaining('Unterminated string in JSON'),
+          },
+          { actionId: 'act_1' },
+        ],
+      ])
+    })
+
+    it('warns once on refusing a document of the wrong shape, with the schema error', async () => {
+      reply('{"wrong":1}', 'length', 256)
+      await call('act_1')
+      expect(cutOffLogs()).toEqual([
+        [
+          'provider.reply_cut_off',
+          expect.objectContaining({
+            outcome: 'refused',
+            parseError: expect.stringMatching(/"code": "invalid_type"[\s\S]*"description"/),
+          }),
+          { actionId: 'act_1' },
+        ],
+      ])
+    })
+
+    it('logs no cut-off when a call runs out of parse retries on finished replies', async () => {
+      reply('not json <<<', 'stop', 256)
+      expect(await call()).toMatchObject({ status: 'failed', error: { tier: 'parse' } })
+      expect(runProviderCall).toHaveBeenCalledTimes(2)
+      expect(cutOffLogs()).toEqual([])
+    })
+
+    it('logs no cut-off when the provider call fails', async () => {
+      vi.mocked(runProviderCall).mockRejectedValue(
+        new APICallError({
+          message: 'unauthorized',
+          url: 'u',
+          requestBodyValues: {},
+          statusCode: 401,
+        }),
+      )
+      expect(await call()).toMatchObject({ status: 'failed', error: { tier: 'provider' } })
+      expect(cutOffLogs()).toEqual([])
+    })
+
+    it('warns on a strict accept at the limit, a sign the limit is tight', async () => {
+      vi.mocked(resolveModel).mockImplementation(() => ({
+        ok: true,
+        providerId: 'prov-1',
+        providerType: 'openai-compatible',
+        modelId: 'model-1',
+        params: {},
+      }))
+      reply('{"description":"A tale."}', 'length', 120)
+      await call('act_2')
+      expect(cutOffLogs()).toEqual([
+        [
+          'provider.reply_cut_off',
+          {
+            outcome: 'accepted',
+            target: 'classifier',
+            cause: 'unknown',
+            outputTokens: 120,
+            reasoningTokens: 40,
+            maxOutput: null,
+            window: null,
+            providerId: 'prov-1',
+            modelId: 'model-1',
+          },
+          { actionId: 'act_2' },
+        ],
+      ])
+    })
+
+    it('warns with no action outside a run', async () => {
+      reply('{"description":"A ta', 'length')
+      await call(null)
+      expect(cutOffLogs()).toEqual([
+        [
+          'provider.reply_cut_off',
+          expect.objectContaining({ outcome: 'refused', cause: 'max-output', outputTokens: null }),
+          undefined,
+        ],
+      ])
+    })
   })
 })
 
@@ -688,5 +924,35 @@ describe('cache marker', () => {
     })
 
     expect(vi.mocked(streamProviderCall).mock.calls.at(-1)?.[0].model).toBe(inner.model)
+  })
+})
+
+describe('describeCallRetryError', () => {
+  it('reads a provider failure as its detail, or its reason when it has none', () => {
+    expect(
+      describeCallRetryError({ tier: 'provider', reason: 'network', detail: '503 upstream' }),
+    ).toBe('503 upstream')
+    expect(describeCallRetryError({ tier: 'provider', reason: 'timeout' })).toBe('timeout')
+  })
+
+  it('reads a parse failure as its detail', () => {
+    expect(describeCallRetryError({ tier: 'parse', detail: 'bad json', attempt: 1 })).toBe(
+      'bad json',
+    )
+  })
+
+  it('describes a cut-off, naming its cause', () => {
+    expect(
+      describeCallRetryError({
+        tier: 'reply-cut-off',
+        cause: 'unknown',
+        outputTokens: 4096,
+        reasoningTokens: null,
+        maxOutput: null,
+        window: null,
+        providerId: 'prov-1',
+        modelId: 'model-1',
+      }),
+    ).toBe('reply cut off (unknown): 4096 output tokens; model model-1 on provider prov-1')
   })
 })

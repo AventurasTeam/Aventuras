@@ -83,17 +83,34 @@ obvious.
 
 ## Failure injection
 
-| Kind         | What the app sees                                                                                                                                                                       |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `http`       | The chosen status. 401/403 is non-retryable, 429 and 5xx are retryable — see [`classify-provider-error.ts`](../../lib/ai/transport/classify-provider-error.ts).                         |
-| `malformed`  | A reply that cannot be repaired into a valid object, exercising the parse-retry path. On narrative it appends a truncated `<state>` block instead, exercising piggyback parse recovery. |
-| `stream-cut` | The SSE stream opens, emits, then closes with no stop frame and no `[DONE]`.                                                                                                            |
-| `hang`       | The socket opens and never finishes, until the client times out or cancels.                                                                                                             |
+| Kind         | What the app sees                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `http`       | The chosen status. 401/403 is non-retryable, 429 and 5xx are retryable — see [`classify-provider-error.ts`](../../lib/ai/transport/classify-provider-error.ts).                                                                                                                                                                                                                                                                                                                    |
+| `malformed`  | A reply that cannot be repaired into a valid object, exercising the parse-retry path. On narrative it appends a truncated `<state>` block instead, exercising piggyback parse recovery.                                                                                                                                                                                                                                                                                            |
+| `stream-cut` | The SSE stream opens, emits, then closes with no stop frame and no `[DONE]`.                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `hang`       | The socket opens and never finishes, until the client times out or cancels.                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `length`     | The first half of the reply, by characters, then a normal ending with `finish_reason: 'length'`, where `stream-cut` sends none (a stream gets the terminal frame and `[DONE]`, a structured reply is one completion): a reply the server stopped at its length limit. A structured one is refused, not repaired; a narrative one cut in its prose commits with a cut-off notice ([`generation-pipeline.md → Cut-off replies`](../../docs/generation-pipeline.md#cut-off-replies)). |
 
 **Structured calls retry once.** `generateStructured` wraps the call in
 `callWithRetry` with `maxProviderAttempts: 2`, so a failure budget of 1 on a
 structured lane is swallowed before the app ever sees it. Use 2 or more.
-Narrative has no such wrapper — one failure fails the run.
+`length` is the exception: a cut reply is never retried, so a budget of 1
+reaches the app.
+
+Narrative has no such wrapper, so one `http` failure fails the run, as does a
+`hang` once the client times out. The other kinds commit: `malformed` through
+piggyback parse recovery, `stream-cut` as a finished reply holding what
+arrived (the SDK reports the missing stop frame as `other`, and only `length`
+counts as cut off), and `length` as below.
+
+Where a narrative `length` cut lands depends on the active response: the mock
+halves the rendered reply, prose plus its trailing blocks. On "Long scene" the
+half falls in the prose, so the turn commits with a cut-off notice. On a
+response whose blocks are longer than its prose, such as "With suggestions",
+it falls inside the trailing blocks: the prose is whole and the turn commits
+with no notice. The default "Short beat" stops just after its prose, before
+any block opens, which still reads as a cut in the prose, so the notice shows
+though no text is missing.
 
 ## Passthrough and recording
 

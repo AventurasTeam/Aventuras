@@ -1,10 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect, useState } from 'react'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fn, screen, spyOn, userEvent, waitFor, within } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
-import type { GenerateStructuredResult } from '@/lib/ai'
+import type { CallRetryError, GenerateStructuredResult } from '@/lib/ai'
+import { logger } from '@/lib/diagnostics'
 
 import { AiAssist } from './ai-assist'
 import { composeKey, nameKey, type AssistListItem, type DedupeKey } from './ai-assist-logic'
@@ -23,12 +24,16 @@ function okRun<T>(value: T) {
   })
 }
 
-function failRun<T>(detail: string) {
+function failWithErrorRun<T>(error: CallRetryError) {
   return async (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => ({
     status: 'failed',
-    detail,
+    error,
     recoverable: [],
   })
+}
+
+function failRun<T>(detail: string) {
+  return failWithErrorRun<T>({ tier: 'provider', reason: 'unknown', detail })
 }
 
 // Fails once (drives the Failure state), then succeeds — exercises "Try
@@ -37,7 +42,12 @@ function flakyThenOkRun<T>(value: T, detail: string) {
   let calls = 0
   return async (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => {
     calls += 1
-    if (calls === 1) return { status: 'failed', recoverable: [], detail }
+    if (calls === 1)
+      return {
+        status: 'failed',
+        recoverable: [],
+        error: { tier: 'provider', reason: 'unknown', detail },
+      }
     return { status: 'ok', recoverable: [], value }
   }
 }
@@ -88,7 +98,12 @@ function flakyThenOkRefine<T>(
   ): Promise<GenerateStructuredResult<T>> => {
     calls.push({ current, instruction })
     attempts += 1
-    if (attempts === 1) return { status: 'failed', recoverable: [], detail }
+    if (attempts === 1)
+      return {
+        status: 'failed',
+        recoverable: [],
+        error: { tier: 'provider', reason: 'unknown', detail },
+      }
     return { status: 'ok', recoverable: [], value }
   }
 }
@@ -129,6 +144,17 @@ function excludeCapturingRun<T>(pages: T[], calls: (readonly string[])[]) {
     call += 1
     return { status: 'ok', recoverable: [], value }
   }
+}
+
+const CUT_OFF_ERROR: CallRetryError = {
+  tier: 'reply-cut-off',
+  cause: 'max-output',
+  outputTokens: 1024,
+  reasoningTokens: null,
+  maxOutput: 1024,
+  window: null,
+  providerId: 'prov_story',
+  modelId: MODEL_ID,
 }
 
 type DescriptionValue = { description: string }
@@ -729,6 +755,33 @@ export const FailureThenRetrySucceeds: Story = {
   },
 }
 
+export const FailureCutOff: Story = {
+  beforeEach: () => {
+    const log = spyOn(logger, 'error').mockImplementation(() => {})
+    return () => log.mockRestore()
+  },
+  render: () => (
+    <ProseDemo
+      resolveModelId={() => MODEL_ID}
+      run={failWithErrorRun<DescriptionValue>(CUT_OFF_ERROR)}
+      onSetup={fn()}
+      onUse={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    const reason =
+      "The reply was cut off at the wizard-assist profile's 1,024-token max output. Raise it, then try again"
+    expect(await screen.findByText(`Couldn't generate. ${reason}.`)).toBeInTheDocument()
+    await expect(logger.error).toHaveBeenCalledWith('provider.wizard_assist_failed', {
+      modelId: MODEL_ID,
+      ariaLabel: 'Suggest description',
+      detail: reason,
+    })
+  },
+}
+
 const refineFailureGenerateCalls: string[] = []
 const refineFailureRetryCalls: { current: DescriptionValue; instruction: string }[] = []
 export const RefineFailureTryAgainRetriesRefine: Story = {
@@ -1153,7 +1206,15 @@ export const ListResult_FailedGenerateMoreKeepsPageAndAppendsOnRetry: Story = {
       resolveModelId={() => MODEL_ID}
       run={sequentialRun<ListItemValue>([
         { status: 'ok', recoverable: [], value: { items: [RUIN_ITEM] } },
-        { status: 'failed', recoverable: [], detail: 'Provider request timed out after 3 retries' },
+        {
+          status: 'failed',
+          recoverable: [],
+          error: {
+            tier: 'provider',
+            reason: 'timeout',
+            detail: 'Provider request timed out after 3 retries',
+          },
+        },
         { status: 'ok', recoverable: [], value: { items: [PAGE_TWO_ITEM] } },
       ])}
       onSetup={fn()}
@@ -1187,7 +1248,15 @@ export const ListResult_FailedFirstGenerateThenRetrySucceedsWithExactPage: Story
     <ListDemo
       resolveModelId={() => MODEL_ID}
       run={sequentialRun<ListItemValue>([
-        { status: 'failed', recoverable: [], detail: 'Provider request timed out after 3 retries' },
+        {
+          status: 'failed',
+          recoverable: [],
+          error: {
+            tier: 'provider',
+            reason: 'timeout',
+            detail: 'Provider request timed out after 3 retries',
+          },
+        },
         { status: 'ok', recoverable: [], value: { items: [RUIN_ITEM, FACTION_ITEM] } },
       ])}
       onSetup={fn()}
@@ -1448,7 +1517,15 @@ export const FailureCancelKeepingAListAsksBeforeDiscarding: Story = {
       resolveModelId={() => MODEL_ID}
       run={sequentialRun<ListItemValue>([
         { status: 'ok', recoverable: [], value: { items: [RUIN_ITEM] } },
-        { status: 'failed', recoverable: [], detail: 'Provider request timed out after 3 retries' },
+        {
+          status: 'failed',
+          recoverable: [],
+          error: {
+            tier: 'provider',
+            reason: 'timeout',
+            detail: 'Provider request timed out after 3 retries',
+          },
+        },
         { status: 'ok', recoverable: [], value: { items: [PAGE_TWO_ITEM] } },
       ])}
       onSetup={fn()}
@@ -1565,7 +1642,15 @@ export const FailureCancelKeepingAnUntouchedListAsksBeforeDiscarding: Story = {
       resolveModelId={() => MODEL_ID}
       run={sequentialRun<ListItemValue>([
         { status: 'ok', recoverable: [], value: { items: [RUIN_ITEM] } },
-        { status: 'failed', recoverable: [], detail: 'Provider request timed out after 3 retries' },
+        {
+          status: 'failed',
+          recoverable: [],
+          error: {
+            tier: 'provider',
+            reason: 'timeout',
+            detail: 'Provider request timed out after 3 retries',
+          },
+        },
         { status: 'ok', recoverable: [], value: { items: [PAGE_TWO_ITEM] } },
       ])}
       onSetup={fn()}

@@ -1,13 +1,14 @@
 import { and, desc, eq, sql, type SQL } from 'drizzle-orm'
 
-import type { Delta, SqlOp } from '@/lib/db'
-import { deltas, storyEntries } from '@/lib/db'
+import type { Delta, EntryMetadata, SqlOp } from '@/lib/db'
+import { deltas, entryMetadataSchema, storyEntries } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { headTurnEntries } from '@/lib/head-turn'
 import { generateId } from '@/lib/ids'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { withBranchWriteShared } from '../delta/branch-write-lock'
+import { computeUndoPayload } from '../delta/delta-encoding'
 import { deltaRowOp } from '../delta/delta-row'
 import {
   DeltaReplayError,
@@ -105,6 +106,41 @@ function inFlightRejection(): StoryEntryRejection {
   }
 }
 
+// data-model.md → Entry metadata shape: the text is the user's now, so the cut-off mark leaves in
+// the edit's own delta, and an undo of the edit restores both.
+type CutOffClear =
+  | { clearsCutOff: false }
+  | { clearsCutOff: true; metadataUndo: Record<string, unknown> }
+
+function cutOffClearOf(metadata: EntryMetadata | null): CutOffClear {
+  if (metadata?.cutOff === undefined) return { clearsCutOff: false }
+  return {
+    clearsCutOff: true,
+    metadataUndo: computeUndoPayload(entryMetadataSchema, metadata, withoutCutOff(metadata)),
+  }
+}
+
+function withoutCutOff(metadata: EntryMetadata): EntryMetadata {
+  const { cutOff: _cutOff, ...cleared } = metadata
+  return cleared
+}
+
+// In SQL: the reversal sharing this transaction may write the row's other metadata keys after the
+// action's read. The store patch reads the row after the reversal's patches for the same reason.
+function contentEditSet(content: string, clear: CutOffClear) {
+  if (!clear.clearsCutOff) return { content }
+  return { content, metadata: sql`json_remove(${storyEntries.metadata}, '$.cutOff')` }
+}
+
+function contentEditPatchColumns(
+  id: string,
+  content: string,
+  clear: CutOffClear,
+): { content: string; metadata?: EntryMetadata } {
+  const stored = clear.clearsCutOff ? entriesStore.getById(id)?.metadata : null
+  return stored ? { content, metadata: withoutCutOff(stored) } : { content }
+}
+
 /**
  * Prose is the classifier's only input, so a rewrite leaves the facts it took from the
  * old text standing on nothing. Reversal and clamp ride one scope and neither runs
@@ -138,6 +174,7 @@ async function updateStoryEntryContentBracketed(
     }
 
   const invalidation = await resolveContentEditInvalidation(branchId, id, ctx)
+  const clear = cutOffClearOf(current.metadata)
 
   // In scope the clamp is unconditional: a pass that read the entry and extracted
   // nothing still advanced the watermark past it, and the op no-ops when the watermark
@@ -149,7 +186,7 @@ async function updateStoryEntryContentBracketed(
     await commitNewAction(set, ctx, [
       ctx.db
         .update(storyEntries)
-        .set({ content })
+        .set(contentEditSet(content, clear))
         .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
         .toSQL(),
       // Spliced, not dispatched: applyDeltaAction's own transaction isn't atomic with the reversal,
@@ -166,7 +203,11 @@ async function updateStoryEntryContentBracketed(
           targetTable: 'story_entries',
           targetId: id,
           op: 'update',
-          undoPayload: contentEditUndoPayload(current.content, invalidation.scope),
+          undoPayload: contentEditUndoPayload(
+            current.content,
+            invalidation.scope,
+            clear.clearsCutOff ? clear.metadataUndo : undefined,
+          ),
         },
       }),
       ...invalidation.clampOps,
@@ -176,7 +217,11 @@ async function updateStoryEntryContentBracketed(
     throw e
   }
 
-  entriesStore.patch(branchId, { op: 'update', id, columns: { content } })
+  entriesStore.patch(branchId, {
+    op: 'update',
+    id,
+    columns: contentEditPatchColumns(id, content, clear),
+  })
   return { status: 'ok' }
 }
 

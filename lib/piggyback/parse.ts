@@ -585,6 +585,36 @@ function findBlockSpan(raw: string, tag: string): BlockSpan | undefined {
   return { tag, start, end: boundedEnd(raw, start + 1, tag) }
 }
 
+function trailingBlockSpans(raw: string): BlockSpan[] {
+  return TRAILING_ROOT_TAGS.map((tag) => findBlockSpan(raw, tag))
+    .filter((s): s is BlockSpan => s !== undefined)
+    .sort((a, b) => a.start - b.start)
+}
+
+/**
+ * Where the server cut a reply it stopped at `length` (generation-pipeline.md → Cut-off replies):
+ * `inBlock` once a trailing block had begun. A root opener cut mid-name is removed from `content`.
+ */
+export function readCutOffReply(raw: string): { content: string; inBlock: boolean } {
+  // `<sta` opens no span findBlockSpan sees. The model opens a block at a line start or right
+  // after a root close tag, so only a fragment there means a block had begun.
+  const lt = raw.lastIndexOf('<')
+  if (lt !== -1) {
+    const fragment = raw.slice(lt + 1)
+    const before = raw.slice(raw.lastIndexOf('\n', lt) + 1, lt).trim()
+    if (
+      (before === '' || TRAILING_ROOT_TAGS.some((tag) => before.endsWith(`</${tag}>`))) &&
+      TRAILING_ROOT_TAGS.some((tag) => tag.startsWith(fragment))
+    )
+      return { content: raw.slice(0, lt).trimEnd(), inBlock: true }
+  }
+  const spans = trailingBlockSpans(raw)
+  if (spans.length === 0) return { content: raw, inBlock: false }
+  // Prose after the last block, as after one emitted out of position, is where the cut fell.
+  const end = Math.max(...spans.map((span) => span.end))
+  return { content: raw, inBlock: raw.slice(end).trim() === '' }
+}
+
 export function stripTrailingBlocks(raw: string): {
   prose: string
   stateRaw?: string
@@ -593,9 +623,7 @@ export function stripTrailingBlocks(raw: string): {
    *  emission compliance is a watch item (docs/memory/piggyback.md). */
   outOfPosition?: true
 } {
-  const spans = TRAILING_ROOT_TAGS.map((tag) => findBlockSpan(raw, tag))
-    .filter((s): s is BlockSpan => s !== undefined)
-    .sort((a, b) => a.start - b.start)
+  const spans = trailingBlockSpans(raw)
   if (spans.length === 0) return { prose: raw }
 
   const kept: string[] = []

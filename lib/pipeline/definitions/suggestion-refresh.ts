@@ -22,8 +22,20 @@ export const SUGGESTION_EMISSION_PHASE = 'suggestion-emission'
 export const SUGGESTION_TRANSLATION_PHASE = 'suggestion-translation'
 
 // Tags the phase-logic failure raised when the call returned but nothing in it
-// resolved, so the strip can say that rather than "generation failed".
+// parsed or resolved, so the strip can say that rather than "generation failed".
 export const SUGGESTIONS_UNUSABLE = 'suggestions-unusable'
+
+function unusable(detail: string): PhaseResult {
+  return {
+    status: 'failed',
+    error: {
+      kind: 'phase-logic',
+      subsystem: SUGGESTIONS_UNUSABLE,
+      phaseName: SUGGESTION_EMISSION_PHASE,
+      detail,
+    },
+  }
+}
 
 // No target entry: the anchor is always the branch's last narrative entry, and
 // the phase resolves it after the run takes the edit gate. Passing it from the
@@ -129,7 +141,7 @@ async function* suggestionEmissionPhase(
   )
   // generation-pipeline.md → Two retry tiers: one event per retried attempt, however the call ended.
   for (const attempt of result.status === 'not-configured' ? [] : result.recoverable)
-    yield { type: 'recoverable_error', error: toPipelineError(attempt) }
+    yield { type: 'recoverable_error', error: toPipelineError(attempt, 'suggestion') }
   if (result.status === 'aborted') return { status: 'aborted' }
   // Pre-flight halts before this phase on a broken resolver, so a failure here
   // only covers a resolver-time race the pre-flight snapshot missed.
@@ -144,12 +156,9 @@ async function* suggestionEmissionPhase(
       },
     }
   if (result.status === 'failed')
-    return {
-      status: 'failed',
-      // generateStructured collapses provider-tier and parse-tier exhaustion into
-      // one detail string; 'unknown' is the honest reason for either.
-      error: { kind: 'provider', reason: 'unknown', detail: result.detail },
-    }
+    return result.error.tier === 'parse'
+      ? unusable(result.error.detail)
+      : { status: 'failed', error: toPipelineError(result.error, 'suggestion') }
 
   // A cancel that lands between the call returning and the write must discard the
   // result, not commit it (generation-pipeline.md → Abort: poll at every
@@ -171,15 +180,9 @@ async function* suggestionEmissionPhase(
   // a dead button. The strip keeps its chips and surfaces the failure beside
   // them.
   if (items.length === 0)
-    return {
-      status: 'failed',
-      error: {
-        kind: 'phase-logic',
-        subsystem: SUGGESTIONS_UNUSABLE,
-        phaseName: SUGGESTION_EMISSION_PHASE,
-        detail: `no chip resolved (received ${result.value.suggestions.length}, dropped ${droppedCount})`,
-      },
-    }
+    return unusable(
+      `no chip resolved (received ${result.value.suggestions.length}, dropped ${droppedCount})`,
+    )
 
   // Defense in depth behind the hard gate: user reversals reject at the action
   // layer for this run's duration, but abort paths and any non-UI writer sit

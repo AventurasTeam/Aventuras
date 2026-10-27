@@ -10,7 +10,7 @@ import { STRUCTURED_SHAPES } from './shapes'
 const HERE = dirname(fileURLToPath(import.meta.url))
 export const STATE_PATH = join(HERE, 'state.json')
 
-export const FAILURE_KINDS = ['none', 'http', 'stream-cut', 'malformed', 'hang'] as const
+export const FAILURE_KINDS = ['none', 'http', 'stream-cut', 'malformed', 'hang', 'length'] as const
 export type FailureKind = (typeof FAILURE_KINDS)[number]
 
 const cannedResponseSchema = z.object({

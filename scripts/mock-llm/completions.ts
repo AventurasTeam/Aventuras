@@ -32,6 +32,12 @@ const TRUNCATED_STATE_BLOCK = '\n\n<state>\n  <transfers><item id='
 // schema, and is what a real model actually emits when it declines.
 const MALFORMED_STRUCTURED = "I'm sorry, I can't produce that JSON."
 
+// What a server that stopped at its length limit sent before the cut.
+export function firstHalf(text: string): string {
+  const chars = Array.from(text)
+  return chars.slice(0, Math.max(1, Math.floor(chars.length / 2))).join('')
+}
+
 function asNarrativeValue(value: unknown): NarrativeValue {
   if (typeof value === 'string') return { prose: value }
   const record = (value ?? {}) as Partial<NarrativeValue>
@@ -206,12 +212,16 @@ export async function handleCompletion(
 
   if (streamed) {
     const value = asNarrativeValue(canned?.value)
-    const content =
+    const rendered =
       failure === 'malformed'
         ? renderNarrative(value) + TRUNCATED_STATE_BLOCK
         : renderNarrative(value)
+    const content = failure === 'length' ? firstHalf(rendered) : rendered
 
-    ctx.log.lastNarrativeHadState = failure === 'malformed' || hasStateContent(value.state)
+    ctx.log.lastNarrativeHadState =
+      failure === 'length'
+        ? content.includes('<state>')
+        : failure === 'malformed' || hasStateContent(value.state)
     entry.served = content
 
     res.writeHead(200, SSE_HEADERS)
@@ -220,7 +230,7 @@ export async function handleCompletion(
       charsPerSecond: lane.stream.charsPerSecond,
       chunkSize: lane.stream.chunkSize,
       jitterMs: lane.delay.jitterMs,
-      ...(failure === 'stream-cut' ? { cut: true } : {}),
+      ending: failure === 'stream-cut' || failure === 'length' ? failure : 'stop',
       aborted: () => clientGone,
     })
     finish()
@@ -231,10 +241,11 @@ export async function handleCompletion(
   // contract the E2E mock uses, so a schema with defaults still parses.
   const value = canned?.value ?? {}
   const broken = failure === 'malformed' || failure === 'stream-cut'
-  const content = broken ? MALFORMED_STRUCTURED : JSON.stringify(value)
+  const full = broken ? MALFORMED_STRUCTURED : JSON.stringify(value)
+  const content = failure === 'length' ? firstHalf(full) : full
 
-  entry.served = broken ? content : value
+  entry.served = failure === 'none' ? value : content
   res.writeHead(200, { ...CORS_HEADERS, 'content-type': 'application/json' })
-  res.end(completionBody(content))
+  res.end(completionBody(content, failure === 'length' ? 'length' : 'stop'))
   finish()
 }

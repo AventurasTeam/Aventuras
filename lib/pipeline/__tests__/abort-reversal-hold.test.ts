@@ -18,6 +18,7 @@ import {
   type PhaseContext,
   type PhaseEmittedEvent,
   type PhaseResult,
+  pipelineErrorDetail,
   pipelineEventBus,
 } from '@/lib/pipeline'
 import { generationStore, type DeferredWorkKind } from '@/lib/stores'
@@ -223,7 +224,10 @@ describe("an interruptible run's abort reversal and the branch write lock", () =
 
     const completes: { outcome: string; detail?: string }[] = []
     pipelineEventBus.subscribe('run_complete', (e) => {
-      completes.push({ outcome: e.outcome, detail: e.error?.detail })
+      completes.push({
+        outcome: e.outcome,
+        detail: e.error !== undefined ? pipelineErrorDetail(e.error) : undefined,
+      })
     })
     abortRuns()
     // generation-pipeline.md → Run state transitions: every abort ends the run, so the gate drops

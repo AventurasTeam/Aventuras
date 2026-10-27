@@ -28,6 +28,7 @@ import { cn } from '@/lib/utils'
 
 import { AiAssistDiscardDialog } from './ai-assist-discard-dialog'
 import {
+  assistFailureReason,
   itemKey,
   markExisting,
   mergePages,
@@ -305,8 +306,9 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
       // structured-output parse failure. The sync-throw branch above is the
       // rare one, so logging only there left diagnostics empty for exactly the
       // reports users file.
-      logger.error('provider.wizard_assist_failed', { modelId, ariaLabel, detail: result.detail })
-      setAssist({ kind: 'failure', detail: result.detail, retry })
+      const detail = assistFailureReason(result.error)
+      logger.error('provider.wizard_assist_failed', { modelId, ariaLabel, detail })
+      setAssist({ kind: 'failure', detail, retry })
     }
     // 'aborted' — whichever action triggered the abort already set its own state.
   }

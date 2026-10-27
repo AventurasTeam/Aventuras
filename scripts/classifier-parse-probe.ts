@@ -4,7 +4,12 @@ import { DatabaseSync } from 'node:sqlite'
 import { and, asc, eq, gt } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 
-import { generateStructured, type CallRetryError, type ResolveModelConfig } from '@/lib/ai'
+import {
+  describeCallRetryError,
+  generateStructured,
+  type CallRetryError,
+  type ResolveModelConfig,
+} from '@/lib/ai'
 import { buildClassifierWindow, classifierReplySchema, readClassifierReply } from '@/lib/classifier'
 import {
   branches,
@@ -31,10 +36,13 @@ import { resolveDevSlot } from './dev-slot/resolve'
 
 // Opt-in: the real pass prompt, sent N times to a real provider, for a first-attempt parse rate.
 //   SMOKE_LLM_URL=http://host:port/v1 SMOKE_LLM_MODEL=<id> pnpm probe:classifier
-// PROBE_RUNS (20), PROBE_BRANCH_ID (br_hero_main), AVENTURAS_DB_PATH (dev slot db, read-only).
+// PROBE_RUNS (20), PROBE_MAX_OUTPUT (unset), PROBE_BRANCH_ID (br_hero_main), AVENTURAS_DB_PATH
+// (dev slot db, read-only).
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
 const RUNS = Number(process.env.PROBE_RUNS ?? 20)
+const MAX_OUTPUT =
+  process.env.PROBE_MAX_OUTPUT === undefined ? undefined : Number(process.env.PROBE_MAX_OUTPUT)
 const BRANCH_ID = process.env.PROBE_BRANCH_ID ?? 'br_hero_main'
 
 const PROVIDER_ID = 'prov_probe'
@@ -111,6 +119,8 @@ type Outcome = {
   status: 'ok' | 'failed' | 'aborted'
   recoverable: readonly CallRetryError[]
   detail?: string
+  /** The reply stopped at its length limit and didn't parse strictly as a complete reply. */
+  cutOff?: true
   /** Entries a tolerant list dropped from a reply that parsed, by list. */
   dropped?: string
 }
@@ -144,6 +154,8 @@ async function main(): Promise<void> {
     return
   }
   if (!Number.isInteger(RUNS) || RUNS < 1) throw new Error(`PROBE_RUNS must be a positive integer`)
+  if (MAX_OUTPUT !== undefined && (!Number.isInteger(MAX_OUTPUT) || MAX_OUTPUT < 1))
+    throw new Error(`PROBE_MAX_OUTPUT must be a positive integer`)
 
   // getModel resolves providers through the app-settings store, so the probe's provider goes there.
   const hydrated = await hydrateAppSettings(async () => ({
@@ -163,6 +175,7 @@ async function main(): Promise<void> {
         kind: 'agent',
         name: 'Classifier probe',
         modelRef: { providerId: PROVIDER_ID, modelId: LLM_MODEL },
+        ...(MAX_OUTPUT !== undefined ? { maxOutput: MAX_OUTPUT } : {}),
       },
     ],
     assignments: { classifier: PROFILE_ID },
@@ -199,7 +212,8 @@ async function main(): Promise<void> {
   console.log(
     `[probe] ${dbPath} ${BRANCH_ID}: ${window.turns.length} turns, ` +
       `mentioned places ${branch.mentionedPlaces ? 'on' : 'off'}, ` +
-      `prompt ${prompt.system.length + prompt.user.length} chars; ${RUNS} runs of ${LLM_MODEL}`,
+      `prompt ${prompt.system.length + prompt.user.length} chars, ` +
+      `max output ${MAX_OUTPUT ?? 'unset'}; ${RUNS} runs of ${LLM_MODEL}`,
   )
 
   const outcomes: Outcome[] = []
@@ -219,14 +233,20 @@ async function main(): Promise<void> {
     const outcome: Outcome = {
       status: result.status,
       recoverable: result.recoverable,
-      ...(result.status === 'failed' ? { detail: result.detail } : {}),
+      ...(result.status === 'failed'
+        ? {
+            detail: describeCallRetryError(result.error),
+            ...(result.error.tier === 'reply-cut-off' ? { cutOff: true as const } : {}),
+          }
+        : {}),
       ...(malformed.length > 0
         ? { dropped: malformed.map(({ list, count }) => `${list} ${count}`).join(', ') }
         : {}),
     }
     outcomes.push(outcome)
     console.log(
-      `[probe] run ${run}: ${outcome.status} in ${((Date.now() - startedAt) / 1000).toFixed(1)} s, ` +
+      `[probe] run ${run}: ${outcome.cutOff === true ? 'cut off at length' : outcome.status} in ` +
+        `${((Date.now() - startedAt) / 1000).toFixed(1)} s, ` +
         `${parseRetries(outcome)} parse / ${providerRetries(outcome)} provider retries` +
         (outcome.detail ? ` — ${oneLine(outcome.detail)}` : ''),
     )
@@ -239,16 +259,23 @@ async function main(): Promise<void> {
 
   const firstAttempt = outcomes.filter((o) => o.status === 'ok' && parseRetries(o) === 0).length
   const afterRetry = outcomes.filter((o) => o.status === 'ok' && parseRetries(o) > 0).length
-  // callWithRetry keeps a call's final error out of `recoverable`, so a failed run with a parse
-  // entry is one whose first reply didn't parse; its re-call failed for either tier.
-  const failedAfterParseRetry = outcomes.filter((o) => o.status === 'failed' && parseRetries(o) > 0)
-  const failedOther = outcomes.filter((o) => o.status === 'failed' && parseRetries(o) === 0)
+  const cutOff = outcomes.filter((o) => o.cutOff === true)
+  // callWithRetry keeps a call's final error out of `recoverable`: a failed run with a parse entry
+  // had an unparseable first reply, then a failed re-call. A cut-off run counts only as cut off.
+  const failedAfterParseRetry = outcomes.filter(
+    (o) => o.status === 'failed' && o.cutOff !== true && parseRetries(o) > 0,
+  )
+  const failedOther = outcomes.filter(
+    (o) => o.status === 'failed' && o.cutOff !== true && parseRetries(o) === 0,
+  )
   const aborted = outcomes.filter((o) => o.status === 'aborted')
   console.log(
     `[probe] first-attempt parse ${firstAttempt}/${RUNS} ` +
-      `(${((100 * firstAttempt) / RUNS).toFixed(0)}%; a failed or aborted run counts as no success), ` +
+      `(${((100 * firstAttempt) / RUNS).toFixed(0)}%; ` +
+      `a failed, cut-off or aborted run counts as no success), ` +
       `ok after a parse retry ${afterRetry}, failed after a parse retry ${failedAfterParseRetry.length}, ` +
-      `failed with no parse retry ${failedOther.length}, aborted ${aborted.length}, ` +
+      `failed with no parse retry ${failedOther.length}, cut off at length ${cutOff.length}, ` +
+      `aborted ${aborted.length}, ` +
       `ok with dropped entries ${outcomes.filter((o) => o.dropped != null).length}, ` +
       `provider retries ${outcomes.reduce((n, o) => n + providerRetries(o), 0)}`,
   )

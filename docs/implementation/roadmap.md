@@ -940,7 +940,17 @@ code before it moved; resolve with the slice it names.
   minimum — that conversion also changes what the auto path accepts,
   so it needs its own care). `e2e/tests/structured-force-on.spec.ts`
   pins current behavior and flags the change. Surfaced by the M3 E2E
-  harness work (2026-07-24); verified 2026-08-19.
+  harness work (2026-07-24); verified 2026-08-19. Under force-on, an
+  Anthropic model without native structured output answers through a
+  JSON tool, and `@ai-sdk/anthropic` returns the tool's input
+  re-serialised as the reply text, which always parses. So the strict
+  parse that refuses a cut-off structured reply
+  ([`generation-pipeline.md → Cut-off replies`](../generation-pipeline.md#cut-off-replies))
+  can't refuse one there, and the periodic pass's reply schema accepts
+  an empty object, so a cut pass would commit what's left and advance
+  the watermark. Wiring force-on needs to refuse a `length` stop on that
+  path outright. What Anthropic sends as a cut tool call's input is
+  unverified. Raised by the cut-off replies slice review (2026-10-26).
 - **M7.1 — The blocking embed path has no per-request token budget.**
   Routed from the Slice 3.12 split (2026-08-19), which keeps the cheap
   halves (a `maxParallelCalls` cap, chunking the local backend) in
@@ -1007,6 +1017,32 @@ code before it moved; resolve with the slice it names.
   fixed on Story Settings → Models, and `resolveModel`'s failure
   result does not say which path failed. Unreachable until deletion
   ships. Surfaced by Slice 4.4 execution (2026-09-14).
+- **M7.1 — A cut-off under a story's model override blames a profile
+  that never reached the call.** An override names a provider and a
+  model only
+  ([`story-settings.md → Insulation from profile changes`](../ui/screens/story-settings/story-settings.md#insulation-from-profile-changes)),
+  so `resolveModel` (`lib/ai/resolve-model.ts`) sends it with no
+  profile parameters at all (`params: {}`), max output included. A
+  reply the server cuts at its own default then reads `unknown`
+  ([`generation-pipeline.md → Cut-off replies`](../generation-pipeline.md#cut-off-replies)),
+  even when the agent's profile sets a max output, and the copy tells
+  the user that a max output on the profile overrides the server's
+  limit and offers `Fix profile`, though that profile never reaches the
+  call; the suggestion strip's copy says the same, without the action.
+  For the periodic pass, every Send fails again with the same
+  advice until the override goes or the server stops cutting. Revisit
+  with M7.1's profile routing, when `Fix profile` stops landing on the
+  interim providers tab. The slice review's options: record whether
+  the call ran on an override (only the profile path returns a
+  `profileId`) and, for one, say so and route to Story Settings →
+  Models instead, which changes the `ReplyCutOffFailure` and `cutOff`
+  shapes canon prints; or let overrides carry parameters such as a max
+  output, which changes the insulation rule above. No interim measure
+  until then (developer, 2026-10-27). The same pass revisits
+  `Fix profile` on an `unknown` cut-off that carries the max output the
+  reply fell short of, where raising that limit can't help and only the
+  profile's model can (kept for now, developer, 2026-10-27). Raised by
+  the cut-off replies slice review (2026-10-26).
 - **M7.2 — Story Settings → Memory's embedder block departs from
   canon.** [`story-settings.md → Memory tab`](../ui/screens/story-settings/story-settings.md#memory-tab)
   puts [Embedding status](../ui/screens/story-settings/story-settings.md#embedding-status)
