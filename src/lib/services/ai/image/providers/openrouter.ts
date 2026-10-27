@@ -1,12 +1,13 @@
 /**
  * OpenRouter Image Provider
  *
- * Generates through `@openrouter/ai-sdk-provider` (POST /images). Models come from GET /models,
- * filtered on image output.
+ * Generates through `@openrouter/ai-sdk-provider` (POST /images). Models come from
+ * GET /images/models; the text `/models` list omits the image-only ones.
  */
 
 import * as z from 'zod'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
+import type { ImageModelCapabilities } from '#lib/types/index.ts'
 import { specToAspectRatio, type ImageSizeTier } from '#lib/utils/image.ts'
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type {
@@ -21,10 +22,11 @@ import { parseModelList } from './parseModelList'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
 const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1'
-const MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models'
 
 const optionalString = z.string().optional().catch(undefined)
-const modalities = z.array(z.string()).catch([])
+const optionalNumber = z.number().optional().catch(undefined)
+const modalities = z.array(z.string()).optional().catch(undefined)
+const ASPECT_RATIO = /^\d+(\.\d+)?:\d+(\.\d+)?$/
 
 const OpenRouterModel = z.object({
   id: z.string(),
@@ -32,16 +34,61 @@ const OpenRouterModel = z.object({
   description: optionalString,
   architecture: z
     .object({ input_modalities: modalities, output_modalities: modalities })
-    .catch({ input_modalities: [], output_modalities: [] }),
-  pricing: z
-    .object({ prompt: optionalString, completion: optionalString, image: optionalString })
+    .optional()
+    .catch(undefined),
+  supported_parameters: z
+    .object({
+      resolution: z
+        .object({ values: z.array(z.string()) })
+        .optional()
+        .catch(undefined),
+      aspect_ratio: z
+        .object({ values: z.array(z.string()) })
+        .optional()
+        .catch(undefined),
+      input_references: z
+        .object({ min: optionalNumber, max: optionalNumber })
+        .optional()
+        .catch(undefined),
+    })
     .catch({}),
 })
 
-/** A price string as a number; zero, negative and unparseable prices read as unknown. */
-function positivePrice(value: string | undefined): number | undefined {
-  const parsed = parseFloat(value ?? '')
-  return parsed > 0 ? parsed : undefined
+type OpenRouterModel = z.output<typeof OpenRouterModel>
+
+function toCapabilities({
+  architecture,
+  supported_parameters: params,
+}: OpenRouterModel): ImageModelCapabilities {
+  const refs = params.input_references
+  const ratios = params.aspect_ratio?.values.filter((v) => ASPECT_RATIO.test(v))
+  const maxReferenceImages = refs?.max && refs.max > 0 ? refs.max : undefined
+
+  // A model that takes images but lists no reference count still takes references; one whose
+  // inputs could not be read stays unknown.
+  const inputs = architecture?.input_modalities
+  let supportsImg2Img: boolean | undefined
+  if (maxReferenceImages || inputs?.includes('image')) supportsImg2Img = true
+  else if (inputs) supportsImg2Img = false
+
+  return {
+    supportsImg2Img,
+    maxReferenceImages,
+    requiresReferenceImage: (refs?.min ?? 0) >= 1 ? true : undefined,
+    supportedResolutions: params.resolution?.values.length ? params.resolution.values : undefined,
+    supportedAspectRatios: ratios?.length ? ratios : undefined,
+  }
+}
+
+function toModelInfo(m: OpenRouterModel): ImageModelInfo {
+  return {
+    id: m.id,
+    name: m.name || m.id,
+    description: m.description,
+    inputModalities: m.architecture?.input_modalities,
+    outputModalities: m.architecture?.output_modalities,
+    ...toCapabilities(m),
+  }
 }
 
 /** The aspect ratios the `/images` API lists; OpenRouter clamps one to what the model supports. */
@@ -104,33 +151,19 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
         referenceImages,
         aspectRatio: specToAspectRatio(spec, OPENROUTER_ASPECT_RATIOS) as `${number}:${number}`,
         providerOptions: { openrouter: { resolution: OPENROUTER_IMAGE_SIZE[spec.size] } },
+    // Discovery works without a key; it is sent when set.
         signal,
       })
     },
 
     async listModels(apiKey?: string): Promise<ImageModelInfo[]> {
-      const headers: Record<string, string> = {}
       const key = apiKey || config.apiKey
-      if (key) headers['Authorization'] = `Bearer ${key}`
-
-      const response = await imageGetFetch(MODELS_ENDPOINT, headers, {
-        serviceId: 'openrouter-image-models',
-      })
-      return parseModelList(await response.json(), OpenRouterModel)
-        .filter((m) => m.architecture.output_modalities.includes('image'))
-        .map((m): ImageModelInfo => ({
-          id: m.id,
-          name: m.name || m.id,
-          description: m.description,
-          supportsImg2Img:
-            m.architecture.input_modalities.includes('image') &&
-            m.architecture.output_modalities.includes('image'),
-          costPerImage: positivePrice(m.pricing.image),
-          costPerTextToken: positivePrice(m.pricing.prompt),
-          costPerImageToken: positivePrice(m.pricing.completion),
-          inputModalities: m.architecture.input_modalities,
-          outputModalities: m.architecture.output_modalities,
-        }))
+      const response = await imageGetFetch(
+        `${baseUrl}/images/models`,
+        key ? { Authorization: `Bearer ${key}` } : undefined,
+        { serviceId: 'openrouter-image-models' },
+      )
+      return parseModelList(await response.json(), OpenRouterModel).map(toModelInfo)
     },
   }
 }

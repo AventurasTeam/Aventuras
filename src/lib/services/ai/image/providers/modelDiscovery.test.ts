@@ -76,14 +76,14 @@ describe('model discovery', () => {
             id: 'google/gemini-2.5-flash-image',
             architecture: { input_modalities: ['text', 'image'], output_modalities: ['image'] },
           },
-          { id: 'openai/gpt-5', architecture: { output_modalities: ['text'] } },
+          { architecture: { output_modalities: ['image'] } },
         ],
       }),
     )
     const models = await createOpenRouterProvider({ apiKey: 'k' }).listModels('k')
     expect(models.map((m) => m.id)).toEqual(['google/gemini-2.5-flash-image'])
     expect(imageGetFetch).toHaveBeenCalledWith(
-      'https://openrouter.ai/api/v1/models',
+      'https://openrouter.ai/api/v1/images/models',
       { Authorization: 'Bearer k' },
       expect.anything(),
     )

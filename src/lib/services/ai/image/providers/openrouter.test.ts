@@ -20,6 +20,7 @@ vi.mock('#lib/utils/url.ts', async (importOriginal) => {
 
 import { createSdkFetch } from '#lib/services/ai/sdk/providers/sdkFetch.ts'
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
+import { imageGetFetch } from './fetchAdapter'
 import { createOpenRouterProvider } from './openrouter'
 
 const PNG = 'iVBORw0KGgo='
@@ -145,5 +146,127 @@ describe('OpenRouter image provider', () => {
     expect(APICallError.isInstance(error)).toBe(true)
     expect(error).toMatchObject({ statusCode: 500 })
     expect(sdkFetch).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('OpenRouter model discovery', () => {
+  const listed = (
+    id: string,
+    inputs: string[] | undefined,
+    params: Record<string, unknown> = {},
+  ) => ({
+    id,
+    name: `${id} name`,
+    description: 'd',
+    architecture: inputs && { input_modalities: inputs, output_modalities: ['image'] },
+    supported_parameters: params,
+  })
+
+  const refs = (min: number, max: number) => ({ input_references: { type: 'range', min, max } })
+
+  const models = async (...entries: unknown[]) => {
+    vi.mocked(imageGetFetch).mockResolvedValue(jsonResponse({ data: entries }))
+    return provider().listModels()
+  }
+
+  const modelOf = async (entry: unknown) => (await models(entry))[0]
+
+  beforeEach(() => vi.mocked(imageGetFetch).mockReset())
+
+  it('reads the image model list on the configured host', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(jsonResponse({ data: [] }))
+    await provider('https://proxy.test/v1').listModels()
+
+    expect(imageGetFetch).toHaveBeenCalledWith(
+      'https://proxy.test/v1/images/models',
+      { Authorization: 'Bearer k' },
+      expect.objectContaining({ serviceId: 'openrouter-image-models' }),
+    )
+  })
+
+  it('sends the key it is given in preference to the configured one', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(jsonResponse({ data: [] }))
+    await provider().listModels('other')
+    expect(vi.mocked(imageGetFetch).mock.calls[0][1]).toEqual({ Authorization: 'Bearer other' })
+  })
+
+  it('sends no Authorization header without a key', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(jsonResponse({ data: [] }))
+    await createOpenRouterProvider({ apiKey: '' }).listModels()
+    expect(vi.mocked(imageGetFetch).mock.calls[0][1]).toBeUndefined()
+  })
+
+  it('lists image-only models and carries no price', async () => {
+    const list = await models(
+      listed('black-forest-labs/flux.2-pro', ['text']),
+      listed('openai/gpt-image-1', ['text', 'image'], refs(0, 16)),
+    )
+
+    expect(list.map((m) => m.id)).toEqual(['black-forest-labs/flux.2-pro', 'openai/gpt-image-1'])
+    expect(list[0]).toMatchObject({ name: 'black-forest-labs/flux.2-pro name', description: 'd' })
+    for (const model of list) {
+      expect(model).not.toHaveProperty('costPerImage')
+      expect(model).not.toHaveProperty('costPerTextToken')
+      expect(model).not.toHaveProperty('costPerImageToken')
+    }
+  })
+
+  it('reads the reference count and an unlisted resolution as absent', async () => {
+    const model = await modelOf(listed('openai/gpt-image-1', ['text', 'image'], refs(0, 16)))
+    expect(model).toMatchObject({ supportsImg2Img: true, maxReferenceImages: 16 })
+    expect(model.supportedResolutions).toBeUndefined()
+    expect(model.requiresReferenceImage).toBeUndefined()
+  })
+
+  it('reads the listed resolutions verbatim', async () => {
+    const model = await modelOf(
+      listed('bytedance-seed/seedream-4.5', ['text', 'image'], {
+        resolution: { type: 'enum', values: ['1K', '2K', '4K'] },
+        ...refs(0, 14),
+      }),
+    )
+    expect(model.supportedResolutions).toEqual(['1K', '2K', '4K'])
+  })
+
+  it('reads the listed aspect ratios and leaves out those that are not w:h', async () => {
+    const model = await modelOf(
+      listed('openai/gpt-image-1', ['text', 'image'], {
+        aspect_ratio: { type: 'enum', values: ['1:1', '3:2', '2:3', 'auto'] },
+      }),
+    )
+    expect(model.supportedAspectRatios).toEqual(['1:1', '3:2', '2:3'])
+  })
+
+  it('reads a model that lists no aspect ratios as having none', async () => {
+    const model = await modelOf(listed('meta/muse-image', ['text', 'image']))
+    expect(model.supportedAspectRatios).toBeUndefined()
+  })
+
+  it('marks a model whose references are mandatory', async () => {
+    const model = await modelOf(listed('recraft/recraft-v4-styles', ['text', 'image'], refs(1, 5)))
+    expect(model).toMatchObject({ requiresReferenceImage: true, maxReferenceImages: 5 })
+  })
+
+  it('takes references on an image input with no listed count, and leaves the count open', async () => {
+    const model = await modelOf(listed('meta/muse-image', ['text', 'image']))
+    expect(model.supportsImg2Img).toBe(true)
+    expect(model.maxReferenceImages).toBeUndefined()
+  })
+
+  it('refuses references on a text-only model that lists none', async () => {
+    const model = await modelOf(listed('recraft/recraft-v4.1-flash', ['text']))
+    expect(model.supportsImg2Img).toBe(false)
+  })
+
+  it('leaves img2img unknown when the inputs cannot be read', async () => {
+    const model = await modelOf({ ...listed('m', undefined), architecture: 'text->image' })
+    expect(model.supportsImg2Img).toBeUndefined()
+  })
+
+  it('keeps a model whose supported parameters are malformed', async () => {
+    const model = await modelOf({ ...listed('m', ['text']), supported_parameters: 'many' })
+    expect(model).toMatchObject({ id: 'm' })
+    expect(model.maxReferenceImages).toBeUndefined()
+    expect(model.supportedResolutions).toBeUndefined()
   })
 })
