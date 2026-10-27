@@ -67,7 +67,7 @@ export function ProviderSetupForm() {
     if (provider === undefined) return
     setCatalog('fetching')
     try {
-      const ids = await fetchModelCatalog({
+      const entries = await fetchModelCatalog({
         ...provider,
         displayName,
         endpoint,
@@ -75,7 +75,10 @@ export function ProviderSetupForm() {
       })
       await updateProvider(
         provider.id,
-        { cachedModels: normalizeModelCatalog(ids, provider.cachedModels), cachedAt: Date.now() },
+        {
+          cachedModels: normalizeModelCatalog(entries, provider.cachedModels),
+          cachedAt: Date.now(),
+        },
         { db, runInTransaction },
       )
       setCatalog('idle')

@@ -6,7 +6,7 @@ export {
   type ResolveTarget,
   type StoryOverrideTarget,
 } from './agents'
-export { fetchModelCatalog, normalizeModelCatalog } from './catalog'
+export { fetchModelCatalog, normalizeModelCatalog, type CatalogEntry } from './catalog'
 export { embedViaProvider } from './embedding'
 export type { ProviderInstanceWithStub } from './types'
 export {
