@@ -110,7 +110,7 @@ export const CAPABILITY_HINT_KEYWORDS = [
 ] as const satisfies readonly CapabilityHint[]
 
 // A 2xx APICallError is a successful reply the SDK couldn't read: its body is the model's own text.
-function isRejection(error: unknown): error is APICallError {
+function isRejection(error: unknown): error is APICallError & { statusCode: number } {
   return APICallError.isInstance(error) && error.statusCode !== undefined && error.statusCode >= 400
 }
 
@@ -174,9 +174,9 @@ export function recognizeOverflow(error: unknown): { detail: string } | null {
   return { detail: providerMessage(error, body) }
 }
 
-/** A 4xx body naming a capability the request carried; never on a body recognized as an overflow. */
+/** A 4xx body naming a capability keyword; never on a body recognized as an overflow. */
 export function capabilityHintOf(error: unknown): CapabilityHint | undefined {
-  if (!isRejection(error) || (error.statusCode ?? 0) >= 500) return undefined
+  if (!isRejection(error) || error.statusCode >= 500) return undefined
   if (recognizeOverflow(error) !== null) return undefined
   const text = searchableText(error)
   const hit = CAPABILITY_HINT_KEYWORDS.find(({ matched }) => text.includes(matched))

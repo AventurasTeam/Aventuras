@@ -307,6 +307,20 @@ describe('recognizeOverflow', () => {
     expect(recognizeOverflow(error)).toEqual({ detail: 'prompt is too long: 9000 tokens' })
   })
 
+  // The search reads the whole body; the quoted detail is still the message first.
+  it('finds a keyword outside the message and quotes the message', () => {
+    const body = JSON.stringify({
+      error: {
+        message: 'Provider returned error',
+        code: 400,
+        metadata: {
+          raw: "This model's maximum context length is 8192 tokens. However, you requested 9000.",
+        },
+      },
+    })
+    expect(recognizeOverflow(rejection(400, body))).toEqual({ detail: 'Provider returned error' })
+  })
+
   it('does not recognize a 400 that names no overflow', () => {
     expect(recognizeOverflow(rejection(400, errorBody('temperature must be at most 2')))).toBeNull()
   })
@@ -367,6 +381,20 @@ describe('capabilityHintOf', () => {
     })
     expect(capabilityHintOf(rejection(500, body))).toBeUndefined()
     expect(capabilityHintOf(rejection(399, body))).toBeUndefined()
+  })
+
+  it('finds a keyword outside the message, such as the offending param', () => {
+    const body = JSON.stringify({
+      error: {
+        message: 'Invalid parameter.',
+        type: 'invalid_request_error',
+        param: 'response_format',
+      },
+    })
+    expect(capabilityHintOf(rejection(400, body))).toEqual({
+      capability: 'structuredOutput',
+      matched: 'response_format',
+    })
   })
 
   it('gives no hint for a body recognized as an overflow', () => {
