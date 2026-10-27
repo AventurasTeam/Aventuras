@@ -755,7 +755,6 @@ export const FailureThenRetrySucceeds: Story = {
   },
 }
 
-// A cut reply names the limit that cut it, and the log carries the reason the user saw.
 export const FailureCutOff: Story = {
   beforeEach: () => {
     const log = spyOn(logger, 'error').mockImplementation(() => {})
