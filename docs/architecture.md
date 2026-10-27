@@ -954,7 +954,8 @@ on its existing failure path:
 ### Recognizing an overflow rejection
 
 `classifyProviderError` recognizes an overflow on any `APICallError`
-with a status. By code first: `context_length_exceeded` or
+with an error status (400 and up; a 2xx one is a reply the SDK couldn't
+read, whose body is the model's text). By code first: `context_length_exceeded` or
 `exceed_context_size_error` in the body's `error.code`, `error.type`
 or a top-level `code`. Then by a short keyword list on the body:
 maximum context length, context size, context window, prompt is too
