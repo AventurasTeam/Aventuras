@@ -14,7 +14,7 @@ async function writeClipboard(text: string): Promise<boolean> {
   return true
 }
 
-/** A system entry's copy request: writes the clipboard and says whether it took. */
+/** A system entry's copy request: writes the clipboard and toasts whether it took. */
 export async function copySystemText(
   text: string,
   write: ClipboardWrite = writeClipboard,
