@@ -105,7 +105,7 @@ export const classifierExtractionSchema = z.object({
         z
           .enum(['active', 'retired'])
           .describe(
-            'active for a staged entity of any kind the prose brings into the scene, or a retired character who returns; retired only on unambiguous finality, never for a place.',
+            'active for a staged entity of any kind the prose brings into the scene, or a retired character who returns; retired only for a character or faction, on unambiguous finality.',
           ),
       ),
       reason: z

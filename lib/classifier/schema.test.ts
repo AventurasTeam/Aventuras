@@ -236,7 +236,7 @@ describe('classifierExtractionSchema — the writer map', () => {
   // The fields whose name alone doesn't say what they hold; the template's rules repeat each.
   it('describes a status change, a relationship kind and a learned happening', () => {
     expect(itemFields('statusFlips').to?.description).toBe(
-      'active for a staged entity of any kind the prose brings into the scene, or a retired character who returns; retired only on unambiguous finality, never for a place.',
+      'active for a staged entity of any kind the prose brings into the scene, or a retired character who returns; retired only for a character or faction, on unambiguous finality.',
     )
     expect(itemFields('statusFlips').reason?.description).toBe(
       'For a retirement: why, in a short phrase from the prose.',
