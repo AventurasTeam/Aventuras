@@ -405,6 +405,32 @@ describe('windowCheckMiddleware', () => {
     ])
   })
 
+  // Reading the system content is part of the count, so the clock moves only inside it.
+  it('logs how long the count took', async () => {
+    let now = 10
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)
+    const prompt: ModelPrompt = [
+      {
+        role: 'system',
+        get content() {
+          now = 25
+          return SYSTEM
+        },
+      },
+    ]
+    try {
+      await checkMiddleware({ tokens: null, source: 'unknown' }).middleware.wrapGenerate!({
+        params: { prompt },
+        model: {} as never,
+        doGenerate: async () => GENERATED,
+        doStream: unsent,
+      })
+    } finally {
+      clock.mockRestore()
+    }
+    expect(estimateLogs()).toEqual([expect.objectContaining({ ms: 15 })])
+  })
+
   it('attributes the estimate log to its run when given an actionId', async () => {
     const attributed = windowCheckMiddleware({
       window: { tokens: null, source: 'unknown' },
