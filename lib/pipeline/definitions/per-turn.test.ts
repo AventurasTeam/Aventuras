@@ -1,3 +1,4 @@
+import { APICallError } from 'ai'
 import { asc, eq } from 'drizzle-orm'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -5,7 +6,14 @@ import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { reverseAndPruneDeltaRows } from '@/lib/actions/delta/reverse-replay'
 import { resolveSweep } from '@/lib/actions/story-entries/operational'
 import { undoLastAction } from '@/lib/actions/story-entries/undo'
-import type { generateStructured, streamText } from '@/lib/ai'
+import {
+  ContextWindowError,
+  type ContextWindowFailure,
+  type generateStructured,
+  type GenerationWindow,
+  type streamText,
+  type StreamTextResult,
+} from '@/lib/ai'
 import {
   APP_SETTINGS_DEFAULTS,
   deltas,
@@ -95,18 +103,34 @@ function baseSettings(overrides: Partial<StorySettings> = {}): StorySettings {
   return { ...STORY_SETTINGS_DEFAULTS, ...overrides }
 }
 
-function failingStreamCall() {
+type StreamCall = Extract<StreamTextResult, { ok: true }>
+
+/** streamText's ok arm around a fake stream: an unknown window, no estimate, no window failure. */
+function streamCall(
+  fake: Partial<Omit<StreamCall, 'ok' | 'stream'>> & { stream: object },
+): Omit<StreamCall, 'stream'> & { stream: object } {
   return {
     ok: true,
     modelId: 'model-1',
     providerId: 'prov-1',
     timedOut: () => false,
+    timeoutMs: undefined,
+    maxOutput: undefined,
+    window: { tokens: null, source: 'unknown' },
+    promptEstimate: () => null,
+    contextWindowFailureOf: () => null,
+    ...fake,
+  }
+}
+
+function failingStreamCall() {
+  return streamCall({
     stream: {
       fullStream: (async function* () {
         throw new Error('stop after call')
       })(),
     },
-  }
+  })
 }
 
 async function runNarrativePhase(abortSignal = new AbortController().signal) {
@@ -274,17 +298,15 @@ describe('per-turn pipeline declaration', () => {
     const controller = new AbortController()
     // ai@6 fullStream ends without throwing on abort (an 'abort' part, no
     // onError) — the phase must classify via the signal, not a stream error.
-    streamTextMock.mockReturnValue({
-      ok: true,
-      modelId: 'model-1',
-      providerId: 'prov-1',
-      timedOut: () => false,
-      stream: {
-        fullStream: (async function* () {
-          controller.abort()
-        })(),
-      },
-    })
+    streamTextMock.mockReturnValue(
+      streamCall({
+        stream: {
+          fullStream: (async function* () {
+            controller.abort()
+          })(),
+        },
+      }),
+    )
 
     const result = await runNarrativePhase(controller.signal)
 
@@ -301,18 +323,17 @@ describe('per-turn pipeline declaration', () => {
     })
     hydrateEntries(phaseDb, 'b1', [])
     entitiesStore.hydrate('b1', [])
-    streamTextMock.mockReturnValue({
-      ok: true,
-      modelId: 'model-1',
-      providerId: 'prov-1',
-      timedOut: () => true,
-      timeoutMs: 45_000,
-      stream: {
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'The lantern gutt' }
-        })(),
-      },
-    })
+    streamTextMock.mockReturnValue(
+      streamCall({
+        timedOut: () => true,
+        timeoutMs: 45_000,
+        stream: {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text: 'The lantern gutt' }
+          })(),
+        },
+      }),
+    )
 
     const result = await runNarrativePhase()
 
@@ -334,20 +355,19 @@ describe('per-turn pipeline declaration', () => {
     hydrateEntries(phaseDb, 'b1', [])
     entitiesStore.hydrate('b1', [])
     let expired = false
-    streamTextMock.mockImplementation((_target, opts) => ({
-      ok: true,
-      modelId: 'model-1',
-      providerId: 'prov-1',
-      timedOut: () => expired,
-      timeoutMs: 45_000,
-      stream: {
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'The lantern gutt' }
-          opts.onError?.({ error: new Error('upstream overloaded') })
-          expired = true
-        })(),
-      },
-    }))
+    streamTextMock.mockImplementation((_target, opts) =>
+      streamCall({
+        timedOut: () => expired,
+        timeoutMs: 45_000,
+        stream: {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text: 'The lantern gutt' }
+            opts.onError?.({ error: new Error('upstream overloaded') })
+            expired = true
+          })(),
+        },
+      }),
+    )
 
     const result = await runNarrativePhase()
 
@@ -372,20 +392,19 @@ describe('per-turn pipeline declaration', () => {
     hydrateEntries(phaseDb, 'b1', [])
     entitiesStore.hydrate('b1', [])
     let expired = false
-    streamTextMock.mockImplementation((_target, opts) => ({
-      ok: true,
-      modelId: 'model-1',
-      providerId: 'prov-1',
-      timedOut: () => expired,
-      timeoutMs: 45_000,
-      stream: {
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'The lantern gutt' }
-          expired = true
-          opts.onError?.({ error: new Error('fetch failed: The operation was aborted.') })
-        })(),
-      },
-    }))
+    streamTextMock.mockImplementation((_target, opts) =>
+      streamCall({
+        timedOut: () => expired,
+        timeoutMs: 45_000,
+        stream: {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text: 'The lantern gutt' }
+            expired = true
+            opts.onError?.({ error: new Error('fetch failed: The operation was aborted.') })
+          })(),
+        },
+      }),
+    )
 
     const result = await runNarrativePhase()
 
@@ -468,20 +487,18 @@ describe('per-turn pipeline declaration', () => {
     // The model sees `heroId` only as the bracketed placeholder 'c1' (the
     // narrative prompt substitutes real ids), and it emits that placeholder
     // back verbatim — never the real id.
-    streamTextMock.mockReturnValue({
-      ok: true,
-      modelId: 'model-1',
-      providerId: 'prov-1',
-      timedOut: () => false,
-      stream: {
-        fullStream: (async function* () {
-          yield {
-            type: 'text-delta',
-            text: 'The story begins.\n<state><scene_entities>c1</scene_entities><world_time_delta>15</world_time_delta></state>',
-          }
-        })(),
-      },
-    })
+    streamTextMock.mockReturnValue(
+      streamCall({
+        stream: {
+          fullStream: (async function* () {
+            yield {
+              type: 'text-delta',
+              text: 'The story begins.\n<state><scene_entities>c1</scene_entities><world_time_delta>15</world_time_delta></state>',
+            }
+          })(),
+        },
+      }),
+    )
 
     const intermediates: Record<string, unknown> = {}
     ensurePerTurnPipelineRegistered()
@@ -585,23 +602,21 @@ describe('per-turn pipeline declaration', () => {
       defaultProviderId: provider.id,
     })
 
-    streamTextMock.mockReturnValue({
-      ok: true,
-      modelId: 'model-1',
-      providerId: 'prov-1',
-      timedOut: () => false,
-      stream: {
-        fullStream: (async function* () {
-          yield {
-            type: 'text-delta',
-            text:
-              'The knight drew his sword.\n' +
-              '<state><world_time_delta>30</world_time_delta></state>\n' +
-              '<suggestions><item category="cat1">Run.</item></suggestions>',
-          }
-        })(),
-      },
-    })
+    streamTextMock.mockReturnValue(
+      streamCall({
+        stream: {
+          fullStream: (async function* () {
+            yield {
+              type: 'text-delta',
+              text:
+                'The knight drew his sword.\n' +
+                '<state><world_time_delta>30</world_time_delta></state>\n' +
+                '<suggestions><item category="cat1">Run.</item></suggestions>',
+            }
+          })(),
+        },
+      }),
+    )
 
     const intermediates: Record<string, unknown> = {}
     ensurePerTurnPipelineRegistered()
@@ -669,17 +684,15 @@ describe('per-turn pipeline declaration', () => {
     })
 
     const raw = '<state><world_time_delta>30</world_time_delta></state>'
-    streamTextMock.mockReturnValue({
-      ok: true,
-      modelId: 'model-1',
-      providerId: 'prov-1',
-      timedOut: () => false,
-      stream: {
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: raw }
-        })(),
-      },
-    })
+    streamTextMock.mockReturnValue(
+      streamCall({
+        stream: {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text: raw }
+          })(),
+        },
+      }),
+    )
 
     const intermediates: Record<string, unknown> = {}
     ensurePerTurnPipelineRegistered()
@@ -742,20 +755,18 @@ describe('per-turn pipeline declaration', () => {
       defaultProviderId: provider.id,
     })
 
-    streamTextMock.mockReturnValue({
-      ok: true,
-      modelId: 'model-1',
-      providerId: 'prov-1',
-      timedOut: () => false,
-      stream: {
-        fullStream: (async function* () {
-          yield {
-            type: 'text-delta',
-            text: 'The story begins.\n<state><scene_entities>c99</scene_entities><world_time_delta>15</world_time_delta></state>',
-          }
-        })(),
-      },
-    })
+    streamTextMock.mockReturnValue(
+      streamCall({
+        stream: {
+          fullStream: (async function* () {
+            yield {
+              type: 'text-delta',
+              text: 'The story begins.\n<state><scene_entities>c99</scene_entities><world_time_delta>15</world_time_delta></state>',
+            }
+          })(),
+        },
+      }),
+    )
 
     const intermediates: Record<string, unknown> = {}
     ensurePerTurnPipelineRegistered()
@@ -827,20 +838,18 @@ describe('per-turn pipeline declaration', () => {
       defaultProviderId: provider.id,
     })
 
-    streamTextMock.mockReturnValue({
-      ok: true,
-      modelId: 'model-1',
-      providerId: 'prov-1',
-      timedOut: () => false,
-      stream: {
-        fullStream: (async function* () {
-          yield {
-            type: 'text-delta',
-            text: 'The story begins.\n<state><current_location>l999</current_location></state>',
-          }
-        })(),
-      },
-    })
+    streamTextMock.mockReturnValue(
+      streamCall({
+        stream: {
+          fullStream: (async function* () {
+            yield {
+              type: 'text-delta',
+              text: 'The story begins.\n<state><current_location>l999</current_location></state>',
+            }
+          })(),
+        },
+      }),
+    )
 
     const intermediates: Record<string, unknown> = {}
     ensurePerTurnPipelineRegistered()
@@ -905,20 +914,18 @@ describe('per-turn pipeline declaration', () => {
       defaultProviderId: provider.id,
     })
 
-    streamTextMock.mockReturnValue({
-      ok: true,
-      modelId: 'model-1',
-      providerId: 'prov-1',
-      timedOut: () => false,
-      stream: {
-        fullStream: (async function* () {
-          yield {
-            type: 'text-delta',
-            text: 'Going back in time?\n<state><world_time_delta>-30</world_time_delta></state>',
-          }
-        })(),
-      },
-    })
+    streamTextMock.mockReturnValue(
+      streamCall({
+        stream: {
+          fullStream: (async function* () {
+            yield {
+              type: 'text-delta',
+              text: 'Going back in time?\n<state><world_time_delta>-30</world_time_delta></state>',
+            }
+          })(),
+        },
+      }),
+    )
 
     ensurePerTurnPipelineRegistered()
     const phase = getPipeline(PER_TURN_KIND).phases[2]
@@ -984,20 +991,18 @@ describe('per-turn pipeline declaration', () => {
     })
 
     // Emits a malformed block where visual_changes is truncated
-    streamTextMock.mockReturnValue({
-      ok: true,
-      modelId: 'model-1',
-      providerId: 'prov-1',
-      timedOut: () => false,
-      stream: {
-        fullStream: (async function* () {
-          yield {
-            type: 'text-delta',
-            text: 'Narrative text\n<state><scene_entities>char_1</scene_entities><visual_changes><entity id="char_1" type="attire">torn cloak</state>',
-          }
-        })(),
-      },
-    })
+    streamTextMock.mockReturnValue(
+      streamCall({
+        stream: {
+          fullStream: (async function* () {
+            yield {
+              type: 'text-delta',
+              text: 'Narrative text\n<state><scene_entities>char_1</scene_entities><visual_changes><entity id="char_1" type="attire">torn cloak</state>',
+            }
+          })(),
+        },
+      }),
+    )
 
     ensurePerTurnPipelineRegistered()
     const narrativeNode = getPipeline(PER_TURN_KIND).phases[2]
@@ -1072,17 +1077,15 @@ describe('per-turn pipeline declaration', () => {
       defaultProviderId: provider.id,
     })
 
-    streamTextMock.mockReturnValue({
-      ok: true,
-      modelId: 'model-1',
-      providerId: 'prov-1',
-      timedOut: () => false,
-      stream: {
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Narrative text\n<state></state>' }
-        })(),
-      },
-    })
+    streamTextMock.mockReturnValue(
+      streamCall({
+        stream: {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text: 'Narrative text\n<state></state>' }
+          })(),
+        },
+      }),
+    )
 
     ensurePerTurnPipelineRegistered()
     const narrativeNode = getPipeline(PER_TURN_KIND).phases[2]
@@ -1153,17 +1156,15 @@ describe('per-turn pipeline declaration', () => {
       defaultProviderId: provider.id,
     })
 
-    streamTextMock.mockReturnValue({
-      ok: true,
-      modelId: 'model-1',
-      providerId: 'prov-1',
-      timedOut: () => false,
-      stream: {
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Narrative text and nothing else.' }
-        })(),
-      },
-    })
+    streamTextMock.mockReturnValue(
+      streamCall({
+        stream: {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text: 'Narrative text and nothing else.' }
+          })(),
+        },
+      }),
+    )
 
     ensurePerTurnPipelineRegistered()
     const narrativeNode = getPipeline(PER_TURN_KIND).phases[2]
@@ -1318,17 +1319,15 @@ async function runNarrativeWith(opts: {
     ],
     defaultProviderId: provider.id,
   } as never)
-  streamTextMock.mockReturnValue({
-    ok: true,
-    modelId: 'model-1',
-    providerId: 'prov-1',
-    timedOut: () => false,
-    stream: {
-      fullStream: (async function* () {
-        yield { type: 'text-delta', text: opts.narrative }
-      })(),
-    },
-  })
+  streamTextMock.mockReturnValue(
+    streamCall({
+      stream: {
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: opts.narrative }
+        })(),
+      },
+    }),
+  )
 
   ensurePerTurnPipelineRegistered()
   const phase = getPipeline(PER_TURN_KIND).phases[2]
@@ -1788,17 +1787,15 @@ describe('narrative fold — creates', () => {
   }
 
   async function foldTurn(text: string, over: { signal?: AbortSignal; log?: Logger } = {}) {
-    streamTextMock.mockReturnValue({
-      ok: true,
-      modelId: 'model-1',
-      providerId: 'prov-1',
-      timedOut: () => false,
-      stream: {
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text }
-        })(),
-      },
-    })
+    streamTextMock.mockReturnValue(
+      streamCall({
+        stream: {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text }
+          })(),
+        },
+      }),
+    )
     const idMap = new IdBiMap()
     for (const id of [HERO, TOWN, MARKET]) idMap.allocate(id)
     const intermediates: Record<string, unknown> = { idMap }
@@ -2932,6 +2929,8 @@ describe('narrative — how the reply ended', () => {
     finishReason?: unknown
     usage?: unknown
     maxOutput?: number
+    window?: GenerationWindow
+    promptEstimate?: number
     piggyback?: boolean
     log?: ReturnType<typeof spyLogger>
   }) {
@@ -2964,20 +2963,23 @@ describe('narrative — how the reply ended', () => {
       ],
       defaultProviderId: provider.id,
     })
-    streamTextMock.mockReturnValue({
-      ok: true,
-      modelId: 'model-1',
-      providerId: 'prov-1',
-      timedOut: () => false,
-      maxOutput: opts.maxOutput,
-      stream: {
-        fullStream: (async function* () {
-          if (opts.text !== '') yield { type: 'text-delta', text: opts.text }
-        })(),
-        finishReason: opts.finishReason,
-        usage: opts.usage,
-      },
-    })
+    // The facade has an estimate only once the SDK built the request, after the stream began.
+    let estimate: number | null = null
+    streamTextMock.mockReturnValue(
+      streamCall({
+        maxOutput: opts.maxOutput,
+        ...(opts.window !== undefined ? { window: opts.window } : {}),
+        promptEstimate: () => estimate,
+        stream: {
+          fullStream: (async function* () {
+            if (opts.text !== '') yield { type: 'text-delta', text: opts.text }
+            estimate = opts.promptEstimate ?? null
+          })(),
+          finishReason: opts.finishReason,
+          usage: opts.usage,
+        },
+      }),
+    )
 
     const log = opts.log ?? spyLogger()
     const intermediates: Record<string, unknown> = {}
@@ -3044,6 +3046,35 @@ describe('narrative — how the reply ended', () => {
     expect(log.warn).toHaveBeenCalledWith(
       'provider.reply_cut_off',
       cutWarning({ ...warned, entryId: entry?.id, outcome: 'marked' }),
+    )
+  })
+
+  // The estimate is read after the stream: an earlier read gets null and the cause `unknown`.
+  it('marks a cut as window when the estimate and the output reach a known window', async () => {
+    const { result, entry, log } = await runReply({
+      text: PROSE,
+      finishReason: 'length',
+      usage: { outputTokens: 100 },
+      window: { tokens: 1000, source: 'configured' },
+      promptEstimate: 900,
+    })
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(entry?.metadata?.cutOff).toStrictEqual({
+      cause: 'window',
+      outputTokens: 100,
+      limit: 1000,
+    })
+    expect(log.warn).toHaveBeenCalledWith(
+      'provider.reply_cut_off',
+      cutWarning({
+        cause: 'window',
+        outputTokens: 100,
+        maxOutput: null,
+        window: 1000,
+        entryId: entry?.id,
+        outcome: 'marked',
+      }),
     )
   })
 
@@ -3273,6 +3304,147 @@ describe('narrative — how the reply ended', () => {
       cause: 'unknown',
       outputTokens: 300,
       maxOutput: 512,
+    })
+  })
+})
+
+// architecture.md → The pre-send check; generation-pipeline.md → Fatal error categories.
+describe('narrative — a stream error', () => {
+  const LLAMA_MESSAGE =
+    'request (71834 tokens) exceeds the available context size (65536 tokens), try increasing it'
+  const CHECK_FAILURE: ContextWindowFailure = {
+    detectedBy: 'check',
+    estimate: 71_234,
+    window: 65_536,
+    windowSource: 'configured',
+    providerId: 'prov-1',
+    modelId: 'model-1',
+  }
+  const PROVIDER_FAILURE: ContextWindowFailure = {
+    detectedBy: 'provider',
+    estimate: 71_234,
+    window: null,
+    windowSource: 'unknown',
+    providerId: 'prov-1',
+    modelId: 'model-1',
+    detail: LLAMA_MESSAGE,
+  }
+
+  function rejection(statusCode: number, message: string): APICallError {
+    return new APICallError({
+      message,
+      url: 'http://127.0.0.1:9/v1/chat/completions',
+      requestBodyValues: {},
+      statusCode,
+      responseBody: JSON.stringify({ error: { message, type: 'invalid_request_error' } }),
+    })
+  }
+
+  // contextWindowFailureOf is faked: it answers `windowFailure` for this stream's error only.
+  async function runStreamError(error: unknown, windowFailure: ContextWindowFailure | null = null) {
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition,
+      settings: baseSettings({ partialChapterBuffer: 3 }),
+    })
+    hydrateEntries(phaseDb, 'b1', [])
+    entitiesStore.hydrate('b1', [])
+    const contextWindowFailureOf = vi.fn((streamError: unknown) =>
+      streamError === error ? windowFailure : null,
+    )
+    streamTextMock.mockImplementation((_target, opts) =>
+      streamCall({
+        contextWindowFailureOf,
+        stream: {
+          fullStream: (async function* () {
+            opts.onError?.({ error })
+          })(),
+        },
+      }),
+    )
+    const log = spyLogger()
+    ensurePerTurnPipelineRegistered()
+    const phase = getPipeline(PER_TURN_KIND).phases[2]
+    if (!phase || !('run' in phase)) throw new Error('expected narrative phase')
+    const gen = phase.run({
+      actionId: 'act_1',
+      abortSignal: new AbortController().signal,
+      intermediates: {},
+      log,
+      runInTransaction: async () => undefined,
+      db: phaseDb.db,
+      storyId: 's1',
+      branchId: 'b1',
+    })
+    const events: PhaseEmittedEvent[] = []
+    let next = await gen.next()
+    while (!next.done) {
+      events.push(next.value)
+      next = await gen.next()
+    }
+    return { result: next.value, events, log, contextWindowFailureOf }
+  }
+
+  it.each([
+    ["the window check's refusal", () => new ContextWindowError(CHECK_FAILURE), CHECK_FAILURE],
+    ['a recognized overflow rejection', () => rejection(400, LLAMA_MESSAGE), PROVIDER_FAILURE],
+  ])('fails %s as context-window, not as a stream failure', async (_label, makeError, failure) => {
+    const error = makeError()
+
+    const { result, events, log, contextWindowFailureOf } = await runStreamError(error, failure)
+
+    expect(contextWindowFailureOf).toHaveBeenCalledWith(error)
+    expect(result).toStrictEqual({
+      status: 'failed',
+      error: { kind: 'context-window', target: 'narrative', ...failure },
+    })
+    expect(events.filter((e) => e.type === 'delta_emitted')).toEqual([])
+    expect(log.warn).toHaveBeenCalledWith('provider.context_window', {
+      target: 'narrative',
+      ...failure,
+    })
+    expect(log.error).not.toHaveBeenCalledWith(
+      'provider.narrative_stream_failed',
+      expect.anything(),
+    )
+  })
+
+  it('carries the capability hint a 4xx rejection names', async () => {
+    const { result, log } = await runStreamError(
+      rejection(400, 'thinking is not supported for this model'),
+    )
+
+    expect(result).toStrictEqual({
+      status: 'failed',
+      error: {
+        kind: 'provider',
+        reason: 'network',
+        detail: 'APICallError: thinking is not supported for this model',
+        possibleCapabilityMismatch: { capability: 'reasoning', matched: 'thinking' },
+      },
+    })
+    expect(log.error).toHaveBeenCalledWith(
+      'provider.narrative_stream_failed',
+      expect.objectContaining({ statusCode: 400 }),
+    )
+    expect(log.warn).not.toHaveBeenCalledWith('provider.context_window', expect.anything())
+  })
+
+  // toStrictEqual: a `possibleCapabilityMismatch: undefined` key fails it.
+  it.each([
+    ['a plain error', () => new Error('socket hang up'), 'socket hang up'],
+    [
+      'a 5xx naming a capability',
+      () => rejection(500, 'thinking budget exceeded upstream'),
+      'APICallError: thinking budget exceeded upstream',
+    ],
+  ])('omits the hint for %s', async (_label, makeError, detail) => {
+    const { result } = await runStreamError(makeError())
+
+    expect(result).toStrictEqual({
+      status: 'failed',
+      error: { kind: 'provider', reason: 'network', detail },
     })
   })
 })
