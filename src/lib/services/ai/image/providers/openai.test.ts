@@ -193,7 +193,7 @@ describe('OpenAI model listing', () => {
       modelsResponse({
         data: [
           { id: 'dall-e-3' },
-          { id: 'gpt-image-1' },
+          { id: 'gpt-image-2' },
           { id: 'chatgpt-image-latest' },
           { id: 'gpt-4o' },
         ],
@@ -201,32 +201,79 @@ describe('OpenAI model listing', () => {
     )
     const models = await createOpenAIProvider({ apiKey: 'k' }).listModels('k')
     expect(models.map((m) => [m.id, m.supportsImg2Img, m.maxReferenceImages])).toEqual([
-      ['gpt-image-1', true, undefined],
-      ['chatgpt-image-latest', true, undefined],
+      ['gpt-image-2', true, 16],
+      ['chatgpt-image-latest', true, 16],
     ])
+  })
+
+  it('lists sizes only for the models that take a fixed set', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(
+      modelsResponse({ data: [{ id: 'gpt-image-2' }, { id: 'gpt-image-1.5' }] }),
+    )
+    const [free, fixed] = await createOpenAIProvider({ apiKey: 'k' }).listModels('k')
+    expect(free.supportedResolutions).toBeUndefined()
+    expect(fixed.supportedResolutions).toEqual(['1024x1024', '1536x1024', '1024x1536'])
+  })
+
+  it('gives a dated snapshot its undated model’s capabilities', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(
+      modelsResponse({
+        data: [{ id: 'gpt-image-2.5-flare' }, { id: 'gpt-image-2.5-flare-2026-09-08' }],
+      }),
+    )
+    const [model, snapshot] = await createOpenAIProvider({ apiKey: 'k' }).listModels('k')
+    expect(snapshot).toMatchObject({ id: 'gpt-image-2.5-flare-2026-09-08' })
+    expect(snapshot.maxReferenceImages).toBe(model.maxReferenceImages)
+  })
+
+  it('knows only that an unlisted image model takes references', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(modelsResponse({ data: [{ id: 'gpt-image-9' }] }))
+    const [model] = await createOpenAIProvider({ apiKey: 'k' }).listModels('k')
+    expect(model.supportsImg2Img).toBe(true)
+    expect(model.maxReferenceImages).toBeUndefined()
+    expect(model.supportedResolutions).toBeUndefined()
   })
 
   it('skips entries without a string id', async () => {
     vi.mocked(imageGetFetch).mockResolvedValue(
-      modelsResponse({ data: [null, 'gpt-image-1', { id: 7 }, { id: 'gpt-image-1' }] }),
+      modelsResponse({ data: [null, 'gpt-image-2', { id: 7 }, { id: 'gpt-image-2' }] }),
     )
     const models = await createOpenAIProvider({ apiKey: 'k' }).listModels('k')
-    expect(models.map((m) => m.id)).toEqual(['gpt-image-1'])
+    expect(models.map((m) => m.id)).toEqual(['gpt-image-2'])
   })
 
   it('lists against a custom base URL the same way', async () => {
     vi.mocked(imageGetFetch).mockResolvedValue(
-      modelsResponse({ data: [{ id: 'gpt-image-1' }, { id: 'flux-dev' }] }),
+      modelsResponse({ data: [{ id: 'gpt-image-2' }, { id: 'flux-dev' }] }),
     )
     const models = await createOpenAIProvider({
       apiKey: 'k',
       baseUrl: 'https://proxy.test/v1',
     }).listModels('k')
-    expect(models.map((m) => m.id)).toEqual(['gpt-image-1'])
+    expect(models.map((m) => m.id)).toEqual(['gpt-image-2'])
     expect(imageGetFetch).toHaveBeenCalledWith(
       'https://proxy.test/v1/models',
       { Authorization: 'Bearer k' },
       expect.anything(),
     )
+  })
+})
+
+describe('OpenAI model capabilities', () => {
+  const capabilities = (model: string) =>
+    createOpenAIProvider({ apiKey: '' }).getModelCapabilities!(model)
+
+  it('answers from the table without a request or a key', async () => {
+    expect(await capabilities('gpt-image-1.5')).toMatchObject({
+      supportsImg2Img: true,
+      maxReferenceImages: 16,
+      supportedResolutions: ['1024x1024', '1536x1024', '1024x1536'],
+    })
+    expect(imageGetFetch).not.toHaveBeenCalled()
+  })
+
+  it('does not know a model that is not an image model', async () => {
+    expect(await capabilities('gpt-4o')).toBeUndefined()
+    expect(await capabilities('dall-e-3')).toBeUndefined()
   })
 })
