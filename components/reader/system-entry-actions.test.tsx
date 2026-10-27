@@ -432,7 +432,7 @@ describe('passResolvedEntry', () => {
     })
   })
 
-  it('says where the text went and how to get it back', () => {
+  it('says why the text is kept here', () => {
     const key = 'reader:systemEntry.passResolvedTextKept'
     expect(hasCopy(key)).toBe(true)
     expect(passResolvedEntry(SUBMISSION).content).toBe(t(key))

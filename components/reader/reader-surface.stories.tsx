@@ -1000,8 +1000,9 @@ export const EmbedderFailure: Story = {
 
 // Composed through the helpers the host writes the entry with, so each bubble shows real copy.
 const HELD_PASS = describePassFailure({ held: true })
-// A Send refused on a held branch always leaves its text on the entry.
-const HELD_SUBMISSION = { content: 'I study the empty frame.', composerMode: 'free' }
+// A Send refused on a held branch always leaves its text on the entry; a failed pass leaves it
+// only when the composer couldn't take it back.
+const KEPT_SUBMISSION = { content: 'I study the empty frame.', composerMode: 'free' }
 const FAILED_PASS_ERROR = {
   kind: 'provider',
   reason: 'timeout',
@@ -1036,16 +1037,16 @@ export const PassFailureHeld: Story = {
   },
 }
 
-// The row reads the kept text off its metadata: the same copy, now with the quote under it.
+// Same copy as PassFailureHeld; the row's kept text shows as a quote under it.
 export const PassFailureHeldTextKept: Story = {
   args: {
-    rows: passFailureRows(HELD_PASS.content, toPassFailureMeta({ held: true }, HELD_SUBMISSION)),
+    rows: passFailureRows(HELD_PASS.content, toPassFailureMeta({ held: true }, KEPT_SUBMISSION)),
     onRetrySystemEntry: undefined,
   },
   play: async () => {
     const row = entryRow('e6')
     expect(within(row).getByText(t('reader:systemEntry.failure.memoryHeld'))).toBeVisible()
-    expect(within(row).getByText(HELD_SUBMISSION.content)).toBeVisible()
+    expect(within(row).getByText(KEPT_SUBMISSION.content)).toBeVisible()
     expect(within(row).getByText(t('reader:systemEntry.heldTextCustody'))).toBeVisible()
     expect(within(row).getByRole('button', { name: /Dismiss/ })).toBeVisible()
     expect(within(row).queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument()
@@ -1100,7 +1101,7 @@ export const PassFailureRetry: Story = {
 
 const FAILED_PASS_KEPT = toPassFailureMeta(
   { held: false, error: FAILED_PASS_ERROR },
-  HELD_SUBMISSION,
+  KEPT_SUBMISSION,
 )
 
 /** Both copy buttons reach the host with the row's stored strings, verbatim. */
@@ -1115,7 +1116,7 @@ export const SystemEntryCopy: Story = {
       within(row).getByRole('button', { name: t('reader:systemEntry.copyHeldText') }),
     )
     await waitFor(() =>
-      expect(args.onCopySystemText).toHaveBeenLastCalledWith(HELD_SUBMISSION.content),
+      expect(args.onCopySystemText).toHaveBeenLastCalledWith(KEPT_SUBMISSION.content),
     )
     await userEvent.click(
       within(row).getByRole('button', { name: t('reader:systemEntry.details') }),
@@ -1129,11 +1130,7 @@ export const SystemEntryCopy: Story = {
   },
 }
 
-/**
- * Landed at the bottom, opening the tail entry's `Details` grows the content below the fold, and
- * no autoscroll rule follows tail growth: the reveal alone brings the detail into view.
- */
-// Taller than the card's bottom padding, which already sits in view under the toggle.
+// Taller than the 24px in view under the toggle: the card's p-4 plus the row frame's py-2.
 const MULTI_LINE_DETAIL = [
   'timeout: classifier: timeout after 600000ms',
   'POST /v1/chat/completions',
@@ -1142,6 +1139,10 @@ const MULTI_LINE_DETAIL = [
   'attempt 3 of 3: no response',
 ].join('\n')
 
+/**
+ * Landed at the bottom, opening the tail entry's `Details` grows the content below the fold, and
+ * no autoscroll rule follows tail growth: the reveal alone brings the detail into view.
+ */
 export const SystemEntryRevealAtTail: Story = {
   args: {
     rows: passFailureRows(FAILED_PASS.content, { ...FAILED_PASS_KEPT, detail: MULTI_LINE_DETAIL }),
