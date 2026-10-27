@@ -592,9 +592,12 @@ someone else's. Older servers are refused with a message asking the user to upda
 cannot be asked its version is let through.
 
 Resolution is chosen as an **intent** — orientation (1:1 / 16:9 / 9:16) plus one of four size
-steps — and each adapter turns it into what its backend accepts: an aspect ratio for Google, a
-ratio plus a resolution tier for OpenRouter, the model's own published resolution list for NanoGPT,
-real dimensions for ComfyUI/A1111/Pollinations, and a snapped-to-grid size inside Z.AI's limits
+steps — and each adapter turns it into what its backend accepts: an aspect ratio plus an `imageSize`
+tier where the model has them for Google (its capabilities are a table in the adapter, because
+`models.list` carries none), the closest of the model's own listed ratios plus one of its listed
+resolution tiers for OpenRouter (no tier when it lists none, because a tier is only honoured where
+listed), the model's own published resolution list for NanoGPT, real dimensions for
+ComfyUI/A1111/Pollinations, and a snapped-to-grid size inside Z.AI's limits
 (`src/lib/utils/image.ts`). A backend that is handed pixel dimensions it does not offer answers
 with the nearest thing it does, which is not the same picture.
 

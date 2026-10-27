@@ -1,7 +1,7 @@
 // Image generation through `@ai-sdk/google`.
 
 import type { ImageModelCapabilities } from '#lib/types/index.ts'
-import { specToAspectRatio } from '#lib/utils/image.ts'
+import { pickResolution, specToAspectRatio } from '#lib/utils/image.ts'
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type {
   ImageProvider,
@@ -30,13 +30,20 @@ export function createGoogleProvider(config: ImageProviderConfig): ImageProvider
     name: 'Google AI Studio',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, spec, referenceImages, signal } = options
+      const { model, prompt, spec, modelInfo, referenceImages, signal } = options
+      const imageSize = pickResolution(spec, modelInfo?.supportedResolutions)
 
       return generateSdkImage({
         model: googleSDK.image(model),
         prompt,
         referenceImages,
-        aspectRatio: specToAspectRatio(spec, GOOGLE_ASPECT_RATIOS) as `${number}:${number}`,
+        aspectRatio: specToAspectRatio(
+          spec,
+          modelInfo?.supportedAspectRatios?.length
+            ? modelInfo.supportedAspectRatios
+            : GOOGLE_ASPECT_RATIOS,
+        ) as `${number}:${number}`,
+        providerOptions: imageSize ? { google: { imageConfig: { imageSize } } } : undefined,
         signal,
       })
     },

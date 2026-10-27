@@ -17,6 +17,7 @@ vi.mock('#lib/utils/url.ts', async (importOriginal) => {
 })
 
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { IMAGE_SIZE_TIERS, type ImageSizeTier } from '#lib/utils/image.ts'
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { createTimeoutFetch } from '../../sdk/providers/fetch'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
@@ -48,6 +49,54 @@ describe('Google adapter references', () => {
   it('sends the plain prompt when there are no references', async () => {
     await createGoogleProvider({ apiKey: 'k' }).generate(options({ referenceImages: undefined }))
     expect(sent().referenceImages).toBeUndefined()
+  })
+})
+
+describe('Google size and ratio', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const imageSizeFor = async (model: string, size: ImageSizeTier) => {
+    const provider = createGoogleProvider({ apiKey: 'k' })
+    await provider.generate(
+      options({
+        model,
+        spec: { orientation: 'square', size },
+        modelInfo: await provider.getModelCapabilities!(model),
+      }),
+    )
+    return sent().providerOptions
+  }
+  const imageSize = (value: string) => ({ google: { imageConfig: { imageSize: value } } })
+
+  it.each([
+    ['gemini-3.1-flash-image', ['512', '1K', '2K', '2K']],
+    ['gemini-nano-banana-2.1', ['1K', '1K', '2K', '2K']],
+    ['gemini-3-pro-image', ['1K', '1K', '2K', '2K']],
+    ['gemini-3.1-flash-lite-image', ['1K', '1K', '1K', '1K']],
+  ])('%s sends the smallest listed tier that covers each size', async (model, expected) => {
+    for (const [i, size] of IMAGE_SIZE_TIERS.entries()) {
+      expect(await imageSizeFor(model, size)).toEqual(imageSize(expected[i]))
+    }
+  })
+
+  it('sends no size to a model that lists none, or when the profile has no snapshot', async () => {
+    expect(await imageSizeFor('gemini-2.5-flash-image', 'large')).toBeUndefined()
+
+    await createGoogleProvider({ apiKey: 'k' }).generate(options({ modelInfo: undefined }))
+    expect(sent().providerOptions).toBeUndefined()
+  })
+
+  it('picks the closest of the model ratios, and the fixed list without a snapshot', async () => {
+    const landscape = { orientation: 'landscape', size: 'medium' } as const
+    const provider = createGoogleProvider({ apiKey: 'k' })
+
+    await provider.generate(
+      options({ spec: landscape, modelInfo: { supportedAspectRatios: ['1:1', '4:3'] } }),
+    )
+    expect(sent().aspectRatio).toBe('4:3')
+
+    await provider.generate(options({ spec: landscape, modelInfo: undefined }))
+    expect(sent().aspectRatio).toBe('16:9')
   })
 })
 
@@ -134,16 +183,6 @@ describe('Google model listing', () => {
     ])
   })
 
-  it('returns no models when none of them generate images', async () => {
-    respond({ ok: true, json: async () => ({ models: [{ name: 'models/gemini-3.5-flash' }] }) })
-    expect(await createGoogleProvider({ apiKey: 'k' }).listModels()).toEqual([])
-  })
-
-  it('rejects when the request fails', async () => {
-    respond({ ok: false, status: 503 })
-    await expect(createGoogleProvider({ apiKey: 'k' }).listModels()).rejects.toThrow('HTTP 503')
-  })
-})
   it('gives a preview its generally available model’s capabilities', async () => {
     respond({
       ok: true,
@@ -173,6 +212,16 @@ describe('Google model listing', () => {
     expect(model.supportsImg2Img).toBe(true)
   })
 
+  it('returns no models when none of them generate images', async () => {
+    respond({ ok: true, json: async () => ({ models: [{ name: 'models/gemini-3.5-flash' }] }) })
+    expect(await createGoogleProvider({ apiKey: 'k' }).listModels()).toEqual([])
+  })
+
+  it('rejects when the request fails', async () => {
+    respond({ ok: false, status: 503 })
+    await expect(createGoogleProvider({ apiKey: 'k' }).listModels()).rejects.toThrow('HTTP 503')
+  })
+})
 
 describe('Google model capabilities', () => {
   beforeEach(() => vi.clearAllMocks())
