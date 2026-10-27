@@ -480,17 +480,17 @@ describe('ensureDeltaActionPort', () => {
 // Every lib/ai test sets its own sink or none, so only this pins the production wiring.
 describe('ensureTruncationNotice', () => {
   const UNDER_REPORTED: LanguageModelUsage = {
-    inputTokens: 1_000,
+    inputTokens: 1_234,
     inputTokenDetails: {
-      noCacheTokens: 1_000,
+      noCacheTokens: 1_234,
       cacheReadTokens: undefined,
       cacheWriteTokens: undefined,
     },
     outputTokens: 50,
     outputTokenDetails: { textTokens: 50, reasoningTokens: undefined },
-    totalTokens: 1_050,
+    totalTokens: 1_284,
   }
-  // 1,000 / 12,345 is well under the 0.5 ratio: the server likely dropped part of the prompt.
+  // 1,234 / 12,345 is well under the 0.5 ratio: the server likely dropped part of the prompt.
   const CALL = {
     usage: UNDER_REPORTED,
     estimate: 12_345,
@@ -498,7 +498,7 @@ describe('ensureTruncationNotice', () => {
     modelId: 'qwen2.5-coder:32b',
   }
   const WARNING =
-    'qwen2.5-coder:32b may have dropped part of the prompt: it counted 1,000 tokens where about 12,400 were sent. Set its context window.'
+    'qwen2.5-coder:32b may have dropped part of the prompt: it counted 1,234 tokens where about 12,400 were sent. Set its context window.'
 
   function shownToasts(): ToastItem[] {
     let shown: ToastItem[] = []
