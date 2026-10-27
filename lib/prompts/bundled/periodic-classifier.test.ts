@@ -78,6 +78,13 @@ describe('periodic classifier template', () => {
     expect(render().system).toMatch(/latest contributing turn/i)
   })
 
+  // The reply drops a sourceTurn sent where the field doesn't exist, and the turn it meant with it.
+  it('asks for sourceTurn on every entry that has the field, naming those that have none', () => {
+    expect(render().system).toContain(
+      "- Provenance. Set sourceTurn on every entry that has the field, and on no other, to the handle of the turn the fact comes from: a happening's involvements and awareness, and a knownAwareness entry, have none. For a fact synthesised across turns,",
+    )
+  })
+
   it('instructs one-perspective-only relationship emission', () => {
     expect(render().system).toMatch(/do not infer the inverse/i)
   })
@@ -480,7 +487,11 @@ describe('periodic classifier template — the writer map rules', () => {
   const RULES = [
     [
       'status changes',
-      '- Status changes. Put each move to active or retired in statusFlips, with the character\'s or faction\'s ID as ref, the new status as to, and the sourceTurn. Give a retirement its reason, a short phrase from the prose ("killed at the ford").\n',
+      '- Status changes. Put each move to active or retired in statusFlips, with the ID from Known entities or Places as ref, the new status as to, and the sourceTurn. Give a retirement its reason, a short phrase from the prose ("killed at the ford").\n',
+    ],
+    [
+      'promotion',
+      '- Promotion. Move a staged entity of any kind to active only when the prose actually brings it into the scene.\n',
     ],
     [
       'when it happened',

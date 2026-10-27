@@ -236,7 +236,7 @@ describe('classifierExtractionSchema — the writer map', () => {
   // The fields whose name alone doesn't say what they hold; the template's rules repeat each.
   it('describes a status change, a relationship kind and a learned happening', () => {
     expect(itemFields('statusFlips').to?.description).toBe(
-      'active for a staged character the prose brings into the scene or a retired one who returns; retired only on unambiguous finality.',
+      'active for a staged entity of any kind the prose brings into the scene, or a retired character who returns; retired only on unambiguous finality, never for a place.',
     )
     expect(itemFields('statusFlips').reason?.description).toBe(
       'For a retirement: why, in a short phrase from the prose.',
@@ -247,6 +247,22 @@ describe('classifierExtractionSchema — the writer map', () => {
     expect(itemFields('knownAwareness').happening?.description).toBe(
       'ID from Known happenings of the happening the character learns of.',
     )
+  })
+
+  // The template's Provenance rule names the entries with no sourceTurn; it goes stale with this.
+  it('gives every entry a sourceTurn but an involvement, an awareness and a knownAwareness', () => {
+    const lacking = (prefix: string, fields: Record<string, JsonNode>): string[] =>
+      Object.entries(fields).flatMap(([name, field]) => {
+        const entry = field.items?.properties
+        if (entry == null) return []
+        const path = `${prefix}${name}`
+        return [...('sourceTurn' in entry ? [] : [path]), ...lacking(`${path}.`, entry)]
+      })
+    expect(lacking('', jsonOf(classifierExtractionWithPlacesSchema).properties ?? {})).toEqual([
+      'happenings.involvements',
+      'happenings.awareness',
+      'knownAwareness',
+    ])
   })
 
   it('parses renames, placements and standings of listed rows', () => {
