@@ -108,6 +108,11 @@ const CAPABILITY_HINT_KEYWORDS = [
  */
 export type CapabilityHint = (typeof CAPABILITY_HINT_KEYWORDS)[number]
 
+/** Which capabilities a request as sent carried; a hint names no other. */
+export type CarriedCapabilities = Readonly<Record<CapabilityHint['capability'], boolean>>
+
+export const CARRIED_NOTHING: CarriedCapabilities = { reasoning: false, structuredOutput: false }
+
 // A 2xx APICallError is a successful reply the SDK couldn't read: its body is the model's own text.
 function isRejection(error: unknown): error is APICallError & { statusCode: number } {
   return APICallError.isInstance(error) && error.statusCode !== undefined && error.statusCode >= 400
@@ -189,18 +194,27 @@ export function recognizeOverflow(error: unknown): { detail: string } | null {
   return { detail: providerMessage(error, body) }
 }
 
-/** A 4xx body naming a capability keyword; never on a body recognized as an overflow. */
-export function capabilityHintOf(error: unknown): CapabilityHint | undefined {
+/** A 4xx body naming a capability the request carried; never on a body recognized as an overflow. */
+export function capabilityHintOf(
+  error: unknown,
+  carried: CarriedCapabilities,
+): CapabilityHint | undefined {
   if (!isRejection(error) || error.statusCode >= 500) return undefined
   if (recognizeOverflow(error) !== null) return undefined
   const text = searchableText(error)
-  const hit = CAPABILITY_HINT_KEYWORDS.find(({ matched }) => text.includes(matched))
+  const hit = CAPABILITY_HINT_KEYWORDS.find(
+    ({ matched, capability }) => carried[capability] && text.includes(matched),
+  )
   return hit === undefined ? undefined : { ...hit }
 }
 
 type ProviderFailure = Extract<CallRetryError, { tier: 'provider' }>
 
-export function classifyProviderError(error: unknown): {
+/** `carried`: what the failed request carried, for the hint; a caller that doesn't say gets none. */
+export function classifyProviderError(
+  error: unknown,
+  carried: CarriedCapabilities = CARRIED_NOTHING,
+): {
   error: ProviderFailure
   retryable: boolean
   retryAfterMs?: number
@@ -211,7 +225,7 @@ export function classifyProviderError(error: unknown): {
   if (APICallError.isInstance(error)) {
     const status = error.statusCode
     const retryAfterMs = parseRetryAfter(error.responseHeaders)
-    const hint = capabilityHintOf(error)
+    const hint = capabilityHintOf(error, carried)
     const failure = (reason: ProviderFailure['reason']): ProviderFailure => ({
       tier: 'provider',
       reason,

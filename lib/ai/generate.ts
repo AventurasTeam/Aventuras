@@ -42,7 +42,12 @@ import {
   type ResolvedParams,
 } from './resolve-model'
 import { callWithRetry, type CallRetryError } from './transport/call-with-retry'
-import { ProviderTimeoutError } from './transport/classify-provider-error'
+import {
+  capabilityHintOf,
+  CARRIED_NOTHING,
+  ProviderTimeoutError,
+  type CapabilityHint,
+} from './transport/classify-provider-error'
 import { runProviderCall, streamProviderCall } from './transport/provider-call'
 import { checkInputTokens } from './truncation-check'
 
@@ -162,6 +167,28 @@ function windowCheck(
   return { window, estimate: () => estimate, middleware }
 }
 
+// After every middleware that changes the request, so it reads the request as sent; `carried()` is
+// the latest request's. The anthropic adapter sends no `thinking` field for a disabled setting.
+function carriedCapabilities() {
+  let carried = CARRIED_NOTHING
+  const middleware: LanguageModelMiddleware = {
+    specificationVersion: 'v3',
+    transformParams: async ({ params }) => {
+      const thinking = params.providerOptions?.anthropic?.thinking
+      carried = {
+        reasoning:
+          typeof thinking === 'object' &&
+          thinking !== null &&
+          'type' in thinking &&
+          thinking.type === 'enabled',
+        structuredOutput: params.responseFormat?.type === 'json',
+      }
+      return params
+    },
+  }
+  return { carried: () => carried, middleware }
+}
+
 /**
  * A rendered template's two halves. A blank system half is left out of the request; a structured
  * call's JSON contract may still create a system message.
@@ -204,6 +231,8 @@ export type StreamTextResult =
       promptEstimate: () => number | null
       /** The check's refusal or a recognized overflow, as a context-window failure; else null. */
       contextWindowFailureOf: (error: unknown) => ContextWindowFailure | null
+      /** The hint a rejection gives on a capability this call's request carried; else undefined. */
+      capabilityHintOf: (error: unknown) => CapabilityHint | undefined
     }
   | { ok: false; kind: ResolveFailureKind; target: ResolveTarget }
 
@@ -218,6 +247,7 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
   const { providerId, modelId } = resolved
   const attribution = opts.actionId === undefined ? undefined : { actionId: opts.actionId }
   const check = windowCheck(opts.config.providers, providerId, modelId, attribution)
+  const sent = carriedCapabilities()
   const bounded =
     resolved.timeoutMs === undefined ? null : boundedSignal(opts.abortSignal, resolved.timeoutMs)
   const abortSignal = bounded?.signal ?? opts.abortSignal
@@ -228,6 +258,7 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
       ...(marksSystemPrefix(opts.cacheSystemPrefix, resolved.providerType)
         ? [anthropicCacheMarkerMiddleware()]
         : []),
+      sent.middleware,
       check.middleware,
     ]),
     ...promptParams(opts.prompt),
@@ -253,6 +284,7 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
     window: check.window,
     promptEstimate: check.estimate,
     contextWindowFailureOf: (error) => (error instanceof ContextWindowError ? error.failure : null),
+    capabilityHintOf: (error) => capabilityHintOf(error, sent.carried()),
   }
 }
 
@@ -347,6 +379,7 @@ export async function generateStructured<T>(
     }
   }
   const check = windowCheck(config.providers, providerId, modelId, attribution)
+  const sent = carriedCapabilities()
   // 'auto' puts the schema in the prompt (no capability signal yet); 'force-on' sends it natively.
   // Marker after the contract: on a blank system half, promptSchemaMiddleware makes the system
   // message. Window check last, to count the contract too (architecture.md → The pre-send check).
@@ -356,6 +389,7 @@ export async function generateStructured<T>(
     ...(marksSystemPrefix(options.cacheSystemPrefix, resolved.providerType)
       ? [anthropicCacheMarkerMiddleware()]
       : []),
+    sent.middleware,
     check.middleware,
   ])
 
@@ -420,7 +454,7 @@ export async function generateStructured<T>(
       }
     },
     parse,
-    { maxProviderAttempts: 2, maxParseAttempts: 2, signal },
+    { maxProviderAttempts: 2, maxParseAttempts: 2, signal, carried: sent.carried },
   )
 
   const { recoverable } = result

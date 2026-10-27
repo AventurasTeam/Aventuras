@@ -1,5 +1,6 @@
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import { APICallError } from 'ai'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
@@ -7,9 +8,11 @@ import { generateStructured, streamText, type PromptHalves } from './generate'
 import { getModel } from './model'
 import { schemaToTypeScriptBlock, type JsonSchema } from './prompt-schema'
 import { resolveModel, type ResolvedParams, type ResolveModelConfig } from './resolve-model'
+import type { CallRetryError } from './transport/call-with-retry'
+import type { CapabilityHint } from './transport/classify-provider-error'
 
-// The real provider adapters over a capturing fetch: only the request body is under
-// test, so every call answers 400 (non-retryable, so each call sends exactly once).
+// The real provider adapters over a capturing fetch. Every call answers a 400 (non-retryable, so
+// each call sends exactly once), whose body the capability hint tests set.
 vi.mock('./model', () => ({ getModel: vi.fn() }))
 vi.mock('./resolve-model', () => ({ resolveModel: vi.fn() }))
 
@@ -21,15 +24,18 @@ type Body = Record<string, unknown> & {
 
 let bodies: Body[] = []
 
+const rejectionOf = (message: string): unknown => ({
+  type: 'error',
+  error: { type: 'invalid_request_error', message },
+})
+let rejection = rejectionOf('captured')
+
 const capture: typeof fetch = async (_input, init) => {
   bodies.push(JSON.parse(String(init?.body)) as Body)
-  return new Response(
-    JSON.stringify({
-      type: 'error',
-      error: { type: 'invalid_request_error', message: 'captured' },
-    }),
-    { status: 400, headers: { 'content-type': 'application/json' } },
-  )
+  return new Response(JSON.stringify(rejection), {
+    status: 400,
+    headers: { 'content-type': 'application/json' },
+  })
 }
 
 const MODELS = {
@@ -104,6 +110,7 @@ function lastBody(): Body {
 
 beforeEach(() => {
   bodies = []
+  rejection = rejectionOf('captured')
 })
 
 // architecture.md → System and user halves: the halves go out as a system message and
@@ -171,4 +178,123 @@ describe('request shape', () => {
       expect(body.messages.map((m) => m.role)).not.toContain('system')
     },
   )
+})
+
+async function structuredFailure(config: ResolveModelConfig): Promise<CallRetryError> {
+  const res = await generateStructured(
+    'classifier',
+    HALVES,
+    schema,
+    config,
+    new AbortController().signal,
+    { actionId: null },
+  )
+  if (res.status !== 'failed') throw new Error(`expected a failed call, got ${res.status}`)
+  return res.error
+}
+
+async function narrativeHint(config: ResolveModelConfig): Promise<CapabilityHint | undefined> {
+  let error: unknown
+  const call = streamText('narrative', {
+    prompt: HALVES,
+    config,
+    onError: (event) => {
+      error = event.error
+    },
+  })
+  if (!call.ok) throw new Error(`resolve failed: ${call.kind}`)
+  await call.stream.consumeStream()
+  expect(APICallError.isInstance(error)).toBe(true)
+  return call.capabilityHintOf(error)
+}
+
+const REASONING: CapabilityHint = { capability: 'reasoning', matched: 'thinking' }
+
+// generation-pipeline.md → Fatal error categories: a rejection naming a capability gets the hint
+// only when the request as sent carried that capability.
+describe('the capability hint', () => {
+  it('hints at reasoning when an anthropic call sent its thinking setting', async () => {
+    rejection = rejectionOf('thinking is not supported by this model')
+
+    const error = await structuredFailure(useProvider('anthropic', { thinking: 2048 }))
+
+    expect(lastBody().thinking).toEqual({ type: 'enabled', budget_tokens: 2048 })
+    expect(error).toMatchObject({ tier: 'provider', possibleCapabilityMismatch: REASONING })
+  })
+
+  // The anthropic adapter sends nothing for a disabled setting; openai-compatible never gets one.
+  it.each([
+    ['anthropic with thinking disabled', 'anthropic', { thinking: 0 }],
+    ['anthropic with no thinking setting', 'anthropic', {}],
+    ['openai-compatible with a thinking budget', 'openai-compatible', { thinking: 2048 }],
+  ] as const)('gives no reasoning hint for %s', async (_label, type, params) => {
+    rejection = rejectionOf('thinking is not supported by this model')
+
+    const error = await structuredFailure(useProvider(type, params))
+
+    expect(lastBody()).not.toHaveProperty('thinking')
+    expect(error).toMatchObject({ tier: 'provider' })
+    expect(error).not.toHaveProperty('possibleCapabilityMismatch')
+  })
+
+  // Each adapter sends the response format its own way: anthropic never as response_format.
+  it.each([
+    ['anthropic', 'output_config'],
+    ['openai-compatible', 'response_format'],
+  ] as const)(
+    'hints at structured output when a %s call sent it under force-on',
+    async (type, key) => {
+      rejection = rejectionOf('json_schema is not supported by this model')
+
+      const error = await structuredFailure(useProvider(type, { structuredOutput: 'force-on' }))
+
+      expect(lastBody()).toHaveProperty(key)
+      expect(error).toMatchObject({
+        possibleCapabilityMismatch: { capability: 'structuredOutput', matched: 'json_schema' },
+      })
+    },
+  )
+
+  // Under auto the schema goes out in the prompt, as the JSON contract.
+  it('gives no structured hint under auto', async () => {
+    rejection = rejectionOf('response_format is not supported by this model')
+
+    const error = await structuredFailure(useProvider('openai-compatible'))
+
+    expect(lastBody()).not.toHaveProperty('response_format')
+    expect(error).toMatchObject({ tier: 'provider' })
+    expect(error).not.toHaveProperty('possibleCapabilityMismatch')
+  })
+
+  it('hints at reasoning when an anthropic narrative sent its thinking setting', async () => {
+    rejection = rejectionOf('thinking is not supported by this model')
+
+    expect(await narrativeHint(useProvider('anthropic', { thinking: 2048 }))).toEqual(REASONING)
+  })
+
+  // The dev llama.cpp router's reply for an absent model, verbatim.
+  it('gives no hint for a model id naming thinking when no thinking setting went out', async () => {
+    rejection = {
+      error: {
+        code: 400,
+        message: "model 'Qwen3-30B-A3B-Thinking-2507' not found",
+        type: 'invalid_request_error',
+      },
+    }
+
+    expect(
+      await narrativeHint(useProvider('openai-compatible', { thinking: 2048 })),
+    ).toBeUndefined()
+  })
+
+  it('gives the narrative no structured hint: it sends no response format', async () => {
+    rejection = rejectionOf('response_format is not supported by this model')
+
+    const hint = await narrativeHint(
+      useProvider('openai-compatible', { structuredOutput: 'force-on' }),
+    )
+
+    expect(lastBody()).not.toHaveProperty('response_format')
+    expect(hint).toBeUndefined()
+  })
 })

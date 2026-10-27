@@ -391,3 +391,44 @@ describe('callWithRetry with a prompt over the window', () => {
     expect(res).toEqual({ status: 'aborted', recoverable: [] })
   })
 })
+
+// generation-pipeline.md → Fatal error categories: a hint names only what the failed request carried.
+describe('callWithRetry and the capability hint', () => {
+  const rejected = (): APICallError =>
+    new APICallError({
+      message: 'Bad Request',
+      url: 'u',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({ error: { message: 'thinking is not supported' } }),
+    })
+
+  // The window check's chain learns what a request carried only as the request goes out.
+  it('reads what the request carried after it failed', async () => {
+    let carried = { reasoning: false, structuredOutput: false }
+    const res = await callWithRetry(
+      async (): Promise<string> => {
+        carried = { reasoning: true, structuredOutput: false }
+        throw rejected()
+      },
+      (raw) => JSON.parse(raw),
+      { ...opts(new AbortController().signal), carried: () => carried },
+    )
+    expect(res).toMatchObject({
+      status: 'failed',
+      error: { possibleCapabilityMismatch: { capability: 'reasoning', matched: 'thinking' } },
+    })
+  })
+
+  it('gives no hint when the caller does not say what its request carried', async () => {
+    const res = await callWithRetry(
+      async (): Promise<string> => {
+        throw rejected()
+      },
+      (raw) => JSON.parse(raw),
+      opts(new AbortController().signal),
+    )
+    expect(res.status).toBe('failed')
+    if (res.status === 'failed') expect('possibleCapabilityMismatch' in res.error).toBe(false)
+  })
+})

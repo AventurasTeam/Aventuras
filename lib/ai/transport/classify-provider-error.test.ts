@@ -64,6 +64,9 @@ function rejection(
 const errorBody = (message: string): string =>
   JSON.stringify({ error: { message, type: 'invalid_request_error' } })
 
+const CARRIED_BOTH = { reasoning: true, structuredOutput: true } as const
+const CARRIED_NONE = { reasoning: false, structuredOutput: false } as const
+
 describe('classifyProviderError', () => {
   it('maps a ProviderTimeoutError to a retryable timeout', () => {
     expect(classifyProviderError(new ProviderTimeoutError())).toEqual({
@@ -131,7 +134,8 @@ describe('classifyProviderError', () => {
     [429, 'network'],
   ] as const)('attaches a capability hint to a %i whose body names one', (status, reason) => {
     expect(
-      classifyProviderError(rejection(status, errorBody('thinking is not supported'))).error,
+      classifyProviderError(rejection(status, errorBody('thinking is not supported')), CARRIED_BOTH)
+        .error,
     ).toEqual({
       tier: 'provider',
       reason,
@@ -141,12 +145,24 @@ describe('classifyProviderError', () => {
   })
 
   it('attaches no hint to a 5xx or to a body recognized as an overflow', () => {
-    const server = classifyProviderError(rejection(500, errorBody('thinking failed upstream')))
+    const server = classifyProviderError(
+      rejection(500, errorBody('thinking failed upstream')),
+      CARRIED_BOTH,
+    )
     const overflow = classifyProviderError(
       rejection(400, errorBody('prompt is too long once thinking is included')),
+      CARRIED_BOTH,
     )
     expect('possibleCapabilityMismatch' in server.error).toBe(false)
     expect('possibleCapabilityMismatch' in overflow.error).toBe(false)
+  })
+
+  // A caller that doesn't say what its request carried, such as the embedder, gets no hint.
+  it('attaches no hint for a capability the request did not carry', () => {
+    const error = rejection(400, errorBody('thinking is not supported'))
+    const uncarried = classifyProviderError(error, { reasoning: false, structuredOutput: true })
+    expect('possibleCapabilityMismatch' in uncarried.error).toBe(false)
+    expect('possibleCapabilityMismatch' in classifyProviderError(error).error).toBe(false)
   })
 })
 
@@ -426,12 +442,18 @@ describe('capabilityHintOf', () => {
     ['thinking is not enabled for this model', 'reasoning', 'thinking'],
     ['reasoning_effort is not supported', 'reasoning', 'reasoning'],
   ] as const)('reads %j as a %s hint', (message, capability, matched) => {
-    expect(capabilityHintOf(rejection(400, errorBody(message)))).toEqual({ capability, matched })
+    expect(capabilityHintOf(rejection(400, errorBody(message)), CARRIED_BOTH)).toEqual({
+      capability,
+      matched,
+    })
   })
 
   it('takes the first keyword in its order: a parameter name before a generic word', () => {
     expect(
-      capabilityHintOf(rejection(400, errorBody('json_schema not supported for reasoning models'))),
+      capabilityHintOf(
+        rejection(400, errorBody('json_schema not supported for reasoning models')),
+        CARRIED_BOTH,
+      ),
     ).toEqual({ capability: 'structuredOutput', matched: 'json_schema' })
     expect(
       capabilityHintOf(
@@ -439,12 +461,15 @@ describe('capabilityHintOf', () => {
           400,
           errorBody('thinking.budget_tokens: Input should be greater than or equal to 1024'),
         ),
+        CARRIED_BOTH,
       ),
     ).toEqual({ capability: 'reasoning', matched: 'budget_tokens' })
   })
 
   it('matches in any case', () => {
-    expect(capabilityHintOf(rejection(400, errorBody('THINKING is not supported')))).toEqual({
+    expect(
+      capabilityHintOf(rejection(400, errorBody('THINKING is not supported')), CARRIED_BOTH),
+    ).toEqual({
       capability: 'reasoning',
       matched: 'thinking',
     })
@@ -452,12 +477,12 @@ describe('capabilityHintOf', () => {
 
   it('reads every 4xx and nothing outside it', () => {
     const body = errorBody('thinking is not supported')
-    expect(capabilityHintOf(rejection(499, body))).toEqual({
+    expect(capabilityHintOf(rejection(499, body), CARRIED_BOTH)).toEqual({
       capability: 'reasoning',
       matched: 'thinking',
     })
-    expect(capabilityHintOf(rejection(500, body))).toBeUndefined()
-    expect(capabilityHintOf(rejection(399, body))).toBeUndefined()
+    expect(capabilityHintOf(rejection(500, body), CARRIED_BOTH)).toBeUndefined()
+    expect(capabilityHintOf(rejection(399, body), CARRIED_BOTH)).toBeUndefined()
   })
 
   it('finds a keyword outside the message, such as the offending param', () => {
@@ -468,7 +493,7 @@ describe('capabilityHintOf', () => {
         param: 'response_format',
       },
     })
-    expect(capabilityHintOf(rejection(400, body))).toEqual({
+    expect(capabilityHintOf(rejection(400, body), CARRIED_BOTH)).toEqual({
       capability: 'structuredOutput',
       matched: 'response_format',
     })
@@ -476,15 +501,37 @@ describe('capabilityHintOf', () => {
 
   it('gives no hint for a body recognized as an overflow', () => {
     const body = errorBody('prompt is too long once thinking is included')
-    expect(capabilityHintOf(rejection(400, body))).toBeUndefined()
+    expect(capabilityHintOf(rejection(400, body), CARRIED_BOTH)).toBeUndefined()
   })
 
   it('gives no hint for anything but an APICallError', () => {
-    expect(capabilityHintOf(new Error('thinking is not supported'))).toBeUndefined()
+    expect(capabilityHintOf(new Error('thinking is not supported'), CARRIED_BOTH)).toBeUndefined()
   })
 
   it('hands out a fresh hint each time, never the keyword table row', () => {
     const error = rejection(400, errorBody('thinking is not supported'))
-    expect(capabilityHintOf(error)).not.toBe(capabilityHintOf(error))
+    expect(capabilityHintOf(error, CARRIED_BOTH)).not.toBe(capabilityHintOf(error, CARRIED_BOTH))
+  })
+
+  it.each([
+    ['thinking is not supported', { capability: 'reasoning', matched: 'thinking' }],
+    [
+      'response_format is not supported',
+      { capability: 'structuredOutput', matched: 'response_format' },
+    ],
+  ] as const)('names %j only when the request carried its capability', (message, hint) => {
+    const error = rejection(400, errorBody(message))
+    const carried = { ...CARRIED_NONE, [hint.capability]: true }
+    const others = { ...CARRIED_BOTH, [hint.capability]: false }
+    expect(capabilityHintOf(error, carried)).toEqual(hint)
+    expect(capabilityHintOf(error, others)).toBeUndefined()
+  })
+
+  it('skips the keywords of a capability the request did not carry', () => {
+    const error = rejection(400, errorBody('json_schema not supported for reasoning models'))
+    expect(capabilityHintOf(error, { reasoning: true, structuredOutput: false })).toEqual({
+      capability: 'reasoning',
+      matched: 'reasoning',
+    })
   })
 })

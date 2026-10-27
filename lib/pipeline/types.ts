@@ -16,7 +16,8 @@ export type PipelineError =
       kind: 'provider'
       reason: 'auth' | 'network' | 'timeout' | 'unknown'
       detail?: string
-      // Best-effort hint from a 4xx body (generation-pipeline.md → Fatal error categories).
+      // Best-effort hint: a 4xx body naming a capability the request carried
+      // (generation-pipeline.md → Fatal error categories).
       possibleCapabilityMismatch?: CapabilityHint
     }
   | { kind: 'phase-logic'; detail: string; phaseName?: string; subsystem?: string }

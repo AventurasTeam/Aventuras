@@ -8,6 +8,7 @@ import { resolveSweep } from '@/lib/actions/story-entries/operational'
 import { undoLastAction } from '@/lib/actions/story-entries/undo'
 import {
   ContextWindowError,
+  type CapabilityHint,
   type ContextWindowFailure,
   type generateStructured,
   type GenerationWindow,
@@ -110,7 +111,7 @@ function baseSettings(overrides: Partial<StorySettings> = {}): StorySettings {
 
 type StreamCall = Extract<StreamTextResult, { ok: true }>
 
-/** streamText's ok arm around a fake stream: an unknown window, no estimate, no window failure. */
+/** streamText's ok arm around a fake stream: an unknown window, no estimate, no window failure, no hint. */
 function streamCall(
   fake: Partial<Omit<StreamCall, 'ok' | 'stream'>> & { stream: object },
 ): Omit<StreamCall, 'stream'> & { stream: object } {
@@ -124,6 +125,7 @@ function streamCall(
     window: { tokens: null, source: 'unknown' },
     promptEstimate: () => null,
     contextWindowFailureOf: () => null,
+    capabilityHintOf: () => undefined,
     ...fake,
   }
 }
@@ -3345,8 +3347,13 @@ describe('narrative — a stream error', () => {
     })
   }
 
-  // contextWindowFailureOf is faked: it answers `windowFailure` for this stream's error only.
-  async function runStreamError(error: unknown, windowFailure: ContextWindowFailure | null = null) {
+  // contextWindowFailureOf and capabilityHintOf are faked: they answer `windowFailure` and `hint`
+  // for this stream's error only.
+  async function runStreamError(
+    error: unknown,
+    windowFailure: ContextWindowFailure | null = null,
+    hint?: CapabilityHint,
+  ) {
     currentStoryStore.set({
       storyId: 's1',
       branchId: 'b1',
@@ -3358,9 +3365,13 @@ describe('narrative — a stream error', () => {
     const contextWindowFailureOf = vi.fn((streamError: unknown) =>
       streamError === error ? windowFailure : null,
     )
+    const capabilityHintOf = vi.fn((streamError: unknown) =>
+      streamError === error ? hint : undefined,
+    )
     streamTextMock.mockImplementation((_target, opts) =>
       streamCall({
         contextWindowFailureOf,
+        capabilityHintOf,
         stream: {
           fullStream: (async function* () {
             yield { type: 'text-delta', text: 'The lantern gutt' }
@@ -3389,7 +3400,7 @@ describe('narrative — a stream error', () => {
       events.push(next.value)
       next = await gen.next()
     }
-    return { result: next.value, events, log, contextWindowFailureOf }
+    return { result: next.value, events, log, contextWindowFailureOf, capabilityHintOf }
   }
 
   it.each([
@@ -3416,11 +3427,14 @@ describe('narrative — a stream error', () => {
     )
   })
 
-  it('carries the capability hint a 4xx rejection names', async () => {
-    const { result, log } = await runStreamError(
-      rejection(400, 'thinking is not supported for this model'),
-    )
+  // lib/ai matches the hint, against what this call's request carried.
+  it("carries the call's capability hint for its stream error", async () => {
+    const error = rejection(400, 'thinking is not supported for this model')
+    const hint: CapabilityHint = { capability: 'reasoning', matched: 'thinking' }
 
+    const { result, log, capabilityHintOf } = await runStreamError(error, null, hint)
+
+    expect(capabilityHintOf).toHaveBeenCalledWith(error)
     expect(result).toStrictEqual({
       status: 'failed',
       error: {
@@ -3441,11 +3455,11 @@ describe('narrative — a stream error', () => {
   it.each([
     ['a plain error', () => new Error('socket hang up'), 'socket hang up'],
     [
-      'a 5xx naming a capability',
-      () => rejection(500, 'thinking budget exceeded upstream'),
-      'APICallError: thinking budget exceeded upstream',
+      'a 4xx naming a capability',
+      () => rejection(400, 'thinking is not supported for this model'),
+      'APICallError: thinking is not supported for this model',
     ],
-  ])('omits the hint for %s', async (_label, makeError, detail) => {
+  ])('omits the hint the call gives none for, on %s', async (_label, makeError, detail) => {
     const { result } = await runStreamError(makeError())
 
     expect(result).toStrictEqual({

@@ -2,7 +2,6 @@ import { APICallError } from 'ai'
 import { eq, sql } from 'drizzle-orm'
 
 import {
-  capabilityHintOf,
   describeProviderError,
   isCutOff,
   replyCutOff,
@@ -277,7 +276,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
         ? { statusCode: streamError.statusCode, url: redactUrl(streamError.url) }
         : {}),
     })
-    const hint = capabilityHintOf(streamError)
+    const hint = call.capabilityHintOf(streamError)
     return {
       status: 'failed',
       error: {
