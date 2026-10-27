@@ -114,6 +114,10 @@ keyboard only takes height from its bottom edge, and the question opens where th
 sheet also cannot be guarded: `vaul` closes it on a handle tap or a swipe with no way to veto, so
 anything with something to lose is a dialog.
 
+On desktop an action modal is at most 85% of the window's height. On a phone it may fill the
+screen less the system bars and a 1rem margin, so a long editor uses the whole height while a
+short one stays its own size.
+
 **Sheets never stack.** A modal opened from inside another modal, such as a confirmation in
 Settings or the pack question during a sync, is a dialog whatever its kind. A sheet on a sheet
 leaves the user unsure which swipe closes what.

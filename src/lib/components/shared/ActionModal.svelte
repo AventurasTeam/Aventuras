@@ -374,7 +374,9 @@
 >
   <ResponsiveModal.Content
     class={cn(
-      'flex max-h-[85dvh] flex-col gap-0 p-0',
+      // A phone keeps the content's default cap, the screen less its margins, so a long body
+      // gets the whole height; a short one is no taller for it.
+      'flex flex-col gap-0 p-0 md:max-h-[85dvh]',
       { md: 'max-w-md', lg: 'max-w-lg', '2xl': 'max-w-2xl' }[size],
       // Inset from a phone's edges, where the dialog would otherwise run full width.
       presentation === 'dialog' && 'w-[calc(100%-2rem)] rounded-lg',
