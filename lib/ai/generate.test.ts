@@ -235,6 +235,14 @@ describe('streamText', () => {
       expect(finished.result.timedOut()).toBe(false)
     })
 
+    it('disarms the bound when the stream reports an abort', () => {
+      const { result, call } = streamed()
+      call.onAbort?.({ steps: [] })
+      vi.advanceTimersByTime(45_000)
+      expect(call.abortSignal?.aborted).toBe(false)
+      expect(result.timedOut()).toBe(false)
+    })
+
     // The SDK calls onError for each error part and keeps the stream open, so a stall can follow.
     it("keeps the bound armed through an error part, still handing it to the caller's onError", () => {
       const onError = vi.fn()
