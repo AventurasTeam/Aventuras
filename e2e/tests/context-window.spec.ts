@@ -109,6 +109,8 @@ test.describe('context window — a turn over a configured window', () => {
     mock = await startMockLlm()
     setProviderEndpoint(seeded.dbPath, mock.url)
     setContextWindowOverride(seeded.dbPath, SEED_MODEL, WINDOW)
+    // No pass chains under this turn, so the first Send owes nothing before the check.
+    setClassifierCadence(seeded.dbPath, 'story_hero', 100)
     app = await launchApp({ userDataDir, cleanupUserData: true })
   })
 
@@ -141,7 +143,7 @@ test.describe('context window — a turn over a configured window', () => {
     expect(copy, row.content).not.toBeNull()
     expect(copyNumber(copy, 'estimate')).toBeGreaterThan(WINDOW)
     // The check runs before the request is built: nothing reached the server.
-    expect(streamedCalls(mock)).toBe(0)
+    expect(mock.requests).toHaveLength(0)
     expect(await entryIdByContent(page, branchId, 'E2E-WINDOW-CHECK-U1')).toBeUndefined()
 
     await expect(reader.retrySystemEntry(page)).toBeVisible()
@@ -257,13 +259,15 @@ test.describe('context window — a provider overflow, then the truncation cross
 
     mock.underReportNextUsage()
     await send('E2E-USAGE-U2 I look back at the river.', 'E2E-USAGE-R2 the ferry is already gone.')
-    const replyId = await pollEntryId(page, branchId, 'E2E-USAGE-R2')
 
+    // The toast dismisses itself after 5 s: read its text before any DB round trip.
     await expect(truncationToast()).toBeVisible({ timeout: 10_000 })
+    const toastText = (await truncationToast().textContent())?.trim() ?? ''
+    const replyId = await pollEntryId(page, branchId, 'E2E-USAGE-R2')
     const reported = await promptTotal(page, replyId)
-    // The server's count reached the entry under-reported: a tenth of a prompt at least this large.
+    // The server's count reached the entry under-reported, under half of (c1)'s full prompt.
     expect(reported).toBeLessThan(fullPrompt / 2)
-    const counts = truncationCopy().exec((await truncationToast().textContent())?.trim() ?? '')
+    const counts = truncationCopy().exec(toastText)
     expect(copyNumber(counts, 'reported')).toBe(reported)
     expect(copyNumber(counts, 'estimate')).toBeGreaterThan(reported * 2)
     await waitForTurnTerminal(page)
