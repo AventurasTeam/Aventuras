@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { describeReplyCutOff } from '@/lib/ai'
+import { describeContextWindow, describeReplyCutOff } from '@/lib/ai'
 import { entryMetadataSchema, type SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
@@ -909,5 +909,189 @@ describe('useSystemEntryActions', () => {
     act(() => result.current.fixAction?.onPress())
     expect(leaveStory).toHaveBeenCalledTimes(1)
     expect(router.push).toHaveBeenCalledWith('/settings?tab=providers')
+  })
+})
+
+// reader-composer.md → Transient pipeline failures: the window row, and a rejection naming a capability.
+describe('window and capability-hint entries', () => {
+  const onRetry = () => {}
+  const SUBMISSION = { content: 'I open the door', composerMode: 'do' }
+  const LLAMACPP_MESSAGE =
+    'request (71834 tokens) exceeds the available context size (65536 tokens), try increasing it'
+
+  const TURN_WINDOW = {
+    kind: 'context-window',
+    target: 'narrative',
+    detectedBy: 'check',
+    estimate: 71_234,
+    window: 65_536,
+    windowSource: 'configured',
+    providerId: 'prov_local',
+    modelId: 'llama3.1:70b',
+  } satisfies PipelineError
+
+  const PASS_OVERFLOW = {
+    kind: 'context-window',
+    target: 'classifier',
+    detectedBy: 'provider',
+    estimate: 71_234,
+    window: null,
+    windowSource: 'unknown',
+    providerId: 'prov_local',
+    modelId: 'llama3.1:70b',
+    detail: LLAMACPP_MESSAGE,
+  } satisfies PipelineError
+
+  const TURN_HINTED = {
+    kind: 'provider',
+    reason: 'network',
+    detail: "400: 'thinking' is not supported for this model",
+    possibleCapabilityMismatch: { capability: 'reasoning', matched: 'thinking' },
+  } satisfies PipelineError
+
+  const PASS_HINTED = {
+    kind: 'provider',
+    reason: 'unknown',
+    detail: 'Bad Request: json_schema is not supported',
+    possibleCapabilityMismatch: { capability: 'structuredOutput', matched: 'json_schema' },
+  } satisfies PipelineError
+
+  const TURN_WINDOW_COPY =
+    "This prompt is about 71,300 tokens; llama3.1:70b's context window is 65,536 (set by you). Nothing was sent. Shorten the prompt in Story Settings (memory budgets, history buffer), raise the window if the model allows more, or switch to a model with a larger one."
+  const PASS_OVERFLOW_COPY = `Memory update failed, so your turn didn't start. The provider rejected the update's prompt; its message suggests it exceeded the model's context window: “${LLAMACPP_MESSAGE}”. Our estimate: about 71,300 tokens. Raise the window if the model allows more, or switch the classifier to a model with a larger one.`
+  const TURN_REASONING_HINT =
+    "The provider rejected the request. Its message mentions `thinking`. That can mean this model doesn't support reasoning: check the profile's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason."
+  const PASS_STRUCTURED_HINT =
+    "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `json_schema`. That can mean this model doesn't support structured output: check the profile's structured-output setting and the model's badge. The provider may also have rejected the request for another reason."
+
+  function actionsFor(failure: SystemFailureMeta) {
+    return renderHook(() => useSystemEntryActions(failure, onRetry, 'story_1', leaveAtOnce)).result
+      .current
+  }
+
+  describe('describeTurnFailure', () => {
+    it("gives a refused prompt the window copy and keeps the window's diagnostic line", () => {
+      expect(describeTurnFailure(TURN_WINDOW)).toEqual({
+        content: TURN_WINDOW_COPY,
+        detail: describeContextWindow(TURN_WINDOW),
+      })
+    })
+
+    it('gives a rejection naming a capability the hedged hint, keeping its reason and detail', () => {
+      expect(describeTurnFailure(TURN_HINTED)).toEqual({
+        content: TURN_REASONING_HINT,
+        detail: "network: 400: 'thinking' is not supported for this model",
+      })
+    })
+  })
+
+  describe('describePassFailure', () => {
+    it("gives a pass prompt the provider rejected the pass's window copy", () => {
+      expect(describePassFailure({ held: false, error: PASS_OVERFLOW }, undefined)).toEqual({
+        content: PASS_OVERFLOW_COPY,
+        detail: describeContextWindow(PASS_OVERFLOW),
+      })
+    })
+
+    it("gives a pass rejection naming a capability the pass's hedged hint", () => {
+      expect(describePassFailure({ held: false, error: PASS_HINTED }, undefined)).toEqual({
+        content: PASS_STRUCTURED_HINT,
+        detail: 'unknown: Bad Request: json_schema is not supported',
+      })
+    })
+  })
+
+  describe('the persisted fix tag', () => {
+    it('stores how a window failure was detected, its diagnostic line and the held text', () => {
+      const meta = toSystemFailureMeta(TURN_WINDOW, SUBMISSION)
+      expect(meta).toEqual({
+        kind: 'context-window',
+        failure: 'check',
+        detail: describeContextWindow(TURN_WINDOW),
+        submission: SUBMISSION,
+      })
+      const parsed = entryMetadataSchema.parse({
+        sceneEntities: [],
+        currentLocationId: null,
+        worldTime: 0,
+        systemFailure: meta,
+      })
+      expect(parsed.systemFailure).toEqual(meta)
+    })
+
+    it("stores a pass overflow's detection beside the failed marker", () => {
+      expect(toPassFailureMeta({ held: false, error: PASS_OVERFLOW }, undefined)).toEqual({
+        kind: 'context-window',
+        failure: 'provider',
+        detail: describeContextWindow(PASS_OVERFLOW),
+        pass: 'failed',
+      })
+    })
+
+    it("stores a provider hint's capability", () => {
+      expect(toSystemFailureMeta(TURN_HINTED, undefined)).toEqual({
+        kind: 'provider',
+        failure: 'reasoning',
+        detail: "network: 400: 'thinking' is not supported for this model",
+      })
+      expect(toPassFailureMeta({ held: false, error: PASS_HINTED }, undefined)).toEqual({
+        kind: 'provider',
+        failure: 'structuredOutput',
+        detail: 'unknown: Bad Request: json_schema is not supported',
+        pass: 'failed',
+      })
+    })
+
+    it('stores no tag for a provider failure without a hint', () => {
+      expect(
+        toSystemFailureMeta({ kind: 'provider', reason: 'auth', detail: '401' }, undefined),
+      ).toEqual({ kind: 'provider', detail: 'auth: 401' })
+    })
+  })
+
+  describe('useSystemEntryActions', () => {
+    // Fed through the meta builders, so the tag written and the tag read must agree.
+    it('offers Fix profile beside Retry on a turn entry whose rejection hinted at a capability', () => {
+      const actions = actionsFor(toSystemFailureMeta(TURN_HINTED, SUBMISSION))
+      expect(actions.fixAction?.label).toBe('Fix profile')
+      expect(actions.onRetry).toBe(onRetry)
+    })
+
+    it('offers Fix profile beside Retry on a failed pass entry whose rejection hinted at a capability', () => {
+      const actions = actionsFor(toPassFailureMeta({ held: false, error: PASS_HINTED }, undefined))
+      expect(actions.fixAction?.label).toBe('Fix profile')
+      expect(actions.onRetry).toBe(onRetry)
+    })
+
+    it("routes a hint's Fix profile through the story-leave guard to App Settings", () => {
+      const leaveStory = vi.fn((proceed: () => void) => proceed())
+      const { result } = renderHook(() =>
+        useSystemEntryActions(
+          toSystemFailureMeta(TURN_HINTED, undefined),
+          onRetry,
+          'story_1',
+          leaveStory,
+        ),
+      )
+      act(() => result.current.fixAction?.onPress())
+      expect(leaveStory).toHaveBeenCalledTimes(1)
+      expect(router.push).toHaveBeenCalledWith('/settings?tab=providers')
+    })
+
+    // `Set window` is the window's remedy, hidden until App Settings has its editor.
+    it('offers Retry and no fix action on a window entry, turn or pass', () => {
+      const turn = actionsFor(toSystemFailureMeta(TURN_WINDOW, SUBMISSION))
+      expect(turn.fixAction).toBeUndefined()
+      expect(turn.onRetry).toBe(onRetry)
+      const pass = actionsFor(toPassFailureMeta({ held: false, error: PASS_OVERFLOW }, undefined))
+      expect(pass.fixAction).toBeUndefined()
+      expect(pass.onRetry).toBe(onRetry)
+    })
+
+    it('offers no fix action for a provider entry whose tag is no capability', () => {
+      expect(
+        actionsFor({ kind: 'provider', failure: 'from-a-newer-build' }).fixAction,
+      ).toBeUndefined()
+    })
   })
 })

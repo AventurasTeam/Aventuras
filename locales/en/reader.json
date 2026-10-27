@@ -204,6 +204,22 @@
         "window": "Memory update failed, so your turn didn't start. The update's reply was cut off where the prompt and reply filled the model's {{limit, number}}-token window.",
         "unknown": "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit. Setting a max output on the classifier profile overrides it.",
         "unknownWithMaxOutput": "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit, short of the classifier profile's {{limit, number}}-token max output."
+      },
+      "contextWindow": {
+        "check": "This prompt is about {{estimate, number}} tokens; {{model}}'s context window is {{window, number}} ({{source}}). Nothing was sent. Shorten the prompt in Story Settings (memory budgets, history buffer), raise the window if the model allows more, or switch to a model with a larger one.",
+        "provider": "The provider rejected the prompt. Its message suggests it exceeded the model's context window: “{{message}}”. Our estimate: about {{estimate, number}} tokens. Shorten the prompt in Story Settings (memory budgets, history buffer), raise the window if the model allows more, or switch to a model with a larger one."
+      },
+      "memoryContextWindow": {
+        "check": "Memory update failed, so your turn didn't start. The update's prompt is about {{estimate, number}} tokens; {{model}}'s context window is {{window, number}} ({{source}}). Raise the window if the model allows more, or switch the classifier to a model with a larger one.",
+        "provider": "Memory update failed, so your turn didn't start. The provider rejected the update's prompt; its message suggests it exceeded the model's context window: “{{message}}”. Our estimate: about {{estimate, number}} tokens. Raise the window if the model allows more, or switch the classifier to a model with a larger one."
+      },
+      "capabilityHint": {
+        "reasoning": "The provider rejected the request. Its message mentions `{{matched}}`. That can mean this model doesn't support reasoning: check the profile's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
+        "structuredOutput": "The provider rejected the request. Its message mentions `{{matched}}`. That can mean this model doesn't support structured output: check the profile's structured-output setting and the model's badge. The provider may also have rejected the request for another reason."
+      },
+      "memoryCapabilityHint": {
+        "reasoning": "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `{{matched}}`. That can mean this model doesn't support reasoning: check the profile's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
+        "structuredOutput": "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `{{matched}}`. That can mean this model doesn't support structured output: check the profile's structured-output setting and the model's badge. The provider may also have rejected the request for another reason."
       }
     }
   },
