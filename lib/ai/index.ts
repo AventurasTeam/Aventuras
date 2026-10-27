@@ -7,6 +7,15 @@ export {
   type StoryOverrideTarget,
 } from './agents'
 export { fetchModelCatalog, normalizeModelCatalog, type CatalogEntry } from './catalog'
+export {
+  ContextWindowError,
+  describeContextWindow,
+  displayEstimate,
+  generationWindow,
+  type ContextWindowFailure,
+  type GenerationWindow,
+  type WindowSource,
+} from './context-window'
 export { embedViaProvider } from './embedding'
 export type { ProviderInstanceWithStub } from './types'
 export {
