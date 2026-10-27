@@ -287,8 +287,9 @@ If a request later fails for what looks like a capability mismatch,
 the provider-error mapper does best-effort keyword matching against the
 response body for the two capabilities a request carries — `thinking`,
 `reasoning` or `budget_tokens` for reasoning, `response_format` or
-`json_schema` for structured output — and threads the capability and
-the matched word through
+`json_schema` for structured output — and, when the request as sent
+carried the capability named, threads the capability and the matched
+word through
 `PipelineError.provider.possibleCapabilityMismatch` (see
 [`generation-pipeline.md → Fatal error categories`](../../../generation-pipeline.md#fatal-error-categories)).
 The error surface phrases it as a hint, never an assertion, because

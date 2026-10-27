@@ -2029,13 +2029,23 @@ banner / dialog for persistent.
 `classifyProviderError` matches a 4xx body against words naming the
 two capabilities a request can carry: `thinking`, `reasoning` and
 `budget_tokens` for **reasoning**, `response_format` and `json_schema`
-for **structured output**. It runs after overflow recognition, so a
-body recognized as an overflow carries no hint. A hit sets the field
-on the `provider` `CallRetryError` to the capability and the matched
-word, and the phase copies it onto `PipelineError.provider` as it maps
-the error; otherwise it's omitted. The narrative's stream error never
-passes through `callWithRetry`, so the narrative phase matches it with
-the same rule (`capabilityHintOf`) and sets the field itself.
+for **structured output**. Only the words of a capability the request
+as sent carried are matched, a profile's `customJson` keys included.
+Reasoning is carried when a thinking setting went out: an Anthropic
+call with a thinking budget, since a disabled setting sends no field.
+Structured output is carried when the JSON response format went out: a
+structured call under `force-on`, since under `auto` the schema rides
+the prompt. So the narrative, which sends neither on an
+OpenAI-compatible provider, gets no hint from a body such as
+`model 'Qwen3-30B-A3B-Thinking-2507' not found`. Matching runs after
+overflow recognition, so a body recognized as an overflow carries no
+hint. A hit sets the field on the `provider` `CallRetryError` to the
+capability and the matched word, and the phase copies it onto
+`PipelineError.provider` as it maps the error; otherwise it's omitted.
+The narrative's stream error never passes through `callWithRetry`, so
+the narrative phase asks its call for the hint (`capabilityHintOf` on
+the `streamText` result, the same rule over the same request) and sets
+the field itself.
 Best-effort only — provider error messages are not standardised;
 the field is a hint for the UI, never an assertion that a user
 override was wrong. The copy names the setting and hedges: "The

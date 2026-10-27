@@ -201,7 +201,11 @@ slice-planning gate forces its resolution before that slice is planned.
   replies smoke on the dev LLM spent a narrative max output of 64, 512,
   1024 and 2200 entirely on reasoning, so every turn failed as cut off
   before any text until the limit (8192) covered the reasoning. Raised by
-  the coordinator from the cut-off replies Task 15 smoke.
+  the coordinator from the cut-off replies Task 15 smoke. Once sent, its
+  keys count as sent for the capability hint
+  ([`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories)):
+  `carriedCapabilities` in `lib/ai/generate.ts` reads only the
+  Anthropic thinking setting and the JSON response format today.
 
 - **The orchestrator never fills a phase-logic error's `phaseName` or
   `retryAttempt`.** Canon has it fill both when it wraps a phase's
@@ -282,13 +286,15 @@ slice-planning gate forces its resolution before that slice is planned.
   the servers above reject an overflow with a 400 before streaming.
   Raised by the context window check.
 
-- **The capability hint matches any 4xx body.** The hint
+- **The capability hint matches any 4xx status.** The hint
   ([`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories))
-  matches any 4xx, a 429 included, so an aggregator's rate-limit body that echoes a
-  model id containing `thinking` or `reasoning` gets the hint and
-  `Fix profile`; a 401 or 403 that mentions a capability ("no access to
-  reasoning models") gets it too, since the hint is matched before the
-  status branches. Raised by the context window check.
+  names only a capability the request carried, and within that it
+  matches any 4xx, a 429 included: on an Anthropic call that sent a
+  thinking budget, a rate-limit body that mentions `thinking` or
+  `reasoning` gets the hint and `Fix profile`, and a 401 or 403 that
+  mentions one ("no access to reasoning models") gets it too, since the
+  hint is matched before the status branches. Raised by the context
+  window check.
 
 - **The truncation cross-check may warn on every warm turn of a server
   that counts only uncached prompt tokens.** Canon names Ollama as a

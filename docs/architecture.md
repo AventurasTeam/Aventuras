@@ -975,7 +975,8 @@ limit differently per server and per version, and a figure learned
 wrong would refuse calls that work; the message names the limit on most
 servers for the user to read. A match is a hint, so the copy says the
 provider's message suggests an overflow rather than asserting one, as
-for `possibleCapabilityMismatch`.
+for
+[`possibleCapabilityMismatch`](./generation-pipeline.md#fatal-error-categories).
 
 ### Truncation cross-check
 
