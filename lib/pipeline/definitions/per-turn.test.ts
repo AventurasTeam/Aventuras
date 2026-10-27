@@ -44,8 +44,13 @@ import { getPipeline } from '../authoring/registry'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
 const { streamTextMock, renderTemplateMock, generateStructuredMock } = vi.hoisted(() => ({
-  // Typed by its parameters only: the fake streams below stand in for the SDK's result shape.
-  streamTextMock: vi.fn<(...args: Parameters<typeof streamText>) => unknown>(),
+  // The fake streams stand in for the SDK's result shape; streamCall pins the rest to the facade.
+  streamTextMock:
+    vi.fn<
+      (
+        ...args: Parameters<typeof streamText>
+      ) => ReturnType<typeof streamCall> | Extract<StreamTextResult, { ok: false }>
+    >(),
   renderTemplateMock: vi.fn(),
   generateStructuredMock: vi.fn<typeof generateStructured>(),
 }))
@@ -3358,6 +3363,7 @@ describe('narrative — a stream error', () => {
         contextWindowFailureOf,
         stream: {
           fullStream: (async function* () {
+            yield { type: 'text-delta', text: 'The lantern gutt' }
             opts.onError?.({ error })
           })(),
         },
