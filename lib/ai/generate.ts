@@ -200,6 +200,15 @@ export type StreamTextResult =
       timeoutMs: number | undefined
       /** The profile's max output (ResolvedParams.maxOutput); undefined when unset. */
       maxOutput: number | undefined
+      /** The model's window as resolved for this call. */
+      window: GenerationWindow
+      /** The request's token estimate; null until the SDK built the request. */
+      promptEstimate: () => number | null
+      /**
+       * A stream error as a context-window failure: the check's refusal or a recognized overflow;
+       * null otherwise.
+       */
+      contextWindowFailureOf: (error: unknown) => ContextWindowFailure | null
     }
   | { ok: false; kind: ResolveFailureKind; target: ResolveTarget }
 
@@ -211,31 +220,57 @@ export type StreamTextResult =
 export function streamText(target: ResolveTarget, opts: StreamTextOptions): StreamTextResult {
   const resolved = prepareGeneration(target, opts.config, opts.actionId)
   if (!resolved.ok) return resolved
+  const { providerId, modelId } = resolved
+  const attribution = opts.actionId === undefined ? undefined : { actionId: opts.actionId }
+  const window = generationWindow(opts.config.providers, providerId, modelId)
+  let estimate: number | null = null
   const bounded =
     resolved.timeoutMs === undefined ? null : boundedSignal(opts.abortSignal, resolved.timeoutMs)
   const abortSignal = bounded?.signal ?? opts.abortSignal
   const stream = streamProviderCall({
-    model: marksSystemPrefix(opts.cacheSystemPrefix, resolved.providerType)
-      ? withMiddleware(resolved.model, [anthropicCacheMarkerMiddleware()])
-      : resolved.model,
+    // The window check goes last, to count the request as sent (architecture.md → The pre-send
+    // check). Its refusal throws before any request and reaches onError as the stream's error.
+    model: withMiddleware(resolved.model, [
+      ...(marksSystemPrefix(opts.cacheSystemPrefix, resolved.providerType)
+        ? [anthropicCacheMarkerMiddleware()]
+        : []),
+      windowCheckMiddleware({
+        window,
+        providerId,
+        modelId,
+        onEstimate: (tokens) => {
+          estimate = tokens
+        },
+        ...attribution,
+      }),
+    ]),
     ...promptParams(opts.prompt),
     ...(abortSignal !== undefined ? { abortSignal } : {}),
     ...(opts.onError !== undefined ? { onError: opts.onError } : {}),
-    // Not on an error: the SDK reports each error part and reads on, so a stall can follow. After a
-    // fatal one the stream is over, and the timer lapses on a call nothing awaits.
-    ...(bounded === null
-      ? {}
-      : { onFinish: () => bounded.dispose(), onAbort: () => bounded.dispose() }),
+    // The bound is disposed on finish and abort, not on an error: the SDK reports each error part
+    // and reads on, so a stall can follow. After a fatal one the stream is over, and the timer
+    // lapses on a call nothing awaits.
+    onFinish: ({ usage }) => {
+      bounded?.dispose()
+      checkInputTokens({ usage, estimate, providerId, modelId, ...attribution })
+    },
+    ...(bounded === null ? {} : { onAbort: () => bounded.dispose() }),
     ...resolved.callSettings,
   })
   return {
     ok: true,
     stream,
-    modelId: resolved.modelId,
-    providerId: resolved.providerId,
+    modelId,
+    providerId,
     timedOut: () => bounded?.expired() ?? false,
     timeoutMs: resolved.timeoutMs,
     maxOutput: resolved.params.maxOutput,
+    window,
+    promptEstimate: () => estimate,
+    contextWindowFailureOf: (error) =>
+      error instanceof ContextWindowError
+        ? error.failure
+        : providerOverflow(error, { window, estimate, providerId, modelId }),
   }
 }
 

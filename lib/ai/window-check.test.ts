@@ -5,8 +5,8 @@ import { z } from 'zod'
 
 import { logger, type Logger } from '@/lib/diagnostics'
 
-import { countPromptTokens } from './context-window'
-import { generateStructured, type PromptHalves } from './generate'
+import { ContextWindowError, countPromptTokens } from './context-window'
+import { generateStructured, streamText, type PromptHalves } from './generate'
 import { getModel } from './model'
 import { schemaToTypeScriptBlock, type JsonSchema, type ModelPrompt } from './prompt-schema'
 import { resolveModel, type ResolvedParams, type ResolveModelConfig } from './resolve-model'
@@ -76,6 +76,21 @@ function rejection(status: number, body: unknown): () => Response {
       status,
       headers: { 'content-type': 'application/json', 'retry-after': '0' },
     })
+}
+
+function sseReply(content: string, usage: Usage): () => Response {
+  const frame = (chunk: Record<string, unknown>) =>
+    `data: ${JSON.stringify({ id: 'chatcmpl-test', object: 'chat.completion.chunk', created: 0, model: 'm', ...chunk })}\n\n`
+  return () =>
+    new Response(
+      frame({
+        choices: [{ index: 0, delta: { role: 'assistant', content }, finish_reason: null }],
+      }) +
+        frame({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) +
+        frame({ choices: [], usage }) +
+        'data: [DONE]\n\n',
+      { status: 200, headers: { 'content-type': 'text/event-stream' } },
+    )
 }
 
 const LLAMA_MESSAGE =
@@ -388,5 +403,137 @@ describe('generateStructured: after the reply', () => {
       debug.mock.calls.filter(([logged]) => logged === kind).map((c) => c[2])
     expect(runOf('provider.input_ratio')).toEqual([undefined])
     expect(runOf('provider.prompt_estimate')).toEqual([undefined])
+  })
+})
+
+async function narrative(
+  config: ResolveModelConfig,
+  opts: { cacheSystemPrefix?: boolean; actionId?: string } = {},
+) {
+  const errors: unknown[] = []
+  const call = streamText('narrative', {
+    prompt: HALVES,
+    config,
+    onError: ({ error }) => {
+      errors.push(error)
+    },
+    ...opts,
+  })
+  if (!call.ok) throw new Error(`resolve failed: ${call.kind}`)
+  await call.stream.consumeStream()
+  return { call, errors }
+}
+
+// architecture.md → The pre-send check: the narrative's refusal arrives as its stream error.
+describe('streamText: the window check', () => {
+  it.each([
+    ['openai-compatible', false],
+    ['anthropic', true],
+  ] as const)(
+    'refuses a %s stream over a known window before sending it (cache marker: %s)',
+    async (type, cacheSystemPrefix) => {
+      const { call, errors } = await narrative(useProvider(type, { window: BARE - 1 }), {
+        cacheSystemPrefix,
+      })
+
+      expect(bodies).toEqual([])
+      expect(errors).toHaveLength(1)
+      expect(errors[0]).toBeInstanceOf(ContextWindowError)
+      expect(call.contextWindowFailureOf(errors[0])).toEqual({
+        detectedBy: 'check',
+        estimate: BARE,
+        window: BARE - 1,
+        windowSource: 'configured',
+        providerId: 'prov',
+        modelId: 'm',
+      })
+      expect(call.window).toEqual({ tokens: BARE - 1, source: 'configured' })
+      expect(call.promptEstimate()).toBe(BARE)
+      expect(checkInputTokens).not.toHaveBeenCalled()
+      // The caller logs it (the narrative phase), so the facade must not.
+      expect(windowLogs()).toEqual([])
+    },
+  )
+
+  it.each([
+    ['equal to the estimate', BARE, { tokens: BARE, source: 'configured' }],
+    ['unknown', undefined, { tokens: null, source: 'unknown' }],
+  ] as const)('sends a stream whose window is %s', async (_label, window, resolved) => {
+    answers = [
+      sseReply('The bell rang.', {
+        prompt_tokens: BARE,
+        completion_tokens: 4,
+        total_tokens: BARE + 4,
+      }),
+    ]
+
+    const { call, errors } = await narrative(
+      useProvider('openai-compatible', window === undefined ? {} : { window }),
+    )
+
+    expect(errors).toEqual([])
+    expect(bodies).toHaveLength(1)
+    expect(call.window).toEqual(resolved)
+    expect(call.promptEstimate()).toBe(BARE)
+  })
+
+  it('reads a recognized overflow as a provider-detected failure, after one request', async () => {
+    answers = [rejection(400, LLAMA_OVERFLOW)]
+
+    const { call, errors } = await narrative(useProvider('openai-compatible'))
+
+    expect(bodies).toHaveLength(1)
+    expect(errors).toHaveLength(1)
+    expect(call.contextWindowFailureOf(errors[0])).toEqual({
+      detectedBy: 'provider',
+      estimate: BARE,
+      window: null,
+      windowSource: 'unknown',
+      providerId: 'prov',
+      modelId: 'm',
+      detail: LLAMA_MESSAGE,
+    })
+    expect(windowLogs()).toEqual([])
+  })
+
+  it('reads any other error as no window failure', async () => {
+    answers = [rejection(500, PLAIN_500)]
+
+    const { call, errors } = await narrative(useProvider('openai-compatible'))
+
+    expect(errors).toHaveLength(1)
+    expect(call.contextWindowFailureOf(errors[0])).toBeNull()
+    expect(call.contextWindowFailureOf(new Error('socket hang up'))).toBeNull()
+  })
+})
+
+// architecture.md → Truncation cross-check: run on the finished stream's usage.
+describe('streamText: the truncation cross-check', () => {
+  it("checks a finished stream's reported input against the estimate", async () => {
+    const sink = vi.fn()
+    configureTruncationNotice(sink)
+    answers = [
+      sseReply('The bell rang.', { prompt_tokens: 1, completion_tokens: 4, total_tokens: 5 }),
+    ]
+
+    await narrative(useProvider('openai-compatible'), { actionId: 'act_7' })
+
+    expect(checkInputTokens).toHaveBeenCalledExactlyOnceWith({
+      usage: expect.objectContaining({ inputTokens: 1 }),
+      estimate: BARE,
+      providerId: 'prov',
+      modelId: 'm',
+      actionId: 'act_7',
+    })
+    expect(sink).toHaveBeenCalledExactlyOnceWith({
+      providerId: 'prov',
+      modelId: 'm',
+      reported: 1,
+      estimate: BARE,
+    })
+    // The window check's debug estimate carries the run too.
+    expect(
+      debug.mock.calls.filter(([kind]) => kind === 'provider.prompt_estimate').map((c) => c[2]),
+    ).toEqual([{ actionId: 'act_7' }])
   })
 })

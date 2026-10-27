@@ -155,11 +155,13 @@ describe('streamText', () => {
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.modelId).toBe('model-1')
     expect(streamProviderCall).toHaveBeenCalledWith({
-      model: {},
+      // Wrapped even with no cache marker: the window check rides every stream.
+      model: expect.objectContaining({ doStream: expect.any(Function) }),
       system: ' S\n',
       prompt: ' P\n',
       abortSignal: signal,
       onError,
+      onFinish: expect.any(Function),
       temperature: 0.7,
       maxOutputTokens: 2048,
       providerOptions: { anthropic: { thinking: { type: 'enabled', budgetTokens: 1024 } } },
@@ -912,19 +914,6 @@ describe('cache marker', () => {
   ])('leaves both calls unmarked on %s', async (_label, type, cacheSystemPrefix) => {
     expect(await streamMark(type, cacheSystemPrefix)).toBeUndefined()
     expect(await structuredMark(type, cacheSystemPrefix)).toBeUndefined()
-  })
-
-  it('hands the stream call the unwrapped model when it marks nothing', () => {
-    const inner = recordingModel()
-    vi.mocked(getModel).mockReturnValueOnce(inner.model as never)
-
-    streamText('narrative', {
-      prompt: { system: 'S', user: 'P' },
-      config: config('openai-compatible'),
-      cacheSystemPrefix: true,
-    })
-
-    expect(vi.mocked(streamProviderCall).mock.calls.at(-1)?.[0].model).toBe(inner.model)
   })
 })
 
