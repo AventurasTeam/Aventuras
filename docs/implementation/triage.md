@@ -240,4 +240,113 @@ slice-planning gate forces its resolution before that slice is planned.
   to a row, and neither of its callers does. Playwright's strict mode fails
   loudly on a second match, so nothing passes by accident today. Raised
   by the cut-off replies slice review; the simplifier left the lift for
-  a home.
+  a home. The context window check added a fourth copy
+  (`context-window.spec.ts`), and `e2e/harness/seed.ts` now repeats
+  its providers read-modify-write block three times
+  (`setProviderEndpoint`, `addProviderCustomModel`,
+  `setContextWindowOverride`).
+
+- **Overflow recognition misses shapes beyond llama.cpp's and OpenAI's.**
+  [`architecture.md → Recognizing an overflow rejection`](../architecture.md#recognizing-an-overflow-rejection)
+  is verified against those two servers only. Recalled by the context
+  window check's reviews and not checked against each server:
+  Anthropic rejects a prompt plus `max_tokens` with "input length and
+  `max_tokens` exceed context limit", and LM Studio says "context
+  length"; neither matches a canon keyword, so both read as a plain
+  provider failure. Gemini's OpenAI-compatible endpoint may wrap its
+  error body in an array, which still matches by keyword but quotes the
+  whole JSON as the provider's message. The capability hint matches any
+  4xx, a 429 included, so an aggregator's rate-limit body that echoes a
+  model id containing `thinking` or `reasoning` gets the hint and
+  `Fix profile`. Reproduced through the real SDK (Task 10 review): an
+  overflow sent as an in-stream error part, then a stall, fails the turn
+  as a provider timeout, because an expired stream fails as a timeout
+  ([`generation-pipeline.md → Two retry tiers, both at phase level`](../generation-pipeline.md#two-retry-tiers-both-at-phase-level));
+  the servers above reject an overflow with a 400 before streaming.
+
+- **The truncation cross-check may warn on every warm turn of a server
+  that counts only uncached prompt tokens.** Canon names Ollama as a
+  server that cuts prompts silently
+  ([`architecture.md → Truncation cross-check`](../architecture.md#truncation-cross-check)).
+  Nobody has checked whether its OpenAI-compatible `prompt_tokens`
+  includes the KV-cache tokens it reused. If it doesn't, a cached story
+  prefix puts the ratio under 0.5 on most turns: a warn log each call
+  and a false toast once per model per session. llama.cpp counts them
+  (`prompt_tokens` 913 with `cached_tokens` 908, Task 6 review). Raised
+  by the context window check.
+
+- **Detected windows on embedding models and parallel slots.** vLLM
+  publishes `max_model_len` on an embedding model too, so the catalog
+  now stores it as that model's `contextWindow`, while the embedder
+  reads only `maxInputTokens` (`lib/embedder/input-window.ts`), whose
+  schema comment says no OpenAI-compatible field publishes it. Whether
+  the embedder falls back to the detected window is a canon question.
+  Separately,
+  [`architecture.md → Detection`](../architecture.md#detection) calls
+  `meta.n_ctx` llama.cpp's per-slot size; on a server started with
+  `--parallel N` and no unified KV cache it may be the total across
+  slots, which overstates the window and ends in a recognized rejection
+  rather than a refusal. The dev router runs `--parallel 1`, so this is
+  unchecked. Raised by the context window check's Task 2 review.
+
+- **A capability editor must store an explicit `false`.**
+  `normalizeModelCatalog` (`lib/ai/catalog.ts`) lets a stored capability
+  key, `false` included, beat detection, and re-detects a key the stored
+  entry lacks on every fetch. The M7 settings editor must therefore
+  write `false` to turn a detected flag off; deleting the key turns it
+  back on at the next refresh. A code comment said so until the context
+  window check compressed it; no canon does.
+
+- **Window-failure copy has rough edges.** From the context window
+  check's Task 11 and 12 reviews:
+  - The provider's message is quoted in the entry's content, which
+    renders through `marked`, so markdown in it (`*x*`, a `#` line)
+    changes the quote. It is sanitized, so not a security issue.
+  - The message shows twice: in the quote and in the muted detail line,
+    `describeContextWindow`'s, which also shows the internal provider
+    id.
+  - A message that ends in a period renders as `….”.`.
+  - `common:contextWindowSource.*` is a translated fragment slotted into
+    sentences; a language with grammatical gender can't agree it with
+    "window". i18next's `context` option would let each sentence carry
+    its own wording.
+  - The suggestion strip's and wizard-assist's window copy names no
+    remedy, and Retry on a check refusal refuses the same prompt again;
+    the turn entry's copy carries the remedies.
+  - A hinted provider failure replaces "LLM call failed." with copy
+    that starts "The provider rejected the request.", where
+    [`reader-composer.md → Transient pipeline failures`](../ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)
+    says the entry adds the hint.
+
+- **The narrative reports every non-window stream error as `network`.**
+  `lib/pipeline/definitions/per-turn.ts` maps a stream error to
+  `reason: 'network'`, a 401 or 403 and other 4xx included, where
+  `classifyProviderError` would give `auth` or `unknown`; the reader
+  then shows "network: APICallError: Unauthorized". The context window
+  check kept it, as a separate behaviour change. The provider `reason`
+  union is also spelled twice, in
+  `lib/ai/transport/classify-provider-error.ts` and
+  `lib/pipeline/types.ts`, with nothing tying the copies together.
+
+- **The E2E mock repeats the dev mock's helpers.**
+  `e2e/harness/mock-llm.ts` has its own `promptText` (the dev mock's is
+  in `scripts/mock-llm/routing.ts`), and both mocks' usage counts now
+  depend on it, so they can drift apart. Its `cors` object repeats
+  `CORS_HEADERS` from `scripts/mock-llm/respond/wire.ts`, its
+  `JSON.parse` of a request body is unguarded (the dev mock answers a
+  bad body with a 400), and its one-shot controls are never reset
+  between tests in a describe, so one armed in a test that fails before
+  its call carries into the next. Raised by the context window check's
+  Task 14 review.
+
+- **A cut-off's `window` cause reads the estimate, not the server's
+  count.** `replyCutOff` (`lib/ai/reply-cut-off.ts`) gives `window` only
+  when the o200k estimate plus the output reaches the figure
+  ([`generation-pipeline.md → Cut-off replies`](../generation-pipeline.md#cut-off-replies)).
+  On a model whose tokenizer counts above o200k, as Gemma 4 does English
+  ([`parked.md`](../parked.md) records 6-7%), a genuinely full known
+  window lands below the figure and reads `unknown`, and the notice
+  points at `Fix profile`. With `includeUsage` on, a cut-off reply now
+  usually carries the provider's own input count, which would make the
+  cause exact. A canon design change. Raised by the context window
+  check's Task 16 review.
