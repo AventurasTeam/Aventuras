@@ -6,10 +6,10 @@ import { countTokens } from '@/lib/retrieval'
 import type { ProviderInstance } from '../db'
 import type { ModelPrompt } from './prompt-schema'
 
-export type WindowSource = 'configured' | 'detected' | 'unknown'
 export type GenerationWindow =
   | { tokens: number; source: 'configured' | 'detected' }
   | { tokens: null; source: 'unknown' }
+export type WindowSource = GenerationWindow['source']
 
 /** generation-pipeline.md → Two retry tiers. */
 export type ContextWindowFailure = {

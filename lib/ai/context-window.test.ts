@@ -97,6 +97,14 @@ describe('generationWindow', () => {
     })
   })
 
+  // Only prov-1 configures qwen.
+  it.each(['prov-2', 'prov-gone'])(
+    "never reads another provider's configured figure (%s)",
+    (id) => {
+      expect(generationWindow(PROVIDERS, id, 'qwen')).toEqual({ tokens: null, source: 'unknown' })
+    },
+  )
+
   it('reads no inherited property as a configured figure', () => {
     expect(generationWindow(PROVIDERS, 'prov-1', 'constructor')).toEqual({
       tokens: null,
@@ -403,6 +411,7 @@ describe('windowCheckMiddleware last in a chain', () => {
     const { sent, call } = structuredCall({ tokens: ESTIMATE, source: 'detected' })
     const error = await refusalOf(call)
     expect(error.failure.window).toBe(ESTIMATE)
+    expect(error.failure.windowSource).toBe('detected')
     expect(error.failure.estimate).toBeGreaterThan(ESTIMATE)
     expect(sent.doGenerateCalls).toHaveLength(0)
   })
