@@ -33,6 +33,7 @@ import {
   isUpwardScrollKey,
 } from '@/lib/reader-scroll'
 
+import { keptSubmissionText } from './composer-draft'
 import type { EditResult, ReaderSurfaceHandle, ReaderSurfaceProps } from './reader-document-types'
 import { headTurnIdsOf, rowReversalFlags } from './row-reversal-flags'
 import { resolveSaveAndRegenTurn } from './save-and-regen'
@@ -144,8 +145,9 @@ const ReaderRow = memo(function ReaderRow({
   onCopySystemText,
 }: ReaderRowProps) {
   const isSystem = row.kind === 'system'
-  const submitted = isSystem ? row.metadata?.systemFailure?.submission?.content : undefined
-  const heldText = submitted != null && submitted.trim() !== '' ? submitted : undefined
+  const heldText = isSystem
+    ? keptSubmissionText(row.metadata?.systemFailure?.submission)
+    : undefined
   const timeEditable = worldTimeRaw != null && worldTimeFrame != null
   // A NULL metadata column carries no absolute triple to edit: the action layer rejects
   // it and useSceneEditing will not open the sheet, so offering the control would leave
