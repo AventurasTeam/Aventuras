@@ -3342,6 +3342,12 @@ describe('periodicClassifierPhase — the writer map', () => {
     createdAt: 1,
     updatedAt: 1,
   }
+  const happeningAt = (id: string, title: string, occurredAtEntryId: string | null): Happening => ({
+    ...fire,
+    id,
+    title,
+    occurredAtEntryId,
+  })
   const amulet: Thread = {
     id: THR_AMULET,
     branchId: 'b1',
@@ -3435,28 +3441,27 @@ describe('periodicClassifierPhase — the writer map', () => {
       recoverable: [],
       value: extraction(),
     } as never)
-    const scene = { sceneEntities: [], currentLocationId: null, worldTime: 0 }
     // Turns 4 and 5 to classify, one entry of reach-back, and 1-3 a closed chapter.
     const h = await ctxWith({
       processedThrough: 3,
       headPosition: 5,
       protectedBuffer: 1,
-      entryMetadata: { 4: { ...scene, injectedHappenings: [HAP_FIRE] } },
+      entryMetadata: {
+        4: {
+          sceneEntities: [],
+          currentLocationId: null,
+          worldTime: 0,
+          injectedHappenings: [HAP_FIRE],
+        },
+      },
     })
     await h.ctx.db.run(sql`UPDATE story_entries SET chapter_id = 'ch1' WHERE position <= 3`)
-    const at = (id: string, title: string, occurredAtEntryId: string | null, temporal = null) => ({
-      ...fire,
-      id,
-      title,
-      occurredAtEntryId,
-      temporal,
-    })
     happeningsStore.hydrate('b1', [
-      at('hap_55555555-5555-5555-5555-555555555551', 'Before the reach-back', 'e2'),
-      at('hap_55555555-5555-5555-5555-555555555552', 'In the reach-back', 'e3'),
-      at('hap_55555555-5555-5555-5555-555555555553', 'In the window', 'e5'),
+      happeningAt('hap_55555555-5555-5555-5555-555555555551', 'Before the reach-back', 'e2'),
+      happeningAt('hap_55555555-5555-5555-5555-555555555552', 'In the reach-back', 'e3'),
+      happeningAt('hap_55555555-5555-5555-5555-555555555553', 'In the window', 'e5'),
       { ...fire, temporal: 'years past' },
-      at('hap_55555555-5555-5555-5555-555555555554', 'Never given', null),
+      happeningAt('hap_55555555-5555-5555-5555-555555555554', 'Never given', null),
     ])
 
     await drain(h.ctx)
@@ -3476,18 +3481,8 @@ describe('periodicClassifierPhase — the writer map', () => {
     } as never)
     const h = await ctxWith({ processedThrough: 0, headPosition: 21 })
     happeningsStore.hydrate('b1', [
-      {
-        ...fire,
-        id: 'hap_55555555-5555-5555-5555-555555555555',
-        title: 'At the cut',
-        occurredAtEntryId: 'e20',
-      },
-      {
-        ...fire,
-        id: 'hap_55555555-5555-5555-5555-555555555556',
-        title: 'Past the cut',
-        occurredAtEntryId: 'e21',
-      },
+      happeningAt('hap_55555555-5555-5555-5555-555555555555', 'At the cut', 'e20'),
+      happeningAt('hap_55555555-5555-5555-5555-555555555556', 'Past the cut', 'e21'),
     ])
 
     await drain(h.ctx)

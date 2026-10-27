@@ -50,6 +50,15 @@ describe('readStoryPlace', () => {
 
 // classifier.md → What the classifier reads → Known happenings.
 describe('readRecentEntryIds', () => {
+  const reply = (branchId: string, id: string, position: number) => ({
+    id,
+    branchId,
+    position,
+    kind: 'ai_reply' as const,
+    content: 'x',
+    chapterId: null,
+    createdAt: position,
+  })
   // e1-e4 a closed chapter, e5 a system row, e6-e9 the open region.
   async function seed() {
     const { db } = await createTestDb()
@@ -57,13 +66,9 @@ describe('readRecentEntryIds', () => {
     await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
     await db.insert(storyEntries).values(
       Array.from({ length: 9 }, (_, i) => ({
-        id: `e${i + 1}`,
-        branchId: 'b1',
-        position: i + 1,
+        ...reply('b1', `e${i + 1}`, i + 1),
         kind: i === 4 ? ('system' as const) : ('ai_reply' as const),
-        content: 'x',
         chapterId: i < 4 ? 'ch1' : null,
-        createdAt: i + 1,
       })),
     )
     return db
@@ -104,17 +109,9 @@ describe('readRecentEntryIds', () => {
   it("leaves out another branch's entries", async () => {
     const db = await seed()
     await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'alt', createdAt: 1 })
-    await db.insert(storyEntries).values(
-      [1, 2].map((position) => ({
-        id: `b2-e${position}`,
-        branchId: 'b2',
-        position,
-        kind: 'ai_reply' as const,
-        content: 'x',
-        chapterId: null,
-        createdAt: position,
-      })),
-    )
+    await db
+      .insert(storyEntries)
+      .values([1, 2].map((position) => reply('b2', `b2-e${position}`, position)))
     const ids = await readRecentEntryIds(db, 'b1', {
       firstPosition: 8,
       lastPosition: 9,
