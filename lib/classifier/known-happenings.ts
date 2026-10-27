@@ -1,8 +1,7 @@
 import type { Happening } from '@/lib/db'
 
 /**
- * classifier.md → What the classifier reads → Known happenings: the happenings the window's turns
- * were given, and those that occurred in the recent entries. A happening with no narrative
+ * classifier.md → What the classifier reads → Known happenings. A happening with no narrative
  * position joins only through a record; a recorded id with no row is left out.
  */
 export function knownHappenings<H extends Pick<Happening, 'id' | 'occurredAtEntryId'>>(

@@ -169,9 +169,8 @@ function parseFailureText(detail: string): string {
     .join('; ')
 }
 
-// As the planner anchors them (classifier.md → What the classifier writes → Happenings): a blank
-// title creates nothing, a recounted one carries a temporal, the rest sit at a source turn that
-// resolves or get no position. The temporal values are printed so filler like "none" shows.
+// As the planner anchors them (classifier.md → What the classifier writes → Happenings); the
+// temporal values print so filler like "none" shows.
 function anchorCounts(
   happenings: readonly { title: string; temporal?: string; sourceTurn?: string }[],
   window: ClassifierWindow,
