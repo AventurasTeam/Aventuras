@@ -6,6 +6,7 @@
   "labelWithCount": "{{label}} ({{value}})",
   "entryRef": "entry #{{n}}",
   "entryRefDangling": "Entry no longer exists",
+  "truncationWarning": "{{model}} may have dropped part of the prompt: it counted {{reported, number}} tokens where about {{estimate, number}} were sent. Set its context window.",
   "relativeTime": {
     "justNow": "just now",
     "minutes_one": "{{count}}m ago",
