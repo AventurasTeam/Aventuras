@@ -21,7 +21,7 @@ const CHECKED: ContextWindowFailure = {
   modelId: 'llama3.1:70b',
 }
 
-// An overflow on a model with no known window: nothing was checked before the send.
+// An overflow on a model with no known window: nothing could be refused before the send.
 const REJECTED_UNQUOTED: ContextWindowFailure = {
   detectedBy: 'provider',
   estimate: 71_234,
