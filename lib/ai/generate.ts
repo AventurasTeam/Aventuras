@@ -298,6 +298,8 @@ export function describeCallRetryError(error: CallRetryError): string {
  * Resolve `target`'s model, call it with `prompt`, and parse the reply against
  * `schema` (retrying provider + parse failures). A generic structured-output
  * generation primitive: the caller supplies the agent target and the Zod schema.
+ * A call over a known window is refused unsent; a window failure, checked or provider-reported,
+ * is never retried.
  */
 export async function generateStructured<T>(
   target: ResolveTarget,
@@ -348,7 +350,7 @@ export async function generateStructured<T>(
       onEstimate: (tokens) => {
         estimate = tokens
       },
-      ...(options.actionId !== null ? { actionId: options.actionId } : {}),
+      ...attribution,
     }),
   ])
 
@@ -402,7 +404,7 @@ export async function generateStructured<T>(
           estimate,
           providerId,
           modelId,
-          ...(options.actionId !== null ? { actionId: options.actionId } : {}),
+          ...attribution,
         })
         return { text: call.text, finishReason: call.finishReason, usage: call.usage }
       } catch (error) {

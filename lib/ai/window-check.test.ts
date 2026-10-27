@@ -384,9 +384,9 @@ describe('generateStructured: after the reply', () => {
     await structured(useProvider('openai-compatible'), null)
 
     expect(checkInputTokens).toHaveBeenCalledOnce()
-    expect(vi.mocked(checkInputTokens).mock.calls[0]?.[0]).not.toHaveProperty('actionId')
-    expect(
-      debug.mock.calls.filter(([kind]) => kind === 'provider.prompt_estimate').map((c) => c[2]),
-    ).toEqual([undefined])
+    const runOf = (kind: string) =>
+      debug.mock.calls.filter(([logged]) => logged === kind).map((c) => c[2])
+    expect(runOf('provider.input_ratio')).toEqual([undefined])
+    expect(runOf('provider.prompt_estimate')).toEqual([undefined])
   })
 })
