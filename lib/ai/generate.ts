@@ -247,9 +247,8 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
     ...promptParams(opts.prompt),
     ...(abortSignal !== undefined ? { abortSignal } : {}),
     ...(opts.onError !== undefined ? { onError: opts.onError } : {}),
-    // The bound is disposed on finish and abort, not on an error: the SDK reports each error part
-    // and reads on, so a stall can follow. After a fatal one the stream is over, and the timer
-    // lapses on a call nothing awaits.
+    // Not disposed on an error: the SDK reports each error part and reads on, so a stall can
+    // follow. After a fatal one the timer lapses on a call nothing awaits.
     onFinish: ({ usage }) => {
       bounded?.dispose()
       checkInputTokens({ usage, estimate, providerId, modelId, ...attribution })

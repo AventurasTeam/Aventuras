@@ -477,24 +477,31 @@ describe('streamText: the window check', () => {
     expect(call.promptEstimate()).toBe(BARE)
   })
 
-  it('reads a recognized overflow as a provider-detected failure, after one request', async () => {
-    answers = [rejection(400, LLAMA_OVERFLOW)]
+  it.each([
+    ['unknown', undefined, { window: null, windowSource: 'unknown' }],
+    ['known', BARE, { window: BARE, windowSource: 'configured' }],
+  ] as const)(
+    'reads a recognized overflow as a provider-detected failure under a %s window, after one request',
+    async (_label, window, known) => {
+      answers = [rejection(400, LLAMA_OVERFLOW)]
 
-    const { call, errors } = await narrative(useProvider('openai-compatible'))
+      const { call, errors } = await narrative(
+        useProvider('openai-compatible', window === undefined ? {} : { window }),
+      )
 
-    expect(bodies).toHaveLength(1)
-    expect(errors).toHaveLength(1)
-    expect(call.contextWindowFailureOf(errors[0])).toEqual({
-      detectedBy: 'provider',
-      estimate: BARE,
-      window: null,
-      windowSource: 'unknown',
-      providerId: 'prov',
-      modelId: 'm',
-      detail: LLAMA_MESSAGE,
-    })
-    expect(windowLogs()).toEqual([])
-  })
+      expect(bodies).toHaveLength(1)
+      expect(errors).toHaveLength(1)
+      expect(call.contextWindowFailureOf(errors[0])).toEqual({
+        detectedBy: 'provider',
+        estimate: BARE,
+        ...known,
+        providerId: 'prov',
+        modelId: 'm',
+        detail: LLAMA_MESSAGE,
+      })
+      expect(windowLogs()).toEqual([])
+    },
+  )
 
   it('reads any other error as no window failure', async () => {
     answers = [rejection(500, PLAIN_500)]
