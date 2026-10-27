@@ -1,7 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 
-import type { ProviderInstance } from '../db'
-import { resolveModelCapabilities } from './model-capabilities'
+import type { ProviderCapabilities, ProviderInstance } from '../db'
+import { resolveModelCapabilities, type ModelCapabilities } from './model-capabilities'
+
+describe('ModelCapabilities', () => {
+  it('is the stored capabilities type, so a schema key reaches every caller', () => {
+    expectTypeOf<ModelCapabilities>().toEqualTypeOf<ProviderCapabilities>()
+  })
+})
 
 describe('resolveModelCapabilities', () => {
   const mockProviders: ProviderInstance[] = [
