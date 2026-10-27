@@ -4,6 +4,7 @@ import { logger } from '@/lib/diagnostics'
 import { countTokens } from '@/lib/retrieval'
 
 import type { ProviderInstance } from '../db'
+import { resolveModelCapabilities } from './model-capabilities'
 import type { ModelPrompt } from './prompt-schema'
 import { recognizeOverflow } from './transport/classify-provider-error'
 
@@ -43,14 +44,12 @@ export function generationWindow(
   providerId: string,
   modelId: string,
 ): GenerationWindow {
-  const provider = providers.find((p) => p.id === providerId)
-  const overrides = provider?.contextWindowOverrides
+  const overrides = providers.find((p) => p.id === providerId)?.contextWindowOverrides
   // hasOwn: a model id such as `constructor` must not read Object.prototype.
   if (overrides !== undefined && Object.hasOwn(overrides, modelId)) {
     return { tokens: overrides[modelId], source: 'configured' }
   }
-  const cached = provider?.cachedModels?.find((m) => m.id === modelId)
-  const detected = cached?.capabilities?.contextWindow
+  const detected = resolveModelCapabilities(providerId, modelId, providers)?.contextWindow
   if (detected !== undefined) return { tokens: detected, source: 'detected' }
   return { tokens: null, source: 'unknown' }
 }
