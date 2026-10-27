@@ -261,8 +261,6 @@ export async function* periodicClassifierPhase(
   const threads = [...threadsStore.getThreads().values()].filter((t) => t.branchId === ctx.branchId)
   // classifier.md → Mentioned places: read once, so prompt and reply schema agree.
   const mentionedPlaces = open.settings.classifierMentionedPlaces
-  // classifier.md → What the classifier reads → Known happenings: what the window's turns were
-  // given, and the recent ones, not every happening on the branch.
   const happenings = knownHappenings(
     [...happeningsStore.getHappenings().values()].filter((h) => h.branchId === ctx.branchId),
     {

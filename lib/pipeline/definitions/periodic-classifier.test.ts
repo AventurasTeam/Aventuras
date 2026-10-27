@@ -133,7 +133,7 @@ async function ctxWith(opts: {
   entryMetadata?: Record<number, StoryEntry['metadata']>
   onWatermark?: (n: number) => void
   mentionedPlaces?: boolean
-  /** stories.settings.protectedBuffer; unset reads as 0. */
+  /** stories.settings.protectedBuffer. Unset, no reach-back: the harness skips the 10 default. */
   protectedBuffer?: number
 }): Promise<Harness> {
   const { db, sqlite } = await createTestDb()
