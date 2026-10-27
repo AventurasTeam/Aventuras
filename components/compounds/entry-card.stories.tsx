@@ -853,6 +853,38 @@ export const SystemHeldTextClamped: StoryT = {
   },
 }
 
+// One paragraph: the line break in HELD_LONG never fits two lines at any width.
+const HELD_PARAGRAPH =
+  'I lean over the ledger and trace the broken seal with one finger, then look up at Tomas and wait.'
+
+const resizableFrameDecorator = (Story: () => ReactElement) => (
+  <View testID="resizable-frame" style={{ width: 260 }}>
+    <Story />
+  </View>
+)
+
+/** `Show all` follows the card's width: gone once the text fits two lines, back when it doesn't. */
+export const SystemHeldTextRemeasures: StoryT = {
+  decorators: [resizableFrameDecorator],
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: SYSTEM_CONTENT,
+    heldText: HELD_PARAGRAPH,
+    onRetry: fn(),
+    onDismiss: fn(),
+  },
+  play: async () => {
+    const frame = screen.getByTestId('resizable-frame')
+    const showAll = { name: t('reader:systemEntry.showAll') }
+    expect(await screen.findByRole('button', showAll)).toBeVisible()
+    frame.style.width = '1100px'
+    await waitFor(() => expect(screen.queryByRole('button', showAll)).not.toBeInTheDocument())
+    frame.style.width = '260px'
+    expect(await screen.findByRole('button', showAll)).toBeVisible()
+  },
+}
+
 const HELD_MARKUP = 'I *lean* in. <b>Now.</b>'
 
 /** Plain text, never markdown: the asterisks and the tag the user typed stay literal. */
@@ -1039,6 +1071,9 @@ export const SystemPhoneWidth: StoryT = {
   },
 }
 
+const DETAIL_MULTILINE =
+  'unknown: APICallError: 400 Bad Request\n{\n  "error": "context length exceeded"\n}'
+
 /** A run holds the gate: Retry and Dismiss wait, the copy buttons and both toggles stay live. */
 export const SystemLiveWhileDisabled: StoryT = {
   ...wrap,
@@ -1047,7 +1082,7 @@ export const SystemLiveWhileDisabled: StoryT = {
     tier: 'desktop',
     content: SYSTEM_CONTENT,
     heldText: HELD_LONG,
-    detail: SYSTEM_DETAIL,
+    detail: DETAIL_MULTILINE,
     onCopy: fn(),
     onRetry: fn(),
     onDismiss: fn(),
@@ -1063,20 +1098,30 @@ export const SystemLiveWhileDisabled: StoryT = {
       await screen.findByRole('button', { name: t('reader:systemEntry.showLess') }),
     ).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: t('reader:systemEntry.details') }))
-    expect(await screen.findByText(SYSTEM_DETAIL)).toBeVisible()
+    // Identity normalizer: the default one collapses the detail's line breaks.
+    expect(await screen.findByText(DETAIL_MULTILINE, { normalizer: (text) => text })).toBeVisible()
     await userEvent.click(
       screen.getByRole('button', { name: t('reader:systemEntry.copyHeldText') }),
     )
     await userEvent.click(screen.getByRole('button', { name: t('reader:systemEntry.copyDetails') }))
     await waitFor(() => expect(args.onCopy).toHaveBeenCalledTimes(2))
+    // Verbatim: line breaks and indentation reach the clipboard as stored.
+    expect(args.onCopy).toHaveBeenNthCalledWith(1, HELD_LONG)
+    expect(args.onCopy).toHaveBeenNthCalledWith(2, DETAIL_MULTILINE)
   },
 }
 
+// Spacers on both sides, so a collapse never clamps scrollTop; no scroll anchoring, so only the
+// card moves the scroller.
 const revealScrollerDecorator = (Story: () => ReactElement) => (
-  <View testID="reveal-scroller" style={{ width: 600, height: 260, overflow: 'scroll' }}>
+  <div
+    data-testid="reveal-scroller"
+    style={{ width: 600, height: 260, overflowY: 'auto', overflowAnchor: 'none' }}
+  >
     <View style={{ height: 600 }} />
     <Story />
-  </View>
+    <View style={{ height: 600 }} />
+  </div>
 )
 
 function revealScroller(): HTMLElement {
@@ -1088,6 +1133,12 @@ function alignToBottom(edge: HTMLElement) {
   const scroller = revealScroller()
   scroller.scrollTop +=
     edge.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom
+}
+
+// `block: 'nearest'` from below the fold: the block's bottom lands on the scroller's, no further.
+function expectAtFold(block: HTMLElement) {
+  const fold = revealScroller().getBoundingClientRect().bottom
+  expect(Math.abs(block.getBoundingClientRect().bottom - fold)).toBeLessThanOrEqual(2)
 }
 
 /** Opening `Details` below the fold scrolls just far enough to show it. */
@@ -1109,9 +1160,7 @@ export const SystemRevealDetails: StoryT = {
     await userEvent.click(toggle)
     const detail = await screen.findByText(SYSTEM_DETAIL)
     await waitFor(() => expect(scroller.scrollTop).toBeGreaterThan(before))
-    expect(detail.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-      scroller.getBoundingClientRect().bottom + 1,
-    )
+    expectAtFold(detail)
   },
 }
 
@@ -1136,9 +1185,56 @@ export const SystemRevealHeldText: StoryT = {
     await userEvent.click(showAll)
     await screen.findByRole('button', { name: t('reader:systemEntry.showLess') })
     await waitFor(() => expect(scroller.scrollTop).toBeGreaterThan(before))
-    expect(quote.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-      scroller.getBoundingClientRect().bottom + 1,
+    expectAtFold(quote)
+  },
+}
+
+/** A held entry mounting below the fold scrolls nothing: only a tap reveals. */
+export const SystemRevealNotOnMount: StoryT = {
+  decorators: [revealScrollerDecorator],
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: SYSTEM_CONTENT,
+    heldText: HELD_LONG,
+    onRetry: fn(),
+    onDismiss: fn(),
+  },
+  play: async () => {
+    await screen.findByRole('button', { name: t('reader:systemEntry.showAll') })
+    const scroller = revealScroller()
+    expect(scroller.scrollTop).toBe(0)
+    expect(heldQuote().getBoundingClientRect().top).toBeGreaterThan(
+      scroller.getBoundingClientRect().bottom,
     )
+  },
+}
+
+/** Collapsing the quote with its top scrolled past leaves the reader where it is. */
+export const SystemCollapseMovesNothing: StoryT = {
+  decorators: [revealScrollerDecorator],
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: SYSTEM_CONTENT,
+    heldText: HELD_LONG,
+    onRetry: fn(),
+    onDismiss: fn(),
+  },
+  play: async () => {
+    await userEvent.click(
+      await screen.findByRole('button', { name: t('reader:systemEntry.showAll') }),
+    )
+    const showLess = await screen.findByRole('button', { name: t('reader:systemEntry.showLess') })
+    const quote = heldQuote()
+    const scroller = revealScroller()
+    // The quote's top 20 px above the scroller's, so a reveal would scroll back; Show less in view.
+    scroller.scrollTop +=
+      quote.getBoundingClientRect().top - scroller.getBoundingClientRect().top + 20
+    const before = scroller.scrollTop
+    await userEvent.click(showLess)
+    await waitFor(() => expect(quoteLines(quote)).toBeCloseTo(2, 0))
+    expect(scroller.scrollTop).toBe(before)
   },
 }
 
