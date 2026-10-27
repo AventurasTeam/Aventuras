@@ -978,10 +978,9 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const parentAnchor = anchor(happening.sourceTurn)
     const happeningId = newId('hap')
     const timestamp = now()
-    // classifier.md → What the classifier writes → Happenings: at its source turn, unless recounted
-    // with a temporal; the table CHECK keeps the two exclusive. Not through anchor():
-    // occurred_at_entry_id is a story-time claim retrieval and the Plot screen read as fact, so a
-    // head-fallback would assert the happening occurred at the newest window turn.
+    // No head fallback (anchor()): retrieval, the Plot screen and a later pass's Known happenings
+    // read occurred_at_entry_id as when it happened. A temporal nulls it too, as
+    // happenings_mutual_excl demands (classifier.md → What the classifier writes → Happenings).
     const temporal = nonBlank(happening.temporal) ?? null
     const source = window.resolveHandle(happening.sourceTurn)
     const occurredAtEntryId = temporal == null && !source.fellBack ? source.entryId : null
