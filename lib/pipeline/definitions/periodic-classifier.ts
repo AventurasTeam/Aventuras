@@ -25,6 +25,7 @@ import {
   RECONCILED_KINDS,
   reconcileNewEntity,
   substituteClassifierIds,
+  type ClassifierWindow,
   type PlanResult,
   type ReconciledKind,
   type ReconcileDecision,
@@ -33,7 +34,9 @@ import {
   branches,
   storyEntries,
   type ClassifierStatus,
+  type DbCtx,
   type Entity,
+  type Happening,
   type StoryEntry,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -104,6 +107,24 @@ export function passTimeoutMs(config: ResolveModelConfig): number {
   return (
     profileTimeoutMs(resolved.ok ? resolved.params.timeout : undefined) ?? PASS_TIMEOUT_DEFAULT_MS
   )
+}
+
+/** classifier.md → What the classifier reads → Known happenings, for a window that isn't empty. */
+export async function readKnownHappenings(
+  db: DbCtx['db'],
+  branchId: string,
+  happenings: readonly Happening[],
+  window: ClassifierWindow,
+  protectedBuffer: number,
+): Promise<Happening[]> {
+  return knownHappenings(happenings, {
+    recorded: window.injectedHappenings,
+    recentEntryIds: await readRecentEntryIds(db, branchId, {
+      firstPosition: window.turns[0]!.position,
+      lastPosition: window.turns.at(-1)!.position,
+      protectedBuffer,
+    }),
+  })
 }
 
 type CallFailure = Exclude<GenerateStructuredResult<unknown>, { status: 'ok' }>
@@ -261,16 +282,12 @@ export async function* periodicClassifierPhase(
   const threads = [...threadsStore.getThreads().values()].filter((t) => t.branchId === ctx.branchId)
   // classifier.md → Mentioned places: read once, so prompt and reply schema agree.
   const mentionedPlaces = open.settings.classifierMentionedPlaces
-  const happenings = knownHappenings(
+  const happenings = await readKnownHappenings(
+    ctx.db,
+    ctx.branchId,
     [...happeningsStore.getHappenings().values()].filter((h) => h.branchId === ctx.branchId),
-    {
-      recorded: window.injectedHappenings,
-      recentEntryIds: await readRecentEntryIds(ctx.db, ctx.branchId, {
-        firstPosition: window.turns[0]!.position,
-        lastPosition: window.turns.at(-1)!.position,
-        protectedBuffer: open.settings.protectedBuffer,
-      }),
-    },
+    window,
+    open.settings.protectedBuffer,
   )
   // The stored pairs a listed happening's awareness skips (plan.ts → knownAwareness).
   const awareness = [...happeningAwarenessStore.getAwareness().values()].filter(

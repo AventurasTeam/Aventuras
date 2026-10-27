@@ -13,7 +13,6 @@ import {
 import {
   buildClassifierWindow,
   classifierReplySchema,
-  knownHappenings,
   readClassifierReply,
   type ClassifierWindow,
 } from '@/lib/classifier'
@@ -35,8 +34,10 @@ import {
 import { dbSchema } from '@/lib/db/schema'
 import { IdBiMap } from '@/lib/ids'
 import { buildClassifierContext } from '@/lib/pipeline/definitions/classifier-context'
-import { readRecentEntryIds } from '@/lib/pipeline/definitions/entry-reads'
-import { PASS_TIMEOUT_DEFAULT_MS } from '@/lib/pipeline/definitions/periodic-classifier'
+import {
+  PASS_TIMEOUT_DEFAULT_MS,
+  readKnownHappenings,
+} from '@/lib/pipeline/definitions/periodic-classifier'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore, hydrateAppSettings } from '@/lib/stores'
 
@@ -116,14 +117,13 @@ async function readBranch(dbPath: string, maxEntries: number): Promise<Branch> {
         .select()
         .from(entities)
         .where(eq(entities.branchId, BRANCH_ID))) as Entity[],
-      happenings: knownHappenings(branchHappenings, {
-        recorded: window.injectedHappenings,
-        recentEntryIds: await readRecentEntryIds(db, BRANCH_ID, {
-          firstPosition: window.turns[0]!.position,
-          lastPosition: window.turns.at(-1)!.position,
-          protectedBuffer: settings.protectedBuffer,
-        }),
-      }),
+      happenings: await readKnownHappenings(
+        db,
+        BRANCH_ID,
+        branchHappenings,
+        window,
+        settings.protectedBuffer,
+      ),
       relationships: (await db
         .select()
         .from(characterRelationships)
@@ -175,7 +175,7 @@ function parseFailureText(detail: string): string {
 function anchorCounts(
   happenings: readonly { title: string; temporal?: string; sourceTurn?: string }[],
   window: ClassifierWindow,
-) {
+): string {
   const titled = happenings.filter((h) => h.title.trim() !== '')
   const temporals = titled.map((h) => h.temporal?.trim() ?? '').filter((t) => t !== '')
   const placed = titled.filter((h) => (h.temporal?.trim() ?? '') === '')
