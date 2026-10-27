@@ -228,14 +228,15 @@ convention, and the expectation that subsystems route through
   over its model's window, logged once per call with `detectedBy`,
   `estimate`, `window`, `windowSource`, `providerId`, `modelId`,
   `target` and, for a provider rejection, its `detail`),
-  `prompt_estimate` (debug: every generation call's token estimate,
-  with `providerId`, `modelId`, `estimate`, `window`, `windowSource`
+  `prompt_estimate` (debug: every attempt's token estimate, so a
+  retried call logs it again, with `providerId`, `modelId`, `estimate`,
+  `window`, `windowSource`
   and `ms`, the count's cost), `input_ratio` (debug: the provider's
-  reported input tokens over the estimate, on every call that reported
+  reported input tokens over the estimate, on every attempt that reported
   a positive count, with `providerId`, `modelId`, `estimate`,
   `reported` and `ratio`), `prompt_truncation_suspected` (warn: that
   ratio under `0.5`, logged every time with the same fields; the toast
-  it raises shows once per model per app session),
+  it raises shows once per provider and model per app session),
   `truncation_notice_failed` (warn: the truncation toast's sink threw;
   logged with `providerId`, `modelId` and `error`, and the call that
   reported is unaffected)

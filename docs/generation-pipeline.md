@@ -1831,7 +1831,7 @@ phase maps `CallRetryError → PipelineError` when it surfaces the events.
 
 Non-retryable errors short-circuit: auth failures (401 / 403) skip
 retry. Same for 4xx client errors, and for a `context-window` failure
-on any status: the same prompt overflows the same window again
+on any error status: the same prompt overflows the same window again
 ([`architecture.md → Model context window`](./architecture.md#model-context-window)).
 A `reply-cut-off` failure isn't retried either: the same prompt and
 limit cut the reply again ([Cut-off replies](#cut-off-replies)).
@@ -1885,9 +1885,11 @@ which a profile max output overrides. Output tokens include reasoning
 on both providers, so a model that spends its allowance thinking reads
 as `max-output`, with `reasoningTokens` saying how much went there.
 An `unknown` cut-off on a call that sent a max output stopped short of
-it: most likely at a full window whose figure isn't known (a known one
-reads it as `window`), or at a provider's own ceiling below it (`@ai-sdk/anthropic`
-lowers `max_tokens` to a known model's maximum). The failure carries
+it: most likely at a full window whose figure isn't known, or that the
+estimate undercounts (a known window that the estimate plus the output
+reaches reads as `window`), or at a provider's own ceiling below it
+(`@ai-sdk/anthropic` lowers `max_tokens` to a known model's maximum).
+The failure carries
 the limit in `maxOutput` and the entry's mark keeps it, so each surface
 says the server stopped short of that limit instead of telling the user
 to set one.

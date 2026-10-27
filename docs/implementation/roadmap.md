@@ -637,7 +637,14 @@ the underlying configuration surfaces.
   provider `⋯` menu with deletion-semantics AlertDialog,
   reset-profiles action, and the profile line under max output that
   gives the model's window, per
-  [`app-settings.md → Context window`](../ui/screens/app-settings/app-settings.md#context-window))
+  [`app-settings.md → Context window`](../ui/screens/app-settings/app-settings.md#context-window);
+  and `Set window` wired on the surfaces the context window check left
+  without it (the turn and pass `context-window` entries, a
+  `window` cut-off's notice and entries, the
+  [truncation toast](../architecture.md#truncation-cross-check)),
+  which needs the model target persisted on failure entries and the
+  cut-off mark (a `CutOffMark` change, per
+  [`generation-pipeline.md → Cut-off replies`](../generation-pipeline.md#cut-off-replies)))
   — deletion runs the full embedding-story
   block + `assignments` key removal + `providers[].length ≥ 1`
   invariant per
@@ -980,9 +987,10 @@ code before it moved; resolve with the slice it names.
   describes.** Routed from the Slice 3.12 split (2026-08-19).
   [`retrieval.md → Structural floor takes budget first`](../memory/retrieval.md#structural-floor-takes-budget-first)
   wants floor-then-reservation-then-budgets over a tracked context
-  window. The window figure is now specced, per model with its source
+  window. The window figure is implemented, per model with its source
   ([`architecture.md → Model context window`](../architecture.md#model-context-window)),
-  but nothing derives budgets from it, and no prompt-overhead
+  detected only until M7.1, but nothing derives budgets from it, and no
+  prompt-overhead
   reservation exists (`promptBufferTokens` is computed only for probe
   captures). The budget editor the original entry
   described ships since Slice 4.4 as five plain
@@ -1176,13 +1184,15 @@ code before it moved; resolve with the slice it names.
   block; the entity, happening and relationship lists grow unbounded
   with the branch — every entity, staged and retired included, with its
   full description — and `generateStructured` (`lib/ai/generate.ts`)
-  passes the rendered prompt straight to the provider with no length
-  guard. No memory doc sets a classifier-prompt budget;
+  refuses the rendered prompt unsent over a known window; with an
+  unknown one, all a user has until M7.1, it goes out unguarded. No
+  memory doc sets a classifier-prompt budget;
   [`architecture.md → Settings`](../architecture.md#settings-strict-types-defaults-at-load)
   names app-scope "classifier truncation caps", of which only the entry
-  cap was built. A token-accurate budget needs the per-model input
-  window the window-level accounting entry above lacks, so the two land
-  together. A window-free interim (drop retired entities, cap each
+  cap was built. A token-accurate budget needs budgets derived from
+  the per-model window figure, which the window-level accounting entry
+  above still lacks, so the two land together. A window-free interim
+  (drop retired entities, cap each
   description) is there if a long story reaches a provider's prompt
   limit first, which fails the pass and so every Send on the branch
   until the prompt fits

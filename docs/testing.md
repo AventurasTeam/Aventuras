@@ -400,7 +400,8 @@ answers, a held one at its release, reply with `raw` verbatim and
 `finish_reason: 'length'`, so a spec can hand the app a document cut
 partway through that it must refuse rather than repair.
 
-Both mocks report token usage as an OpenAI-compatible server does,
+The harness mock and the dev mock server (`scripts/mock-llm`) report
+token usage as an OpenAI-compatible server does,
 counted with o200k over the request's message text and the reply: on
 every structured reply, and on a stream that asks with
 `stream_options.include_usage`, which the app's provider always does

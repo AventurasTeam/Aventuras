@@ -283,8 +283,9 @@ breakdown under [UX](#ux).
   the characters a user invested in most become the ones retrieval
   can't seat. The budgets can rise now that the
   [context window check](./architecture.md#model-context-window)
-  refuses a prompt over its model's window rather than sending it;
-  until the
+  refuses a prompt over a known window rather than sending it, and the
+  [truncation cross-check](./architecture.md#truncation-cross-check)
+  flags a server that cut one; until the
   [window-relative accounting](./memory/retrieval.md#structural-floor-takes-budget-first)
   fits a prompt to the window, a story whose prompt outgrows it stops
   its turns. The
