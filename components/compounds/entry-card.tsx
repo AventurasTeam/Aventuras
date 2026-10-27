@@ -59,6 +59,7 @@ import {
 } from '@/lib/piggyback'
 import { cn } from '@/lib/utils'
 
+import { DetailsDisclosure, HeldTextQuote } from './entry-card-system'
 import { RichEntryContent } from './rich-entry-content'
 import { SceneEditForm, sceneSaveErrorKey, type SceneSaveResult } from './scene-edit-form'
 import { UnsavedChangesDialog } from './unsaved-changes-dialog'
@@ -152,7 +153,12 @@ type EntryCardProps = {
   streamingPhase?: 'reasoning' | 'reply'
 
   // system-only:
+  /** Renders the collapsed Details disclosure under the buttons when non-empty. */
   detail?: string
+  /** The turn's text the entry keeps, shown verbatim as plain text; omit when blank. */
+  heldText?: string
+  /** The quote's and the detail's copy buttons; absent hides both. Not gated by `disabled`. */
+  onCopy?: (text: string) => void
   /** Kind-specific recovery route (e.g. "Fix profile" → settings); precedes Retry. */
   fixAction?: { label: string; onPress: () => void }
   onRetry?: () => void
@@ -1011,6 +1017,8 @@ export function EntryCard({
   cutOffNotice,
   streamingPhase,
   detail,
+  heldText,
+  onCopy,
   fixAction,
   onRetry,
   onDismiss,
@@ -1254,11 +1262,7 @@ export function EntryCard({
       ) : kind === 'system' ? (
         <View className="gap-3">
           <NarrativeContent text={content} />
-          {detail != null ? (
-            <Text size="xs" variant="muted">
-              {detail}
-            </Text>
-          ) : null}
+          {heldText != null ? <HeldTextQuote text={heldText} onCopy={onCopy} tier={tier} /> : null}
           {(fixAction != null || onRetry != null || onDismiss != null) && (
             <View className="flex-row gap-2">
               {fixAction != null ? (
@@ -1285,6 +1289,9 @@ export function EntryCard({
               ) : null}
             </View>
           )}
+          {detail != null && detail !== '' ? (
+            <DetailsDisclosure detail={detail} onCopy={onCopy} tier={tier} />
+          ) : null}
         </View>
       ) : kind === 'streaming' && content.length === 0 ? null : ( // pre-first-chunk / reasoning-phase placeholder: nothing to render yet
         <NarrativeContent

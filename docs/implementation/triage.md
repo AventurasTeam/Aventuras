@@ -355,3 +355,39 @@ slice-planning gate forces its resolution before that slice is planned.
   usually carries the provider's own input count, which would make the
   cause exact. A canon design change. Raised by the context window
   check.
+
+- **The stored system-failure shape is looser than the data model.**
+  `systemFailure` in `lib/db/story-entries/entry-metadata.ts` parses on
+  any entry kind, while
+  [`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)
+  puts it only on `kind: 'system'`, and `pass: 'resolved'` parses
+  without a `submission`, while the data model calls a resolved entry a
+  notice holding the text. The writers are already tight
+  (`passResolvedEntry` takes a non-null submission) and the reader guards
+  on `kind === 'system'`, but a resolved row read back without text would
+  show "so it's kept here" over no quote. Older code; raised by the
+  held-text slice review's type-design pass.
+
+- **`JSONBlock`'s copy fails silently.** `components/ui/json-block.tsx`
+  writes the clipboard with `.catch(() => {})` on both platforms and
+  gives no feedback either way, while a system entry's copy
+  (`components/reader/copy-system-text.ts`) toasts its outcome. Canon
+  ([`data.md`](../ui/patterns/data.md)) doesn't say what the Diagnostics
+  copy confirms. Raised by the held-text slice review.
+
+- **Two shapes the held-text slice review's simplifier left for a
+  home.**
+  - Three sites split the clipboard into web `navigator.clipboard` and
+    native `expo-clipboard` on their own: `copySystemText`'s writer,
+    `JSONBlock`'s copy and `ImportDialog`'s read
+    (`components/compounds/import-dialog.tsx`). A `lib/clipboard`
+    module with a read and a write would hold one copy. The writers'
+    failure policies differ (see the `JSONBlock` entry above), and
+    the system copy's `reader.clipboard_unavailable` warning names its
+    subsystem, so sharing is a decision, not a dedupe.
+  - `TextToggle` (`components/compounds/entry-card-system.tsx`) and the
+    cut-off notice's fix link in `entry-card.tsx` share a link-button
+    shape: a named group, the web cursor and outline reset, a focus
+    ring on the inner text, and phone tap padding cancelled by
+    margins. Two uses don't pay for a primitive; a third link-style
+    button is the signal to extract one.
