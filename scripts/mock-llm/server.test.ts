@@ -203,6 +203,24 @@ describe('failure injection', () => {
     lane.failure = { kind: 'none', status: 500, remaining: 0 }
   })
 
+  it('sends no usage frame on a cut stream, even to a request that asked for it', async () => {
+    const lane = mock.ctx.lane('narrative')
+    lane.stream = { charsPerSecond: 100_000, chunkSize: 6 }
+    lane.failure = { kind: 'stream-cut', status: 500, remaining: 1 }
+
+    const raw = await (
+      await post({
+        model: 'seed/narrative',
+        stream: true,
+        stream_options: { include_usage: true },
+        messages: [{ role: 'user', content: 'Continue the scene.' }],
+      })
+    ).text()
+
+    expect(raw).not.toContain('"usage"')
+    expect(collectSseContent(raw).length).toBeGreaterThan(0)
+  })
+
   it('does not spend a sequence entry on a call it failed', async () => {
     const lane = mock.ctx.lane('narrative')
     lane.stream = { charsPerSecond: 0, chunkSize: 6 }
@@ -318,7 +336,7 @@ describe('wire helpers', () => {
     expect(mockUsage('', '')).toEqual({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 })
   })
 
-  // The two bodies Task 5's recognition tests use, byte for byte.
+  // OpenAI's shape (code, type, message), as the recognition tests use it.
   it("writes llama.cpp's and OpenAI's overflow bodies as those servers do", () => {
     expect(overflowBody('llamacpp', { prompt: 71834, window: 65536 })).toBe(
       '{"error":{"code":400,"message":"request (71834 tokens) exceeds the available context size (65536 tokens), try increasing it","type":"exceed_context_size_error","n_prompt_tokens":71834,"n_ctx":65536}}',
