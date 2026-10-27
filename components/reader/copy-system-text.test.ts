@@ -1,6 +1,7 @@
 import { setStringAsync } from 'expo-clipboard'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { toast } from '@/lib/toast'
 
@@ -14,6 +15,7 @@ vi.mock('react-native', async (importOriginal) => ({
   Platform: platform,
 }))
 vi.mock('expo-clipboard', () => ({ setStringAsync: vi.fn() }))
+vi.mock('@/lib/diagnostics', () => ({ logger: { error: vi.fn(), warn: vi.fn() } }))
 vi.mock('@/lib/toast', () => ({ toast: { info: vi.fn(), error: vi.fn() } }))
 
 const TEXT = 'I open the letter.\n\nThen I read it.'
@@ -34,6 +36,8 @@ describe('copySystemText', () => {
     expect(write).toHaveBeenCalledWith(TEXT)
     expect(toast.info).toHaveBeenCalledWith(t('reader:systemEntry.copied'))
     expect(toast.error).not.toHaveBeenCalled()
+    expect(logger.error).not.toHaveBeenCalled()
+    expect(logger.warn).not.toHaveBeenCalled()
   })
 
   // The web writer reports a missing Clipboard API as `false`; native writes fail only by throwing.
@@ -49,6 +53,9 @@ describe('copySystemText', () => {
     })
     expect(toast.error).toHaveBeenCalledWith(t('reader:systemEntry.copyFailed'))
     expect(toast.info).not.toHaveBeenCalled()
+    expect(logger.error).toHaveBeenCalledWith('reader.system_text_copy_failed', {
+      error: 'denied',
+    })
   })
 
   describe('default writer', () => {
@@ -68,6 +75,7 @@ describe('copySystemText', () => {
       expect(setStringAsync).not.toHaveBeenCalled()
       expect(toast.error).toHaveBeenCalledWith(t('reader:systemEntry.copyFailed'))
       expect(toast.info).not.toHaveBeenCalled()
+      expect(logger.warn).toHaveBeenCalledWith('reader.clipboard_unavailable')
     })
 
     it('writes through expo-clipboard on native', async () => {

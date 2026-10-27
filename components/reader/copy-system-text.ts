@@ -1,6 +1,7 @@
 import { setStringAsync } from 'expo-clipboard'
 import { Platform } from 'react-native'
 
+import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { toast } from '@/lib/toast'
 
@@ -9,7 +10,10 @@ type ClipboardWrite = (text: string) => Promise<boolean>
 // Not expo-clipboard's web build: its execCommand fallback reports success without checking.
 async function writeClipboard(text: string): Promise<boolean> {
   if (Platform.OS !== 'web') return setStringAsync(text)
-  if (typeof navigator === 'undefined' || navigator.clipboard == null) return false
+  if (typeof navigator === 'undefined' || navigator.clipboard == null) {
+    logger.warn('reader.clipboard_unavailable')
+    return false
+  }
   await navigator.clipboard.writeText(text)
   return true
 }
@@ -22,7 +26,10 @@ export async function copySystemText(
   let written: boolean
   try {
     written = await write(text)
-  } catch {
+  } catch (error: unknown) {
+    logger.error('reader.system_text_copy_failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
     written = false
   }
   if (written) toast.info(t('reader:systemEntry.copied'))
