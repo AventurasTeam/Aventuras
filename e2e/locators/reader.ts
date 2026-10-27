@@ -134,8 +134,11 @@ export const reader = {
   dismissSystemEntry: (page: Page): Locator =>
     page.locator('[data-entry-row]').getByRole('button', { name: t('reader:systemEntry.dismiss') }),
   // The collapsed disclosure a system entry's failure detail sits behind (entry-card-system.tsx).
+  // exact:true — once it opens, "Copy details" holds the name as a substring.
   systemEntryDetailsToggle: (page: Page): Locator =>
-    page.locator('[data-entry-row]').getByRole('button', { name: t('reader:systemEntry.details') }),
+    page
+      .locator('[data-entry-row]')
+      .getByRole('button', { name: t('reader:systemEntry.details'), exact: true }),
   switchEmbedderFix: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:systemEntry.switchEmbedder') }),
   // A config-resolver failure's fix row (system-entry-actions.tsx, useConfigFixAction).
