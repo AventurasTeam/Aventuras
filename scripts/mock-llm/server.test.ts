@@ -336,7 +336,7 @@ describe('wire helpers', () => {
     expect(mockUsage('', '')).toEqual({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 })
   })
 
-  // OpenAI's shape (code, type, message), as the recognition tests use it.
+  // llama.cpp's body as its server sends it; OpenAI's, less its message's closing sentence.
   it("writes llama.cpp's and OpenAI's overflow bodies as those servers do", () => {
     expect(overflowBody('llamacpp', { prompt: 71834, window: 65536 })).toBe(
       '{"error":{"code":400,"message":"request (71834 tokens) exceeds the available context size (65536 tokens), try increasing it","type":"exceed_context_size_error","n_prompt_tokens":71834,"n_ctx":65536}}',

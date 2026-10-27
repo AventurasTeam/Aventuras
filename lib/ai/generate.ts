@@ -204,10 +204,7 @@ export type StreamTextResult =
       window: GenerationWindow
       /** The request's token estimate; null until the SDK built the request. */
       promptEstimate: () => number | null
-      /**
-       * A stream error as a context-window failure: the check's refusal or a recognized overflow;
-       * null otherwise.
-       */
+      /** The check's refusal or a recognized overflow, as a context-window failure; else null. */
       contextWindowFailureOf: (error: unknown) => ContextWindowFailure | null
     }
   | { ok: false; kind: ResolveFailureKind; target: ResolveTarget }
@@ -329,11 +326,9 @@ export function describeCallRetryError(error: CallRetryError): string {
 }
 
 /**
- * Resolve `target`'s model, call it with `prompt`, and parse the reply against
- * `schema` (retrying provider + parse failures). A generic structured-output
- * generation primitive: the caller supplies the agent target and the Zod schema.
- * A call over a known window is refused unsent; a window failure, checked or provider-reported,
- * is never retried.
+ * Resolve `target`'s model, call it with `prompt`, and parse the reply against `schema`, retrying
+ * provider and parse failures. A call over a known window is refused unsent; a window failure,
+ * checked or provider-reported, is never retried.
  */
 export async function generateStructured<T>(
   target: ResolveTarget,
@@ -367,10 +362,9 @@ export async function generateStructured<T>(
   }
   const window = generationWindow(config.providers, providerId, modelId)
   let estimate: number | null = null
-  // 'auto' injects the schema via the prompt (no capability signal yet); native responseFormat
-  // is opt-in via 'force-on'. The marker follows the contract: on a blank system half, the
-  // contract's system message exists only once promptSchemaMiddleware has run. The window check
-  // goes last, to count the request as sent (architecture.md → The pre-send check).
+  // 'auto' puts the schema in the prompt (no capability signal yet); 'force-on' sends it natively.
+  // Marker after the contract: on a blank system half, promptSchemaMiddleware makes the system
+  // message. Window check last, to count what is sent (architecture.md → The pre-send check).
   const model = withMiddleware(resolved.model, [
     jsonResponseFormatMiddleware(jsonSchema),
     ...(resolved.params.structuredOutput === 'force-on' ? [] : [promptSchemaMiddleware()]),
@@ -443,7 +437,7 @@ export async function generateStructured<T>(
         return { text: call.text, finishReason: call.finishReason, usage: call.usage }
       } catch (error) {
         if (bounded?.expired()) throw new ProviderTimeoutError()
-        // As a ContextWindowError, so callWithRetry ends the call: the prompt would overflow again.
+        // As a ContextWindowError, so it fails in the context-window tier, not as a provider error.
         const overflow = providerOverflow(error, { window, estimate, providerId, modelId })
         if (overflow !== null) throw new ContextWindowError(overflow)
         throw error

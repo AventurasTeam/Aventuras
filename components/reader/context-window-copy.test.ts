@@ -75,7 +75,7 @@ describe('turnContextWindowContent', () => {
     expect(turnContextWindowContent(REJECTED)).toBe(turnProviderCopy(LLAMACPP_MESSAGE))
   })
 
-  // The provider's message is the evidence: a known window must not swap it for the check's numbers.
+  // The provider's message is the evidence; a known window must not swap in the check's numbers.
   it('keeps the provider copy when the window was known as well', () => {
     expect(
       turnContextWindowContent({ ...REJECTED, window: 65_536, windowSource: 'detected' }),

@@ -34,7 +34,7 @@ export function toPipelineError(e: CallRetryError, target: ResolveTarget): Pipel
   }
 }
 
-/** Detail for logs and status: the arm's own (may span lines), or the window or cut-off described. */
+/** Log and status detail: the arm's own (may span lines), or the window or cut-off described. */
 export function pipelineErrorDetail(e: PipelineError): string | undefined {
   switch (e.kind) {
     case 'context-window':

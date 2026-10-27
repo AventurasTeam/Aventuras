@@ -94,8 +94,7 @@ function providerDetail(error: Extract<PipelineError, { kind: 'provider' }>): st
   return error.detail != null ? `${error.reason}: ${error.detail}` : error.reason
 }
 
-// The entry's persisted fix-action tag: the resolver's failure, a cut-off's cause, how a window
-// failure was detected, or the capability a provider's rejection hinted at.
+// The entry's persisted fix-action tag.
 function failureTagOf(error: PipelineError | undefined): string | undefined {
   if (error?.kind === 'config-resolver') return error.failure
   if (error?.kind === 'reply-cut-off') return error.cause
@@ -311,9 +310,8 @@ export function useEmbedderFixAction(storyId: string | null): SystemEntryFixActi
 }
 
 /**
- * `Fix profile` for a max-output or server-limit cut-off, or a rejection hinting at a capability,
- * via the story-leave guard. Memoized: the reader hands it to every row, so a fresh identity would
- * re-render each per chunk.
+ * `Fix profile` via the story-leave guard. Memoized: the reader hands it to every row, so a fresh
+ * identity would re-render each per chunk.
  */
 export function useProfileFixAction(
   enabled: boolean,

@@ -912,7 +912,7 @@ describe('useSystemEntryActions', () => {
   })
 })
 
-// reader-composer.md → Transient pipeline failures: the window row, and a rejection naming a capability.
+// reader-composer.md → Transient pipeline failures.
 describe('window and capability-hint entries', () => {
   const onRetry = () => {}
   const SUBMISSION = { content: 'I open the door', composerMode: 'do' }

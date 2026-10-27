@@ -40,9 +40,9 @@ export function readContextWindow(raw: Record<string, unknown>): number | undefi
 }
 
 /**
- * Merges detection, then the cached entry (a stored key, even `false`, beats detection), then the
- * fresh window: a published one replaces the stored one, an absent one keeps it (architecture.md →
- * The window figure).
+ * Later wins: detection, the cached entry, then the published window; an absent window keeps the
+ * stored one (architecture.md → The window figure). A stored key, even `false`, beats detection:
+ * turn a flag off by storing `false`, not deleting the key, or the next refresh re-detects it.
  */
 export function normalizeModelCatalog(
   entries: readonly CatalogEntry[],

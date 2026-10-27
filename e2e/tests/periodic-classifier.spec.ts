@@ -1479,8 +1479,7 @@ test.describe('periodic classifier — a pass reply cut off at its length limit'
 })
 
 // architecture.md → Recognizing an overflow rejection, classifier.md → Failure policy: a pass the
-// provider rejects as over the window fails unretried, chained or owed. Serial: test 2's Send owes
-// test 1's pass.
+// provider rejects fails unretried, chained or owed. Serial: test 2's Send owes test 1's pass.
 test.describe('periodic classifier — a pass the provider rejects as over the window', () => {
   test.describe.configure({ mode: 'serial' })
 

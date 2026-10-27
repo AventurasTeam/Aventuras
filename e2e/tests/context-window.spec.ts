@@ -17,11 +17,10 @@ import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 import { toast } from '../locators/toast'
 
-// architecture.md → Model context window, at the seams unit tests stop short of: a window read from
-// settings at boot, the real SSE transport, the reader's entry and the boot-wired toast
-// (docs/testing.md → Coverage). Effects read back through the DB bridge (Selector strategy, tier 1).
+// architecture.md → Model context window, at the seams unit tests miss (testing.md → Coverage):
+// window read from settings at boot, real SSE transport, the reader's entry, boot-wired toast.
 
-// The seeded narrative profile's model, which the classifier profile shares (lib/db/devtools/seed-dataset.ts).
+// Seeded narrative model, which the classifier profile shares (lib/db/devtools/seed-dataset.ts).
 const SEED_MODEL = 'seed/narrative'
 const STORY = 'The Veilstone Courier'
 
@@ -101,7 +100,7 @@ test.describe('context window — a turn over a configured window', () => {
   const WINDOW = 100
 
   test.beforeAll(async () => {
-    // Retrieval blocks narrative: no installed embedder, no call to refuse. Cold cache downloads ~24 MB.
+    // Retrieval blocks narrative: no embedder, no call to refuse. Cold cache downloads ~24 MB.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
@@ -161,7 +160,7 @@ test.describe('context window — a provider overflow, then the truncation cross
   let app: LaunchedApp
   let mock: MockLlm
   let userDataDir: string | undefined
-  // The prompt total a turn the server counted in full recorded; set by the usage test.
+  // Prompt total recorded on a turn the server counted in full; set by the usage test.
   let fullPrompt = 0
 
   test.beforeAll(async () => {
@@ -265,7 +264,7 @@ test.describe('context window — a provider overflow, then the truncation cross
     const toastText = (await truncationToast().textContent())?.trim() ?? ''
     const replyId = await pollEntryId(page, branchId, 'E2E-USAGE-R2')
     const reported = await promptTotal(page, replyId)
-    // The server's count reached the entry under-reported, under half of (c1)'s full prompt.
+    // The server's count reached the entry under-reported, under half the usage test's full prompt.
     expect(reported).toBeLessThan(fullPrompt / 2)
     const counts = truncationCopy().exec(toastText)
     expect(copyNumber(counts, 'reported')).toBe(reported)

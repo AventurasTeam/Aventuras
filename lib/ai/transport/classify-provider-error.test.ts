@@ -284,7 +284,7 @@ describe('recognizeOverflow', () => {
     expect(recognizeOverflow(rejection(400, body))).toEqual({ detail: message })
   })
 
-  // A recognized code with an empty message must not quote nothing: the raw body is the next evidence.
+  // A recognized code with a blank message must quote the raw body, never nothing.
   it.each(['', '   '])('quotes the raw body when the provider message is %j', (message) => {
     const body = JSON.stringify({ error: { message, code: 'context_length_exceeded' } })
     expect(recognizeOverflow(rejection(400, body))).toEqual({ detail: body })

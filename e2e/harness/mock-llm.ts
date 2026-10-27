@@ -162,11 +162,11 @@ export type MockLlm = {
   cutNextNarrative: () => void
   /** One-shot: the next `agentName` call answered (held: at release) sends `raw`, then 'length'. */
   cutNextStructured: (agentName: string, raw: string) => void
-  /** One-shot: the next narrative stream reports a tenth of its counted prompt tokens. */
+  /** One-shot: the next narrative stream to report usage claims a tenth of its prompt tokens. */
   underReportNextUsage: () => void
   /** One-shot: the next narrative call is rejected with an overflow 400 in `shape`. */
   overflowNextNarrative: (shape?: OverflowShape) => void
-  /** One-shot: the next call matching `agentName`, a STRUCTURED_SHAPES name like cutNextStructured's, is rejected with an overflow 400 in `shape`. */
+  /** One-shot: the next call matching the `agentName` shape gets an overflow 400 in `shape`. */
   overflowNextStructured: (agentName: string, shape?: OverflowShape) => void
   /** Every completion request received, in order. */
   requests: MockRequest[]
@@ -176,8 +176,7 @@ export type MockLlm = {
 const DEFAULT_NARRATIVE =
   'The blade rasps free of its sheath. Somewhere in the drowned city, a bell answers, and the rain leans closer to listen.'
 
-// The role frame alone holds a stream open (the cancel test's in-flight window); the tail
-// (content, finish frame, usage when asked, [DONE]) completes it.
+// Split so a held stream can send the role frame alone, then the tail at release.
 function narrativeTail(content: string, finishReason: FinishReason, usage?: MockUsage): string {
   return contentFrame(content) + stopFrames(finishReason, usage)
 }
@@ -242,7 +241,7 @@ export async function startMockLlm(): Promise<MockLlm> {
     return 'length'
   }
 
-  // Spent like the cut, by the next stream that reports usage, so a held one released later takes it.
+  // Spent by the next stream that reports usage, so a held one released later takes it.
   const narrativeUsage = (body: Record<string, unknown>): MockUsage | undefined => {
     if (!wantsStreamUsage(body)) return undefined
     const usage = mockUsage(promptText(body), narrative)

@@ -26,7 +26,7 @@ export const SSE_HEADERS = {
   connection: 'keep-alive',
 }
 
-/** Every mock model's `meta.n_ctx` on /models: the window detection stores, far above any dev prompt. */
+/** Each mock model's `meta.n_ctx` on /models, for window detection; far above any dev prompt. */
 export const MOCK_CONTEXT_WINDOW = 131072
 
 export type MockUsage = { prompt_tokens: number; completion_tokens: number; total_tokens: number }

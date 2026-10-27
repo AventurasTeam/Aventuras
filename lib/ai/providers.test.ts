@@ -43,8 +43,7 @@ function eventStream(frames: readonly unknown[]): Response {
   })
 }
 
-// architecture.md → Truncation cross-check: without stream_options most servers report no usage
-// on a stream, so the cross-check and the prompt total would read nothing.
+// architecture.md → Truncation cross-check: most servers send no stream usage unless asked.
 describe('createProviderModel · openai-compatible streams', () => {
   it('asks for usage on a streamed call and reads the prompt count it gets back', async () => {
     const bodies: { stream?: boolean; stream_options?: { include_usage?: boolean } }[] = []

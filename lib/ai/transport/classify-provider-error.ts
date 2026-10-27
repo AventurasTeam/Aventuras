@@ -162,7 +162,7 @@ function providerMessage(error: APICallError, body: unknown): string {
   )
 }
 
-/** architecture.md → Recognizing an overflow rejection: by code, then keyword, on any error status. */
+/** architecture.md → Recognizing an overflow rejection: by code, then keyword, on any 4xx/5xx. */
 export function recognizeOverflow(error: unknown): { detail: string } | null {
   if (!isRejection(error)) return null
   const body = parsedBody(error)

@@ -16,7 +16,7 @@ export type PipelineError =
       kind: 'provider'
       reason: 'auth' | 'network' | 'timeout' | 'unknown'
       detail?: string
-      // Carried over from the provider CallRetryError (generation-pipeline.md → Fatal error categories).
+      // Best-effort hint from a 4xx body (generation-pipeline.md → Fatal error categories).
       possibleCapabilityMismatch?: CapabilityHint
     }
   | { kind: 'phase-logic'; detail: string; phaseName?: string; subsystem?: string }

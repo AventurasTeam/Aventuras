@@ -129,7 +129,7 @@ export function windowCheckMiddleware(opts: {
   }
 }
 
-/** An estimate as copy prints it: exact under 1,000, else rounded up to the next 100, so a refused estimate never prints at or under its window. */
+/** Exact under 1,000, else ceil to the next 100, so a refused estimate stays over its window. */
 export function displayEstimate(tokens: number): number {
   return tokens < 1000 ? tokens : Math.ceil(tokens / 100) * 100
 }

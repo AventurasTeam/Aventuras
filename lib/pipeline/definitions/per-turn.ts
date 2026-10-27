@@ -304,7 +304,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
         usage,
         maxOutput: call.maxOutput,
         window: call.window.tokens,
-        // Read here, after the stream: the facade has an estimate only once the SDK built the request.
+        // After the stream: the facade has an estimate only once the SDK built the request.
         promptEstimate: call.promptEstimate(),
         providerId: call.providerId,
         modelId: call.modelId,

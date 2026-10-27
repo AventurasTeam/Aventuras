@@ -19,8 +19,8 @@ import {
   type MockLlm,
 } from '../../e2e/harness/mock-llm'
 
-// Through the app's own provider, so the usage and rejections the E2E specs rely on are the ones
-// @ai-sdk/openai-compatible actually reads.
+// SDK-facing checks run through the app's own provider, so the usage and rejections E2E specs
+// rely on are the ones @ai-sdk/openai-compatible actually reads; raw fetches pin the wire bytes.
 
 // Prose, not a repeated character (lessons-learned/token-fixtures-need-real-prose.md).
 const PROMPT = Array(25).fill('The bell answers from across the water.').join(' ')
@@ -66,7 +66,7 @@ async function narrativeCall(
   return { text, finishReason: await stream.finishReason, usage: await stream.usage }
 }
 
-/** A narrative call the server rejects: the SDK ends the stream empty and hands onError the error. */
+/** A rejected narrative call: the SDK ends the stream empty and hands onError the error. */
 async function narrativeError(llm: MockLlm): Promise<unknown> {
   let error: unknown
   const stream = streamProviderCall({
