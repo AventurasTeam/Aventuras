@@ -170,7 +170,9 @@ Async function props out (document → native):
 - Entry actions: edit commit, regenerate, branch, delete, flip era,
   system-entry retry/dismiss/fix, a system entry's copy
   (`onCopySystemText`, which native writes to the clipboard and
-  toasts), the cut-off notice's fix (`onFixCutOff`), and world-time
+  confirms, per
+  [`entry-card.md → System entry`](./entry-card.md#system-entry)),
+  the cut-off notice's fix (`onFixCutOff`), and world-time
   edits —
   `onEditWorldTime` carries the desktop/tablet Dialog's Save, and
   `onRequestEditWorldTime` asks native to present the phone Sheet.

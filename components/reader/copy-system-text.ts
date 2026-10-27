@@ -18,6 +18,11 @@ async function writeClipboard(text: string): Promise<boolean> {
   return true
 }
 
+// Android 13 (API 33) confirms every copy itself; a toast on top would double it.
+function osConfirmsCopy(): boolean {
+  return Platform.OS === 'android' && Platform.Version >= 33
+}
+
 /** A system entry's copy request: writes the clipboard and toasts whether it took. */
 export async function copySystemText(
   text: string,
@@ -32,6 +37,6 @@ export async function copySystemText(
     })
     written = false
   }
-  if (written) toast.info(t('reader:systemEntry.copied'))
-  else toast.error(t('reader:systemEntry.copyFailed'))
+  if (!written) toast.error(t('reader:systemEntry.copyFailed'))
+  else if (!osConfirmsCopy()) toast.info(t('reader:systemEntry.copied'))
 }

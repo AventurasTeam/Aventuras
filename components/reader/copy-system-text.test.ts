@@ -7,7 +7,7 @@ import { toast } from '@/lib/toast'
 
 import { copySystemText } from './copy-system-text'
 
-const platform = vi.hoisted(() => ({ OS: 'web' }))
+const platform = vi.hoisted(() => ({ OS: 'web', Version: 0 }))
 
 // The unit project resolves react-native to RN Web; the native branch needs OS switched.
 vi.mock('react-native', async (importOriginal) => ({
@@ -27,6 +27,7 @@ describe('copySystemText', () => {
 
   afterEach(() => {
     platform.OS = 'web'
+    platform.Version = 0
     vi.unstubAllGlobals()
   })
 
@@ -80,11 +81,31 @@ describe('copySystemText', () => {
 
     it('writes through expo-clipboard on native', async () => {
       platform.OS = 'android'
+      platform.Version = 32
       vi.mocked(setStringAsync).mockResolvedValue(true)
       await copySystemText(TEXT)
       expect(setStringAsync).toHaveBeenCalledWith(TEXT)
       expect(toast.info).toHaveBeenCalledWith(t('reader:systemEntry.copied'))
       expect(toast.error).not.toHaveBeenCalled()
+    })
+
+    it('leaves the confirmation to Android 13 and later', async () => {
+      platform.OS = 'android'
+      platform.Version = 33
+      vi.mocked(setStringAsync).mockResolvedValue(true)
+      await copySystemText(TEXT)
+      expect(setStringAsync).toHaveBeenCalledWith(TEXT)
+      expect(toast.info).not.toHaveBeenCalled()
+      expect(toast.error).not.toHaveBeenCalled()
+    })
+
+    it('still reports a failed write on Android 13 and later', async () => {
+      platform.OS = 'android'
+      platform.Version = 33
+      vi.mocked(setStringAsync).mockRejectedValue(new Error('binder'))
+      await copySystemText(TEXT)
+      expect(toast.error).toHaveBeenCalledWith(t('reader:systemEntry.copyFailed'))
+      expect(toast.info).not.toHaveBeenCalled()
     })
   })
 })
