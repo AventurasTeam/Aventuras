@@ -381,20 +381,18 @@
       class="flex min-h-0 flex-1 flex-col outline-none"
       inert={question.open}
     >
-      <!-- Left-aligned at every width: a title or description that wraps reads badly centred. -->
+      <!-- The title alone, centred; the description opens the body, where wrapping reads well. -->
       <!-- Tinted like the buttons' panel, so both read as a frame around the body. -->
-      <ResponsiveModal.Header class="bg-muted/40 border-b px-6 py-4 text-left" closeButton={false}>
-        <ResponsiveModal.Title class={cn('text-left', titleIcon && 'flex items-center gap-2')}>
+      <ResponsiveModal.Header
+        class="bg-muted/40 border-b px-6 py-4 text-center sm:text-center"
+        closeButton={false}
+      >
+        <ResponsiveModal.Title
+          class={cn('text-center', titleIcon && 'flex items-center justify-center gap-2')}
+        >
           {@render titleIcon?.()}
           {title}
         </ResponsiveModal.Title>
-        {#if typeof description === 'string'}
-          <ResponsiveModal.Description class="text-left">{description}</ResponsiveModal.Description>
-        {:else if description}
-          <ResponsiveModal.Description class="text-left">
-            {@render description()}
-          </ResponsiveModal.Description>
-        {/if}
       </ResponsiveModal.Header>
 
       <!--
@@ -412,9 +410,14 @@
           class="md:min-h-0 md:flex-1 md:overflow-y-auto"
           onscroll={measureJump}
         >
-          {#if children}
+          {#if children || description}
             <div class="space-y-3 px-6 py-4">
-              {@render children()}
+              {#if typeof description === 'string'}
+                <ResponsiveModal.Description>{description}</ResponsiveModal.Description>
+              {:else if description}
+                <ResponsiveModal.Description>{@render description()}</ResponsiveModal.Description>
+              {/if}
+              {@render children?.()}
             </div>
           {/if}
           {#if removal}

@@ -39,11 +39,14 @@
   {#if alternative}
     <span class="flex w-full max-sm:order-1 sm:mr-auto sm:w-auto">{@render alternative()}</span>
   {/if}
-  <!-- Half the width each, until a label does not fit: then they stack in reading order. -->
-  <span class="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
+  <!-- On a phone half the width each, stacking in reading order when a label does not fit; from
+       640px up both as wide as the wider. -->
+  <span
+    class="flex w-full flex-wrap gap-2 sm:inline-grid sm:w-auto sm:auto-cols-fr sm:grid-flow-col"
+  >
     <Button
       variant="outline"
-      class="basis-pair grow sm:grow-0 sm:basis-auto"
+      class="basis-pair grow"
       onclick={onCancel}
       disabled={busy && !cancelWhileBusy}
     >
@@ -52,10 +55,7 @@
     <Button
       variant={tone === 'default' ? 'default' : 'feature'}
       onclick={onConfirm}
-      class={cn(
-        'basis-pair grow sm:grow-0 sm:basis-auto',
-        tone !== 'default' && FEATURE_COLORS[tone].vars,
-      )}
+      class={cn('basis-pair grow', tone !== 'default' && FEATURE_COLORS[tone].vars)}
       disabled={disabled || busy}
     >
       {#if busy}

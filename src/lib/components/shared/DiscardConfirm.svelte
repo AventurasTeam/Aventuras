@@ -46,17 +46,15 @@
       </p>
 
       <!-- The same pair as an action modal's footer: neutral to stay, the delete tone to go. -->
-      <div class="mt-5 flex flex-wrap gap-2 sm:flex-nowrap sm:justify-end">
-        <Button
-          variant="outline"
-          class="basis-pair grow sm:grow-0 sm:basis-auto"
-          onclick={() => question.answer(false)}
-        >
+      <div
+        class="mt-5 flex flex-wrap gap-2 sm:ml-auto sm:grid sm:w-fit sm:auto-cols-fr sm:grid-flow-col"
+      >
+        <Button variant="outline" class="basis-pair grow" onclick={() => question.answer(false)}>
           {shown?.keepLabel ?? 'Keep editing'}
         </Button>
         <Button
           variant="feature"
-          class={cn('basis-pair grow sm:grow-0 sm:basis-auto', FEATURE_COLORS.delete.vars)}
+          class={cn('basis-pair grow', FEATURE_COLORS.delete.vars)}
           onclick={() => question.answer(true)}
         >
           {shown?.confirmLabel ?? 'Discard'}

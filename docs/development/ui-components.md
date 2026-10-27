@@ -12,7 +12,8 @@ Nothing enforces the catalog. It is the place to look, and the place to point at
 Use `shared/ActionModal.svelte`. A caller passes what the modal says and does; the shell owns the
 rest:
 
-- **Layout.** A header with the title and description and no close button: Cancel is the way out.
+- **Layout.** A header with the centred title alone and no close button: Cancel is the way out.
+  The description opens the body.
   The header and the buttons' panel are tinted (`bg-muted/40`) with a rule each, so they frame the
   body. The header stays pinned. On desktop the buttons are pinned under the body too, and only the body
   scrolls; on a phone the body and the buttons scroll together, leaving the small screen to the
@@ -22,8 +23,8 @@ rest:
   held near the top when it has a text field. Only a tool with no text field is a bottom sheet
   with a handle (see below), where only the handle drags and the content scrolls.
 - **Buttons.** An outlined Cancel and the action, side by side on a phone and at the trailing edge
-  on desktop. On a phone each takes half the width, and when a label does not fit they stack in
-  reading order, Cancel above the action. The action's icon turns into a spinner while it runs.
+  on desktop, where both are as wide as the wider. On a phone each takes half the width, and when a
+  label does not fit they stack in reading order, Cancel above the action. The action's icon turns into a spinner while it runs.
 - **Ways out.** Cancel, Escape, Android's back press (claimed by the open modal through
   `utils/backPress.ts`, and decided as Escape) and a click outside all go
   through one decision, `shared/actionModalClose.ts`, which has its own tests. A sheet's swipe or
@@ -147,9 +148,9 @@ action is disabled or running. A phone keyboard has no such key, so it cannot sa
 
 ### Wording
 
-The header is left-aligned at every width, since a title or description that wraps reads badly
-centred. It holds only the title and a short description; a control, even a switch that changes
-what the body says, goes at the top of the body. A way to do the job other than this modal, such
+The header holds only the title, centred at every width. The description is the first line of the
+body, where a sentence that wraps reads well, and it scrolls with the body; anything else, even a
+switch that changes what the body says, follows it. A way to do the job other than this modal, such
 as the character editor's "Ask assistant", is an `alternative`: it sits left of Cancel, and on a
 phone on a full-width row above them. The snippet gets `leaveFor(next)`, which asks the discard
 question first when the modal holds edits and then runs `next`, since leaving for the other route
@@ -224,9 +225,9 @@ starts open, and whether the reader folded it is saved per explanation, across s
 sessions, under the `id` it is given, which no other explanation may share. A search for
 `ExplanationFold` finds them all.
 
-In an action modal it goes in the body, above the fields, not in the header's description: the
-header stays pinned, and an explanation the reader has read should not keep its height there. A
-description is for what the reader needs every time.
+In an action modal it goes in the body, above the fields, not in the description: an explanation
+the reader has read should not keep its height there. A description is for what the reader needs
+every time.
 
 Not every fold is one. A notice about this particular item, like the time edit's "This entry is a
 fork point", opens again each time, since what it says changes with the item. It is the same
