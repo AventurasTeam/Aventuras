@@ -2049,7 +2049,7 @@
       content: "<b>Memory update failed, so your turn didn't start.</b> The update's reply was cut off at the classifier profile's 1,024-token max output. Raise it, then Retry.",
       actions: '<span class="err-btn primary">Fix profile</span><span class="err-btn">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
-    // A 4xx whose body names a capability (generation-pipeline.md -> Fatal error categories).
+    // A 4xx whose body names a capability the request carried (generation-pipeline.md -> Fatal error categories).
     capability: {
       kind: '⚠ System · generation error',
       content: "<b>The provider rejected the request.</b> Its message mentions <code>thinking</code>. That can mean this model doesn't support reasoning: check the profile's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",

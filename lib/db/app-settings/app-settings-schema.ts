@@ -31,6 +31,11 @@ export const providerCapabilitiesSchema = z.object({
    * field publishes it. Absent means unknown, not unlimited (lib/embedder → embedderInputWindow).
    */
   maxInputTokens: z.number().int().positive().optional(),
+  /**
+   * Generation window in tokens, as the server published it (architecture.md → Detection).
+   * Detected only: a fresh value replaces it, a fetch that publishes none keeps it.
+   */
+  contextWindow: z.number().int().positive().optional(),
 })
 
 export type ProviderCapabilities = z.infer<typeof providerCapabilitiesSchema>
@@ -54,6 +59,11 @@ export const providerInstanceSchema = z.object({
     .array(z.object({ id: z.string(), capabilities: providerCapabilitiesSchema.optional() }))
     .optional(),
   customModelIds: z.array(z.string()).optional(),
+  /**
+   * The user's generation window per model id, listed or custom. Wins over the detected
+   * `contextWindow` and survives a catalog refresh (architecture.md → The window figure).
+   */
+  contextWindowOverrides: z.record(z.string(), z.number().int().positive()).optional(),
   cachedAt: z.number().optional(),
 })
 

@@ -1777,20 +1777,20 @@ type CallRetryError =
   | ({ tier: 'context-window' } & ContextWindowFailure)
   | ({ tier: 'reply-cut-off' } & ReplyCutOffFailure)
 
-type CapabilityHint = {
-  capability: 'reasoning' | 'structuredOutput'
-  matched: string // the substring that matched, for the copy
-}
+type CapabilityHint = // matched: the keyword that matched, for the copy
+  | { capability: 'structuredOutput'; matched: 'response_format' | 'json_schema' }
+  | { capability: 'reasoning'; matched: 'budget_tokens' | 'thinking' | 'reasoning' }
 
 type ContextWindowFailure = {
   detectedBy: 'check' | 'provider' // the pre-send check, or a recognized provider rejection
   estimate: number // countTokens over the request as sent
-  window: number | null // null when unknown, which only a provider rejection can report
-  windowSource: 'configured' | 'detected' | 'unknown'
   providerId: string
   modelId: string
   detail?: string // the provider's message verbatim; provider-detected only
-}
+} & (
+  | { window: number; windowSource: 'configured' | 'detected' }
+  | { window: null; windowSource: 'unknown' } // unknown: only a provider rejection can report it
+)
 
 type ReplyCutOffFailure = {
   cause: 'max-output' | 'window' | 'unknown' // see Cut-off replies
@@ -1831,7 +1831,7 @@ phase maps `CallRetryError → PipelineError` when it surfaces the events.
 
 Non-retryable errors short-circuit: auth failures (401 / 403) skip
 retry. Same for 4xx client errors, and for a `context-window` failure
-on any status: the same prompt overflows the same window again
+on any error status: the same prompt overflows the same window again
 ([`architecture.md → Model context window`](./architecture.md#model-context-window)).
 A `reply-cut-off` failure isn't retried either: the same prompt and
 limit cut the reply again ([Cut-off replies](#cut-off-replies)).
@@ -1885,12 +1885,14 @@ which a profile max output overrides. Output tokens include reasoning
 on both providers, so a model that spends its allowance thinking reads
 as `max-output`, with `reasoningTokens` saying how much went there.
 An `unknown` cut-off on a call that sent a max output stopped short of
-it: most likely at a full window, until the window check reads it as
-`window`, or at a provider's own ceiling below it (`@ai-sdk/anthropic`
-lowers `max_tokens` to a known model's maximum). The failure carries
-the limit in `maxOutput` and the entry's mark keeps it, so each surface
-says the server stopped short of that limit instead of telling the user
-to set one.
+it: most likely at a full window the call couldn't see as full, its
+figure unknown or above the server's real window, or the prompt larger
+than the estimate (a known window that the estimate plus the output
+reaches reads as `window`); or at a provider's own ceiling below it
+(`@ai-sdk/anthropic` lowers `max_tokens` to a known model's maximum).
+The failure carries the limit in `maxOutput` and the entry's mark keeps
+it, so each surface says the server stopped short of that limit instead
+of telling the user to set one.
 
 Every cut-off, committed or failed, logs a warning with the cause and
 the numbers. A plain-text call other than the narrative, such as a
@@ -1957,7 +1959,7 @@ type PipelineError =
       kind: 'provider'
       reason: 'auth' | 'network' | 'timeout' | 'unknown'
       detail?: string
-      possibleCapabilityMismatch?: CapabilityHint // carried over from CallRetryError
+      possibleCapabilityMismatch?: CapabilityHint // from CallRetryError, or the narrative's stream error
     }
   | {
       kind: 'phase-logic'
@@ -2027,11 +2029,23 @@ banner / dialog for persistent.
 `classifyProviderError` matches a 4xx body against words naming the
 two capabilities a request can carry: `thinking`, `reasoning` and
 `budget_tokens` for **reasoning**, `response_format` and `json_schema`
-for **structured output**. It runs after overflow recognition, so a
-body recognized as an overflow carries no hint. A hit sets the field
-on the `provider` `CallRetryError` to the capability and the matched
-word, and the phase copies it onto `PipelineError.provider` as it maps
-the error; otherwise it's omitted.
+for **structured output**. Only the words of a capability the request
+as sent carried are matched, a profile's `customJson` keys included.
+Reasoning is carried when a thinking setting went out: an Anthropic
+call with a thinking budget, since a disabled setting sends no field.
+Structured output is carried when the JSON response format went out: a
+structured call under `force-on`, since under `auto` the schema rides
+the prompt. So the narrative, which sends neither on an
+OpenAI-compatible provider, gets no hint from a body such as
+`model 'Qwen3-30B-A3B-Thinking-2507' not found`. Matching runs after
+overflow recognition, so a body recognized as an overflow carries no
+hint. A hit sets the field on the `provider` `CallRetryError` to the
+capability and the matched word, and the phase copies it onto
+`PipelineError.provider` as it maps the error; otherwise it's omitted.
+The narrative's stream error never passes through `callWithRetry`, so
+the narrative phase asks its call for the hint (`capabilityHintOf` on
+the `streamText` result, the same rule over the same request) and sets
+the field itself.
 Best-effort only — provider error messages are not standardised;
 the field is a hint for the UI, never an assertion that a user
 override was wrong. The copy names the setting and hedges: "The

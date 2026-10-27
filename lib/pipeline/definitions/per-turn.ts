@@ -256,6 +256,15 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       },
     }
   if (streamError !== undefined) {
+    // Not `provider`: its remedy is the user's (generation-pipeline.md → Fatal error categories).
+    const windowFailure = call.contextWindowFailureOf(streamError)
+    if (windowFailure !== null) {
+      ctx.log.warn('provider.context_window', { target: 'narrative', ...windowFailure })
+      return {
+        status: 'failed',
+        error: { kind: 'context-window', target: 'narrative', ...windowFailure },
+      }
+    }
     // The envelope message alone ("Failed to process successful response") names
     // nothing actionable, and the orchestrator's own pipeline.phase_failed
     // carries neither statusCode nor a URL. No body: httpCallSink already stores
@@ -267,12 +276,14 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
         ? { statusCode: streamError.statusCode, url: redactUrl(streamError.url) }
         : {}),
     })
+    const hint = call.capabilityHintOf(streamError)
     return {
       status: 'failed',
       error: {
         kind: 'provider',
         reason: 'network',
         detail: describeProviderError(streamError),
+        ...(hint !== undefined ? { possibleCapabilityMismatch: hint } : {}),
       },
     }
   }
@@ -291,8 +302,9 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       failure: replyCutOff({
         usage,
         maxOutput: call.maxOutput,
-        window: null,
-        promptEstimate: null,
+        window: call.window.tokens,
+        // After the stream: the facade has an estimate only once the SDK built the request.
+        promptEstimate: call.promptEstimate(),
         providerId: call.providerId,
         modelId: call.modelId,
       }),

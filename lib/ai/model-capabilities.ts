@@ -1,14 +1,6 @@
-import type { ProviderInstance } from '../db'
+import type { ProviderCapabilities, ProviderInstance } from '../db'
 
-export type ModelCapabilities = {
-  reasoning?: boolean
-  structuredOutput?: boolean
-  matryoshkaSupported?: boolean
-  matryoshkaDims?: number[]
-  taggedBlockReliable?: boolean
-  embeddingDim?: number
-  maxInputTokens?: number
-}
+export type ModelCapabilities = ProviderCapabilities
 
 export function resolveModelCapabilities(
   providerId: string,

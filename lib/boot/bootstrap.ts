@@ -10,6 +10,7 @@ import {
   reverseReplayDeltas,
   settleUserWrites,
 } from '@/lib/actions'
+import { configureTruncationNotice, displayEstimate } from '@/lib/ai'
 import type { DbCtx } from '@/lib/db'
 import { configureDiagnosticsGate, logger } from '@/lib/diagnostics'
 import {
@@ -17,6 +18,7 @@ import {
   embedClassifierDescriptions,
   setDrainKickSink,
 } from '@/lib/embedder-swap'
+import { t } from '@/lib/i18n'
 import {
   configureClassifierEmbedder,
   configureDeltaActionPort,
@@ -33,6 +35,7 @@ import {
   recoveryReportStore,
   rehydrateAppSettings,
 } from '@/lib/stores'
+import { toast } from '@/lib/toast'
 
 // __DEV__ force-on folds into isEnabled so dev captures the recovery pass; both
 // thunks read app_settings.diagnostics LIVE and must never capture the snapshot.
@@ -42,6 +45,20 @@ export function ensureDiagnosticsGate(): void {
       (typeof __DEV__ !== 'undefined' && __DEV__) ||
       appSettingsStore.getAppSettings().diagnostics.enabled,
     isDebugEnabled: () => appSettingsStore.getAppSettings().diagnostics.debug_level_enabled,
+  })
+}
+
+// lib/ai can't raise UI, so the truncation cross-check signals through this sink. Canon's
+// `Set window` action waits on App Settings' window editor, so the toast has none yet.
+export function ensureTruncationNotice(): void {
+  configureTruncationNotice(({ modelId, reported, estimate }) => {
+    toast.warning(
+      t('common:truncationWarning', {
+        model: modelId,
+        reported,
+        estimate: displayEstimate(estimate),
+      }),
+    )
   })
 }
 
@@ -86,6 +103,7 @@ export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
   // Registry must be populated before recovery drives reverse-replay (resolves by target_table).
   registerAllDomains()
   ensureDiagnosticsGate()
+  ensureTruncationNotice()
   ensureDeltaActionPort()
   wireDrainWorker(ctx)
   configureClassifierEmbedder(embedClassifierDescriptions)

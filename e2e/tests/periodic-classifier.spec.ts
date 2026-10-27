@@ -4,7 +4,7 @@ import { goToWorld, openStory } from '../flows/navigation'
 import { takeTurn } from '../flows/turn'
 import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
-import { t } from '../harness/i18n'
+import { copyNumber, copyPattern, t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { EXAMPLES, promptOf, startMockLlm, type MockLlm } from '../harness/mock-llm'
 import {
@@ -1472,6 +1472,130 @@ test.describe('periodic classifier — a pass reply cut off at its length limit'
     expect(streamedCalls()).toBe(narratives)
     // The draft was empty, so the text went back to the composer and the entry carries none.
     expect(await systemFailures(branch)).toEqual([['failed', 'reply-cut-off', 'unknown', null]])
+    const [state, , watermark] = await classifierStatus(branch)
+    expect(state).toBe('failed')
+    expect(watermark).toBe(parked)
+  })
+})
+
+// architecture.md → Recognizing an overflow rejection, classifier.md → Failure policy: a pass the
+// provider rejects fails unretried, chained or owed. Serial: test 2's Send owes test 1's pass.
+test.describe('periodic classifier — a pass the provider rejects as over the window', () => {
+  test.describe.configure({ mode: 'serial' })
+
+  let app: LaunchedApp
+  let mock: MockLlm
+  let userDataDir: string | undefined
+  let parked: number
+
+  test.beforeAll(async () => {
+    // Retrieval blocks narrative: no installed embedder, no reply. Cold cache downloads ~24 MB.
+    test.setTimeout(180_000)
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    await installEmbedderModel(userDataDir)
+    mock = await startMockLlm()
+    setProviderEndpoint(seeded.dbPath, mock.url)
+    // A turn writes two entries, so with the watermark at the last reply each turn owes one pass.
+    setClassifierCadence(seeded.dbPath, 'story_hero', 2)
+    parked = parkClassifierWatermarkAtLastReply(seeded.dbPath, 'br_hero_main')
+    app = await launchApp({ userDataDir, cleanupUserData: true })
+  })
+
+  test.afterAll(async () => {
+    await app?.close()
+    await mock?.close()
+    removeUserDataDir(userDataDir)
+  })
+
+  const {
+    branchId,
+    entryIdByContent,
+    pollEntryId,
+    passOutcomes,
+    classifierStatus,
+    passCalls,
+    send,
+  } = passProbe(
+    () => app.window,
+    () => mock,
+  )
+
+  const U2 = 'E2E-OVERPASS-U2 I wade into the ford.'
+  const streamedCalls = () => mock.requests.filter((r) => r.streamed).length
+
+  async function systemFailures(branch: string): Promise<unknown[][]> {
+    return queryApp(
+      app.window,
+      `SELECT json_extract(metadata, '$.systemFailure.pass'),
+              json_extract(metadata, '$.systemFailure.kind'),
+              json_extract(metadata, '$.systemFailure.failure'),
+              json_extract(metadata, '$.systemFailure.submission'),
+              content
+       FROM story_entries WHERE branch_id = ? AND kind = 'system'`,
+      [branch],
+    )
+  }
+
+  test('a chained pass the provider rejects fails after one call and leaves the watermark', async () => {
+    const page = app.window
+    await home.openStory(page, 'The Veilstone Courier').click()
+    await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
+    const branch = await branchId()
+    const calls = passCalls()
+
+    // The harness keys structured calls by STRUCTURED_SHAPES name, not by agent id.
+    mock.overflowNextStructured('periodic-classifier')
+    await send('E2E-OVERPASS-U1 I ride for the ford.', 'E2E-OVERPASS-R1 the water runs high.')
+    await pollEntryId(branch, 'E2E-OVERPASS-R1')
+
+    await expect.poll(passOutcomes, { timeout: 20_000 }).toEqual(['failed'])
+    // Not retried: a second call would have drawn the inert default and completed.
+    expect(passCalls()).toBe(calls + 1)
+    const [state, lastError, watermark] = await classifierStatus(branch)
+    expect(state).toBe('failed')
+    // Recognized as a window failure, the server's message kept, not a bare provider 400.
+    expect(lastError).toEqual(expect.stringContaining('context window'))
+    expect(lastError).toEqual(expect.stringContaining('exceeds the available context size'))
+    expect(watermark).toBe(parked)
+  })
+
+  test('the owed pass at Send, rejected again, fails the Send with a window entry', async () => {
+    const page = app.window
+    const branch = await branchId()
+    const narratives = streamedCalls()
+    const calls = passCalls()
+
+    mock.overflowNextStructured('periodic-classifier')
+    await send(U2, 'E2E-OVERPASS-R2 the far bank comes up out of the mist.')
+
+    await expect(reader.retrySystemEntry(page)).toBeVisible({ timeout: 20_000 })
+    await expect(reader.dismissSystemEntry(page)).toBeVisible()
+    // A window entry offers no profile fix.
+    await expect(reader.fixProfile(page)).toHaveCount(0)
+    await expect(reader.composer(page)).toHaveValue(U2)
+    expect(await entryIdByContent(branch, 'E2E-OVERPASS-U2')).toBeUndefined()
+    expect(await passOutcomes()).toEqual(['failed', 'failed'])
+    expect(passCalls()).toBe(calls + 1)
+    expect(streamedCalls()).toBe(narratives)
+
+    const rows = await systemFailures(branch)
+    expect(rows).toHaveLength(1)
+    const [pass, kind, failure, submission, content] = rows[0]
+    // The draft was empty, so the text went back to the composer and the entry carries none.
+    expect([pass, kind, failure, submission]).toEqual([
+      'failed',
+      'context-window',
+      'provider',
+      null,
+    ])
+    const copy = copyPattern('reader:systemEntry.failure.memoryContextWindow.provider', {
+      texts: ['message'],
+      numbers: ['estimate'],
+    }).exec(content as string)
+    expect(copy, String(content)).not.toBeNull()
+    expect(copy?.groups?.message).toContain('exceeds the available context size')
+    expect(copyNumber(copy, 'estimate')).toBeGreaterThan(0)
     const [state, , watermark] = await classifierStatus(branch)
     expect(state).toBe('failed')
     expect(watermark).toBe(parked)

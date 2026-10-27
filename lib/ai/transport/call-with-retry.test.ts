@@ -1,6 +1,7 @@
 import { APICallError } from 'ai'
 import { describe, expect, it, vi } from 'vitest'
 
+import { ContextWindowError, type ContextWindowFailure } from '../context-window'
 import { ReplyCutOffError, type ReplyCutOffFailure } from '../reply-cut-off'
 import { callWithRetry } from './call-with-retry'
 
@@ -318,5 +319,116 @@ describe('callWithRetry with a cut-off reply', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+const OVER: ContextWindowFailure = {
+  detectedBy: 'check',
+  estimate: 71_234,
+  window: 65_536,
+  windowSource: 'configured',
+  providerId: 'prov-1',
+  modelId: 'model-1',
+}
+
+// generation-pipeline.md → Two retry tiers: the same prompt overflows the same window again.
+describe('callWithRetry with a prompt over the window', () => {
+  it('returns a refusal its call throws as failed, after a single call', async () => {
+    const callFn = vi.fn(async (): Promise<string> => {
+      throw new ContextWindowError(OVER)
+    })
+    const parseFn = vi.fn((raw: string): unknown => JSON.parse(raw))
+    const res = await callWithRetry(callFn, parseFn, opts(new AbortController().signal))
+    expect(res).toEqual({
+      status: 'failed',
+      error: { tier: 'context-window', ...OVER },
+      recoverable: [],
+    })
+    expect(callFn).toHaveBeenCalledOnce()
+    expect(parseFn).not.toHaveBeenCalled()
+  })
+
+  it('keeps the provider retry that came before a provider-detected overflow', async () => {
+    vi.useFakeTimers()
+    try {
+      const overflow: ContextWindowFailure = {
+        ...OVER,
+        detectedBy: 'provider',
+        detail: 'request exceeds the available context size',
+      }
+      let n = 0
+      const callFn = vi.fn(async (): Promise<string> => {
+        if (n++ === 0) throw server()
+        throw new ContextWindowError(overflow)
+      })
+      const promise = callWithRetry(
+        callFn,
+        (raw) => JSON.parse(raw),
+        opts(new AbortController().signal),
+      )
+      await vi.advanceTimersByTimeAsync(60000)
+      expect(await promise).toEqual({
+        status: 'failed',
+        error: { tier: 'context-window', ...overflow },
+        recoverable: [{ tier: 'provider', reason: 'network', detail: expect.any(String) }],
+      })
+      expect(callFn).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reports a refusal thrown after a cancel as aborted', async () => {
+    const ctrl = new AbortController()
+    const res = await callWithRetry(
+      async (): Promise<string> => {
+        ctrl.abort()
+        throw new ContextWindowError(OVER)
+      },
+      (raw) => JSON.parse(raw),
+      opts(ctrl.signal),
+    )
+    expect(res).toEqual({ status: 'aborted', recoverable: [] })
+  })
+})
+
+// generation-pipeline.md → Fatal error categories: a hint names only what the failed request carried.
+describe('callWithRetry and the capability hint', () => {
+  const rejected = (): APICallError =>
+    new APICallError({
+      message: 'Bad Request',
+      url: 'u',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({ error: { message: 'thinking is not supported' } }),
+    })
+
+  // The window check's chain learns what a request carried only as the request goes out.
+  it('reads what the request carried after it failed', async () => {
+    let carried = { reasoning: false, structuredOutput: false }
+    const res = await callWithRetry(
+      async (): Promise<string> => {
+        carried = { reasoning: true, structuredOutput: false }
+        throw rejected()
+      },
+      (raw) => JSON.parse(raw),
+      { ...opts(new AbortController().signal), carried: () => carried },
+    )
+    expect(res).toMatchObject({
+      status: 'failed',
+      error: { possibleCapabilityMismatch: { capability: 'reasoning', matched: 'thinking' } },
+    })
+  })
+
+  it('gives no hint when the caller does not say what its request carried', async () => {
+    const res = await callWithRetry(
+      async (): Promise<string> => {
+        throw rejected()
+      },
+      (raw) => JSON.parse(raw),
+      opts(new AbortController().signal),
+    )
+    expect(res.status).toBe('failed')
+    if (res.status === 'failed') expect('possibleCapabilityMismatch' in res.error).toBe(false)
   })
 })

@@ -68,6 +68,45 @@ describe('providerInstanceSchema', () => {
   })
 })
 
+describe('providerInstanceSchema — context window keys', () => {
+  const withCapabilities = (capabilities: Record<string, unknown>) => ({
+    ...VALID_PROVIDER,
+    cachedModels: [{ id: 'gemma', capabilities }],
+  })
+  const withOverrides = (contextWindowOverrides: Record<string, unknown>) => ({
+    ...VALID_PROVIDER,
+    contextWindowOverrides,
+  })
+
+  it('keeps a detected contextWindow on a cached model', () => {
+    const parsed = providerInstanceSchema.parse(withCapabilities({ contextWindow: 65536 }))
+    expect(parsed.cachedModels?.[0].capabilities?.contextWindow).toBe(65536)
+  })
+
+  it.each([0, -1, 1.5])('rejects a detected contextWindow of %s', (contextWindow) => {
+    expect(providerInstanceSchema.safeParse(withCapabilities({ contextWindow })).success).toBe(
+      false,
+    )
+  })
+
+  it('keeps the configured figures per model id, listed or custom', () => {
+    const parsed = providerInstanceSchema.parse(
+      withOverrides({ gemma: 32768, 'my-finetune': 8192 }),
+    )
+    expect(parsed.contextWindowOverrides).toEqual({ gemma: 32768, 'my-finetune': 8192 })
+  })
+
+  it.each([0, -1, 1.5])('rejects a configured figure of %s', (tokens) => {
+    expect(providerInstanceSchema.safeParse(withOverrides({ gemma: tokens })).success).toBe(false)
+  })
+
+  it('parses a provider written before either key existed', () => {
+    const parsed = providerInstanceSchema.parse(withCapabilities({ reasoning: true }))
+    expect(parsed.contextWindowOverrides).toBeUndefined()
+    expect(parsed.cachedModels?.[0].capabilities).toEqual({ reasoning: true })
+  })
+})
+
 describe('modelProfileSchema', () => {
   it('accepts a minimal narrative profile', () => {
     expect(modelProfileSchema.safeParse(VALID_PROFILE).success).toBe(true)

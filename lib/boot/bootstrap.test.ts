@@ -1,3 +1,4 @@
+import type { LanguageModelUsage } from 'ai'
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -6,6 +7,7 @@ import {
   __resetBranchWriteLocks,
   withBranchWriteShared,
 } from '@/lib/actions/delta/branch-write-lock'
+import { __resetTruncationCheck, checkInputTokens } from '@/lib/ai/truncation-check'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   APP_SETTINGS_DEFAULTS,
@@ -32,8 +34,9 @@ import {
   releaseBranchWriteExclusive,
 } from '@/lib/pipeline/runtime/action-port'
 import { appSettingsStore, recoveryReportStore, resetAllStores } from '@/lib/stores'
+import { toastStore, type ToastItem } from '@/lib/toast'
 
-import { ensureDeltaActionPort, runBootstrap } from './bootstrap'
+import { ensureDeltaActionPort, ensureTruncationNotice, runBootstrap } from './bootstrap'
 
 let ctx: {
   db: Awaited<ReturnType<typeof createTestDb>>['db']
@@ -471,5 +474,70 @@ describe('ensureDeltaActionPort', () => {
     // Checked before awaiting, so a release that frees nothing fails here, not by timeout.
     expect(run).toHaveBeenCalledOnce()
     await write
+  })
+})
+
+// Every lib/ai test sets its own sink or none, so only this pins the production wiring.
+describe('ensureTruncationNotice', () => {
+  const UNDER_REPORTED: LanguageModelUsage = {
+    inputTokens: 1_234,
+    inputTokenDetails: {
+      noCacheTokens: 1_234,
+      cacheReadTokens: undefined,
+      cacheWriteTokens: undefined,
+    },
+    outputTokens: 50,
+    outputTokenDetails: { textTokens: 50, reasoningTokens: undefined },
+    totalTokens: 1_284,
+  }
+  // 1,234 / 12,345 is well under the 0.5 ratio: the server likely dropped part of the prompt.
+  const CALL = {
+    usage: UNDER_REPORTED,
+    estimate: 12_345,
+    providerId: 'prov_local',
+    modelId: 'qwen2.5-coder:32b',
+  }
+  const WARNING =
+    'qwen2.5-coder:32b may have dropped part of the prompt: it counted 1,234 tokens where about 12,400 were sent. Set its context window.'
+
+  function shownToasts(): ToastItem[] {
+    let shown: ToastItem[] = []
+    const unsubscribe = toastStore.subscribe((items) => {
+      shown = items
+    })
+    unsubscribe()
+    return shown
+  }
+
+  beforeEach(() => {
+    __resetTruncationCheck()
+    toastStore.__reset()
+  })
+  afterEach(() => {
+    __resetTruncationCheck()
+    toastStore.__reset()
+  })
+
+  // Canon's `Set window` action waits on App Settings' window editor, so the toast has none.
+  it('raises one warning toast naming both counts, with no action', () => {
+    ensureTruncationNotice()
+    checkInputTokens(CALL)
+    expect(shownToasts()).toEqual([
+      { id: expect.any(String), severity: 'warning', message: WARNING },
+    ])
+  })
+
+  it('replaces its sink on a boot re-run rather than adding a second', () => {
+    ensureTruncationNotice()
+    ensureTruncationNotice()
+    checkInputTokens(CALL)
+    expect(shownToasts()).toHaveLength(1)
+  })
+
+  it('is wired by runBootstrap', async () => {
+    await seedRow()
+    await runBootstrap(ctx)
+    checkInputTokens(CALL)
+    expect(shownToasts().map((item) => item.message)).toEqual([WARNING])
   })
 })

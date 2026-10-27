@@ -557,7 +557,7 @@ and gains `Fix profile`, which opens the profile the
 limit. A fix action precedes `Retry` on every row, as on the embed
 row.
 
-When a provider's rejection names a capability
+When a provider's rejection names a capability the request carried
 ([`generation-pipeline.md → Fatal error categories`](../../../generation-pipeline.md#fatal-error-categories)),
 the **LLM call failed** or **Memory update failed** entry adds the
 hedged hint naming the profile's setting and the model's badge, and

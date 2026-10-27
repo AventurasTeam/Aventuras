@@ -21,7 +21,7 @@ import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
-import { type GenerateStructuredResult } from '@/lib/ai'
+import { describeCallRetryError, type GenerateStructuredResult } from '@/lib/ai'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
@@ -306,9 +306,12 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
       // structured-output parse failure. The sync-throw branch above is the
       // rare one, so logging only there left diagnostics empty for exactly the
       // reports users file.
-      const detail = assistFailureReason(result.error)
-      logger.error('provider.wizard_assist_failed', { modelId, ariaLabel, detail })
-      setAssist({ kind: 'failure', detail, retry })
+      logger.error('provider.wizard_assist_failed', {
+        modelId,
+        ariaLabel,
+        detail: describeCallRetryError(result.error),
+      })
+      setAssist({ kind: 'failure', detail: assistFailureReason(result.error), retry })
     }
     // 'aborted' — whichever action triggered the abort already set its own state.
   }

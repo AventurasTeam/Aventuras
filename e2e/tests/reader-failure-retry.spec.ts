@@ -4,7 +4,7 @@ import { waitForTurnTerminal } from '../flows/turn'
 import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
-import { startMockLlm, type MockLlm } from '../harness/mock-llm'
+import { mockUsage, startMockLlm, type MockLlm } from '../harness/mock-llm'
 import {
   createSeededUserDataDir,
   removeUserDataDir,
@@ -181,7 +181,7 @@ test.describe('reader — a reply cut off at its length limit', () => {
     })
     await expect(reader.fixProfile(page)).toBeVisible()
     await expect(reader.retrySystemEntry(page)).toBeVisible()
-    // No max output on the seeded profile and no usage on the stream: cause `unknown`.
+    // No max output on the seeded profile and no window known for its model: cause `unknown`.
     expect(await systemFailures(branchId)).toEqual([
       ['reply-cut-off', 'unknown', expect.stringContaining('E2E-NOPROSE-USER')],
     ])
@@ -206,7 +206,8 @@ test.describe('reader — a reply cut off at its length limit', () => {
     const branchId = await currentBranchId(page, 'story_hero')
     await waitForTurnTerminal(page)
 
-    mock.setNarrative('E2E-INPROSE-REPLY the rope bridge sways, and the far plank')
+    const cutReply = 'E2E-INPROSE-REPLY the rope bridge sways, and the far plank'
+    mock.setNarrative(cutReply)
     mock.cutNextNarrative()
     await reader.composer(page).fill('E2E-INPROSE-USER I step onto the bridge.')
     await reader.send(page).click()
@@ -214,8 +215,11 @@ test.describe('reader — a reply cut off at its length limit', () => {
     const replyId = await pollEntryId(branchId, 'E2E-INPROSE-REPLY')
     // After the piggyback fallback's metadata merge, which the mark must survive.
     await waitForTurnTerminal(page)
-    // The cause names no limit, and the stream reported no output count.
-    expect(await cutOffOf(replyId)).toEqual({ cause: 'unknown' })
+    // The cause names no limit; the mark keeps the output count the stream reported.
+    expect(await cutOffOf(replyId)).toEqual({
+      cause: 'unknown',
+      outputTokens: mockUsage('', cutReply).completion_tokens,
+    })
     await expect(reader.cutOffNotice(page, replyId, 'unknown')).toBeVisible()
     // The route wires the profile fix into the notice; canon offers it for `unknown`.
     await expect(reader.row(page, replyId).locator(reader.fixProfile(page))).toBeVisible()

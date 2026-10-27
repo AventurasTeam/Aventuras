@@ -14,6 +14,14 @@ import { logger } from '@/lib/diagnostics'
 import type { ProviderInstance } from '../db'
 import type { ResolveTarget } from './agents'
 import { anthropicCacheMarkerMiddleware } from './cache-marker'
+import {
+  ContextWindowError,
+  describeContextWindow,
+  generationWindow,
+  windowCheckMiddleware,
+  type ContextWindowFailure,
+  type GenerationWindow,
+} from './context-window'
 import { getModel } from './model'
 import {
   jsonResponseFormatMiddleware,
@@ -34,8 +42,14 @@ import {
   type ResolvedParams,
 } from './resolve-model'
 import { callWithRetry, type CallRetryError } from './transport/call-with-retry'
-import { ProviderTimeoutError } from './transport/classify-provider-error'
+import {
+  capabilityHintOf,
+  CARRIED_NOTHING,
+  ProviderTimeoutError,
+  type CapabilityHint,
+} from './transport/classify-provider-error'
 import { runProviderCall, streamProviderCall } from './transport/provider-call'
+import { checkInputTokens } from './truncation-check'
 
 export type CallSettings = {
   temperature?: number
@@ -132,6 +146,49 @@ function withMiddleware(
   })
 }
 
+// Must go last in a chain. `estimate()` is the latest count, null until the SDK built a request.
+function windowCheck(
+  providers: readonly ProviderInstance[],
+  providerId: string,
+  modelId: string,
+  attribution: { actionId: string } | undefined,
+) {
+  const window = generationWindow(providers, providerId, modelId)
+  let estimate: number | null = null
+  const middleware = windowCheckMiddleware({
+    window,
+    providerId,
+    modelId,
+    onEstimate: (tokens) => {
+      estimate = tokens
+    },
+    ...attribution,
+  })
+  return { window, estimate: () => estimate, middleware }
+}
+
+// After every middleware that changes the request, so it reads the request as sent; `carried()` is
+// the latest request's. The anthropic adapter sends no `thinking` field for a disabled setting.
+function carriedCapabilities() {
+  let carried = CARRIED_NOTHING
+  const middleware: LanguageModelMiddleware = {
+    specificationVersion: 'v3',
+    transformParams: async ({ params }) => {
+      const thinking = params.providerOptions?.anthropic?.thinking
+      carried = {
+        reasoning:
+          typeof thinking === 'object' &&
+          thinking !== null &&
+          'type' in thinking &&
+          thinking.type === 'enabled',
+        structuredOutput: params.responseFormat?.type === 'json',
+      }
+      return params
+    },
+  }
+  return { carried: () => carried, middleware }
+}
+
 /**
  * A rendered template's two halves. A blank system half is left out of the request; a structured
  * call's JSON contract may still create a system message.
@@ -168,6 +225,14 @@ export type StreamTextResult =
       timeoutMs: number | undefined
       /** The profile's max output (ResolvedParams.maxOutput); undefined when unset. */
       maxOutput: number | undefined
+      /** The model's window as resolved for this call. */
+      window: GenerationWindow
+      /** The request's token estimate; null until the SDK built the request. */
+      promptEstimate: () => number | null
+      /** The check's refusal or a recognized overflow, as a context-window failure; else null. */
+      contextWindowFailureOf: (error: unknown) => ContextWindowFailure | null
+      /** The hint a rejection gives on a capability this call's request carried; else undefined. */
+      capabilityHintOf: (error: unknown) => CapabilityHint | undefined
     }
   | { ok: false; kind: ResolveFailureKind; target: ResolveTarget }
 
@@ -179,31 +244,47 @@ export type StreamTextResult =
 export function streamText(target: ResolveTarget, opts: StreamTextOptions): StreamTextResult {
   const resolved = prepareGeneration(target, opts.config, opts.actionId)
   if (!resolved.ok) return resolved
+  const { providerId, modelId } = resolved
+  const attribution = opts.actionId === undefined ? undefined : { actionId: opts.actionId }
+  const check = windowCheck(opts.config.providers, providerId, modelId, attribution)
+  const sent = carriedCapabilities()
   const bounded =
     resolved.timeoutMs === undefined ? null : boundedSignal(opts.abortSignal, resolved.timeoutMs)
   const abortSignal = bounded?.signal ?? opts.abortSignal
   const stream = streamProviderCall({
-    model: marksSystemPrefix(opts.cacheSystemPrefix, resolved.providerType)
-      ? withMiddleware(resolved.model, [anthropicCacheMarkerMiddleware()])
-      : resolved.model,
+    // The check's refusal, thrown before any request, and a recognized overflow reach onError as
+    // a ContextWindowError (architecture.md → The pre-send check).
+    model: withMiddleware(resolved.model, [
+      ...(marksSystemPrefix(opts.cacheSystemPrefix, resolved.providerType)
+        ? [anthropicCacheMarkerMiddleware()]
+        : []),
+      sent.middleware,
+      check.middleware,
+    ]),
     ...promptParams(opts.prompt),
     ...(abortSignal !== undefined ? { abortSignal } : {}),
     ...(opts.onError !== undefined ? { onError: opts.onError } : {}),
-    // Not on an error: the SDK reports each error part and reads on, so a stall can follow. After a
-    // fatal one the stream is over, and the timer lapses on a call nothing awaits.
-    ...(bounded === null
-      ? {}
-      : { onFinish: () => bounded.dispose(), onAbort: () => bounded.dispose() }),
+    // Not disposed on an error: the SDK reports each error part and reads on, so a stall can
+    // follow. After a fatal one the timer lapses on a call nothing awaits.
+    onFinish: ({ usage }) => {
+      bounded?.dispose()
+      checkInputTokens({ usage, estimate: check.estimate(), providerId, modelId, ...attribution })
+    },
+    ...(bounded === null ? {} : { onAbort: () => bounded.dispose() }),
     ...resolved.callSettings,
   })
   return {
     ok: true,
     stream,
-    modelId: resolved.modelId,
-    providerId: resolved.providerId,
+    modelId,
+    providerId,
     timedOut: () => bounded?.expired() ?? false,
     timeoutMs: resolved.timeoutMs,
     maxOutput: resolved.params.maxOutput,
+    window: check.window,
+    promptEstimate: check.estimate,
+    contextWindowFailureOf: (error) => (error instanceof ContextWindowError ? error.failure : null),
+    capabilityHintOf: (error) => capabilityHintOf(error, sent.carried()),
   }
 }
 
@@ -255,15 +336,17 @@ export function describeCallRetryError(error: CallRetryError): string {
       return error.detail ?? error.reason
     case 'parse':
       return error.detail
+    case 'context-window':
+      return describeContextWindow(error)
     case 'reply-cut-off':
       return describeReplyCutOff(error)
   }
 }
 
 /**
- * Resolve `target`'s model, call it with `prompt`, and parse the reply against
- * `schema` (retrying provider + parse failures). A generic structured-output
- * generation primitive: the caller supplies the agent target and the Zod schema.
+ * Resolve `target`'s model, call it with `prompt`, and parse the reply against `schema`, retrying
+ * provider and parse failures. A call over a known window is refused unsent; a window failure,
+ * checked or provider-reported, is never retried.
  */
 export async function generateStructured<T>(
   target: ResolveTarget,
@@ -275,6 +358,8 @@ export async function generateStructured<T>(
 ): Promise<GenerateStructuredResult<T>> {
   const resolved = prepareGeneration(target, config, options.actionId ?? undefined)
   if (!resolved.ok) return { status: 'not-configured', kind: resolved.kind }
+  const { providerId, modelId } = resolved
+  const attribution = options.actionId === null ? undefined : { actionId: options.actionId }
 
   // z.toJSONSchema throws on unrepresentable schemas (transforms, refinements);
   // surface it as a typed failure rather than a raw rejection past the caller's
@@ -293,26 +378,26 @@ export async function generateStructured<T>(
       recoverable: [],
     }
   }
-  // 'auto' injects the schema via the prompt (no capability signal yet); native responseFormat
-  // is opt-in via 'force-on'. The marker goes last: on a blank system half, the contract's
-  // system message exists only once promptSchemaMiddleware has run.
+  const check = windowCheck(config.providers, providerId, modelId, attribution)
+  const sent = carriedCapabilities()
+  // 'auto' puts the schema in the prompt (no capability signal yet); 'force-on' sends it natively.
+  // Marker after the contract: on a blank system half, promptSchemaMiddleware makes the system
+  // message. Window check last, to count the contract too (architecture.md → The pre-send check).
   const model = withMiddleware(resolved.model, [
     jsonResponseFormatMiddleware(jsonSchema),
     ...(resolved.params.structuredOutput === 'force-on' ? [] : [promptSchemaMiddleware()]),
     ...(marksSystemPrefix(options.cacheSystemPrefix, resolved.providerType)
       ? [anthropicCacheMarkerMiddleware()]
       : []),
+    sent.middleware,
+    check.middleware,
   ])
 
   const logCutOff = (
     failure: ReplyCutOffFailure,
     outcome: { outcome: 'accepted' } | { outcome: 'refused'; parseError: string },
   ): void => {
-    logger.warn(
-      'provider.reply_cut_off',
-      { ...outcome, target, ...failure },
-      options.actionId === null ? undefined : { actionId: options.actionId },
-    )
+    logger.warn('provider.reply_cut_off', { ...outcome, target, ...failure }, attribution)
   }
   // generation-pipeline.md → Cut-off replies: a cut reply is accepted only as a strict document,
   // since jsonrepair would close a truncated one into a valid but shorter reply.
@@ -321,10 +406,10 @@ export async function generateStructured<T>(
     const failure = replyCutOff({
       usage: reply.usage,
       maxOutput: resolved.params.maxOutput,
-      window: null,
-      promptEstimate: null,
-      providerId: resolved.providerId,
-      modelId: resolved.modelId,
+      window: check.window.tokens,
+      promptEstimate: check.estimate(),
+      providerId,
+      modelId,
     })
     let value: T
     try {
@@ -353,6 +438,13 @@ export async function generateStructured<T>(
           abortSignal: bounded?.signal ?? sig,
           ...resolved.callSettings,
         })
+        checkInputTokens({
+          usage: call.usage,
+          estimate: check.estimate(),
+          providerId,
+          modelId,
+          ...attribution,
+        })
         return { text: call.text, finishReason: call.finishReason, usage: call.usage }
       } catch (error) {
         if (bounded?.expired()) throw new ProviderTimeoutError()
@@ -362,11 +454,16 @@ export async function generateStructured<T>(
       }
     },
     parse,
-    { maxProviderAttempts: 2, maxParseAttempts: 2, signal },
+    { maxProviderAttempts: 2, maxParseAttempts: 2, signal, carried: sent.carried },
   )
 
   const { recoverable } = result
   if (result.status === 'ok') return { status: 'ok', value: result.result, recoverable }
   if (result.status === 'aborted') return { status: 'aborted', recoverable }
-  return { status: 'failed', error: result.error, recoverable }
+  const { error } = result
+  if (error.tier === 'context-window') {
+    const { tier: _tier, ...failure } = error
+    logger.warn('provider.context_window', { target, ...failure }, attribution)
+  }
+  return { status: 'failed', error, recoverable }
 }

@@ -391,9 +391,28 @@
         ['Slow', 10],
       ]
       const FAILURES = {
-        narrative: ['none', 'http', 'stream-cut', 'malformed', 'hang', 'length'],
-        structured: ['none', 'http', 'malformed', 'hang', 'length'],
+        narrative: [
+          'none',
+          'http',
+          'stream-cut',
+          'malformed',
+          'hang',
+          'length',
+          'overflow-llamacpp',
+          'overflow-openai',
+        ],
+        structured: [
+          'none',
+          'http',
+          'malformed',
+          'hang',
+          'length',
+          'overflow-llamacpp',
+          'overflow-openai',
+        ],
       }
+      // A cut reply and an overflow rejection are never retried, so one failure reaches the app.
+      const NOT_RETRIED = ['length', 'overflow-llamacpp', 'overflow-openai']
 
       // Nav sections, in display order; `id` matches laneCatalog's group.
       const GROUPS = [
@@ -670,7 +689,7 @@
             ${
               !isNarrative &&
               lane.failure.kind !== 'none' &&
-              lane.failure.kind !== 'length' &&
+              !NOT_RETRIED.includes(lane.failure.kind) &&
               lane.failure.remaining === 1
                 ? `<p class="hint" style="color:var(--warn)">Structured calls retry once (<code>maxProviderAttempts: 2</code>), so a single injected failure is swallowed before the app sees it. Use 2 or more.</p>`
                 : ''

@@ -637,7 +637,14 @@ the underlying configuration surfaces.
   provider `⋯` menu with deletion-semantics AlertDialog,
   reset-profiles action, and the profile line under max output that
   gives the model's window, per
-  [`app-settings.md → Context window`](../ui/screens/app-settings/app-settings.md#context-window))
+  [`app-settings.md → Context window`](../ui/screens/app-settings/app-settings.md#context-window);
+  and `Set window` wired on the surfaces the context window check left
+  without it (the turn and pass `context-window` entries, a
+  `window` cut-off's notice and entries, the
+  [truncation toast](../architecture.md#truncation-cross-check)),
+  which needs the model target persisted on failure entries and the
+  cut-off mark (a change to both shapes in
+  [`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)))
   — deletion runs the full embedding-story
   block + `assignments` key removal + `providers[].length ≥ 1`
   invariant per
@@ -951,6 +958,34 @@ code before it moved; resolve with the slice it names.
   the watermark. Wiring force-on needs to refuse a `length` stop on that
   path outright. What Anthropic sends as a cut tool call's input is
   unverified. Raised by the cut-off replies slice review (2026-10-26).
+- **M7.1 — A profile's `customJson` is never sent.** Routed from triage
+  (2026-10-27). `resolveModel` (`lib/ai/resolve-model.ts`) carries a
+  profile's `customJson` into the resolved params, and nothing reads it
+  after that: `buildCallSettings` (`lib/ai/generate.ts`) maps only
+  temperature, max output and the Anthropic-only thinking budget, for
+  every provider. Canon calls it a per-field merge over the constructed
+  payload
+  ([`data-model.md → App settings storage`](../data-model.md#app-settings-storage)).
+  On an OpenAI-compatible reasoning model nothing can then disable or
+  cap thinking: the cut-off replies smoke on the dev LLM spent a
+  narrative max output of 64, 512, 1024 and 2200 entirely on reasoning,
+  so every turn failed as cut off before any text until the limit
+  (8192) covered the reasoning. Nothing can set a profile's `customJson`
+  today: the profile writers the app calls, `quickWireModel` and
+  `resetAppSettings`, write none, `upsertProfile` has no caller, and the
+  dev seed sets none, so it is reachable only by hand-editing SQLite and
+  sending it now would change nothing anyone can observe. That is why it
+  lands with M7.1's profile editor, whose "Advanced — custom JSON
+  payload" field
+  ([`app-settings.md → GENERATION · Profiles`](../ui/screens/app-settings/app-settings.md#generation--profiles))
+  is the first thing that sets one. Once sent, its keys count as sent
+  for the capability hint
+  ([`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories)),
+  so `carriedCapabilities` in `lib/ai/generate.ts`, which reads only the
+  Anthropic thinking setting and the JSON response format today, must
+  read them too. Per-story `customJson` stays parked
+  ([`parked.md → Granular per-story model controls`](../parked.md#granular-per-story-model-controls)).
+  Raised by the coordinator from the cut-off replies Task 15 smoke.
 - **M7.1 — The blocking embed path has no per-request token budget.**
   Routed from the Slice 3.12 split (2026-08-19), which keeps the cheap
   halves (a `maxParallelCalls` cap, chunking the local backend) in
@@ -980,9 +1015,10 @@ code before it moved; resolve with the slice it names.
   describes.** Routed from the Slice 3.12 split (2026-08-19).
   [`retrieval.md → Structural floor takes budget first`](../memory/retrieval.md#structural-floor-takes-budget-first)
   wants floor-then-reservation-then-budgets over a tracked context
-  window. The window figure is now specced, per model with its source
+  window. The window figure is implemented, per model with its source
   ([`architecture.md → Model context window`](../architecture.md#model-context-window)),
-  but nothing derives budgets from it, and no prompt-overhead
+  detected only until M7.1, but nothing derives budgets from it, and no
+  prompt-overhead
   reservation exists (`promptBufferTokens` is computed only for probe
   captures). The budget editor the original entry
   described ships since Slice 4.4 as five plain
@@ -1043,6 +1079,28 @@ code before it moved; resolve with the slice it names.
   reply fell short of, where raising that limit can't help and only the
   profile's model can (kept for now, developer, 2026-10-27). Raised by
   the cut-off replies slice review (2026-10-26).
+- **M7.1 — A detected window can go stale and lock a model out.**
+  Canon keeps
+  the last detected figure when a fetch publishes none
+  ([`architecture.md → The window figure`](../architecture.md#the-window-figure)),
+  so after a
+  llama.cpp router restarts the model with a larger context, a prompt
+  between the old and new figures is refused before it is sent. If the
+  router loads a model only on a request (believed, not checked), the
+  model never loads, a refresh never sees its new `meta.n_ctx`, and
+  until M7.1's override the user's only exit is another model. Pointing
+  a saved provider at another server keeps the first server's figures
+  too: a model id the new server lists without a window inherits the
+  old one. The providers tab owns endpoint edits and the override, so
+  it decides when a detected figure is dropped. Raised by the context
+  window check and its slice review (2026-10-27).
+- **M7.1 — A capability editor must store an explicit `false`.**
+  `normalizeModelCatalog` (`lib/ai/catalog.ts`) lets a stored capability
+  key, `false` included, beat detection, and re-detects a key the stored
+  entry lacks on every fetch. The M7 settings editor must therefore
+  write `false` to turn a detected flag off; deleting the key turns it
+  back on at the next refresh. No canon says so. Raised by the context
+  window check (2026-10-27).
 - **M7.2 — Story Settings → Memory's embedder block departs from
   canon.** [`story-settings.md → Memory tab`](../ui/screens/story-settings/story-settings.md#memory-tab)
   puts [Embedding status](../ui/screens/story-settings/story-settings.md#embedding-status)
@@ -1176,13 +1234,16 @@ code before it moved; resolve with the slice it names.
   block; the entity, happening and relationship lists grow unbounded
   with the branch — every entity, staged and retired included, with its
   full description — and `generateStructured` (`lib/ai/generate.ts`)
-  passes the rendered prompt straight to the provider with no length
-  guard. No memory doc sets a classifier-prompt budget;
+  refuses the rendered prompt unsent over a known window; with an
+  unknown one (the server publishes none, and the user can't set one
+  until M7.1) it is sent unchecked. No memory doc sets a
+  classifier-prompt budget;
   [`architecture.md → Settings`](../architecture.md#settings-strict-types-defaults-at-load)
   names app-scope "classifier truncation caps", of which only the entry
-  cap was built. A token-accurate budget needs the per-model input
-  window the window-level accounting entry above lacks, so the two land
-  together. A window-free interim (drop retired entities, cap each
+  cap was built. A token-accurate budget needs budgets derived from
+  the per-model window figure, which the window-level accounting entry
+  above still lacks, so the two land together. A window-free interim
+  (drop retired entities, cap each
   description) is there if a long story reaches a provider's prompt
   limit first, which fails the pass and so every Send on the branch
   until the prompt fits

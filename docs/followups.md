@@ -15,32 +15,6 @@ for the placement rule.
 
 ## Data-model
 
-- **Implement the context window check.** Designed 2026-10-26
-  ([`architecture.md → Model context window`](./architecture.md#model-context-window)):
-  the window figure with its detected and configured sources, the
-  pre-send check in `lib/ai`, overflow recognition in
-  `classifyProviderError`, and the truncation cross-check. The
-  cross-check needs `includeUsage` on the OpenAI-compatible provider,
-  which also stops streamed turns recording their prompt tokens as
-  `0`. The same `classifyProviderError` work implements the
-  capability hint canon already describes and code lacks
-  ([`generation-pipeline.md → Fatal error categories`](./generation-pipeline.md#fatal-error-categories)).
-  The check also feeds the window figure and the prompt estimate into
-  the cut-off cause at both call sites (the structured parse in
-  `lib/ai/generate.ts`, the narrative in
-  `lib/pipeline/definitions/per-turn.ts`), which pass `null` today,
-  so the `window` cause can't occur yet; and it gives a `window`
-  cut-off's notice, turn entry and pass entry their `Set window`
-  action
-  ([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)).
-  It reuses cut-off reply handling's typed failure arm, and comes
-  before [retrieval tuning](#tuning-and-play-testing),
-  which raises the budgets severalfold. The window chip, the profile
-  line and `Set window`'s target land with M7.1's providers tab; until
-  then a figure is detected only and the failure shows without a
-  route. The plan measures the count's cost on Android, and gives the
-  mock LLM a usage report and an overflow rejection for E2E.
-
 - **Periodic classifier context grows with the story.** A pass lists
   every entity, place, relationship view and happening on the branch
   ([`classifier.md → What the classifier reads`](./memory/classifier.md#what-the-classifier-reads)),
@@ -213,9 +187,7 @@ for the placement rule.
   each section of its prompt used (in-scene and retrieved entities, the
   location map, the story history, retrieved happenings, lore, threads,
   the instructions and so on) in its entry's metadata, and a UI shows
-  them. Today an entry keeps only totals (`metadata.tokens`), whose
-  prompt total reads `0` on OpenAI-compatible streams until the context
-  window check sets `includeUsage` (under [Data-model](#data-model)), and the
+  them. Today an entry keeps only totals (`metadata.tokens`), and the
   Memory probe's per-pool numbers
   ([`memory/probe.md`](./memory/probe.md)) cover only retrieval's pools
   and the structural floor, and only on captured turns; the design
@@ -309,9 +281,15 @@ breakdown under [UX](#ux).
   entity budget, which budget fill skips permanently
   ([`retrieval.md → Budget-fill termination`](./memory/retrieval.md#budget-fill-termination)):
   the characters a user invested in most become the ones retrieval
-  can't seat. The budgets rise only after the
-  [context window check](./architecture.md#model-context-window) is
-  implemented (under [Data-model](#data-model)), and the
+  can't seat. The budgets can rise now that the
+  [context window check](./architecture.md#model-context-window)
+  refuses a prompt over a known window rather than sending it, and the
+  [truncation cross-check](./architecture.md#truncation-cross-check)
+  flags a server that cut one; until the
+  [window-relative accounting](./memory/retrieval.md#structural-floor-takes-budget-first)
+  fits a prompt to the window, a story whose prompt outgrows it stops
+  its turns where the window is known or the server rejects the prompt,
+  and is cut silently, with a warning toast, where neither holds. The
   [Tier-2 knob surface](./parked.md#tier-2-retrieval-ranker-knob-tuning-surface)
   waits on these defaults settling. Raised 2026-10-19 by the
   entity-state design (the budgets).

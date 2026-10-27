@@ -1,3 +1,4 @@
+import { windowCopyOf } from '@/components/reader/context-window-copy'
 import { cutOffCopyOf } from '@/components/reader/cut-off-copy'
 import { describeCallRetryError, type CallRetryError } from '@/lib/ai'
 import { t } from '@/lib/i18n'
@@ -94,8 +95,20 @@ export function mergePages<P>(
   return merged
 }
 
-/** Failure-state reason: a cut-off gets a plain sentence, not the diagnostic's tags and counts. */
+function assistWindowReason(error: Extract<CallRetryError, { tier: 'context-window' }>): string {
+  const copy = windowCopyOf(error)
+  // The check never refuses without a window; with no figure to print, the diagnostic line.
+  return copy === null
+    ? describeCallRetryError(error)
+    : t(`wizard:aiAssist.contextWindow.${copy.key}`, copy.values)
+}
+
+/**
+ * Failure-state reason: a cut-off or a prompt over the window gets a plain sentence, not the
+ * diagnostic's tags and counts. No trailing period: the `failure` template adds one.
+ */
 export function assistFailureReason(error: CallRetryError): string {
+  if (error.tier === 'context-window') return assistWindowReason(error)
   if (error.tier !== 'reply-cut-off') return describeCallRetryError(error)
   const copy = cutOffCopyOf(error)
   return copy.key === 'unknown'

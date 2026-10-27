@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { logger, type Logger } from '@/lib/diagnostics'
 
 import type { ProviderInstance } from '../db'
+import { describeContextWindow, type ContextWindowFailure } from './context-window'
 import {
   buildCallSettings,
   describeCallRetryError,
@@ -154,11 +155,13 @@ describe('streamText', () => {
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.modelId).toBe('model-1')
     expect(streamProviderCall).toHaveBeenCalledWith({
-      model: {},
+      // Wrapped even with no cache marker: the window check rides every stream.
+      model: expect.objectContaining({ doStream: expect.any(Function) }),
       system: ' S\n',
       prompt: ' P\n',
       abortSignal: signal,
       onError,
+      onFinish: expect.any(Function),
       temperature: 0.7,
       maxOutputTokens: 2048,
       providerOptions: { anthropic: { thinking: { type: 'enabled', budgetTokens: 1024 } } },
@@ -230,6 +233,14 @@ describe('streamText', () => {
       vi.advanceTimersByTime(45_000)
       expect(finished.call.abortSignal?.aborted).toBe(false)
       expect(finished.result.timedOut()).toBe(false)
+    })
+
+    it('disarms the bound when the stream reports an abort', () => {
+      const { result, call } = streamed()
+      call.onAbort?.({ steps: [] })
+      vi.advanceTimersByTime(45_000)
+      expect(call.abortSignal?.aborted).toBe(false)
+      expect(result.timedOut()).toBe(false)
     })
 
     // The SDK calls onError for each error part and keeps the stream open, so a stall can follow.
@@ -912,19 +923,6 @@ describe('cache marker', () => {
     expect(await streamMark(type, cacheSystemPrefix)).toBeUndefined()
     expect(await structuredMark(type, cacheSystemPrefix)).toBeUndefined()
   })
-
-  it('hands the stream call the unwrapped model when it marks nothing', () => {
-    const inner = recordingModel()
-    vi.mocked(getModel).mockReturnValueOnce(inner.model as never)
-
-    streamText('narrative', {
-      prompt: { system: 'S', user: 'P' },
-      config: config('openai-compatible'),
-      cacheSystemPrefix: true,
-    })
-
-    expect(vi.mocked(streamProviderCall).mock.calls.at(-1)?.[0].model).toBe(inner.model)
-  })
 })
 
 describe('describeCallRetryError', () => {
@@ -954,5 +952,20 @@ describe('describeCallRetryError', () => {
         modelId: 'model-1',
       }),
     ).toBe('reply cut off (unknown): 4096 output tokens; model model-1 on provider prov-1')
+  })
+
+  it('describes a context-window failure as describeContextWindow does', () => {
+    const failure: ContextWindowFailure = {
+      detectedBy: 'provider',
+      estimate: 71_234,
+      window: null,
+      windowSource: 'unknown',
+      providerId: 'prov-1',
+      modelId: 'model-1',
+      detail: 'prompt is too long',
+    }
+    const line = describeCallRetryError({ tier: 'context-window', ...failure })
+    expect(line).toBe(describeContextWindow(failure))
+    expect(line).toContain('model-1')
   })
 })

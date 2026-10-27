@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router'
 import { useMemo } from 'react'
 
-import type { ResolveFailureKind } from '@/lib/ai'
+import type { CapabilityHint, ResolveFailureKind } from '@/lib/ai'
 import type { SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
@@ -15,6 +15,11 @@ import {
 } from '@/lib/pipeline'
 import { openEmbedderSwapDialog } from '@/lib/stores'
 
+import {
+  capabilityHintContent,
+  passContextWindowContent,
+  turnContextWindowContent,
+} from './context-window-copy'
 import { offersProfileFix, passCutOffContent, turnCutOffContent } from './cut-off-copy'
 import type { PassRefusal } from './send-run'
 
@@ -75,14 +80,26 @@ function isResolveFailureKind(failure: string): failure is ResolveFailureKind {
   return Object.hasOwn(FIX_LABEL, failure)
 }
 
+// The tags a provider hint persists; keyed per capability, so a new one is a type error until listed.
+const HINT_FIX_TAGS = {
+  reasoning: true,
+  structuredOutput: true,
+} as const satisfies Record<CapabilityHint['capability'], true>
+
+function isCapabilityHintTag(failure: string | undefined): boolean {
+  return failure !== undefined && Object.hasOwn(HINT_FIX_TAGS, failure)
+}
+
 function providerDetail(error: Extract<PipelineError, { kind: 'provider' }>): string {
   return error.detail != null ? `${error.reason}: ${error.detail}` : error.reason
 }
 
-// The entry's persisted fix-action tag: the resolver's failure, or a cut-off's cause.
+// The persisted `failure` tag: resolver, cut-off and hinted provider entries pick their fix by it.
 function failureTagOf(error: PipelineError | undefined): string | undefined {
   if (error?.kind === 'config-resolver') return error.failure
   if (error?.kind === 'reply-cut-off') return error.cause
+  if (error?.kind === 'context-window') return error.detectedBy
+  if (error?.kind === 'provider') return error.possibleCapabilityMismatch?.capability
   return undefined
 }
 
@@ -107,7 +124,14 @@ export function describeTurnFailure(error: PipelineError | undefined): {
   detail?: string
 } {
   if (error?.kind === 'provider') {
-    return { content: t('reader:systemEntry.failure.llmCall'), detail: providerDetail(error) }
+    const hint = error.possibleCapabilityMismatch
+    return {
+      content:
+        hint !== undefined
+          ? capabilityHintContent(hint, 'turn')
+          : t('reader:systemEntry.failure.llmCall'),
+      detail: providerDetail(error),
+    }
   }
   if (error?.kind === 'config-resolver') {
     return { content: t(TURN_RESOLVER_COPY[error.failure]), detail: error.detail }
@@ -126,6 +150,9 @@ export function describeTurnFailure(error: PipelineError | undefined): {
   }
   if (error?.kind === 'reply-cut-off') {
     return { content: turnCutOffContent(error), detail: pipelineErrorDetail(error) }
+  }
+  if (error?.kind === 'context-window') {
+    return { content: turnContextWindowContent(error), detail: pipelineErrorDetail(error) }
   }
   if (error?.kind === 'phase-logic' && error.subsystem === EMPTY_REPLY) {
     return {
@@ -163,13 +190,23 @@ export function describePassFailure(
     }
   const { error } = refusal
   if (error?.kind === 'provider') {
-    return { content: t('reader:systemEntry.failure.memory'), detail: providerDetail(error) }
+    const hint = error.possibleCapabilityMismatch
+    return {
+      content:
+        hint !== undefined
+          ? capabilityHintContent(hint, 'pass')
+          : t('reader:systemEntry.failure.memory'),
+      detail: providerDetail(error),
+    }
   }
   if (error?.kind === 'config-resolver') {
     return { content: t(PASS_RESOLVER_COPY[error.failure]), detail: error.detail }
   }
   if (error?.kind === 'reply-cut-off') {
     return { content: passCutOffContent(error), detail: pipelineErrorDetail(error) }
+  }
+  if (error?.kind === 'context-window') {
+    return { content: passContextWindowContent(error), detail: pipelineErrorDetail(error) }
   }
   return {
     content: t('reader:systemEntry.failure.memory'),
@@ -273,8 +310,8 @@ export function useEmbedderFixAction(storyId: string | null): SystemEntryFixActi
 }
 
 /**
- * `Fix profile` for a max-output or server-limit cut-off, via the story-leave guard. Memoized: the
- * reader hands it to every row, so a fresh identity would re-render each per chunk.
+ * `Fix profile` via the story-leave guard. Memoized: the reader hands it to every row, so a fresh
+ * identity would re-render each per chunk.
  */
 export function useProfileFixAction(
   enabled: boolean,
@@ -305,14 +342,16 @@ export function useSystemEntryActions(
     leaveStory,
   )
   const embedderFix = useEmbedderFixAction(failure?.kind === 'embedder' ? storyId : null)
-  const cutOffFix = useProfileFixAction(
-    failure?.kind === 'reply-cut-off' && offersProfileFix(failure.failure),
+  // None for context-window: `Set window` needs App Settings' window editor and a model target.
+  const profileFix = useProfileFixAction(
+    (failure?.kind === 'reply-cut-off' && offersProfileFix(failure.failure)) ||
+      (failure?.kind === 'provider' && isCapabilityHintTag(failure.failure)),
     leaveStory,
   )
   // A held branch can't run a pass, and a resolved entry's pass has run, so either offers Dismiss
   // alone. The fix gates are kind-exclusive, so the `??` order carries no meaning.
   return {
     onRetry: failure?.pass === 'held' || failure?.pass === 'resolved' ? undefined : onRetry,
-    fixAction: embedderFix ?? configFix ?? cutOffFix,
+    fixAction: embedderFix ?? configFix ?? profileFix,
   }
 }

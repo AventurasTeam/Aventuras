@@ -9,6 +9,8 @@ import { labeledPromptOutputSchema } from '@/lib/wizard'
 
 import { firstHalf } from './completions'
 import { collectSseContent } from './passthrough'
+import { mockUsage, overflowBody, overflowCounts } from './respond/wire'
+import { promptText } from './routing'
 import { startMockServer, type MockServer } from './server'
 
 let mock: MockServer
@@ -201,6 +203,24 @@ describe('failure injection', () => {
     lane.failure = { kind: 'none', status: 500, remaining: 0 }
   })
 
+  it('sends no usage frame on a cut stream, even to a request that asked for it', async () => {
+    const lane = mock.ctx.lane('narrative')
+    lane.stream = { charsPerSecond: 100_000, chunkSize: 6 }
+    lane.failure = { kind: 'stream-cut', status: 500, remaining: 1 }
+
+    const raw = await (
+      await post({
+        model: 'seed/narrative',
+        stream: true,
+        stream_options: { include_usage: true },
+        messages: [{ role: 'user', content: 'Continue the scene.' }],
+      })
+    ).text()
+
+    expect(raw).not.toContain('"usage"')
+    expect(collectSseContent(raw).length).toBeGreaterThan(0)
+  })
+
   it('does not spend a sequence entry on a call it failed', async () => {
     const lane = mock.ctx.lane('narrative')
     lane.stream = { charsPerSecond: 0, chunkSize: 6 }
@@ -254,6 +274,42 @@ describe('failure injection', () => {
       lane.failure = { kind: 'none', status: 500, remaining: 0 }
     },
   )
+  it.each([
+    ['overflow-llamacpp', 'llamacpp'],
+    ['overflow-openai', 'openai'],
+  ] as const)(
+    'answers %s with a 400 in that shape, whatever status the lane names, then answers again',
+    async (kind, shape) => {
+      mock.ctx.log.clear()
+      const lane = mock.ctx.lane('per-turn-classifier')
+      lane.failure = { kind, status: 503, remaining: 1 }
+      const request = structuredRequest(fallbackClassifierSchema)
+
+      const rejected = await post(request)
+
+      expect(rejected.status).toBe(400)
+      expect(rejected.headers.get('content-type')).toContain('application/json')
+      expect(await rejected.text()).toBe(overflowBody(shape, overflowCounts(promptText(request))))
+      expect(mock.ctx.log.list()[0]).toMatchObject({
+        outcome: 'failed',
+        failureKind: kind,
+        status: 400,
+      })
+      expect((await post(request)).status).toBe(200)
+    },
+  )
+
+  it('rejects a narrative call with an overflow 400 before any stream opens', async () => {
+    const lane = mock.ctx.lane('narrative')
+    lane.failure = { kind: 'overflow-llamacpp', status: 500, remaining: 1 }
+
+    const response = await post({ model: 'seed/narrative', stream: true, messages: [] })
+
+    expect(response.status).toBe(400)
+    expect(response.headers.get('content-type')).toContain('application/json')
+    expect(await response.text()).toContain('exceed_context_size_error')
+    expect(lane.failure.remaining).toBe(0)
+  })
 })
 
 describe('firstHalf', () => {
@@ -267,6 +323,32 @@ describe('firstHalf', () => {
   it('counts a character outside the BMP as one, never splitting its surrogate pair', () => {
     expect(firstHalf('ab😀cd')).toBe('ab')
     expect(firstHalf('😀')).toBe('😀')
+  })
+})
+
+describe('wire helpers', () => {
+  it('counts usage with o200k over the prompt and the reply', () => {
+    expect(mockUsage('hello world', 'hi')).toEqual({
+      prompt_tokens: 2,
+      completion_tokens: 1,
+      total_tokens: 3,
+    })
+    expect(mockUsage('', '')).toEqual({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 })
+  })
+
+  // llama.cpp's body as its server sends it; OpenAI's, less its message's closing sentence.
+  it("writes llama.cpp's and OpenAI's overflow bodies as those servers do", () => {
+    expect(overflowBody('llamacpp', { prompt: 71834, window: 65536 })).toBe(
+      '{"error":{"code":400,"message":"request (71834 tokens) exceeds the available context size (65536 tokens), try increasing it","type":"exceed_context_size_error","n_prompt_tokens":71834,"n_ctx":65536}}',
+    )
+    expect(overflowBody('openai', { prompt: 130000, window: 128000 })).toBe(
+      '{"error":{"message":"This model\'s maximum context length is 128000 tokens. However, your messages resulted in 130000 tokens.","type":"invalid_request_error","param":"messages","code":"context_length_exceeded"}}',
+    )
+  })
+
+  it('puts an overflow at the counted prompt, over a window half its size', () => {
+    expect(overflowCounts('hello world')).toEqual({ prompt: 2, window: 1 })
+    expect(overflowCounts('')).toEqual({ prompt: 0, window: 1 })
   })
 })
 
@@ -300,6 +382,13 @@ describe('catalog and control surface', () => {
   it('advertises the model id the seed pins taggedBlockReliable to', async () => {
     const body = (await (await fetch(`${mock.url}/models`)).json()) as { data: { id: string }[] }
     expect(body.data.map((m) => m.id)).toContain('seed/narrative')
+  })
+
+  it("publishes every model's window as meta.n_ctx, the field detection reads", async () => {
+    const body = (await (await fetch(`${mock.url}/models`)).json()) as {
+      data: { id: string; meta?: { n_ctx?: number } }[]
+    }
+    expect(body.data.map((m) => m.meta?.n_ctx)).toEqual([131072, 131072])
   })
 
   it('logs each call with its lane and the placeholders its prompt offered', async () => {
@@ -422,5 +511,59 @@ describe('lane PUT', () => {
       remaining: 1,
     })
     mock.ctx.lane('per-turn-classifier').failure = { kind: 'none', status: 500, remaining: 0 }
+  })
+
+  it('accepts both overflow failure kinds', async () => {
+    for (const kind of ['overflow-llamacpp', 'overflow-openai'] as const) {
+      const response = await fetch(`${base()}/api/lanes/per-turn-classifier`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ failure: { kind, remaining: 1 } }),
+      })
+      expect(response.status).toBe(200)
+      expect(mock.ctx.lane('per-turn-classifier').failure).toMatchObject({ kind, remaining: 1 })
+    }
+    mock.ctx.lane('per-turn-classifier').failure = { kind: 'none', status: 500, remaining: 0 }
+  })
+})
+
+describe('usage', () => {
+  it('reports usage on a structured reply, counted over its prompt and its reply', async () => {
+    const request = structuredRequest(fallbackClassifierSchema)
+    const body = (await (await post(request)).json()) as {
+      choices: { message: { content: string } }[]
+      usage?: unknown
+    }
+    const content = body.choices[0]?.message.content ?? ''
+    const expected = mockUsage(promptText(request), content)
+
+    expect(expected.prompt_tokens).toBeGreaterThan(0)
+    expect(body.usage).toEqual(expected)
+  })
+
+  it('streams usage before [DONE] only to a request that asks for it', async () => {
+    mock.ctx.lane('narrative').stream = { charsPerSecond: 0, chunkSize: 6 }
+    const messages = [{ role: 'user', content: 'Continue the scene.' }]
+
+    const plain = await (await post({ model: 'seed/narrative', stream: true, messages })).text()
+    expect(plain).not.toContain('"usage"')
+
+    const raw = await (
+      await post({
+        model: 'seed/narrative',
+        stream: true,
+        stream_options: { include_usage: true },
+        messages,
+      })
+    ).text()
+    const frames = raw.split('\n\n').filter((frame) => frame.startsWith('data:'))
+    expect(frames.at(-1)).toBe('data: [DONE]')
+    expect(frames.at(-3)).toContain('"finish_reason":"stop"')
+    const last = JSON.parse((frames.at(-2) ?? '').slice('data: '.length)) as {
+      choices: unknown[]
+      usage: unknown
+    }
+    expect(last.choices).toEqual([])
+    expect(last.usage).toEqual(mockUsage('Continue the scene.', collectSseContent(raw)))
   })
 })
