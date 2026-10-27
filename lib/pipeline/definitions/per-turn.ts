@@ -489,6 +489,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     generationTimingMs: Date.now() - startedAt,
     ...(reasoningText ? { reasoning: reasoningText } : {}),
     ...(cut !== undefined && !cut.inBlock ? { cutOff: cutOffMark(cut.failure) } : {}),
+    ...(load.injectedHappenings.length > 0 ? { injectedHappenings: load.injectedHappenings } : {}),
     ...(fold?.metadata ?? inherited),
     ...(stateReport !== undefined ? { stateReport } : {}),
     ...(suggestionsCaptured

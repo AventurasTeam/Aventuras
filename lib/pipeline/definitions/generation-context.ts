@@ -458,6 +458,7 @@ export async function buildGenerationContext(
     ...namedCharacters,
   ])
 
+  const retrievedHappenings = promptRows(retrieval?.bundles.happenings.selected)
   const context = {
     // cadence.md → Composition rule: the two-mode window plus its
     // protectedBuffer spillover is not expressible as a template `| recent: N`.
@@ -480,7 +481,7 @@ export async function buildGenerationContext(
     },
     retrievedEntities,
     retrievedLore: promptRows(retrieval?.bundles.lore.selected),
-    retrievedHappenings: promptRows(retrieval?.bundles.happenings.selected),
+    retrievedHappenings,
     retrievedThreads: promptRows(retrieval?.bundles.threads.selected),
     retrievedChapters: promptRows(retrieval?.bundles.chapters.selected),
     structuralLocation,
@@ -526,6 +527,8 @@ export async function buildGenerationContext(
     idMap,
     mapCurrentLocationId,
     stateShownIds,
+    // Real ids: the reply records them (data-model.md → Entry metadata shape).
+    injectedHappenings: retrievedHappenings.map((row) => row.id),
   }
 }
 

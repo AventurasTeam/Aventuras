@@ -54,6 +54,9 @@ export const entryMetadataSchema = z.object({
       }),
     ])
     .optional(),
+  // The happenings the ranker seated in this turn's prompt; authored, never inherited. The periodic
+  // classifier lists them (docs/memory/classifier.md#what-the-classifier-reads).
+  injectedHappenings: z.array(z.string()).optional(),
   // Feeds the NEXT turn's Q3 retrieval query (docs/memory/retrieval.md#q3-piggyback-summary).
   // Optional — absent on parse failure or restart is fine per docs/memory/piggyback.md.
   summary: z.string().optional(),

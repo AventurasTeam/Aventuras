@@ -118,6 +118,22 @@ test.describe('retrieval — a turn injects a retrieved bundle', () => {
     expect(prompt, 'the retrieved happenings block reached the prompt').toContain(
       '# What has happened',
     )
+    // The reply records the bundle's happenings by id, which the periodic classifier lists
+    // (data-model.md → Entry metadata shape). ACTION aims at the ambush, so its row is seated.
+    const recorded = await queryApp(
+      app.window,
+      `SELECT j.value, h.title FROM json_each(
+         (SELECT metadata FROM story_entries WHERE branch_id = ? AND kind = 'ai_reply'
+          ORDER BY position DESC LIMIT 1),
+         '$.injectedHappenings') j
+       LEFT JOIN happenings h ON h.branch_id = ? AND h.id = j.value`,
+      [HERO_BRANCH, HERO_BRANCH],
+    )
+    expect(
+      recorded.filter(([, title]) => title === null),
+      'every recorded id is a happening',
+    ).toEqual([])
+    expect(recorded.map(([, title]) => title)).toContain('The alley ambush')
     // Structural floor, not the ranker — but it is still retrieval's output: a
     // failed pass leaves generation-context's floor undefined and every pinned
     // bundle empty, so the header disappears with it.
