@@ -777,7 +777,9 @@ export const FailureCutOff: Story = {
     await expect(logger.error).toHaveBeenCalledWith('provider.wizard_assist_failed', {
       modelId: MODEL_ID,
       ariaLabel: 'Suggest description',
-      detail: reason,
+      detail:
+        'reply cut off (max-output): 1024 output tokens, max output 1024; ' +
+        'model gpt-4o-mini on provider prov_story',
     })
   },
 }
