@@ -169,13 +169,21 @@ function parseFailureText(detail: string): string {
     .join('; ')
 }
 
-// classifier.md → What the classifier writes → Happenings: a recounted happening carries a
-// temporal; the rest sit at their source turn.
-function anchorCounts(happenings: readonly { temporal?: string }[]) {
-  const temporal = happenings.filter((h) => (h.temporal?.trim() ?? '') !== '').length
+// As the planner anchors them (classifier.md → What the classifier writes → Happenings): a blank
+// title creates nothing, a recounted one carries a temporal, the rest sit at a source turn that
+// resolves or get no position. The temporal values are printed so filler like "none" shows.
+function anchorCounts(
+  happenings: readonly { title: string; temporal?: string; sourceTurn?: string }[],
+  window: ClassifierWindow,
+) {
+  const titled = happenings.filter((h) => h.title.trim() !== '')
+  const temporals = titled.map((h) => h.temporal?.trim() ?? '').filter((t) => t !== '')
+  const placed = titled.filter((h) => (h.temporal?.trim() ?? '') === '')
+  const unanchored = placed.filter((h) => window.resolveHandle(h.sourceTurn).fellBack).length
   return (
-    `happenings: ${happenings.length} (temporal ${temporal}, ` +
-    `at source turn ${happenings.length - temporal})`
+    `happenings: ${titled.length} (temporal ${temporals.length}, ` +
+    `at source turn ${placed.length - unanchored}, unanchored ${unanchored})` +
+    (temporals.length > 0 ? `; temporal values ${JSON.stringify([...new Set(temporals)])}` : '')
   )
 }
 
@@ -283,7 +291,7 @@ async function main(): Promise<void> {
     )
     if (outcome.dropped != null)
       console.log(`[probe]   dropped entries that didn't fit: ${outcome.dropped}`)
-    if (read != null) console.log(`[probe]   ${anchorCounts(read.reply.happenings)}`)
+    if (read != null) console.log(`[probe]   ${anchorCounts(read.reply.happenings, window)}`)
     const firstParse = outcome.recoverable.find((e): e is ParseRetryError => e.tier === 'parse')
     if (firstParse != null)
       console.log(`[probe]   first parse failure: ${oneLine(parseFailureText(firstParse.detail))}`)
