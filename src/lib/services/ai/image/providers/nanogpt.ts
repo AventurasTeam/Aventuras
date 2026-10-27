@@ -83,10 +83,6 @@ const NanoGptModel = z.object({
     .object({ input_modalities: modalities, output_modalities: modalities })
     .optional()
     .catch(undefined),
-  pricing: z
-    .object({ per_image: z.record(z.string(), z.unknown()).optional().catch(undefined) })
-    .optional()
-    .catch(undefined),
   capabilities: featureFlags,
   supported_parameters: supportedParameters,
 })
@@ -174,12 +170,10 @@ function toCapabilities({
 }
 
 function toModelInfo(m: NanoGptModel): ImageModelInfo {
-  const prices = Object.values(m.pricing?.per_image ?? {}).filter((c) => typeof c === 'number')
   return {
     id: m.id,
     name: m.name || m.id,
     description: m.description,
-    costPerImage: prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : undefined,
     inputModalities: m.architecture?.input_modalities,
     outputModalities: m.architecture?.output_modalities,
     ...toCapabilities(m),

@@ -137,7 +137,6 @@ const listed = (
     supported_parameters?: Record<string, unknown>
     capabilities?: unknown
     architecture?: unknown
-    pricing?: unknown
   } = {},
 ) => ({
   id,
@@ -339,7 +338,6 @@ describe('NanoGPT model catalogue', () => {
       listed('m', {
         supported_parameters: { resolutions: ['1k'], max_input_images: 'many', aspect_ratio: 7 },
         capabilities: 'yes',
-        pricing: [],
       }),
     )
     expect(model).toMatchObject({ id: 'm', supportedResolutions: ['1k'] })
@@ -350,13 +348,6 @@ describe('NanoGPT model catalogue', () => {
     withModels({ name: 'nameless' }, listed('m'))
     const models = await createNanoGPTProvider({ apiKey: 'k' }).listModels()
     expect(models.map((m) => m.id)).toEqual(['m'])
-  })
-
-  it('averages the per-image prices', async () => {
-    const model = await capabilitiesOf(
-      listed('m', { pricing: { per_image: { '1k': 0.01, '2k': 0.03, auto: 'n/a' } } }),
-    )
-    expect(model?.costPerImage).toBeCloseTo(0.02)
   })
 })
 
