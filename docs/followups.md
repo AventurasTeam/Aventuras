@@ -286,6 +286,40 @@ breakdown under [UX](#ux).
   Raised by the developer 2026-10-25, split from the prompt content
   pass.
 
+- **Classifier prompt: interface and structure.** The periodic
+  classifier's prompt is twenty rules in one list, then the reply
+  format as a TypeScript type whose comments carry a few field
+  descriptions. A first pass on 2026-10-27 named each output list in
+  its rule and described the fields a name doesn't explain. Left for a
+  pass that can measure itself:
+  - an evaluation set first: a few hand-written windows with the facts
+    each should yield (a fight across turns, a recounted past event, a
+    name reveal, a faction changing sides, a character learning of a
+    listed happening), scored by the parse probe. The hero branch's
+    opening the probe reads today is thin, repeating prose, so its
+    counts measure nothing;
+  - sections instead of the flat list: the task, the inputs, the rules
+    that hold everywhere (IDs and handles, provenance, scene, silence),
+    then each output list in the order the model writes it. Today
+    `knownAwareness` is written last but explained in the fourth rule;
+  - what counts as a happening, which no rule says beyond the category
+    examples;
+  - each turn's prose inside its own delimiters, the reason behind each
+    rule that isn't obvious, a short worked example, and no capitals for
+    emphasis;
+  - room to reason before the JSON, weighed against a pass that already
+    takes 75-157 s on the dev model;
+  - `sourceTurn` optional in the reply type, so a missing one parses and
+    falls back to the window head, while the rules ask for it on every
+    entry.
+
+  A field description reaches the model only when the reply format is
+  written into the prompt, the profile's structured output on auto.
+  Forced on, the schema goes to the server alone, and llama.cpp turns
+  it into a sampling grammar the model never reads (other providers
+  unverified), so the rules repeat whatever a description says. Raised
+  by the developer 2026-10-27.
+
 - **Parked items play gives a signal for.** Each waits on evidence
   only play produces, so play checks them rather than letting the
   signal pass unseen:
