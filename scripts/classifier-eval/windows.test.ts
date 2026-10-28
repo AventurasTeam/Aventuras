@@ -52,3 +52,24 @@ describe.each(EVAL_WINDOWS.map((w) => [w.name, w] as const))('eval window %s', (
     expect(back).toEqual(w.ideal)
   })
 })
+
+// A relative the prose names after a character is someone else.
+describe.each([
+  ['learning', 'Tam Rook is a new character', /^tam/i, "Tam Rook's aunt"],
+  ['recounted', 'Edric Vane is a new character', /vane/i, 'The son of Count Edric Vane'],
+  ['recounted', 'Vane, who gave the order, is involved in the wreck', /vane/i, 'son of Edric Vane'],
+] as const)('eval window %s', (window, check, own, relative) => {
+  it(`fails "${check}" when only a relative is added`, () => {
+    const w = EVAL_WINDOWS.find((x) => x.name === window)!
+    const holds = w.checks.find((c) => c.name === check)!.holds
+    const target = w.ideal.newCharacters.find((c) => own.test(c.name))!
+    const r = {
+      ...w.ideal,
+      newCharacters: w.ideal.newCharacters.map((c) =>
+        c === target ? { ...c, name: relative } : c,
+      ),
+    }
+    expect(holds(w.ideal)).toBe(true)
+    expect(holds(r)).toBe(false)
+  })
+})

@@ -10,6 +10,9 @@ import {
   type EvalWindow,
 } from '../fixture'
 
+// Vane himself, never his son, whom the prose names after him.
+const VANE = /^(count )?(edric )?vane$/i
+
 export const recounted: EvalWindow = {
   name: 'recounted',
   about: 'an event from thirty years before the story, told by a witness',
@@ -85,14 +88,14 @@ Nessa folded the page into her coat. She would take it to the magistrates' court
       name: 'Edric Vane is a new character',
       kind: 'expect',
       basis: 'rule',
-      holds: (r) => newCharacterNamed(r, /vane/i) != null,
+      holds: (r) => newCharacterNamed(r, VANE) != null,
     },
     {
       name: 'Vane, who gave the order, is involved in the wreck',
       kind: 'expect',
       basis: 'rule',
       holds: (r) => {
-        const vane = newCharacterNamed(r, /vane/i)
+        const vane = newCharacterNamed(r, VANE)
         return vane != null && r.happenings.some((h) => isRecounted(h) && involves(h, vane.handle))
       },
     },

@@ -90,7 +90,7 @@ Oriel ducked his head, pleased and embarrassed at once, and was gone.`,
       name: 'Tam Rook is a new character',
       kind: 'expect',
       basis: 'rule',
-      holds: (r) => newCharacterNamed(r, /tam|rook/i) != null,
+      holds: (r) => newCharacterNamed(r, /^tam( rook)?$/i) != null,
     },
     {
       name: 'Tam Rook, who fled, is not made dead',
