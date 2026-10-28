@@ -103,12 +103,16 @@ Oriel ducked his head, pleased and embarrassed at once, and was gone.`,
       name: 'Tam Rook, who fled, is not made dead',
       kind: 'avoid',
       basis: 'rule',
-      holds: (r) =>
-        !r.happenings.some((h) =>
-          /\b(death|murder|killing) of tam\b|\btam\b.*\b(death|dies|died|dead|killed)\b/i.test(
-            h.title,
-          ),
-        ),
+      holds: (r) => {
+        const tam = newCharacterNamed(r, /^tam( rook)?$/i)
+        return (
+          !r.happenings.some((h) =>
+            /\b(death|murder|killing) of tam\b|\btam\b.*\b(death|dies|died|dead|killed)\b/i.test(
+              h.title,
+            ),
+          ) && !r.statusFlips.some((f) => f.to === 'retired' && f.ref === tam?.handle)
+        )
+      },
     },
     // Adding the steward is left unscored; one added as no more than "the steward" is lost a few
     // turns on, since nothing in the reply says what he is doing.

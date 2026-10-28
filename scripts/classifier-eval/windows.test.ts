@@ -86,3 +86,16 @@ describe.each([
     expect(holds(r)).toBe(false)
   })
 })
+
+// Four replies retired Tam's own new handle, two for "ran the same night".
+it('the learning window counts a retirement of Tam as making him dead', () => {
+  const w = EVAL_WINDOWS.find((x) => x.name === 'learning')!
+  const holds = w.checks.find((c) => c.name === 'Tam Rook, who fled, is not made dead')!.holds
+  const tam = w.ideal.newCharacters.find((c) => c.name === 'Tam Rook')!
+  const retired = {
+    ...w.ideal,
+    statusFlips: [{ ref: tam.handle, to: 'retired' as const, reason: 'ran', sourceTurn: 't2' }],
+  }
+  expect(holds(w.ideal)).toBe(true)
+  expect(holds(retired)).toBe(false)
+})
