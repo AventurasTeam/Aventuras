@@ -216,20 +216,61 @@ function captureReplies(): void {
   }
 }
 
+// llama.cpp's timings carry its prompt-cache reuse and, with speculative decoding, the drafted
+// and accepted tokens: what a slip rate that moves between runs on an unchanged server is read against.
+type ServerTimings = {
+  cache_n?: number
+  prompt_n?: number
+  predicted_n?: number
+  predicted_per_second?: number
+  draft_n?: number
+  draft_n_accepted?: number
+}
+
 type ChatCompletion = {
   choices?: { message?: { content?: string | null; reasoning_content?: string | null } }[]
+  system_fingerprint?: string
+  usage?: unknown
+  timings?: ServerTimings
+}
+
+type ReplyParts = {
+  content: string
+  reasoning: string | null
+  server: Pick<ChatCompletion, 'system_fingerprint' | 'usage' | 'timings'> | null
 }
 
 // A body that isn't a chat completion, such as an error, is kept whole as the content.
-function replyParts(body: string): { content: string; reasoning: string | null } {
-  let message
+function replyParts(body: string): ReplyParts {
+  let completion: ChatCompletion | undefined
   try {
-    message = (JSON.parse(body) as ChatCompletion).choices?.[0]?.message
+    completion = JSON.parse(body) as ChatCompletion
   } catch {
-    message = undefined
+    completion = undefined
   }
-  if (message == null) return { content: body, reasoning: null }
-  return { content: message.content ?? '', reasoning: message.reasoning_content ?? null }
+  const message = completion?.choices?.[0]?.message
+  if (completion == null || message == null) return { content: body, reasoning: null, server: null }
+  const { system_fingerprint, usage, timings } = completion
+  return {
+    content: message.content ?? '',
+    reasoning: message.reasoning_content ?? null,
+    server: { system_fingerprint, usage, timings },
+  }
+}
+
+function serverLine(replies: readonly ReplyParts[]): string | null {
+  const timings = replies.flatMap((r) => (r.server?.timings == null ? [] : [r.server.timings]))
+  if (timings.length === 0) return null
+  const sum = (pick: (t: ServerTimings) => number | undefined) =>
+    timings.reduce((n, t) => n + (pick(t) ?? 0), 0)
+  const speeds = timings.flatMap((t) =>
+    t.predicted_per_second == null ? [] : [t.predicted_per_second],
+  )
+  return (
+    `draft accepted ${sum((t) => t.draft_n_accepted)}/${sum((t) => t.draft_n)}, ` +
+    `prompt from cache ${sum((t) => t.cache_n)}/${sum((t) => t.cache_n) + sum((t) => t.prompt_n)}, ` +
+    `${speeds.map((v) => v.toFixed(0)).join('/')} tokens/s`
+  )
 }
 
 function strictJsonError(text: string): string | null {
@@ -258,12 +299,14 @@ function emitStats(contents: readonly string[]): EmitStats {
   return { calls: contents.length, fenced: contents.filter(isFenced).length, keys, slips }
 }
 
-const rawText = (replies: readonly ReturnType<typeof replyParts>[]) =>
+const rawText = (replies: readonly ReplyParts[]) =>
   replies
-    .map(({ content, reasoning }, i) =>
+    .map(({ content, reasoning, server }, i) =>
       [
         `=== call ${i + 1} ===`,
-        ...(reasoning == null ? [] : ['--- reasoning ---', reasoning, '--- reply ---']),
+        ...(server == null ? [] : ['--- server ---', JSON.stringify(server)]),
+        ...(reasoning == null ? [] : ['--- reasoning ---', reasoning]),
+        ...(server == null && reasoning == null ? [] : ['--- reply ---']),
         content,
       ].join('\n'),
     )
@@ -316,6 +359,8 @@ async function attempt(
       `${parseRetries(outcome)} parse / ${providerRetries(outcome)} provider retries` +
       (outcome.detail ? ` — ${oneLine(outcome.detail)}` : ''),
   )
+  const server = serverLine(replies)
+  if (server != null) console.log(`[probe]   server: ${server}`)
   if (emit.slips.length > 0)
     console.log(
       `[probe]   ${emit.slips.length} of ${emit.keys} keys lost their closing quote: ` +

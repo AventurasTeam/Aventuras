@@ -462,8 +462,9 @@ provider retries, its first parse failure by field path and the
 entries a reply that parsed dropped for not fitting, by list, its
 happenings as the planner would anchor them (with a `temporal`, at a
 source turn that resolves, or unanchored, with the distinct `temporal`
-values), the keys whose closing quote the model dropped and whether
-the reply needed jsonrepair past its code fence, then the
+values), the keys whose closing quote the model dropped, whether the
+reply needed jsonrepair past its code fence and, from a llama.cpp
+server, its draft acceptance, prompt-cache reuse and speed, then the
 first-attempt parse rate and the share of keys that slipped. A reply
 the server stopped at its length limit that doesn't parse strictly is
 refused, not repaired
