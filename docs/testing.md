@@ -462,10 +462,11 @@ provider retries, its first parse failure by field path and the
 entries a reply that parsed dropped for not fitting, by list, its
 happenings as the planner would anchor them (with a `temporal`, at a
 source turn that resolves, or unanchored, with the distinct `temporal`
-values) and whether the reply was strict JSON or needed jsonrepair to
-mend it, then the first-attempt parse rate. A reply the server
-stopped at its length limit that doesn't parse strictly is refused,
-not repaired
+values), the keys whose closing quote the model dropped and whether
+the reply needed jsonrepair past its code fence, then the
+first-attempt parse rate and the share of keys that slipped. A reply
+the server stopped at its length limit that doesn't parse strictly is
+refused, not repaired
 ([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)):
 its run prints the cut-off's cause and numbers, and the summary counts
 it as cut off at length rather than as a failed run. `SMOKE_LLM_KEY`

@@ -154,8 +154,9 @@ type Outcome = {
   cutOff?: true
   /** Entries a tolerant list dropped from a reply that parsed, by list. */
   dropped?: string
-  /** The reply that parsed was no strict JSON: jsonrepair made it parse. */
+  /** The reply that parsed wasn't strict JSON inside its code fence: jsonrepair made it parse. */
   repaired?: true
+  emit: EmitStats
 }
 
 type ParseRetryError = Extract<CallRetryError, { tier: 'parse' }>
@@ -240,6 +241,23 @@ function strictJsonError(text: string): string | null {
   }
 }
 
+const isFenced = (text: string) => /^\s*```/.test(text)
+const unfenced = (text: string) => text.replace(/^\s*```[\w-]*\s*|\s*```\s*$/g, '')
+
+// Models pretty-print a key per line, so a key that lost its closing quote (`"ref: "c2",`,
+// `"severity: 1,`, `"role:": "x"`) is a line opening on a quote, a word and a colon. A string in
+// an array that opens the same way counts too.
+const KEY_LINE = /^\s*"[A-Za-z_$][\w$]*"\s*:/gm
+const SLIPPED_KEY_LINE = /^\s*"[A-Za-z_$][\w$]*:.*$/gm
+
+type EmitStats = { calls: number; fenced: number; keys: number; slips: readonly string[] }
+
+function emitStats(contents: readonly string[]): EmitStats {
+  const slips = contents.flatMap((c) => c.match(SLIPPED_KEY_LINE) ?? []).map((line) => line.trim())
+  const keys = contents.reduce((n, c) => n + (c.match(KEY_LINE)?.length ?? 0), 0) + slips.length
+  return { calls: contents.length, fenced: contents.filter(isFenced).length, keys, slips }
+}
+
 const rawText = (replies: readonly ReturnType<typeof replyParts>[]) =>
   replies
     .map(({ content, reasoning }, i) =>
@@ -273,7 +291,10 @@ async function attempt(
   const malformed = result.status === 'ok' ? readClassifierReply(result.value).malformed : []
   const replies = runBodies.map(replyParts)
   const notStrict =
-    result.status === 'ok' && replies.length > 0 ? strictJsonError(replies.at(-1)!.content) : null
+    result.status === 'ok' && replies.length > 0
+      ? strictJsonError(unfenced(replies.at(-1)!.content))
+      : null
+  const emit = emitStats(replies.map((r) => r.content))
   const outcome: Outcome = {
     status: result.status,
     recoverable: result.recoverable,
@@ -287,6 +308,7 @@ async function attempt(
       ? { dropped: malformed.map(({ list, count }) => `${list} ${count}`).join(', ') }
       : {}),
     ...(notStrict != null ? { repaired: true as const } : {}),
+    emit,
   }
   console.log(
     `[probe] run ${run}: ${outcome.cutOff === true ? 'cut off at length' : outcome.status} in ` +
@@ -294,8 +316,15 @@ async function attempt(
       `${parseRetries(outcome)} parse / ${providerRetries(outcome)} provider retries` +
       (outcome.detail ? ` — ${oneLine(outcome.detail)}` : ''),
   )
+  if (emit.slips.length > 0)
+    console.log(
+      `[probe]   ${emit.slips.length} of ${emit.keys} keys lost their closing quote: ` +
+        emit.slips.map((line) => oneLine(line).slice(0, 60)).join('  '),
+    )
   if (notStrict != null)
-    console.log(`[probe]   no strict JSON, parsed by jsonrepair: ${oneLine(notStrict)}`)
+    console.log(
+      `[probe]   no strict JSON in its fence, parsed by jsonrepair: ${oneLine(notStrict)}`,
+    )
   if (outcome.dropped != null)
     console.log(`[probe]   dropped entries that didn't fit: ${outcome.dropped}`)
   const firstParse = outcome.recoverable.find((e): e is ParseRetryError => e.tier === 'parse')
@@ -436,9 +465,17 @@ function summarizeParses(outcomes: readonly Outcome[]): void {
       `ok after a parse retry ${afterRetry}, failed after a parse retry ${failedAfterParseRetry.length}, ` +
       `failed with no parse retry ${failedOther.length}, cut off at length ${cutOff.length}, ` +
       `aborted ${aborted.length}, ` +
-      `ok only through jsonrepair ${outcomes.filter((o) => o.repaired === true).length}, ` +
+      `ok only through jsonrepair, past a fence, ${outcomes.filter((o) => o.repaired === true).length}, ` +
       `ok with dropped entries ${outcomes.filter((o) => o.dropped != null).length}, ` +
       `provider retries ${outcomes.reduce((n, o) => n + providerRetries(o), 0)}`,
+  )
+  const sum = (pick: (e: EmitStats) => number) => outcomes.reduce((n, o) => n + pick(o.emit), 0)
+  const slipped = sum((e) => e.slips.length)
+  const keys = sum((e) => e.keys)
+  console.log(
+    `[probe] emitted: ${sum((e) => e.calls)} calls, ${sum((e) => e.fenced)} in a code fence; ` +
+      `${slipped} of ${keys} keys lost their closing quote ` +
+      `(${keys === 0 ? 0 : ((100 * slipped) / keys).toFixed(2)}%)`,
   )
 }
 
