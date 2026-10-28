@@ -504,6 +504,10 @@ describe('periodic classifier template — standing and threads', () => {
 describe('periodic classifier template — the writer map rules', () => {
   const RULES = [
     [
+      'titles',
+      '- Titles. Give every happening a title, a few words naming the event as a chapter heading would ("The duel at the mill"), and a description of what happened, from the prose. A happening without a title is dropped, with its involvements and awareness.\n',
+    ],
+    [
       'status changes',
       '- Status changes. Put each move to active or retired in statusFlips, with the ID from Known entities or Places as ref, the new status as to, and the sourceTurn. Give a retirement its reason, a short phrase from the prose ("killed at the ford").\n',
     ],

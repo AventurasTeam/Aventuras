@@ -69,7 +69,7 @@ const awareness = z.object({
 const involvement = z.object({ ref: z.string(), role: z.string().optional() })
 
 const happening = z.object({
-  title: z.string(),
+  title: z.string().describe('A few words naming the event; every happening needs one.'),
   description: z.string().optional(),
   temporal: z
     .string()

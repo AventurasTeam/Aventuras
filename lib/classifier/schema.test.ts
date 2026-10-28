@@ -234,7 +234,7 @@ describe('classifierExtractionSchema — the writer map', () => {
   })
 
   // The fields whose name alone doesn't say what they hold; the template's rules repeat each.
-  it('describes a status change, a relationship kind, a learned happening, a changed thread and a faction', () => {
+  it('describes a status change, a relationship kind, a learned happening, a changed thread, a faction and a title', () => {
     expect(itemFields('statusFlips').to?.description).toBe(
       'active for a staged entity of any kind the prose brings into the scene, or a retired character who returns; retired only for a character or faction, on unambiguous finality.',
     )
@@ -249,6 +249,9 @@ describe('classifierExtractionSchema — the writer map', () => {
     )
     expect(itemFields('threadStatuses').thread?.description).toBe(
       'ID from the Threads list of the thread whose status changes; never a thread this reply adds, whose status goes in its own newThreads entry.',
+    )
+    expect(itemFields('happenings').title?.description).toBe(
+      'A few words naming the event; every happening needs one.',
     )
     expect(itemFields('memberships').faction?.description).toBe(
       "ID of the faction from Known entities or a new faction's handle; null when they now belong to none, never for a faction they leave for another.",
