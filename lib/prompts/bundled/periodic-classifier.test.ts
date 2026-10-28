@@ -205,13 +205,21 @@ describe('periodic classifier template — system and user halves', () => {
   it('names the lists its rules refer to instead of pointing above', () => {
     const { system } = render()
     expect(system).toContain(
-      'A character the prose introduces who is not in the Known entities list goes in newCharacters',
+      'Add a character the prose introduces who is not in the Known entities list:',
     )
     expect(system).toContain('so it can never be confused with a listed ID.')
     expect(system).toContain(
       "by a title, epithet or name form its line in Known entities or Places doesn't show",
     )
     expect(system).not.toMatch(/\babove\b/)
+  })
+
+  // classifier.md → What the classifier writes → New characters: the bar factions and places keep.
+  it('adds a named character or an unnamed one the story could come back to, never a passing figure', () => {
+    const { system } = render()
+    expect(system).toContain(
+      'a named one, or an unnamed one the story could come back to ("the innkeeper who hid them"). Not a passing figure there only for the moment ("a porter", "a soldier in the crowd"). Put each in newCharacters with a handle you choose.',
+    )
   })
 
   // The turns arrive after the rules, so "these turns" has nothing to point at.

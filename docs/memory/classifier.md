@@ -146,6 +146,13 @@ alias list (the keywords bullet below).
   after the flip's prose stands (see
   [`cadence.md → User edits and classifier writes`](./cadence.md#user-edits-and-classifier-writes)).
 
+- **New characters** — the characters the turns introduce that Known
+  entities lacks, with the bar factions and places keep: a named one,
+  or an unnamed one the story could come back to ("the innkeeper who
+  hid them"), never a passing figure there only for the moment ("a
+  porter"). Each goes through
+  [reconciliation](#disambiguation-on-new-character-mentions) before
+  it is created.
 - **Mentioned places** — with the story's setting on, the places the
   turns mention but the scene doesn't enter
   ([Mentioned places](#mentioned-places)).
