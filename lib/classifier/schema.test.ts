@@ -234,7 +234,7 @@ describe('classifierExtractionSchema — the writer map', () => {
   })
 
   // The fields whose name alone doesn't say what they hold; the template's rules repeat each.
-  it('describes a status change, a relationship kind and a learned happening', () => {
+  it('describes a status change, a relationship kind, a learned happening and a changed thread', () => {
     expect(itemFields('statusFlips').to?.description).toBe(
       'active for a staged entity of any kind the prose brings into the scene, or a retired character who returns; retired only for a character or faction, on unambiguous finality.',
     )
@@ -246,6 +246,9 @@ describe('classifierExtractionSchema — the writer map', () => {
     )
     expect(itemFields('knownAwareness').happening?.description).toBe(
       'ID from Known happenings of the happening the character learns of; never a happening this reply adds, whose learners go in its own awareness.',
+    )
+    expect(itemFields('threadStatuses').thread?.description).toBe(
+      'ID from the Threads list of the thread whose status changes; never a thread this reply adds, whose status goes in its own newThreads entry.',
     )
   })
 

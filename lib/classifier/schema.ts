@@ -212,7 +212,11 @@ export const classifierExtractionSchema = z.object({
   ),
   threadStatuses: tolerantList(
     z.object({
-      thread: z.string(),
+      thread: z
+        .string()
+        .describe(
+          'ID from the Threads list of the thread whose status changes; never a thread this reply adds, whose status goes in its own newThreads entry.',
+        ),
       status: foldedEnum(z.enum(['active', 'resolved', 'failed'])),
       sourceTurn,
     }),
