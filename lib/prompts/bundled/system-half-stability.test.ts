@@ -271,13 +271,13 @@ const RENDER_CASES: RenderCase[] = [
     templateId: TEMPLATE_IDS.periodicClassifier,
     first: PASS_A,
     second: PASS_B,
-    systemShows: ['Rules:'],
+    systemShows: ['Rules for every list:'],
   },
   {
     templateId: TEMPLATE_IDS.periodicClassifier,
     first: { ...PASS_A, mentionedPlaces: true },
     second: { ...PASS_B, mentionedPlaces: true },
-    systemShows: ['Rules:', '- New places. Add a place the turns mention'],
+    systemShows: ['Rules for every list:', '- New places. Add a place the turns mention'],
   },
   {
     templateId: TEMPLATE_IDS.suggestionRefresh,

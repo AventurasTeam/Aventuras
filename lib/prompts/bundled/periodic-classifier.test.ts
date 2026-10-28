@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { NEW_HANDLE_PREFIX } from '@/lib/classifier'
+import {
+  classifierExtractionSchema,
+  classifierExtractionWithPlacesSchema,
+  NEW_HANDLE_PREFIX,
+} from '@/lib/classifier'
 
 import { renderTemplate, TEMPLATE_IDS } from '..'
 
@@ -171,19 +175,31 @@ describe('periodic classifier template', () => {
 
 // architecture.md → System and user halves; classifier.md → What the classifier reads.
 describe('periodic classifier template — system and user halves', () => {
-  it('opens the system half with the role line, then the rules', () => {
+  it('opens the system half with the role line, then the rules every list keeps', () => {
     const lines = render().system.split('\n')
     expect(lines.slice(0, 4)).toEqual([
       'You are extracting structured world state from recent story prose. Report only what the prose supports; never invent.',
       '',
-      'Rules:',
+      'Rules for every list:',
       '',
     ])
     expect(lines[4]).toMatch(/^- Provenance\. /)
-    expect(lines.at(-1)).toBe(
-      '- Silence is valid. Return empty arrays for anything the prose does not support.',
-    )
   })
+
+  // Each list's rules sit where the model is about to write it: a rule read far from its list went
+  // unheeded (the evaluation set's knownAwareness).
+  it.each([
+    [false, classifierExtractionSchema],
+    [true, classifierExtractionWithPlacesSchema],
+  ])(
+    'heads its rules with every reply list in the order the reply writes them (places %s)',
+    (mentionedPlaces, schema) => {
+      const headed = render({ mentionedPlaces })
+        .system.split('\n')
+        .flatMap((line) => /^Rules for (.+):$/.exec(line)?.[1]?.split(/, | and /) ?? [])
+      expect(headed).toEqual(['every list', ...Object.keys(schema.shape)])
+    },
+  )
 
   // The lists sit in the user half, so a rule cannot point at them by position.
   it('names the lists its rules refer to instead of pointing above', () => {
@@ -353,8 +369,10 @@ describe('periodic classifier template — places', () => {
     expect(off.system).not.toContain('New places')
     expect(off.system).not.toContain('newPlaces')
     // The rule leaves no gap behind it either way.
-    for (const { system } of [on, off]) expect(system).toMatch(/\n- Silence is valid\./)
-    expect(off.system).toMatch(/already shows\.\n- Silence is valid\./)
+    expect(off.system).toMatch(/knownAwareness stays empty\.$/)
+    expect(on.system).toMatch(
+      /knownAwareness stays empty\.\n\nRules for newPlaces:\n\n- New places\. /,
+    )
   })
 })
 
@@ -535,8 +553,12 @@ describe('periodic classifier template — the writer map rules', () => {
   // Without its last sentence, replies filed who learned of a happening they added under
   // knownAwareness, naming it by title.
   it('sends awareness of a listed happening to knownAwareness, and of an added one to its own', () => {
-    expect(render().system).toContain(
-      "If a character learns of it after it happened, or learns of a past one, set learnedAtTurn to the turn that narrated the learning. Never add again a happening Known happenings lists: when the turns show a character learning of one (\"Kael tells Aria about the massacre\"), add a knownAwareness entry with its ID as happening, the character's ID or a new character's handle as ref, source, severity and learnedAtTurn. knownAwareness is for those listed happenings alone: who learns of a happening this reply adds goes in that happening's own awareness, and when the turns show no one learning of a listed happening, knownAwareness stays empty.\n",
+    const { system } = render()
+    expect(system).toContain(
+      'If a character learns of it after it happened, or learns of a past one, set learnedAtTurn to the turn that narrated the learning.\n',
+    )
+    expect(system).toContain(
+      "Rules for knownAwareness:\n\n- Never add again a happening Known happenings lists: when the turns show a character learning of one (\"Kael tells Aria about the massacre\"), add a knownAwareness entry with its ID as happening, the character's ID or a new character's handle as ref, source, severity and learnedAtTurn. knownAwareness is for those listed happenings alone: who learns of a happening this reply adds goes in that happening's own awareness, and when the turns show no one learning of a listed happening, knownAwareness stays empty.",
     )
   })
 

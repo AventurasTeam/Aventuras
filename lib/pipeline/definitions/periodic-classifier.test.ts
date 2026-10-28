@@ -395,7 +395,7 @@ describe('periodicClassifierPhase', () => {
     expect(user).not.toContain('rival')
     // classifier.md → What the classifier reads: role line and rules lead; branch lists stay out.
     expect(system).toMatch(
-      /^You are extracting structured world state from recent story prose\. Report only what the prose supports; never invent\.\n\nRules:\n\n- Provenance\. /,
+      /^You are extracting structured world state from recent story prose\. Report only what the prose supports; never invent\.\n\nRules for every list:\n\n- Provenance\. /,
     )
     expect(system).not.toContain('Kael sees')
     expect(system).not.toContain('as: ally')
