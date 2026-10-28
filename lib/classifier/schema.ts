@@ -163,7 +163,7 @@ export const classifierExtractionSchema = z.object({
         .string()
         .nullable()
         .describe(
-          "ID of the faction from Known entities or a new faction's handle; null when they now belong to none.",
+          "ID of the faction from Known entities or a new faction's handle; null when they now belong to none, never for a faction they leave for another.",
         ),
       sourceTurn,
     }),

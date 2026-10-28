@@ -600,11 +600,12 @@ rules:
 
 > Set a character's faction when the turns establish which organized
 > group they belong to now: they join it, are revealed as a member, or
-> change sides. Set it to none when they leave it or are cast out. Only
-> their main allegiance: a secondary tie, a past membership ("once of
-> the Iron Circle"), a disguise or a cover story doesn't change it.
-> Emit a fact only when the turns establish one or change the faction
-> their line shows.
+> change sides. Set it to none when they leave it or are cast out. A
+> change of sides is one fact naming the new faction: no fact sets none
+> for the faction they leave. Only their main allegiance: a secondary
+> tie, a past membership ("once of the Iron Circle"), a disguise or a
+> cover story doesn't change it. Emit a fact only when the turns
+> establish one or change the faction their line shows.
 
 **Matching.** A new faction reconciles against the branch's factions
 of every status, by the namesake rule, similarity and thresholds of

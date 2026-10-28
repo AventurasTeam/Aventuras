@@ -37,7 +37,7 @@ Rules for newCharacters and newFactions:
 
 Rules for memberships:
 
-- Memberships. Set a character's faction when the turns establish which organized group they belong to now: they join it, are revealed as a member, or change sides. Set it to none when they leave it or are cast out. Only their main allegiance: a secondary tie, a past membership ("once of the Iron Circle"), a disguise or a cover story doesn't change it. Emit a fact only when the turns establish one or change the faction their line shows. A character's line in Known entities shows its faction after "faction:". Put each fact in memberships with character set to the character's ID or a new character's handle, faction set to the faction's ID, a new faction's handle, or null for none, and the sourceTurn.
+- Memberships. Set a character's faction when the turns establish which organized group they belong to now: they join it, are revealed as a member, or change sides. Set it to none when they leave it or are cast out. A change of sides is one fact naming the new faction: no fact sets none for the faction they leave. Only their main allegiance: a secondary tie, a past membership ("once of the Iron Circle"), a disguise or a cover story doesn't change it. Emit a fact only when the turns establish one or change the faction their line shows. A character's line in Known entities shows its faction after "faction:". Put each fact in memberships with character set to the character's ID or a new character's handle, faction set to the faction's ID, a new faction's handle, or null for none, and the sourceTurn.
 
 Rules for aliases, renames, placements and standings:
 

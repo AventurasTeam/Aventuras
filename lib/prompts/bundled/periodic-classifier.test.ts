@@ -381,7 +381,7 @@ describe('periodic classifier template — factions', () => {
   const FACTION_RULE =
     'Add a faction when the prose establishes an organized group with its own identity in the story\'s world: a named one (a guild, an order, a noble house, a gang, a church, a government), or an unnamed one the story could come back to ("the smugglers who run the docks"). Not a loose crowd or a kind of person ("the guards", "the villagers"), not one that exists only in a hypothetical, a dream or a figure of speech, and not one already in Known entities, even under another name: use its ID and add the name form as an alias.'
   const MEMBERSHIP_RULE =
-    'Set a character\'s faction when the turns establish which organized group they belong to now: they join it, are revealed as a member, or change sides. Set it to none when they leave it or are cast out. Only their main allegiance: a secondary tie, a past membership ("once of the Iron Circle"), a disguise or a cover story doesn\'t change it. Emit a fact only when the turns establish one or change the faction their line shows.'
+    'Set a character\'s faction when the turns establish which organized group they belong to now: they join it, are revealed as a member, or change sides. Set it to none when they leave it or are cast out. A change of sides is one fact naming the new faction: no fact sets none for the faction they leave. Only their main allegiance: a secondary tie, a past membership ("once of the Iron Circle"), a disguise or a cover story doesn\'t change it. Emit a fact only when the turns establish one or change the faction their line shows.'
 
   it.each([true, false])(
     'carries both rules in the system half, whatever the places setting: %s',
