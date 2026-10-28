@@ -102,11 +102,20 @@ Nessa folded the page into her coat. She would take it to the magistrates' court
       basis: 'rule',
       holds: (r) => r.newThreads.length > 0,
     },
+    // The page changing hands is left unscored: piggyback records the item and its move, and
+    // whether a handover is also a happening is undecided.
     {
-      name: 'the telling is not a happening: every happening is the recounted past',
+      name: 'the telling is not a happening: Nessa learning of the wreck is awareness',
       kind: 'avoid',
       basis: 'judgment',
-      holds: (r) => r.happenings.every(isRecounted),
+      holds: (r) =>
+        !r.happenings.some(
+          (h) =>
+            !isRecounted(h) &&
+            /\b(tells?|told|telling|recounts?|reveals?|revelation|confess(es|ion)?|account|story|tale|truth|learns?)\b/i.test(
+              h.title,
+            ),
+        ),
     },
     awarenessOfListedOnly(['hap_belltower']),
   ],
@@ -161,13 +170,13 @@ Nessa folded the page into her coat. She would take it to the magistrates' court
     ],
     happenings: [
       {
-        title: 'Brannoc gives Nessa the logbook page',
+        title: 'Brannoc tells Nessa the truth of the Marigold',
         involvements: [
           { ref: 'char_brannoc', role: 'actor' },
           { ref: 'char_nessa', role: 'target' },
         ],
         awareness: [],
-        sourceTurn: 't4',
+        sourceTurn: 't2',
       },
     ],
   }),

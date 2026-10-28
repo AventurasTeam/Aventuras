@@ -93,6 +93,28 @@ Oriel ducked his head, pleased and embarrassed at once, and was gone.`,
       holds: (r) => newCharacterNamed(r, /tam|rook/i) != null,
     },
     {
+      name: 'Tam Rook, who fled, is not made dead',
+      kind: 'avoid',
+      basis: 'rule',
+      holds: (r) =>
+        !r.happenings.some((h) =>
+          /\b(death|murder|killing) of tam\b|\btam\b.*\b(dies|died|dead|killed)\b/i.test(h.title),
+        ),
+    },
+    // Adding the steward is left unscored; one added as no more than "the steward" is lost a few
+    // turns on, since nothing in the reply says what he is doing.
+    {
+      name: 'a steward, if added, is described by what he is doing',
+      kind: 'avoid',
+      basis: 'judgment',
+      holds: (r) => {
+        const steward = newCharacterNamed(r, /steward/i)
+        return (
+          steward == null || /nightshade|alchemist|poison|senna|list/i.test(steward.description)
+        )
+      },
+    },
+    {
       name: 'finding Tam is a new thread',
       kind: 'expect',
       basis: 'rule',
@@ -142,6 +164,16 @@ Oriel ducked his head, pleased and embarrassed at once, and was gone.`,
         title: 'Lady Senna poisoned',
         involvements: [{ ref: 'char_senna', role: 'target' }],
         awareness: [],
+        sourceTurn: 't2',
+      },
+      { title: 'The death of Tam Rook', involvements: [], awareness: [], sourceTurn: 't2' },
+    ],
+    newCharacters: [
+      {
+        handle: 'new:steward',
+        name: 'the steward',
+        description: 'The steward.',
+        keywords: [],
         sourceTurn: 't2',
       },
     ],

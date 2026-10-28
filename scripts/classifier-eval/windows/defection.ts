@@ -81,6 +81,12 @@ Maela slid the paper across the table. He read it twice, then unpinned the tarni
       holds: (r) => !r.memberships.some((m) => m.character === 'char_maela'),
     },
     {
+      name: 'no new character: the gate-boy, the hanged brother and the warrant’s signer go unnamed',
+      kind: 'avoid',
+      basis: 'judgment',
+      holds: (r) => r.newCharacters.length === 0,
+    },
+    {
       name: 'no new faction for a listed one',
       kind: 'avoid',
       basis: 'rule',
@@ -132,6 +138,9 @@ Maela slid the paper across the table. He read it twice, then unpinned the tarni
       },
     ],
     memberships: [{ character: 'char_maela', faction: 'fact_wardens', sourceTurn: 't4' }],
+    newCharacters: [
+      { handle: 'new:boy', name: 'Gate-boy', description: 'x', keywords: [], sourceTurn: 't4' },
+    ],
     newFactions: [
       {
         handle: 'new:wardens',

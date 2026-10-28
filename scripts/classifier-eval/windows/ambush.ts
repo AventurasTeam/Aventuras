@@ -111,6 +111,13 @@ When Sefa comes down the bank leading the cart horse, there's an arrow standing 
           /\b(you|tobin|traveller|traveler|player|protagonist)\b/i.test(c.name),
         ),
     },
+    {
+      name: 'the archer and the third rider, never named, are not new characters',
+      kind: 'avoid',
+      basis: 'judgment',
+      holds: (r) =>
+        r.newCharacters.every((c) => /hask/i.test(c.name) && !/archer|rider/i.test(c.name)),
+    },
     awarenessOfListedOnly([]),
   ],
   ideal: reply({
@@ -164,6 +171,13 @@ When Sefa comes down the bank leading the cart horse, there's an arrow standing 
     ],
     newCharacters: [
       { handle: 'new:you', name: 'You', description: 'The rider.', keywords: [], sourceTurn: 't2' },
+      {
+        handle: 'new:archer',
+        name: 'Younger rider',
+        description: 'x',
+        keywords: ['the archer'],
+        sourceTurn: 't2',
+      },
     ],
   }),
 }
