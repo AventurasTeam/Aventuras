@@ -393,3 +393,78 @@ come back to. The mean rate of rule checks is 0.89 against 0.91, the
 two Nessa misses being IDs written with their brackets, of judgment
 checks 0.69 against 0.65. Kept, with the steward for the developer to
 judge.
+
+## Change 7: awareness counts who witnessed it
+
+The Awareness rule opened "List only characters the prose shows
+learning the fact", against its own example source, "witnessed
+firsthand", and the data model's awareness, a character who knows the
+happening
+([`data-model.md → Diagram`](../data-model.md#diagram)).
+Brannoc, who watched the wreck he recounts, never learns it in the
+turns, and no reply on changes 3 to 6 put him in its awareness. The
+rule now opens: "List only characters the prose shows knowing the
+fact: who witnessed it, and who learns of it."
+
+Expected to move: Brannoc aware of the wreck, 0 of 10 four times; at
+risk, the unrelated listed fire getting no awareness, knownAwareness
+naming only listed happenings, Nessa's learnedAtTurn and Idris's
+learning, and awareness spreading to everyone in a scene.
+
+Brannoc is aware in 9 of 10. The fire, knownAwareness and Nessa held;
+one learning reply added the listed poisoning again, with Oriel as its
+teller, and so missed Idris's learning, as one reply on change 2's
+prompt had. Awareness rows rose from 0.7 and 0.5 a happening to 1.3,
+nearly all of it in recounted and defection, where those who did a
+thing are now aware of it: Brann and Maela of the theft they carried
+out. The silent drover Pell, whom replies take for the "you" of the
+ambush, is aware in 23 of its happenings against 18 and 13, the lead
+question again. Completion tokens didn't move. The mean rate of rule
+checks is 0.90 against 0.89, of judgment checks 0.74 against 0.69.
+Kept.
+
+This run also corrects change 6's reading. With the bar unchanged, 3
+of 10 replies named a rider, so the bar's prompt names one in 3 of 20
+runs against 10 of 30 before it, a smaller effect than change 6's run
+alone showed. The steward came in 5 of 10 again, 11 of 20 against 7
+of 30 before the bar, and Tam's aunt in 1.
+
+## Where it stands
+
+Every change so far, with the check it was made for. The baseline and
+change 1 ran five times a window, the rest ten; the mean rates are
+over the checks as they now score, the baseline's read through the
+slip recovery.
+
+| Change             | The check it was made for                        | Before → after | Rule / judgment mean |
+| ------------------ | ------------------------------------------------ | -------------- | -------------------- |
+| baseline           |                                                  |                | 0.74 / 0.64          |
+| 1, knownAwareness  | knownAwareness names only a listed happening     | 11/25 → 17/25  | 0.83 / 0.60          |
+| 2, headings        | the same                                         | 37/50 → 49/50  | 0.86 / 0.66          |
+| 3, threadStatuses  | every ID names a listed row or a declared handle | 38/50 → 47/50  | 0.87 / 0.65          |
+| 4, change of sides | Brann ends in House Varro                        | 7/10 → 9/10    | 0.89 / 0.63          |
+| 5, titles          | calls that drop a happening                      | 4/50 → 0/50    | 0.91 / 0.65          |
+| 6, character bar   | replies naming an ambush rider                   | 10/30 → 3/20   | 0.89 / 0.69          |
+| 7, witnesses       | Brannoc aware of the wreck                       | 0/10 → 9/10    | 0.90 / 0.74          |
+
+Left, each for the developer or measured as out of a rule's reach:
+
+- **The steward** under the character bar, in the followup.
+- **A none beside a join** could also be settled in the planner, a
+  none and a join for one character at one turn read as the leave
+  before the join, which would hold for any model; it would change
+  canon's apply order, so it was left.
+- **The lead.** Replies take the silent drover Pell for the ambush's
+  "you" and leave Tobin out of most happenings (2 to 5 of 10).
+- **The cover name.** No reply reads "Mistress Penn, sir, from
+  Tanner's Row" as Ilse naming herself; the reasoning takes Penn for
+  the fishmonger or a third person, so the Names rule, which already
+  sends a disguise to aliases, never comes into play.
+- **A character named later in the window.** Twice in the 300
+  replies since change 2 the scarred man was added unnamed, his own
+  handle then renamed Dov Hask, a rename the planner drops, so Hask is
+  lost.
+- **One happening a beat.** The fight is never one happening (1 of 70
+  runs), the followup's "what counts as a happening".
+- **Tam Rook made dead** swings between 3 and 7 of 10 with no change
+  near it, and Vane, named and dead, is added in 1 to 5.

@@ -287,9 +287,10 @@ breakdown under [UX](#ux).
     piggyback already records with who gave it;
   - where the character bar falls: the rule now keeps the one factions
     and places keep, a named character or an unnamed one the story
-    could come back to, which ended the named ambush riders but has the
-    `learning` replies add the steward hunting the alchemists in 6 of
-    10, against 1, and Tam's aunt in 2;
+    could come back to. A reply still names an ambush rider in 3 of 20
+    runs, against 10 of 30 without the bar, and the `learning` replies
+    add the steward hunting the alchemists in 11 of 20, against 7 of
+    30, and Tam's aunt in 3, against none;
   - the lead: the prompt doesn't name the story's lead, so in first- or
     second-person narration "I" and "you" are the lead only by the
     scene. The `ambush` window measures it;
