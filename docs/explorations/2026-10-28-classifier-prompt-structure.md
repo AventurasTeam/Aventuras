@@ -101,3 +101,41 @@ The failures that recur, by how many of the 21 replies show them:
 
 Two checks were corrected after reading these replies: "X's death"
 forms of Tam's death and of a re-added poisoning had scored as held.
+
+## Recovering the slip
+
+The developer prefers the reply format in the prompt to a provider's
+structured output, so the slip is recovered in code rather than ruled
+out by a grammar. `parseStructured` now gives a key its quote back on
+a line that opens on a key the schema declares, before jsonrepair, and
+drops a colon left inside a key's quotes (`"role:": "target"`, a form
+first seen in this corpus) on strict JSON too
+([`tech-stack.md → jsonrepair`](../tech-stack.md#7-jsonrepair)).
+Replayed through it, all 41 saved calls of both runs parse at their
+first call and the 25 clean ones come out unchanged. Read as the app
+would now read them, the baseline's 25 runs hold 140 of 190 rule
+checks and 33 of 55 judgment checks: the reference the changes below
+compare against.
+
+## Temperature 0.7
+
+The router samples this model at temperature 1.0, top_p 0.95 and
+top_k 20. Rerun with the request setting 0.7, the set slipped 3 of
+1,930 keys (0.16%), against 18 of 2,142 at 1.0: some 16 were due at
+the old rate. All three were forms the recovery handles, and every
+run's first call parses. The content didn't move: 141 of 190 rule
+checks and 32 of 55 judgment checks, read the same way. So a lower
+temperature makes the slip rarer and leaves what the model extracts
+alone, at five runs a window.
+
+Two things the run showed that the baseline didn't:
+
+- **Unnamed characters written with a null name.** Two ambush replies
+  gave the archer and the third rider `"name": null` or no
+  description, and the reply's tolerant list dropped them, the outcome
+  the window's check asks for, by accident. One of them did the same
+  to Hask, whose name only comes at the fight's end, and lost him.
+- **`temporal` on an event just before the scene.** "The ferry rope
+  is cut", which the riders did before Tobin reached the crossing, got
+  "before the story", the phrase the rule gives for a past with no
+  time.
