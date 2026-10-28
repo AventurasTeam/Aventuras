@@ -185,6 +185,12 @@ or "t4", the new sentence notwithstanding. The rule sits fourth and the
 list is written last; that is the structure pass's question.
 
 The run slipped 1 of 1,640 keys, against 18 of 2,142 in the baseline
-at the same temperature and a similar reply size. The prompt change
-can't account for that; whether the router changed between the runs is
-open.
+at the same temperature and a similar reply size, on a router the
+developer left untouched, serving the same model throughout. Slips
+cluster, one call held five and one on the earlier prompt ten, so
+calls are the steadier count: a slip in 3 of 9 calls on the earlier
+prompt, 13 of 32 in the baseline, 3 of 27 at 0.7 and 1 of 25 here.
+The prompt change can't account for that, and the cause is open; the
+probe now saves llama.cpp's timings with each reply, its draft
+acceptance, prompt-cache reuse and speed, for the runs after this one
+to be read against.
