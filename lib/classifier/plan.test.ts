@@ -3114,6 +3114,53 @@ describe('factions', () => {
       ])
     })
 
+    // Nothing to leave, or a join restating the faction held: the none is the change, in reply order.
+    it("keeps the reply's order at one turn unless the character leaves one faction for another", () => {
+      const { planned } = buildClassifierActions(
+        reply({
+          memberships: [
+            { character: 'char_kael', faction: 'fact_circle', sourceTurn: 't2' },
+            { character: 'char_kael', faction: null, sourceTurn: 't2' },
+            { character: 'char_aria', faction: 'fact_crown', sourceTurn: 't2' },
+            { character: 'char_aria', faction: null, sourceTurn: 't2' },
+          ],
+        }),
+        deps([
+          member('char_kael', null),
+          member('char_aria', 'fact_crown'),
+          factionRow('fact_crown'),
+          factionRow('fact_circle'),
+        ]),
+      )
+      expect(
+        memberships(planned).map(({ id, factionId, entryId }) => [id, factionId, entryId]),
+      ).toEqual([
+        ['char_kael', 'fact_circle', 'e2'],
+        ['char_kael', null, 'e2'],
+        ['char_aria', null, 'e2'],
+      ])
+    })
+
+    it("reads the faction held before a turn from the reply's earlier turns", () => {
+      const { planned } = buildClassifierActions(
+        reply({
+          memberships: [
+            { character: 'char_kael', faction: 'fact_crown', sourceTurn: 't1' },
+            { character: 'char_kael', faction: 'fact_circle', sourceTurn: 't2' },
+            { character: 'char_kael', faction: null, sourceTurn: 't2' },
+          ],
+        }),
+        deps([member('char_kael', null), factionRow('fact_crown'), factionRow('fact_circle')]),
+      )
+      expect(
+        memberships(planned).map(({ id, factionId, entryId }) => [id, factionId, entryId]),
+      ).toEqual([
+        ['char_kael', 'fact_crown', 'e1'],
+        ['char_kael', null, 'e2'],
+        ['char_kael', 'fact_circle', 'e2'],
+      ])
+    })
+
     // The handler can refuse the earlier write (a user edit between the turns), so only the
     // stored faction, never a planned one, can rule a later fact out.
     it('keeps a fact restating an earlier planned one, so a refused write cannot hide it', () => {

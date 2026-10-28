@@ -22,23 +22,31 @@ const turnIndex = (turn: string | undefined): number => {
   return match == null ? Infinity : Number(match[1])
 }
 
-/** The faction a character ends with: the planner applies memberships in turn order, a none
- *  before a join at one turn, then reply order, so the last one stands. Undefined when the reply
- *  sets none. */
+/** The faction a character holding `held` ends with, as the planner applies memberships: in turn
+ *  order, then reply order, but a none first at a turn that also joins a faction other than the one
+ *  held, a change of sides. Undefined when the reply sets none. */
 export const factionAfter = (
   reply: ClassifierExtraction,
   character: string,
-): string | null | undefined =>
-  reply.memberships
-    .map((m, order) => ({
-      m,
-      order,
-      at: turnIndex(m.sourceTurn),
-      join: Number(m.faction !== null),
-    }))
+  held: string | null,
+): string | null | undefined => {
+  const facts = reply.memberships
+    .map((m, order) => ({ m, order, at: turnIndex(m.sourceTurn) }))
     .filter(({ m }) => m.character === character)
-    .sort((a, b) => a.at - b.at || a.join - b.join || a.order - b.order)
-    .at(-1)?.m.faction
+    .sort((a, b) => a.at - b.at || a.order - b.order)
+  let current: string | null | undefined = undefined
+  let before = held
+  for (const at of new Set(facts.map((f) => f.at))) {
+    const turn = facts.filter((f) => f.at === at).map((f) => f.m.faction)
+    const switching =
+      before != null && turn.includes(null) && turn.some((f) => f !== null && f !== before)
+    const ordered = switching
+      ? [...turn.filter((f) => f === null), ...turn.filter((f) => f !== null)]
+      : turn
+    for (const faction of ordered) current = before = faction
+  }
+  return current
+}
 
 export const awarenessOfListedOnly = (listed: readonly string[]): Check => ({
   name: 'knownAwareness names only a listed happening',

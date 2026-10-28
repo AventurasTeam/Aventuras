@@ -32,6 +32,7 @@ describe('factionAfter', () => {
       factionAfter(
         reply({ memberships: [{ character: 'char_maela', faction: 'f', sourceTurn: 't1' }] }),
         BRANN,
+        'fact_wardens',
       ),
     ).toBeUndefined()
   })
@@ -43,7 +44,7 @@ describe('factionAfter', () => {
         { character: BRANN, faction: null, sourceTurn: 't2' },
       ],
     })
-    expect(factionAfter(r, BRANN)).toBe('fact_varro')
+    expect(factionAfter(r, BRANN, 'fact_wardens')).toBe('fact_varro')
   })
 
   it('takes the later of two joins within one turn', () => {
@@ -53,7 +54,7 @@ describe('factionAfter', () => {
         { character: BRANN, faction: 'fact_wardens', sourceTurn: 't2' },
       ],
     })
-    expect(factionAfter(r, BRANN)).toBe('fact_wardens')
+    expect(factionAfter(r, BRANN, 'fact_wardens')).toBe('fact_wardens')
   })
 
   it('reads a none beside a join within one turn as the leave before the join', () => {
@@ -63,7 +64,19 @@ describe('factionAfter', () => {
         { character: BRANN, faction: null, sourceTurn: 't2' },
       ],
     })
-    expect(factionAfter(r, BRANN)).toBe('fact_varro')
+    expect(factionAfter(r, BRANN, 'fact_wardens')).toBe('fact_varro')
+  })
+
+  it('keeps the reply order within one turn with no faction to leave, or the held one restated', () => {
+    const joinThenNone = (faction: string) =>
+      reply({
+        memberships: [
+          { character: BRANN, faction, sourceTurn: 't2' },
+          { character: BRANN, faction: null, sourceTurn: 't2' },
+        ],
+      })
+    expect(factionAfter(joinThenNone('fact_varro'), BRANN, null)).toBeNull()
+    expect(factionAfter(joinThenNone('fact_wardens'), BRANN, 'fact_wardens')).toBeNull()
   })
 
   it('puts an unknown turn after every turn', () => {
@@ -73,7 +86,7 @@ describe('factionAfter', () => {
         { character: BRANN, faction: 'fact_varro', sourceTurn: 't4' },
       ],
     })
-    expect(factionAfter(r, BRANN)).toBeNull()
+    expect(factionAfter(r, BRANN, 'fact_wardens')).toBeNull()
   })
 })
 

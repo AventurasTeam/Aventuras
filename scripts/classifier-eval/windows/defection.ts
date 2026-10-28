@@ -62,7 +62,7 @@ Maela slid the paper across the table. He read it twice, then unpinned the tarni
       name: 'Brann ends the window in House Varro',
       kind: 'expect',
       basis: 'rule',
-      holds: (r) => factionAfter(r, 'char_brann') === 'fact_varro',
+      holds: (r) => factionAfter(r, 'char_brann', 'fact_wardens') === 'fact_varro',
     },
     {
       name: 'his membership sits at t2, where he swears',

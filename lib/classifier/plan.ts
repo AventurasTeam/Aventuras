@@ -1135,11 +1135,46 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const row = rowById.get(id)
     return row == null ? null : characterFactionId(row)
   }
-  // A none beside a join at one turn is a change of sides: the leave first, whatever the reply's order.
-  const leavesFirst = [...extraction.memberships].sort(
-    (a, b) => Number(a.faction !== null) - Number(b.faction !== null),
-  )
-  for (const fact of inTurnOrder(leavesFirst)) {
+  // A none beside a join of another faction at one turn, for a character who held one before it,
+  // is a change of sides: the leave first, whatever the reply's order. Looked up without
+  // resolveRef, which would log a miss the loop below logs again.
+  const peekRef = (ref: string): string | null =>
+    handleMap.get(ref) ?? (index.has(ref) ? ref : null)
+  const held = new Map<string, string | null>()
+  const heldBefore = (id: string): string | null =>
+    held.has(id) ? (held.get(id) ?? null) : storedFaction(id)
+  const byTurn = new Map<number, ClassifierExtraction['memberships']>()
+  for (const fact of inTurnOrder(extraction.memberships)) {
+    const at = turnPosition(fact.sourceTurn)
+    byTurn.set(at, [...(byTurn.get(at) ?? []), fact])
+  }
+  const membershipFacts = [...byTurn.values()].flatMap((facts) => {
+    const factionOf = (fact: (typeof facts)[number]) =>
+      fact.faction === null ? null : peekRef(fact.faction)
+    const switching = new Set(
+      facts.flatMap((fact) => {
+        const id = peekRef(fact.character)
+        if (id == null || fact.faction !== null) return []
+        const before = heldBefore(id)
+        const joinsAnother = facts.some(
+          (other) =>
+            other.faction !== null &&
+            peekRef(other.character) === id &&
+            factionOf(other) !== before,
+        )
+        return before != null && joinsAnother ? [id] : []
+      }),
+    )
+    const rank = (fact: (typeof facts)[number]): number =>
+      switching.has(peekRef(fact.character) ?? '') ? Number(fact.faction !== null) : 0
+    const ordered = [...facts].sort((a, b) => rank(a) - rank(b))
+    for (const fact of ordered) {
+      const id = peekRef(fact.character)
+      if (id != null) held.set(id, factionOf(fact))
+    }
+    return ordered
+  })
+  for (const fact of membershipFacts) {
     const characterId = resolveRef(fact.character, 'character')
     if (characterId == null) continue
     let factionId: string | null = null
