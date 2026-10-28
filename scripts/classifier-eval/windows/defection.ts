@@ -1,4 +1,4 @@
-import { awarenessOfListedOnly, involves } from '../checks'
+import { awarenessOfListedOnly, factionAfter, involves } from '../checks'
 import {
   action,
   character,
@@ -59,11 +59,10 @@ Maela slid the paper across the table. He read it twice, then unpinned the tarni
   ]),
   checks: [
     {
-      name: 'Brann now belongs to House Varro',
+      name: 'Brann ends the window in House Varro',
       kind: 'expect',
       basis: 'rule',
-      holds: (r) =>
-        r.memberships.some((m) => m.character === 'char_brann' && m.faction === 'fact_varro'),
+      holds: (r) => factionAfter(r, 'char_brann') === 'fact_varro',
     },
     {
       name: 'his membership sits at t2, where he swears',
