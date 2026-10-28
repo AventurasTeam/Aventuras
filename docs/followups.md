@@ -285,12 +285,14 @@ breakdown under [UX](#ux).
   - what counts as a happening, which no rule says beyond the category
     examples. One case to settle: an item changing hands, which
     piggyback already records with who gave it;
-  - an unnamed participant given a handle: replies add the ambush's
-    archer or third rider by a role name in 0 to 6 of 10 runs, whatever
-    the character bar says, to involve them in the fight. The
-    Involvements rule could keep a participant who is no character out
-    of involvements, or the planner could leave one to the happening's
-    description;
+  - an unnamed figure in the scene added anyway: replies add the
+    ambush's archer or third rider by a role name in 0 to 6 of 10 runs,
+    to involve them in the fight, and `defection`'s gate-boy as "a
+    person in the scene" in 3 of the final prompt's 20, without weighing
+    the character bar. The Involvements rule could keep a participant
+    who is no character out of involvements, or the planner could leave
+    one to the happening's description; the bar, grown to six clauses,
+    may also read past;
   - a revealed name taken for someone new: 2 of 10 `reveal` replies
     add Ilse Marrow as a new character beside her rename, though the
     character rule calls a revealed name a rename;

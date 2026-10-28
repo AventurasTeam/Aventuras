@@ -619,6 +619,18 @@ replies filed their own happening under knownAwareness. The mean rate
 of rule checks is 0.91 against 0.95, of judgment checks 0.70 against
 0.76, on the six windows. Kept on the mechanism the reasoning shows.
 
+Run again, the final prompt read 0.93 for rule checks and 0.66 for
+judgment checks on the five original windows, against 0.90 and 0.64
+the first time and 0.94 and 0.73 for change 10: Oriel's knowing came
+back to 9 of 10, and the rule checks sit within a reply or two of
+change 10's. No invoked name or fiddler came in across the 20 runs.
+The one check down on both runs is defection's extras, 8 of 10 twice:
+the gate-boy came in 3 times in 20 against none in the 70 runs before,
+each reply adding him as "a person in the scene" without weighing the
+bar, as the archer is added for the fight. Whether the bar, grown to
+six clauses, now reads past is a question for a change to its
+structure.
+
 ## Where it stands
 
 Every change, with the check it was made for. The baseline and change
@@ -626,20 +638,20 @@ Every change, with the check it was made for. The baseline and change
 scored again on the checks as they now stand, over the five original
 windows, so they differ from the figures given at each change.
 
-| Change                | The check it was made for                        | Before → after              | Rule / judgment mean |
-| --------------------- | ------------------------------------------------ | --------------------------- | -------------------- |
-| baseline              |                                                  |                             | 0.71 / 0.70          |
-| 1, knownAwareness     | knownAwareness names only a listed happening     | 11/25 → 17/25               | 0.79 / 0.66          |
-| 2, headings           | the same                                         | 37/50 → 49/50               | 0.83 / 0.70          |
-| 3, threadStatuses     | every ID names a listed row or a declared handle | 38/50 → 47/50               | 0.84 / 0.71          |
-| 4, change of sides    | a none beside Brann's join                       | 10/20 → 4/60                | 0.85 / 0.69          |
-| 5, titles             | calls that drop a happening                      | 4/50 → 0 in every run since | 0.86 / 0.71          |
-| 6, character bar      | replies naming an ambush rider                   | 10/30 → 7/40                | 0.86 / 0.76          |
-| 7, witnesses          | Brannoc aware of the wreck; reverted             | 0/10 → 16/20                | 0.88 / 0.72          |
-| 8, awareness, knowing | Brannoc aware; Oriel knows                       | 0/20 → 10/10; 0/20 → 8/10   | 0.89 / 0.72          |
-| 9, story's direction  | Tam added; Vane added                            | 36/50 → 10/10; 8/50 → 10/10 | 0.92 / 0.68          |
-| 10, person, creature  | a ship, a reef, the hanged brother added         | 7 in 10 runs → 0            | 0.94 / 0.73          |
-| 11, invoked names     | `namedrops`: an invoked name or the fiddler      | 2/10 → 0/10                 | 0.90 / 0.64          |
+| Change                | The check it was made for                        | Before → after              | Rule / judgment mean     |
+| --------------------- | ------------------------------------------------ | --------------------------- | ------------------------ |
+| baseline              |                                                  |                             | 0.71 / 0.70              |
+| 1, knownAwareness     | knownAwareness names only a listed happening     | 11/25 → 17/25               | 0.79 / 0.66              |
+| 2, headings           | the same                                         | 37/50 → 49/50               | 0.83 / 0.70              |
+| 3, threadStatuses     | every ID names a listed row or a declared handle | 38/50 → 47/50               | 0.84 / 0.71              |
+| 4, change of sides    | a none beside Brann's join                       | 10/20 → 4/60                | 0.85 / 0.69              |
+| 5, titles             | calls that drop a happening                      | 4/50 → 0 in every run since | 0.86 / 0.71              |
+| 6, character bar      | replies naming an ambush rider                   | 10/30 → 7/40                | 0.86 / 0.76              |
+| 7, witnesses          | Brannoc aware of the wreck; reverted             | 0/10 → 16/20                | 0.88 / 0.72              |
+| 8, awareness, knowing | Brannoc aware; Oriel knows                       | 0/20 → 10/10; 0/20 → 8/10   | 0.89 / 0.72              |
+| 9, story's direction  | Tam added; Vane added                            | 36/50 → 10/10; 8/50 → 10/10 | 0.92 / 0.68              |
+| 10, person, creature  | a ship, a reef, the hanged brother added         | 7 in 10 runs → 0            | 0.94 / 0.73              |
+| 11, invoked names     | `namedrops`: an invoked name or the fiddler      | 2/10 → 0/20                 | 0.90 / 0.64, 0.93 / 0.66 |
 
 Two fixes went into code: a none beside a join at one turn reads as a
 change of sides when the character held another faction, and an ID or
@@ -648,12 +660,10 @@ Brann ends in House Varro in every run.
 
 Left, each for the developer or measured as out of a rule's reach:
 
-- **Change 11's dip.** On the five original windows its run sits below
-  change 10's, though no miss traced to its clause; a second run of the
-  final prompt is to tell its effect from the swings.
-- **An unnamed participant given a handle.** Replies add the ambush's
-  archer by a role name to involve him in the fight, 0 to 6 of 10
-  runs, whatever the bar says; in the followup.
+- **An unnamed figure in the scene added anyway.** Replies add the
+  ambush's archer by a role name to involve him in the fight, 0 to 6 of
+  10 runs, and defection's gate-boy as "a person in the scene", 3 of
+  the final prompt's 20, without weighing the bar; in the followup.
 - **A revealed name taken for someone new**, Ilse in 1 or 2 of 10, in
   the followup.
 - **"Whose part is over"** read once as covering a named character
