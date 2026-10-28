@@ -354,3 +354,42 @@ happenings, 2.4 against 2.5, but now describe 110 of 122 against 41 of
 125, at about 3% more completion tokens, nearly all of it reasoning.
 The mean rate of rule checks is 0.91 against 0.89, of judgment checks
 0.65 against 0.63. Kept.
+
+## Change 6: a bar for new characters
+
+Factions and places each had a bar, characters none: the rule took
+every character the prose introduces, and the ambush replies added the
+unnamed archer and third rider by a name in 3 or 4 runs of 10, which
+the developer's review of the windows marked as noise. The New
+characters rule now opens: "Add a character the prose introduces who
+is not in the Known entities list: a named one, or an unnamed one the
+story could come back to ("the innkeeper who hid them"). Not a passing
+figure there only for the moment ("a porter", "a soldier in the
+crowd")." The name field gets no description: telling the model how
+to name an unnamed character could turn the blank-named extras, which
+the planner drops, into created ones. Canon's write list gains the
+bar.
+
+Expected to move: the riders, 7 of 10 twice; holding, Dov Hask, named
+only at the fight's end, Tam Rook, no character for "you", defection's
+extras and the fishmonger; either way, Vane, named, at 2 of 10, and
+the steward, unnamed and left unscored, added in 1 of 10.
+
+| replies adding    | a named rider | the steward | Tam's aunt | Vane | Vane's son |
+| ----------------- | ------------- | ----------- | ---------- | ---- | ---------- |
+| change 5's prompt | 3             | 1           | 0          | 2    | 1          |
+| change 6's prompt | 0             | 6           | 2          | 2    | 1          |
+
+The riders check reads 10 of 10, and every check expected to hold did
+but Dov Hask, 9 of 10: one reply added the scarred man with a blank
+name and renamed its own handle at t4, a rename the planner resolves
+only against listed rows, the path one reply on change 3's prompt took
+too. The model still writes blank-named riders, 11 against 15, which the
+planner drops.
+Vane didn't move. The learning window gained characters: the steward,
+who is hunting the alchemists in the prose, in 6 of 10, and Tam's
+aunt, where Oriel will start looking, in 2, both ones a story could
+come back to. The mean rate of rule checks is 0.89 against 0.91, the
+two Nessa misses being IDs written with their brackets, of judgment
+checks 0.69 against 0.65. Kept, with the steward for the developer to
+judge.

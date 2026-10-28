@@ -285,11 +285,11 @@ breakdown under [UX](#ux).
   - what counts as a happening, which no rule says beyond the category
     examples. One case to settle: an item changing hands, which
     piggyback already records with who gave it;
-  - what counts as a character: the rule takes every character the
-    prose introduces, while factions and places each have a bar ("not
-    a loose crowd", "not a generic kind of place"), so a reply added an
-    unnamed archer and the rider who fled. The `ambush`, `defection`
-    and `learning` windows measure it;
+  - where the character bar falls: the rule now keeps the one factions
+    and places keep, a named character or an unnamed one the story
+    could come back to, which ended the named ambush riders but has the
+    `learning` replies add the steward hunting the alchemists in 6 of
+    10, against 1, and Tam's aunt in 2;
   - the lead: the prompt doesn't name the story's lead, so in first- or
     second-person narration "I" and "you" are the lead only by the
     scene. The `ambush` window measures it;
