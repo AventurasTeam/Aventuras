@@ -15,23 +15,6 @@ for the placement rule.
 
 ## Data-model
 
-- **Bound the pass's Known happenings.** A pass no longer lists every
-  happening on the branch
-  ([`classifier.md → What the classifier reads`](./memory/classifier.md#what-the-classifier-reads)).
-  Today `periodic-classifier.ts` reads them all for the prompt and for
-  the planner's `happenings`, and no entry records what its prompt
-  carried. The work: the turn writing the ids of the happenings the
-  ranker seated as `injectedHappenings` on the AI entry it creates,
-  with the entry metadata schema
-  ([`data-model.md → Entry metadata shape`](./data-model.md#entry-metadata-shape));
-  the pass reading the list canon gives, and the planner checking
-  `knownAwareness` against that same list; and the touch points: the
-  template's snapshot tests, the classifier probe, which builds the
-  same context, and any test whose older happening has no narrative
-  position, which is now listed only through a record. Raised 2026-10-27 by the Known happenings design; the roster
-  half of the growth is parked
-  ([`parked.md → The pass lists the whole roster`](./parked.md#the-pass-lists-the-whole-roster)).
-
 - **Chapter-close agent design.** Chapter close's write set is fixed
   by the
   [authorship contract](./data-model.md#authorship-contract), and
@@ -283,6 +266,58 @@ breakdown under [UX](#ux).
   the system half, unmeasured; tuning checks where it reads best.
   Raised by the developer 2026-10-25, split from the prompt content
   pass.
+
+- **Classifier prompt: interface and structure.** The periodic
+  classifier's prompt is 21 rules in one list (22 with mentioned
+  places on), then the reply format as a TypeScript type whose
+  comments carry a few field descriptions. A first pass on 2026-10-27
+  named each output list in its rule and described the fields a name
+  doesn't explain. Left for a pass that can measure itself:
+  - an evaluation set first: a few hand-written windows with the facts
+    each should yield (a fight across turns, a recounted past event, a
+    name reveal, a faction changing sides, a character learning of a
+    listed happening), scored by the parse probe. The hero branch's
+    opening the probe reads today is thin, repeating prose, so its
+    counts measure nothing. The set also scores placeholder use: the
+    one measured failure is a model inventing its own handles, which
+    drops involvements and awareness (the M7.5 note on
+    `unresolvedRefs` in
+    [`roadmap.md → M7`](./implementation/roadmap.md#m7--app-settings--diagnostics--onboarding)),
+    and the play check above covers whether replies fill the new
+    fields;
+  - sections instead of the flat list: the task, the inputs, the rules
+    that hold everywhere (IDs and handles, provenance, scene, silence),
+    then each output list in the order the model writes it. Today
+    `knownAwareness` is written last, before only `newPlaces` with
+    mentioned places on, but explained in the fourth rule;
+  - what counts as a happening, which no rule says beyond the category
+    examples;
+  - each turn's prose inside its own delimiters, the reason behind each
+    rule that isn't obvious, a short worked example, and no capitals for
+    emphasis;
+  - room to reason before the JSON, weighed against a pass that already
+    takes 75-157 s on the dev model;
+  - `sourceTurn` optional in the reply type, so a missing one parses and
+    falls back to the window head, while the rules ask for it on every
+    entry that has one. A happening without one also has no place in
+    story time, so a later pass lists it only through a record;
+  - a `temporal` the model fills for an event the turns show, filler
+    like "none" or an in-scene time like "that night", which takes the
+    happening out of story time with nothing logged. The probe prints
+    the `temporal` values a reply gives, and an explicit marker in the
+    reply (shown, recounted, backdrop) is the remedy if they show it;
+  - the icon catalog, which only `icon`'s description carries: the
+    rule points at "the list its icon field gives", and `icon` is a
+    tolerated string, not an enum, so forced on the model sees neither
+    the list nor a grammar limiting it.
+
+  A field description reaches the model only when the reply format is
+  written into the prompt, which happens unless the profile forces
+  structured output on. Forced on, the schema goes to the server
+  alone, and llama.cpp turns it into a sampling grammar the model
+  never reads (other providers unverified), so the rules repeat what a
+  description says, the icon catalog aside. Raised by the developer
+  2026-10-27.
 
 - **Parked items play gives a signal for.** Each waits on evidence
   only play produces, so play checks them rather than letting the

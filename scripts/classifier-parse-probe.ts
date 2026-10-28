@@ -10,7 +10,12 @@ import {
   type CallRetryError,
   type ResolveModelConfig,
 } from '@/lib/ai'
-import { buildClassifierWindow, classifierReplySchema, readClassifierReply } from '@/lib/classifier'
+import {
+  buildClassifierWindow,
+  classifierReplySchema,
+  readClassifierReply,
+  type ClassifierWindow,
+} from '@/lib/classifier'
 import {
   branches,
   characterRelationships,
@@ -26,9 +31,13 @@ import {
   type StoryEntry,
   type Thread,
 } from '@/lib/db'
+import { dbSchema } from '@/lib/db/schema'
 import { IdBiMap } from '@/lib/ids'
 import { buildClassifierContext } from '@/lib/pipeline/definitions/classifier-context'
-import { PASS_TIMEOUT_DEFAULT_MS } from '@/lib/pipeline/definitions/periodic-classifier'
+import {
+  PASS_TIMEOUT_DEFAULT_MS,
+  readKnownHappenings,
+} from '@/lib/pipeline/definitions/periodic-classifier'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore, hydrateAppSettings } from '@/lib/stores'
 
@@ -71,44 +80,56 @@ type Branch = {
   /** stories.settings.classifierMentionedPlaces, which picks the pass's prompt and reply schema. */
   mentionedPlaces: boolean
   entities: Entity[]
+  /** The Known happenings the pass would list for this window. */
   happenings: Happening[]
   relationships: CharacterRelationship[]
   threads: Thread[]
-  entries: StoryEntry[]
+  window: ClassifierWindow
 }
 
 async function readBranch(dbPath: string, maxEntries: number): Promise<Branch> {
   const sqlite = new DatabaseSync(dbPath, { readOnly: true })
   try {
-    const db = drizzle(makeProxy(sqlite))
+    const db = drizzle(makeProxy(sqlite), { schema: dbSchema })
     const [story] = await db
       .select({ settings: stories.settings })
       .from(branches)
       .innerJoin(stories, eq(stories.id, branches.storyId))
       .where(eq(branches.id, BRANCH_ID))
     if (story == null) throw new Error(`[probe] no branch ${BRANCH_ID} in ${dbPath}`)
+    const settings = storySettingsSchema.parse(story.settings)
+    // From watermark 0, one past the cap so the window sees the cut, as the pass reads it.
+    const entries = (await db
+      .select()
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, BRANCH_ID), gt(storyEntries.position, 0)))
+      .orderBy(asc(storyEntries.position))
+      .limit(maxEntries + 1)) as StoryEntry[]
+    const window = buildClassifierWindow({ entries, processedThrough: 0, maxEntries })
+    if (window.isEmpty) throw new Error(`[probe] branch ${BRANCH_ID} in ${dbPath} has no prose`)
+    const branchHappenings = (await db
+      .select()
+      .from(happenings)
+      .where(eq(happenings.branchId, BRANCH_ID))) as Happening[]
     return {
-      mentionedPlaces: storySettingsSchema.parse(story.settings).classifierMentionedPlaces,
+      mentionedPlaces: settings.classifierMentionedPlaces,
       entities: (await db
         .select()
         .from(entities)
         .where(eq(entities.branchId, BRANCH_ID))) as Entity[],
-      happenings: (await db
-        .select()
-        .from(happenings)
-        .where(eq(happenings.branchId, BRANCH_ID))) as Happening[],
+      happenings: await readKnownHappenings(
+        db,
+        BRANCH_ID,
+        branchHappenings,
+        window,
+        settings.protectedBuffer,
+      ),
       relationships: (await db
         .select()
         .from(characterRelationships)
         .where(eq(characterRelationships.branchId, BRANCH_ID))) as CharacterRelationship[],
       threads: (await db.select().from(threads).where(eq(threads.branchId, BRANCH_ID))) as Thread[],
-      // From watermark 0, one past the cap so the window sees the cut, as the pass reads it.
-      entries: (await db
-        .select()
-        .from(storyEntries)
-        .where(and(eq(storyEntries.branchId, BRANCH_ID), gt(storyEntries.position, 0)))
-        .orderBy(asc(storyEntries.position))
-        .limit(maxEntries + 1)) as StoryEntry[],
+      window,
     }
   } finally {
     sqlite.close()
@@ -146,6 +167,23 @@ function parseFailureText(detail: string): string {
       return `${path === '' ? '(root)' : path}: ${issue.message ?? ''}`
     })
     .join('; ')
+}
+
+// As the planner anchors them (classifier.md → What the classifier writes → Happenings); the
+// temporal values print so filler like "none" shows.
+function anchorCounts(
+  happenings: readonly { title: string; temporal?: string; sourceTurn?: string }[],
+  window: ClassifierWindow,
+): string {
+  const titled = happenings.filter((h) => h.title.trim() !== '')
+  const temporals = titled.map((h) => h.temporal?.trim() ?? '').filter((t) => t !== '')
+  const placed = titled.filter((h) => (h.temporal?.trim() ?? '') === '')
+  const unanchored = placed.filter((h) => window.resolveHandle(h.sourceTurn).fellBack).length
+  return (
+    `happenings: ${titled.length} (temporal ${temporals.length}, ` +
+    `at source turn ${placed.length - unanchored}, unanchored ${unanchored})` +
+    (temporals.length > 0 ? `; temporal values ${JSON.stringify([...new Set(temporals)])}` : '')
+  )
 }
 
 async function main(): Promise<void> {
@@ -194,8 +232,7 @@ async function main(): Promise<void> {
   const dbPath = resolveDbPath()
   const maxEntries = settings.classifierWindowMaxEntries
   const branch = await readBranch(dbPath, maxEntries)
-  const window = buildClassifierWindow({ entries: branch.entries, processedThrough: 0, maxEntries })
-  if (window.isEmpty) throw new Error(`[probe] branch ${BRANCH_ID} in ${dbPath} has no prose`)
+  const { window } = branch
   const prompt = renderTemplate(
     TEMPLATE_IDS.periodicClassifier,
     buildClassifierContext({
@@ -229,7 +266,8 @@ async function main(): Promise<void> {
     )
     if (result.status === 'not-configured')
       throw new Error(`[probe] the classifier target did not resolve: ${result.kind}`)
-    const malformed = result.status === 'ok' ? readClassifierReply(result.value).malformed : []
+    const read = result.status === 'ok' ? readClassifierReply(result.value) : null
+    const malformed = read?.malformed ?? []
     const outcome: Outcome = {
       status: result.status,
       recoverable: result.recoverable,
@@ -252,6 +290,7 @@ async function main(): Promise<void> {
     )
     if (outcome.dropped != null)
       console.log(`[probe]   dropped entries that didn't fit: ${outcome.dropped}`)
+    if (read != null) console.log(`[probe]   ${anchorCounts(read.reply.happenings, window)}`)
     const firstParse = outcome.recoverable.find((e): e is ParseRetryError => e.tier === 'parse')
     if (firstParse != null)
       console.log(`[probe]   first parse failure: ${oneLine(parseFailureText(firstParse.detail))}`)

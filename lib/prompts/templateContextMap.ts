@@ -424,7 +424,8 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       name: 'happenings',
       type: '{ id, title }[]',
       category: 'Plot',
-      description: 'Existing happenings, so the model can reference rather than duplicate them.',
+      description:
+        "Not every happening on the branch: those the window's turns were given (their entries' `injectedHappenings`) and the recent ones: those that occurred from the open region's first entry or from `protectedBuffer` entries before the window, whichever is earlier, and those created from those entries. By id and title (on one line), so the model can reference rather than duplicate them.",
       required: false,
     },
     {

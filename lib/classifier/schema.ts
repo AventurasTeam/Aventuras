@@ -71,9 +71,12 @@ const involvement = z.object({ ref: z.string(), role: z.string().optional() })
 const happening = z.object({
   title: z.string(),
   description: z.string().optional(),
-  /** Free-form anchor for out-of-narrative happenings; mutually exclusive with occurredAtTurn. */
-  temporal: z.string().optional(),
-  occurredAtTurn: z.string().optional(),
+  temporal: z
+    .string()
+    .optional()
+    .describe(
+      'Only for an event the turns recount from before the story or offstage, or a backdrop that holds throughout: its time as the prose gives it, or a short phrase when it gives none (before the story, ongoing). Omit for an event the turns show happening.',
+    ),
   category: tolerated(z.string()),
   icon,
   involvements: tolerantList(involvement),
@@ -87,16 +90,28 @@ export const classifierExtractionSchema = z.object({
     z.object({
       subject: z.string(),
       object: z.string(),
-      /** Subject's view of object only — never the inferred inverse. */
-      kind: z.string(),
+      kind: z
+        .string()
+        .describe(
+          'How the subject sees the object, in a word or short phrase: sister, mentor, rival. Never the inverse.',
+        ),
       sourceTurn,
     }),
   ),
   statusFlips: tolerantList(
     z.object({
       ref: z.string(),
-      to: foldedEnum(z.enum(['active', 'retired'])),
-      reason: z.string().optional(),
+      to: foldedEnum(
+        z
+          .enum(['active', 'retired'])
+          .describe(
+            'active for a staged entity of any kind the prose brings into the scene, or a retired character who returns; retired only for a character or faction, on unambiguous finality.',
+          ),
+      ),
+      reason: z
+        .string()
+        .optional()
+        .describe('For a retirement: why, in a short phrase from the prose.'),
       sourceTurn,
     }),
   ),
@@ -204,7 +219,9 @@ export const classifierExtractionSchema = z.object({
   ),
   knownAwareness: tolerantList(
     z.object({
-      happening: z.string(),
+      happening: z
+        .string()
+        .describe('ID from Known happenings of the happening the character learns of.'),
       /** Character placeholder or a newCharacters handle. */
       ref: z.string(),
       source: z.string(),

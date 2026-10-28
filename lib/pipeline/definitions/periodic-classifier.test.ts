@@ -133,6 +133,8 @@ async function ctxWith(opts: {
   entryMetadata?: Record<number, StoryEntry['metadata']>
   onWatermark?: (n: number) => void
   mentionedPlaces?: boolean
+  /** stories.settings.protectedBuffer. Unset, no reach-back: the harness skips the 10 default. */
+  protectedBuffer?: number
 }): Promise<Harness> {
   const { db, sqlite } = await createTestDb()
   await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
@@ -183,7 +185,11 @@ async function ctxWith(opts: {
     storyId: 's1',
     branchId: 'b1',
     definition: {} as never,
-    settings: { models: {}, classifierMentionedPlaces: opts.mentionedPlaces ?? false } as never,
+    settings: {
+      models: {},
+      classifierMentionedPlaces: opts.mentionedPlaces ?? false,
+      protectedBuffer: opts.protectedBuffer,
+    } as never,
   })
   entriesStore.hydrate('b1', entries)
   entitiesStore.hydrate('b1', opts.entities ?? [])
@@ -3336,6 +3342,12 @@ describe('periodicClassifierPhase — the writer map', () => {
     createdAt: 1,
     updatedAt: 1,
   }
+  const happeningAt = (id: string, title: string, occurredAtEntryId: string | null): Happening => ({
+    ...fire,
+    id,
+    title,
+    occurredAtEntryId,
+  })
   const amulet: Thread = {
     id: THR_AMULET,
     branchId: 'b1',
@@ -3377,7 +3389,20 @@ describe('periodicClassifierPhase — the writer map', () => {
         ],
       }),
     } as never)
-    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael, aria] })
+    // fire has no narrative position: it is listed because turn 1 was given it.
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      entities: [kael, aria],
+      entryMetadata: {
+        1: {
+          sceneEntities: [],
+          currentLocationId: null,
+          worldTime: 0,
+          injectedHappenings: [HAP_FIRE],
+        },
+      },
+    })
     happeningsStore.hydrate('b1', [fire])
     const stored: HappeningAwareness = {
       id: 'haw_1',
@@ -3407,6 +3432,114 @@ describe('periodicClassifierPhase — the writer map', () => {
         },
       },
     ])
+  })
+
+  // classifier.md → What the classifier reads → Known happenings.
+  it('lists the happenings the turns were given and the recent ones, not the rest', async () => {
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction(),
+    } as never)
+    // Turns 4 and 5 to classify, one entry of reach-back, and 1-3 a closed chapter.
+    const h = await ctxWith({
+      processedThrough: 3,
+      headPosition: 5,
+      protectedBuffer: 1,
+      entryMetadata: {
+        4: {
+          sceneEntities: [],
+          currentLocationId: null,
+          worldTime: 0,
+          injectedHappenings: [HAP_FIRE],
+        },
+      },
+    })
+    await h.ctx.db.run(sql`UPDATE story_entries SET chapter_id = 'ch1' WHERE position <= 3`)
+    happeningsStore.hydrate('b1', [
+      happeningAt('hap_55555555-5555-5555-5555-555555555551', 'Before the reach-back', 'e2'),
+      happeningAt('hap_55555555-5555-5555-5555-555555555552', 'In the reach-back', 'e3'),
+      happeningAt('hap_55555555-5555-5555-5555-555555555553', 'In the window', 'e5'),
+      { ...fire, temporal: 'years past' },
+      happeningAt('hap_55555555-5555-5555-5555-555555555554', 'Never given', null),
+    ])
+
+    await drain(h.ctx)
+
+    const { user } = vi.mocked(generateStructured).mock.calls[0][1]
+    for (const title of ['In the reach-back', 'In the window', 'The market fire'])
+      expect(user).toContain(`] ${title}\n`)
+    for (const title of ['Before the reach-back', 'Never given']) expect(user).not.toContain(title)
+  })
+
+  // A recounted happening has no position: its create's anchor is what puts it in the recent set.
+  it('lists a happening a pass made from a recent entry, by its create, not by a later update', async () => {
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction(),
+    } as never)
+    // e1 a closed chapter, e2 the open region's start, e3-e4 the window, no reach-back.
+    const h = await ctxWith({ processedThrough: 2, headPosition: 4, protectedBuffer: 0 })
+    await h.ctx.db.run(sql`UPDATE story_entries SET chapter_id = 'ch1' WHERE position = 1`)
+    const recounted = (id: string, title: string): Happening => ({
+      ...happeningAt(id, title, null),
+      temporal: 'ten winters ago',
+    })
+    const HAP_RECENT = 'hap_66666666-6666-6666-6666-666666666661'
+    const HAP_CLOSED = 'hap_66666666-6666-6666-6666-666666666662'
+    const HAP_TOUCHED = 'hap_66666666-6666-6666-6666-666666666663'
+    happeningsStore.hydrate('b1', [
+      recounted(HAP_RECENT, 'Made from the open region'),
+      recounted(HAP_CLOSED, 'Made from the closed chapter'),
+      recounted(HAP_TOUCHED, 'Made earlier, edited recently'),
+    ])
+    const logged = [
+      { targetId: HAP_RECENT, entryId: 'e2', op: 'create' as const },
+      { targetId: HAP_CLOSED, entryId: 'e1', op: 'create' as const },
+      { targetId: HAP_TOUCHED, entryId: 'e1', op: 'create' as const },
+      { targetId: HAP_TOUCHED, entryId: 'e2', op: 'update' as const },
+    ]
+    await h.ctx.db.insert(deltas).values(
+      logged.map((d, i) => ({
+        ...d,
+        id: `d_${i}`,
+        branchId: 'b1',
+        actionId: `act_${i}`,
+        logPosition: i + 1,
+        source: 'periodic_classifier' as const,
+        targetTable: 'happenings',
+        undoPayload: null,
+        createdAt: 1,
+      })),
+    )
+
+    await drain(h.ctx)
+
+    const { user } = vi.mocked(generateStructured).mock.calls[0][1]
+    expect(user).toContain('] Made from the open region\n')
+    expect(user).not.toContain('Made from the closed chapter')
+    expect(user).not.toContain('Made earlier, edited recently')
+  })
+
+  // classifierWindowMaxEntries defaults to 20, so the window ends at e20 and no turn in it saw e21.
+  it('leaves out a happening past the cut of a truncated window', async () => {
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction(),
+    } as never)
+    const h = await ctxWith({ processedThrough: 0, headPosition: 21 })
+    happeningsStore.hydrate('b1', [
+      happeningAt('hap_55555555-5555-5555-5555-555555555555', 'At the cut', 'e20'),
+      happeningAt('hap_55555555-5555-5555-5555-555555555556', 'Past the cut', 'e21'),
+    ])
+
+    await drain(h.ctx)
+
+    const { user } = vi.mocked(generateStructured).mock.calls[0][1]
+    expect(user).toContain('] At the cut\n')
+    expect(user).not.toContain('Past the cut')
   })
 
   it("moves a listed thread's status at its turn, and logs one for a thread it never listed", async () => {

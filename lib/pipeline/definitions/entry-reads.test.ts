@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { branches, stories, storyEntries } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
-import { readStoryPlace } from './entry-reads'
+import { readRecentEntryIds, readStoryPlace } from './entry-reads'
 
 describe('readStoryPlace', () => {
   const at = (currentLocationId: string) => ({ sceneEntities: [], currentLocationId, worldTime: 0 })
@@ -45,5 +45,89 @@ describe('readStoryPlace', () => {
     expect([story.tail, story.scene]).toEqual(['loc_marsh', 'loc_crypt'])
     const now = await readStoryPlace(db, 'b1')
     expect([now.tail, now.scene]).toEqual(['loc_keep', 'loc_keep'])
+  })
+})
+
+// classifier.md → What the classifier reads → Known happenings.
+describe('readRecentEntryIds', () => {
+  const reply = (branchId: string, id: string, position: number) => ({
+    id,
+    branchId,
+    position,
+    kind: 'ai_reply' as const,
+    content: 'x',
+    chapterId: null,
+    createdAt: position,
+  })
+  // e1-e4 a closed chapter, e5 a system row, e6-e9 the open region.
+  async function seed() {
+    const { db } = await createTestDb()
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    await db.insert(storyEntries).values(
+      Array.from({ length: 9 }, (_, i) => ({
+        ...reply('b1', `e${i + 1}`, i + 1),
+        kind: i === 4 ? ('system' as const) : ('ai_reply' as const),
+        chapterId: i < 4 ? 'ch1' : null,
+      })),
+    )
+    return db
+  }
+  const sorted = (ids: Set<string>) => [...ids].sort()
+
+  it.each([
+    ['no reach-back still takes the open region from its start', 8, 0, ['e6', 'e7', 'e8', 'e9']],
+    [
+      "no reach-back from the open region's first entry stays out of the closed chapter",
+      6,
+      0,
+      ['e6', 'e7', 'e8', 'e9'],
+    ],
+    ['a reach-back inside the open region keeps all of it', 8, 1, ['e6', 'e7', 'e8', 'e9']],
+    [
+      'a reach-back crosses the chapter boundary, skipping the system row',
+      8,
+      4,
+      ['e3', 'e4', 'e6', 'e7', 'e8', 'e9'],
+    ],
+    [
+      'a reach-back past the branch start takes the whole branch',
+      8,
+      20,
+      ['e1', 'e2', 'e3', 'e4', 'e6', 'e7', 'e8', 'e9'],
+    ],
+  ])('%s', async (_name, firstPosition, protectedBuffer, expected) => {
+    const db = await seed()
+    const ids = await readRecentEntryIds(db, 'b1', {
+      firstPosition,
+      lastPosition: 9,
+      protectedBuffer,
+    })
+    expect(sorted(ids)).toEqual(expected)
+  })
+
+  it("leaves out another branch's entries", async () => {
+    const db = await seed()
+    await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'alt', createdAt: 1 })
+    await db
+      .insert(storyEntries)
+      .values([1, 2].map((position) => reply('b2', `b2-e${position}`, position)))
+    const ids = await readRecentEntryIds(db, 'b1', {
+      firstPosition: 8,
+      lastPosition: 9,
+      protectedBuffer: 0,
+    })
+    expect(sorted(ids)).toEqual(['e6', 'e7', 'e8', 'e9'])
+  })
+
+  // A window truncated at classifierWindowMaxEntries: no turn in it saw the entries past its cut.
+  it("stops at the window's last entry", async () => {
+    const db = await seed()
+    const ids = await readRecentEntryIds(db, 'b1', {
+      firstPosition: 8,
+      lastPosition: 8,
+      protectedBuffer: 0,
+    })
+    expect(sorted(ids)).toEqual(['e6', 'e7', 'e8'])
   })
 })

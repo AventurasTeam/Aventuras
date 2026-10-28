@@ -391,3 +391,23 @@ slice-planning gate forces its resolution before that slice is planned.
     ring on the inner text, and phone tap padding cancelled by
     margins. Two uses don't pay for a primitive; a third link-style
     button is the signal to extract one.
+
+- **`settingsCount`'s premise is stale.** Its docstring
+  (`lib/settings-number.ts`) says `storySettingsSchema` avoids `.int()`
+  so a hand-edited blob degrades rather than refusing to open the
+  story. The schema has had `.int().nonnegative()` on the buffer keys
+  since #422 (`lib/db/stories/story-config-schema.ts`), and opening a
+  story refuses a settings blob that fails to parse. Its callers
+  (`promptBufferTake`, `readRecentEntryIds`, the scan surface, the
+  injection cascade) re-clamp a value the boundary already checked.
+  Either the helper goes, or the docstring says what it guards.
+  Raised by the Known happenings slice review.
+
+- **`ClassifierWindow` doesn't tie `turns` to `isEmpty`.** The two are
+  separate fields (`lib/classifier/window.ts`), so a caller reads
+  `turns[0]!` on the strength of an `isEmpty` early return several
+  lines up (`periodic-classifier.ts`, the classifier probe), and
+  `plan.ts` falls back with `turns[0]?.entryId ?? ''`. A union
+  (`{ isEmpty: true; turns: readonly [] }` or a non-empty tuple
+  otherwise) makes the guard the type's. Raised by the Known
+  happenings slice review.

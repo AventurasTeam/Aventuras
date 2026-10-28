@@ -1249,8 +1249,26 @@ function entityCandidate(id: string, displayName: string, renderedText: string):
   }
 }
 
+function happeningCandidate(id: string, title: string): Candidate {
+  return {
+    kind: 'happening',
+    id,
+    displayName: title,
+    renderedText: `${title}.`,
+    sims: [0, 0, 0],
+    vector: new Float32Array([1, 0, 0]),
+    chaptersOld: 0,
+    pinSignal: 0,
+    keywordHits: [],
+    embeddingStale: false,
+    commonKnowledge: false,
+    occurredAtEntryId: null,
+    awarenessIds: [],
+  }
+}
+
 function retrievalIntermediate(
-  over: { entities?: Candidate[]; selectedLocationIds?: string[] } = {},
+  over: { entities?: Candidate[]; happenings?: Candidate[]; selectedLocationIds?: string[] } = {},
 ): RetrievalSuccess {
   return retrievalSuccess({
     floor: {
@@ -1268,6 +1286,7 @@ function retrievalIntermediate(
       entities: over.entities ?? [
         entityCandidate(RETRIEVED_ENTITY_ID, 'Corvin', 'Corvin (not in the scene): a smuggler.'),
       ],
+      happenings: over.happenings ?? [],
     },
     selectedLocationIds: over.selectedLocationIds,
   })
@@ -1436,6 +1455,45 @@ describe('narrative fold — retrieval handoff', () => {
     expect(context.locationIds).toEqual(['l1'])
     expect(prompt).toContain('# Places\n[l1] The Market\n')
     expect(prompt).not.toContain('Use one of these place IDs')
+  })
+
+  // data-model.md → Entry metadata shape: the periodic classifier lists what the turn was given.
+  it('records the happenings the ranker seated on the reply, by id', async () => {
+    const seated = happeningCandidate('hap_00000000-0000-4000-8000-0000000000a1', 'The ford')
+    const unseated = happeningCandidate('hap_00000000-0000-4000-8000-0000000000a2', 'The fire')
+    const retrieval = retrievalIntermediate({ happenings: [seated] })
+    const ranked = retrieval.bundles.happenings
+    // The pool also holds a row the ranker scored and left out, which the turn was never given.
+    retrieval.bundles.happenings = {
+      ...ranked,
+      pool: [seated, unseated],
+      traces: [
+        ...ranked.traces,
+        {
+          ...ranked.traces[0]!,
+          id: unseated.id,
+          displayName: unseated.displayName,
+          renderedText: unseated.renderedText,
+          mmrRank: 1,
+          selected: false,
+          dropReason: 'below_threshold',
+        },
+      ],
+      funnel: { ...ranked.funnel, poolSize: 2, preFilteredSize: 2 },
+    }
+    const { metadata } = await runNarrativeWith({
+      narrative: 'prose',
+      intermediates: { [RETRIEVAL_INTERMEDIATE_KEY]: retrieval },
+    })
+    expect(metadata.injectedHappenings).toEqual(['hap_00000000-0000-4000-8000-0000000000a1'])
+  })
+
+  it.each([
+    ['the ranker seated none', { [RETRIEVAL_INTERMEDIATE_KEY]: retrievalIntermediate() }],
+    ['the retrieval phase stashed nothing', {}],
+  ])('records no happenings on the reply when %s', async (_name, intermediates) => {
+    const { metadata } = await runNarrativeWith({ narrative: 'prose', intermediates })
+    expect(metadata).not.toHaveProperty('injectedHappenings')
   })
 
   // ctx.intermediates is Record<string, unknown>: a non-outcome value must not

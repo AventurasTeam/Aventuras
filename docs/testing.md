@@ -459,8 +459,10 @@ sends it `PROBE_RUNS` times, 20 by default, under a profile with no max
 output unless `PROBE_MAX_OUTPUT` sets one, so a run can test what a
 real profile sends. It prints each run's outcome with its parse and
 provider retries, its first parse failure by field path and the
-entries a reply that parsed dropped for not fitting, by list, then the
-first-attempt parse rate. A reply the server stopped at its length
+entries a reply that parsed dropped for not fitting, by list, and its
+happenings as the planner would anchor them (with a `temporal`, at a
+source turn that resolves, or unanchored, with the distinct `temporal`
+values), then the first-attempt parse rate. A reply the server stopped at its length
 limit that doesn't parse strictly is refused, not repaired
 ([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)):
 its run prints the cut-off's cause and numbers, and the summary counts

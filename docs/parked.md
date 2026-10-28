@@ -1518,7 +1518,11 @@ Phase 3e
 handles the within-chapter case: it clusters happenings by similarity,
 shared cast and nearness in time, the agent decides merge, keep
 distinct or delete redundant, and awareness rows merge as a side
-effect. Happenings that describe one event across chapters stay
+effect. A `temporal` happening has no position for the nearness test,
+so 3e never clusters one; within a chapter, the pass listing the
+happenings created from recent entries
+([`classifier.md → What the classifier reads`](./memory/classifier.md#what-the-classifier-reads))
+is what keeps a retelling from being extracted twice. Happenings that describe one event across chapters stay
 distinct, since 3e reads the closed range only and Plot has no
 happening merge.
 

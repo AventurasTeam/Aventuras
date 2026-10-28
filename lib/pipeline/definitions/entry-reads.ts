@@ -1,6 +1,6 @@
-import { and, desc, eq, inArray, lt, ne, type SQL } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, isNull, lt, lte, min, ne, type SQL } from 'drizzle-orm'
 
-import { storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
+import { chunked, deltas, storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
 import { NARRATIVE_KINDS } from '@/lib/piggyback'
 import { settingsCount } from '@/lib/settings-number'
 import { storyPlaceOf, type StoryPlace } from '@/lib/world'
@@ -66,4 +66,69 @@ export async function readStoryPlace(
   const tail = await latestEntry(db, branchId, ne(storyEntries.kind, 'system'), before)
   const sceneSource = await latestEntry(db, branchId, NARRATIVE, before)
   return storyPlaceOf({ tail, sceneSource })
+}
+
+/**
+ * classifier.md → What the classifier reads → Known happenings: the non-system entries from the
+ * open region's start, or from `protectedBuffer` entries before the window's first entry when that
+ * is earlier, through the window's last entry.
+ */
+export async function readRecentEntryIds(
+  db: DbCtx['db'],
+  branchId: string,
+  bounds: { firstPosition: number; lastPosition: number; protectedBuffer: number },
+): Promise<Set<string>> {
+  const nonSystem = and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system'))
+  const [open] = await db
+    .select({ start: min(storyEntries.position) })
+    .from(storyEntries)
+    .where(and(nonSystem, isNull(storyEntries.chapterId)))
+  let floor = Math.min(open?.start ?? bounds.firstPosition, bounds.firstPosition)
+  const reach = settingsCount(bounds.protectedBuffer, 0)
+  if (reach > 0) {
+    const [back] = await db
+      .select({ position: storyEntries.position })
+      .from(storyEntries)
+      .where(and(nonSystem, lt(storyEntries.position, bounds.firstPosition)))
+      .orderBy(desc(storyEntries.position))
+      .limit(1)
+      .offset(reach - 1)
+    // Fewer entries than the reach: the history spills back to the branch's start.
+    floor = Math.min(floor, back?.position ?? 0)
+  }
+  const rows = await db
+    .select({ id: storyEntries.id })
+    .from(storyEntries)
+    .where(
+      and(
+        nonSystem,
+        gte(storyEntries.position, floor),
+        lte(storyEntries.position, bounds.lastPosition),
+      ),
+    )
+  return new Set(rows.map((r) => r.id))
+}
+
+/** The happenings whose create delta is anchored to one of `entryIds`: what those entries produced. */
+export async function readHappeningsMadeFrom(
+  db: DbCtx['db'],
+  branchId: string,
+  entryIds: ReadonlySet<string>,
+): Promise<Set<string>> {
+  const made = new Set<string>()
+  for (const ids of chunked([...entryIds])) {
+    const rows = await db
+      .select({ id: deltas.targetId })
+      .from(deltas)
+      .where(
+        and(
+          eq(deltas.branchId, branchId),
+          eq(deltas.targetTable, 'happenings'),
+          eq(deltas.op, 'create'),
+          inArray(deltas.entryId, ids),
+        ),
+      )
+    for (const row of rows) made.add(row.id)
+  }
+  return made
 }

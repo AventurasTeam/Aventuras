@@ -1,5 +1,6 @@
 export { PERIODIC_CLASSIFIER_KIND } from './kind'
 export { buildClassifierWindow } from './window'
+export { knownHappenings } from './known-happenings'
 export type { ClassifierWindow, WindowTurn } from './window'
 export {
   classifierExtractionSchema,

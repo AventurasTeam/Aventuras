@@ -78,6 +78,13 @@ describe('periodic classifier template', () => {
     expect(render().system).toMatch(/latest contributing turn/i)
   })
 
+  // The reply drops a sourceTurn sent where the field doesn't exist, and the turn it meant with it.
+  it('asks for sourceTurn on every entry that has the field, naming those that have none', () => {
+    expect(render().system).toContain(
+      "- Provenance. Set sourceTurn on every entry that has the field, and on no other, to the handle of the turn the fact comes from: a happening's involvements and awareness, and a knownAwareness entry, have none. For a fact synthesised across turns,",
+    )
+  })
+
   it('instructs one-perspective-only relationship emission', () => {
     expect(render().system).toMatch(/do not infer the inverse/i)
   })
@@ -479,6 +486,18 @@ describe('periodic classifier template — standing and threads', () => {
 describe('periodic classifier template — the writer map rules', () => {
   const RULES = [
     [
+      'status changes',
+      '- Status changes. Put each move to active or retired in statusFlips, with the ID from Known entities or Places as ref, the new status as to, and the sourceTurn. Give a retirement its reason, a short phrase from the prose ("killed at the ford").\n',
+    ],
+    [
+      'promotion',
+      '- Promotion. Move a staged entity of any kind to active only when the prose actually brings it into the scene.\n',
+    ],
+    [
+      'when it happened',
+      '- When it happened. A happening sits at its sourceTurn, where the turns show it happen. For an event from before the story or offstage that the turns only recount, or a backdrop that holds throughout, set temporal instead: its time as the prose gives it ("ten winters ago", "since the war"), or a short phrase when the prose gives none ("before the story", "ongoing"). An event still to come is not a happening: put the plan in newThreads, and add the event when the turns show it happen. Hearing of it can be one, at that turn.\n',
+    ],
+    [
       'returns',
       "- Returns. Move a retired character back to active only when the turns put them in the scene now: not a memory, a flashback, a vision or someone's report of them. Never a place.\n",
     ],
@@ -496,7 +515,7 @@ describe('periodic classifier template — the writer map rules', () => {
     ],
     [
       'threads',
-      "- Threads. Add a thread when the turns set up something the story will follow past the current scene: a goal a character commits to, a quest given, a mystery raised, a threat that looms. Not a passing intention, and not one already in the Threads list, even worded differently: change its status instead. Emit a status only when the turns establish the change. Put each new thread in newThreads with a title, a short description, its status (pending when the story knows of it but no one pursues it, active when someone does) and the sourceTurn. A thread the turns both open and close goes in newThreads as resolved or failed, with sourceTurn the turn that opened it and resolvedAtTurn the turn that closed it. Put each change in threadStatuses with the listed thread's ID as thread, the new status (active when it is taken up, resolved when it is achieved, failed when it is made impossible) and the sourceTurn.\n",
+      "- Threads. Add a thread when the turns set up something the story will follow past the current scene: a goal a character commits to, a quest given, a mystery raised, a threat that looms, an event set for later. Not a passing intention, and not one already in the Threads list, even worded differently: change its status instead. Emit a status only when the turns establish the change. Put each new thread in newThreads with a title, a short description, its status (pending when the story knows of it but no one pursues it, active when someone does) and the sourceTurn. A thread the turns both open and close goes in newThreads as resolved or failed, with sourceTurn the turn that opened it and resolvedAtTurn the turn that closed it. Put each change in threadStatuses with the listed thread's ID as thread, the new status (active when it is taken up, resolved when it is achieved, failed when it is made impossible) and the sourceTurn.\n",
     ],
     [
       'categories and icons',

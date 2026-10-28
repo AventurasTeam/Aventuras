@@ -99,6 +99,15 @@ dedup at create are in
   Summaries, lore and descriptions break it, accepted as coincidental
   (above). Summaries and close-written lore arrive with M5, so the
   effect today is near zero.
+- **Load-bearing, found while planning the implementation**: that a
+  pass's happenings carry a position. The reply schema offered
+  `occurredAtTurn` without a description and the template never asked
+  for it, and the planner set no position without it, so a happening the model didn't anchor would
+  have been listed only through a record. A happening now sits at its
+  source turn unless the reply marks it recounted with a `temporal`,
+  and the reply no longer has an `occurredAtTurn`: a happening's source
+  is when it happened
+  ([`classifier.md → What the classifier writes`](../memory/classifier.md#what-the-classifier-writes)).
 - **Holds**: `protectedBuffer` 0 stops the recent set at the chapter
   start, as it stops the history; a rollback into the window takes its
   entries' records; a regenerate after a pass reverses the pass's

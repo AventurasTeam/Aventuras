@@ -53,7 +53,6 @@ test.describe('periodic classifier — graph population', () => {
           title: 'The courier is ambushed at the ford',
           description: 'Bandits take the satchel.',
           sourceTurn: 't1',
-          occurredAtTurn: 't1',
           involvements: [{ ref: 'newbie', role: 'attacker' }],
           awareness: [
             { ref: 'newbie', source: 'witnessed firsthand', severity: 0.9, learnedAtTurn: 't1' },
@@ -1739,6 +1738,8 @@ test.describe('periodic classifier — the writer map', () => {
   const USER_STANDING = 'E2E-USER uneasy allies'
   const OLD_PROSE_STANDING = 'E2E-PASS sworn to the Syndicate'
   const SYNDICATE_STANDING = 'E2E-PASS outlawed by the Watch'
+  // In the open region, and only Kael and Vorne know of it (seed-dataset.ts).
+  const PACT = 'Vorne’s pact'
 
   test.beforeAll(async () => {
     test.setTimeout(180_000)
@@ -1812,7 +1813,12 @@ test.describe('periodic classifier — the writer map', () => {
     const watch = await idOf('entities', 'name', 'The City Watch')
     const syndicate = await idOf('entities', 'name', 'The Veil Syndicate')
     const amulet = await idOf('threads', 'title', 'What the amulet wants')
-    const betrayal = await idOf('happenings', 'title', 'The old betrayal')
+    const pact = await idOf('happenings', 'title', PACT)
+    const outOfReach = {
+      'The alley ambush': await idOf('happenings', 'title', 'The alley ambush'),
+      'The market fire': await idOf('happenings', 'title', 'The market fire'),
+      'The old betrayal': await idOf('happenings', 'title', 'The old betrayal'),
+    }
 
     mock.setNarrative('E2E-WRITER-R1 The broker waits out the rain under the Watch-house eaves.')
     await takeTurn(page, 'E2E-WRITER-U1 I watch the broker.', 'E2E-WRITER-R1')
@@ -1843,6 +1849,35 @@ test.describe('periodic classifier — the writer map', () => {
     if (held === undefined) throw new Error('the held pass call was not recorded')
     const prompt = promptOf(held)
     const ph = (name: string) => placeholderIn(prompt, name)
+
+    // classifier.md → What the classifier reads → Known happenings: the pact occurred in the open
+    // region; the ambush and the fire in closed chapters past the reach-back, and the betrayal has
+    // no position, so each of those is listed only when a turn was given it.
+    const recorded = new Set(
+      (
+        await queryApp(
+          page,
+          `SELECT DISTINCT j.value FROM story_entries e, json_each(e.metadata, '$.injectedHappenings') j
+           WHERE e.branch_id = ? AND e.content LIKE 'E2E-WRITER-R%'`,
+          [HERO_BRANCH],
+        )
+      ).map(([id]) => id as string),
+    )
+    const listed = (title: string) => {
+      try {
+        placeholderIn(prompt, title)
+        return true
+      } catch {
+        return false
+      }
+    }
+    expect(listed(PACT), 'a happening in the open region is listed').toBe(true)
+    for (const [title, id] of Object.entries(outOfReach))
+      expect(listed(title), `${title} is listed iff a turn was given it`).toBe(recorded.has(id))
+    expect(
+      Object.values(outOfReach).some((id) => !recorded.has(id)),
+      'the turns left one out, so the bound is exercised',
+    ).toBe(true)
 
     // t1..t4: turn 1's action and reply, then turn 2's.
     mock.setStructured('periodic-classifier', {
@@ -1892,8 +1927,8 @@ test.describe('periodic classifier — the writer map', () => {
       ],
       knownAwareness: [
         {
-          happening: ph('The old betrayal'),
-          ref: ph('Vorne'),
+          happening: ph(PACT),
+          ref: ph('The Ashen Sage'),
           source: 'told by Kael',
           severity: 0.7,
           learnedAtTurn: 't4',
@@ -1954,7 +1989,7 @@ test.describe('periodic classifier — the writer map', () => {
       page,
       `SELECT source, decay_resistance, learned_at_entry_id FROM happening_awareness
        WHERE branch_id = ? AND character_id = ? AND happening_id = ?`,
-      [HERO_BRANCH, vorne, betrayal],
+      [HERO_BRANCH, sage, pact],
     )
     expect(awareness?.[0]).toBe('told by Kael')
     expect(awareness?.[1]).toBeCloseTo(0.7)

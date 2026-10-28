@@ -77,6 +77,9 @@ Five knobs per story. Defaults copied from
   chapter boundary to satisfy the `protectedBuffer` floor. Total
   entries = `max(current_chapter_size, protectedBuffer)`.
 
+System entries take no part: the buffer reads and counts only the
+narrative entries.
+
 **"Backwards from the boundary", not "from the previous chapter."**
 The arithmetic above is unconditional, so when the previous chapter is
 itself shorter than the remaining shortfall, the walk continues into

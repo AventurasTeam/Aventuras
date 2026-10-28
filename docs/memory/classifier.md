@@ -46,20 +46,28 @@ branch's world as lists the classifier addresses by placeholder id
     ([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)).
     A deliberate reference to an older happening comes from one the
     narrator was given;
-  - every happening that occurred from the open region's first entry
-    on, or from `protectedBuffer` entries before the window's first
-    entry when that is earlier, counting entries as the prompt buffer
-    does, system entries aside. The turns' story history carries these
+  - every happening that occurred from the open region's first entry,
+    or from `protectedBuffer` entries before the window's first entry
+    when that is earlier, through the window's last entry, counting
+    entries as the prompt buffer does, system entries aside. No turn
+    of the window had a later entry as history, so a truncated
+    window's cut bounds it too. The turns' story history carries these
     as prose, the whole open region in full-chapter mode and its tail
     otherwise, across a chapter boundary as far back as the buffer
     spills
     ([`cadence.md → Composition rule`](./cadence.md#composition-rule)),
     so a scene that continues one the last pass classified finds its
-    happening listed.
+    happening listed;
+  - every happening created from one of those entries, its create
+    delta anchored there
+    ([Provenance attribution](#provenance-attribution)). A `temporal`
+    happening has no position for the bullet above, so this is what
+    lists a recounted one to the next pass while the turns still
+    retell it.
 
   A happening with no narrative position, a `temporal` one or one with
-  neither anchor, joins only through a record, and an id the branch no
-  longer has is left out. A happening
+  neither anchor, joins through a record or its create, and an id the
+  branch no longer has is left out. A happening
   the turns mention without the narrator having it as a row or as
   recent prose goes unlisted: a coincidental mention, or a retelling
   from a chapter summary, a lore body or an entity description. Its
@@ -93,7 +101,24 @@ alias list (the keywords bullet below).
   `happening_awareness`. New rows for events extracted from the prose
   window, each with a free-form `category` and an `icon` from the
   catalog, and `decay_resistance` set per awareness row from the
-  model's per-character severity judgment at extraction time. An
+  model's per-character severity judgment at extraction time. Each
+  happening sits in story time at its source turn
+  (`occurred_at_entry_id`), where the turns show it happen, or, for an
+  event from before the story or offstage that the turns only recount,
+  or a backdrop that holds throughout, at a free-form `temporal`
+  instead: the prose's own time, or a short phrase when it gives none
+  ("before the story", "ongoing"). An event still to come isn't a
+  happening yet: the plan is a [thread](#threads), hearing of it can
+  be a happening at that turn, and the event becomes one at the turn
+  the turns show it happen. A `temporal` the pass writes is never a
+  future, which no pass could later move to a turn. One synthesised
+  across turns sits at the latest, its provenance turn
+  ([Provenance attribution](#provenance-attribution)). One without a
+  `temporal` whose `sourceTurn` is missing or names no window turn has
+  neither, never the window head: the
+  [recent happenings](#what-the-classifier-reads) a later pass lists,
+  Plot's chapter grouping and the ranker's chapter boost all read the
+  position. An
   awareness row may also name a happening Known happenings lists, when
   the turns show a character learning of it ("Kael tells Aria about
   the massacre"); a pair the reply repeats lands at its earliest
@@ -243,10 +268,12 @@ Provenance is a **distinct axis** from the narrative anchors
 `happenings.occurred_at_entry_id` (where an event sits in story time; `null`
 for the temporal / historical class) and
 `happening_awareness.learned_at_entry_id` (when a character learned a fact).
-They frequently coincide, but the classifier already had to map each
-extraction to a window entry to populate those — provenance formalizes the
-single per-fact attribution channel that feeds all three, the anchor read
-directly and the narrative fields the classifier's judgment on top.
+A happening's story-time position is its provenance turn unless the
+reply marks it recounted with a `temporal`
+([What the classifier writes](#what-the-classifier-writes)), so a
+happening built from several turns sits at the latest of them, not
+where it began. An awareness row's `learned_at_entry_id` is its own
+provenance turn: its `learnedAtTurn`, else the happening's.
 
 ## ID handling in classifier output
 
@@ -631,8 +658,8 @@ keep their facts, as World's delete of a faction does
 
 ## Threads
 
-A pass tracks the story's threads: the goals, quests, mysteries and
-threats the turns set up. The narrator's prompt carries a thread while
+A pass tracks the story's threads: the goals, quests, mysteries,
+threats and events set for later that the turns set up. The narrator's prompt carries a thread while
 it is active
 ([`retrieval.md → Structural floor`](./retrieval.md#structural-floor--always-inject)),
 chapter close consolidates them over the chapter

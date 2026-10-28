@@ -100,7 +100,6 @@ describe('classifierExtractionSchema', () => {
           title: 'The courier is ambushed',
           description: 'Bandits take the satchel.',
           sourceTurn: 't2',
-          occurredAtTurn: 't2',
           involvements: [{ ref: 'c1', role: 'victim' }],
           awareness: [
             { ref: 'c1', source: 'witnessed firsthand', severity: 0.9, learnedAtTurn: 't2' },
@@ -223,6 +222,47 @@ describe('classifierExtractionSchema — the writer map', () => {
       'One of: sparkles, eye, handshake, door, swords, flame, mask, scroll, key, skull, crown, map, heart, shield, coins, book. Omit when none fits.'
     expect(itemFields('happenings').icon?.description).toBe(expected)
     expect(itemFields('newThreads').icon?.description).toBe(expected)
+  })
+
+  // classifier.md → What the classifier writes → Happenings: a happening sits at its source turn.
+  it('asks for a time only for a happening the turns recount, and for no turn of its own', () => {
+    const fields = itemFields('happenings')
+    expect(fields.temporal?.description).toBe(
+      'Only for an event the turns recount from before the story or offstage, or a backdrop that holds throughout: its time as the prose gives it, or a short phrase when it gives none (before the story, ongoing). Omit for an event the turns show happening.',
+    )
+    expect(fields).not.toHaveProperty('occurredAtTurn')
+  })
+
+  // The fields whose name alone doesn't say what they hold; the template's rules repeat each.
+  it('describes a status change, a relationship kind and a learned happening', () => {
+    expect(itemFields('statusFlips').to?.description).toBe(
+      'active for a staged entity of any kind the prose brings into the scene, or a retired character who returns; retired only for a character or faction, on unambiguous finality.',
+    )
+    expect(itemFields('statusFlips').reason?.description).toBe(
+      'For a retirement: why, in a short phrase from the prose.',
+    )
+    expect(itemFields('relationships').kind?.description).toBe(
+      'How the subject sees the object, in a word or short phrase: sister, mentor, rival. Never the inverse.',
+    )
+    expect(itemFields('knownAwareness').happening?.description).toBe(
+      'ID from Known happenings of the happening the character learns of.',
+    )
+  })
+
+  // The template's Provenance rule names the entries with no sourceTurn; it goes stale with this.
+  it('gives every entry a sourceTurn but an involvement, an awareness and a knownAwareness', () => {
+    const lacking = (prefix: string, fields: Record<string, JsonNode>): string[] =>
+      Object.entries(fields).flatMap(([name, field]) => {
+        const entry = field.items?.properties
+        if (entry == null) return []
+        const path = `${prefix}${name}`
+        return [...('sourceTurn' in entry ? [] : [path]), ...lacking(`${path}.`, entry)]
+      })
+    expect(lacking('', jsonOf(classifierExtractionWithPlacesSchema).properties ?? {})).toEqual([
+      'happenings.involvements',
+      'happenings.awareness',
+      'knownAwareness',
+    ])
   })
 
   it('parses renames, placements and standings of listed rows', () => {
