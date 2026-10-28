@@ -121,5 +121,13 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
     },
 
     listModels,
+
+    // The list names each model's aliases, which generation accepts as ids.
+    async getModelCapabilities(model: string): Promise<ImageModelCapabilities | undefined> {
+      const models = await listModels()
+      // An unreadable reply parses to an empty list, which must not read as an unknown model.
+      if (!models.length) throw new Error('Pollinations returned no image models')
+      return models.find((m) => m.id === model) ?? models.find((m) => m.aliases?.includes(model))
+    },
   }
 }

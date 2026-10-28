@@ -176,4 +176,47 @@ describe('Pollinations adapter', () => {
       expect(vi.mocked(imageGetFetch).mock.lastCall![1]).toEqual({ Accept: 'application/json' })
     })
   })
+
+  describe('getModelCapabilities', () => {
+    const lookup = (model: string) =>
+      createPollinationsProvider({ apiKey: 'k' }).getModelCapabilities!(model)
+
+    beforeEach(() =>
+      catalogue(
+        image('black-forest-labs/flux.1-schnell', { aliases: ['flux'], max_reference_images: 3 }),
+        { name: 'google/veo-3.1-fast', aliases: ['veo'], output_modalities: ['video'] },
+      ),
+    )
+
+    it('finds a model by its id and by an alias', async () => {
+      expect(await lookup('black-forest-labs/flux.1-schnell')).toMatchObject({
+        maxReferenceImages: 3,
+      })
+      expect(await lookup('flux')).toMatchObject({ maxReferenceImages: 3 })
+    })
+
+    it('prefers an exact id over another model’s alias', async () => {
+      catalogue(
+        image('a/first', { aliases: ['flux'], max_reference_images: 1 }),
+        image('flux', { max_reference_images: 5 }),
+      )
+      expect(await lookup('flux')).toMatchObject({ maxReferenceImages: 5 })
+    })
+
+    it('does not resolve a video model', async () => {
+      expect(await lookup('veo')).toBeUndefined()
+    })
+
+    it('answers undefined for a model the list lacks', async () => {
+      expect(await lookup('nope')).toBeUndefined()
+    })
+
+    it('rejects when the reply holds no image models', async () => {
+      vi.mocked(imageGetFetch).mockResolvedValue(reply({ error: 'nope' }))
+      await expect(lookup('flux')).rejects.toThrow('no image models')
+
+      catalogue()
+      await expect(lookup('flux')).rejects.toThrow('no image models')
+    })
+  })
 })
