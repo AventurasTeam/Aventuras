@@ -25,10 +25,10 @@ with `PROBE_EVAL`
 Each check is marked `rule` when a rule in the prompt asks for the
 fact and `judgment` when only the window's author does; every window
 also checks that each ID a reply names is a listed row or a handle the
-reply declares. The developer reviewed the windows on 2026-10-28. Left
-unscored on purpose: whether the steward becomes a character, and
-whether the page changing hands is a happening, since piggyback
-records the item and who gave it. After change 9 the developer added
+reply declares. The developer reviewed the windows on 2026-10-28,
+`namedrops` after change 11. Left unscored on purpose: whether the
+steward becomes a character, and whether the page changing hands is a
+happening, since piggyback records the item and who gave it. After change 9 the developer added
 the warrant's signer in `defection`, whom Brann demands, so the story
 may be heading for him.
 
