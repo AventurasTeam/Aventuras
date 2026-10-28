@@ -566,6 +566,29 @@ him as noise. The mean rate of rule checks is 0.92 against 0.89, of
 judgment checks 0.68 against 0.72. Kept, the over-reach the next
 change's.
 
+## Change 10: a person or creature, and no part that is over
+
+The bar now asks for "every named person or creature, whether alive,
+dead or only spoken of, but never a named ship, place or thing", and
+leaves out an unnamed figure the scene is done with, "nor one whose
+part is over ("a porter", "a sailor who helped haul the net", "a
+father long dead")". Canon's bullet says the same.
+
+Expected to move: the Marigold, the Teeth and the hanged brother, 3, 1
+and 3 of 10 on change 9's prompt; holding, Tam, Vane, the steward, the
+aunt, and Ilse kept a rename.
+
+The ship, the reef and the brother came in no reply, and defection's
+check against its extras read 10 of 10 again. Tam and Vane held at 10
+of 10, Vane involved in the wreck in 7, and the steward and the aunt
+came in 9 and 5 times. Two replies took Ilse for someone new again,
+and one added "Mistress Penn", her cover name, as another. A reply
+named an ambush rider in 6 of 10: each adds the archer to give the
+skirmish an involvement, its reasoning never turning to the bar, and
+across the bar's runs the count went 0, 1, 3, 3, 3, 2 and now 6, a
+swing no version of the bar has moved. The mean rate of rule checks is
+0.94 against 0.92, of judgment checks 0.73 against 0.68. Kept.
+
 ## Where it stands
 
 Every change so far, with the check it was made for. The baseline and

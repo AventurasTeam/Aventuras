@@ -285,12 +285,15 @@ breakdown under [UX](#ux).
   - what counts as a happening, which no rule says beyond the category
     examples. One case to settle: an item changing hands, which
     piggyback already records with who gave it;
-  - where the character bar falls: the rule now keeps the one factions
-    and places keep, a named character or an unnamed one the story
-    could come back to. A reply still names an ambush rider in 7 of 40
-    runs, against 10 of 30 without the bar, and the `learning` replies
-    add the steward hunting the alchemists in 18 of 40, against 7 of
-    30, and Tam's aunt in 7, against none;
+  - an unnamed participant given a handle: replies add the ambush's
+    archer or third rider by a role name in 0 to 6 of 10 runs, whatever
+    the character bar says, to involve them in the fight. The
+    Involvements rule could keep a participant who is no character out
+    of involvements, or the planner could leave one to the happening's
+    description;
+  - a revealed name taken for someone new: 2 of 10 `reveal` replies
+    add Ilse Marrow as a new character beside her rename, though the
+    character rule calls a revealed name a rename;
   - the lead: the prompt doesn't name the story's lead, so in first- or
     second-person narration "I" and "you" are the lead only by the
     scene. The `ambush` window measures it;
