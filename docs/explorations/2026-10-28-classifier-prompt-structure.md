@@ -421,13 +421,26 @@ out. The silent drover Pell, whom replies take for the "you" of the
 ambush, is aware in 23 of its happenings against 18 and 13, the lead
 question again. Completion tokens didn't move. The mean rate of rule
 checks is 0.90 against 0.89, of judgment checks 0.74 against 0.69.
-Kept.
+Kept, until the run below.
 
 This run also corrects change 6's reading. With the bar unchanged, 3
 of 10 replies named a rider, so the bar's prompt names one in 3 of 20
 runs against 10 of 30 before it, a smaller effect than change 6's run
 alone showed. The steward came in 5 of 10 again, 11 of 20 against 7
 of 30 before the bar, and Tam's aunt in 1.
+
+Run again with the prompt unchanged, ten a window, Brannoc held at 7
+of 10. Idris learning of the listed poisoning, which had held in every
+run since change 2, missed in 3 of 10, 4 of 20 with the first run: two
+of the misses added the poisoning again, and one wrote no
+knownAwareness at all, reasoning that it had no new happening to
+learn of. None of the reasoning cites the changed sentence, so the
+learning window ran ten more times on change 6's prompt the same
+afternoon: 10 of 10, 20 of 20 with its first run. A rule check and a
+duplicated happening outweigh a judgment check: reverted. Across the
+three runs with the bar, a reply names a rider in 6 of 30, adds the
+steward in 13 of 30 and Tam's aunt in 6, and a change of sides comes
+with a none in 4 of 50 since change 4.
 
 ## Where it stands
 
@@ -444,12 +457,17 @@ slip recovery.
 | 3, threadStatuses  | every ID names a listed row or a declared handle | 38/50 → 47/50  | 0.87 / 0.65          |
 | 4, change of sides | Brann ends in House Varro                        | 7/10 → 9/10    | 0.89 / 0.63          |
 | 5, titles          | calls that drop a happening                      | 4/50 → 0/50    | 0.91 / 0.65          |
-| 6, character bar   | replies naming an ambush rider                   | 10/30 → 3/20   | 0.89 / 0.69          |
-| 7, witnesses       | Brannoc aware of the wreck                       | 0/10 → 9/10    | 0.90 / 0.74          |
+| 6, character bar   | replies naming an ambush rider                   | 10/30 → 6/30   | 0.89 / 0.69          |
+| 7, witnesses       | Brannoc aware of the wreck; reverted             | 0/10 → 16/20   | 0.90 / 0.74          |
 
 Left, each for the developer or measured as out of a rule's reach:
 
 - **The steward** under the character bar, in the followup.
+- **A witness's awareness.** The Awareness rule asks for the
+  characters the prose shows learning a fact, so no reply puts
+  Brannoc, who watched the wreck he recounts, in its awareness; change
+  7's wording fixed that at the cost of Idris's learning, in the
+  followup.
 - **A none beside a join** could also be settled in the planner, a
   none and a join for one character at one turn read as the leave
   before the join, which would hold for any model; it would change
