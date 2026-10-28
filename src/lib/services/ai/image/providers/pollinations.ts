@@ -7,7 +7,7 @@
 
 import * as z from 'zod'
 import type { ImageModelCapabilities } from '#lib/types/index.ts'
-import { specToPixels, formatImageSize } from '#lib/utils/image.ts'
+import { specToPixels, formatImageSize, pickResolution } from '#lib/utils/image.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -101,11 +101,13 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
     name: 'Pollinations',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, spec, referenceImages, signal } = options
+      const { model, prompt, spec, modelInfo, referenceImages, signal } = options
 
       if (!config.apiKey) {
         throw new Error('Pollinations API key is required to bypass Turnstile protection.')
       }
+
+      const resolution = pickResolution(spec, modelInfo?.supportedResolutions)
 
       return generateOpenAICompatibleImage({
         baseUrl: GENERATION_BASE_URL,
@@ -115,7 +117,7 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
         prompt,
         size: formatImageSize(specToPixels(spec)),
         referenceImages,
-        extraFields: { safe: false },
+        extraFields: { safe: false, ...(resolution && { resolution }) },
         signal,
       })
     },

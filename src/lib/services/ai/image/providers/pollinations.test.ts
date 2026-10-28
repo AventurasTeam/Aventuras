@@ -57,6 +57,36 @@ describe('Pollinations adapter', () => {
     expect(generateOpenAICompatibleImage).not.toHaveBeenCalled()
   })
 
+  describe('resolution tier', () => {
+    const generateWith = (supportedResolutions?: string[], size: 'small' | 'medium' = 'medium') =>
+      createPollinationsProvider({ apiKey: 'k' }).generate({
+        ...options(),
+        spec: { orientation: 'landscape', size },
+        modelInfo: { supportedResolutions },
+      })
+
+    it('sends the listed tier that covers the size, as listed', async () => {
+      await generateWith(['1k', '2k'])
+      expect(lastImageCall().extraFields).toEqual({ safe: false, resolution: '2k' })
+
+      await generateWith(['1k', '2k'], 'small')
+      expect(lastImageCall().extraFields).toEqual({ safe: false, resolution: '1k' })
+    })
+
+    it.each([[undefined], [[]], [['auto']]])(
+      'sends none when the model lists none (%j)',
+      async (listed) => {
+        await generateWith(listed)
+        expect(lastImageCall().extraFields).toEqual({ safe: false })
+      },
+    )
+
+    it('still sends the pixel size beside the tier', async () => {
+      await generateWith(['1k', '2k'])
+      expect(lastImageCall().size).toBe('1536x864')
+    })
+  })
+
   describe('listModels', () => {
     const list = (apiKey?: string, configKey = 'k') =>
       createPollinationsProvider({ apiKey: configKey }).listModels(apiKey)
