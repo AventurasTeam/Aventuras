@@ -589,47 +589,82 @@ across the bar's runs the count went 0, 1, 3, 3, 3, 2 and now 6, a
 swing no version of the bar has moved. The mean rate of rule checks is
 0.94 against 0.92, of judgment checks 0.73 against 0.68. Kept.
 
+## A window of names only invoked, and change 11
+
+A side agent noted that "every named person, whether alive, dead or
+only spoken of" has no floor, and that no window held a name dropped
+in passing. The sixth window, `namedrops`, has Odo swear by Saint
+Aldric's bones, quote old King Harrow and pass on the name of Jorun
+Vask, whom Wren sets out to find, while a fiddler plays Merrit's
+ballad. Run ten times on change 8's prompt, before the bar asked for
+every named person, and on change 10's, Jorun came in every time on
+both. On change 10's one reply added King Harrow, weighing him by
+"only spoken of", and one the fiddler; on change 8's neither.
+
+Change 11 leaves out a name the prose only invokes, as factions and
+places leave out a figure of speech: "Nor is a name the prose only
+invokes, in an oath, a saying or a song ("by Saint Mira's tears", "as
+Queen Ysolde used to say")", the examples' names other than the
+window's. Canon's bullet says the same. Expected to move: the invoked
+names and the fiddler; at risk, Tam and Vane, both only spoken of.
+
+No reply added an invoked name or the fiddler, and Jorun held at 10 of
+10, though one of ten against none proves little alone. Tam and Vane
+missed once each, neither by the new clause: the Vane reply added him
+without the description the reply type requires, and the Tam reply
+read change 10's "nor one whose part is over" as covering a named boy
+it took for dead. The rest moved as a scatter, Oriel's knowing at 5 of
+10 against 9 and Vane's involvement at 2 against 7, and two recounted
+replies filed their own happening under knownAwareness. The mean rate
+of rule checks is 0.91 against 0.95, of judgment checks 0.70 against
+0.76, on the six windows. Kept on the mechanism the reasoning shows.
+
 ## Where it stands
 
-Every change so far, with the check it was made for. The baseline and
-change 1 ran five times a window, the rest ten; the mean rates are
-over the checks as they now score, the baseline's read through the
-slip recovery.
+Every change, with the check it was made for. The baseline and change
+1 ran five times a window, the rest ten. The mean rates are every run
+scored again on the checks as they now stand, over the five original
+windows, so they differ from the figures given at each change.
 
-| Change             | The check it was made for                        | Before → after | Rule / judgment mean |
-| ------------------ | ------------------------------------------------ | -------------- | -------------------- |
-| baseline           |                                                  |                | 0.74 / 0.64          |
-| 1, knownAwareness  | knownAwareness names only a listed happening     | 11/25 → 17/25  | 0.83 / 0.60          |
-| 2, headings        | the same                                         | 37/50 → 49/50  | 0.86 / 0.66          |
-| 3, threadStatuses  | every ID names a listed row or a declared handle | 38/50 → 47/50  | 0.87 / 0.65          |
-| 4, change of sides | Brann ends in House Varro                        | 7/10 → 9/10    | 0.89 / 0.63          |
-| 5, titles          | calls that drop a happening                      | 4/50 → 0/50    | 0.91 / 0.65          |
-| 6, character bar   | replies naming an ambush rider                   | 10/30 → 7/40   | 0.89 / 0.69          |
-| 7, witnesses       | Brannoc aware of the wreck; reverted             | 0/10 → 16/20   | 0.90 / 0.74          |
+| Change                | The check it was made for                        | Before → after              | Rule / judgment mean |
+| --------------------- | ------------------------------------------------ | --------------------------- | -------------------- |
+| baseline              |                                                  |                             | 0.71 / 0.70          |
+| 1, knownAwareness     | knownAwareness names only a listed happening     | 11/25 → 17/25               | 0.79 / 0.66          |
+| 2, headings           | the same                                         | 37/50 → 49/50               | 0.83 / 0.70          |
+| 3, threadStatuses     | every ID names a listed row or a declared handle | 38/50 → 47/50               | 0.84 / 0.71          |
+| 4, change of sides    | a none beside Brann's join                       | 10/20 → 4/60                | 0.85 / 0.69          |
+| 5, titles             | calls that drop a happening                      | 4/50 → 0 in every run since | 0.86 / 0.71          |
+| 6, character bar      | replies naming an ambush rider                   | 10/30 → 7/40                | 0.86 / 0.76          |
+| 7, witnesses          | Brannoc aware of the wreck; reverted             | 0/10 → 16/20                | 0.88 / 0.72          |
+| 8, awareness, knowing | Brannoc aware; Oriel knows                       | 0/20 → 10/10; 0/20 → 8/10   | 0.89 / 0.72          |
+| 9, story's direction  | Tam added; Vane added                            | 36/50 → 10/10; 8/50 → 10/10 | 0.92 / 0.68          |
+| 10, person, creature  | a ship, a reef, the hanged brother added         | 7 in 10 runs → 0            | 0.94 / 0.73          |
+| 11, invoked names     | `namedrops`: an invoked name or the fiddler      | 2/10 → 0/10                 | 0.90 / 0.64          |
+
+Two fixes went into code: a none beside a join at one turn reads as a
+change of sides when the character held another faction, and an ID or
+turn handle copied with its brackets reads as the bare one. Replayed,
+Brann ends in House Varro in every run.
 
 Left, each for the developer or measured as out of a rule's reach:
 
-- **The steward** under the character bar, in the followup.
-- **A witness's awareness.** The Awareness rule asks for the
-  characters the prose shows learning a fact, so no reply puts
-  Brannoc, who watched the wreck he recounts, in its awareness; change
-  7's wording fixed that at the cost of Idris's learning, in the
-  followup.
-- **A none beside a join** could also be settled in the planner, a
-  none and a join for one character at one turn read as the leave
-  before the join, which would hold for any model; it would change
-  canon's apply order, so it was left.
+- **Change 11's dip.** On the five original windows its run sits below
+  change 10's, though no miss traced to its clause; a second run of the
+  final prompt is to tell its effect from the swings.
+- **An unnamed participant given a handle.** Replies add the ambush's
+  archer by a role name to involve him in the fight, 0 to 6 of 10
+  runs, whatever the bar says; in the followup.
+- **A revealed name taken for someone new**, Ilse in 1 or 2 of 10, in
+  the followup.
+- **"Whose part is over"** read once as covering a named character
+  taken for dead.
 - **The lead.** Replies take the silent drover Pell for the ambush's
-  "you" and leave Tobin out of most happenings (2 to 5 of 10).
+  "you" and leave Tobin out of most happenings.
 - **The cover name.** No reply reads "Mistress Penn, sir, from
-  Tanner's Row" as Ilse naming herself; the reasoning takes Penn for
-  the fishmonger or a third person, so the Names rule, which already
-  sends a disguise to aliases, never comes into play.
-- **A character named later in the window.** Twice in the 300
-  replies since change 2 the scarred man was added unnamed, his own
-  handle then renamed Dov Hask, a rename the planner drops, so Hask is
-  lost.
-- **One happening a beat.** The fight is never one happening (1 of 70
-  runs), the followup's "what counts as a happening".
-- **Tam Rook made dead** swings between 3 and 7 of 10 with no change
-  near it, and Vane, named and dead, is added in 1 to 5.
+  Tanner's Row" as Ilse naming herself.
+- **A character named later in the window**, added unnamed and his own
+  handle renamed, a rename the planner drops: at least twice.
+- **One happening a beat.** The fight is one happening in 3 of the
+  130 runs since change 1, the followup's "what counts as a happening".
+- **Tam Rook made dead**, "ran the same night" read as his death, in 2
+  to 8 of 10 learning replies.
