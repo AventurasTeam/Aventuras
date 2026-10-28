@@ -291,12 +291,6 @@ breakdown under [UX](#ux).
     runs, against 10 of 30 without the bar, and the `learning` replies
     add the steward hunting the alchemists in 18 of 40, against 7 of
     30, and Tam's aunt in 7, against none;
-  - a witness's awareness: the Awareness rule asks for the characters
-    the prose shows learning a fact, so a witness who recounts it, like
-    Brannoc in `recounted`, is never aware of it. Asking for "who
-    witnessed it, and who learns of it" made him aware in 16 of 20
-    runs, but Idris missed learning of the listed poisoning in 4 of 20
-    against 1 of 70, mostly by adding it again, so it was reverted;
   - the lead: the prompt doesn't name the story's lead, so in first- or
     second-person narration "I" and "you" are the lead only by the
     scene. The `ambush` window measures it;

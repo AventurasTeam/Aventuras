@@ -480,6 +480,48 @@ The developer asked for both of the fixes left to code.
   read Nessa's learning in 10 of 10, against 8, and change 3's reveal
   reply lands its rename and alias.
 
+## Change 8: awareness is whoever knows
+
+The developer settled what change 7 had raised: awareness is a
+character knowing of a happening, however they came to it, a witness
+or a teller as much as someone told. Change 7 had asked that of a
+happening the reply adds while knownAwareness still took only those
+who learn of a listed one, and two of its four misses on Idris had
+recorded Oriel, the poisoning's teller, by adding the poisoning again,
+the one place left for him. Both rules now say knowing. The Awareness
+rule opens "List only characters the prose shows knowing of it,
+however they came to: who witnessed it or took part, and who learns of
+it", and the knownAwareness rule takes a character "knowing of one,
+learning of it ("Kael tells Aria about the massacre") or knowing it
+already (Kael, who tells it)", with learnedAtTurn only when the turns
+narrate the learning. The field's description and canon say the same.
+Brannoc's check became a rule check, and the learning window gained
+one: Oriel, who tells of the poisoning, knows of it.
+
+Expected to move: Brannoc and Oriel, 0 of 20 each on the kept prompt;
+at risk, Idris's learning and the poisoning added again, 19 of 20 on
+the kept prompt, the unrelated fire, and awareness spreading.
+
+| check                         | the kept prompt (20 runs) | change 7 (20 runs) | change 8 (10 runs) |
+| ----------------------------- | ------------------------- | ------------------ | ------------------ |
+| Brannoc aware of the wreck    | 0                         | 16                 | 10                 |
+| Oriel knows of the poisoning  | 0                         | 1                  | 8                  |
+| Idris learns of the poisoning | 19                        | 16                 | 9                  |
+| the poisoning not added again | 19                        | 17                 | 10                 |
+
+No reply added the poisoning again. The one Idris miss wrote no
+knownAwareness and no happening at all, as one reply on change 7's
+prompt did. The fire held. Awareness rows rose to 1.7 a happening,
+against 0.5 on both runs of the kept prompt, those who took part now
+among them, and Pell, taken for the ambush's "you", is aware in 24 of
+its happenings. The mean rate of rule checks is 0.89 against 0.86
+and 0.85, of judgment checks 0.72 against 0.76 and 0.72. Kept.
+
+Two reveal replies added Ilse Marrow as a new character beside the
+right rename, "the Heron" as its keyword instead of an alias, one
+citing the bar: she is named. With the bar a reply does it in 3 of 50
+runs, and in none of 30 before it.
+
 ## Where it stands
 
 Every change so far, with the check it was made for. The baseline and
