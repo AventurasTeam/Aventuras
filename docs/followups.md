@@ -320,6 +320,11 @@ breakdown under [UX](#ux).
     falls back to the window head, while the rules ask for it on every
     entry that has one. A happening without one also has no place in
     story time, so a later pass lists it only through a record;
+  - a `temporal` the model fills for an event the turns show, filler
+    like "none" or an in-scene time like "that night", which takes the
+    happening out of story time with nothing logged. The probe prints
+    the `temporal` values a reply gives, and an explicit marker in the
+    reply (shown, recounted, backdrop) is the remedy if they show it;
   - the icon catalog, which only `icon`'s description carries: the
     rule points at "the list its icon field gives", and `icon` is a
     tolerated string, not an enum, so forced on the model sees neither
