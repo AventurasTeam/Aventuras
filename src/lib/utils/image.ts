@@ -264,7 +264,8 @@ const RESOLUTION_LONG_EDGE = new Map([
 /**
  * The model's smallest listed tier that covers the spec's long edge, else its largest; `undefined`
  * when it lists none. A backend rejects a tier the model lists others without and ignores one on a
- * model that lists none, so with nothing listed there is nothing to send.
+ * model that lists none, so with nothing listed there is nothing to send. Tiers match in any case
+ * and come back as listed.
  */
 export function pickResolution(
   spec: ImageSpec,
@@ -274,7 +275,7 @@ export function pickResolution(
   const want = Math.max(width, height)
   const tiers = listed
     .flatMap((tier) => {
-      const edge = RESOLUTION_LONG_EDGE.get(tier)
+      const edge = RESOLUTION_LONG_EDGE.get(tier.toUpperCase())
       return edge ? [{ tier, edge }] : []
     })
     .toSorted((a, b) => a.edge - b.edge)

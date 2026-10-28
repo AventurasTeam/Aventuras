@@ -198,6 +198,12 @@ describe('pickResolution', () => {
     expect(pick('small', ['512', '1K', '2K'], 'portrait')).toBe('1K')
   })
 
+  it('reads a tier in any case and returns it as listed', () => {
+    expect(pick('small', ['1k', '2k'])).toBe('1k')
+    expect(pick('medium', ['1k', '2k'])).toBe('2k')
+    expect(pick('large', ['1k', '2K'])).toBe('2K')
+  })
+
   it('ignores tiers it cannot place and sorts the rest', () => {
     expect(pick('small', ['auto', '2K', '1K'])).toBe('1K')
     expect(pick('small', ['auto'])).toBeUndefined()
