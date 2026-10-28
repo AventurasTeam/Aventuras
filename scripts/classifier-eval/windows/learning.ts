@@ -159,6 +159,7 @@ Oriel ducked his head, pleased and embarrassed at once, and was gone.`,
     ],
   }),
   bad: reply({
+    aliases: [{ ref: 'c9', terms: ['x'], sourceTurn: 't2' }],
     happenings: [
       {
         title: 'Lady Senna poisoned',

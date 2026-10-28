@@ -85,6 +85,7 @@ By the time the barrow had passed she was straight-backed again and twenty paces
     ],
   }),
   bad: reply({
+    aliases: [{ ref: 'c9', terms: ['x'], sourceTurn: 't2' }],
     knownAwareness: [
       {
         happening: 'hap_unlisted',

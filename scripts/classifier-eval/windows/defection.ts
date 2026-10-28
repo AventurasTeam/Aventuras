@@ -128,6 +128,7 @@ Maela slid the paper across the table. He read it twice, then unpinned the tarni
     ],
   }),
   bad: reply({
+    aliases: [{ ref: 'c9', terms: ['x'], sourceTurn: 't2' }],
     knownAwareness: [
       {
         happening: 'hap_unlisted',

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { factionAfter } from './checks'
-import { reply } from './fixture'
+import { factionAfter, refsResolve } from './checks'
+import { character, faction, happening, reply, thread } from './fixture'
 import { defection } from './windows/defection'
 
 const BRANN = 'char_brann'
@@ -58,4 +58,71 @@ it('the defection window fails a join followed by a leave at the same turn', () 
     ],
   })
   expect(defection.checks.filter((c) => !c.holds(joinThenLeave))).toHaveLength(1)
+})
+
+describe('refsResolve', () => {
+  const check = refsResolve({
+    entities: [character('char_a', 'A'), faction('fact_b', 'B')],
+    happenings: [happening('hap_c', 'C')],
+    threads: [thread('thr_d', 'D', 'active')],
+  })
+  const hap = (involvement: string, aware: string) => ({
+    title: 't',
+    involvements: [{ ref: involvement, role: 'actor' }],
+    awareness: [{ ref: aware, source: 's', severity: 0.5 }],
+    sourceTurn: 't1',
+  })
+  const naming = (ref: string) => ({
+    'an involvement': reply({ happenings: [hap(ref, 'char_a')] }),
+    'an awareness': reply({ happenings: [hap('char_a', ref)] }),
+    'a relationship subject': reply({
+      relationships: [{ subject: ref, object: 'char_a', kind: 'k', sourceTurn: 't1' }],
+    }),
+    'a relationship object': reply({
+      relationships: [{ subject: 'char_a', object: ref, kind: 'k', sourceTurn: 't1' }],
+    }),
+    'a status flip': reply({ statusFlips: [{ ref, to: 'active', sourceTurn: 't1' }] }),
+    'a membership character': reply({
+      memberships: [{ character: ref, faction: 'fact_b', sourceTurn: 't1' }],
+    }),
+    'a membership faction': reply({
+      memberships: [{ character: 'char_a', faction: ref, sourceTurn: 't1' }],
+    }),
+    'an alias': reply({ aliases: [{ ref, terms: ['x'], sourceTurn: 't1' }] }),
+    'a rename': reply({ renames: [{ ref, name: 'x', sourceTurn: 't1' }] }),
+    'a placement': reply({ placements: [{ ref, parent: 'top-level', sourceTurn: 't1' }] }),
+    'a placement parent': reply({ placements: [{ ref: 'char_a', parent: ref, sourceTurn: 't1' }] }),
+    'a standing': reply({ standings: [{ ref, standing: 'x', sourceTurn: 't1' }] }),
+    'a thread status': reply({
+      threadStatuses: [{ thread: ref, status: 'resolved', sourceTurn: 't1' }],
+    }),
+    'a knownAwareness character': reply({
+      knownAwareness: [{ happening: 'hap_c', ref, source: 's', severity: 0.5 }],
+    }),
+  })
+
+  it.each(Object.entries(naming('c9')))('fails on an invented ID in %s', (_, r) => {
+    expect(check.holds(r)).toBe(false)
+  })
+
+  it.each(Object.entries(naming('char_a')))('holds on a listed ID in %s', (_, r) => {
+    expect(check.holds(r)).toBe(true)
+  })
+
+  it('holds on a handle the reply declares, a null faction and a thread it lists', () => {
+    const r = reply({
+      newCharacters: [
+        { handle: 'new:e', name: 'E', description: 'x', keywords: [], sourceTurn: 't1' },
+      ],
+      newFactions: [
+        { handle: 'new:f', name: 'F', description: 'x', keywords: [], sourceTurn: 't1' },
+      ],
+      memberships: [
+        { character: 'new:e', faction: 'new:f', sourceTurn: 't1' },
+        { character: 'char_a', faction: null, sourceTurn: 't1' },
+      ],
+      threadStatuses: [{ thread: 'thr_d', status: 'resolved', sourceTurn: 't1' }],
+    })
+    expect(check.holds(r)).toBe(true)
+  })
 })

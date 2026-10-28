@@ -149,6 +149,7 @@ When Sefa comes down the bank leading the cart horse, there's an arrow standing 
     ],
   }),
   bad: reply({
+    aliases: [{ ref: 'c9', terms: ['x'], sourceTurn: 't2' }],
     happenings: [
       {
         title: 'Pell charges the scarred man',

@@ -477,10 +477,12 @@ evaluation set instead: hand-written windows in
 pass renders a branch, `PROBE_RUNS` times each, 5 by default. Each
 window carries checks of the facts its prose should and shouldn't
 yield, marked by whether a rule in the prompt asks for the fact or
-only the window's author judges it; the probe prints each run's
-misses, then how often each check held, and `PROBE_OUT` saves each
-window's prompt and each reply, both as the server sent it, with any
-separate reasoning, and as the checks read it. A unit test proves
+only the window's author judges it, and every window also checks
+that each ID a reply names is one the prompt listed or a handle the
+reply declares; the probe prints each run's misses, then how often
+each check held, and `PROBE_OUT` saves each window's prompt and each
+reply, both as the server sent it, with any separate reasoning, and
+as the checks read it. A unit test proves
 each check can hold and can fail.
 
 ## Selector strategy

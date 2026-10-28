@@ -1,6 +1,6 @@
 import type { ClassifierExtraction } from '@/lib/classifier'
 
-import type { Check } from './fixture'
+import type { Check, EvalWindow } from './fixture'
 
 type ReplyHappening = ClassifierExtraction['happenings'][number]
 
@@ -36,3 +36,37 @@ export const awarenessOfListedOnly = (listed: readonly string[]): Check => ({
   basis: 'rule',
   holds: (r) => r.knownAwareness.every((k) => listed.includes(k.happening)),
 })
+
+const referencesOf = (r: ClassifierExtraction): string[] => [
+  ...r.happenings.flatMap((h) => [
+    ...h.involvements.map((i) => i.ref),
+    ...h.awareness.map((a) => a.ref),
+  ]),
+  ...r.relationships.flatMap((x) => [x.subject, x.object]),
+  ...r.statusFlips.map((f) => f.ref),
+  ...r.memberships.flatMap((m) => (m.faction == null ? [m.character] : [m.character, m.faction])),
+  ...r.aliases.map((a) => a.ref),
+  ...r.renames.map((n) => n.ref),
+  ...r.placements.flatMap((p) => (p.parent === 'top-level' ? [p.ref] : [p.ref, p.parent])),
+  ...r.standings.map((s) => s.ref),
+  ...r.threadStatuses.map((t) => t.thread),
+  ...r.knownAwareness.map((k) => k.ref),
+]
+
+/** Every ID a reply names is a row its window lists or a handle the reply declares: an invented
+ *  handle drops the fact that uses it. A knownAwareness happening is awarenessOfListedOnly's. */
+export const refsResolve = (w: Pick<EvalWindow, 'entities' | 'happenings' | 'threads'>): Check => {
+  const listed = new Set([...w.entities, ...w.happenings, ...w.threads].map((row) => row.id))
+  return {
+    name: 'every ID names a listed row or a handle the reply declares',
+    kind: 'avoid',
+    basis: 'rule',
+    holds: (r) => {
+      const declared = new Set([
+        ...r.newCharacters.map((c) => c.handle),
+        ...r.newFactions.map((f) => f.handle),
+      ])
+      return referencesOf(r).every((ref) => listed.has(ref) || declared.has(ref))
+    },
+  }
+}

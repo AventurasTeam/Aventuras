@@ -274,14 +274,13 @@ breakdown under [UX](#ux).
   named each output list in its rule and described the fields a name
   doesn't explain. The rest is measured against the evaluation set,
   the parse probe's `PROBE_EVAL` mode
-  ([`testing.md → Real-provider checks`](./testing.md#real-provider-checks)):
-  - placeholder use, which the set scores only in `knownAwareness` so
-    far: the one measured failure is a model inventing its own handles,
-    which drops involvements and awareness (the M7.5 note on
-    `unresolvedRefs` in
-    [`roadmap.md → M7`](./implementation/roadmap.md#m7--app-settings--diagnostics--onboarding)),
-    and the play check above covers whether replies fill the new
-    fields;
+  ([`testing.md → Real-provider checks`](./testing.md#real-provider-checks)).
+  Every window also scores placeholder use, the one failure measured
+  before the set: a model inventing its own handles drops the facts
+  that use them (the M7.5 note on `unresolvedRefs` in
+  [`roadmap.md → M7`](./implementation/roadmap.md#m7--app-settings--diagnostics--onboarding)).
+  Whether replies fill the new fields is the play check's above. Left
+  to measure:
   - sections instead of the flat list: the task, the inputs, the rules
     that hold everywhere (IDs and handles, provenance, scene, silence),
     then each output list in the order the model writes it. Today

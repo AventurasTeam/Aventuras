@@ -159,6 +159,7 @@ Nessa folded the page into her coat. She would take it to the magistrates' court
     ],
   }),
   bad: reply({
+    aliases: [{ ref: 'c9', terms: ['x'], sourceTurn: 't2' }],
     knownAwareness: [
       {
         happening: 'hap_unlisted',
