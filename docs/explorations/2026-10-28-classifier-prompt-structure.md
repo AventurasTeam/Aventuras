@@ -448,6 +448,38 @@ names a rider in 7 of 40, adds the steward in 18 of 40 and Tam's aunt
 in 7, and since change 4 a change of sides comes with a none in 4 of 60. The rerun's mean rates are 0.89 for rule checks and 0.65 for
 judgment checks.
 
+## Scoring Tam and Vane themselves
+
+The checks that Tam Rook and Edric Vane are added matched any new
+character whose name held "tam" or "vane", so a reply adding only Tam
+Rook's aunt or Vane's son passed. They now match the character's own
+name. Scored again, Tam is added in 25 of 30 runs before the character
+bar and 27 of 40 with it, Vane in 8 of 30 and 6 of 40. The replies
+that leave Tam out under the bar cite it: they misread "ran the same
+night" as his death and ask whether a dead boy is one "the story could
+come back to", a test the bar sets only for an unnamed character.
+Along with the steward and Tam's aunt, the bar ended the stand-ins for
+the ambush's lead, a "narrator", a "protagonist" and an "unknown" in 3
+of 30 replies before it.
+
+## Two recoveries in code
+
+The developer asked for both of the fixes left to code.
+
+- **A change of sides.** The planner now plans a none at the same turn
+  as a joined faction first, whichever the reply wrote first: both
+  start from the faction the character held, so the pair is the leave
+  before the join. A join and a cast-out within one turn read the same
+  way, the cost canon names. Replayed, Brann ends in House Varro in
+  every run, among them change 2's and 3's, where 3 of 10 had left him
+  in no faction.
+- **Bracketed IDs.** A reference or turn handle a reply copies with the
+  prompt's brackets, `[c1]` or `[t2]`, is read as the bare one when
+  that resolves; 4 of 300 replies wrote them so. The eval now resolves
+  turn handles as the pass does. Replayed, change 6's recounted replies
+  read Nessa's learning in 10 of 10, against 8, and change 3's reveal
+  reply lands its rename and alias.
+
 ## Where it stands
 
 Every change so far, with the check it was made for. The baseline and
