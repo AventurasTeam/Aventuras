@@ -215,10 +215,10 @@ describe('periodic classifier template — system and user halves', () => {
   })
 
   // classifier.md → What the classifier writes → New characters: a revealed name is a rename.
-  it('adds every named character and an unnamed one the story points toward, never a revealed name', () => {
+  it('adds every named person and an unnamed one the story points toward, never a thing or a revealed name', () => {
     const { system } = render()
     expect(system).toContain(
-      'every named one, whether alive, dead or only spoken of, and an unnamed one the turns point the story toward, someone a character sets out to find or to face, or who is after one of them ("the innkeeper they ride to warn", "the bounty hunter on their trail"). Not an unnamed figure the scene is done with, even one who took part ("a porter", "a sailor who helped haul the net"), and not a listed character whose own name the turns reveal: that is a rename. Put each in newCharacters with a handle you choose.',
+      'every named person or creature, whether alive, dead or only spoken of, but never a named ship, place or thing, and an unnamed one the turns point the story toward, someone a character sets out to find or to face, or who is after one of them ("the innkeeper they ride to warn", "the bounty hunter on their trail"). Not an unnamed figure the scene is done with, even one who took part, nor one whose part is over ("a porter", "a sailor who helped haul the net", "a father long dead"), and not a listed character whose own name the turns reveal: that is a rename. Put each in newCharacters with a handle you choose.',
     )
   })
 
