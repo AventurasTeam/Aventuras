@@ -57,6 +57,8 @@ export interface ImageGenerateResult {
 export interface ImageModelInfo extends ImageModelCapabilities {
   id: string
   name: string
+  /** Other ids the provider serves this model under. */
+  aliases?: string[]
   description?: string
   costPerImage?: number
   costPerTextToken?: number

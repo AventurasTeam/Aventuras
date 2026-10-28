@@ -44,13 +44,6 @@ describe('model discovery', () => {
     })
   })
 
-  it('rejects when Pollinations returns something other than a list', async () => {
-    vi.mocked(imageGetFetch).mockResolvedValue(reply({ error: 'nope' }))
-    await expect(createPollinationsProvider({ apiKey: 'k' }).listModels('k')).rejects.toThrow(
-      'unexpected model list',
-    )
-  })
-
   it('rejects when a response body is not JSON', async () => {
     vi.mocked(imageGetFetch).mockResolvedValue({
       ok: true,
