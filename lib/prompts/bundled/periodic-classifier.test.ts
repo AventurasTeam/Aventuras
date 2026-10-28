@@ -495,7 +495,7 @@ describe('periodic classifier template — the writer map rules', () => {
     ],
     [
       'when it happened',
-      '- When it happened. A happening sits at its sourceTurn. For an event from before the story or offstage that the turns only recount, set temporal to its time as the prose gives it ("ten winters ago", "before the war"); leave temporal out for an event the turns show happening.\n',
+      '- When it happened. A happening sits at its sourceTurn, where the turns show it happen. For an event from before the story or offstage that the turns only recount, or a backdrop that holds throughout, set temporal instead: its time as the prose gives it ("ten winters ago", "since the war"), or a short phrase when the prose gives none ("before the story", "ongoing"). An event still to come is not a happening: put the plan in newThreads, and add the event when the turns show it happen. Hearing of it can be one, at that turn.\n',
     ],
     [
       'returns',
@@ -515,7 +515,7 @@ describe('periodic classifier template — the writer map rules', () => {
     ],
     [
       'threads',
-      "- Threads. Add a thread when the turns set up something the story will follow past the current scene: a goal a character commits to, a quest given, a mystery raised, a threat that looms. Not a passing intention, and not one already in the Threads list, even worded differently: change its status instead. Emit a status only when the turns establish the change. Put each new thread in newThreads with a title, a short description, its status (pending when the story knows of it but no one pursues it, active when someone does) and the sourceTurn. A thread the turns both open and close goes in newThreads as resolved or failed, with sourceTurn the turn that opened it and resolvedAtTurn the turn that closed it. Put each change in threadStatuses with the listed thread's ID as thread, the new status (active when it is taken up, resolved when it is achieved, failed when it is made impossible) and the sourceTurn.\n",
+      "- Threads. Add a thread when the turns set up something the story will follow past the current scene: a goal a character commits to, a quest given, a mystery raised, a threat that looms, an event set for later. Not a passing intention, and not one already in the Threads list, even worded differently: change its status instead. Emit a status only when the turns establish the change. Put each new thread in newThreads with a title, a short description, its status (pending when the story knows of it but no one pursues it, active when someone does) and the sourceTurn. A thread the turns both open and close goes in newThreads as resolved or failed, with sourceTurn the turn that opened it and resolvedAtTurn the turn that closed it. Put each change in threadStatuses with the listed thread's ID as thread, the new status (active when it is taken up, resolved when it is achieved, failed when it is made impossible) and the sourceTurn.\n",
     ],
     [
       'categories and icons',

@@ -228,7 +228,7 @@ describe('classifierExtractionSchema — the writer map', () => {
   it('asks for a time only for a happening the turns recount, and for no turn of its own', () => {
     const fields = itemFields('happenings')
     expect(fields.temporal?.description).toBe(
-      'Only for an event from before the story or offstage that the turns recount: when it happened, as the prose gives it. Omit for an event the turns show happening.',
+      'Only for an event the turns recount from before the story or offstage, or a backdrop that holds throughout: its time as the prose gives it, or a short phrase when it gives none (before the story, ongoing). Omit for an event the turns show happening.',
     )
     expect(fields).not.toHaveProperty('occurredAtTurn')
   })

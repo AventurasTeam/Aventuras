@@ -75,7 +75,7 @@ const happening = z.object({
     .string()
     .optional()
     .describe(
-      'Only for an event from before the story or offstage that the turns recount: when it happened, as the prose gives it. Omit for an event the turns show happening.',
+      'Only for an event the turns recount from before the story or offstage, or a backdrop that holds throughout: its time as the prose gives it, or a short phrase when it gives none (before the story, ongoing). Omit for an event the turns show happening.',
     ),
   category: tolerated(z.string()),
   icon,

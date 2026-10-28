@@ -103,12 +103,19 @@ alias list (the keywords bullet below).
   catalog, and `decay_resistance` set per awareness row from the
   model's per-character severity judgment at extraction time. Each
   happening sits in story time at its source turn
-  (`occurred_at_entry_id`), or, for an event from before the story or
-  offstage that the turns only recount, at a free-form `temporal`
-  instead. One synthesised across turns sits at the latest, its
-  provenance turn ([Provenance attribution](#provenance-attribution)).
-  One without a `temporal` whose `sourceTurn` is missing or names no
-  window turn has neither, never the window head: the
+  (`occurred_at_entry_id`), where the turns show it happen, or, for an
+  event from before the story or offstage that the turns only recount,
+  or a backdrop that holds throughout, at a free-form `temporal`
+  instead: the prose's own time, or a short phrase when it gives none
+  ("before the story", "ongoing"). An event still to come isn't a
+  happening yet: the plan is a [thread](#threads), hearing of it can
+  be a happening at that turn, and the event becomes one at the turn
+  the turns show it happen. A `temporal` the pass writes is never a
+  future, which no pass could later move to a turn. One synthesised
+  across turns sits at the latest, its provenance turn
+  ([Provenance attribution](#provenance-attribution)). One without a
+  `temporal` whose `sourceTurn` is missing or names no window turn has
+  neither, never the window head: the
   [recent happenings](#what-the-classifier-reads) a later pass lists,
   Plot's chapter grouping and the ranker's chapter boost all read the
   position. An
@@ -651,8 +658,8 @@ keep their facts, as World's delete of a faction does
 
 ## Threads
 
-A pass tracks the story's threads: the goals, quests, mysteries and
-threats the turns set up. The narrator's prompt carries a thread while
+A pass tracks the story's threads: the goals, quests, mysteries,
+threats and events set for later that the turns set up. The narrator's prompt carries a thread while
 it is active
 ([`retrieval.md → Structural floor`](./retrieval.md#structural-floor--always-inject)),
 chapter close consolidates them over the chapter
