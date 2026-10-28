@@ -301,3 +301,30 @@ without a title were dropped in 5 of 50 calls, against 4 and 2: one
 ambush reply sent all eight without one and lost the fight, Sefa and
 the crossing with them. The slip rate was 34 of 3,030 keys, in 14 of
 51 calls, every reply parsed.
+
+## Change 4: a change of sides is one membership
+
+Half the defection replies on changes 2 and 3 gave Brann two
+memberships at the turn he swears, House Varro and none, and when the
+none came last the planner, applying a turn's facts in reply order,
+left him in no faction: 6 of 20 runs. Nothing said a change of sides
+needs no none first. The Memberships rule now goes on after "Set it to
+none when they leave it or are cast out": "A change of sides is one
+fact naming the new faction: no fact sets none for the faction they
+leave", and the faction field's description says the same.
+
+Expected to move: Brann ending in House Varro, 7 of 10 twice; at risk,
+Maela's borrowed coat changing no membership and his membership
+sitting at t2, both 10 of 10, and memberships appearing in windows
+that have none.
+
+A none beside the join came in 1 of 10 replies, against 10 of 20, and
+it is the one run that leaves Brann in no faction: 9 of 10 against 7.
+Maela's coat and the turn held at 10 of 10, and no other window wrote
+a membership. The mean rate of rule checks is 0.89 against 0.87, of
+judgment checks 0.63 against 0.65. Kept.
+
+Happenings without a title were dropped in 4 of 50 calls again, 15
+happenings this time: one ambush reply sent all eight without one and
+another four. Tam Rook made dead swings between runs with no change
+near it, 5, 4 and now 7 of 10.
