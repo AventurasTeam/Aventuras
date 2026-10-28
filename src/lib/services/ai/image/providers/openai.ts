@@ -11,7 +11,7 @@ import * as z from 'zod'
 import type { ImageModelCapabilities } from '#lib/types/index.ts'
 import {
   formatImageSize,
-  parseImageSize,
+  isSizeString,
   pickSize,
   specToPixels,
   type ImageResolution,
@@ -78,9 +78,6 @@ function atLeastMinPixels({ width, height }: ImageResolution): ImageResolution {
   const raise = (edge: number) => Math.ceil((edge * scale) / EDGE_MULTIPLE) * EDGE_MULTIPLE
   return { width: raise(width), height: raise(height) }
 }
-
-const isSizeString = (value: string | undefined): value is `${number}x${number}` =>
-  parseImageSize(value) !== undefined
 
 export function createOpenAIProvider(config: ImageProviderConfig): ImageProvider {
   const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL

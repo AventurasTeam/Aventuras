@@ -97,6 +97,9 @@ export function parseImageSize(size: string | undefined): ImageResolution | unde
   return match ? { width: Number(match[1]), height: Number(match[2]) } : undefined
 }
 
+export const isSizeString = (value: string | undefined): value is `${number}x${number}` =>
+  parseImageSize(value) !== undefined
+
 /** `WIDTHxHEIGHT`, for the providers whose parameter is a string in that shape. */
 export function formatImageSize(res: ImageResolution): `${number}x${number}` {
   return `${res.width}x${res.height}`
