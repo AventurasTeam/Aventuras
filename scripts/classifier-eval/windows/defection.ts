@@ -1,4 +1,4 @@
-import { awarenessOfListedOnly, factionAfter, involves } from '../checks'
+import { awarenessOfListedOnly, createdCharacters, factionAfter, involves } from '../checks'
 import {
   action,
   character,
@@ -84,7 +84,7 @@ Maela slid the paper across the table. He read it twice, then unpinned the tarni
       name: 'no new character: the gate-boy, the hanged brother and the warrant’s signer go unnamed',
       kind: 'avoid',
       basis: 'judgment',
-      holds: (r) => r.newCharacters.length === 0,
+      holds: (r) => createdCharacters(r).length === 0,
     },
     {
       name: 'no new faction for a listed one',

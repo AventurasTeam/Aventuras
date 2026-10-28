@@ -1,4 +1,4 @@
-import { awarenessOfListedOnly, involves, newCharacterNamed } from '../checks'
+import { awarenessOfListedOnly, createdCharacters, involves, newCharacterNamed } from '../checks'
 import {
   action,
   character,
@@ -116,7 +116,7 @@ When Sefa comes down the bank leading the cart horse, there's an arrow standing 
       kind: 'avoid',
       basis: 'judgment',
       holds: (r) =>
-        r.newCharacters.every((c) => /hask/i.test(c.name) && !/archer|rider/i.test(c.name)),
+        createdCharacters(r).every((c) => /hask/i.test(c.name) && !/archer|rider/i.test(c.name)),
     },
     awarenessOfListedOnly([]),
   ],

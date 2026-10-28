@@ -23,6 +23,18 @@ describe.each(EVAL_WINDOWS.map((w) => [w.name, w] as const))('eval window %s', (
     expect(failing('avoid', w.bad, true)).toEqual([])
   })
 
+  it('fails no check on a blank-named new character, which the planner never creates', () => {
+    const extra = {
+      handle: 'new:extra',
+      name: '',
+      description: 'x',
+      keywords: [],
+      sourceTurn: 't1',
+    }
+    const r = { ...w.ideal, newCharacters: [...w.ideal.newCharacters, extra] }
+    expect(failing(null, r, false)).toEqual([])
+  })
+
   it('shows every turn and no fixture id in the prompt', () => {
     const { prompt } = renderWindow(w, MAX_ENTRIES)
     for (const entry of w.entries) expect(prompt.user).toContain(entry.content)

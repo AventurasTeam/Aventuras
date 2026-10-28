@@ -9,8 +9,12 @@ export const involves = (h: ReplyHappening, ref: string): boolean =>
 
 export const isRecounted = (h: ReplyHappening): boolean => (h.temporal?.trim() ?? '') !== ''
 
+/** The new characters the planner creates: it plans nothing for a blank name. */
+export const createdCharacters = (reply: ClassifierExtraction) =>
+  reply.newCharacters.filter((c) => c.name.trim() !== '')
+
 export const newCharacterNamed = (reply: ClassifierExtraction, name: RegExp) =>
-  reply.newCharacters.find((c) => name.test(c.name))
+  createdCharacters(reply).find((c) => name.test(c.name))
 
 // An unknown turn falls back to the window head, after every turn.
 const turnIndex = (turn: string | undefined): number => {

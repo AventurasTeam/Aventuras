@@ -1,10 +1,30 @@
 import { describe, expect, it } from 'vitest'
 
-import { factionAfter, refsResolve } from './checks'
+import { createdCharacters, factionAfter, refsResolve } from './checks'
 import { character, faction, happening, reply, thread } from './fixture'
 import { defection } from './windows/defection'
 
 const BRANN = 'char_brann'
+
+describe('createdCharacters', () => {
+  it('leaves out a new character with a blank name, which the planner never creates', () => {
+    const entry = (handle: string, name: string) => ({
+      handle,
+      name,
+      description: 'x',
+      keywords: [],
+      sourceTurn: 't1',
+    })
+    const r = reply({
+      newCharacters: [
+        entry('new:dov', 'Dov Hask'),
+        entry('new:archer', ''),
+        entry('new:rider', ' '),
+      ],
+    })
+    expect(createdCharacters(r).map((c) => c.handle)).toEqual(['new:dov'])
+  })
+})
 
 describe('factionAfter', () => {
   it('is undefined when the reply sets no faction for the character', () => {
