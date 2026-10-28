@@ -656,7 +656,12 @@ reply is dropped as a misreading of a past membership. A member at
 retirement keeps the faction, since retiring touches no member, and a
 faction the reply itself retires keeps the memberships from its turns.
 A staged faction takes members and stays staged. One character's facts
-are planned in source-turn order, ties in reply order. A fact matching
+are planned in source-turn order, ties in reply order, except that a
+none at the same turn as a joined faction is planned first: both start
+from the faction the character held, so the pair is a change of sides,
+the leave before the join, whichever the reply wrote first. A
+character who joins and is cast out within one turn reads the same
+way, the cost of catching the common case. A fact matching
 the stored faction writes nothing, but only until a fact for the
 character is sent: from then on each is sent, since user precedence
 may refuse the earlier write and the later turn is newer prose, and

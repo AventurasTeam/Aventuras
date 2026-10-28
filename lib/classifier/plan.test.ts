@@ -3058,19 +3058,59 @@ describe('factions', () => {
           memberships: [
             { character: 'char_kael', faction: null, sourceTurn: 't3' },
             { character: 'char_kael', faction: 'fact_crown', sourceTurn: 't1' },
+            { character: 'char_aria', faction: 'fact_circle', sourceTurn: 't2' },
             { character: 'char_aria', faction: 'fact_crown', sourceTurn: 't2' },
-            { character: 'char_aria', faction: null, sourceTurn: 't2' },
           ],
         }),
-        deps([member('char_kael', null), member('char_aria', null), factionRow('fact_crown')]),
+        deps([
+          member('char_kael', null),
+          member('char_aria', null),
+          factionRow('fact_crown'),
+          factionRow('fact_circle'),
+        ]),
       )
       expect(
         memberships(planned).map(({ id, factionId, entryId }) => [id, factionId, entryId]),
       ).toEqual([
         ['char_kael', 'fact_crown', 'e1'],
+        ['char_aria', 'fact_circle', 'e2'],
         ['char_aria', 'fact_crown', 'e2'],
-        ['char_aria', null, 'e2'],
         ['char_kael', null, 'e3'],
+      ])
+    })
+
+    // classifier.md → Factions → Memberships: replies wrote a change of sides as a join and a
+    // none at one turn, and with the none last the character ended in no faction.
+    it('plans a none beside a join at one turn first, whichever the reply wrote first', () => {
+      const { planned } = buildClassifierActions(
+        reply({
+          memberships: [
+            { character: 'char_kael', faction: 'fact_circle', sourceTurn: 't2' },
+            { character: 'char_kael', faction: null, sourceTurn: 't2' },
+            { character: 'char_aria', faction: null, sourceTurn: 't2' },
+            { character: 'char_aria', faction: 'fact_circle', sourceTurn: 't2' },
+            { character: 'char_rhen', faction: 'fact_circle', sourceTurn: 't1' },
+            { character: 'char_rhen', faction: null, sourceTurn: 't2' },
+          ],
+        }),
+        deps([
+          member('char_kael', 'fact_crown'),
+          member('char_aria', 'fact_crown'),
+          member('char_rhen', 'fact_crown'),
+          factionRow('fact_crown'),
+          factionRow('fact_circle'),
+        ]),
+      )
+      expect(
+        memberships(planned).map(({ id, factionId, entryId }) => [id, factionId, entryId]),
+      ).toEqual([
+        // A join at an earlier turn and a leave at a later one stay a join, then a leave.
+        ['char_rhen', 'fact_circle', 'e1'],
+        ['char_kael', null, 'e2'],
+        ['char_aria', null, 'e2'],
+        ['char_rhen', null, 'e2'],
+        ['char_kael', 'fact_circle', 'e2'],
+        ['char_aria', 'fact_circle', 'e2'],
       ])
     })
 

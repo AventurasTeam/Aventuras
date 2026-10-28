@@ -46,14 +46,24 @@ describe('factionAfter', () => {
     expect(factionAfter(r, BRANN)).toBe('fact_varro')
   })
 
-  it('takes the later entry within one turn', () => {
+  it('takes the later of two joins within one turn', () => {
+    const r = reply({
+      memberships: [
+        { character: BRANN, faction: 'fact_varro', sourceTurn: 't2' },
+        { character: BRANN, faction: 'fact_wardens', sourceTurn: 't2' },
+      ],
+    })
+    expect(factionAfter(r, BRANN)).toBe('fact_wardens')
+  })
+
+  it('reads a none beside a join within one turn as the leave before the join', () => {
     const r = reply({
       memberships: [
         { character: BRANN, faction: 'fact_varro', sourceTurn: 't2' },
         { character: BRANN, faction: null, sourceTurn: 't2' },
       ],
     })
-    expect(factionAfter(r, BRANN)).toBeNull()
+    expect(factionAfter(r, BRANN)).toBe('fact_varro')
   })
 
   it('puts an unknown turn after every turn', () => {
@@ -68,8 +78,8 @@ describe('factionAfter', () => {
 })
 
 // A real reply wrote a change of sides as a join and then a leave, both at t2: the planner applies
-// the leave last and Brann ends in no faction.
-it('the defection window fails a join followed by a leave at the same turn', () => {
+// the leave first, so Brann ends in House Varro.
+it('the defection window passes a join followed by a leave at the same turn', () => {
   const joinThenLeave = reply({
     ...defection.ideal,
     memberships: [
@@ -77,7 +87,7 @@ it('the defection window fails a join followed by a leave at the same turn', () 
       { character: BRANN, faction: null, sourceTurn: 't2' },
     ],
   })
-  expect(defection.checks.filter((c) => !c.holds(joinThenLeave))).toHaveLength(1)
+  expect(defection.checks.filter((c) => !c.holds(joinThenLeave)).map((c) => c.name)).toEqual([])
 })
 
 describe('refsResolve', () => {

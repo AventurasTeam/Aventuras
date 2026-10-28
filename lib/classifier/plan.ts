@@ -1135,7 +1135,11 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const row = rowById.get(id)
     return row == null ? null : characterFactionId(row)
   }
-  for (const fact of inTurnOrder(extraction.memberships)) {
+  // A none beside a join at one turn is a change of sides: the leave first, whatever the reply's order.
+  const leavesFirst = [...extraction.memberships].sort(
+    (a, b) => Number(a.faction !== null) - Number(b.faction !== null),
+  )
+  for (const fact of inTurnOrder(leavesFirst)) {
     const characterId = resolveRef(fact.character, 'character')
     if (characterId == null) continue
     let factionId: string | null = null
