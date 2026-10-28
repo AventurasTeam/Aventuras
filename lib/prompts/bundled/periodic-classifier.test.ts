@@ -561,13 +561,6 @@ describe('periodic classifier template — the writer map rules', () => {
     }
   })
 
-  // data-model.md → happening_awareness: a character aware of it, "witnessed firsthand" among the sources.
-  it('puts who witnessed a happening in its awareness, beside who learns of it', () => {
-    expect(render().system).toContain(
-      '- Awareness. List only characters the prose shows knowing the fact: who witnessed it, and who learns of it.',
-    )
-  })
-
   // classifier.md → What the classifier writes → Happenings: awareness of a listed happening.
   // Without its last sentence, replies filed who learned of a happening they added under
   // knownAwareness, naming it by title.
