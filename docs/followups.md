@@ -312,7 +312,13 @@ breakdown under [UX](#ux).
   - the icon catalog, which only `icon`'s description carries: the
     rule points at "the list its icon field gives", and `icon` is a
     tolerated string, not an enum, so forced on the model sees neither
-    the list nor a grammar limiting it.
+    the list nor a grammar limiting it;
+  - a change of sides as one membership naming the new faction. The
+    rule asks for the new faction when a character changes sides and
+    for none when one leaves, and nothing says the first needs no
+    second: a reply wrote a defection as a join, then a leave, at one
+    turn, and the planner, applying the leave last, left the character
+    in no faction. The `defection` window measures it.
 
   A field description reaches the model only when the reply format is
   written into the prompt, the profile's structured output on auto, so
@@ -322,7 +328,9 @@ breakdown under [UX](#ux).
   and llama.cpp turns a schema into a sampling grammar the model never
   reads. Whether vLLM or SGLang let a reasoning model think before a
   schema-bound reply is unverified; a few samples through a hosted
-  provider would tell. Raised by the developer 2026-10-27.
+  provider would tell. The prompt is tuned on the dev model, Gemma 4
+  26B-A4B, as the capability floor; hosted models are sampled beside
+  it for comparison. Raised by the developer 2026-10-27.
 
 - **Parked items play gives a signal for.** Each waits on evidence
   only play produces, so play checks them rather than letting the
