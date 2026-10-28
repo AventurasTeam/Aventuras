@@ -612,7 +612,9 @@ image host makes the whole generation run again, and it is billed again. The key
 the API's own origin, and redirects are checked rather than followed blindly.
 
 Each adapter keeps its own model discovery and size handling; discovery throws on a failed request
-rather than substituting a list. Whether a provider takes an API key or a base URL is declared per
+rather than substituting a list. OpenAI Compatible has no standard model list: its filtering and
+capability reading were assembled from a handful of hosts' replies, and `/images/models` is an optional
+extra whose failure never fails the listing. Whether a provider takes an API key or a base URL is declared per
 provider in the registry (`PROVIDER_API_KEY`, `PROVIDER_BASE_URL`), and the settings form and
 `hasRequiredCredentials` read those tables. Migration `042` moved image settings that still named an
 API profile into image profiles, moved proxy-style `openai` profiles and every `chutes` profile
