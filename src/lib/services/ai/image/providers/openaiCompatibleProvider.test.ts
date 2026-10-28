@@ -71,6 +71,29 @@ describe('OpenAI Compatible image generation', () => {
     expect(sdk.config[0].baseURL).toBe('https://normalized.test/v1')
   })
 
+  it('sends the picked size from the snapshot, and canonical pixels without one', async () => {
+    const provider = createOpenAICompatibleProvider({ apiKey: 'k', baseUrl: BASE_URL })
+    const spec = { orientation: 'landscape', size: 'medium' } as const
+
+    await provider.generate(
+      options({
+        spec,
+        modelInfo: { supportedResolutions: ['1024x1024', '1536x1024', '1024x1536'] },
+      }),
+    )
+    expect(lastGenerate().size).toBe('1536x1024')
+
+    await provider.generate(options({ spec }))
+    expect(lastGenerate().size).toBe('1536x864')
+  })
+
+  it('sends canonical pixels when the listed size is not WxH', async () => {
+    await createOpenAICompatibleProvider({ apiKey: 'k', baseUrl: BASE_URL }).generate(
+      options({ modelInfo: { supportedResolutions: ['square_hd', 'auto'] } }),
+    )
+    expect(lastGenerate().size).toBe('1536x1536')
+  })
+
   it('lists models from the normalized base URL', async () => {
     vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v1')
     vi.mocked(imageGetFetch).mockResolvedValue({

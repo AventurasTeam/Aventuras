@@ -6,7 +6,7 @@
  */
 
 import * as z from 'zod'
-import { specToPixels, formatImageSize } from '#lib/utils/image.ts'
+import { formatImageSize, isSizeString, pickSize, specToPixels } from '#lib/utils/image.ts'
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type {
   ImageProvider,
@@ -36,8 +36,10 @@ export function createOpenAICompatibleProvider(config: ImageProviderConfig): Ima
     name: 'OpenAI Compatible',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, spec, referenceImages, signal } = options
+      const { model, prompt, spec, modelInfo, referenceImages, signal } = options
       if (!baseUrl) throw new Error('OpenAI-compatible provider requires a custom base URL')
+
+      const listed = pickSize(spec, modelInfo?.supportedResolutions)
 
       return generateOpenAICompatibleImage({
         baseUrl,
@@ -45,7 +47,7 @@ export function createOpenAICompatibleProvider(config: ImageProviderConfig): Ima
         serviceId: 'openai-compatible-image',
         model,
         prompt,
-        size: formatImageSize(specToPixels(spec)),
+        size: isSizeString(listed) ? listed : formatImageSize(specToPixels(spec)),
         referenceImages,
         signal,
       })
