@@ -282,16 +282,11 @@ breakdown under [UX](#ux).
   [`roadmap.md → M7`](./implementation/roadmap.md#m7--app-settings--diagnostics--onboarding)).
   Whether replies fill the new fields is the play check's above. Left
   to measure:
-  - a reply's own new thread named again in `threadStatuses`, by its
-    title and with the status it already gives, which drops as an
-    unresolved reference: 3 of 50 replies on the flat list, 12 of 50
-    under headings, where the Threads rule shares one with
-    `newThreads`. Only the rule's last sentence says `thread` takes a
-    listed thread's ID, and the field has no description;
   - a happening sent without a title, which the parser drops with its
-    involvements and awareness: 2 of 50 replies on the flat list, 4 of
-    50 under headings. No rule asks for one, and only the reply type
-    marks it required;
+    involvements and awareness: 2 of 50 replies on the flat list, 4
+    and 5 of 50 under headings, one of them sending all eight of its
+    happenings without one. No rule asks for one, and only the reply
+    type marks it required;
   - what counts as a happening, which no rule says beyond the category
     examples. One case to settle: an item changing hands, which
     piggyback already records with who gave it;

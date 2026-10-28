@@ -255,3 +255,49 @@ the rest in draft acceptance (0.75 against 0.76, 0.75 against 0.75),
 prompt-cache reuse or speed. So the swing is neither the prompt nor
 anything llama.cpp's timings show, and it left the content scores
 alone. Every reply parsed.
+
+## Scoring blank names
+
+The ambush check against the unnamed archer and third rider, and
+defection's against a new character, counted every newCharacters
+entry, blank names among them, though the planner creates nothing for
+a blank name. Under headings the extras came back with blank names, so
+the checks failed replies the app would have read correctly. They now
+count only named entries, and every run so far was scored again from
+its raw replies: the mean rate of judgment checks reads 0.64 at
+baseline, 0.60 and 0.58 for change 1's prompt and 0.66 for change 2's,
+in place of the figures above; the rule checks' are unchanged. The
+ambush check reads 2 of 5, 3 of 5, 3 of 5 and 10 of 10.
+
+## Change 3: threadStatuses for listed threads
+
+The Threads rule's last sentence now goes on: "threadStatuses is for
+those listed threads alone: a thread this reply adds carries its
+status in its own newThreads entry and never appears in
+threadStatuses", and the thread field's description says the same.
+
+Expected to move: a reply's own new thread named in threadStatuses, 12
+of 50 runs on change 2's prompt, and with it every reference resolving
+in recounted, reveal, defection and learning; at risk, the new threads
+for finding Tam and for Nessa's resolve, and knownAwareness, whose
+sentence this one follows in form.
+
+| every ID names a listed row or a handle the reply declares | ambush | recounted | reveal | defection | learning |
+| ---------------------------------------------------------- | ------ | --------- | ------ | --------- | -------- |
+| change 2                                                   | 10/10  | 8/10      | 9/10   | 5/10      | 6/10     |
+| change 3                                                   | 10/10  | 8/10      | 9/10   | 10/10     | 10/10    |
+
+No reply named its own thread in threadStatuses, against 12 of 50. The
+three references still unresolved are of other kinds: names written as
+involvement refs, turn handles as awareness refs, and IDs written with
+their brackets. Both new threads held at 10 of 10 and knownAwareness at
+49 of 50. The mean rate of rule checks is 0.87 against 0.86, of
+judgment checks 0.65 against 0.66. Kept.
+
+The ambush extras came back named in 4 of 10 replies ("the archer",
+"the third rider"), against none on change 2's prompt, which this
+change doesn't touch; change 2's 10 of 10 was its good end. Happenings
+without a title were dropped in 5 of 50 calls, against 4 and 2: one
+ambush reply sent all eight without one and lost the fight, Sefa and
+the crossing with them. The slip rate was 34 of 3,030 keys, in 14 of
+51 calls, every reply parsed.
