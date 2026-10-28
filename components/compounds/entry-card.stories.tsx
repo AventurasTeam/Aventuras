@@ -115,6 +115,7 @@ export const OpeningKind: StoryT = {
   },
 }
 
+/** A detail and no kept text: no quote, and the detail waits behind a collapsed `Details`. */
 export const SystemKind: StoryT = {
   ...wrap,
   args: {
@@ -123,6 +124,13 @@ export const SystemKind: StoryT = {
     detail: 'The model service is temporarily unavailable. Retry in a moment.',
     onRetry: fn(),
     onDismiss: fn(),
+  },
+  play: async () => {
+    const toggle = await screen.findByRole('button', { name: t('reader:systemEntry.details') })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText(/temporarily unavailable/)).not.toBeInTheDocument()
+    expect(screen.queryByText(t('reader:systemEntry.heldTextLabel'))).not.toBeInTheDocument()
+    expect(screen.queryByText(t('reader:systemEntry.heldTextCustody'))).not.toBeInTheDocument()
   },
 }
 
@@ -400,7 +408,7 @@ export const CutOffNoticeActionWhileDisabled: StoryT = {
 }
 
 const phoneWidthDecorator = (Story: () => ReactElement) => (
-  <View style={{ width: 360 }}>
+  <View testID="phone-frame" style={{ width: 360 }}>
     <Story />
   </View>
 )
@@ -767,6 +775,450 @@ export const SystemRetryFires: StoryT = {
     const retry = screen.getByRole('button', { name: /Retry/ })
     await userEvent.click(retry)
     await waitFor(() => expect(args.onRetry).toHaveBeenCalledTimes(1))
+  },
+}
+
+const HELD_SHORT = 'I open the letter.'
+const HELD_LONG =
+  '"Tomas, wait. Before you go, tell me what the captain said about the ledger, and why the seal on the letter was already broken when it reached me. If you knew, I\'d rather hear it from you now than from her tonight.\n\nAnd if you didn\'t know, then someone in this house opened it before you carried it up the stairs." I said.'
+const SYSTEM_DETAIL = 'rate-limit: APICallError: 429 Too Many Requests'
+const SYSTEM_CONTENT = 'LLM call failed.'
+
+// A function matcher: the default one collapses the quote's line breaks.
+function heldQuote(): HTMLElement {
+  return screen.getByText((_, node) => node?.textContent === HELD_LONG)
+}
+
+function quoteLines(quote: HTMLElement): number {
+  return quote.getBoundingClientRect().height / parseFloat(getComputedStyle(quote).lineHeight)
+}
+
+/** Kept text that fits its two lines: the quote and its custody line, no `Show all`. */
+export const SystemHeldTextShort: StoryT = {
+  ...wrap,
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: SYSTEM_CONTENT,
+    heldText: HELD_SHORT,
+    detail: SYSTEM_DETAIL,
+    onCopy: fn(),
+    onRetry: fn(),
+    onDismiss: fn(),
+  },
+  play: async () => {
+    const quote = await screen.findByText(HELD_SHORT)
+    expect(quote).toBeVisible()
+    expect(screen.getByText(t('reader:systemEntry.heldTextLabel'))).toBeVisible()
+    expect(screen.getByText(t('reader:systemEntry.heldTextCustody'))).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: t('reader:systemEntry.showAll') }),
+    ).not.toBeInTheDocument()
+    // Above the buttons; the disclosure under them.
+    const retry = screen.getByRole('button', { name: /Retry/ })
+    const details = screen.getByRole('button', { name: t('reader:systemEntry.details') })
+    expect(quote.compareDocumentPosition(retry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(retry.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  },
+}
+
+/** Kept text past two lines clamps; `Show all` opens it verbatim, `Show less` clamps it again. */
+export const SystemHeldTextClamped: StoryT = {
+  ...wrap,
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: SYSTEM_CONTENT,
+    heldText: HELD_LONG,
+    onCopy: fn(),
+    onRetry: fn(),
+    onDismiss: fn(),
+  },
+  play: async () => {
+    const showAll = await screen.findByRole('button', { name: t('reader:systemEntry.showAll') })
+    const quote = heldQuote()
+    expect(quoteLines(quote)).toBeCloseTo(2, 0)
+    await userEvent.click(showAll)
+    const showLess = await screen.findByRole('button', { name: t('reader:systemEntry.showLess') })
+    expect(showLess).toHaveAttribute('aria-expanded', 'true')
+    expect(quoteLines(quote)).toBeGreaterThan(3)
+    // A text node with its line breaks: what Dismiss would put back.
+    expect(quote.textContent).toBe(HELD_LONG)
+    await userEvent.click(showLess)
+    await waitFor(() => expect(quoteLines(quote)).toBeCloseTo(2, 0))
+  },
+}
+
+// One paragraph: the line break in HELD_LONG never fits two lines at any width.
+const HELD_PARAGRAPH =
+  'I lean over the ledger and trace the broken seal with one finger, then look up at Tomas and wait.'
+
+const resizableFrameDecorator = (Story: () => ReactElement) => (
+  <View testID="resizable-frame" style={{ width: 260 }}>
+    <Story />
+  </View>
+)
+
+/** `Show all` follows the card's width: gone once the text fits two lines, back when it doesn't. */
+export const SystemHeldTextRemeasures: StoryT = {
+  decorators: [resizableFrameDecorator],
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: SYSTEM_CONTENT,
+    heldText: HELD_PARAGRAPH,
+    onRetry: fn(),
+    onDismiss: fn(),
+  },
+  play: async () => {
+    const frame = screen.getByTestId('resizable-frame')
+    const showAll = { name: t('reader:systemEntry.showAll') }
+    expect(await screen.findByRole('button', showAll)).toBeVisible()
+    frame.style.width = '1100px'
+    await waitFor(() => expect(screen.queryByRole('button', showAll)).not.toBeInTheDocument())
+    frame.style.width = '260px'
+    expect(await screen.findByRole('button', showAll)).toBeVisible()
+  },
+}
+
+const HELD_MARKUP = 'I *lean* in. <b>Now.</b>'
+
+/** Plain text, never markdown: the asterisks and the tag the user typed stay literal. */
+export const SystemHeldTextPlain: StoryT = {
+  ...wrap,
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: SYSTEM_CONTENT,
+    heldText: HELD_MARKUP,
+    onRetry: fn(),
+    onDismiss: fn(),
+  },
+  play: async () => {
+    const quote = await screen.findByText(HELD_MARKUP)
+    expect(quote.querySelector('b, em, strong')).toBeNull()
+  },
+}
+
+/** `Details` opens the detail with its copy button; each copy passes its string verbatim. */
+export const SystemDetailsOpen: StoryT = {
+  ...wrap,
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: SYSTEM_CONTENT,
+    heldText: HELD_SHORT,
+    detail: SYSTEM_DETAIL,
+    onCopy: fn(),
+    onRetry: fn(),
+    onDismiss: fn(),
+  },
+  play: async ({ args }) => {
+    const toggle = await screen.findByRole('button', { name: t('reader:systemEntry.details') })
+    expect(
+      screen.queryByRole('button', { name: t('reader:systemEntry.copyDetails') }),
+    ).not.toBeInTheDocument()
+    await userEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(await screen.findByText(SYSTEM_DETAIL)).toBeVisible()
+
+    await userEvent.click(screen.getByRole('button', { name: t('reader:systemEntry.copyDetails') }))
+    await waitFor(() => expect(args.onCopy).toHaveBeenLastCalledWith(SYSTEM_DETAIL))
+    await userEvent.click(
+      screen.getByRole('button', { name: t('reader:systemEntry.copyHeldText') }),
+    )
+    await waitFor(() => expect(args.onCopy).toHaveBeenLastCalledWith(HELD_SHORT))
+
+    await userEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText(SYSTEM_DETAIL)).not.toBeInTheDocument()
+  },
+}
+
+/** No `onCopy`, no copy buttons: neither on the quote nor in the open detail. */
+export const SystemWithoutCopy: StoryT = {
+  ...wrap,
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: SYSTEM_CONTENT,
+    heldText: HELD_SHORT,
+    detail: SYSTEM_DETAIL,
+    onRetry: fn(),
+    onDismiss: fn(),
+  },
+  play: async () => {
+    await userEvent.click(
+      await screen.findByRole('button', { name: t('reader:systemEntry.details') }),
+    )
+    expect(await screen.findByText(SYSTEM_DETAIL)).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: t('reader:systemEntry.copyHeldText') }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: t('reader:systemEntry.copyDetails') }),
+    ).not.toBeInTheDocument()
+  },
+}
+
+/** A held entry: kept text, no detail, so no `Details`; Dismiss alone. */
+export const SystemHeldNoDetail: StoryT = {
+  ...wrap,
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: t('reader:systemEntry.failure.memoryHeld'),
+    heldText: HELD_SHORT,
+    onCopy: fn(),
+    onDismiss: fn(),
+  },
+  play: async () => {
+    expect(await screen.findByText(HELD_SHORT)).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: t('reader:systemEntry.details') }),
+    ).not.toBeInTheDocument()
+  },
+}
+
+/** An empty detail has nothing to disclose: no `Details` toggle opening onto nothing. */
+export const SystemEmptyDetail: StoryT = {
+  ...wrap,
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: SYSTEM_CONTENT,
+    detail: '',
+    onRetry: fn(),
+    onDismiss: fn(),
+  },
+  play: async () => {
+    expect(await screen.findByRole('button', { name: /Retry/ })).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: t('reader:systemEntry.details') }),
+    ).not.toBeInTheDocument()
+  },
+}
+
+const LONG_DETAIL =
+  'unknown: APICallError: 400 Bad Request: https://api.example.invalid/v1/chat/completions?model=qwen2.5-14b-instruct-q4_k_m&request_id=req_8f3a6c1e2d9b4a7f8e6c5d4b3a2f1e0d'
+
+// Hit-tested at both edges: a later sibling painting over the box would take that strip.
+function expectPhoneTapZone(button: HTMLElement) {
+  const rect = button.getBoundingClientRect()
+  expect(rect.height).toBeGreaterThanOrEqual(44)
+  const x = rect.left + Math.min(rect.width / 2, 8)
+  expect(button.contains(document.elementFromPoint(x, rect.top + 1))).toBe(true)
+  expect(button.contains(document.elementFromPoint(x, rect.bottom - 1))).toBe(true)
+}
+
+/** At phone width: the toggles take the 44 px tap floor, open or closed, and a long URL wraps. */
+export const SystemPhoneWidth: StoryT = {
+  decorators: [phoneWidthDecorator],
+  args: {
+    kind: 'system',
+    tier: 'phone',
+    content: SYSTEM_CONTENT,
+    heldText: HELD_LONG,
+    detail: LONG_DETAIL,
+    onCopy: fn(),
+    onRetry: fn(),
+    onDismiss: fn(),
+  },
+  play: async () => {
+    const showAll = await screen.findByRole('button', { name: t('reader:systemEntry.showAll') })
+    const details = screen.getByRole('button', { name: t('reader:systemEntry.details') })
+    expectPhoneTapZone(showAll)
+    expectPhoneTapZone(details)
+    // The buttons keep their own tap zones under the toggle's padding.
+    const retry = screen.getByRole('button', { name: /Retry/ })
+    const retryRect = retry.getBoundingClientRect()
+    const retryX = retryRect.left + retryRect.width / 2
+    expect(retry.contains(document.elementFromPoint(retryX, retryRect.bottom - 1))).toBe(true)
+
+    await userEvent.click(showAll)
+    expectPhoneTapZone(
+      await screen.findByRole('button', { name: t('reader:systemEntry.showLess') }),
+    )
+    await userEvent.click(details)
+    const detail = await screen.findByText(LONG_DETAIL)
+    // Open, the detail follows the toggle and would otherwise take its padding's strip.
+    expectPhoneTapZone(details)
+    const copy = screen.getByRole('button', { name: t('reader:systemEntry.copyDetails') })
+    const copyRect = copy.getBoundingClientRect()
+    const copyX = copyRect.left + copyRect.width / 2
+    expect(copy.contains(document.elementFromPoint(copyX, copyRect.top + 1))).toBe(true)
+    const frame = screen.getByTestId('phone-frame')
+    expect(frame.scrollWidth).toBeLessThanOrEqual(frame.clientWidth)
+    expect(detail.getBoundingClientRect().right).toBeLessThanOrEqual(
+      frame.getBoundingClientRect().right,
+    )
+  },
+}
+
+const DETAIL_MULTILINE =
+  'unknown: APICallError: 400 Bad Request\n{\n  "error": "context length exceeded"\n}'
+
+/** A run holds the gate: Retry and Dismiss wait, the copy buttons and both toggles stay live. */
+export const SystemLiveWhileDisabled: StoryT = {
+  ...wrap,
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: SYSTEM_CONTENT,
+    heldText: HELD_LONG,
+    detail: DETAIL_MULTILINE,
+    onCopy: fn(),
+    onRetry: fn(),
+    onDismiss: fn(),
+    disabled: true,
+    disabledReason: 'Generation is in flight. Cancel to edit.',
+  },
+  play: async ({ args }) => {
+    expect(await screen.findByRole('button', { name: /Retry/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Dismiss/ })).toBeDisabled()
+
+    await userEvent.click(screen.getByRole('button', { name: t('reader:systemEntry.showAll') }))
+    expect(
+      await screen.findByRole('button', { name: t('reader:systemEntry.showLess') }),
+    ).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: t('reader:systemEntry.details') }))
+    // Identity normalizer: the default one collapses the detail's line breaks.
+    expect(await screen.findByText(DETAIL_MULTILINE, { normalizer: (text) => text })).toBeVisible()
+    await userEvent.click(
+      screen.getByRole('button', { name: t('reader:systemEntry.copyHeldText') }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: t('reader:systemEntry.copyDetails') }))
+    await waitFor(() => expect(args.onCopy).toHaveBeenCalledTimes(2))
+    // Verbatim: line breaks and indentation reach the clipboard as stored.
+    expect(args.onCopy).toHaveBeenNthCalledWith(1, HELD_LONG)
+    expect(args.onCopy).toHaveBeenNthCalledWith(2, DETAIL_MULTILINE)
+  },
+}
+
+// Spacers on both sides, so a collapse never clamps scrollTop; no scroll anchoring, so only the
+// card moves the scroller.
+const revealScrollerDecorator = (Story: () => ReactElement) => (
+  <div
+    data-testid="reveal-scroller"
+    style={{ width: 600, height: 260, overflowY: 'auto', overflowAnchor: 'none' }}
+  >
+    <View style={{ height: 600 }} />
+    <Story />
+    <View style={{ height: 600 }} />
+  </div>
+)
+
+function revealScroller(): HTMLElement {
+  return screen.getByTestId('reveal-scroller')
+}
+
+// Lines `edge` up with the scroller's bottom, so whatever it opens lands below the fold.
+function alignToBottom(edge: HTMLElement) {
+  const scroller = revealScroller()
+  scroller.scrollTop +=
+    edge.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom
+}
+
+// `block: 'nearest'` from below the fold: the block's bottom lands on the scroller's, no further.
+function expectAtFold(block: HTMLElement) {
+  const fold = revealScroller().getBoundingClientRect().bottom
+  expect(Math.abs(block.getBoundingClientRect().bottom - fold)).toBeLessThanOrEqual(2)
+}
+
+/** Opening `Details` below the fold scrolls just far enough to show it. */
+export const SystemRevealDetails: StoryT = {
+  decorators: [revealScrollerDecorator],
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: SYSTEM_CONTENT,
+    detail: SYSTEM_DETAIL,
+    onRetry: fn(),
+    onDismiss: fn(),
+  },
+  play: async () => {
+    const toggle = await screen.findByRole('button', { name: t('reader:systemEntry.details') })
+    alignToBottom(toggle)
+    const scroller = revealScroller()
+    const before = scroller.scrollTop
+    await userEvent.click(toggle)
+    const detail = await screen.findByText(SYSTEM_DETAIL)
+    await waitFor(() => expect(scroller.scrollTop).toBeGreaterThan(before))
+    expectAtFold(detail)
+  },
+}
+
+/** `Show all` grows the quote past the fold; the reader follows just far enough to show it. */
+export const SystemRevealHeldText: StoryT = {
+  decorators: [revealScrollerDecorator],
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: SYSTEM_CONTENT,
+    heldText: HELD_LONG,
+    onRetry: fn(),
+    onDismiss: fn(),
+  },
+  play: async () => {
+    const showAll = await screen.findByRole('button', { name: t('reader:systemEntry.showAll') })
+    const quote = heldQuote()
+    // The toggle in view: clicking one below the fold would scroll it in through focus alone.
+    alignToBottom(showAll)
+    const scroller = revealScroller()
+    const before = scroller.scrollTop
+    await userEvent.click(showAll)
+    await screen.findByRole('button', { name: t('reader:systemEntry.showLess') })
+    await waitFor(() => expect(scroller.scrollTop).toBeGreaterThan(before))
+    expectAtFold(quote)
+  },
+}
+
+/** A held entry mounting below the fold scrolls nothing: only a tap reveals. */
+export const SystemRevealNotOnMount: StoryT = {
+  decorators: [revealScrollerDecorator],
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: SYSTEM_CONTENT,
+    heldText: HELD_LONG,
+    onRetry: fn(),
+    onDismiss: fn(),
+  },
+  play: async () => {
+    await screen.findByRole('button', { name: t('reader:systemEntry.showAll') })
+    const scroller = revealScroller()
+    expect(scroller.scrollTop).toBe(0)
+    expect(heldQuote().getBoundingClientRect().top).toBeGreaterThan(
+      scroller.getBoundingClientRect().bottom,
+    )
+  },
+}
+
+/** Collapsing the quote with its top scrolled past leaves the reader where it is. */
+export const SystemCollapseMovesNothing: StoryT = {
+  decorators: [revealScrollerDecorator],
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: SYSTEM_CONTENT,
+    heldText: HELD_LONG,
+    onRetry: fn(),
+    onDismiss: fn(),
+  },
+  play: async () => {
+    await userEvent.click(
+      await screen.findByRole('button', { name: t('reader:systemEntry.showAll') }),
+    )
+    const showLess = await screen.findByRole('button', { name: t('reader:systemEntry.showLess') })
+    const quote = heldQuote()
+    const scroller = revealScroller()
+    // The quote's top 20 px above the scroller's, so a reveal would scroll back; Show less in view.
+    scroller.scrollTop +=
+      quote.getBoundingClientRect().top - scroller.getBoundingClientRect().top + 20
+    const before = scroller.scrollTop
+    await userEvent.click(showLess)
+    await waitFor(() => expect(quoteLines(quote)).toBeCloseTo(2, 0))
+    expect(scroller.scrollTop).toBe(before)
   },
 }
 

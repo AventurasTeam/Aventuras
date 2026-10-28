@@ -9,6 +9,18 @@ export function isDraftEmpty(draft: { text: string } | undefined): boolean {
 }
 
 /**
+ * The turn's text a system entry keeps, verbatim; undefined when absent or blank. The card's
+ * quote and the hand-back both decide through it, so the quote's custody line stays true.
+ */
+export function keptSubmissionText(
+  submission: { content: string } | undefined,
+): string | undefined {
+  return submission === undefined || submission.content.trim().length === 0
+    ? undefined
+    : submission.content
+}
+
+/**
  * What a path that destroys a failure entry owes the composer. The entry's
  * `submission` is the only copy of a failed turn's text — the `user_action` went with
  * its reverse-replayed action group — so dropping the notice without handing it back
@@ -26,9 +38,9 @@ export function planSubmissionHandback(
   /** The mounted composer's draft; undefined once the reader has unmounted. */
   draft: { text: string } | undefined,
 ): SubmissionHandback {
-  // Unreachable through the send gate; restoring it would announce an empty recovery.
-  if (submission === undefined || submission.content.trim().length === 0) return { action: 'none' }
+  const content = keptSubmissionText(submission)
+  if (content === undefined) return { action: 'none' }
   if (draft === undefined) return { action: 'no-composer' }
   if (!isDraftEmpty(draft)) return { action: 'keep-draft' }
-  return { action: 'restore', content: submission.content }
+  return { action: 'restore', content }
 }

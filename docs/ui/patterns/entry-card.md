@@ -722,6 +722,8 @@ technology, which pass the stored string verbatim to `onCopy`. The card
 only requests: the host writes the clipboard and toasts `Copied.`, or an
 error when the write fails
 ([`reader-document.md → Bridge contract`](./reader-document.md#bridge-contract)).
+Android 13 and later get no `Copied.`: the OS confirms every copy itself,
+and the toast would double it. The error toast shows everywhere.
 Without `onCopy` both buttons hide.
 
 **Reveal on open.** A system entry sits at the branch tail, right above

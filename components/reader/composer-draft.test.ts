@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { isDraftEmpty, planSubmissionHandback } from './composer-draft'
+import { isDraftEmpty, keptSubmissionText, planSubmissionHandback } from './composer-draft'
 
 describe('isDraftEmpty', () => {
   it('treats an absent composer as empty', () => {
@@ -23,6 +23,24 @@ describe('isDraftEmpty', () => {
 
   it('treats padded text as non-empty', () => {
     expect(isDraftEmpty({ text: '  I draw the blade  ' })).toBe(false)
+  })
+})
+
+describe('keptSubmissionText', () => {
+  it('keeps nothing when the entry carried no submission', () => {
+    expect(keptSubmissionText(undefined)).toBeUndefined()
+  })
+
+  it.each(['', '   ', '\n', ' \n\t '])('keeps nothing for a %j submission', (content) => {
+    expect(keptSubmissionText({ content })).toBeUndefined()
+  })
+
+  it('keeps typed text', () => {
+    expect(keptSubmissionText({ content: 'I draw the blade' })).toBe('I draw the blade')
+  })
+
+  it('keeps padded text verbatim rather than trimming it', () => {
+    expect(keptSubmissionText({ content: '  I draw the blade\n' })).toBe('  I draw the blade\n')
   })
 })
 

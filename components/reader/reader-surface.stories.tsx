@@ -89,6 +89,7 @@ const noopHandlers = {
   onRegenerate: async () => {},
   onRetrySystemEntry: async () => {},
   onDismissSystemEntry: async () => {},
+  onCopySystemText: async () => {},
   onFixSystemEntry: async () => {},
   onFixCutOff: async () => {},
 }
@@ -998,16 +999,16 @@ export const EmbedderFailure: Story = {
 }
 
 // Composed through the helpers the host writes the entry with, so each bubble shows real copy.
-const HELD_PASS = describePassFailure({ held: true }, undefined)
-// A Send refused on a held branch always leaves its text on the entry.
-const HELD_SUBMISSION = { content: 'I study the empty frame.', composerMode: 'free' }
-const HELD_PASS_TEXT_KEPT = describePassFailure({ held: true }, HELD_SUBMISSION)
+const HELD_PASS = describePassFailure({ held: true })
+// A Send refused on a held branch always leaves its text on the entry; a failed pass leaves it
+// only when the composer couldn't take it back.
+const KEPT_SUBMISSION = { content: 'I study the empty frame.', composerMode: 'free' }
 const FAILED_PASS_ERROR = {
   kind: 'provider',
   reason: 'timeout',
   detail: 'classifier: timeout after 600000ms',
 } as const
-const FAILED_PASS = describePassFailure({ held: false, error: FAILED_PASS_ERROR }, undefined)
+const FAILED_PASS = describePassFailure({ held: false, error: FAILED_PASS_ERROR })
 
 function passFailureRows(content: string, failure: SystemFailureMeta): StoryEntry[] {
   return [
@@ -1032,25 +1033,39 @@ export const PassFailureHeld: Story = {
     const row = entryRow('e6')
     expect(within(row).getByRole('button', { name: /Dismiss/ })).toBeVisible()
     expect(within(row).queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument()
+    expect(within(row).queryByText(t('reader:systemEntry.heldTextLabel'))).not.toBeInTheDocument()
   },
 }
 
+// Same copy as PassFailureHeld; the row's kept text shows as a quote under it.
 export const PassFailureHeldTextKept: Story = {
   args: {
+    rows: passFailureRows(HELD_PASS.content, toPassFailureMeta({ held: true }, KEPT_SUBMISSION)),
+    onRetrySystemEntry: undefined,
+  },
+  play: async () => {
+    const row = entryRow('e6')
+    expect(within(row).getByText(t('reader:systemEntry.failure.memoryHeld'))).toBeVisible()
+    expect(within(row).getByText(KEPT_SUBMISSION.content)).toBeVisible()
+    expect(within(row).getByText(t('reader:systemEntry.heldTextCustody'))).toBeVisible()
+    expect(within(row).getByRole('button', { name: /Dismiss/ })).toBeVisible()
+    expect(within(row).queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument()
+  },
+}
+
+// A blank submission is nothing to keep: no quote over whitespace.
+export const PassFailureHeldBlankText: Story = {
+  args: {
     rows: passFailureRows(
-      HELD_PASS_TEXT_KEPT.content,
-      toPassFailureMeta({ held: true }, HELD_SUBMISSION),
+      HELD_PASS.content,
+      toPassFailureMeta({ held: true }, { content: ' \n ', composerMode: 'free' }),
     ),
     onRetrySystemEntry: undefined,
   },
   play: async () => {
     const row = entryRow('e6')
     expect(within(row).getByText(t('reader:systemEntry.failure.memoryHeld'))).toBeVisible()
-    expect(
-      within(row).queryByText(t('reader:systemEntry.failure.memoryHeldNoText')),
-    ).not.toBeInTheDocument()
-    expect(within(row).getByRole('button', { name: /Dismiss/ })).toBeVisible()
-    expect(within(row).queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument()
+    expect(within(row).queryByText(t('reader:systemEntry.heldTextLabel'))).not.toBeInTheDocument()
   },
 }
 
@@ -1061,6 +1076,11 @@ export const PassResolvedTextKept: Story = {
   args: {
     rows: passFailureRows(RESOLVED_PASS.content, RESOLVED_PASS.failure),
     onRetrySystemEntry: undefined,
+  },
+  play: async () => {
+    const row = entryRow('e6')
+    expect(within(row).getByText('I wade in after it.')).toBeVisible()
+    expect(within(row).getByText(t('reader:systemEntry.heldTextCustody'))).toBeVisible()
   },
 }
 
@@ -1076,6 +1096,74 @@ export const PassFailureRetry: Story = {
   play: async ({ args }) => {
     await userEvent.click(within(entryRow('e6')).getByRole('button', { name: /Retry/ }))
     await waitFor(() => expect(args.onRetrySystemEntry).toHaveBeenCalledTimes(1))
+  },
+}
+
+const FAILED_PASS_KEPT = toPassFailureMeta(
+  { held: false, error: FAILED_PASS_ERROR },
+  KEPT_SUBMISSION,
+)
+
+/** Both copy buttons reach the host with the row's stored strings, verbatim. */
+export const SystemEntryCopy: Story = {
+  args: {
+    rows: passFailureRows(FAILED_PASS.content, FAILED_PASS_KEPT),
+    onCopySystemText: fn(async () => {}),
+  },
+  play: async ({ args }) => {
+    const row = entryRow('e6')
+    await userEvent.click(
+      within(row).getByRole('button', { name: t('reader:systemEntry.copyHeldText') }),
+    )
+    await waitFor(() =>
+      expect(args.onCopySystemText).toHaveBeenLastCalledWith(KEPT_SUBMISSION.content),
+    )
+    await userEvent.click(
+      within(row).getByRole('button', { name: t('reader:systemEntry.details') }),
+    )
+    await userEvent.click(
+      await within(row).findByRole('button', { name: t('reader:systemEntry.copyDetails') }),
+    )
+    await waitFor(() =>
+      expect(args.onCopySystemText).toHaveBeenLastCalledWith(FAILED_PASS_KEPT.detail),
+    )
+  },
+}
+
+// Taller than the 24px in view under the toggle: the card's p-4 plus the row frame's py-2.
+const MULTI_LINE_DETAIL = [
+  'timeout: classifier: timeout after 600000ms',
+  'POST /v1/chat/completions',
+  'attempt 1 of 3: no response',
+  'attempt 2 of 3: no response',
+  'attempt 3 of 3: no response',
+].join('\n')
+
+/**
+ * Landed at the bottom, opening the tail entry's `Details` grows the content below the fold, and
+ * no autoscroll rule follows tail growth: the reveal alone brings the detail into view.
+ */
+export const SystemEntryRevealAtTail: Story = {
+  args: {
+    rows: passFailureRows(FAILED_PASS.content, { ...FAILED_PASS_KEPT, detail: MULTI_LINE_DETAIL }),
+  },
+  play: async () => {
+    const row = entryRow('e6')
+    const scroller = row.parentElement
+    if (scroller == null) throw new Error('no reader scroller')
+    await settleLanding(scroller)
+    await userEvent.click(
+      within(row).getByRole('button', { name: t('reader:systemEntry.details') }),
+    )
+    // A function matcher: the default one collapses the detail's line breaks.
+    const detail = await within(row).findByText(
+      (_, node) => node?.childElementCount === 0 && node.textContent === MULTI_LINE_DETAIL,
+    )
+    await waitFor(() =>
+      expect(detail.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        scroller.getBoundingClientRect().bottom + 1,
+      ),
+    )
   },
 }
 

@@ -33,6 +33,7 @@ import {
   isUpwardScrollKey,
 } from '@/lib/reader-scroll'
 
+import { keptSubmissionText } from './composer-draft'
 import type { EditResult, ReaderSurfaceHandle, ReaderSurfaceProps } from './reader-document-types'
 import { headTurnIdsOf, rowReversalFlags } from './row-reversal-flags'
 import { resolveSaveAndRegenTurn } from './save-and-regen'
@@ -100,6 +101,7 @@ type ReaderRowProps = {
   onFixCutOff: () => Promise<void>
   onRetrySystemEntry?: () => Promise<void>
   onDismissSystemEntry: () => Promise<void>
+  onCopySystemText: (text: string) => Promise<void>
 }
 
 // Memoized so a stream chunk (which re-renders the surface) doesn't reconcile
@@ -140,8 +142,12 @@ const ReaderRow = memo(function ReaderRow({
   onFixCutOff,
   onRetrySystemEntry,
   onDismissSystemEntry,
+  onCopySystemText,
 }: ReaderRowProps) {
   const isSystem = row.kind === 'system'
+  const heldText = isSystem
+    ? keptSubmissionText(row.metadata?.systemFailure?.submission)
+    : undefined
   const timeEditable = worldTimeRaw != null && worldTimeFrame != null
   // A NULL metadata column carries no absolute triple to edit: the action layer rejects
   // it and useSceneEditing will not open the sheet, so offering the control would leave
@@ -193,6 +199,8 @@ const ReaderRow = memo(function ReaderRow({
         isSystem || row.kind === 'opening' ? undefined : () => void onRequestRollback(row.id)
       }
       detail={isSystem ? row.metadata?.systemFailure?.detail : undefined}
+      heldText={heldText}
+      onCopy={isSystem ? (text) => void onCopySystemText(text) : undefined}
       fixAction={
         isSystem && systemFixLabel != null
           ? { label: systemFixLabel, onPress: () => void onFixSystemEntry() }
@@ -247,6 +255,7 @@ export function ReaderSurface({
   onRegenerate,
   onRetrySystemEntry,
   onDismissSystemEntry,
+  onCopySystemText,
   onFixSystemEntry,
   onFixCutOff,
   ref,
@@ -678,6 +687,7 @@ export function ReaderSurface({
                 onFixCutOff={onFixCutOff}
                 onRetrySystemEntry={onRetrySystemEntry}
                 onDismissSystemEntry={onDismissSystemEntry}
+                onCopySystemText={onCopySystemText}
               />
             </div>
           )

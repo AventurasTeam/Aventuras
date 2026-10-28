@@ -1859,6 +1859,17 @@ own.
   parent's `overflowInset`, which suggests the clip may not happen;
   if the device agrees, the "never lets slop reach past the parent"
   claim here and in `chips.md → Tag` is wrong.
+- **M9.5 — `IconAction`s in the reader document sit under the phone
+  tap floor.** `IconAction` reaches 44 px through `hitSlop`, which
+  RN-Web drops outright, so inside the reader document (Electron, and
+  the Android WebView) an `EntryCard` icon button is only its visible
+  box: about 22 px at compact density, measured in Storybook. That
+  covers the action cluster's edit, regenerate, branch and delete
+  buttons and a system entry's two copy buttons. No device check is
+  needed, unlike the `Tag` item above. The card's text buttons
+  (`Show all`, `Details`, the cut-off notice's fix) already pad to the
+  floor on phone with margins that cancel the padding. Raised
+  2026-10-27 by the held-text slice review.
 - **M9.5 — `ListRow` and `Button` `sm` sit under the phone tap floor.**
   [`touch.md → Touch-target floor on phone`](../ui/foundations/mobile/touch.md#touch-target-floor-on-phone)
   pins a 44 px `min-height` on "any tappable list row", but

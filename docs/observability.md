@@ -331,7 +331,11 @@ convention, and the expectation that subsystems route through
   peek `Set as lead` whose `setStoryLead` threw rather than refused,
   or that had no story id to write with because the reader's hydration
   hadn't landed; the user sees the generic lead-failure toast either
-  way)
+  way). A system entry's copy adds two more
+  (`components/reader/copy-system-text.ts`):
+  `system_text_copy_failed` (a clipboard write that threw) and
+  `clipboard_unavailable` (warn, no Clipboard API on web); the user
+  sees the copy-failed toast after either
 
 Kinds grow organically as subsystems land.
 

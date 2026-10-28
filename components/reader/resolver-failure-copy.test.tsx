@@ -61,7 +61,7 @@ function resolverError(failure: ResolveFailureKind): PipelineError {
 function resolve(kind: ResolveFailureKind, set: WordingSet): string | undefined {
   const error = resolverError(kind)
   if (set === 'turn') return describeTurnFailure(error).content
-  if (set === 'pass') return describePassFailure({ held: false, error }, undefined).content
+  if (set === 'pass') return describePassFailure({ held: false, error }).content
   if (set === 'suggestion') return describeSuggestionFailure(error)
   return renderHook(() => useConfigFixAction(kind, 'story_1', (proceed) => proceed())).result
     .current?.label

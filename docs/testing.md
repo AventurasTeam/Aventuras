@@ -237,17 +237,26 @@ comment, or it does not get one.
 Three renderer paths leave the page for the OS, and each needs a
 harness-side counterpart.
 [`e2e/tests/import-export.spec.ts`](../e2e/tests/import-export.spec.ts)
-is the worked example of all three.
+is the worked example of all three, with the renderer reading the
+clipboard;
+[`e2e/tests/retrieval-embed-failure.spec.ts`](../e2e/tests/retrieval-embed-failure.spec.ts)
+is the one for the renderer writing it.
 
-- **Clipboard.** The renderer reads with `navigator.clipboard.readText()`,
-  which works only because `electron/main.ts` sets no permission
-  request or check handler, and Electron approves every permission
-  when a session has none. A future handler must grant
-  `clipboard-read`, or the clipboard path breaks. A spec writes the
-  text from main (`clipboard.writeText` through `app.evaluate`). Off
-  the [virtual display](#virtual-display) that write lands on the
-  developer's own clipboard, so the spec keeps the text it replaced
-  and writes it back in `afterAll`, before the app closes.
+- **Clipboard.** The renderer reads with `navigator.clipboard.readText()`
+  and writes with `navigator.clipboard.writeText()`. Both work only
+  because `electron/main.ts` sets no permission request or check
+  handler, and Electron approves every permission when a session has
+  none. A future handler must grant `clipboard-read` and
+  `clipboard-sanitized-write`, or the clipboard paths break. A spec
+  reaches the OS clipboard from main (`clipboard` through
+  `app.evaluate`). For a read it writes the text the renderer will
+  take. For a write it first writes a sentinel, then polls
+  `clipboard.readText` until the copied text replaces it, so text
+  already on the clipboard can't pass the check. Off the
+  [virtual display](#virtual-display) every one of these writes lands
+  on the developer's own clipboard, so the spec keeps the text its
+  first write replaced and writes it back in `afterAll`, before the
+  app closes.
 - **Downloads.** A renderer anchor download fires the session's
   `will-download` event. With no handler setting the save path,
   Electron opens its native Save dialog, which the harness can't

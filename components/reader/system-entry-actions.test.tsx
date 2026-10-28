@@ -240,21 +240,11 @@ describe('toSystemFailureMeta', () => {
 })
 
 describe('describePassFailure', () => {
-  const SUBMISSION = { content: 'I wait.', composerMode: 'free' }
-
-  it('names the hold and the text it keeps, with no detail line', () => {
+  // The quote shows whether text is kept, so the held copy never mentions it.
+  it('names the hold, with no detail line', () => {
     const key = 'reader:systemEntry.failure.memoryHeld'
     expect(hasCopy(key)).toBe(true)
-    expect(describePassFailure({ held: true }, SUBMISSION)).toEqual({ content: t(key) })
-  })
-
-  // The text went back to the composer before a Retry came back held: the entry stores none.
-  it('claims no kept text for a held entry that stores none', () => {
-    const key = 'reader:systemEntry.failure.memoryHeldNoText'
-    expect(hasCopy(key)).toBe(true)
-    const out = describePassFailure({ held: true }, undefined)
-    expect(out).toEqual({ content: t(key) })
-    expect(out.content).not.toBe(t('reader:systemEntry.failure.memoryHeld'))
+    expect(describePassFailure({ held: true })).toEqual({ content: t(key) })
   })
 
   it.each([
@@ -263,18 +253,15 @@ describe('describePassFailure', () => {
     ['provider-missing', 'reader:systemEntry.failure.memoryProviderMissing'],
     ['override-provider-missing', 'reader:systemEntry.failure.memoryOverrideProviderMissing'],
   ] as const)('names the classifier for a %s resolver failure', (failure, key) => {
-    const out = describePassFailure(
-      {
-        held: false,
-        error: {
-          kind: 'config-resolver',
-          failure,
-          target: 'classifier',
-          phaseName: 'classify',
-        },
+    const out = describePassFailure({
+      held: false,
+      error: {
+        kind: 'config-resolver',
+        failure,
+        target: 'classifier',
+        phaseName: 'classify',
       },
-      undefined,
-    )
+    })
     expect(hasCopy(key)).toBe(true)
     expect(out).toEqual({ content: t(key) })
   })
@@ -282,17 +269,14 @@ describe('describePassFailure', () => {
   it('gives a provider failure the pass copy with its reason and detail', () => {
     expect(hasCopy('reader:systemEntry.failure.memory')).toBe(true)
     expect(
-      describePassFailure(
-        {
-          held: false,
-          error: {
-            kind: 'provider',
-            reason: 'timeout',
-            detail: 'classifier: timeout after 600000ms',
-          },
+      describePassFailure({
+        held: false,
+        error: {
+          kind: 'provider',
+          reason: 'timeout',
+          detail: 'classifier: timeout after 600000ms',
         },
-        undefined,
-      ),
+      }),
     ).toEqual({
       content: t('reader:systemEntry.failure.memory'),
       detail: 'timeout: classifier: timeout after 600000ms',
@@ -301,24 +285,18 @@ describe('describePassFailure', () => {
 
   it('falls back to the reason when a provider failure has no detail', () => {
     expect(
-      describePassFailure(
-        { held: false, error: { kind: 'provider', reason: 'network' } },
-        undefined,
-      ).detail,
+      describePassFailure({ held: false, error: { kind: 'provider', reason: 'network' } }).detail,
     ).toBe('network')
   })
 
   it('carries any other cause in the detail line', () => {
     expect(
-      describePassFailure(
-        { held: false, error: { kind: 'phase-logic', detail: 'window read' } },
-        undefined,
-      ),
+      describePassFailure({ held: false, error: { kind: 'phase-logic', detail: 'window read' } }),
     ).toEqual({ content: t('reader:systemEntry.failure.memory'), detail: 'window read' })
   })
 
   it('still names the failure when the run carried no error', () => {
-    expect(describePassFailure({ held: false, error: undefined }, undefined)).toEqual({
+    expect(describePassFailure({ held: false, error: undefined })).toEqual({
       content: t('reader:systemEntry.failure.memory'),
     })
   })
@@ -331,17 +309,16 @@ describe('describePassFailure', () => {
       target: 'classifier',
       phaseName: 'classify',
     } as const
-    expect(describePassFailure({ held: false, error: config }, undefined).content).not.toBe(
+    expect(describePassFailure({ held: false, error: config }).content).not.toBe(
       describeTurnFailure(config).content,
     )
     expect(
-      describePassFailure({ held: false, error: { kind: 'provider', reason: 'auth' } }, undefined)
-        .content,
+      describePassFailure({ held: false, error: { kind: 'provider', reason: 'auth' } }).content,
     ).not.toBe(t('reader:systemEntry.failure.llmCall'))
   })
 
   it("names the limit a cut pass reply hit, in the pass's own words", () => {
-    expect(describePassFailure({ held: false, error: PASS_CUT }, undefined)).toEqual({
+    expect(describePassFailure({ held: false, error: PASS_CUT })).toEqual({
       content:
         "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit. Setting a max output on the classifier profile overrides it.",
       detail: describeReplyCutOff(PASS_CUT),
@@ -455,7 +432,7 @@ describe('passResolvedEntry', () => {
     })
   })
 
-  it('says where the text went and how to get it back', () => {
+  it('says why the text is kept here', () => {
     const key = 'reader:systemEntry.passResolvedTextKept'
     expect(hasCopy(key)).toBe(true)
     expect(passResolvedEntry(SUBMISSION).content).toBe(t(key))
@@ -656,6 +633,15 @@ describe('dismissSystemEntry', () => {
     const h = harness({ stillOnBranch: () => false })
 
     await dismissSystemEntry({ ...h.deps, submission: undefined })
+
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  it('warns of nothing off-branch when the entry held blank text', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const h = harness({ stillOnBranch: () => false })
+
+    await dismissSystemEntry({ ...h.deps, submission: { content: ' \n ', composerMode: 'free' } })
 
     expect(warn).not.toHaveBeenCalled()
   })
@@ -987,14 +973,14 @@ describe('window and capability-hint entries', () => {
 
   describe('describePassFailure', () => {
     it("gives a pass prompt the provider rejected the pass's window copy", () => {
-      expect(describePassFailure({ held: false, error: PASS_OVERFLOW }, undefined)).toEqual({
+      expect(describePassFailure({ held: false, error: PASS_OVERFLOW })).toEqual({
         content: PASS_OVERFLOW_COPY,
         detail: describeContextWindow(PASS_OVERFLOW),
       })
     })
 
     it("gives a pass rejection naming a capability the pass's hedged hint", () => {
-      expect(describePassFailure({ held: false, error: PASS_HINTED }, undefined)).toEqual({
+      expect(describePassFailure({ held: false, error: PASS_HINTED })).toEqual({
         content: PASS_STRUCTURED_HINT,
         detail: 'unknown: Bad Request: json_schema is not supported',
       })

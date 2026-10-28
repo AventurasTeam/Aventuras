@@ -76,6 +76,8 @@ export type ReaderSurfaceProps = {
   /** Undefined when the system entry offers no Retry (a branch held `running`). */
   onRetrySystemEntry: (() => Promise<void>) | undefined
   onDismissSystemEntry: () => Promise<void>
+  /** A system entry's kept text or detail: the host writes the clipboard and toasts. */
+  onCopySystemText: (text: string) => Promise<void>
   onFixSystemEntry: () => Promise<void>
   onFixCutOff: () => Promise<void>
 }
