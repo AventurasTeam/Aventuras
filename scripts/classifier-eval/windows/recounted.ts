@@ -78,7 +78,7 @@ Nessa folded the page into her coat. She would take it to the magistrates' court
     {
       name: 'Brannoc, who watched it, is aware of the wreck',
       kind: 'expect',
-      basis: 'judgment',
+      basis: 'rule',
       holds: (r) =>
         r.happenings.some(
           (h) => isRecounted(h) && h.awareness.some((a) => a.ref === 'char_brannoc'),

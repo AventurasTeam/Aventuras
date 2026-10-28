@@ -60,6 +60,13 @@ Oriel ducked his head, pleased and embarrassed at once, and was gone.`,
         r.knownAwareness.some((k) => k.happening === 'hap_poisoning' && k.ref === 'char_idris'),
     },
     {
+      name: 'Oriel, who tells of the poisoning, knows of it',
+      kind: 'expect',
+      basis: 'rule',
+      holds: (r) =>
+        r.knownAwareness.some((k) => k.happening === 'hap_poisoning' && k.ref === 'char_oriel'),
+    },
+    {
       name: 'his learning sits at t2',
       kind: 'expect',
       basis: 'rule',
@@ -140,6 +147,7 @@ Oriel ducked his head, pleased and embarrassed at once, and was gone.`,
         severity: 0.9,
         learnedAtTurn: 't2',
       },
+      { happening: 'hap_poisoning', ref: 'char_oriel', source: 'town talk', severity: 0.6 },
     ],
     newCharacters: [
       {
