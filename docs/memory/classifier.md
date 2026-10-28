@@ -295,7 +295,11 @@ substitution layer swaps both directions
 (see [`generation-pipeline.md → ID placeholder substitution`](../generation-pipeline.md#id-placeholder-substitution)).
 The placeholder universe shown to the classifier covers the rows
 in the prompt's structured entity, place, happening, thread and
-relationship lists.
+relationship lists. The prompt shows each ID and turn handle in
+brackets; a reply that copies them (`[c1]`, `[t2]`) is read as the
+bare one when that names a listed row, a handle the reply declares or
+a turn of the window, and anything else stays as written, an
+unresolved reference.
 
 When the classifier creates a brand-new entity, it emits the
 entity as a **full object with no `id` field** — name, description,

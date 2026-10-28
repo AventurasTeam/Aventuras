@@ -106,6 +106,28 @@ describe('substituteClassifierIds', () => {
     })
   })
 
+  // classifier.md → ID handling: a reply that copies the prompt's brackets lost every fact naming them.
+  it('reads a placeholder or a handle written in its brackets as the bare one', () => {
+    const idMap = new IdBiMap()
+    const kael = idMap.allocate(CHAR_A)
+    const fire = idMap.allocate(HAP_A)
+    const out = substituteClassifierIds(
+      {
+        newCharacters: [{ handle: 'new:guard' }],
+        relationships: [{ subject: `[${kael}]`, object: '[new:guard]' }],
+        knownAwareness: [{ happening: `[${fire}]`, ref: '[c9]', source: `[${kael}]` }],
+      },
+      idMap,
+      new Set(['new:guard']),
+    )
+    expect(out).toEqual({
+      newCharacters: [{ handle: 'new:guard' }],
+      relationships: [{ subject: CHAR_A, object: 'new:guard' }],
+      // An unknown ID keeps its brackets for the planner to report as written; prose keeps them.
+      knownAwareness: [{ happening: HAP_A, ref: '[c9]', source: `[${kael}]` }],
+    })
+  })
+
   it('leaves an unknown ref untouched so the planner can resolve or report it', () => {
     const idMap = new IdBiMap()
     // 'nc1' is a newCharacters temp handle; 'c9' was never allocated.

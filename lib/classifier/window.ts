@@ -1,6 +1,8 @@
 import { inheritedEntryMetadata, type StoryEntry } from '@/lib/db'
 import { promptProse } from '@/lib/piggyback'
 
+import { unbracketed } from './substitute'
+
 export type WindowTurn = {
   handle: string
   entryId: string
@@ -66,7 +68,10 @@ export function buildClassifierWindow(args: {
     : (turns.at(-1)?.position ?? floor)
   const byHandle = new Map(turns.map((t) => [t.handle, t]))
   const head = turns.at(-1) ?? null
-  const turnOf = (handle: string | undefined) => (handle != null ? byHandle.get(handle) : undefined)
+  const turnOf = (handle: string | undefined) =>
+    handle != null
+      ? (byHandle.get(handle) ?? byHandle.get(unbracketed(handle) ?? handle))
+      : undefined
 
   return {
     turns,

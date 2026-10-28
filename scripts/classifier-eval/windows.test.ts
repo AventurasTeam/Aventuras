@@ -51,6 +51,19 @@ describe.each(EVAL_WINDOWS.map((w) => [w.name, w] as const))('eval window %s', (
     expect(malformed).toEqual([])
     expect(back).toEqual(w.ideal)
   })
+
+  it('reads its ideal reply back with every ID and turn handle in the brackets the prompt shows', () => {
+    const { legend, schema, read } = renderWindow(w, MAX_ENTRIES)
+    const placeholders = new Set(legend.values())
+    const bracketed: unknown = JSON.parse(JSON.stringify(w.ideal), (key, value: unknown) => {
+      if (typeof value !== 'string' || key === 'handle') return value
+      const id = legend.get(value) ?? value
+      return placeholders.has(id) || /^t\d+$/.test(id) || id.startsWith('new:') ? `[${id}]` : id
+    })
+    expect(JSON.stringify(bracketed)).toContain('"[t')
+    const { reply: back } = read(schema.parse(bracketed))
+    expect(back).toEqual(w.ideal)
+  })
 })
 
 // A relative the prose names after a character is someone else.

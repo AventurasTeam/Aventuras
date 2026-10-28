@@ -22,6 +22,20 @@ function walkStrings(value: unknown, visit: (s: string) => string): unknown {
   return value
 }
 
+const TURN_FIELDS = new Set(['sourceTurn', 'learnedAtTurn', 'resolvedAtTurn'])
+
+function walkFields(value: unknown, visit: (key: string, s: string) => string): unknown {
+  if (Array.isArray(value)) return value.map((v) => walkFields(v, visit))
+  if (value !== null && typeof value === 'object')
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [
+        k,
+        typeof v === 'string' ? visit(k, v) : walkFields(v, visit),
+      ]),
+    )
+  return value
+}
+
 export type RenderedWindow = {
   prompt: RenderedPrompt
   schema: ReturnType<typeof classifierReplySchema>
@@ -63,6 +77,7 @@ export function renderWindow(w: EvalWindow, maxEntries: number): RenderedWindow 
       idMap,
     }),
   )
+  const handleOf = new Map(window.turns.map((t) => [t.entryId, t.handle]))
   const legend = new Map<string, string>()
   for (const [real, id] of readable) {
     const placeholder = idMap.getPlaceholderFor(real)
@@ -82,8 +97,14 @@ export function renderWindow(w: EvalWindow, maxEntries: number): RenderedWindow 
           ...reply.newFactions.map((f) => f.handle),
         ]),
       )
+      // A turn handle as the pass resolves it, so a check reads the turn the planner anchors to.
+      const turned = walkFields(substituted, (key, s) => {
+        if (!TURN_FIELDS.has(key)) return s
+        const { entryId, fellBack } = window.resolveHandle(s)
+        return fellBack ? s : (handleOf.get(entryId) ?? s)
+      })
       return {
-        reply: walkStrings(substituted, (s) => readable.get(s) ?? s) as ClassifierExtraction,
+        reply: walkStrings(turned, (s) => readable.get(s) ?? s) as ClassifierExtraction,
         malformed,
       }
     },

@@ -13,6 +13,9 @@ export const PLACEHOLDER_FIELDS = [...HANDLE_FIELDS, 'happening', 'thread'] as c
  */
 export const NEW_HANDLE_PREFIX = 'new:'
 
+/** The ID inside the brackets the prompt shows it in, for a reply that copied them: "[c1]" is c1. */
+export const unbracketed = (value: string): string | undefined => /^\[([^[\]]+)\]$/.exec(value)?.[1]
+
 /**
  * Placeholder -> UUID, the return trip of `substituteIds`; unknown strings pass through for the
  * planner's handleMap. `reservedHandles` are never rewritten where a handle can stand: a model
@@ -29,9 +32,13 @@ export function substituteClassifierIds<T>(
   return Object.fromEntries(
     Object.entries(value).map(([key, v]) => {
       if (typeof v === 'string' && (PLACEHOLDER_FIELDS as readonly string[]).includes(key)) {
-        const reserved =
-          (HANDLE_FIELDS as readonly string[]).includes(key) && reservedHandles.has(v)
-        return [key, reserved ? v : (idMap.getUuidFor(v) ?? v)]
+        const handleField = (HANDLE_FIELDS as readonly string[]).includes(key)
+        const known = (ref: string): boolean =>
+          (handleField && reservedHandles.has(ref)) || idMap.getUuidFor(ref) != null
+        const bare = unbracketed(v)
+        const ref = bare != null && !known(v) && known(bare) ? bare : v
+        const reserved = handleField && reservedHandles.has(ref)
+        return [key, reserved ? ref : (idMap.getUuidFor(ref) ?? ref)]
       }
       return [key, substituteClassifierIds(v, idMap, reservedHandles)]
     }),

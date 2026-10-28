@@ -141,6 +141,18 @@ describe('buildClassifierWindow', () => {
     expect(w.resolveHandle('t99')).toEqual({ entryId: 'e2', fellBack: true })
     expect(w.resolveHandle(undefined)).toEqual({ entryId: 'e2', fellBack: true })
   })
+
+  // classifier.md → ID handling: a turn handle copied with the prompt's brackets is that turn.
+  it('resolves a handle written in its brackets as the bare one', () => {
+    const w = buildClassifierWindow({
+      entries: [entry(1, 'e1'), entry(2, 'e2')],
+      processedThrough: 0,
+      maxEntries: 20,
+    })
+    expect(w.resolveHandle('[t1]')).toEqual({ entryId: 'e1', fellBack: false })
+    expect(w.resolveHandle('[t9]')).toEqual({ entryId: 'e2', fellBack: true })
+    expect(w.resolveHandle('[[t1]]')).toEqual({ entryId: 'e2', fellBack: true })
+  })
 })
 
 // classifier.md → What the classifier reads: each turn carries the scene saved on it.
