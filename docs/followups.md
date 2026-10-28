@@ -282,11 +282,6 @@ breakdown under [UX](#ux).
   [`roadmap.md → M7`](./implementation/roadmap.md#m7--app-settings--diagnostics--onboarding)).
   Whether replies fill the new fields is the play check's above. Left
   to measure:
-  - a happening sent without a title, which the parser drops with its
-    involvements and awareness: 2 of 50 replies on the flat list, 4
-    and 5 of 50 under headings, one of them sending all eight of its
-    happenings without one. No rule asks for one, and only the reply
-    type marks it required;
   - what counts as a happening, which no rule says beyond the category
     examples. One case to settle: an item changing hands, which
     piggyback already records with who gave it;

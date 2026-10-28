@@ -328,3 +328,29 @@ Happenings without a title were dropped in 4 of 50 calls again, 15
 happenings this time: one ambush reply sent all eight without one and
 another four. Tam Rook made dead swings between runs with no change
 near it, 5, 4 and now 7 of 10.
+
+## Change 5: every happening needs a title
+
+No rule asked for a happening's title, which only the reply type marks
+required, and replies sent happenings without one in 2, 4, 5 and 4 of
+50 calls on the prompts so far; the parser drops each with its
+involvements and awareness. A new rule now opens the happenings
+section: "Titles. Give every happening a title, a few words naming the
+event as a chapter heading would ("The duel at the mill"), and a
+description of what happened, from the prose. A happening without a
+title is dropped, with its involvements and awareness." The title
+field's description says every happening needs one.
+
+Expected to move: the calls that drop happenings, and with them
+ambush's happening at t4, Sefa and the crossing, each 8 of 10 on
+change 4's prompt, and defection's toll-house, 8 of 10; at risk, the
+checks that count happenings, the telling that is no happening (9 of 10) and the poisoning not added again (10 of 10), and the example's
+words turning up in titles.
+
+No call dropped a happening, against 4 of 50, and the four checks read
+10 of 10. The telling and the poisoning held at 10 of 10, and no title
+borrowed the example's words. Replies average the same number of
+happenings, 2.4 against 2.5, but now describe 110 of 122 against 41 of
+125, at about 3% more completion tokens, nearly all of it reasoning.
+The mean rate of rule checks is 0.91 against 0.89, of judgment checks
+0.65 against 0.63. Kept.
