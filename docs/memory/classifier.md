@@ -156,8 +156,8 @@ alias list (the keywords bullet below).
   warn"). Never an unnamed figure the scene is done with, even one who
   took part, nor one whose part is over ("a porter", "a father long
   dead"), nor a listed character whose name the turns reveal, which is
-  a rename. Each goes
-  through
+  a rename, nor a name the prose only invokes, in an oath, a saying or
+  a song. Each goes through
   [reconciliation](#disambiguation-on-new-character-mentions) before
   it is created.
 - **Mentioned places** — with the story's setting on, the places the
