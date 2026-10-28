@@ -57,11 +57,17 @@ branch's world as lists the classifier addresses by placeholder id
     spills
     ([`cadence.md → Composition rule`](./cadence.md#composition-rule)),
     so a scene that continues one the last pass classified finds its
-    happening listed.
+    happening listed;
+  - every happening created from one of those entries, its create
+    delta anchored there
+    ([Provenance attribution](#provenance-attribution)). A `temporal`
+    happening has no position for the bullet above, so this is what
+    lists a recounted one to the next pass while the turns still
+    retell it.
 
   A happening with no narrative position, a `temporal` one or one with
-  neither anchor, joins only through a record, and an id the branch no
-  longer has is left out. A happening
+  neither anchor, joins through a record or its create, and an id the
+  branch no longer has is left out. A happening
   the turns mention without the narrator having it as a row or as
   recent prose goes unlisted: a coincidental mention, or a retelling
   from a chapter summary, a lore body or an entity description. Its

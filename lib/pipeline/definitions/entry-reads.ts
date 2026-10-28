@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, inArray, isNull, lt, lte, min, ne, type SQL } from 'drizzle-orm'
 
-import { storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
+import { chunked, deltas, storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
 import { NARRATIVE_KINDS } from '@/lib/piggyback'
 import { settingsCount } from '@/lib/settings-number'
 import { storyPlaceOf, type StoryPlace } from '@/lib/world'
@@ -107,4 +107,28 @@ export async function readRecentEntryIds(
       ),
     )
   return new Set(rows.map((r) => r.id))
+}
+
+/** The happenings whose create delta is anchored to one of `entryIds`: what those entries produced. */
+export async function readHappeningsMadeFrom(
+  db: DbCtx['db'],
+  branchId: string,
+  entryIds: ReadonlySet<string>,
+): Promise<Set<string>> {
+  const made = new Set<string>()
+  for (const ids of chunked([...entryIds])) {
+    const rows = await db
+      .select({ id: deltas.targetId })
+      .from(deltas)
+      .where(
+        and(
+          eq(deltas.branchId, branchId),
+          eq(deltas.targetTable, 'happenings'),
+          eq(deltas.op, 'create'),
+          inArray(deltas.entryId, ids),
+        ),
+      )
+    for (const row of rows) made.add(row.id)
+  }
+  return made
 }

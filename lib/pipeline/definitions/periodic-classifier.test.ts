@@ -3472,6 +3472,56 @@ describe('periodicClassifierPhase — the writer map', () => {
     for (const title of ['Before the reach-back', 'Never given']) expect(user).not.toContain(title)
   })
 
+  // A recounted happening has no position: its create's anchor is what puts it in the recent set.
+  it('lists a happening a pass made from a recent entry, by its create, not by a later update', async () => {
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction(),
+    } as never)
+    // e1 a closed chapter, e2 the open region's start, e3-e4 the window, no reach-back.
+    const h = await ctxWith({ processedThrough: 2, headPosition: 4, protectedBuffer: 0 })
+    await h.ctx.db.run(sql`UPDATE story_entries SET chapter_id = 'ch1' WHERE position = 1`)
+    const recounted = (id: string, title: string): Happening => ({
+      ...happeningAt(id, title, null),
+      temporal: 'ten winters ago',
+    })
+    const HAP_RECENT = 'hap_66666666-6666-6666-6666-666666666661'
+    const HAP_CLOSED = 'hap_66666666-6666-6666-6666-666666666662'
+    const HAP_TOUCHED = 'hap_66666666-6666-6666-6666-666666666663'
+    happeningsStore.hydrate('b1', [
+      recounted(HAP_RECENT, 'Made from the open region'),
+      recounted(HAP_CLOSED, 'Made from the closed chapter'),
+      recounted(HAP_TOUCHED, 'Made earlier, edited recently'),
+    ])
+    const logged = [
+      { targetId: HAP_RECENT, entryId: 'e2', op: 'create' as const },
+      { targetId: HAP_CLOSED, entryId: 'e1', op: 'create' as const },
+      { targetId: HAP_TOUCHED, entryId: 'e1', op: 'create' as const },
+      { targetId: HAP_TOUCHED, entryId: 'e2', op: 'update' as const },
+    ]
+    await h.ctx.db.insert(deltas).values(
+      logged.map((d, i) => ({
+        ...d,
+        id: `d_${i}`,
+        branchId: 'b1',
+        actionId: `act_${i}`,
+        logPosition: i + 1,
+        source: 'periodic_classifier' as const,
+        targetTable: 'happenings',
+        undoPayload: null,
+        createdAt: 1,
+      })),
+    )
+
+    await drain(h.ctx)
+
+    const { user } = vi.mocked(generateStructured).mock.calls[0][1]
+    expect(user).toContain('] Made from the open region\n')
+    expect(user).not.toContain('Made from the closed chapter')
+    expect(user).not.toContain('Made earlier, edited recently')
+  })
+
   // classifierWindowMaxEntries defaults to 20, so the window ends at e20 and no turn in it saw e21.
   it('leaves out a happening past the cut of a truncated window', async () => {
     vi.mocked(generateStructured).mockResolvedValue({

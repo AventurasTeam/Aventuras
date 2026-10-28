@@ -55,7 +55,7 @@ import {
 
 import { buildClassifierContext } from './classifier-context'
 import { classifierEmbedder } from './description-embedder'
-import { readRecentEntryIds, readStoryPlace } from './entry-reads'
+import { readHappeningsMadeFrom, readRecentEntryIds, readStoryPlace } from './entry-reads'
 import { readClassifierStatus } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import { definePipeline } from '../authoring/define'
@@ -117,13 +117,15 @@ export async function readKnownHappenings(
   window: ClassifierWindow,
   protectedBuffer: number,
 ): Promise<Happening[]> {
+  const recentEntryIds = await readRecentEntryIds(db, branchId, {
+    firstPosition: window.turns[0]!.position,
+    lastPosition: window.turns.at(-1)!.position,
+    protectedBuffer,
+  })
   return knownHappenings(happenings, {
     recorded: window.injectedHappenings,
-    recentEntryIds: await readRecentEntryIds(db, branchId, {
-      firstPosition: window.turns[0]!.position,
-      lastPosition: window.turns.at(-1)!.position,
-      protectedBuffer,
-    }),
+    recentEntryIds,
+    madeFromRecent: await readHappeningsMadeFrom(db, branchId, recentEntryIds),
   })
 }
 
