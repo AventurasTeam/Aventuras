@@ -7,19 +7,20 @@ one measured change at a time. Started 2026-10-28.
 
 ## The evaluation set
 
-Five windows in `scripts/classifier-eval/`, each a few turns of
-hand-written prose over a small hand-written roster, built in memory
-and rendered as the pass renders a branch. The parse probe sends them
+Five windows in `scripts/classifier-eval/`, a sixth added after change
+10, each a few turns of hand-written prose over a small hand-written
+roster, built in memory and rendered as the pass renders a branch. The parse probe sends them
 with `PROBE_EVAL`
 ([`testing.md → Real-provider checks`](../testing.md#real-provider-checks)).
 
-| Window    | What it exercises                                                                                         |
-| --------- | --------------------------------------------------------------------------------------------------------- |
-| ambush    | a fight across two turns, in second person; the lead named only by the scene, beside a silent drover      |
-| recounted | an event thirty years before the story, told by a witness who hands over evidence                         |
-| reveal    | a listed stranger gives her name, an epithet, then a cover name                                           |
-| defection | a sergeant changes sides; an agent wears his old faction's coat as a disguise                             |
-| learning  | a character learns of a listed happening; a listed relationship the prose restates; a fled boy, a steward |
+| Window    | What it exercises                                                                                                       |
+| --------- | ----------------------------------------------------------------------------------------------------------------------- |
+| ambush    | a fight across two turns, in second person; the lead named only by the scene, beside a silent drover                    |
+| recounted | an event thirty years before the story, told by a witness who hands over evidence                                       |
+| reveal    | a listed stranger gives her name, an epithet, then a cover name                                                         |
+| defection | a sergeant changes sides; an agent wears his old faction's coat as a disguise                                           |
+| learning  | a character learns of a listed happening; a listed relationship the prose restates; a fled boy, a steward               |
+| namedrops | names only invoked, a saint in an oath, a king in a saying, a song's maker, beside a named man the story sets out after |
 
 Each check is marked `rule` when a rule in the prompt asks for the
 fact and `judgment` when only the window's author does; every window

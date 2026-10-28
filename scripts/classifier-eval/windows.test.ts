@@ -110,3 +110,11 @@ it("the defection window leaves the warrant's signer unscored, and counts the ha
   expect(holds(adding('the man who signed that warrant'))).toBe(true)
   expect(holds(adding("Brann's brother"))).toBe(false)
 })
+
+it('the namedrops window finds Jorun Vask by his name, not in any new character', () => {
+  const w = EVAL_WINDOWS.find((x) => x.name === 'namedrops')!
+  const holds = w.checks.find((c) => c.name.startsWith('Jorun Vask'))!.holds
+  const jorun = w.ideal.newCharacters[0]
+  expect(holds(w.ideal)).toBe(true)
+  expect(holds({ ...w.ideal, newCharacters: [{ ...jorun, name: 'Saint Aldric' }] })).toBe(false)
+})

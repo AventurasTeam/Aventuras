@@ -3,6 +3,7 @@ import type { EvalWindow } from './fixture'
 import { ambush } from './windows/ambush'
 import { defection } from './windows/defection'
 import { learning } from './windows/learning'
+import { namedrops } from './windows/namedrops'
 import { recounted } from './windows/recounted'
 import { reveal } from './windows/reveal'
 
@@ -18,4 +19,5 @@ export const EVAL_WINDOWS: readonly EvalWindow[] = [
   reveal,
   defection,
   learning,
+  namedrops,
 ].map((w) => ({ ...w, checks: [...w.checks, refsResolve(w)] }))
