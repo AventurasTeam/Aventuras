@@ -561,7 +561,14 @@ describe('periodic classifier template — the writer map rules', () => {
     }
   })
 
-  // classifier.md → What the classifier writes → Happenings: awareness of a listed happening.
+  // classifier.md → What the classifier writes → Happenings: awareness is who knows, however
+  // they came to, for an added happening and a listed one alike.
+  it('lists who witnessed or took part in a happening as well as who learns of it', () => {
+    expect(render().system).toContain(
+      '- Awareness. List only characters the prose shows knowing of it, however they came to: who witnessed it or took part, and who learns of it.',
+    )
+  })
+
   // Without its last sentence, replies filed who learned of a happening they added under
   // knownAwareness, naming it by title.
   it('sends awareness of a listed happening to knownAwareness, and of an added one to its own', () => {
@@ -570,7 +577,7 @@ describe('periodic classifier template — the writer map rules', () => {
       'If a character learns of it after it happened, or learns of a past one, set learnedAtTurn to the turn that narrated the learning.\n',
     )
     expect(system).toContain(
-      "Rules for knownAwareness:\n\n- Never add again a happening Known happenings lists: when the turns show a character learning of one (\"Kael tells Aria about the massacre\"), add a knownAwareness entry with its ID as happening, the character's ID or a new character's handle as ref, source, severity and learnedAtTurn. knownAwareness is for those listed happenings alone: who learns of a happening this reply adds goes in that happening's own awareness, and when the turns show no one learning of a listed happening, knownAwareness stays empty.",
+      "Rules for knownAwareness:\n\n- Never add again a happening Known happenings lists: when the turns show a character knowing of one, learning of it (\"Kael tells Aria about the massacre\") or knowing it already (Kael, who tells it), add a knownAwareness entry with its ID as happening, the character's ID or a new character's handle as ref, source, severity, and learnedAtTurn when the turns narrate the learning. knownAwareness is for those listed happenings alone: who knows of a happening this reply adds goes in that happening's own awareness, and when the turns show no one knowing of a listed happening, knownAwareness stays empty.",
     )
   })
 

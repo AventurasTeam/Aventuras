@@ -120,12 +120,14 @@ alias list (the keywords bullet below).
   neither, never the window head: the
   [recent happenings](#what-the-classifier-reads) a later pass lists,
   Plot's chapter grouping and the ranker's chapter boost all read the
-  position. An
-  awareness row may also name a happening Known happenings lists, when
-  the turns show a character learning of it ("Kael tells Aria about
-  the massacre"); a pair the reply repeats lands at its earliest
-  learning turn. A happening with a blank title creates nothing, its
-  involvements and awareness with it, and is logged.
+  position. Its awareness rows are the characters the turns show
+  knowing of it, however they came to: who witnessed it or took part,
+  and who learns of it. An awareness row may also name a happening
+  Known happenings lists, when the turns show a character knowing of
+  it, learning of it ("Kael tells Aria about the massacre") or knowing
+  it already (Kael, who tells it); a pair the reply repeats lands at
+  its earliest learning turn. A happening with a blank title creates
+  nothing, its involvements and awareness with it, and is logged.
 - **Status transitions** — `entities.status` flips:
   - `staged → active` when prose mentions a staged entity in scene
     (the slow path; see

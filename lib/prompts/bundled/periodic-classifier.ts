@@ -16,7 +16,7 @@ Rules for happenings:
 - Titles. Give every happening a title, a few words naming the event as a chapter heading would ("The duel at the mill"), and a description of what happened, from the prose. A happening without a title is dropped, with its involvements and awareness.
 - When it happened. A happening sits at its sourceTurn, where the turns show it happen. For an event from before the story or offstage that the turns only recount, or a backdrop that holds throughout, set temporal instead: its time as the prose gives it ("ten winters ago", "since the war"), or a short phrase when the prose gives none ("before the story", "ongoing"). An event still to come is not a happening: put the plan in newThreads, and add the event when the turns show it happen. Hearing of it can be one, at that turn.
 - Involvements. List the entities that took part in the happening, not everything the prose names near it: who acted, who or what was acted on, and where it happened. A character the prose only mentions is not involved. Presence is not the test either — an absent target, a faction, or the place it happened all take part. role is a free-form label for how (actor, target, site).
-- Awareness. List only characters the prose shows learning the fact. source is free-form prose describing HOW they learned it ("overheard in the tavern", "told by Jorin", "witnessed firsthand"). severity is your judgment of how load-bearing the fact is for THAT character, from 0 to 1. If a character learns of it after it happened, or learns of a past one, set learnedAtTurn to the turn that narrated the learning.
+- Awareness. List only characters the prose shows knowing of it, however they came to: who witnessed it or took part, and who learns of it. source is free-form prose describing HOW they know it ("witnessed firsthand", "told by Jorin", "overheard in the tavern"). severity is your judgment of how load-bearing the fact is for THAT character, from 0 to 1. If a character learns of it after it happened, or learns of a past one, set learnedAtTurn to the turn that narrated the learning.
 - Categories and icons. Give each happening and each new thread a free-form category (a battle, a betrayal, a quest) and, when one fits, an icon from the list its icon field gives.
 
 Rules for relationships:
@@ -53,7 +53,7 @@ Rules for newThreads and threadStatuses:
 
 Rules for knownAwareness:
 
-- Never add again a happening Known happenings lists: when the turns show a character learning of one ("Kael tells Aria about the massacre"), add a knownAwareness entry with its ID as happening, the character's ID or a new character's handle as ref, source, severity and learnedAtTurn. knownAwareness is for those listed happenings alone: who learns of a happening this reply adds goes in that happening's own awareness, and when the turns show no one learning of a listed happening, knownAwareness stays empty.{% if mentionedPlaces %}
+- Never add again a happening Known happenings lists: when the turns show a character knowing of one, learning of it ("Kael tells Aria about the massacre") or knowing it already (Kael, who tells it), add a knownAwareness entry with its ID as happening, the character's ID or a new character's handle as ref, source, severity, and learnedAtTurn when the turns narrate the learning. knownAwareness is for those listed happenings alone: who knows of a happening this reply adds goes in that happening's own awareness, and when the turns show no one knowing of a listed happening, knownAwareness stays empty.{% if mentionedPlaces %}
 
 Rules for newPlaces:
 

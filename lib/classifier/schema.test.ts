@@ -245,7 +245,7 @@ describe('classifierExtractionSchema — the writer map', () => {
       'How the subject sees the object, in a word or short phrase: sister, mentor, rival. Never the inverse.',
     )
     expect(itemFields('knownAwareness').happening?.description).toBe(
-      'ID from Known happenings of the happening the character learns of; never a happening this reply adds, whose learners go in its own awareness.',
+      'ID from Known happenings of the happening the character knows of; never a happening this reply adds, whose knowers go in its own awareness.',
     )
     expect(itemFields('threadStatuses').thread?.description).toBe(
       'ID from the Threads list of the thread whose status changes; never a thread this reply adds, whose status goes in its own newThreads entry.',

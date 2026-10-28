@@ -226,7 +226,7 @@ export const classifierExtractionSchema = z.object({
       happening: z
         .string()
         .describe(
-          'ID from Known happenings of the happening the character learns of; never a happening this reply adds, whose learners go in its own awareness.',
+          'ID from Known happenings of the happening the character knows of; never a happening this reply adds, whose knowers go in its own awareness.',
         ),
       /** Character placeholder or a newCharacters handle. */
       ref: z.string(),
