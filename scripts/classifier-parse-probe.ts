@@ -47,7 +47,8 @@ import { resolveDevSlot } from './dev-slot/resolve'
 
 // Opt-in: the real pass prompt, sent N times to a real provider, for a first-attempt parse rate.
 //   SMOKE_LLM_URL=http://host:port/v1 SMOKE_LLM_MODEL=<id> pnpm probe:classifier
-// SMOKE_LLM_KEY (none), PROBE_RUNS (20, or 5 a window), PROBE_MAX_OUTPUT (unset), PROBE_BRANCH_ID
+// SMOKE_LLM_KEY (none), PROBE_RUNS (20, or 5 a window), PROBE_MAX_OUTPUT and PROBE_TEMPERATURE
+// (unset: the server's own), PROBE_BRANCH_ID
 // (br_hero_main), AVENTURAS_DB_PATH (dev slot db, read-only). PROBE_EVAL (all, or window names)
 // sends the evaluation set's windows instead and scores each reply; PROBE_OUT saves the replies,
 // raw and read.
@@ -59,6 +60,8 @@ const OUT = process.env.PROBE_OUT
 const RUNS = Number(process.env.PROBE_RUNS ?? (EVAL == null ? 20 : 5))
 const MAX_OUTPUT =
   process.env.PROBE_MAX_OUTPUT === undefined ? undefined : Number(process.env.PROBE_MAX_OUTPUT)
+const TEMPERATURE =
+  process.env.PROBE_TEMPERATURE === undefined ? undefined : Number(process.env.PROBE_TEMPERATURE)
 const BRANCH_ID = process.env.PROBE_BRANCH_ID ?? 'br_hero_main'
 
 const PROVIDER_ID = 'prov_probe'
@@ -322,7 +325,7 @@ async function probeBranch(config: ResolveModelConfig, maxEntries: number): Prom
     `[probe] ${dbPath} ${BRANCH_ID}: ${window.turns.length} turns, ` +
       `mentioned places ${branch.mentionedPlaces ? 'on' : 'off'}, ` +
       `prompt ${prompt.system.length + prompt.user.length} chars, ` +
-      `max output ${MAX_OUTPUT ?? 'unset'}; ${RUNS} runs of ${LLM_MODEL}`,
+      `max output ${MAX_OUTPUT ?? 'unset'}, temperature ${TEMPERATURE ?? 'unset'}; ${RUNS} runs of ${LLM_MODEL}`,
   )
 
   const outcomes: Outcome[] = []
@@ -367,7 +370,7 @@ async function probeEvalSet(
     const { prompt } = rendered
     console.log(
       `[probe] eval ${w.name}, ${w.about}: prompt ${prompt.system.length + prompt.user.length} ` +
-        `chars, max output ${MAX_OUTPUT ?? 'unset'}; ${RUNS} runs of ${LLM_MODEL}`,
+        `chars, max output ${MAX_OUTPUT ?? 'unset'}, temperature ${TEMPERATURE ?? 'unset'}; ${RUNS} runs of ${LLM_MODEL}`,
     )
     if (OUT != null)
       writeFileSync(join(OUT, `${w.name}.prompt.txt`), `${prompt.system}\n\n${prompt.user}\n`)
@@ -447,6 +450,8 @@ async function main(): Promise<void> {
   if (!Number.isInteger(RUNS) || RUNS < 1) throw new Error(`PROBE_RUNS must be a positive integer`)
   if (MAX_OUTPUT !== undefined && (!Number.isInteger(MAX_OUTPUT) || MAX_OUTPUT < 1))
     throw new Error(`PROBE_MAX_OUTPUT must be a positive integer`)
+  if (TEMPERATURE !== undefined && !(TEMPERATURE >= 0 && TEMPERATURE <= 2))
+    throw new Error(`PROBE_TEMPERATURE must be a number from 0 to 2`)
 
   // getModel resolves providers through the app-settings store, so the probe's provider goes there.
   const hydrated = await hydrateAppSettings(async () => ({
@@ -467,6 +472,7 @@ async function main(): Promise<void> {
         name: 'Classifier probe',
         modelRef: { providerId: PROVIDER_ID, modelId: LLM_MODEL },
         ...(MAX_OUTPUT !== undefined ? { maxOutput: MAX_OUTPUT } : {}),
+        ...(TEMPERATURE !== undefined ? { temperature: TEMPERATURE } : {}),
       },
     ],
     assignments: { classifier: PROFILE_ID },
