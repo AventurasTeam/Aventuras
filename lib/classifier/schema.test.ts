@@ -245,7 +245,7 @@ describe('classifierExtractionSchema — the writer map', () => {
       'How the subject sees the object, in a word or short phrase: sister, mentor, rival. Never the inverse.',
     )
     expect(itemFields('knownAwareness').happening?.description).toBe(
-      'ID from Known happenings of the happening the character learns of.',
+      'ID from Known happenings of the happening the character learns of; never a happening this reply adds, whose learners go in its own awareness.',
     )
   })
 

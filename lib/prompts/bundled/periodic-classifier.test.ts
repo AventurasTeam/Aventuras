@@ -532,9 +532,11 @@ describe('periodic classifier template — the writer map rules', () => {
   })
 
   // classifier.md → What the classifier writes → Happenings: awareness of a listed happening.
-  it('sends awareness of a listed happening to knownAwareness, not a second happening', () => {
+  // Without its last sentence, replies filed who learned of a happening they added under
+  // knownAwareness, naming it by title.
+  it('sends awareness of a listed happening to knownAwareness, and of an added one to its own', () => {
     expect(render().system).toContain(
-      'If a character learns of it after it happened, or learns of a past one, set learnedAtTurn to the turn that narrated the learning. Never add again a happening Known happenings lists: when the turns show a character learning of one ("Kael tells Aria about the massacre"), add a knownAwareness entry with its ID as happening, the character\'s ID or a new character\'s handle as ref, source, severity and learnedAtTurn.\n',
+      "If a character learns of it after it happened, or learns of a past one, set learnedAtTurn to the turn that narrated the learning. Never add again a happening Known happenings lists: when the turns show a character learning of one (\"Kael tells Aria about the massacre\"), add a knownAwareness entry with its ID as happening, the character's ID or a new character's handle as ref, source, severity and learnedAtTurn. knownAwareness is for those listed happenings alone: who learns of a happening this reply adds goes in that happening's own awareness, and when the turns show no one learning of a listed happening, knownAwareness stays empty.\n",
     )
   })
 
