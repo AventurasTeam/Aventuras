@@ -49,7 +49,8 @@ import { resolveDevSlot } from './dev-slot/resolve'
 //   SMOKE_LLM_URL=http://host:port/v1 SMOKE_LLM_MODEL=<id> pnpm probe:classifier
 // SMOKE_LLM_KEY (none), PROBE_RUNS (20, or 5 a window), PROBE_MAX_OUTPUT (unset), PROBE_BRANCH_ID
 // (br_hero_main), AVENTURAS_DB_PATH (dev slot db, read-only). PROBE_EVAL (all, or window names)
-// sends the evaluation set's windows instead and scores each reply; PROBE_OUT saves the replies.
+// sends the evaluation set's windows instead and scores each reply; PROBE_OUT saves the replies,
+// raw and read.
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
 const LLM_KEY = process.env.SMOKE_LLM_KEY ?? ''
@@ -150,6 +151,8 @@ type Outcome = {
   cutOff?: true
   /** Entries a tolerant list dropped from a reply that parsed, by list. */
   dropped?: string
+  /** The reply that parsed was no strict JSON: jsonrepair made it parse. */
+  repaired?: true
 }
 
 type ParseRetryError = Extract<CallRetryError, { tier: 'parse' }>
@@ -195,13 +198,64 @@ function anchorCounts(
 type ReplySchema = ReturnType<typeof classifierReplySchema>
 type ParsedReply = Parameters<typeof readClassifierReply>[0]
 
+// The response bodies of the current run's calls, read beside the SDK's copy: its result carries
+// only the parsed value, so a repaired reply or a dropped entry can't be seen without them.
+const runBodies: string[] = []
+
+function captureReplies(): void {
+  const sdkFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const response = await sdkFetch(input, init)
+    const url = input instanceof Request ? input.url : String(input)
+    if (url.endsWith('/chat/completions')) runBodies.push(await response.clone().text())
+    return response
+  }
+}
+
+type ChatCompletion = {
+  choices?: { message?: { content?: string | null; reasoning_content?: string | null } }[]
+}
+
+// A body that isn't a chat completion, such as an error, is kept whole as the content.
+function replyParts(body: string): { content: string; reasoning: string | null } {
+  let message
+  try {
+    message = (JSON.parse(body) as ChatCompletion).choices?.[0]?.message
+  } catch {
+    message = undefined
+  }
+  if (message == null) return { content: body, reasoning: null }
+  return { content: message.content ?? '', reasoning: message.reasoning_content ?? null }
+}
+
+function strictJsonError(text: string): string | null {
+  try {
+    JSON.parse(text)
+    return null
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error)
+  }
+}
+
+const rawText = (replies: readonly ReturnType<typeof replyParts>[]) =>
+  replies
+    .map(({ content, reasoning }, i) =>
+      [
+        `=== call ${i + 1} ===`,
+        ...(reasoning == null ? [] : ['--- reasoning ---', reasoning, '--- reply ---']),
+        content,
+      ].join('\n'),
+    )
+    .join('\n\n') + '\n'
+
 // One pass call, printed as a run line; the parsed reply when the call returned one.
 async function attempt(
   run: number,
   prompt: RenderedPrompt,
   schema: ReplySchema,
   config: ResolveModelConfig,
-): Promise<{ outcome: Outcome; parsed: ParsedReply | null }> {
+): Promise<{ outcome: Outcome; parsed: ParsedReply | null; raw: string }> {
+  runBodies.length = 0
   const startedAt = Date.now()
   const result = await generateStructured(
     'classifier',
@@ -214,6 +268,9 @@ async function attempt(
   if (result.status === 'not-configured')
     throw new Error(`[probe] the classifier target did not resolve: ${result.kind}`)
   const malformed = result.status === 'ok' ? readClassifierReply(result.value).malformed : []
+  const replies = runBodies.map(replyParts)
+  const notStrict =
+    result.status === 'ok' && replies.length > 0 ? strictJsonError(replies.at(-1)!.content) : null
   const outcome: Outcome = {
     status: result.status,
     recoverable: result.recoverable,
@@ -226,6 +283,7 @@ async function attempt(
     ...(malformed.length > 0
       ? { dropped: malformed.map(({ list, count }) => `${list} ${count}`).join(', ') }
       : {}),
+    ...(notStrict != null ? { repaired: true as const } : {}),
   }
   console.log(
     `[probe] run ${run}: ${outcome.cutOff === true ? 'cut off at length' : outcome.status} in ` +
@@ -233,12 +291,14 @@ async function attempt(
       `${parseRetries(outcome)} parse / ${providerRetries(outcome)} provider retries` +
       (outcome.detail ? ` — ${oneLine(outcome.detail)}` : ''),
   )
+  if (notStrict != null)
+    console.log(`[probe]   no strict JSON, parsed by jsonrepair: ${oneLine(notStrict)}`)
   if (outcome.dropped != null)
     console.log(`[probe]   dropped entries that didn't fit: ${outcome.dropped}`)
   const firstParse = outcome.recoverable.find((e): e is ParseRetryError => e.tier === 'parse')
   if (firstParse != null)
     console.log(`[probe]   first parse failure: ${oneLine(parseFailureText(firstParse.detail))}`)
-  return { outcome, parsed: result.status === 'ok' ? result.value : null }
+  return { outcome, parsed: result.status === 'ok' ? result.value : null, raw: rawText(replies) }
 }
 
 async function probeBranch(config: ResolveModelConfig, maxEntries: number): Promise<Outcome[]> {
@@ -314,8 +374,9 @@ async function probeEvalSet(
     const held = w.checks.map(() => 0)
     let parsedRuns = 0
     for (let run = 1; run <= RUNS; run++) {
-      const { outcome, parsed } = await attempt(run, prompt, rendered.schema, config)
+      const { outcome, parsed, raw } = await attempt(run, prompt, rendered.schema, config)
       outcomes.push(outcome)
+      if (OUT != null) writeFileSync(join(OUT, `${w.name}.${run}.raw.txt`), raw)
       if (parsed == null) continue
       parsedRuns++
       const { reply } = rendered.read(parsed)
@@ -372,6 +433,7 @@ function summarizeParses(outcomes: readonly Outcome[]): void {
       `ok after a parse retry ${afterRetry}, failed after a parse retry ${failedAfterParseRetry.length}, ` +
       `failed with no parse retry ${failedOther.length}, cut off at length ${cutOff.length}, ` +
       `aborted ${aborted.length}, ` +
+      `ok only through jsonrepair ${outcomes.filter((o) => o.repaired === true).length}, ` +
       `ok with dropped entries ${outcomes.filter((o) => o.dropped != null).length}, ` +
       `provider retries ${outcomes.reduce((n, o) => n + providerRetries(o), 0)}`,
   )
@@ -420,6 +482,7 @@ async function main(): Promise<void> {
     assignments: settings.assignments,
   }
 
+  captureReplies()
   const maxEntries = settings.classifierWindowMaxEntries
   const outcomes =
     EVAL == null

@@ -459,11 +459,13 @@ sends it `PROBE_RUNS` times, 20 by default, under a profile with no max
 output unless `PROBE_MAX_OUTPUT` sets one, so a run can test what a
 real profile sends. It prints each run's outcome with its parse and
 provider retries, its first parse failure by field path and the
-entries a reply that parsed dropped for not fitting, by list, and its
+entries a reply that parsed dropped for not fitting, by list, its
 happenings as the planner would anchor them (with a `temporal`, at a
 source turn that resolves, or unanchored, with the distinct `temporal`
-values), then the first-attempt parse rate. A reply the server stopped at its length
-limit that doesn't parse strictly is refused, not repaired
+values) and whether the reply was strict JSON or needed jsonrepair to
+mend it, then the first-attempt parse rate. A reply the server
+stopped at its length limit that doesn't parse strictly is refused,
+not repaired
 ([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)):
 its run prints the cut-off's cause and numbers, and the summary counts
 it as cut off at length rather than as a failed run. `SMOKE_LLM_KEY`
@@ -477,8 +479,9 @@ window carries checks of the facts its prose should and shouldn't
 yield, marked by whether a rule in the prompt asks for the fact or
 only the window's author judges it; the probe prints each run's
 misses, then how often each check held, and `PROBE_OUT` saves each
-window's prompt and each reply. A unit test proves each check can
-hold and can fail.
+window's prompt and each reply, both as the server sent it, with any
+separate reasoning, and as the checks read it. A unit test proves
+each check can hold and can fail.
 
 ## Selector strategy
 
