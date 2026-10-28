@@ -214,11 +214,11 @@ describe('periodic classifier template — system and user halves', () => {
     expect(system).not.toMatch(/\babove\b/)
   })
 
-  // classifier.md → What the classifier writes → New characters: the bar factions and places keep.
-  it('adds a named character or an unnamed one the story could come back to, never a passing figure', () => {
+  // classifier.md → What the classifier writes → New characters: a revealed name is a rename.
+  it('adds every named character and an unnamed one the story points toward, never a revealed name', () => {
     const { system } = render()
     expect(system).toContain(
-      'a named one, or an unnamed one the story could come back to ("the innkeeper who hid them"). Not a passing figure there only for the moment ("a porter", "a soldier in the crowd"). Put each in newCharacters with a handle you choose.',
+      'every named one, whether alive, dead or only spoken of, and an unnamed one the turns point the story toward, someone a character sets out to find or to face, or who is after one of them ("the innkeeper they ride to warn", "the bounty hunter on their trail"). Not an unnamed figure the scene is done with, even one who took part ("a porter", "a sailor who helped haul the net"), and not a listed character whose own name the turns reveal: that is a rename. Put each in newCharacters with a handle you choose.',
     )
   })
 

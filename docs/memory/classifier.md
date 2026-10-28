@@ -149,10 +149,13 @@ alias list (the keywords bullet below).
   [`cadence.md → User edits and classifier writes`](./cadence.md#user-edits-and-classifier-writes)).
 
 - **New characters** — the characters the turns introduce that Known
-  entities lacks, with the bar factions and places keep: a named one,
-  or an unnamed one the story could come back to ("the innkeeper who
-  hid them"), never a passing figure there only for the moment ("a
-  porter"). Each goes through
+  entities lacks: every named one, alive, dead or only spoken of, and
+  an unnamed one the turns point the story toward, someone a character
+  sets out to find or to face or who is after one of them ("the
+  innkeeper they ride to warn"). Never an unnamed figure the scene is
+  done with, even one who took part ("a porter"), nor a listed
+  character whose name the turns reveal, which is a rename. Each goes
+  through
   [reconciliation](#disambiguation-on-new-character-mentions) before
   it is created.
 - **Mentioned places** — with the story's setting on, the places the
