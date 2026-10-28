@@ -601,7 +601,8 @@ sizes where a model takes only those and otherwise real dimensions raised to its
 capabilities are a table in the adapter, because `/models` carries none), real dimensions for
 ComfyUI/A1111, real dimensions plus one of the model's listed resolution tiers for Pollinations (no
 tier when it lists none, because the pixel count follows the tier where there is one), and a
-snapped-to-grid size inside Z.AI's limits
+snapped-to-grid size inside the model's limits for Z.AI (glm-image, and the CogView models on BigModel;
+its API reference publishes both, because no endpoint lists image models)
 (`src/lib/utils/image.ts`). A backend that is handed pixel dimensions it does not offer answers
 with the nearest thing it does, which is not the same picture.
 
