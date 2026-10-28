@@ -80,11 +80,12 @@ Maela slid the paper across the table. He read it twice, then unpinned the tarni
       basis: 'rule',
       holds: (r) => !r.memberships.some((m) => m.character === 'char_maela'),
     },
+    // The warrant's signer is left unscored: Brann demands him, so the story may be heading for him.
     {
-      name: 'no new character: the gate-boy, the hanged brother and the warrant’s signer go unnamed',
+      name: 'no new character but the warrant’s signer: the gate-boy and the hanged brother go unnamed',
       kind: 'avoid',
       basis: 'judgment',
-      holds: (r) => createdCharacters(r).length === 0,
+      holds: (r) => createdCharacters(r).every((c) => /warrant|sign/i.test(c.name)),
     },
     {
       name: 'no new faction for a listed one',

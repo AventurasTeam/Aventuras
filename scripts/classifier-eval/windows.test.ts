@@ -99,3 +99,14 @@ it('the learning window counts a retirement of Tam as making him dead', () => {
   expect(holds(w.ideal)).toBe(true)
   expect(holds(retired)).toBe(false)
 })
+
+it("the defection window leaves the warrant's signer unscored, and counts the hanged brother", () => {
+  const w = EVAL_WINDOWS.find((x) => x.name === 'defection')!
+  const holds = w.checks.find((c) => c.name.startsWith('no new character but'))!.holds
+  const adding = (name: string) => ({
+    ...w.ideal,
+    newCharacters: [{ handle: 'new:x', name, description: 'x', keywords: [], sourceTurn: 't2' }],
+  })
+  expect(holds(adding('the man who signed that warrant'))).toBe(true)
+  expect(holds(adding("Brann's brother"))).toBe(false)
+})

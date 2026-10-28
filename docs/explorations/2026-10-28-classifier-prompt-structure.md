@@ -27,7 +27,9 @@ also checks that each ID a reply names is a listed row or a handle the
 reply declares. The developer reviewed the windows on 2026-10-28. Left
 unscored on purpose: whether the steward becomes a character, and
 whether the page changing hands is a happening, since piggyback
-records the item and who gave it.
+records the item and who gave it. After change 9 the developer added
+the warrant's signer in `defection`, whom Brann demands, so the story
+may be heading for him.
 
 ## Baseline
 
