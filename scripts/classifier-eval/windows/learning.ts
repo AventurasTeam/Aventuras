@@ -73,7 +73,7 @@ Oriel ducked his head, pleased and embarrassed at once, and was gone.`,
       name: 'the poisoning is not added again',
       kind: 'avoid',
       basis: 'rule',
-      holds: (r) => !r.happenings.some((h) => /poison/i.test(h.title)),
+      holds: (r) => !r.happenings.some((h) => /poison|senna/i.test(h.title)),
     },
     {
       name: 'the listed master and apprentice views are not restated',
@@ -98,7 +98,9 @@ Oriel ducked his head, pleased and embarrassed at once, and was gone.`,
       basis: 'rule',
       holds: (r) =>
         !r.happenings.some((h) =>
-          /\b(death|murder|killing) of tam\b|\btam\b.*\b(dies|died|dead|killed)\b/i.test(h.title),
+          /\b(death|murder|killing) of tam\b|\btam\b.*\b(death|dies|died|dead|killed)\b/i.test(
+            h.title,
+          ),
         ),
     },
     // Adding the steward is left unscored; one added as no more than "the steward" is lost a few
@@ -162,12 +164,12 @@ Oriel ducked his head, pleased and embarrassed at once, and was gone.`,
     aliases: [{ ref: 'c9', terms: ['x'], sourceTurn: 't2' }],
     happenings: [
       {
-        title: 'Lady Senna poisoned',
+        title: 'Lady Senna’s death',
         involvements: [{ ref: 'char_senna', role: 'target' }],
         awareness: [],
         sourceTurn: 't2',
       },
-      { title: 'The death of Tam Rook', involvements: [], awareness: [], sourceTurn: 't2' },
+      { title: 'Tam Rook’s death', involvements: [], awareness: [], sourceTurn: 't2' },
     ],
     newCharacters: [
       {
