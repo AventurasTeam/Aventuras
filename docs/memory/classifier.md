@@ -16,7 +16,9 @@ values.
 The prompt opens with its system half
 ([`architecture.md → System and user halves`](../architecture.md#system-and-user-halves)):
 the role line and the extraction rules, which name the lists they
-refer to rather than pointing above. Its user half carries the
+refer to rather than pointing above: first the rules every list keeps,
+then each list's rules under a heading naming it, in the order the
+reply writes the lists. Its user half carries the
 branch's world as lists the classifier addresses by placeholder id
 ([ID handling](#id-handling-in-classifier-output)), then the turns:
 

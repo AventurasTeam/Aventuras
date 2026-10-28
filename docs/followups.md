@@ -268,11 +268,12 @@ breakdown under [UX](#ux).
   pass.
 
 - **Classifier prompt: interface and structure.** The periodic
-  classifier's prompt is 21 rules in one list (22 with mentioned
-  places on), then the reply format as a TypeScript type whose
-  comments carry a few field descriptions. A first pass on 2026-10-27
-  named each output list in its rule and described the fields a name
-  doesn't explain. The rest is measured against the evaluation set,
+  classifier's prompt is the rules every list keeps, then each list's
+  rules under a heading naming it, then the reply format as a
+  TypeScript type whose comments carry a few field descriptions. A
+  first pass on 2026-10-27 named each output list in its rule and
+  described the fields a name doesn't explain. The rest is measured
+  against the evaluation set,
   the parse probe's `PROBE_EVAL` mode
   ([`testing.md → Real-provider checks`](./testing.md#real-provider-checks)).
   Every window also scores placeholder use, the one failure measured
@@ -281,11 +282,16 @@ breakdown under [UX](#ux).
   [`roadmap.md → M7`](./implementation/roadmap.md#m7--app-settings--diagnostics--onboarding)).
   Whether replies fill the new fields is the play check's above. Left
   to measure:
-  - sections instead of the flat list: the task, the inputs, the rules
-    that hold everywhere (IDs and handles, provenance, scene, silence),
-    then each output list in the order the model writes it. Today
-    `knownAwareness` is written last, before only `newPlaces` with
-    mentioned places on, but explained in the fourth rule;
+  - a reply's own new thread named again in `threadStatuses`, by its
+    title and with the status it already gives, which drops as an
+    unresolved reference: 3 of 50 replies on the flat list, 12 of 50
+    under headings, where the Threads rule shares one with
+    `newThreads`. Only the rule's last sentence says `thread` takes a
+    listed thread's ID, and the field has no description;
+  - a happening sent without a title, which the parser drops with its
+    involvements and awareness: 2 of 50 replies on the flat list, 4 of
+    50 under headings. No rule asks for one, and only the reply type
+    marks it required;
   - what counts as a happening, which no rule says beyond the category
     examples. One case to settle: an item changing hands, which
     piggyback already records with who gave it;

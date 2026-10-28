@@ -194,3 +194,64 @@ The prompt change can't account for that, and the cause is open; the
 probe now saves llama.cpp's timings with each reply, its draft
 acceptance, prompt-cache reuse and speed, for the runs after this one
 to be read against.
+
+## Change 2: rules under the lists they govern
+
+The system half's rules now sit under headings: "Rules for every
+list:" over provenance, scene and silence, then one heading for each
+reply list or group of lists, in the order the reply writes them, so
+the Awareness rule's sentences on listed happenings, change 1's among
+them, make a knownAwareness section of their own instead of ending the
+fourth rule. No sentence changed: the script
+found the same 95 sentences before and after (104 with mentioned
+places on), the headings the only additions, and the user half
+identical.
+
+Expected to move: knownAwareness naming only listed happenings in
+reveal and recounted; at risk, Idris learning of the listed poisoning.
+Ten runs a window this time, since a regrouping could move many checks
+a little. With the slip rate moving between runs on an unchanged
+router, change 1's prompt was also run again, five a window from its
+own commit, to tell a run's drift from the change's effect.
+
+| knownAwareness names only a listed happening | ambush | recounted | reveal | defection | learning |
+| -------------------------------------------- | ------ | --------- | ------ | --------- | -------- |
+| change 1                                     | 4/5    | 3/5       | 2/5    | 4/5       | 4/5      |
+| change 1, again                              | 4/5    | 3/5       | 4/5    | 4/5       | 5/5      |
+| change 2                                     | 9/10   | 10/10     | 10/10  | 10/10     | 10/10    |
+
+The rerun held change 1's scores, the mean rate of rule checks 0.85
+against 0.83 and of judgment checks 0.53 both times, so between runs
+of one prompt the content holds steady. Against it, knownAwareness
+went from 37 of 50 to 49 of 50, Nessa's learnedAtTurn from 6 of 10 to
+10 of 10, and Brannoc, unaware of the wreck in all ten runs of change
+1's prompt, is aware in 3 of 10. Idris learning of the poisoning held,
+10 of 10. Over the set the mean rate of rule checks is 0.86 and of
+judgment checks 0.57. Kept.
+
+Two failures read against both runs of change 1's prompt:
+
+- A reply named its own new thread again in threadStatuses, by title
+  and with the status newThreads already gives it, in 12 of 50 runs
+  against 3 of 50, and in 5 of 25 in the baseline. It is every
+  reference that resolves to nothing, and costs only a dropped entry
+  repeating a status. The Threads rule now shares a
+  heading with newThreads, and only its last sentence says thread
+  takes a listed thread's ID.
+- A reply sent happenings without a title, which the parser drops with
+  their involvements and awareness, in 4 of 50 calls against 2 of 50;
+  three were defection's, and two of them account for its toll-house
+  check's failures and two of the ledger theft's. No rule asks for a
+  title.
+
+Tam Rook made dead in 5 of 10 runs, against 2 of 10, is the largest
+other move, within what ten runs leave open.
+
+The slips moved again with the prompt held still: change 1's prompt
+slipped 1 of 1,640 keys the first time and 16 of 1,598 on the rerun, a
+slip in 1 call of 25 and then 9, and the regrouped prompt 37 of 2,926,
+in 17 calls of 50. In neither run do the calls with a slip differ from
+the rest in draft acceptance (0.75 against 0.76, 0.75 against 0.75),
+prompt-cache reuse or speed. So the swing is neither the prompt nor
+anything llama.cpp's timings show, and it left the content scores
+alone. Every reply parsed.
