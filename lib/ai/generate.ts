@@ -302,9 +302,24 @@ export function parseStructured<T>(
     obj = JSON.parse(raw)
   } catch (error) {
     if (opts.repair === false) throw error
-    obj = JSON.parse(jsonrepair(raw))
+    obj = restoreColonKeys(JSON.parse(jsonrepair(raw)))
   }
   return schema.parse(obj)
+}
+
+// jsonrepair ends a key that lost its end quote at the next quote, colon and all: `"turn: "t2"`
+// comes back as {"turn: ": "t2"}. Only after a repair, so a strict document keeps its keys.
+function restoreColonKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(restoreColonKeys)
+  if (value === null || typeof value !== 'object') return value
+  const keys = Object.keys(value)
+  return Object.fromEntries(
+    Object.entries(value).map(([key, inner]) => {
+      const name = key.replace(/\s*:\s*$/, '')
+      const restored = name !== key && name !== '' && !keys.includes(name)
+      return [restored ? name : key, restoreColonKeys(inner)]
+    }),
+  )
 }
 
 export type StructuredCallOptions = {

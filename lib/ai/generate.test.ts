@@ -301,6 +301,24 @@ describe('parseStructured', () => {
   it('throws when valid JSON fails schema validation', () => {
     expect(() => parseStructured('{"wrong":1}', schema)).toThrow()
   })
+  it('restores a key that lost its end quote, at any depth', () => {
+    const nested = z.object({ items: z.array(z.object({ name: z.string(), turn: z.string() })) })
+    const raw = '{"items": [{"name: "Brann", "turn":"t2"}, {"name:"Maela", "turn": "t4"}]}'
+    expect(parseStructured(raw, nested)).toEqual({
+      items: [
+        { name: 'Brann', turn: 't2' },
+        { name: 'Maela', turn: 't4' },
+      ],
+    })
+  })
+  it('keeps a key the object already has over a restored one', () => {
+    expect(parseStructured('{"description": "Hi", "description: "No"}', schema).description).toBe(
+      'Hi',
+    )
+  })
+  it('leaves a strict document’s keys alone', () => {
+    expect(parseStructured('{"a:": 1}', z.record(z.string(), z.number()))).toEqual({ 'a:': 1 })
+  })
 })
 
 describe('generateStructured', () => {
