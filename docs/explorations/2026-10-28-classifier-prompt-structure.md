@@ -135,7 +135,56 @@ Two things the run showed that the baseline didn't:
   description, and the reply's tolerant list dropped them, the outcome
   the window's check asks for, by accident. One of them did the same
   to Hask, whose name only comes at the fight's end, and lost him.
-- **`temporal` on an event just before the scene.** "The ferry rope
-  is cut", which the riders did before Tobin reached the crossing, got
-  "before the story", the phrase the rule gives for a past with no
-  time.
+- **`temporal` on an event the prose only shows done.** "The ferry
+  rope is cut" got "before the story". The developer read it as
+  right: the prose shows the rope cut, not the cutting, which could
+  have been half a day before the cart came, so the rule's offstage
+  case applies. Only the phrase is loose, and it is the rule's own
+  example for a past with no time.
+
+## How a change is measured
+
+A change either rewrites a rule's text where it stands, with its field
+description if it has one, or moves and groups rules without changing
+a sentence, which a script checks by comparing the rendered rules
+before and after. One kind at a time, each measured on the whole set
+against the replayed baseline at the router's temperature, the harsher
+case, with the checks it should move named before the run. Five runs a
+window shows only large shifts.
+
+## Change 1: knownAwareness is for listed happenings
+
+The Awareness rule told the model to set learnedAtTurn when a
+character learns of a past event, then, for a listed happening, to add
+a knownAwareness entry with learnedAtTurn, and never said where the
+learners of a happening the reply adds go. The baseline's replies made
+the wreck a new happening with an empty awareness and filed Nessa under
+knownAwareness, naming it by title. The rule now ends: "knownAwareness
+is for those listed happenings alone: who learns of a happening this
+reply adds goes in that happening's own awareness, and when the turns
+show no one learning of a listed happening, knownAwareness stays
+empty", and the field's description says the same.
+
+Expected to move: knownAwareness naming only listed happenings in
+ambush, recounted and reveal, and Nessa's learnedAtTurn; at risk,
+Idris learning of the listed poisoning.
+
+| knownAwareness names only a listed happening | ambush | recounted | reveal | defection | learning |
+| -------------------------------------------- | ------ | --------- | ------ | --------- | -------- |
+| baseline                                     | 1/5    | 0/5       | 1/5    | 5/5       | 4/5      |
+| change 1                                     | 4/5    | 3/5       | 2/5    | 4/5       | 4/5      |
+
+Nessa's learnedAtTurn rose from 1 to 3 of 5; Brannoc stays unaware of
+the wreck in all five. Idris learning of the poisoning held, 5 of 5.
+Over the set, rule checks went from 140 to 158 of 190 and judgment
+checks from 33 to 29 of 55, the fall a scatter of single runs. Kept.
+
+Reveal is what's left: its replies still add "Ilse reveals her name"
+with an empty awareness and file Corwin under knownAwareness as "h1"
+or "t4", the new sentence notwithstanding. The rule sits fourth and the
+list is written last; that is the structure pass's question.
+
+The run slipped 1 of 1,640 keys, against 18 of 2,142 in the baseline
+at the same temperature and a similar reply size. The prompt change
+can't account for that; whether the router changed between the runs is
+open.
