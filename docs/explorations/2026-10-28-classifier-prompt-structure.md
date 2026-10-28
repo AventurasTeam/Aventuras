@@ -437,10 +437,16 @@ knownAwareness at all, reasoning that it had no new happening to
 learn of. None of the reasoning cites the changed sentence, so the
 learning window ran ten more times on change 6's prompt the same
 afternoon: 10 of 10, 20 of 20 with its first run. A rule check and a
-duplicated happening outweigh a judgment check: reverted. Across the
-three runs with the bar, a reply names a rider in 6 of 30, adds the
-steward in 13 of 30 and Tam's aunt in 6, and a change of sides comes
-with a none in 4 of 50 since change 4.
+duplicated happening outweigh a judgment check: reverted.
+
+The kept prompt, changes 1 to 6, then ran the whole set again. Idris
+missed his learning once there too, a reply adding the poisoning
+again, so the prompts without change 7 miss it in 1 of 70 runs since
+change 2 against 4 of 20 with it: still a cost, less sure than the
+first comparison read. Across the four runs with the bar, a reply
+names a rider in 7 of 40, adds the steward in 18 of 40 and Tam's aunt
+in 7, and since change 4 a change of sides comes with a none in 4 of 60. The rerun's mean rates are 0.89 for rule checks and 0.65 for
+judgment checks.
 
 ## Where it stands
 
@@ -457,7 +463,7 @@ slip recovery.
 | 3, threadStatuses  | every ID names a listed row or a declared handle | 38/50 → 47/50  | 0.87 / 0.65          |
 | 4, change of sides | Brann ends in House Varro                        | 7/10 → 9/10    | 0.89 / 0.63          |
 | 5, titles          | calls that drop a happening                      | 4/50 → 0/50    | 0.91 / 0.65          |
-| 6, character bar   | replies naming an ambush rider                   | 10/30 → 6/30   | 0.89 / 0.69          |
+| 6, character bar   | replies naming an ambush rider                   | 10/30 → 7/40   | 0.89 / 0.69          |
 | 7, witnesses       | Brannoc aware of the wreck; reverted             | 0/10 → 16/20   | 0.90 / 0.74          |
 
 Left, each for the developer or measured as out of a rule's reach:
