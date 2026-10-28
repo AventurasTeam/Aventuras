@@ -522,6 +522,47 @@ right rename, "the Heron" as its keyword instead of an alias, one
 citing the bar: she is named. With the bar a reply does it in 3 of 50
 runs, and in none of 30 before it.
 
+## Change 9: the story's direction as the character bar
+
+The developer judged change 6's bar by where the story is heading: the
+steward and Tam's aunt belong, since Oriel sets out to find the aunt
+and the steward is hunting Tam, while the ambush riders fought, fled
+and nothing points back to them. The bar also had to stop costing
+named characters, and a revealed name had to stay a rename. The rule
+now asks for "every named one, whether alive, dead or only spoken of,
+and an unnamed one the turns point the story toward, someone a
+character sets out to find or to face, or who is after one of them",
+not "an unnamed figure the scene is done with, even one who took
+part", "and not a listed character whose own name the turns reveal:
+that is a rename". Canon's bullet says the same.
+
+| replies adding       | the bar's five runs (50) | change 9 (10) |
+| -------------------- | ------------------------ | ------------- |
+| Tam Rook             | 36                       | 10            |
+| Edric Vane           | 8                        | 10            |
+| Ilse as someone new  | 3                        | 0             |
+| the archer           | 10                       | 2             |
+| the third rider      | 7                        | 2             |
+| the steward          | 24                       | 8             |
+| Tam's aunt           | 8                        | 5             |
+| Vane's son           | 2                        | 4             |
+| Brann's brother      | 0                        | 3             |
+| the Marigold, a ship | 1                        | 3             |
+| the Teeth, a reef    | 0                        | 1             |
+
+The named characters came in, Vane among them, involved in the wreck
+in 3 of 10, and no reply took Ilse for someone new. The riders barely
+moved, and the steward and the aunt rose, as the developer's bar has
+it. Two over-reaches came with it: "every named one" took the
+Marigold, a ship, and the Teeth, a reef, for characters, and the
+hanged brother, unnamed and dead, came in on "dead or only spoken of",
+so defection's check against its extras fell to 7 of 10. One reply
+added "the man who signed that warrant", whom Brann demands, so the
+story does point at him; the check, written before this bar, counts
+him as noise. The mean rate of rule checks is 0.92 against 0.89, of
+judgment checks 0.68 against 0.72. Kept, the over-reach the next
+change's.
+
 ## Where it stands
 
 Every change so far, with the check it was made for. The baseline and
