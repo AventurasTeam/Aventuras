@@ -99,12 +99,18 @@ Maela slid the paper across the table. He read it twice, then unpinned the tarni
       basis: 'rule',
       holds: (r) => !r.newFactions.some((f) => /warden|varro/i.test(f.name)),
     },
+    // The bargain at t1 and t2 involves both too; the theft is told at t3 and t4.
     {
       name: 'the ledger theft is a happening involving Brann and Maela',
       kind: 'expect',
       basis: 'judgment',
       holds: (r) =>
-        r.happenings.some((h) => involves(h, 'char_brann') && involves(h, 'char_maela')),
+        r.happenings.some(
+          (h) =>
+            (h.sourceTurn === 't3' || h.sourceTurn === 't4') &&
+            involves(h, 'char_brann') &&
+            involves(h, 'char_maela'),
+        ),
     },
     {
       name: 'a happening involves the toll-house, where the theft happened',

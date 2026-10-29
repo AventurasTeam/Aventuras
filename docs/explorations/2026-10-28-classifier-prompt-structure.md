@@ -1049,16 +1049,16 @@ windows, so they differ from the figures given at each change.
 
 | Change                 | The check it was made for                        | Before → after              | Rule / judgment mean     |
 | ---------------------- | ------------------------------------------------ | --------------------------- | ------------------------ |
-| baseline               |                                                  |                             | 0.64 / 0.84              |
+| baseline               |                                                  |                             | 0.64 / 0.72              |
 | 1, knownAwareness      | knownAwareness names only a listed happening     | 11/25 → 17/25               | 0.68 / 0.84              |
-| 2, headings            | the same                                         | 37/50 → 49/50               | 0.73 / 0.88              |
-| 3, threadStatuses      | every ID names a listed row or a declared handle | 38/50 → 47/50               | 0.73 / 0.88              |
-| 4, change of sides     | a none beside Brann's join                       | 10/20 → 4/60                | 0.74 / 0.88              |
-| 5, titles              | calls that drop a happening                      | 4/50 → 0 in every run since | 0.73 / 0.94              |
+| 2, headings            | the same                                         | 37/50 → 49/50               | 0.73 / 0.86              |
+| 3, threadStatuses      | every ID names a listed row or a declared handle | 38/50 → 47/50               | 0.73 / 0.84              |
+| 4, change of sides     | a none beside Brann's join                       | 10/20 → 4/60                | 0.74 / 0.84              |
+| 5, titles              | calls that drop a happening                      | 4/50 → 0 in every run since | 0.73 / 0.92              |
 | 6, character bar       | replies naming an ambush rider                   | 10/30 → 7/40                | 0.74 / 1.00              |
-| 7, witnesses           | Brannoc aware of the wreck; reverted             | 0/10 → 16/20                | 0.75 / 0.94              |
-| 8, awareness, knowing  | Brannoc aware; Oriel knows                       | 0/20 → 10/10; 0/20 → 8/10   | 0.75 / 0.94              |
-| 9, story's direction   | Tam added; Vane added                            | 36/50 → 10/10; 8/50 → 10/10 | 0.79 / 0.86              |
+| 7, witnesses           | Brannoc aware of the wreck; reverted             | 0/10 → 16/20                | 0.75 / 0.92              |
+| 8, awareness, knowing  | Brannoc aware; Oriel knows                       | 0/20 → 10/10; 0/20 → 8/10   | 0.75 / 0.92              |
+| 9, story's direction   | Tam added; Vane added                            | 36/50 → 10/10; 8/50 → 10/10 | 0.79 / 0.84              |
 | 10, person, creature   | a ship, a reef, the hanged brother added         | 7 in 10 runs → 0            | 0.81 / 0.88              |
 | 11, invoked names      | `namedrops`: an invoked name or the fiddler      | 2/10 → 0/20                 | 0.77 / 0.82, 0.79 / 0.80 |
 | 12, one happening      | the ambush, the market one happening each        | 0/20 → 20/20                | 0.91 / 0.80 with 13      |
@@ -1078,6 +1078,9 @@ times this session: the granularity checks became rule checks with
 change 12, Tobin's and Pell's with change 13, and Tam's death, the
 steward, the aunt and the hanging's time were added, so every row reads lower on rules
 and differently on judgment than the figures given at each change.
+The theft check once passed on the alehouse bargain, which involves
+Brann and Maela too, and now looks only at the theft's turns; the
+baseline and changes 2 to 9 read lower on judgment for it.
 Judgment now rests on five checks, which swing a run's mean widely.
 
 Five fixes went into code: a none beside a join at one turn reads as a

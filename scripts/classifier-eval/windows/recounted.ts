@@ -103,7 +103,8 @@ Nessa folded the page into her coat. She would take it to the magistrates' court
       name: 'Nessa’s resolve to take the page to court is a new thread',
       kind: 'expect',
       basis: 'rule',
-      holds: (r) => r.newThreads.length > 0,
+      holds: (r) =>
+        r.newThreads.some((t) => /court|magistrat/i.test(`${t.title} ${t.description}`)),
     },
     // The scene at the lighthouse is an encounter and its own happening; Nessa learning of the
     // wreck is awareness on the wreck, which the checks above score.

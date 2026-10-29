@@ -120,7 +120,8 @@ Oriel ducked his head, pleased and embarrassed at once, and was gone.`,
       basis: 'rule',
       holds: (r) => {
         const tam = newCharacterNamed(r, /^tam( rook)?$/i)
-        // A sentence with a death in it and no flight: "who fled the night she died" passes.
+        // A sentence with a death in it, unless beside a flight and Senna, the death hers: "who fled
+        // the night she died" passes, "Tam fled, then was found dead" doesn't.
         const tellsDead = (text: string, about: RegExp) =>
           text
             .split(/[.;]/)
@@ -128,7 +129,11 @@ Oriel ducked his head, pleased and embarrassed at once, and was gone.`,
               (sentence) =>
                 about.test(sentence) &&
                 /\b(died|dead|killed|death)\b/i.test(sentence) &&
-                !/\b(fled|flee|ran|run|escap\w*|missing|vanish\w*|disappear\w*)\b/i.test(sentence),
+                !(
+                  /\b(fled|flee|ran|run|escap\w*|missing|vanish\w*|disappear\w*)\b/i.test(
+                    sentence,
+                  ) && /\b(senna|she|her)\b/i.test(sentence)
+                ),
             )
         return (
           !r.happenings.some((h) => tellsDead(h.description ?? '', /\btam\b/i)) &&

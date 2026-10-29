@@ -100,6 +100,48 @@ it('the learning window counts a retirement of Tam as making him dead', () => {
   expect(holds(retired)).toBe(false)
 })
 
+it('the learning window counts a death told beside a flight as Tam’s unless it is Senna’s', () => {
+  const w = EVAL_WINDOWS.find((x) => x.name === 'learning')!
+  const holds = w.checks.find((c) => c.name === 'no description tells Tam as dead')!.holds
+  const telling = (description: string) => ({
+    ...w.ideal,
+    newCharacters: w.ideal.newCharacters.map((c) =>
+      c.name === 'Tam Rook' ? { ...c, description } : c,
+    ),
+  })
+  expect(holds(telling('The cupbearer who fled the night she died.'))).toBe(true)
+  expect(holds(telling('The cupbearer, who fled, then was found dead.'))).toBe(false)
+})
+
+it('the defection window finds the theft at its own turns, not in the bargain', () => {
+  const w = EVAL_WINDOWS.find((x) => x.name === 'defection')!
+  const holds = w.checks.find((c) => c.name.startsWith('the ledger theft'))!.holds
+  const bargain = {
+    title: 'Brann sells the ledgers to House Varro',
+    involvements: [
+      { ref: 'char_brann', role: 'seller' },
+      { ref: 'char_maela', role: 'buyer' },
+    ],
+    awareness: [],
+    sourceTurn: 't2',
+  }
+  expect(holds(w.ideal)).toBe(true)
+  expect(holds({ ...w.ideal, happenings: [bargain] })).toBe(false)
+})
+
+it('the recounted window scores only a thread taking the page to court', () => {
+  const w = EVAL_WINDOWS.find((x) => x.name === 'recounted')!
+  const holds = w.checks.find((c) => c.name.endsWith('is a new thread'))!.holds
+  const thread = {
+    title: 'The son in the hall',
+    description: 'Vane’s son still rules Ostmark.',
+    status: 'active' as const,
+    sourceTurn: 't4',
+  }
+  expect(holds(w.ideal)).toBe(true)
+  expect(holds({ ...w.ideal, newThreads: [thread] })).toBe(false)
+})
+
 it("the defection window leaves the warrant's signer unscored, and counts the hanged brother", () => {
   const w = EVAL_WINDOWS.find((x) => x.name === 'defection')!
   const holds = w.checks.find((c) => c.name.startsWith('no new character but'))!.holds
