@@ -214,11 +214,18 @@ describe('periodic classifier template — system and user halves', () => {
     expect(system).not.toMatch(/\babove\b/)
   })
 
-  // classifier.md → What the classifier writes → New characters: a revealed name is a rename.
+  // classifier.md → What the classifier writes → New characters: a revealed name is a rename. The
+  // rule's parts are labelled sub-bullets, so a reply weighing one can't skip past another.
   it('adds every named person and an unnamed one the story points toward, never a thing, a revealed name or an invoked one', () => {
     const { system } = render()
     expect(system).toContain(
-      'every named person or creature, whether alive, dead or only spoken of, but never a named ship, place or thing, and an unnamed one the turns point the story toward, someone a character sets out to find or to face, or who is after one of them ("the innkeeper they ride to warn", "the bounty hunter on their trail"). Not an unnamed figure the scene is done with, even one who took part, nor one whose part is over ("a porter", "a sailor who helped haul the net", "a father long dead"), and not a listed character whose own name the turns reveal: that is a rename. Nor is a name the prose only invokes, in an oath, a saying or a song ("by Saint Mira\'s tears", "as Queen Ysolde used to say"). Put each in newCharacters with a handle you choose.',
+      [
+        '- New characters. Add a character the prose introduces who is not in the Known entities list:',
+        '  - Who to add: every named person or creature, whether alive, dead or only spoken of, but never a named ship, place or thing, and an unnamed one the turns point the story toward, someone a character sets out to find or to face, or who is after one of them ("the innkeeper they ride to warn", "the bounty hunter on their trail").',
+        '  - Who not to add: Not an unnamed figure the scene is done with, even one who took part, nor one whose part is over ("a porter", "a sailor who helped haul the net", "a father long dead"), and not a listed character whose own name the turns reveal: that is a rename. Nor is a name the prose only invokes, in an oath, a saying or a song ("by Saint Mira\'s tears", "as Queen Ysolde used to say").',
+        '  - A listed character under another name: A shortened or fuller name, a title or an alias of a listed character is that character unless the prose shows it is someone else: refer to it by its listed ID instead of adding a newCharacters entry, and put the new name form in aliases.',
+        '  - The entry: Put each in newCharacters with a handle you choose.',
+      ].join('\n'),
     )
   })
 
