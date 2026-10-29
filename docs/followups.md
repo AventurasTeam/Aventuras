@@ -61,23 +61,39 @@ for the placement rule.
   2026-10-20, failure policy 2026-10-22; its flag's reason left to it
   by the AI writer map.
 
-- **Prompt content pass.** The
-  [system and user halves](./architecture.md#system-and-user-halves)
-  moved today's prompts into the new shape without rewriting them, and
-  the content still needs writing: the narrator's standing instructions
-  (its role, the story's mode and lead, and the narration person, which
-  [`data-model.md`](./data-model.md) says governs how the AI writes
-  prose but no bundled template renders, the wizard's opening
-  included), which today are one output-format line; the wizard's system halves, empty because each
-  shared context macro mixes the output contract with grounding that
-  changes as the user fills the wizard in, so each splits into a
-  contract macro and a grounding macro; and the blocks the split left in
-  a user half only because they point at its content by position. The
-  pass is done when every story and settings input the user sets
-  reaches the prompts that should carry it. It comes before play
-  testing, which needs those inputs in place to tune against; tuning
-  the wording is [prompt tuning](#tuning-and-play-testing). Raised
-  2026-10-11.
+- **Implement the prompt content pass.** Canon now says what each
+  prompt carries so that every story and settings input reaches the
+  prompts that should carry it: the rules in
+  [`principles.md → Mode, lead, and narration`](./ui/principles.md#mode-lead-and-narration--three-orthogonal-concepts),
+  where they land in
+  [`architecture.md → System and user halves`](./architecture.md#system-and-user-halves).
+  The work:
+  - the generation context resolves `lead` through `resolveLead` and
+    builds `currentTime` through the calendar renderer, and the
+    wizard's context the start time, each added to the variable
+    registry and its parity tests;
+  - a happening row names who knows it (`lib/retrieval/run.ts`), and
+    the lead joins the scope in adventure and first or second person
+    ([`retrieval.md → POV-awareness scope`](./memory/retrieval.md#pov-awareness-scope));
+  - the standing-instructions macro, in the narrator's system half and
+    the wizard opening;
+  - the suggestion-voice macro, in the tagged and the JSON suggestion
+    emissions, so the narrator's reply, the fallback's fold and the
+    refresh call all carry it;
+  - every history marks the user's turns, and the classifiers get the
+    mode rule, the fallback its lead line
+    ([`classifier.md → What the classifier reads`](./memory/classifier.md#what-the-classifier-reads));
+  - the title and description calls read what
+    [`wizard.md → Context-shaping`](./ui/screens/wizard/wizard.md#context-shaping)
+    lists, and a description runs 1–3 sentences.
+
+  The template tests pin that a rename of the lead changes a system
+  half and nothing else per call does. The classifier's evaluation set
+  is re-run on the dev model, since the mode rule and the marks change
+  what it reads. It comes before play testing, which needs those inputs
+  in place to tune against; tuning the wording is
+  [prompt tuning](#tuning-and-play-testing). Raised 2026-10-11,
+  designed 2026-10-29.
 
   The pass also takes the whitespace and wording nits the halves PR's
   reviews found in the bundled prompts, all older than the split
@@ -267,6 +283,19 @@ breakdown under [UX](#ux).
   Raised by the developer 2026-10-25, split from the prompt content
   pass.
 
+  Two more placement questions wait on the same measurement: whether
+  the wizard's shared macros split into an output contract and the
+  grounding that changes as the user fills the wizard in, giving its
+  templates a system half; and whether the blocks a user half keeps
+  only because they point at its content by position (the ID
+  instructions, the state and suggestion emission) move to the system
+  half, caching about 1.5k tokens a turn but taking a format directive
+  from the end of the prompt, where models follow it best. Play also
+  checks the content pass's rules hold: the narrator keeps to the
+  lead's attempt and to what each character knows, chips keep their
+  voice, and the classifiers don't record a direction as something
+  that happened. Added 2026-10-29 by the content pass's design.
+
 - **Judge the classifier's descriptions.** A happening's description
   is the story's memory of the scene, recalled later as fact, and the
   evaluation set's checks look for the facts a reply must hold but
@@ -295,3 +324,4 @@ breakdown under [UX](#ux).
   - [Multi-axis salience](./parked.md#multi-axis-salience)
   - [Prompt-cache optimization](./parked.md#prompt-cache-optimization)
   - [Calibrating the token estimate per model](./parked.md#calibrating-the-token-estimate-per-model)
+  - [A limited narrator in second and third person](./parked.md#a-limited-narrator-in-second-and-third-person)

@@ -1425,7 +1425,8 @@ regresses.
   `source` descriptors — no authored list to curate, and no `priority`
   to order by. Decisively, direct seating would bypass
   [POV-awareness scope](#pov-awareness-scope), which admits happenings
-  only through `character_id IN (sceneEntities ∩ characters)`; a
+  only through the in-scene characters' awareness rows, the lead's
+  among them where the story is told from their side; a
   keyword path assembling its own candidates would seat happenings no
   in-scene character is aware of. That is an information leak, not a
   tuning preference.
@@ -1666,17 +1667,29 @@ characters' awareness rows** in both adventure and creative modes:
 
 ```sql
 SELECT * FROM happening_awareness
-WHERE character_id IN ({sceneEntities ∩ characters})
+WHERE character_id IN ({sceneEntities ∩ characters} ∪ {lead})
 ```
+
+The lead joins the set in adventure and in first- or second-person
+narration, whether or not the turn's scene tags name them: the story
+is told from the lead's side there, and a missed tag mustn't wipe what
+the lead knows. Otherwise, and when the lead doesn't resolve on the
+branch, the set is the scene's characters alone.
 
 Lead-only filtering was considered for adventure mode and rejected.
 Characters can feasibly acquire knowledge without the protagonist
-present (detached-POV moments), and the `narration` setting
-(`first | second | third`) is the lever for POV-constraint via
-prompt, not retrieval. The risk of leakage (AI mentions things the
-protagonist shouldn't know) is bounded by narration-mediated
-prompting; the schema supports tightening to lead-only later if
-real-world testing shows persistent leakage.
+present (detached-POV moments), and the prompt, not retrieval, keeps
+each character to what they know. A happening row's text is its title,
+its description, then one line naming each character in the scope who
+knows it and how, from their awareness rows' `source`
+(`Known to: Aria (witnessed firsthand); Jorin (told by Aria)`), or
+`Common knowledge` for a common-knowledge happening, which has none.
+The ranker measures that text, names included. A character in the
+scene whom the line doesn't name doesn't know it, which is what the
+narrator's knowledge rule acts on
+([`ui/principles.md → Narration`](../ui/principles.md#3-narration--the-prose-person-the-ai-writes-in)).
+The schema supports tightening to lead-only later if real-world testing
+shows persistent leakage.
 
 ---
 

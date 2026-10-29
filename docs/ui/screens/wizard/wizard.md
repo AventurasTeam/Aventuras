@@ -795,10 +795,14 @@ Both have AI-suggest:
 - **Title** — chips result. Wizard-assist generates 5–10 candidate
   titles. Click chip to fill. `Regenerate` for fresh batch.
 - **Description** — prose result (short). 1–3 sentences synthesizing
-  the story.
+  the story's premise: who, where and what's at stake, not narrative
+  prose.
 
-Both calls fire from this step → see EVERYTHING (mode/narration/
-calendar/genre/tone/setting/lore/cast/opening). Resolves the
+Both calls fire from this step, so they see the whole story: the mode
+and the lead, the genre and tone by label, the setting, the active
+cast by name and description, the lore by title, and the opening. A
+genre or tone body is instructions to a model, not a fact about the
+story, and the calendar says nothing a title needs. Resolves the
 "title generation with no prior data" concern that drove placing
 identity at the end.
 
@@ -1096,9 +1100,18 @@ across different kinds is not a match (collisions show
 ### Context-shaping
 
 Each call's prompt context is built from **current wizard state at
-call time**. Quality compounds as the wizard progresses; by step
-5, calls see everything (mode/narration/calendar/genre/tone/
-setting/lore/cast/opening).
+call time**, and each reads the part of it that bears on its field.
+Quality compounds as the wizard progresses:
+
+| Call               | Reads                                                                                                                                                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Genre              | setting, tone                                                                                                                                                                                                                   |
+| Tone               | setting, genre                                                                                                                                                                                                                  |
+| Setting            | genre, tone                                                                                                                                                                                                                     |
+| Lore               | setting, genre, the lore already written                                                                                                                                                                                        |
+| Cast               | setting, genre, tone, lore, the cast already there                                                                                                                                                                              |
+| Opening            | the narrator's standing instructions for the mode, the narration and the lead ([`architecture.md → System and user halves`](../../../architecture.md#system-and-user-halves)), the start time, setting, genre, tone, lore, cast |
+| Title, description | the whole story, as [Title + description](#title--description--inlined-below-opening) lists                                                                                                                                     |
 
 ## Trigger inventory
 

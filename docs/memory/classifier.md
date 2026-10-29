@@ -18,7 +18,17 @@ The prompt opens with its system half
 the role line and the extraction rules, which name the lists they
 refer to rather than pointing above: first the rules every list keeps,
 then each list's rules under a heading naming it, in the order the
-reply writes the lists. Its user half carries the
+reply writes the lists. The rules every list keeps include the mode
+rule, how to read a user's turn
+([`ui/principles.md → Mode`](../ui/principles.md#1-mode--users-relationship-to-the-story)):
+in an adventure a user's turn is what the lead does, says or attempts,
+so where the narration after it shows the outcome the narration
+decides it, and what the lead says stands unless the narration
+contradicts it; in a creative story, and for text in an adventure that
+plainly addresses the narrator, a turn that reads as a direction
+states nothing that happened, so facts come from the narration, and a
+turn that reads as prose is classified like the narration. Its user
+half carries the
 branch's world as lists the classifier addresses by placeholder id
 ([ID handling](#id-handling-in-classifier-output)), then the turns:
 
@@ -88,7 +98,8 @@ branch's world as lists the classifier addresses by placeholder id
   the prose never names the lead, and a scene with someone else in it
   doesn't say which one "you" is.
 - **Turns to classify** — the window's entries by turn handle, each
-  with its prose and the scene saved on it: the entry's
+  marked as the user's when it is a `user_action`, with its prose and
+  the scene saved on it: the entry's
   `sceneEntities` and `currentLocationId`
   ([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)),
   as the same placeholder ids. The saved scene includes the user's

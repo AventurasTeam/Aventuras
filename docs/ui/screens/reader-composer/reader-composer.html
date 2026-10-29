@@ -2254,16 +2254,16 @@
 
   const suggestionSets = {
     adventure: [
-      { kind: 'action', label: 'Action', text: 'Aria reaches for her blade, testing its balance against the weight of the moment.' },
-      { kind: 'dialogue', label: 'Dialogue', text: '"You were there, weren\'t you? At the Warden\'s fall."' },
-      { kind: 'examine', label: 'Examine', text: 'Aria studies Kael\'s face for tells of deceit, noting the scar along his jaw.' },
-      { kind: 'move', label: 'Move', text: 'Aria steps toward the back door, keeping Kael in her peripheral vision.' },
+      { kind: 'action', label: 'Action', text: 'I reach for my blade, testing its balance against the weight of the moment.' },
+      { kind: 'dialogue', label: 'Dialogue', text: '"You were there, weren\'t you? At the Warden\'s fall," I said.' },
+      { kind: 'examine', label: 'Examine', text: 'I study Kael\'s face for tells of deceit, noting the scar along his jaw.' },
+      { kind: 'move', label: 'Move', text: 'I step toward the back door, keeping Kael in my peripheral vision.' },
     ],
     creative: [
-      { kind: 'action', label: 'Action', text: 'Aria draws her blade in a single smooth motion, the steel catching the tavern light.' },
-      { kind: 'dialogue', label: 'Dialogue', text: '"I knew you\'d come for me," Kael says, with a weariness that surprises her.' },
-      { kind: 'revelation', label: 'Revelation', text: 'A memory surfaces: Aria recognizes the faint sigil burned into Kael\'s palm — Warden\'s Mark.' },
-      { kind: 'twist', label: 'Twist', text: 'The tavern door bursts open. Boots on wood. The Warden\'s men, here already.' },
+      { kind: 'action', label: 'Action', text: 'Aria draws her blade on Kael before he can explain.' },
+      { kind: 'dialogue', label: 'Dialogue', text: 'Kael admits he knew Aria would come for him.' },
+      { kind: 'revelation', label: 'Revelation', text: 'Aria recognizes the Warden\'s Mark burned into Kael\'s palm.' },
+      { kind: 'twist', label: 'Twist', text: 'The Warden\'s men burst into the tavern.' },
     ],
   };
 
@@ -2279,7 +2279,7 @@
     suggestionsList.querySelectorAll('.suggestion').forEach(s => {
       s.addEventListener('click', () => {
         const text = s.querySelector('.suggestion-text').textContent.trim();
-        // Fill composer with suggestion text; set mode to Free (suggestion is complete prose, no further wrapping needed).
+        // Fill composer with suggestion text; set mode to Free (a suggestion is a finished turn, no further wrapping needed).
         document.querySelector('.composer-input').textContent = text;
         document.getElementById('mode-label').textContent = 'Free';
         document.querySelectorAll('.mode-menu-item').forEach(m => m.classList.toggle('active', m.dataset.modeValue === 'Free'));
@@ -2299,7 +2299,7 @@
           : 'Filtered through Aria\'s perspective';
       }
       renderSuggestions(mode);
-      // composer mode picker is adventure-only — hidden in creative (user writes prose directly, no wrapping)
+      // composer mode picker is adventure-only — hidden in creative (user writes directions or prose directly, no wrapping)
       document.querySelector('.mode-picker').classList.toggle('hidden', mode !== 'adventure');
       document.querySelectorAll('[data-mode]').forEach(x => x.classList.toggle('active', x === b));
     });

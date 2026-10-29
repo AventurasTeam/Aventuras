@@ -1307,6 +1307,20 @@ folds the system half into the start of the user message. Parked
 2026-10-11; the signal is a report of a model failing on the system
 role.
 
+#### A limited narrator in second and third person
+
+Only first-person narration keeps to what the lead knows
+([`principles.md → Narration`](./ui/principles.md#3-narration--the-prose-person-the-ai-writes-in)).
+A limited narrator would keep second- and third-person narration
+there too: a prompt variant of the standing instructions, chosen per
+story, reading the happening rows that already name who knows each.
+Should the prompt not hold the line, retrieval's scope can tighten to
+the lead
+([`retrieval.md → POV-awareness scope`](./memory/retrieval.md#pov-awareness-scope)).
+Parked 2026-10-29 by the prompt content pass's design; the signal is
+users asking for it, or play showing the omniscient narrator giving
+away what the story should keep back.
+
 #### Unicode case folding for names and terms
 
 Names, keyword terms and stackable keys compare lowercased

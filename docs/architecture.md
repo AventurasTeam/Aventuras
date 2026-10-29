@@ -183,8 +183,9 @@ Every macro is created with a **context group tag**. The group drives:
    group's variables when editing the macro (same registry that powers
    template autocomplete)
 2. **Include compatibility** — a template in group G can only include
-   macros tagged with G or `staticContent` (the zero-variable fallback
-   for truly group-free macros like output-format directives). The
+   macros tagged with G or `staticContent` (the fallback for
+   group-free macros that read no context variable, only what an
+   include passes them, like output-format directives). The
    editor flags mismatches at author time; a runtime validator catches
    them on pack load. Full validator contract (when it runs, what it
    validates, failure surface) lands with pack-design — see
@@ -197,9 +198,10 @@ Example built-in macros:
   ([Entity state on the template surface](#entity-state-on-the-template-surface))
 - `macro_item_line` (`generationContext`) — one held or loose item's
   line, shared by `Holds:` and `Here:`
-- `macro_happening_for_memory` (`generationContext`) — a happening
-  formatted as it would appear in a POV character's memory, including
-  the source descriptor
+- the narrator's standing instructions (`staticContent`) — its role
+  and the mode, lead and narration rules, given as parameters, shared
+  by the per-turn narrative and the wizard's opening
+  ([System and user halves](#system-and-user-halves))
 - `macro_output_format_narrative` (`staticContent`) — the output
   instruction block for narrative generation
 - `macro_wizard_genre_context` (`wizard`) — the genre output contract
@@ -240,7 +242,11 @@ story's calls of that template, its standing instructions and the
 story definition, and must render byte-identically from one call to the
 next unless the user changes what it reads: the story, or a setting it
 resolves through, as reassigning the narrative model in App Settings
-changes `piggybackFires`. Everything that changes per call
+changes `piggybackFires`. The one other change is the lead's name, which
+a pass's reveal can rename, rarely enough that the miss costs little. A
+system half names the lead and never brackets an id: placeholders are
+allocated per call, in the order the context is walked, so an id there
+would move it every call. Everything that changes per call
 goes in the user half: the scene, retrieval, the history, and a format
 directive that depends on a per-call flag. Providers send the system
 message first and cache from the start of the request, so one per-call
@@ -268,13 +274,36 @@ Wider caching is
 
 The bundled pack splits its templates this way:
 
-| Template                      | System half                                                                     | User half                                                                                                                                                                                       |
-| ----------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Per-turn narrative            | Setting, Genre, Tone, Calendar, the output-format line                          | In scene, Current location, the location map and held items, the memory blocks, the ID instructions, Story so far, the state and suggestion emission                                            |
-| Piggyback fallback classifier | Calendar                                                                        | Everything else in its order: the ID roster, the scene, the location map and held items, the memory blocks, the characters the turn names, the turns and the report directives that follow them |
-| Periodic classifier           | The role line and the rules                                                     | The Known lists and the turns                                                                                                                                                                   |
-| Suggestion refresh            | Setting, Genre, Tone                                                            | In scene, Story so far, the next-turn options and the reader's draft                                                                                                                            |
-| Wizard templates              | Empty; on the prompt-injection path the structured-output contract supplies one | Everything                                                                                                                                                                                      |
+| Template                      | System half                                                                       | User half                                                                                                                                                                                                    |
+| ----------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Per-turn narrative            | The standing instructions, Setting, Genre, Tone, Calendar, the output-format line | In scene, Current location, Current time, the location map and held items, the memory blocks, the ID instructions, Story so far, the state and suggestion emission                                           |
+| Piggyback fallback classifier | Calendar, the mode rule                                                           | Everything else in its order: the ID roster and the lead, the scene, the location map and held items, the memory blocks, the characters the turn names, the turns and the report directives that follow them |
+| Periodic classifier           | The role line and the rules, the mode rule among them                             | The Known lists, the lead and the turns                                                                                                                                                                      |
+| Suggestion refresh            | Setting, Genre, Tone                                                              | In scene, Story so far, the next-turn options and the reader's draft                                                                                                                                         |
+| Wizard templates              | Empty; on the prompt-injection path the structured-output contract supplies one   | Everything                                                                                                                                                                                                   |
+
+**The standing instructions are shared macros.** One holds the
+narrator's, given the mode, the narration person and the lead's name,
+and the per-turn narrative and the wizard's opening both include it;
+its rules are
+[`principles.md → Mode, lead, and narration`](./ui/principles.md#mode-lead-and-narration--three-orthogonal-concepts).
+Another holds the voice of next-turn suggestions, given the mode, the
+wrap person and the lead's name. The tagged and the JSON suggestion
+emissions include it, so every path that writes chips carries it: the
+narrator's reply, the fallback classifier's fold and the refresh call
+([`reader-composer.md → Next-turn suggestions`](./ui/screens/reader-composer/reader-composer.md#next-turn-suggestions)).
+Each reads no context variable, only its parameters, as the memory
+blocks macro does, so each is `staticContent`, and a
+template passes the lead its context resolves: `lead`, the story's lead
+through `resolveLead`, absent when it dangles on the branch, or the
+wizard draft's. Without a lead the instructions name none, and
+narration in first or second person still holds.
+
+**Every history marks the user's turns.** Story so far, the fallback's
+turns and the periodic classifier's turns mark a `user_action` entry
+as the user's, so a model can tell the lead's attempt or a direction
+from the narration; the opening and the replies render unmarked. The
+mark costs a few tokens per user turn.
 
 ### Structured output — the JSON contract is not pack content
 
@@ -558,18 +587,18 @@ exposes the wizard's state fields directly.
 
 ### v2 shape of `generationContext` — what's carried over, what changes
 
-| Old variable                                   | V2 replacement                                                                                                                                |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `characters` / `locations` / `items`           | Unified under `entities` discriminated by `kind`                                                                                              |
-| `storyBeats`                                   | Renamed `threads`                                                                                                                             |
-| `lorebookEntries`                              | Split: `lore` (timeless reference) + entities with `status='staged'` (pre-introduced actors)                                                  |
-| `relevantWorldState`                           | Same concept; filtered slice of entities/happenings/lore driven by POV character's `happening_awareness`                                      |
-| `timeTracker`                                  | Derived from latest entry's `metadata.worldTime` + `definition.worldTimeOrigin` (see data-model.md → "In-world time tracking")                |
-| `genre` / `tone` (single-string fields)        | `definition.genre.{label,promptBody}` and `definition.tone.{label,promptBody}` — substantial preset+prose blocks (label + body)               |
-| `setting` (no v1 equivalent in old context)    | New: `definition.setting` — freeform prose injected into generation context                                                                   |
-| `translated_*` columns via `translationResult` | Reads through the `translations` table (polymorphic target) instead of per-column fields                                                      |
-| Pipeline intermediates (narrativeResult, etc.) | Same — written to the run's intermediates, available to later templates within the run                                                        |
-| `packVariables.runtimeVariables`               | Same pattern; deferred until pack system lands (see [`parked.md → Pack runtimeVariables surface`](./parked.md#pack-runtimevariables-surface)) |
+| Old variable                                   | V2 replacement                                                                                                                                                                                                                                                                                     |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `characters` / `locations` / `items`           | Unified under `entities` discriminated by `kind`                                                                                                                                                                                                                                                   |
+| `storyBeats`                                   | Renamed `threads`                                                                                                                                                                                                                                                                                  |
+| `lorebookEntries`                              | Split: `lore` (timeless reference) + entities with `status='staged'` (pre-introduced actors)                                                                                                                                                                                                       |
+| `relevantWorldState`                           | Same concept; filtered slice of entities/happenings/lore driven by the in-scene characters' `happening_awareness`, the lead always among them where the story is told from their side                                                                                                              |
+| `timeTracker`                                  | `currentTime`: the latest entry's `metadata.worldTime` from `definition.worldTimeOrigin`, in the calendar's display format; the narrator's Current time, absent when no calendar resolves or the render fails ([`data-model.md → In-world time tracking`](./data-model.md#in-world-time-tracking)) |
+| `genre` / `tone` (single-string fields)        | `definition.genre.{label,promptBody}` and `definition.tone.{label,promptBody}` — substantial preset+prose blocks (label + body)                                                                                                                                                                    |
+| `setting` (no v1 equivalent in old context)    | New: `definition.setting` — freeform prose injected into generation context                                                                                                                                                                                                                        |
+| `translated_*` columns via `translationResult` | Reads through the `translations` table (polymorphic target) instead of per-column fields                                                                                                                                                                                                           |
+| Pipeline intermediates (narrativeResult, etc.) | Same — written to the run's intermediates, available to later templates within the run                                                                                                                                                                                                             |
+| `packVariables.runtimeVariables`               | Same pattern; deferred until pack system lands (see [`parked.md → Pack runtimeVariables surface`](./parked.md#pack-runtimevariables-surface))                                                                                                                                                      |
 
 Definitional fields (mode, lead, narration, genre, tone, setting,
 calendar) are sourced from `story.definition`; operational fields
@@ -1255,9 +1284,12 @@ see
 
 Retrieval queries the awareness graph as the **union of all in-scene
 characters' awareness rows** in both adventure and creative modes,
-not lead-only. Detached-POV moments (a non-lead character acquiring
-knowledge in a side scene) need the wider scope; the `narration`
-setting is the lever for POV-constraint via prompt, not retrieval.
+not lead-only, and the lead always counts in adventure and in first-
+or second-person narration. Detached-POV moments (a non-lead character
+acquiring knowledge in a side scene) need the wider scope. Each
+happening row names which in-scene characters know it, and the
+narrator's standing instructions keep each character to what they know
+([`ui/principles.md → Narration`](./ui/principles.md#3-narration--the-prose-person-the-ai-writes-in)).
 See
 [`memory/retrieval.md → POV-awareness scope`](./memory/retrieval.md#pov-awareness-scope).
 

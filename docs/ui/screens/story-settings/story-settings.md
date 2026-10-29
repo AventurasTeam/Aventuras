@@ -249,8 +249,13 @@ Houses three groupings, each with its own sub-section:
 3. **Authoring aids** — composer modes toggle + wrap POV
    (first/third) + suggestions toggle + `suggestionCount` stepper +
    [Suggestion categories](#suggestion-categories) editor. Wrap POV is
-   disabled while composer modes are off, and so whenever the modes
-   toggle itself is unavailable (creative or unknown mode).
+   the person the user's input is written in: what the composer modes
+   wrap, and what adventure's suggestions, offered as input, say
+   ([`reader-composer.md → Next-turn suggestions`](../reader-composer/reader-composer.md#next-turn-suggestions)).
+   It is disabled only where it affects nothing: while composer modes
+   and suggestions are both off, and whenever the modes toggle itself
+   is unavailable (creative or unknown mode), since creative chips are
+   directions in third person.
 
 ### Orthogonal axes
 
@@ -891,12 +896,12 @@ to inform, not to gatekeep.
 
 ### Flagged fields
 
-| Tab        | Field             | Why flagged                                                                                             |
-| ---------- | ----------------- | ------------------------------------------------------------------------------------------------------- |
-| Generation | `mode`            | Switching adventure ↔ creative reframes the user's relationship to the story going forward.             |
-| Generation | `narration`       | Changing first/second/third-person mid-story reads as a voice break unless intentional.                 |
-| Generation | `composerWrapPov` | Changes how new user input in `Do` / `Say` / `Think` modes is rendered. Existing entries stay as-saved. |
-| Pack       | `activePackId`    | Rewrites the prompt shape on the next turn. Story content unaffected; generation patterns shift.        |
+| Tab        | Field             | Why flagged                                                                                                                                                    |
+| ---------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Generation | `mode`            | Switching adventure ↔ creative reframes the user's relationship to the story going forward.                                                                    |
+| Generation | `narration`       | Changing first/second/third-person mid-story reads as a voice break unless intentional.                                                                        |
+| Generation | `composerWrapPov` | Changes how new user input in `Do` / `Say` / `Think` modes is rendered, and the person adventure's suggestions are written in. Existing entries stay as-saved. |
+| Pack       | `activePackId`    | Rewrites the prompt shape on the next turn. Story content unaffected; generation patterns shift.                                                               |
 
 Not flagged, deliberately:
 
@@ -925,8 +930,8 @@ changes downstream:
 - **`narration`** — "Changes the AI's prose voice from the next
   turn forward. Existing entries are unchanged."
 - **`composerWrapPov`** — "Affects how new user input in `Do` /
-  `Say` / `Think` modes is rendered. Existing entries stay
-  as-saved."
+  `Say` / `Think` modes is rendered, and the person suggestions are
+  written in. Existing entries stay as-saved."
 - **`activePackId`** — "Switches the active pack — the prompt shape
   rewrites on the next turn. Story content stays; generation
   patterns change."

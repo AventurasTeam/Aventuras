@@ -775,10 +775,25 @@ tinted background), suggestion prose body, left-edge color accent
 strip from the stored palette slot. Color is visual identity only;
 screen readers get the category label as accessible text.
 
-**Suggestions are complete prose.** Tap → composer text replaces
-with the suggestion, composer mode set to **`Free`** (suggestion is
-already finished prose; no further wrapping needed). User can edit
+**Suggestions are finished turns.** Tap → composer text replaces
+with the suggestion, composer mode set to **`Free`** (the suggestion
+is already a finished turn; no further wrapping needed). User can edit
 text and/or override mode before sending.
+
+**A chip is written as the user's next turn**, in the sense of
+[`principles.md → Mode`](../../principles.md#1-mode--users-relationship-to-the-story).
+All three emission paths are given the mode, the wrap person and the
+lead
+([`architecture.md → System and user halves`](../../../architecture.md#system-and-user-halves)):
+
+- **Adventure** — each option is the lead's next turn, never how the
+  world responds, written in `composerWrapPov`: "I…" in first person,
+  the lead's name in third. It draws only on what the lead knows. With
+  no lead on the branch it is written in first person, which needs no
+  name.
+- **Creative** — each option is a short direction for the next beat,
+  in third person by name ("Kael confronts Aria about the letter"),
+  and may involve any character.
 
 **Known UX wart — tap-after-typing loses typed text.** Composer
 input isn't delta-logged (it's pre-submit state), so no Cmd/Ctrl-Z

@@ -766,8 +766,14 @@ Its scene sections and memory blocks bracket ids throughout, beside
 the state they show, rather than leave the model to match a name to
 the roster.
 
-Its system half is the calendar vocabulary, and everything else, the
-report directives included, is its user half
+It reads a user's turn as the periodic classifier does: its turns mark
+the user's, it names the lead by id and name after the roster, and the
+mode rule tells it what a user's turn establishes
+([`classifier.md → What the classifier reads`](./classifier.md#what-the-classifier-reads)).
+
+Its system half is the calendar vocabulary and the mode rule, and
+everything else, the lead and the report directives included, is its
+user half: the lead's placeholder id changes from call to call
 ([`architecture.md → System and user halves`](../architecture.md#system-and-user-halves)).
 A fallback recovering from a failed piggyback parse carries no cache
 marker.

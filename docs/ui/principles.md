@@ -569,10 +569,33 @@ because it conflated three distinct concepts.
 ### 1. Mode — user's relationship to the story
 
 - **Adventure** — the user is a character. A lead entity is required
-  (must be `kind=character`). Pipeline filters prompt context by the
-  lead's awareness links.
+  (must be `kind=character`).
 - **Creative writing** — the user is a director. Lead is optional
-  (ensemble stories). No awareness filtering applied.
+  (ensemble stories).
+
+In both modes the narrator sees what the characters in the scene know,
+each happening naming who of them knows it
+([`retrieval.md → POV-awareness scope`](../memory/retrieval.md#pov-awareness-scope)).
+The mode decides what a user's turn is, and the narrator's standing
+instructions say so:
+
+- **An adventure turn is the lead's attempt.** It is what the lead
+  does, says or attempts. The narrator plays it out and decides how the
+  world and the other characters respond, failure included. It may give
+  the lead perceptions, sensations and involuntary reactions, but never
+  a choice, a line of speech or an action the user didn't write, and it
+  stops at the lead's next choice; the opening ends where the lead's
+  first choice begins. Text that plainly addresses the narrator rather
+  than playing the lead ("skip to the next morning") is followed as a
+  direction.
+- **A creative turn is a direction or prose.** The narrator writes the
+  passage that carries out a turn that reads as a direction and
+  continues from one that reads as prose, and writes any character, the
+  lead included.
+
+The classifiers read a user's turn the same way: an attempt's outcome
+and a direction's events come from the narration
+([`classifier.md → What the classifier reads`](../memory/classifier.md#what-the-classifier-reads)).
 
 ### 2. Lead — which character the story is about
 
@@ -599,6 +622,13 @@ Narration governs **AI output only.** It does NOT affect how the
 user's own input gets wrapped — see "Composer mode" below. Composer
 wrap POV is a separate setting restricted to first/third
 (second-person makes no sense for user-composed input).
+
+**The narration is omniscient, the characters aren't.** A character
+speaks, acts and remembers only from what they know. In second and
+third person the narration may tell what no one in the scene knows; in
+first person the narrator is the lead, so the narration keeps to what
+the lead knows too. A limited narrator in second and third person is
+[parked](../parked.md#a-limited-narrator-in-second-and-third-person).
 
 Field: `stories.definition.narration: 'first' | 'second' | 'third'`.
 
@@ -764,7 +794,9 @@ writes as a director; the value only takes effect if the story later
 switches to adventure, since modes are adventure-only).
 Second-person isn't offered — "you reach for the blade" makes no
 sense as user-composed input (the user isn't the narrator addressing
-themselves).
+themselves). Adventure's next-turn suggestions are written in the same
+person, so a chip reads as a turn the user could have sent
+([`reader-composer.md → Next-turn suggestions`](./screens/reader-composer/reader-composer.md#next-turn-suggestions)).
 
 Examples (adventure mode, lead = Aria):
 
@@ -793,7 +825,7 @@ want voice-matched entries can pick a wrap POV that aligns or use
   — per-story toggle; the user opts out per story. When off, the
   composer has no mode picker; user text is sent verbatim.
 - In creative mode, modes are **always hidden** regardless of the
-  toggle. User is a director writing prose directly — no shorthand
+  toggle. User is a director writing directions or prose directly — no shorthand
   to expand.
 
 If either condition hides the picker, the composer reduces to

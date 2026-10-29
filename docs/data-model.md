@@ -1429,10 +1429,12 @@ reader resolves it through `resolveLead` and treats a dangling lead as
 absent — the composer disables its third-person wrap until a new lead
 is set. One reader still sees the raw id: `isStoryLead`
 (`lib/actions/entities/register.ts`) only matches it against a live
-row, so a dangling id is harmless there. No bundled generation
-template reads `leadEntityId` directly — the generation template
-context (`lib/pipeline/definitions/generation-context.ts`) spreads
-`definition` as-is. (The wizard context macro,
+row, so a dangling id is harmless there. The generation and classifier
+contexts resolve it the same way and hand templates `lead`, absent when
+it dangles, so no bundled template reads
+`stories.definition.leadEntityId` directly
+([`architecture.md → System and user halves`](./architecture.md#system-and-user-halves)).
+(The wizard context macro,
 `lib/prompts/bundled/wizard.ts`, reads the wizard draft's lead, not
 `stories.definition.leadEntityId`, so it's unaffected either way.)
 Deleting the lead is refused. A per-branch, delta-logged lead is
@@ -1481,7 +1483,7 @@ stories.settings: {
 
   // Composer
   composerModesEnabled: boolean     // adventure-only; creative ignores; default true
-  composerWrapPov: 'first' | 'third' // how composer modes wrap user input (NOT narration); default set by mode at creation — 'first' adventure, 'third' creative
+  composerWrapPov: 'first' | 'third' // how composer modes wrap user input (NOT narration), and the person adventure's next-turn suggestions are written in; default set by mode at creation — 'first' adventure, 'third' creative
   suggestionsEnabled: boolean       // gates next-turn suggestion pane
 
   // Next-turn suggestions — user-customizable category palette + literal count
@@ -1631,7 +1633,8 @@ author-input config.
 **Narration vs composer wrap POV — orthogonal axes, often confused.**
 `narration` governs how the AI writes prose (`first | second | third`
 person). `composerWrapPov` governs how the composer's lazy-input modes
-(Do/Say/Think) wrap user text into sendable form. These are distinct:
+(Do/Say/Think) wrap user text into sendable form, and the person
+adventure's next-turn suggestions are written in. These are distinct:
 second-person narration doesn't imply wrapping user input as "You
 reach for..." — that would produce nonsense. Composer wrap POV is
 restricted to `first | third` (second not offered); narration has all
