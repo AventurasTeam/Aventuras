@@ -70,7 +70,7 @@ describe('writeJudgeDump', () => {
   it('writes the turns, each run under a label, and the key naming each label’s run', () => {
     const first = saveRun('first', {
       'ambush.10.json': 'tenth',
-      'ambush.2.json': 'second',
+      'ambush.02.json': 'second',
       'ambush.2.raw.txt': 'not a reply',
       'ambush.system.txt': 'not a reply',
     })

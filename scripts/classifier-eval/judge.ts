@@ -38,15 +38,14 @@ export function writeJudgeDump(
     const replies = windows.map((w) => ({
       w,
       numbered: files
-        .map((f) => new RegExp(`^${w.name}\\.(\\d+)\\.json$`).exec(f)?.[1])
-        .filter((n) => n != null)
-        .map(Number)
-        .sort((a, b) => a - b)
-        .map((n) => ({
+        .flatMap((file) => {
+          const n = new RegExp(`^${w.name}\\.(\\d+)\\.json$`).exec(file)?.[1]
+          return n == null ? [] : [{ file, n: Number(n) }]
+        })
+        .sort((a, b) => a.n - b.n)
+        .map(({ file, n }) => ({
           n,
-          reply: JSON.parse(
-            readFileSync(join(dir, `${w.name}.${n}.json`), 'utf8'),
-          ) as ClassifierExtraction,
+          reply: JSON.parse(readFileSync(join(dir, file), 'utf8')) as ClassifierExtraction,
         })),
     }))
     return { dir, replies: replies.filter(({ numbered }) => numbered.length > 0) }
