@@ -3161,6 +3161,33 @@ describe('factions', () => {
       ])
     })
 
+    it('reads the faction held past an earlier join the planner drops', () => {
+      const { planned } = buildClassifierActions(
+        reply({
+          memberships: [
+            { character: 'char_kael', faction: 'fact_ghost', sourceTurn: 't1' },
+            { character: 'char_kael', faction: 'fact_circle', sourceTurn: 't2' },
+            { character: 'char_kael', faction: null, sourceTurn: 't2' },
+            { character: 'char_aria', faction: 'fact_old', sourceTurn: 't1' },
+            { character: 'char_aria', faction: 'fact_crown', sourceTurn: 't2' },
+            { character: 'char_aria', faction: null, sourceTurn: 't2' },
+          ],
+        }),
+        deps([
+          member('char_kael', 'fact_crown'),
+          member('char_aria', 'fact_crown'),
+          factionRow('fact_crown'),
+          factionRow('fact_circle'),
+          factionRow('fact_old', 'retired'),
+        ]),
+      )
+      expect(memberships(planned).map(({ id, factionId }) => [id, factionId])).toEqual([
+        ['char_kael', null],
+        ['char_aria', null],
+        ['char_kael', 'fact_circle'],
+      ])
+    })
+
     // The handler can refuse the earlier write (a user edit between the turns), so only the
     // stored faction, never a planned one, can rule a later fact out.
     it('keeps a fact restating an earlier planned one, so a refused write cannot hide it', () => {
