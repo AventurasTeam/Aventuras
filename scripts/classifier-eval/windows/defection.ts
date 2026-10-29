@@ -112,6 +112,19 @@ Maela slid the paper across the table. He read it twice, then unpinned the tarni
       basis: 'rule',
       holds: (r) => r.happenings.some((h) => involves(h, 'loc_tollhouse')),
     },
+    // The prose dates the hanging only as "the year his brother came up a crown short"; twelve years
+    // is Brann's service, so any count of years is worked out, not the prose's own.
+    {
+      name: 'the hanging carries no time worked out from other figures',
+      kind: 'avoid',
+      basis: 'rule',
+      holds: (r) =>
+        !r.happenings.some((h) =>
+          /\b(twelve|12|a)\s+years?\s+ago\b|\b(early|first)\s+years\b/i.test(
+            `${h.temporal ?? ''} ${h.description ?? ''}`,
+          ),
+        ),
+    },
     // The brother's hanging is told as past and is its own happening, whether or not it is dated.
     {
       name: 'the alehouse bargain is one happening, not an offer and an acceptance',
@@ -159,6 +172,13 @@ Maela slid the paper across the table. He read it twice, then unpinned the tarni
       },
     ],
     happenings: [
+      {
+        title: 'The hanging of Brann’s brother',
+        temporal: 'twelve years ago',
+        involvements: [],
+        awareness: [],
+        sourceTurn: 't2',
+      },
       { title: 'Maela’s offer', involvements: [], awareness: [], sourceTurn: 't1' },
       { title: 'Brann accepts', involvements: [], awareness: [], sourceTurn: 't2' },
     ],
