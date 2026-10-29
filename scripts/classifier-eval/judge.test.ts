@@ -124,11 +124,17 @@ describe('writeJudgeDump', () => {
     expect(existsSync(join(dir, 'b'))).toBe(false)
   })
 
-  it('reads every reply before writing, so a bad one leaves no partial dump', () => {
-    const run = saveRun('run', { 'ambush.1.json': 'first', 'recounted.1.json': 'second' })
-    writeFileSync(join(run, 'recounted.1.json'), '{ not json')
-    const out = join(dir, 'out')
-    expect(() => writeJudgeDump([ambush!, recounted!], [run], out)).toThrow(SyntaxError)
-    expect(existsSync(out)).toBe(false)
-  })
+  it.each([
+    ['unparseable', '{ not json', SyntaxError],
+    ['no reply object', 'null', TypeError],
+  ])(
+    'reads every reply before writing, so a bad one leaves no partial dump: %s',
+    (_, text, error) => {
+      const run = saveRun('run', { 'ambush.1.json': 'first', 'recounted.1.json': 'second' })
+      writeFileSync(join(run, 'recounted.1.json'), text)
+      const out = join(dir, 'out')
+      expect(() => writeJudgeDump([ambush!, recounted!], [run], out)).toThrow(error)
+      expect(existsSync(out)).toBe(false)
+    },
+  )
 })

@@ -32,28 +32,33 @@ export function writeJudgeDump(
 ): void {
   if (existsSync(outDir) && readdirSync(outDir).length > 0)
     throw new Error(`[judge] ${outDir} isn't empty, and a judge reads every run file in it`)
-  // Everything is read before anything is written, so a bad file leaves no partial dump behind.
+  // Every reply is read and described before anything is written, so a bad file leaves no partial
+  // dump behind.
   const runs = runDirs.map((dir) => {
     const files = readdirSync(dir)
-    const replies = windows.map((w) => ({
-      w,
-      numbered: files
+    const answered: EvalWindow[] = []
+    const body: string[] = []
+    for (const w of windows) {
+      const numbered = files
         .flatMap((file) => {
           const n = new RegExp(`^${w.name}\\.(\\d+)\\.json$`).exec(file)?.[1]
           return n == null ? [] : [{ file, n: Number(n) }]
         })
         .sort((a, b) => a.n - b.n)
-        .map(({ file, n }) => ({
-          n,
-          reply: JSON.parse(readFileSync(join(dir, file), 'utf8')) as ClassifierExtraction,
-        })),
-    }))
-    return { dir, replies: replies.filter(({ numbered }) => numbered.length > 0) }
+      if (numbered.length === 0) continue
+      answered.push(w)
+      body.push('', `## Window ${w.name}`)
+      for (const { file, n } of numbered) {
+        const reply = JSON.parse(readFileSync(join(dir, file), 'utf8')) as ClassifierExtraction
+        body.push('', `### Reply ${n}`, ...describeReply(reply))
+      }
+    }
+    return { dir, answered, body }
   })
   const turns = windows.flatMap((w) => {
     const shown = new Set(
       runs
-        .filter(({ replies }) => replies.some((r) => r.w === w))
+        .filter(({ answered }) => answered.includes(w))
         .map(({ dir }) => {
           const file = join(dir, `${w.name}.user.txt`)
           if (!existsSync(file))
@@ -72,12 +77,10 @@ export function writeJudgeDump(
   const key: string[] = []
   shuffled.forEach(({ run }, i) => {
     const label = String.fromCharCode(65 + i)
-    const lines = [`# Run ${label}`]
-    for (const { w, numbered } of run.replies) {
-      lines.push('', `## Window ${w.name}`)
-      for (const { n, reply } of numbered) lines.push('', `### Reply ${n}`, ...describeReply(reply))
-    }
-    writeFileSync(join(outDir, `run-${label}.md`), `${lines.join('\n')}\n`)
+    writeFileSync(
+      join(outDir, `run-${label}.md`),
+      `${[`# Run ${label}`, ...run.body].join('\n')}\n`,
+    )
     key.push(`${label} ${run.dir}`)
   })
   writeFileSync(join(outDir, 'key.txt'), `${key.join('\n')}\n`)
