@@ -115,7 +115,7 @@ Maela slid the paper across the table. He read it twice, then unpinned the tarni
     // The prose dates the hanging only as "the year his brother came up a crown short"; twelve years
     // is Brann's service, so any count of years is worked out, not the prose's own.
     {
-      name: 'the hanging carries no time worked out from other figures',
+      name: 'the hanging carries no time worked out from other numbers',
       kind: 'avoid',
       basis: 'rule',
       holds: (r) =>

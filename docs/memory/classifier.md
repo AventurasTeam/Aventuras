@@ -126,7 +126,8 @@ alias list (the keywords bullet below).
   (`occurred_at_entry_id`), where the turns show it happen, or, for an
   event from before the story or offstage that the turns only recount,
   or a backdrop that holds throughout, at a free-form `temporal`
-  instead: the prose's own time, or a short phrase when it gives none
+  instead: the prose's own time, in its own words and never worked out
+  from other numbers in it, or a short phrase when it gives none
   ("before the story", "ongoing"). A recounted one's source turn is
   the turn that tells it, where its creation and any awareness row
   without a learning turn anchor. An event still to come isn't a
