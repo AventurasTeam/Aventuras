@@ -219,6 +219,7 @@ const PASS_A: Record<string, unknown> = {
   ],
   happenings: [{ id: 'hp1', title: 'The satchel was stolen' }],
   threads: [{ id: 'th1', title: 'Find the heir', status: 'active' }],
+  lead: { id: 'c1', name: 'Kael' },
 }
 
 const PASS_B: Record<string, unknown> = {
@@ -241,6 +242,7 @@ const PASS_B: Record<string, unknown> = {
   relationships: [],
   happenings: [],
   threads: [],
+  lead: null,
 }
 
 type RenderCase = {
@@ -271,13 +273,13 @@ const RENDER_CASES: RenderCase[] = [
     templateId: TEMPLATE_IDS.periodicClassifier,
     first: PASS_A,
     second: PASS_B,
-    systemShows: ['Rules:'],
+    systemShows: ['Rules for every list:'],
   },
   {
     templateId: TEMPLATE_IDS.periodicClassifier,
     first: { ...PASS_A, mentionedPlaces: true },
     second: { ...PASS_B, mentionedPlaces: true },
-    systemShows: ['Rules:', '- New places. Add a place the turns mention'],
+    systemShows: ['Rules for every list:', '- New places. Add a place the turns mention'],
   },
   {
     templateId: TEMPLATE_IDS.suggestionRefresh,

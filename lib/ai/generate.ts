@@ -297,14 +297,86 @@ export function parseStructured<T>(
   schema: z.ZodType<T>,
   opts: { repair?: boolean } = {},
 ): T {
+  if (opts.repair === false) return schema.parse(JSON.parse(raw))
+  const keys = schemaKeys(schema)
   let obj: unknown
   try {
     obj = JSON.parse(raw)
-  } catch (error) {
-    if (opts.repair === false) throw error
-    obj = JSON.parse(jsonrepair(raw))
+  } catch {
+    obj = JSON.parse(jsonrepair(restoreKeyQuotes(raw, keys)))
   }
-  return schema.parse(obj)
+  return schema.parse(restoreColonKeys(obj, keys))
+}
+
+// Every property name the schema declares, at any depth; none when it has no JSON Schema form.
+function schemaKeys(schema: z.ZodType): ReadonlySet<string> {
+  const keys = new Set<string>()
+  const walk = (node: unknown): void => {
+    if (node === null || typeof node !== 'object') return
+    const { properties } = node as { properties?: unknown }
+    if (properties !== null && typeof properties === 'object')
+      for (const key of Object.keys(properties)) keys.add(key)
+    for (const child of Object.values(node)) walk(child)
+  }
+  try {
+    walk(z.toJSONSchema(schema))
+  } catch {
+    keys.clear()
+  }
+  return keys
+}
+
+// A key that dropped its closing quote: `"ref: "c2",`, `"severity: 1,`, or with the quote moved
+// past the value, `"placements: []",`. jsonrepair can't tell where that quote belonged, and the
+// last two fail the reply. Models pretty-print a key per line, so a line opening on a schema key
+// and a colon gets its quote back; another word there may be a string, as in an array.
+const SLIPPED_KEY = /^(\s*)"([A-Za-z_$][\w$]*):\s*(.*)$/
+
+function restoreKeyQuotes(text: string, keys: ReadonlySet<string>): string {
+  return text
+    .split('\n')
+    .map((line) => {
+      const [, indent = '', key = '', rest = ''] = SLIPPED_KEY.exec(line) ?? []
+      return keys.has(key) ? `${indent}"${key}": ${slippedValue(rest)}` : line
+    })
+    .join('\n')
+}
+
+// A quote closing the line after the value was the key's: what precedes it is the value, kept when
+// it is JSON and quoted when not. A whole string, or a line with no quote, is the value as it is;
+// `"role:": "target"` has its quote, and only a stray colon to lose.
+function slippedValue(rest: string): string {
+  const [, afterStray] = /^"\s*:\s*(.*)$/.exec(rest) ?? []
+  if (afterStray !== undefined) return afterStray
+  if (/^"(?:[^"\\]|\\.)*"/.test(rest)) return rest
+  const [, value, tail] = /^(.*)"([\s,}\]]*)$/.exec(rest) ?? []
+  if (value === undefined) return rest
+  return `${isJson(value) ? value : JSON.stringify(value)}${tail ?? ''}`
+}
+
+function isJson(text: string): boolean {
+  try {
+    JSON.parse(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
+// A colon left inside a key's quotes, `"role:": "target"`, is still JSON, and a compact reply's
+// `"turn: "t2"` comes back from jsonrepair as {"turn: ": "t2"}. Either key loses its colon when its
+// bare name is one the schema declares and the object doesn't already hold.
+function restoreColonKeys(value: unknown, schemaKeys: ReadonlySet<string>): unknown {
+  if (Array.isArray(value)) return value.map((item) => restoreColonKeys(item, schemaKeys))
+  if (value === null || typeof value !== 'object') return value
+  const keys = Object.keys(value)
+  return Object.fromEntries(
+    Object.entries(value).map(([key, inner]) => {
+      const name = key.replace(/\s*:\s*$/, '')
+      const restored = name !== key && schemaKeys.has(name) && !keys.includes(name)
+      return [restored ? name : key, restoreColonKeys(inner, schemaKeys)]
+    }),
+  )
 }
 
 export type StructuredCallOptions = {

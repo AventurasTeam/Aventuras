@@ -301,6 +301,67 @@ describe('parseStructured', () => {
   it('throws when valid JSON fails schema validation', () => {
     expect(() => parseStructured('{"wrong":1}', schema)).toThrow()
   })
+  it('restores a key that lost its end quote, at any depth', () => {
+    const nested = z.object({ items: z.array(z.object({ name: z.string(), turn: z.string() })) })
+    const raw = '{"items": [{"name: "Brann", "turn":"t2"}, {"name:"Maela", "turn": "t4"}]}'
+    expect(parseStructured(raw, nested)).toEqual({
+      items: [
+        { name: 'Brann', turn: 't2' },
+        { name: 'Maela', turn: 't4' },
+      ],
+    })
+  })
+  it('keeps a key the object already has over a restored one', () => {
+    expect(parseStructured('{"description": "Hi", "description: "No"}', schema).description).toBe(
+      'Hi',
+    )
+  })
+  it('leaves a strict document’s keys alone', () => {
+    expect(parseStructured('{"a:": 1}', z.record(z.string(), z.number()))).toEqual({ 'a:': 1 })
+  })
+
+  describe('a pretty-printed key that lost its closing quote', () => {
+    const entry = z.object({
+      ref: z.string(),
+      severity: z.number(),
+      icon: z.string(),
+      name: z.string(),
+      placements: z.array(z.string()),
+      tags: z.array(z.string()),
+    })
+    // The tag opens like a key, but the schema names no `warning`: it stays a string.
+    const base = [
+      '{',
+      '  "ref": "c1",',
+      '  "severity": 0.5,',
+      '  "icon": "swords",',
+      '  "name": "",',
+      '  "placements": [],',
+      '  "tags": [',
+      '    "warning: hot"',
+      '  ]',
+      '}',
+    ].join('\n')
+    it.each([
+      ['the value still quoted', '"ref": "c1",', '"ref: "c1",'],
+      ['no space after the colon', '"ref": "c1",', '"ref:"c1",'],
+      ['no closing quote at all', '"severity": 0.5,', '"severity: 0.5,'],
+      ['the quote after a JSON value', '"placements": [],', '"placements: []",'],
+      ['the quote after a bare word', '"icon": "swords",', '"icon: swords",'],
+      ['the quote after nothing', '"name": "",', '"name: ",'],
+      ['a value opening on the line', '"tags": [', '"tags: ['],
+      ['a stray colon inside the quotes', '"icon": "swords",', '"icon:": "swords",'],
+    ])('restores it with %s', (_, valid, slipped) => {
+      expect(base).toContain(valid)
+      expect(parseStructured(base.replace(valid, slipped), entry)).toEqual(JSON.parse(base))
+    })
+    it('restores a stray colon in a reply another slip sends to jsonrepair', () => {
+      const raw = base
+        .replace('"icon": "swords",', '"icon:": "swords",')
+        .replace('"severity": 0.5,', '"severity: 0.5,')
+      expect(parseStructured(raw, entry)).toEqual(JSON.parse(base))
+    })
+  })
 })
 
 describe('generateStructured', () => {

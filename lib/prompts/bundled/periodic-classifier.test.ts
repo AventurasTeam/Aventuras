@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { NEW_HANDLE_PREFIX } from '@/lib/classifier'
+import {
+  classifierExtractionSchema,
+  classifierExtractionWithPlacesSchema,
+  NEW_HANDLE_PREFIX,
+} from '@/lib/classifier'
 
 import { renderTemplate, TEMPLATE_IDS } from '..'
 
@@ -171,31 +175,51 @@ describe('periodic classifier template', () => {
 
 // architecture.md → System and user halves; classifier.md → What the classifier reads.
 describe('periodic classifier template — system and user halves', () => {
-  it('opens the system half with the role line, then the rules', () => {
+  it('opens the system half with the role line, then the rules every list keeps', () => {
     const lines = render().system.split('\n')
     expect(lines.slice(0, 4)).toEqual([
       'You are extracting structured world state from recent story prose. Report only what the prose supports; never invent.',
       '',
-      'Rules:',
+      'Rules for every list:',
       '',
     ])
     expect(lines[4]).toMatch(/^- Provenance\. /)
-    expect(lines.at(-1)).toBe(
-      '- Silence is valid. Return empty arrays for anything the prose does not support.',
-    )
   })
+
+  // Each list's rules sit where the model is about to write it: a rule read far from its list went
+  // unheeded (the evaluation set's knownAwareness).
+  it.each([
+    [false, classifierExtractionSchema],
+    [true, classifierExtractionWithPlacesSchema],
+  ])(
+    'heads its rules with every reply list in the order the reply writes them (places %s)',
+    (mentionedPlaces, schema) => {
+      const headed = render({ mentionedPlaces })
+        .system.split('\n')
+        .flatMap((line) => /^Rules for (.+):$/.exec(line)?.[1]?.split(/, | and /) ?? [])
+      expect(headed).toEqual(['every list', ...Object.keys(schema.shape)])
+    },
+  )
 
   // The lists sit in the user half, so a rule cannot point at them by position.
   it('names the lists its rules refer to instead of pointing above', () => {
     const { system } = render()
     expect(system).toContain(
-      'A character the prose introduces who is not in the Known entities list goes in newCharacters',
+      'Add a character the prose introduces who is not in the Known entities list:',
     )
     expect(system).toContain('so it can never be confused with a listed ID.')
     expect(system).toContain(
       "by a title, epithet or name form its line in Known entities or Places doesn't show",
     )
     expect(system).not.toMatch(/\babove\b/)
+  })
+
+  // classifier.md → What the classifier writes → New characters: a revealed name is a rename.
+  it('adds every named person and an unnamed one the story points toward, never a thing, a revealed name or an invoked one', () => {
+    const { system } = render()
+    expect(system).toContain(
+      'every named person or creature, whether alive, dead or only spoken of, but never a named ship, place or thing, and an unnamed one the turns point the story toward, someone a character sets out to find or to face, or who is after one of them ("the innkeeper they ride to warn", "the bounty hunter on their trail"). Not an unnamed figure the scene is done with, even one who took part, nor an unnamed one whose part is over ("a porter", "a sailor who helped haul the net", "a father long dead"), and not a listed character whose own name the turns reveal: that is a rename. Nor is a name the prose only invokes, in an oath, a saying or a song ("by Saint Mira\'s tears", "as Queen Ysolde used to say"). Put each in newCharacters with a handle you choose.',
+    )
   })
 
   // The turns arrive after the rules, so "these turns" has nothing to point at.
@@ -353,8 +377,10 @@ describe('periodic classifier template — places', () => {
     expect(off.system).not.toContain('New places')
     expect(off.system).not.toContain('newPlaces')
     // The rule leaves no gap behind it either way.
-    for (const { system } of [on, off]) expect(system).toMatch(/\n- Silence is valid\./)
-    expect(off.system).toMatch(/already shows\.\n- Silence is valid\./)
+    expect(off.system).toMatch(/knownAwareness stays empty\.$/)
+    expect(on.system).toMatch(
+      /knownAwareness stays empty\.\n\nRules for newPlaces:\n\n- New places\. /,
+    )
   })
 })
 
@@ -363,7 +389,7 @@ describe('periodic classifier template — factions', () => {
   const FACTION_RULE =
     'Add a faction when the prose establishes an organized group with its own identity in the story\'s world: a named one (a guild, an order, a noble house, a gang, a church, a government), or an unnamed one the story could come back to ("the smugglers who run the docks"). Not a loose crowd or a kind of person ("the guards", "the villagers"), not one that exists only in a hypothetical, a dream or a figure of speech, and not one already in Known entities, even under another name: use its ID and add the name form as an alias.'
   const MEMBERSHIP_RULE =
-    'Set a character\'s faction when the turns establish which organized group they belong to now: they join it, are revealed as a member, or change sides. Set it to none when they leave it or are cast out. Only their main allegiance: a secondary tie, a past membership ("once of the Iron Circle"), a disguise or a cover story doesn\'t change it. Emit a fact only when the turns establish one or change the faction their line shows.'
+    'Set a character\'s faction when the turns establish which organized group they belong to now: they join it, are revealed as a member, or change sides. Set it to none when they leave it or are cast out. A change of sides is one fact naming the new faction: no fact sets none for the faction they leave. Only their main allegiance: a secondary tie, a past membership ("once of the Iron Circle"), a disguise or a cover story doesn\'t change it. Emit a fact only when the turns establish one or change the faction their line shows.'
 
   it.each([true, false])(
     'carries both rules in the system half, whatever the places setting: %s',
@@ -486,6 +512,18 @@ describe('periodic classifier template — standing and threads', () => {
 describe('periodic classifier template — the writer map rules', () => {
   const RULES = [
     [
+      'involvements',
+      '- Involvements. List the entities that took part in the happening, not everything the prose names near it: who acted, who or what was acted on, and where it happened. A character the prose only mentions is not involved. Presence is not the test either — an absent target, a faction, or the place it happened all take part. A figure who took part but whom the New characters rule leaves out, an unnamed one the scene is done with, is not involved: tell their part in the description, and never add a character only to involve them. role is a free-form label for how (actor, target, site).\n',
+    ],
+    [
+      'one happening an encounter',
+      "- One happening an encounter. A happening is one whole event, however many turns it runs across: a fight, a meeting, a bargain, a theft, a chase. Its beats are not happenings of their own: the insult that starts a duel, each blow and the wound that ends it are one happening, the duel, as a feast's toasts, the quarrel at it and the walkout are one, the feast. Give it the latest turn it runs to as sourceTurn, and a description telling its notable moments in order, in a few sentences: who did what, what was said, given or lost, and how it ended, so that a character recalling it later has the scene to recall. Another event is another happening: one at another time or place, or one the turns only recount.\n",
+    ],
+    [
+      'titles',
+      '- Titles. Give every happening a title, a few words naming the event as a chapter heading would ("The duel at the mill"), and a description of what happened, from the prose. A happening without a title is dropped, with its involvements and awareness.\n',
+    ],
+    [
       'status changes',
       '- Status changes. Put each move to active or retired in statusFlips, with the ID from Known entities or Places as ref, the new status as to, and the sourceTurn. Give a retirement its reason, a short phrase from the prose ("killed at the ford").\n',
     ],
@@ -495,7 +533,7 @@ describe('periodic classifier template — the writer map rules', () => {
     ],
     [
       'when it happened',
-      '- When it happened. A happening sits at its sourceTurn, where the turns show it happen. For an event from before the story or offstage that the turns only recount, or a backdrop that holds throughout, set temporal instead: its time as the prose gives it ("ten winters ago", "since the war"), or a short phrase when the prose gives none ("before the story", "ongoing"). An event still to come is not a happening: put the plan in newThreads, and add the event when the turns show it happen. Hearing of it can be one, at that turn.\n',
+      '- When it happened. A happening sits at its sourceTurn, where the turns show it happen. For an event from before the story or offstage that the turns only recount, or a backdrop that holds throughout, set temporal too: its time in the prose\'s own words ("ten winters ago", "since the war"), never one worked out from other numbers in it, or a short phrase when the prose gives none ("before the story", "ongoing"); its sourceTurn is then the turn that tells it. An event still to come is not a happening: put the plan in newThreads, and add the event when the turns show it happen. Hearing of it can be one, at that turn.\n',
     ],
     [
       'returns',
@@ -515,7 +553,7 @@ describe('periodic classifier template — the writer map rules', () => {
     ],
     [
       'threads',
-      "- Threads. Add a thread when the turns set up something the story will follow past the current scene: a goal a character commits to, a quest given, a mystery raised, a threat that looms, an event set for later. Not a passing intention, and not one already in the Threads list, even worded differently: change its status instead. Emit a status only when the turns establish the change. Put each new thread in newThreads with a title, a short description, its status (pending when the story knows of it but no one pursues it, active when someone does) and the sourceTurn. A thread the turns both open and close goes in newThreads as resolved or failed, with sourceTurn the turn that opened it and resolvedAtTurn the turn that closed it. Put each change in threadStatuses with the listed thread's ID as thread, the new status (active when it is taken up, resolved when it is achieved, failed when it is made impossible) and the sourceTurn.\n",
+      "- Threads. Add a thread when the turns set up something the story will follow past the current scene: a goal a character commits to, a quest given, a mystery raised, a threat that looms, an event set for later. Not a passing intention, and not one already in the Threads list, even worded differently: change its status instead. Emit a status only when the turns establish the change. Put each new thread in newThreads with a title, a short description, its status (pending when the story knows of it but no one pursues it, active when someone does) and the sourceTurn. A thread the turns both open and close goes in newThreads as resolved or failed, with sourceTurn the turn that opened it and resolvedAtTurn the turn that closed it. Put each change in threadStatuses with the listed thread's ID as thread, the new status (active when it is taken up, resolved when it is achieved, failed when it is made impossible) and the sourceTurn. threadStatuses is for those listed threads alone: a thread this reply adds carries its status in its own newThreads entry and never appears in threadStatuses.\n",
     ],
     [
       'categories and icons',
@@ -531,10 +569,23 @@ describe('periodic classifier template — the writer map rules', () => {
     }
   })
 
-  // classifier.md → What the classifier writes → Happenings: awareness of a listed happening.
-  it('sends awareness of a listed happening to knownAwareness, not a second happening', () => {
+  // classifier.md → What the classifier writes → Happenings: awareness is who knows, however
+  // they came to, for an added happening and a listed one alike.
+  it('lists who witnessed or took part in a happening as well as who learns of it', () => {
     expect(render().system).toContain(
-      'If a character learns of it after it happened, or learns of a past one, set learnedAtTurn to the turn that narrated the learning. Never add again a happening Known happenings lists: when the turns show a character learning of one ("Kael tells Aria about the massacre"), add a knownAwareness entry with its ID as happening, the character\'s ID or a new character\'s handle as ref, source, severity and learnedAtTurn.\n',
+      '- Awareness. List only characters the prose shows knowing of it, however they came to: who witnessed it or took part, and who learns of it.',
+    )
+  })
+
+  // Without its last sentence, replies filed who learned of a happening they added under
+  // knownAwareness, naming it by title.
+  it('sends awareness of a listed happening to knownAwareness, and of an added one to its own', () => {
+    const { system } = render()
+    expect(system).toContain(
+      'If a character learns of it after it happened, or learns of a past one, set learnedAtTurn to the turn that narrated the learning.\n',
+    )
+    expect(system).toContain(
+      "Rules for knownAwareness:\n\n- Never add again a happening Known happenings lists: when the turns show a character knowing of one, learning of it (\"Kael tells Aria about the massacre\") or knowing it already (Kael, who tells it), add a knownAwareness entry with its ID as happening, the character's ID or a new character's handle as ref, source, severity, and learnedAtTurn when the turns narrate the learning. knownAwareness is for those listed happenings alone: who knows of a happening this reply adds goes in that happening's own awareness, and when the turns show no one knowing of a listed happening, knownAwareness stays empty.",
     )
   })
 

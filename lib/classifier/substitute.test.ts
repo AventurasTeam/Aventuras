@@ -4,7 +4,13 @@ import { z } from 'zod'
 import { IdBiMap } from '@/lib/ids'
 
 import { classifierExtractionWithPlacesSchema } from './schema'
-import { PLACEHOLDER_FIELDS, substituteClassifierIds } from './substitute'
+import {
+  idNames,
+  nameIdsInProse,
+  PLACEHOLDER_FIELDS,
+  PROSE_FIELDS,
+  substituteClassifierIds,
+} from './substitute'
 
 const CHAR_A = 'char_11111111-1111-1111-1111-111111111111'
 const CHAR_B = 'char_22222222-2222-2222-2222-222222222222'
@@ -76,6 +82,133 @@ describe('PLACEHOLDER_FIELDS', () => {
   it('does not overlap the non-reference fields', () => {
     expect(PLACEHOLDER_FIELDS.filter((f) => NON_REF_FIELDS.includes(f))).toEqual([])
   })
+
+  // A new prose field fails here until nameIdsInProse reads it, or it is named an id, turn or enum.
+  it('leaves only handles, turns and enum values out of the prose fields', () => {
+    expect(NON_REF_FIELDS.filter((f) => !(PROSE_FIELDS as readonly string[]).includes(f))).toEqual([
+      'handle',
+      'icon',
+      'learnedAtTurn',
+      'resolvedAtTurn',
+      'sourceTurn',
+      'status',
+      'to',
+    ])
+  })
+})
+
+// classifier.md → ID handling in classifier output: a placeholder in prose.
+describe('nameIdsInProse', () => {
+  const names: Record<string, string> = { c1: 'Pell', c2: 'Tobin Ash', 'new:hask': 'Dov Hask' }
+  const nameOf = (token: string) => names[token]
+
+  it('names a bracketed or bare ID or handle in prose, wherever the prose sits', () => {
+    const out = nameIdsInProse(
+      {
+        happenings: [
+          {
+            title: 'c2 at the ford',
+            description: '[c1] charged [new:hask]; new:hask fell, and c2 watched.',
+            involvements: [{ ref: 'c1', role: 'rescuer of [c2]' }],
+            awareness: [{ ref: 'c2', source: 'told by [c1]', learnedAtTurn: 't2' }],
+            sourceTurn: 't2',
+          },
+        ],
+        newCharacters: [
+          {
+            handle: 'new:hask',
+            name: 'Dov Hask',
+            traits: ['hates [c2]'],
+            visual: { attire: "c1's old coat" },
+          },
+        ],
+      },
+      nameOf,
+    )
+    expect(out).toEqual({
+      happenings: [
+        {
+          title: 'Tobin Ash at the ford',
+          description: 'Pell charged Dov Hask; Dov Hask fell, and Tobin Ash watched.',
+          involvements: [{ ref: 'c1', role: 'rescuer of Tobin Ash' }],
+          awareness: [{ ref: 'c2', source: 'told by Pell', learnedAtTurn: 't2' }],
+          sourceTurn: 't2',
+        },
+      ],
+      newCharacters: [
+        {
+          handle: 'new:hask',
+          name: 'Dov Hask',
+          traits: ['hates Tobin Ash'],
+          visual: { attire: "Pell's old coat" },
+        },
+      ],
+    })
+  })
+
+  it('leaves a token it names nothing for as written', () => {
+    const prose = { description: '[c9] and c9 at [t2], in v2 of the map, by new:nobody' }
+    expect(nameIdsInProse(prose, nameOf)).toEqual(prose)
+  })
+})
+
+describe('idNames', () => {
+  it("names a listed row's placeholder, and a handle by its first declaration", () => {
+    const idMap = new IdBiMap()
+    const c = idMap.allocate(CHAR_A)
+    const hp = idMap.allocate(HAP_A)
+    const th = idMap.allocate(THR_A)
+    const nameOf = idNames(
+      idMap,
+      {
+        entities: [{ id: CHAR_A, name: 'Kael' }],
+        happenings: [{ id: HAP_A, title: 'The ford ambush' }],
+        threads: [{ id: THR_A, title: 'Find the heir' }],
+      },
+      {
+        newCharacters: [
+          { handle: 'new:x', name: ' Dov ' },
+          { handle: 'new:x', name: 'Later' },
+          { handle: 'new:blank', name: ' ' },
+        ],
+        newFactions: [{ handle: 'new:guild', name: 'The Guild' }],
+      },
+    )
+    expect([c, hp, th, 'new:x', 'new:guild', 'new:blank', 'c9'].map(nameOf)).toEqual([
+      'Kael',
+      'The ford ambush',
+      'Find the heir',
+      'Dov',
+      'The Guild',
+      undefined,
+      undefined,
+    ])
+  })
+
+  it("names a handle spelling a listed row's placeholder as the reply's, as its refs read", () => {
+    const idMap = new IdBiMap()
+    const c1 = idMap.allocate(CHAR_A)
+    const c2 = idMap.allocate(CHAR_B)
+    const nameOf = idNames(
+      idMap,
+      {
+        entities: [
+          { id: CHAR_A, name: 'Kael' },
+          { id: CHAR_B, name: 'Aria' },
+        ],
+        happenings: [],
+        threads: [],
+      },
+      {
+        newCharacters: [
+          { handle: c1, name: 'Dov' },
+          { handle: c2, name: '' },
+        ],
+        newFactions: [],
+      },
+    )
+    expect([c1, c2].map(nameOf)).toEqual(['Dov', undefined])
+  })
 })
 
 describe('substituteClassifierIds', () => {
@@ -103,6 +236,28 @@ describe('substituteClassifierIds', () => {
         },
       ],
       relationships: [{ subject: CHAR_A, object: CHAR_B, kind: a }],
+    })
+  })
+
+  // classifier.md → ID handling: a reply that copies the prompt's brackets lost every fact naming them.
+  it('reads a placeholder or a handle written in its brackets as the bare one', () => {
+    const idMap = new IdBiMap()
+    const kael = idMap.allocate(CHAR_A)
+    const fire = idMap.allocate(HAP_A)
+    const out = substituteClassifierIds(
+      {
+        newCharacters: [{ handle: 'new:guard' }],
+        relationships: [{ subject: `[${kael}]`, object: '[new:guard]' }],
+        knownAwareness: [{ happening: `[${fire}]`, ref: '[c9]', source: `[${kael}]` }],
+      },
+      idMap,
+      new Set(['new:guard']),
+    )
+    expect(out).toEqual({
+      newCharacters: [{ handle: 'new:guard' }],
+      relationships: [{ subject: CHAR_A, object: 'new:guard' }],
+      // An unknown ID keeps its brackets for the planner to report as written; prose keeps them.
+      knownAwareness: [{ happening: HAP_A, ref: '[c9]', source: `[${kael}]` }],
     })
   })
 

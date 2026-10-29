@@ -69,19 +69,29 @@ const awareness = z.object({
 const involvement = z.object({ ref: z.string(), role: z.string().optional() })
 
 const happening = z.object({
-  title: z.string(),
-  description: z.string().optional(),
+  title: z.string().describe('A few words naming the event; every happening needs one.'),
+  description: z
+    .string()
+    .optional()
+    .describe(
+      'What happened, from the prose: for an event across several turns, its notable moments in order, in a few sentences.',
+    ),
   temporal: z
     .string()
     .optional()
     .describe(
-      'Only for an event the turns recount from before the story or offstage, or a backdrop that holds throughout: its time as the prose gives it, or a short phrase when it gives none (before the story, ongoing). Omit for an event the turns show happening.',
+      "Only for an event the turns recount from before the story or offstage, or a backdrop that holds throughout: its time in the prose's own words, never one worked out from other numbers in it, or a short phrase when it gives none (before the story, ongoing). Omit for an event the turns show happening.",
     ),
   category: tolerated(z.string()),
   icon,
   involvements: tolerantList(involvement),
   awareness: tolerantList(awareness),
-  sourceTurn: z.string().optional(),
+  sourceTurn: z
+    .string()
+    .optional()
+    .describe(
+      'The turn the happening comes from: where the turns show it, or for a recounted one, the turn that tells it.',
+    ),
 })
 
 export const classifierExtractionSchema = z.object({
@@ -163,7 +173,7 @@ export const classifierExtractionSchema = z.object({
         .string()
         .nullable()
         .describe(
-          "ID of the faction from Known entities or a new faction's handle; null when they now belong to none.",
+          "ID of the faction from Known entities or a new faction's handle; null when they now belong to none, never for a faction they leave for another.",
         ),
       sourceTurn,
     }),
@@ -212,7 +222,11 @@ export const classifierExtractionSchema = z.object({
   ),
   threadStatuses: tolerantList(
     z.object({
-      thread: z.string(),
+      thread: z
+        .string()
+        .describe(
+          'ID from the Threads list of the thread whose status changes; never a thread this reply adds, whose status goes in its own newThreads entry.',
+        ),
       status: foldedEnum(z.enum(['active', 'resolved', 'failed'])),
       sourceTurn,
     }),
@@ -221,7 +235,9 @@ export const classifierExtractionSchema = z.object({
     z.object({
       happening: z
         .string()
-        .describe('ID from Known happenings of the happening the character learns of.'),
+        .describe(
+          'ID from Known happenings of the happening the character knows of; never a happening this reply adds, whose knowers go in its own awareness.',
+        ),
       /** Character placeholder or a newCharacters handle. */
       ref: z.string(),
       source: z.string(),

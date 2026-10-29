@@ -227,14 +227,17 @@ describe('classifierExtractionSchema — the writer map', () => {
   // classifier.md → What the classifier writes → Happenings: a happening sits at its source turn.
   it('asks for a time only for a happening the turns recount, and for no turn of its own', () => {
     const fields = itemFields('happenings')
+    expect(fields.sourceTurn?.description).toBe(
+      'The turn the happening comes from: where the turns show it, or for a recounted one, the turn that tells it.',
+    )
     expect(fields.temporal?.description).toBe(
-      'Only for an event the turns recount from before the story or offstage, or a backdrop that holds throughout: its time as the prose gives it, or a short phrase when it gives none (before the story, ongoing). Omit for an event the turns show happening.',
+      "Only for an event the turns recount from before the story or offstage, or a backdrop that holds throughout: its time in the prose's own words, never one worked out from other numbers in it, or a short phrase when it gives none (before the story, ongoing). Omit for an event the turns show happening.",
     )
     expect(fields).not.toHaveProperty('occurredAtTurn')
   })
 
   // The fields whose name alone doesn't say what they hold; the template's rules repeat each.
-  it('describes a status change, a relationship kind and a learned happening', () => {
+  it('describes a status change, a relationship kind, a learned happening, a changed thread, a faction, a title and a description', () => {
     expect(itemFields('statusFlips').to?.description).toBe(
       'active for a staged entity of any kind the prose brings into the scene, or a retired character who returns; retired only for a character or faction, on unambiguous finality.',
     )
@@ -245,7 +248,19 @@ describe('classifierExtractionSchema — the writer map', () => {
       'How the subject sees the object, in a word or short phrase: sister, mentor, rival. Never the inverse.',
     )
     expect(itemFields('knownAwareness').happening?.description).toBe(
-      'ID from Known happenings of the happening the character learns of.',
+      'ID from Known happenings of the happening the character knows of; never a happening this reply adds, whose knowers go in its own awareness.',
+    )
+    expect(itemFields('threadStatuses').thread?.description).toBe(
+      'ID from the Threads list of the thread whose status changes; never a thread this reply adds, whose status goes in its own newThreads entry.',
+    )
+    expect(itemFields('happenings').title?.description).toBe(
+      'A few words naming the event; every happening needs one.',
+    )
+    expect(itemFields('happenings').description?.description).toBe(
+      'What happened, from the prose: for an event across several turns, its notable moments in order, in a few sentences.',
+    )
+    expect(itemFields('memberships').faction?.description).toBe(
+      "ID of the faction from Known entities or a new faction's handle; null when they now belong to none, never for a faction they leave for another.",
     )
   })
 

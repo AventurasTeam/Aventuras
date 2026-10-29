@@ -444,6 +444,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
         "Stored character-to-character views, one per perspective: the subject's view of the object, with both names inlined so the model doesn't have to cross-reference the entity list. The author's edits live here too.",
       required: false,
     },
+    {
+      name: 'lead',
+      type: '{ id, name } | null',
+      category: 'Entities',
+      description:
+        'The story\'s lead as `entities` lists it (id and its name on one line), so the model knows whose "I" and "you" the turns narrate. Null when the story has no lead, or its lead dangles on this branch.',
+      required: false,
+    },
   ],
   wizard: [
     {
@@ -561,6 +569,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'namedCharacters',
     'worldTimeDeltaBasis',
     'leadEntityId',
+    'lead',
     'cast',
     'relationships',
   ],

@@ -1031,9 +1031,14 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       })
     }
 
+    // One row a character: the first stands, the happening's own before any knownAwareness entry
+    // foldOwnAwareness moved in, as two refs reconciled to one character would otherwise upsert
+    // over it.
+    const aware = new Set<string>()
     for (const row of happening.awareness) {
       const characterId = resolveRef(row.ref, 'character')
-      if (characterId == null) continue
+      if (characterId == null || aware.has(characterId)) continue
+      aware.add(characterId)
       // A character learning of an OLD happening anchors to the turn that
       // narrated the learning, not the happening's.
       const learnedEntryId = row.learnedAtTurn != null ? anchor(row.learnedAtTurn) : parentAnchor
@@ -1135,7 +1140,53 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const row = rowById.get(id)
     return row == null ? null : characterFactionId(row)
   }
+  // A none beside a join of another faction at one turn, for a character who held one before it,
+  // is a change of sides: the leave first, whatever the reply's order. Looked up without
+  // resolveRef, which would log a miss the loop below logs again.
+  const peekRef = (ref: string): string | null =>
+    handleMap.get(ref) ?? (index.has(ref) ? ref : null)
+  const held = new Map<string, string | null>()
+  const heldBefore = (id: string): string | null =>
+    held.has(id) ? (held.get(id) ?? null) : storedFaction(id)
+  const byTurn = new Map<number, ClassifierExtraction['memberships']>()
   for (const fact of inTurnOrder(extraction.memberships)) {
+    const at = turnPosition(fact.sourceTurn)
+    byTurn.set(at, [...(byTurn.get(at) ?? []), fact])
+  }
+  const membershipFacts = [...byTurn.values()].flatMap((facts) => {
+    // The faction of a join the loop below keeps: no other kind, and not a retired one. A join it
+    // drops neither changes sides nor changes the faction held.
+    const joined = (fact: (typeof facts)[number]): string | null => {
+      const faction = fact.faction === null ? null : peekRef(fact.faction)
+      return faction != null &&
+        index.get(faction)?.kind === 'faction' &&
+        rowById.get(faction)?.status !== 'retired'
+        ? faction
+        : null
+    }
+    const switching = new Set(
+      facts.flatMap((fact) => {
+        const id = peekRef(fact.character)
+        if (id == null || fact.faction !== null) return []
+        const before = heldBefore(id)
+        const joinsAnother = facts.some((other) => {
+          const faction = joined(other)
+          return peekRef(other.character) === id && faction != null && faction !== before
+        })
+        return before != null && joinsAnother ? [id] : []
+      }),
+    )
+    const rank = (fact: (typeof facts)[number]): number =>
+      switching.has(peekRef(fact.character) ?? '') ? Number(fact.faction !== null) : 0
+    const ordered = [...facts].sort((a, b) => rank(a) - rank(b))
+    for (const fact of ordered) {
+      const id = peekRef(fact.character)
+      const faction = joined(fact)
+      if (id != null && (fact.faction === null || faction != null)) held.set(id, faction)
+    }
+    return ordered
+  })
+  for (const fact of membershipFacts) {
     const characterId = resolveRef(fact.character, 'character')
     if (characterId == null) continue
     let factionId: string | null = null

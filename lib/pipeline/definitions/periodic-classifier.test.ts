@@ -135,6 +135,8 @@ async function ctxWith(opts: {
   mentionedPlaces?: boolean
   /** stories.settings.protectedBuffer. Unset, no reach-back: the harness skips the 10 default. */
   protectedBuffer?: number
+  /** stories.definition.leadEntityId. */
+  leadEntityId?: string
 }): Promise<Harness> {
   const { db, sqlite } = await createTestDb()
   await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
@@ -184,7 +186,7 @@ async function ctxWith(opts: {
   currentStoryStore.set({
     storyId: 's1',
     branchId: 'b1',
-    definition: {} as never,
+    definition: { leadEntityId: opts.leadEntityId ?? null } as never,
     settings: {
       models: {},
       classifierMentionedPlaces: opts.mentionedPlaces ?? false,
@@ -395,7 +397,7 @@ describe('periodicClassifierPhase', () => {
     expect(user).not.toContain('rival')
     // classifier.md → What the classifier reads: role line and rules lead; branch lists stay out.
     expect(system).toMatch(
-      /^You are extracting structured world state from recent story prose\. Report only what the prose supports; never invent\.\n\nRules:\n\n- Provenance\. /,
+      /^You are extracting structured world state from recent story prose\. Report only what the prose supports; never invent\.\n\nRules for every list:\n\n- Provenance\. /,
     )
     expect(system).not.toContain('Kael sees')
     expect(system).not.toContain('as: ally')
@@ -472,6 +474,39 @@ describe('periodicClassifierPhase', () => {
     const prompt = vi.mocked(generateStructured).mock.calls[0][1].user
     expect(prompt).toContain('[t1] scene: [c1]\nturn 1')
     expect(prompt).not.toMatch(/(char|loc|item|fact)_[0-9a-f]{8}-/)
+  })
+
+  // classifier.md → What the classifier reads: the lead, by the placeholder its line holds.
+  it.each([
+    ['names the story’s lead', CHAR_KAEL, "\nThe story's lead is [c1] Kael."],
+    ['names no lead that dangles on the branch', 'char_99999999-9999-9999-9999-999999999999', null],
+  ])('%s before the turns', async (_label, leadEntityId, line) => {
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+      keywords: [],
+    } as unknown as Entity
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 1,
+      entities: [kael],
+      leadEntityId,
+    })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction(),
+    } as never)
+
+    await drain(h.ctx)
+
+    const prompt = vi.mocked(generateStructured).mock.calls[0][1].user
+    if (line == null) expect(prompt).not.toContain('lead')
+    else expect(prompt).toContain(`${line} Outside quoted speech`)
   })
 
   // architecture.md → System and user halves; observability.md → actionId threading.
@@ -1279,6 +1314,192 @@ describe('periodicClassifierPhase', () => {
     ) as { action: { payload: { entry: { entityId: string } } } }
     expect(involvement.action.payload.entry.entityId).toBe(created.action.payload.entry.id)
     expect(involvement.action.payload.entry.entityId).not.toBe(CHAR_KAEL)
+  })
+
+  // classifier.md → ID handling in classifier output: a placeholder in prose.
+  it('stores a description that wrote a listed character or a new one by ID under their names', async () => {
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+      keywords: [],
+    } as unknown as Entity
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction({
+        newCharacters: [
+          {
+            handle: 'new:dov',
+            name: 'Dov',
+            description: 'A bandit.',
+            keywords: [],
+            sourceTurn: 't1',
+          },
+        ],
+        happenings: [
+          {
+            title: 'The ambush',
+            description: '[c1] unhorsed new:dov.',
+            sourceTurn: 't1',
+            involvements: [{ ref: 'c1' }],
+            awareness: [],
+          },
+        ],
+      }),
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael] })
+    const { events } = await drain(h.ctx)
+
+    const happening = events.find(
+      (e) => (e as { action: { kind: string } }).action.kind === 'createHappening',
+    ) as { action: { payload: { entry: { description: string } } } }
+    expect(happening.action.payload.entry.description).toBe('Kael unhorsed Dov.')
+  })
+
+  // classifier.md → What the classifier writes → Happenings: awareness filed under the wrong list.
+  it("stores knownAwareness naming the reply's own happening by title as that happening's", async () => {
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+      keywords: [],
+    } as unknown as Entity
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction({
+        happenings: [
+          { title: 'The ford ambush', sourceTurn: 't1', involvements: [], awareness: [] },
+        ],
+        knownAwareness: [
+          { happening: 'the ford ambush', ref: 'c1', source: 'told', severity: 0.5 },
+        ],
+      }),
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael] })
+    const { events } = await drain(h.ctx)
+
+    const happening = events.find(
+      (e) => (e as { action: { kind: string } }).action.kind === 'createHappening',
+    ) as { action: { payload: { entry: { id: string } } } }
+    const awareness = events.find(
+      (e) => (e as { action: { kind: string } }).action.kind === 'upsertHappeningAwareness',
+    ) as { action: { payload: { characterId: string; happeningId: string } } }
+    expect(awareness.action.payload).toMatchObject({
+      characterId: CHAR_KAEL,
+      happeningId: happening.action.payload.entry.id,
+    })
+  })
+
+  // Folded after substitution, where one character is one ref however the reply wrote it.
+  describe('folds knownAwareness by the character each ref names', () => {
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+      keywords: [],
+    } as unknown as Entity
+    // The ambush lists `own` as a witness; a knownAwareness entry names it by title, for `known`.
+    const awarenessOf = async (own: string, known: string, newCharacters: object[] = []) => {
+      vi.mocked(generateStructured).mockResolvedValue({
+        status: 'ok',
+        recoverable: [],
+        value: extraction({
+          newCharacters,
+          happenings: [
+            {
+              title: 'The ford ambush',
+              sourceTurn: 't1',
+              involvements: [],
+              awareness: [{ ref: own, source: 'saw it', severity: 1 }],
+            },
+          ],
+          knownAwareness: [
+            { happening: 'The ford ambush', ref: known, source: 'told', severity: 0.5 },
+          ],
+        }),
+      })
+      const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael] })
+      const { events } = await drain(h.ctx)
+      return events
+        .map((e) => (e as { action: { kind: string; payload: unknown } }).action)
+        .filter((a) => a.kind === 'upsertHappeningAwareness')
+        .map((a) => a.payload as { characterId: string; source?: string })
+        .map(({ characterId, source }) => [characterId === CHAR_KAEL ? 'Kael' : 'other', source])
+    }
+
+    it('keeps the happening’s own entry for "c1" when the entry names "[c1]"', async () => {
+      expect(await awarenessOf('c1', '[c1]')).toEqual([['Kael', 'saw it']])
+    })
+
+    it('keeps both when the reply declares "[c1]" as its own handle', async () => {
+      const dov = {
+        handle: '[c1]',
+        name: 'Dov',
+        description: 'A drover.',
+        keywords: [],
+        sourceTurn: 't1',
+      }
+      expect(await awarenessOf('[c1]', 'c1', [dov])).toEqual([
+        ['other', 'saw it'],
+        ['Kael', 'told'],
+      ])
+    })
+  })
+
+  // classifier.md → Disambiguation: a reveal the reply also wrote up as a newcomer.
+  it('takes a new character named as the reply renames a listed one for that character', async () => {
+    const stranger = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'the hooded stranger',
+      status: 'active',
+      description: 'A stranger in a hood.',
+      keywords: [],
+    } as unknown as Entity
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction({
+        renames: [{ ref: 'c1', name: 'Kael', sourceTurn: 't1' }],
+        newCharacters: [
+          {
+            handle: 'new:kael',
+            name: 'Kael',
+            description: 'A courier.',
+            keywords: [],
+            sourceTurn: 't1',
+          },
+        ],
+        happenings: [
+          { title: 'A', sourceTurn: 't1', involvements: [{ ref: 'new:kael' }], awareness: [] },
+        ],
+      }),
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [stranger] })
+    const { events } = await drain(h.ctx)
+
+    const kinds = events.map((e) => (e as { action: { kind: string } }).action.kind)
+    expect(kinds).not.toContain('createEntity')
+    const renamed = events.find(
+      (e) => (e as { action: { kind: string } }).action.kind === 'renameEntity',
+    ) as { action: { payload: { id: string; name: string } } }
+    expect(renamed.action.payload).toMatchObject({ id: CHAR_KAEL, name: 'Kael' })
+    const involvement = events.find(
+      (e) => (e as { action: { kind: string } }).action.kind === 'createHappeningInvolvement',
+    ) as { action: { payload: { entry: { entityId: string } } } }
+    expect(involvement.action.payload.entry.entityId).toBe(CHAR_KAEL)
   })
 
   it('reconciles a new character against a staged namesake and promotes instead of creating', async () => {

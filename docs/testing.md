@@ -459,14 +459,45 @@ sends it `PROBE_RUNS` times, 20 by default, under a profile with no max
 output unless `PROBE_MAX_OUTPUT` sets one, so a run can test what a
 real profile sends. It prints each run's outcome with its parse and
 provider retries, its first parse failure by field path and the
-entries a reply that parsed dropped for not fitting, by list, and its
+entries a reply that parsed dropped for not fitting, by list, its
 happenings as the planner would anchor them (with a `temporal`, at a
 source turn that resolves, or unanchored, with the distinct `temporal`
-values), then the first-attempt parse rate. A reply the server stopped at its length
-limit that doesn't parse strictly is refused, not repaired
+values), the keys whose closing quote the model dropped, whether the
+reply needed jsonrepair past its code fence and, from a llama.cpp
+server, its draft acceptance, prompt-cache reuse and speed, then the
+first-attempt parse rate and the share of keys that slipped. A reply
+the server stopped at its length limit that doesn't parse strictly is
+refused, not repaired
 ([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)):
 its run prints the cut-off's cause and numbers, and the summary counts
-it as cut off at length rather than as a failed run.
+it as cut off at length rather than as a failed run. `SMOKE_LLM_KEY`
+sets the provider's API key, for a hosted server.
+
+`PROBE_EVAL` (`all`, or window names) sends the classifier's
+evaluation set instead: hand-written windows in
+`scripts/classifier-eval/`, each built in memory and rendered as the
+pass renders a branch, `PROBE_RUNS` times each, 5 by default. Each
+window carries checks of the facts its prose should and shouldn't
+yield, marked by whether a rule in the prompt asks for the fact or
+only the window's author judges it, and every window also checks
+that each ID a reply names is one the prompt listed or a handle the
+reply declares; the probe prints each run's misses, then how often
+each check held, and `PROBE_OUT`, a directory of its own for each
+run, saves each window's prompt, its system and user halves apart,
+and each reply, as the server sent it, with any separate reasoning,
+and as the checks read it. A unit test proves
+each check can hold and can fail.
+
+The checks look for the facts a reply must hold and can't see one the
+prose never had. `pnpm judge:classifier <out-dir> <run-dir>...`
+(`scripts/classifier-judge-dump.ts`) turns eval runs saved with
+`PROBE_OUT` into a faithfulness judge's input, in a new or empty
+directory: each window's Known lists and turns, as the prompt the
+runs answered showed them, each run's happenings and new characters
+under a label drawn at random, and a key naming each label's run. A judge, a
+model other than any it judges, then reads every description against
+the turns by `scripts/classifier-eval/judge-brief.md`, which also says
+how far its counts can be trusted.
 
 ## Selector strategy
 

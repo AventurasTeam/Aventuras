@@ -101,7 +101,8 @@ Fallback JSON parsing for LLM outputs that don't quite validate.
 
 - Pattern: `JSON.parse()` first; on fail, run through `jsonrepair` and re-parse; then zod-validate. A reply the server stopped at its length limit is never repaired: `jsonrepair` would close the cut into a valid shorter document ([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies))
 - Handles common LLM mistakes — trailing commas, missing/extra quotes, unclosed strings, Python-style `True`/`None`
-- Tiny, MIT, actively maintained
+- One it can't place: a key that lost its closing quote. A model drops it about once per hundred keys on the dev model, as `"ref: "c2",`, `"severity: 1,` or `"placements: []",`, and jsonrepair either runs the key on to the next quote or fails the reply. Before jsonrepair, `parseStructured` gives the quote back on a line that opens on a key the schema declares, since models pretty-print a key per line; after it, and on strict JSON, it drops a colon left inside a key's quotes (`"role:"`) when the bare name is a schema key the object doesn't hold
+- Tiny, ISC, actively maintained
 
 ### 8. Prompt templates + editor (LiquidJS + CodeMirror 6)
 

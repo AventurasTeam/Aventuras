@@ -16,7 +16,9 @@ values.
 The prompt opens with its system half
 ([`architecture.md → System and user halves`](../architecture.md#system-and-user-halves)):
 the role line and the extraction rules, which name the lists they
-refer to rather than pointing above. Its user half carries the
+refer to rather than pointing above: first the rules every list keeps,
+then each list's rules under a heading naming it, in the order the
+reply writes the lists. Its user half carries the
 branch's world as lists the classifier addresses by placeholder id
 ([ID handling](#id-handling-in-classifier-output)), then the turns:
 
@@ -78,6 +80,13 @@ branch's world as lists the classifier addresses by placeholder id
 
 - **Threads** — the branch's threads by id, title and status
   ([Threads](#threads)).
+- **The lead** — the story's lead by placeholder id and name, when it
+  has one that resolves on the branch
+  ([`data-model.md → Story settings shape`](../data-model.md#story-settings-shape)):
+  outside quoted speech, "I" and "you" in the turns are the lead. In
+  first- or second-person narration, and in an adventure's actions,
+  the prose never names the lead, and a scene with someone else in it
+  doesn't say which one "you" is.
 - **Turns to classify** — the window's entries by turn handle, each
   with its prose and the scene saved on it: the entry's
   `sceneEntities` and `currentLocationId`
@@ -101,13 +110,27 @@ alias list (the keywords bullet below).
   `happening_awareness`. New rows for events extracted from the prose
   window, each with a free-form `category` and an `icon` from the
   catalog, and `decay_resistance` set per awareness row from the
-  model's per-character severity judgment at extraction time. Each
+  model's per-character severity judgment at extraction time. A
+  figure who took part but is no character by the New characters bar
+  below is told in the description, not involved, and never added as a
+  character only to be involved. A
+  happening is one whole event, however many turns it runs across: a
+  fight, a meeting, a bargain, never a beat of one. A conversation is
+  an encounter too, even when what it holds is a telling, which
+  awareness records, and a plan, which a thread records. Its description
+  tells the notable moments in order, who did what, what was said,
+  given or lost and how it ended, so that a character recalling it
+  has the scene to recall. Another event is another happening: one at
+  another time or place, or one the turns only recount. Each
   happening sits in story time at its source turn
   (`occurred_at_entry_id`), where the turns show it happen, or, for an
   event from before the story or offstage that the turns only recount,
   or a backdrop that holds throughout, at a free-form `temporal`
-  instead: the prose's own time, or a short phrase when it gives none
-  ("before the story", "ongoing"). An event still to come isn't a
+  instead: the prose's own time, in its own words and never worked out
+  from other numbers in it, or a short phrase when it gives none
+  ("before the story", "ongoing"). A recounted one's source turn is
+  the turn that tells it, where its creation and any awareness row
+  without a learning turn anchor. An event still to come isn't a
   happening yet: the plan is a [thread](#threads), hearing of it can
   be a happening at that turn, and the event becomes one at the turn
   the turns show it happen. A `temporal` the pass writes is never a
@@ -118,12 +141,19 @@ alias list (the keywords bullet below).
   neither, never the window head: the
   [recent happenings](#what-the-classifier-reads) a later pass lists,
   Plot's chapter grouping and the ranker's chapter boost all read the
-  position. An
-  awareness row may also name a happening Known happenings lists, when
-  the turns show a character learning of it ("Kael tells Aria about
-  the massacre"); a pair the reply repeats lands at its earliest
-  learning turn. A happening with a blank title creates nothing, its
-  involvements and awareness with it, and is logged.
+  position. Its awareness rows are the characters the turns show
+  knowing of it, however they came to: who witnessed it or took part,
+  and who learns of it. An awareness row may also name a happening
+  Known happenings lists, when the turns show a character knowing of
+  it, learning of it ("Kael tells Aria about the massacre") or knowing
+  it already (Kael, who tells it); a pair the reply repeats lands at
+  its earliest learning turn. Such an entry naming, by its title, one
+  happening the reply itself adds is that happening's own awareness,
+  unless it already lists the character; any other name no Known
+  happening holds, a title two of the reply's happenings share among
+  them, plans nothing. A character a happening's awareness names twice,
+  by one ref or by two that resolve to one row, keeps the first entry. A happening with a blank title creates
+  nothing, its involvements and awareness with it, and is logged.
 - **Status transitions** — `entities.status` flips:
   - `staged → active` when prose mentions a staged entity in scene
     (the slow path; see
@@ -144,6 +174,18 @@ alias list (the keywords bullet below).
   after the flip's prose stands (see
   [`cadence.md → User edits and classifier writes`](./cadence.md#user-edits-and-classifier-writes)).
 
+- **New characters** — the characters the turns introduce that Known
+  entities lacks: every named person or creature, alive, dead or only
+  spoken of, never a named ship, place or thing, and an unnamed one the
+  turns point the story toward, someone a character sets out to find
+  or to face or who is after one of them ("the innkeeper they ride to
+  warn"). Never an unnamed figure the scene is done with, even one who
+  took part, nor an unnamed one whose part is over ("a porter", "a
+  father long dead"), nor a listed character whose name the turns reveal, which is
+  a rename, nor a name the prose only invokes, in an oath, a saying or
+  a song. Each goes through
+  [reconciliation](#disambiguation-on-new-character-mentions) before
+  it is created.
 - **Mentioned places** — with the story's setting on, the places the
   turns mention but the scene doesn't enter
   ([Mentioned places](#mentioned-places)).
@@ -284,7 +326,21 @@ substitution layer swaps both directions
 (see [`generation-pipeline.md → ID placeholder substitution`](../generation-pipeline.md#id-placeholder-substitution)).
 The placeholder universe shown to the classifier covers the rows
 in the prompt's structured entity, place, happening, thread and
-relationship lists.
+relationship lists. The prompt shows each ID and turn handle in
+brackets; a reply that copies them (`[c1]`, `[t2]`) is read as the
+bare one when that names a listed row, a handle the reply declares or
+a turn of the window, and anything else stays as written, an
+unresolved reference.
+
+A placeholder means nothing past its call, so an ID or a handle the
+reply writes into prose (a title, a description, an awareness source,
+a profile field), bracketed or bare, is replaced with what it stands
+for before anything is stored: a listed entity's name, a listed
+happening's or thread's title, or the name a new row's handle
+declares. A stored `"[c1] charged"` would otherwise name whoever holds
+`c1` in a later prompt. A handle the reply declares stands for its new
+row there as in a reference, even when it spells a listed placeholder.
+A token that names nothing stays as written.
 
 When the classifier creates a brand-new entity, it emits the
 entity as a **full object with no `id` field** — name, description,
@@ -343,6 +399,15 @@ the candidate with the branch's characters (active, staged, retired)
 and decides whether to absorb it into one of them, create it flagged
 for World-panel review, or create it plain. Candidates in one reply
 are not compared with each other.
+
+**A reveal written twice.** A candidate whose name, under the
+normalization below, is the exact name one of the reply's renames
+gives a branch row of its kind is that row, before any comparison
+and with no score: the reply revealed the row's name and also added
+the revealed name as a newcomer. It absorbs as the decision's first
+row does, promoting a staged row and otherwise treating the mention as
+the row's, and the rename then lands with no other holder of the name.
+A shortened or fuller form of the revealed name compares as usual.
 
 **Namesakes.** Names compare under the keyword-term normalization
 (trimmed, lowercased, NFC), split into words on whitespace.
@@ -598,11 +663,12 @@ rules:
 
 > Set a character's faction when the turns establish which organized
 > group they belong to now: they join it, are revealed as a member, or
-> change sides. Set it to none when they leave it or are cast out. Only
-> their main allegiance: a secondary tie, a past membership ("once of
-> the Iron Circle"), a disguise or a cover story doesn't change it.
-> Emit a fact only when the turns establish one or change the faction
-> their line shows.
+> change sides. Set it to none when they leave it or are cast out. A
+> change of sides is one fact naming the new faction: no fact sets none
+> for the faction they leave. Only their main allegiance: a secondary
+> tie, a past membership ("once of the Iron Circle"), a disguise or a
+> cover story doesn't change it. Emit a fact only when the turns
+> establish one or change the faction their line shows.
 
 **Matching.** A new faction reconciles against the branch's factions
 of every status, by the namesake rule, similarity and thresholds of
@@ -640,11 +706,19 @@ reply is dropped as a misreading of a past membership. A member at
 retirement keeps the faction, since retiring touches no member, and a
 faction the reply itself retires keeps the memberships from its turns.
 A staged faction takes members and stays staged. One character's facts
-are planned in source-turn order, ties in reply order. A fact matching
-the stored faction writes nothing, but only until a fact for the
-character is sent: from then on each is sent, since user precedence
-may refuse the earlier write and the later turn is newer prose, and
-the handler no-ops one whose faction is already written. A character
+are planned in source-turn order, ties in reply order, except that a
+none at the same turn as a join is planned first when the character
+held a faction before that turn, by the stored row or the reply's
+earlier turns, and the join names another: the pair is a change of
+sides, the leave before the join, whichever the reply wrote first.
+With no faction held, or the held one restated, the none is the change
+and keeps its place. No fact names the faction it leaves, so joining
+another faction and being cast out of it within one turn still reads
+as a change of sides. A fact matching the stored faction writes
+nothing, but only until a fact for the character is sent: from then on
+each is sent, since user precedence may refuse the earlier write and
+the later turn is newer prose, and the handler no-ops one whose
+faction is already written. A character
 who joins at one turn and leaves at a later one writes twice, and
 reversing the later turn leaves the earlier membership the prose still
 holds. Each is planned after the reply's creates, so it can name

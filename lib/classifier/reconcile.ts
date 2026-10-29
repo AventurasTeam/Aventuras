@@ -1,7 +1,7 @@
 import type { CollisionReason, Entity } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import { compareAge } from '@/lib/list-modules'
-import { flagStillHolds, namesakeBasis } from '@/lib/world'
+import { flagStillHolds, nameBasis, namesakeBasis } from '@/lib/world'
 
 // Canon's starting ranges (classifier.md -> Disambiguation). Hardcoded: the
 // tuning surface is parked until the M7.5 probe work.
@@ -17,8 +17,9 @@ type ClassifierFlagReason = Extract<
 export type ReconcileDecision =
   | { kind: 'create'; flag: null }
   | { kind: 'create'; flag: { partnerId: string; reason: ClassifierFlagReason } }
-  | { kind: 'promote'; entityId: string; similarity: number }
-  | { kind: 'known'; entityId: string; similarity: number }
+  // similarity null: the reply's own rename gave the row the candidate's name.
+  | { kind: 'promote'; entityId: string; similarity: number | null }
+  | { kind: 'known'; entityId: string; similarity: number | null }
 
 export type ScoredNamesake = {
   entity: Entity
@@ -169,6 +170,8 @@ export type ReconciledKind = Extract<Entity['kind'], 'character' | 'faction'>
 
 type ReconcileDeps = {
   entities: readonly Entity[]
+  /** The reply's renames, by the row's real id. */
+  renames?: readonly { ref: string; name: string }[]
   embedDescriptions: EmbedDescriptions
   log: Pick<Logger, 'warn'>
   signal: AbortSignal
@@ -191,6 +194,15 @@ export async function reconcileNewEntity(
   deps: ReconcileDeps,
 ): Promise<ReconcileDecision> {
   const byId = new Map(deps.entities.map((e) => [e.id, e]))
+  // classifier.md → Disambiguation: a reveal the reply also wrote up as a newcomer.
+  const renamedSo = deps.renames
+    ?.filter((rename) => nameBasis(candidate.name, rename.name) === 'same-name')
+    .map((rename) => byId.get(rename.ref))
+    .find((entity) => entity?.kind === deps.kind)
+  if (renamedSo != null)
+    return renamedSo.status === 'staged'
+      ? { kind: 'promote', entityId: renamedSo.id, similarity: null }
+      : { kind: 'known', entityId: renamedSo.id, similarity: null }
   const matched: Omit<ScoredNamesake, 'similarity' | 'inScene'>[] = []
   for (const entity of deps.entities) {
     if (entity.kind !== deps.kind) continue

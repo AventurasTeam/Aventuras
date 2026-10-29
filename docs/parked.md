@@ -1808,6 +1808,69 @@ that fails the embed on a vector it can't normalize instead of storing
 it. Parked 2026-10-24; the signal is a provider returning zero or NaN
 vectors.
 
+#### A split or agentic classifier for local models
+
+An optional toggle for running the periodic classifier on a local
+model weaker than the one the prompt is tuned to: the pass's work is
+split across several calls, so each holds fewer rules and asks for
+less at once. Three shapes, none designed:
+
+- **A split pass.** The reply's lists divided between calls in an
+  order where each call's output feeds the next: new characters,
+  factions, aliases and renames first, then the happenings with those
+  newcomers listed, then relationships, memberships, threads and
+  awareness. Each call's system half is its own cacheable prefix.
+- **An agentic classifier.** The model is handed one task after
+  another in a loop, each step's result in front of it for the next.
+- **Piece-by-piece output.** One call, but the model reasons and
+  emits one list at a time, so its reasoning on one list is done
+  before the next begins, rather than one block of reasoning ahead of
+  the whole reply.
+
+Whatever the shape, the pass's contract holds: it writes once, after
+the model is done, as one burst under its action id, and a pass that
+fails or runs out its time writes nothing
+([Pipeline framing](./memory/classifier.md#pipeline-framing),
+[Failure policy](./memory/classifier.md#failure-policy)). Two findings
+from the prompt's tuning bear on a split: written first in one reply,
+the newCharacters list was sometimes left empty while the happenings
+still referenced new handles, since the model finds who took part
+while it works through the happenings; and a split multiplies the
+time a pass takes, which on a slow local model meets the pass's
+timeout sooner. The evaluation set
+([`testing.md → Real-provider checks`](./testing.md#real-provider-checks))
+is the measure: a split pass is worth having only if it beats the
+single call on the same model.
+
+Raised by the developer 2026-10-29, after sampling models on the final
+prompt: Gemma 4 26B-A4B, the dev model, scored 0.92 on rule checks,
+Qwen 3.8 flash-next at IQ3_XXS 0.88 with one call over the 600 s
+timeout, and DeepSeek v4.1 flash, hosted, 0.99. The signal is a local
+model the developer wants to support that scores well below the floor
+on the evaluation set in one call, or can't finish a pass in time.
+
+#### Classifier prompt structure the research favoured
+
+Four changes to the periodic classifier prompt's structure, each
+untested: each turn's prose inside its own delimiters, the reason
+behind each rule that isn't obvious, a short worked example, and no
+capitals for emphasis. A research pass found none with strong measured
+support for a reasoning model of the dev model's size: worked examples
+tend to hurt reasoning models, and formatting changes move results by
+large amounts in no predictable direction. The two changes it ranked
+first, the character rule in labelled parts and the new-entity lists
+ahead of the happenings, each cost more than they bought on the dev
+model and were reverted: labelled parts blanked an unnamed character's
+name in 4 replies of 10, and the lists written first were sometimes
+written empty.
+
+Parked 2026-10-29, when the classifier prompt's tuning closed. The
+signal is a misread the evaluation set
+([`testing.md → Real-provider checks`](./testing.md#real-provider-checks))
+shows on a model the app targets that a rule's wording doesn't reach,
+such as where a turn's prose ends or which rule governs a list; each
+change is measured on the set alone.
+
 ### UX (parked)
 
 #### Drag-and-drop file import for ImportDialog

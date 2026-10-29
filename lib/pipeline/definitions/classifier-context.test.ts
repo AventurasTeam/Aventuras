@@ -26,6 +26,7 @@ describe('buildClassifierContext', () => {
       relationships: [],
       threads: [],
       mentionedPlaces: false,
+      leadId: null,
       idMap: new IdBiMap(),
     })
     const declared = VARIABLES.classifierContext.map((v) => v.name)
@@ -63,6 +64,7 @@ describe('buildClassifierContext', () => {
       relationships: [],
       threads: [],
       mentionedPlaces: false,
+      leadId: null,
       idMap: new IdBiMap(),
     })
     const [entity] = context.entities as Record<string, unknown>[]
@@ -93,12 +95,40 @@ describe('buildClassifierContext', () => {
       relationships: [],
       threads: [],
       mentionedPlaces: false,
+      leadId: null,
       idMap,
     })
     expect((context.entities as { id: string }[])[0].id).toBe('c1')
     expect((context.happenings as { id: string }[])[0].id).toBe('hp1')
     // Entry ids are NOT substitutable — provenance rides the handle map.
     expect((context.turns as { handle: string }[])[0].handle).toBe('t1')
+  })
+
+  // classifier.md → What the classifier reads: the lead by the placeholder its own line holds.
+  it.each([
+    ['a listed character', 'char_22222222-2222-2222-2222-222222222222', { id: 'c2', name: 'Aria' }],
+    ['a faction', 'fact_33333333-3333-3333-3333-333333333333', null],
+    ['no row', 'char_99999999-9999-9999-9999-999999999999', null],
+    ['nothing', null, null],
+  ])('names the lead as its line does when it is %s', (_label, leadId, lead) => {
+    const row = (id: string, name: string, kind: string) =>
+      ({ id, name, kind, status: 'active', description: null, keywords: [] }) as never
+    const context = buildClassifierContext({
+      window: { turns: [] } as never,
+      entities: [
+        row('char_11111111-1111-1111-1111-111111111111', 'Kael', 'character'),
+        row('char_22222222-2222-2222-2222-222222222222', 'Aria\n the Bold', 'character'),
+        row('fact_33333333-3333-3333-3333-333333333333', 'The Wardens', 'faction'),
+      ],
+      happenings: [],
+      relationships: [],
+      threads: [],
+      mentionedPlaces: false,
+      leadId,
+      idMap: new IdBiMap(),
+    })
+    expect(context.lead).toEqual(lead == null ? null : { ...lead, name: 'Aria the Bold' })
+    expect((context.entities as { id: string }[]).map((e) => e.id)).toEqual(['c1', 'c2', 'f1'])
   })
 
   it('projects turns down to handle, content, scene and location', () => {
@@ -109,6 +139,7 @@ describe('buildClassifierContext', () => {
       relationships: [],
       threads: [],
       mentionedPlaces: false,
+      leadId: null,
       idMap: new IdBiMap(),
     })
     // A raw entry id in the prompt would be an id the model can neither use nor
@@ -158,6 +189,7 @@ describe('buildClassifierContext', () => {
       ],
       threads: [],
       mentionedPlaces: false,
+      leadId: null,
       idMap: new IdBiMap(),
     })
     expect(context.relationships).toEqual([
@@ -178,6 +210,7 @@ describe('buildClassifierContext', () => {
       ],
       threads: [],
       mentionedPlaces: false,
+      leadId: null,
       idMap: new IdBiMap(),
     })
     expect(context.relationships).toEqual([])
@@ -209,6 +242,7 @@ describe('buildClassifierContext', () => {
         relationships: [],
         threads: [],
         mentionedPlaces: false,
+        leadId: null,
         idMap: new IdBiMap(),
       })
       expect((context.entities as { id: string }[]).map((e) => e.id)).toEqual(['c1', 'c2'])
@@ -229,6 +263,7 @@ describe('buildClassifierContext', () => {
         relationships: [],
         threads: [],
         mentionedPlaces: false,
+        leadId: null,
         idMap,
       })
       expect(context.turns).toEqual([
@@ -247,6 +282,7 @@ describe('buildClassifierContext', () => {
       relationships: [],
       threads: [],
       mentionedPlaces: false,
+      leadId: null,
       idMap: new IdBiMap(),
     })
     expect((context.entities as { keywords: string[] }[])[0].keywords).toEqual(['the Grey Wolf'])
@@ -264,6 +300,7 @@ describe('buildClassifierContext', () => {
         relationships: [],
         threads: [],
         mentionedPlaces: false,
+        leadId: null,
         idMap: new IdBiMap(),
       })
     const kael = {
@@ -323,6 +360,7 @@ describe('buildClassifierContext', () => {
         relationships: [],
         threads: [],
         mentionedPlaces,
+        leadId: null,
         idMap,
       })
 
@@ -444,6 +482,7 @@ describe('buildClassifierContext', () => {
         relationships: [],
         threads: [],
         mentionedPlaces: false,
+        leadId: null,
         idMap,
       })
       expect(idMap.getPlaceholderFor(HALL)).toBe('l2')
@@ -485,6 +524,7 @@ describe('buildClassifierContext — factions', () => {
       relationships: [],
       threads: [],
       mentionedPlaces: false,
+      leadId: null,
       idMap,
     }).entities as { id: string; faction: string | null }[]
 
@@ -527,6 +567,7 @@ describe('buildClassifierContext — factions', () => {
       relationships: [],
       threads: [],
       mentionedPlaces: false,
+      leadId: null,
       idMap: new IdBiMap(),
     }).entities as Record<string, unknown>[]
     expect(entity).toMatchObject({
@@ -560,6 +601,7 @@ describe('buildClassifierContext — standing', () => {
         relationships: [],
         threads: [],
         mentionedPlaces: false,
+        leadId: null,
         idMap: new IdBiMap(),
       }).entities as { standing: string | null }[]
     )[0].standing
@@ -617,6 +659,7 @@ describe('buildClassifierContext — threads', () => {
         thread(HEIR, 'Find the heir', { status: 'pending' }),
       ],
       mentionedPlaces: false,
+      leadId: null,
       idMap,
     })
     // No entry refs: entry_* is not substitutable, so they would reach the prompt raw.
@@ -639,6 +682,7 @@ describe('buildClassifierContext — happenings', () => {
       relationships: [],
       threads: [],
       mentionedPlaces: false,
+      leadId: null,
       idMap: new IdBiMap(),
     })
     expect(context.happenings).toEqual([{ id: 'hp1', title: 'The ford ambush' }])

@@ -21,6 +21,9 @@ import {
   nextStatusOnSuccess,
   newPlacesOf,
   PERIODIC_CLASSIFIER_KIND,
+  foldOwnAwareness,
+  idNames,
+  nameIdsInProse,
   readClassifierReply,
   RECONCILED_KINDS,
   reconcileNewEntity,
@@ -52,6 +55,7 @@ import {
   threadsStore,
   type OpenStory,
 } from '@/lib/stores'
+import { resolveLead } from '@/lib/world'
 
 import { buildClassifierContext } from './classifier-context'
 import { classifierEmbedder } from './description-embedder'
@@ -306,6 +310,9 @@ export async function* periodicClassifierPhase(
       relationships,
       threads,
       mentionedPlaces,
+      leadId:
+        resolveLead(open.definition.leadEntityId, entitiesStore.getEntities(), ctx.branchId)?.id ??
+        null,
       idMap,
     }),
   )
@@ -352,20 +359,25 @@ export async function* periodicClassifierPhase(
     return { status: 'failed', error: failure.error }
   }
 
-  const { reply: extraction, malformed } = readClassifierReply(result.value)
+  const { reply, malformed } = readClassifierReply(result.value)
   for (const drop of malformed) ctx.log.warn('classifier.entry_malformed', drop)
-  const substituted = substituteClassifierIds(
-    extraction,
-    idMap,
-    new Set([
-      ...extraction.newCharacters.map((c) => c.handle),
-      ...extraction.newFactions.map((f) => f.handle),
-      ...newPlacesOf(extraction).map((p) => p.handle),
-    ]),
+  // classifier.md → ID handling: a placeholder in prose would name another row in a later call.
+  const extraction = nameIdsInProse(reply, idNames(idMap, { entities, happenings, threads }, reply))
+  const substituted = foldOwnAwareness(
+    substituteClassifierIds(
+      extraction,
+      idMap,
+      new Set([
+        ...extraction.newCharacters.map((c) => c.handle),
+        ...extraction.newFactions.map((f) => f.handle),
+        ...newPlacesOf(extraction).map((p) => p.handle),
+      ]),
+    ),
   )
 
   const deps = {
     entities,
+    renames: substituted.renames,
     embedDescriptions: classifierEmbedder(),
     log: ctx.log,
     signal: ctx.abortSignal,

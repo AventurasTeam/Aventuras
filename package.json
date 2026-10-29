@@ -47,6 +47,7 @@
     "db:seed": "tsx scripts/seed/index.ts",
     "mock": "tsx scripts/mock-llm/index.ts",
     "probe:classifier": "tsx scripts/classifier-parse-probe.ts",
+    "judge:classifier": "tsx scripts/classifier-judge-dump.ts",
     "db:studio:desktop": "drizzle-kit studio --config drizzle.studio.config.ts"
   },
   "dependencies": {
