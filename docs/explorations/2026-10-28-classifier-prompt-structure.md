@@ -871,6 +871,48 @@ own awareness before planning, unless the happening already lists the
 character. Replayed, that leaves only the slips naming an invented ID:
 2 replies on change 12's run and on change 15's, 1 on the rerun.
 
+## Other models, sampled
+
+The final prompt ran 3 times a window on five more models: Qwen 3.8
+flash-next at IQ3_XXS, a second local model, and four hosted through a
+subscription, all through the prompt-rendered reply format, no
+provider structured output. Gemma's 20 runs are the comparison. Three
+replies a window give a direction, not a rate.
+
+| Model                   | Rule / judgment | Median call | Invented or wrong claims |
+| ----------------------- | --------------- | ----------- | ------------------------ |
+| GLM 5.3 flash           | 0.99 / 1.00     | 103 s       | 0 in 18 replies          |
+| DeepSeek v4.1 flash     | 0.99 / 1.00     | 39 s        | 2 in 2 replies, minor    |
+| Minimax M3.1 flash      | 0.94 / 1.00     | 24 s        | 2 in 2 replies           |
+| Gemma 4 26B-A4B, dev    | 0.92 / 0.94     | 73 s        | 5 in 4 replies           |
+| Mercury 2.5, diffusion  | 0.92 / 1.00     | 7 s         | 4 in 4 replies           |
+| Qwen 3.8 flash-next IQ3 | 0.88 / 0.86     | 135 s       | 10 in 7 of 16 replies    |
+
+- **GLM and DeepSeek** pass nearly every check. GLM reads Ilse's
+  cover name in all 3 replies, the only model to do so every time;
+  DeepSeek is the faster.
+- **Minimax** recalls well, the steward and the aunt every time, but
+  splits encounters: one ambush reply has no happening and another
+  makes the cut rope its own; 3 happenings a reply in three windows.
+- **Mercury** answers in 7 seconds, its reasoning hidden, with terse
+  descriptions and thin recall: the steward and the aunt once each.
+- **Qwen** reads Tam's flight right, as every model but Gemma does,
+  but scores lowest, and one call ran past the pass's 600 s timeout.
+
+The checks look for moments that must be present and can't see a
+moment the prose never had, though under one happening an encounter a
+description is the story's memory of the scene. So one reader, blind
+to which model wrote what, read every description against the turns.
+GLM wrote nothing false. DeepSeek and Minimax slipped twice each,
+"three nights past" for three nights after Idris left. Gemma told Tam
+dead and moved the lamp's dousing to the Count's men. Mercury invented
+"the bodies washed up on the shingle" and had Hask give his name
+before he was unhorsed. Qwen reversed the fight's outcome ("the cart
+was left at the band's mercy"), set the wreck on "a clear night" and
+invented an inquiry. Errors cluster in the fight's order and in the
+recounted wreck. Three of the findings were checked against the
+replies and hold.
+
 ## Where it stands
 
 Every change, with the check it was made for. The baseline and change

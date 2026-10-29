@@ -282,6 +282,12 @@ breakdown under [UX](#ux).
   [`roadmap.md → M7`](./implementation/roadmap.md#m7--app-settings--diagnostics--onboarding)).
   Whether replies fill the new fields is the play check's above. Left
   to measure:
+  - a description's faithfulness: the checks look for moments that
+    must be present and can't see one the prose never had, though a
+    description is the story's memory of the scene. A blind read of
+    every description against the turns found 0 to 10 invented or
+    wrong claims a model across 18 replies (2026-10-29); a judge pass
+    over descriptions would make that part of the evaluation set;
   - a death the prose never states: `learning`'s "her cupbearer ran
     the same night" is read as Tam Rook's death in 5 to 9 of 10
     replies on every prompt, in a description, a death-titled happening
