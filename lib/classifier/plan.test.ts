@@ -280,9 +280,9 @@ describe('buildClassifierActions', () => {
     expect(
       planned
         .filter((p) => p.action.kind === 'upsertHappeningAwareness')
-        .map((p) => payloadOf<{ characterId: string; source?: string }>(p))
-        .map(({ characterId, source }) => [characterId, source]),
-    ).toEqual([['char_a', 'saw it']])
+        .map((p) => payloadOf<{ characterId: string; source?: string; decayResistance: number }>(p))
+        .map(({ characterId, source, decayResistance }) => [characterId, source, decayResistance]),
+    ).toEqual([['char_a', 'saw it', 1]])
   })
 
   it('maps severity onto decay_resistance and stamps learned_at_entry_id', () => {
