@@ -708,6 +708,65 @@ description names Pell: "Tobin Ash charges the leader, Dov Hask,
 knocking him from his saddle." Every other check held, the archer
 included, still added in 6 of 10. Kept.
 
+## Prompting practice, researched
+
+The developer asked whether current prompting practice, applied to the
+prompt's structure, would improve it. A research pass read the vendors'
+guides and the recent measured work; the sources below are as it
+reported them, read by it and not checked again here.
+
+- **Gemma 4's own guidance** covers the system role, which it supports
+  natively, and thinking mode, and says nothing about structure,
+  delimiters, examples or JSON. Everything else is borrowed from
+  guidance written for frontier models.
+- **Vendor guidance.** OpenAI's GPT-4.1 guide puts instructions at
+  both ends of a long context, and notes that on a conflict the later
+  wording wins. Google's Gemini 3 guide puts negative and formatting
+  constraints last. Anthropic's guide puts the query last and gives
+  the reason behind a rule. For reasoning models, OpenAI and
+  Anthropic both advise against "think step by step" and prescriptive
+  checklists.
+- **Measured.** Long reasoning traces degrade compliance with simple
+  constraints (MathIF, arXiv 2505.14810; When Thinking Fails,
+  2505.11423). Errors under many instructions are mostly omissions,
+  smaller models degrade fastest and early instructions fare better
+  (IFScale, 2507.11538). Formatting changes move results a lot, but in
+  no predictable direction (Sclar et al., 2310.11324). Repeating the
+  prompt is about neutral when the model reasons (2512.14982). Few-shot
+  examples tend to hurt reasoning models (the DeepSeek-R1 report, and
+  Medprompt run on o1).
+- **Its ranking for this prompt:**
+  1. split the long New characters bullet into labelled parts;
+  2. put the new-entity rules and lists ahead of the happenings,
+     first if the traces show bystanders created while involvements
+     are built;
+  3. a static reminder at the end of the user half naming the most
+     missed rules;
+  4. one delimiter style throughout;
+  5. formatting sentences moved into the schema;
+  6. a reminder injected into the reasoning;
+  7. an example, ranked last.
+
+  Nothing in the list has strong measured support for a 4B-active
+  reasoning model.
+
+## S1: the character rule in labelled parts (reverted)
+
+Structure only: the New characters bullet became four labelled
+sub-bullets, "Who to add", "Who not to add", "A listed character
+under another name" and "The entry", every sentence verbatim. Expected
+to move: the ambush's archer and defection's gate-boy, added without
+the bar being weighed.
+
+The archer stayed out in 6 replies of 10 against 4, inside the 4 to 10
+it has swung through on every prompt, and the gate-boy in 10 of 10, as
+before. The rest held within a reply or two. But in 4 of 10 `learning`
+replies the unnamed steward, who the developer judged belongs, came
+back with an empty name, which the planner drops, so he was kept in 2
+replies against 9; no earlier run had blanked an unnamed character
+there. Labelled apart from the named, the unnamed one seems to have
+been read as having no name to give. Reverted.
+
 ## Two more recoveries in code
 
 Two slips a rule had not stopped are now repaired after the reply
