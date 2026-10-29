@@ -67,13 +67,13 @@ When Sefa comes down the bank leading the cart horse, there's an arrow standing 
       holds: (r) => r.happenings.length === 1,
     },
     {
-      name: 'a happening tells the fight’s moments: the cut rope, Hask, Sefa’s wound',
+      name: 'a happening tells the fight’s moments: Hask unhorsed, the archer shot, Sefa’s wound',
       kind: 'expect',
       basis: 'rule',
       holds: (r) =>
         r.happenings.some((h) =>
-          [/rope/i, /hask|scar/i, /thigh|wound|injur|hurt|\bhit\b|struck/i].every((moment) =>
-            moment.test(h.description ?? ''),
+          [/hask|scar/i, /bolt|crossbow|archer/i, /thigh|wound|injur|hurt|\bhit\b|struck/i].every(
+            (moment) => moment.test(h.description ?? ''),
           ),
         ),
     },
