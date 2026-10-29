@@ -974,6 +974,35 @@ reasoning, putting required properties first, with nothing slid. With
 no schema in the prompt, one of its two happenings had no
 description.
 
+## A judge for invented details
+
+The checks can't see a moment the prose never had. A Sonnet judge,
+chosen so that no model judges itself, read each run's descriptions
+against the turns, blind to the run. Calibrated first on the blind
+audit's 108 replies, it found 20 of the Opus audit's 23 invented or
+wrong claims and ranked the six models the same; most of its 6 extra
+claims the audit had graded overreach. Judged twice, one run gave 7
+and 10 claims, agreeing on every claim the first judging found: the
+judge varies by missing a repeat of a pattern, not by reading the
+prose differently.
+
+| Gemma run                | Invented or wrong, 60 replies | Overreach |
+| ------------------------ | ----------------------------- | --------- |
+| change 11's prompt       | 15                            | 7         |
+| change 12                | 18                            | 5         |
+| final prompt, three runs | 7 and 10, 9, 13               | 3 to 6    |
+
+Change 12's descriptions run a quarter longer, and they carry no
+more invention for it: 10 of change 12's 18 are "Pell charges Dov
+Hask", the lead change 13 named, and most of change 11's prompt's are
+the same Pell. On the final prompt the false memories are mostly one:
+Tam told as dead, 19 across the three runs, the misread no other model
+makes. Next, in 3 of 4 judgings, the brother's hanging is set
+"twelve years ago", where the prose gives "the year his brother came
+up a crown short" and twelve years is Brann's service: a time
+computed where the rule asks for the prose's own. Past those two, the
+final prompt invents or gets wrong 3 to 5 claims in 60 replies.
+
 ## Where it stands
 
 Every change, with the check it was made for. The baseline and change
