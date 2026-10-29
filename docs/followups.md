@@ -267,78 +267,24 @@ breakdown under [UX](#ux).
   Raised by the developer 2026-10-25, split from the prompt content
   pass.
 
-- **Classifier prompt: interface and structure.** The periodic
-  classifier's prompt is the rules every list keeps, then each list's
-  rules under a heading naming it, then the reply format as a
-  TypeScript type whose comments carry a few field descriptions. A
-  first pass on 2026-10-27 named each output list in its rule and
-  described the fields a name doesn't explain. The rest is measured
-  against the evaluation set,
-  the parse probe's `PROBE_EVAL` mode
+- **Judge the classifier's descriptions.** A happening's description
+  is the story's memory of the scene, recalled later as fact, and the
+  evaluation set's checks look for the facts a reply must hold but
+  can't see one the prose never had. A judge reads every description
+  against the turns instead: `pnpm judge:classifier` writes its blind
+  input from probe runs, with the judge's instructions beside it
   ([`testing.md → Real-provider checks`](./testing.md#real-provider-checks)).
-  Every window also scores placeholder use, the one failure measured
-  before the set: a model inventing its own handles drops the facts
-  that use them (the M7.5 note on `unresolvedRefs` in
-  [`roadmap.md → M7`](./implementation/roadmap.md#m7--app-settings--diagnostics--onboarding)).
-  Whether replies fill the new fields is the play check's above. Left
-  to measure:
-  - a description's faithfulness: the checks look for moments that
-    must be present and can't see one the prose never had, though a
-    description is the story's memory of the scene. A blind read of
-    every description against the turns found 0 to 10 invented or
-    wrong claims a model across 18 replies (2026-10-29); a judge pass
-    over descriptions would make that part of the evaluation set;
-  - a death the prose never states: `learning`'s "her cupbearer ran
-    the same night" is read as Tam Rook's death in 5 to 9 of 10
-    replies on every prompt, in a description, a death-titled happening
-    or a retirement. The reasoning's first summary of the turn already
-    has him dead, and a rule asking for the turns' own words before a
-    death is told did not reach it (1 of 10 clean against 5). The
-    developer read the turns and the prompt and finds no reading in
-    which Tam is dead: the dev model contradicts itself. The samples on
-    other models show whether another reads it right;
-  - each turn's prose inside its own delimiters, the reason behind each
-    rule that isn't obvious, a short worked example, and no capitals for
-    emphasis. Two structure changes a research pass ranked first, the
-    character rule in labelled parts and the new-entity lists ahead of
-    the happenings, each cost more than they bought on the dev model
-    and were reverted;
-  - room to reason before the JSON, weighed against a pass that already
-    takes 75-157 s on the dev model. Neither mode leaves room today: on
-    auto the reply parses only as the JSON alone, and forced on,
-    llama.cpp's grammar binds it from the first token. So it means a
-    reasoning field first in the reply, or the model's own thinking;
-  - `sourceTurn` optional in the reply type, so a missing one parses and
-    falls back to the window head, while the rules ask for it on every
-    entry that has one. A happening without one also has no place in
-    story time, so a later pass lists it only through a record;
-  - a `temporal` the model fills for an event the turns show, filler
-    like "none" or an in-scene time like "that night", which takes the
-    happening out of story time with nothing logged. The probe prints
-    the `temporal` values a reply gives, and an explicit marker in the
-    reply (shown, recounted, backdrop) is the remedy if they show it;
-  - the icon catalog, which only `icon`'s description carries: the
-    rule points at "the list its icon field gives", and `icon` is a
-    tolerated string, not an enum, so forced on the model sees neither
-    the list nor a grammar limiting it;
-  - a change of sides as one membership naming the new faction. The
-    rule asks for the new faction when a character changes sides and
-    for none when one leaves, and nothing says the first needs no
-    second: a reply wrote a defection as a join, then a leave, at one
-    turn, and the planner, applying the leave last, left the character
-    in no faction. The `defection` window measures it.
-
-  A field description reaches the model only when the reply format is
-  written into the prompt, the profile's structured output on auto, so
-  the rules repeat whatever a description says, the icon catalog
-  aside. Forced on, the app sends no schema at all until M7.1 wires one
-  ([`roadmap.md → M7`](./implementation/roadmap.md#m7--app-settings--diagnostics--onboarding)),
-  and llama.cpp turns a schema into a sampling grammar the model never
-  reads. Whether vLLM or SGLang let a reasoning model think before a
-  schema-bound reply is unverified; a few samples through a hosted
-  provider would tell. The prompt is tuned on the dev model, Gemma 4
-  26B-A4B, as the capability floor; hosted models are sampled beside
-  it for comparison. Raised by the developer 2026-10-27.
+  On the evaluation set the prompt, judged before its last two changes,
+  invented or got wrong 3 to 5 claims in 60 replies on the dev model,
+  besides one misread no rule reached: "her cupbearer ran the same night" told as Tam Rook's death,
+  which no other model sampled makes. The set's windows are four
+  hand-written turns; a played story's windows run longer, recount more
+  and carry a larger cast, so play judges the descriptions of passes
+  over played branches. The probe's branch mode saves nothing yet, so
+  judging a played branch first needs it to save the window's turns and
+  each reply as read, as eval mode does. Whether a judge runs by hand,
+  an agent given the instructions, or as a probe step calling a judge
+  model is open. Raised 2026-10-29 by the classifier prompt's tuning.
 
 - **Parked items play gives a signal for.** Each waits on evidence
   only play produces, so play checks them rather than letting the

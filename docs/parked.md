@@ -1849,6 +1849,28 @@ timeout, and DeepSeek v4.1 flash, hosted, 0.99. The signal is a local
 model the developer wants to support that scores well below the floor
 on the evaluation set in one call, or can't finish a pass in time.
 
+#### Classifier prompt structure the research favoured
+
+Four changes to the periodic classifier prompt's structure, each
+untested: each turn's prose inside its own delimiters, the reason
+behind each rule that isn't obvious, a short worked example, and no
+capitals for emphasis. A research pass found none with strong measured
+support for a reasoning model of the dev model's size: worked examples
+tend to hurt reasoning models, and formatting changes move results by
+large amounts in no predictable direction. The two changes it ranked
+first, the character rule in labelled parts and the new-entity lists
+ahead of the happenings, each cost more than they bought on the dev
+model and were reverted: labelled parts blanked an unnamed character's
+name in 4 replies of 10, and the lists written first were sometimes
+written empty.
+
+Parked 2026-10-29, when the classifier prompt's tuning closed. The
+signal is a misread the evaluation set
+([`testing.md → Real-provider checks`](./testing.md#real-provider-checks))
+shows on a model the app targets that a rule's wording doesn't reach,
+such as where a turn's prose ends or which rule governs a list; each
+change is measured on the set alone.
+
 ### UX (parked)
 
 #### Drag-and-drop file import for ImportDialog

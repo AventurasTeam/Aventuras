@@ -1109,3 +1109,11 @@ Left, each for the developer or measured as out of a rule's reach:
   handle renamed, a rename the planner drops: at least twice.
 - **Oriel's knowing** swings from 5 to 9 of 10 between runs of one
   prompt.
+
+The followup closed on 2026-10-29. The judge became a followup of its
+own under play testing, its input written by `pnpm judge:classifier`
+and its instructions committed beside the evaluation set; the
+structure ideas left untested went to parked; the structured-output
+measurements joined the roadmap's M7.1 note on forced-on structured
+output. The change of sides, room to reason, a missing sourceTurn and
+filler times were settled or never showed.

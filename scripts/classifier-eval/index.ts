@@ -10,9 +10,9 @@ import { reveal } from './windows/reveal'
 export type { Check, EvalWindow } from './fixture'
 export { renderWindow } from './render'
 
-// The evaluation set the classifier prompt is tuned against (followups.md → Classifier prompt:
-// interface and structure). Run it with PROBE_EVAL on the parse probe. Each window also scores
-// placeholder use against its own rows.
+// The evaluation set the classifier prompt is tuned against (testing.md → Real-provider checks).
+// Run it with PROBE_EVAL on the parse probe. Each window also scores placeholder use against its
+// own rows.
 export const EVAL_WINDOWS: readonly EvalWindow[] = [
   ambush,
   recounted,

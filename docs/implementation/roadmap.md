@@ -958,6 +958,25 @@ code before it moved; resolve with the slice it names.
   the watermark. Wiring force-on needs to refuse a `length` stop on that
   path outright. What Anthropic sends as a cut tool call's input is
   unverified. Raised by the cut-off replies slice review (2026-10-26).
+  Measured 2026-10-29 with the parse probe's `PROBE_STRUCTURED` switch,
+  which sends the periodic pass's schema as `json_schema`: on two hosted
+  models, DeepSeek v4.1 flash and GLM 5.3 flash, the engine's
+  constrained decoding emitted every property in the schema's order,
+  required or not, and values slid a slot (`temporal` took the
+  category's word, `icon` the turn handle, `sourceTurn` went empty), so
+  the evaluation set's rule mean fell from 0.99 to 0.89-0.94. The
+  requests the provider forwarded carried the schema verbatim,
+  descriptions included and `strict` false. Both models still reasoned,
+  DeepSeek about a third as long, and GLM in full slid all the same, so
+  the schema does it. The values slid with the reply type in the prompt
+  too, its order in sight, so whether the nullable conversion, every
+  property required and absence an explicit null, stops the slide is
+  unmeasured. The icon catalog sits only in `icon`'s description, and
+  `icon` is a tolerated string, not an enum. On llama.cpp (build b11820)
+  the dev model reasoned in full before the grammar applied, and the
+  grammar put required properties first; in its one call nothing slid.
+  DeepSeek's JSON Output, a bare `json_object` with the reply type kept
+  in the prompt, slid nothing and kept the reasoning.
 - **M7.1 — A profile's `customJson` is never sent.** Routed from triage
   (2026-10-27). `resolveModel` (`lib/ai/resolve-model.ts`) carries a
   profile's `customJson` into the resolved params, and nothing reads it
