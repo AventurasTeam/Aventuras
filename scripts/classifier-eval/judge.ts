@@ -32,17 +32,24 @@ export function writeJudgeDump(
 ): void {
   if (existsSync(outDir) && readdirSync(outDir).length > 0)
     throw new Error(`[judge] ${outDir} isn't empty, and a judge reads every run file in it`)
+  // Everything is read before anything is written, so a bad file leaves no partial dump behind.
   const runs = runDirs.map((dir) => {
     const files = readdirSync(dir)
     const replies = windows.map((w) => ({
       w,
-      numbers: files
+      numbered: files
         .map((f) => new RegExp(`^${w.name}\\.(\\d+)\\.json$`).exec(f)?.[1])
         .filter((n) => n != null)
         .map(Number)
-        .sort((a, b) => a - b),
+        .sort((a, b) => a - b)
+        .map((n) => ({
+          n,
+          reply: JSON.parse(
+            readFileSync(join(dir, `${w.name}.${n}.json`), 'utf8'),
+          ) as ClassifierExtraction,
+        })),
     }))
-    return { dir, replies: replies.filter(({ numbers }) => numbers.length > 0) }
+    return { dir, replies: replies.filter(({ numbered }) => numbered.length > 0) }
   })
   const turns = windows.flatMap((w) => {
     const shown = new Set(
@@ -67,14 +74,9 @@ export function writeJudgeDump(
   shuffled.forEach(({ run }, i) => {
     const label = String.fromCharCode(65 + i)
     const lines = [`# Run ${label}`]
-    for (const { w, numbers } of run.replies) {
+    for (const { w, numbered } of run.replies) {
       lines.push('', `## Window ${w.name}`)
-      for (const n of numbers) {
-        const reply = JSON.parse(
-          readFileSync(join(run.dir, `${w.name}.${n}.json`), 'utf8'),
-        ) as ClassifierExtraction
-        lines.push('', `### Reply ${n}`, ...describeReply(reply))
-      }
+      for (const { n, reply } of numbered) lines.push('', `### Reply ${n}`, ...describeReply(reply))
     }
     writeFileSync(join(outDir, `run-${label}.md`), `${lines.join('\n')}\n`)
     key.push(`${label} ${run.dir}`)

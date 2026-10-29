@@ -13,8 +13,8 @@ judge reads every description against the turns.
    window's Known lists and turns as the prompt the runs answered
    showed them; `run-A.md` onward, each run's happenings and new
    characters under a label drawn at random; and `key.txt`, naming
-   each label's run. Runs whose prompts showed a window differently
-   are judged apart.
+   each label's run. It refuses runs whose prompts showed a window
+   differently: dump each group of runs into its own `<out-dir>`.
 3. Give a judge the brief below, with `<out-dir>` filled in, one judge
    a dump. Use a model other than any it judges, so no model judges
    itself.

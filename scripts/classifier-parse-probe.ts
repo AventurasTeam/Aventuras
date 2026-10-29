@@ -427,9 +427,10 @@ async function probeBranch(config: ResolveModelConfig, maxEntries: number): Prom
   return outcomes
 }
 
+// A window named twice runs once: its second pass would overwrite the first's saved replies.
 function selectWindows(names: string): readonly EvalWindow[] {
   if (names === 'all') return EVAL_WINDOWS
-  return names.split(',').map((name) => {
+  const windows = names.split(',').map((name) => {
     const window = EVAL_WINDOWS.find((w) => w.name === name.trim())
     if (window == null)
       throw new Error(
@@ -437,6 +438,7 @@ function selectWindows(names: string): readonly EvalWindow[] {
       )
     return window
   })
+  return [...new Set(windows)]
 }
 
 const listCounts = (reply: object) =>

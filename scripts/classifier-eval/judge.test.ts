@@ -123,4 +123,12 @@ describe('writeJudgeDump', () => {
     expect(() => writeJudgeDump([ambush!], [other], join(dir, 'b'))).toThrow(/no ambush\.user/)
     expect(existsSync(join(dir, 'b'))).toBe(false)
   })
+
+  it('reads every reply before writing, so a bad one leaves no partial dump', () => {
+    const run = saveRun('run', { 'ambush.1.json': 'first', 'recounted.1.json': 'second' })
+    writeFileSync(join(run, 'recounted.1.json'), '{ not json')
+    const out = join(dir, 'out')
+    expect(() => writeJudgeDump([ambush!, recounted!], [run], out)).toThrow(SyntaxError)
+    expect(existsSync(out)).toBe(false)
+  })
 })
