@@ -90,36 +90,6 @@ const happening = z.object({
 })
 
 export const classifierExtractionSchema = z.object({
-  happenings: tolerantList(happening),
-  relationships: tolerantList(
-    z.object({
-      subject: z.string(),
-      object: z.string(),
-      kind: z
-        .string()
-        .describe(
-          'How the subject sees the object, in a word or short phrase: sister, mentor, rival. Never the inverse.',
-        ),
-      sourceTurn,
-    }),
-  ),
-  statusFlips: tolerantList(
-    z.object({
-      ref: z.string(),
-      to: foldedEnum(
-        z
-          .enum(['active', 'retired'])
-          .describe(
-            'active for a staged entity of any kind the prose brings into the scene, or a retired character who returns; retired only for a character or faction, on unambiguous finality.',
-          ),
-      ),
-      reason: z
-        .string()
-        .optional()
-        .describe('For a retirement: why, in a short phrase from the prose.'),
-      sourceTurn,
-    }),
-  ),
   newCharacters: tolerantList(
     z.object({
       /** Temporary handle the model picks; later refs in the same reply use it. */
@@ -158,6 +128,36 @@ export const classifierExtractionSchema = z.object({
       sourceTurn,
       standing: tolerated(z.string()),
       agenda: profileTerms,
+    }),
+  ),
+  happenings: tolerantList(happening),
+  relationships: tolerantList(
+    z.object({
+      subject: z.string(),
+      object: z.string(),
+      kind: z
+        .string()
+        .describe(
+          'How the subject sees the object, in a word or short phrase: sister, mentor, rival. Never the inverse.',
+        ),
+      sourceTurn,
+    }),
+  ),
+  statusFlips: tolerantList(
+    z.object({
+      ref: z.string(),
+      to: foldedEnum(
+        z
+          .enum(['active', 'retired'])
+          .describe(
+            'active for a staged entity of any kind the prose brings into the scene, or a retired character who returns; retired only for a character or faction, on unambiguous finality.',
+          ),
+      ),
+      reason: z
+        .string()
+        .optional()
+        .describe('For a retirement: why, in a short phrase from the prose.'),
+      sourceTurn,
     }),
   ),
   memberships: tolerantList(
