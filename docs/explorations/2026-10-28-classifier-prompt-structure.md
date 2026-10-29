@@ -868,7 +868,7 @@ windows, so they differ from the figures given at each change.
 | 9, story's direction   | Tam added; Vane added                            | 36/50 → 10/10; 8/50 → 10/10 | 0.79 / 0.86              |
 | 10, person, creature   | a ship, a reef, the hanged brother added         | 7 in 10 runs → 0            | 0.82 / 0.88              |
 | 11, invoked names      | `namedrops`: an invoked name or the fiddler      | 2/10 → 0/20                 | 0.77 / 0.82, 0.80 / 0.80 |
-| 12, one happening      | the ambush, the market one happening each        | 0/20 → 19/20                | 0.91 / 0.80 with 13      |
+| 12, one happening      | the ambush, the market one happening each        | 0/20 → 20/20                | 0.91 / 0.80 with 13      |
 | 13, the lead           | Tobin involved; Pell in no happening             | 1/10 → 10/10; 0/10 → 10/10  | the same                 |
 | S1, labelled parts     | the archer; the gate-boy; reverted               | 4/10 → 6/10; 10 → 10        | 0.90 / 0.90              |
 | 14, deaths; reverted   | no description tells Tam as dead                 | 5/10 → 1/10                 | four windows only        |
