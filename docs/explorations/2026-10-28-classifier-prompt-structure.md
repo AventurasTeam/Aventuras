@@ -767,6 +767,24 @@ replies against 9; no earlier run had blanked an unnamed character
 there. Labelled apart from the named, the unnamed one seems to have
 been read as having no name to give. Reverted.
 
+## Change 14: a death only in the prose's words (reverted)
+
+The Tam check read only a death-titled happening and a retirement, so
+with change 12's descriptions it missed the misread. A check on
+descriptions found Tam told as dead in 5 to 9 of 10 replies on every
+prompt: "The cupbearer who died the same night as Lady Senna." The
+reasoning's first summary of the turn already has it: "Her cupbearer,
+Tam Rook, died the same night."
+
+Change 14 added a rule every list keeps: "Deaths. Say a character
+died, in a happening, a description or a status change, only where
+the turns' own words say so: one who fled, hid or went missing is
+alive", leaving out the window's own word, "ran". Run on the four
+windows a death touches, Tam was told as dead in 9 replies of 10
+against 5, and the reasoning still summarised the turn as his death
+before any rule was weighed. Reverted: a misreading at the first
+summary is out of a rule's reach on the dev model.
+
 ## Two more recoveries in code
 
 Two slips a rule had not stopped are now repaired after the reply

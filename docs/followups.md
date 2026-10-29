@@ -297,7 +297,9 @@ breakdown under [UX](#ux).
   - a death the prose never states: `learning`'s "her cupbearer ran
     the same night" is read as Tam Rook's death in 5 to 9 of 10
     replies on every prompt, in a description, a death-titled happening
-    or a retirement;
+    or a retirement. The reasoning's first summary of the turn already
+    has him dead, and a rule asking for the turns' own words before a
+    death is told did not reach it (1 of 10 clean against 5);
   - each turn's prose inside its own delimiters, the reason behind each
     rule that isn't obvious, a short worked example, and no capitals for
     emphasis;
