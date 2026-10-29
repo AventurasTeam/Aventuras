@@ -146,7 +146,10 @@ alias list (the keywords bullet below).
     (the slow path; see
     [Staged-entity promotion](./edge-cases.md#staged-entity-promotion)).
   - `active → retired` on hard finality signals only (death, exile,
-    faction-disbanded). Conservative bias. Never a location: a
+    faction-disbanded). Conservative bias. A death counts only where
+    the turns' own words state it, and the same holds for a happening
+    or a description telling one: a character who fled, hid or went
+    missing is alive. Never a location: a
     destroyed place stays active, its destruction a `condition`, and
     only the user retires a place
     ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
