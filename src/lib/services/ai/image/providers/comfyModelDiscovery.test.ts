@@ -43,6 +43,20 @@ describe('ComfyUI model discovery', () => {
     expect(await createComfyProvider({ apiKey: '' }).listModels()).toEqual([])
   })
 
+  it('reads only the checkpoint and diffusion model folders', async () => {
+    serveModels({ checkpoints: ['a.safetensors'], diffusion_models: [] })
+    await createComfyProvider({ apiKey: '' }).listModels()
+    expect(
+      vi
+        .mocked(imageGetFetch)
+        .mock.calls.map(([url]) => String(url))
+        .toSorted(),
+    ).toEqual([
+      'http://localhost:8188/models/checkpoints',
+      'http://localhost:8188/models/diffusion_models',
+    ])
+  })
+
   it('prefixes checkpoints and diffusion models by source', async () => {
     serveModels({ checkpoints: ['a.safetensors'], diffusion_models: ['flux.safetensors'] })
     const models = await createComfyProvider({ apiKey: '' }).listModels()

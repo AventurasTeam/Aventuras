@@ -45,7 +45,7 @@ export enum ComfyMode {
 // Values are Promises to prevent parallel fetches for the same baseUrl.
 const unetModelNames = new Map<string, Promise<Set<string>>>()
 
-// Cached auto-detected clip/vae names per baseUrl, populated in listModels()
+// The first text encoder and VAE the server lists, for a UNet profile that names none.
 const autoClipCache = new Map<string, string>()
 const autoVaeCache = new Map<string, string>()
 
@@ -695,16 +695,10 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
     },
 
     async listModels(): Promise<ImageModelInfo[]> {
-      const [checkpoints, diffusionModels, textEncoders, vaeModels] = await Promise.all([
+      const [checkpoints, diffusionModels] = await Promise.all([
         fetchModels('checkpoints'),
         fetchModels('diffusion_models').catch(() => []),
-        fetchModels('text_encoders').catch(() => []),
-        fetchModels('vae').catch(() => []),
       ])
-
-      // Cache auto-detected clip/vae for this baseUrl
-      if (textEncoders[0]) autoClipCache.set(baseUrl, textEncoders[0])
-      if (vaeModels[0]) autoVaeCache.set(baseUrl, vaeModels[0])
 
       // Track which models require the unet workflow (keyed per baseUrl, resolved Promise)
       unetModelNames.set(baseUrl, Promise.resolve(new Set(diffusionModels)))
