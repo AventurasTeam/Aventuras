@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite'
 
 import { and, asc, eq, gt } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
+import { z } from 'zod'
 
 import {
   describeCallRetryError,
@@ -53,7 +54,9 @@ import { resolveDevSlot } from './dev-slot/resolve'
 // (unset: the server's own), PROBE_BRANCH_ID
 // (br_hero_main), AVENTURAS_DB_PATH (dev slot db, read-only). PROBE_EVAL (all, or window names)
 // sends the evaluation set's windows instead and scores each reply; PROBE_OUT saves the replies,
-// raw and read.
+// raw and read. PROBE_STRUCTURED sends the reply schema as the request's json_schema
+// response_format, which the app doesn't do yet: native (structured output forced on, so no schema
+// in the prompt) or both (the prompt's schema too).
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
 const LLM_KEY = process.env.SMOKE_LLM_KEY ?? ''
@@ -65,6 +68,7 @@ const MAX_OUTPUT =
 const TEMPERATURE =
   process.env.PROBE_TEMPERATURE === undefined ? undefined : Number(process.env.PROBE_TEMPERATURE)
 const BRANCH_ID = process.env.PROBE_BRANCH_ID ?? 'br_hero_main'
+const STRUCTURED = process.env.PROBE_STRUCTURED
 
 const PROVIDER_ID = 'prov_probe'
 const PROFILE_ID = 'prof_probe'
@@ -403,6 +407,7 @@ async function probeBranch(config: ResolveModelConfig, maxEntries: number): Prom
     }),
   )
   const schema = classifierReplySchema(branch.mentionedPlaces)
+  responseSchema = z.toJSONSchema(schema)
   console.log(
     `[probe] ${dbPath} ${BRANCH_ID}: ${window.turns.length} turns, ` +
       `mentioned places ${branch.mentionedPlaces ? 'on' : 'off'}, ` +
@@ -438,6 +443,25 @@ const listCounts = (reply: object) =>
     .map(([name, list]) => `${name} ${(list as unknown[]).length}`)
     .join(', ') || 'every list empty'
 
+// The schema the next call's response_format carries. The openai-compatible provider is created
+// without supportsStructuredOutputs, so it sends json_object with no schema, or nothing on auto.
+let responseSchema: unknown
+
+function sendResponseSchema(): void {
+  const send = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const request = new Request(input, init)
+    if (responseSchema === undefined || !request.url.endsWith('/chat/completions'))
+      return send(request)
+    const body = JSON.parse(await request.text()) as Record<string, unknown>
+    body.response_format = {
+      type: 'json_schema',
+      json_schema: { name: 'response', schema: responseSchema, strict: false },
+    }
+    return send(new Request(request, { body: JSON.stringify(body) }))
+  }
+}
+
 async function probeEvalSet(
   names: string,
   config: ResolveModelConfig,
@@ -450,9 +474,11 @@ async function probeEvalSet(
   for (const w of windows) {
     const rendered = renderWindow(w, maxEntries)
     const { prompt } = rendered
+    responseSchema = z.toJSONSchema(rendered.schema)
     console.log(
       `[probe] eval ${w.name}, ${w.about}: prompt ${prompt.system.length + prompt.user.length} ` +
-        `chars, max output ${MAX_OUTPUT ?? 'unset'}, temperature ${TEMPERATURE ?? 'unset'}; ${RUNS} runs of ${LLM_MODEL}`,
+        `chars, max output ${MAX_OUTPUT ?? 'unset'}, temperature ${TEMPERATURE ?? 'unset'}, ` +
+        `response schema ${STRUCTURED ?? 'in the prompt only'}; ${RUNS} runs of ${LLM_MODEL}`,
     )
     if (OUT != null)
       writeFileSync(join(OUT, `${w.name}.prompt.txt`), `${prompt.system}\n\n${prompt.user}\n`)
@@ -542,6 +568,9 @@ async function main(): Promise<void> {
     throw new Error(`PROBE_MAX_OUTPUT must be a positive integer`)
   if (TEMPERATURE !== undefined && !(TEMPERATURE >= 0 && TEMPERATURE <= 2))
     throw new Error(`PROBE_TEMPERATURE must be a number from 0 to 2`)
+  if (STRUCTURED !== undefined && STRUCTURED !== 'native' && STRUCTURED !== 'both')
+    throw new Error(`PROBE_STRUCTURED must be native or both`)
+  if (STRUCTURED !== undefined) sendResponseSchema()
 
   // getModel resolves providers through the app-settings store, so the probe's provider goes there.
   const hydrated = await hydrateAppSettings(async () => ({
@@ -563,6 +592,7 @@ async function main(): Promise<void> {
         modelRef: { providerId: PROVIDER_ID, modelId: LLM_MODEL },
         ...(MAX_OUTPUT !== undefined ? { maxOutput: MAX_OUTPUT } : {}),
         ...(TEMPERATURE !== undefined ? { temperature: TEMPERATURE } : {}),
+        ...(STRUCTURED === 'native' ? { structuredOutput: 'force-on' as const } : {}),
       },
     ],
     assignments: { classifier: PROFILE_ID },
