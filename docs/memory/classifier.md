@@ -151,7 +151,8 @@ alias list (the keywords bullet below).
   happening the reply itself adds is that happening's own awareness,
   unless it already lists the character; any other name no Known
   happening holds, a title two of the reply's happenings share among
-  them, plans nothing. A happening with a blank title creates
+  them, plans nothing. A character a happening's awareness names twice,
+  by one ref or by two that resolve to one row, keeps the first entry. A happening with a blank title creates
   nothing, its involvements and awareness with it, and is logged.
 - **Status transitions** — `entities.status` flips:
   - `staged → active` when prose mentions a staged entity in scene
