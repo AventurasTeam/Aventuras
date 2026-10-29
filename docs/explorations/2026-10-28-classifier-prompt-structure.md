@@ -1019,6 +1019,27 @@ rule mean fell from 0.93 to 0.90 on six windows, inside the 0.92 and
 and Tam's death checks can fail only where Tam exists, now in every
 reply. Kept.
 
+## Change 18: a time in the prose's own words
+
+The judge's second finding, the hanging "twelve years ago", is a time
+worked out from Brann's twelve years of service. "When it happened"
+asked for a recounted event's time "as the prose gives it"; it now
+asks for "its time in the prose's own words, never one worked out from
+other numbers in it", and the `temporal` field says the same.
+"Numbers", not "figures": the prompt uses "figure" for a character.
+
+The hanging carried no worked-out time in 9 of 10 replies, against 6,
+8, 7 and 6 on the four runs before; it was dated "before the story" 3
+times and in the prose's own phrase twice. The wreck kept "thirty
+winters back" in all 10, where 2 of change 17's had made it "thirty
+years ago". In the same run Idris learned of the poisoning in only 6
+of 10, against 39 of 40 before. The misses read off this rule: two
+replies added the poisoning again, one quoting the rule only to word
+the copy's time; one left knownAwareness empty after deciding not to
+add it; one read "who knows of a happening this reply adds goes in its
+own awareness" as keeping knownAwareness to added happenings. Run
+again, `learning` gave 9 of 10. Kept.
+
 ## Where it stands
 
 Every change, with the check it was made for. The baseline and change
@@ -1049,6 +1070,7 @@ windows, so they differ from the figures given at each change.
 | 15, run again          | the same                                         | 4/10 → 5/10                 | 0.90 / 0.88              |
 | 16, telling turn       | happenings without a sourceTurn                  | 32/169 → 0/78               | 0.92 / 0.90              |
 | 17, part over, unnamed | Tam added                                        | 7/10 → 10/10                | 0.89 / 0.90              |
+| 18, prose's own words  | the hanging's time not worked out                | 6/10 → 9/10                 | 0.90 / 0.86              |
 
 Changes 12 and 13 ran together on the five windows, 13 alone on
 `ambush`, whose prompt alone it changed. The checks moved several
