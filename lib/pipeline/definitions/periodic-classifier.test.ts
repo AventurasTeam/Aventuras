@@ -1281,6 +1281,51 @@ describe('periodicClassifierPhase', () => {
     expect(involvement.action.payload.entry.entityId).not.toBe(CHAR_KAEL)
   })
 
+  // classifier.md → Disambiguation: a reveal the reply also wrote up as a newcomer.
+  it('takes a new character named as the reply renames a listed one for that character', async () => {
+    const stranger = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'the hooded stranger',
+      status: 'active',
+      description: 'A stranger in a hood.',
+      keywords: [],
+    } as unknown as Entity
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction({
+        renames: [{ ref: 'c1', name: 'Kael', sourceTurn: 't1' }],
+        newCharacters: [
+          {
+            handle: 'new:kael',
+            name: 'Kael',
+            description: 'A courier.',
+            keywords: [],
+            sourceTurn: 't1',
+          },
+        ],
+        happenings: [
+          { title: 'A', sourceTurn: 't1', involvements: [{ ref: 'new:kael' }], awareness: [] },
+        ],
+      }),
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [stranger] })
+    const { events } = await drain(h.ctx)
+
+    const kinds = events.map((e) => (e as { action: { kind: string } }).action.kind)
+    expect(kinds).not.toContain('createEntity')
+    const renamed = events.find(
+      (e) => (e as { action: { kind: string } }).action.kind === 'renameEntity',
+    ) as { action: { payload: { id: string; name: string } } }
+    expect(renamed.action.payload).toMatchObject({ id: CHAR_KAEL, name: 'Kael' })
+    const involvement = events.find(
+      (e) => (e as { action: { kind: string } }).action.kind === 'createHappeningInvolvement',
+    ) as { action: { payload: { entry: { entityId: string } } } }
+    expect(involvement.action.payload.entry.entityId).toBe(CHAR_KAEL)
+  })
+
   it('reconciles a new character against a staged namesake and promotes instead of creating', async () => {
     const vector = Float32Array.from([1, 0, 0])
     const embedder = vi.fn(async () => ({ vectors: [vector, vector], dim: 3 }))

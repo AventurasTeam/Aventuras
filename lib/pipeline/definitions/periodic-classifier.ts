@@ -366,6 +366,7 @@ export async function* periodicClassifierPhase(
 
   const deps = {
     entities,
+    renames: substituted.renames,
     embedDescriptions: classifierEmbedder(),
     log: ctx.log,
     signal: ctx.abortSignal,

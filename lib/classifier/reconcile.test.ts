@@ -300,6 +300,45 @@ const candidate = (
 })
 
 describe('reconcileNewEntity', () => {
+  // classifier.md → Disambiguation: a reveal the reply also wrote up as a newcomer.
+  it.each([
+    ['takes a candidate named as the reply renames a row for that row', 'active', 'known'],
+    ['promotes a staged row the reply renames to the candidate’s name', 'staged', 'promote'],
+  ] as const)('%s, with no embed call', async (_label, status, kind) => {
+    const embed = embedder({})
+    const decision = await reconcileNewEntity(candidate({ name: ' ILSE marrow' }), {
+      kind: 'character',
+      entities: [row({ id: 'char_grey', name: 'Woman in grey', status })],
+      renames: [{ ref: 'char_grey', name: 'Ilse Marrow' }],
+      embedDescriptions: embed,
+      log: logger,
+      signal,
+      scene: null,
+    })
+    expect(decision).toEqual({ kind, entityId: 'char_grey', similarity: null })
+    expect(embed).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['a row of another kind', 'fact_grey', 'Ilse Marrow', 'Ilse Marrow'],
+    ['a row the reply gives only a fuller name', 'char_grey', 'Ilse Marrow', 'Ilse'],
+    ['an id no row holds', 'char_gone', 'Ilse Marrow', 'Ilse Marrow'],
+  ])('creates the candidate when the rename names %s', async (_label, ref, renamed, name) => {
+    const decision = await reconcileNewEntity(candidate({ name }), {
+      kind: 'character',
+      entities: [
+        row({ id: 'char_grey', name: 'Woman in grey' }),
+        row({ id: 'fact_grey', kind: 'faction', name: 'The Greys' }),
+      ],
+      renames: [{ ref, name: renamed }],
+      embedDescriptions: embedder({}),
+      log: logger,
+      signal,
+      scene: null,
+    })
+    expect(decision).toEqual({ kind: 'create', flag: null })
+  })
+
   it('creates plain with no embed call when no character is a namesake', async () => {
     const embed = embedder({})
     const decision = await reconcileNewEntity(candidate({ name: 'John' }), {

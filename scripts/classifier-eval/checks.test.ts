@@ -24,6 +24,23 @@ describe('createdCharacters', () => {
     })
     expect(createdCharacters(r).map((c) => c.handle)).toEqual(['new:dov'])
   })
+
+  it('leaves out one named as the reply renames a listed character, which the planner absorbs', () => {
+    const ilse = {
+      handle: 'new:ilse',
+      name: 'ilse  MARROW',
+      description: 'x',
+      keywords: [],
+      sourceTurn: 't2',
+    }
+    const renamed = (ref: string, name: string) =>
+      createdCharacters(
+        reply({ newCharacters: [ilse], renames: [{ ref, name, sourceTurn: 't2' }] }),
+      ).length
+    expect(renamed('char_grey', 'Ilse Marrow')).toBe(0)
+    expect(renamed('char_grey', 'Ilse')).toBe(1)
+    expect(renamed('fact_grey', 'Ilse Marrow')).toBe(1)
+  })
 })
 
 describe('factionAfter', () => {

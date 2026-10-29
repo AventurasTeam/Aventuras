@@ -1,4 +1,5 @@
 import type { ClassifierExtraction } from '@/lib/classifier'
+import { nameBasis } from '@/lib/world'
 
 import type { Check, EvalWindow } from './fixture'
 
@@ -9,9 +10,16 @@ export const involves = (h: ReplyHappening, ref: string): boolean =>
 
 export const isRecounted = (h: ReplyHappening): boolean => (h.temporal?.trim() ?? '') !== ''
 
-/** The new characters the planner creates: it plans nothing for a blank name. */
+/** The new characters the planner creates: it plans nothing for a blank name, and one named as
+ *  the reply renames a row is that row (classifier.md → Disambiguation). */
 export const createdCharacters = (reply: ClassifierExtraction) =>
-  reply.newCharacters.filter((c) => c.name.trim() !== '')
+  reply.newCharacters.filter(
+    (c) =>
+      c.name.trim() !== '' &&
+      !reply.renames.some(
+        (n) => n.ref.startsWith('char_') && nameBasis(c.name, n.name) === 'same-name',
+      ),
+  )
 
 export const newCharacterNamed = (reply: ClassifierExtraction, name: RegExp) =>
   createdCharacters(reply).find((c) => name.test(c.name))

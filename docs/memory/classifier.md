@@ -370,6 +370,15 @@ and decides whether to absorb it into one of them, create it flagged
 for World-panel review, or create it plain. Candidates in one reply
 are not compared with each other.
 
+**A reveal written twice.** A candidate whose name, under the
+normalization below, is the exact name one of the reply's renames
+gives a branch row of its kind is that row, before any comparison
+and with no score: the reply revealed the row's name and also added
+the revealed name as a newcomer. It absorbs as the decision's first
+row does, promoting a staged row and otherwise treating the mention as
+the row's, and the rename then lands with no other holder of the name.
+A shortened or fuller form of the revealed name compares as usual.
+
 **Namesakes.** Names compare under the keyword-term normalization
 (trimmed, lowercased, NFC), split into words on whitespace.
 
