@@ -931,6 +931,49 @@ invented an inquiry. Errors cluster in the fight's order and in the
 recounted wreck. Three of the findings were checked against the
 replies and hold.
 
+## Native structured output, measured
+
+The app has never sent the reply schema to a provider: the
+openai-compatible provider is created without
+`supportsStructuredOutputs`, so structured output forced on sends a
+bare `json_object`, and auto sends nothing. A probe-only switch now
+rewrites the request: `native` forces structured output on and sends
+the schema as `json_schema`, `both` keeps the prompt's schema too, and
+`json` keeps the prompt's schema and asks only for `json_object`. A
+canary schema requiring a value the prompt never names came back
+filled from DeepSeek and GLM, so the constraint reaches them.
+
+| Model, mode        | Rule mean | Reasoning tokens, median | Median call |
+| ------------------ | --------- | ------------------------ | ----------- |
+| DeepSeek, auto     | 0.99      | 3,094                    | 39 s        |
+| DeepSeek, both     | 0.93      | 971                      | 14 s        |
+| DeepSeek, native   | 0.94      | 1,170                    | 17 s        |
+| GLM, auto          | 0.99      | 7,024                    | 103 s       |
+| GLM, both          | 0.94      | 9,115                    | 136 s       |
+| GLM, native        | 0.89      | 7,802                    | 117 s       |
+| DeepSeek API, auto | 0.99      | 3,106                    | 23 s        |
+| DeepSeek API, json | 0.97      | 2,685                    | 23 s        |
+
+Every mode parsed every reply; auto already did, through the recovery
+in code. Under a schema both models filled every property in the
+schema's order and the values slid a slot: `temporal` took the
+category's word ("skirmish"), `icon` the turn handle ("t4"), and
+sourceTurn went empty, so scenes left story time. The requests the
+provider forwarded upstream, which the developer read, carry the
+schema verbatim, `strict` false and only `title`, `involvements` and
+`awareness` required on a happening: the engines' constrained decoding
+forces the rest. GLM reasoned in full and slid all the same, so the
+schema did the damage, not lost reasoning. A schema for strict output
+would hold every field, with absence an explicit null. JSON-only mode,
+DeepSeek's JSON Output on its own API, slid nothing and kept the
+reasoning, and had nothing to repair.
+
+One Gemma call with the native schema, on the dev llama.cpp build,
+reasoned in full before its reply: the grammar applied after the
+reasoning, putting required properties first, with nothing slid. With
+no schema in the prompt, one of its two happenings had no
+description.
+
 ## Where it stands
 
 Every change, with the check it was made for. The baseline and change
