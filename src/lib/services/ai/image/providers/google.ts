@@ -51,11 +51,6 @@ export function createGoogleProvider(config: ImageProviderConfig): ImageProvider
     async listModels(): Promise<ImageModelInfo[]> {
       return fetchGoogleImageModels(baseUrl, config.apiKey)
     },
-
-    // `models.list` carries no image capabilities, so they come from the table.
-    async getModelCapabilities(model: string): Promise<ImageModelCapabilities | undefined> {
-      return isSdkImageModel(model) ? googleImageCapabilities(model) : undefined
-    },
   }
 }
 

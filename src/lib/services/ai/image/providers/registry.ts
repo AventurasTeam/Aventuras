@@ -22,10 +22,10 @@ import { IMAGE_MODEL_SNAPSHOT_VERSION, snapshotModel } from './modelSnapshot'
 
 // Provider factory imports (lazy)
 import { createNanoGPTProvider } from './nanogpt'
-import { createOpenAIProvider } from './openai'
+import { createOpenAIProvider, openaiModelCapabilities } from './openai'
 import { createOpenAICompatibleProvider } from './openaiCompatibleProvider'
 import { createPollinationsProvider } from './pollinations'
-import { createGoogleProvider } from './google'
+import { createGoogleProvider, googleModelCapabilities } from './google'
 import { createZhipuProvider } from './zhipu'
 import { comfyReferenceLimit, createComfyProvider } from './comfy'
 import { createOpenRouterProvider } from './openrouter'
@@ -123,6 +123,32 @@ export const referenceLimit = (
   providerOptions: ImageProfile['providerOptions'],
 ): number => PROVIDER_REFERENCE_LIMIT[providerType](providerOptions)
 
+type CapabilitySource =
+  | { kind: 'snapshot' }
+  | { kind: 'table'; lookup: (model: string) => ImageModelCapabilities | undefined }
+  | { kind: 'none' }
+
+/**
+ * Where a provider's per-model capabilities come from at generation: `snapshot` for an API that
+ * can change under a saved profile, `table` for a map in the adapter, `none` for nothing that
+ * generation reads. Exhaustive by type, so a new provider has to declare which it is.
+ */
+const PROVIDER_CAPABILITIES: Record<ImageProviderType, CapabilitySource> = {
+  nanogpt: { kind: 'snapshot' },
+  openai: { kind: 'table', lookup: openaiModelCapabilities },
+  'openai-compatible': { kind: 'snapshot' },
+  openrouter: { kind: 'snapshot' },
+  pollinations: { kind: 'snapshot' },
+  google: { kind: 'table', lookup: googleModelCapabilities },
+  zhipu: { kind: 'none' },
+  comfyui: { kind: 'none' },
+  a1111: { kind: 'none' },
+}
+
+/** Whether a profile of this provider type saves a snapshot of its model's capabilities. */
+export const capturesModelSnapshot = (providerType: ImageProviderType): boolean =>
+  PROVIDER_CAPABILITIES[providerType].kind === 'snapshot'
+
 // ============================================================================
 // Model Cache
 // ============================================================================
@@ -157,8 +183,28 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
 }
 
-/** What a profile's model can do, from its snapshot; a legacy or outdated one is looked up once. */
+/** What a profile's model can do, from the source its provider declares. */
 async function modelCapabilities(
+  profile: ImageProfile,
+  model: string,
+): Promise<ImageModelCapabilities | undefined> {
+  const source = PROVIDER_CAPABILITIES[profile.providerType]
+  switch (source.kind) {
+    case 'table':
+      return source.lookup(model)
+    case 'none':
+      return undefined
+    case 'snapshot':
+      return snapshotCapabilities(profile, model)
+    default: {
+      const unreachable: never = source
+      return unreachable
+    }
+  }
+}
+
+/** From the profile's snapshot; a legacy or outdated one is looked up once. */
+async function snapshotCapabilities(
   profile: ImageProfile,
   model: string,
 ): Promise<ImageModelCapabilities | undefined> {
@@ -300,7 +346,7 @@ export async function generateImage(options: {
 
   const provider = PROVIDER_FACTORIES[profile.providerType](config)
 
-  // The model's sizes and reference limit, from the profile's snapshot.
+  // The model's sizes and reference limit, from the source its provider declares.
   const capabilities = await modelCapabilities(profile, model)
 
   // A reference that cannot be fetched is dropped; the scene is still worth drawing without it.

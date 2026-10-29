@@ -111,11 +111,6 @@ export function createOpenAIProvider(config: ImageProviderConfig): ImageProvider
     async listModels(apiKey: string): Promise<ImageModelInfo[]> {
       return fetchOpenAIImageModels(baseUrl, apiKey)
     },
-
-    // `/models` carries no capabilities, so they come from the table.
-    async getModelCapabilities(model: string): Promise<ImageModelCapabilities | undefined> {
-      return isOpenAIImageModel(model) ? openaiImageCapabilities(model) : undefined
-    },
   }
 }
 

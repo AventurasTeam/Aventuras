@@ -42,7 +42,7 @@ export interface ImageGenerateOptions {
   prompt: string
   /** What the user asked for. Each adapter turns it into whatever its backend takes. */
   spec: ImageSpec
-  /** The selected model's capabilities, from the profile's snapshot. */
+  /** The selected model's capabilities, from the profile's snapshot or the provider's table. */
   modelInfo?: ImageModelCapabilities
   referenceImages?: string[] // raw base64 (no data: prefix)
   signal?: AbortSignal
@@ -73,8 +73,9 @@ export interface ImageProvider {
   generate(options: ImageGenerateOptions): Promise<ImageGenerateResult>
   listModels(apiKey?: string): Promise<ImageModelInfo[]>
   /**
-   * One model's capabilities, for providers that can describe a model without listing them all.
-   * Rejects on failure; `undefined` means the provider does not know the model.
+   * One model's capabilities, for snapshot providers that can describe a model without listing
+   * them all: the lookup that backfills a profile's snapshot. Rejects on failure; `undefined`
+   * means the provider does not know the model.
    */
   getModelCapabilities?(model: string): Promise<ImageModelCapabilities | undefined>
   // ComfyUI specific

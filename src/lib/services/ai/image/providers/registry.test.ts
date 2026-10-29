@@ -24,6 +24,15 @@ vi.mock('./fetchAdapter', () => ({
 
 vi.mock('./openai', () => ({
   createOpenAIProvider: vi.fn(),
+  openaiModelCapabilities: vi.fn(),
+}))
+
+vi.mock('./openrouter', () => ({
+  createOpenRouterProvider: vi.fn(),
+}))
+
+vi.mock('./zhipu', () => ({
+  createZhipuProvider: vi.fn(),
 }))
 
 vi.mock('./comfy', () => ({
@@ -39,6 +48,7 @@ vi.mock('./a1111', () => ({
 
 vi.mock('./google', () => ({
   createGoogleProvider: vi.fn(),
+  googleModelCapabilities: vi.fn(),
 }))
 
 vi.mock('#lib/utils/url.ts', async (importOriginal) => {
@@ -48,10 +58,12 @@ vi.mock('#lib/utils/url.ts', async (importOriginal) => {
 
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { fetchPublicImageBase64 } from './fetchAdapter'
-import { createOpenAIProvider } from './openai'
+import { createOpenAIProvider, openaiModelCapabilities } from './openai'
+import { createOpenRouterProvider } from './openrouter'
+import { createZhipuProvider } from './zhipu'
 import { comfyReferenceLimit, createComfyProvider } from './comfy'
 import { createA1111Provider } from './a1111'
-import { createGoogleProvider } from './google'
+import { createGoogleProvider, googleModelCapabilities } from './google'
 import type { ImageModelInfo } from './types'
 import {
   supportsImageGeneration,
@@ -74,6 +86,8 @@ describe('Image Provider Registry', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(comfyReferenceLimit).mockReturnValue(0)
+    vi.mocked(openaiModelCapabilities).mockReturnValue(undefined)
+    vi.mocked(googleModelCapabilities).mockReturnValue(undefined)
   })
 
   describe('supportsImageGeneration', () => {
@@ -210,7 +224,7 @@ describe('Image Provider Registry', () => {
     // The model list is cached per key, so each case gets its own.
     let keyCounter = 0
     function setup(
-      providerType: 'openai' | 'google' | 'comfyui' | 'a1111',
+      providerType: 'openai' | 'openrouter' | 'google' | 'comfyui' | 'a1111',
       models: ImageModelInfo[] = [],
       providerOptions: Record<string, unknown> = {},
     ) {
@@ -222,6 +236,7 @@ describe('Image Provider Registry', () => {
         listModels: vi.fn(async () => models),
       }
       vi.mocked(createOpenAIProvider).mockReturnValue(provider)
+      vi.mocked(createOpenRouterProvider).mockReturnValue(provider)
       vi.mocked(createGoogleProvider).mockReturnValue(provider)
       vi.mocked(createComfyProvider).mockReturnValue(provider)
       vi.mocked(createA1111Provider).mockReturnValue(provider)
@@ -259,7 +274,7 @@ describe('Image Provider Registry', () => {
     })
 
     it('trims references to the model limit before downloading any', async () => {
-      const generate = setup('openai', [
+      const generate = setup('openrouter', [
         { id: 'dall-e-2', name: 'dall-e-2', supportsImg2Img: true, maxReferenceImages: 1 },
       ])
 
@@ -329,7 +344,7 @@ describe('Image Provider Registry', () => {
     })
 
     it('downloads no reference for a model that takes none', async () => {
-      const generate = setup('openai', [
+      const generate = setup('openrouter', [
         { id: 'dall-e-3', name: 'DALL·E 3', supportsImg2Img: false, maxReferenceImages: 0 },
       ])
 
@@ -427,6 +442,7 @@ describe('Image Provider Registry', () => {
         listModels: vi.fn(async () => models),
       }
       vi.mocked(createOpenAIProvider).mockReturnValue(provider)
+      vi.mocked(createOpenRouterProvider).mockReturnValue(provider)
       vi.mocked(createComfyProvider).mockReturnValue(provider)
       vi.mocked(createA1111Provider).mockReturnValue(provider)
       vi.mocked(settings.getImageProfile).mockReturnValue({
@@ -461,17 +477,17 @@ describe('Image Provider Registry', () => {
     })
 
     it('is false for a model marked as lacking img2img', async () => {
-      setup('openai', [{ id: 'm', name: 'm', supportsImg2Img: false }])
+      setup('openrouter', [{ id: 'm', name: 'm', supportsImg2Img: false }])
       expect(await supportsReferenceImages('p', 'm')).toBe(false)
     })
 
     it('is true for a model that supports img2img', async () => {
-      setup('openai', [{ id: 'm', name: 'm', supportsImg2Img: true }])
+      setup('openrouter', [{ id: 'm', name: 'm', supportsImg2Img: true }])
       expect(await supportsReferenceImages('p', 'm')).toBe(true)
     })
 
     it('passes a model absent from the list', async () => {
-      setup('openai', [{ id: 'other', name: 'other', supportsImg2Img: false }])
+      setup('openrouter', [{ id: 'other', name: 'other', supportsImg2Img: false }])
       expect(await supportsReferenceImages('p', 'm')).toBe(true)
     })
 
@@ -495,16 +511,16 @@ describe('Image Provider Registry', () => {
     ) {
       const n = counter++
       const generate = vi.fn(async (_options: unknown) => ({ base64: 'RESULT' }))
-      vi.mocked(createOpenAIProvider).mockReturnValue({
-        id: 'openai',
-        name: 'openai',
+      vi.mocked(createOpenRouterProvider).mockReturnValue({
+        id: 'openrouter',
+        name: 'openrouter',
         generate,
         listModels,
         getModelCapabilities,
       })
       const profile = {
         id: `snap-${n}`,
-        providerType: 'openai',
+        providerType: 'openrouter',
         apiKey: `sk-snap-${n}`,
         model: 'm',
         providerOptions: {},
@@ -722,6 +738,82 @@ describe('Image Provider Registry', () => {
       expect(await supportsReferenceImages('p', 'm')).toBe(false)
       expect(listModels).not.toHaveBeenCalled()
     })
+  })
+
+  describe('capability source', () => {
+    let counter = 0
+    function setup(providerType: ImageProviderType, over: Partial<ImageProfile> = {}) {
+      const n = counter++
+      const generate = vi.fn(async (_options: unknown) => ({ base64: 'RESULT' }))
+      const listModels = vi.fn(async (): Promise<ImageModelInfo[]> => [])
+      const provider = { id: providerType, name: providerType, generate, listModels }
+      vi.mocked(createOpenAIProvider).mockReturnValue(provider)
+      vi.mocked(createGoogleProvider).mockReturnValue(provider)
+      vi.mocked(createZhipuProvider).mockReturnValue(provider)
+      vi.mocked(createComfyProvider).mockReturnValue(provider)
+      vi.mocked(createA1111Provider).mockReturnValue(provider)
+      vi.mocked(settings.getImageProfile).mockReturnValue({
+        id: `source-${n}`,
+        providerType,
+        apiKey: `sk-source-${n}`,
+        model: 'm',
+        providerOptions: {},
+        ...over,
+      } as ImageProfile)
+      vi.mocked(settings.updateImageProfile).mockResolvedValue(undefined)
+      return { generate, listModels }
+    }
+
+    const staleSnapshot = {
+      model: 'm',
+      version: IMAGE_MODEL_SNAPSHOT_VERSION,
+      capturedAt: 1,
+      capabilities: { supportedResolutions: ['2k'] },
+    }
+    const generate = () => generateImage({ profileId: 'p', model: 'm', prompt: 'x' })
+
+    it.each([
+      ['openai', openaiModelCapabilities],
+      ['google', googleModelCapabilities],
+    ] as const)(
+      'hands a %s profile its table, not its snapshot, and neither lists nor saves',
+      async (providerType, lookup) => {
+        const table = { supportedResolutions: ['1024x1024'] }
+        vi.mocked(lookup).mockReturnValue(table)
+        const { generate: send, listModels } = setup(providerType, {
+          modelSnapshot: staleSnapshot,
+        })
+
+        await generate()
+
+        expect(lookup).toHaveBeenCalledWith('m')
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ modelInfo: table }))
+        expect(listModels).not.toHaveBeenCalled()
+        expect(settings.updateImageProfile).not.toHaveBeenCalled()
+      },
+    )
+
+    it('reads the table in supportsReferenceImages', async () => {
+      vi.mocked(openaiModelCapabilities).mockReturnValue({ supportsImg2Img: false })
+      setup('openai', {
+        modelSnapshot: { ...staleSnapshot, capabilities: { supportsImg2Img: true } },
+      })
+
+      expect(await supportsReferenceImages('p', 'm')).toBe(false)
+    })
+
+    it.each(['zhipu', 'comfyui', 'a1111'] as const)(
+      'gives a %s profile no capabilities and neither lists nor saves',
+      async (providerType) => {
+        const { generate: send, listModels } = setup(providerType)
+
+        await generate()
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ modelInfo: undefined }))
+        expect(listModels).not.toHaveBeenCalled()
+        expect(settings.updateImageProfile).not.toHaveBeenCalled()
+      },
+    )
   })
 
   describe('lookupModelCapabilities', () => {
