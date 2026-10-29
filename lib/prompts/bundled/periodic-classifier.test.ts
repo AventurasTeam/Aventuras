@@ -512,6 +512,10 @@ describe('periodic classifier template — standing and threads', () => {
 describe('periodic classifier template — the writer map rules', () => {
   const RULES = [
     [
+      'one happening an encounter',
+      "- One happening an encounter. A happening is one whole event, however many turns it runs across: a fight, a meeting, a bargain, a theft, a chase. Its beats are not happenings of their own: the insult that starts a duel, each blow and the wound that ends it are one happening, the duel, as a feast's toasts, the quarrel at it and the walkout are one, the feast. Give it the latest turn it runs to as sourceTurn, and a description telling its notable moments in order, in a few sentences: who did what, what was said, given or lost, and how it ended, so that a character recalling it later has the scene to recall. Another event is another happening: one at another time or place, or one the turns only recount.\n",
+    ],
+    [
       'titles',
       '- Titles. Give every happening a title, a few words naming the event as a chapter heading would ("The duel at the mill"), and a description of what happened, from the prose. A happening without a title is dropped, with its involvements and awareness.\n',
     ],

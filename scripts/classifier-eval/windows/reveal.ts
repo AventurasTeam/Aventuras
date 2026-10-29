@@ -78,13 +78,13 @@ By the time the barrow had passed she was straight-backed again and twenty paces
     {
       name: 'the meeting in the market is one happening, not one a beat',
       kind: 'expect',
-      basis: 'judgment',
+      basis: 'rule',
       holds: (r) => r.happenings.filter((h) => !isRecounted(h)).length === 1,
     },
     {
       name: 'a happening tells the meeting’s moments: the cornering, her name, the note',
       kind: 'expect',
-      basis: 'judgment',
+      basis: 'rule',
       holds: (r) =>
         r.happenings.some((h) =>
           [/corner|knife|confront|awning/i, /ilse|marrow|heron/i, /note/i].every((moment) =>

@@ -103,7 +103,13 @@ alias list (the keywords bullet below).
   `happening_awareness`. New rows for events extracted from the prose
   window, each with a free-form `category` and an `icon` from the
   catalog, and `decay_resistance` set per awareness row from the
-  model's per-character severity judgment at extraction time. Each
+  model's per-character severity judgment at extraction time. A
+  happening is one whole event, however many turns it runs across: a
+  fight, a meeting, a bargain, never a beat of one. Its description
+  tells the notable moments in order, who did what, what was said,
+  given or lost and how it ended, so that a character recalling it
+  has the scene to recall. Another event is another happening: one at
+  another time or place, or one the turns only recount. Each
   happening sits in story time at its source turn
   (`occurred_at_entry_id`), where the turns show it happen, or, for an
   event from before the story or offstage that the turns only recount,

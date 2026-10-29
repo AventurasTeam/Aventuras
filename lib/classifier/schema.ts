@@ -70,7 +70,12 @@ const involvement = z.object({ ref: z.string(), role: z.string().optional() })
 
 const happening = z.object({
   title: z.string().describe('A few words naming the event; every happening needs one.'),
-  description: z.string().optional(),
+  description: z
+    .string()
+    .optional()
+    .describe(
+      'What happened, from the prose: for an event across several turns, its notable moments in order, in a few sentences.',
+    ),
   temporal: z
     .string()
     .optional()

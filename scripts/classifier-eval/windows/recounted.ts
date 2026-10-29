@@ -123,7 +123,7 @@ Nessa folded the page into her coat. She would take it to the magistrates' court
     {
       name: 'the wreck is one happening: the doused lamp is a moment of it, not its own',
       kind: 'avoid',
-      basis: 'judgment',
+      basis: 'rule',
       holds: (r) =>
         !r.happenings.some(
           (h) => /dous|order|lamp|light/i.test(h.title) && !/wreck|sink|marigold/i.test(h.title),

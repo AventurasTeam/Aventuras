@@ -116,7 +116,7 @@ Maela slid the paper across the table. He read it twice, then unpinned the tarni
     {
       name: 'the alehouse bargain is one happening, not an offer and an acceptance',
       kind: 'avoid',
-      basis: 'judgment',
+      basis: 'rule',
       holds: (r) =>
         r.happenings.filter(
           (h) =>
