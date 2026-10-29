@@ -93,14 +93,16 @@ export function renderWindow(w: EvalWindow, maxEntries: number): RenderedWindow 
     legend,
     read: (parsed) => {
       const { reply: read, malformed } = readClassifierReply(parsed)
-      const reply = foldOwnAwareness(nameIdsInProse(read, idNames(idMap, rows, read)))
-      const substituted = substituteClassifierIds(
-        reply,
-        idMap,
-        new Set([
-          ...reply.newCharacters.map((c) => c.handle),
-          ...reply.newFactions.map((f) => f.handle),
-        ]),
+      const reply = nameIdsInProse(read, idNames(idMap, rows, read))
+      const substituted = foldOwnAwareness(
+        substituteClassifierIds(
+          reply,
+          idMap,
+          new Set([
+            ...reply.newCharacters.map((c) => c.handle),
+            ...reply.newFactions.map((f) => f.handle),
+          ]),
+        ),
       )
       // A turn handle as the pass resolves it, so a check reads the turn the planner anchors to.
       const turned = walkFields(substituted, (key, s) => {

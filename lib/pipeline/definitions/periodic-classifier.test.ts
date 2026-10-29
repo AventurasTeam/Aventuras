@@ -1398,6 +1398,65 @@ describe('periodicClassifierPhase', () => {
     })
   })
 
+  // Folded after substitution, where one character is one ref however the reply wrote it.
+  describe('folds knownAwareness by the character each ref names', () => {
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+      keywords: [],
+    } as unknown as Entity
+    // The ambush lists `own` as a witness; a knownAwareness entry names it by title, for `known`.
+    const awarenessOf = async (own: string, known: string, newCharacters: object[] = []) => {
+      vi.mocked(generateStructured).mockResolvedValue({
+        status: 'ok',
+        recoverable: [],
+        value: extraction({
+          newCharacters,
+          happenings: [
+            {
+              title: 'The ford ambush',
+              sourceTurn: 't1',
+              involvements: [],
+              awareness: [{ ref: own, source: 'saw it', severity: 1 }],
+            },
+          ],
+          knownAwareness: [
+            { happening: 'The ford ambush', ref: known, source: 'told', severity: 0.5 },
+          ],
+        }),
+      })
+      const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael] })
+      const { events } = await drain(h.ctx)
+      return events
+        .map((e) => (e as { action: { kind: string; payload: unknown } }).action)
+        .filter((a) => a.kind === 'upsertHappeningAwareness')
+        .map((a) => a.payload as { characterId: string; source?: string })
+        .map(({ characterId, source }) => [characterId === CHAR_KAEL ? 'Kael' : 'other', source])
+    }
+
+    it('keeps the happening’s own entry for "c1" when the entry names "[c1]"', async () => {
+      expect(await awarenessOf('c1', '[c1]')).toEqual([['Kael', 'saw it']])
+    })
+
+    it('keeps both when the reply declares "[c1]" as its own handle', async () => {
+      const dov = {
+        handle: '[c1]',
+        name: 'Dov',
+        description: 'A drover.',
+        keywords: [],
+        sourceTurn: 't1',
+      }
+      expect(await awarenessOf('[c1]', 'c1', [dov])).toEqual([
+        ['other', 'saw it'],
+        ['Kael', 'told'],
+      ])
+    })
+  })
+
   // classifier.md → Disambiguation: a reveal the reply also wrote up as a newcomer.
   it('takes a new character named as the reply renames a listed one for that character', async () => {
     const stranger = {
