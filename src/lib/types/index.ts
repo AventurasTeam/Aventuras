@@ -897,7 +897,7 @@ export interface ImageProfile {
   apiKey: string
   baseUrl?: string
   model: string
-  /** Absent means never captured. */
+  /** Saved only for providers whose capabilities come from an API; absent means never captured. */
   modelSnapshot?: ImageModelSnapshot
   providerOptions: Record<string, unknown>
   createdAt: number

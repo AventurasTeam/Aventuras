@@ -26,6 +26,7 @@
     referenceLimit,
     suggestReferenceInputs,
     chooseModelSnapshot,
+    capturesModelSnapshot,
     type ComfyCustomWorkflow,
     type ImageModelInfo,
   } from '#lib/services/ai/image/index.ts'
@@ -383,6 +384,7 @@
   }
 
   function buildModelSnapshot() {
+    if (!capturesModelSnapshot(profileProviderType)) return undefined
     return chooseModelSnapshot({
       model: profileModel,
       providerType: profileProviderType,

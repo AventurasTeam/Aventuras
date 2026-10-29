@@ -28,6 +28,7 @@ export {
   takesApiKey,
   baseUrlMode,
   referenceLimit,
+  capturesModelSnapshot,
   IMAGE_PROVIDER_LABELS,
   IMAGE_PROVIDER_OPTIONS,
   type ImageModelInfo,
