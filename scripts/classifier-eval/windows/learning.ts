@@ -114,6 +114,28 @@ Oriel ducked his head, pleased and embarrassed at once, and was gone.`,
         )
       },
     },
+    {
+      name: 'no description tells Tam as dead',
+      kind: 'avoid',
+      basis: 'rule',
+      holds: (r) => {
+        const tam = newCharacterNamed(r, /^tam( rook)?$/i)
+        // A sentence with a death in it and no flight: "who fled the night she died" passes.
+        const tellsDead = (text: string, about: RegExp) =>
+          text
+            .split(/[.;]/)
+            .some(
+              (sentence) =>
+                about.test(sentence) &&
+                /\b(died|dead|killed|death)\b/i.test(sentence) &&
+                !/\b(fled|flee|ran|run|escap\w*|missing|vanish\w*|disappear\w*)\b/i.test(sentence),
+            )
+        return (
+          !r.happenings.some((h) => tellsDead(h.description ?? '', /\btam\b/i)) &&
+          !tellsDead(tam?.description ?? '', /./)
+        )
+      },
+    },
     // Adding the steward is left unscored; one added as no more than "the steward" is lost a few
     // turns on, since nothing in the reply says what he is doing.
     {
@@ -181,7 +203,13 @@ Oriel ducked his head, pleased and embarrassed at once, and was gone.`,
         awareness: [],
         sourceTurn: 't2',
       },
-      { title: 'Tam Rook’s death', involvements: [], awareness: [], sourceTurn: 't2' },
+      {
+        title: 'Tam Rook’s death',
+        description: 'Tam Rook died the same night.',
+        involvements: [],
+        awareness: [],
+        sourceTurn: 't2',
+      },
     ],
     newCharacters: [
       {
