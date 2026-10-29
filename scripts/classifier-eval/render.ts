@@ -74,6 +74,7 @@ export function renderWindow(w: EvalWindow, maxEntries: number): RenderedWindow 
       relationships: rows.relationships,
       threads: rows.threads,
       mentionedPlaces: false,
+      leadId: w.lead == null ? null : canonicalSeedId(w.lead),
       idMap,
     }),
   )

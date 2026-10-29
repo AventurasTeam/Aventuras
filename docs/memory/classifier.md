@@ -80,6 +80,13 @@ branch's world as lists the classifier addresses by placeholder id
 
 - **Threads** — the branch's threads by id, title and status
   ([Threads](#threads)).
+- **The lead** — the story's lead by placeholder id and name, when it
+  has one that resolves on the branch
+  ([`data-model.md → Story settings shape`](../data-model.md#story-settings-shape)):
+  outside quoted speech, "I" and "you" in the turns are the lead. In
+  first- or second-person narration, and in an adventure's actions,
+  the prose never names the lead, and a scene with someone else in it
+  doesn't say which one "you" is.
 - **Turns to classify** — the window's entries by turn handle, each
   with its prose and the scene saved on it: the entry's
   `sceneEntities` and `currentLocationId`

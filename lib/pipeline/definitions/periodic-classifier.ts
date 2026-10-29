@@ -52,6 +52,7 @@ import {
   threadsStore,
   type OpenStory,
 } from '@/lib/stores'
+import { resolveLead } from '@/lib/world'
 
 import { buildClassifierContext } from './classifier-context'
 import { classifierEmbedder } from './description-embedder'
@@ -306,6 +307,9 @@ export async function* periodicClassifierPhase(
       relationships,
       threads,
       mentionedPlaces,
+      leadId:
+        resolveLead(open.definition.leadEntityId, entitiesStore.getEntities(), ctx.branchId)?.id ??
+        null,
       idMap,
     }),
   )

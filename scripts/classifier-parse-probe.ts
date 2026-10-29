@@ -23,6 +23,7 @@ import {
   entities,
   happenings,
   stories,
+  storyDefinitionSchema,
   storyEntries,
   storySettingsSchema,
   threads,
@@ -41,6 +42,7 @@ import {
 } from '@/lib/pipeline/definitions/periodic-classifier'
 import { renderTemplate, TEMPLATE_IDS, type RenderedPrompt } from '@/lib/prompts'
 import { appSettingsStore, hydrateAppSettings } from '@/lib/stores'
+import { resolveLead } from '@/lib/world'
 
 import { EVAL_WINDOWS, renderWindow, type EvalWindow } from './classifier-eval'
 import { resolveDevSlot } from './dev-slot/resolve'
@@ -89,6 +91,8 @@ function makeProxy(sqlite: DatabaseSync) {
 type Branch = {
   /** stories.settings.classifierMentionedPlaces, which picks the pass's prompt and reply schema. */
   mentionedPlaces: boolean
+  /** stories.definition.leadEntityId, which may dangle on this branch. */
+  leadEntityId: string | null
   entities: Entity[]
   /** The Known happenings the pass would list for this window. */
   happenings: Happening[]
@@ -102,7 +106,7 @@ async function readBranch(dbPath: string, maxEntries: number): Promise<Branch> {
   try {
     const db = drizzle(makeProxy(sqlite), { schema: dbSchema })
     const [story] = await db
-      .select({ settings: stories.settings })
+      .select({ settings: stories.settings, definition: stories.definition })
       .from(branches)
       .innerJoin(stories, eq(stories.id, branches.storyId))
       .where(eq(branches.id, BRANCH_ID))
@@ -123,6 +127,7 @@ async function readBranch(dbPath: string, maxEntries: number): Promise<Branch> {
       .where(eq(happenings.branchId, BRANCH_ID))) as Happening[]
     return {
       mentionedPlaces: settings.classifierMentionedPlaces,
+      leadEntityId: storyDefinitionSchema.parse(story.definition).leadEntityId ?? null,
       entities: (await db
         .select()
         .from(entities)
@@ -391,6 +396,9 @@ async function probeBranch(config: ResolveModelConfig, maxEntries: number): Prom
       relationships: branch.relationships,
       threads: branch.threads,
       mentionedPlaces: branch.mentionedPlaces,
+      leadId:
+        resolveLead(branch.leadEntityId, new Map(branch.entities.map((e) => [e.id, e])), BRANCH_ID)
+          ?.id ?? null,
       idMap: new IdBiMap(),
     }),
   )

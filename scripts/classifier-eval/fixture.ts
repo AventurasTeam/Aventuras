@@ -27,6 +27,8 @@ export type Check = {
 export type EvalWindow = {
   name: string
   about: string
+  /** The story's lead, for a window narrated in the first or second person. */
+  lead?: string
   entities: Entity[]
   happenings: Happening[]
   relationships: CharacterRelationship[]

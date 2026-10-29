@@ -104,6 +104,10 @@ Threads, same ID rule — each with its status:
 {%- unless threads and threads.size > 0 %}
 (none)
 {%- endunless %}
+{%- if lead %}
+
+The story's lead is [{{ lead.id }}] {{ lead.name }}. Outside quoted speech, "I" and "you" in the turns are the lead.
+{%- endif %}
 
 Turns to classify. Each is labelled with a turn handle in brackets — every fact you emit must carry the handle of the turn whose prose produced it. The turn's scene and location, by the same ID rule, may follow the handle; its prose starts on the next line:
 {%- for turn in turns %}

@@ -59,6 +59,11 @@ function projectRelationships(
 }
 
 // classifier.md → Mentioned places. Retired places keep their id: a happening can name one.
+function leadOf(entities: readonly Entity[], leadId: string | null) {
+  const lead = entities.find((e) => e.id === leadId && e.kind === 'character')
+  return lead == null ? null : { id: lead.id, name: oneLine(lead.name) }
+}
+
 const placeRow = ({ entity: e, depth }: PlaceTreeRow) => ({
   id: e.id,
   name: oneLine(e.name),
@@ -81,9 +86,12 @@ export function buildClassifierContext(args: {
   threads: readonly Thread[]
   /** stories.settings.classifierMentionedPlaces, read once when the pass builds its prompt. */
   mentionedPlaces: boolean
+  /** The story's lead on this branch (resolveLead), or null. */
+  leadId: string | null
   idMap: IdBiMap
 }): Record<string, unknown> {
-  const { window, entities, happenings, relationships, threads, mentionedPlaces, idMap } = args
+  const { window, entities, happenings, relationships, threads, mentionedPlaces, leadId, idMap } =
+    args
   const known = new Set(entities.map((e) => e.id))
   const factions = new Set(entities.filter((e) => e.kind === 'faction').map((e) => e.id))
   // classifier.md → Factions: an id naming no listed faction would otherwise reach the prompt as
@@ -124,6 +132,9 @@ export function buildClassifierContext(args: {
     happenings: happenings.map((h) => ({ id: h.id, title: oneLine(h.title) })),
     threads: threads.map((t) => ({ id: t.id, title: oneLine(t.title), status: t.status })),
     relationships: projectRelationships(relationships, entities),
+    // classifier.md → What the classifier reads: who "I" and "you" are; a lead no line lists has
+    // no placeholder to name it by.
+    lead: leadOf(entities, leadId),
     mentionedPlaces,
   }
   return substituteIds(context, idMap) as Record<string, unknown>

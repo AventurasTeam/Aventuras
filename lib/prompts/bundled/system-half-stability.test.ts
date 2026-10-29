@@ -219,6 +219,7 @@ const PASS_A: Record<string, unknown> = {
   ],
   happenings: [{ id: 'hp1', title: 'The satchel was stolen' }],
   threads: [{ id: 'th1', title: 'Find the heir', status: 'active' }],
+  lead: { id: 'c1', name: 'Kael' },
 }
 
 const PASS_B: Record<string, unknown> = {
@@ -241,6 +242,7 @@ const PASS_B: Record<string, unknown> = {
   relationships: [],
   happenings: [],
   threads: [],
+  lead: null,
 }
 
 type RenderCase = {

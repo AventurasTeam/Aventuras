@@ -135,6 +135,8 @@ async function ctxWith(opts: {
   mentionedPlaces?: boolean
   /** stories.settings.protectedBuffer. Unset, no reach-back: the harness skips the 10 default. */
   protectedBuffer?: number
+  /** stories.definition.leadEntityId. */
+  leadEntityId?: string
 }): Promise<Harness> {
   const { db, sqlite } = await createTestDb()
   await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
@@ -184,7 +186,7 @@ async function ctxWith(opts: {
   currentStoryStore.set({
     storyId: 's1',
     branchId: 'b1',
-    definition: {} as never,
+    definition: { leadEntityId: opts.leadEntityId ?? null } as never,
     settings: {
       models: {},
       classifierMentionedPlaces: opts.mentionedPlaces ?? false,
@@ -472,6 +474,39 @@ describe('periodicClassifierPhase', () => {
     const prompt = vi.mocked(generateStructured).mock.calls[0][1].user
     expect(prompt).toContain('[t1] scene: [c1]\nturn 1')
     expect(prompt).not.toMatch(/(char|loc|item|fact)_[0-9a-f]{8}-/)
+  })
+
+  // classifier.md → What the classifier reads: the lead, by the placeholder its line holds.
+  it.each([
+    ['names the story’s lead', CHAR_KAEL, "\nThe story's lead is [c1] Kael."],
+    ['names no lead that dangles on the branch', 'char_99999999-9999-9999-9999-999999999999', null],
+  ])('%s before the turns', async (_label, leadEntityId, line) => {
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+      keywords: [],
+    } as unknown as Entity
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 1,
+      entities: [kael],
+      leadEntityId,
+    })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction(),
+    } as never)
+
+    await drain(h.ctx)
+
+    const prompt = vi.mocked(generateStructured).mock.calls[0][1].user
+    if (line == null) expect(prompt).not.toContain('lead')
+    else expect(prompt).toContain(`${line} Outside quoted speech`)
   })
 
   // architecture.md → System and user halves; observability.md → actionId threading.

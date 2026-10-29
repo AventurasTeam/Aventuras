@@ -10,12 +10,12 @@ import {
   type EvalWindow,
 } from '../fixture'
 
-// Adventure mode: second-person narration of the lead, Tobin, and first-person actions. The prompt
-// names no lead, and Pell shares the scene without a word in the prose, so nothing but knowing the
-// lead tells "you" from Pell.
+// Adventure mode: second-person narration of the lead, Tobin, and first-person actions. Pell shares
+// the scene without a word in the prose, so nothing but knowing the lead tells "you" from Pell.
 export const ambush: EvalWindow = {
   name: 'ambush',
   about: 'a fight across two turns, narrated in the second person',
+  lead: 'char_tobin',
   entities: [
     character('char_pell', 'Pell', { description: 'A drover hired for the salt road.' }),
     character('char_tobin', 'Tobin Ash', { description: 'A salt carter out of Ostmark.' }),
@@ -86,14 +86,20 @@ When Sefa comes down the bank leading the cart horse, there's an arrow standing 
     {
       name: 'a happening involves Tobin, the prose’s "you"',
       kind: 'expect',
-      basis: 'judgment',
+      basis: 'rule',
       holds: (r) => r.happenings.some((h) => involves(h, 'char_tobin')),
     },
     {
       name: 'Pell, never in the prose, is involved in no happening',
       kind: 'avoid',
-      basis: 'judgment',
+      basis: 'rule',
       holds: (r) => !r.happenings.some((h) => involves(h, 'char_pell')),
+    },
+    {
+      name: 'no happening’s description tells Pell in the fight',
+      kind: 'avoid',
+      basis: 'rule',
+      holds: (r) => !r.happenings.some((h) => /pell/i.test(h.description ?? '')),
     },
     {
       name: 'a happening involves Sefa',
@@ -116,7 +122,7 @@ When Sefa comes down the bank leading the cart horse, there's an arrow standing 
     {
       name: 'no new character stands for "you"',
       kind: 'avoid',
-      basis: 'judgment',
+      basis: 'rule',
       holds: (r) =>
         !r.newCharacters.some((c) =>
           /\b(you|tobin|traveller|traveler|player|protagonist)\b/i.test(c.name),
@@ -164,6 +170,7 @@ When Sefa comes down the bank leading the cart horse, there's an arrow standing 
     happenings: [
       {
         title: 'Pell charges the scarred man',
+        description: 'Pell charges the scarred man.',
         involvements: [{ ref: 'char_pell', role: 'actor' }],
         awareness: [],
         sourceTurn: 't4',
