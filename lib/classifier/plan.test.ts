@@ -3171,19 +3171,25 @@ describe('factions', () => {
             { character: 'char_aria', faction: 'fact_old', sourceTurn: 't1' },
             { character: 'char_aria', faction: 'fact_crown', sourceTurn: 't2' },
             { character: 'char_aria', faction: null, sourceTurn: 't2' },
+            { character: 'char_rhen', faction: 'loc_keep', sourceTurn: 't1' },
+            { character: 'char_rhen', faction: 'fact_crown', sourceTurn: 't2' },
+            { character: 'char_rhen', faction: null, sourceTurn: 't2' },
           ],
         }),
         deps([
           member('char_kael', 'fact_crown'),
           member('char_aria', 'fact_crown'),
+          member('char_rhen', 'fact_crown'),
           factionRow('fact_crown'),
           factionRow('fact_circle'),
           factionRow('fact_old', 'retired'),
+          nonCharacterRow('loc_keep', 'location'),
         ]),
       )
       expect(memberships(planned).map(({ id, factionId }) => [id, factionId])).toEqual([
         ['char_kael', null],
         ['char_aria', null],
+        ['char_rhen', null],
         ['char_kael', 'fact_circle'],
       ])
     })

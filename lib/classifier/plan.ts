@@ -1168,12 +1168,15 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const rank = (fact: (typeof facts)[number]): number =>
       switching.has(peekRef(fact.character) ?? '') ? Number(fact.faction !== null) : 0
     const ordered = [...facts].sort((a, b) => rank(a) - rank(b))
-    // A join the loop below drops, to an unknown or retired faction, leaves the faction held.
+    // A join the loop below drops, to no faction or a retired one, leaves the faction held.
     for (const fact of ordered) {
       const id = peekRef(fact.character)
       const faction = factionOf(fact)
       const kept =
-        fact.faction === null || (faction != null && rowById.get(faction)?.status !== 'retired')
+        fact.faction === null ||
+        (faction != null &&
+          index.get(faction)?.kind === 'faction' &&
+          rowById.get(faction)?.status !== 'retired')
       if (id != null && kept) held.set(id, faction)
     }
     return ordered
