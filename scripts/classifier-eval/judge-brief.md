@@ -9,9 +9,12 @@ judge reads every description against the turns.
 
 1. Save probe runs with `PROBE_OUT`, one directory a run.
 2. `pnpm judge:classifier <out-dir> <run-dir>...` writes the judge's
-   input: `turns/<window>.txt`, each window's Known lists and turns;
-   `run-A.md` onward, each run's happenings and new characters under a
-   label drawn at random; and `key.txt`, naming each label's run.
+   input into a new or empty `<out-dir>`: `turns/<window>.txt`, each
+   window's Known lists and turns as the prompt the runs answered
+   showed them; `run-A.md` onward, each run's happenings and new
+   characters under a label drawn at random; and `key.txt`, naming
+   each label's run. Runs whose prompts showed a window differently
+   are judged apart.
 3. Give a judge the brief below, with `<out-dir>` filled in, one judge
    a dump. Use a model other than any it judges, so no model judges
    itself.

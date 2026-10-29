@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
@@ -53,11 +53,12 @@ import { resolveDevSlot } from './dev-slot/resolve'
 // SMOKE_LLM_KEY (none), PROBE_RUNS (20, or 5 a window), PROBE_MAX_OUTPUT and PROBE_TEMPERATURE
 // (unset: the server's own), PROBE_BRANCH_ID
 // (br_hero_main), AVENTURAS_DB_PATH (dev slot db, read-only). PROBE_EVAL (all, or window names)
-// sends the evaluation set's windows instead and scores each reply; PROBE_OUT saves the replies,
-// raw and read. PROBE_STRUCTURED sends the reply schema as the request's json_schema
-// response_format, which the app doesn't do yet: native (structured output forced on, so no schema
-// in the prompt) or both (the prompt's schema too); json keeps the prompt's schema and asks for
-// json_object, a JSON-only mode with no schema (DeepSeek's JSON Output).
+// sends the evaluation set's windows instead and scores each reply; PROBE_OUT, a directory a run,
+// saves the prompt's halves and the replies, raw and read. PROBE_STRUCTURED sends the reply schema
+// as the request's json_schema response_format, which the app doesn't do yet: native (structured
+// output forced on, so no schema in the prompt) or both (the prompt's schema too); json keeps the
+// prompt's schema and asks for json_object, a JSON-only mode with no schema (DeepSeek's JSON
+// Output).
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
 const LLM_KEY = process.env.SMOKE_LLM_KEY ?? ''
@@ -472,7 +473,13 @@ async function probeEvalSet(
   maxEntries: number,
 ): Promise<Outcome[]> {
   const windows = selectWindows(names)
-  if (OUT != null) mkdirSync(OUT, { recursive: true })
+  if (OUT != null) {
+    mkdirSync(OUT, { recursive: true })
+    // An earlier invocation's reply would read as this run's, to the judge dump among others.
+    const earlier = readdirSync(OUT).find((f) => windows.some((w) => f.startsWith(`${w.name}.`)))
+    if (earlier != null)
+      throw new Error(`[probe] ${OUT} already holds ${earlier}; save each run to its own directory`)
+  }
   const outcomes: Outcome[] = []
   const scores: { window: EvalWindow; parsedRuns: number; held: number[] }[] = []
   for (const w of windows) {
@@ -484,8 +491,10 @@ async function probeEvalSet(
         `chars, max output ${MAX_OUTPUT ?? 'unset'}, temperature ${TEMPERATURE ?? 'unset'}, ` +
         `response schema ${STRUCTURED ?? 'in the prompt only'}; ${RUNS} runs of ${LLM_MODEL}`,
     )
-    if (OUT != null)
-      writeFileSync(join(OUT, `${w.name}.prompt.txt`), `${prompt.system}\n\n${prompt.user}\n`)
+    if (OUT != null) {
+      writeFileSync(join(OUT, `${w.name}.system.txt`), `${prompt.system}\n`)
+      writeFileSync(join(OUT, `${w.name}.user.txt`), `${prompt.user}\n`)
+    }
     const held = w.checks.map(() => 0)
     let parsedRuns = 0
     for (let run = 1; run <= RUNS; run++) {

@@ -482,17 +482,19 @@ yield, marked by whether a rule in the prompt asks for the fact or
 only the window's author judges it, and every window also checks
 that each ID a reply names is one the prompt listed or a handle the
 reply declares; the probe prints each run's misses, then how often
-each check held, and `PROBE_OUT` saves each window's prompt and each
-reply, both as the server sent it, with any separate reasoning, and
-as the checks read it. A unit test proves
+each check held, and `PROBE_OUT`, a directory of its own for each
+run, saves each window's prompt, its system and user halves apart,
+and each reply, as the server sent it, with any separate reasoning,
+and as the checks read it. A unit test proves
 each check can hold and can fail.
 
 The checks look for the facts a reply must hold and can't see one the
 prose never had. `pnpm judge:classifier <out-dir> <run-dir>...`
 (`scripts/classifier-judge-dump.ts`) turns eval runs saved with
-`PROBE_OUT` into a faithfulness judge's input: each window's Known
-lists and turns, each run's happenings and new characters under a
-label drawn at random, and a key naming each label's run. A judge, a
+`PROBE_OUT` into a faithfulness judge's input, in a new or empty
+directory: each window's Known lists and turns, as the prompt the
+runs answered showed them, each run's happenings and new characters
+under a label drawn at random, and a key naming each label's run. A judge, a
 model other than any it judges, then reads every description against
 the turns by `scripts/classifier-eval/judge-brief.md`, which also says
 how far its counts can be trusted.

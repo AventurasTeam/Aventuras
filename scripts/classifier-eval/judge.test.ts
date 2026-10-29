@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -51,32 +51,36 @@ describe('writeJudgeDump', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  const saveRun = (name: string, replies: Record<string, string>) => {
+  // Each window a run replied to gets the user half its prompt showed, as the probe saves it.
+  const saveRun = (name: string, replies: Record<string, string>, shown = 'turns') => {
     const runDir = join(dir, name)
     mkdirSync(runDir)
-    for (const [file, title] of Object.entries(replies))
+    for (const [file, title] of Object.entries(replies)) {
       writeFileSync(
         join(runDir, file),
         JSON.stringify(reply({ happenings: [{ ...happening, title, description: title }] })),
       )
+      const window = /^(\w+)\.\d+\.json$/.exec(file)?.[1]
+      if (window != null) writeFileSync(join(runDir, `${window}.user.txt`), `${window} ${shown}`)
+    }
     return runDir
   }
+  const [ambush, recounted] = EVAL_WINDOWS
 
   it('writes the turns, each run under a label, and the key naming each label’s run', () => {
-    const [ambush, recounted] = EVAL_WINDOWS
     const first = saveRun('first', {
       'ambush.10.json': 'tenth',
       'ambush.2.json': 'second',
       'ambush.2.raw.txt': 'not a reply',
-      'ambush.prompt.txt': 'not a reply',
+      'ambush.system.txt': 'not a reply',
     })
     const second = saveRun('second', { 'recounted.1.json': 'the wreck' })
     const out = join(dir, 'out')
 
     writeJudgeDump([ambush!, recounted!], [first, second], out)
 
-    expect(readFileSync(join(out, 'turns', 'ambush.txt'), 'utf8')).toContain('[t1]')
-    expect(readFileSync(join(out, 'turns', 'recounted.txt'), 'utf8')).toContain('[t1]')
+    expect(readFileSync(join(out, 'turns', 'ambush.txt'), 'utf8')).toBe('ambush turns')
+    expect(readFileSync(join(out, 'turns', 'recounted.txt'), 'utf8')).toBe('recounted turns')
     const key = new Map(
       readFileSync(join(out, 'key.txt'), 'utf8')
         .trim()
@@ -99,5 +103,24 @@ describe('writeJudgeDump', () => {
       ].join('\n'),
     )
     expect(readFileSync(join(out, `run-${key.get(second)}.md`), 'utf8')).not.toContain('ambush')
+  })
+
+  it('refuses an output directory holding anything, so no earlier run file is judged', () => {
+    const run = saveRun('run', { 'ambush.1.json': 'first' })
+    const out = join(dir, 'out')
+    mkdirSync(out)
+    writeFileSync(join(out, 'run-C.md'), 'stale')
+    expect(() => writeJudgeDump([ambush!], [run], out)).toThrow(/isn't empty/)
+  })
+
+  it('refuses runs whose prompts showed a window differently, or a run with no prompt saved', () => {
+    const first = saveRun('first', { 'ambush.1.json': 'first' })
+    const other = saveRun('other', { 'ambush.1.json': 'first' }, 'other turns')
+    expect(() => writeJudgeDump([ambush!], [first, other], join(dir, 'a'))).toThrow(
+      /show ambush differently/,
+    )
+    rmSync(join(other, 'ambush.user.txt'))
+    expect(() => writeJudgeDump([ambush!], [other], join(dir, 'b'))).toThrow(/no ambush\.user/)
+    expect(existsSync(join(dir, 'b'))).toBe(false)
   })
 })
