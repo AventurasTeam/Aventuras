@@ -233,15 +233,48 @@ describe('UNet graph', () => {
     expect(graph['10']).toEqual((UnetWorkflow as Graph)['10'])
   })
 
-  it('detects a diffusion model by its folder when no mode is set', async () => {
-    listing({
-      diffusion_models: ['flux.safetensors'],
-      text_encoders: ['clip.safetensors'],
-      vae: ['ae.safetensors'],
-    })
-    await generate({}, { model: 'flux.safetensors' })
+  const modelRequests = () =>
+    vi
+      .mocked(imageGetFetch)
+      .mock.calls.map(([url]) => String(url))
+      .filter((url) => url.includes('/models/'))
+
+  it('picks the UNet workflow from the id prefix when no mode is set', async () => {
+    listing({ text_encoders: ['clip.safetensors'], vae: ['ae.safetensors'] })
+    await generate({}, { model: 'unet:flux.safetensors' })
     const graph = postedGraph()
     expect(graph['1'].inputs.unet_name).toBe('flux.safetensors')
+    expect(modelRequests().some((url) => url.endsWith('/models/diffusion_models'))).toBe(false)
+  })
+
+  it('picks the checkpoint workflow for a bare id when no mode is set', async () => {
+    serve('9')
+    await generate({}, { model: 'sd15.safetensors' })
+    const graph = postedGraph()
+    expect(graph['4'].inputs.ckpt_name).toBe('sd15.safetensors')
+    expect(modelRequests()).toEqual([])
+  })
+
+  it('keeps a checkpoint-prefixed id on the checkpoint workflow even if a diffusion model shares its name', async () => {
+    listing({ diffusion_models: ['m.safetensors'] })
+    serve('9')
+    await generate({}, { model: 'checkpoint:m.safetensors' })
+    expect(postedGraph()['4'].inputs.ckpt_name).toBe('m.safetensors')
+    expect(modelRequests()).toEqual([])
+  })
+
+  it('reads no model list when the profile names the text encoder and VAE', async () => {
+    await generate(opts, { model: 'unet:flux.safetensors' })
+    expect(modelRequests()).toEqual([])
+  })
+
+  it('takes the first text encoder and VAE the server lists when the profile names none', async () => {
+    listing({
+      text_encoders: ['clip.safetensors', 'other.safetensors'],
+      vae: ['ae.safetensors', 'other.safetensors'],
+    })
+    await generate({ mode: ComfyMode.UnetTxt2Img }, { model: 'unet:flux.safetensors' })
+    const graph = postedGraph()
     expect(graph['3'].inputs.clip_name).toBe('clip.safetensors')
     expect(graph['4'].inputs.vae_name).toBe('ae.safetensors')
   })

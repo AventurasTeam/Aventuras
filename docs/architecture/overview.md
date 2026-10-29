@@ -612,7 +612,9 @@ image host makes the whole generation run again, and it is billed again. The key
 the API's own origin, and redirects are checked rather than followed blindly.
 
 Each adapter keeps its own model discovery and size handling; discovery throws on a failed request
-rather than substituting a list. OpenAI Compatible has no standard model list: its filtering and
+rather than substituting a list. ComfyUI generation reads no model list to choose a workflow: the
+id's `checkpoint:` or `unet:` prefix does, and a UNet text encoder or VAE left blank falls back to
+the first file the server lists. OpenAI Compatible has no standard model list: its filtering and
 capability reading were assembled from a handful of hosts' replies, and `/images/models` is an optional
 extra whose failure never fails the listing. Whether a provider takes an API key or a base URL is declared per
 provider in the registry (`PROVIDER_API_KEY`, `PROVIDER_BASE_URL`), and the settings form and

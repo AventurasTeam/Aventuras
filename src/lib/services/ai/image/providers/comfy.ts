@@ -41,10 +41,6 @@ export enum ComfyMode {
   UnetTxt2Img = 'unet-txt2img',
 }
 
-// Tracks which model names came from diffusion_models/, keyed by baseUrl.
-// Values are Promises to prevent parallel fetches for the same baseUrl.
-const unetModelNames = new Map<string, Promise<Set<string>>>()
-
 // The first text encoder and VAE the server lists, for a UNet profile that names none.
 const autoClipCache = new Map<string, string>()
 const autoVaeCache = new Map<string, string>()
@@ -77,7 +73,6 @@ export async function fetchModelList(
 
 export function clearComfyCacheForUrl(baseUrl: string | undefined): void {
   const key = resolveComfyBaseUrl(baseUrl)
-  unetModelNames.delete(key)
   autoClipCache.delete(key)
   autoVaeCache.delete(key)
   serverSystems.delete(key)
@@ -513,9 +508,8 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
       // Strip the source-namespace prefix added by listModels() to deduplicate entries
       // (e.g. "checkpoint:model.safetensors" → "model.safetensors"). Handles both
       // prefixed IDs (new) and bare filenames (profiles saved before this change).
-      const model = /^(?:checkpoint|unet):/.test(options.model)
-        ? options.model.replace(/^(?:checkpoint|unet):/, '')
-        : options.model
+      const prefixed = /^(checkpoint|unet):/.exec(options.model)
+      const model = prefixed ? options.model.slice(prefixed[0].length) : options.model
 
       const positiveTags = (providerOptions?.positivePrompt as string) || ''
       const negativeTags = (providerOptions?.negativePrompt as string) || ''
@@ -568,31 +562,11 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
       const loraOptions = providerOptions?.lora as
         { name: string; strengthModel?: number; strengthClip?: number } | undefined
 
-      // Explicit mode always wins. Auto-detection only runs when no mode is set.
-      const hasExplicitOverride = !!explicitMode
-      const isLoraMode =
-        explicitMode === ComfyMode.LoraTxt2Img || (!hasExplicitOverride && !!loraOptions)
-
-      // Only fetch diffusion_models when auto-detection is needed; explicit basic/lora
-      // overrides skip it entirely to avoid an unnecessary network round-trip.
-      const needsUnetDetection = !hasExplicitOverride || explicitMode === ComfyMode.UnetTxt2Img
-      let unetNames = new Set<string>()
-      if (needsUnetDetection) {
-        if (!unetModelNames.has(baseUrl)) {
-          const p = fetchModels('diffusion_models')
-            .then((m) => new Set(m))
-            .catch((err) => {
-              unetModelNames.delete(baseUrl)
-              throw err
-            })
-          unetModelNames.set(baseUrl, p)
-        }
-        unetNames = await unetModelNames.get(baseUrl)!
-      }
-
+      // An explicit mode wins; without one, the LoRA option and then the id's source prefix decide.
+      const isLoraMode = explicitMode === ComfyMode.LoraTxt2Img || (!explicitMode && !!loraOptions)
       const isUnetMode =
         explicitMode === ComfyMode.UnetTxt2Img ||
-        (!hasExplicitOverride && !isLoraMode && unetNames.has(model))
+        (!explicitMode && !isLoraMode && prefixed?.[1] === 'unet')
 
       const serverPath = (name: string) => toServerPath(name, server?.os)
 
@@ -699,9 +673,6 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
         fetchModels('checkpoints'),
         fetchModels('diffusion_models').catch(() => []),
       ])
-
-      // Track which models require the unet workflow (keyed per baseUrl, resolved Promise)
-      unetModelNames.set(baseUrl, Promise.resolve(new Set(diffusionModels)))
 
       const toInfo =
         (prefix: string, description: string) =>
