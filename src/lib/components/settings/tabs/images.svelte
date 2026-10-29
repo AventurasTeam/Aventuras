@@ -200,6 +200,8 @@
   let profileWeightDtype = $state('default')
   let availableClips = $state<string[]>([])
   let availableVaes = $state<string[]>([])
+  // Fields the form filled from a single-entry server list, as opposed to ones the user set.
+  const autoFilled = $state({ clip: false, vae: false })
   let isLoadingUnetModels = $state(false)
   const clipItems = $derived(availableClips.map((c) => ({ value: c, label: c })))
   const vaeItems = $derived(availableVaes.map((v) => ({ value: v, label: v })))
@@ -479,6 +481,8 @@
     workflowFileName = null
     profileClipName = ''
     profileVaeName = ''
+    autoFilled.clip = false
+    autoFilled.vae = false
     profileClipType = 'lumina2'
     profileWeightDtype = 'default'
     availableClips = []
@@ -531,6 +535,8 @@
       workflowError = null
       profileClipName = (opts.clipName as string) || ''
       profileVaeName = (opts.vaeName as string) || ''
+      autoFilled.clip = false
+      autoFilled.vae = false
       profileClipType = (opts.clipType as string) || 'lumina2'
       profileWeightDtype = (opts.weightDtype as string) || 'default'
       availableClips = []
@@ -719,8 +725,21 @@
         fetchModelList(baseUrl, 'vae', settings.apiSettings.llmTimeoutMs),
       ])
       if (reqId !== unetModelsReqId) return
-      availableClips = clips
+      // A reply for another profile or server must not fill this one.
+      if (profileProviderType !== 'comfyui' || resolveComfyBaseUrl(profileBaseUrl) !== baseUrl) {
+        return
+      }
+      // Reassigning an empty list would re-run the auto-load effect below, which reads its length.
+      if (clips.length > 0 || availableClips.length > 0) availableClips = clips
       availableVaes = vaes
+      if (!profileClipName && clips.length === 1) {
+        profileClipName = clips[0]
+        autoFilled.clip = true
+      }
+      if (!profileVaeName && vaes.length === 1) {
+        profileVaeName = vaes[0]
+        autoFilled.vae = true
+      }
     } finally {
       if (reqId === unetModelsReqId) isLoadingUnetModels = false
     }
@@ -735,7 +754,8 @@
 
   // Evict comfy.ts caches when the user changes the ComfyUI base URL so that
   // the next generate/listModels call fetches fresh model lists.
-  // Also clear availableClips/Vaes so the auto-load effect can trigger a fresh fetch.
+  // Also clear availableClips/Vaes so the auto-load effect can trigger a fresh fetch, and drop
+  // auto-filled names so that fetch refills them from the new server.
   $effect(() => {
     if (profileProviderType === 'comfyui') {
       const currentUrl = resolveComfyBaseUrl(profileBaseUrl)
@@ -743,6 +763,12 @@
         clearComfyCacheForUrl(prevComfyBaseUrl)
         availableClips = []
         availableVaes = []
+        untrack(() => {
+          if (autoFilled.clip) profileClipName = ''
+          if (autoFilled.vae) profileVaeName = ''
+          autoFilled.clip = false
+          autoFilled.vae = false
+        })
       }
       prevComfyBaseUrl = currentUrl
     } else {
@@ -1631,10 +1657,12 @@
                   : undefined}
               onSelect={(v) => {
                 profileClipName = (v as { value: string }).value
+                autoFilled.clip = false
               }}
               allowCustom={true}
               onCustomSelect={(v) => {
                 profileClipName = v
+                autoFilled.clip = false
               }}
               itemLabel={(s: { label: string }) => s.label}
               itemValue={(s: { value: string }) => s.value}
@@ -1657,10 +1685,12 @@
                   : undefined}
               onSelect={(v) => {
                 profileVaeName = (v as { value: string }).value
+                autoFilled.vae = false
               }}
               allowCustom={true}
               onCustomSelect={(v) => {
                 profileVaeName = v
+                autoFilled.vae = false
               }}
               itemLabel={(s: { label: string }) => s.label}
               itemValue={(s: { value: string }) => s.value}
