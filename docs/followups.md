@@ -282,22 +282,15 @@ breakdown under [UX](#ux).
   [`roadmap.md → M7`](./implementation/roadmap.md#m7--app-settings--diagnostics--onboarding)).
   Whether replies fill the new fields is the play check's above. Left
   to measure:
-  - whether a conversation whose substance is a telling, which awareness
-    records, and a plan, which a thread records, is a happening of its
-    own. One happening an encounter makes the lighthouse talk in
-    `recounted` a happening in every reply, and `learning`'s in 3 of 10;
-  - awareness of a happening the reply itself adds, filed under
-    knownAwareness by the happening's title or an invented ID, which
-    the planner drops: 2 or 3 replies in 60 before one happening an
-    encounter, 5 after. The title case could be moved into the
-    happening's own awareness in code; an invented ID can't be matched
-    safely;
   - a death the prose never states: `learning`'s "her cupbearer ran
     the same night" is read as Tam Rook's death in 5 to 9 of 10
     replies on every prompt, in a description, a death-titled happening
     or a retirement. The reasoning's first summary of the turn already
     has him dead, and a rule asking for the turns' own words before a
-    death is told did not reach it (1 of 10 clean against 5);
+    death is told did not reach it (1 of 10 clean against 5). The
+    developer read the turns and the prompt and finds no reading in
+    which Tam is dead: the dev model contradicts itself. The samples on
+    other models show whether another reads it right;
   - each turn's prose inside its own delimiters, the reason behind each
     rule that isn't obvious, a short worked example, and no capitals for
     emphasis. Two structure changes a research pass ranked first, the

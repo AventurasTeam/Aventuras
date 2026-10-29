@@ -858,6 +858,19 @@ parses, as bracketed IDs were.
   now written as the row's name or title, or the name its handle
   declares, before planning. The eval reads replies the same way.
 
+## The developer's answers, and a third recovery
+
+The developer settled the session's three questions on 2026-10-29. A
+conversation is an encounter like any other and stays a happening even
+when what it holds is a telling and a plan, which canon now says. Tam
+Rook's death is no reading of the turns at all, the dev model
+contradicting itself, so it stays as a check to read on other models.
+And awareness of a happening the reply itself adds, filed under
+knownAwareness by the happening's title, is moved into that happening's
+own awareness before planning, unless the happening already lists the
+character. Replayed, that leaves only the slips naming an invented ID:
+2 replies on change 12's run and on change 15's, 1 on the rerun.
+
 ## Where it stands
 
 Every change, with the check it was made for. The baseline and change
@@ -895,11 +908,12 @@ steward and the aunt were added, so every row reads lower on rules
 and differently on judgment than the figures given at each change.
 Judgment now rests on five checks, which swing a run's mean widely.
 
-Four fixes went into code: a none beside a join at one turn reads as a
+Five fixes went into code: a none beside a join at one turn reads as a
 change of sides when the character held another faction; an ID or
 turn handle copied with its brackets reads as the bare one; a new
-character named as the reply renames a row is that row; and an ID in
-prose is written as the name it stands for. Replayed, Brann ends in
+character named as the reply renames a row is that row; an ID in
+prose is written as the name it stands for; and knownAwareness naming
+the reply's own happening by title is that happening's awareness. Replayed, Brann ends in
 House Varro in every run, and no reply adds Ilse as someone new.
 
 Two structure changes the research ranked first were measured and
@@ -909,17 +923,12 @@ moved what it was meant to move by more than the swing.
 
 Left, each for the developer or measured as out of a rule's reach:
 
-- **A conversation as a happening.** Under one happening an encounter
-  the lighthouse talk is a happening in every recounted reply, and
-  Idris's homecoming in 3 of 10 learning replies, though what they
-  hold is a telling, which awareness records, and a plan, which a
-  thread records. Whether such a scene is a happening is the
-  developer's to say; in the followup.
 - **Tam Rook made dead.** The reasoning's first summary reads "ran the
   same night" as his death, and a description tells it in 5 to 9 of 10
-  replies on every prompt; change 14's rule did not reach it.
+  replies on every prompt; change 14's rule did not reach it, and the
+  developer finds no reading of the turns that supports it.
 - **Awareness of the reply's own happening** filed under
-  knownAwareness, 5 replies in 60 after change 12; in the followup.
+  knownAwareness by an invented ID, 1 or 2 replies in 60.
 - **Vane involved in the wreck** in 2 to 7 of 10 on every prompt,
   though descriptions name the Count's order.
 - **The cover name.** No reply reads "Mistress Penn, sir, from
