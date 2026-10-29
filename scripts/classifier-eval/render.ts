@@ -1,6 +1,7 @@
 import {
   buildClassifierWindow,
   classifierReplySchema,
+  foldOwnAwareness,
   idNames,
   nameIdsInProse,
   readClassifierReply,
@@ -92,7 +93,7 @@ export function renderWindow(w: EvalWindow, maxEntries: number): RenderedWindow 
     legend,
     read: (parsed) => {
       const { reply: read, malformed } = readClassifierReply(parsed)
-      const reply = nameIdsInProse(read, idNames(idMap, rows, read))
+      const reply = foldOwnAwareness(nameIdsInProse(read, idNames(idMap, rows, read)))
       const substituted = substituteClassifierIds(
         reply,
         idMap,

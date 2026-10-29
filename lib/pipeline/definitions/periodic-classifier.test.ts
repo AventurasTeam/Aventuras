@@ -1360,6 +1360,44 @@ describe('periodicClassifierPhase', () => {
     expect(happening.action.payload.entry.description).toBe('Kael unhorsed Dov.')
   })
 
+  // classifier.md → What the classifier writes → Happenings: awareness filed under the wrong list.
+  it("stores knownAwareness naming the reply's own happening by title as that happening's", async () => {
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+      keywords: [],
+    } as unknown as Entity
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction({
+        happenings: [
+          { title: 'The ford ambush', sourceTurn: 't1', involvements: [], awareness: [] },
+        ],
+        knownAwareness: [
+          { happening: 'the ford ambush', ref: 'c1', source: 'told', severity: 0.5 },
+        ],
+      }),
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael] })
+    const { events } = await drain(h.ctx)
+
+    const happening = events.find(
+      (e) => (e as { action: { kind: string } }).action.kind === 'createHappening',
+    ) as { action: { payload: { entry: { id: string } } } }
+    const awareness = events.find(
+      (e) => (e as { action: { kind: string } }).action.kind === 'upsertHappeningAwareness',
+    ) as { action: { payload: { characterId: string; happeningId: string } } }
+    expect(awareness.action.payload).toMatchObject({
+      characterId: CHAR_KAEL,
+      happeningId: happening.action.payload.entry.id,
+    })
+  })
+
   // classifier.md → Disambiguation: a reveal the reply also wrote up as a newcomer.
   it('takes a new character named as the reply renames a listed one for that character', async () => {
     const stranger = {

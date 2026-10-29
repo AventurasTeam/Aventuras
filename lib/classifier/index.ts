@@ -56,3 +56,4 @@ export {
   shouldCadenceFire,
   worstCaseCadenceEntries,
 } from './status'
+export { foldOwnAwareness } from './own-awareness'

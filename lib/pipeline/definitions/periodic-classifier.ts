@@ -21,6 +21,7 @@ import {
   nextStatusOnSuccess,
   newPlacesOf,
   PERIODIC_CLASSIFIER_KIND,
+  foldOwnAwareness,
   idNames,
   nameIdsInProse,
   readClassifierReply,
@@ -361,7 +362,9 @@ export async function* periodicClassifierPhase(
   const { reply, malformed } = readClassifierReply(result.value)
   for (const drop of malformed) ctx.log.warn('classifier.entry_malformed', drop)
   // classifier.md → ID handling: a placeholder in prose would name another row in a later call.
-  const extraction = nameIdsInProse(reply, idNames(idMap, { entities, happenings, threads }, reply))
+  const extraction = foldOwnAwareness(
+    nameIdsInProse(reply, idNames(idMap, { entities, happenings, threads }, reply)),
+  )
   const substituted = substituteClassifierIds(
     extraction,
     idMap,

@@ -115,7 +115,9 @@ alias list (the keywords bullet below).
   below is told in the description, not involved, and never added as a
   character only to be involved. A
   happening is one whole event, however many turns it runs across: a
-  fight, a meeting, a bargain, never a beat of one. Its description
+  fight, a meeting, a bargain, never a beat of one. A conversation is
+  an encounter too, even when what it holds is a telling, which
+  awareness records, and a plan, which a thread records. Its description
   tells the notable moments in order, who did what, what was said,
   given or lost and how it ended, so that a character recalling it
   has the scene to recall. Another event is another happening: one at
@@ -142,7 +144,10 @@ alias list (the keywords bullet below).
   Known happenings lists, when the turns show a character knowing of
   it, learning of it ("Kael tells Aria about the massacre") or knowing
   it already (Kael, who tells it); a pair the reply repeats lands at
-  its earliest learning turn. A happening with a blank title creates
+  its earliest learning turn. Such an entry naming, by its title, a
+  happening the reply itself adds is that happening's own awareness,
+  unless it already lists the character; any other name no Known
+  happening holds plans nothing. A happening with a blank title creates
   nothing, its involvements and awareness with it, and is logged.
 - **Status transitions** — `entities.status` flips:
   - `staged → active` when prose mentions a staged entity in scene
