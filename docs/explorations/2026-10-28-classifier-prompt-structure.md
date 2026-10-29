@@ -631,6 +631,85 @@ bar, as the archer is added for the fight. Whether the bar, grown to
 six clauses, now reads past is a question for a change to its
 structure.
 
+## Change 12: one happening an encounter
+
+The developer settled what counts as a happening: fewer of them, an
+encounter spread across four turns stored as one, its description
+holding the notable moments, so that a later recall gives a character
+the scene to remember. Before the change the final prompt split the
+ambush into 3 or 4 happenings a reply (the cut rope, the toll demand,
+the skirmish, Sefa's wound), the market meeting into two, and the
+alehouse bargain into an offer and an acceptance in half the replies.
+Descriptions ran 40 to 220 characters.
+
+Checks came first, as judgment checks: the ambush and the market
+meeting are one happening each, a description tells each one's moments,
+the bargain is not split, and the wreck's doused lamp is not its own
+happening. On the final prompt's two runs they read 0, 2 to 6, 0, 0, 4
+to 5 and 7 to 10 of 10. The fight's moments were first marked by the
+cut rope, Hask and Sefa's wound; no reply on any prompt tells the rope,
+cut before the fight began, so the markers became Hask unhorsed, the
+archer shot and Sefa's wound.
+
+Change 12 opens the happening rules with "One happening an encounter":
+a happening is one whole event however many turns it runs across, its
+beats are not happenings of their own (a duel's insult, blows and
+wound; a feast's toasts, quarrel and walkout, examples the windows
+don't hold), its sourceTurn is the latest turn it runs to, and its
+description tells the notable moments in order, in a few sentences:
+"who did what, what was said, given or lost, and how it ended". An
+event at another time or place, or one the turns only recount, is
+another happening. The description field says the same, and canon's
+Happenings bullet with it. The granularity checks became rule checks.
+
+Every check it was made for went to 10 of 10. A reply now holds 1
+happening for the ambush and the market, 2 or 3 for defection (the
+bargain, the theft, and the brother's hanging when it is added), and
+2 for recounted: the wreck, and the lighthouse conversation as an
+encounter of its own in every reply. Descriptions run 150 to 320
+characters and, in the replies read, tell the scene faithfully: "Brann
+accepts, unpins his Warden badge, and pledges his service to House
+Varro by kissing Maela's signet." Tam was never made dead, 10 of 10
+against 7 and 4.
+
+One check fell: Tobin is involved in 1 reply of 10 against 4 and 6.
+The one happening of the fight now carries every actor, and with no
+lead named the reply gives the charge to Pell, who never appears in
+the prose; two descriptions wrote him as `"[c1]"`. That is the lead's
+open item made worse, the subject of change 13. Awareness of a
+happening the reply adds was filed under knownAwareness in 5 replies
+of 60, against 2 or 3 before, three by the happening's title and two
+by an invented ID. The recounted window's judgment check that "the
+telling is not a happening" was retired: the lighthouse conversation
+is now an encounter of its own, and the check scored only its title's
+wording, while Nessa learning of the wreck stays scored as awareness.
+Whether a conversation whose substance is a telling and a plan is a
+happening at all is the developer's to say. Kept.
+
+## Two more recoveries in code
+
+Two slips a rule had not stopped are now repaired after the reply
+parses, as bracketed IDs were.
+
+- **A reveal written twice.** In 1 or 2 of 10 `reveal` replies the
+  model renames the woman in grey to Ilse Marrow and also adds Ilse
+  Marrow as a new character. The new row was created first, so the
+  rename met a taken name: the stranger kept her old name, gained the
+  new one as a keyword and a collision flag, and the user had a merge
+  to make. Reconciliation now takes a candidate whose exact name one of
+  the reply's own renames gives a row of its kind for that row, before
+  any scoring; a shortened or fuller form compares as before. The
+  eval's `createdCharacters` mirrors it, so `reveal`'s check scores
+  what the planner creates.
+- **An ID in prose.** Placeholders are per call, so a description
+  storing `"[c1] charged"` names whoever holds `c1` in a later prompt.
+  Across every run so far about one reply in 50 wrote a placeholder
+  into prose, bracketed or bare, in a description, a title or a
+  temporal; change 12, whose descriptions tell who did what, did it in
+  2 of its first 13. A known placeholder or handle in a prose field is
+  now written as the row's name or title, or the name its handle
+  declares, before planning. The eval reads replies the same way.
+
 ## Where it stands
 
 Every change, with the check it was made for. The baseline and change
