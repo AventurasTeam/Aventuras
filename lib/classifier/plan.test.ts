@@ -251,6 +251,40 @@ describe('buildClassifierActions', () => {
     expect(resistances).toEqual([1, 0])
   })
 
+  it('plans one row for a character the happening lists twice, the first', () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        newCharacters: [
+          { handle: 'new:k', name: 'Kael', description: 'x', keywords: [], sourceTurn: 't1' },
+        ],
+        happenings: [
+          {
+            title: 'A',
+            sourceTurn: 't1',
+            involvements: [],
+            awareness: [
+              { ref: 'char_a', source: 'saw it', severity: 1 },
+              { ref: 'new:k', source: 'told', severity: 0.5 },
+              { ref: 'char_a', source: 'told again', severity: 0.2 },
+            ],
+          },
+        ],
+      }),
+      {
+        ...base,
+        decisions: forCharacters(
+          new Map([['new:k', { kind: 'known', entityId: 'char_a', similarity: 0.9 }]]),
+        ),
+      },
+    )
+    expect(
+      planned
+        .filter((p) => p.action.kind === 'upsertHappeningAwareness')
+        .map((p) => payloadOf<{ characterId: string; source?: string }>(p))
+        .map(({ characterId, source }) => [characterId, source]),
+    ).toEqual([['char_a', 'saw it']])
+  })
+
   it('maps severity onto decay_resistance and stamps learned_at_entry_id', () => {
     const { planned } = buildClassifierActions(
       reply({
@@ -3191,6 +3225,37 @@ describe('factions', () => {
         ['char_aria', null],
         ['char_rhen', null],
         ['char_kael', 'fact_circle'],
+      ])
+    })
+
+    it('counts only a join the planner keeps as a change of sides', () => {
+      const { planned } = buildClassifierActions(
+        reply({
+          memberships: [
+            { character: 'char_kael', faction: 'fact_crown', sourceTurn: 't1' },
+            { character: 'char_kael', faction: null, sourceTurn: 't1' },
+            { character: 'char_kael', faction: 'loc_keep', sourceTurn: 't1' },
+            { character: 'char_aria', faction: 'fact_crown', sourceTurn: 't1' },
+            { character: 'char_aria', faction: null, sourceTurn: 't1' },
+            { character: 'char_aria', faction: 'fact_old', sourceTurn: 't1' },
+            { character: 'char_rhen', faction: 'fact_crown', sourceTurn: 't1' },
+            { character: 'char_rhen', faction: null, sourceTurn: 't1' },
+            { character: 'char_rhen', faction: 'fact_ghost', sourceTurn: 't1' },
+          ],
+        }),
+        deps([
+          member('char_kael', 'fact_crown'),
+          member('char_aria', 'fact_crown'),
+          member('char_rhen', 'fact_crown'),
+          factionRow('fact_crown'),
+          factionRow('fact_old', 'retired'),
+          nonCharacterRow('loc_keep', 'location'),
+        ]),
+      )
+      expect(memberships(planned).map(({ id, factionId }) => [id, factionId])).toEqual([
+        ['char_kael', null],
+        ['char_aria', null],
+        ['char_rhen', null],
       ])
     })
 
