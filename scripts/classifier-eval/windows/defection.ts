@@ -1,4 +1,10 @@
-import { awarenessOfListedOnly, createdCharacters, factionAfter, involves } from '../checks'
+import {
+  awarenessOfListedOnly,
+  createdCharacters,
+  factionAfter,
+  involves,
+  isRecounted,
+} from '../checks'
 import {
   action,
   character,
@@ -106,6 +112,19 @@ Maela slid the paper across the table. He read it twice, then unpinned the tarni
       basis: 'rule',
       holds: (r) => r.happenings.some((h) => involves(h, 'loc_tollhouse')),
     },
+    // The brother's hanging is told as past and is its own happening, whether or not it is dated.
+    {
+      name: 'the alehouse bargain is one happening, not an offer and an acceptance',
+      kind: 'avoid',
+      basis: 'judgment',
+      holds: (r) =>
+        r.happenings.filter(
+          (h) =>
+            !isRecounted(h) &&
+            (h.sourceTurn === 't1' || h.sourceTurn === 't2') &&
+            !/hang|brother|execut|crane|death|kill/i.test(h.title),
+        ).length <= 1,
+    },
     awarenessOfListedOnly([]),
   ],
   ideal: reply({
@@ -138,6 +157,10 @@ Maela slid the paper across the table. He read it twice, then unpinned the tarni
         severity: 0.5,
         learnedAtTurn: 't2',
       },
+    ],
+    happenings: [
+      { title: 'Maela’s offer', involvements: [], awareness: [], sourceTurn: 't1' },
+      { title: 'Brann accepts', involvements: [], awareness: [], sourceTurn: 't2' },
     ],
     memberships: [{ character: 'char_maela', faction: 'fact_wardens', sourceTurn: 't4' }],
     newCharacters: [

@@ -67,6 +67,17 @@ When Sefa comes down the bank leading the cart horse, there's an arrow standing 
       holds: (r) => r.happenings.length === 1,
     },
     {
+      name: 'a happening tells the fight’s moments: the cut rope, Hask, Sefa’s wound',
+      kind: 'expect',
+      basis: 'judgment',
+      holds: (r) =>
+        r.happenings.some((h) =>
+          [/rope/i, /hask|scar/i, /thigh|wound|injur|hurt|\bhit\b|struck/i].every((moment) =>
+            moment.test(h.description ?? ''),
+          ),
+        ),
+    },
+    {
       name: 'a happening sits at t4, the fight’s last turn',
       kind: 'expect',
       basis: 'rule',
@@ -125,7 +136,7 @@ When Sefa comes down the bank leading the cart horse, there's an arrow standing 
       {
         title: 'Ambush at Greywater crossing',
         description:
-          'Dov Hask’s riders cut the ferry rope and demand the cart; Tobin unhorses Hask and Sefa shoots the archer.',
+          'Dov Hask’s riders cut the ferry rope and demand the cart; Tobin unhorses Hask, Sefa shoots the archer, and an arrow wounds Sefa in the thigh.',
         category: 'battle',
         icon: 'swords',
         involvements: [

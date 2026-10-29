@@ -1,4 +1,4 @@
-import { awarenessOfListedOnly, newCharacterNamed } from '../checks'
+import { awarenessOfListedOnly, isRecounted, newCharacterNamed } from '../checks'
 import { action, character, entries, narration, place, reply, type EvalWindow } from '../fixture'
 
 export const reveal: EvalWindow = {
@@ -75,9 +75,41 @@ By the time the barrow had passed she was straight-backed again and twenty paces
       basis: 'judgment',
       holds: (r) => newCharacterNamed(r, /fish/i) == null,
     },
+    {
+      name: 'the meeting in the market is one happening, not one a beat',
+      kind: 'expect',
+      basis: 'judgment',
+      holds: (r) => r.happenings.filter((h) => !isRecounted(h)).length === 1,
+    },
+    {
+      name: 'a happening tells the meeting’s moments: the cornering, her name, the note',
+      kind: 'expect',
+      basis: 'judgment',
+      holds: (r) =>
+        r.happenings.some((h) =>
+          [/corner|knife|confront|awning/i, /ilse|marrow|heron/i, /note/i].every((moment) =>
+            moment.test(h.description ?? ''),
+          ),
+        ),
+    },
     awarenessOfListedOnly([]),
   ],
   ideal: reply({
+    happenings: [
+      {
+        title: 'Corwin corners Ilse in Tallow Market',
+        description:
+          'Corwin corners the woman in grey, who gives her name as Ilse Marrow and says she was paid to find his ring; posing as Mistress Penn, she slips him a note saying the ring was never his mother’s.',
+        category: 'an encounter',
+        involvements: [
+          { ref: 'char_corwin', role: 'actor' },
+          { ref: 'char_grey', role: 'actor' },
+          { ref: 'loc_market', role: 'site' },
+        ],
+        awareness: [],
+        sourceTurn: 't4',
+      },
+    ],
     renames: [{ ref: 'char_grey', name: 'Ilse Marrow', sourceTurn: 't2' }],
     aliases: [
       { ref: 'char_grey', terms: ['the Heron'], sourceTurn: 't2' },
