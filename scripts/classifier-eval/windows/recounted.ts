@@ -105,28 +105,17 @@ Nessa folded the page into her coat. She would take it to the magistrates' court
       basis: 'rule',
       holds: (r) => r.newThreads.length > 0,
     },
-    // The page changing hands is left unscored: piggyback records the item and its move, and
-    // whether a handover is also a happening is undecided.
-    {
-      name: 'the telling is not a happening: Nessa learning of the wreck is awareness',
-      kind: 'avoid',
-      basis: 'judgment',
-      holds: (r) =>
-        !r.happenings.some(
-          (h) =>
-            !isRecounted(h) &&
-            /\b(tells?|told|telling|recounts?|reveals?|revelation|confess(es|ion)?|account|story|tale|truth|learns?)\b/i.test(
-              h.title,
-            ),
-        ),
-    },
+    // The scene at the lighthouse is an encounter and its own happening; Nessa learning of the
+    // wreck is awareness on the wreck, which the checks above score.
     {
       name: 'the wreck is one happening: the doused lamp is a moment of it, not its own',
       kind: 'avoid',
       basis: 'rule',
       holds: (r) =>
         !r.happenings.some(
-          (h) => /dous|order|lamp|light/i.test(h.title) && !/wreck|sink|marigold/i.test(h.title),
+          (h) =>
+            /\b(dous\w*|order\w*|lamp|light)\b/i.test(h.title) &&
+            !/wreck|sink|marigold/i.test(h.title),
         ),
     },
     awarenessOfListedOnly(['hap_belltower']),
