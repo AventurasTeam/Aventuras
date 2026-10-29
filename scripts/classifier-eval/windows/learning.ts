@@ -136,8 +136,22 @@ Oriel ducked his head, pleased and embarrassed at once, and was gone.`,
         )
       },
     },
-    // Adding the steward is left unscored; one added as no more than "the steward" is lost a few
-    // turns on, since nothing in the reply says what he is doing.
+    // The developer's call: the story aims at both, the steward after the shop and the aunt the
+    // one Oriel sets out to find.
+    {
+      name: 'the steward, who is after the shop, is a new character',
+      kind: 'expect',
+      basis: 'rule',
+      holds: (r) => newCharacterNamed(r, /steward/i) != null,
+    },
+    {
+      name: 'Tam’s aunt, whom Oriel sets out to find, is a new character',
+      kind: 'expect',
+      basis: 'rule',
+      holds: (r) => newCharacterNamed(r, /aunt/i) != null,
+    },
+    // One added as no more than "the steward" is lost a few turns on, since nothing in the reply
+    // says what he is doing.
     {
       name: 'a steward, if added, is described by what he is doing',
       kind: 'avoid',
@@ -182,6 +196,20 @@ Oriel ducked his head, pleased and embarrassed at once, and was gone.`,
         description: 'Lady Senna’s cupbearer, who fled the night she died.',
         keywords: ['the cupbearer'],
         sourceTurn: 't2',
+      },
+      {
+        handle: 'new:steward',
+        name: 'The steward',
+        description: 'Asking which alchemists sold nightshade tincture since Lady Senna’s death.',
+        keywords: [],
+        sourceTurn: 't2',
+      },
+      {
+        handle: 'new:aunt',
+        name: 'Tam’s aunt',
+        description: 'Tam Rook’s aunt, who lives in the net-sheds.',
+        keywords: [],
+        sourceTurn: 't4',
       },
     ],
     newThreads: [
