@@ -177,8 +177,8 @@ alias list (the keywords bullet below).
   turns point the story toward, someone a character sets out to find
   or to face or who is after one of them ("the innkeeper they ride to
   warn"). Never an unnamed figure the scene is done with, even one who
-  took part, nor one whose part is over ("a porter", "a father long
-  dead"), nor a listed character whose name the turns reveal, which is
+  took part, nor an unnamed one whose part is over ("a porter", "a
+  father long dead"), nor a listed character whose name the turns reveal, which is
   a rename, nor a name the prose only invokes, in an oath, a saying or
   a song. Each goes through
   [reconciliation](#disambiguation-on-new-character-mentions) before
