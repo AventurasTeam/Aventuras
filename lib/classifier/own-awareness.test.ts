@@ -45,11 +45,28 @@ describe('foldOwnAwareness', () => {
     expect(out.knownAwareness).toEqual(entries)
   })
 
-  it('moves an entry into the first of two happenings sharing its title', () => {
+  it('keeps the own entry of a character either side writes in brackets', () => {
+    const own = { ref: 'c1', source: 'witnessed it', severity: 1 }
+    const bracketed = { ...own, ref: '[c1]' }
+    expect(
+      foldOwnAwareness({
+        happenings: [wreck([own])],
+        knownAwareness: [told(wreck().title, '[c1]')],
+      }).happenings[0].awareness,
+    ).toEqual([own])
+    expect(
+      foldOwnAwareness({ happenings: [wreck([bracketed])], knownAwareness: [told(wreck().title)] })
+        .happenings[0].awareness,
+    ).toEqual([bracketed])
+  })
+
+  it('leaves an entry naming a title two of the reply’s happenings share as written', () => {
+    const entries = [told('The wreck of the Marigold')]
     const out = foldOwnAwareness({
-      happenings: [wreck(), wreck()],
-      knownAwareness: [told('The wreck of the Marigold')],
+      happenings: [wreck(), { title: 'The wreck of the marigold', awareness: [] }],
+      knownAwareness: entries,
     })
-    expect(out.happenings.map((h) => h.awareness.length)).toEqual([1, 0])
+    expect(out.happenings.map((h) => h.awareness)).toEqual([[], []])
+    expect(out.knownAwareness).toEqual(entries)
   })
 })

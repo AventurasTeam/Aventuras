@@ -147,10 +147,11 @@ alias list (the keywords bullet below).
   Known happenings lists, when the turns show a character knowing of
   it, learning of it ("Kael tells Aria about the massacre") or knowing
   it already (Kael, who tells it); a pair the reply repeats lands at
-  its earliest learning turn. Such an entry naming, by its title, a
+  its earliest learning turn. Such an entry naming, by its title, one
   happening the reply itself adds is that happening's own awareness,
   unless it already lists the character; any other name no Known
-  happening holds plans nothing. A happening with a blank title creates
+  happening holds, a title two of the reply's happenings share among
+  them, plans nothing. A happening with a blank title creates
   nothing, its involvements and awareness with it, and is logged.
 - **Status transitions** — `entities.status` flips:
   - `staged → active` when prose mentions a staged entity in scene
