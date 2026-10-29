@@ -56,7 +56,8 @@ import { resolveDevSlot } from './dev-slot/resolve'
 // sends the evaluation set's windows instead and scores each reply; PROBE_OUT saves the replies,
 // raw and read. PROBE_STRUCTURED sends the reply schema as the request's json_schema
 // response_format, which the app doesn't do yet: native (structured output forced on, so no schema
-// in the prompt) or both (the prompt's schema too).
+// in the prompt) or both (the prompt's schema too); json keeps the prompt's schema and asks for
+// json_object, a JSON-only mode with no schema (DeepSeek's JSON Output).
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
 const LLM_KEY = process.env.SMOKE_LLM_KEY ?? ''
@@ -454,10 +455,13 @@ function sendResponseSchema(): void {
     if (responseSchema === undefined || !request.url.endsWith('/chat/completions'))
       return send(request)
     const body = JSON.parse(await request.text()) as Record<string, unknown>
-    body.response_format = {
-      type: 'json_schema',
-      json_schema: { name: 'response', schema: responseSchema, strict: false },
-    }
+    body.response_format =
+      STRUCTURED === 'json'
+        ? { type: 'json_object' }
+        : {
+            type: 'json_schema',
+            json_schema: { name: 'response', schema: responseSchema, strict: false },
+          }
     return send(new Request(request, { body: JSON.stringify(body) }))
   }
 }
@@ -568,8 +572,8 @@ async function main(): Promise<void> {
     throw new Error(`PROBE_MAX_OUTPUT must be a positive integer`)
   if (TEMPERATURE !== undefined && !(TEMPERATURE >= 0 && TEMPERATURE <= 2))
     throw new Error(`PROBE_TEMPERATURE must be a number from 0 to 2`)
-  if (STRUCTURED !== undefined && STRUCTURED !== 'native' && STRUCTURED !== 'both')
-    throw new Error(`PROBE_STRUCTURED must be native or both`)
+  if (STRUCTURED !== undefined && !['native', 'both', 'json'].includes(STRUCTURED))
+    throw new Error(`PROBE_STRUCTURED must be native, both or json`)
   if (STRUCTURED !== undefined) sendResponseSchema()
 
   // getModel resolves providers through the app-settings store, so the probe's provider goes there.
