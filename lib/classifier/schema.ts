@@ -86,7 +86,12 @@ const happening = z.object({
   icon,
   involvements: tolerantList(involvement),
   awareness: tolerantList(awareness),
-  sourceTurn: z.string().optional(),
+  sourceTurn: z
+    .string()
+    .optional()
+    .describe(
+      'The turn the happening comes from: where the turns show it, or for a recounted one, the turn that tells it.',
+    ),
 })
 
 export const classifierExtractionSchema = z.object({

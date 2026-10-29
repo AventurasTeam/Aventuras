@@ -227,6 +227,9 @@ describe('classifierExtractionSchema — the writer map', () => {
   // classifier.md → What the classifier writes → Happenings: a happening sits at its source turn.
   it('asks for a time only for a happening the turns recount, and for no turn of its own', () => {
     const fields = itemFields('happenings')
+    expect(fields.sourceTurn?.description).toBe(
+      'The turn the happening comes from: where the turns show it, or for a recounted one, the turn that tells it.',
+    )
     expect(fields.temporal?.description).toBe(
       'Only for an event the turns recount from before the story or offstage, or a backdrop that holds throughout: its time as the prose gives it, or a short phrase when it gives none (before the story, ongoing). Omit for an event the turns show happening.',
     )
