@@ -282,9 +282,10 @@ breakdown under [UX](#ux).
   [`roadmap.md → M7`](./implementation/roadmap.md#m7--app-settings--diagnostics--onboarding)).
   Whether replies fill the new fields is the play check's above. Left
   to measure:
-  - what counts as a happening, which no rule says beyond the category
-    examples. One case to settle: an item changing hands, which
-    piggyback already records with who gave it;
+  - whether a conversation whose substance is a telling, which awareness
+    records, and a plan, which a thread records, is a happening of its
+    own. One happening an encounter makes the lighthouse talk in
+    `recounted` a happening in every reply, and `learning`'s in 3 of 10;
   - an unnamed figure in the scene added anyway: replies add the
     ambush's archer or third rider by a role name in 0 to 6 of 10 runs,
     to involve them in the fight, and `defection`'s gate-boy as "a
@@ -293,12 +294,10 @@ breakdown under [UX](#ux).
     who is no character out of involvements, or the planner could leave
     one to the happening's description; the bar, grown to six clauses,
     may also read past;
-  - a revealed name taken for someone new: 2 of 10 `reveal` replies
-    add Ilse Marrow as a new character beside her rename, though the
-    character rule calls a revealed name a rename;
-  - the lead: the prompt doesn't name the story's lead, so in first- or
-    second-person narration "I" and "you" are the lead only by the
-    scene. The `ambush` window measures it;
+  - a death the prose never states: `learning`'s "her cupbearer ran
+    the same night" is read as Tam Rook's death in 5 to 9 of 10
+    replies on every prompt, in a description, a death-titled happening
+    or a retirement;
   - each turn's prose inside its own delimiters, the reason behind each
     rule that isn't obvious, a short worked example, and no capitals for
     emphasis;

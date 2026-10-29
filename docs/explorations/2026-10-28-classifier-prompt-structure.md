@@ -686,6 +686,28 @@ wording, while Nessa learning of the wreck stays scored as awareness.
 Whether a conversation whose substance is a telling and a plan is a
 happening at all is the developer's to say. Kept.
 
+## Change 13: the lead, named
+
+The story stores its lead (`leadEntityId`), and a first- or
+second-person story or an adventure must have one, but the prompt never
+said who it was: "I" and "you" were the lead only by the scene, and
+`ambush`'s scene also holds Pell, who never appears in the prose. On
+the final prompt Pell was involved in 9 replies of 10 and Tobin in 4
+to 6; with change 12 the one happening of the fight went to Pell, Tobin
+in 1 reply of 10, and descriptions read "Pell charges the leader".
+
+The user half now names the lead before the turns, when it resolves
+on the branch, by the placeholder its own line holds: `The story's lead is [c2] Tobin Ash. Outside quoted speech, "I" and "you" in the turns are the lead.` The system half is unchanged, so the cached
+prefix is too, and no other window has a lead, so their prompts are
+byte for byte as before; only `ambush` ran. The checks on Tobin, Pell
+and "you" became rule checks, with one more: no description tells Pell
+in the fight.
+
+Tobin is involved in 10 replies of 10, Pell in none, and no
+description names Pell: "Tobin Ash charges the leader, Dov Hask,
+knocking him from his saddle." Every other check held, the archer
+included, still added in 6 of 10. Kept.
+
 ## Two more recoveries in code
 
 Two slips a rule had not stopped are now repaired after the reply
