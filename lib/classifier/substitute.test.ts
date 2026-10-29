@@ -184,6 +184,31 @@ describe('idNames', () => {
       undefined,
     ])
   })
+
+  it("names a handle spelling a listed row's placeholder as the reply's, as its refs read", () => {
+    const idMap = new IdBiMap()
+    const c1 = idMap.allocate(CHAR_A)
+    const c2 = idMap.allocate(CHAR_B)
+    const nameOf = idNames(
+      idMap,
+      {
+        entities: [
+          { id: CHAR_A, name: 'Kael' },
+          { id: CHAR_B, name: 'Aria' },
+        ],
+        happenings: [],
+        threads: [],
+      },
+      {
+        newCharacters: [
+          { handle: c1, name: 'Dov' },
+          { handle: c2, name: '' },
+        ],
+        newFactions: [],
+      },
+    )
+    expect([c1, c2].map(nameOf)).toEqual(['Dov', undefined])
+  })
 })
 
 describe('substituteClassifierIds', () => {

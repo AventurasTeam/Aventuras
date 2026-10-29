@@ -116,16 +116,17 @@ export function idNames(
     ...rows.happenings.map((h) => [h.id, h.title] as const),
     ...rows.threads.map((t) => [t.id, t.title] as const),
   ])
+  const declared = [...reply.newCharacters, ...reply.newFactions, ...(reply.newPlaces ?? [])]
   // A handle declared twice is named as its first declaration binds it.
   const byHandle = new Map<string, string>()
-  for (const { handle, name } of [
-    ...reply.newCharacters,
-    ...reply.newFactions,
-    ...(reply.newPlaces ?? []),
-  ])
+  for (const { handle, name } of declared)
     if (!byHandle.has(handle) && name.trim() !== '') byHandle.set(handle, name.trim())
+  // A declared handle is the reply's even where it spells a listed row's placeholder, as
+  // substituteClassifierIds reads it.
+  const handles = new Set(declared.map((d) => d.handle))
   return (token) => {
+    if (handles.has(token)) return byHandle.get(token)
     const id = idMap.getUuidFor(token)
-    return id == null ? byHandle.get(token) : byId.get(id)
+    return id == null ? undefined : byId.get(id)
   }
 }

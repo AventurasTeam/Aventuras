@@ -337,7 +337,9 @@ a profile field), bracketed or bare, is replaced with what it stands
 for before anything is stored: a listed entity's name, a listed
 happening's or thread's title, or the name a new row's handle
 declares. A stored `"[c1] charged"` would otherwise name whoever holds
-`c1` in a later prompt. A token that names nothing stays as written.
+`c1` in a later prompt. A handle the reply declares stands for its new
+row there as in a reference, even when it spells a listed placeholder.
+A token that names nothing stays as written.
 
 When the classifier creates a brand-new entity, it emits the
 entity as a **full object with no `id` field** — name, description,
