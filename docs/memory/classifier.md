@@ -111,6 +111,9 @@ alias list (the keywords bullet below).
   window, each with a free-form `category` and an `icon` from the
   catalog, and `decay_resistance` set per awareness row from the
   model's per-character severity judgment at extraction time. A
+  figure who took part but is no character by the New characters bar
+  below is told in the description, not involved, and never added as a
+  character only to be involved. A
   happening is one whole event, however many turns it runs across: a
   fight, a meeting, a bargain, never a beat of one. Its description
   tells the notable moments in order, who did what, what was said,
