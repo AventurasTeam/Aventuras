@@ -785,6 +785,24 @@ against 5, and the reasoning still summarised the turn as his death
 before any rule was weighed. Reverted: a misreading at the first
 summary is out of a rule's reach on the dev model.
 
+## S2: new characters before happenings (reverted)
+
+Structure only: the rules for new characters and factions, and their
+lists in the reply type, moved ahead of the happening rules, every
+sentence unchanged. The research ranked it second, and first if the
+traces showed bystanders created while involvements are built, which
+the archer's do: "new:archer: took part".
+
+The archer stayed out in 9 replies of 10 against 4, but in 5 of the 9
+he was declared with an empty name, which the planner drops, so the
+bar was no more weighed than before. And the list now written first
+was sometimes written empty: 2 ambush replies declared no new
+character and still involved `new:dov_hask` in the fight, so Hask was
+lost, and 4 recounted replies added no one, Vane added in 6 of 10 and
+involved in 2. The model fills the lists in the order given, and it is
+in the happenings that it finds who took part. Reverted, with the
+prompt back to change 13's.
+
 ## Two more recoveries in code
 
 Two slips a rule had not stopped are now repaired after the reply
