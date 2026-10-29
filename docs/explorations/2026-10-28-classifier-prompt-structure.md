@@ -803,6 +803,26 @@ involved in 2. The model fills the lists in the order given, and it is
 in the happenings that it finds who took part. Reverted, with the
 prompt back to change 13's.
 
+## Change 15: a bystander told, not involved
+
+The archer's traces show where he comes from: the Involvements rule
+lists "who acted", the archer acted, and only a new character's handle
+can name him, so the reply adds him, the bar never read. Change 15
+adds to the Involvements rule: "A figure who took part but whom the
+New characters rule leaves out, an unnamed one the scene is done with,
+is not involved: tell their part in the description, and never add a
+character only to involve them." Change 12 had made the description
+the place for a scene's moments. Canon's Happenings bullet says the
+same.
+
+Replies declaring the archer or the third rider fell to 4 of 10 from
+7 and 8 on the two runs before, 3 of those 4 with an empty name, which
+the planner drops; the archer is told instead: "Sefa shot the archer
+in the forearm with a crossbow." Every named character held, Hask,
+Vane, Tam and Jorun in 10 of 10, the gate-boy stayed out, and the
+steward came in 7 times, inside the 6 to 9 of every earlier prompt.
+Kept.
+
 ## Two more recoveries in code
 
 Two slips a rule had not stopped are now repaired after the reply
@@ -834,43 +854,65 @@ Every change, with the check it was made for. The baseline and change
 scored again on the checks as they now stand, over the five original
 windows, so they differ from the figures given at each change.
 
-| Change                | The check it was made for                        | Before → after              | Rule / judgment mean     |
-| --------------------- | ------------------------------------------------ | --------------------------- | ------------------------ |
-| baseline              |                                                  |                             | 0.71 / 0.70              |
-| 1, knownAwareness     | knownAwareness names only a listed happening     | 11/25 → 17/25               | 0.79 / 0.66              |
-| 2, headings           | the same                                         | 37/50 → 49/50               | 0.83 / 0.70              |
-| 3, threadStatuses     | every ID names a listed row or a declared handle | 38/50 → 47/50               | 0.84 / 0.71              |
-| 4, change of sides    | a none beside Brann's join                       | 10/20 → 4/60                | 0.85 / 0.69              |
-| 5, titles             | calls that drop a happening                      | 4/50 → 0 in every run since | 0.86 / 0.71              |
-| 6, character bar      | replies naming an ambush rider                   | 10/30 → 7/40                | 0.86 / 0.76              |
-| 7, witnesses          | Brannoc aware of the wreck; reverted             | 0/10 → 16/20                | 0.88 / 0.72              |
-| 8, awareness, knowing | Brannoc aware; Oriel knows                       | 0/20 → 10/10; 0/20 → 8/10   | 0.89 / 0.72              |
-| 9, story's direction  | Tam added; Vane added                            | 36/50 → 10/10; 8/50 → 10/10 | 0.92 / 0.68              |
-| 10, person, creature  | a ship, a reef, the hanged brother added         | 7 in 10 runs → 0            | 0.94 / 0.73              |
-| 11, invoked names     | `namedrops`: an invoked name or the fiddler      | 2/10 → 0/20                 | 0.90 / 0.64, 0.93 / 0.66 |
+| Change                 | The check it was made for                        | Before → after              | Rule / judgment mean     |
+| ---------------------- | ------------------------------------------------ | --------------------------- | ------------------------ |
+| baseline               |                                                  |                             | 0.63 / 0.84              |
+| 1, knownAwareness      | knownAwareness names only a listed happening     | 11/25 → 17/25               | 0.68 / 0.84              |
+| 2, headings            | the same                                         | 37/50 → 49/50               | 0.73 / 0.88              |
+| 3, threadStatuses      | every ID names a listed row or a declared handle | 38/50 → 47/50               | 0.73 / 0.88              |
+| 4, change of sides     | a none beside Brann's join                       | 10/20 → 4/60                | 0.74 / 0.88              |
+| 5, titles              | calls that drop a happening                      | 4/50 → 0 in every run since | 0.73 / 0.94              |
+| 6, character bar       | replies naming an ambush rider                   | 10/30 → 7/40                | 0.74 / 1.00              |
+| 7, witnesses           | Brannoc aware of the wreck; reverted             | 0/10 → 16/20                | 0.75 / 0.94              |
+| 8, awareness, knowing  | Brannoc aware; Oriel knows                       | 0/20 → 10/10; 0/20 → 8/10   | 0.76 / 0.94              |
+| 9, story's direction   | Tam added; Vane added                            | 36/50 → 10/10; 8/50 → 10/10 | 0.79 / 0.86              |
+| 10, person, creature   | a ship, a reef, the hanged brother added         | 7 in 10 runs → 0            | 0.82 / 0.88              |
+| 11, invoked names      | `namedrops`: an invoked name or the fiddler      | 2/10 → 0/20                 | 0.77 / 0.82, 0.80 / 0.80 |
+| 12, one happening      | the ambush, the market one happening each        | 0/20 → 19/20                | 0.91 / 0.80 with 13      |
+| 13, the lead           | Tobin involved; Pell in no happening             | 1/10 → 10/10; 0/10 → 10/10  | the same                 |
+| S1, labelled parts     | the archer; the gate-boy; reverted               | 4/10 → 6/10; 10 → 10        | 0.90 / 0.90              |
+| 14, deaths; reverted   | no description tells Tam as dead                 | 5/10 → 1/10                 | four windows only        |
+| S2, new entities first | the archer; reverted                             | 4/10 → 9/10                 | 0.88 / 0.92              |
+| 15, bystander told     | the archer and the third rider not added         | 4/10 → 9/10                 | 0.92 / 0.96              |
 
-Two fixes went into code: a none beside a join at one turn reads as a
-change of sides when the character held another faction, and an ID or
-turn handle copied with its brackets reads as the bare one. Replayed,
-Brann ends in House Varro in every run.
+Changes 12 and 13 ran together on the five windows, 13 alone on
+`ambush`, whose prompt alone it changed. The checks moved several
+times this session: the granularity checks became rule checks with
+change 12, Tobin's and Pell's with change 13, and Tam's death, the
+steward and the aunt were added, so every row reads lower on rules
+and differently on judgment than the figures given at each change.
+Judgment now rests on five checks, which swing a run's mean widely.
+
+Four fixes went into code: a none beside a join at one turn reads as a
+change of sides when the character held another faction; an ID or
+turn handle copied with its brackets reads as the bare one; a new
+character named as the reply renames a row is that row; and an ID in
+prose is written as the name it stands for. Replayed, Brann ends in
+House Varro in every run, and no reply adds Ilse as someone new.
+
+Two structure changes the research ranked first were measured and
+reverted: labelled parts blanked the unnamed steward's name, and the
+new-entity lists written first were sometimes written empty. Neither
+moved what it was meant to move by more than the swing.
 
 Left, each for the developer or measured as out of a rule's reach:
 
-- **An unnamed figure in the scene added anyway.** Replies add the
-  ambush's archer by a role name to involve him in the fight, 0 to 6 of
-  10 runs, and defection's gate-boy as "a person in the scene", 3 of
-  the final prompt's 20, without weighing the bar; in the followup.
-- **A revealed name taken for someone new**, Ilse in 1 or 2 of 10, in
-  the followup.
-- **"Whose part is over"** read once as covering a named character
-  taken for dead.
-- **The lead.** Replies take the silent drover Pell for the ambush's
-  "you" and leave Tobin out of most happenings.
+- **A conversation as a happening.** Under one happening an encounter
+  the lighthouse talk is a happening in every recounted reply, and
+  Idris's homecoming in 3 of 10 learning replies, though what they
+  hold is a telling, which awareness records, and a plan, which a
+  thread records. Whether such a scene is a happening is the
+  developer's to say; in the followup.
+- **Tam Rook made dead.** The reasoning's first summary reads "ran the
+  same night" as his death, and a description tells it in 5 to 9 of 10
+  replies on every prompt; change 14's rule did not reach it.
+- **Awareness of the reply's own happening** filed under
+  knownAwareness, 5 replies in 60 after change 12; in the followup.
+- **Vane involved in the wreck** in 2 to 7 of 10 on every prompt,
+  though descriptions name the Count's order.
 - **The cover name.** No reply reads "Mistress Penn, sir, from
   Tanner's Row" as Ilse naming herself.
 - **A character named later in the window**, added unnamed and his own
   handle renamed, a rename the planner drops: at least twice.
-- **One happening a beat.** The fight is one happening in 3 of the
-  130 runs since change 1, the followup's "what counts as a happening".
-- **Tam Rook made dead**, "ran the same night" read as his death, in 2
-  to 8 of 10 learning replies.
+- **Oriel's knowing** swings from 5 to 9 of 10 between runs of one
+  prompt.

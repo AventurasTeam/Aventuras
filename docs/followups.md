@@ -286,14 +286,12 @@ breakdown under [UX](#ux).
     records, and a plan, which a thread records, is a happening of its
     own. One happening an encounter makes the lighthouse talk in
     `recounted` a happening in every reply, and `learning`'s in 3 of 10;
-  - an unnamed figure in the scene added anyway: replies add the
-    ambush's archer or third rider by a role name in 0 to 6 of 10 runs,
-    to involve them in the fight, and `defection`'s gate-boy as "a
-    person in the scene" in 3 of the final prompt's 20, without weighing
-    the character bar. The Involvements rule could keep a participant
-    who is no character out of involvements, or the planner could leave
-    one to the happening's description; the bar, grown to six clauses,
-    may also read past;
+  - awareness of a happening the reply itself adds, filed under
+    knownAwareness by the happening's title or an invented ID, which
+    the planner drops: 2 or 3 replies in 60 before one happening an
+    encounter, 5 after. The title case could be moved into the
+    happening's own awareness in code; an invented ID can't be matched
+    safely;
   - a death the prose never states: `learning`'s "her cupbearer ran
     the same night" is read as Tam Rook's death in 5 to 9 of 10
     replies on every prompt, in a description, a death-titled happening
@@ -302,7 +300,10 @@ breakdown under [UX](#ux).
     death is told did not reach it (1 of 10 clean against 5);
   - each turn's prose inside its own delimiters, the reason behind each
     rule that isn't obvious, a short worked example, and no capitals for
-    emphasis;
+    emphasis. Two structure changes a research pass ranked first, the
+    character rule in labelled parts and the new-entity lists ahead of
+    the happenings, each cost more than they bought on the dev model
+    and were reverted;
   - room to reason before the JSON, weighed against a pass that already
     takes 75-157 s on the dev model. Neither mode leaves room today: on
     auto the reply parses only as the JSON alone, and forced on,
