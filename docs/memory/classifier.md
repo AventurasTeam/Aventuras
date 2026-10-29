@@ -18,9 +18,7 @@ The prompt opens with its system half
 the role line and the extraction rules, which name the lists they
 refer to rather than pointing above: first the rules every list keeps,
 then each list's rules under a heading naming it, in the order the
-reply writes the lists. New characters and factions come first, so a
-reply settles who exists before it lists who took part in what. Its
-user half carries the
+reply writes the lists. Its user half carries the
 branch's world as lists the classifier addresses by placeholder id
 ([ID handling](#id-handling-in-classifier-output)), then the turns:
 
