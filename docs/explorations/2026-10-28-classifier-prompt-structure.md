@@ -871,6 +871,24 @@ own awareness before planning, unless the happening already lists the
 character. Replayed, that leaves only the slips naming an invented ID:
 2 replies on change 12's run and on change 15's, 1 on the rerun.
 
+## Change 16: a recounted happening keeps its telling turn
+
+Replayed on the final prompt, 32 of Gemma's 169 happenings carried no
+sourceTurn, every one a recounted event with its `temporal`. Their
+place in story time held, but their creation, and any awareness row
+without a learning turn, anchored at the window head. "When it
+happened" said to set `temporal` "instead" for a recounted event,
+while Provenance asks for a sourceTurn on every entry, and Gemma read
+"instead" literally. The rule now says to set `temporal` too, "its
+sourceTurn is then the turn that tells it", and the happening's
+sourceTurn field says the same.
+
+Every happening carried a sourceTurn, 0 missing of 78, and one entry
+of 240 in any list. The wreck kept its time and Nessa her learning
+turn in 10 of 10. Tam came in 7 times against 10 and 10: in each miss
+the reasoning took him for dead, then read "nor one whose part is
+over" as covering a named character, the open item below. Kept.
+
 ## Other models, sampled
 
 The final prompt ran 3 times a window on five more models: Qwen 3.8
