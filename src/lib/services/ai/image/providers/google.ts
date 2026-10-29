@@ -111,6 +111,10 @@ function googleImageCapabilities(id: string): ImageModelCapabilities {
 /** The SDK refuses a Google image model whose id does not start with `gemini-`. */
 const isSdkImageModel = (id: string): boolean => id.startsWith('gemini-') && isGoogleImageModel(id)
 
+/** What generation reads for a model; `undefined` for an id that is not an image model. */
+export const googleModelCapabilities = (model: string): ImageModelCapabilities | undefined =>
+  isSdkImageModel(model) ? googleImageCapabilities(model) : undefined
+
 async function fetchGoogleImageModels(baseUrl: string, apiKey?: string): Promise<ImageModelInfo[]> {
   if (!apiKey) return []
 

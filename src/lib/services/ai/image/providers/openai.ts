@@ -65,6 +65,10 @@ function openaiImageCapabilities(id: string): ImageModelCapabilities {
   )
 }
 
+/** What generation reads for a model; `undefined` for an id that is not an image model. */
+export const openaiModelCapabilities = (model: string): ImageModelCapabilities | undefined =>
+  isOpenAIImageModel(model) ? openaiImageCapabilities(model) : undefined
+
 // Free-form sizes have a pixel floor: the tiny tier and non-square small are below it.
 const MIN_PIXELS = 655_360
 const EDGE_MULTIPLE = 16

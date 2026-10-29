@@ -21,7 +21,7 @@ import { IMAGE_SIZE_TIERS, type ImageSizeTier } from '#lib/utils/image.ts'
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { createTimeoutFetch } from '../../sdk/providers/fetch'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
-import { createGoogleProvider } from './google'
+import { createGoogleProvider, googleModelCapabilities } from './google'
 import type { ImageGenerateOptions } from './types'
 
 const options = (over: Partial<ImageGenerateOptions> = {}): ImageGenerateOptions => ({
@@ -61,7 +61,7 @@ describe('Google size and ratio', () => {
       options({
         model,
         spec: { orientation: 'square', size },
-        modelInfo: await provider.getModelCapabilities!(model),
+        modelInfo: googleModelCapabilities(model),
       }),
     )
     return sent().providerOptions
@@ -226,11 +226,8 @@ describe('Google model listing', () => {
 describe('Google model capabilities', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  const capabilities = (model: string) =>
-    createGoogleProvider({ apiKey: '' }).getModelCapabilities!(model)
-
-  it('answers from the table without a request or a key', async () => {
-    expect(await capabilities('gemini-3.1-flash-image')).toMatchObject({
+  it('answers from the table without a request or a key', () => {
+    expect(googleModelCapabilities('gemini-3.1-flash-image')).toMatchObject({
       supportsImg2Img: true,
       maxReferenceImages: 14,
       supportedResolutions: ['512', '1K', '2K', '4K'],
@@ -238,14 +235,14 @@ describe('Google model capabilities', () => {
     expect(createTimeoutFetch).not.toHaveBeenCalled()
   })
 
-  it('reads a preview as its generally available model', async () => {
-    expect(await capabilities('gemini-3.1-flash-image-preview')).toEqual(
-      await capabilities('gemini-3.1-flash-image'),
+  it('reads a preview as its generally available model', () => {
+    expect(googleModelCapabilities('gemini-3.1-flash-image-preview')).toEqual(
+      googleModelCapabilities('gemini-3.1-flash-image'),
     )
   })
 
-  it('does not know a model the SDK cannot generate with', async () => {
-    expect(await capabilities('nano-banana-pro-preview')).toBeUndefined()
-    expect(await capabilities('gemini-3.5-flash')).toBeUndefined()
+  it('does not know a model the SDK cannot generate with', () => {
+    expect(googleModelCapabilities('nano-banana-pro-preview')).toBeUndefined()
+    expect(googleModelCapabilities('gemini-3.5-flash')).toBeUndefined()
   })
 })

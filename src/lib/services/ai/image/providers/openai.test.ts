@@ -29,7 +29,7 @@ vi.mock('#lib/utils/url.ts', async (importOriginal) => {
 
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { imageGetFetch } from './fetchAdapter'
-import { createOpenAIProvider } from './openai'
+import { createOpenAIProvider, openaiModelCapabilities } from './openai'
 import { IMAGE_SIZE_TIERS, type ImageSpec } from '#lib/utils/image.ts'
 import type { ImageGenerateOptions } from './types'
 
@@ -197,7 +197,7 @@ describe('OpenAI image size', () => {
       options({
         model,
         spec: { orientation, size },
-        modelInfo: await provider.getModelCapabilities!(model),
+        modelInfo: openaiModelCapabilities(model),
         referenceImages,
       }),
     )
@@ -246,7 +246,7 @@ describe('OpenAI image size', () => {
       options({
         model: 'gpt-image-9',
         spec: { orientation: 'landscape', size: 'medium' },
-        modelInfo: await provider.getModelCapabilities!('gpt-image-9'),
+        modelInfo: openaiModelCapabilities('gpt-image-9'),
       }),
     )
     expect(lastJson().size).toBe('1536x864')
@@ -329,11 +329,8 @@ describe('OpenAI model listing', () => {
 })
 
 describe('OpenAI model capabilities', () => {
-  const capabilities = (model: string) =>
-    createOpenAIProvider({ apiKey: '' }).getModelCapabilities!(model)
-
-  it('answers from the table without a request or a key', async () => {
-    expect(await capabilities('gpt-image-1.5')).toMatchObject({
+  it('answers from the table without a request or a key', () => {
+    expect(openaiModelCapabilities('gpt-image-1.5')).toMatchObject({
       supportsImg2Img: true,
       maxReferenceImages: 16,
       supportedResolutions: ['1024x1024', '1536x1024', '1024x1536'],
@@ -341,8 +338,8 @@ describe('OpenAI model capabilities', () => {
     expect(imageGetFetch).not.toHaveBeenCalled()
   })
 
-  it('does not know a model that is not an image model', async () => {
-    expect(await capabilities('gpt-4o')).toBeUndefined()
-    expect(await capabilities('dall-e-3')).toBeUndefined()
+  it('does not know a model that is not an image model', () => {
+    expect(openaiModelCapabilities('gpt-4o')).toBeUndefined()
+    expect(openaiModelCapabilities('dall-e-3')).toBeUndefined()
   })
 })
