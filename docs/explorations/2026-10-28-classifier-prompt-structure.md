@@ -823,6 +823,17 @@ Vane, Tam and Jorun in 10 of 10, the gate-boy stayed out, and the
 steward came in 7 times, inside the 6 to 9 of every earlier prompt.
 Kept.
 
+Run again, the final prompt read 0.91 for rule checks and 0.91 for
+judgment checks on the six windows, against 0.93 and 0.97 the first
+time and 0.81 and 0.86 for change 11's prompt on the checks as they
+now stand. The archer came in by name in 5 replies of 10, one of them
+as "the unseen archer" who shot Sefa, against 1 the first time: over
+the two runs a named archer is created in 6 of 20 against 12 of 20 on
+the two runs before the change, half as often, not never. Two
+`reveal` replies added Ilse as someone new without renaming her, which
+the code's fold can't catch, and one `recounted` call failed to parse
+after its retry, the first such failure in the session's runs.
+
 ## Two more recoveries in code
 
 Two slips a rule had not stopped are now repaired after the reply
@@ -874,6 +885,7 @@ windows, so they differ from the figures given at each change.
 | 14, deaths; reverted   | no description tells Tam as dead                 | 5/10 → 1/10                 | four windows only        |
 | S2, new entities first | the archer; reverted                             | 4/10 → 9/10                 | 0.88 / 0.92              |
 | 15, bystander told     | the archer and the third rider not added         | 4/10 → 9/10                 | 0.92 / 0.96              |
+| 15, run again          | the same                                         | 4/10 → 5/10                 | 0.90 / 0.88              |
 
 Changes 12 and 13 ran together on the five windows, 13 alone on
 `ambush`, whose prompt alone it changed. The checks moved several
