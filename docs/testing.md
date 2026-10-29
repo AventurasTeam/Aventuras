@@ -487,6 +487,16 @@ reply, both as the server sent it, with any separate reasoning, and
 as the checks read it. A unit test proves
 each check can hold and can fail.
 
+The checks look for the facts a reply must hold and can't see one the
+prose never had. `pnpm judge:classifier <out-dir> <run-dir>...`
+(`scripts/classifier-judge-dump.ts`) turns eval runs saved with
+`PROBE_OUT` into a faithfulness judge's input: each window's Known
+lists and turns, each run's happenings and new characters under a
+label drawn at random, and a key naming each label's run. A judge, a
+model other than any it judges, then reads every description against
+the turns by `scripts/classifier-eval/judge-brief.md`, which also says
+how far its counts can be trusted.
+
 ## Selector strategy
 
 Three tiers, cheapest and most stable first. Reach for a lower tier
