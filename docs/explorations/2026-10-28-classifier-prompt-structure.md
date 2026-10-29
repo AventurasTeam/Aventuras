@@ -1003,6 +1003,22 @@ up a crown short" and twelve years is Brann's service: a time
 computed where the rule asks for the prose's own. Past those two, the
 final prompt invents or gets wrong 3 to 5 claims in 60 replies.
 
+## Change 17: a part that is over, for the unnamed
+
+The character bar leaves out "one whose part is over ('a father long
+dead')", meant for a figure the story is done with. Change 16's three
+replies without Tam each took him for dead, then read the clause as
+covering a named boy. It now reads "nor an unnamed one whose part is
+over".
+
+Tam came in 10 of 10. The unnamed stayed out: the archer and the third
+rider in 8 of 10, the gate-boy's one miss a reply adding the listed
+Maela again. Vane, Jorun, Hask, the steward and the aunt held. The
+rule mean fell from 0.93 to 0.90 on six windows, inside the 0.92 and
+0.90 of one prompt run twice; the checks that fell are off the clause,
+and Tam's death checks can fail only where Tam exists, now in every
+reply. Kept.
+
 ## Where it stands
 
 Every change, with the check it was made for. The baseline and change
@@ -1012,7 +1028,7 @@ windows, so they differ from the figures given at each change.
 
 | Change                 | The check it was made for                        | Before → after              | Rule / judgment mean     |
 | ---------------------- | ------------------------------------------------ | --------------------------- | ------------------------ |
-| baseline               |                                                  |                             | 0.63 / 0.84              |
+| baseline               |                                                  |                             | 0.64 / 0.84              |
 | 1, knownAwareness      | knownAwareness names only a listed happening     | 11/25 → 17/25               | 0.68 / 0.84              |
 | 2, headings            | the same                                         | 37/50 → 49/50               | 0.73 / 0.88              |
 | 3, threadStatuses      | every ID names a listed row or a declared handle | 38/50 → 47/50               | 0.73 / 0.88              |
@@ -1020,10 +1036,10 @@ windows, so they differ from the figures given at each change.
 | 5, titles              | calls that drop a happening                      | 4/50 → 0 in every run since | 0.73 / 0.94              |
 | 6, character bar       | replies naming an ambush rider                   | 10/30 → 7/40                | 0.74 / 1.00              |
 | 7, witnesses           | Brannoc aware of the wreck; reverted             | 0/10 → 16/20                | 0.75 / 0.94              |
-| 8, awareness, knowing  | Brannoc aware; Oriel knows                       | 0/20 → 10/10; 0/20 → 8/10   | 0.76 / 0.94              |
+| 8, awareness, knowing  | Brannoc aware; Oriel knows                       | 0/20 → 10/10; 0/20 → 8/10   | 0.75 / 0.94              |
 | 9, story's direction   | Tam added; Vane added                            | 36/50 → 10/10; 8/50 → 10/10 | 0.79 / 0.86              |
-| 10, person, creature   | a ship, a reef, the hanged brother added         | 7 in 10 runs → 0            | 0.82 / 0.88              |
-| 11, invoked names      | `namedrops`: an invoked name or the fiddler      | 2/10 → 0/20                 | 0.77 / 0.82, 0.80 / 0.80 |
+| 10, person, creature   | a ship, a reef, the hanged brother added         | 7 in 10 runs → 0            | 0.81 / 0.88              |
+| 11, invoked names      | `namedrops`: an invoked name or the fiddler      | 2/10 → 0/20                 | 0.77 / 0.82, 0.79 / 0.80 |
 | 12, one happening      | the ambush, the market one happening each        | 0/20 → 20/20                | 0.91 / 0.80 with 13      |
 | 13, the lead           | Tobin involved; Pell in no happening             | 1/10 → 10/10; 0/10 → 10/10  | the same                 |
 | S1, labelled parts     | the archer; the gate-boy; reverted               | 4/10 → 6/10; 10 → 10        | 0.90 / 0.90              |
@@ -1031,12 +1047,14 @@ windows, so they differ from the figures given at each change.
 | S2, new entities first | the archer; reverted                             | 4/10 → 9/10                 | 0.88 / 0.92              |
 | 15, bystander told     | the archer and the third rider not added         | 4/10 → 9/10                 | 0.92 / 0.96              |
 | 15, run again          | the same                                         | 4/10 → 5/10                 | 0.90 / 0.88              |
+| 16, telling turn       | happenings without a sourceTurn                  | 32/169 → 0/78               | 0.92 / 0.90              |
+| 17, part over, unnamed | Tam added                                        | 7/10 → 10/10                | 0.89 / 0.90              |
 
 Changes 12 and 13 ran together on the five windows, 13 alone on
 `ambush`, whose prompt alone it changed. The checks moved several
 times this session: the granularity checks became rule checks with
 change 12, Tobin's and Pell's with change 13, and Tam's death, the
-steward and the aunt were added, so every row reads lower on rules
+steward, the aunt and the hanging's time were added, so every row reads lower on rules
 and differently on judgment than the figures given at each change.
 Judgment now rests on five checks, which swing a run's mean widely.
 
