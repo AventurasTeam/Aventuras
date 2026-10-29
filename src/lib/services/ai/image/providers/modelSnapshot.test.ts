@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ImageProfile } from '#lib/types/index.ts'
-import { IMAGE_MODEL_SNAPSHOT_VERSION, chooseModelSnapshot, snapshotModel } from './modelSnapshot'
+import {
+  IMAGE_MODEL_SNAPSHOT_VERSION,
+  chooseModelSnapshot,
+  modelListKey,
+  snapshotModel,
+} from './modelSnapshot'
 import type { ImageModelInfo } from './types'
 
 const info = (over: Partial<ImageModelInfo> = {}): ImageModelInfo => ({
@@ -64,6 +69,22 @@ describe('snapshotModel', () => {
 
   it('is empty for a model the list does not know', () => {
     expect(snapshotModel('gone').capabilities).toEqual({})
+  })
+})
+
+describe('modelListKey', () => {
+  const key = modelListKey('openai-compatible', 'k', 'https://x.example/v1')
+
+  it('is the same for another spelling of the base URL', () => {
+    expect(modelListKey('openai-compatible', 'k', 'https://x.example/v1/')).toBe(key)
+  })
+
+  it.each([
+    ['provider', modelListKey('nanogpt', 'k', 'https://x.example/v1')],
+    ['API key', modelListKey('openai-compatible', 'k2', 'https://x.example/v1')],
+    ['base URL', modelListKey('openai-compatible', 'k', 'https://y.example/v1')],
+  ])('differs when the %s differs', (_, other) => {
+    expect(other).not.toBe(key)
   })
 })
 

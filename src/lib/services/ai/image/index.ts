@@ -37,6 +37,7 @@ export {
 export {
   IMAGE_MODEL_SNAPSHOT_VERSION,
   chooseModelSnapshot,
+  modelListKey,
   snapshotModel,
 } from './providers/modelSnapshot'
 

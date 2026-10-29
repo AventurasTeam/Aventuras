@@ -35,11 +35,20 @@ export function snapshotModel(model: string, info?: ImageModelCapabilities): Ima
   }
 }
 
+/** Identifies the inputs a model list was loaded for. */
+export function modelListKey(
+  providerType: ImageProviderType,
+  apiKey: string,
+  baseUrl?: string,
+): string {
+  return JSON.stringify([providerType, apiKey, normalizeBaseUrl(baseUrl)])
+}
+
 /**
- * The snapshot a profile should save. A list still loading may belong to the previous provider,
- * so only a settled one is read; otherwise the stored snapshot survives while the provider, base
- * URL and model are unchanged. A model a settled list lacks may still be served (an alias), so it
- * is left to the generation-time lookup rather than captured as empty.
+ * The snapshot a profile should save. A list loaded for other inputs may belong to the previous
+ * provider, so only a settled one is read; otherwise the stored snapshot survives while the
+ * provider, base URL and model are unchanged. A model a settled list lacks may still be served
+ * (an alias), so it is left to the generation-time lookup rather than captured as empty.
  */
 export function chooseModelSnapshot(args: {
   model: string

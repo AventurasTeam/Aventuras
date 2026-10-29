@@ -26,6 +26,7 @@
     referenceLimit,
     suggestReferenceInputs,
     chooseModelSnapshot,
+    modelListKey,
     capturesModelSnapshot,
     type ComfyCustomWorkflow,
     type ImageModelInfo,
@@ -130,6 +131,8 @@
   // Profile form model state
   let profileModel = $state('')
   let profileModels = $state<ImageModelInfo[]>([])
+  // The `modelListKey` of the inputs `profileModels` was loaded for.
+  let profileModelsKey = $state<string | null>(null)
   let isLoadingProfileModels = $state(false)
   let profileModelsError = $state<string | null>(null)
 
@@ -257,9 +260,11 @@
       // Discard stale results if a newer request has already started.
       if (reqId !== profileModelsReqId) return
       profileModels = models
+      profileModelsKey = modelListKey(providerType, apiKey, baseUrl)
     } catch (error) {
       if (reqId !== profileModelsReqId) return
       profileModels = []
+      profileModelsKey = null
       profileModelsError = error instanceof Error ? error.message : 'Failed to load models'
     } finally {
       if (reqId === profileModelsReqId) isLoadingProfileModels = false
@@ -390,7 +395,8 @@
       providerType: profileProviderType,
       baseUrl: profileBaseUrl || undefined,
       models: profileModels,
-      settled: !isLoadingProfileModels && !profileModelsError,
+      settled:
+        profileModelsKey === modelListKey(profileProviderType, profileApiKey, profileBaseUrl),
       stored: editingProfileId ? settings.getImageProfile(editingProfileId) : undefined,
     })
   }
@@ -465,6 +471,7 @@
     profileBaseUrl = ''
     profileModel = ''
     profileModels = []
+    profileModelsKey = null
     profileSampler = 'dpmpp_2m_sde_gpu'
     profileScheduler = 'sgm_uniform'
     profileMode = ComfyMode.BasicTxt2Img
@@ -508,6 +515,7 @@
     profileBaseUrl = profile.baseUrl || ''
     profileModel = profile.model || ''
     profileModels = []
+    profileModelsKey = null
     profileTakesReferences = profile.providerOptions?.takesReferences === true
     profileInputReferences = profile.providerOptions?.inputReferences === true
 
