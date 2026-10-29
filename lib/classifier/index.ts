@@ -24,7 +24,13 @@ export type {
   Standing,
   ThreadStatusChange,
 } from './schema'
-export { NEW_HANDLE_PREFIX, PLACEHOLDER_FIELDS, substituteClassifierIds } from './substitute'
+export {
+  idNames,
+  NEW_HANDLE_PREFIX,
+  nameIdsInProse,
+  PLACEHOLDER_FIELDS,
+  substituteClassifierIds,
+} from './substitute'
 export {
   cosine,
   decideNewItem,

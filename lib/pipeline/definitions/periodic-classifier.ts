@@ -21,6 +21,8 @@ import {
   nextStatusOnSuccess,
   newPlacesOf,
   PERIODIC_CLASSIFIER_KIND,
+  idNames,
+  nameIdsInProse,
   readClassifierReply,
   RECONCILED_KINDS,
   reconcileNewEntity,
@@ -356,8 +358,10 @@ export async function* periodicClassifierPhase(
     return { status: 'failed', error: failure.error }
   }
 
-  const { reply: extraction, malformed } = readClassifierReply(result.value)
+  const { reply, malformed } = readClassifierReply(result.value)
   for (const drop of malformed) ctx.log.warn('classifier.entry_malformed', drop)
+  // classifier.md → ID handling: a placeholder in prose would name another row in a later call.
+  const extraction = nameIdsInProse(reply, idNames(idMap, { entities, happenings, threads }, reply))
   const substituted = substituteClassifierIds(
     extraction,
     idMap,

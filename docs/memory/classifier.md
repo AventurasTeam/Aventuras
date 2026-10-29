@@ -319,6 +319,14 @@ bare one when that names a listed row, a handle the reply declares or
 a turn of the window, and anything else stays as written, an
 unresolved reference.
 
+A placeholder means nothing past its call, so an ID or a handle the
+reply writes into prose (a title, a description, an awareness source,
+a profile field), bracketed or bare, is replaced with what it stands
+for before anything is stored: a listed entity's name, a listed
+happening's or thread's title, or the name a new row's handle
+declares. A stored `"[c1] charged"` would otherwise name whoever holds
+`c1` in a later prompt. A token that names nothing stays as written.
+
 When the classifier creates a brand-new entity, it emits the
 entity as a **full object with no `id` field** — name, description,
 state fields, etc. Parse allocates a fresh `char_<uuid>` (or other

@@ -1316,6 +1316,50 @@ describe('periodicClassifierPhase', () => {
     expect(involvement.action.payload.entry.entityId).not.toBe(CHAR_KAEL)
   })
 
+  // classifier.md → ID handling in classifier output: a placeholder in prose.
+  it('stores a description that wrote a listed character or a new one by ID under their names', async () => {
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+      keywords: [],
+    } as unknown as Entity
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction({
+        newCharacters: [
+          {
+            handle: 'new:dov',
+            name: 'Dov',
+            description: 'A bandit.',
+            keywords: [],
+            sourceTurn: 't1',
+          },
+        ],
+        happenings: [
+          {
+            title: 'The ambush',
+            description: '[c1] unhorsed new:dov.',
+            sourceTurn: 't1',
+            involvements: [{ ref: 'c1' }],
+            awareness: [],
+          },
+        ],
+      }),
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael] })
+    const { events } = await drain(h.ctx)
+
+    const happening = events.find(
+      (e) => (e as { action: { kind: string } }).action.kind === 'createHappening',
+    ) as { action: { payload: { entry: { description: string } } } }
+    expect(happening.action.payload.entry.description).toBe('Kael unhorsed Dov.')
+  })
+
   // classifier.md → Disambiguation: a reveal the reply also wrote up as a newcomer.
   it('takes a new character named as the reply renames a listed one for that character', async () => {
     const stranger = {
