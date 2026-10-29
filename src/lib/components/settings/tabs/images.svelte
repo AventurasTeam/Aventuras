@@ -1641,7 +1641,8 @@
               placeholder="Auto-detect first available"
             />
             <p class="text-muted-foreground text-xs">
-              Leave empty to auto-detect the first text encoder found in ComfyUI.
+              Empty uses the first text encoder ComfyUI lists, so pick one if the server has
+              several.
             </p>
           </div>
 
@@ -1666,7 +1667,7 @@
               placeholder="Auto-detect first available"
             />
             <p class="text-muted-foreground text-xs">
-              Leave empty to auto-detect the first VAE found in ComfyUI.
+              Empty uses the first VAE ComfyUI lists, so pick one if the server has several.
             </p>
           </div>
 
