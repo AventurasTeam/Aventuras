@@ -32,6 +32,7 @@ import {
   type Entity,
   type Happening,
   type StoryEntry,
+  type StoryMode,
   type Thread,
 } from '@/lib/db'
 import { dbSchema } from '@/lib/db/schema'
@@ -99,6 +100,7 @@ type Branch = {
   mentionedPlaces: boolean
   /** stories.definition.leadEntityId, which may dangle on this branch. */
   leadEntityId: string | null
+  mode: StoryMode
   entities: Entity[]
   /** The Known happenings the pass would list for this window. */
   happenings: Happening[]
@@ -131,9 +133,11 @@ async function readBranch(dbPath: string, maxEntries: number): Promise<Branch> {
       .select()
       .from(happenings)
       .where(eq(happenings.branchId, BRANCH_ID))) as Happening[]
+    const definition = storyDefinitionSchema.parse(story.definition)
     return {
       mentionedPlaces: settings.classifierMentionedPlaces,
-      leadEntityId: storyDefinitionSchema.parse(story.definition).leadEntityId ?? null,
+      leadEntityId: definition.leadEntityId ?? null,
+      mode: definition.mode,
       entities: (await db
         .select()
         .from(entities)
@@ -405,6 +409,7 @@ async function probeBranch(config: ResolveModelConfig, maxEntries: number): Prom
       leadId:
         resolveLead(branch.leadEntityId, new Map(branch.entities.map((e) => [e.id, e])), BRANCH_ID)
           ?.id ?? null,
+      mode: branch.mode,
       idMap: new IdBiMap(),
     }),
   )

@@ -1,4 +1,11 @@
-import { describeCalendarVocabulary, resolveCalendar } from '@/lib/calendar'
+import {
+  describeCalendarVocabulary,
+  FormatMiss,
+  formatWorldTime,
+  resolveCalendar,
+  type CalendarSystem,
+  type TierTuple,
+} from '@/lib/calendar'
 import { inheritedEntryMetadata, type Entity, type StoryEntry } from '@/lib/db'
 import { IdBiMap, substituteIds } from '@/lib/ids'
 import { buildSuggestionSlots, NARRATIVE_KINDS, promptProse } from '@/lib/piggyback'
@@ -15,11 +22,13 @@ import {
   type ThreadRow,
 } from '@/lib/retrieval'
 import { currentStoryStore, entitiesStore } from '@/lib/stores'
+import { oneLine } from '@/lib/text'
 import {
   buildEntityViews,
   byName,
   listedAncestorNames,
   locationMapView,
+  resolveLead,
   type EntityViews,
   type KindedView,
 } from '@/lib/world'
@@ -276,6 +285,21 @@ function resolveWorldTimeDeltaBasis(rows: readonly StoryEntry[]): WorldTimeDelta
 }
 
 /**
+ * The latest entry's world time as the reader's footer shows it (data-model.md → In-world time
+ * tracking). Null when it won't render: a raw number of seconds would read as a time.
+ */
+function currentTimeOf(
+  latest: StoryEntry | undefined,
+  calendar: CalendarSystem,
+  origin: TierTuple,
+): string | null {
+  const worldTime = latest?.metadata?.worldTime
+  if (typeof worldTime !== 'number') return null
+  const rendered = formatWorldTime(worldTime, calendar, origin)
+  return rendered instanceof FormatMiss || rendered.trim() === '' ? null : rendered
+}
+
+/**
  * A story entry as a template sees it. Prose, position and kind only: `metadata`
  * carries entity ids, and substituteIds allocates a placeholder for every id it
  * walks, so a window's worth of historical scene rosters would put entities
@@ -359,7 +383,10 @@ export async function buildGenerationContext(
   const readsScene = SCENE_VARIABLES.some((name) => reads.has(name))
   const [buffer, lastTurns, sceneSource] = await Promise.all([
     reads.has('entries') ? readPromptBuffer(ctx.db, branchId, settings) : [],
-    reads.has('lastTurns') || reads.has('worldTimeDeltaBasis') || reads.has('namedCharacters')
+    reads.has('lastTurns') ||
+    reads.has('worldTimeDeltaBasis') ||
+    reads.has('namedCharacters') ||
+    reads.has('currentTime')
       ? readLastTurns(
           ctx.db,
           branchId,
@@ -457,6 +484,7 @@ export async function buildGenerationContext(
   ])
 
   const retrievedHappenings = promptRows(retrieval?.bundles.happenings.selected)
+  const lead = resolveLead(definition.leadEntityId, entitiesStore.getEntities(), branchId)
   const context = {
     // cadence.md → Composition rule: the two-mode window plus its
     // protectedBuffer spillover is not expressible as a template `| recent: N`.
@@ -471,7 +499,11 @@ export async function buildGenerationContext(
     sceneMetadata: scene,
     worldTimeDeltaBasis: resolveWorldTimeDeltaBasis(lastTurns),
     definition: normalizedDefinition,
+    // architecture.md → System and user halves: a system half names the lead and never brackets
+    // its id, which is allocated per call. After `entities`, so the id numbers as it does there.
+    lead: lead == null ? null : { id: lead.id, name: oneLine(lead.name) },
     calendarVocabulary: describeCalendarVocabulary(calendar),
+    currentTime: currentTimeOf(lastTurns.at(-1), calendar, definition.worldTimeOrigin),
     userSettings: {
       fullChapterInBuffer: settings.fullChapterInBuffer,
       partialChapterBuffer: settings.partialChapterBuffer,
@@ -513,6 +545,7 @@ export async function buildGenerationContext(
     suggestionsFire: suggestionsFire && suggestionSlots.length > 0,
     suggestionSlots,
     suggestionCount: settings.suggestionCount,
+    composerWrapPov: settings.composerWrapPov,
     refreshGuidance: trimProse(refreshGuidance),
   }
 

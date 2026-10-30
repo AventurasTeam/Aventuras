@@ -124,6 +124,7 @@ const TURN_A: Record<string, unknown> = {
   suggestionCount: 2,
   refreshGuidance: '',
   worldTimeDeltaBasis: 'sinceLastAiReply',
+  currentTime: 'Frostmoon 3, the third hour',
 }
 
 const TURN_B: Record<string, unknown> = {
@@ -178,6 +179,7 @@ const TURN_B: Record<string, unknown> = {
   suggestionCount: 3,
   refreshGuidance: 'Kael asks Mora about the heir.',
   worldTimeDeltaBasis: 'sinceUserAction',
+  currentTime: null,
 }
 
 const PASS_A: Record<string, unknown> = {

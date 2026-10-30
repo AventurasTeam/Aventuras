@@ -213,11 +213,27 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: true,
     },
     {
+      name: 'lead',
+      type: '{ id, name } | null',
+      category: 'Entities',
+      description:
+        "The story's lead as `entities` lists it, its name on one line. Null when the story has no lead, or its lead dangles on this branch. A system half reads `lead.name` only: the id is a placeholder allocated per call, so it would change the half every call.",
+      required: true,
+    },
+    {
       name: 'calendarVocabulary',
       type: 'CalendarVocabulary',
       category: 'Story Config',
       description:
         'Vocabulary descriptor (base units, tier names/labels, era names) for the active calendar system; falls back to earth-gregorian for an unresolved id, matching the reader.',
+      required: true,
+    },
+    {
+      name: 'currentTime',
+      type: 'string | null',
+      category: 'Story Config',
+      description:
+        "The latest entry's world time in the calendar's display format, as the reader's footer shows it. Null when the entry has no world time or the calendar fails to render it; leave the block out then. Per call.",
       required: true,
     },
     {
@@ -371,6 +387,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: false,
     },
     {
+      name: 'composerWrapPov',
+      type: "'first' | 'third'",
+      category: 'Story Config',
+      description:
+        "stories.settings.composerWrapPov: the person the user's input is written in, which adventure's next-turn suggestions are written in too.",
+      required: true,
+    },
+    {
       name: 'refreshGuidance',
       type: 'string',
       category: 'Generation Results',
@@ -452,6 +476,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
         'The story\'s lead as `entities` lists it (id and its name on one line), so the model knows whose "I" and "you" the turns narrate. Null when the story has no lead, or its lead dangles on this branch.',
       required: false,
     },
+    {
+      name: 'mode',
+      type: "'adventure' | 'creative'",
+      category: 'Story Config',
+      description:
+        "The story's mode, which decides what a user's turn establishes: an adventure's is the lead's attempt, a creative story's a direction or prose.",
+      required: true,
+    },
   ],
   wizard: [
     {
@@ -468,6 +500,22 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       description:
         'Lead cast id — a placeholder after id-substitution, so a model can echo it in sceneEntities; blank on lead-less paths.',
       required: false,
+    },
+    {
+      name: 'lead',
+      type: '{ id, name } | null',
+      category: 'Entities',
+      description:
+        "The draft's lead when it is an active character in `cast`, its name on one line; null otherwise. `id` is the same placeholder as `leadEntityId`.",
+      required: true,
+    },
+    {
+      name: 'startTime',
+      type: 'string | null',
+      category: 'Story Config',
+      description:
+        "The story's start moment in the calendar's display format, as the calendar step shows it. Null when the start moment doesn't render.",
+      required: true,
     },
     {
       name: 'cast',
@@ -593,6 +641,10 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
   'Story Config': [
     'definition',
     'calendarVocabulary',
+    'currentTime',
+    'startTime',
+    'composerWrapPov',
+    'mode',
     'userSettings',
     'suggestionSlots',
     'suggestionCount',

@@ -1119,6 +1119,7 @@ describe('bundled per-turn template — system and user halves', () => {
         },
       },
     ],
+    currentTime: 'March 15, 1200 AD 10:01',
     suggestionsFire: true,
     suggestionCount: 2,
     suggestionSlots: [{ ref: 'cat1', label: 'Action', promptHint: 'A decisive move.' }],
@@ -1126,6 +1127,13 @@ describe('bundled per-turn template — system and user halves', () => {
   const render = (over: Record<string, unknown> = {}) =>
     renderTemplate(TEMPLATE_IDS.perTurnNarrative, { ...everything, ...over })
   const headings = (half: string) => half.split('\n').filter((line) => line.startsWith('# '))
+
+  // architecture.md → v2 shape of generationContext: absent when the time doesn't render.
+  it('leaves Current time out when there is none', () => {
+    const { user } = render({ currentTime: null })
+    expect(user).not.toContain('# Current time')
+    expect(user).toContain('A weathered hilltop fortress.\n\n# Places')
+  })
 
   it('holds Setting, Genre, Tone and Calendar in that order, then the output-format line', () => {
     const { system } = render()
@@ -1139,11 +1147,13 @@ describe('bundled per-turn template — system and user halves', () => {
     expect(headings(user)).toEqual([
       '# In scene',
       '# Current location',
+      '# Current time',
       '# Places',
       '# The wider world',
       '# Story so far',
     ])
     for (const perCall of [
+      '# Current time\nMarch 15, 1200 AD 10:01\n\n# Places',
       'off-scene character above',
       PLACES_INSTRUCTION,
       '<state>',
