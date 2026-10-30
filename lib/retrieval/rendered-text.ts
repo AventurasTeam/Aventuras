@@ -192,10 +192,10 @@ export function happeningKnowersLine(
   if (commonKnowledge) return 'Common knowledge'
   const knowers = awareness
     .flatMap((a) => {
-      const name = nameOf.get(a.characterId)
-      return name === undefined
+      const name = blankToNull(oneLine(nameOf.get(a.characterId) ?? ''))
+      return name === null
         ? []
-        : [{ id: a.characterId, name: oneLine(name), source: blankToNull(oneLine(a.source ?? '')) }]
+        : [{ id: a.characterId, name, source: blankToNull(oneLine(a.source ?? '')) }]
     })
     .sort((a, b) => collate(a.name, b.name) || compareId(a.id, b.id))
   if (knowers.length === 0) return null

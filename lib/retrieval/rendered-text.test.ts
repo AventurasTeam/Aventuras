@@ -264,4 +264,12 @@ describe('happeningKnowersLine', () => {
     expect(happeningKnowersLine(false, [knows('char_gone', 'saw')], NAMES)).toBeNull()
     expect(happeningKnowersLine(false, [], NAMES)).toBeNull()
   })
+
+  it('leaves out a knower whose name is blank', () => {
+    const names = new Map([...NAMES, ['char_blank', ' \n ']])
+    expect(
+      happeningKnowersLine(false, [knows('char_blank', 'saw'), knows('char_aria', 'saw')], names),
+    ).toBe('Known to: Aria (saw)')
+    expect(happeningKnowersLine(false, [knows('char_blank', 'saw')], names)).toBeNull()
+  })
 })
