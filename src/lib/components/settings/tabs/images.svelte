@@ -50,6 +50,7 @@
   import ImageResolutionSelector from '#lib/components/settings/ImageResolutionSelector.svelte'
   import { defaultImageSpec, normalizeImageDataUrl, type ImageSpec } from '#lib/utils/image.ts'
   import { errMessage } from '#lib/utils/error.ts'
+  import { parseHttpUrl } from '#lib/utils/url.ts'
 
   const imageStyles = [
     { value: 'image-style-soft-anime', label: 'Soft Anime' },
@@ -221,7 +222,12 @@
   const connection = $derived(
     connectionFor(profileProviderType, profileApiKey, profileBaseUrl || undefined),
   )
-  const canSaveProfile = $derived(!!profileName.trim() && !needsWorkflow)
+  const baseUrlInvalid = $derived(
+    baseUrlMode(profileProviderType) !== 'none' &&
+      !!profileBaseUrl.trim() &&
+      !parseHttpUrl(profileBaseUrl.trim()),
+  )
+  const canSaveProfile = $derived(!!profileName.trim() && !needsWorkflow && !baseUrlInvalid)
 
   onDestroy(() => {
     flushAutoSave()
@@ -266,6 +272,7 @@
 
   async function loadProfileForm(force: boolean) {
     stopProfileModels()
+    if (baseUrlInvalid) return
     const request = new AbortController()
     modelsRequest = request
     isLoadingProfileModels = true
@@ -321,6 +328,7 @@
     const profileId = editingProfileId
     const providerType = profileProviderType
     const { apiKey, baseUrl } = connection
+    const invalid = baseUrlInvalid
 
     untrack(() => {
       if (!profileId) {
@@ -333,10 +341,14 @@
       loadedProfileId = profileId
       loadedProviderType = providerType
 
-      if (profileModelsKey !== modelListKey(providerType, apiKey, baseUrl)) {
+      if (invalid || profileModelsKey !== modelListKey(providerType, apiKey, baseUrl)) {
         profileModels = []
         profileModelsKey = null
         profileModelsError = null
+      }
+      if (invalid) {
+        stopProfileModels()
+        return
       }
       if (targetChanged) {
         void loadProfileForm(false)
@@ -1330,7 +1342,16 @@
         <Label>
           {baseUrlMode(profileProviderType) === 'required' ? 'Base URL' : 'Base URL (optional)'}
         </Label>
-        <Input bind:value={profileBaseUrl} placeholder="Custom base URL" />
+        <Input
+          bind:value={profileBaseUrl}
+          placeholder="Custom base URL"
+          aria-invalid={baseUrlInvalid}
+        />
+        {#if baseUrlInvalid}
+          <p class="text-destructive text-xs" role="alert">
+            Enter a full URL starting with http:// or https://
+          </p>
+        {/if}
       </div>
     {/if}
 
