@@ -14,6 +14,7 @@ const STABLE_SYSTEM_VARIABLES: readonly string[] = [
   'calendarVocabulary',
   'piggybackFires',
   'mentionedPlaces',
+  'mode',
   'lead',
 ]
 
@@ -25,6 +26,7 @@ const perCallReads = (templateId: TemplateId, half?: TemplateHalf) =>
   )
 
 const STORY = {
+  mode: 'adventure',
   definition: {
     mode: 'adventure',
     narration: 'second',
@@ -276,19 +278,23 @@ const RENDER_CASES: RenderCase[] = [
     templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
     first: TURN_A,
     second: TURN_B,
-    systemShows: ['This story tracks time in days'],
+    systemShows: ['This story tracks time in days', 'what the lead does, says or attempts'],
   },
   {
     templateId: TEMPLATE_IDS.periodicClassifier,
     first: PASS_A,
     second: PASS_B,
-    systemShows: ['Rules for every list:'],
+    systemShows: ['Rules for every list:', 'what the lead does, says or attempts'],
   },
   {
     templateId: TEMPLATE_IDS.periodicClassifier,
     first: { ...PASS_A, mentionedPlaces: true },
     second: { ...PASS_B, mentionedPlaces: true },
-    systemShows: ['Rules for every list:', '- New places. Add a place the turns mention'],
+    systemShows: [
+      'Rules for every list:',
+      'what the lead does, says or attempts',
+      '- New places. Add a place the turns mention',
+    ],
   },
   {
     templateId: TEMPLATE_IDS.suggestionRefresh,

@@ -9,6 +9,7 @@ Rules for every list:
 
 - Provenance. Set sourceTurn on every entry that has the field, and on no other, to the handle of the turn the fact comes from: a happening's involvements and awareness, and a knownAwareness entry, have none. For a fact synthesised across turns, use the LATEST contributing turn. For a status change or a first introduction, use the triggering turn.
 - Scene. After a turn's handle come the entities the story had in that scene when the turn was saved, and its location. Prose naming an entity in its turn's scene, or its location, refers to that entity.
+- The user's turns. {% include 'macro_classifier_mode_rule', mode: mode %}
 - Silence is valid. Return empty arrays for anything the prose does not support.
 
 Rules for happenings:

@@ -1,5 +1,6 @@
 import { MACRO_IDS, TEMPLATE_IDS } from '../ids'
 import type { Pack, TemplateEntry } from '../types'
+import { CLASSIFIER_MODE_RULE } from './classifier-mode-rule'
 import { ENTITY_STATE, ITEM_LINE } from './entity-state'
 import { MEMORY_BLOCKS } from './memory-blocks'
 import { NARRATOR_INSTRUCTIONS } from './narrator-instructions'
@@ -75,6 +76,7 @@ export const bundledPack: Pack = {
     // architecture.md → Macros: generationContext, since they read its entity views.
     [MACRO_IDS.entityState]: { group: 'generationContext', source: ENTITY_STATE },
     [MACRO_IDS.itemLine]: { group: 'generationContext', source: ITEM_LINE },
+    [MACRO_IDS.classifierModeRule]: { group: 'staticContent', source: CLASSIFIER_MODE_RULE },
     [MACRO_IDS.memoryBlocks]: { group: 'staticContent', source: MEMORY_BLOCKS },
     [MACRO_IDS.narratorInstructions]: { group: 'staticContent', source: NARRATOR_INSTRUCTIONS },
     [MACRO_IDS.outputFormatNarrative]: { group: 'staticContent', source: OUTPUT_FORMAT_NARRATIVE },

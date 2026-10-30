@@ -26,6 +26,7 @@ export const TEMPLATE_IDS = {
 
 export const MACRO_IDS = {
   entityState: 'macro_entity_state',
+  classifierModeRule: 'macro_classifier_mode_rule',
   itemLine: 'macro_item_line',
   memoryBlocks: 'macro_memory_blocks',
   narratorInstructions: 'macro_narrator_instructions',

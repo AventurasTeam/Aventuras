@@ -1786,9 +1786,9 @@ describe('per-turn-piggyback', () => {
         expect(user).toContain('# Relevant lore')
         expect(user).toContain('An exiled line.')
         expect(user).toContain('# This turn')
-        // piggyback.md → Fallback classifier context: the calendar is the whole system half.
+        // piggyback.md → Fallback classifier context: the calendar and the mode rule are the whole system half.
         expect(system).toMatch(
-          /^# Calendar\nThis story tracks time in seconds\. Tiers: .+ into a seconds delta using these units\.$/,
+          /^# Calendar\nThis story tracks time in seconds\. Tiers: .+ into a seconds delta using these units\.\n\n# The user's turns\n[^\n]+$/,
         )
         expect(user).not.toContain('# Calendar')
       })

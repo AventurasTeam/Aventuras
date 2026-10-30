@@ -51,12 +51,28 @@ const context = {
   lore: [],
   definition: { setting: '', genre: { promptBody: '' }, tone: { promptBody: '' } },
   calendarVocabulary: null,
+  mode: 'adventure',
 }
 
 const render = (over: Record<string, unknown> = {}) =>
   renderTemplate(TEMPLATE_IDS.periodicClassifier, { ...context, ...over })
 
 describe('periodic classifier template', () => {
+  // classifier.md → What the classifier reads: the mode rule is among the rules every list keeps.
+  it("reads a user's turn by the story's mode, among the rules for every list", () => {
+    const rulesForEveryList = (system: string) =>
+      system.slice(system.indexOf('Rules for every list:'), system.indexOf('Rules for happenings:'))
+    const adventure = rulesForEveryList(render().system)
+    expect(adventure).toContain(
+      "- The user's turns. A turn marked as the user's is what the lead does, says or attempts. Where the narration after it shows how an attempt turned out, the narration decides what happened, and what the lead says stands unless the narration contradicts it.",
+    )
+    const creative = rulesForEveryList(render({ mode: 'creative' }).system)
+    expect(creative).toContain(
+      "- The user's turns. A turn marked as the user's is a direction or prose. One that reads as a direction",
+    )
+    expect(creative).toContain('classify it like the narration.\n')
+  })
+
   it('carries the hard-finality retirement directive', () => {
     const rendered = render()
     expect(rendered).toMatchSnapshot()
