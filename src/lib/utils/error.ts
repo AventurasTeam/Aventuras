@@ -30,3 +30,10 @@ export function errMessage(e: unknown): string {
     return String(e)
   }
 }
+
+/** The first non-blank line of `text`, cut to `max` characters. */
+export function errorSummary(text: string, max = 200): string {
+  const first = text.split('\n').find((line) => line.trim()) ?? ''
+  const line = first.trim()
+  return line.length > max ? `${line.slice(0, max - 1)}…` : line
+}

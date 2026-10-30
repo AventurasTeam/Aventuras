@@ -2,8 +2,10 @@
   import type { ImageModelInfo } from '#lib/services/ai/image/index.ts'
   import { Autocomplete } from '#lib/components/ui/autocomplete/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
-  import { RefreshCw, Loader2, Check, ImagePlus, Square } from '@lucide/svelte'
+  import * as Collapsible from '#lib/components/ui/collapsible/index.ts'
+  import { RefreshCw, Loader2, Check, ImagePlus, Square, ChevronRight } from '@lucide/svelte'
   import { cn } from '#lib/utils/cn.ts'
+  import { errorSummary } from '#lib/utils/error.ts'
   import {
     DEFAULT_AVG_PROMPT_TOKENS,
     DEFAULT_AVG_IMAGE_TOKENS,
@@ -44,6 +46,26 @@
     onStop,
     placeholder = 'Select a model',
   }: Props = $props()
+
+  const errorLine = $derived(errorMessage ? errorSummary(errorMessage) : '')
+  const hasDetails = $derived(!!errorMessage && errorMessage.trim() !== errorLine)
+
+  let copied = $state(false)
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined
+
+  async function copyDetails() {
+    if (!errorMessage) return
+    try {
+      await navigator.clipboard.writeText(errorMessage)
+      copied = true
+      clearTimeout(copiedTimer)
+      copiedTimer = setTimeout(() => (copied = false), 1500)
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err)
+    }
+  }
+
+  $effect(() => () => clearTimeout(copiedTimer))
 
   // Format cost per image
   function formatCost(model: ImageModelInfo): string {
@@ -173,6 +195,25 @@
     </p>
   {/if}
   {#if errorMessage}
-    <p class="text-destructive text-xs" role="alert">{errorMessage}</p>
+    <p class="text-destructive text-xs" role="alert">{errorLine}</p>
+    {#if hasDetails}
+      <Collapsible.Root>
+        <Collapsible.Trigger
+          class="group/details text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
+        >
+          <ChevronRight
+            class="size-3 transition-transform duration-200 group-data-[state=open]/details:rotate-90"
+          />
+          Details
+        </Collapsible.Trigger>
+        <Collapsible.Content class="space-y-2 pt-1">
+          <pre
+            class="bg-muted max-h-48 overflow-auto rounded-md p-2 text-xs break-all whitespace-pre-wrap">{errorMessage}</pre>
+          <Button variant="outline" size="sm" onclick={copyDetails}>
+            {copied ? 'Copied' : 'Copy'}
+          </Button>
+        </Collapsible.Content>
+      </Collapsible.Root>
+    {/if}
   {/if}
 </div>
