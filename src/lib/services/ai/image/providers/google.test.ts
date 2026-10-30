@@ -10,6 +10,9 @@ vi.mock('@ai-sdk/google', () => ({
 vi.mock('../../sdk/providers/fetch', () => ({
   createTimeoutFetch: vi.fn(),
 }))
+vi.mock('./fetchAdapter', () => ({
+  imageGetFetch: vi.fn(),
+}))
 
 vi.mock('#lib/utils/url.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
@@ -19,7 +22,7 @@ vi.mock('#lib/utils/url.ts', async (importOriginal) => {
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { IMAGE_SIZE_TIERS, type ImageSizeTier } from '#lib/utils/image.ts'
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
-import { createTimeoutFetch } from '../../sdk/providers/fetch'
+import { imageGetFetch } from './fetchAdapter'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 import { createGoogleProvider, googleModelCapabilities } from './google'
 import type { ImageGenerateOptions } from './types'
@@ -116,20 +119,12 @@ describe('Google transport', () => {
 describe('Google model listing', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  const respond = (response: { ok: boolean; status?: number; json?: () => Promise<unknown> }) =>
-    vi
-      .mocked(createTimeoutFetch)
-      .mockReturnValue((async () => response) as unknown as ReturnType<typeof createTimeoutFetch>)
+  const respond = (response: { json: () => Promise<unknown> }) =>
+    vi.mocked(imageGetFetch).mockResolvedValue(response as Response)
 
   it('uses the normalized base URL for the SDK and the model list', async () => {
     vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v1beta')
-    const fetchFn = vi.fn(async (_url: string) => ({
-      ok: true,
-      json: async () => ({ models: [] }),
-    }))
-    vi.mocked(createTimeoutFetch).mockReturnValue(
-      fetchFn as unknown as ReturnType<typeof createTimeoutFetch>,
-    )
+    respond({ json: async () => ({ models: [] }) })
 
     await createGoogleProvider({ apiKey: 'k', baseUrl: ' https://raw.test// ' }).listModels()
 
@@ -137,33 +132,32 @@ describe('Google model listing', () => {
     expect(createGoogleGenerativeAI).toHaveBeenCalledWith(
       expect.objectContaining({ baseURL: 'https://normalized.test/v1beta' }),
     )
-    expect(fetchFn).toHaveBeenCalledWith('https://normalized.test/v1beta/models?key=k&pageSize=200')
+    expect(imageGetFetch).toHaveBeenCalledWith(
+      'https://normalized.test/v1beta/models?pageSize=200',
+      { 'x-goog-api-key': 'k' },
+      { serviceId: 'google-image-models' },
+    )
   })
 
   it('lists from the default host without a base URL', async () => {
-    const fetchFn = vi.fn(async (_url: string) => ({
-      ok: true,
-      json: async () => ({ models: [] }),
-    }))
-    vi.mocked(createTimeoutFetch).mockReturnValue(
-      fetchFn as unknown as ReturnType<typeof createTimeoutFetch>,
-    )
+    respond({ json: async () => ({ models: [] }) })
 
     await createGoogleProvider({ apiKey: 'k' }).listModels()
 
-    expect(fetchFn).toHaveBeenCalledWith(
-      'https://generativelanguage.googleapis.com/v1beta/models?key=k&pageSize=200',
+    expect(imageGetFetch).toHaveBeenCalledWith(
+      'https://generativelanguage.googleapis.com/v1beta/models?pageSize=200',
+      { 'x-goog-api-key': 'k' },
+      { serviceId: 'google-image-models' },
     )
   })
 
   it('returns no models, and makes no request, without a key', async () => {
     expect(await createGoogleProvider({ apiKey: '' }).listModels()).toEqual([])
-    expect(createTimeoutFetch).not.toHaveBeenCalled()
+    expect(imageGetFetch).not.toHaveBeenCalled()
   })
 
   it('lists only the image models the SDK can generate with, each taking references', async () => {
     respond({
-      ok: true,
       json: async () => ({
         models: [
           { name: 'models/gemini-2.5-flash-image' },
@@ -185,7 +179,6 @@ describe('Google model listing', () => {
 
   it('gives a preview its generally available model’s capabilities', async () => {
     respond({
-      ok: true,
       json: async () => ({
         models: [
           { name: 'models/gemini-3-pro-image' },
@@ -202,7 +195,7 @@ describe('Google model listing', () => {
   })
 
   it('knows only that an unlisted image model takes references', async () => {
-    respond({ ok: true, json: async () => ({ models: [{ name: 'models/gemini-9-image' }] }) })
+    respond({ json: async () => ({ models: [{ name: 'models/gemini-9-image' }] }) })
 
     const [model] = await createGoogleProvider({ apiKey: 'k' }).listModels()
 
@@ -213,13 +206,13 @@ describe('Google model listing', () => {
   })
 
   it('returns no models when none of them generate images', async () => {
-    respond({ ok: true, json: async () => ({ models: [{ name: 'models/gemini-3.5-flash' }] }) })
+    respond({ json: async () => ({ models: [{ name: 'models/gemini-3.5-flash' }] }) })
     expect(await createGoogleProvider({ apiKey: 'k' }).listModels()).toEqual([])
   })
 
   it('rejects when the request fails', async () => {
-    respond({ ok: false, status: 503 })
-    await expect(createGoogleProvider({ apiKey: 'k' }).listModels()).rejects.toThrow('HTTP 503')
+    vi.mocked(imageGetFetch).mockRejectedValue(new Error('Image API error 503: unavailable'))
+    await expect(createGoogleProvider({ apiKey: 'k' }).listModels()).rejects.toThrow('503')
   })
 })
 
@@ -232,7 +225,7 @@ describe('Google model capabilities', () => {
       maxReferenceImages: 14,
       supportedResolutions: ['512', '1K', '2K', '4K'],
     })
-    expect(createTimeoutFetch).not.toHaveBeenCalled()
+    expect(imageGetFetch).not.toHaveBeenCalled()
   })
 
   it('reads a preview as its generally available model', () => {

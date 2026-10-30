@@ -12,7 +12,7 @@ import type {
 } from './types'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { isGoogleImageModel } from '../../sdk/providers/modelFetcher'
-import { createTimeoutFetch } from '../../sdk/providers/fetch'
+import { imageGetFetch } from './fetchAdapter'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
 const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
@@ -113,11 +113,12 @@ export const googleModelCapabilities = (model: string): ImageModelCapabilities |
 async function fetchGoogleImageModels(baseUrl: string, apiKey?: string): Promise<ImageModelInfo[]> {
   if (!apiKey) return []
 
-  const url = baseUrl + '/models?key=' + encodeURIComponent(apiKey) + '&pageSize=200'
-
-  const fetchFn = createTimeoutFetch(30000, 'google-image-models')
-  const response = await fetchFn(url)
-  if (!response.ok) throw new Error(`Google models request failed: HTTP ${response.status}`)
+  // The key goes in a header: the debug log records the request URL.
+  const response = await imageGetFetch(
+    `${baseUrl}/models?pageSize=200`,
+    { 'x-goog-api-key': apiKey },
+    { serviceId: 'google-image-models' },
+  )
 
   const data = await response.json()
   if (!Array.isArray(data.models)) throw new Error('Google models response has no models array')
