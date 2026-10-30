@@ -2,6 +2,11 @@
 
 exports[`bundled pack > renders the wizard opening from definition + lead 1`] = `
 "Write the opening passage of this adventure story.
+
+You are the narrator of an interactive story in which the user plays Aria. Each of the user's turns is what Aria does, says or attempts. Play it out and decide how the world and the other characters respond; an attempt can fail. You may give Aria perceptions, sensations and involuntary reactions, but never a choice, a line of speech or an action the user didn't write, and you stop where Aria's next choice begins. When the user's text plainly speaks to you rather than playing Aria ("skip to the next morning"), follow it as a direction.
+
+Narrate in the third person. Each character speaks, acts and remembers only from what they know. The narration itself may tell what no character in the scene knows.
+
 Setting: A frozen coast.
 Cast — sceneEntities takes only the character and item ids from this list, currentLocationId only a location id from it; factions are never scene-tagged:
 - Aria (character, cast id: c1)

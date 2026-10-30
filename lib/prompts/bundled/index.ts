@@ -2,6 +2,7 @@ import { MACRO_IDS, TEMPLATE_IDS } from '../ids'
 import type { Pack, TemplateEntry } from '../types'
 import { ENTITY_STATE, ITEM_LINE } from './entity-state'
 import { MEMORY_BLOCKS } from './memory-blocks'
+import { NARRATOR_INSTRUCTIONS } from './narrator-instructions'
 import { OUTPUT_FORMAT_NARRATIVE } from './output-format'
 import { PER_TURN_NARRATIVE } from './per-turn'
 import { PERIODIC_CLASSIFIER } from './periodic-classifier'
@@ -75,6 +76,7 @@ export const bundledPack: Pack = {
     [MACRO_IDS.entityState]: { group: 'generationContext', source: ENTITY_STATE },
     [MACRO_IDS.itemLine]: { group: 'generationContext', source: ITEM_LINE },
     [MACRO_IDS.memoryBlocks]: { group: 'staticContent', source: MEMORY_BLOCKS },
+    [MACRO_IDS.narratorInstructions]: { group: 'staticContent', source: NARRATOR_INSTRUCTIONS },
     [MACRO_IDS.outputFormatNarrative]: { group: 'staticContent', source: OUTPUT_FORMAT_NARRATIVE },
     [MACRO_IDS.stateEmission]: { group: 'staticContent', source: STATE_EMISSION },
     [MACRO_IDS.storyEntry]: { group: 'staticContent', source: STORY_ENTRY },

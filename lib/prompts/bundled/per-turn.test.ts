@@ -1074,8 +1074,9 @@ describe('bundled per-turn template — suggestionsFire gating', () => {
     })
     expect(user).not.toContain('<state>')
     expect(user).toContain('Aria stepped through.\n\nAppend exactly one <suggestions> block')
-    expect(system).toBe(
-      'Write the next beat of the story as prose. Do not break character or address the reader.',
+    expect(system).not.toContain('<suggestions>')
+    expect(system.split('\n').at(-1)).toBe(
+      'Write the next beat of the story as prose. Do not break character or step outside the story to speak to the user.',
     )
   })
 })
@@ -1083,7 +1084,7 @@ describe('bundled per-turn template — suggestionsFire gating', () => {
 // architecture.md → System and user halves.
 describe('bundled per-turn template — system and user halves', () => {
   const OUTPUT_FORMAT =
-    'Write the next beat of the story as prose. Do not break character or address the reader.'
+    'Write the next beat of the story as prose. Do not break character or step outside the story to speak to the user.'
   const everything = {
     ...m2Context,
     definition: {
@@ -1181,8 +1182,12 @@ describe('bundled per-turn template — system and user halves', () => {
     expect(render()).toMatchSnapshot()
   })
 
-  it('is the output-format line alone for a story with no setting, genre, tone or calendar', () => {
-    expect(renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context).system).toBe(OUTPUT_FORMAT)
+  it('is the standing instructions and the output-format line for a story with no setting, genre, tone or calendar', () => {
+    const { system } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)
+    expect(headings(system)).toEqual([])
+    expect(system).toMatch(/^You are the narrator of an interactive story/)
+    expect(system).toMatch(/\n\nThe user's turns are marked with <user_turn> tags[^\n]+\n\n/)
+    expect(system.split('\n').at(-1)).toBe(OUTPUT_FORMAT)
   })
 
   // Neither half starts or ends on a blank line; whatever follows a half supplies its own separator.
@@ -1216,7 +1221,7 @@ describe('bundled per-turn template — system and user halves', () => {
         piggybackFires,
         suggestionsFire,
       })
-      expect(system).toMatch(/^# Calendar\n[^\n]+\n\n/)
+      expect(system).toMatch(/[^\n]\n\n# Calendar\n[^\n]+\n\n[^\n]/)
       expect(headings(system)).toEqual(['# Calendar'])
       for (const half of [system, user]) {
         expect(half).not.toMatch(/^[ \t]*\n/)
@@ -1232,6 +1237,92 @@ describe('bundled per-turn template — system and user halves', () => {
     )
     expect(render({ piggybackFires: false, suggestionsFire: false }).user).toMatch(
       /\nAria stepped through\.\n$/,
+    )
+  })
+})
+
+// ui/principles.md → Mode, lead, and narration: the narrator's standing instructions.
+describe('bundled per-turn template — standing instructions', () => {
+  const KAEL = { id: 'c1', name: 'Kael' }
+  const systemFor = (mode: string, narration: string, lead: typeof KAEL | null) =>
+    renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...m2Context,
+      definition: { ...m2Context.definition, mode, narration },
+      lead,
+    }).system
+
+  it("reads an adventure turn as the lead's attempt, played out up to their next choice", () => {
+    const system = systemFor('adventure', 'third', KAEL)
+    expect(system).toMatch(
+      /^You are the narrator of an interactive story in which the user plays Kael\./,
+    )
+    expect(system).toContain("Each of the user's turns is what Kael does, says or attempts.")
+    expect(system).toContain('an attempt can fail')
+    expect(system).toContain(
+      "never a choice, a line of speech or an action the user didn't write, and you stop where Kael's next choice begins",
+    )
+    expect(system).toContain('("skip to the next morning"), follow it as a direction')
+    expect(system).not.toContain('the user directs')
+  })
+
+  it('reads a creative turn as a direction or prose, and writes any character', () => {
+    const system = systemFor('creative', 'third', KAEL)
+    expect(system).toMatch(/^You are the narrator of a story the user directs\./)
+    expect(system).toContain('write the passage that carries it out')
+    expect(system).toContain('continue the story from it')
+    expect(system).toContain('You may write any character, Kael included.')
+    expect(system).not.toContain('attempts')
+  })
+
+  it.each([
+    ['first', 'Narrate in the first person, as Kael: "I" is Kael.'],
+    ['second', 'Narrate in the second person: "you" is Kael.'],
+    ['third', 'Narrate in the third person.'],
+  ])('narrates in the %s person', (narration, line) => {
+    expect(systemFor('adventure', narration, KAEL)).toContain(line)
+  })
+
+  it('keeps each character to what they know, and the narration omniscient', () => {
+    for (const narration of ['second', 'third']) {
+      const system = systemFor('creative', narration, KAEL)
+      expect(system).toContain(
+        'Each character speaks, acts and remembers only from what they know.',
+      )
+      expect(system).toContain(
+        'The narration itself may tell what no character in the scene knows.',
+      )
+    }
+  })
+
+  it('keeps first-person narration to what the lead knows', () => {
+    const system = systemFor('adventure', 'first', KAEL)
+    expect(system).toContain("The narration is Kael's own, so it keeps to what Kael knows too.")
+    expect(system).not.toContain('may tell what no character')
+  })
+
+  it('names no lead without one, and falls back to omniscient narration in the first person', () => {
+    for (const mode of ['adventure', 'creative'])
+      for (const narration of ['first', 'second', 'third']) {
+        const system = systemFor(mode, narration, null)
+        expect(system).not.toContain('Kael')
+        expect(system).not.toContain('undefined')
+        expect(system).toContain(
+          'The narration itself may tell what no character in the scene knows.',
+        )
+      }
+    expect(systemFor('adventure', 'first', null)).toContain('Narrate in the first person.')
+    expect(systemFor('adventure', 'third', null)).toContain(
+      "in which the user plays a character. Each of the user's turns is what the user's character does",
+    )
+  })
+
+  it("tells the narrator how the user's turns and the happenings' knowers read", () => {
+    const system = systemFor('adventure', 'second', KAEL)
+    expect(system).toContain(
+      "The user's turns are marked with <user_turn> tags in the story so far.",
+    )
+    expect(system).toContain(
+      "each happening ends with who in the scene knows it, or says it is common knowledge; a character in the scene it doesn't name doesn't know it.",
     )
   })
 })

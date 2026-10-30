@@ -28,6 +28,7 @@ export const MACRO_IDS = {
   entityState: 'macro_entity_state',
   itemLine: 'macro_item_line',
   memoryBlocks: 'macro_memory_blocks',
+  narratorInstructions: 'macro_narrator_instructions',
   outputFormatNarrative: 'macro_output_format_narrative',
   stateEmission: 'macro_state_emission',
   storyEntry: 'macro_story_entry',

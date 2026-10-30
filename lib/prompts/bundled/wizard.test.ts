@@ -11,7 +11,8 @@ const leadCtx = {
     tone: { promptBody: '' },
   },
   leadEntityId: 'c1',
-  // The row must be present for the lead's name to reach the prompt at all.
+  // wizardTemplateContext resolves `lead` from the cast row (activeLead).
+  lead: { id: 'c1', name: 'Aria' },
   cast: [{ id: 'c1', kind: 'character', name: 'Aria', description: '', status: 'active' }],
 }
 const leadlessCtx = {
@@ -67,6 +68,57 @@ describe('WIZARD_OPENING template', () => {
     }).user
     expect(out).toContain('Write it as hard sci-fi, terse and technical.')
     expect(out).toContain('Keep it clinical and understated.')
+  })
+})
+
+// architecture.md → System and user halves: the opening carries the narrator's standing
+// instructions, through the macro the per-turn narrative includes too.
+describe('WIZARD_OPENING standing instructions', () => {
+  const firstPerson = {
+    ...leadCtx,
+    definition: { ...leadCtx.definition, narration: 'first' },
+  }
+
+  it('gives the narrator the mode, the narration and the lead by name, after the directive', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, firstPerson).user
+    expect(out).toMatch(
+      /^Write the opening passage of this adventure story\.\n\nYou are the narrator of an interactive story in which the user plays Aria\./,
+    )
+    expect(out).toContain("you stop where Aria's next choice begins")
+    expect(out).toContain('Narrate in the first person, as Aria: "I" is Aria.')
+  })
+
+  it('names no lead on the lead-less path', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, leadlessCtx).user
+    expect(out).toContain('You are the narrator of a story the user directs.')
+    expect(out).not.toContain('Aria')
+  })
+
+  it('carries the same instructions into a refine', () => {
+    const generate = renderTemplate(TEMPLATE_IDS.wizardOpening, firstPerson).user
+    const refine = renderTemplate(TEMPLATE_IDS.wizardOpeningRefine, {
+      ...firstPerson,
+      current: { content: 'The harbor lay still.' },
+      instruction: 'darker',
+    }).user
+    const instructions = generate.slice(
+      generate.indexOf('You are the narrator'),
+      generate.indexOf('\n\nNarrate'),
+    )
+    expect(instructions.length).toBeGreaterThan(100)
+    expect(refine).toContain(instructions)
+  })
+
+  it('gives the start moment when the calendar renders one', () => {
+    expect(
+      renderTemplate(TEMPLATE_IDS.wizardOpening, {
+        ...leadCtx,
+        startTime: 'March 14, 1200 AD 09:00',
+      }).user,
+    ).toContain('\n\nThe story starts at March 14, 1200 AD 09:00.\n')
+    expect(
+      renderTemplate(TEMPLATE_IDS.wizardOpening, { ...leadCtx, startTime: null }).user,
+    ).not.toContain('The story starts at')
   })
 })
 
@@ -262,6 +314,7 @@ describe('WIZARD_OPENING cast block', () => {
         },
       ],
       leadEntityId: 'c1',
+      lead: { id: 'c1', name: 'Aria' },
       guidance: '',
     }).user
     expect(out).toContain('Aria (character, cast id: c1): A blacksmith.')
@@ -308,6 +361,8 @@ describe('WIZARD_OPENING cast block', () => {
     expect(out).not.toContain('Cast —')
   })
 
+  // wizardTemplateContext leaves `lead` null for a staged or non-character lead (activeLead), so
+  // the template names no lead the cast block lists as something else, whatever leadEntityId says.
   it('drops the lead line when the lead id points at a staged row', () => {
     const out = renderTemplate(TEMPLATE_IDS.wizardOpening, {
       definition: { mode: 'adventure', genre: {}, tone: {}, setting: '' },
@@ -315,11 +370,8 @@ describe('WIZARD_OPENING cast block', () => {
         { id: 'c1', kind: 'character', name: 'Aria', description: '', status: 'staged' },
         { id: 'c2', kind: 'character', name: 'Bo', description: '', status: 'active' },
       ],
-      // Staging the lead is only reachable through setCastStatus in the shipped
-      // UI, which nulls leadEntityId in the same write — but the template can't
-      // assume every caller of this context routes through that store, so it
-      // must not name a lead the cast block simultaneously excludes.
       leadEntityId: 'c1',
+      lead: null,
       guidance: '',
     }).user
     expect(out).not.toContain('lead character')
@@ -332,9 +384,8 @@ describe('WIZARD_OPENING cast block', () => {
       cast: [
         { id: 'l1', kind: 'location', name: 'Mornstone Keep', description: '', status: 'active' },
       ],
-      // Same reasoning as the staged case: canSetLead gates the shipped UI to
-      // active characters, but a hydrated pointer can outlive the row it named.
       leadEntityId: 'l1',
+      lead: null,
       guidance: '',
     }).user
     expect(out).toContain('Mornstone Keep (location, cast id: l1)')
