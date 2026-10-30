@@ -56,7 +56,8 @@ He said nothing. Outside, the rain came harder against the shutters.`,
             involves(h, 'char_kael') &&
             involves(h, 'char_aria') &&
             /mother/i.test(said(h)) &&
-            /\b(she|aria|herself)\b[^.]*\b(wrote|written|writes|penned)\b/i.test(said(h)),
+            (/\b(she|aria|herself)\b[^.]*\b(wrote|written|writes|penned)\b/i.test(said(h)) ||
+              /\b(written|penned)\s+by\s+(her|aria)\b/i.test(said(h))),
         ),
     },
     {
