@@ -1,3 +1,4 @@
+import type { Entity } from '@/lib/db'
 import { dedupeTerms } from '@/lib/keyword-terms'
 import {
   matchNewPlace,
@@ -16,6 +17,7 @@ import {
   type PlacementDrop,
   type PlacePlacement,
   type SettledNewPlace,
+  type SettlingPlace,
 } from '@/lib/world'
 
 import {
@@ -59,19 +61,11 @@ function notePlacement(
 /**
  * classifier.md → What the classifier writes → Where a place sits. Judged against this reply's own
  * creates and placements, so a drop happens before the handler sees the fact.
- *
- * Each placement plans, and so writes, before any new place of its turn or a later one: a new
- * place matches and is checked where the placements ahead of it leave the places, as they land.
  */
-export function placementPlanner(ctx: PlanContext): (position: number) => void {
-  const { extraction, deps, planned, handleMap, report, rowById, placedHere, createdPlaces } = ctx
+export function placementPlanner(ctx: PlanContext): (fact: Placement) => void {
+  const { deps, planned, report, rowById, placedHere, createdPlaces } = ctx
   const { branchId, entities, story } = deps
   const realPlacement = realPlacementOf(entities.filter((e) => e.kind === 'location'))
-  const placementFacts = ctx.inTurnOrder(extraction.placements)
-  // A new place's handle, which a placement may name before the place settles.
-  const placeHandles = new Set(
-    newPlacesOf(extraction).flatMap((p) => (nonBlank(p.name) == null ? [] : [p.handle])),
-  )
   // `placedEarlier`: this reply placed the row before. Only the stored placement rules a fact
   // out otherwise: the handler may refuse one this reply sent.
   const judgePlacement = (
@@ -94,7 +88,7 @@ export function placementPlanner(ctx: PlanContext): (position: number) => void {
     const parentId = fact.parent
     const parent = rowById.get(parentId)
     if (parent?.kind !== 'location') {
-      if (parent === undefined && !handleMap.has(parentId) && !placeHandles.has(parentId))
+      if (parent === undefined && !ctx.claimed.has(parentId))
         return { kind: 'unresolved', parent: parentId }
       const cause = parent === undefined ? 'parent-not-listed' : 'parent-not-a-place'
       return { kind: 'dropped', drop: { ref: fact.ref, parent: parentId, cause } }
@@ -107,41 +101,51 @@ export function placementPlanner(ctx: PlanContext): (position: number) => void {
     return { kind: 'place', id, placement: { kind: 'under', parentId } }
   }
 
-  let placementsPlanned = 0
-  return (position) => {
-    for (; placementsPlanned < placementFacts.length; placementsPlanned++) {
-      const fact = placementFacts[placementsPlanned]
-      if (ctx.turnPosition(fact.sourceTurn) > position) return
-      const placedEarlier = placedHere.has(fact.ref)
-      const parentOf = replyParentOf(placedHere, parentOfLocations([...entities, ...createdPlaces]))
-      const judged = judgePlacement(fact, placedEarlier, parentOf)
-      if (judged.kind === 'unseen') report.unseenRefs.push({ list: 'placements', ref: fact.ref })
-      else if (judged.kind === 'unresolved') report.unresolvedRefs.push(judged.parent)
-      else if (judged.kind === 'dropped') report.droppedPlacements.push(judged.drop)
-      if (judged.kind !== 'place') continue
-      const { id, placement } = judged
-      notePlacement(placedHere, id, placement, placedEarlier)
-      planned.push({
-        action: {
-          kind: 'placeLocation',
-          source: SOURCE,
-          payload: { branchId, id, placement, proseEntryId: ctx.proseSource(fact.sourceTurn) },
-        },
-        entryId: ctx.anchor(fact.sourceTurn),
-      })
-    }
+  return (fact) => {
+    const placedEarlier = placedHere.has(fact.ref)
+    const parentOf = replyParentOf(placedHere, parentOfLocations([...entities, ...createdPlaces]))
+    const judged = judgePlacement(fact, placedEarlier, parentOf)
+    if (judged.kind === 'unseen') report.unseenRefs.push({ list: 'placements', ref: fact.ref })
+    else if (judged.kind === 'unresolved') report.unresolvedRefs.push(judged.parent)
+    else if (judged.kind === 'dropped') report.droppedPlacements.push(judged.drop)
+    if (judged.kind !== 'place') return
+    const { id, placement } = judged
+    notePlacement(placedHere, id, placement, placedEarlier)
+    planned.push({
+      action: {
+        kind: 'placeLocation',
+        source: SOURCE,
+        payload: { branchId, id, placement, proseEntryId: ctx.proseSource(fact.sourceTurn) },
+      },
+      entryId: ctx.anchor(fact.sourceTurn),
+    })
   }
 }
 
 /**
- * classifier.md → Mentioned places. After characters and factions, so the handle namespace they
- * share keeps their bindings; before anything that names a place by its handle.
+ * classifier.md → Mentioned places: the entries that keep their handles, in settling order: turn
+ * order, ties in the reply's order, as successive passes would meet them, each still waiting for
+ * its own parent. After characters and factions, so the namespace they share keeps their claims.
  */
-export function planNewPlaces(
-  ctx: PlanContext,
-  planPlacementsThrough: (position: number) => void,
-): void {
-  const { extraction, deps, planned, handleMap, index, report, rowById } = ctx
+export function claimNewPlaces(ctx: PlanContext): SettlingPlace<NewPlace>[] {
+  const { extraction, claimed, report, rowById } = ctx
+  // A repeated handle keeps its first declaration in the reply's order, before turns reorder it.
+  const firsts: NewPlace[] = []
+  for (const place of newPlacesOf(extraction)) {
+    const { handle, name } = place
+    if (nonBlank(name) == null) report.droppedPlaces.push({ handle, name, cause: 'blank-name' })
+    else if (claimed.has(handle)) report.droppedPlaces.push({ handle, name, cause: 'handle-taken' })
+    else {
+      claimed.add(handle)
+      firsts.push(declaredPlace(place))
+    }
+  }
+  return settlingOrder(ctx.inTurnOrder(firsts), (id) => rowById.get(id)?.kind === 'location').order
+}
+
+/** classifier.md → Mentioned places, against the places as the facts ahead of each leave them. */
+export function newPlacePlanner(ctx: PlanContext): (settling: SettlingPlace<NewPlace>) => void {
+  const { deps, planned, handleMap, index, report, rowById } = ctx
   const { placedHere, createdPlaces, anchorOnce, proseSource } = ctx
   const { branchId, entities, now, newId, story } = deps
   // The pass saw every place, so matching is over real children: nothing is hidden.
@@ -150,32 +154,13 @@ export function planNewPlaces(
   // By row and parent: the pass keeps no one chain, so another parent's placement walks anew.
   const reuseDrops = new Map<string, PlacementDrop>()
   const dropKey = (id: string, parentId: string): string => `${id} ${parentId}`
-
-  const declared: NewPlace[] = []
-  for (const place of newPlacesOf(extraction)) {
-    const { handle, name } = place
-    if (nonBlank(name) == null) report.droppedPlaces.push({ handle, name, cause: 'blank-name' })
-    else if (handleMap.has(handle))
-      report.droppedPlaces.push({ handle, name, cause: 'handle-taken' })
-    else declared.push(declaredPlace(place))
+  const asNamedHere = (place: Entity): Entity => {
+    const row = index.get(place.id)
+    return row === undefined ? place : { ...place, name: row.name, keywords: row.keywords }
   }
 
-  // A repeated handle keeps its first declaration in the reply's order, before turns reorder it.
-  const firsts = new Map<string, NewPlace>()
-  for (const place of declared) {
-    const { handle, name } = place
-    if (firsts.has(handle)) report.droppedPlaces.push({ handle, name, cause: 'handle-taken' })
-    else firsts.set(handle, place)
-  }
-  // classifier.md → Mentioned places: in turn order, ties in the reply's order, as successive
-  // passes would meet them; each still waits for its own parent.
-  const { order } = settlingOrder(
-    ctx.inTurnOrder([...firsts.values()]),
-    (id) => rowById.get(id)?.kind === 'location',
-  )
-  for (const settling of order) {
+  return (settling) => {
     const place = settling.emission
-    planPlacementsThrough(ctx.turnPosition(place.sourceTurn))
     const parentOf = replyParentOf(placedHere, parentOfLocations([...entities, ...createdPlaces]))
     const placement = placeNewLocation({
       place: settling,
@@ -198,7 +183,7 @@ export function planNewPlaces(
     const match = matchNewPlace(
       { name: stored.name, placement: candidate, keywords: place.keywords },
       placed,
-      replyMatchView(view, placedHere),
+      replyMatchView({ ...view, locations: view.locations.map(asNamedHere) }, placedHere),
       placedHere,
     )
 
@@ -208,13 +193,6 @@ export function planNewPlaces(
       id = match.id
       // One fact, one anchor: its terms and its placement count one fallback between them.
       const at = anchorOnce(place.sourceTurn)
-      ctx.mentionTerms.push({
-        id,
-        terms: place.keywords,
-        sourceTurn: place.sourceTurn,
-        proseEntryId: proseSource(place.sourceTurn),
-        entryId: at,
-      })
       // `match.place`: an unplaced reused row, or this reply's own create taken over.
       if (match.place && candidate.kind !== 'unplaced') {
         const drop =
@@ -251,6 +229,7 @@ export function planNewPlaces(
         const drop = reuseDrops.get(dropKey(id, candidate.parentId))
         if (drop !== undefined) report.parentDrops.push({ handle: place.handle, ...drop })
       }
+      ctx.appendTerms(id, place.keywords, proseSource(place.sourceTurn), at)
     } else {
       id = newId('loc')
       const { flag } = match
@@ -266,7 +245,13 @@ export function planNewPlaces(
           : { parent_location_id: null, condition },
         candidate,
       )
-      index.set(id, { kind: 'location', status: 'active', keywords })
+      index.set(id, {
+        kind: 'location',
+        status: 'active',
+        name: stored.name,
+        createdAt: timestamp,
+        keywords,
+      })
       createdPlaces.push({ id, kind: 'location', state })
       planned.push({
         action: {

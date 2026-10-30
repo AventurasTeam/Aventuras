@@ -2377,6 +2377,153 @@ describe('periodicClassifierPhase via runPipeline', () => {
     return inCall
   }
 
+  // classifier.md → Planning order: each write lands on the rows the writes ahead of it left.
+  describe('renames landing against the rows as they stand', () => {
+    const CHAR_MARA = 'char_33333333-3333-3333-3333-333333333333'
+    const CHAR_HOST = 'char_44444444-4444-4444-4444-444444444444'
+    const LOC_NORTH = 'loc_11111111-1111-1111-1111-111111111111'
+    const LOC_SOUTH = 'loc_22222222-2222-2222-2222-222222222222'
+    const LOC_MILL = 'loc_33333333-3333-3333-3333-333333333333'
+    const LOC_VARN = 'loc_44444444-4444-4444-4444-444444444444'
+    const rowOfKind = (id: string, kind: Entity['kind'], name: string, state: unknown) =>
+      ({
+        id,
+        branchId: 'b1',
+        kind,
+        name,
+        status: 'active',
+        description: 'x',
+        keywords: [],
+        injectionMode: 'auto',
+        nameCollisionFlag: 0,
+        createdAt: 1,
+        updatedAt: 1,
+        state,
+      }) as unknown as Entity
+    const person = (id: string, name: string) => rowOfKind(id, 'character', name, {})
+    const place = (id: string, name: string, parent: string | null) =>
+      rowOfKind(id, 'location', name, { parent_location_id: parent })
+
+    async function seedRows(rows: Entity[]): Promise<Seeded> {
+      const seeded = await seedApplyTimeHarness()
+      await seeded.db.insert(storyEntries).values({
+        id: 'e2',
+        branchId: 'b1',
+        position: 2,
+        kind: 'ai_reply',
+        content: 'turn 2',
+        chapterId: null,
+        metadata: {},
+        createdAt: 2,
+      } as never)
+      await seeded.db.insert(entities).values(rows as never)
+      entitiesStore.hydrate('b1', rows)
+      return seeded
+    }
+
+    const userNames = (seeded: Seeded, id: string, name: string) =>
+      realApplyDeltaAction(
+        {
+          action: {
+            kind: 'updateEntity',
+            source: 'user_edit',
+            payload: { branchId: 'b1', id, patch: { name } },
+          },
+          actionId: 'act_u',
+          branchId: 'b1',
+        },
+        seeded,
+      )
+
+    async function pass(seeded: Seeded, reply: Partial<Record<string, unknown>>): Promise<void> {
+      registerWithReply({ happenings: [], ...reply })
+      expect(await runOutcome({ storyId: 's1', branchId: 'b1', ...seeded })).toBe('completed')
+    }
+
+    const rowOf = async (seeded: Seeded, id: string) => {
+      const [row] = await seeded.db.select().from(entities).where(eq(entities.id, id))
+      return row
+    }
+
+    it('lets a second rename take the name of a first the user refused', async () => {
+      const seeded = await seedRows([
+        person(CHAR_MARA, 'Marra'),
+        person(CHAR_HOST, 'the innkeeper'),
+      ])
+      await userNames(seeded, CHAR_MARA, 'Mara')
+      await pass(seeded, {
+        renames: [
+          { ref: 'c1', name: 'Selene', sourceTurn: 't1' },
+          { ref: 'c2', name: 'Selene', sourceTurn: 't2' },
+        ],
+      })
+      expect(await rowOf(seeded, CHAR_MARA)).toMatchObject({ name: 'Mara' })
+      expect(await rowOf(seeded, CHAR_HOST)).toMatchObject({
+        name: 'Selene',
+        keywords: ['the innkeeper'],
+        nameCollisionFlag: 0,
+      })
+    })
+
+    it('turns a rename to a name the user kept from a refused rename away into a clash', async () => {
+      const seeded = await seedRows([
+        person(CHAR_MARA, 'Marra'),
+        person(CHAR_HOST, 'the innkeeper'),
+      ])
+      await userNames(seeded, CHAR_MARA, 'Mara')
+      await pass(seeded, {
+        renames: [
+          { ref: 'c1', name: 'Selene', sourceTurn: 't1' },
+          { ref: 'c2', name: 'Mara', sourceTurn: 't2' },
+        ],
+      })
+      expect(await rowOf(seeded, CHAR_MARA)).toMatchObject({ name: 'Mara' })
+      expect(await rowOf(seeded, CHAR_HOST)).toMatchObject({
+        name: 'the innkeeper',
+        keywords: ['Mara'],
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: CHAR_MARA,
+        nameCollisionReason: 'name-taken',
+      })
+    })
+
+    // Placeholders number depth first down the Places tree (classifier-context.ts).
+    const moveMill = (south: string) => ({
+      renames: [{ ref: 'l2', name: 'Varn', sourceTurn: 't1' }],
+      placements: [{ ref: 'l2', parent: south, sourceTurn: 't2' }],
+    })
+    const REGIONS = [place(LOC_NORTH, 'the North', null), place(LOC_SOUTH, 'the South', null)]
+
+    it('lands a rename free at its turn, before a later turn moves the place beside a holder', async () => {
+      const seeded = await seedRows([
+        ...REGIONS,
+        place(LOC_MILL, 'the old mill', LOC_NORTH),
+        place(LOC_VARN, 'Varn', LOC_SOUTH),
+      ])
+      await pass(seeded, moveMill('l3'))
+      expect(await rowOf(seeded, LOC_MILL)).toMatchObject({
+        name: 'Varn',
+        state: { parent_location_id: LOC_SOUTH },
+        nameCollisionFlag: 0,
+      })
+    })
+
+    it('clashes a rename at its turn, before a later turn moves the place away', async () => {
+      const seeded = await seedRows([
+        ...REGIONS,
+        place(LOC_MILL, 'the old mill', LOC_NORTH),
+        place(LOC_VARN, 'Varn', LOC_NORTH),
+      ])
+      await pass(seeded, moveMill('l4'))
+      expect(await rowOf(seeded, LOC_MILL)).toMatchObject({
+        name: 'the old mill',
+        keywords: ['Varn'],
+        state: { parent_location_id: LOC_SOUTH },
+        nameCollisionPartnerId: LOC_VARN,
+      })
+    })
+  })
+
   // generation-pipeline.md → Two retry tiers: the orchestrator logs each event as the run.
   it('logs each retried attempt under the run', async () => {
     clearBuffers()

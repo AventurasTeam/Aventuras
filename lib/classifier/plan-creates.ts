@@ -17,7 +17,7 @@ import {
   type PlanContext,
   type PlanDeps,
 } from './plan-context'
-import type { ReconciledKind } from './reconcile'
+import type { ReconciledKind, ReconcileDecision } from './reconcile'
 import type { ClassifierExtraction, NewCharacter, NewFaction } from './schema'
 
 /**
@@ -92,13 +92,22 @@ function factionProfile(candidate: NewFaction, cutTexts: CutText[]): FactionStat
   }
 }
 
-/** classifier.md → Disambiguation and → Factions: absorb, promote or create, by the decision. */
-export function planNewEntities(ctx: PlanContext, kind: ReconciledKind): void {
-  const { extraction, deps, planned, handleMap, index, report, anchorOnce, proseSource } = ctx
-  const { branchId, now, newId } = deps
-  const { reply, idPrefix } = RECONCILED_KINDS[kind]
+/** A new character or faction that kept its handle, and what reconciliation decided for it. */
+export type ClaimedEntity = {
+  kind: ReconciledKind
+  candidate: NewCharacter | NewFaction
+  decision: ReconcileDecision
+}
+
+/**
+ * classifier.md → ID handling in classifier output: the entries that keep their handles, in the reply's order. The phase
+ * reconciles a handle's first declaration, so a repeat of it must never reach the queue.
+ */
+export function claimNewEntities(ctx: PlanContext, kind: ReconciledKind): ClaimedEntity[] {
+  const { extraction, deps, handleMap, claimed, report } = ctx
   const decisionOf = deps.decisions[kind]
-  for (const candidate of extraction[reply]) {
+  const claims: ClaimedEntity[] = []
+  for (const candidate of extraction[RECONCILED_KINDS[kind].reply]) {
     const { handle, name } = candidate
     if (nonBlank(name) == null) {
       report.droppedCreates.push({ kind, handle, name, cause: 'blank-name' })
@@ -106,7 +115,7 @@ export function planNewEntities(ctx: PlanContext, kind: ReconciledKind): void {
     }
     // A handle reused for a second row would silently rebind every earlier
     // ref to the later row. Keep the first binding and report the collision.
-    if (handleMap.has(handle)) {
+    if (claimed.has(handle)) {
       report.droppedCreates.push({ kind, handle, name, cause: 'handle-taken' })
       continue
     }
@@ -115,72 +124,77 @@ export function planNewEntities(ctx: PlanContext, kind: ReconciledKind): void {
       report.unresolvedRefs.push(handle)
       continue
     }
-    // A known mention writes only its new terms, so it anchors only when one writes.
-    const at = anchorOnce(candidate.sourceTurn)
-    const proseEntryId = proseSource(candidate.sourceTurn)
-    if (decision.kind === 'promote' || decision.kind === 'known') {
-      handleMap.set(handle, decision.entityId)
-      ctx.mentionTerms.push({
-        id: decision.entityId,
-        terms: candidate.keywords,
-        sourceTurn: candidate.sourceTurn,
-        proseEntryId,
-        entryId: at,
-      })
-    }
-    if (decision.kind === 'known') continue
-    const entryId = at()
-    if (decision.kind === 'promote') {
-      const promoted = index.get(decision.entityId)
-      if (promoted != null) index.set(decision.entityId, { ...promoted, status: 'active' })
-      planned.push({
-        action: {
-          kind: 'promoteStagedEntity',
-          source: SOURCE,
-          payload: { branchId, id: decision.entityId, proseEntryId },
-        },
-        entryId,
-      })
-      continue
-    }
-    const id = newId(idPrefix)
-    const timestamp = now()
-    const keywords = dedupeTerms(candidate.keywords)
-    const stored = clampEmbeddedText(candidate)
-    handleMap.set(candidate.handle, id)
-    index.set(id, { kind, status: 'active', keywords })
+    claimed.add(handle)
+    // Names a row that exists, so it binds now: a flip of an earlier turn sees that row as it is.
+    if (decision.kind !== 'create') handleMap.set(handle, decision.entityId)
+    claims.push({ kind, candidate, decision })
+  }
+  return claims
+}
+
+/** classifier.md → Disambiguation and → Factions: absorb, promote or create, by the decision. */
+export function planNewEntity(ctx: PlanContext, claim: ClaimedEntity): void {
+  const { deps, planned, handleMap, index, report } = ctx
+  const { kind, candidate, decision } = claim
+  const { branchId, now, newId } = deps
+  // A known mention writes only its new terms, so it anchors only when one writes.
+  const at = ctx.anchorOnce(candidate.sourceTurn)
+  const proseEntryId = ctx.proseSource(candidate.sourceTurn)
+  if (decision.kind === 'promote') {
+    // Sent whatever the view says, as the handler may have refused the facts that moved it.
+    const promoted = index.get(decision.entityId)
+    if (promoted?.status === 'staged')
+      index.set(decision.entityId, { ...promoted, status: 'active' })
     planned.push({
       action: {
-        kind: 'createEntity',
+        kind: 'promoteStagedEntity',
         source: SOURCE,
-        payload: {
-          entry: {
-            id,
-            branchId,
-            kind,
-            name: stored.name,
-            // First introduction is the classifier's one description write; it
-            // never amends a description afterwards (authorship contract).
-            description: stored.description,
-            keywords,
-            status: 'active',
-            injectionMode: 'auto',
-            // The loop's kind picks the list, so the cast can't pair the wrong profile.
-            state:
-              kind === 'character'
-                ? characterProfile(candidate as NewCharacter, report.cutTexts)
-                : factionProfile(candidate as NewFaction, report.cutTexts),
-            nameCollisionFlag: decision.flag == null ? 0 : 1,
-            nameCollisionPartnerId: decision.flag?.partnerId ?? null,
-            nameCollisionReason: decision.flag?.reason ?? null,
-            // Nothing embeds on the write path: the sync stage owns the vector.
-            embeddingStale: 1,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          },
-        },
+        payload: { branchId, id: decision.entityId, proseEntryId },
       },
-      entryId,
+      entryId: at(),
     })
   }
+  if (decision.kind !== 'create') {
+    ctx.appendTerms(decision.entityId, candidate.keywords, proseEntryId, at)
+    return
+  }
+  const id = newId(RECONCILED_KINDS[kind].idPrefix)
+  const timestamp = now()
+  const keywords = dedupeTerms(candidate.keywords)
+  const stored = clampEmbeddedText(candidate)
+  handleMap.set(candidate.handle, id)
+  index.set(id, { kind, status: 'active', name: stored.name, createdAt: timestamp, keywords })
+  planned.push({
+    action: {
+      kind: 'createEntity',
+      source: SOURCE,
+      payload: {
+        entry: {
+          id,
+          branchId,
+          kind,
+          name: stored.name,
+          // First introduction is the classifier's one description write; it
+          // never amends a description afterwards (authorship contract).
+          description: stored.description,
+          keywords,
+          status: 'active',
+          injectionMode: 'auto',
+          // The claim's kind picks the list, so the cast can't pair the wrong profile.
+          state:
+            kind === 'character'
+              ? characterProfile(candidate as NewCharacter, report.cutTexts)
+              : factionProfile(candidate as NewFaction, report.cutTexts),
+          nameCollisionFlag: decision.flag == null ? 0 : 1,
+          nameCollisionPartnerId: decision.flag?.partnerId ?? null,
+          nameCollisionReason: decision.flag?.reason ?? null,
+          // Nothing embeds on the write path: the sync stage owns the vector.
+          embeddingStale: 1,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+      },
+    },
+    entryId: at(),
+  })
 }

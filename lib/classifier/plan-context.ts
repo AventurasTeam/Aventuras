@@ -94,7 +94,7 @@ export type CutText = CutLengths &
       }
   )
 
-/** What a pass logs about the facts that planned nothing or planned changed. */
+/** What the pass logs: the facts that planned nothing, or less than they said. */
 type PlanReport = {
   unresolvedRefs: string[]
   droppedPlaces: DroppedPlace[]
@@ -144,22 +144,15 @@ export type PlanDeps = {
 }
 
 /** A row as the reply's facts so far leave it. */
-type RowView = { kind: Entity['kind']; status: Entity['status']; keywords: string[] }
-
-/** A known or promoted mention's, or a reused place's, new keywords. */
-export type MentionTerms = {
-  id: string
-  terms: readonly string[]
-  sourceTurn?: string
-  proseEntryId: string
-  entryId: () => string
-}
+type RowView = Pick<Entity, 'kind' | 'status' | 'name' | 'createdAt'> & { keywords: string[] }
 
 export type PlanContext = {
   extraction: ClassifierReply
   deps: PlanDeps
   planned: PlannedWrite[]
   handleMap: Map<string, string>
+  /** Every handle an entry of the reply keeps, bound or not yet: the queue reorders the creates. */
+  claimed: Set<string>
   report: PlanReport
   rowById: ReadonlyMap<string, Entity>
   /**
@@ -170,8 +163,6 @@ export type PlanContext = {
   /** What this reply creates and where it puts a place, which later creates and placements walk. */
   createdPlaces: Pick<Entity, 'id' | 'kind' | 'state'>[]
   placedHere: Map<string, PlacedPlacement>
-  /** Written in turn order with the row's other keyword writes (planKeywordWrites). */
-  mentionTerms: MentionTerms[]
   anchor: (turn: string | undefined) => string
   /** One anchor per fact, taken only when the fact writes, so a no-op never counts as a fallback. */
   anchorOnce: (turn: string | undefined) => () => string
@@ -182,6 +173,8 @@ export type PlanContext = {
   proseSource: (turn: string | undefined) => string
   entryPosition: (entryId: string) => number
   turnPosition: (turn: string | undefined) => number
+  /** Ascending by position, ties in the list's order. */
+  byPosition: <T>(facts: readonly T[], positionOf: (fact: T) => number) => T[]
   /** Facts about one row apply in source-turn order, ties in reply order: latest prose wins. */
   inTurnOrder: <T extends { sourceTurn?: string }>(facts: readonly T[]) => T[]
   resolveRef: (ref: string, expectedKind?: Entity['kind']) => string | null
@@ -274,7 +267,16 @@ export function createPlanContext(extraction: ClassifierReply, deps: PlanDeps): 
 
   const rowById = new Map(entities.map((e) => [e.id, e]))
   const index = new Map<string, RowView>(
-    entities.map((e) => [e.id, { kind: e.kind, status: e.status, keywords: e.keywords }]),
+    entities.map((e) => [
+      e.id,
+      {
+        kind: e.kind,
+        status: e.status,
+        name: e.name,
+        createdAt: e.createdAt,
+        keywords: e.keywords,
+      },
+    ]),
   )
 
   const resolveRef = (ref: string, expectedKind?: Entity['kind']): string | null => {
@@ -313,28 +315,31 @@ export function createPlanContext(extraction: ClassifierReply, deps: PlanDeps): 
     window.turns.findIndex((t) => t.entryId === entryId)
   const turnPosition = (turn: string | undefined): number =>
     entryPosition(window.resolveHandle(turn).entryId)
-  const inTurnOrder = <T extends { sourceTurn?: string }>(facts: readonly T[]): T[] =>
+  const byPosition = <T>(facts: readonly T[], positionOf: (fact: T) => number): T[] =>
     facts
-      .map((fact, order) => ({ fact, order, at: turnPosition(fact.sourceTurn) }))
+      .map((fact, order) => ({ fact, order, at: positionOf(fact) }))
       .sort((a, b) => a.at - b.at || a.order - b.order)
       .map(({ fact }) => fact)
+  const inTurnOrder = <T extends { sourceTurn?: string }>(facts: readonly T[]): T[] =>
+    byPosition(facts, (fact) => turnPosition(fact.sourceTurn))
 
   return {
     extraction,
     deps,
     planned,
     handleMap,
+    claimed: new Set(),
     report,
     rowById,
     index,
     createdPlaces: [],
     placedHere: new Map(),
-    mentionTerms: [],
     anchor,
     anchorOnce,
     proseSource,
     entryPosition,
     turnPosition,
+    byPosition,
     inTurnOrder,
     resolveRef,
     appendTerms,

@@ -61,36 +61,6 @@ for the placement rule.
   2026-10-20, failure policy 2026-10-22; its flag's reason left to it
   by the AI writer map.
 
-- **Implement per-row planning.** The periodic classifier's planner
-  plans a reply's facts as one queue in turn order, its writes landing
-  in the queue's order, and a rename is decided as it lands between the
-  rename and the clash
-  ([`classifier.md → Planning order`](./memory/classifier.md#planning-order),
-  [→ What the classifier writes](./memory/classifier.md#what-the-classifier-writes)).
-  `lib/classifier/plan.ts`'s `buildClassifierActions` still plans list
-  by list in about a thousand lines; its thread and awareness blocks
-  share about ten of the planner's locals (`anchor`, `proseSource`,
-  `entryPosition`, `inTurnOrder`, `iconOf`, the drop lists, `planned`),
-  so the queue wants a shared planner context rather than more
-  closures. The work:
-  - the queue, and its writes landing in its order;
-  - `renameEntity` sent for a rename and a clash alike, its handler
-    deciding between them, with the planner predicting by the
-    handler's holder rule (`nameHeldByOther`) rather than its own;
-  - the `classifier.rename_clash` log reporting the handler's outcome,
-    not the planner's prediction;
-  - tests pinning what the queue fixes: a turn-1 rename judged before a
-    turn-3 placement moves its place, a turn-3 new place reusing the
-    place turn 1 renamed, a turn-1 retire of a staged character planned
-    before a turn-3 mention promotes it; and both directions of the
-    rename decided as it lands: a first rename the user's edit refuses
-    leaves a second rename to its name free to land, and a rename away
-    from a name the user's edit refuses leaves a rename to that name a
-    clash.
-
-  Raised 2026-10-23 by the AI writer map's Task 20 review and
-  2026-10-24 by its slice review; designed 2026-10-30.
-
 ## UX
 
 - **Per-turn token usage breakdown.** Every turn records the tokens

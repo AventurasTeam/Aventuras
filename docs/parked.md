@@ -1822,7 +1822,9 @@ a turn-2 placement moves it under the Inn, and a turn-3 "Cellar" under
 the Keep, carrying "the vault", maps to it. That is a silent
 mis-merge: the keyword lands on the moved row and the Keep's cellar is
 never created, where successive passes would create it anew under the
-Keep. The developer kept the twin rule as settled; a fix needs a twin
+Keep. A rename of a turn between them maps the same way, where they
+would create it beside the renamed row, flagged. The developer kept the
+twin rule as settled; a fix needs a twin
 keyed on where the first one's row sits by then, which reopens the twin
 of a create a takeover placed. Raised 2026-10-24 by the AI writer
 map's slice review; parked 2026-10-30 by the planner's turn-order
