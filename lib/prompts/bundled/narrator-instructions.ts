@@ -1,6 +1,5 @@
-// staticContent: reads only `mode`, `narration` and `lead` (a name, blank without one), so the
-// per-turn narrative and the wizard's opening carry the same rules
-// (ui/principles.md → Mode, lead, and narration).
+// staticContent: reads only `mode`, `narration` and `lead` (a name, blank without one); shared by
+// the narrator and the wizard opening (ui/principles.md → Mode, lead, and narration).
 export const NARRATOR_INSTRUCTIONS = `{%- if lead != blank -%}
 {%- assign who = lead -%}
 {%- else -%}

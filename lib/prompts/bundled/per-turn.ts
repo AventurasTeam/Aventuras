@@ -1,9 +1,8 @@
 import type { TemplateSources } from '../types'
 
 export const PER_TURN_NARRATIVE: TemplateSources = {
-  // The system half must render the same bytes on every call until the user edits
-  // the story (architecture.md → System and user halves): nothing per call goes in it, and the lead
-  // by name only, since its id is a placeholder allocated per call.
+  // architecture.md → System and user halves: the same bytes every call, so nothing per call goes
+  // in it, and the lead by name only: its id is a placeholder allocated per call.
   system: `{% include 'macro_narrator_instructions', mode: definition.mode, narration: definition.narration, lead: lead.name %}
 
 The user's turns are marked with <user_turn> tags in the story so far. Under What has happened, each happening ends with who in the scene knows it, or says it is common knowledge; a character in the scene it doesn't name doesn't know it.

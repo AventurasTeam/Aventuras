@@ -300,13 +300,9 @@ function currentTimeOf(
 }
 
 /**
- * A story entry as a template sees it. Prose, position and kind only: `metadata`
- * carries entity ids, and substituteIds allocates a placeholder for every id it
- * walks, so a window's worth of historical scene rosters would put entities
- * deleted chapters ago into the map — where resolveRef reads presence as "the
- * model was shown this". Current scene state is `sceneMetadata`, sourced from
- * one entry. `id` is deliberately absent; `entry` has no substitutable prefix,
- * and `position` is the handle a template wants. `kind` tells the user's turns apart.
+ * Prose, position and kind only: substituting `metadata`'s historical scene rosters would map
+ * long-deleted entities, which resolveRef reads as shown to the model. No `id`: `entry_` would leak
+ * raw, since it doesn't substitute.
  */
 function promptEntry(entry: StoryEntry) {
   return { position: entry.position, kind: entry.kind, content: promptProse(entry) }

@@ -1,6 +1,5 @@
-// staticContent: reads only `mode`, `person` (stories.settings.composerWrapPov) and `lead` (a name,
-// blank without one). A chip is offered as the user's next turn, so it speaks in their voice
-// (reader-composer.md → Next-turn suggestions); both emission macros include it.
+// staticContent: reads only `mode`, `person` (composerWrapPov) and `lead` (a name, blank without
+// one); both emission macros include it (reader-composer.md → Next-turn suggestions).
 export const SUGGESTION_VOICE = `{%- if lead != blank -%}
 {%- assign who = lead -%}
 {%- else -%}

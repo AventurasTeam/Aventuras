@@ -154,9 +154,8 @@ export function AuthoringAidsPanel({
         ? t(`storySettings:generation.composerModesUnavailable.${modeProblem}`)
         : t('storySettings:generation.composerModesCreative')
 
-  // story-settings.md → Authoring aids: wrap POV is the person the user's input is written in, what
-  // Do / Say / Think wrap and what adventure's suggestions say, so it goes inert only without both,
-  // or outside adventure. Disabled, not discarded: an edit made before stays in the session.
+  // story-settings.md → Authoring aids: inert only with modes and suggestions both off, or outside
+  // adventure. Disabled, not discarded: an edit made before stays in the session.
   const wrapPovInert = (!modesEnabled && !enabled) || modesGateHint != null
 
   const confirmReset = () => {

@@ -19,9 +19,8 @@ export type AwarenessRow = {
 }
 
 /**
- * retrieval.md → POV-awareness scope: the in-scene characters, and the lead in adventure or in
- * first- or second-person narration, where the story is told from the lead's side and a missed
- * scene tag mustn't wipe what the lead knows. `leadId` is the lead resolved on the branch, or null.
+ * retrieval.md → POV-awareness scope: the scene's characters, plus the lead where the story is told
+ * from their side, so a missed scene tag can't wipe what they know. `leadId` is resolved, or null.
  */
 export function awarenessScope(
   sceneCharacterIds: readonly string[],
@@ -35,9 +34,8 @@ export function awarenessScope(
 }
 
 /**
- * retrieval.md → POV-awareness scope: the UNION of the scope's awareness rows in both modes, not
- * lead-only. Detached-POV moments need the wider scope; the prompt, not retrieval, keeps each
- * character to what they know.
+ * retrieval.md → POV-awareness scope: the union of the scope's rows, not lead-only; the prompt, not
+ * retrieval, keeps each character to what they know.
  */
 export async function loadAwarenessForScene(
   queryAll: QueryAll,
