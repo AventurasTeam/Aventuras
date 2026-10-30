@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   branches,
@@ -9,11 +9,18 @@ import {
   stories,
   storyEntries,
   type CharacterState,
+  type CollisionReason,
   type Entity,
   type LocationState,
   type NewEntity,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import {
+  __resetDiagnosticsGate,
+  clearBuffers,
+  configureDiagnosticsGate,
+  getDiagnosticsSnapshot,
+} from '@/lib/diagnostics'
 import { entitiesStore } from '@/lib/stores'
 import { collisionPairOf, entityDeleteActions, entityMergeActions, storyPlaceOf } from '@/lib/world'
 
@@ -1818,7 +1825,18 @@ describe('renameEntity onto a name another row holds', () => {
     placeRow('loc_marsh', 'the Marsh', { parent_location_id: null }),
   ]
 
-  it('refuses a name the user gave a row whose rename away the pass planned first', async () => {
+  const flagged = (partnerId: string, reason: CollisionReason = 'name-taken') => ({
+    nameCollisionFlag: 1 as const,
+    nameCollisionPartnerId: partnerId,
+    nameCollisionReason: reason,
+  })
+  const UNFLAGGED = {
+    nameCollisionFlag: 0 as const,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
+  }
+
+  it('clashes on a name the user gave a row whose rename away the pass planned first', async () => {
     const { db, ctx } = await setup()
     await createRow(ctx, person('char_2', 'Marra'))
     await createRow(ctx, person('char_1', 'the innkeeper'))
@@ -1827,13 +1845,32 @@ describe('renameEntity onto a name another row holds', () => {
     await proseAt(ctx, 'e_2', 2)
     expect(await apply(ctx, renameOf('char_2', 'Selene', 'e_1'), 'act_n1')).toEqual(userWonOver)
 
-    expect(await apply(ctx, renameOf('char_1', 'Mara', 'e_2'), 'act_n2')).toEqual(
-      noopBecause('name-taken'),
-    )
-    expect(await rowFor(db, 'char_1')).toMatchObject({ name: 'the innkeeper', keywords: [] })
+    expect((await apply(ctx, renameOf('char_1', 'Mara', 'e_2'), 'act_n2')).status).toBe('ok')
+    expect(await rowFor(db, 'char_1')).toMatchObject({
+      name: 'the innkeeper',
+      keywords: ['Mara'],
+      ...flagged('char_2'),
+    })
   })
 
-  it('refuses a sibling name when the move away the pass planned first lost to the user', async () => {
+  it('renames onto the name of a rename the user refused', async () => {
+    const { db, ctx } = await setup()
+    await createRow(ctx, person('char_2', 'Marra'))
+    await createRow(ctx, person('char_1', 'the innkeeper'))
+    await proseAt(ctx, 'e_1', 1)
+    await apply(ctx, editOf('char_2', { name: 'Mara' }), 'act_u')
+    await proseAt(ctx, 'e_2', 2)
+    expect(await apply(ctx, renameOf('char_2', 'Selene', 'e_1'), 'act_n1')).toEqual(userWonOver)
+
+    expect((await apply(ctx, renameOf('char_1', 'Selene', 'e_2'), 'act_n2')).status).toBe('ok')
+    expect(await rowFor(db, 'char_1')).toMatchObject({
+      name: 'Selene',
+      keywords: ['the innkeeper'],
+      ...UNFLAGGED,
+    })
+  })
+
+  it('clashes on a sibling name when the move away the pass planned first lost to the user', async () => {
     const { db, ctx } = await setup()
     await db
       .insert(entities)
@@ -1854,18 +1891,20 @@ describe('renameEntity onto a name another row holds', () => {
     }
     expect(await apply(ctx, backToReach, 'act_p')).toEqual(userWonOver)
 
-    expect(await apply(ctx, renameOf('loc_a', 'Mill', 'e_2'), 'act_n')).toEqual(
-      noopBecause('name-taken'),
-    )
-    expect((await rowFor(db, 'loc_a')).name).toBe('old mill')
+    expect((await apply(ctx, renameOf('loc_a', 'Mill', 'e_2'), 'act_n')).status).toBe('ok')
+    expect(await rowFor(db, 'loc_a')).toMatchObject({
+      name: 'old mill',
+      keywords: ['Mill'],
+      ...flagged('loc_mill'),
+    })
   })
 
   // piggyback.md → Matching before creating: a real sibling, or any place when either is unplaced.
   it.each([
     ['lands beside a holder under another parent', 'loc_reach', 'loc_marsh', true],
-    ['is refused beside an unplaced holder', null, 'loc_marsh', false],
-    ['is refused for an unplaced place', 'loc_reach', null, false],
-    ['is refused beside a holder whose parent is gone', 'loc_gone', 'loc_reach', false],
+    ['clashes beside an unplaced holder', null, 'loc_marsh', false],
+    ['clashes for an unplaced place', 'loc_reach', null, false],
+    ['clashes beside a holder whose parent is gone', 'loc_gone', 'loc_reach', false],
   ])(
     'a place rename %s',
     async (_label, holderParent: string | null, ownParent: string | null, lands: boolean) => {
@@ -1877,23 +1916,195 @@ describe('renameEntity onto a name another row holds', () => {
       await db.insert(entities).values([...REGIONS, placeRow('loc_mill', 'Mill', at(holderParent))])
       await createRow(ctx, placeRow('loc_a', 'old mill', at(ownParent)))
       await proseAt(ctx, 'e_1', 1)
-      expect(await apply(ctx, renameOf('loc_a', 'Mill', 'e_1'), 'act_n')).toMatchObject(
-        lands ? { status: 'ok' } : noopBecause('name-taken'),
-      )
+      expect((await apply(ctx, renameOf('loc_a', 'Mill', 'e_1'), 'act_n')).status).toBe('ok')
+      expect((await rowFor(db, 'loc_a')).name).toBe(lands ? 'Mill' : 'old mill')
     },
   )
 
   it.each([
-    ['is refused when a retired row of the kind holds it', 'character', 'retired', false],
+    ['clashes when a retired row of the kind holds it', 'character', 'retired', false],
     ['lands when only a row of another kind holds it', 'faction', 'active', true],
   ] as const)('a rename %s', async (_label, kind, status, lands) => {
     const { db, ctx } = await setup()
     await db.insert(entities).values({ ...person('ent_2', 'mara '), kind, status, state: {} })
     await createRow(ctx, person('char_1', 'the innkeeper'))
     await proseAt(ctx, 'e_1', 1)
-    expect(await apply(ctx, renameOf('char_1', 'Mara', 'e_1'), 'act_n')).toMatchObject(
-      lands ? { status: 'ok' } : noopBecause('name-taken'),
-    )
+    expect((await apply(ctx, renameOf('char_1', 'Mara', 'e_1'), 'act_n')).status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).name).toBe(lands ? 'Mara' : 'the innkeeper')
+  })
+
+  async function seedClash(ctx: Ctx, db: StateDb, innkeeper: Partial<NewEntity> = {}) {
+    await db.insert(entities).values(person('char_2', 'Mara'))
+    await createRow(ctx, person('char_1', 'the innkeeper', innkeeper))
+    await proseAt(ctx, 'e_1', 1)
+  }
+  const clash = (ctx: Ctx) => apply(ctx, renameOf('char_1', 'Mara', 'e_1'), 'act_n')
+
+  it('writes one delta: the name as a keyword and the flag naming the holder', async () => {
+    const { db, ctx } = await setup()
+    await seedClash(ctx, db, { keywords: ['the host'] })
+    expect((await clash(ctx)).status).toBe('ok')
+
+    const landed = { keywords: ['the host', 'Mara'], ...flagged('char_2') }
+    expect(await rowFor(db, 'char_1')).toMatchObject({ name: 'the innkeeper', ...landed })
+    expect(entitiesStore.getById('char_1')).toMatchObject(landed)
+    expect(await undoPayloadsOf(db, 'act_n')).toEqual([{ keywords: ['the host'], ...UNFLAGGED }])
+  })
+
+  it('reverses to the keywords and flag from before it', async () => {
+    const { db, ctx } = await setup()
+    await seedClash(ctx, db, { keywords: ['the host'] })
+    await clash(ctx)
+    expect(await reverseReplayDeltas('act_n', ctx)).toBe(1)
+    expect(await rowFor(db, 'char_1')).toMatchObject({ keywords: ['the host'], ...UNFLAGGED })
+  })
+
+  it('takes the oldest holder as the partner, then the lowest id', async () => {
+    const { db, ctx } = await setup()
+    await db
+      .insert(entities)
+      .values([
+        person('char_z', 'Mara', { createdAt: 3 }),
+        person('char_b', 'Mara', { createdAt: 0 }),
+        person('char_a', 'MARA', { createdAt: 0 }),
+      ])
+    await createRow(ctx, person('char_1', 'the innkeeper'))
+    await proseAt(ctx, 'e_1', 1)
+    await clash(ctx)
+    expect(await rowFor(db, 'char_1')).toMatchObject(flagged('char_a'))
+  })
+
+  it('takes a name spaced apart from the one another row holds as that name', async () => {
+    const { db, ctx } = await setup()
+    await seedClash(ctx, db)
+    await apply(ctx, renameOf('char_1', 'Mara  ', 'e_1'), 'act_n')
+    expect(await rowFor(db, 'char_1')).toMatchObject({ keywords: ['Mara'], ...flagged('char_2') })
+  })
+
+  it('raises alone on a row that already holds the name as a keyword', async () => {
+    const { db, ctx } = await setup()
+    await seedClash(ctx, db, { keywords: ['mara'] })
+    expect((await clash(ctx)).status).toBe('ok')
+    expect(await rowFor(db, 'char_1')).toMatchObject({ keywords: ['mara'], ...flagged('char_2') })
+    expect(await undoPayloadsOf(db, 'act_n')).toEqual([UNFLAGGED])
+  })
+
+  describe('a row already flagged', () => {
+    const FLAGGED_DISTINCT = flagged('char_3', 'distinct')
+
+    it('gets the keyword only, keeping a flag that holds and its partner', async () => {
+      const { db, ctx } = await setup()
+      await db.insert(entities).values(person('char_3', 'the innkeeper'))
+      await seedClash(ctx, db, FLAGGED_DISTINCT)
+      expect((await clash(ctx)).status).toBe('ok')
+      expect(await rowFor(db, 'char_1')).toMatchObject({ keywords: ['Mara'], ...FLAGGED_DISTINCT })
+      expect(await undoPayloadsOf(db, 'act_n')).toEqual([{ keywords: [] }])
+    })
+
+    it('writes nothing when it holds the keyword and the flag holds', async () => {
+      const { db, ctx } = await setup()
+      await seedClash(ctx, db, { keywords: ['Mara'], ...flagged('char_2') })
+      expect(await clash(ctx)).toEqual(noopBecause('name-taken'))
+      expect(await undoPayloadsOf(db, 'act_n')).toEqual([])
+    })
+
+    // classifier.md → Names: a dormant flag (pairing no longer holds under World) counts as none.
+    it.each([
+      ['a partner it shares no name with', 'char_3'],
+      ['a partner that is gone', 'char_gone'],
+    ])('re-points a flag dormant on %s, and reverses to it', async (_label, oldPartner) => {
+      const { db, ctx } = await setup()
+      await db.insert(entities).values(person('char_3', 'Zed'))
+      await seedClash(ctx, db, flagged(oldPartner, 'distinct'))
+      expect((await clash(ctx)).status).toBe('ok')
+      expect(await rowFor(db, 'char_1')).toMatchObject(flagged('char_2'))
+      await reverseReplayDeltas('act_n', ctx)
+      expect(await rowFor(db, 'char_1')).toMatchObject(flagged(oldPartner, 'distinct'))
+    })
+
+    // A check on the row as it stands would re-point this: the keyword is what revives the pair.
+    it("keeps a dormant flag the clash's own keyword brings back to life", async () => {
+      const { db, ctx } = await setup()
+      await db.insert(entities).values(person('char_3', 'Mara', { createdAt: 3 }))
+      await seedClash(ctx, db, flagged('char_3', 'distinct'))
+      expect((await clash(ctx)).status).toBe('ok')
+      expect(await rowFor(db, 'char_1')).toMatchObject({
+        keywords: ['Mara'],
+        ...flagged('char_3', 'distinct'),
+      })
+    })
+  })
+
+  // cadence.md → User edits and classifier writes, each column by its own edits.
+  describe('after a user edit', () => {
+    it('clashes past a name the user wrote after the prose', async () => {
+      const { db, ctx } = await setup()
+      await seedClash(ctx, db)
+      await apply(ctx, editOf('char_1', { name: 'the landlord' }), 'act_u')
+      expect((await clash(ctx)).status).toBe('ok')
+      expect(await rowFor(db, 'char_1')).toMatchObject({
+        name: 'the landlord',
+        keywords: ['Mara'],
+        ...flagged('char_2'),
+      })
+    })
+
+    it('adds the keyword past a flag the user cleared after the prose, and raises nothing', async () => {
+      const { db, ctx } = await setup()
+      await seedClash(ctx, db, flagged('char_2', 'distinct'))
+      await apply(ctx, editOf('char_1', UNFLAGGED), 'act_u')
+      expect((await clash(ctx)).status).toBe('ok')
+      expect(await rowFor(db, 'char_1')).toMatchObject({ keywords: ['Mara'], ...UNFLAGGED })
+      expect(await undoPayloadsOf(db, 'act_n')).toEqual([{ keywords: [] }])
+    })
+
+    it('raises past a keyword the user removed when the names alone pair', async () => {
+      const { db, ctx } = await setup()
+      await seedClash(ctx, db, { name: 'Mara Vale', keywords: ['Mara'] })
+      await apply(ctx, editOf('char_1', { keywords: [] }), 'act_u')
+      expect((await clash(ctx)).status).toBe('ok')
+      expect(await rowFor(db, 'char_1')).toMatchObject({ keywords: [], ...flagged('char_2') })
+    })
+
+    it('writes nothing when the keyword the user removed was all that paired them', async () => {
+      const { db, ctx } = await setup()
+      await seedClash(ctx, db, { keywords: ['Mara'] })
+      await apply(ctx, editOf('char_1', { keywords: [] }), 'act_u')
+      expect(await clash(ctx)).toEqual(noopBecause('name-taken'))
+      expect(await rowFor(db, 'char_1')).toMatchObject({ keywords: [], ...UNFLAGGED })
+    })
+  })
+
+  describe('the clash log', () => {
+    afterEach(() => __resetDiagnosticsGate())
+    const logged = () =>
+      getDiagnosticsSnapshot()
+        .logEntries.filter((e) => e.kind === 'classifier.rename_clash')
+        .map((e) => [e.level, e.fields, e.actionId])
+
+    it.each([
+      ['a raise that landed', {}, true],
+      ['a flag that holds', { keywords: ['Mara'], ...flagged('char_2') }, false],
+    ])('reports %s, against the run', async (_label, over, raised) => {
+      clearBuffers()
+      configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+      const { db, ctx } = await setup()
+      await seedClash(ctx, db, over)
+      await clash(ctx)
+      expect(logged()).toEqual([
+        ['warn', { ref: 'char_1', name: 'Mara', partnerId: 'char_2', flagged: raised }, 'act_n'],
+      ])
+    })
+
+    it('stays quiet for a rename that lands', async () => {
+      clearBuffers()
+      configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+      const { ctx } = await setup()
+      await createRow(ctx, person('char_1', 'the innkeeper'))
+      await proseAt(ctx, 'e_1', 1)
+      await clash(ctx)
+      expect(logged()).toEqual([])
+    })
   })
 })
 

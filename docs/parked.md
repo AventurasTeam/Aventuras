@@ -1822,12 +1822,29 @@ a turn-2 placement moves it under the Inn, and a turn-3 "Cellar" under
 the Keep, carrying "the vault", maps to it. That is a silent
 mis-merge: the keyword lands on the moved row and the Keep's cellar is
 never created, where successive passes would create it anew under the
-Keep. The developer kept the twin rule as settled; a fix needs a twin
+Keep. A rename of a turn between them maps the same way, where they
+would create it beside the renamed row, flagged. The developer kept the
+twin rule as settled; a fix needs a twin
 keyed on where the first one's row sits by then, which reopens the twin
 of a create a takeover placed. Raised 2026-10-24 by the AI writer
 map's slice review; parked 2026-10-30 by the planner's turn-order
 design. The signal is play showing a place's keyword on a row the story
 moved, or a place missing under the parent its prose gave it.
+
+#### A staged row has no retirement
+
+The classifier retires `active → retired` only
+([`memory/classifier.md → What the classifier writes`](./memory/classifier.md#what-the-classifier-writes)),
+so a retire of a staged row is dropped and logged
+(`classifier.retire_dropped`). A staged character who dies in the prose
+stays staged, and a later turn or pass that brings the row into the
+scene, by finding the body say, promotes it to active with the death
+lost. The fix is a `staged → retired` transition, which changes the
+status rules and `retireEntity`'s `not-active` refusal. Raised
+2026-10-30 by the review of per-row planning, whose queue gave one
+reply the outcome two passes already had; parked the same day. The
+signal is `classifier.retire_dropped` firing in play, or a dead
+character reading as active.
 
 #### A zero or NaN embedding is stored as it comes
 

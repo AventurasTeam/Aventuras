@@ -236,6 +236,52 @@ describe('reversing a machine write under a later user write', () => {
     expect(await kael(db)).toMatchObject({ name: 'Corvin Vale', keywords: ['the knight'] })
   })
 
+  describe("a rename's clash, written as one delta", () => {
+    const clash = async (ctx: Ctx, db: Db) => {
+      await db.insert(entities).values({ ...KAEL, id: 'char_mira', name: 'Mira', keywords: [] })
+      const rename: PipelineAction = {
+        kind: 'renameEntity',
+        source: 'periodic_classifier',
+        payload: { branchId: 'b1', id: 'char_kael', name: 'Mira', proseEntryId: null },
+      }
+      await apply(ctx, rename, 'act_c')
+      expect(await kael(db)).toMatchObject({ name: 'Kael', nameCollisionFlag: 1 })
+    }
+
+    it('reverses its flag past a later user edit of the keywords', async () => {
+      const { db, ctx } = await setup()
+      await createKael(ctx)
+      await clash(ctx, db)
+      await apply(ctx, userPatch({ keywords: ['the knight', 'Mira', 'ser'] }), 'act_u')
+
+      await reverseRows(await deltasOf(db, 'act_c'), ctx)
+
+      expect(await kael(db)).toMatchObject({
+        keywords: ['the knight', 'Mira', 'ser'],
+        nameCollisionFlag: 0,
+        nameCollisionPartnerId: null,
+        nameCollisionReason: null,
+      })
+    })
+
+    it('reverses its keyword past a later user edit of the flag', async () => {
+      const { db, ctx } = await setup()
+      await createKael(ctx)
+      await clash(ctx, db)
+      await db.insert(entities).values({ ...KAEL, id: 'char_ash', name: 'Mira', keywords: [] })
+      await apply(ctx, userPatch({ nameCollisionPartnerId: 'char_ash' }), 'act_u')
+
+      await reverseRows(await deltasOf(db, 'act_c'), ctx)
+
+      expect(await kael(db)).toMatchObject({
+        keywords: ['the knight'],
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: 'char_ash',
+        nameCollisionReason: 'name-taken',
+      })
+    })
+  })
+
   it('still reverses a column the later user edit left alone', async () => {
     const { db, ctx } = await setup()
     await createKael(ctx)

@@ -174,6 +174,10 @@ alias list (the keywords bullet below).
     destroyed place stays active, its destruction a `condition`, and
     only the user retires a place
     ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
+    A staged row has no retirement: a retire of one is dropped and
+    logged, and the row stays staged, so a later turn or pass that
+    brings it into the scene promotes it with its finality lost
+    ([`parked.md → A staged row has no retirement`](../parked.md#a-staged-row-has-no-retirement)).
 
   - `retired → active` when the turns put a retired character in the
     scene now: not a memory, a flashback, a vision or someone's report
@@ -313,17 +317,21 @@ the stored row instead, a status transition aside
 So a turn-1 rename is judged where turn 1 leaves its place, not where a
 turn-3 move does; a new place matches a place an earlier turn renamed;
 and a turn-1 retire of a staged character is judged before a turn-3
-mention promotes it. A turn that reveals a place's name and also
+mention promotes it, so the retire drops and the row ends active, as
+across two passes. A turn that reveals a place's name and also
 declares a new place of that name under the same parent reuses the
-renamed place. New characters and factions are reconciled before the
+renamed place; a new place of the name it had is no namesake by then,
+as in a later pass, so it is created, flagged `same-parent` by the old
+name's keyword when it shares the renamed place's parent. New characters and factions are reconciled before the
 queue, against the snapshot and every rename in the reply whatever its
 turn, so a reveal written twice absorbs whichever turn its newcomer
 comes from
 ([Disambiguation on new-character mentions](#disambiguation-on-new-character-mentions));
 the queue plans the writes their decisions give. A new place waits for
-its own parent ([Mentioned places](#mentioned-places)). The queue's
-writes land in its order, so each is checked as it lands against the
-rows the facts ahead of it left.
+its own parent ([Mentioned places](#mentioned-places)), and a status
+transition for the create of a row it names, each anchored at its own
+turn still. The queue's writes land in its order, so each is checked
+as it lands against the rows the facts ahead of it left.
 
 Memberships and standings read the rows as they stood before the reply
 ([Factions](#factions)). Happenings, awareness, relationships and
@@ -665,7 +673,8 @@ where they leave the places, so a place one of them puts under another
 parent is no unplaced namesake to reuse, and one it puts under the new
 place's parent is reused there, placed once. The twin rule above still
 comes first: a new place maps to an earlier one of its name and
-declared parent even after a placement moved that one's row.
+declared parent even after a placement moved that one's row or a
+rename changed its name.
 
 **After the turn.** A pass runs after the turn that brought it due, so
 a place the turn created is already a row it matches against, and the

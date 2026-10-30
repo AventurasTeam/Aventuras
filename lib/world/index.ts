@@ -36,6 +36,7 @@ export type {
   StackableDraft,
 } from './entity-draft'
 export { nameTakenByOther } from './collision-flags'
+export { nameHolders } from './name-holders'
 export { nameBasis, namesakeBasis } from './namesakes'
 export type { NameBasis, NamesakeMatch, NamesakeSide } from './namesakes'
 export {

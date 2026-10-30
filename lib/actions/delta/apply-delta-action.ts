@@ -179,7 +179,7 @@ async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<Mutatio
   const resolved = resolveByActionKind(action.kind)
   if (!resolved) return { status: 'rejected', reason: `no handler registered for ${action.kind}` }
 
-  const outcome = await resolved.handler(action, branchId, ctx)
+  const outcome = await resolved.handler(action, branchId, { ...ctx, actionId })
   if (outcome.status === 'rejected') return outcome
 
   const deltaId = generateId('delta')
@@ -308,7 +308,7 @@ async function applyDeltaActionGroupUnlocked(
     const resolved = resolveByActionKind(action.kind)
     if (!resolved) return { status: 'rejected', reason: `no handler registered for ${action.kind}` }
 
-    const outcome = await resolved.handler(action, branchId, ctx, { created })
+    const outcome = await resolved.handler(action, branchId, { ...ctx, actionId }, { created })
     if (outcome.status === 'rejected')
       return outcome.code === 'noop'
         ? 'noop'
