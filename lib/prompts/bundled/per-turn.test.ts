@@ -301,9 +301,21 @@ describe('bundled per-turn template — empty-guard contract', () => {
     }
     const { system, user } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, contextWithCalendar)
     expect(system).toContain('# Calendar')
-    expect(system).toContain('This story tracks time in seconds (1 seconds per second).')
+    expect(system).toContain('This story tracks time in seconds. Tiers:')
     expect(system).toContain('month (January and February)')
     expect(user).not.toContain('# Calendar')
+  })
+
+  it("gives a base unit's length in seconds only when it isn't one second", () => {
+    const { system } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...m2Context,
+      calendarVocabulary: {
+        baseUnitName: 'day',
+        secondsPerBaseUnit: 86400,
+        tiers: [{ name: 'month', labels: [] }],
+      },
+    })
+    expect(system).toContain('This story tracks time in days (86400 seconds per day). Tiers:')
   })
 
   it('omits the calendar section when calendarVocabulary is absent', () => {

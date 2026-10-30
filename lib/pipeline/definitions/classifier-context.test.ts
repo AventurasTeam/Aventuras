@@ -199,6 +199,43 @@ describe('buildClassifierContext', () => {
     ])
   })
 
+  it("puts each fact's names and kind on one line", () => {
+    const context = buildClassifierContext({
+      window: { turns: [] } as never,
+      entities: [character(AEFRE, 'Aefre\nthe Younger'), character(BAEL, 'Bael')],
+      happenings: [],
+      relationships: [
+        relationship(
+          'rel_11111111-1111-1111-1111-111111111111',
+          AEFRE,
+          BAEL,
+          'sworn\nsister',
+          'ward  \n of',
+        ),
+      ],
+      threads: [],
+      mentionedPlaces: false,
+      leadId: null,
+      idMap: new IdBiMap(),
+    })
+    expect(context.relationships).toEqual([
+      {
+        subject: 'c1',
+        subjectName: 'Aefre the Younger',
+        object: 'c2',
+        objectName: 'Bael',
+        kind: 'sworn sister',
+      },
+      {
+        subject: 'c2',
+        subjectName: 'Bael',
+        object: 'c1',
+        objectName: 'Aefre the Younger',
+        kind: 'ward of',
+      },
+    ])
+  })
+
   it('drops a relationship row whose character has no entity in the snapshot', () => {
     const context = buildClassifierContext({
       window: { turns: [] } as never,

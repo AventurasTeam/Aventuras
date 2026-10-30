@@ -5,14 +5,14 @@ import type { TemplateSources } from '../types'
 export const PIGGYBACK_FALLBACK_CLASSIFIER: TemplateSources = {
   system: `{% if calendarVocabulary -%}
 # Calendar
-This story tracks time in {{ calendarVocabulary.baseUnitName }}s ({{ calendarVocabulary.secondsPerBaseUnit }} seconds per {{ calendarVocabulary.baseUnitName }}). Tiers: {% for t in calendarVocabulary.tiers %}{{ t.name }}{% if t.labels.size > 0 %} ({{ t.labels | prose_join }}){% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}. Convert relative-time prose ("two days later", "the next morning") into a seconds delta using these units.
+This story tracks time in {{ calendarVocabulary.baseUnitName }}s{% if calendarVocabulary.secondsPerBaseUnit != 1 %} ({{ calendarVocabulary.secondsPerBaseUnit }} seconds per {{ calendarVocabulary.baseUnitName }}){% endif %}. Tiers: {% for t in calendarVocabulary.tiers %}{{ t.name }}{% if t.labels.size > 0 %} ({{ t.labels | prose_join }}){% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}. Convert relative-time prose ("two days later", "the next morning") into a seconds delta using these units.
 {%- endif %}`,
   user: `Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:
 {%- assign referenceable = entities | active -%}
 {%- assign stagedEntities = entities | staged -%}
 {% for e in referenceable %}
 - [{{ e.id }}] {{ e.name }} ({{ e.kind }})
-{%- endfor %}
+{%- endfor -%}
 {% for e in stagedEntities %}
 - [{{ e.id }}] {{ e.name }} ({{ e.kind }}, staged)
 {%- endfor %}

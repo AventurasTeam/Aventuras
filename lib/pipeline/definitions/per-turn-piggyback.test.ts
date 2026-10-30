@@ -1788,7 +1788,7 @@ describe('per-turn-piggyback', () => {
         expect(user).toContain('# This turn')
         // piggyback.md → Fallback classifier context: the calendar is the whole system half.
         expect(system).toMatch(
-          /^# Calendar\nThis story tracks time in seconds .+ into a seconds delta using these units\.$/,
+          /^# Calendar\nThis story tracks time in seconds\. Tiers: .+ into a seconds delta using these units\.$/,
         )
         expect(user).not.toContain('# Calendar')
       })

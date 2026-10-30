@@ -256,6 +256,43 @@ describe('bundled piggyback fallback classifier template', () => {
     )
   })
 
+  describe('the roster', () => {
+    const rosterOf = (rows: Entity[]) => {
+      const user = render(context({}, rows))
+      return user.slice(0, user.indexOf('Everything from here')).split('\n').slice(1)
+    }
+
+    it('runs its active and staged entries together, one blank line before the framing', () => {
+      expect(rosterOf(WORLD)).toEqual([
+        '- [c1] Kael (character)',
+        '- [l1] The Drowned Keep (location)',
+        '- [i3] Courier’s seal (item)',
+        '- [i4] short sword (item)',
+        '- [i5] a rusted lantern (item)',
+        '- [i9] Veilstone (item, staged)',
+        '',
+        '',
+      ])
+    })
+
+    it('keeps one blank line before the framing with nothing staged', () => {
+      expect(rosterOf([KAEL, KEEP])).toEqual([
+        '- [c1] Kael (character)',
+        '- [l1] The Drowned Keep (location)',
+        '',
+        '',
+      ])
+    })
+
+    it('lists staged entries alone when nothing is active', () => {
+      expect(rosterOf([VEILSTONE])).toEqual(['- [i9] Veilstone (item, staged)', '', ''])
+    })
+
+    it('says none when the branch has no entity', () => {
+      expect(rosterOf([])).toEqual(['(none)', '', ''])
+    })
+  })
+
   // piggyback.md → Fallback classifier context: bracketed IDs, the roster being its only source.
   describe('the location map and item lines', () => {
     it('renders the map nested, with IDs', () => {

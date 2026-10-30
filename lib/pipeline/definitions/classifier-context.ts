@@ -31,7 +31,7 @@ function projectRelationships(
   entities: readonly Entity[],
 ): RelationshipFact[] {
   const characterNames = new Map(
-    entities.filter((e) => e.kind === 'character').map((e) => [e.id, e.name]),
+    entities.filter((e) => e.kind === 'character').map((e) => [e.id, oneLine(e.name)]),
   )
   return relationships.flatMap((r): RelationshipFact[] => {
     const aName = characterNames.get(r.aId)
@@ -44,7 +44,7 @@ function projectRelationships(
         subjectName: aName,
         object: r.bId,
         objectName: bName,
-        kind: r.kind,
+        kind: oneLine(r.kind),
       })
     if (r.inverseKind != null)
       facts.push({
@@ -52,7 +52,7 @@ function projectRelationships(
         subjectName: bName,
         object: r.aId,
         objectName: aName,
-        kind: r.inverseKind,
+        kind: oneLine(r.inverseKind),
       })
     return facts
   })

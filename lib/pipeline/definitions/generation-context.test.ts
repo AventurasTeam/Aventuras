@@ -249,6 +249,21 @@ describe('buildGenerationContext', () => {
     expect((ctx.definition as typeof definition).setting).toBe('A keep on a hill.')
   })
 
+  it('trims the whitespace around definitional prose', async () => {
+    const ctx = await buildContext({
+      definition: {
+        ...definition,
+        setting: '\nA keep on a hill.\n',
+        genre: { label: 'Fantasy', promptBody: '\n\nHigh fantasy realm.  ' },
+        tone: { label: 'Wry', promptBody: '  Dry.\n' },
+      },
+    })
+    const trimmed = ctx.definition as typeof definition
+    expect(trimmed.setting).toBe('A keep on a hill.')
+    expect(trimmed.genre.promptBody).toBe('High fantasy realm.')
+    expect(trimmed.tone.promptBody).toBe('Dry.')
+  })
+
   it('substitutes entity UUIDs to placeholders', async () => {
     const entities = [
       {

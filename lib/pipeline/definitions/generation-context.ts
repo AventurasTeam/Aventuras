@@ -66,12 +66,10 @@ export type FloorEntity = Pick<EntityRow, 'id' | 'status' | 'name' | 'descriptio
 export type FloorLore = Pick<LoreRow, 'id' | 'title' | 'body'>
 export type FloorThread = Pick<ThreadRow, 'id' | 'status' | 'title' | 'description'>
 
-// Defense-in-depth: emit '' for whitespace-only definitional prose so a header
-// stays guarded regardless of the template's blank-check idiom. The bundled
-// template uses `!= blank` (LiquidJS `blank` already matches whitespace), but a
-// custom pack using `!= ""` would leak the header on a whitespace-only value.
-function blankIfWhitespace(value: string): string {
-  return value.trim() === '' ? '' : value
+// Trimmed, so prose the user starts with a newline doesn't open a blank line under its heading,
+// and whitespace-only prose is '' for a custom pack guarding with `!= ""` rather than `!= blank`.
+function trimProse(value: string): string {
+  return value.trim()
 }
 
 /**
@@ -376,9 +374,9 @@ export async function buildGenerationContext(
 
   const normalizedDefinition = {
     ...definition,
-    setting: blankIfWhitespace(definition.setting),
-    genre: { ...definition.genre, promptBody: blankIfWhitespace(definition.genre.promptBody) },
-    tone: { ...definition.tone, promptBody: blankIfWhitespace(definition.tone.promptBody) },
+    setting: trimProse(definition.setting),
+    genre: { ...definition.genre, promptBody: trimProse(definition.genre.promptBody) },
+    tone: { ...definition.tone, promptBody: trimProse(definition.tone.promptBody) },
   }
 
   // Prompt and reader footer must describe the same calendar; both fall back to
@@ -515,7 +513,7 @@ export async function buildGenerationContext(
     suggestionsFire: suggestionsFire && suggestionSlots.length > 0,
     suggestionSlots,
     suggestionCount: settings.suggestionCount,
-    refreshGuidance: blankIfWhitespace(refreshGuidance),
+    refreshGuidance: trimProse(refreshGuidance),
   }
 
   // Data-side, pre-render substitution: entity `id` (char_/loc_/... UUIDs) becomes

@@ -155,7 +155,7 @@ High fantasy.
 Dry humor.
 
 # Calendar
-This story tracks time in seconds (1 seconds per second). Tiers: month (January and February). Convert relative-time prose ("two days later", "the next morning") into a seconds delta on <world_time_delta> using these units.
+This story tracks time in seconds. Tiers: month (January and February). Convert relative-time prose ("two days later", "the next morning") into a seconds delta on <world_time_delta> using these units.
 
 Write the next beat of the story as prose. Do not break character or address the reader.",
   "user": "# In scene

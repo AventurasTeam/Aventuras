@@ -105,14 +105,15 @@ export function unhiddenLocationView(entities: readonly Entity[]): LocationMatch
 }
 
 function mapRow(location: Entity, depth: number): LocationMapRow {
-  const { id, name } = location
+  const { id } = location
+  // Each row is one line of the tree: a stored name or reason may span several.
+  const name = oneLine(location.name)
   return location.status === 'retired'
     ? {
         retired: true,
         id: null,
         name,
         depth,
-        // Each row is one line of the tree: a stored reason may span several.
         retiredReason: blankToNull(oneLine(location.retiredReason ?? '')),
       }
     : { retired: false, id, name, depth, retiredReason: null }
@@ -177,10 +178,10 @@ export function buildLocationMap(
   return locationMapView(entities, currentLocationId).rows
 }
 
-/** `# Current location`'s chain: the listed ancestors' names, nearest first. */
+/** `# Current location`'s chain: the listed ancestors' names, nearest first, each on one line. */
 export function listedAncestorNames(locationId: string, entities: readonly Entity[]): string[] {
   const modes = placeModes(entities, locationId)
   return locationAncestors(locationId, entities)
     .filter((e) => !modes.isDisabled(e.id))
-    .map((e) => e.name)
+    .map((e) => oneLine(e.name))
 }
