@@ -7,6 +7,8 @@ export type WindowTurn = {
   handle: string
   entryId: string
   position: number
+  /** Who wrote it: a `user_action` is the user's turn, which the prompt marks. */
+  kind: Exclude<StoryEntry['kind'], 'system'>
   content: string
   /** The entry's saved metadata.sceneEntities; [] when it has no metadata. */
   sceneEntities: readonly string[]
@@ -47,7 +49,7 @@ export function buildClassifierWindow(args: {
   // facts "the turn whose prose produced it", and a persisted <suggestions> block offers actions
   // the story never took.
   const turns: WindowTurn[] = capped
-    .filter((e) => e.kind !== 'system')
+    .filter((e): e is StoryEntry & Pick<WindowTurn, 'kind'> => e.kind !== 'system')
     .map((e, i) => {
       // User actions too: each carries the scene submitTurn inherited onto it.
       const { sceneEntities, currentLocationId } = inheritedEntryMetadata(e.metadata)
@@ -55,6 +57,7 @@ export function buildClassifierWindow(args: {
         handle: `t${i + 1}`,
         entryId: e.id,
         position: e.position,
+        kind: e.kind,
         content: promptProse(e),
         sceneEntities,
         currentLocationId,

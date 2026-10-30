@@ -124,6 +124,7 @@ export function buildClassifierContext(args: {
     // Scene/location ids are filtered to known: a deleted row would get a placeholder.
     turns: window.turns.map((t) => ({
       handle: t.handle,
+      kind: t.kind,
       content: t.content,
       scene: t.sceneEntities.filter((id) => known.has(id)),
       location:

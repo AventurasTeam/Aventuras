@@ -256,6 +256,23 @@ describe('bundled piggyback fallback classifier template', () => {
     )
   })
 
+  // piggyback.md → Fallback classifier context: its turns mark the user's.
+  it("wraps the user's turns in <user_turn>, in the earlier turns and in this one", () => {
+    const user = render(
+      context({
+        lastTurns: [
+          { position: 1, kind: 'opening', content: 'The marsh road ended.' },
+          { position: 2, kind: 'user_action', content: 'I test the stones.' },
+          { position: 3, kind: 'user_action', content: 'I raise both hands.' },
+          { position: 4, kind: 'ai_reply', content: 'The keep answered.' },
+        ],
+      }),
+    )
+    expect(user).toContain(
+      '# Earlier turns — how the scene got here, not the turn you report on\n\nThe marsh road ended.\n\n<user_turn>\nI test the stones.\n</user_turn>\n\n# This turn\n\n<user_turn>\nI raise both hands.\n</user_turn>\n\nThe keep answered.\n',
+    )
+  })
+
   describe('the roster', () => {
     const rosterOf = (rows: Entity[]) => {
       const user = render(context({}, rows))

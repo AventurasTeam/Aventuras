@@ -7,6 +7,7 @@ import { PER_TURN_NARRATIVE } from './per-turn'
 import { PERIODIC_CLASSIFIER } from './periodic-classifier'
 import { PIGGYBACK_FALLBACK_CLASSIFIER } from './piggyback-fallback-classifier'
 import { STATE_EMISSION } from './state-emission'
+import { STORY_ENTRY } from './story-entry'
 import { SUGGESTION_EMISSION } from './suggestion-emission'
 import { SUGGESTION_EMISSION_JSON } from './suggestion-emission-json'
 import { SUGGESTION_REFRESH } from './suggestion-refresh'
@@ -76,6 +77,7 @@ export const bundledPack: Pack = {
     [MACRO_IDS.memoryBlocks]: { group: 'staticContent', source: MEMORY_BLOCKS },
     [MACRO_IDS.outputFormatNarrative]: { group: 'staticContent', source: OUTPUT_FORMAT_NARRATIVE },
     [MACRO_IDS.stateEmission]: { group: 'staticContent', source: STATE_EMISSION },
+    [MACRO_IDS.storyEntry]: { group: 'staticContent', source: STORY_ENTRY },
     [MACRO_IDS.suggestionEmission]: { group: 'staticContent', source: SUGGESTION_EMISSION },
     [MACRO_IDS.suggestionEmissionJson]: {
       group: 'staticContent',

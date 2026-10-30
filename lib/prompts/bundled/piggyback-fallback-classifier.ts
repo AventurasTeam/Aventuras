@@ -79,12 +79,12 @@ negative offset slices from the END in Liquid — coinciding with the intended r
 {% if pairStart > 0 -%}
 # Earlier turns — how the scene got here, not the turn you report on
 {% for entry in lastTurns limit: pairStart %}
-{{ entry.content }}
+{% include 'macro_story_entry', entry: entry %}
 {% endfor %}
 {% endif -%}
 # This turn
 {% for entry in lastTurns offset: pairStart %}
-{{ entry.content }}
+{% include 'macro_story_entry', entry: entry %}
 {% endfor %}
 Report the scene state as of the LAST entry above, the time delta, a one-sentence summary of the turn, up to three retrieval queries naming context you want looked up for the next turn, and anything else the schema asks for that this turn showed.
 Scene state is absolute, not a delta: report the full cast present at the end of the turn, not only what changed. Read the entry before it for state the user's own action changed.

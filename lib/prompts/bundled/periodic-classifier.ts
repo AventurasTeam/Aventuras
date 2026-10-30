@@ -109,9 +109,10 @@ Threads, same ID rule — each with its status:
 The story's lead is [{{ lead.id }}] {{ lead.name }}. Outside quoted speech, "I" and "you" in the turns are the lead.
 {%- endif %}
 
-Turns to classify. Each is labelled with a turn handle in brackets — every fact you emit must carry the handle of the turn whose prose produced it. The turn's scene and location, by the same ID rule, may follow the handle; its prose starts on the next line:
+Turns to classify. Each is labelled with a turn handle in brackets — every fact you emit must carry the handle of the turn whose prose produced it. After the handle, a turn the user wrote is marked as the user's, and the turn's scene and location may follow, by the same ID rule; its prose starts on the next line:
 {%- for turn in turns %}
-[{{ turn.handle }}]{% if turn.scene.size > 0 %} scene: {% for sceneId in turn.scene %}[{{ sceneId }}]{% unless forloop.last %}, {% endunless %}{% endfor %}{% endif %}{% if turn.location %}{% if turn.scene.size > 0 %};{% endif %} location: [{{ turn.location }}]{% endif %}
+{%- assign sep = ' ' %}
+[{{ turn.handle }}]{% if turn.kind == 'user_action' %}{{ sep }}the user's turn{% assign sep = '; ' %}{% endif %}{% if turn.scene.size > 0 %}{{ sep }}scene: {% for sceneId in turn.scene %}[{{ sceneId }}]{% unless forloop.last %}, {% endunless %}{% endfor %}{% assign sep = '; ' %}{% endif %}{% if turn.location %}{{ sep }}location: [{{ turn.location }}]{% endif %}
 {{ turn.content }}
 {%- endfor %}`,
 }

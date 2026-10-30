@@ -78,7 +78,7 @@ Use an ID from Places for <current_location>, or declare a new one with <new_loc
 {% endif -%}
 # Story so far
 {% for entry in entries %}
-{{ entry.content }}
+{% include 'macro_story_entry', entry: entry %}
 {% endfor %}
 {%- comment -%}
 Each emission block opens with one newline: a blank line after the story's last

@@ -128,7 +128,27 @@ describe('periodic classifier template', () => {
     const { user } = render()
     expect(user).toContain('[t1] scene: [c1]; location: [l1]\nKael falls at the ford, lifeless.')
     expect(user).toContain('\n[t2]\nAria hears of it from Jorin.')
-    expect(user).toContain('scene and location, by the same ID rule, may follow the handle')
+    expect(user).toContain(
+      "After the handle, a turn the user wrote is marked as the user's, and the turn's scene and location may follow",
+    )
+  })
+
+  // classifier.md → What the classifier reads: a user_action is marked as the user's turn.
+  it("marks the user's turn after its handle, ahead of its scene and location", () => {
+    const { user } = render({
+      turns: [
+        { handle: 't1', kind: 'opening', content: 'The ford.', scene: ['c1'], location: 'l1' },
+        { handle: 't2', kind: 'user_action', content: 'I wade in.', scene: ['c1'], location: 'l1' },
+        { handle: 't3', kind: 'user_action', content: 'I wait.', scene: [], location: 'l1' },
+        { handle: 't4', kind: 'user_action', content: 'I shout.', scene: [], location: null },
+        { handle: 't5', kind: 'ai_reply', content: 'No one answers.', scene: [], location: null },
+      ],
+    })
+    expect(user).toContain('\n[t1] scene: [c1]; location: [l1]\nThe ford.')
+    expect(user).toContain("\n[t2] the user's turn; scene: [c1]; location: [l1]\nI wade in.")
+    expect(user).toContain("\n[t3] the user's turn; location: [l1]\nI wait.")
+    expect(user).toContain("\n[t4] the user's turn\nI shout.")
+    expect(user).toContain('\n[t5]\nNo one answers.')
   })
 
   it('renders a scene without a location, and a location without a scene', () => {

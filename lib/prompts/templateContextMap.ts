@@ -97,7 +97,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entry[]',
       category: 'Story',
       description:
-        'Prompt buffer, already composed to the two-mode window plus protectedBuffer spillover; system entries excluded. Each item carries `position` and `content`. Render it whole.',
+        "Prompt buffer, already composed to the two-mode window plus protectedBuffer spillover; system entries excluded. Each item carries `position`, `kind` ('user_action', 'ai_reply' or 'opening') and `content`; a `user_action` is the user's turn, which the bundled templates mark (macro_story_entry). Render it whole.",
       required: true,
     },
     {
@@ -105,7 +105,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entry[]',
       category: 'Story',
       description:
-        'The trailing non-system entries the per-turn classifier reads, `classifierContextEntries` many, floored at the action-plus-reply pair so neither the buffer knobs nor a template can cut below it. Which kinds they are depends on when the phase asks. Overlaps `entries` — render one or the other, not both. For per-turn classification, not for narrating.',
+        'The trailing non-system entries the per-turn classifier reads, `classifierContextEntries` many, floored at the action-plus-reply pair so neither the buffer knobs nor a template can cut below it, shaped like `entries`. Which kinds they are depends on when the phase asks. Overlaps `entries` — render one or the other, not both. For per-turn classification, not for narrating.',
       required: true,
     },
     {
@@ -382,10 +382,10 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
   classifierContext: [
     {
       name: 'turns',
-      type: '{ handle, content, scene, location }[]',
+      type: '{ handle, kind, content, scene, location }[]',
       category: 'Story',
       description:
-        'Unclassified prose window. Each turn carries the provenance handle (t1..tN) the model must tag its facts with, its prose (`content`), and the scene saved on its entry: `scene` (entity ids) and `location` (an entity id or null). Ids the branch no longer has are left out.',
+        "Unclassified prose window. Each turn carries the provenance handle (t1..tN) the model must tag its facts with, its entry's `kind` ('user_action' for the user's turn, 'ai_reply' or 'opening'), its prose (`content`), and the scene saved on its entry: `scene` (entity ids) and `location` (an entity id or null). Ids the branch no longer has are left out.",
       required: true,
     },
     {

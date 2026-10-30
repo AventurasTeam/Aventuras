@@ -45,7 +45,7 @@ first: LiquidJS drops a filter on a for tag's collection.
 {% endif -%}
 # Story so far
 {% for entry in entries %}
-{{ entry.content }}
+{% include 'macro_story_entry', entry: entry %}
 {% endfor %}
 {%- comment -%}
 No suggestionsFire guard, unlike per-turn and the fallback classifier: those

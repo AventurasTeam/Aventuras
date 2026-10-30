@@ -30,6 +30,7 @@ export const MACRO_IDS = {
   memoryBlocks: 'macro_memory_blocks',
   outputFormatNarrative: 'macro_output_format_narrative',
   stateEmission: 'macro_state_emission',
+  storyEntry: 'macro_story_entry',
   suggestionEmission: 'macro_suggestion_emission',
   suggestionEmissionJson: 'macro_suggestion_emission_json',
   // One per prose field: everything its generate and refine templates share.

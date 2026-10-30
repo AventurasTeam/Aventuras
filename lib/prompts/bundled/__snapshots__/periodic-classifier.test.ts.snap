@@ -70,7 +70,7 @@ Known happenings, same ID rule:
 Threads, same ID rule — each with its status:
 - [th1] Recover the satchel (active)
 
-Turns to classify. Each is labelled with a turn handle in brackets — every fact you emit must carry the handle of the turn whose prose produced it. The turn's scene and location, by the same ID rule, may follow the handle; its prose starts on the next line:
+Turns to classify. Each is labelled with a turn handle in brackets — every fact you emit must carry the handle of the turn whose prose produced it. After the handle, a turn the user wrote is marked as the user's, and the turn's scene and location may follow, by the same ID rule; its prose starts on the next line:
 [t1] scene: [c1]; location: [l1]
 Kael falls at the ford, lifeless.
 [t2]

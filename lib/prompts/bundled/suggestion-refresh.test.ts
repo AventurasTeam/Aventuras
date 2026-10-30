@@ -102,6 +102,26 @@ describe('bundled suggestion-refresh template — system and user halves', () =>
   })
 })
 
+describe('bundled suggestion-refresh template — the story so far', () => {
+  it("wraps the user's turns in <user_turn>, leaving the opening and replies bare", () => {
+    const { user } = renderTemplate(TEMPLATE_IDS.suggestionRefresh, {
+      definition: { mode: 'creative', setting: '', genre: {}, tone: {} },
+      entities: [],
+      sceneEntities: [],
+      entries: [
+        { kind: 'opening', content: 'The gate groaned open.' },
+        { kind: 'user_action', content: 'I step through.\n\nThen I wait.' },
+        { kind: 'ai_reply', content: 'Nothing stirs.' },
+      ],
+      suggestionCount: 1,
+      suggestionSlots: [{ ref: 'cat1', label: 'Action', promptHint: 'A move.' }],
+    })
+    expect(user).toContain(
+      '# Story so far\n\nThe gate groaned open.\n\n<user_turn>\nI step through.\n\nThen I wait.\n</user_turn>\n\nNothing stirs.\n',
+    )
+  })
+})
+
 // architecture.md → Entity state on the template surface: the narrator's in-scene list, no ids.
 describe('bundled suggestion-refresh template — in scene', () => {
   const sceneOf = (rows: Entity[], sceneEntities: string[]) => {

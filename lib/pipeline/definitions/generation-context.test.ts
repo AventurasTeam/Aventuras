@@ -993,7 +993,7 @@ describe('buildGenerationContext — data source', () => {
     expect((context.lastTurns as { content: string }[]).map((e) => e.content)).toEqual(['ours'])
   })
 
-  it('projects entries to position and content, carrying no metadata', async () => {
+  it('projects entries to position, kind and content, carrying no metadata', async () => {
     openStory()
     await seedEntries([
       dbEntry(1, 'prose', 'ai_reply', {
@@ -1010,7 +1010,19 @@ describe('buildGenerationContext — data source', () => {
 
     const rows = [...narrative.entries, ...classifier.lastTurns] as Record<string, unknown>[]
     expect(rows).toHaveLength(2)
-    for (const row of rows) expect(Object.keys(row).sort()).toEqual(['content', 'position'])
+    for (const row of rows) expect(row).toEqual({ position: 1, kind: 'ai_reply', content: 'prose' })
+  })
+
+  it("carries each entry's kind, so a template can mark the user's turns", async () => {
+    openStory()
+    await seedEntries([
+      dbEntry(1, 'The door is locked.', 'ai_reply'),
+      dbEntry(2, 'I pick the lock.', 'user_action'),
+    ])
+
+    const narrative = await build()
+
+    expect(narrative.entries.map((e) => e.kind)).toEqual(['ai_reply', 'user_action'])
   })
 
   // The group's variable set does not shrink; the query behind an unread one does.

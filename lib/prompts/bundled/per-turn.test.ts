@@ -126,6 +126,21 @@ describe('bundled per-turn template — empty-guard contract', () => {
     expect(out).toContain('Aria stepped through.')
   })
 
+  // architecture.md → System and user halves: every history marks the user's turns.
+  it("wraps the user's turns in <user_turn>, leaving the opening and replies bare", () => {
+    const { user } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...m2Context,
+      entries: [
+        { kind: 'opening', content: 'The gate groaned open.' },
+        { kind: 'user_action', content: 'I step through.\n\nThen I wait.' },
+        { kind: 'ai_reply', content: 'Nothing stirs.' },
+      ],
+    })
+    expect(user).toContain(
+      '# Story so far\n\nThe gate groaned open.\n\n<user_turn>\nI step through.\n\nThen I wait.\n</user_turn>\n\nNothing stirs.\n',
+    )
+  })
+
   it('matches the recorded snapshot', () => {
     expect(renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)).toMatchSnapshot()
   })

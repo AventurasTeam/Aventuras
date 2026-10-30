@@ -11,6 +11,7 @@ const turn = (over: Partial<WindowTurn> = {}): WindowTurn => ({
   handle: 't1',
   entryId: 'entry_x',
   position: 1,
+  kind: 'ai_reply',
   content: 'prose',
   sceneEntities: [],
   currentLocationId: null,
@@ -131,9 +132,11 @@ describe('buildClassifierContext', () => {
     expect((context.entities as { id: string }[]).map((e) => e.id)).toEqual(['c1', 'c2', 'f1'])
   })
 
-  it('projects turns down to handle, content, scene and location', () => {
+  it('projects turns down to handle, kind, content, scene and location', () => {
     const context = buildClassifierContext({
-      window: { turns: [turn({ position: 7 })] } as never,
+      window: {
+        turns: [turn({ position: 7 }), turn({ handle: 't2', kind: 'user_action' })],
+      } as never,
       entities: [],
       happenings: [],
       relationships: [],
@@ -144,7 +147,10 @@ describe('buildClassifierContext', () => {
     })
     // A raw entry id in the prompt would be an id the model can neither use nor
     // resolve, and position is meaningless to it.
-    expect(context.turns).toEqual([{ handle: 't1', content: 'prose', scene: [], location: null }])
+    expect(context.turns).toEqual([
+      { handle: 't1', kind: 'ai_reply', content: 'prose', scene: [], location: null },
+      { handle: 't2', kind: 'user_action', content: 'prose', scene: [], location: null },
+    ])
   })
 
   const AEFRE = 'char_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
@@ -285,7 +291,7 @@ describe('buildClassifierContext', () => {
       expect((context.entities as { id: string }[]).map((e) => e.id)).toEqual(['c1', 'c2'])
       expect((context.places as { id: string }[]).map((e) => e.id)).toEqual(['l1'])
       expect(context.turns).toEqual([
-        { handle: 't1', content: 'prose', scene: ['c2', 'c1'], location: 'l1' },
+        { handle: 't1', kind: 'ai_reply', content: 'prose', scene: ['c2', 'c1'], location: 'l1' },
       ])
     })
 
@@ -304,7 +310,7 @@ describe('buildClassifierContext', () => {
         idMap,
       })
       expect(context.turns).toEqual([
-        { handle: 't1', content: 'prose', scene: ['c1'], location: null },
+        { handle: 't1', kind: 'ai_reply', content: 'prose', scene: ['c1'], location: null },
       ])
       expect(idMap.getPlaceholderFor(GONE)).toBeUndefined()
       expect(idMap.getPlaceholderFor(GONE_LOC)).toBeUndefined()
@@ -524,7 +530,7 @@ describe('buildClassifierContext', () => {
       })
       expect(idMap.getPlaceholderFor(HALL)).toBe('l2')
       expect(context.turns).toEqual([
-        { handle: 't1', content: 'prose', scene: ['l2', 'c1'], location: 'l2' },
+        { handle: 't1', kind: 'ai_reply', content: 'prose', scene: ['l2', 'c1'], location: 'l2' },
       ])
     })
 

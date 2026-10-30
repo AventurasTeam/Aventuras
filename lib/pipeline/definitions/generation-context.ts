@@ -276,16 +276,16 @@ function resolveWorldTimeDeltaBasis(rows: readonly StoryEntry[]): WorldTimeDelta
 }
 
 /**
- * A story entry as a template sees it. Prose and position only: `metadata`
+ * A story entry as a template sees it. Prose, position and kind only: `metadata`
  * carries entity ids, and substituteIds allocates a placeholder for every id it
  * walks, so a window's worth of historical scene rosters would put entities
  * deleted chapters ago into the map — where resolveRef reads presence as "the
  * model was shown this". Current scene state is `sceneMetadata`, sourced from
  * one entry. `id` is deliberately absent; `entry` has no substitutable prefix,
- * and `position` is the handle a template wants.
+ * and `position` is the handle a template wants. `kind` tells the user's turns apart.
  */
 function promptEntry(entry: StoryEntry) {
-  return { position: entry.position, content: promptProse(entry) }
+  return { position: entry.position, kind: entry.kind, content: promptProse(entry) }
 }
 
 function readRetrievalOutcome(
