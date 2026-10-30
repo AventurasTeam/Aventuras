@@ -2,6 +2,7 @@ import { refsResolve } from './checks'
 import type { EvalWindow } from './fixture'
 import { ambush } from './windows/ambush'
 import { defection } from './windows/defection'
+import { direction } from './windows/direction'
 import { learning } from './windows/learning'
 import { namedrops } from './windows/namedrops'
 import { recounted } from './windows/recounted'
@@ -20,4 +21,5 @@ export const EVAL_WINDOWS: readonly EvalWindow[] = [
   defection,
   learning,
   namedrops,
+  direction,
 ].map((w) => ({ ...w, checks: [...w.checks, refsResolve(w)] }))

@@ -154,9 +154,9 @@ export function AuthoringAidsPanel({
         ? t(`storySettings:generation.composerModesUnavailable.${modeProblem}`)
         : t('storySettings:generation.composerModesCreative')
 
-  // Wrap POV only shapes Do / Say / Think, so it goes inert with them. Disabled,
-  // not discarded: an edit made while modes were on stays in the session.
-  const wrapPovNeedsModes = !modesEnabled || modesGateHint != null
+  // story-settings.md → Authoring aids: inert only with modes and suggestions both off, or outside
+  // adventure. Disabled, not discarded: an edit made before stays in the session.
+  const wrapPovInert = (!modesEnabled && !enabled) || modesGateHint != null
 
   const confirmReset = () => {
     if (disabled) return
@@ -226,8 +226,8 @@ export function AuthoringAidsPanel({
       <FormRow
         label={t('storySettings:generation.composerWrapPov')}
         hint={
-          wrapPovNeedsModes
-            ? t('storySettings:generation.composerWrapPovNeedsModes')
+          wrapPovInert
+            ? t('storySettings:generation.composerWrapPovInert')
             : t('storySettings:generation.composerWrapPovHint')
         }
       >
@@ -240,7 +240,7 @@ export function AuthoringAidsPanel({
           ]}
           value={wrapPov}
           onValueChange={(value) => setWrapPov(value === 'first' ? 'first' : 'third')}
-          disabled={disabled || wrapPovNeedsModes}
+          disabled={disabled || wrapPovInert}
           disabledReason={disabled ? disabledReason : undefined}
         />
       </FormRow>

@@ -313,6 +313,7 @@ export async function* periodicClassifierPhase(
       leadId:
         resolveLead(open.definition.leadEntityId, entitiesStore.getEntities(), ctx.branchId)?.id ??
         null,
+      mode: open.definition.mode,
       idMap,
     }),
   )

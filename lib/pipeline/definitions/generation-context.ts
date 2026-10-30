@@ -1,4 +1,11 @@
-import { describeCalendarVocabulary, resolveCalendar } from '@/lib/calendar'
+import {
+  describeCalendarVocabulary,
+  FormatMiss,
+  formatWorldTime,
+  resolveCalendar,
+  type CalendarSystem,
+  type TierTuple,
+} from '@/lib/calendar'
 import { inheritedEntryMetadata, type Entity, type StoryEntry } from '@/lib/db'
 import { IdBiMap, substituteIds } from '@/lib/ids'
 import { buildSuggestionSlots, NARRATIVE_KINDS, promptProse } from '@/lib/piggyback'
@@ -15,11 +22,13 @@ import {
   type ThreadRow,
 } from '@/lib/retrieval'
 import { currentStoryStore, entitiesStore } from '@/lib/stores'
+import { oneLine } from '@/lib/text'
 import {
   buildEntityViews,
   byName,
   listedAncestorNames,
   locationMapView,
+  resolveLead,
   type EntityViews,
   type KindedView,
 } from '@/lib/world'
@@ -66,12 +75,10 @@ export type FloorEntity = Pick<EntityRow, 'id' | 'status' | 'name' | 'descriptio
 export type FloorLore = Pick<LoreRow, 'id' | 'title' | 'body'>
 export type FloorThread = Pick<ThreadRow, 'id' | 'status' | 'title' | 'description'>
 
-// Defense-in-depth: emit '' for whitespace-only definitional prose so a header
-// stays guarded regardless of the template's blank-check idiom. The bundled
-// template uses `!= blank` (LiquidJS `blank` already matches whitespace), but a
-// custom pack using `!= ""` would leak the header on a whitespace-only value.
-function blankIfWhitespace(value: string): string {
-  return value.trim() === '' ? '' : value
+// Trimmed, so prose the user starts with a newline doesn't open a blank line under its heading,
+// and whitespace-only prose is '' for a custom pack guarding with `!= ""` rather than `!= blank`.
+function trimProse(value: string): string {
+  return value.trim()
 }
 
 /**
@@ -278,16 +285,27 @@ function resolveWorldTimeDeltaBasis(rows: readonly StoryEntry[]): WorldTimeDelta
 }
 
 /**
- * A story entry as a template sees it. Prose and position only: `metadata`
- * carries entity ids, and substituteIds allocates a placeholder for every id it
- * walks, so a window's worth of historical scene rosters would put entities
- * deleted chapters ago into the map — where resolveRef reads presence as "the
- * model was shown this". Current scene state is `sceneMetadata`, sourced from
- * one entry. `id` is deliberately absent; `entry` has no substitutable prefix,
- * and `position` is the handle a template wants.
+ * The latest entry's world time as the reader's footer shows it (data-model.md → In-world time
+ * tracking). Null when it won't render: a raw number of seconds would read as a time.
+ */
+function currentTimeOf(
+  latest: StoryEntry | undefined,
+  calendar: CalendarSystem,
+  origin: TierTuple,
+): string | null {
+  const worldTime = latest?.metadata?.worldTime
+  if (typeof worldTime !== 'number') return null
+  const rendered = formatWorldTime(worldTime, calendar, origin)
+  return rendered instanceof FormatMiss || rendered.trim() === '' ? null : rendered
+}
+
+/**
+ * Prose, position and kind only: substituting `metadata`'s historical scene rosters would map
+ * long-deleted entities, which resolveRef reads as shown to the model. No `id`: `entry_` would leak
+ * raw, since it doesn't substitute.
  */
 function promptEntry(entry: StoryEntry) {
-  return { position: entry.position, content: promptProse(entry) }
+  return { position: entry.position, kind: entry.kind, content: promptProse(entry) }
 }
 
 function readRetrievalOutcome(
@@ -361,7 +379,10 @@ export async function buildGenerationContext(
   const readsScene = SCENE_VARIABLES.some((name) => reads.has(name))
   const [buffer, lastTurns, sceneSource] = await Promise.all([
     reads.has('entries') ? readPromptBuffer(ctx.db, branchId, settings) : [],
-    reads.has('lastTurns') || reads.has('worldTimeDeltaBasis') || reads.has('namedCharacters')
+    reads.has('lastTurns') ||
+    reads.has('worldTimeDeltaBasis') ||
+    reads.has('namedCharacters') ||
+    reads.has('currentTime')
       ? readLastTurns(
           ctx.db,
           branchId,
@@ -376,9 +397,9 @@ export async function buildGenerationContext(
 
   const normalizedDefinition = {
     ...definition,
-    setting: blankIfWhitespace(definition.setting),
-    genre: { ...definition.genre, promptBody: blankIfWhitespace(definition.genre.promptBody) },
-    tone: { ...definition.tone, promptBody: blankIfWhitespace(definition.tone.promptBody) },
+    setting: trimProse(definition.setting),
+    genre: { ...definition.genre, promptBody: trimProse(definition.genre.promptBody) },
+    tone: { ...definition.tone, promptBody: trimProse(definition.tone.promptBody) },
   }
 
   // Prompt and reader footer must describe the same calendar; both fall back to
@@ -459,6 +480,7 @@ export async function buildGenerationContext(
   ])
 
   const retrievedHappenings = promptRows(retrieval?.bundles.happenings.selected)
+  const lead = resolveLead(definition.leadEntityId, entitiesStore.getEntities(), branchId)
   const context = {
     // cadence.md → Composition rule: the two-mode window plus its
     // protectedBuffer spillover is not expressible as a template `| recent: N`.
@@ -473,7 +495,11 @@ export async function buildGenerationContext(
     sceneMetadata: scene,
     worldTimeDeltaBasis: resolveWorldTimeDeltaBasis(lastTurns),
     definition: normalizedDefinition,
+    // architecture.md → System and user halves: a system half names the lead and never brackets
+    // its id, which is allocated per call. After `entities`, so the id numbers as it does there.
+    lead: lead == null ? null : { id: lead.id, name: oneLine(lead.name) },
     calendarVocabulary: describeCalendarVocabulary(calendar),
+    currentTime: currentTimeOf(lastTurns.at(-1), calendar, definition.worldTimeOrigin),
     userSettings: {
       fullChapterInBuffer: settings.fullChapterInBuffer,
       partialChapterBuffer: settings.partialChapterBuffer,
@@ -515,7 +541,8 @@ export async function buildGenerationContext(
     suggestionsFire: suggestionsFire && suggestionSlots.length > 0,
     suggestionSlots,
     suggestionCount: settings.suggestionCount,
-    refreshGuidance: blankIfWhitespace(refreshGuidance),
+    composerWrapPov: settings.composerWrapPov,
+    refreshGuidance: trimProse(refreshGuidance),
   }
 
   // Data-side, pre-render substitution: entity `id` (char_/loc_/... UUIDs) becomes

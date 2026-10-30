@@ -20,7 +20,7 @@ export const titleChipsSchema = z.object({
   titles: z.array(z.string()).min(1).describe('five short, evocative titles'),
 })
 export const descriptionOutputSchema = z.object({
-  description: z.string().describe('the one-sentence log line'),
+  description: z.string().describe("one to three sentences on the story's premise"),
 })
 
 export const loreSuggestionsSchema = z.object({

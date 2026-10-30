@@ -9,11 +9,13 @@
 // bracketed beside the name: "[cat1] Action" reads as one label, and a model
 // that picks the human-readable half emits a ref that resolves to nothing and
 // gets its chip dropped.
-export const SUGGESTION_EMISSION_JSON = `Populate the "suggestions" field of your JSON response with exactly {{ suggestionCount }} distinct entries, one per option for what the reader does next.
+export const SUGGESTION_EMISSION_JSON = `Populate the "suggestions" field of your JSON response with exactly {{ suggestionCount }} distinct entries, one per option for the user's next turn.
 
 Each entry has exactly two fields:
 - "categoryRef" — an opaque id copied EXACTLY from the id column below (e.g. "cat1"). Never the category's name, never its description.
-- "text" — COMPLETE prose written as the reader's own next turn, not a description of an option and not a question.
+- "text" — a finished turn the user could send as it is, not a description of an option and not a question.
+
+{% include 'macro_suggestion_voice', mode: definition.mode, person: composerWrapPov, lead: lead.name %}
 
 Categories you may reference:
 {% for slot in suggestionSlots -%}

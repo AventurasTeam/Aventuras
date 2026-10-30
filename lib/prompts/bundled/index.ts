@@ -1,20 +1,25 @@
 import { MACRO_IDS, TEMPLATE_IDS } from '../ids'
 import type { Pack, TemplateEntry } from '../types'
+import { CLASSIFIER_MODE_RULE } from './classifier-mode-rule'
 import { ENTITY_STATE, ITEM_LINE } from './entity-state'
 import { MEMORY_BLOCKS } from './memory-blocks'
+import { NARRATOR_INSTRUCTIONS } from './narrator-instructions'
 import { OUTPUT_FORMAT_NARRATIVE } from './output-format'
 import { PER_TURN_NARRATIVE } from './per-turn'
 import { PERIODIC_CLASSIFIER } from './periodic-classifier'
 import { PIGGYBACK_FALLBACK_CLASSIFIER } from './piggyback-fallback-classifier'
 import { STATE_EMISSION } from './state-emission'
+import { STORY_ENTRY } from './story-entry'
 import { SUGGESTION_EMISSION } from './suggestion-emission'
 import { SUGGESTION_EMISSION_JSON } from './suggestion-emission-json'
 import { SUGGESTION_REFRESH } from './suggestion-refresh'
+import { SUGGESTION_VOICE } from './suggestion-voice'
 import {
   MACRO_WIZARD_DESCRIPTION_CONTEXT,
   MACRO_WIZARD_GENRE_CONTEXT,
   MACRO_WIZARD_OPENING_CONTEXT,
   MACRO_WIZARD_SETTING_CONTEXT,
+  MACRO_WIZARD_STORY,
   MACRO_WIZARD_TONE_CONTEXT,
   WIZARD_CAST,
   WIZARD_DESCRIPTION,
@@ -70,16 +75,21 @@ export const bundledPack: Pack = {
     [MACRO_IDS.wizardGenreContext]: { group: 'wizard', source: MACRO_WIZARD_GENRE_CONTEXT },
     [MACRO_IDS.wizardToneContext]: { group: 'wizard', source: MACRO_WIZARD_TONE_CONTEXT },
     [MACRO_IDS.wizardSettingContext]: { group: 'wizard', source: MACRO_WIZARD_SETTING_CONTEXT },
+    [MACRO_IDS.wizardStory]: { group: 'wizard', source: MACRO_WIZARD_STORY },
     // architecture.md → Macros: generationContext, since they read its entity views.
     [MACRO_IDS.entityState]: { group: 'generationContext', source: ENTITY_STATE },
     [MACRO_IDS.itemLine]: { group: 'generationContext', source: ITEM_LINE },
+    [MACRO_IDS.classifierModeRule]: { group: 'staticContent', source: CLASSIFIER_MODE_RULE },
     [MACRO_IDS.memoryBlocks]: { group: 'staticContent', source: MEMORY_BLOCKS },
+    [MACRO_IDS.narratorInstructions]: { group: 'staticContent', source: NARRATOR_INSTRUCTIONS },
     [MACRO_IDS.outputFormatNarrative]: { group: 'staticContent', source: OUTPUT_FORMAT_NARRATIVE },
     [MACRO_IDS.stateEmission]: { group: 'staticContent', source: STATE_EMISSION },
+    [MACRO_IDS.storyEntry]: { group: 'staticContent', source: STORY_ENTRY },
     [MACRO_IDS.suggestionEmission]: { group: 'staticContent', source: SUGGESTION_EMISSION },
     [MACRO_IDS.suggestionEmissionJson]: {
       group: 'staticContent',
       source: SUGGESTION_EMISSION_JSON,
     },
+    [MACRO_IDS.suggestionVoice]: { group: 'staticContent', source: SUGGESTION_VOICE },
   },
 }

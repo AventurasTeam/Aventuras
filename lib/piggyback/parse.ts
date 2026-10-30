@@ -519,7 +519,7 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
   }
 }
 
-// <item category="cat1">complete prose</item> — one entry per chip slot.
+// <item category="cat1">the option's text</item> — one entry per chip slot.
 // Independent of <state> by construction: a separate root-tag extraction, so
 // neither block's failure can reach the other (C2).
 export function parseSuggestionsBlock(raw: string): ParseSuggestionsBlockResult {

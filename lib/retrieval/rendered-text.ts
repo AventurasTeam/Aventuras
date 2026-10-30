@@ -1,5 +1,6 @@
 import type { EntityKind } from '@/lib/db'
-import { oneLine } from '@/lib/text'
+import { collate, compareId } from '@/lib/list-modules'
+import { blankToNull, oneLine } from '@/lib/text'
 import type {
   CharacterStateView,
   EntityRef,
@@ -8,6 +9,7 @@ import type {
   KindedView,
 } from '@/lib/world'
 
+import type { AwarenessRow } from './awareness'
 import type { EntityRow, LoreRow } from './pools'
 import type { MeasuredEntity } from './types'
 
@@ -176,4 +178,26 @@ export function entityRenderedText(entity: MeasuredEntity): string {
 /** Lore's counterpart to entityRenderedText, shared for the same reason. */
 export function loreRenderedText(row: Pick<LoreRow, 'title' | 'body'>): string {
   return lines(row.title, row.body)
+}
+
+/**
+ * retrieval.md → POV-awareness scope: a happening row's last line, naming who in the scope knows
+ * it and how, which the narrator's knowledge rule reads. Null when no knower's name resolves.
+ */
+export function happeningKnowersLine(
+  commonKnowledge: boolean,
+  awareness: readonly Pick<AwarenessRow, 'characterId' | 'source'>[],
+  nameOf: ReadonlyMap<string, string>,
+): string | null {
+  if (commonKnowledge) return 'Common knowledge'
+  const knowers = awareness
+    .flatMap((a) => {
+      const name = blankToNull(oneLine(nameOf.get(a.characterId) ?? ''))
+      return name === null
+        ? []
+        : [{ id: a.characterId, name, source: blankToNull(oneLine(a.source ?? '')) }]
+    })
+    .sort((a, b) => collate(a.name, b.name) || compareId(a.id, b.id))
+  if (knowers.length === 0) return null
+  return `Known to: ${knowers.map((k) => (k.source === null ? k.name : `${k.name} (${k.source})`)).join('; ')}`
 }

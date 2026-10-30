@@ -48,6 +48,15 @@ describe('buildClassifierWindow', () => {
     expect(w.turns[1]?.content).toBe('I check the <state> of the door.')
   })
 
+  it("carries each turn's kind, so the prompt can mark the user's", () => {
+    const w = buildClassifierWindow({
+      entries: [entry(1, 'e1', 'opening'), entry(2, 'e2', 'user_action'), entry(3, 'e3')],
+      processedThrough: null,
+      maxEntries: 20,
+    })
+    expect(w.turns.map((t) => t.kind)).toEqual(['opening', 'user_action', 'ai_reply'])
+  })
+
   it('treats a null watermark as "nothing processed yet"', () => {
     const w = buildClassifierWindow({
       entries: [entry(1, 'e1'), entry(2, 'e2')],

@@ -213,16 +213,33 @@ describe('bundled piggyback fallback classifier template', () => {
 
   // piggyback.md → Fallback classifier context.
   describe('system and user halves', () => {
-    it('is the calendar block alone in the system half', () => {
-      expect(renderHalves(context()).system).toBe(
-        '# Calendar\nThis story tracks time in days (86400 seconds per day). Tiers: month (Frostmoon and Thawmoon). Convert relative-time prose ("two days later", "the next morning") into a seconds delta using these units.',
+    it('is the calendar block, then the mode rule, in the system half', () => {
+      const { system } = renderHalves(context())
+      expect(system).toMatch(
+        /^# Calendar\nThis story tracks time in days \(86400 seconds per day\)\. Tiers: month \(Frostmoon and Thawmoon\)\. Convert relative-time prose \("two days later", "the next morning"\) into a seconds delta using these units\.\n\n# The user's turns\nA turn marked as the user's is what the lead does, says or attempts\. [^\n]+$/,
       )
     })
 
-    it('renders a blank system half when the story has no calendar', () => {
+    it('is the mode rule alone when the story has no calendar', () => {
       const { system, user } = renderHalves(context({ calendarVocabulary: null }))
-      expect(system).toBe('')
+      expect(system).toMatch(/^# The user's turns\nA turn marked as the user's is /)
       expect(user).toContain('\n# This turn\n')
+    })
+
+    // classifier.md → What the classifier reads: what a user's turn establishes depends on the mode.
+    it("reads a user's turn by the story's mode", () => {
+      const adventure = renderHalves(context()).system
+      expect(adventure).toContain(
+        'Where the narration after it shows how an attempt turned out, the narration decides what happened',
+      )
+      expect(adventure).toContain('plainly speaks to the narrator rather than playing the lead')
+      const creative = renderHalves(
+        context({ definition: { mode: 'creative', genre: {}, tone: {}, setting: '' } }),
+      ).system
+      expect(creative).toContain("A turn marked as the user's is a direction or prose.")
+      expect(creative).toContain('states nothing that happened: take the facts from the narration')
+      expect(creative).toContain('classify it like the narration')
+      expect(creative).not.toContain('attempts')
     })
 
     it('keeps the calendar out of the user half', () => {
@@ -254,6 +271,84 @@ describe('bundled piggyback fallback classifier template', () => {
     expect(render(context()).split('\n')[0]).toBe(
       'Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:',
     )
+  })
+
+  // piggyback.md → Fallback classifier context: its turns mark the user's.
+  it("wraps the user's turns in <user_turn>, in the earlier turns and in this one", () => {
+    const user = render(
+      context({
+        lastTurns: [
+          { position: 1, kind: 'opening', content: 'The marsh road ended.' },
+          { position: 2, kind: 'user_action', content: 'I test the stones.' },
+          { position: 3, kind: 'user_action', content: 'I raise both hands.' },
+          { position: 4, kind: 'ai_reply', content: 'The keep answered.' },
+        ],
+      }),
+    )
+    expect(user).toContain(
+      '# Earlier turns — how the scene got here, not the turn you report on\n\nThe marsh road ended.\n\n<user_turn>\nI test the stones.\n</user_turn>\n\n# This turn\n\n<user_turn>\nI raise both hands.\n</user_turn>\n\nThe keep answered.\n',
+    )
+  })
+
+  // piggyback.md → Fallback classifier context: the lead by id and name, after the roster.
+  it('names the lead after the roster, by id and name', () => {
+    const user = render(context({ lead: { id: 'c1', name: 'Kael' } }))
+    expect(user).toContain(
+      '- [i9] Veilstone (item, staged)\n\nThe story\'s lead is [c1] Kael. Outside quoted speech, "I" and "you" in the turns are the lead.\n\nEverything from here',
+    )
+    expect(render(context({ lead: null }))).not.toContain("The story's lead")
+  })
+
+  // reader-composer.md → Next-turn suggestions: the fallback's fold carries the chips' voice too.
+  it("asks for chips in the user's voice when it asks for chips", () => {
+    const user = render(
+      context({
+        suggestionsFire: true,
+        suggestionSlots: [{ ref: 'cat1', label: 'Action', promptHint: 'act' }],
+        suggestionCount: 2,
+        composerWrapPov: 'third',
+        lead: { id: 'c1', name: 'Kael' },
+      }),
+    )
+    expect(user).toContain("Write each option as Kael's next turn")
+    expect(user).toContain('Write it in the third person, calling Kael by name.')
+  })
+
+  describe('the roster', () => {
+    const rosterOf = (rows: Entity[]) => {
+      const user = render(context({}, rows))
+      return user.slice(0, user.indexOf('Everything from here')).split('\n').slice(1)
+    }
+
+    it('runs its active and staged entries together, one blank line before the framing', () => {
+      expect(rosterOf(WORLD)).toEqual([
+        '- [c1] Kael (character)',
+        '- [l1] The Drowned Keep (location)',
+        '- [i3] Courier’s seal (item)',
+        '- [i4] short sword (item)',
+        '- [i5] a rusted lantern (item)',
+        '- [i9] Veilstone (item, staged)',
+        '',
+        '',
+      ])
+    })
+
+    it('keeps one blank line before the framing with nothing staged', () => {
+      expect(rosterOf([KAEL, KEEP])).toEqual([
+        '- [c1] Kael (character)',
+        '- [l1] The Drowned Keep (location)',
+        '',
+        '',
+      ])
+    })
+
+    it('lists staged entries alone when nothing is active', () => {
+      expect(rosterOf([VEILSTONE])).toEqual(['- [i9] Veilstone (item, staged)', '', ''])
+    })
+
+    it('says none when the branch has no entity', () => {
+      expect(rosterOf([])).toEqual(['(none)', '', ''])
+    })
   })
 
   // piggyback.md → Fallback classifier context: bracketed IDs, the roster being its only source.

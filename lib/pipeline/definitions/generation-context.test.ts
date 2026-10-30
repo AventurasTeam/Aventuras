@@ -249,6 +249,21 @@ describe('buildGenerationContext', () => {
     expect((ctx.definition as typeof definition).setting).toBe('A keep on a hill.')
   })
 
+  it('trims the whitespace around definitional prose', async () => {
+    const ctx = await buildContext({
+      definition: {
+        ...definition,
+        setting: '\nA keep on a hill.\n',
+        genre: { label: 'Fantasy', promptBody: '\n\nHigh fantasy realm.  ' },
+        tone: { label: 'Wry', promptBody: '  Dry.\n' },
+      },
+    })
+    const trimmed = ctx.definition as typeof definition
+    expect(trimmed.setting).toBe('A keep on a hill.')
+    expect(trimmed.genre.promptBody).toBe('High fantasy realm.')
+    expect(trimmed.tone.promptBody).toBe('Dry.')
+  })
+
   it('substitutes entity UUIDs to placeholders', async () => {
     const entities = [
       {
@@ -262,6 +277,109 @@ describe('buildGenerationContext', () => {
     ] as never[]
     const ctx = await buildContext({ entities })
     expect((ctx.entities as { id: string }[])[0]!.id).toBe('c1')
+  })
+
+  describe('lead', () => {
+    const LEAD = 'char_00000000-0000-4000-8000-000000000001'
+    const OTHER = 'char_00000000-0000-4000-8000-000000000002'
+    const character = (id: string, name: string, over: object = {}) => ({
+      id,
+      kind: 'character',
+      name,
+      description: null,
+      status: 'active',
+      injectionMode: 'auto',
+      ...over,
+    })
+
+    it('names the lead by its placeholder and its name on one line', async () => {
+      const ctx = await buildContext({
+        entities: [character(OTHER, 'Jorin'), character(LEAD, 'Mara\nthe Bold')],
+      })
+      expect(ctx.lead).toEqual({ id: 'c2', name: 'Mara the Bold' })
+      expect((ctx.entities as { id: string; name: string }[])[1]).toMatchObject({ id: 'c2' })
+    })
+
+    it('is null when the story has no lead', async () => {
+      const ctx = await buildContext({
+        definition: { ...definition, leadEntityId: undefined },
+        entities: [character(LEAD, 'Mara')],
+      })
+      expect(ctx.lead).toBeNull()
+    })
+
+    it('is null when the lead dangles on this branch', async () => {
+      const elsewhere = await buildContext({
+        entities: [character(LEAD, 'Mara', { branchId: 'b2' })],
+      })
+      expect(elsewhere.lead).toBeNull()
+      const gone = await buildContext({ entities: [character(OTHER, 'Jorin')] })
+      expect(gone.lead).toBeNull()
+    })
+  })
+
+  describe('currentTime', () => {
+    const atTime = (position: number, kind: StoryEntry['kind'], worldTime?: number) =>
+      ({
+        ...entry(`e${position}`, position, `prose ${position}`, kind),
+        metadata:
+          worldTime === undefined
+            ? null
+            : { sceneEntities: [], currentLocationId: null, worldTime },
+      }) as never
+    const gregorian = {
+      ...definition,
+      calendarSystemId: 'earth-gregorian',
+      worldTimeOrigin: { year: 1200, month: 3, day: 14, hour: 9, minute: 0, second: 0 },
+    }
+
+    it("renders the latest entry's world time in the calendar's display format", async () => {
+      const ctx = await buildContext({
+        definition: gregorian,
+        entries: [atTime(1, 'ai_reply', 0), atTime(2, 'user_action', 90061)],
+      })
+      expect(ctx.currentTime).toBe('March 15, 1200 AD 10:01')
+    })
+
+    it('reads past a system entry at the tail', async () => {
+      const ctx = await buildContext({
+        definition: gregorian,
+        entries: [atTime(1, 'ai_reply', 90061), atTime(2, 'system', 0)],
+      })
+      expect(ctx.currentTime).toBe('March 15, 1200 AD 10:01')
+    })
+
+    it('is null when the latest entry has no world time', async () => {
+      const ctx = await buildContext({
+        definition: gregorian,
+        entries: [atTime(1, 'ai_reply', 90061), atTime(2, 'user_action')],
+      })
+      expect(ctx.currentTime).toBeNull()
+    })
+
+    it("is null when the calendar can't render it", async () => {
+      const ctx = await buildContext({
+        definition: gregorian,
+        entries: [atTime(1, 'ai_reply', Number.MAX_SAFE_INTEGER)],
+      })
+      expect(ctx.currentTime).toBeNull()
+    })
+
+    it("is null for a template that doesn't read it, which skips the read", async () => {
+      const ctx = await buildContext({
+        definition: gregorian,
+        entries: [atTime(1, 'ai_reply', 90061)],
+        templateId: TEMPLATE_IDS.suggestionRefresh,
+      })
+      expect(ctx.currentTime).toBeNull()
+    })
+  })
+
+  it("passes the story's composerWrapPov through", async () => {
+    const third = await buildContext({ settings: storySettings({ composerWrapPov: 'third' }) })
+    expect(third.composerWrapPov).toBe('third')
+    const first = await buildContext({ settings: storySettings({ composerWrapPov: 'first' }) })
+    expect(first.composerWrapPov).toBe('first')
   })
 
   // Packs are user-authored, so whatever reaches the context is template surface
@@ -978,7 +1096,7 @@ describe('buildGenerationContext — data source', () => {
     expect((context.lastTurns as { content: string }[]).map((e) => e.content)).toEqual(['ours'])
   })
 
-  it('projects entries to position and content, carrying no metadata', async () => {
+  it('projects entries to position, kind and content, carrying no metadata', async () => {
     openStory()
     await seedEntries([
       dbEntry(1, 'prose', 'ai_reply', {
@@ -995,7 +1113,19 @@ describe('buildGenerationContext — data source', () => {
 
     const rows = [...narrative.entries, ...classifier.lastTurns] as Record<string, unknown>[]
     expect(rows).toHaveLength(2)
-    for (const row of rows) expect(Object.keys(row).sort()).toEqual(['content', 'position'])
+    for (const row of rows) expect(row).toEqual({ position: 1, kind: 'ai_reply', content: 'prose' })
+  })
+
+  it("carries each entry's kind, so a template can mark the user's turns", async () => {
+    openStory()
+    await seedEntries([
+      dbEntry(1, 'The door is locked.', 'ai_reply'),
+      dbEntry(2, 'I pick the lock.', 'user_action'),
+    ])
+
+    const narrative = await build()
+
+    expect(narrative.entries.map((e) => e.kind)).toEqual(['ai_reply', 'user_action'])
   })
 
   // The group's variable set does not shrink; the query behind an unread one does.

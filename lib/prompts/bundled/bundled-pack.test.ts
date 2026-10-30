@@ -56,6 +56,7 @@ describe('bundled pack', () => {
         tone: { promptBody: '' },
       },
       leadEntityId: 'c1',
+      lead: { id: 'c1', name: 'Aria' },
       cast: [{ id: 'c1', kind: 'character', name: 'Aria', description: '', status: 'active' }],
     }).user
     expect(out).toContain('adventure')

@@ -5,6 +5,7 @@ import type {
   EntityState,
   Happening,
   StoryEntry,
+  StoryMode,
   Thread,
 } from '@/lib/db'
 import { entryMetadataSchema } from '@/lib/db'
@@ -29,6 +30,8 @@ export type EvalWindow = {
   about: string
   /** The story's lead, for a window narrated in the first or second person. */
   lead?: string
+  /** The story's mode; adventure when left out. */
+  mode?: StoryMode
   entities: Entity[]
   happenings: Happening[]
   relationships: CharacterRelationship[]

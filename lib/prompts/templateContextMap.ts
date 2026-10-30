@@ -97,7 +97,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entry[]',
       category: 'Story',
       description:
-        'Prompt buffer, already composed to the two-mode window plus protectedBuffer spillover; system entries excluded. Each item carries `position` and `content`. Render it whole.',
+        "Prompt buffer, already composed to the two-mode window plus protectedBuffer spillover; system entries excluded. Each item carries `position`, `kind` ('user_action', 'ai_reply' or 'opening') and `content`; a `user_action` is the user's turn, which the bundled templates mark (macro_story_entry). Render it whole.",
       required: true,
     },
     {
@@ -105,7 +105,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entry[]',
       category: 'Story',
       description:
-        'The trailing non-system entries the per-turn classifier reads, `classifierContextEntries` many, floored at the action-plus-reply pair so neither the buffer knobs nor a template can cut below it. Which kinds they are depends on when the phase asks. Overlaps `entries` — render one or the other, not both. For per-turn classification, not for narrating.',
+        'The trailing non-system entries the per-turn classifier reads, `classifierContextEntries` many, floored at the action-plus-reply pair so neither the buffer knobs nor a template can cut below it, shaped like `entries`. Which kinds they are depends on when the phase asks. Overlaps `entries` — render one or the other, not both. For per-turn classification, not for narrating.',
       required: true,
     },
     {
@@ -213,11 +213,27 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: true,
     },
     {
+      name: 'lead',
+      type: '{ id, name } | null',
+      category: 'Entities',
+      description:
+        "The story's lead as `entities` lists it, its name on one line. Null when the story has no lead, or its lead dangles on this branch. A system half reads `lead.name` only: the id is a placeholder allocated per call, so it would change the half every call.",
+      required: true,
+    },
+    {
       name: 'calendarVocabulary',
       type: 'CalendarVocabulary',
       category: 'Story Config',
       description:
         'Vocabulary descriptor (base units, tier names/labels, era names) for the active calendar system; falls back to earth-gregorian for an unresolved id, matching the reader.',
+      required: true,
+    },
+    {
+      name: 'currentTime',
+      type: 'string | null',
+      category: 'Story Config',
+      description:
+        "The latest entry's world time in the calendar's display format, as the reader's footer shows it. Null when the entry has no world time or the calendar fails to render it; leave the block out then. Per call.",
       required: true,
     },
     {
@@ -254,7 +270,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'RetrievedRow[]',
       category: 'Retrieval',
       description:
-        'Happenings the ranker seated this turn; renderedText carries the awareness sources verbatim. Empty when nothing scored or no retrieval ran.',
+        "Happenings the ranker seated this turn, as { id, displayName, renderedText }: `renderedText` is the title, the description, then who in the scope knows it and how (`Known to: Aria (witnessed firsthand); Jorin (told by Aria)`), or `Common knowledge`. The scope is the scene's characters, and the lead in adventure or first- or second-person narration; a character in the scene the line doesn't name doesn't know it. The string the type budget was charged for, and the one to render. Empty when nothing scored or no retrieval ran.",
       required: true,
     },
     {
@@ -371,6 +387,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: false,
     },
     {
+      name: 'composerWrapPov',
+      type: "'first' | 'third'",
+      category: 'Story Config',
+      description:
+        "stories.settings.composerWrapPov: the person the user's input is written in, which adventure's next-turn suggestions are written in too.",
+      required: true,
+    },
+    {
       name: 'refreshGuidance',
       type: 'string',
       category: 'Generation Results',
@@ -382,10 +406,10 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
   classifierContext: [
     {
       name: 'turns',
-      type: '{ handle, content, scene, location }[]',
+      type: '{ handle, kind, content, scene, location }[]',
       category: 'Story',
       description:
-        'Unclassified prose window. Each turn carries the provenance handle (t1..tN) the model must tag its facts with, its prose (`content`), and the scene saved on its entry: `scene` (entity ids) and `location` (an entity id or null). Ids the branch no longer has are left out.',
+        "Unclassified prose window. Each turn carries the provenance handle (t1..tN) the model must tag its facts with, its entry's `kind` ('user_action' for the user's turn, 'ai_reply' or 'opening'), its prose (`content`), and the scene saved on its entry: `scene` (entity ids) and `location` (an entity id or null). Ids the branch no longer has are left out.",
       required: true,
     },
     {
@@ -452,6 +476,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
         'The story\'s lead as `entities` lists it (id and its name on one line), so the model knows whose "I" and "you" the turns narrate. Null when the story has no lead, or its lead dangles on this branch.',
       required: false,
     },
+    {
+      name: 'mode',
+      type: "'adventure' | 'creative'",
+      category: 'Story Config',
+      description:
+        "The story's mode, which decides what a user's turn establishes: an adventure's is the lead's attempt, a creative story's a direction or prose.",
+      required: true,
+    },
   ],
   wizard: [
     {
@@ -468,6 +500,22 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       description:
         'Lead cast id — a placeholder after id-substitution, so a model can echo it in sceneEntities; blank on lead-less paths.',
       required: false,
+    },
+    {
+      name: 'lead',
+      type: '{ id, name } | null',
+      category: 'Entities',
+      description:
+        "The draft's lead when it is an active character in `cast`, its name on one line; null otherwise. `id` is the same placeholder as `leadEntityId`.",
+      required: true,
+    },
+    {
+      name: 'startTime',
+      type: 'string | null',
+      category: 'Story Config',
+      description:
+        "The story's start moment in the calendar's display format, as the calendar step shows it. Null when the start moment doesn't render.",
+      required: true,
     },
     {
       name: 'cast',
@@ -593,6 +641,10 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
   'Story Config': [
     'definition',
     'calendarVocabulary',
+    'currentTime',
+    'startTime',
+    'composerWrapPov',
+    'mode',
     'userSettings',
     'suggestionSlots',
     'suggestionCount',

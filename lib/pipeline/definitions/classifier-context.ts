@@ -1,5 +1,5 @@
 import type { ClassifierWindow } from '@/lib/classifier'
-import type { CharacterRelationship, Entity, Happening, Thread } from '@/lib/db'
+import type { CharacterRelationship, Entity, Happening, StoryMode, Thread } from '@/lib/db'
 import { substituteIds, type IdBiMap } from '@/lib/ids'
 import { normalizeTerm } from '@/lib/keyword-terms'
 import { blankToNull, oneLine } from '@/lib/text'
@@ -31,7 +31,7 @@ function projectRelationships(
   entities: readonly Entity[],
 ): RelationshipFact[] {
   const characterNames = new Map(
-    entities.filter((e) => e.kind === 'character').map((e) => [e.id, e.name]),
+    entities.filter((e) => e.kind === 'character').map((e) => [e.id, oneLine(e.name)]),
   )
   return relationships.flatMap((r): RelationshipFact[] => {
     const aName = characterNames.get(r.aId)
@@ -44,7 +44,7 @@ function projectRelationships(
         subjectName: aName,
         object: r.bId,
         objectName: bName,
-        kind: r.kind,
+        kind: oneLine(r.kind),
       })
     if (r.inverseKind != null)
       facts.push({
@@ -52,7 +52,7 @@ function projectRelationships(
         subjectName: bName,
         object: r.aId,
         objectName: aName,
-        kind: r.inverseKind,
+        kind: oneLine(r.inverseKind),
       })
     return facts
   })
@@ -88,10 +88,21 @@ export function buildClassifierContext(args: {
   mentionedPlaces: boolean
   /** The story's lead on this branch (resolveLead), or null. */
   leadId: string | null
+  /** The story's mode, which decides how the prompt reads a user's turn. */
+  mode: StoryMode
   idMap: IdBiMap
 }): Record<string, unknown> {
-  const { window, entities, happenings, relationships, threads, mentionedPlaces, leadId, idMap } =
-    args
+  const {
+    window,
+    entities,
+    happenings,
+    relationships,
+    threads,
+    mentionedPlaces,
+    leadId,
+    mode,
+    idMap,
+  } = args
   const known = new Set(entities.map((e) => e.id))
   const factions = new Set(entities.filter((e) => e.kind === 'faction').map((e) => e.id))
   // classifier.md → Factions: an id naming no listed faction would otherwise reach the prompt as
@@ -124,6 +135,7 @@ export function buildClassifierContext(args: {
     // Scene/location ids are filtered to known: a deleted row would get a placeholder.
     turns: window.turns.map((t) => ({
       handle: t.handle,
+      kind: t.kind,
       content: t.content,
       scene: t.sceneEntities.filter((id) => known.has(id)),
       location:
@@ -136,6 +148,7 @@ export function buildClassifierContext(args: {
     // no placeholder to name it by.
     lead: leadOf(entities, leadId),
     mentionedPlaces,
+    mode,
   }
   return substituteIds(context, idMap) as Record<string, unknown>
 }

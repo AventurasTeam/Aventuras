@@ -9,6 +9,7 @@ Rules for every list:
 
 - Provenance. Set sourceTurn on every entry that has the field, and on no other, to the handle of the turn the fact comes from: a happening's involvements and awareness, and a knownAwareness entry, have none. For a fact synthesised across turns, use the LATEST contributing turn. For a status change or a first introduction, use the triggering turn.
 - Scene. After a turn's handle come the entities the story had in that scene when the turn was saved, and its location. Prose naming an entity in its turn's scene, or its location, refers to that entity.
+- The user's turns. {% include 'macro_classifier_mode_rule', mode: mode %}
 - Silence is valid. Return empty arrays for anything the prose does not support.
 
 Rules for happenings:
@@ -109,9 +110,10 @@ Threads, same ID rule — each with its status:
 The story's lead is [{{ lead.id }}] {{ lead.name }}. Outside quoted speech, "I" and "you" in the turns are the lead.
 {%- endif %}
 
-Turns to classify. Each is labelled with a turn handle in brackets — every fact you emit must carry the handle of the turn whose prose produced it. The turn's scene and location, by the same ID rule, may follow the handle; its prose starts on the next line:
+Turns to classify. Each is labelled with a turn handle in brackets — every fact you emit must carry the handle of the turn whose prose produced it. After the handle, a turn the user wrote is marked as the user's, and the turn's scene and location may follow, by the same ID rule; its prose starts on the next line:
 {%- for turn in turns %}
-[{{ turn.handle }}]{% if turn.scene.size > 0 %} scene: {% for sceneId in turn.scene %}[{{ sceneId }}]{% unless forloop.last %}, {% endunless %}{% endfor %}{% endif %}{% if turn.location %}{% if turn.scene.size > 0 %};{% endif %} location: [{{ turn.location }}]{% endif %}
+{%- assign sep = ' ' %}
+[{{ turn.handle }}]{% if turn.kind == 'user_action' %}{{ sep }}the user's turn{% assign sep = '; ' %}{% endif %}{% if turn.scene.size > 0 %}{{ sep }}scene: {% for sceneId in turn.scene %}[{{ sceneId }}]{% unless forloop.last %}, {% endunless %}{% endfor %}{% assign sep = '; ' %}{% endif %}{% if turn.location %}{{ sep }}location: [{{ turn.location }}]{% endif %}
 {{ turn.content }}
 {%- endfor %}`,
 }

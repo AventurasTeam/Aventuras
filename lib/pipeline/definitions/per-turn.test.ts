@@ -2952,15 +2952,16 @@ describe('narrative fold — creates', () => {
 })
 
 // architecture.md → System and user halves. Fixture fills Setting/Genre/Tone and the calendar
-// always resolves, so all four lead the system half.
+// always resolves, so all four follow the standing instructions in the system half.
 describe('narrative fold — prompt halves', () => {
-  it('sends the definition and calendar as the system half, and the scene and story as the user half', async () => {
+  it('sends the standing instructions, definition and calendar as the system half, and the scene and story as the user half', async () => {
     const { system, prompt: user } = await runNarrativeWith({ narrative: 'prose' })
+    expect(system).toMatch(/^You are the narrator of an interactive story/)
     expect(system).toMatch(
-      /^# Setting\nA keep on a hill\.\n\n# Genre\nHigh fantasy\.\n\n# Tone\nDry humor\.\n\n# Calendar\nThis story tracks time in /,
+      /[^\n]\n\n# Setting\nA keep on a hill\.\n\n# Genre\nHigh fantasy\.\n\n# Tone\nDry humor\.\n\n# Calendar\nThis story tracks time in /,
     )
     expect(system).toMatch(
-      /[^\n]\n\nWrite the next beat of the story as prose\. Do not break character or address the reader\.$/,
+      /[^\n]\n\nWrite the next beat of the story as prose\. Do not break character or step outside the story to speak to the user\.$/,
     )
     expect(user).toContain('# Story so far')
     expect(user).not.toContain('# Setting')

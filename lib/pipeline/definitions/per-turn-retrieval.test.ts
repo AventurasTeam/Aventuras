@@ -14,6 +14,7 @@ import {
   type EntryMetadata,
   type ProbeCapturePayload,
   type Story,
+  type StoryDefinition,
   type StoryEntry,
   type StorySettings,
 } from '@/lib/db'
@@ -183,13 +184,14 @@ function seedOpenStory(
     entities?: Entity[]
     entriesBranch?: string
     storyId?: string
+    definition?: Partial<Pick<StoryDefinition, 'mode' | 'narration' | 'leadEntityId'>>
   } = {},
 ): StorySettings {
   const settings: StorySettings = { ...STORY_SETTINGS_DEFAULTS, ...opts.settings }
   currentStoryStore.set({
     storyId: opts.storyId ?? 's1',
     branchId: 'b1',
-    definition,
+    definition: { ...definition, ...opts.definition },
     settings,
   })
   hydrateEntries(phaseDb, opts.entriesBranch ?? 'b1', opts.entries ?? [])
@@ -1194,6 +1196,58 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     expect(params.sceneEntityIds).toEqual(['char_hero', 'item_blade'])
     expect(params.sceneCharacterIds).toEqual(['char_hero'])
     expect(params.currentLocationId).toBe('loc_keep')
+  })
+
+  // retrieval.md → POV-awareness scope: the lead joins where the story is told from their side.
+  describe('the lead in the awareness scope', () => {
+    const offScene = (
+      over: Partial<Pick<StoryDefinition, 'mode' | 'narration'>>,
+      lead = 'char_hero',
+    ) => {
+      seedOpenStory({
+        definition: { leadEntityId: lead, ...over },
+        entities: [
+          entity('char_hero', 'character', 'Kael'),
+          entity('char_mora', 'character', 'Mora'),
+        ],
+        entries: [entry(1, 'ai_reply', 'Mora waits.', meta({ sceneEntities: ['char_mora'] }))],
+      })
+    }
+
+    it.each([
+      ['adventure', 'third'],
+      ['creative', 'first'],
+      ['creative', 'second'],
+    ] as const)(
+      'joins in %s, %s person, though the scene leaves them out',
+      async (mode, narration) => {
+        offScene({ mode, narration })
+        await runRetrievalPhase()
+        expect(lastParams().sceneCharacterIds).toEqual(['char_mora', 'char_hero'])
+        expect(lastParams().sceneEntityIds).toEqual(['char_mora'])
+      },
+    )
+
+    it('stays out in a creative story told in the third person', async () => {
+      offScene({ mode: 'creative', narration: 'third' })
+      await runRetrievalPhase()
+      expect(lastParams().sceneCharacterIds).toEqual(['char_mora'])
+    })
+
+    it('counts once when the scene already has them', async () => {
+      seedOpenStory({
+        entities: [entity('char_hero', 'character', 'Kael')],
+        entries: [entry(1, 'ai_reply', 'Kael waits.', meta({ sceneEntities: ['char_hero'] }))],
+      })
+      await runRetrievalPhase()
+      expect(lastParams().sceneCharacterIds).toEqual(['char_hero'])
+    })
+
+    it('stays out when the lead dangles on the branch', async () => {
+      offScene({ mode: 'adventure', narration: 'second' }, 'char_gone')
+      await runRetrievalPhase()
+      expect(lastParams().sceneCharacterIds).toEqual(['char_mora'])
+    })
   })
 
   it('falls back to an empty scene when the branch has no entries at all', async () => {

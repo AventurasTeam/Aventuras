@@ -78,6 +78,7 @@ export function renderWindow(w: EvalWindow, maxEntries: number): RenderedWindow 
       threads: rows.threads,
       mentionedPlaces: false,
       leadId: w.lead == null ? null : canonicalSeedId(w.lead),
+      mode: w.mode ?? 'adventure',
       idMap,
     }),
   )

@@ -11,7 +11,7 @@ const leadCtx = {
     tone: { promptBody: '' },
   },
   leadEntityId: 'c1',
-  // The row must be present for the lead's name to reach the prompt at all.
+  lead: { id: 'c1', name: 'Aria' },
   cast: [{ id: 'c1', kind: 'character', name: 'Aria', description: '', status: 'active' }],
 }
 const leadlessCtx = {
@@ -70,13 +70,128 @@ describe('WIZARD_OPENING template', () => {
   })
 })
 
+// architecture.md → System and user halves: the opening carries the narrator's standing
+// instructions, through the macro the per-turn narrative includes too.
+describe('WIZARD_OPENING standing instructions', () => {
+  const firstPerson = {
+    ...leadCtx,
+    definition: { ...leadCtx.definition, narration: 'first' },
+  }
+
+  it('gives the narrator the mode, the narration and the lead by name, after the directive', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, firstPerson).user
+    expect(out).toMatch(
+      /^Write the opening passage of this adventure story\.\n\nYou are the narrator of an interactive story in which the user plays Aria\./,
+    )
+    expect(out).toContain("you stop where Aria's next choice begins")
+    expect(out).toContain('Narrate in the first person, as Aria: "I" is Aria.')
+  })
+
+  it('names no lead on the lead-less path', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, leadlessCtx).user
+    expect(out).toContain('You are the narrator of a story the user directs.')
+    expect(out).not.toContain('Aria')
+  })
+
+  it('carries the same instructions into a refine', () => {
+    const generate = renderTemplate(TEMPLATE_IDS.wizardOpening, firstPerson).user
+    const refine = renderTemplate(TEMPLATE_IDS.wizardOpeningRefine, {
+      ...firstPerson,
+      current: { content: 'The harbor lay still.' },
+      instruction: 'darker',
+    }).user
+    const instructions = generate.slice(
+      generate.indexOf('You are the narrator'),
+      generate.indexOf('\n\nNarrate'),
+    )
+    expect(instructions.length).toBeGreaterThan(100)
+    expect(refine).toContain(instructions)
+  })
+
+  it('gives the start moment when the calendar renders one', () => {
+    expect(
+      renderTemplate(TEMPLATE_IDS.wizardOpening, {
+        ...leadCtx,
+        startTime: 'March 14, 1200 AD 09:00',
+      }).user,
+    ).toContain('\n\nThe story starts at March 14, 1200 AD 09:00.\n')
+    expect(
+      renderTemplate(TEMPLATE_IDS.wizardOpening, { ...leadCtx, startTime: null }).user,
+    ).not.toContain('The story starts at')
+  })
+})
+
+// wizard.md → Title + description: both calls see the whole story.
+describe.each([
+  ['title', TEMPLATE_IDS.wizardTitleChips],
+  ['description', TEMPLATE_IDS.wizardDescription],
+])('the %s call', (_field, templateId) => {
+  const story = {
+    definition: {
+      mode: 'adventure',
+      narration: 'second',
+      setting: 'A drowned coast of salt marsh.',
+      genre: { label: 'Low fantasy', promptBody: 'GENRE-BODY-MARKER' },
+      tone: { label: 'Wry', promptBody: 'TONE-BODY-MARKER' },
+      calendarSystemId: 'earth-gregorian',
+      worldTimeOrigin: { year: 1200 },
+    },
+    lead: { id: 'c1', name: 'Aria' },
+    leadEntityId: 'c1',
+    startTime: 'START-TIME-MARKER',
+    cast: [
+      { id: 'c1', kind: 'character', name: 'Aria', description: 'A diver.', status: 'active' },
+      { id: 'l1', kind: 'location', name: 'The Sunken Archive', description: '', status: 'active' },
+      { id: 'c2', kind: 'character', name: 'Gandalf', description: 'A wizard.', status: 'staged' },
+    ],
+    lore: [{ title: 'The Salt Wells', body: 'LORE-BODY-MARKER' }],
+    opening: { content: 'The tide went out and did not come back.' },
+  }
+  const out = renderTemplate(templateId, story).user
+
+  it('reads the mode and the lead, the genre and tone by label, and the setting', () => {
+    expect(out).toContain('An interactive story the user plays as Aria.\n')
+    expect(out).toContain(
+      'Genre: Low fantasy\nTone: Wry\nSetting: A drowned coast of salt marsh.\n',
+    )
+    expect(out).not.toContain('BODY-MARKER')
+  })
+
+  it('reads the active cast by name and description, and the lore by title, with no ids', () => {
+    expect(out).toContain('Cast:\n- Aria: A diver.\n- The Sunken Archive\n')
+    expect(out).not.toContain('Gandalf')
+    expect(out).toContain('World reference:\n- The Salt Wells\n')
+    expect(out).not.toMatch(/\bc1\b|\bl1\b/)
+  })
+
+  it('reads the opening, and nothing of the calendar', () => {
+    expect(out).toContain('Opening:\nThe tide went out and did not come back.\n')
+    expect(out).not.toContain('START-TIME-MARKER')
+    expect(out).not.toContain('1200')
+  })
+
+  it('names a creative story and leaves out what is unset', () => {
+    const bare = renderTemplate(templateId, {
+      definition: { mode: 'creative', setting: '', genre: { label: '' }, tone: { label: '' } },
+      lead: null,
+      cast: [],
+      lore: [],
+      opening: { content: 'It began.' },
+    }).user
+    expect(bare).toContain('A story.\nOpening:\nIt began.\n')
+    expect(bare).not.toMatch(/Genre:|Tone:|Setting:|Cast:|World reference:|undefined/)
+  })
+})
+
 describe('WIZARD_DESCRIPTION template', () => {
-  it('asks for a synopsis/description, not next-beat narrative', () => {
+  it('asks for a premise of one to three sentences, not next-beat narrative', () => {
     const out = renderTemplate(TEMPLATE_IDS.wizardDescription, {
       opening: { content: 'Once upon a time.' },
     }).user
     expect(out).toContain('Once upon a time.')
-    expect(out.toLowerCase()).toMatch(/description|synopsis|log line|log-line/)
+    expect(out).toContain(
+      "A description is one to three sentences on the story's premise: who it is about, where, and what is at stake. Do not write narrative prose.",
+    )
     // must NOT include the narrative next-beat macro text:
     expect(out.toLowerCase()).not.toContain('next beat')
   })
@@ -262,6 +377,7 @@ describe('WIZARD_OPENING cast block', () => {
         },
       ],
       leadEntityId: 'c1',
+      lead: { id: 'c1', name: 'Aria' },
       guidance: '',
     }).user
     expect(out).toContain('Aria (character, cast id: c1): A blacksmith.')
@@ -308,6 +424,8 @@ describe('WIZARD_OPENING cast block', () => {
     expect(out).not.toContain('Cast —')
   })
 
+  // wizardTemplateContext leaves `lead` null for a staged or non-character lead (activeLead), so
+  // the template names no lead the cast block lists as something else, whatever leadEntityId says.
   it('drops the lead line when the lead id points at a staged row', () => {
     const out = renderTemplate(TEMPLATE_IDS.wizardOpening, {
       definition: { mode: 'adventure', genre: {}, tone: {}, setting: '' },
@@ -315,11 +433,8 @@ describe('WIZARD_OPENING cast block', () => {
         { id: 'c1', kind: 'character', name: 'Aria', description: '', status: 'staged' },
         { id: 'c2', kind: 'character', name: 'Bo', description: '', status: 'active' },
       ],
-      // Staging the lead is only reachable through setCastStatus in the shipped
-      // UI, which nulls leadEntityId in the same write — but the template can't
-      // assume every caller of this context routes through that store, so it
-      // must not name a lead the cast block simultaneously excludes.
       leadEntityId: 'c1',
+      lead: null,
       guidance: '',
     }).user
     expect(out).not.toContain('lead character')
@@ -332,9 +447,8 @@ describe('WIZARD_OPENING cast block', () => {
       cast: [
         { id: 'l1', kind: 'location', name: 'Mornstone Keep', description: '', status: 'active' },
       ],
-      // Same reasoning as the staged case: canSetLead gates the shipped UI to
-      // active characters, but a hydrated pointer can outlive the row it named.
       leadEntityId: 'l1',
+      lead: null,
       guidance: '',
     }).user
     expect(out).toContain('Mornstone Keep (location, cast id: l1)')
@@ -414,7 +528,7 @@ const REFINE_PAIRS = [
     field: 'description',
     generate: TEMPLATE_IDS.wizardDescription,
     refine: TEMPLATE_IDS.wizardDescriptionRefine,
-    contract: 'one-sentence log line',
+    contract: "one to three sentences on the story's premise",
     directive: 'Revise the description below',
     current: { description: 'A diver hunts a drowned archive.' },
     rendered: ['A diver hunts a drowned archive.'],

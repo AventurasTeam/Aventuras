@@ -7,12 +7,16 @@ import { bundledPack, loadPack, renderTemplate, TEMPLATE_IDS, type TemplateId } 
 
 // architecture.md → System and user halves: a system half must render byte-identically from call
 // to call unless the user changes what it reads, so it may read only what the story or the
-// settings it resolves through fix (piggybackFires follows the narrative model's assignment).
+// settings it resolves through fix (piggybackFires follows the narrative model's assignment), and
+// the lead, whose name a reveal can change but whose id it must not read.
 const STABLE_SYSTEM_VARIABLES: readonly string[] = [
   'definition',
   'calendarVocabulary',
   'piggybackFires',
   'mentionedPlaces',
+  'mode',
+  'composerWrapPov',
+  'lead',
 ]
 
 const { engine } = loadPack(bundledPack)
@@ -23,8 +27,11 @@ const perCallReads = (templateId: TemplateId, half?: TemplateHalf) =>
   )
 
 const STORY = {
+  mode: 'adventure',
+  composerWrapPov: 'first',
   definition: {
     mode: 'adventure',
+    narration: 'second',
     setting: 'A drowned coast of salt marsh and broken keeps.',
     genre: { label: 'Fantasy', promptBody: 'Low fantasy: magic is rare, costly and feared.' },
     tone: { label: 'Wry', promptBody: 'Dry humour under real danger.' },
@@ -124,6 +131,8 @@ const TURN_A: Record<string, unknown> = {
   suggestionCount: 2,
   refreshGuidance: '',
   worldTimeDeltaBasis: 'sinceLastAiReply',
+  currentTime: 'Frostmoon 3, the third hour',
+  lead: { id: 'c1', name: 'Kael' },
 }
 
 const TURN_B: Record<string, unknown> = {
@@ -178,6 +187,9 @@ const TURN_B: Record<string, unknown> = {
   suggestionCount: 3,
   refreshGuidance: 'Kael asks Mora about the heir.',
   worldTimeDeltaBasis: 'sinceUserAction',
+  currentTime: null,
+  // The same lead under another placeholder: ids are allocated per call.
+  lead: { id: 'c7', name: 'Kael' },
 }
 
 const PASS_A: Record<string, unknown> = {
@@ -259,6 +271,7 @@ const RENDER_CASES: RenderCase[] = [
     first: TURN_A,
     second: TURN_B,
     systemShows: [
+      'in which the user plays Kael',
       'A drowned coast of salt marsh and broken keeps.',
       'This story tracks time in days',
     ],
@@ -267,19 +280,23 @@ const RENDER_CASES: RenderCase[] = [
     templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
     first: TURN_A,
     second: TURN_B,
-    systemShows: ['This story tracks time in days'],
+    systemShows: ['This story tracks time in days', 'what the lead does, says or attempts'],
   },
   {
     templateId: TEMPLATE_IDS.periodicClassifier,
     first: PASS_A,
     second: PASS_B,
-    systemShows: ['Rules for every list:'],
+    systemShows: ['Rules for every list:', 'what the lead does, says or attempts'],
   },
   {
     templateId: TEMPLATE_IDS.periodicClassifier,
     first: { ...PASS_A, mentionedPlaces: true },
     second: { ...PASS_B, mentionedPlaces: true },
-    systemShows: ['Rules for every list:', '- New places. Add a place the turns mention'],
+    systemShows: [
+      'Rules for every list:',
+      'what the lead does, says or attempts',
+      '- New places. Add a place the turns mention',
+    ],
   },
   {
     templateId: TEMPLATE_IDS.suggestionRefresh,
@@ -332,5 +349,37 @@ describe('bundled system halves render byte-identically across calls', () => {
       // Positive control: the per-call contexts reach the prompt.
       expect(a.user).not.toBe(b.user)
     })
+  })
+})
+
+// architecture.md → System and user halves: the one change besides the story and its settings.
+describe("a lead's rename", () => {
+  const LEAD_SYSTEM_TEMPLATES = Object.values(TEMPLATE_IDS).filter((id) =>
+    templateGlobals(engine, id, 'system').has('lead'),
+  )
+
+  it('is read by the narrator', () => {
+    expect(LEAD_SYSTEM_TEMPLATES).toContain(TEMPLATE_IDS.perTurnNarrative)
+  })
+
+  it.each(LEAD_SYSTEM_TEMPLATES)('changes the system half of %s', (templateId) => {
+    const before = renderTemplate(templateId, { ...TURN_A, ...STORY })
+    const after = renderTemplate(templateId, {
+      ...TURN_A,
+      ...STORY,
+      lead: { id: 'c1', name: 'Kael Varro' },
+    })
+    expect(after.system).not.toBe(before.system)
+    expect(after.system).toContain('Kael Varro')
+  })
+
+  it.each(LEAD_SYSTEM_TEMPLATES)('never brackets its id in the system half of %s', (templateId) => {
+    const { system } = renderTemplate(templateId, {
+      ...TURN_A,
+      ...STORY,
+      piggybackFires: true,
+      lead: { id: 'LEAD-ID-MARKER', name: 'Kael' },
+    })
+    expect(system).not.toContain('LEAD-ID-MARKER')
   })
 })

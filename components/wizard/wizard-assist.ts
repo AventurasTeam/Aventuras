@@ -6,11 +6,13 @@ import {
   type GenerateStructuredResult,
   type ResolveModelConfig,
 } from '@/lib/ai'
+import { resolveCalendar } from '@/lib/calendar'
 import type { WizardWorkingState } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { IdBiMap, parseAndSubstitute, substituteIds } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS, type TemplateId } from '@/lib/prompts'
 import { appSettingsStore, wizardStore } from '@/lib/stores'
+import { oneLine } from '@/lib/text'
 import {
   castSuggestionsSchema,
   descriptionOutputSchema,
@@ -24,6 +26,9 @@ import {
   type LoreSuggestions,
   type SettingOutput,
 } from '@/lib/wizard'
+
+import { computeSampleRender } from './step-calendar-logic'
+import { activeLead } from './step-cast-logic'
 
 const ASSIST_TARGET = 'wizard-assist'
 
@@ -115,9 +120,13 @@ export function wizardTemplateContext(
   guidance: string,
   extra?: Record<string, unknown>,
 ): Record<string, unknown> {
+  const lead = activeLead(state.cast, state.leadEntityId)
+  const { calendarSystemId, worldTimeOrigin } = state.definition
   return {
     definition: state.definition,
     leadEntityId: state.leadEntityId,
+    lead: lead == null ? null : { id: lead.id, name: oneLine(lead.name) },
+    startTime: computeSampleRender(resolveCalendar(calendarSystemId), worldTimeOrigin),
     opening: state.opening,
     lore: state.lore.map(withoutTags),
     cast: state.cast.map(castRowForTemplate),

@@ -102,6 +102,79 @@ describe('bundled suggestion-refresh template — system and user halves', () =>
   })
 })
 
+// reader-composer.md → Next-turn suggestions: a chip is written as the user's next turn.
+describe("bundled suggestion-refresh template — the chips' voice", () => {
+  const KAEL = { id: 'c1', name: 'Kael' }
+  const optionsFor = (mode: string, composerWrapPov: string, lead: typeof KAEL | null) => {
+    const { user } = renderTemplate(TEMPLATE_IDS.suggestionRefresh, {
+      definition: { mode, narration: 'second', setting: '', genre: {}, tone: {} },
+      composerWrapPov,
+      lead,
+      entities: [],
+      sceneEntities: [],
+      entries: [],
+      suggestionCount: 2,
+      suggestionSlots: [{ ref: 'cat1', label: 'Action', promptHint: 'A move.' }],
+    })
+    return user.slice(user.indexOf('# Next-turn options'))
+  }
+
+  it("writes an adventure chip as the lead's next turn, never the world's response", () => {
+    const options = optionsFor('adventure', 'first', KAEL)
+    expect(options).toContain(
+      "Write each option as Kael's next turn: what Kael does, says or attempts next, never how the world or anyone else responds.",
+    )
+    expect(options).toContain('Draw only on what Kael knows.')
+  })
+
+  it('writes it in the wrap person', () => {
+    expect(optionsFor('adventure', 'first', KAEL)).toContain(
+      'Write it in the first person, as "I".',
+    )
+    expect(optionsFor('adventure', 'third', KAEL)).toContain(
+      'Write it in the third person, calling Kael by name.',
+    )
+  })
+
+  it('falls back to the first person with no lead, which needs no name', () => {
+    const options = optionsFor('adventure', 'third', null)
+    expect(options).toContain('Write it in the first person, as "I".')
+    expect(options).not.toContain('third person')
+    expect(options).not.toContain('undefined')
+  })
+
+  it('writes a creative chip as a short direction in the third person, by name', () => {
+    for (const person of ['first', 'third']) {
+      const options = optionsFor('creative', person, KAEL)
+      expect(options).toContain(
+        "Write each option as a short direction for the story's next beat, in the third person, calling characters by name",
+      )
+      expect(options).toContain('It may involve any character.')
+      expect(options).not.toContain('as "I"')
+    }
+  })
+})
+
+describe('bundled suggestion-refresh template — the story so far', () => {
+  it("wraps the user's turns in <user_turn>, leaving the opening and replies bare", () => {
+    const { user } = renderTemplate(TEMPLATE_IDS.suggestionRefresh, {
+      definition: { mode: 'creative', setting: '', genre: {}, tone: {} },
+      entities: [],
+      sceneEntities: [],
+      entries: [
+        { kind: 'opening', content: 'The gate groaned open.' },
+        { kind: 'user_action', content: 'I step through.\n\nThen I wait.' },
+        { kind: 'ai_reply', content: 'Nothing stirs.' },
+      ],
+      suggestionCount: 1,
+      suggestionSlots: [{ ref: 'cat1', label: 'Action', promptHint: 'A move.' }],
+    })
+    expect(user).toContain(
+      '# Story so far\n\nThe gate groaned open.\n\n<user_turn>\nI step through.\n\nThen I wait.\n</user_turn>\n\nNothing stirs.\n',
+    )
+  })
+})
+
 // architecture.md → Entity state on the template surface: the narrator's in-scene list, no ids.
 describe('bundled suggestion-refresh template — in scene', () => {
   const sceneOf = (rows: Entity[], sceneEntities: string[]) => {

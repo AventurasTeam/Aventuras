@@ -5,18 +5,23 @@ import type { TemplateSources } from '../types'
 export const PIGGYBACK_FALLBACK_CLASSIFIER: TemplateSources = {
   system: `{% if calendarVocabulary -%}
 # Calendar
-This story tracks time in {{ calendarVocabulary.baseUnitName }}s ({{ calendarVocabulary.secondsPerBaseUnit }} seconds per {{ calendarVocabulary.baseUnitName }}). Tiers: {% for t in calendarVocabulary.tiers %}{{ t.name }}{% if t.labels.size > 0 %} ({{ t.labels | prose_join }}){% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}. Convert relative-time prose ("two days later", "the next morning") into a seconds delta using these units.
-{%- endif %}`,
+This story tracks time in {{ calendarVocabulary.baseUnitName }}s{% if calendarVocabulary.secondsPerBaseUnit != 1 %} ({{ calendarVocabulary.secondsPerBaseUnit }} seconds per {{ calendarVocabulary.baseUnitName }}){% endif %}. Tiers: {% for t in calendarVocabulary.tiers %}{{ t.name }}{% if t.labels.size > 0 %} ({{ t.labels | prose_join }}){% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}. Convert relative-time prose ("two days later", "the next morning") into a seconds delta using these units.
+
+{% endif -%}
+# The user's turns
+{% include 'macro_classifier_mode_rule', mode: definition.mode %}`,
   user: `Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:
 {%- assign referenceable = entities | active -%}
 {%- assign stagedEntities = entities | staged -%}
 {% for e in referenceable %}
 - [{{ e.id }}] {{ e.name }} ({{ e.kind }})
-{%- endfor %}
+{%- endfor -%}
 {% for e in stagedEntities %}
 - [{{ e.id }}] {{ e.name }} ({{ e.kind }}, staged)
 {%- endfor %}
 {% if referenceable.size == 0 and stagedEntities.size == 0 %}(none)
+{% endif %}{% if lead %}
+The story's lead is [{{ lead.id }}] {{ lead.name }}. Outside quoted speech, "I" and "you" in the turns are the lead.
 {% endif %}
 {%- comment -%}
 Marking is mandatory, not stylistic (piggyback.md), and aimed at the memory blocks: older and
@@ -79,12 +84,12 @@ negative offset slices from the END in Liquid — coinciding with the intended r
 {% if pairStart > 0 -%}
 # Earlier turns — how the scene got here, not the turn you report on
 {% for entry in lastTurns limit: pairStart %}
-{{ entry.content }}
+{% include 'macro_story_entry', entry: entry %}
 {% endfor %}
 {% endif -%}
 # This turn
 {% for entry in lastTurns offset: pairStart %}
-{{ entry.content }}
+{% include 'macro_story_entry', entry: entry %}
 {% endfor %}
 Report the scene state as of the LAST entry above, the time delta, a one-sentence summary of the turn, up to three retrieval queries naming context you want looked up for the next turn, and anything else the schema asks for that this turn showed.
 Scene state is absolute, not a delta: report the full cast present at the end of the turn, not only what changed. Read the entry before it for state the user's own action changed.

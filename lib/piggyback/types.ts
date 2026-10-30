@@ -173,7 +173,7 @@ export type PlannedTurn = {
 // Consumers differ only in array policy (.catch([]) or not), never in element.
 export const suggestionRefSchema = z.object({
   categoryRef: z.string().describe('opaque category id from the prompt list, e.g. cat1'),
-  text: z.string().describe("complete prose for the reader's next turn"),
+  text: z.string().describe("the option, as the user's next turn"),
 })
 
 export type SuggestionRef = z.infer<typeof suggestionRefSchema>

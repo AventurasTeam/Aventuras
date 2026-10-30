@@ -61,61 +61,6 @@ for the placement rule.
   2026-10-20, failure policy 2026-10-22; its flag's reason left to it
   by the AI writer map.
 
-- **Implement the prompt content pass.** Canon now says what each
-  prompt carries so that every story and settings input reaches the
-  prompts that should carry it: the rules in
-  [`principles.md → Mode, lead, and narration`](./ui/principles.md#mode-lead-and-narration--three-orthogonal-concepts),
-  where they land in
-  [`architecture.md → System and user halves`](./architecture.md#system-and-user-halves).
-  The work:
-  - the generation context resolves `lead` through `resolveLead` and
-    builds `currentTime` through the calendar renderer, and the
-    wizard's context the start time, each added to the variable
-    registry and its parity tests;
-  - a happening row names who knows it (`lib/retrieval/run.ts`), and
-    the lead joins the scope in adventure and first or second person
-    ([`retrieval.md → POV-awareness scope`](./memory/retrieval.md#pov-awareness-scope));
-  - the standing-instructions macro, in the narrator's system half and
-    the wizard opening;
-  - the suggestion-voice macro, in the tagged and the JSON suggestion
-    emissions, so the narrator's reply, the fallback's fold and the
-    refresh call all carry it;
-  - every history marks the user's turns, and the classifiers get the
-    mode rule, the fallback its lead line
-    ([`classifier.md → What the classifier reads`](./memory/classifier.md#what-the-classifier-reads));
-  - the title and description calls read what
-    [`wizard.md → Context-shaping`](./ui/screens/wizard/wizard.md#context-shaping)
-    lists, and a description runs 1–3 sentences.
-
-  The template tests pin that a rename of the lead changes a system
-  half and nothing else per call does. The classifier's evaluation set
-  is re-run on the dev model, since the mode rule and the marks change
-  what it reads. It comes before play testing, which needs those inputs
-  in place to tune against; tuning the wording is
-  [prompt tuning](#tuning-and-play-testing). Raised 2026-10-11,
-  designed 2026-10-29.
-
-  The pass also takes the whitespace and wording nits the halves PR's
-  reviews found in the bundled prompts, all older than the split
-  (routed from triage 2026-10-11):
-  - a Setting, Genre or Tone the user starts with a newline renders a
-    blank line under its heading;
-  - the Gregorian calendar line reads "time in seconds (1 seconds per
-    second)", now inside the cached system half;
-  - the periodic classifier's Known relationships lines print a
-    character's name and a view's kind as stored, so a newline in one
-    starts a line the model may read as another fact
-    (`classifier-context.ts`); Known entities, Places and Known
-    happenings already collapse theirs with `oneLine` (raised
-    2026-10-18 by the classifier factions slice review);
-  - the fallback classifier's roster leaves a blank line between its
-    active and staged entries;
-  - a place name with a newline breaks the location map's tree: the
-    rest of the name lands at column 0, where it reads as a top-level
-    place (`lib/world/location-map.ts`). A retired reason is already
-    flattened to one line there; the name isn't (raised 2026-10-15 by
-    the retired and disabled places slice review).
-
 - **`buildClassifierActions` has outgrown one function.**
   `lib/classifier/plan.ts`'s planner runs about a thousand lines; its thread and awareness blocks share about ten of the
   planner's locals
@@ -294,7 +239,11 @@ breakdown under [UX](#ux).
   checks the content pass's rules hold: the narrator keeps to the
   lead's attempt and to what each character knows, chips keep their
   voice, and the classifiers don't record a direction as something
-  that happened. Added 2026-10-29 by the content pass's design.
+  that happened. Added 2026-10-29 by the content pass's design. It
+  also watches for the narrator writing a `<user_turn>` of its own,
+  copying how its history marks the user's turns; if one shows, the
+  reply is stripped of it or told not to (added 2026-10-30 by the
+  content pass's implementation).
 
 - **Judge the classifier's descriptions.** A happening's description
   is the story's memory of the scene, recalled later as fact, and the

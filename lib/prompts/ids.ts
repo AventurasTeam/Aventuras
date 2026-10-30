@@ -26,18 +26,23 @@ export const TEMPLATE_IDS = {
 
 export const MACRO_IDS = {
   entityState: 'macro_entity_state',
+  classifierModeRule: 'macro_classifier_mode_rule',
   itemLine: 'macro_item_line',
   memoryBlocks: 'macro_memory_blocks',
+  narratorInstructions: 'macro_narrator_instructions',
   outputFormatNarrative: 'macro_output_format_narrative',
   stateEmission: 'macro_state_emission',
+  storyEntry: 'macro_story_entry',
   suggestionEmission: 'macro_suggestion_emission',
   suggestionEmissionJson: 'macro_suggestion_emission_json',
+  suggestionVoice: 'macro_suggestion_voice',
   // One per prose field: everything its generate and refine templates share.
   wizardOpeningContext: 'macro_wizard_opening_context',
   wizardDescriptionContext: 'macro_wizard_description_context',
   wizardGenreContext: 'macro_wizard_genre_context',
   wizardToneContext: 'macro_wizard_tone_context',
   wizardSettingContext: 'macro_wizard_setting_context',
+  wizardStory: 'macro_wizard_story',
 } as const
 
 export type TemplateId = (typeof TEMPLATE_IDS)[keyof typeof TEMPLATE_IDS]

@@ -130,6 +130,14 @@ describe('buildLocationMap', () => {
     )
   })
 
+  // A name that breaks a line would put the rest of it at depth 0, where it reads as a top-level place.
+  it("folds a place name's line breaks into single spaces, listed or retired", () => {
+    const vellis: Entity = { ...VELLIS, name: 'Port\nVellis' }
+    const anchor: Entity = { ...ANCHOR, name: 'The Rusty\r\n Anchor', status: 'retired' }
+    const map = buildLocationMap([ELDRA, vellis, anchor], null)
+    expect(outline(map)).toEqual(['Eldra', '  Port Vellis', '    The Rusty Anchor (retired)'])
+  })
+
   it('gives a retired location with a blank reason no reason', () => {
     const retired: Entity = { ...RETIRED_VELLIS, retiredReason: '  ' }
     expect(buildLocationMap([ELDRA, retired], null)[1]).toMatchObject({
@@ -304,6 +312,15 @@ describe('locationMapView.anchorOf', () => {
 describe('listedAncestorNames', () => {
   it('names the listed ancestors, nearest first', () => {
     expect(listedAncestorNames('loc_back', WORLD)).toEqual([
+      'The Rusty Anchor',
+      'Port Vellis',
+      'Eldra',
+    ])
+  })
+
+  it('puts each name on one line', () => {
+    const vellis: Entity = { ...VELLIS, name: 'Port\n  Vellis' }
+    expect(listedAncestorNames('loc_back', [ELDRA, vellis, ANCHOR, BACK_ROOM])).toEqual([
       'The Rusty Anchor',
       'Port Vellis',
       'Eldra',

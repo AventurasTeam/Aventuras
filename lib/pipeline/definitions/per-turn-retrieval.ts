@@ -10,6 +10,7 @@ import { generateId } from '@/lib/ids'
 import { promptProse } from '@/lib/piggyback'
 import { commitCaptureMode, reserveCaptureMode, writeProbeCapture } from '@/lib/probe'
 import {
+  awarenessScope,
   buildScanText,
   countTokens,
   RANKER_DEFAULTS,
@@ -21,6 +22,7 @@ import {
   type RetrievalType,
 } from '@/lib/retrieval'
 import { appSettingsStore } from '@/lib/stores'
+import { resolveLead } from '@/lib/world'
 
 import { readSceneSource } from './entry-reads'
 import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
@@ -68,9 +70,14 @@ export async function* retrievalPhase(
   const lastNarrative = await readSceneSource(ctx.db, branchId)
   const scene = inheritedEntryMetadata(lastNarrative?.metadata)
   const characterIds = new Set(entities.filter((e) => e.kind === 'character').map((e) => e.id))
-  // retrieval.md → POV-awareness scope queries `sceneEntities ∩ characters`;
+  // retrieval.md → POV-awareness scope queries `sceneEntities ∩ characters`, and the lead;
   // sceneEntities itself is kind-mixed (data-model.md → Entry metadata shape).
-  const sceneCharacterIds = scene.sceneEntities.filter((id) => characterIds.has(id))
+  const sceneCharacterIds = awarenessScope(
+    scene.sceneEntities.filter((id) => characterIds.has(id)),
+    resolveLead(open.definition.leadEntityId, new Map(entities.map((e) => [e.id, e])), branchId)
+      ?.id ?? null,
+    open.definition,
+  )
   // The same window generation-context composes for the prompt, so the capture
   // prices what the pools actually competed against rather than re-deriving the
   // mode rule. Priced on the prose alone: the per-turn template wraps entries in

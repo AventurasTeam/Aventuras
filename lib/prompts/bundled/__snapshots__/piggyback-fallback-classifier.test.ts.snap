@@ -3,14 +3,16 @@
 exports[`bundled piggyback fallback classifier template > matches the recorded snapshot 1`] = `
 {
   "system": "# Calendar
-This story tracks time in days (86400 seconds per day). Tiers: month (Frostmoon and Thawmoon). Convert relative-time prose ("two days later", "the next morning") into a seconds delta using these units.",
+This story tracks time in days (86400 seconds per day). Tiers: month (Frostmoon and Thawmoon). Convert relative-time prose ("two days later", "the next morning") into a seconds delta using these units.
+
+# The user's turns
+A turn marked as the user's is what the lead does, says or attempts. Where the narration after it shows how an attempt turned out, the narration decides what happened, and what the lead says stands unless the narration contradicts it. A user's turn that plainly speaks to the narrator rather than playing the lead ("skip to the next morning") is a direction: it states nothing that happened, so take the facts from the narration.",
   "user": "Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:
 - [c1] Kael (character)
 - [l1] The Drowned Keep (location)
 - [i3] Courier’s seal (item)
 - [i4] short sword (item)
 - [i5] a rusted lantern (item)
-
 - [i9] Veilstone (item, staged)
 
 Everything from here to "# This turn" is the world as it stands going into that turn — the baseline your report starts from, not a record of anything that happened in it.

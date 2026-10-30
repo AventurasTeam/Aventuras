@@ -572,9 +572,58 @@ describe('wizardTemplateContext', () => {
 
   it('emits every registry variable a generate call carries', () => {
     const keys = Object.keys(wizardTemplateContext(emptyWorkingState(), ''))
-    for (const name of ['definition', 'leadEntityId', 'cast', 'opening', 'lore', 'guidance']) {
+    for (const name of [
+      'definition',
+      'leadEntityId',
+      'lead',
+      'startTime',
+      'cast',
+      'opening',
+      'lore',
+      'guidance',
+    ]) {
       expect(keys).toContain(name)
     }
+  })
+
+  describe('lead', () => {
+    const withLead = (row: { name?: string; status?: 'active' | 'staged' }) => ({
+      ...emptyWorkingState(),
+      leadEntityId: LEAD_ID,
+      cast: [{ ...emptyCastDraft('character', LEAD_ID), name: 'Aria', ...row }],
+    })
+
+    it('names the lead when it is an active character in the cast, its name on one line', () => {
+      const ctx = wizardTemplateContext(withLead({ name: 'Aria\nVane' }), '')
+      expect(ctx.lead).toEqual({ id: LEAD_ID, name: 'Aria Vane' })
+    })
+
+    it('is null for a staged lead, or with no lead set', () => {
+      expect(wizardTemplateContext(withLead({ status: 'staged' }), '').lead).toBeNull()
+      expect(wizardTemplateContext({ ...withLead({}), leadEntityId: null }, '').lead).toBeNull()
+    })
+  })
+
+  describe('startTime', () => {
+    it('renders the start moment as the calendar step shows it', () => {
+      const state = emptyWorkingState()
+      const ctx = wizardTemplateContext(
+        {
+          ...state,
+          definition: {
+            ...state.definition,
+            calendarSystemId: 'earth-gregorian',
+            worldTimeOrigin: { year: 1200, month: 3, day: 14, hour: 9, minute: 0, second: 0 },
+          },
+        },
+        '',
+      )
+      expect(ctx.startTime).toBe('March 14, 1200 AD 09:00')
+    })
+
+    it('is null before the calendar step seeds a start moment', () => {
+      expect(wizardTemplateContext(emptyWorkingState(), '').startTime).toBeNull()
+    })
   })
 
   it('keeps the wizard-only parentUnknown marker off a location row', () => {

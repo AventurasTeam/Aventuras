@@ -1,9 +1,13 @@
 import type { TemplateSources } from '../types'
 
 export const PER_TURN_NARRATIVE: TemplateSources = {
-  // The system half must render the same bytes on every call until the user edits
-  // the story (architecture.md → System and user halves): nothing per call goes in it.
-  system: `{% if definition.setting != blank -%}
+  // architecture.md → System and user halves: the same bytes every call, so nothing per call goes
+  // in it, and the lead by name only: its id is a placeholder allocated per call.
+  system: `{% include 'macro_narrator_instructions', mode: definition.mode, narration: definition.narration, lead: lead.name %}
+
+The user's turns are marked with <user_turn> tags in the story so far. Under What has happened, each happening ends with who in the scene knows it, or says it is common knowledge; a character in the scene it doesn't name doesn't know it.
+
+{% if definition.setting != blank -%}
 # Setting
 {{ definition.setting }}
 
@@ -20,7 +24,7 @@ export const PER_TURN_NARRATIVE: TemplateSources = {
 {% endif -%}
 {% if calendarVocabulary -%}
 # Calendar
-This story tracks time in {{ calendarVocabulary.baseUnitName }}s ({{ calendarVocabulary.secondsPerBaseUnit }} seconds per {{ calendarVocabulary.baseUnitName }}). Tiers: {% for t in calendarVocabulary.tiers %}{{ t.name }}{% if t.labels.size > 0 %} ({{ t.labels | prose_join }}){% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}.{% if piggybackFires %} Convert relative-time prose ("two days later", "the next morning") into a seconds delta on <world_time_delta> using these units.{% endif %}
+This story tracks time in {{ calendarVocabulary.baseUnitName }}s{% if calendarVocabulary.secondsPerBaseUnit != 1 %} ({{ calendarVocabulary.secondsPerBaseUnit }} seconds per {{ calendarVocabulary.baseUnitName }}){% endif %}. Tiers: {% for t in calendarVocabulary.tiers %}{{ t.name }}{% if t.labels.size > 0 %} ({{ t.labels | prose_join }}){% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}.{% if piggybackFires %} Convert relative-time prose ("two days later", "the next morning") into a seconds delta on <world_time_delta> using these units.{% endif %}
 
 {% endif -%}
 {% include 'macro_output_format_narrative' %}`,
@@ -58,6 +62,11 @@ current location, a null one's id would match, since nil == nil.
 Here:{% for i in looseItems %}{% include 'macro_item_line', item: i, condition: i.state.condition, ids: piggybackFires %}{% endfor %}{% endif %}
 
 {% endif -%}
+{% if currentTime -%}
+# Current time
+{{ currentTime }}
+
+{% endif -%}
 {% if locationMap.size > 0 or locationMapUnplaced.size > 0 -%}
 # Places
 {% for p in locationMap %}{% for d in (1..p.depth) %}  {% endfor %}{% if p.retired %}{{ p.name }} (retired{% if p.retiredReason %}: {{ p.retiredReason }}{% endif %}){% else %}{% if piggybackFires %}[{{ p.id }}] {% endif %}{{ p.name }}{% endif %}
@@ -78,7 +87,7 @@ Use an ID from Places for <current_location>, or declare a new one with <new_loc
 {% endif -%}
 # Story so far
 {% for entry in entries %}
-{{ entry.content }}
+{% include 'macro_story_entry', entry: entry %}
 {% endfor %}
 {%- comment -%}
 Each emission block opens with one newline: a blank line after the story's last
