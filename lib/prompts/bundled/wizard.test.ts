@@ -11,7 +11,6 @@ const leadCtx = {
     tone: { promptBody: '' },
   },
   leadEntityId: 'c1',
-  // wizardTemplateContext resolves `lead` from the cast row (activeLead).
   lead: { id: 'c1', name: 'Aria' },
   cast: [{ id: 'c1', kind: 'character', name: 'Aria', description: '', status: 'active' }],
 }

@@ -654,6 +654,8 @@ export const WrapPovStaysEditableForSuggestions: Story = {
     )
     expect(screen.getByText(COPY.wrapPovHint)).toBeInTheDocument()
 
+    await userEvent.click(screen.getByRole('radio', { name: COPY.wrapFirst }))
+    await waitFor(() => expect(screen.getByRole('radio', { name: COPY.wrapFirst })).toBeChecked())
     await userEvent.click(screen.getByRole('switch', { name: COPY.suggestions }))
 
     await waitFor(() =>
@@ -663,6 +665,8 @@ export const WrapPovStaysEditableForSuggestions: Story = {
       ),
     )
     expect(screen.getByText(COPY.wrapPovInert)).toBeInTheDocument()
+    // Disabled, not discarded: the edit stays in the session.
+    expect(screen.getByRole('radio', { name: COPY.wrapFirst })).toBeChecked()
   },
 }
 
