@@ -209,3 +209,4 @@ breakdown under [UX](#ux).
   - [Calibrating the token estimate per model](./parked.md#calibrating-the-token-estimate-per-model)
   - [A limited narrator in second and third person](./parked.md#a-limited-narrator-in-second-and-third-person)
   - [A twin across a placement](./parked.md#a-twin-across-a-placement)
+  - [A staged row has no retirement](./parked.md#a-staged-row-has-no-retirement)

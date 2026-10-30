@@ -174,6 +174,10 @@ alias list (the keywords bullet below).
     destroyed place stays active, its destruction a `condition`, and
     only the user retires a place
     ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
+    A staged row has no retirement: a retire of one is dropped and
+    logged, and the row stays staged, so a later turn or pass that
+    brings it into the scene promotes it with its finality lost
+    ([`parked.md → A staged row has no retirement`](../parked.md#a-staged-row-has-no-retirement)).
 
   - `retired → active` when the turns put a retired character in the
     scene now: not a memory, a flashback, a vision or someone's report
@@ -313,7 +317,8 @@ the stored row instead, a status transition aside
 So a turn-1 rename is judged where turn 1 leaves its place, not where a
 turn-3 move does; a new place matches a place an earlier turn renamed;
 and a turn-1 retire of a staged character is judged before a turn-3
-mention promotes it. A turn that reveals a place's name and also
+mention promotes it, so the retire drops and the row ends active, as
+across two passes. A turn that reveals a place's name and also
 declares a new place of that name under the same parent reuses the
 renamed place; a new place of the name it had is no namesake by then,
 as in a later pass, so it is created, flagged `same-parent` by the old

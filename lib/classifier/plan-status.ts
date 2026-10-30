@@ -21,9 +21,13 @@ export function planStatusFlip(
   // Monotonic staged->active (the other writer may have landed it already), a return, and
   // hard-finality retirement only.
   if (flip.to === 'active' && current.status !== 'staged' && !returning) return
-  if (flip.to === 'retired' && current.status !== 'active') return
   // A destroyed place stays active, its destruction a condition: only the user retires one.
   if (flip.to === 'retired' && current.kind === 'location') return
+  if (flip.to === 'retired' && current.status === 'staged') {
+    report.droppedRetirements.push({ ref: flip.ref, cause: 'staged' })
+    return
+  }
+  if (flip.to === 'retired' && current.status !== 'active') return
   index.set(id, { ...current, status: flip.to })
   const proseEntryId = ctx.proseSource(flip.sourceTurn)
   planned.push({

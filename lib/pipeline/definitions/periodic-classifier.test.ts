@@ -2519,6 +2519,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
         name: 'the old mill',
         keywords: ['Varn'],
         state: { parent_location_id: LOC_SOUTH },
+        nameCollisionFlag: 1,
         nameCollisionPartnerId: LOC_VARN,
       })
     })
@@ -4067,13 +4068,16 @@ describe('periodicClassifierPhase — the writer map', () => {
           { ref: 'c1', parent: 'l1', sourceTurn: 't1' },
         ],
         standings: [{ ref: 'c1', standing: 'feared', sourceTurn: 't1' }],
-        statusFlips: [{ ref: 'f1', to: 'active', sourceTurn: 't1' }],
+        statusFlips: [
+          { ref: 'f1', to: 'active', sourceTurn: 't1' },
+          { ref: 'c2', to: 'retired', sourceTurn: 't1' },
+        ],
       }),
     } as never)
     const h = await ctxWith({
       processedThrough: 0,
       headPosition: 2,
-      entities: [kael, watch as Entity, ford],
+      entities: [kael, watch as Entity, ford, { ...aria, status: 'staged' }],
       mentionedPlaces: true,
     })
     await drain(h.ctx)
@@ -4087,6 +4091,9 @@ describe('periodicClassifierPhase — the writer map', () => {
     ])
     expect(logged('classifier.return_dropped')).toEqual([
       ['warn', { ref: FACT_WATCH, cause: 'not-a-character' }],
+    ])
+    expect(logged('classifier.retire_dropped')).toEqual([
+      ['warn', { ref: CHAR_ARIA, cause: 'staged' }],
     ])
     expect(logged('classifier.unresolved_refs')).toEqual([])
   })

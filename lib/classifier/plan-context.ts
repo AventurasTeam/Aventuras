@@ -46,6 +46,9 @@ export type DroppedStanding = { faction: string; cause: 'retired-faction' | 'not
 /** A return from retirement naming a row that is no character: only a character returns. */
 export type DroppedReturn = { ref: string; cause: 'not-a-character' }
 
+/** A retirement naming a staged row, which has none, so the prose's finality is lost. */
+export type DroppedRetirement = { ref: string; cause: 'staged' }
+
 /** A happening's or a new thread's icon the catalog lacks: written as none. */
 export type UnknownIcon = { title: string; icon: string }
 
@@ -107,6 +110,7 @@ type PlanReport = {
   unknownIcons: UnknownIcon[]
   droppedRenames: DroppedRename[]
   droppedReturns: DroppedReturn[]
+  droppedRetirements: DroppedRetirement[]
   droppedThreads: DroppedThread[]
   droppedHappenings: DroppedHappening[]
   earlyCloses: EarlyClose[]
@@ -230,6 +234,7 @@ export function createPlanContext(extraction: ClassifierReply, deps: PlanDeps): 
     unknownIcons: [],
     droppedRenames: [],
     droppedReturns: [],
+    droppedRetirements: [],
     droppedThreads: [],
     droppedHappenings: [],
     earlyCloses: [],

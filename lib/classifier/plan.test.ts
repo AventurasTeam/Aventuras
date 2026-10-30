@@ -809,9 +809,27 @@ describe('buildClassifierActions', () => {
       expect(planned.map((p) => p.action.kind)).toEqual(['retireEntity'])
     })
 
-    it('skips a retire flip when the snapshot status is staged, not active', () => {
-      const { planned } = flip('char_s', 'retired', [entityRow('char_s', 'staged')])
+    it('drops and reports a retire flip when the snapshot status is staged, not active', () => {
+      const { planned, droppedRetirements } = flip('char_s', 'retired', [
+        entityRow('char_s', 'staged'),
+      ])
       expect(planned).toHaveLength(0)
+      expect(droppedRetirements).toEqual([{ ref: 'char_s', cause: 'staged' }])
+    })
+
+    it('reports no lost retirement for a staged place, which only the user retires', () => {
+      const place = { ...(nonCharacterRow('loc_s', 'location') as object), status: 'staged' }
+      const { planned, droppedRetirements } = flip('loc_s', 'retired', [place as never])
+      expect(planned).toHaveLength(0)
+      expect(droppedRetirements).toEqual([])
+    })
+
+    it('reports no lost retirement for a row already retired', () => {
+      const { planned, droppedRetirements } = flip('char_r', 'retired', [
+        entityRow('char_r', 'retired'),
+      ])
+      expect(planned).toHaveLength(0)
+      expect(droppedRetirements).toEqual([])
     })
 
     it('emits one delta for two identical retire flips', () => {
@@ -831,7 +849,7 @@ describe('buildClassifierActions', () => {
       const decisions = new Map<string, ReconcileDecision>([
         ['h1', { kind: 'promote', entityId: 'char_s', similarity: 0.9 }],
       ])
-      const { planned } = buildClassifierActions(
+      const { planned, droppedRetirements } = buildClassifierActions(
         reply({
           statusFlips: [{ ref: 'char_s', to: 'retired', reason: 'fell', sourceTurn: 't2' }],
           newCharacters: [
@@ -841,6 +859,7 @@ describe('buildClassifierActions', () => {
         { ...base, decisions: forCharacters(decisions), entities: [entityRow('char_s', 'staged')] },
       )
       expect(planned.map((p) => p.action.kind)).toEqual(['promoteStagedEntity', 'retireEntity'])
+      expect(droppedRetirements).toEqual([])
       expect(planned[1].action).toMatchObject({
         payload: { id: 'char_s', retiredReason: 'fell' },
       })
@@ -5210,8 +5229,8 @@ describe('planning order', () => {
     it.each([
       ['its id', 'char_s'],
       ['the handle of the mention that promotes it', 'new:sable'],
-    ])('of a staged row is judged before a later turn promotes it, by %s', (_label, ref) => {
-      const { planned } = plan(
+    ])('of a staged row drops before a later turn promotes it, by %s', (_label, ref) => {
+      const { planned, droppedRetirements } = plan(
         {
           statusFlips: [{ ref, to: 'retired', sourceTurn: 't1' }],
           newCharacters: [newCharacter('new:sable', 'Sable', 't3')],
@@ -5220,6 +5239,7 @@ describe('planning order', () => {
         { decisions: promoteSable },
       )
       expect(writes(planned)).toEqual([['promoteStagedEntity', 'e3']])
+      expect(droppedRetirements).toEqual([{ ref, cause: 'staged' }])
     })
 
     // A promote that lands on a row the reply retired no-ops, so the view stays retired.

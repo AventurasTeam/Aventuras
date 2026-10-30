@@ -1831,6 +1831,21 @@ map's slice review; parked 2026-10-30 by the planner's turn-order
 design. The signal is play showing a place's keyword on a row the story
 moved, or a place missing under the parent its prose gave it.
 
+#### A staged row has no retirement
+
+The classifier retires `active → retired` only
+([`memory/classifier.md → What the classifier writes`](./memory/classifier.md#what-the-classifier-writes)),
+so a retire of a staged row is dropped and logged
+(`classifier.retire_dropped`). A staged character who dies in the prose
+stays staged, and a later turn or pass that brings the row into the
+scene, by finding the body say, promotes it to active with the death
+lost. The fix is a `staged → retired` transition, which changes the
+status rules and `retireEntity`'s `not-active` refusal. Raised
+2026-10-30 by the review of per-row planning, whose queue gave one
+reply the outcome two passes already had; parked the same day. The
+signal is `classifier.retire_dropped` firing in play, or a dead
+character reading as active.
+
 #### A zero or NaN embedding is stored as it comes
 
 `l2Normalize` (`lib/embedder/local/pooling.ts`) returns a zero vector
