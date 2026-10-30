@@ -13,6 +13,7 @@ import { STORY_ENTRY } from './story-entry'
 import { SUGGESTION_EMISSION } from './suggestion-emission'
 import { SUGGESTION_EMISSION_JSON } from './suggestion-emission-json'
 import { SUGGESTION_REFRESH } from './suggestion-refresh'
+import { SUGGESTION_VOICE } from './suggestion-voice'
 import {
   MACRO_WIZARD_DESCRIPTION_CONTEXT,
   MACRO_WIZARD_GENRE_CONTEXT,
@@ -87,5 +88,6 @@ export const bundledPack: Pack = {
       group: 'staticContent',
       source: SUGGESTION_EMISSION_JSON,
     },
+    [MACRO_IDS.suggestionVoice]: { group: 'staticContent', source: SUGGESTION_VOICE },
   },
 }

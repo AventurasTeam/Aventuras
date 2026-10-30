@@ -35,6 +35,7 @@ export const MACRO_IDS = {
   storyEntry: 'macro_story_entry',
   suggestionEmission: 'macro_suggestion_emission',
   suggestionEmissionJson: 'macro_suggestion_emission_json',
+  suggestionVoice: 'macro_suggestion_voice',
   // One per prose field: everything its generate and refine templates share.
   wizardOpeningContext: 'macro_wizard_opening_context',
   wizardDescriptionContext: 'macro_wizard_description_context',

@@ -15,6 +15,7 @@ const STABLE_SYSTEM_VARIABLES: readonly string[] = [
   'piggybackFires',
   'mentionedPlaces',
   'mode',
+  'composerWrapPov',
   'lead',
 ]
 
@@ -27,6 +28,7 @@ const perCallReads = (templateId: TemplateId, half?: TemplateHalf) =>
 
 const STORY = {
   mode: 'adventure',
+  composerWrapPov: 'first',
   definition: {
     mode: 'adventure',
     narration: 'second',

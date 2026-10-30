@@ -1054,6 +1054,19 @@ describe('bundled per-turn template — suggestionsFire gating', () => {
     expect(withoutState).toContain('never inside the prose itself')
   })
 
+  // reader-composer.md → Next-turn suggestions: the narrator's tagged block carries the voice.
+  it("asks for chips in the user's voice", () => {
+    const { user } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...suggestionContext,
+      composerWrapPov: 'first',
+      lead: { id: 'char_1', name: 'Aria' },
+    })
+    expect(user).toContain(
+      "Each option is a finished turn they could send as it is — not a description of an option, and not a question. Write each option as Aria's next turn",
+    )
+    expect(user).toContain('Write it in the first person, as "I".')
+  })
+
   it('omits the suggestion-emission macro when suggestionsFire is false', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...suggestionContext,

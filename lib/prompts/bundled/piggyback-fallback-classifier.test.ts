@@ -299,6 +299,21 @@ describe('bundled piggyback fallback classifier template', () => {
     expect(render(context({ lead: null }))).not.toContain("The story's lead")
   })
 
+  // reader-composer.md → Next-turn suggestions: the fallback's fold carries the chips' voice too.
+  it("asks for chips in the user's voice when it asks for chips", () => {
+    const user = render(
+      context({
+        suggestionsFire: true,
+        suggestionSlots: [{ ref: 'cat1', label: 'Action', promptHint: 'act' }],
+        suggestionCount: 2,
+        composerWrapPov: 'third',
+        lead: { id: 'c1', name: 'Kael' },
+      }),
+    )
+    expect(user).toContain("Write each option as Kael's next turn")
+    expect(user).toContain('Write it in the third person, calling Kael by name.')
+  })
+
   describe('the roster', () => {
     const rosterOf = (rows: Entity[]) => {
       const user = render(context({}, rows))
