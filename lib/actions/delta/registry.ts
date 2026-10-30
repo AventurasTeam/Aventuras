@@ -75,10 +75,13 @@ export function noopRefusal(reason: string): HandlerOutcome {
   return { status: 'rejected', reason, code: 'noop' }
 }
 
+/** `actionId`: the write's own, for a handler that reports an outcome against its run. */
+export type HandlerCtx = DbCtx & { actionId?: string }
+
 export type ActionHandler = (
   action: PipelineAction,
   branchId: string,
-  ctx: DbCtx,
+  ctx: HandlerCtx,
   /** Present on the group path only. */
   group?: GroupScope,
 ) => Promise<HandlerOutcome> | HandlerOutcome

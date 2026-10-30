@@ -10,6 +10,7 @@ import {
   type Entity,
   type EntityState,
 } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { newTerms, normalizeTerm } from '@/lib/keyword-terms'
 import { boundStateText } from '@/lib/piggyback'
 import { entitiesStore } from '@/lib/stores'
@@ -18,6 +19,7 @@ import {
   flagStillHolds,
   moveHidesStory,
   nameBasis,
+  nameHolders,
   pairSideOf,
   parentOfLocations,
   PLACE_REFUSAL,
@@ -35,6 +37,7 @@ import {
   createdKey,
   type ActionHandler,
   type GroupScope,
+  type HandlerCtx,
   type HandlerOutcome,
 } from '../delta/registry'
 import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteField } from '../delta/user-precedence'
@@ -508,24 +511,101 @@ export const placeLocationHandler: ActionHandler = async (action, branchId, ctx)
 }
 
 // classifier.md → What the classifier writes → Names, on the rows as the write lands: a write the
-// planner counted on can have been refused since. Any status counts, as the planner counts it.
-async function nameHeldByOther(ctx: DbCtx, current: Entity, name: string): Promise<boolean> {
+// planner counted on can have been refused since.
+async function oldestHolder(
+  ctx: DbCtx,
+  current: Entity,
+  name: string,
+): Promise<Entity | undefined> {
   const rows = await ctx.db
-    .select({ id: entities.id, name: entities.name, state: entities.state })
+    .select({
+      id: entities.id,
+      name: entities.name,
+      state: entities.state,
+      createdAt: entities.createdAt,
+    })
     .from(entities)
     .where(and(eq(entities.branchId, current.branchId), eq(entities.kind, current.kind)))
-  const holders = rows.filter((r) => r.id !== current.id && nameBasis(r.name, name) === 'same-name')
-  if (current.kind !== 'location') return holders.length > 0
-  // A place is compared with a real sibling, or with any place when either is unplaced.
-  const placementAt = realPlacementOf(rows)
-  const own = placementAt(current.id)
-  return holders.some((r) => {
-    const other = placementAt(r.id)
-    return own.kind === 'unplaced' || other.kind === 'unplaced' || samePlacement(own, other)
-  })
+  const [holder] = nameHolders(current, name, rows, realPlacementOf(rows))
+  return holder === undefined ? undefined : loadCurrent(current.branchId, holder.id, ctx)
 }
 
-/** classifier.md → What the classifier writes → Names. */
+/**
+ * Why `row`, as the write leaves it, takes no flag naming `partner`, or null. A row whose flag still
+ * holds keeps its partner, one per row; a dormant flag counts as none (classifier.md → Names).
+ */
+async function raiseRefusal(
+  ctx: DbCtx,
+  row: Entity,
+  partner: Entity,
+  reason: CollisionReason,
+  edits: readonly Delta[],
+): Promise<string | null> {
+  if (row.nameCollisionFlag === 1) {
+    const flagged =
+      row.nameCollisionPartnerId === null
+        ? undefined
+        : await loadCurrent(row.branchId, row.nameCollisionPartnerId, ctx)
+    if (flagStillHolds(row, flagged)) return 'already-flagged'
+  }
+  // World's pairing rule: a raise needs a pair.
+  if (!stillPaired(reason, pairSideOf(row), pairSideOf(partner))) return 'not-namesakes'
+  // A user's clear stands against older prose; newer prose may raise the flag again.
+  if (wroteField(edits, 'entities', 'nameCollisionFlag', [])) return USER_EDITED_SINCE_PROSE
+  return null
+}
+
+const flagColumns = (partnerId: string, reason: CollisionReason) => ({
+  nameCollisionFlag: 1,
+  nameCollisionPartnerId: partnerId,
+  nameCollisionReason: reason,
+})
+
+const flagUndo = (row: Entity) => ({
+  nameCollisionFlag: row.nameCollisionFlag,
+  nameCollisionPartnerId: row.nameCollisionPartnerId,
+  nameCollisionReason: row.nameCollisionReason,
+})
+
+/** classifier.md → Names: the name joins the keywords and the flag names the holder, for merging. */
+async function renameClashOutcome(
+  ctx: HandlerCtx,
+  current: Entity,
+  name: string,
+  holder: Entity,
+  edits: readonly Delta[],
+): Promise<HandlerOutcome> {
+  const { branchId, id } = current
+  const removed = priorTerms(edits)
+  const kept = newTerms(current.keywords, [name]).filter(
+    (term) => !removed.has(normalizeTerm(term)),
+  )
+  const keywords = [...current.keywords, ...kept]
+  // Against the row as this write leaves it: the keyword can be what pairs the two.
+  const refused = await raiseRefusal(ctx, { ...current, keywords }, holder, 'name-taken', edits)
+  const flagged = refused === null
+  logger.warn(
+    'classifier.rename_clash',
+    { ref: id, name, partnerId: holder.id, flagged },
+    { actionId: ctx.actionId },
+  )
+  if (kept.length === 0 && !flagged) return noopRefusal('name-taken')
+  return columnsWriteOutcome(
+    branchId,
+    id,
+    {
+      ...(kept.length > 0 ? { keywords } : {}),
+      ...(flagged ? flagColumns(holder.id, 'name-taken') : {}),
+    },
+    {
+      ...(kept.length > 0 ? { keywords: current.keywords } : {}),
+      ...(flagged ? flagUndo(current) : {}),
+    },
+    ctx,
+  )
+}
+
+/** classifier.md → What the classifier writes → Names: a rename or a clash, as the write lands. */
 export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'renameEntity')
     throw new Error(`handler/kind mismatch: expected 'renameEntity', got '${action.kind}'`)
@@ -540,8 +620,9 @@ export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) 
   if (nameBasis(name, current.name) === 'same-name') return noopRefusal('name-unchanged')
   const edits =
     proseEntryId === null ? [] : await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId)
+  const holder = await oldestHolder(ctx, current, name)
+  if (holder !== undefined) return renameClashOutcome(ctx, current, name, holder, edits)
   if (wroteField(edits, 'entities', 'name', [])) return noopRefusal(USER_EDITED_SINCE_PROSE)
-  if (await nameHeldByOther(ctx, current, name)) return noopRefusal('name-taken')
   // The old name joins the keywords unless they hold it, or the user removed it after the prose.
   const removed = priorTerms(edits)
   const kept = newTerms(current.keywords, [current.name]).filter(
@@ -558,10 +639,7 @@ export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) 
   )
 }
 
-/**
- * edge-cases.md → Layer B. A row whose flag still holds keeps its partner, one per row; a dormant
- * flag counts as none and is re-pointed (classifier.md → Names).
- */
+/** edge-cases.md → Layer B. */
 export const raiseCollisionFlagHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'raiseCollisionFlag')
     throw new Error(`handler/kind mismatch: expected 'raiseCollisionFlag', got '${action.kind}'`)
@@ -570,34 +648,15 @@ export const raiseCollisionFlagHandler: ActionHandler = async (action, branchId,
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
   if (!current) return noopRefusal(`flag target entities ${bid}:${id} not found`)
-  if (current.nameCollisionFlag === 1) {
-    const flagged =
-      current.nameCollisionPartnerId === null
-        ? undefined
-        : await loadCurrent(bid, current.nameCollisionPartnerId, ctx)
-    if (flagStillHolds(current, flagged)) return noopRefusal('already-flagged')
-  }
   if (partnerId === id) return noopRefusal('partner-is-self')
   const partner = await loadCurrent(bid, partnerId, ctx)
   if (partner === undefined) return noopRefusal('partner-not-found')
   if (partner.kind !== current.kind) return noopRefusal('partner-not-of-kind')
-  // World's pairing rule on the rows as they stand, a clash's keyword landed: a raise needs a pair.
-  if (!stillPaired(reason, pairSideOf(current), pairSideOf(partner)))
-    return noopRefusal('not-namesakes')
-  // A user's clear stands against older prose; newer prose may raise the flag again.
-  if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'nameCollisionFlag'))
-    return noopRefusal(USER_EDITED_SINCE_PROSE)
-  return columnsWriteOutcome(
-    bid,
-    id,
-    { nameCollisionFlag: 1, nameCollisionPartnerId: partnerId, nameCollisionReason: reason },
-    {
-      nameCollisionFlag: current.nameCollisionFlag,
-      nameCollisionPartnerId: current.nameCollisionPartnerId,
-      nameCollisionReason: current.nameCollisionReason,
-    },
-    ctx,
-  )
+  const edits =
+    proseEntryId === null ? [] : await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId)
+  const refused = await raiseRefusal(ctx, current, partner, reason, edits)
+  if (refused !== null) return noopRefusal(refused)
+  return columnsWriteOutcome(bid, id, flagColumns(partnerId, reason), flagUndo(current), ctx)
 }
 
 /** classifier.md → Factions: `state.standing` alone, cut to the schema's 500 as a condition is. */

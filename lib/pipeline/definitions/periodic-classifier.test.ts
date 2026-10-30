@@ -3883,9 +3883,6 @@ describe('periodicClassifierPhase — the writer map', () => {
       entities: [kael, character(CHAR_STRANGER, 'the hooded stranger'), ford],
     })
     await drain(h.ctx)
-    expect(logged('classifier.rename_clash')).toEqual([
-      ['warn', { ref: CHAR_STRANGER, name: 'Kael', partnerId: CHAR_KAEL, flagged: true }],
-    ])
     expect(logged('classifier.placement_dropped')).toEqual([
       ['warn', { ref: LOC_FORD, cause: 'not-unplaced' }],
     ])

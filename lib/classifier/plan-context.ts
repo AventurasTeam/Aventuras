@@ -34,9 +34,6 @@ export type DroppedMembership = Pick<Membership, 'character'> & {
   cause: 'retired-faction'
 }
 
-/** A rename to a name another row of the kind holds; `flagged`: this rename sent a raise. */
-export type RenameClash = { ref: string; name: string; partnerId: string; flagged: boolean }
-
 /** A write naming a row its list didn't show (data-model.md → Authorship contract). */
 export type UnseenRef = {
   list: 'renames' | 'placements' | 'standings' | 'threadStatuses' | 'knownAwareness'
@@ -104,7 +101,6 @@ type PlanReport = {
   droppedCreates: DroppedCreate[]
   parentDrops: ParentDrop[]
   droppedMemberships: DroppedMembership[]
-  renameClashes: RenameClash[]
   unseenRefs: UnseenRef[]
   droppedPlacements: DroppedPlacement[]
   droppedStandings: DroppedStanding[]
@@ -247,7 +243,6 @@ export function createPlanContext(extraction: ClassifierReply, deps: PlanDeps): 
     droppedCreates: [],
     parentDrops: [],
     droppedMemberships: [],
-    renameClashes: [],
     unseenRefs: [],
     droppedPlacements: [],
     droppedStandings: [],
