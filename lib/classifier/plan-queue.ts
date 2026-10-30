@@ -7,10 +7,9 @@ import { planStatusFlip } from './plan-status'
 type QueuedFact = { at: number; plan: () => void }
 
 /**
- * classifier.md → Planning order. Queued in the list order of one turn, so a sort by position alone
- * keeps it within a turn. Handles are claimed first: the queue reorders the entries that claim them.
- * A keyword write's undo is the whole prior list, so turn order also keeps a reversal from writing
- * an earlier turn's terms away (classifier.md → Provenance attribution).
+ * classifier.md → Planning order: list order within a turn, sorted by position alone. Handles are
+ * claimed first, as the queue reorders their claimants. A keyword write's undo is the whole prior
+ * list, so turn order keeps a reversal from erasing earlier terms (→ Provenance attribution).
  */
 export function planQueue(ctx: PlanContext): void {
   const { extraction, turnPosition } = ctx

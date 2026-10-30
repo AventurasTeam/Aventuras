@@ -66,8 +66,7 @@ export function planHappenings(ctx: PlanContext): void {
     })
 
     for (const involvement of happening.involvements) {
-      // Unrestricted by kind: happening_involvements is polymorphic — a location,
-      // item or faction is valid subject matter.
+      // Unrestricted by kind: happening_involvements is polymorphic (location, item, faction ok).
       const entityId = resolveRef(involvement.ref)
       if (entityId == null) continue
       planned.push({
@@ -89,16 +88,14 @@ export function planHappenings(ctx: PlanContext): void {
       })
     }
 
-    // One row a character: the first stands, the happening's own before any knownAwareness entry
-    // foldOwnAwareness moved in, as two refs reconciled to one character would otherwise upsert
-    // over it.
+    // One row a character: the first stands (the happening's own, before any knownAwareness entry
+    // foldOwnAwareness moved in); two refs reconciled to one character would upsert over it.
     const aware = new Set<string>()
     for (const row of happening.awareness) {
       const characterId = resolveRef(row.ref, 'character')
       if (characterId == null || aware.has(characterId)) continue
       aware.add(characterId)
-      // A character learning of an OLD happening anchors to the turn that
-      // narrated the learning, not the happening's.
+      // Learning of an OLD happening anchors to the narrating turn, not the happening's.
       const learnedEntryId =
         row.learnedAtTurn != null ? ctx.anchor(row.learnedAtTurn) : parentAnchor
       planned.push({
@@ -110,8 +107,7 @@ export function planHappenings(ctx: PlanContext): void {
             characterId,
             happeningId,
             learnedAtEntryId: learnedEntryId,
-            // Clamped here, not in the schema: the wire contract must stay
-            // JSON-Schema-representable, so it carries the raw number.
+            // Clamped here, not in the schema, which must stay JSON-Schema-representable.
             decayResistance: Math.min(1, Math.max(0, row.severity)),
             // Undefined, not null: a blank re-emit must leave an existing source alone.
             source: nonBlank(row.source),
@@ -214,8 +210,7 @@ export function planThreads(ctx: PlanContext): void {
       continue
     }
     const entryId = ctx.anchor(thread.sourceTurn)
-    // Opened and closed here: the create and the close are two writes, each kept by its own turn,
-    // so reversing the closing turn alone reopens the thread.
+    // Create and close are two writes, each kept by its own turn: reversing the close reopens it.
     const closedAs =
       thread.status === 'resolved' || thread.status === 'failed' ? thread.status : null
     const id = newId('thr')

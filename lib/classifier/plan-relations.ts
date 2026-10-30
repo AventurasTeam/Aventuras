@@ -90,9 +90,8 @@ export function planMemberships(ctx: PlanContext): void {
     const row = rowById.get(id)
     return row == null ? null : characterFactionId(row)
   }
-  // A none beside a join of another faction at one turn, for a character who held one before it,
-  // is a change of sides: the leave first, whatever the reply's order. Looked up without
-  // resolveRef, which would log a miss the loop below logs again.
+  // A none beside a join of another faction at one turn, for a character who held one, is a
+  // change of sides: leave first, any reply order. Not resolveRef, which double-logs a miss.
   const peekRef = (ref: string): string | null =>
     handleMap.get(ref) ?? (index.has(ref) ? ref : null)
   const held = new Map<string, string | null>()

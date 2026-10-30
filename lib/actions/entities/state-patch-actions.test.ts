@@ -2008,7 +2008,7 @@ describe('renameEntity onto a name another row holds', () => {
       expect(await undoPayloadsOf(db, 'act_n')).toEqual([])
     })
 
-    // classifier.md → Names: a dormant flag, one World's pairing rule no longer holds, counts as none.
+    // classifier.md → Names: a dormant flag (pairing no longer holds under World) counts as none.
     it.each([
       ['a partner it shares no name with', 'char_3'],
       ['a partner that is gone', 'char_gone'],

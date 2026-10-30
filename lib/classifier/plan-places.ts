@@ -123,9 +123,8 @@ export function placementPlanner(ctx: PlanContext): (fact: Placement) => void {
 }
 
 /**
- * classifier.md → Mentioned places: the entries that keep their handles, in settling order: turn
- * order, ties in the reply's order, as successive passes would meet them, each still waiting for
- * its own parent. After characters and factions, so the namespace they share keeps their claims.
+ * classifier.md → Mentioned places: entries keeping their handles, in settling order (turn order,
+ * ties in reply order). After characters and factions, so the shared namespace keeps their claims.
  */
 export function claimNewPlaces(ctx: PlanContext): SettlingPlace<NewPlace>[] {
   const { extraction, claimed, report, rowById } = ctx

@@ -124,15 +124,11 @@ export type PlanDeps = {
   branchId: string
   window: ClassifierWindow
   entities: readonly Entity[]
-  /**
-   * Reconcile decision per handle, resolved before planning, one map per kind: one handle can
-   * name a character and a faction.
-   */
+  /** Reconcile decision per handle, one map per kind: one handle can name both kinds. */
   decisions: Readonly<Record<ReconciledKind, ReadonlyMap<string, ReconcileDecision>>>
   now: () => number
-  // 'haw' is absent on purpose: the upsertHappeningAwareness handler in
-  // lib/actions/happenings/register-awareness.ts allocates the awareness id
-  // itself, so the planner must not.
+  // No 'haw': upsertHappeningAwareness (lib/actions/happenings/register-awareness.ts) allocates
+  // the awareness id itself, so the planner must not.
   newId: (kind: 'hap' | 'char' | 'fact' | 'hinv' | 'loc' | 'thr') => string
   threads: readonly Thread[]
   /** The happenings the prompt listed: the same set the phase passes to buildClassifierContext. */
@@ -155,10 +151,7 @@ export type PlanContext = {
   claimed: Set<string>
   report: PlanReport
   rowById: ReadonlyMap<string, Entity>
-  /**
-   * Mutable, not a frozen snapshot: rows this pass plans are visible to later facts in the same
-   * reply, so the flip guards read post-plan status and a ref to a just-created character resolves.
-   */
+  /** Mutable: later facts see rows this pass plans (post-plan status, new characters). */
   index: Map<string, RowView>
   /** What this reply creates and where it puts a place, which later creates and placements walk. */
   createdPlaces: Pick<Entity, 'id' | 'kind' | 'state'>[]
@@ -166,10 +159,7 @@ export type PlanContext = {
   anchor: (turn: string | undefined) => string
   /** One anchor per fact, taken only when the fact writes, so a no-op never counts as a fallback. */
   anchorOnce: (turn: string | undefined) => () => string
-  /**
-   * An unattributed fact's prose dates to the window's oldest turn while its survival anchor stays
-   * the newest: dating the prose too late would outrank the user's edits.
-   */
+  /** Unattributed prose dates to the window's oldest turn; later would outrank the user's edits. */
   proseSource: (turn: string | undefined) => string
   entryPosition: (entryId: string) => number
   turnPosition: (turn: string | undefined) => number
@@ -202,13 +192,11 @@ export function nonBlank(text: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined
 }
 
-// Past the embedder's window the tail is absent from the vector while `sourceHash` still
-// covers the whole string, so nothing re-embeds or reports it. Not a schema `.max()` —
-// a violation is a parse failure and the retry re-reads the same prose (cf. schema.ts).
+// Past the embedder's window the tail is missing from the vector yet `sourceHash` covers it, so
+// nothing re-embeds it. Not a schema `.max()`: the failed parse retries the same prose (schema.ts).
 export function clampEmbedded(text: string, limit: number): string {
   if (text.length <= limit) return text
-  // A lone surrogate half would be stored, hashed into sourceHash and rendered
-  // as a replacement character.
+  // A lone surrogate half would be stored, hashed and rendered as a replacement character.
   const lead = text.charCodeAt(limit - 1)
   const cut = lead >= 0xd800 && lead <= 0xdbff ? limit - 1 : limit
   return text.slice(0, cut).trimEnd()
@@ -281,9 +269,8 @@ export function createPlanContext(extraction: ClassifierReply, deps: PlanDeps): 
 
   const resolveRef = (ref: string, expectedKind?: Entity['kind']): string | null => {
     const id = handleMap.get(ref) ?? (index.has(ref) ? ref : null)
-    // A kind mismatch is unresolvable, not merely wrong: the awareness and
-    // relationship tables are FK-less and their handlers don't re-check kind, so
-    // a location landing in character_id would never be caught downstream.
+    // A kind mismatch is unresolvable: the FK-less awareness and relationship tables and their
+    // handlers don't check kind, so a location in character_id would never be caught.
     if (id == null || (expectedKind != null && index.get(id)?.kind !== expectedKind)) {
       report.unresolvedRefs.push(ref)
       return null

@@ -21,9 +21,8 @@ import type { ReconciledKind, ReconcileDecision } from './reconcile'
 import type { ClassifierExtraction, NewCharacter, NewFaction } from './schema'
 
 /**
- * A kind's reply field and id prefix, as `PlanDeps.decisions` keys its decision map. NewCharacter
- * and NewFaction differ only in optional fields, so a hand-made pairing of them still compiles
- * swapped.
+ * A kind's reply field and id prefix, keyed like `PlanDeps.decisions`. NewCharacter and NewFaction
+ * differ only in optional fields, so a hand-made pairing compiles swapped.
  */
 export const RECONCILED_KINDS = {
   character: { reply: 'newCharacters', idPrefix: 'char' },
@@ -34,12 +33,9 @@ export const RECONCILED_KINDS = {
 >
 
 /**
- * A new row's embedded name and description as the row will store them, whatever its kind.
- *
- * Layer B decides against the stored row (reconcile.ts), so an unclamped candidate is
- * measured against text that will never exist: an unbounded name stops matching the row
- * it created, an unbounded description can carry a genuine match out of TAU_HIGH. Both
- * bounds live here so write path and reconcile key cannot be given one without the other.
+ * A new row's embedded name and description as stored. Layer B (reconcile.ts) matches the stored
+ * row, so unclamped text mis-measures: a long name stops matching, a long description can leave
+ * TAU_HIGH. Both bounds live here so write path and reconcile key can't diverge.
  */
 export function clampEmbeddedText(candidate: { name: string; description: string }): {
   name: string
@@ -51,8 +47,8 @@ export function clampEmbeddedText(candidate: { name: string; description: string
   }
 }
 
-// data-model.md → Soft caps + compaction discipline: the Zod degradation bounds a create's state
-// must pass, else the handler refuses the row and the pass fails. The soft caps are the prompt's.
+// data-model.md → Soft caps + compaction discipline: Zod degradation bounds a create's state must
+// pass, else the handler refuses the row and the pass fails. Soft caps are the prompt's.
 const MAX_VOICE = 2000
 const MAX_STATE_LIST = 50
 
@@ -100,8 +96,8 @@ export type ClaimedEntity = {
 }
 
 /**
- * classifier.md → ID handling in classifier output: the entries that keep their handles, in the reply's order. The phase
- * reconciles a handle's first declaration, so a repeat of it must never reach the queue.
+ * classifier.md → ID handling in classifier output: entries that keep their handles, in reply
+ * order. The phase reconciles a handle's first declaration, so a repeat never reaches the queue.
  */
 export function claimNewEntities(ctx: PlanContext, kind: ReconciledKind): ClaimedEntity[] {
   const { extraction, deps, handleMap, claimed, report } = ctx
@@ -113,8 +109,7 @@ export function claimNewEntities(ctx: PlanContext, kind: ReconciledKind): Claime
       report.droppedCreates.push({ kind, handle, name, cause: 'blank-name' })
       continue
     }
-    // A handle reused for a second row would silently rebind every earlier
-    // ref to the later row. Keep the first binding and report the collision.
+    // A reused handle would silently rebind every earlier ref to the later row: keep the first.
     if (claimed.has(handle)) {
       report.droppedCreates.push({ kind, handle, name, cause: 'handle-taken' })
       continue
@@ -174,8 +169,7 @@ export function planNewEntity(ctx: PlanContext, claim: ClaimedEntity): void {
           branchId,
           kind,
           name: stored.name,
-          // First introduction is the classifier's one description write; it
-          // never amends a description afterwards (authorship contract).
+          // Classifier's one description write; never amended afterwards (authorship contract).
           description: stored.description,
           keywords,
           status: 'active',
