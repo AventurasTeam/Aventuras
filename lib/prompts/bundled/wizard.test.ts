@@ -122,13 +122,77 @@ describe('WIZARD_OPENING standing instructions', () => {
   })
 })
 
+// wizard.md → Title + description: both calls see the whole story.
+describe.each([
+  ['title', TEMPLATE_IDS.wizardTitleChips],
+  ['description', TEMPLATE_IDS.wizardDescription],
+])('the %s call', (_field, templateId) => {
+  const story = {
+    definition: {
+      mode: 'adventure',
+      narration: 'second',
+      setting: 'A drowned coast of salt marsh.',
+      genre: { label: 'Low fantasy', promptBody: 'GENRE-BODY-MARKER' },
+      tone: { label: 'Wry', promptBody: 'TONE-BODY-MARKER' },
+      calendarSystemId: 'earth-gregorian',
+      worldTimeOrigin: { year: 1200 },
+    },
+    lead: { id: 'c1', name: 'Aria' },
+    leadEntityId: 'c1',
+    startTime: 'START-TIME-MARKER',
+    cast: [
+      { id: 'c1', kind: 'character', name: 'Aria', description: 'A diver.', status: 'active' },
+      { id: 'l1', kind: 'location', name: 'The Sunken Archive', description: '', status: 'active' },
+      { id: 'c2', kind: 'character', name: 'Gandalf', description: 'A wizard.', status: 'staged' },
+    ],
+    lore: [{ title: 'The Salt Wells', body: 'LORE-BODY-MARKER' }],
+    opening: { content: 'The tide went out and did not come back.' },
+  }
+  const out = renderTemplate(templateId, story).user
+
+  it('reads the mode and the lead, the genre and tone by label, and the setting', () => {
+    expect(out).toContain('An interactive story the user plays as Aria.\n')
+    expect(out).toContain(
+      'Genre: Low fantasy\nTone: Wry\nSetting: A drowned coast of salt marsh.\n',
+    )
+    expect(out).not.toContain('BODY-MARKER')
+  })
+
+  it('reads the active cast by name and description, and the lore by title, with no ids', () => {
+    expect(out).toContain('Cast:\n- Aria: A diver.\n- The Sunken Archive\n')
+    expect(out).not.toContain('Gandalf')
+    expect(out).toContain('World reference:\n- The Salt Wells\n')
+    expect(out).not.toMatch(/\bc1\b|\bl1\b/)
+  })
+
+  it('reads the opening, and nothing of the calendar', () => {
+    expect(out).toContain('Opening:\nThe tide went out and did not come back.\n')
+    expect(out).not.toContain('START-TIME-MARKER')
+    expect(out).not.toContain('1200')
+  })
+
+  it('names a creative story and leaves out what is unset', () => {
+    const bare = renderTemplate(templateId, {
+      definition: { mode: 'creative', setting: '', genre: { label: '' }, tone: { label: '' } },
+      lead: null,
+      cast: [],
+      lore: [],
+      opening: { content: 'It began.' },
+    }).user
+    expect(bare).toContain('A story.\nOpening:\nIt began.\n')
+    expect(bare).not.toMatch(/Genre:|Tone:|Setting:|Cast:|World reference:|undefined/)
+  })
+})
+
 describe('WIZARD_DESCRIPTION template', () => {
-  it('asks for a synopsis/description, not next-beat narrative', () => {
+  it('asks for a premise of one to three sentences, not next-beat narrative', () => {
     const out = renderTemplate(TEMPLATE_IDS.wizardDescription, {
       opening: { content: 'Once upon a time.' },
     }).user
     expect(out).toContain('Once upon a time.')
-    expect(out.toLowerCase()).toMatch(/description|synopsis|log line|log-line/)
+    expect(out).toContain(
+      "A description is one to three sentences on the story's premise: who it is about, where, and what is at stake. Do not write narrative prose.",
+    )
     // must NOT include the narrative next-beat macro text:
     expect(out.toLowerCase()).not.toContain('next beat')
   })
@@ -465,7 +529,7 @@ const REFINE_PAIRS = [
     field: 'description',
     generate: TEMPLATE_IDS.wizardDescription,
     refine: TEMPLATE_IDS.wizardDescriptionRefine,
-    contract: 'one-sentence log line',
+    contract: "one to three sentences on the story's premise",
     directive: 'Revise the description below',
     current: { description: 'A diver hunts a drowned archive.' },
     rendered: ['A diver hunts a drowned archive.'],

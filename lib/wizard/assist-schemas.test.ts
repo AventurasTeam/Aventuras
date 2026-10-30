@@ -40,7 +40,7 @@ describe('wizard assist schemas', () => {
     expect(titleChipsSchema.parse({ titles: ['A', 'B'] }).titles).toEqual(['A', 'B'])
     expect(() => titleChipsSchema.parse({ titles: [] })).toThrow()
   })
-  it('descriptionOutputSchema parses a log line', () => {
+  it('descriptionOutputSchema parses a description', () => {
     expect(descriptionOutputSchema.parse({ description: 'A tale.' }).description).toBe('A tale.')
   })
 })

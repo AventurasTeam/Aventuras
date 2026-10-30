@@ -133,16 +133,27 @@ Revision instruction: {{ instruction }}
 
 {% include 'macro_wizard_setting_context' %}`
 
-export const WIZARD_TITLE_CHIPS = `Suggest five short, evocative titles for this story.
-Opening:
-{{ opening.content }}
-{% if guidance != blank %}Additional guidance: {{ guidance }}
-{% endif %}`
-
-export const MACRO_WIZARD_DESCRIPTION_CONTEXT = `A description is a one-sentence log line: do not write narrative prose, write a concise synopsis of the opening below.
-Opening:
+// wizard.md → Title + description: the whole story the user has set up. Genre and tone by label: a
+// body is instructions to a model, not a fact about the story, and the calendar names nothing here.
+export const MACRO_WIZARD_STORY = `{%- assign activeCast = cast | active -%}
+{% if definition.mode == 'adventure' %}An interactive story the user plays as {% if lead %}{{ lead.name }}{% else %}its lead{% endif %}.{% else %}A story{% if lead %} whose lead is {{ lead.name }}{% endif %}.{% endif %}
+{% if definition.genre.label != blank %}Genre: {{ definition.genre.label }}
+{% endif %}{% if definition.tone.label != blank %}Tone: {{ definition.tone.label }}
+{% endif %}{% if definition.setting != blank %}Setting: {{ definition.setting }}
+{% endif %}{% if activeCast.size > 0 %}Cast:
+{% for row in activeCast %}- {{ row.name }}{% if row.description != blank %}: {{ row.description }}{% endif %}
+{% endfor %}{% endif %}{% if lore.size > 0 %}World reference:
+{% for row in lore %}- {{ row.title }}
+{% endfor %}{% endif %}Opening:
 {{ opening.content }}
 `
+
+export const WIZARD_TITLE_CHIPS = `Suggest five short, evocative titles for this story.
+{% include 'macro_wizard_story' %}{% if guidance != blank %}Additional guidance: {{ guidance }}
+{% endif %}`
+
+export const MACRO_WIZARD_DESCRIPTION_CONTEXT = `A description is one to three sentences on the story's premise: who it is about, where, and what is at stake. Do not write narrative prose.
+{% include 'macro_wizard_story' %}`
 
 export const WIZARD_DESCRIPTION = `Write a description for this story. {% include 'macro_wizard_description_context' %}{% if guidance != blank %}Additional guidance: {{ guidance }}
 {% endif %}`

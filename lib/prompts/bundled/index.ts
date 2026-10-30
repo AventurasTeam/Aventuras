@@ -19,6 +19,7 @@ import {
   MACRO_WIZARD_GENRE_CONTEXT,
   MACRO_WIZARD_OPENING_CONTEXT,
   MACRO_WIZARD_SETTING_CONTEXT,
+  MACRO_WIZARD_STORY,
   MACRO_WIZARD_TONE_CONTEXT,
   WIZARD_CAST,
   WIZARD_DESCRIPTION,
@@ -74,6 +75,7 @@ export const bundledPack: Pack = {
     [MACRO_IDS.wizardGenreContext]: { group: 'wizard', source: MACRO_WIZARD_GENRE_CONTEXT },
     [MACRO_IDS.wizardToneContext]: { group: 'wizard', source: MACRO_WIZARD_TONE_CONTEXT },
     [MACRO_IDS.wizardSettingContext]: { group: 'wizard', source: MACRO_WIZARD_SETTING_CONTEXT },
+    [MACRO_IDS.wizardStory]: { group: 'wizard', source: MACRO_WIZARD_STORY },
     // architecture.md → Macros: generationContext, since they read its entity views.
     [MACRO_IDS.entityState]: { group: 'generationContext', source: ENTITY_STATE },
     [MACRO_IDS.itemLine]: { group: 'generationContext', source: ITEM_LINE },

@@ -42,6 +42,7 @@ export const MACRO_IDS = {
   wizardGenreContext: 'macro_wizard_genre_context',
   wizardToneContext: 'macro_wizard_tone_context',
   wizardSettingContext: 'macro_wizard_setting_context',
+  wizardStory: 'macro_wizard_story',
 } as const
 
 export type TemplateId = (typeof TEMPLATE_IDS)[keyof typeof TEMPLATE_IDS]
