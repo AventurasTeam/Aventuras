@@ -36,7 +36,7 @@
     "saveAnyway": "Save anyway",
     "fieldSeparator": ": ",
     "consequence": {
-      "composerWrapPov": "Affects how new user input in Do / Say / Think modes is rendered. Existing entries stay as-saved."
+      "composerWrapPov": "Affects how new user input in Do / Say / Think modes is rendered, and the person suggestions are written in. Existing entries stay as-saved."
     }
   },
   "missingStory": "This story could not be loaded.",
@@ -140,8 +140,8 @@
       "unrecognized": "Composer modes are adventure-only, and this story's mode isn't one this version recognises."
     },
     "composerWrapPov": "Wrap point of view",
-    "composerWrapPovHint": "How Do / Say / Think wrap what you type. Independent of the narration voice.",
-    "composerWrapPovNeedsModes": "Applies only when the composer offers Do / Say / Think.",
+    "composerWrapPovHint": "How Do / Say / Think wrap what you type, and the person suggestions are written in. Independent of the narration voice.",
+    "composerWrapPovInert": "Applies only in an adventure with Do / Say / Think or suggestions on.",
     "wrapPov": {
       "first": "1st person",
       "third": "3rd person"

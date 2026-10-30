@@ -118,7 +118,7 @@ const COPY = {
   wrapFirst: t('storySettings:generation.wrapPov.first'),
   wrapThird: t('storySettings:generation.wrapPov.third'),
   wrapPovHint: t('storySettings:generation.composerWrapPovHint'),
-  wrapPovNeedsModes: t('storySettings:generation.composerWrapPovNeedsModes'),
+  wrapPovInert: t('storySettings:generation.composerWrapPovInert'),
   fieldComposerModes: t('storySettings:generation.field.composerModes'),
   fieldWrapPov: t('storySettings:generation.field.composerWrapPov'),
   confirmTitle: t('storySettings:confirm.title'),
@@ -462,7 +462,7 @@ export const ComposerModesGatedInCreativeMode: Story = {
       'aria-disabled',
       'true',
     )
-    expect(screen.getByText(COPY.wrapPovNeedsModes)).toBeInTheDocument()
+    expect(screen.getByText(COPY.wrapPovInert)).toBeInTheDocument()
     expectSessionClean()
   },
 }
@@ -546,10 +546,10 @@ export const WrapPovSavesWithoutAskingOnAnEmptyStory: Story = {
   },
 }
 
-// Wrap POV edited, then modes off: the edit survives, and Discard still clears it.
+// Wrap POV edited, then modes off with suggestions off: the edit survives, and Discard clears it.
 export const DiscardResetsTheComposerFields: Story = {
   args: {
-    settings: settings({ composerModesEnabled: true }),
+    settings: settings({ composerModesEnabled: true, suggestionsEnabled: false }),
     definition: DEFINITION,
     onCommit: fn(async () => {}),
   },
@@ -606,9 +606,10 @@ export const HardGateFreezesTheComposerFields: Story = {
   },
 }
 
+// Suggestions off, so the modes toggle is the only thing wrap POV follows here.
 export const WrapPovFollowsTheComposerModesToggle: Story = {
   args: {
-    settings: settings({ composerModesEnabled: false }),
+    settings: settings({ composerModesEnabled: false, suggestionsEnabled: false }),
     definition: DEFINITION,
     onCommit: fn(async () => {}),
   },
@@ -621,7 +622,7 @@ export const WrapPovFollowsTheComposerModesToggle: Story = {
       'aria-disabled',
       'true',
     )
-    expect(screen.getByText(COPY.wrapPovNeedsModes)).toBeInTheDocument()
+    expect(screen.getByText(COPY.wrapPovInert)).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('switch', { name: COPY.composerModes }))
 
@@ -632,10 +633,36 @@ export const WrapPovFollowsTheComposerModesToggle: Story = {
       ),
     )
     expect(screen.getByText(COPY.wrapPovHint)).toBeInTheDocument()
-    expect(screen.queryByText(COPY.wrapPovNeedsModes)).not.toBeInTheDocument()
+    expect(screen.queryByText(COPY.wrapPovInert)).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('radio', { name: COPY.wrapFirst }))
     await waitFor(() => expect(screen.getByRole('radio', { name: COPY.wrapFirst })).toBeChecked())
+  },
+}
+
+// story-settings.md → Authoring aids: adventure's suggestions are written in the wrap person too.
+export const WrapPovStaysEditableForSuggestions: Story = {
+  args: {
+    settings: settings({ composerModesEnabled: false, suggestionsEnabled: true }),
+    definition: DEFINITION,
+    onCommit: fn(async () => {}),
+  },
+  play: async () => {
+    expect(await screen.findByRole('radio', { name: COPY.wrapFirst })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+    expect(screen.getByText(COPY.wrapPovHint)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('switch', { name: COPY.suggestions }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('radio', { name: COPY.wrapFirst })).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      ),
+    )
+    expect(screen.getByText(COPY.wrapPovInert)).toBeInTheDocument()
   },
 }
 
@@ -643,7 +670,7 @@ export const WrapPovFollowsTheComposerModesToggle: Story = {
 // for a wrap-POV change made before modes went off.
 export const WrapPovEditSurvivesTurningModesOff: Story = {
   args: {
-    settings: settings({ composerModesEnabled: true }),
+    settings: settings({ composerModesEnabled: true, suggestionsEnabled: false }),
     definition: DEFINITION,
     onCommit: fn(async () => {}),
     confirmFlagged: true,
