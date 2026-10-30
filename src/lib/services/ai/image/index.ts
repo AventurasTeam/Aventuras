@@ -27,6 +27,7 @@ export {
   requiresApiKey,
   takesApiKey,
   baseUrlMode,
+  connectionFor,
   referenceLimit,
   capturesModelSnapshot,
   IMAGE_PROVIDER_LABELS,

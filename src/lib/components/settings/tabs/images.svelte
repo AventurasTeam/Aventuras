@@ -18,6 +18,7 @@
     generateImage,
     takesApiKey,
     baseUrlMode,
+    connectionFor,
     IMAGE_PROVIDER_LABELS,
     IMAGE_PROVIDER_OPTIONS,
     ComfyMode,
@@ -215,6 +216,10 @@
       profileMode === ComfyMode.CustomWorkflow &&
       (!profileCustomWorkflow || !!pendingWorkflowData),
   )
+  // A field the provider has no input for is neither saved nor sent; the form keeps what was typed.
+  const connection = $derived(
+    connectionFor(profileProviderType, profileApiKey, profileBaseUrl || undefined),
+  )
   const canSaveProfile = $derived(!!profileName.trim() && !needsWorkflow)
 
   onDestroy(() => flushAutoSave())
@@ -243,20 +248,14 @@
   async function loadProfileFormModels(
     providerType: ImageProviderType,
     apiKey: string,
-    baseUrl: string,
+    baseUrl: string | undefined,
     forceReload: boolean,
   ) {
-    const effectiveBaseUrl = baseUrl || undefined
     const reqId = ++profileModelsReqId
     isLoadingProfileModels = true
     profileModelsError = null
     try {
-      const models = await listImageModelsByProvider(
-        providerType,
-        apiKey,
-        forceReload,
-        effectiveBaseUrl,
-      )
+      const models = await listImageModelsByProvider(providerType, apiKey, forceReload, baseUrl)
       // Discard stale results if a newer request has already started.
       if (reqId !== profileModelsReqId) return
       profileModels = models
@@ -278,16 +277,15 @@
   $effect(() => {
     if (editingProfileId && profileProviderType) {
       const providerType = profileProviderType
-      const apiKey = profileApiKey
-      const baseUrl = profileBaseUrl
+      const { apiKey, baseUrl } = connection
 
       untrack(() => {
         loadProfileFormModels(providerType, apiKey, baseUrl, false)
         if (providerType === 'comfyui') {
-          loadSamplerInfo(baseUrl || undefined, 'comfyui')
-          loadLoras(baseUrl || undefined)
+          loadSamplerInfo(baseUrl, 'comfyui')
+          loadLoras(baseUrl)
         } else if (providerType === 'a1111') {
-          loadSamplerInfo(baseUrl || undefined, 'a1111')
+          loadSamplerInfo(baseUrl, 'a1111')
         } else {
           profileSamplers = []
           profileSchedulers = []
@@ -393,10 +391,11 @@
     return chooseModelSnapshot({
       model: profileModel,
       providerType: profileProviderType,
-      baseUrl: profileBaseUrl || undefined,
+      baseUrl: connection.baseUrl,
       models: profileModels,
       settled:
-        profileModelsKey === modelListKey(profileProviderType, profileApiKey, profileBaseUrl),
+        profileModelsKey ===
+        modelListKey(profileProviderType, connection.apiKey, connection.baseUrl),
       stored: editingProfileId ? settings.getImageProfile(editingProfileId) : undefined,
     })
   }
@@ -408,8 +407,8 @@
     await settings.updateImageProfile(editingProfileId, {
       name: profileName.trim(),
       providerType: profileProviderType,
-      apiKey: profileApiKey,
-      baseUrl: profileBaseUrl || undefined,
+      apiKey: connection.apiKey,
+      baseUrl: connection.baseUrl,
       model: profileModel,
       modelSnapshot: buildModelSnapshot(),
       providerOptions: buildProviderOptions(),
@@ -580,8 +579,8 @@
     await settings.addImageProfile({
       name: profileName.trim(),
       providerType: profileProviderType,
-      apiKey: profileApiKey,
-      baseUrl: profileBaseUrl || undefined,
+      apiKey: connection.apiKey,
+      baseUrl: connection.baseUrl,
       model: profileModel,
       modelSnapshot: buildModelSnapshot(),
       providerOptions: buildProviderOptions(),
@@ -1285,7 +1284,7 @@
         errorMessage={profileModelsError}
         showRefreshButton={true}
         onRefresh={() =>
-          loadProfileFormModels(profileProviderType, profileApiKey, profileBaseUrl, true)}
+          loadProfileFormModels(profileProviderType, connection.apiKey, connection.baseUrl, true)}
       />
       {#if referenceProfileWarningReason}
         <p class="text-warning mt-1 text-xs">

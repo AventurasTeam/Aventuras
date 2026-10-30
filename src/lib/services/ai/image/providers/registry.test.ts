@@ -70,6 +70,7 @@ import {
   requiresApiKey,
   takesApiKey,
   baseUrlMode,
+  connectionFor,
   IMAGE_PROVIDER_LABELS,
   IMAGE_PROVIDER_OPTIONS,
   generateImage,
@@ -884,6 +885,59 @@ describe('Image Provider Registry', () => {
       })
       expect(await listImageModels('p')).toHaveLength(1)
       expect(listModels).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('hidden connection fields', () => {
+    it.each([
+      ['nanogpt', 'key', 'https://stale.test', { apiKey: 'key', baseUrl: undefined }],
+      ['openrouter', 'key', 'https://stale.test', { apiKey: 'key', baseUrl: undefined }],
+      ['a1111', 'stale-key', 'http://sd.test', { apiKey: '', baseUrl: 'http://sd.test' }],
+      ['comfyui', 'stale-key', 'http://comfy.test', { apiKey: '', baseUrl: 'http://comfy.test' }],
+      [
+        'openai-compatible',
+        'key',
+        'https://proxy.test',
+        { apiKey: 'key', baseUrl: 'https://proxy.test' },
+      ],
+    ] satisfies [ImageProviderType, string, string, ReturnType<typeof connectionFor>][])(
+      'connectionFor(%s) keeps only the fields the provider has an input for',
+      (providerType, apiKey, baseUrl, expected) => {
+        expect(connectionFor(providerType, apiKey, baseUrl)).toEqual(expected)
+      },
+    )
+
+    it('builds a provider without a leftover base URL', async () => {
+      const listModels = vi.fn(async () => [])
+      vi.mocked(createOpenRouterProvider).mockReturnValue({
+        id: 'openrouter',
+        name: 'openrouter',
+        generate: vi.fn(),
+        listModels,
+      })
+
+      await listImageModelsByProvider('openrouter', 'sk-hidden-url', true, 'https://stale.test')
+
+      expect(createOpenRouterProvider).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKey: 'sk-hidden-url', baseUrl: undefined }),
+      )
+    })
+
+    it('builds a provider without a leftover API key', async () => {
+      const listModels = vi.fn(async () => [])
+      vi.mocked(createA1111Provider).mockReturnValue({
+        id: 'a1111',
+        name: 'a1111',
+        generate: vi.fn(),
+        listModels,
+      })
+
+      await listImageModelsByProvider('a1111', 'stale-key', true, 'http://sd.test')
+
+      expect(createA1111Provider).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKey: '', baseUrl: 'http://sd.test' }),
+      )
+      expect(listModels).toHaveBeenCalledWith('')
     })
   })
 

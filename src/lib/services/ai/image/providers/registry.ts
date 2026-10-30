@@ -286,6 +286,21 @@ export function baseUrlMode(providerType: string): FieldMode {
 }
 
 /**
+ * The API key and base URL a provider uses. The form keeps a value typed for another provider, so
+ * a field this one has no input for is dropped rather than sent.
+ */
+export function connectionFor(
+  providerType: string,
+  apiKey: string,
+  baseUrl: string | undefined,
+): { apiKey: string; baseUrl: string | undefined } {
+  return {
+    apiKey: takesApiKey(providerType) ? apiKey : '',
+    baseUrl: baseUrlMode(providerType) === 'none' ? undefined : baseUrl,
+  }
+}
+
+/**
  * Whether edits through this profile and model can carry a reference image. A model the list
  * does not know passes: only an explicit `supportsImg2Img: false` rules out.
  */
@@ -338,8 +353,7 @@ export async function generateImage(options: {
   })
 
   const config: ImageProviderConfig = {
-    apiKey: profile.apiKey,
-    baseUrl: profile.baseUrl,
+    ...connectionFor(profile.providerType, profile.apiKey, profile.baseUrl),
     providerOptions: profile.providerOptions,
     timeoutMs: settings.apiSettings.llmTimeoutMs,
   }
@@ -387,7 +401,8 @@ export async function listImageModels(profileId: string): Promise<ImageModelInfo
   const profile = settings.getImageProfile(profileId)
   if (!profile) return []
 
-  const cacheKey = getCacheKey(profile.providerType, profile.apiKey, profile.baseUrl)
+  const connection = connectionFor(profile.providerType, profile.apiKey, profile.baseUrl)
+  const cacheKey = getCacheKey(profile.providerType, connection.apiKey, connection.baseUrl)
   const cached = modelCaches.get(cacheKey)
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.models
@@ -395,12 +410,11 @@ export async function listImageModels(profileId: string): Promise<ImageModelInfo
 
   try {
     const config: ImageProviderConfig = {
-      apiKey: profile.apiKey,
-      baseUrl: profile.baseUrl,
+      ...connection,
       timeoutMs: settings.apiSettings.llmTimeoutMs,
     }
     const provider = PROVIDER_FACTORIES[profile.providerType](config)
-    const models = await provider.listModels(profile.apiKey)
+    const models = await provider.listModels(connection.apiKey)
     modelCaches.set(cacheKey, { models, timestamp: Date.now() })
     return models
   } catch (error) {
@@ -420,7 +434,8 @@ export async function listImageModelsByProvider(
   forceReload: boolean,
   baseUrl?: string,
 ): Promise<ImageModelInfo[]> {
-  const cacheKey = getCacheKey(providerType, apiKey, baseUrl)
+  const connection = connectionFor(providerType, apiKey ?? '', baseUrl)
+  const cacheKey = getCacheKey(providerType, connection.apiKey, connection.baseUrl)
   if (!forceReload) {
     const cached = modelCaches.get(cacheKey)
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -430,12 +445,11 @@ export async function listImageModelsByProvider(
 
   try {
     const config: ImageProviderConfig = {
-      apiKey: apiKey ?? '',
-      baseUrl,
+      ...connection,
       timeoutMs: settings.apiSettings.llmTimeoutMs,
     }
     const provider = PROVIDER_FACTORIES[providerType](config)
-    const models = await provider.listModels(apiKey)
+    const models = await provider.listModels(connection.apiKey)
     modelCaches.set(cacheKey, { models, timestamp: Date.now() })
     return models
   } catch (error) {
@@ -455,8 +469,7 @@ export async function lookupModelCapabilities(
   baseUrl?: string,
 ): Promise<ImageModelCapabilities | undefined> {
   const provider = PROVIDER_FACTORIES[providerType]({
-    apiKey,
-    baseUrl,
+    ...connectionFor(providerType, apiKey, baseUrl),
     timeoutMs: settings.apiSettings.llmTimeoutMs,
   })
   if (provider.getModelCapabilities) return provider.getModelCapabilities(model)
