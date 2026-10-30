@@ -994,7 +994,8 @@ action and delta-logged, so CTRL-Z re-flags the row:
   instead ([Reversibility](#reversibility)).
 
 A reversal can still leave one, such as undoing the partner's
-create, and so can a pass's rename, which writes no flag columns. It
+create, and so can a pass's rename that renames the row, which writes
+no flag columns. It
 stays hidden until its pair holds again (the partner returns, and ids
 are never reused, so only the same row can, or a later rename or move
 makes the two a pair again), until a pass re-points it at a new

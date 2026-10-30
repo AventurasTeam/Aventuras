@@ -1782,7 +1782,11 @@ the planner plans every keyword write to a row in turn order (its
 renames, aliases, a known or promoted mention's terms and a reused
 place's), and the periodic classifier, their only writer, lands its
 passes in turn order, so the loss needs a later reply carrying an
-earlier turn's term than one already written. The general fix is an
+earlier turn's term than one already written. One reply can carry it
+too: a new place waiting for a later turn's parent writes a reused
+place's terms at its parent's turn
+([`memory/classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)),
+after a keyword write of a turn between them. The general fix is an
 undo that removes only the terms its own write added.
 
 Parked 2026-10-24; the signal is a keyword of a surviving turn lost to
@@ -1806,6 +1810,24 @@ unless reconciliation catches them.
 
 Parked 2026-10-24; the signal is the unattributed fallback
 (`classifier.window_head_fallback`) firing often enough to measure.
+
+#### A twin across a placement
+
+Two new places with one name and declared parent map to the first
+before any other match, even when a placement of a turn between them
+moved the first one's row
+([`memory/classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)):
+a turn-1 "Cellar" under the Keep reuses and places the unplaced cellar,
+a turn-2 placement moves it under the Inn, and a turn-3 "Cellar" under
+the Keep, carrying "the vault", maps to it. That is a silent
+mis-merge: the keyword lands on the moved row and the Keep's cellar is
+never created, where successive passes would create it anew under the
+Keep. The developer kept the twin rule as settled; a fix needs a twin
+keyed on where the first one's row sits by then, which reopens the twin
+of a create a takeover placed. Raised 2026-10-24 by the AI writer
+map's slice review; parked 2026-10-30 by the planner's turn-order
+design. The signal is play showing a place's keyword on a row the story
+moved, or a place missing under the parent its prose gave it.
 
 #### A zero or NaN embedding is stored as it comes
 

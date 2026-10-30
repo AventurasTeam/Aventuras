@@ -272,18 +272,20 @@ membership, link rows, threads and lore:
   one field, so an edit to any of them counts, a merge's re-point
   included.
 
-A pass plans a standing, a thread status, a placement, a rename, a
-keyword append and a membership against the stored row, not against
-what an earlier fact of the same reply planned: one that restates the
+A pass judges whether a standing, a thread status, a placement, a
+rename, a keyword append or a membership restates the row against the
+stored row, not against what an earlier fact of the same reply planned:
+one that restates the
 stored value plans nothing unless an earlier fact for that row was
 sent, and one that restates an earlier fact's value is still sent,
 since user precedence may refuse the earlier write and the later turn
 is newer prose. The handler no-ops a write whose value is already
-written. A rename clash's flag raise is planned against the stored
-flag alone, each clash sending its own, and the handler no-ops one
-whose flag already holds. A status transition is the exception, judged against the
-reply's view
+written. A rename is sent the same way whether it would rename or
+clash, and decided between the two as it lands, a clash's flag
+no-oping when the row's flag already holds
 ([`classifier.md → What the classifier writes`](./classifier.md#what-the-classifier-writes)).
+A status transition is the exception, judged against the reply's view
+([`classifier.md → Planning order`](./classifier.md#planning-order)).
 
 Undoing the user's edit removes its delta, which lifts the protection
 for any pass that reads the prose afterwards. A pass the edit already

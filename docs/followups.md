@@ -61,71 +61,35 @@ for the placement rule.
   2026-10-20, failure policy 2026-10-22; its flag's reason left to it
   by the AI writer map.
 
-- **`buildClassifierActions` has outgrown one function.**
-  `lib/classifier/plan.ts`'s planner runs about a thousand lines; its thread and awareness blocks share about ten of the
-  planner's locals
-  (`anchor`, `proseSource`, `entryPosition`, `inTurnOrder`, `iconOf`,
-  the drop lists, `planned`), so a split wants a shared planner
-  context rather than more closures. Raised 2026-10-23 by the AI
-  writer map's Task 20 review.
+- **Implement per-row planning.** The periodic classifier's planner
+  plans a reply's facts as one queue in turn order, its writes landing
+  in the queue's order, and a rename is decided as it lands between the
+  rename and the clash
+  ([`classifier.md → Planning order`](./memory/classifier.md#planning-order),
+  [→ What the classifier writes](./memory/classifier.md#what-the-classifier-writes)).
+  `lib/classifier/plan.ts`'s `buildClassifierActions` still plans list
+  by list in about a thousand lines; its thread and awareness blocks
+  share about ten of the planner's locals (`anchor`, `proseSource`,
+  `entryPosition`, `inTurnOrder`, `iconOf`, the drop lists, `planned`),
+  so the queue wants a shared planner context rather than more
+  closures. The work:
+  - the queue, and its writes landing in its order;
+  - `renameEntity` sent for a rename and a clash alike, its handler
+    deciding between them, with the planner predicting by the
+    handler's holder rule (`nameHeldByOther`) rather than its own;
+  - the `classifier.rename_clash` log reporting the handler's outcome,
+    not the planner's prediction;
+  - tests pinning what the queue fixes: a turn-1 rename judged before a
+    turn-3 placement moves its place, a turn-3 new place reusing the
+    place turn 1 renamed, a turn-1 retire of a staged character planned
+    before a turn-3 mention promotes it; and both directions of the
+    rename decided as it lands: a first rename the user's edit refuses
+    leaves a second rename to its name free to land, and a rename away
+    from a name the user's edit refuses leaves a rename to that name a
+    clash.
 
-  The planner also plans the reply list by list, each list judged
-  against what the earlier lists planned as though it landed, where
-  canon checks a fact against what earlier facts in the reply changed
-  ([`classifier.md → What the classifier writes`](./memory/classifier.md#what-the-classifier-writes)).
-  Two facts about one row, from different turns and in different
-  lists, can then be judged in the wrong order. The AI writer map's
-  slice review fixed one case: a mentioned place's matching now sees
-  the placements of its turn and earlier ones, so the reply no longer
-  folds two places into one. The rest waits for per-row planning in
-  turn order across lists, one queue of each row's facts each judged
-  against the state after the earlier ones (the review's option A),
-  which the split is the moment for:
-  - **A rename against a placement.** Renames plan after every
-    placement, so a turn-1 rename is judged where a turn-3 move leaves
-    the place. When a user edit refuses the move as it lands, the
-    rename has already become a `name-taken` clash, and the flag lands
-    across different parents. Option A fixes it.
-  - **A create against a rename.** Creates plan before renames, so a
-    turn-1 rename of the old mill to "Varn" and a turn-3 mention of a
-    new "Varn" in the same region create a second "Varn" and flag the
-    mill, where successive passes would reuse the renamed mill. Option
-    A fixes it.
-  - **A promote against a retire.** A staged character a turn-3
-    mention promotes is promoted before a turn-1 retire is judged, so
-    the retire becomes plannable: the character is promoted, then
-    retired, where successive passes would only promote it. Option A
-    fixes it.
-  - **A new place waiting for a later turn's parent.** New places settle
-    in turn order, but each waits for its own parent, so a turn-1 place
-    under a new place of turn 3 settles after it. It then matches
-    against the placements of turns up to its parent's and counts later
-    turns' new places as its earlier creates: a turn-1 Cellar under a
-    turn-3 Loft takes over a turn-2 unplaced Cellar, a turn-1 write on a
-    row turn 2 creates, under a parent turn 3 creates. Per-row planning
-    alone doesn't give a turn-1 place a turn-3 parent; the likely fix
-    creates it unplaced at its own turn and places it at its parent's.
-  - **A twin across a placement.** Two new places with one name and
-    declared parent map to the first before any other match, even when
-    a placement of a turn between them moved the first one's row: a
-    turn-1 "Cellar" under the Keep reuses and places the unplaced
-    cellar, a turn-2 placement moves it under the Inn, and a turn-3
-    "Cellar" under the Keep, carrying "the vault", maps to it. That is a
-    silent mis-merge: the keyword lands on the moved row and the Keep's
-    cellar is never created, where successive passes would create it
-    anew under the Keep. The developer kept the twin rule as settled;
-    a fix needs option A and a twin keyed on where the first one's row
-    sits by then, which reopens the twin of a create a takeover placed.
-  - **Two renames to one name, the first refused.** When a user edit
-    refuses the first rename as it lands, the second, planned as a
-    clash against it, writes only a keyword and its flag is refused,
-    so the revealed name is lost. Option A leaves this one, since
-    canon's two-layer check lets a planned write be refused when it
-    lands; its fix is writing the clash outcome at write time, the
-    alternative to the rename's write-time no-op.
-
-  Raised 2026-10-24 by the AI writer map's slice review; routed from
-  triage 2026-10-24.
+  Raised 2026-10-23 by the AI writer map's Task 20 review and
+  2026-10-24 by its slice review; designed 2026-10-30.
 
 ## UX
 
@@ -274,3 +238,4 @@ breakdown under [UX](#ux).
   - [Prompt-cache optimization](./parked.md#prompt-cache-optimization)
   - [Calibrating the token estimate per model](./parked.md#calibrating-the-token-estimate-per-model)
   - [A limited narrator in second and third person](./parked.md#a-limited-narrator-in-second-and-third-person)
+  - [A twin across a placement](./parked.md#a-twin-across-a-placement)

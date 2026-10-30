@@ -179,9 +179,10 @@ alias list (the keywords bullet below).
     scene now: not a memory, a flashback, a vision or someone's report
     of them. Never a place.
 
-  Each is checked against the pass's view — its snapshot plus what
-  earlier facts in the same reply changed — when planned, and against
-  the row as it stands when the write lands. A status the user wrote
+  Each is checked against the pass's view — its snapshot plus what the
+  reply's facts ahead of it changed
+  ([Planning order](#planning-order)) — when planned, and against the
+  row as it stands when the write lands. A status the user wrote
   after the flip's prose stands (see
   [`cadence.md → User edits and classifier writes`](./cadence.md#user-edits-and-classifier-writes)).
 
@@ -234,15 +235,18 @@ alias list (the keywords bullet below).
   unplaced): the name joins the entity's
   keywords, as a name the turns use for it, and the pass flags the
   entity (`name-taken`) with the oldest holder as its partner, for the
-  user to merge. The rename is checked again against the rows as they
-  stand when it lands, since a write the pass counted on may have been
-  refused by then: a holder found only then leaves the rename unwritten,
-  with no keyword and no flag. An entity already flagged keeps its flag
-  and gets the keyword only. A dormant flag
+  user to merge. Which of the two a rename writes is decided as it
+  lands, against the rows as they stand then, since a write the pass
+  counted on may have been refused by then: the pass predicts the
+  outcome for the facts after it but sends one rename either way, so a
+  refused rename leaves a later rename to its name free to land, and a
+  holder found only then gets the clash. A name the user wrote after
+  the rename's prose stops the rename, not the clash. An entity already
+  flagged keeps its flag and gets the keyword only. A dormant flag
   ([`world.md → Surfacing`](../ui/screens/world/world.md#surfacing)),
   its partner gone, its pair no longer namesakes once the keyword is
   counted, or a `same-parent` pair no longer sharing a parent, counts
-  as no flag: the pass re-points it at the holder.
+  as no flag: the rename re-points it at the holder.
 - **Where a place sits** — a listed place's parent, when the turns
   place one the Places list shows unplaced or move one; and the
   top-level mark for an unplaced place nothing on the map could
@@ -287,6 +291,43 @@ alias list (the keywords bullet below).
   no delta. So is one against a view the user wrote, or a pair the user
   deleted, after the fact's prose
   ([user precedence](./cadence.md#user-edits-and-classifier-writes)).
+
+### Planning order
+
+The reply's facts that change what another fact is judged against plan
+as one queue in source-turn order. Within one turn they plan in this
+order, ties in the reply's order, and a fact with no source turn counts
+at the newest:
+
+1. new characters and factions, with their promotes and a known or
+   promoted mention's new keywords;
+2. placements;
+3. renames, then aliases;
+4. new places, with a reused place's keywords and placement;
+5. status transitions.
+
+Each is judged against the pass's snapshot plus what the facts ahead
+of it changed; only whether a write restates the row is judged against
+the stored row instead, a status transition aside
+([`cadence.md → User edits and classifier writes`](./cadence.md#user-edits-and-classifier-writes)).
+So a turn-1 rename is judged where turn 1 leaves its place, not where a
+turn-3 move does; a new place matches a place an earlier turn renamed;
+and a turn-1 retire of a staged character is judged before a turn-3
+mention promotes it. A turn that reveals a place's name and also
+declares a new place of that name under the same parent reuses the
+renamed place. New characters and factions are reconciled before the
+queue, against the snapshot and every rename in the reply whatever its
+turn, so a reveal written twice absorbs whichever turn its newcomer
+comes from
+([Disambiguation on new-character mentions](#disambiguation-on-new-character-mentions));
+the queue plans the writes their decisions give. A new place waits for
+its own parent ([Mentioned places](#mentioned-places)). The queue's
+writes land in its order, so each is checked as it lands against the
+rows the facts ahead of it left.
+
+Memberships and standings read the rows as they stood before the reply
+([Factions](#factions)). Happenings, awareness, relationships and
+threads plan after the queue, since nothing in it reads them.
 
 ## Provenance attribution
 
@@ -493,8 +534,8 @@ reasons: `same-parent`, for a location created beside a similarly
 named sibling, and `unplaced`, for an unplaced one created while places
 elsewhere share its name. The per-turn writer gives an item's exact
 namesake `alike` or `ambiguous` by the same bands. A pass whose rename
-meets a name another row of the kind holds flags the entity
-`name-taken`, with the oldest such row as its partner
+meets, as it lands, a name another row of the kind holds flags the
+entity `name-taken`, with the oldest such row as its partner
 ([What the classifier writes](#what-the-classifier-writes)). World
 pairs a flagged row with its partner and states the reason in the
 resolve dialog
@@ -560,7 +601,12 @@ that name it
 under whatever row that place resolved to; otherwise the places settle
 in turn order, ties in the reply's order and a place with no source
 turn counting at the newest, each waiting only for its own parent, so
-one whose parent never resolves settles unplaced at its own turn. A
+one whose parent never resolves settles unplaced at its own turn. One
+whose parent is a new place of a later turn settles when that parent
+does, matched against the places as the reply's facts up to that turn
+leave them, and is still anchored at its own turn. When that match
+reuses a place the reply creates at a turn between the two, reversing
+that turn removes the place though the earlier turn mentions it. A
 place whose parent the turns don't give is top-level when nothing on
 the map could contain it,
 and unplaced when something could and the turns don't say which; when
