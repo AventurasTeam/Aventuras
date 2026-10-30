@@ -52,14 +52,23 @@ He said nothing. Outside, the rain came harder against the shutters.`,
       basis: 'rule',
       holds: (r) =>
         r.happenings.some(
-          (h) => involves(h, 'char_kael') && involves(h, 'char_aria') && /mother/i.test(said(h)),
+          (h) =>
+            involves(h, 'char_kael') &&
+            involves(h, 'char_aria') &&
+            /mother/i.test(said(h)) &&
+            /\b(she|aria|herself)\b[^.]*\b(wrote|written|writes|penned)\b/i.test(said(h)),
         ),
     },
     {
       name: 'the burning, from the turn written as prose, is recorded',
       kind: 'expect',
       basis: 'rule',
-      holds: (r) => r.happenings.some((h) => /burn|fire|ash|flame/i.test(said(h))),
+      // The prose turn, or the narration that finishes it: a fact synthesised across turns takes
+      // the latest.
+      holds: (r) =>
+        r.happenings.some(
+          (h) => /burn|fire|ash|flame/i.test(said(h)) && ['t3', 't4'].includes(h.sourceTurn ?? ''),
+        ),
     },
     {
       name: 'Kael knows of the confrontation',
