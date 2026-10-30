@@ -59,18 +59,24 @@ export function normalizeBaseUrl(url: string | undefined): string {
   return /^[a-z][a-z\d+.-]*:$/i.test(normalized) ? '' : normalized
 }
 
+/** The parsed URL, or `null` when `url` is not an absolute `http(s)` URL. */
+export function parseHttpUrl(url: string): URL | null {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return null
+  }
+  return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed : null
+}
+
 /**
  * Whether an `http(s)` URL points at a host outside the user's own machine and network.
  * Judges the name and IP literals only: a public name that resolves to a private address passes.
  */
 export function isPublicHttpUrl(url: string): boolean {
-  let parsed: URL
-  try {
-    parsed = new URL(url)
-  } catch {
-    return false
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+  const parsed = parseHttpUrl(url)
+  if (!parsed) return false
 
   // The parser has already normalised numeric IPv4 forms (`2130706433`, `0x7f.1`) to dotted quads.
   const host = parsed.hostname.replace(/\.$/, '')

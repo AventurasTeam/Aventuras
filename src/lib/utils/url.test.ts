@@ -1,5 +1,21 @@
 import { describe, it, expect } from 'vitest'
-import { isPublicHttpUrl, normalizeBaseUrl } from './url'
+import { isPublicHttpUrl, normalizeBaseUrl, parseHttpUrl } from './url'
+
+describe('parseHttpUrl', () => {
+  it.each([
+    ['http://192.168.1.50:4000/v1', '192.168.1.50'],
+    ['https://open.bigmodel.cn/api', 'open.bigmodel.cn'],
+  ])('parses %j', (input, hostname) => {
+    expect(parseHttpUrl(input)?.hostname).toBe(hostname)
+  })
+
+  it.each(['', 'h', 'open.bigmodel.cn/api', 'http://', 'ftp://example.com', 'file:///tmp/a'])(
+    'gives null for %j',
+    (input) => {
+      expect(parseHttpUrl(input)).toBeNull()
+    },
+  )
+})
 
 describe('normalizeBaseUrl', () => {
   it.each([
