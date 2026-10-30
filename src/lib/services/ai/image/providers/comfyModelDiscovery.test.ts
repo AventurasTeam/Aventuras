@@ -63,6 +63,20 @@ describe('ComfyUI model discovery', () => {
     expect(models.map((m) => m.id)).toEqual(['checkpoint:a.safetensors', 'unet:flux.safetensors'])
   })
 
+  it('forwards the abort signal to every list request', async () => {
+    serveModels({ checkpoints: [], diffusion_models: [], loras: [] })
+    const { signal } = new AbortController()
+    const provider = createComfyProvider({ apiKey: '' })
+
+    await provider.listModels(undefined, signal)
+    await provider.listLoras!(signal)
+    await provider.getSamplerInfo!(signal).catch(() => {})
+
+    const calls = vi.mocked(imageGetFetch).mock.calls
+    expect(calls).toHaveLength(4)
+    for (const [, , options] of calls) expect(options?.signal).toBe(signal)
+  })
+
   it('lists LoRAs, and none when the folder cannot be read', async () => {
     serveModels({ loras: ['detail.safetensors'] })
     expect(await createComfyProvider({ apiKey: '' }).listLoras!()).toEqual(['detail.safetensors'])

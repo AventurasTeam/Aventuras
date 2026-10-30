@@ -620,7 +620,9 @@ extra whose failure never fails the listing. Whether a provider takes an API key
 provider in the registry (`PROVIDER_API_KEY`, `PROVIDER_BASE_URL`), and the settings form and
 `hasRequiredCredentials` read those tables. The form keeps a value typed for another provider, so the
 registry builds a provider only from the fields it has an input for (`connectionFor`): a leftover base URL
-is not sent to NanoGPT, nor a leftover API key to A1111. Migration `042` moved image settings that still named an
+is not sent to NanoGPT, nor a leftover API key to A1111. Discovery (`listModels`, `getSamplerInfo`,
+`listLoras`) takes an `AbortSignal`. A cancelled model list is
+never cached, even when an adapter answers with a partial one. Migration `042` moved image settings that still named an
 API profile into image profiles, moved proxy-style `openai` profiles and every `chutes` profile
 (that provider is gone) to OpenAI Compatible, and pinned `zhipu` profiles with an empty base URL to
 `open.bigmodel.cn`, which they used before the default became `api.z.ai`.

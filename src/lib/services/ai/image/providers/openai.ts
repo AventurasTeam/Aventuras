@@ -108,19 +108,23 @@ export function createOpenAIProvider(config: ImageProviderConfig): ImageProvider
       })
     },
 
-    async listModels(apiKey: string): Promise<ImageModelInfo[]> {
-      return fetchOpenAIImageModels(baseUrl, apiKey)
+    async listModels(apiKey: string, signal?: AbortSignal): Promise<ImageModelInfo[]> {
+      return fetchOpenAIImageModels(baseUrl, apiKey, signal)
     },
   }
 }
 
-async function fetchOpenAIImageModels(baseUrl: string, apiKey: string): Promise<ImageModelInfo[]> {
+async function fetchOpenAIImageModels(
+  baseUrl: string,
+  apiKey: string,
+  signal?: AbortSignal,
+): Promise<ImageModelInfo[]> {
   if (!apiKey) return []
 
   const response = await imageGetFetch(
     `${baseUrl}/models`,
     { Authorization: `Bearer ${apiKey}` },
-    { serviceId: 'openai-image-models' },
+    { serviceId: 'openai-image-models', signal },
   )
   return parseModelList(await response.json(), ModelEntry)
     .filter(({ id }) => isOpenAIImageModel(id))

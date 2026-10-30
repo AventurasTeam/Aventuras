@@ -42,6 +42,17 @@ describe('model discovery', () => {
       vi.mocked(imageGetFetch).mockResolvedValue(reply(emptyBody))
       expect(await create().listModels('k')).toEqual([])
     })
+
+    it('forwards the abort signal to its request', async () => {
+      vi.mocked(imageGetFetch).mockResolvedValue(reply(emptyBody))
+      const { signal } = new AbortController()
+
+      await create().listModels('k', signal)
+
+      const calls = vi.mocked(imageGetFetch).mock.calls
+      expect(calls.length).toBeGreaterThan(0)
+      for (const [, , options] of calls) expect(options?.signal).toBe(signal)
+    })
   })
 
   it('rejects when a response body is not JSON', async () => {
@@ -54,6 +65,17 @@ describe('model discovery', () => {
     await expect(createOpenRouterProvider({ apiKey: 'k' }).listModels('k')).rejects.toThrow(
       'Unexpected token',
     )
+  })
+
+  it('forwards the abort signal to both A1111 sampler requests', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(reply([]))
+    const { signal } = new AbortController()
+
+    await createA1111Provider({ apiKey: '' }).getSamplerInfo!(signal)
+
+    const calls = vi.mocked(imageGetFetch).mock.calls
+    expect(calls).toHaveLength(2)
+    for (const [, , options] of calls) expect(options?.signal).toBe(signal)
   })
 
   it('makes no OpenAI request without a key', async () => {

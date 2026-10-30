@@ -188,9 +188,10 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
     return key ? { Authorization: `Bearer ${key}` } : undefined
   }
 
-  async function fetchModels(apiKey?: string): Promise<NanoGptModel[]> {
+  async function fetchModels(apiKey?: string, signal?: AbortSignal): Promise<NanoGptModel[]> {
     const response = await imageGetFetch(`${baseUrl}/images/models`, discoveryHeaders(apiKey), {
       serviceId: DISCOVERY_SERVICE_ID,
+      signal,
     })
     return parseModelList(await response.json(), NanoGptModel)
   }
@@ -222,8 +223,8 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
       })
     },
 
-    async listModels(apiKey?: string): Promise<ImageModelInfo[]> {
-      return (await fetchModels(apiKey)).map(toModelInfo)
+    async listModels(apiKey?: string, signal?: AbortSignal): Promise<ImageModelInfo[]> {
+      return (await fetchModels(apiKey, signal)).map(toModelInfo)
     },
 
     // The list omits some ids that `/images` still serves, under a shorter name; those resolve here.

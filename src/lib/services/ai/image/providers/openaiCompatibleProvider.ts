@@ -125,9 +125,9 @@ export function createOpenAICompatibleProvider(config: ImageProviderConfig): Ima
       })
     },
 
-    async listModels(apiKey?: string): Promise<ImageModelInfo[]> {
+    async listModels(apiKey?: string, signal?: AbortSignal): Promise<ImageModelInfo[]> {
       if (!baseUrl) return []
-      return fetchImageModels(baseUrl, apiKey)
+      return fetchImageModels(baseUrl, apiKey, signal)
     },
   }
 }
@@ -136,7 +136,12 @@ export function createOpenAICompatibleProvider(config: ImageProviderConfig): Ima
 async function fetchEntries(
   url: string,
   headers: Record<string, string> | undefined,
-  options: { serviceId: string; timeoutMs?: number; allowStatuses?: number[] },
+  options: {
+    serviceId: string
+    timeoutMs?: number
+    allowStatuses?: number[]
+    signal?: AbortSignal
+  },
 ): Promise<ModelEntry[] | undefined> {
   const response = await imageGetFetch(url, headers, options)
   if (!response.ok) {
@@ -146,15 +151,23 @@ async function fetchEntries(
   return parseModelList(await response.json(), ModelEntry)
 }
 
-async function fetchImageModels(baseUrl: string, apiKey?: string): Promise<ImageModelInfo[]> {
+async function fetchImageModels(
+  baseUrl: string,
+  apiKey?: string,
+  signal?: AbortSignal,
+): Promise<ImageModelInfo[]> {
   const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined
 
   const [general, dedicated] = await Promise.allSettled([
-    fetchEntries(`${baseUrl}/models`, headers, { serviceId: 'openai-compatible-image-models' }),
+    fetchEntries(`${baseUrl}/models`, headers, {
+      serviceId: 'openai-compatible-image-models',
+      signal,
+    }),
     fetchEntries(`${baseUrl}/images/models`, headers, {
       serviceId: 'openai-compatible-image-models',
       timeoutMs: DEDICATED_LIST_TIMEOUT_MS,
       allowStatuses: ABSENT_STATUSES,
+      signal,
     }),
   ])
 

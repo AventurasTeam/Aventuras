@@ -6,6 +6,7 @@
  * sdk/generate.ts generateImage().
  */
 
+import { isAbortError } from '#lib/services/activity/index.ts'
 import { settings } from '#lib/stores/settings.svelte.ts'
 import type { ImageModelCapabilities, ImageProfile, ImageProviderType } from '#lib/types/index.ts'
 import { parseImageSpec, describeImageSpec, type ImageSpec } from '#lib/utils/image.ts'
@@ -426,13 +427,15 @@ export async function listImageModels(profileId: string): Promise<ImageModelInfo
 /**
  * List image models by provider type directly (without needing a profile).
  * Used during profile creation to preview available models. A failed fetch rethrows so the
- * form can show it.
+ * form can show it. An aborted `signal` rejects and caches nothing, even when the adapter
+ * answered with a partial list.
  */
 export async function listImageModelsByProvider(
   providerType: ImageProviderType,
   apiKey: string,
   forceReload: boolean,
   baseUrl?: string,
+  signal?: AbortSignal,
 ): Promise<ImageModelInfo[]> {
   const connection = connectionFor(providerType, apiKey ?? '', baseUrl)
   const cacheKey = getCacheKey(providerType, connection.apiKey, connection.baseUrl)
@@ -449,11 +452,12 @@ export async function listImageModelsByProvider(
       timeoutMs: settings.apiSettings.llmTimeoutMs,
     }
     const provider = PROVIDER_FACTORIES[providerType](config)
-    const models = await provider.listModels(connection.apiKey)
+    const models = await provider.listModels(connection.apiKey, signal)
+    signal?.throwIfAborted()
     modelCaches.set(cacheKey, { models, timestamp: Date.now() })
     return models
   } catch (error) {
-    log('Error listing models by provider', { providerType, error })
+    if (!isAbortError(error)) log('Error listing models by provider', { providerType, error })
     throw error
   }
 }
@@ -483,6 +487,7 @@ export async function lookupModelCapabilities(
 export async function getProviderSamplerInfo(
   baseUrl?: string,
   providerType: Extract<ImageProviderType, 'comfyui' | 'a1111'> = 'comfyui',
+  signal?: AbortSignal,
 ): Promise<{ samplers: string[]; schedulers: string[] }> {
   try {
     const config: ImageProviderConfig = {
@@ -493,11 +498,11 @@ export async function getProviderSamplerInfo(
     const provider =
       providerType === 'a1111' ? createA1111Provider(config) : createComfyProvider(config)
     if (provider.getSamplerInfo) {
-      return await provider.getSamplerInfo()
+      return await provider.getSamplerInfo(signal)
     }
     return { samplers: [], schedulers: [] }
   } catch (error) {
-    log('Error getting sampler info', { error })
+    if (!isAbortError(error)) log('Error getting sampler info', { error })
     return { samplers: [], schedulers: [] }
   }
 }
@@ -505,7 +510,7 @@ export async function getProviderSamplerInfo(
 /**
  * List available LoRAs for a ComfyUI provider.
  */
-export async function listLoras(baseUrl?: string): Promise<string[]> {
+export async function listLoras(baseUrl?: string, signal?: AbortSignal): Promise<string[]> {
   try {
     const config: ImageProviderConfig = {
       apiKey: '',
@@ -514,11 +519,11 @@ export async function listLoras(baseUrl?: string): Promise<string[]> {
     }
     const provider = createComfyProvider(config)
     if (provider.listLoras) {
-      return await provider.listLoras()
+      return await provider.listLoras(signal)
     }
     return []
   } catch (error) {
-    log('Error getting LoRA list', { error })
+    if (!isAbortError(error)) log('Error getting LoRA list', { error })
     return []
   }
 }

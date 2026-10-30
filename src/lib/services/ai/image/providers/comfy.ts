@@ -62,11 +62,13 @@ export async function fetchModelList(
   baseUrl: string | undefined,
   type: string,
   timeoutMs?: number,
+  signal?: AbortSignal,
 ): Promise<string[]> {
   // Tauri HTTP, not the WebView's fetch (docs/architecture/overview.md, "Local image servers").
   const resp = await imageGetFetch(`${resolveComfyBaseUrl(baseUrl)}/models/${type}`, undefined, {
     serviceId: 'comfy-models',
     timeoutMs,
+    signal,
   })
   return (await resp.json()) as string[]
 }
@@ -497,7 +499,8 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
     }).imageModel(model)
 
   // Binds baseUrl + optional timeout so internal callers don't repeat them.
-  const fetchModels = (type: string) => fetchModelList(baseUrl, type, config.timeoutMs)
+  const fetchModels = (type: string, signal?: AbortSignal) =>
+    fetchModelList(baseUrl, type, config.timeoutMs, signal)
 
   return {
     id: 'comfyui',
@@ -668,10 +671,10 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
       })
     },
 
-    async listModels(): Promise<ImageModelInfo[]> {
+    async listModels(_apiKey?: string, signal?: AbortSignal): Promise<ImageModelInfo[]> {
       const [checkpoints, diffusionModels] = await Promise.all([
-        fetchModels('checkpoints'),
-        fetchModels('diffusion_models').catch(() => []),
+        fetchModels('checkpoints', signal),
+        fetchModels('diffusion_models', signal).catch(() => []),
       ])
 
       const toInfo =
@@ -689,18 +692,19 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
       ]
     },
 
-    async listLoras(): Promise<string[]> {
+    async listLoras(signal?: AbortSignal): Promise<string[]> {
       try {
-        return await fetchModels('loras')
+        return await fetchModels('loras', signal)
       } catch {
         return []
       }
     },
 
-    async getSamplerInfo(): Promise<ComfySamplerInfo> {
+    async getSamplerInfo(signal?: AbortSignal): Promise<ComfySamplerInfo> {
       const response = await imageGetFetch(`${baseUrl}/object_info/KSampler`, undefined, {
         serviceId: 'comfy-samplers',
         timeoutMs: config.timeoutMs,
+        signal,
       })
       const { sampler_name, scheduler } = KSamplerInfo.parse(await response.json()).KSampler.input
         .required

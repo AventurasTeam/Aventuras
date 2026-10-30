@@ -63,12 +63,13 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
       })
     },
 
-    async listModels(apiKey: string): Promise<ImageModelInfo[]> {
+    async listModels(apiKey: string, signal?: AbortSignal): Promise<ImageModelInfo[]> {
       const headers: Record<string, string> = {}
       if (apiKey) headers.Authorization = `Bearer ${apiKey}`
 
       const response = await imageGetFetch(`${baseUrl}/sdapi/v1/sd-models`, headers, {
         serviceId: 'a1111-models',
+        signal,
       })
       const data: { title?: string; model_name?: string; name?: string }[] = await response.json()
 
@@ -78,7 +79,7 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
       }))
     },
 
-    async getSamplerInfo(): Promise<ComfySamplerInfo> {
+    async getSamplerInfo(signal?: AbortSignal): Promise<ComfySamplerInfo> {
       const authHeaders: Record<string, string> | undefined = config.apiKey
         ? { Authorization: `Bearer ${config.apiKey}` }
         : undefined
@@ -86,9 +87,11 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
       const [samplersRes, schedulersRes] = await Promise.allSettled([
         imageGetFetch(`${baseUrl}/sdapi/v1/samplers`, authHeaders, {
           serviceId: 'a1111-samplers',
+          signal,
         }),
         imageGetFetch(`${baseUrl}/sdapi/v1/schedulers`, authHeaders, {
           serviceId: 'a1111-schedulers',
+          signal,
         }),
       ])
 

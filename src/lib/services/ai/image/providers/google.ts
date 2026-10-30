@@ -48,8 +48,8 @@ export function createGoogleProvider(config: ImageProviderConfig): ImageProvider
       })
     },
 
-    async listModels(): Promise<ImageModelInfo[]> {
-      return fetchGoogleImageModels(baseUrl, config.apiKey)
+    async listModels(_apiKey?: string, signal?: AbortSignal): Promise<ImageModelInfo[]> {
+      return fetchGoogleImageModels(baseUrl, config.apiKey, signal)
     },
   }
 }
@@ -110,14 +110,18 @@ const isSdkImageModel = (id: string): boolean => id.startsWith('gemini-') && isG
 export const googleModelCapabilities = (model: string): ImageModelCapabilities | undefined =>
   isSdkImageModel(model) ? googleImageCapabilities(model) : undefined
 
-async function fetchGoogleImageModels(baseUrl: string, apiKey?: string): Promise<ImageModelInfo[]> {
+async function fetchGoogleImageModels(
+  baseUrl: string,
+  apiKey?: string,
+  signal?: AbortSignal,
+): Promise<ImageModelInfo[]> {
   if (!apiKey) return []
 
   // The key goes in a header: the debug log records the request URL.
   const response = await imageGetFetch(
     `${baseUrl}/models?pageSize=200`,
     { 'x-goog-api-key': apiKey },
-    { serviceId: 'google-image-models' },
+    { serviceId: 'google-image-models', signal },
   )
 
   const data = await response.json()

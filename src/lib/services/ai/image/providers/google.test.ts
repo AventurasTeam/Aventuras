@@ -135,8 +135,17 @@ describe('Google model listing', () => {
     expect(imageGetFetch).toHaveBeenCalledWith(
       'https://normalized.test/v1beta/models?pageSize=200',
       { 'x-goog-api-key': 'k' },
-      { serviceId: 'google-image-models' },
+      { serviceId: 'google-image-models', signal: undefined },
     )
+  })
+
+  it('forwards the abort signal', async () => {
+    respond({ json: async () => ({ models: [] }) })
+    const { signal } = new AbortController()
+
+    await createGoogleProvider({ apiKey: 'k' }).listModels(undefined, signal)
+
+    expect(vi.mocked(imageGetFetch).mock.calls[0][2]?.signal).toBe(signal)
   })
 
   it('lists from the default host without a base URL', async () => {
@@ -147,7 +156,7 @@ describe('Google model listing', () => {
     expect(imageGetFetch).toHaveBeenCalledWith(
       'https://generativelanguage.googleapis.com/v1beta/models?pageSize=200',
       { 'x-goog-api-key': 'k' },
-      { serviceId: 'google-image-models' },
+      { serviceId: 'google-image-models', signal: undefined },
     )
   })
 

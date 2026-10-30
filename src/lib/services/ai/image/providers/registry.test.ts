@@ -64,7 +64,7 @@ import { createZhipuProvider } from './zhipu'
 import { comfyReferenceLimit, createComfyProvider } from './comfy'
 import { createA1111Provider } from './a1111'
 import { createGoogleProvider, googleModelCapabilities } from './google'
-import type { ImageModelInfo } from './types'
+import type { ImageModelInfo, ImageProvider } from './types'
 import {
   supportsImageGeneration,
   requiresApiKey,
@@ -888,6 +888,43 @@ describe('Image Provider Registry', () => {
     })
   })
 
+  describe('cancelled model listing', () => {
+    const adapter = (listModels: ImageProvider['listModels']): ImageProvider => ({
+      id: 'openai',
+      name: 'openai',
+      generate: vi.fn(),
+      listModels,
+    })
+
+    it('hands the signal to the adapter', async () => {
+      const listModels = vi.fn(async (_apiKey?: string, _signal?: AbortSignal) => [])
+      vi.mocked(createOpenAIProvider).mockReturnValue(adapter(listModels))
+      const { signal } = new AbortController()
+
+      await listImageModelsByProvider('openai', 'sk-abort-pass', true, undefined, signal)
+
+      expect(listModels.mock.calls[0][1]).toBe(signal)
+    })
+
+    it('rejects and caches nothing when the abort lands as the adapter returns a list', async () => {
+      const controller = new AbortController()
+      const listModels = vi.fn(async (_apiKey?: string, _signal?: AbortSignal) => {
+        controller.abort()
+        return [{ id: 'partial', name: 'partial' }]
+      })
+      vi.mocked(createOpenAIProvider).mockReturnValue(adapter(listModels))
+
+      await expect(
+        listImageModelsByProvider('openai', 'sk-abort-cache', false, undefined, controller.signal),
+      ).rejects.toMatchObject({ name: 'AbortError' })
+
+      listModels.mockImplementationOnce(async () => [{ id: 'full', name: 'full' }])
+      const models = await listImageModelsByProvider('openai', 'sk-abort-cache', false)
+      expect(models.map((m) => m.id)).toEqual(['full'])
+      expect(listModels).toHaveBeenCalledTimes(2)
+    })
+  })
+
   describe('hidden connection fields', () => {
     it.each([
       ['nanogpt', 'key', 'https://stale.test', { apiKey: 'key', baseUrl: undefined }],
@@ -937,7 +974,7 @@ describe('Image Provider Registry', () => {
       expect(createA1111Provider).toHaveBeenCalledWith(
         expect.objectContaining({ apiKey: '', baseUrl: 'http://sd.test' }),
       )
-      expect(listModels).toHaveBeenCalledWith('')
+      expect(listModels).toHaveBeenCalledWith('', undefined)
     })
   })
 

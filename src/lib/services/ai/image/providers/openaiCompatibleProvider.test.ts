@@ -126,6 +126,17 @@ describe('OpenAI Compatible model listing', () => {
   const list = (apiKey = 'k') =>
     createOpenAICompatibleProvider({ apiKey, baseUrl: BASE_URL }).listModels(apiKey)
 
+  it('forwards the abort signal to both list requests', async () => {
+    mockHost({ models: json({ data: [] }) })
+    const { signal } = new AbortController()
+
+    await createOpenAICompatibleProvider({ apiKey: 'k', baseUrl: BASE_URL }).listModels('k', signal)
+
+    const calls = vi.mocked(imageGetFetch).mock.calls
+    expect(calls).toHaveLength(2)
+    for (const [, , options] of calls) expect(options?.signal).toBe(signal)
+  })
+
   it('lists from the normalized base URL, general list and dedicated list', async () => {
     vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v1')
     mockHost({ models: json({ data: [] }) })

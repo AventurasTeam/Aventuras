@@ -71,7 +71,7 @@ export interface ImageProvider {
   readonly id: ImageProviderType
   readonly name: string
   generate(options: ImageGenerateOptions): Promise<ImageGenerateResult>
-  listModels(apiKey?: string): Promise<ImageModelInfo[]>
+  listModels(apiKey?: string, signal?: AbortSignal): Promise<ImageModelInfo[]>
   /**
    * One model's capabilities, for snapshot providers that can describe a model without listing
    * them all: the lookup that backfills a profile's snapshot. Rejects on failure; `undefined`
@@ -79,8 +79,8 @@ export interface ImageProvider {
    */
   getModelCapabilities?(model: string): Promise<ImageModelCapabilities | undefined>
   // ComfyUI specific
-  getSamplerInfo?(): Promise<ComfySamplerInfo>
-  listLoras?(): Promise<string[]>
+  getSamplerInfo?(signal?: AbortSignal): Promise<ComfySamplerInfo>
+  listLoras?(signal?: AbortSignal): Promise<string[]>
 }
 
 export interface ImageProviderConfig {
