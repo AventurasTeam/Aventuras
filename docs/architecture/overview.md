@@ -621,7 +621,8 @@ provider in the registry (`PROVIDER_API_KEY`, `PROVIDER_BASE_URL`), and the sett
 `hasRequiredCredentials` read those tables. The form keeps a value typed for another provider, so the
 registry builds a provider only from the fields it has an input for (`connectionFor`): a leftover base URL
 is not sent to NanoGPT, nor a leftover API key to A1111. Discovery (`listModels`, `getSamplerInfo`,
-`listLoras`) takes an `AbortSignal`. A cancelled model list is
+`listLoras`) takes an `AbortSignal`. The profile form debounces key and base URL edits, aborts the request
+a newer one or Stop replaces, and writes only what the current request returns. A cancelled model list is
 never cached, even when an adapter answers with a partial one. Migration `042` moved image settings that still named an
 API profile into image profiles, moved proxy-style `openai` profiles and every `chutes` profile
 (that provider is gone) to OpenAI Compatible, and pinned `zhipu` profiles with an empty base URL to

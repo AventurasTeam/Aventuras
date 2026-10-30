@@ -2,7 +2,7 @@
   import type { ImageModelInfo } from '#lib/services/ai/image/index.ts'
   import { Autocomplete } from '#lib/components/ui/autocomplete/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
-  import { RefreshCw, Loader2, Check, ImagePlus } from '@lucide/svelte'
+  import { RefreshCw, Loader2, Check, ImagePlus, Square } from '@lucide/svelte'
   import { cn } from '#lib/utils/cn.ts'
   import {
     DEFAULT_AVG_PROMPT_TOKENS,
@@ -24,6 +24,7 @@
     errorMessage?: string | null
     showRefreshButton?: boolean
     onRefresh?: () => void
+    onStop?: () => void
 
     // Styling
     placeholder?: string
@@ -40,6 +41,7 @@
     errorMessage = null,
     showRefreshButton = false,
     onRefresh,
+    onStop,
     placeholder = 'Select a model',
   }: Props = $props()
 
@@ -95,71 +97,82 @@
 </script>
 
 <div class="w-full space-y-2">
-  {#if isLoading}
-    <div class="text-muted-foreground flex items-center gap-2 text-sm">
-      <Loader2 class="h-4 w-4 animate-spin" />
-      Loading models...
-    </div>
-  {:else}
-    <div class="flex items-center gap-2">
-      <div class="flex-1">
-        <Autocomplete
-          items={models}
-          selected={selectedModel}
-          onSelect={(m) => handleChange((m as ImageModelInfo)?.id)}
-          allowCustom={true}
-          onCustomSelect={(val) => handleChange(val)}
-          itemLabel={(m) => m.name}
-          itemValue={(m) => m.id}
-          {placeholder}
-        >
-          {#snippet itemSnippet(model)}
-            <div class="flex w-full flex-col items-start gap-1">
-              <div class="flex w-full items-center justify-between gap-2">
-                <div class="flex items-center gap-2 truncate">
-                  <Check
-                    class={cn(
-                      'h-4 w-4',
-                      selectedModelId === model.id ? 'opacity-100' : 'opacity-0',
-                    )}
-                  />
-                  <span class="truncate">{getModelLabel(model)}</span>
-                </div>
-                {#if showImg2ImgIndicator && model.supportsImg2Img}
-                  <ImagePlus class="text-muted-foreground h-4 w-4 shrink-0" />
-                {/if}
+  <div class="flex items-center gap-2">
+    <div class="flex-1">
+      <Autocomplete
+        items={models}
+        selected={selectedModel}
+        onSelect={(m) => handleChange((m as ImageModelInfo)?.id)}
+        allowCustom={true}
+        onCustomSelect={(val) => handleChange(val)}
+        itemLabel={(m) => m.name}
+        itemValue={(m) => m.id}
+        {placeholder}
+      >
+        {#snippet itemSnippet(model)}
+          <div class="flex w-full flex-col items-start gap-1">
+            <div class="flex w-full items-center justify-between gap-2">
+              <div class="flex items-center gap-2 truncate">
+                <Check
+                  class={cn('h-4 w-4', selectedModelId === model.id ? 'opacity-100' : 'opacity-0')}
+                />
+                <span class="truncate">{getModelLabel(model)}</span>
               </div>
-              {#if showDescription && model.description}
-                <span class="text-muted-foreground pl-6 text-xs">
-                  {model.description}
-                </span>
+              {#if showImg2ImgIndicator && model.supportsImg2Img}
+                <ImagePlus class="text-muted-foreground h-4 w-4 shrink-0" />
               {/if}
             </div>
-          {/snippet}
-          {#snippet triggerSnippet()}
-            <span class="flex w-full items-center justify-between gap-2 overflow-hidden">
-              <span class="truncate">{selectedLabel}</span>
-              {#if showImg2ImgIndicator && selectedModel?.supportsImg2Img}
-                <ImagePlus class="text-muted-foreground h-3.5 w-3.5 shrink-0" />
-              {/if}
-            </span>
-          {/snippet}
-        </Autocomplete>
-      </div>
+            {#if showDescription && model.description}
+              <span class="text-muted-foreground pl-6 text-xs">
+                {model.description}
+              </span>
+            {/if}
+          </div>
+        {/snippet}
+        {#snippet triggerSnippet()}
+          <span class="flex w-full items-center justify-between gap-2 overflow-hidden">
+            <span class="truncate">{selectedLabel}</span>
+            {#if showImg2ImgIndicator && selectedModel?.supportsImg2Img}
+              <ImagePlus class="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+            {/if}
+          </span>
+        {/snippet}
+      </Autocomplete>
+    </div>
 
-      {#if showRefreshButton && onRefresh}
-        <Button variant="ghost" size="icon" onclick={onRefresh} aria-label="Refresh models">
+    {#if showRefreshButton && onRefresh}
+      {#if isLoading && onStop}
+        <Button variant="ghost" size="icon" onclick={onStop} aria-label="Stop loading models">
+          <span class="relative size-4">
+            <Loader2 class="size-4 motion-safe:animate-spin" />
+            <Square class="absolute inset-0 m-auto size-2 fill-current" />
+          </span>
+        </Button>
+      {:else}
+        <Button
+          variant="ghost"
+          size="icon"
+          onclick={onRefresh}
+          disabled={isLoading}
+          aria-label="Refresh models"
+        >
           <RefreshCw class="h-4 w-4" />
         </Button>
       {/if}
-    </div>
-    {#if selectedIsUnavailable}
-      <p class="text-muted-foreground text-xs" role="status">
-        "{selectedModelId}" is not in the list fetched from this provider. It will be sent as typed.
-      </p>
     {/if}
-    {#if errorMessage}
-      <p class="text-destructive text-xs" role="alert">{errorMessage}</p>
-    {/if}
+  </div>
+  {#if isLoading}
+    <p class="text-muted-foreground flex items-center gap-2 text-xs" role="status">
+      <Loader2 class="size-3.5 motion-safe:animate-spin" />
+      Loading models…
+    </p>
+  {/if}
+  {#if selectedIsUnavailable}
+    <p class="text-muted-foreground text-xs" role="status">
+      "{selectedModelId}" is not in the list fetched from this provider. It will be sent as typed.
+    </p>
+  {/if}
+  {#if errorMessage}
+    <p class="text-destructive text-xs" role="alert">{errorMessage}</p>
   {/if}
 </div>

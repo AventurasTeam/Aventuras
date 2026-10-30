@@ -49,6 +49,7 @@
   import IconRow from '#lib/components/ui/icon-row.svelte'
   import ImageResolutionSelector from '#lib/components/settings/ImageResolutionSelector.svelte'
   import { defaultImageSpec, normalizeImageDataUrl, type ImageSpec } from '#lib/utils/image.ts'
+  import { errMessage } from '#lib/utils/error.ts'
 
   const imageStyles = [
     { value: 'image-style-soft-anime', label: 'Soft Anime' },
@@ -222,7 +223,10 @@
   )
   const canSaveProfile = $derived(!!profileName.trim() && !needsWorkflow)
 
-  onDestroy(() => flushAutoSave())
+  onDestroy(() => {
+    flushAutoSave()
+    stopProfileModels()
+  })
 
   // Testing state
   let testProfileId = $state<string | null>(null)
@@ -242,68 +246,122 @@
   // Derived LoRA items — avoids re-mapping on every render
   const loraItems = $derived(availableLoras.map((l) => ({ value: l, label: l })))
 
-  // Load models for the profile form when provider/apiKey/baseUrl change
-  let profileModelsReqId = 0
+  // The form has one current model-list request. Every abort goes through stopProfileModels, so an
+  // aborted request is never still current when its catch runs.
+  const MODEL_LOAD_DEBOUNCE_MS = 400
+  let modelsRequest: AbortController | null = null
+  let unetRequest: AbortController | null = null
+  let modelsDebounce: ReturnType<typeof setTimeout> | undefined
 
-  async function loadProfileFormModels(
-    providerType: ImageProviderType,
-    apiKey: string,
-    baseUrl: string | undefined,
-    forceReload: boolean,
-  ) {
-    const reqId = ++profileModelsReqId
+  function stopProfileModels() {
+    clearTimeout(modelsDebounce)
+    modelsDebounce = undefined
+    modelsRequest?.abort()
+    unetRequest?.abort()
+    modelsRequest = null
+    unetRequest = null
+    isLoadingProfileModels = false
+    isLoadingUnetModels = false
+  }
+
+  async function loadProfileForm(force: boolean) {
+    stopProfileModels()
+    const request = new AbortController()
+    modelsRequest = request
     isLoadingProfileModels = true
     profileModelsError = null
+
+    const providerType = profileProviderType
+    const { apiKey, baseUrl } = connection
+
+    async function loadModels() {
+      try {
+        const models = await listImageModelsByProvider(
+          providerType,
+          apiKey,
+          force,
+          baseUrl,
+          request.signal,
+        )
+        if (modelsRequest !== request) return
+        profileModels = models
+        profileModelsKey = modelListKey(providerType, apiKey, baseUrl)
+      } catch (error) {
+        if (modelsRequest !== request) return
+        profileModels = []
+        profileModelsKey = null
+        profileModelsError = errMessage(error)
+      }
+    }
+
+    const reads = [loadModels()]
+    if (providerType === 'comfyui') {
+      reads.push(loadSamplerInfo(request, baseUrl, 'comfyui'), loadLoras(request, baseUrl))
+      if (profileMode === ComfyMode.UnetTxt2Img) void loadUnetModels()
+    } else if (providerType === 'a1111') {
+      reads.push(loadSamplerInfo(request, baseUrl, 'a1111'))
+    } else {
+      profileSamplers = []
+      profileSchedulers = []
+    }
+
     try {
-      const models = await listImageModelsByProvider(providerType, apiKey, forceReload, baseUrl)
-      // Discard stale results if a newer request has already started.
-      if (reqId !== profileModelsReqId) return
-      profileModels = models
-      profileModelsKey = modelListKey(providerType, apiKey, baseUrl)
-    } catch (error) {
-      if (reqId !== profileModelsReqId) return
-      profileModels = []
-      profileModelsKey = null
-      profileModelsError = error instanceof Error ? error.message : 'Failed to load models'
+      await Promise.allSettled(reads)
     } finally {
-      if (reqId === profileModelsReqId) isLoadingProfileModels = false
+      if (modelsRequest === request) isLoadingProfileModels = false
     }
   }
 
-  // Reactively load models when provider, apiKey, or (for ComfyUI) baseUrl changes in profile form.
-  // Reactive deps are captured explicitly before untrack() so that reads inside the loader
-  // functions (e.g. settings.apiSettings.llmTimeoutMs) are NOT accidentally tracked as
-  // dependencies — which would cause the effect to re-run on unrelated settings changes.
-  $effect(() => {
-    if (editingProfileId && profileProviderType) {
-      const providerType = profileProviderType
-      const { apiKey, baseUrl } = connection
+  // Reactive deps are captured before untrack() so the loaders' own reads (e.g.
+  // settings.apiSettings.llmTimeoutMs) do not become dependencies of this effect.
+  let loadedProfileId: string | null = null
+  let loadedProviderType: ImageProviderType | null = null
 
-      untrack(() => {
-        loadProfileFormModels(providerType, apiKey, baseUrl, false)
-        if (providerType === 'comfyui') {
-          loadSamplerInfo(baseUrl, 'comfyui')
-          loadLoras(baseUrl)
-        } else if (providerType === 'a1111') {
-          loadSamplerInfo(baseUrl, 'a1111')
-        } else {
-          profileSamplers = []
-          profileSchedulers = []
-        }
-      })
-    }
+  $effect(() => {
+    const profileId = editingProfileId
+    const providerType = profileProviderType
+    const { apiKey, baseUrl } = connection
+
+    untrack(() => {
+      if (!profileId) {
+        stopProfileModels()
+        loadedProfileId = null
+        loadedProviderType = null
+        return
+      }
+      const targetChanged = profileId !== loadedProfileId || providerType !== loadedProviderType
+      loadedProfileId = profileId
+      loadedProviderType = providerType
+
+      if (profileModelsKey !== modelListKey(providerType, apiKey, baseUrl)) {
+        profileModels = []
+        profileModelsKey = null
+        profileModelsError = null
+      }
+      if (targetChanged) {
+        void loadProfileForm(false)
+        return
+      }
+      stopProfileModels()
+      isLoadingProfileModels = true
+      modelsDebounce = setTimeout(() => void loadProfileForm(false), MODEL_LOAD_DEBOUNCE_MS)
+    })
   })
 
-  async function loadSamplerInfo(baseUrl?: string, providerType: 'comfyui' | 'a1111' = 'comfyui') {
-    const info = await getProviderSamplerInfo(baseUrl, providerType)
-    if ((profileBaseUrl || undefined) !== baseUrl) return
+  async function loadSamplerInfo(
+    request: AbortController,
+    baseUrl: string | undefined,
+    providerType: 'comfyui' | 'a1111',
+  ) {
+    const info = await getProviderSamplerInfo(baseUrl, providerType, request.signal)
+    if (modelsRequest !== request) return
     profileSamplers = info.samplers.map((s) => ({ value: s, label: s }))
     profileSchedulers = info.schedulers.map((s) => ({ value: s, label: s }))
   }
 
-  async function loadLoras(baseUrl?: string) {
-    const loras = await listLoras(baseUrl)
-    if ((profileBaseUrl || undefined) !== baseUrl) return
+  async function loadLoras(request: AbortController, baseUrl: string | undefined) {
+    const loras = await listLoras(baseUrl, request.signal)
+    if (modelsRequest !== request) return
     availableLoras = loras
   }
 
@@ -721,25 +779,25 @@
   // UNet model loading
   // ---------------------------------------------------------------------------
 
-  let unetModelsReqId = 0
-
   async function loadUnetModels() {
     if (profileProviderType !== 'comfyui') return
     const baseUrl = resolveComfyBaseUrl(profileBaseUrl)
-    const reqId = ++unetModelsReqId
+    unetRequest?.abort()
+    const request = new AbortController()
+    unetRequest = request
     isLoadingUnetModels = true
     try {
+      const timeoutMs = settings.apiSettings.llmTimeoutMs
       const [clips, vaes] = await Promise.all([
-        fetchModelList(baseUrl, 'text_encoders', settings.apiSettings.llmTimeoutMs),
-        fetchModelList(baseUrl, 'vae', settings.apiSettings.llmTimeoutMs),
+        fetchModelList(baseUrl, 'text_encoders', timeoutMs, request.signal),
+        fetchModelList(baseUrl, 'vae', timeoutMs, request.signal),
       ])
-      if (reqId !== unetModelsReqId) return
+      if (unetRequest !== request) return
       // A reply for another profile or server must not fill this one.
       if (profileProviderType !== 'comfyui' || resolveComfyBaseUrl(profileBaseUrl) !== baseUrl) {
         return
       }
-      // Reassigning an empty list would re-run the auto-load effect below, which reads its length.
-      if (clips.length > 0 || availableClips.length > 0) availableClips = clips
+      availableClips = clips
       availableVaes = vaes
       if (!profileClipName && clips.length === 1) {
         profileClipName = clips[0]
@@ -749,16 +807,23 @@
         profileVaeName = vaes[0]
         autoFilled.vae = true
       }
+    } catch {
+      // A failed list leaves the pickers as they were; there is nothing to report here.
     } finally {
-      if (reqId === unetModelsReqId) isLoadingUnetModels = false
+      if (unetRequest === request) {
+        unetRequest = null
+        isLoadingUnetModels = false
+      }
     }
   }
 
-  // Auto-load when switching to UNet mode
+  // Switching into UNet mode loads the lists. A base-URL change reloads them through the
+  // debounced model load instead, so the list length is read untracked.
   $effect(() => {
-    if (profileMode === ComfyMode.UnetTxt2Img && availableClips.length === 0) {
-      untrack(() => void loadUnetModels())
-    }
+    if (profileMode !== ComfyMode.UnetTxt2Img || profileProviderType !== 'comfyui') return
+    untrack(() => {
+      if (availableClips.length === 0 && !unetRequest) void loadUnetModels()
+    })
   })
 
   // Evict comfy.ts caches when the user changes the ComfyUI base URL so that
@@ -1283,8 +1348,8 @@
         isLoading={isLoadingProfileModels}
         errorMessage={profileModelsError}
         showRefreshButton={true}
-        onRefresh={() =>
-          loadProfileFormModels(profileProviderType, connection.apiKey, connection.baseUrl, true)}
+        onRefresh={() => loadProfileForm(true)}
+        onStop={stopProfileModels}
       />
       {#if referenceProfileWarningReason}
         <p class="text-warning mt-1 text-xs">
