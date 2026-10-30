@@ -9,6 +9,7 @@ vi.mock('#lib/stores/debug.svelte.ts', () => ({
 
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { isAbortError } from '#lib/services/activity/describeError.ts'
+import { debug } from '#lib/stores/debug.svelte.ts'
 import { RequestTimeoutError } from '#lib/utils/error.ts'
 import { fetchPublicImageBase64, imageGetFetch } from './fetchAdapter'
 
@@ -150,6 +151,47 @@ describe('imageGetFetch abort handling', () => {
     expect(error).toBeInstanceOf(RequestTimeoutError)
     expect(error).toMatchObject({ message: `${what} timed out after 5s` })
     expect(isAbortError(error)).toBe(false)
+  })
+})
+
+describe('imageGetFetch debug log', () => {
+  const logged = () => vi.mocked(debug.addDebugResponse)
+
+  beforeEach(() => {
+    mockFetch.mockReset()
+    logged().mockClear()
+  })
+
+  it('logs a cancelled request as aborted', async () => {
+    mockFetch.mockImplementation(pendingUntilAborted)
+    const caller = new AbortController()
+    const request = imageGetFetch('https://img.test/a', undefined, {
+      signal: caller.signal,
+    }).catch((e: unknown) => e)
+
+    caller.abort()
+    await request
+
+    expect(logged()).toHaveBeenCalledTimes(1)
+    expect(logged().mock.calls[0][2]).toEqual({ error: 'aborted' })
+  })
+
+  it('logs a failure that never got a response', async () => {
+    mockFetch.mockRejectedValue(new TypeError('Failed to fetch'))
+
+    await expect(imageGetFetch('https://img.test/a')).rejects.toThrow('Failed to fetch')
+
+    expect(logged()).toHaveBeenCalledTimes(1)
+    expect(logged().mock.calls[0][2]).toEqual({ error: 'Failed to fetch' })
+  })
+
+  it('logs an error status once', async () => {
+    mockFetch.mockImplementation(async () => new Response('nope', { status: 500 }))
+
+    await expect(imageGetFetch('https://img.test/a')).rejects.toThrow('Image API error 500')
+
+    expect(logged()).toHaveBeenCalledTimes(1)
+    expect(logged().mock.calls[0][2]).toMatchObject({ status: 500 })
   })
 })
 

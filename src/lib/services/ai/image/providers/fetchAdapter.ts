@@ -7,7 +7,9 @@
  */
 
 import { IMAGE_TIMEOUT_DEFAULT } from '#lib/constants/timeout.ts'
+import { isAbortError } from '#lib/services/activity/index.ts'
 import { debug } from '#lib/stores/debug.svelte.ts'
+import { errMessage } from '#lib/utils/error.ts'
 import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
 import { bytesToBase64 } from '#lib/utils/image.ts'
 import { isPublicHttpUrl } from '#lib/utils/url.ts'
@@ -66,6 +68,7 @@ export async function imageGetFetch(
   const guard = createRequestGuard({ timeoutMs, what: 'Image fetch', callerSignal: signal })
   const startTime = Date.now()
   const debugId = debug.addDebugRequest(serviceId, { url, method: 'GET', body: {} })
+  let statusLogged = false
 
   try {
     const response = await httpFetch(url, {
@@ -89,13 +92,19 @@ export async function imageGetFetch(
         startTime,
         errorText,
       )
+      statusLogged = true
       throw new Error(`Image API error ${response.status}: ${errorText}`)
     }
 
     debug.addDebugResponse(debugId, serviceId, { status: response.status }, startTime)
     return guard.wrapBody(response)
   } catch (error) {
-    throw guard.mapError(error)
+    const mapped = guard.mapError(error)
+    if (!statusLogged) {
+      const reason = isAbortError(mapped) ? 'aborted' : errMessage(mapped)
+      debug.addDebugResponse(debugId, serviceId, { error: reason }, startTime, reason)
+    }
+    throw mapped
   } finally {
     guard.dispose()
   }
