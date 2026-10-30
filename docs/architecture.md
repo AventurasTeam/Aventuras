@@ -198,9 +198,10 @@ Example built-in macros:
   ([Entity state on the template surface](#entity-state-on-the-template-surface))
 - `macro_item_line` (`generationContext`) — one held or loose item's
   line, shared by `Holds:` and `Here:`
-- the narrator's standing instructions (`staticContent`) — its role
-  and the mode, lead and narration rules, given as parameters, shared
-  by the per-turn narrative and the wizard's opening
+- `macro_narrator_instructions` (`staticContent`) — the narrator's
+  standing instructions: its role and the mode, lead and narration
+  rules, given as parameters, shared by the per-turn narrative and the
+  wizard's opening
   ([System and user halves](#system-and-user-halves))
 - `macro_output_format_narrative` (`staticContent`) — the output
   instruction block for narrative generation
