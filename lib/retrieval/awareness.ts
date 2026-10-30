@@ -1,3 +1,5 @@
+import type { StoryDefinition } from '@/lib/db'
+
 import type { QueryAll } from './types'
 
 export type AwarenessRow = {
@@ -17,10 +19,25 @@ export type AwarenessRow = {
 }
 
 /**
- * retrieval.md → POV-awareness scope: the UNION of all in-scene characters'
- * awareness rows in both modes, not lead-only. Detached-POV moments need the
- * wider scope; the `narration` setting is the lever for POV constraint via
- * prompt, not retrieval.
+ * retrieval.md → POV-awareness scope: the in-scene characters, and the lead in adventure or in
+ * first- or second-person narration, where the story is told from the lead's side and a missed
+ * scene tag mustn't wipe what the lead knows. `leadId` is the lead resolved on the branch, or null.
+ */
+export function awarenessScope(
+  sceneCharacterIds: readonly string[],
+  leadId: string | null,
+  definition: Pick<StoryDefinition, 'mode' | 'narration'>,
+): string[] {
+  const toldFromLead = definition.mode === 'adventure' || definition.narration !== 'third'
+  return leadId != null && toldFromLead
+    ? [...new Set([...sceneCharacterIds, leadId])]
+    : [...sceneCharacterIds]
+}
+
+/**
+ * retrieval.md → POV-awareness scope: the UNION of the scope's awareness rows in both modes, not
+ * lead-only. Detached-POV moments need the wider scope; the prompt, not retrieval, keeps each
+ * character to what they know.
  */
 export async function loadAwarenessForScene(
   queryAll: QueryAll,

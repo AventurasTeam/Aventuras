@@ -1,4 +1,4 @@
-export { loadAwarenessForScene } from './awareness'
+export { awarenessScope, loadAwarenessForScene } from './awareness'
 export type { AwarenessRow } from './awareness'
 export { promptBufferTake, readPromptBuffer } from './buffer'
 export type { BufferSettings } from './buffer'

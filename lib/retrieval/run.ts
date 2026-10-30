@@ -32,7 +32,13 @@ import {
   type QueryStackInput,
 } from './queries'
 import { rankAll, rankPerType } from './ranker'
-import { entityRenderedText, lines, loreRenderedText, measuredEntity } from './rendered-text'
+import {
+  entityRenderedText,
+  happeningKnowersLine,
+  lines,
+  loreRenderedText,
+  measuredEntity,
+} from './rendered-text'
 import {
   countStaleHappenings,
   loadChapterRanges,
@@ -810,6 +816,7 @@ function assembleCandidates(
     }
 
     case 'happening': {
+      const nameOf = new Map(sourceRows.entities.map((e) => [e.id, e.name]))
       const byHappening = new Map<string, AwarenessRow[]>()
       for (const a of awareness) {
         const bucket = byHappening.get(a.happeningId)
@@ -828,7 +835,11 @@ function assembleCandidates(
           kind: 'happening' as const,
           id: r.id,
           displayName: r.title,
-          renderedText: lines(r.title, r.description, ...rows.map((a) => a.source)),
+          renderedText: lines(
+            r.title,
+            r.description,
+            happeningKnowersLine(r.commonKnowledge, rows, nameOf),
+          ),
           sims: simsFor(vector),
           vector,
           commonKnowledge: r.commonKnowledge,

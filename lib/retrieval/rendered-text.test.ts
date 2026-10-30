@@ -9,6 +9,7 @@ import {
   entityHead,
   entityRenderedText,
   entityStateLines,
+  happeningKnowersLine,
   HELD_ITEM_ID_STAND_IN,
   itemLine,
   measuredEntity,
@@ -205,5 +206,62 @@ describe('entityRenderedText', () => {
   // retrieval.md → Token estimation: "a stand-in placeholder of realistic width".
   it('measures the stand-in at a real two-digit placeholder’s cost', () => {
     expect(countTokens(`- [${HELD_ITEM_ID_STAND_IN}] Sword`)).toBe(countTokens('- [i10] Sword'))
+  })
+})
+
+// retrieval.md → POV-awareness scope: the row's text names who in the scope knows it, and how.
+describe('happeningKnowersLine', () => {
+  const NAMES = new Map([
+    ['char_jorin', 'Jorin'],
+    ['char_aria', 'Aria'],
+    ['char_bex', 'bex'],
+  ])
+  const knows = (characterId: string, source: string | null) => ({ characterId, source })
+
+  it('names each knower with how they know it, by name', () => {
+    expect(
+      happeningKnowersLine(
+        false,
+        [knows('char_jorin', 'told by Aria'), knows('char_aria', 'witnessed firsthand')],
+        NAMES,
+      ),
+    ).toBe('Known to: Aria (witnessed firsthand); Jorin (told by Aria)')
+  })
+
+  it('sorts names without regard to case', () => {
+    expect(
+      happeningKnowersLine(false, [knows('char_jorin', 'heard'), knows('char_bex', 'saw')], NAMES),
+    ).toBe('Known to: bex (saw); Jorin (heard)')
+  })
+
+  it('names a knower with no source alone', () => {
+    expect(
+      happeningKnowersLine(false, [knows('char_aria', null), knows('char_jorin', '  ')], NAMES),
+    ).toBe('Known to: Aria; Jorin')
+  })
+
+  it('puts a name and a source spanning lines on one line', () => {
+    expect(
+      happeningKnowersLine(
+        false,
+        [knows('char_aria', 'told\nby  Jorin')],
+        new Map([['char_aria', 'Aria\nVane']]),
+      ),
+    ).toBe('Known to: Aria Vane (told by Jorin)')
+  })
+
+  it('says common knowledge for a common-knowledge happening, whoever knows it', () => {
+    expect(happeningKnowersLine(true, [], NAMES)).toBe('Common knowledge')
+    expect(happeningKnowersLine(true, [knows('char_aria', 'saw it')], NAMES)).toBe(
+      'Common knowledge',
+    )
+  })
+
+  it("leaves out a knower whose name doesn't resolve, and the line when none does", () => {
+    expect(
+      happeningKnowersLine(false, [knows('char_gone', 'saw'), knows('char_aria', 'saw')], NAMES),
+    ).toBe('Known to: Aria (saw)')
+    expect(happeningKnowersLine(false, [knows('char_gone', 'saw')], NAMES)).toBeNull()
+    expect(happeningKnowersLine(false, [], NAMES)).toBeNull()
   })
 })

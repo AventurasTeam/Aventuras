@@ -270,7 +270,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'RetrievedRow[]',
       category: 'Retrieval',
       description:
-        'Happenings the ranker seated this turn; renderedText carries the awareness sources verbatim. Empty when nothing scored or no retrieval ran.',
+        "Happenings the ranker seated this turn, as { id, displayName, renderedText }: `renderedText` is the title, the description, then who in the scope knows it and how (`Known to: Aria (witnessed firsthand); Jorin (told by Aria)`), or `Common knowledge`. The scope is the scene's characters, and the lead in adventure or first- or second-person narration; a character in the scene the line doesn't name doesn't know it. The string the type budget was charged for, and the one to render. Empty when nothing scored or no retrieval ran.",
       required: true,
     },
     {
