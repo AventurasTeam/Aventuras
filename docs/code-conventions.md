@@ -305,9 +305,8 @@ field forms with validation and a commit step. Inline single inputs
 (a rename field, a search box, a toggle row) stay component-local
 with plain `useState`; pulling them into a form library buys nothing.
 
-Convention-only this slice. `react-hook-form` installs in Slice 2.3;
-until then, follow the convention and keep form clusters shaped so
-the adoption is mechanical.
+Convention-only: no lint rule tells a form cluster from an inline
+input, so review is what upholds this.
 
 ## pnpm and patches
 

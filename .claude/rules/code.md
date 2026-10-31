@@ -158,8 +158,8 @@ thresholds. See
 ## Forms
 
 Input clusters with a submit button use `react-hook-form`; inline
-single inputs stay component-local. Convention-only until
-`react-hook-form` lands (Slice 2.3). See
+single inputs stay component-local. Convention-only: no lint rule
+checks this. See
 [code-conventions.md → Forms](../../docs/code-conventions.md#forms).
 
 ## pnpm and patches
