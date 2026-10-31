@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { describeCallRetryError, describeContextWindow, type CallRetryError } from '@/lib/ai'
+import { describeContextWindow, type CallRetryError } from '@/lib/ai'
 import { t } from '@/lib/i18n'
 
 import {
+  assistCanRetry,
+  assistFailureDetail,
   assistFailureReason,
   composeKey,
   itemKey,
@@ -157,17 +159,21 @@ describe('assistFailureReason', () => {
     })
   })
 
-  it("passes any other failure's own line through", () => {
-    expect(
-      assistFailureReason({
-        tier: 'provider',
-        reason: 'timeout',
-        detail: 'Provider request timed out after 3 retries',
-      }),
-    ).toBe('Provider request timed out after 3 retries')
+  it.each([
+    ['timeout', 'The request timed out'],
+    ['auth', 'The provider refused the request. Check the API key and model access'],
+    ['network', "Couldn't reach the provider, or it's busy"],
+    ['unknown', 'The provider rejected the request'],
+  ] as const)('gives a %s failure a plain sentence, not its diagnostic', (reason, sentence) => {
+    expect(assistFailureReason({ tier: 'provider', reason, detail: 'APICallError: nope' })).toBe(
+      sentence,
+    )
+  })
+
+  it('gives a parse failure a plain sentence, not the parser message', () => {
     expect(
       assistFailureReason({ tier: 'parse', detail: 'Unexpected end of JSON input', attempt: 2 }),
-    ).toBe('Unexpected end of JSON input')
+    ).toBe("The model's reply wasn't usable")
   })
 })
 
@@ -193,18 +199,19 @@ describe('assistFailureReason for a prompt over the context window', () => {
     detail: LLAMACPP_MESSAGE,
   } satisfies CallRetryError
 
+  const REMEDY = "Shorten what you've entered or your guidance, or use a model with a larger window"
   const providerReason = (message: string) =>
-    `The provider rejected the prompt. Its message suggests it exceeded the model's context window: “${message}”`
+    `The provider rejected the prompt. Its message suggests it exceeded the model's context window: “${message}”. ${REMEDY}`
 
   it("names the rounded estimate and the model's window with its source", () => {
     expect(assistFailureReason(refused)).toBe(
-      "The prompt is about 71,300 tokens, over llama3.1:70b's 65,536-token context window (set by you)",
+      `The prompt is about 71,300 tokens, over llama3.1:70b's 65,536-token context window (set by you). ${REMEDY}`,
     )
   })
 
   it('names a detected window as detected', () => {
     expect(assistFailureReason({ ...refused, windowSource: 'detected' })).toBe(
-      "The prompt is about 71,300 tokens, over llama3.1:70b's 65,536-token context window (detected)",
+      `The prompt is about 71,300 tokens, over llama3.1:70b's 65,536-token context window (detected). ${REMEDY}`,
     )
   })
 
@@ -230,22 +237,76 @@ describe('assistFailureReason for a prompt over the context window', () => {
     )
   })
 
-  it('passes the diagnostic line through for a check failure with no window to print', () => {
+  it('falls back to a plain sentence for a check failure with no window to print', () => {
     const windowless = {
       ...refused,
       window: null,
       windowSource: 'unknown',
     } satisfies CallRetryError
-    expect(assistFailureReason(windowless)).toBe(describeCallRetryError(windowless))
+    expect(assistFailureReason(windowless)).toBe('The provider rejected the request')
   })
 
   // The overlay wraps the reason in "Couldn't generate. {{reason}}.": one closing period.
-  it('reads as one sentence inside the failure template', () => {
+  it("ends on the failure template's one period", () => {
     expect(t('wizard:aiAssist.failure', { reason: assistFailureReason(refused) })).toBe(
-      "Couldn't generate. The prompt is about 71,300 tokens, over llama3.1:70b's 65,536-token context window (set by you).",
+      `Couldn't generate. The prompt is about 71,300 tokens, over llama3.1:70b's 65,536-token context window (set by you). ${REMEDY}.`,
     )
     expect(t('wizard:aiAssist.failure', { reason: assistFailureReason(rejected) })).toBe(
-      `Couldn't generate. The provider rejected the prompt. Its message suggests it exceeded the model's context window: “${LLAMACPP_MESSAGE}”.`,
+      `Couldn't generate. ${providerReason(LLAMACPP_MESSAGE)}.`,
     )
+  })
+})
+
+describe('assistFailureDetail', () => {
+  it("keeps a provider failure's own line for the disclosure", () => {
+    expect(
+      assistFailureDetail({ tier: 'provider', reason: 'unknown', detail: 'APICallError: nope' }),
+    ).toBe('APICallError: nope')
+  })
+
+  it("keeps a parse failure's message", () => {
+    expect(assistFailureDetail({ tier: 'parse', detail: 'bad json', attempt: 2 })).toBe('bad json')
+  })
+
+  it('has nothing to disclose for a failure with no line of its own', () => {
+    expect(assistFailureDetail({ tier: 'provider', reason: 'timeout' })).toBeUndefined()
+  })
+
+  it('has nothing to disclose where the sentence is already the whole story', () => {
+    const refused = {
+      tier: 'context-window',
+      detectedBy: 'check',
+      estimate: 71_234,
+      window: 65_536,
+      windowSource: 'configured',
+      providerId: 'prov_local',
+      modelId: 'm',
+    } satisfies CallRetryError
+    expect(assistFailureDetail(refused)).toBeUndefined()
+  })
+})
+
+describe('assistCanRetry', () => {
+  const windowFailure = {
+    tier: 'context-window',
+    detectedBy: 'check',
+    estimate: 2,
+    window: 1,
+    windowSource: 'configured',
+    providerId: 'p',
+    modelId: 'm',
+  } satisfies CallRetryError
+
+  // The overlay offers no way to change the prompt, so the same call refuses the same way.
+  it.each([
+    ['a check refusal', windowFailure],
+    ['a provider rejection', { ...windowFailure, detectedBy: 'provider' as const }],
+  ])('offers no retry after %s', (_label, error) => {
+    expect(assistCanRetry(error)).toBe(false)
+  })
+
+  it('offers a retry after anything else', () => {
+    expect(assistCanRetry({ tier: 'provider', reason: 'timeout' })).toBe(true)
+    expect(assistCanRetry({ tier: 'parse', detail: 'x', attempt: 2 })).toBe(true)
   })
 })

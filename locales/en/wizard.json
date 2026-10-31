@@ -201,6 +201,14 @@
     "notConfigured": "AI is not configured.",
     "loading": "Generating with {{model}}…",
     "failure": "Couldn't generate. {{reason}}.",
+    "failureReason": {
+      "timeout": "The request timed out",
+      "auth": "The provider refused the request. Check the API key and model access",
+      "network": "Couldn't reach the provider, or it's busy",
+      "unknown": "The provider rejected the request",
+      "parse": "The model's reply wasn't usable",
+      "unexpected": "Something went wrong before the request was sent"
+    },
     "cutOff": {
       "maxOutput": "The reply was cut off at the wizard-assist profile's {{limit, number}}-token max output. Raise it, then try again",
       "window": "The reply was cut off where the prompt and reply filled the model's {{limit, number}}-token window",
@@ -208,8 +216,8 @@
       "unknownWithMaxOutput": "The server stopped the reply at its own limit, short of the wizard-assist profile's {{limit, number}}-token max output"
     },
     "contextWindow": {
-      "check": "The prompt is about {{estimate, number}} tokens, over {{model}}'s {{window, number}}-token context window ({{source}})",
-      "provider": "The provider rejected the prompt. Its message suggests it exceeded the model's context window: “{{message}}”"
+      "check": "The prompt is about {{estimate, number}} tokens, over {{model}}'s {{window, number}}-token context window ({{source}}). Shorten what you've entered or your guidance, or use a model with a larger window",
+      "provider": "The provider rejected the prompt. Its message suggests it exceeded the model's context window: “{{message}}”. Shorten what you've entered or your guidance, or use a model with a larger window"
     },
     "refine": {
       "label": "How should this change?",

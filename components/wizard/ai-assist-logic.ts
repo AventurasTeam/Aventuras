@@ -1,6 +1,6 @@
 import { windowCopyOf } from '@/components/reader/context-window-copy'
 import { cutOffCopyOf } from '@/components/reader/cut-off-copy'
-import { describeCallRetryError, type CallRetryError } from '@/lib/ai'
+import type { CallRetryError, ProviderReason } from '@/lib/ai'
 import { t } from '@/lib/i18n'
 
 declare const DedupeKeyBrand: unique symbol
@@ -97,21 +97,44 @@ export function mergePages<P>(
 
 function assistWindowReason(error: Extract<CallRetryError, { tier: 'context-window' }>): string {
   const copy = windowCopyOf(error)
-  // The check never refuses without a window; with no figure to print, the diagnostic line.
+  // The check never refuses without a window, so there's no figure to print.
   return copy === null
-    ? describeCallRetryError(error)
+    ? t('wizard:aiAssist.failureReason.unknown')
     : t(`wizard:aiAssist.contextWindow.${copy.key}`, copy.values)
 }
 
-/**
- * Failure-state reason: a cut-off or a prompt over the window gets a plain sentence, not the
- * diagnostic's tags and counts. No trailing period: the `failure` template adds one.
- */
+// Exhaustive: a new reason is a type error, not a raw diagnostic in the overlay.
+const PROVIDER_REASON_COPY = {
+  timeout: 'wizard:aiAssist.failureReason.timeout',
+  auth: 'wizard:aiAssist.failureReason.auth',
+  network: 'wizard:aiAssist.failureReason.network',
+  unknown: 'wizard:aiAssist.failureReason.unknown',
+} as const satisfies Record<ProviderReason, string>
+
+/** Failure-state reason, a plain sentence. No trailing period: the `failure` template adds one. */
 export function assistFailureReason(error: CallRetryError): string {
-  if (error.tier === 'context-window') return assistWindowReason(error)
-  if (error.tier !== 'reply-cut-off') return describeCallRetryError(error)
-  const copy = cutOffCopyOf(error)
-  return copy.key === 'unknown'
-    ? t('wizard:aiAssist.cutOff.unknown')
-    : t(`wizard:aiAssist.cutOff.${copy.key}`, { limit: copy.limit })
+  switch (error.tier) {
+    case 'context-window':
+      return assistWindowReason(error)
+    case 'provider':
+      return t(PROVIDER_REASON_COPY[error.reason])
+    case 'parse':
+      return t('wizard:aiAssist.failureReason.parse')
+    case 'reply-cut-off': {
+      const copy = cutOffCopyOf(error)
+      return copy.key === 'unknown'
+        ? t('wizard:aiAssist.cutOff.unknown')
+        : t(`wizard:aiAssist.cutOff.${copy.key}`, { limit: copy.limit })
+    }
+  }
+}
+
+/** The failure's own line for the Details disclosure, where the sentence can't hold it all. */
+export function assistFailureDetail(error: CallRetryError): string | undefined {
+  return error.tier === 'provider' || error.tier === 'parse' ? error.detail : undefined
+}
+
+/** A window failure repeats: nothing in the overlay can change the prompt. */
+export function assistCanRetry(error: CallRetryError): boolean {
+  return error.tier !== 'context-window'
 }

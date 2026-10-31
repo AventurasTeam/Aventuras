@@ -985,8 +985,14 @@ on its existing failure path:
   the turns the same way; a conversation that outgrows the window later
   only stops its task
   ([`memory/chapter-close.md → When a task stops`](./memory/chapter-close.md#when-a-task-stops));
-- suggestion refresh, the fallback classifier and wizard-assist on
-  their own.
+- suggestion refresh and wizard-assist on their own, each naming the
+  remedy that fits what its prompt holds: the suggestion prompt has no
+  memory pools, so its copy names the history buffer, and the wizard
+  has no story yet, so its copy names what's been entered. The strip
+  keeps `Retry`, which is how the user gets unstuck once they've acted
+  on the remedy; wizard-assist's overlay can't change the prompt, so
+  it offers none;
+- the fallback classifier on its own.
 
 ### Recognizing an overflow rejection
 

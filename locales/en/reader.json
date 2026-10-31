@@ -47,8 +47,8 @@
         "unknownWithMaxOutput": "The server stopped the suggestion model's reply at its own limit, short of the suggestion profile's {{limit, number}}-token max output."
       },
       "contextWindow": {
-        "check": "The suggestion prompt is about {{estimate, number}} tokens, over {{model}}'s {{window, number}}-token context window ({{source}}). Nothing was sent.",
-        "provider": "The provider rejected the suggestion prompt. Its message suggests it exceeded the model's context window: “{{message}}”."
+        "check": "The suggestion prompt is about {{estimate, number}} tokens, over {{model}}'s {{window, number}}-token context window ({{source}}). Nothing was sent. Shorten the history buffer in Story Settings, raise the window if the model allows more, or switch the suggestion model to one with a larger window.",
+        "provider": "The provider rejected the suggestion prompt. Its message suggests it exceeded the model's context window: “{{message}}”. Shorten the history buffer in Story Settings, raise the window if the model allows more, or switch the suggestion model to one with a larger window."
       }
     }
   },

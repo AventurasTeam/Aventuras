@@ -2,6 +2,7 @@ import { Sparkles } from 'lucide-react-native'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
+import { DetailsDisclosure } from '@/components/compounds/entry-card-system'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -22,12 +23,15 @@ import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
 import { describeCallRetryError, type GenerateStructuredResult } from '@/lib/ai'
+import { copyText } from '@/lib/clipboard'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 import { AiAssistDiscardDialog } from './ai-assist-discard-dialog'
 import {
+  assistCanRetry,
+  assistFailureDetail,
   assistFailureReason,
   itemKey,
   markExisting,
@@ -53,7 +57,7 @@ type AssistState<T> =
   | { kind: 'loading'; modelId: string; from?: Preview<T>; mode: 'generate' | 'refine' }
   | ({ kind: 'result' } & Preview<T>)
   | ({ kind: 'refine' } & Preview<T>)
-  | { kind: 'failure'; detail: string; retry: () => void }
+  | { kind: 'failure'; reason: string; detail?: string; retry?: () => void }
 
 type AiAssistCommonProps = {
   /** Accessible name for the trigger AND the overlay's visible heading (e.g. "Suggest setting"). */
@@ -145,10 +149,13 @@ export type AiAssistProps<T, P = unknown> =
   | AiAssistChipsProps<T>
   | AiAssistListProps<T, P>
 
+const copyDetail = (text: string): void => void copyText(text)
+
 export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
   const { ariaLabel, guidancePlaceholder, resolveModelId, onSetup, disabled } = props
 
-  const isPhone = useTier() === 'phone'
+  const tier = useTier()
+  const isPhone = tier === 'phone'
   // Inside the phone Sheet a plain ScrollView's touches lose to its pan gesture, so
   // rows past the fold are unreachable; the Sheet's scroll component registers with
   // that gesture system. NativeWind drops className on gorhom's, so every class stays
@@ -287,7 +294,12 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
       if (requestSeqRef.current !== seq) return
       const detail = err instanceof Error ? err.message : String(err)
       logger.error('provider.wizard_assist_threw', { modelId, error: detail })
-      setAssist({ kind: 'failure', detail, retry })
+      setAssist({
+        kind: 'failure',
+        reason: t('wizard:aiAssist.failureReason.unexpected'),
+        detail,
+        retry,
+      })
       return
     }
     if (requestSeqRef.current !== seq) return
@@ -311,7 +323,13 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
         ariaLabel,
         detail: describeCallRetryError(result.error),
       })
-      setAssist({ kind: 'failure', detail: assistFailureReason(result.error), retry })
+      const detail = assistFailureDetail(result.error)
+      setAssist({
+        kind: 'failure',
+        reason: assistFailureReason(result.error),
+        ...(detail !== undefined ? { detail } : {}),
+        ...(assistCanRetry(result.error) ? { retry } : {}),
+      })
     }
     // 'aborted' — whichever action triggered the abort already set its own state.
   }
@@ -804,8 +822,11 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
         return (
           <View className={cn('gap-3', isPhone && 'flex-1')}>
             <Text size="sm" className="text-danger">
-              {t('wizard:aiAssist.failure', { reason: assist.detail })}
+              {t('wizard:aiAssist.failure', { reason: assist.reason })}
             </Text>
+            {assist.detail !== undefined ? (
+              <DetailsDisclosure detail={assist.detail} onCopy={copyDetail} tier={tier} />
+            ) : null}
             {actionSpacer}
             <View className="flex-row justify-end gap-2">
               {/* Not closeOverlay: a failure after a successful generate leaves listItems
@@ -813,9 +834,11 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
               <Button variant="ghost" onPress={requestClose}>
                 <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
               </Button>
-              <Button onPress={assist.retry}>
-                <Text>{t('wizard:aiAssist.actions.tryAgain')}</Text>
-              </Button>
+              {assist.retry !== undefined ? (
+                <Button onPress={assist.retry}>
+                  <Text>{t('wizard:aiAssist.actions.tryAgain')}</Text>
+                </Button>
+              ) : null}
             </View>
           </View>
         )

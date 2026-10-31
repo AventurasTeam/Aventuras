@@ -95,13 +95,6 @@ slice-planning gate forces its resolution before that slice is planned.
   holds on web only. Read from the expo source, not measured on a
   device. Raised by the cut-off replies Task 10 review.
 
-- **Wizard-assist shows raw diagnostics to the user.** For any failure
-  other than a cut-off, `ai-assist.tsx` puts `describeCallRetryError`'s
-  line into "Couldn't generate. {{reason}}.": a provider error's
-  `label ← cause` chain or a JSON or Zod parse message, untranslated,
-  possibly ending in a doubled period. Raised by the cut-off replies
-  Task 11 review.
-
 - **The orchestrator never fills a phase-logic error's `phaseName` or
   `retryAttempt`.** Canon has it fill both when it wraps a phase's
   error
@@ -173,9 +166,6 @@ slice-planning gate forces its resolution before that slice is planned.
     sentences; a language with grammatical gender can't agree it with
     "window". i18next's `context` option would let each sentence carry
     its own wording.
-  - The suggestion strip's and wizard-assist's window copy names no
-    remedy, and Retry on a check refusal refuses the same prompt again;
-    the turn entry's copy carries the remedies.
   - A hinted provider failure replaces "LLM call failed." with copy
     that starts "The provider rejected the request.", where
     [`reader-composer.md → Transient pipeline failures`](../ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)

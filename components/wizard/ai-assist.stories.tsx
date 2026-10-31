@@ -715,7 +715,7 @@ export const Failure: Story = {
   render: () => (
     <ProseDemo
       resolveModelId={() => MODEL_ID}
-      run={failRun<DescriptionValue>('Provider request timed out after 3 retries')}
+      run={failRun<DescriptionValue>('APICallError: model not found')}
       onSetup={fn()}
       onUse={fn()}
     />
@@ -724,9 +724,44 @@ export const Failure: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
     expect(
-      await screen.findByText("Couldn't generate. Provider request timed out after 3 retries."),
+      await screen.findByText("Couldn't generate. The provider rejected the request."),
     ).toBeInTheDocument()
+    expect(screen.queryByText('APICallError: model not found')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Details' }))
+    expect(await screen.findByText('APICallError: model not found')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+  },
+}
+
+// Nothing in the overlay can change the prompt, so the same call would refuse the same way.
+export const FailureOverWindow: Story = {
+  beforeEach: () => {
+    const log = spyOn(logger, 'error').mockImplementation(() => {})
+    return () => log.mockRestore()
+  },
+  render: () => (
+    <ProseDemo
+      resolveModelId={() => MODEL_ID}
+      run={failWithErrorRun<DescriptionValue>({
+        tier: 'context-window',
+        detectedBy: 'check',
+        estimate: 71_234,
+        window: 65_536,
+        windowSource: 'configured',
+        providerId: 'prov_story',
+        modelId: 'gpt-4o-mini',
+      })}
+      onSetup={fn()}
+      onUse={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    expect(await screen.findByText(/Shorten what you've entered/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Details' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
   },
 }
@@ -747,7 +782,7 @@ export const FailureThenRetrySucceeds: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
     expect(
-      await screen.findByText("Couldn't generate. Provider request timed out after 3 retries."),
+      await screen.findByText("Couldn't generate. The provider rejected the request."),
     ).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
