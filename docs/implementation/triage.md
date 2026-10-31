@@ -98,15 +98,6 @@ slice-planning gate forces its resolution before that slice is planned.
     uses the shared `sourceTurn` const; sharing the instance wants the
     prompt-schema snapshots to confirm it.
 
-- **Failure details the pipeline logs have no test.** The `errorDetail`
-  of `pipeline.run_aborted` and `pipeline.phase_failed`
-  (`lib/pipeline/runtime/orchestrator.ts`) is asserted nowhere, and the
-  periodic classifier's `onPreflightFailure` hook
-  (`lib/pipeline/definitions/periodic-classifier.ts`) is tested only for
-  a resolver failure, not for its other branch, which records
-  `pipelineErrorDetail(error)`. Setting either detail to `undefined`
-  passes the suite. Raised by the cut-off replies Task 2 review.
-
 - **The `provider.*` log kinds in `observability.md` are stale.**
   [`observability.md`](../observability.md) lists `retry_succeeded`,
   `rate_limited`, `stream_interrupted`, `request_failed` and

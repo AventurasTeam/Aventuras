@@ -151,6 +151,40 @@ describe('stub fault scenarios', () => {
     expect(recoverableCount()).toBe(0)
   })
 
+  // A computed detail, so a log that read `error.detail` directly would come up empty here.
+  it('logs what failed on both the phase and the run', async () => {
+    const { ctx } = await makeHarness()
+    const cutOff = async function* (): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
+      return {
+        status: 'failed',
+        error: {
+          kind: 'reply-cut-off',
+          target: 'narrative',
+          cause: 'unknown',
+          outputTokens: null,
+          reasoningTokens: null,
+          maxOutput: null,
+          window: null,
+          providerId: 'prov-1',
+          modelId: 'model-1',
+        },
+      }
+    }
+    definePipeline({ kind: 'stub', phases: [{ name: 'gen', run: cutOff }], ...base })
+
+    expect(expectRan(await runPipeline('stub', ctx)).outcome).toBe('failed')
+
+    const fields = (kind: string) =>
+      getDiagnosticsSnapshot().logEntries.find((e) => e.kind === kind)?.fields
+    const logged = {
+      errorKind: 'reply-cut-off',
+      errorDetail:
+        'reply cut off (unknown): output tokens not reported; model model-1 on provider prov-1',
+    }
+    expect(fields('pipeline.phase_failed')).toMatchObject({ phase: 'gen', ...logged })
+    expect(fields('pipeline.run_aborted')).toMatchObject({ reason: 'phase-failure', ...logged })
+  })
+
   it('user cancellation → aborted, ambient cleared', async () => {
     const { ctx } = await makeHarness()
     definePipeline({
