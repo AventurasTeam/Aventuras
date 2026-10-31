@@ -82,6 +82,19 @@ describe('turnContextWindowContent', () => {
     ).toBe(turnProviderCopy(LLAMACPP_MESSAGE))
   })
 
+  // Every surface follows the closing quote with its own period.
+  it("drops the provider message's own final period from the quote", () => {
+    expect(turnContextWindowContent({ ...REJECTED, detail: 'Too many tokens.' })).toBe(
+      turnProviderCopy('Too many tokens'),
+    )
+  })
+
+  it('leaves a period inside the message alone', () => {
+    expect(turnContextWindowContent({ ...REJECTED, detail: 'v1.2 refused it' })).toBe(
+      turnProviderCopy('v1.2 refused it'),
+    )
+  })
+
   it('quotes the diagnostic line when the provider gave no message', () => {
     expect(turnContextWindowContent(REJECTED_UNQUOTED)).toBe(
       turnProviderCopy(describeContextWindow(REJECTED_UNQUOTED)),

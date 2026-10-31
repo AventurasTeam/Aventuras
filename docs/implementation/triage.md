@@ -262,7 +262,6 @@ slice-planning gate forces its resolution before that slice is planned.
   - The provider's message is quoted in the entry's content, which
     renders through `marked`, so markdown in it (`*x*`, a `#` line)
     changes the quote. It is sanitized, so not a security issue.
-  - A message that ends in a period renders as `….”.`.
   - `common:contextWindowSource.*` is a translated fragment slotted into
     sentences; a language with grammatical gender can't agree it with
     "window". i18next's `context` option would let each sentence carry
