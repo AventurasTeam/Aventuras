@@ -98,16 +98,6 @@ slice-planning gate forces its resolution before that slice is planned.
     uses the shared `sourceTurn` const; sharing the instance wants the
     prompt-schema snapshots to confirm it.
 
-- **A profile's max output accepts any number.** `maxOutput` in
-  `lib/db/app-settings/app-settings-schema.ts` is
-  `z.number().optional()`, so `0`, negative and fractional limits pass
-  validation and are sent as `maxOutputTokens`. Since the cut-off
-  replies work, the cause rule reads any output at or over the limit
-  as `max-output` ([`generation-pipeline.md → Cut-off replies`](../generation-pipeline.md#cut-off-replies)),
-  so a limit of `0` makes every cut-off read `max-output` and its copy
-  quote a 0-token max output. Raised by the cut-off replies Task 1
-  review.
-
 - **Failure details the pipeline logs have no test.** The `errorDetail`
   of `pipeline.run_aborted` and `pipeline.phase_failed`
   (`lib/pipeline/runtime/orchestrator.ts`) is asserted nowhere, and the

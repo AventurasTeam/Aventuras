@@ -1695,8 +1695,8 @@ app_settings.profiles: Array<{
   description?: string                       // user-authored, agent profiles only
   modelRef: { providerId: string; modelId: string }  // composite — disambiguates same modelId across providers
   temperature?: number                       // 0-2 (provider-dependent; Anthropic caps at 1, OpenAI/Google allow 2)
-  maxOutput?: number
-  thinking?: number                          // reasoning slider; conditional on model capability
+  maxOutput?: number                         // a positive whole number
+  thinking?: number                          // reasoning slider; conditional on model capability; a whole number, 0 turns it off
   timeout?: number                           // seconds; unset = no limit, except a classifier pass's or a chapter close's call's ten minutes
   structuredOutput?: 'auto' | 'force-on' | 'force-off'  // agent profiles only
   closeConversation?: 'split' | 'single'     // agent profiles only; chapter close's shape, default split. See docs/memory/chapter-close.md → Conversations
