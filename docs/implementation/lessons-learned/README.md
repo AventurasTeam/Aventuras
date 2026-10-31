@@ -83,6 +83,9 @@ slice plans when relevant.
   — RN-Web polyfills `box-none` only in compiled styles, so an inline
   object leaves the view catching clicks; use the compiled
   `POINTER_EVENTS_BOX_NONE` and hit-test with `elementFromPoint`.
+- [The expo-dom bridge keeps neither identity nor rejections](./expo-dom-bridge-identity-and-rejections.md)
+  — props are fresh JSON per emission and callbacks new proxies, so a memo
+  misses on native; a host rejection dies silently in the WebView.
 - [`expo-clipboard`'s web write reports success it never checked](./expo-clipboard-web-reports-false-success.md)
   — its `execCommand` fallback resolves `true` on a refused copy; write
   `navigator.clipboard` directly on web and catch the throw everywhere.

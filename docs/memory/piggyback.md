@@ -617,6 +617,16 @@ merely mentions `<state>` carries no closer, so it is never mistaken
 for markup and never truncated. A reply that strips to nothing is
 persisted raw rather than committed blank.
 
+**A reply can hold more than the one of each block the prompt asks
+for.** Every closed pair is excised, a repeat or a block nested in
+another included, and so is an unclosed block after them, so none of
+that markup reaches the column either. Only the last span of a kind can
+sit mid-line, though. Ahead of it, a block has to open at a line start
+or right after a root close tag, and so does an unclosed block past a
+closed pair: mid-line, a closed pair is a quote and an opener a mention,
+and both stay in the prose. With repeats, the parser reads the first
+`<state>`, and the raw the report keeps is that same block.
+
 Three consequences:
 
 - **`promptProse` becomes a no-op for new rows but stays.** Three

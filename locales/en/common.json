@@ -64,6 +64,11 @@
     "resetSettings": "Reset settings",
     "resetWarning": "Resetting erases your saved providers and API keys. Your stories are not affected."
   },
+  "clipboard": {
+    "copy": "Copy",
+    "copied": "Copied.",
+    "copyFailed": "Couldn't copy to the clipboard."
+  },
   "crashRecovery": {
     "title": "Story recovered",
     "ok": "OK",
@@ -85,7 +90,8 @@
     "branchHeldRefusedNamed": "An interrupted memory update in {{storyName}} could not be undone without breaking later changes. Its branch can't take turns — your story content is intact.",
     "branchHeldRefusedUnnamed": "An interrupted memory update could not be undone without breaking later changes. That story's branch can't take turns — your story content is intact.",
     "incompleteRefusedNamed": "An interrupted background update in {{storyName}} could not be undone without breaking later changes. Your story content is intact.",
-    "incompleteRefusedUnnamed": "An interrupted background update could not be undone without breaking later changes. Your story content is intact."
+    "incompleteRefusedUnnamed": "An interrupted background update could not be undone without breaking later changes. Your story content is intact.",
+    "passFailed": "Aventuras couldn't check for updates left unfinished when it last closed. Restarting the app retries automatically."
   },
   "kinds": {
     "character": "Character",

@@ -2993,6 +2993,7 @@ describe('narrative — how the reply ended', () => {
   async function runReply(opts: {
     text: string
     finishReason?: unknown
+    rawFinishReason?: unknown
     usage?: unknown
     maxOutput?: number
     window?: GenerationWindow
@@ -3042,6 +3043,7 @@ describe('narrative — how the reply ended', () => {
             estimate = opts.promptEstimate ?? null
           })(),
           finishReason: opts.finishReason,
+          rawFinishReason: opts.rawFinishReason,
           usage: opts.usage,
         },
       }),
@@ -3277,10 +3279,91 @@ describe('narrative — how the reply ended', () => {
     expect(entry?.content).toBe(BLOCK)
   })
 
+  // generation-pipeline.md → Cut-off replies: a reply that ended early keeps its text and says so.
+  describe.each([
+    ['no finish signal', 'other', undefined, 'interrupted'],
+    ['the content filter', 'content-filter', 'refusal', 'content-filter'],
+  ])('a reply stopped by %s', (_label, finishReason, rawFinishReason, cause) => {
+    it('commits with a mark naming the cause, whatever the limits say', async () => {
+      const { result, entry, log } = await runReply({
+        text: PROSE,
+        finishReason,
+        rawFinishReason,
+        maxOutput: 512,
+        usage: { outputTokens: 512 },
+      })
+
+      expect(result).toEqual({ status: 'completed' })
+      expect(entry?.content).toBe(PROSE)
+      expect(entry?.metadata?.cutOff).toEqual({ cause, outputTokens: 512 })
+      expect(log.warn).toHaveBeenCalledWith(
+        'provider.reply_cut_off',
+        cutWarning({ cause, outputTokens: 512, maxOutput: 512, outcome: 'marked' }),
+      )
+    })
+
+    it('removes an opener cut mid-name, so no fragment reaches the prose', async () => {
+      const { entry } = await runReply({
+        text: `${PROSE}\n\n<sta`,
+        finishReason,
+        rawFinishReason,
+      })
+
+      expect(entry?.content).toBe(PROSE)
+      expect(entry?.metadata).not.toHaveProperty('cutOff')
+    })
+
+    it('marks nothing when a closed trailing block proves the prose ended', async () => {
+      const { result, entry, log } = await runReply({
+        text: `${PROSE}\n\n<state><summary>s</summary></state>`,
+        finishReason,
+        rawFinishReason,
+      })
+
+      expect(result).toEqual({ status: 'completed' })
+      expect(entry?.content).toBe(PROSE)
+      expect(entry?.metadata).not.toHaveProperty('cutOff')
+      expect(log.warn).toHaveBeenCalledWith(
+        'provider.reply_cut_off',
+        cutWarning({ cause, outputTokens: null, maxOutput: null, outcome: 'in-block' }),
+      )
+    })
+  })
+
+  it('records no tokens when the stream reported no counts', async () => {
+    const { entry } = await runReply({
+      text: PROSE,
+      finishReason: 'stop',
+      usage: { inputTokens: undefined, outputTokens: undefined },
+    })
+
+    expect(entry?.metadata).not.toHaveProperty('tokens')
+  })
+
+  it('keeps the count a stream did report', async () => {
+    const { entry } = await runReply({
+      text: PROSE,
+      finishReason: 'stop',
+      usage: { inputTokens: 900, outputTokens: undefined },
+    })
+
+    expect(entry?.metadata?.tokens).toEqual({ prompt: 900, completion: 0 })
+  })
+
+  it("leaves a server's own finish word finished", async () => {
+    const { entry, log } = await runReply({
+      text: PROSE,
+      finishReason: 'other',
+      rawFinishReason: 'eos',
+    })
+
+    expect(entry?.metadata).not.toHaveProperty('cutOff')
+    expect(log.warn).not.toHaveBeenCalledWith('provider.reply_cut_off', expect.anything())
+  })
+
   // The output reached the max output, so only the finish reason can tell these apart from a cut.
   it.each([
     ['stop', 'stop'],
-    ['content-filter', 'content-filter'],
     ['an unreadable finish reason', unreadable],
   ])('commits a reply with text that finished with %s, unmarked', async (_label, finishReason) => {
     const { result, entry, log } = await runReply({
@@ -3498,7 +3581,7 @@ describe('narrative — a stream error', () => {
       status: 'failed',
       error: {
         kind: 'provider',
-        reason: 'network',
+        reason: 'unknown',
         detail: 'APICallError: thinking is not supported for this model',
         possibleCapabilityMismatch: { capability: 'reasoning', matched: 'thinking' },
       },
@@ -3512,18 +3595,20 @@ describe('narrative — a stream error', () => {
 
   // toStrictEqual: a `possibleCapabilityMismatch: undefined` key fails it.
   it.each([
-    ['a plain error', () => new Error('socket hang up'), 'socket hang up'],
+    ['a plain error', () => new Error('socket hang up'), 'network', 'socket hang up'],
     [
       'a 4xx naming a capability',
       () => rejection(400, 'thinking is not supported for this model'),
+      'unknown',
       'APICallError: thinking is not supported for this model',
     ],
-  ])('omits the hint the call gives none for, on %s', async (_label, makeError, detail) => {
+    ['a 401', () => rejection(401, 'bad key'), 'auth', 'APICallError: bad key'],
+  ])('omits the hint the call gives none for, on %s', async (_label, makeError, reason, detail) => {
     const { result } = await runStreamError(makeError())
 
     expect(result).toStrictEqual({
       status: 'failed',
-      error: { kind: 'provider', reason: 'network', detail },
+      error: { kind: 'provider', reason, detail },
     })
   })
 })

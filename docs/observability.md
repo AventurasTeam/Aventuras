@@ -214,11 +214,18 @@ convention, and the expectation that subsystems route through
   (warn: the description embed call threw, so every namesake went
   unscored)
 - `retrieval.*` — `row_skipped_stale`, `empty_pool`, `knn_error`
-- `provider.*` — `retry_succeeded`, `rate_limited`,
-  `stream_interrupted`, `request_failed`, `url_redaction_failed`
+- `provider.*` — `url_redaction_failed`
   (the URL pass failed to parse a span and left it unredacted —
-  it fails open, so it must not fail silently), `reply_cut_off` (warn:
-  the server stopped a reply at its length limit; logged with the
+  it fails open, so it must not fail silently),
+  `narrative_stream_failed` (error: a stream error that fails the turn,
+  with its detail and, for a rejection, the status and redacted URL),
+  `http_call_buffer_full`, `wizard_assist_failed` and
+  `wizard_assist_threw` (a wizard call that failed, or threw before it
+  went out), `wizard_opening_unresolved_refs`, `setup_save_failed`,
+  `setup_fetch_models_failed`, `setup_quick_wire_failed`,
+  `setup_add_custom_failed`, `reply_cut_off` (warn:
+  a reply stopped short, at a length limit, by a filter or with no
+  finish signal; logged with the
   cause, the numbers and an `outcome`, `refused` or `accepted` for a
   structured call and `failed`, `marked` or `in-block` for the
   narrative; a refused structured call also carries `parseError`,
@@ -331,11 +338,11 @@ convention, and the expectation that subsystems route through
   peek `Set as lead` whose `setStoryLead` threw rather than refused,
   or that had no story id to write with because the reader's hydration
   hadn't landed; the user sees the generic lead-failure toast either
-  way). A system entry's copy adds two more
-  (`components/reader/copy-system-text.ts`):
-  `system_text_copy_failed` (a clipboard write that threw) and
-  `clipboard_unavailable` (warn, no Clipboard API on web); the user
-  sees the copy-failed toast after either
+  way). `Dismiss` adds two, each
+  with its own toast (`components/reader/system-entry-actions.tsx`):
+  `system_entry_dismiss_failed` (the delete failed, the entry stands)
+  and `system_entry_reload_failed` (the delete landed, the card is
+  stale)
 
 Kinds grow organically as subsystems land.
 
@@ -371,6 +378,9 @@ signal that corrects or explains one that already bypassed.
   for the same reason its accusation does — a retraction gated out
   of every configuration that recorded the accusation would read as
   a permanent false positive instead of a correction.
+- `app.clipboard_copy_failed` and `app.clipboard_unavailable` — a copy
+  whose write threw, and a copy on web with no Clipboard API, at warn
+  (`lib/clipboard`). The user sees the copy-failed toast after either.
 - `app.rejection_tracker_unavailable` — no tracker could be
   installed at all; the signal that the backstop itself isn't
   running, which matters most in exactly the configuration

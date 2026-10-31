@@ -1695,8 +1695,8 @@ app_settings.profiles: Array<{
   description?: string                       // user-authored, agent profiles only
   modelRef: { providerId: string; modelId: string }  // composite — disambiguates same modelId across providers
   temperature?: number                       // 0-2 (provider-dependent; Anthropic caps at 1, OpenAI/Google allow 2)
-  maxOutput?: number
-  thinking?: number                          // reasoning slider; conditional on model capability
+  maxOutput?: number                         // a positive whole number
+  thinking?: number                          // reasoning slider; conditional on model capability; a whole number, 0 turns it off
   timeout?: number                           // seconds; unset = no limit, except a classifier pass's or a chapter close's call's ten minutes
   structuredOutput?: 'auto' | 'force-on' | 'force-off'  // agent profiles only
   closeConversation?: 'split' | 'single'     // agent profiles only; chapter close's shape, default split. See docs/memory/chapter-close.md → Conversations
@@ -2004,7 +2004,7 @@ story_entries.metadata: {
   model?: string
   generationTimingMs?: number
   reasoning?: string                // persisted reasoning text from providers that expose it; mirrors `tokens.reasoning` (the count). Optional — undefined when the provider doesn't surface reasoning.
-  cutOff?:                          // the server stopped this reply at its limit inside the prose; authored, never inherited. See "Cut-off mark" below
+  cutOff?:                          // this reply ended early inside the prose; authored, never inherited. See "Cut-off mark" below
     | {
         cause: 'max-output' | 'window'
         outputTokens?: number       // as the provider reported
@@ -2014,6 +2014,10 @@ story_entries.metadata: {
         cause: 'unknown'            // no limit the call knew of was reached
         outputTokens?: number
         maxOutput?: number          // the max output the call sent, which the reply fell short of; absent when it sent none
+      }
+    | {
+        cause: 'interrupted' | 'content-filter'  // no finish signal arrived, or a filter stopped it
+        outputTokens?: number
       }
   injectedHappenings?: string[]     // the happenings the ranker seated in this turn's prompt; authored, never inherited, absent when it seated none. The periodic classifier lists them (memory/classifier.md#what-the-classifier-reads)
 
@@ -2080,9 +2084,10 @@ export/backup includes it as part of the entry record. Search
 scope intentionally excludes it (provenance, not searchable
 narrative content).
 
-**Cut-off mark.** `cutOff` is written on an `ai_reply` whose reply the
-server stopped at `length` before any trailing block began, so the story
-text itself ends early
+**Cut-off mark.** `cutOff` is written on an `ai_reply` whose reply
+ended before any trailing block began, so the story text itself ends
+early: the server stopped it at `length`, a filter stopped it, or the
+stream closed with no finish signal
 ([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)).
 The card shows it as a notice
 ([`entry-card.md → Cut-off notice`](./ui/patterns/entry-card.md#cut-off-notice)).
@@ -2116,7 +2121,7 @@ absolute after an edit is the correct outcome and is rendered as such
 (see [EntryCard → World-state panel](./ui/patterns/entry-card.md#world-state-panel)).
 
 **The report records what was emitted and what `apply.ts` and the
-create planner did with it.** Four things can differ from the
+create planner did with it.** Five things can differ from the
 absolute state beside them:
 
 - `currentLocation` is rejected when the id does not resolve to a
@@ -2141,6 +2146,10 @@ absolute state beside them:
 - A condition is rejected when its id isn't a place or item the
   prompt showed with its state, or its text is blank; `rejected`
   records that, and `classifier.condition_unseen` logs the first.
+- A visual change's or a condition's text is bounded to 500 UTF-16
+  units before it's written. The report keeps the text as emitted, so
+  the panel can show more than World holds; `classifier.visual_truncated`
+  and `classifier.condition_truncated` log the cut.
 
 The decision is recorded rather than re-derived, because the
 difference alone does not identify its cause. An emitted location

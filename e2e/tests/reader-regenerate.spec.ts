@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { currentBranchId, queryApp } from '../harness/db'
+import { currentBranchId, entryIdOf, pollEntryIdOf, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
@@ -57,33 +57,8 @@ test.describe('reader — regenerate a reply', () => {
     return currentBranchId(app.window, 'story_hero')
   }
 
-  // per-turn.ts yields stream_chunk during streaming and the reader renders it
-  // live, so the DOM text a caller just awaited can resolve off the stream
-  // buffer while the row (and its create delta) are still mid-commit in a
-  // later transaction. Callers poll this rather than reading it once. The
-  // cardinality assert is the other half: no ORDER BY / LIMIT means a
-  // regression that duplicated a row would otherwise still satisfy a bare
-  // presence/absence check.
-  async function entryIdByContent(branch: string, marker: string): Promise<string | undefined> {
-    const rows = await queryApp(
-      app.window,
-      `SELECT id FROM story_entries WHERE branch_id = ? AND content LIKE ?`,
-      [branch, `%${marker}%`],
-    )
-    expect(rows.length, `${marker} row count`).toBeLessThanOrEqual(1)
-    return rows[0]?.[0] as string | undefined
-  }
-
-  // Poll until the marker's row exists, then hand back its id. The extra read
-  // after the poll settles is safe (no further write can race it — the poll
-  // already proved the row committed) and avoids threading a resolved value
-  // out of expect.poll, which only returns the assertion's pass/fail.
-  async function pollEntryId(branch: string, marker: string): Promise<string> {
-    await expect.poll(() => entryIdByContent(branch, marker), { timeout: 15_000 }).toBeDefined()
-    const id = await entryIdByContent(branch, marker)
-    if (id === undefined) throw new Error(`${marker}: present at the poll, gone on read-back`)
-    return id
-  }
+  const entryIdByContent = (branch: string, marker: string) => entryIdOf(app.window, branch, marker)
+  const pollEntryId = (branch: string, marker: string) => pollEntryIdOf(app.window, branch, marker)
 
   async function pollEntryGone(branch: string, marker: string): Promise<void> {
     await expect.poll(() => entryIdByContent(branch, marker), { timeout: 15_000 }).toBeUndefined()

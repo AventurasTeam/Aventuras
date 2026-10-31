@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, screen } from 'storybook/test'
+import { expect, screen, spyOn, userEvent, waitFor } from 'storybook/test'
+
+import { t } from '@/lib/i18n'
+import { toastStore, type ToastItem } from '@/lib/toast'
 
 import { JSONBlock } from './json-block'
 
@@ -34,6 +37,39 @@ export const Basic: Story = {
     const inset = parseFloat(getComputedStyle(text).paddingTop)
     expect(inset).toBeGreaterThan(0)
     expect(copy.getBoundingClientRect().top - text.getBoundingClientRect().top).toBe(inset)
+  },
+}
+
+export const CopiesFormattedJson: Story = {
+  render: () => (
+    <View className="w-96 p-4">
+      <JSONBlock data={{ attempt: 2 }} />
+    </View>
+  ),
+  beforeEach: () => {
+    // A toast left by another story would satisfy the assertion below.
+    toastStore.__reset()
+    const write = spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
+    return () => write.mockRestore()
+  },
+  play: async () => {
+    let toasts: ToastItem[] = []
+    const stop = toastStore.subscribe((next) => {
+      toasts = next
+    })
+    try {
+      await userEvent.click(await screen.findByRole('button', { name: 'Copy' }))
+      await waitFor(() =>
+        expect(navigator.clipboard.writeText).toHaveBeenCalledWith('{\n  "attempt": 2\n}'),
+      )
+      await waitFor(() =>
+        expect(toasts.map((item) => [item.severity, item.message])).toEqual([
+          ['info', t('common:clipboard.copied')],
+        ]),
+      )
+    } finally {
+      stop()
+    }
   },
 }
 

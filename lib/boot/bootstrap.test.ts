@@ -107,7 +107,13 @@ describe('runBootstrap', () => {
     ctx.sqlite.exec('DROP TABLE pipeline_runs')
     const r = await runBootstrap(ctx)
     expect(r).toEqual({ status: 'ok' })
-    expect(recoveryReportStore.getSnapshot().pendingRecoveryReport).toBeNull()
+    // No orphan was read, so the report can't say none exist.
+    expect(recoveryReportStore.getSnapshot().pendingRecoveryReport).toEqual({
+      reversed: [],
+      failures: [],
+      heldStoryIds: [],
+      passFailed: true,
+    })
   })
 
   it('a per-orphan reversal failure does not block boot, and is reported', async () => {
@@ -276,6 +282,7 @@ describe('runBootstrap', () => {
       reversed: [],
       failures: [],
       heldStoryIds: ['s1'],
+      passFailed: true,
     })
   })
 

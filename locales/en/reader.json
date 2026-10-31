@@ -47,8 +47,8 @@
         "unknownWithMaxOutput": "The server stopped the suggestion model's reply at its own limit, short of the suggestion profile's {{limit, number}}-token max output."
       },
       "contextWindow": {
-        "check": "The suggestion prompt is about {{estimate, number}} tokens, over {{model}}'s {{window, number}}-token context window ({{source}}). Nothing was sent.",
-        "provider": "The provider rejected the suggestion prompt. Its message suggests it exceeded the model's context window: “{{message}}”."
+        "check": "The suggestion prompt is about {{estimate, number}} tokens, over {{model}}'s {{window, number}}-token context window ({{source}}). Nothing was sent. Shorten the history buffer in Story Settings, raise the window if the model allows more, or switch the suggestion model to one with a larger window.",
+        "provider": "The provider rejected the suggestion prompt. Its message suggests it exceeded the model's context window: “{{message}}”. Shorten the history buffer in Story Settings, raise the window if the model allows more, or switch the suggestion model to one with a larger window."
       }
     }
   },
@@ -152,7 +152,9 @@
     "maxOutput": "Cut off at the narrative profile's {{limit, number}}-token max output.",
     "window": "Cut off where the prompt and reply filled the model's {{limit, number}}-token window.",
     "unknown": "The server stopped the reply at its own limit. Setting a max output on the profile overrides it.",
-    "unknownWithMaxOutput": "The server stopped the reply at its own limit, short of the narrative profile's {{limit, number}}-token max output."
+    "unknownWithMaxOutput": "The server stopped the reply at its own limit, short of the narrative profile's {{limit, number}}-token max output.",
+    "interrupted": "The provider ended this reply without saying it had finished, so it may be incomplete.",
+    "contentFilter": "The provider's content filter stopped this reply."
   },
   "worldTimeEdit": {
     "title": "Edit time",
@@ -178,8 +180,8 @@
     "details": "Details",
     "copyHeldText": "Copy your text",
     "copyDetails": "Copy details",
-    "copied": "Copied.",
-    "copyFailed": "Couldn't copy to the clipboard.",
+    "dismissFailed": "Couldn't dismiss this. Try again.",
+    "dismissReloadFailed": "Dismissed, but the reader couldn't refresh. Reopen the story to update it.",
     "assignProfile": "Assign profile",
     "fixProfile": "Fix profile",
     "fixDefault": "Fix default",

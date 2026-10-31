@@ -7,7 +7,7 @@ describe('settingsCount', () => {
     expect(settingsCount(7, 1)).toBe(7)
   })
 
-  // The schema omits .int() on purpose, so read sites genuinely see fractional values.
+  // classifierContextEntries omits .int() on purpose, so its read site can see one.
   it('floors a fractional value rather than rounding it', () => {
     expect(settingsCount(7.9, 1)).toBe(7)
   })

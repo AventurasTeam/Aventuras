@@ -35,6 +35,30 @@ export async function queryApp(
   return result.rows
 }
 
+// A reply streams into the DOM before its row commits, so callers poll. The cardinality assert
+// catches a duplicated write that a bare presence check would pass.
+export async function entryIdOf(
+  page: Page,
+  branchId: string,
+  marker: string,
+): Promise<string | undefined> {
+  const rows = await queryApp(
+    page,
+    `SELECT id FROM story_entries WHERE branch_id = ? AND content LIKE ?`,
+    [branchId, `%${marker}%`],
+  )
+  expect(rows.length, `${marker} row count`).toBeLessThanOrEqual(1)
+  return rows[0]?.[0] as string | undefined
+}
+
+// Poll until the marker's row exists, then hand back its id: expect.poll returns only pass or fail.
+export async function pollEntryIdOf(page: Page, branchId: string, marker: string): Promise<string> {
+  await expect.poll(() => entryIdOf(page, branchId, marker), { timeout: 30_000 }).toBeDefined()
+  const id = await entryIdOf(page, branchId, marker)
+  if (id === undefined) throw new Error(`${marker}: present at the poll, gone on read-back`)
+  return id
+}
+
 // Branch-scoped because both writers are: the drain warms only the open branch, a
 // turn's sync stage only its own — an unscoped total waits on rows nothing drains.
 const BRANCH_STALE_TOTAL_SQL = `SELECT (SELECT count(*) FROM entities WHERE branch_id = ? AND embedding_stale = 1)

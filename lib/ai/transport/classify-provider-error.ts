@@ -3,13 +3,13 @@ import { APICallError } from 'ai'
 import type { ContextWindowFailure } from '../context-window'
 import type { ReplyCutOffFailure } from '../reply-cut-off'
 
-// lib/ai-local error vocabulary. The pipeline layer maps these to PipelineError
-// when it yields recoverable_error events — keeps lib/ai free of an upward
-// lib/pipeline type dependency.
+export type ProviderReason = 'auth' | 'network' | 'timeout' | 'unknown'
+
+// lib/ai-local vocabulary; the pipeline maps it to PipelineError, so lib/ai has no upward import.
 export type CallRetryError =
   | {
       tier: 'provider'
-      reason: 'auth' | 'network' | 'timeout' | 'unknown'
+      reason: ProviderReason
       detail?: string
       possibleCapabilityMismatch?: CapabilityHint
     }
@@ -32,7 +32,8 @@ const MAX_CAUSE_DEPTH = 5
 // throws, which would replace the provider failure with a TypeError.
 function coerce(value: unknown): string {
   try {
-    return String(value)
+    const text = String(value)
+    return text === '[object Object]' ? JSON.stringify(value) : text
   } catch {
     return '[uncoercible value]'
   }
@@ -194,12 +195,16 @@ export function recognizeOverflow(error: unknown): { detail: string } | null {
   return { detail: providerMessage(error, body) }
 }
 
-/** A 4xx body naming a capability the request carried; never on a body recognized as an overflow. */
+/**
+ * A 4xx body naming a capability the request carried; never on a body recognized as an overflow,
+ * nor on a 401 or a 429, whose status already names the cause.
+ */
 export function capabilityHintOf(
   error: unknown,
   carried: CarriedCapabilities,
 ): CapabilityHint | undefined {
   if (!isRejection(error) || error.statusCode >= 500) return undefined
+  if (error.statusCode === 401 || error.statusCode === 429) return undefined
   if (recognizeOverflow(error) !== null) return undefined
   const text = searchableText(error)
   const hit = CAPABILITY_HINT_KEYWORDS.find(
@@ -209,6 +214,11 @@ export function capabilityHintOf(
 }
 
 type ProviderFailure = Extract<CallRetryError, { tier: 'provider' }>
+
+/** The narrative's stream error: a rejection has a status to read, anything else is the transport. */
+export function streamErrorReason(error: unknown): ProviderReason {
+  return APICallError.isInstance(error) ? classifyProviderError(error).error.reason : 'network'
+}
 
 /** `carried`: what the failed request carried, for the hint; a caller that doesn't say gets none. */
 export function classifyProviderError(

@@ -61,353 +61,47 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **A failed Dismiss tells the user nothing.** The reader passes
-  `handleDismissSystemEntry` unwrapped, and the card fires it as
-  `() => void onDismissSystemEntry()` (`components/reader/reader-surface.tsx`),
-  so a throw becomes an unhandled rejection. A failed delete leaves the
-  tap doing nothing. A failed reload, which the hand-back now survives,
-  leaves "text restored" beside a stale card. A pass entry's Retry goes
-  through `runAction` and toasts its failure; Dismiss doesn't. The
-  `void` predates the 2026-10-24 triage pass; raised by its slice
-  review.
+- **A `partialChapterBuffer` of 0 reads as 1.** The Memory tab and
+  `storySettingsSchema` accept 0, and the comment in
+  `lib/retrieval/buffer.ts` says 0 "asks for no window at all", but
+  `settingsCount(…, 1)` floors it to 1 and `buffer.test.ts` calls it
+  unreachable. Canon doesn't say which is meant. Raised by the
+  2026-10-31 triage pass.
 
-- **A boot whose recovery pass throws reports nothing.** When
-  `recoverInFlightRuns` itself throws, `bootstrap.ts` logs
-  `bootstrap.recovery_failed` and publishes the report with empty
-  `reversed` and `failures`, so the modal shows only a held branch the
-  read found, or doesn't open at all. The orphans it never reached stay
-  on disk and the next boot retries them. Canon's crash-recovery copy
-  ([`generation-pipeline.md → Crash recovery`](../generation-pipeline.md#crash-recovery-via-pipeline_runs-marker-table)) covers failed
-  orphans, not a failed pass. Before the 2026-10-24 triage pass the
-  report wasn't published at all on a throw; raised by its slice
-  review.
-
-- **The state report shows a change as emitted, not as stored.**
-  `buildPiggybackActions` bounds a visual change's and a condition's text
-  before writing it (`boundStateText` in `lib/piggyback/apply.ts`), but
-  the report keeps the emitted text, so the entry card's panel can show
-  more than World holds. Canon doesn't say which the panel shows.
-  Raised by the 2026-10-24 triage pass's verification; filed by its
-  slice review.
-
-- **Small shared helpers the simplifier left for a home.** The 2026-10-24
-  triage pass's slice review ran the simplifier and skipped four
-  duplications that predate the range or need a new module:
-  - The expression that reads an unknown throw's message (an
-    `instanceof Error` check falling back to `String`) appears 60+ times across `lib`, `app` and `components`,
-    beside eight local `messageOf` / `errorMessage` helpers; five of
-    the copies sit in `lib/pipeline/runtime/orchestrator.ts` next to its
-    own `messageOf`.
-  - The orchestrator builds `run_complete` by hand at three sites
-    (`unwindRun`, `commitRun`, `abortRun`).
-  - The per-attempt `recoverable_error` loop is written three times
-    (`per-turn-piggyback.ts`, `suggestion-refresh.ts`,
-    `periodic-classifier.ts`); `call-error.ts` is the natural home.
-  - `lib/classifier/schema.ts`'s happening entry writes
-    `sourceTurn: z.string().optional()` inline while every other entry
-    uses the shared `sourceTurn` const; sharing the instance wants the
-    prompt-schema snapshots to confirm it.
-
-- **A profile's max output accepts any number.** `maxOutput` in
-  `lib/db/app-settings/app-settings-schema.ts` is
-  `z.number().optional()`, so `0`, negative and fractional limits pass
-  validation and are sent as `maxOutputTokens`. Since the cut-off
-  replies work, the cause rule reads any output at or over the limit
-  as `max-output` ([`generation-pipeline.md → Cut-off replies`](../generation-pipeline.md#cut-off-replies)),
-  so a limit of `0` makes every cut-off read `max-output` and its copy
-  quote a 0-token max output. Raised by the cut-off replies Task 1
-  review.
-
-- **Failure details the pipeline logs have no test.** The `errorDetail`
-  of `pipeline.run_aborted` and `pipeline.phase_failed`
-  (`lib/pipeline/runtime/orchestrator.ts`) is asserted nowhere, and the
-  periodic classifier's `onPreflightFailure` hook
-  (`lib/pipeline/definitions/periodic-classifier.ts`) is tested only for
-  a resolver failure, not for its other branch, which records
-  `pipelineErrorDetail(error)`. Setting either detail to `undefined`
-  passes the suite. Raised by the cut-off replies Task 2 review.
-
-- **The `provider.*` log kinds in `observability.md` are stale.**
-  [`observability.md`](../observability.md) lists `retry_succeeded`,
-  `rate_limited`, `stream_interrupted`, `request_failed` and
-  `url_redaction_failed`. The code also logs `http_call_buffer_full`,
-  `narrative_stream_failed`, `wizard_assist_failed`,
-  `wizard_assist_threw`, `wizard_opening_unresolved_refs` and four
-  `setup_*` kinds, and logs no `rate_limited`, `stream_interrupted` or
-  `request_failed` by those names. The cut-off replies PR adds its own
-  `reply_cut_off`. Raised by the cut-off replies Task 4 review.
-
-- **Two trailing-block shapes leak markup into the prose.**
-  `findBlockSpan` (`lib/piggyback/parse.ts`) pairs the last close tag
-  with the opener before it, so in `<state>a</state>` followed by an
-  unclosed `<state>` it never sees the second block, which stays in the
-  prose and sets `outOfPosition`; on a cut-off reply the entry is also
-  marked. When one block nests inside the other, `stripTrailingBlocks`'
-  cursor moves backwards and the outer block's tail (its close tag
-  included) is left in the prose. Both are rare model outputs. Raised by
-  the cut-off replies Task 5 review.
-
-- **Warning text fails contrast in Catppuccin Latte.** Latte's
-  `--warning` (`#df8e1d`) on `--bg-raised` (`#e6e9ef`) is 2.15:1, so every
-  `text-warning` line on a card (the state-problems box, the cut-off
-  notice) misses AA. Every other theme passes. The
-  [contrast audit](../ui/foundations/color.md) has no warning
-  text-on-surface pair, and its Latte exemption covers only the pill
-  fills. Raised by the cut-off replies Task 9 review.
-
-- **On native, the reader rows' memo misses on every host render.**
-  expo-dom hands every function prop a new identity per prop emission
-  and emits on every host render (`node_modules/expo/src/dom/`:
-  `dom-entry.tsx`, `marshal.tsx`, `webview-wrapper.tsx`), so the
-  stable-callback reasoning in `components/reader/reader-surface.tsx`
-  holds on web only. Read from the expo source, not measured on a
-  device. Raised by the cut-off replies Task 10 review.
-
-- **Wizard-assist shows raw diagnostics to the user.** For any failure
-  other than a cut-off, `ai-assist.tsx` puts `describeCallRetryError`'s
-  line into "Couldn't generate. {{reason}}.": a provider error's
-  `label ← cause` chain or a JSON or Zod parse message, untranslated,
-  possibly ending in a doubled period. Raised by the cut-off replies
-  Task 11 review.
-
-- **The dev mock's failure injection misreports in three spots.** In
-  `scripts/mock-llm/completions.ts`, a lane with an upstream selected
-  spends a `malformed`, `stream-cut` or `length` failure and logs the
-  call as failed, then relays the upstream reply untouched; the
-  [mock README](../../scripts/mock-llm/README.md) doesn't say these
-  kinds apply in mock mode only. `piggybackNote` blames
-  `taggedBlockReliable` when the fallback fires after an injected
-  `malformed` or `length` cut inside `<state>`. The control UI's
-  "a single injected failure is swallowed" hint also shows for an HTTP
-  401 or 403, which the app doesn't retry. Raised by the cut-off
-  replies Task 12 review.
-
-- **The orchestrator never fills a phase-logic error's `phaseName` or
-  `retryAttempt`.** Canon has it fill both when it wraps a phase's
-  error
-  ([`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories)),
-  but nothing in `lib/pipeline/runtime/orchestrator.ts` sets either,
-  the `phase-logic` arm in `lib/pipeline/types.ts` has no
-  `retryAttempt`, and `toPipelineError` drops a parse failure's
-  `attempt`. Since the cut-off replies work, a pass's or a suggestion
-  refresh's exhausted parse retries reach this bare arm, where they
-  used to be relabelled `provider`. Raised by the cut-off replies slice
-  review.
-
-- **A narrative stream that ends without its final frame commits as
-  finished.** Canon fails the phase on a mid-stream provider error
-  ([`generation-pipeline.md → Streaming resilience — thin v1`](../generation-pipeline.md#streaming-resilience--thin-v1)),
-  but when the SSE body just ends, with no finish frame and no
-  `[DONE]`, the OpenAI-compatible provider raises nothing: it reports
-  the finish reason as `other` and hands back the partial text (probed
-  through the app's transport against the dev mock's `stream-cut`).
-  The narrative phase reads anything but `length` as finished, so the
-  truncated prose commits with no cut-off notice; read from
-  `lib/pipeline/definitions/per-turn.ts`, not run end to end. The logger
-  has no `stream_interrupted` kind either, though `observability.md`
-  lists one. Raised by the cut-off replies slice review.
-
-- **E2E entry-id helpers are copied per spec, and reader locators scope
-  unevenly.** `entryIdByContent` and `pollEntryId` live in three specs
-  (`reader-regenerate`, `periodic-classifier` and, since the cut-off
-  replies work, `reader-failure-retry`), with different poll timeouts
-  and a `page()` getter in one, so lifting them into
-  `e2e/harness/db.ts` needs page and timeout parameters rather than a
-  move. In `e2e/locators/reader.ts`, `dismissSystemEntry` is scoped to
-  the entry rows while `retrySystemEntry`, `systemEntryFailure` and
-  `fixProfile` match page-wide; `fixProfile`'s comment says to scope it
-  to a row, and neither of its callers does. Playwright's strict mode fails
-  loudly on a second match, so nothing passes by accident today. Raised
-  by the cut-off replies slice review; the simplifier left the lift for
-  a home. The context window check added a fourth copy
-  (`context-window.spec.ts`), and `e2e/harness/seed.ts` now repeats
-  its providers read-modify-write block three times
-  (`setProviderEndpoint`, `addProviderCustomModel`,
-  `setContextWindowOverride`). `e2e/tests/periodic-classifier.spec.ts`
-  repeats one describe setup in each of its twelve `beforeAll` blocks
-  (the seed, `passProbe`, the stream and failure counts); the window
-  check's overflow describe is a near-copy of the cut-off one. A setup
-  factory is a change to the whole file, which the slice review's
-  simplifier left alone.
-
-- **Overflow recognition misses shapes beyond llama.cpp's and OpenAI's.**
-  [`architecture.md → Recognizing an overflow rejection`](../architecture.md#recognizing-an-overflow-rejection)
-  is verified against those two servers only. Checked in SGLang's
-  source (`tokenizer_manager.py`), a server canon names under
-  [Detection](../architecture.md#detection): a prompt over its window
-  is a 400 reading "The input (N tokens) is longer than the model's
-  context length (M tokens).", which no canon keyword matches, so it
-  reads as a plain provider failure. A "context length" keyword would
-  catch it and LM Studio's wording, but may also catch a max-output
-  rejection phrased against the context length, whose remedy is a lower
-  max output, not a shorter prompt. Recalled by the context
-  window check's reviews and not checked against each server:
-  Anthropic rejects a prompt plus `max_tokens` with "input length and
-  `max_tokens` exceed context limit", and LM Studio says "context
-  length"; neither matches a canon keyword, so both read as a plain
-  provider failure. `@ai-sdk/anthropic` sends the model's whole max
-  output as `max_tokens` when the profile sets none, and Anthropic's
-  docs say models from Claude 4.5 accept such a request and stop at the
-  window (`model_context_window_exceeded`, read as a `length` cut-off),
-  so only earlier models reject it. Gemini's OpenAI-compatible endpoint may wrap its
-  error body in an array, which still matches by keyword but quotes the
-  whole JSON as the provider's message. An overflow sent inside the
-  stream after an HTTP 200 is never recognized:
-  `@ai-sdk/openai-compatible` hands it over as a plain string, not an
-  `APICallError`, so the turn fails as a provider `network` error, or,
-  reproduced through the real SDK, as a provider timeout when a stall
-  follows, because an expired stream fails as a timeout
-  ([`generation-pipeline.md → Two retry tiers, both at phase level`](../generation-pipeline.md#two-retry-tiers-both-at-phase-level));
-  the servers above reject an overflow with a 400 before streaming.
-  Raised by the context window check.
-
-- **The capability hint matches any 4xx status.** The hint
-  ([`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories))
-  names only a capability the request carried, and within that it
-  matches any 4xx, a 429 included: on an Anthropic call that sent a
-  thinking budget, a rate-limit body that mentions `thinking` or
-  `reasoning` gets the hint and `Fix profile`, and a 401 or 403 that
-  mentions one ("no access to reasoning models") gets it too, since the
-  hint is matched before the status branches. Raised by the context
-  window check.
-
-- **The truncation cross-check may warn on every warm turn of a server
-  that counts only uncached prompt tokens.** Canon names Ollama as a
-  server that cuts prompts silently
-  ([`architecture.md → Truncation cross-check`](../architecture.md#truncation-cross-check)).
-  Nobody has checked whether its OpenAI-compatible `prompt_tokens`
-  includes the KV-cache tokens it reused. If it doesn't, a cached story
-  prefix puts the ratio under 0.5 on most turns: a warn log each call
-  and a false toast once per model per session. llama.cpp counts them
-  (`prompt_tokens` 913 with `cached_tokens` 908). Raised by the context
-  window check.
-
-- **A detected window on a `--parallel N` llama.cpp server.**
-  [`architecture.md → Detection`](../architecture.md#detection) calls
-  `meta.n_ctx` llama.cpp's per-slot size; on a server started with
-  `--parallel N` and no unified KV cache it may be the total across
-  slots, which overstates the window and ends in a recognized rejection
-  rather than a refusal. The dev router runs `--parallel 1`, so this is
-  unchecked. Raised by the context window check.
-
-- **Window-failure copy has rough edges.** From the context window
-  check's reviews:
-  - The provider's message is quoted in the entry's content, which
-    renders through `marked`, so markdown in it (`*x*`, a `#` line)
-    changes the quote. It is sanitized, so not a security issue.
-  - A message that ends in a period renders as `….”.`.
-  - `common:contextWindowSource.*` is a translated fragment slotted into
-    sentences; a language with grammatical gender can't agree it with
-    "window". i18next's `context` option would let each sentence carry
-    its own wording.
-  - The suggestion strip's and wizard-assist's window copy names no
-    remedy, and Retry on a check refusal refuses the same prompt again;
-    the turn entry's copy carries the remedies.
-  - A hinted provider failure replaces "LLM call failed." with copy
-    that starts "The provider rejected the request.", where
-    [`reader-composer.md → Transient pipeline failures`](../ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)
-    says the entry adds the hint.
-  - The truncation toast names only the model, while it shows once per
-    provider and model, so one model id on two providers can show two
-    identical toasts.
-
-- **The narrative reports every non-window stream error as `network`.**
-  `lib/pipeline/definitions/per-turn.ts` maps a stream error to
-  `reason: 'network'`, a 401 or 403 and other 4xx included, where
-  `classifyProviderError` would give `auth` or `unknown`; the reader
-  then shows "network: APICallError: Unauthorized". The context window
-  check kept it, as a separate behaviour change. The provider `reason`
-  union is also spelled twice, in
-  `lib/ai/transport/classify-provider-error.ts` and
-  `lib/pipeline/types.ts`, with nothing tying the copies together.
-  Raised by the context window check.
-
-- **The E2E mock repeats the dev mock's helpers.**
-  `e2e/harness/mock-llm.ts` has its own `promptText` (the dev mock's is
-  in `scripts/mock-llm/routing.ts`), and both mocks' usage counts now
-  depend on it, so they can drift apart. Its `cors` object repeats
-  `CORS_HEADERS` from `scripts/mock-llm/respond/wire.ts`, its
-  `JSON.parse` of a request body is unguarded (the dev mock answers a
-  bad body with a 400), and its one-shot controls are never reset
-  between tests in a describe, so one armed in a test that fails before
-  its call carries into the next. Raised by the context window check.
-  The harness's own tests repeat their helpers too:
-  `scripts/mock-llm/harness-usage.test.ts` copies `provider()` and
-  `classifierCall()` from `harness-cut.test.ts`, and `blockOf`,
-  `structuredCall` and `started()` from `harness-hold.test.ts`; a
-  shared `scripts/mock-llm/harness-calls.ts` beside them would hold one
-  copy (the slice review's simplifier left it, as it touches files the
-  slice didn't change).
-
-- **A cut-off's `window` cause reads the estimate, not the server's
-  count.** `replyCutOff` (`lib/ai/reply-cut-off.ts`) gives `window` only
-  when the o200k estimate plus the output reaches the figure
-  ([`generation-pipeline.md → Cut-off replies`](../generation-pipeline.md#cut-off-replies)).
-  On a model whose tokenizer counts above o200k, as Gemma 4 does English
-  ([`parked.md → Calibrating the token estimate per model`](../parked.md#calibrating-the-token-estimate-per-model)
-  records 6-7%), a genuinely full known
-  window lands below the figure and reads `unknown`, and the notice
-  points at `Fix profile`, which the roadmap's M7.1 item on a cut-off
-  under a story's model override already revisits. On one that counts
-  below it, as Gemma 4 does Japanese (25%), a stop at the server's own
-  default can reach the figure and read `window`, whose notice offers no
-  action until M7.1 wires `Set window`. With `includeUsage` on, a cut-off reply now
-  usually carries the provider's own input count, which would make the
-  cause exact. A canon design change. Raised by the context window
-  check.
-
-- **The stored system-failure shape is looser than the data model.**
-  `systemFailure` in `lib/db/story-entries/entry-metadata.ts` parses on
-  any entry kind, while
+- **A chapter close can't persist its failure's `close` field.**
   [`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)
-  puts it only on `kind: 'system'`, and `pass: 'resolved'` parses
-  without a `submission`, while the data model calls a resolved entry a
-  notice holding the text. The writers are already tight
-  (`passResolvedEntry` takes a non-null submission) and the reader guards
-  on `kind === 'system'`, but a resolved row read back without text would
-  show "so it's kept here" over no quote. Older code; raised by the
-  held-text slice review's type-design pass.
+  gives `systemFailure` a `close?`, and `lib/db/story-entries/entry-metadata.ts`
+  has none, so zod would strip it. No writer exists yet; M5's must add
+  it. Read, not exercised. Raised by the 2026-10-31 triage pass.
 
-- **`JSONBlock`'s copy fails silently.** `components/ui/json-block.tsx`
-  writes the clipboard with `.catch(() => {})` on both platforms and
-  gives no feedback either way, while a system entry's copy
-  (`components/reader/copy-system-text.ts`) toasts its outcome. Canon
-  ([`data.md`](../ui/patterns/data.md)) doesn't say what the Diagnostics
-  copy confirms. Raised by the held-text slice review.
+- **A synchronous throw from the narrative's `streamText` escapes its
+  error handling.** It's outside the `try` in
+  `lib/pipeline/definitions/per-turn.ts`, so it lands in the
+  orchestrator's catch as `orchestrator`, and `boundedSignal`'s timer
+  isn't disposed. Bounding `maxOutput` removed the one known trigger.
+  Read, not run. Raised by the 2026-10-31 triage pass.
 
-- **Two shapes the held-text slice review's simplifier left for a
-  home.**
-  - Three sites split the clipboard into web `navigator.clipboard` and
-    native `expo-clipboard` on their own: `copySystemText`'s writer,
-    `JSONBlock`'s copy and `ImportDialog`'s read
-    (`components/compounds/import-dialog.tsx`). A `lib/clipboard`
-    module with a read and a write would hold one copy. The writers'
-    failure policies differ (see the `JSONBlock` entry above), and
-    the system copy's `reader.clipboard_unavailable` warning names its
-    subsystem, so sharing is a decision, not a dedupe.
-  - `TextToggle` (`components/compounds/entry-card-system.tsx`) and the
-    cut-off notice's fix link in `entry-card.tsx` share a link-button
-    shape: a named group, the web cursor and outline reset, a focus
-    ring on the inner text, and phone tap padding cancelled by
-    margins. Two uses don't pay for a primitive; a third link-style
-    button is the signal to extract one.
+- **A stale `Retry` after a failed reload can run the turn the composer
+  still holds.** A `Dismiss` whose reload fails leaves the card up with
+  its `Retry`, beside the text it handed back, and `Dismiss` takes no
+  dispatch guard. The toast now says to reopen the story; nothing stops
+  the tap. Read, not run. Raised by the 2026-10-31 triage pass.
 
-- **`settingsCount`'s premise is stale.** Its docstring
-  (`lib/settings-number.ts`) says `storySettingsSchema` avoids `.int()`
-  so a hand-edited blob degrades rather than refusing to open the
-  story. The schema has had `.int().nonnegative()` on the buffer keys
-  since #422 (`lib/db/stories/story-config-schema.ts`), and opening a
-  story refuses a settings blob that fails to parse. Its callers
-  (`promptBufferTake`, `readRecentEntryIds`, the scan surface, the
-  injection cascade) re-clamp a value the boundary already checked.
-  Either the helper goes, or the docstring says what it guards.
-  Raised by the Known happenings slice review.
+- **Raw strings skip `t()`.** `components/ui/multi-select.tsx` and the
+  `Edit raw — coming later` hint in `components/compounds/json-viewer.tsx`.
+  Raised by the 2026-10-31 triage pass.
 
-- **`ClassifierWindow` doesn't tie `turns` to `isEmpty`.** The two are
-  separate fields (`lib/classifier/window.ts`), so a caller reads
-  `turns[0]!` on the strength of an `isEmpty` early return several
-  lines up (`periodic-classifier.ts`, the classifier probe), and
-  `plan.ts` falls back with `turns[0]?.entryId ?? ''`. A union
-  (`{ isEmpty: true; turns: readonly [] }` or a non-empty tuple
-  otherwise) makes the guard the type's. Raised by the Known
-  happenings slice review.
+- **Latte's muted text misses AA on sunken surfaces.** `--fg-muted` is
+  3.20 and `--fg-secondary` 4.05 on `--bg-sunken`; the audit checks both
+  only on `--bg-base`. Raised by the 2026-10-31 triage pass.
+
+- **Canon's capability hint covers tool calling, and the code doesn't.**
+  [`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories)
+  lists `tools` and `tool_choice`; `CAPABILITY_HINT_KEYWORDS` in
+  `lib/ai/transport/classify-provider-error.ts` has neither. May simply
+  be unbuilt until M5's close steps send tools. Raised by the 2026-10-31
+  triage pass.
+
+- **A profile's `timeout` is still a bare `z.number()`.** `maxOutput` and
+  `thinking` got bounds in the 2026-10-31 triage pass; nobody checked
+  what `boundedSignal` does with 0 or a negative. Raised by that pass.

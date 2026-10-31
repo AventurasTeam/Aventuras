@@ -101,6 +101,37 @@ describe('formatRecoveryReport', () => {
   })
 })
 
+describe('a recovery pass that failed', () => {
+  const PASS_FAILED =
+    "Aventuras couldn't check for updates left unfinished when it last closed. Restarting the app retries automatically."
+  const passFailed: BootRecoveryReport = {
+    reversed: [],
+    failures: [],
+    heldStoryIds: [],
+    passFailed: true,
+  }
+
+  it('says the check failed', () => {
+    expect(formatRecoveryReport(passFailed, {})).toBe(PASS_FAILED)
+  })
+
+  it('reads as incomplete', () => {
+    expect(formatRecoveryTitle(passFailed)).toBe('Recovery incomplete')
+  })
+
+  it('follows a hold the read still found', () => {
+    expect(formatRecoveryReport({ ...passFailed, heldStoryIds: ['s1'] }, { s1: 'Mornstone' })).toBe(
+      `A memory update in Mornstone was left unfinished at startup. Its branch can't take turns until it is cleared — your story content is intact, and restarting the app retries automatically. ${PASS_FAILED}`,
+    )
+  })
+
+  it('stays out of a report whose pass ran', () => {
+    expect(formatRecoveryReport(report(recovered('per-turn', null)), {})).not.toContain(
+      "couldn't check",
+    )
+  })
+})
+
 describe('failure copy', () => {
   it("promises the branch's turns stop only for a classifier orphan, the kind that holds one", () => {
     expect(

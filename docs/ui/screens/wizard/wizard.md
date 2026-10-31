@@ -1070,13 +1070,26 @@ usual.
 ### Failure
 
 Inline error in the overlay: `Couldn't generate. <reason>.
-[Try again] [Cancel]`. No silent failure. A reply cut off at its limit
+[Try again] [Cancel]`. No silent failure. The reason is a plain
+sentence for the kind of failure: a timeout, a refused key, an
+unreachable or busy provider, a rejected request, an unusable reply,
+or a failure before the request went out. The provider's own line
+isn't the reason, but stays under a collapsed `Details` with a copy
+button, the same disclosure a reader system entry has
+([`entry-card.md → System entry`](../../patterns/entry-card.md#system-entry)):
+Diagnostics may not hold it for the user, and on a wrong model id it's
+the line that explains the failure. A reply cut off at its limit
 gives the limit as the reason, as the reader's cut-off copy does: the
 wizard-assist profile's max output ("…cut off at the wizard-assist
 profile's 1,024-token max output. Raise it, then try again."), the
 model's window, or the server's own limit, with the max output it
 stopped short of when the call sent one
 ([`generation-pipeline.md → Cut-off replies`](../../../generation-pipeline.md#cut-off-replies)).
+
+A prompt over the model's window names the remedy, to shorten what's
+entered or the guidance or to use a model with a larger window, and
+offers only `[Cancel]`: `Try again` repeats the same request, and
+nothing in the overlay can change it.
 
 ### No provider configured
 

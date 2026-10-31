@@ -41,6 +41,7 @@ export function planSubmissionHandback(
   const content = keptSubmissionText(submission)
   if (content === undefined) return { action: 'none' }
   if (draft === undefined) return { action: 'no-composer' }
+  if (draft.text === content) return { action: 'none' }
   if (!isDraftEmpty(draft)) return { action: 'keep-draft' }
   return { action: 'restore', content }
 }

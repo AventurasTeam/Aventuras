@@ -37,7 +37,9 @@ export { callWithRetry, type CallRetryError } from './transport/call-with-retry'
 export {
   describeProviderError,
   ProviderTimeoutError,
+  streamErrorReason,
   type CapabilityHint,
+  type ProviderReason,
 } from './transport/classify-provider-error'
 export { configureTruncationNotice, type TruncationNotice } from './truncation-check'
 export {
@@ -53,6 +55,7 @@ export {
   describeReplyCutOff,
   isCutOff,
   replyCutOff,
+  replyStopOf,
   type CutOffCause,
   type ReplyCutOffFailure,
 } from './reply-cut-off'

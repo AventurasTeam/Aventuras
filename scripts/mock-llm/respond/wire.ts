@@ -1,7 +1,7 @@
 // OpenAI-compatible frames, shared with e2e/harness/mock-llm.ts: a change here
 // reaches the E2E suite; the real transport (lib/ai/transport) consumes them.
 
-import type { ServerResponse } from 'node:http'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { Tiktoken } from 'js-tiktoken/lite'
 import o200kBase from 'js-tiktoken/ranks/o200k_base'
@@ -11,6 +11,15 @@ const CHUNK_BASE = {
   object: 'chat.completion.chunk',
   created: 0,
   model: 'mock',
+}
+
+export function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let data = ''
+    req.on('data', (c) => (data += c))
+    req.on('end', () => resolve(data))
+    req.on('error', reject)
+  })
 }
 
 export const CORS_HEADERS = {

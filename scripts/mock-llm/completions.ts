@@ -4,9 +4,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { MockContext } from './context'
 import { extractPlaceholders, type LogEntry } from './log'
 import { passthrough } from './passthrough'
-import { streamNarrative } from './respond/narrative'
-import { hasStateContent, renderNarrative, type NarrativeValue } from './respond/tagged-block'
+import { deliveredByCut, streamNarrative } from './respond/narrative'
+import { renderNarrative, type NarrativeValue } from './respond/tagged-block'
 import {
+  readBody,
   CORS_HEADERS,
   SSE_HEADERS,
   completionBody,
@@ -59,15 +60,6 @@ function asNarrativeValue(value: unknown): NarrativeValue {
   }
 }
 
-export function readBody(req: IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let data = ''
-    req.on('data', (c) => (data += c))
-    req.on('end', () => resolve(data))
-    req.on('error', reject)
-  })
-}
-
 function sendHttpFailure(res: ServerResponse, status: number): void {
   res.writeHead(status, { ...CORS_HEADERS, 'content-type': 'application/json' })
   res.end(errorBody(`mock injected HTTP ${status}`))
@@ -83,19 +75,20 @@ const OVERFLOW_SHAPES = {
 const isOverflowKind = (kind: FailureKind): kind is OverflowKind =>
   Object.hasOwn(OVERFLOW_SHAPES, kind)
 
+// With a real reply passing through there's nothing for these to alter, so they stay armed.
+const ALTERS_CANNED_REPLY: ReadonlySet<FailureKind> = new Set(['malformed', 'stream-cut', 'length'])
+
 function resolveUpstream(ctx: MockContext, lane: Lane) {
   if (lane.mode !== 'passthrough') return null
   return ctx.state.upstreams.find((u) => u.id === lane.upstreamId) ?? null
 }
 
-// Not the whole story on its own — a narrative that carried <state> and is
-// still followed by a classifier call means the piggyback fold did not take,
-// most often because the resolved narrative model has no taggedBlockReliable
-// capability. Without this the fallback path looks identical to the real one.
+// Narrative carried <state> yet a classifier still ran: the fold failed (block unparsed, or model
+// lacks taggedBlockReliable); otherwise this path looks identical to the real one.
 function piggybackNote(ctx: MockContext, key: string): string | undefined {
   if (!PER_TURN_CLASSIFIER_LANES.has(key)) return undefined
   if (ctx.log.lastNarrativeHadState === true)
-    return 'fallback classifier fired even though the narrative carried <state> — check taggedBlockReliable on the resolved narrative model'
+    return 'fallback classifier fired though the narrative carried <state> — the block failed to parse, or the resolved narrative model has no taggedBlockReliable'
   if (ctx.log.lastNarrativeHadState === false)
     return 'fallback classifier fired because the narrative carried no <state> block'
   return undefined
@@ -175,7 +168,10 @@ export async function handleCompletion(
   // Spent only once the call is going to be answered: a budget claimed by a
   // request abandoned during the delay leaves the lane looking armed while the
   // next call sails through.
-  const failure: FailureKind = takeFailure(lane)
+  const failure: FailureKind =
+    lane.mode === 'passthrough' && ALTERS_CANNED_REPLY.has(lane.failure.kind)
+      ? 'none'
+      : takeFailure(lane)
   if (failure !== 'none') {
     entry.failureKind = failure
     entry.outcome = 'failed'
@@ -244,15 +240,14 @@ export async function handleCompletion(
     const value = asNarrativeValue(canned?.value)
     const rendered =
       failure === 'malformed'
-        ? renderNarrative(value) + TRUNCATED_STATE_BLOCK
+        ? renderNarrative({ ...value, state: undefined }) + TRUNCATED_STATE_BLOCK
         : renderNarrative(value)
     const content = failure === 'length' ? firstHalf(rendered) : rendered
+    const delivered =
+      failure === 'stream-cut' ? deliveredByCut(content, lane.stream.chunkSize) : content
 
-    ctx.log.lastNarrativeHadState =
-      failure === 'length'
-        ? content.includes('<state>')
-        : failure === 'malformed' || hasStateContent(value.state)
-    entry.served = content
+    ctx.log.lastNarrativeHadState = delivered.includes('<state>')
+    entry.served = delivered
 
     res.writeHead(200, SSE_HEADERS)
     await streamNarrative(res, {

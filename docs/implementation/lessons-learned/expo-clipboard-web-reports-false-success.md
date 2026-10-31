@@ -37,6 +37,5 @@ a failure only by throwing.
   native, where a failure is a throw.
 - A copy that gives feedback must catch the throw on every platform;
   the resolved boolean alone proves nothing on either.
-- `components/reader/copy-system-text.ts` is the worked example: one
-  writer per platform, a single catch, and an error toast for both
-  failure shapes.
+- `lib/clipboard/copy-text.ts` is the worked example: one writer per
+  platform, a single catch, and an error toast for both failure shapes.

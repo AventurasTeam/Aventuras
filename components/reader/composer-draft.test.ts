@@ -85,6 +85,13 @@ describe('planSubmissionHandback', () => {
     })
   })
 
+  // A second Dismiss over a stale card: the draft already holds this text, nothing was withheld.
+  it('owes nothing when the draft already holds the text', () => {
+    expect(
+      planSubmissionHandback({ content: 'I draw the blade' }, { text: 'I draw the blade' }),
+    ).toEqual({ action: 'none' })
+  })
+
   // A stray space must not cost the user the only copy of their turn.
   it('treats a whitespace-only draft as room to restore into', () => {
     expect(planSubmissionHandback({ content: 'I draw the blade' }, { text: '  \n' })).toEqual({

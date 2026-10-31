@@ -125,6 +125,37 @@ describe('modelProfileSchema', () => {
   })
 })
 
+describe('modelProfileSchema — numeric limits', () => {
+  const profile = {
+    id: 'p',
+    kind: 'narrative',
+    name: 'P',
+    modelRef: { providerId: 'x', modelId: 'y' },
+  } as const
+  const accepts = (over: Record<string, unknown>) =>
+    modelProfileSchema.safeParse({ ...profile, ...over }).success
+
+  it.each([0, -1, 1.5])('refuses a max output of %s, which the SDK would throw on', (maxOutput) => {
+    expect(accepts({ maxOutput })).toBe(false)
+  })
+
+  it('takes a positive whole max output', () => {
+    expect(accepts({ maxOutput: 4096 })).toBe(true)
+  })
+
+  it.each([-1, 1.5])('refuses a thinking budget of %s', (thinking) => {
+    expect(accepts({ thinking })).toBe(false)
+  })
+
+  it('takes 0, which turns thinking off', () => {
+    expect(accepts({ thinking: 0 })).toBe(true)
+  })
+
+  it('takes a positive whole thinking budget', () => {
+    expect(accepts({ thinking: 1024 })).toBe(true)
+  })
+})
+
 describe('appSettingsConfigSchema', () => {
   it('accepts an empty config (fresh-install defaults)', () => {
     const ok = appSettingsConfigSchema.safeParse({

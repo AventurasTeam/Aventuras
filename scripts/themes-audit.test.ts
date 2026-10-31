@@ -14,6 +14,25 @@ describe('AUDIT_PAIRS', () => {
   })
 })
 
+describe.each(themes.map((theme) => [theme.id, theme] as const))('%s', (_id, theme) => {
+  const rows = auditTheme(theme).rows
+
+  it('clears AA for every text pair, semantic text on each surface included', () => {
+    expect(rows.filter((row) => row.kind === 'text' && row.aa === 'fail')).toEqual([])
+  })
+
+  it('audits each semantic text slot on all four solid surfaces', () => {
+    const semantic = rows
+      .filter((row) => row.kind === 'text' && row.fg.endsWith('-text'))
+      .map((row) => `${row.fg} ${row.bg}`)
+    const expected = ['--success-text', '--warning-text', '--danger-text', '--info-text'].flatMap(
+      (fg) =>
+        ['--bg-base', '--bg-raised', '--bg-sunken', '--bg-overlay'].map((bg) => `${fg} ${bg}`),
+    )
+    expect(semantic.sort()).toEqual(expected.sort())
+  })
+})
+
 describe('auditTheme', () => {
   it('produces a row per declared text pair', () => {
     const theme = themes[0]

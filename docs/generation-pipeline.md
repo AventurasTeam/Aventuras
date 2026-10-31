@@ -1257,6 +1257,16 @@ So this is not an observability-only state:
   boot refuses that one again, so its copy says the update could not
   be undone without breaking later changes and promises no retry.
 
+A failure of the pass itself is the query that lists the orphans
+throwing, the one thing the per-orphan catch can't hold. Boot logs
+`bootstrap.recovery_failed`, skips the reset, which has no report to
+work from, and carries on, and the next boot retries. The modal still
+opens, titled _"Recovery incomplete"_, with a line saying the check
+for unfinished updates failed: logging alone would leave orphans on
+disk that the user could write over without knowing. That line does
+not call the content intact: no orphan was read, so an interrupted
+reply could still be on disk.
+
 No max-retry counter and no admin "drop orphan" affordance for v1;
 stuck orphans remain visible in Logs across boots. Nearly every
 failure is transient DB IO that self-heals on the next boot. Three
@@ -1268,9 +1278,12 @@ case, which that work resolves),
 and
 [a reversal refused as an integrity error](./parked.md#a-boot-recovery-refused-as-an-integrity-error-never-settles).
 Reaching either of the first two takes a build and data from
-different versions. The third needs a run whose abort's own reversal
-failed: the orchestrator lifts the run's gate even then, so a user
-write can land that the reversal would break, and
+different versions. The third needs a user write to land while an
+orphan's writes are still there: after a run whose abort's own reversal
+failed, since the orchestrator lifts the run's gate even then, or after
+a boot whose recovery failed on that orphan or as a whole, since
+nothing but a held branch stops a turn. That write can be one the
+reversal would break, and
 [Reverse-replay](#reverse-replay) refuses the reversal as `write-back`
 on each boot. The orphan's writes stay, and for a pass its branch
 takes no turns; a branch from an entry before the orphan starts idle
@@ -1868,7 +1881,8 @@ Every call through `lib/ai` reads the SDK's `finishReason`. Both
 providers report a reply the server stopped at its output limit or at
 the model's window as `'length'`: Anthropic's `max_tokens` and
 `model_context_window_exceeded`, OpenAI-compatible `length`. Any other
-value, or none, is treated as finished.
+value, or none, is treated as finished, but for the two ways a
+narrative reply can end early, below.
 
 **A structured reply cut off is refused, not repaired.** On `'length'`
 the reply is accepted only if it parses strictly, with no repair: a
@@ -1907,19 +1921,47 @@ and with `phase-logic` (subsystem `empty-reply`) when the model stopped
 normally with no text at all. A reply that is only a trailing block
 keeps its raw text, as before.
 
+**A narrative reply that ended early takes the same path.** Two stops
+aren't a limit but still leave a reply short. `'content-filter'`, which
+Anthropic's `refusal` maps to, is a filter stopping it. `'other'` with
+no raw reason is a stream that closed with no finish signal: the SDK
+reports a body that just ends that way, and `[DONE]` with no
+`finish_reason`, so a cut stream can't be told from a server that never
+sends one. Each commits with a mark of its own cause, `content-filter`
+or `interrupted`, under the same rules: a fragment of an opener is
+removed, and a closed trailing block means the prose ended, so it
+marks nothing. Marking rather than failing is what makes that
+ambiguity safe: a false `interrupted` costs a notice on a reply with
+no block, where a failure would stop every turn on such a server. A
+raw reason the SDK doesn't know, such as `eos`, is the server's own
+finish word and stays finished, and a blank reply fails as `empty-reply`
+whichever way it stopped.
+
+**A structured reply a filter stopped gets no repair either**, for the
+same reason a cut-off one doesn't: `jsonrepair` would close it into a
+shorter list that a pass saves as whole. It's accepted only if it parses
+strictly. Otherwise it fails as a parse failure, not `reply-cut-off`,
+and is retried, since a filter may not trip twice, with a detail naming
+the filter. `'other'` with no raw reason stays finished on a structured
+call: there's no stream to end early, and a body that omits its
+`finish_reason` still arrives whole.
+
 **The cause** comes from what the call knows: `max-output` when the
 profile sets `maxOutput` and the output tokens reached it, or the
 provider reported none; `window` when the model's window is known and
-the prompt estimate plus the output tokens reach it; `unknown`
+the prompt plus the output tokens reach it, reading the prompt from the
+provider's input count and from the estimate only when it reported
+none, since o200k can miss a server's own count by a quarter either
+way; `unknown`
 otherwise, on hosted servers usually their own default `max_tokens`,
 which a profile max output overrides. Output tokens include reasoning
 on both providers, so a model that spends its allowance thinking reads
 as `max-output`, with `reasoningTokens` saying how much went there.
 An `unknown` cut-off on a call that sent a max output stopped short of
 it: most likely at a full window the call couldn't see as full, its
-figure unknown or above the server's real window, or the prompt larger
-than the estimate (a known window that the estimate plus the output
-reaches reads as `window`); or at a provider's own ceiling below it
+figure unknown or above the server's real window, or, on a server that
+reports no input count, the prompt larger than the estimate; or at a
+provider's own ceiling below it
 (`@ai-sdk/anthropic` lowers `max_tokens` to a known model's maximum).
 The failure carries the limit in `maxOutput` and the entry's mark keeps
 it, so each surface says the server stopped short of that limit instead
@@ -1928,8 +1970,7 @@ of telling the user to set one.
 Every cut-off, committed or failed, logs a warning with the cause and
 the numbers. A plain-text call other than the narrative, such as a
 future translation call, reads `finishReason` itself and decides what
-a cut reply means for it. A `content-filter` stop is not a cut-off and
-commits as before.
+a cut reply means for it.
 
 ### Phase-level recovery is the v1 transparency goal
 
@@ -1955,7 +1996,10 @@ doesn't auto-retry.
 Phase-level retry doesn't help mid-stream failures: partial content
 has already been side-channelled into the store; can't re-call
 cleanly. V1: mid-stream provider error → fatal phase return →
-reverse-replay → orphan placeholder cleanup → user re-prompts.
+reverse-replay → orphan placeholder cleanup → user re-prompts. A
+stream that closes with no error and no finish signal isn't one of
+these: it commits with a mark
+([Cut-off replies](#cut-off-replies)).
 
 ### Chapter-close partial failure
 
@@ -2074,7 +2118,9 @@ the prompt. So the narrative, which sends neither on an
 OpenAI-compatible provider, gets no hint from a body such as
 `model 'Qwen3-30B-A3B-Thinking-2507' not found`. Matching runs after
 overflow recognition, so a body recognized as an overflow carries no
-hint. A hit sets the field on the `provider` `CallRetryError` to the
+hint. A 401 or a 429 carries none either: a status that names its own
+cause isn't a capability rejection, whatever its body says. A 403
+stays, being what a capability gate sends. A hit sets the field on the `provider` `CallRetryError` to the
 capability and the matched word, and the phase copies it onto
 `PipelineError.provider` as it maps the error; otherwise it's omitted.
 The narrative's stream error never passes through `callWithRetry`, so
@@ -2084,8 +2130,8 @@ the field itself.
 Best-effort only — provider error messages are not standardised;
 the field is a hint for the UI, never an assertion that a user
 override was wrong. The copy names the setting and hedges: "The
-provider's message mentions `thinking`. That can mean this model
-doesn't support reasoning: check the profile's thinking setting and
+provider rejected the request. Its message mentions `thinking`. That
+can mean this model doesn't support reasoning: check the profile's thinking setting and
 the model's 🧠 badge. The provider may also have rejected the request
 for another reason." Its action is `Fix profile`, since the profile
 holds the per-call setting and App Settings · Providers the model's
@@ -2094,11 +2140,14 @@ badge
 
 **Structured-context fields on `phase-logic` and `action-layer`**
 (O4). All optional so existing call sites keep compiling.
-Orchestrator auto-populates `phaseName` and `retryAttempt` when
-wrapping phase-emitted errors (it owns that context). `subsystem`
-and `targetRef` are call-site populated when the failing code
-knows them. `tableName` / `targetId` / `constraintViolated` for
-the action-layer variant come from the SQLite error mapper.
+`phaseName` and `subsystem` are call-site populated when the failing
+code knows them; the orchestrator returns a phase's failure as it is,
+and `pipeline.phase_failed` logs the phase either way, so a bare
+`phase-logic` loses nothing a reader needs. An attempt number stays in
+`lib/ai`, where the retry runs, and reaches the pipeline as one
+`recoverable_error` per retried attempt. `tableName` / `targetId` /
+`constraintViolated` for the action-layer variant come from the SQLite
+error mapper.
 Diagnostics UI renders structured fields when present, falls back
 to `detail` alone otherwise.
 

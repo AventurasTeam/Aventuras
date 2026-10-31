@@ -527,6 +527,109 @@ describe('stripTrailingBlocks', () => {
     expect(stateRaw).toBe('<state>')
   })
 
+  describe('a reply that breaks the one-of-each shape', () => {
+    const state = (summary: string) => `<state><summary>${summary}</summary></state>`
+    const suggestions = '<suggestions><item category="cat1">go</item></suggestions>'
+    const nestedState = `<state><summary>x</summary>${suggestions}</state>`
+
+    it('leaves no tag of a block nested in the other, either way round', () => {
+      const nestedSuggestions = `<suggestions>${state('x')}</suggestions>`
+      expect(stripTrailingBlocks(`Prose.\n\n${nestedState}`).prose).toBe('Prose.')
+      expect(stripTrailingBlocks(`Prose.\n\n${nestedSuggestions}`).prose).toBe('Prose.')
+    })
+
+    it('does not read a nested block as out of position', () => {
+      expect(stripTrailingBlocks(`Prose.\n\n${nestedState}`).outOfPosition).toBeUndefined()
+    })
+
+    it('keeps prose after a nested block, flagged out of position', () => {
+      const { prose, outOfPosition } = stripTrailingBlocks(`Prose.\n\n${nestedState}\nAfter.`)
+      expect(prose).toBe('Prose.\n\n\nAfter.')
+      expect(outOfPosition).toBe(true)
+    })
+
+    it('excises every repeat of a closed block', () => {
+      const { prose, outOfPosition } = stripTrailingBlocks(`Prose.\n\n${state('a')}\n${state('b')}`)
+      expect(prose).toBe('Prose.')
+      expect(outOfPosition).toBeUndefined()
+    })
+
+    it('reports the first repeat as the raw, the one parseStateBlock reads', () => {
+      const raw = `Prose.\n\n${state('a')}\n${state('b')}`
+      expect(stripTrailingBlocks(raw).stateRaw).toBe(state('a'))
+      expect(parseStateBlock(raw).block.summary).toBe('a')
+    })
+
+    it('excises an unclosed block after a closed one', () => {
+      const { prose, outOfPosition } = stripTrailingBlocks(
+        `Prose.\n\n${state('a')}\n<state>\n<summary>b`,
+      )
+      expect(prose).toBe('Prose.')
+      expect(outOfPosition).toBeUndefined()
+    })
+
+    it('excises repeats ahead of a trailing unclosed block', () => {
+      const raw = `Prose.\n\n${state('a')}\n${state('b')}\n<state>\n<summary>c`
+      expect(stripTrailingBlocks(raw).prose).toBe('Prose.')
+    })
+
+    it('excises both tags of a block nested in its own kind', () => {
+      expect(stripTrailingBlocks(`Prose.\n\n<state>a<state>b</state>c</state>`).prose).toBe(
+        'Prose.',
+      )
+    })
+
+    it('still leaves an unclosed mention ahead of a closed block', () => {
+      expect(stripTrailingBlocks(`A <state> of alarm.\n\n${state('a')}`).prose).toBe(
+        'A <state> of alarm.',
+      )
+    })
+
+    it('leaves a mention followed by markup ahead of a closed block', () => {
+      expect(stripTrailingBlocks(`A <state> <em>alarm</em>.\n\n${state('a')}`).prose).toBe(
+        'A <state> <em>alarm</em>.',
+      )
+    })
+
+    it('leaves a mention after a closed block in the prose', () => {
+      const { prose, outOfPosition } = stripTrailingBlocks(`${state('a')}\nA <state> of alarm.`)
+      expect(prose).toBe('A <state> of alarm.')
+      expect(outOfPosition).toBe(true)
+    })
+
+    it('leaves a mention followed by markup after a closed block in the prose', () => {
+      const { prose, outOfPosition } = stripTrailingBlocks(
+        `Prose.\n\n${state('a')}\nA <state> <em>alarm</em>.`,
+      )
+      expect(prose).toBe('Prose.\n\n\nA <state> <em>alarm</em>.')
+      expect(outOfPosition).toBe(true)
+    })
+
+    it('excises an unclosed block right after the close of a closed one', () => {
+      expect(stripTrailingBlocks(`Prose.\n\n${state('a')}<state>\n<summary>b`).prose).toBe('Prose.')
+    })
+
+    it('leaves a closed pair quoted mid-line ahead of the real block', () => {
+      const { prose, stateRaw, outOfPosition } = stripTrailingBlocks(
+        `He wrote <state>awake</state>.\n\n${state('a')}`,
+      )
+      expect(prose).toBe('He wrote <state>awake</state>.')
+      expect(stateRaw).toBe(state('a'))
+      expect(outOfPosition).toBeUndefined()
+    })
+
+    it('leaves a closed pair quoted mid-line ahead of an unclosed block', () => {
+      const raw = 'He wrote <state>awake</state>.\n\n<state>\n<summary>b'
+      expect(stripTrailingBlocks(raw).prose).toBe('He wrote <state>awake</state>.')
+    })
+
+    it('leaves a stray close tag no opener claims', () => {
+      expect(stripTrailingBlocks('He wrote </state> on the wall.').prose).toBe(
+        'He wrote </state> on the wall.',
+      )
+    })
+  })
+
   it('assigns each raw to its own block when suggestions precede state', () => {
     const raw =
       'p\n<suggestions><item category="cat1">go</item></suggestions>\n<state><summary>x</summary></state>'
@@ -553,7 +656,7 @@ describe('readCutOffReply', () => {
     expect(readCutOffReply('')).toEqual({ content: '', inBlock: false })
   })
 
-  // findBlockSpan opens no span on a mention followed by prose, so neither does the cut.
+  // blockSpans opens no span on a mention followed by prose, so neither does the cut.
   it('reads prose that mentions a root tag in passing as prose', () => {
     const raw = 'The city declared a <state> of emergency that mor'
     expect(readCutOffReply(raw)).toEqual({ content: raw, inBlock: false })
@@ -601,6 +704,16 @@ describe('readCutOffReply', () => {
   })
 
   // State is emitted first, so a closed <state> block is the usual `<` before a cut <sugg.
+  it('reads a cut in an unclosed block after a closed one as in the block', () => {
+    const raw = 'Prose.\n\n<state><summary>a</summary></state>\n<state>\n<summary>b'
+    expect(readCutOffReply(raw).inBlock).toBe(true)
+  })
+
+  it('reads a cut in prose that mentions the tag after a closed block as outside it', () => {
+    const raw = `${PROSE}<state><summary>a</summary></state>\nA <state> <em>alarm</em>.`
+    expect(readCutOffReply(raw)).toEqual({ content: raw, inBlock: false })
+  })
+
   it('reads an opener cut after a closed block as in the block, and removes it', () => {
     const closed = `${PROSE}<state>\n<summary>x</summary>\n</state>\n`
     expect(readCutOffReply(`${closed}<sugg`)).toEqual({ content: closed.trimEnd(), inBlock: true })

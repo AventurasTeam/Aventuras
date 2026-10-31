@@ -750,6 +750,38 @@ describe('generateStructured', () => {
       expect(runProviderCall).toHaveBeenCalledOnce()
     })
 
+    // Repair would close this into a shorter list, and a pass would save it as whole.
+    it('refuses a filtered reply only repair could close, retrying it as a parse failure', async () => {
+      reply('{"items":["a","b"', 'content-filter')
+      const res = await generateStructured(
+        'classifier',
+        PROMPT,
+        z.object({ items: z.array(z.string()) }) as z.ZodType<unknown>,
+        STRUCTURED_CFG,
+        new AbortController().signal,
+        { actionId: null },
+      )
+      expect(res).toMatchObject({ status: 'failed', error: { tier: 'parse' } })
+      expect(res.status === 'failed' && describeCallRetryError(res.error)).toContain(
+        'content filter stopped the reply',
+      )
+      expect(runProviderCall).toHaveBeenCalledTimes(2)
+    })
+
+    it('accepts a filtered reply that parses strictly', async () => {
+      reply('{"description":"A tale."}', 'content-filter')
+      expect(await call()).toEqual({
+        status: 'ok',
+        value: { description: 'A tale.' },
+        recoverable: [],
+      })
+    })
+
+    it('still repairs a reply the model finished', async () => {
+      reply('{"description":"A tale.",}', 'stop')
+      expect(await call()).toMatchObject({ status: 'ok', value: { description: 'A tale.' } })
+    })
+
     it('accepts a reply that parses strictly, a complete document at the limit', async () => {
       reply('{"description":"A tale."}', 'length', 256)
       expect(await call()).toEqual({

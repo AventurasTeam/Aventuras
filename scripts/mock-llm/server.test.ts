@@ -203,6 +203,66 @@ describe('failure injection', () => {
     lane.failure = { kind: 'none', status: 500, remaining: 0 }
   })
 
+  it('logs what a cut stream delivered, not what it was going to say', async () => {
+    const lane = mock.ctx.lane('narrative')
+    lane.stream = { charsPerSecond: 100_000, chunkSize: 8 }
+    lane.failure = { kind: 'stream-cut', status: 500, remaining: 1 }
+    mock.ctx.log.clear()
+
+    const text = await narrativeText(
+      await post({ model: 'seed/narrative', stream: true, messages: [] }),
+    )
+
+    expect(text).not.toContain('<state>')
+    expect(mock.ctx.log.list()[0]?.served).toBe(text)
+    expect(mock.ctx.log.lastNarrativeHadState).toBe(false)
+
+    lane.failure = { kind: 'none', status: 500, remaining: 0 }
+  })
+
+  it("swaps a narrative's own <state> for a truncated one, so the parse has to recover", async () => {
+    const lane = mock.ctx.lane('narrative')
+    lane.failure = { kind: 'malformed', status: 500, remaining: 1 }
+
+    const text = await narrativeText(
+      await post({ model: 'seed/narrative', stream: true, messages: [] }),
+    )
+
+    expect(text.match(/<state>/g)).toHaveLength(1)
+    expect(parseStateBlock(text).failures).not.toEqual([])
+
+    lane.failure = { kind: 'none', status: 500, remaining: 0 }
+  })
+
+  it('leaves a kind that alters a canned reply armed on a passthrough lane', async () => {
+    const lane = mock.ctx.lane('narrative')
+    lane.mode = 'passthrough'
+    lane.failure = { kind: 'malformed', status: 500, remaining: 1 }
+    mock.ctx.log.clear()
+
+    await post({ model: 'seed/narrative', stream: true, messages: [] })
+
+    expect(lane.failure.remaining).toBe(1)
+    expect(mock.ctx.log.list()[0]?.failureKind).toBeUndefined()
+
+    lane.mode = 'mock'
+    lane.failure = { kind: 'none', status: 500, remaining: 0 }
+  })
+
+  it('still fails a passthrough lane on a kind no reply is needed for', async () => {
+    const lane = mock.ctx.lane('narrative')
+    lane.mode = 'passthrough'
+    lane.failure = { kind: 'http', status: 503, remaining: 1 }
+
+    const response = await post({ model: 'seed/narrative', stream: true, messages: [] })
+
+    expect(response.status).toBe(503)
+    expect(lane.failure.remaining).toBe(0)
+
+    lane.mode = 'mock'
+    lane.failure = { kind: 'none', status: 500, remaining: 0 }
+  })
+
   it('sends no usage frame on a cut stream, even to a request that asked for it', async () => {
     const lane = mock.ctx.lane('narrative')
     lane.stream = { charsPerSecond: 100_000, chunkSize: 6 }

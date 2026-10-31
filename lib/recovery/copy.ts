@@ -95,5 +95,6 @@ export function formatRecoveryReport(
     ...report.reversed.map((run) => formatRun(run, named(run.storyId))),
     ...report.failures.map((failure) => formatFailure(failure, named(failure.storyId), isHeld)),
     ...unexplainedHolds(report).map((storyId) => formatUnclearedHold(named(storyId))),
+    ...(report.passFailed === true ? [t('crashRecovery.passFailed')] : []),
   ].join(' ')
 }

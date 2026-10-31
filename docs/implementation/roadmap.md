@@ -658,7 +658,9 @@ the underlying configuration surfaces.
   and `Set window` wired on the surfaces the context window check left
   without it (the turn and pass `context-window` entries, a
   `window` cut-off's notice and entries, the
-  [truncation toast](../architecture.md#truncation-cross-check)),
+  [truncation toast](../architecture.md#truncation-cross-check), which
+  should also name the provider, since it shows once per provider and
+  model and one model id on two providers reads as a repeat),
   which needs the model target persisted on failure entries and the
   cut-off mark (a change to both shapes in
   [`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)))
@@ -768,6 +770,13 @@ code before it moved; resolve with the slice it names.
   already anticipates a main-process emit path, which is where the design
   should start. Surfaced by Slice 3.12a review (2026-08-19), routed
   2026-08-20.
+- **M7.1 — The reasoning slider must stay below the model's output cap.**
+  The Anthropic SDK sends max output plus the thinking budget as
+  `max_tokens`, so the two can't clash on their own, but it then clamps to
+  the cap of a model it knows. A budget at or above that cap goes out
+  without room under `max_tokens`, and Anthropic requires it lower. Nothing
+  writes `thinking` yet, so the slider's range is the place to bound it.
+  Surfaced by the PR #673 review (2026-10-31).
 - **M7.1 — Tagged-block capability detection is unspecified, and its
   reliability question is open at depth.**
   [`memory/piggyback.md → Capability gate`](../memory/piggyback.md#capability-gate)
@@ -1623,7 +1632,9 @@ isn't a per-feature concern.
   [`memory/retrieval.md → Compute lifecycle`](../memory/retrieval.md#compute-lifecycle)
   (naive 100k rows would take ~16 min).
 - M9.5 — Cross-platform parity smoke (Linux desktop + Android),
-  performance budget audit, accessibility audit
+  performance budget audit, including the
+  [native reader's per-emission rerender](../parked.md#native-reader-rows-rerender-per-emission),
+  accessibility audit
   ([`accessibility skill`](./conventions.md) checks).
 - M9.6 — v1 ship: changelog, release notes, distribution
   packaging; **app icon + splash screen** replacing Expo
@@ -1814,6 +1825,20 @@ own.
   component from `components/compounds/entity-picker.tsx`. Raised
   2026-10-24 by the AI writer map's slice review. Routed from triage
   2026-10-25.
+- **M9.2 — Link-style buttons disagree on focus ring and tap floor.**
+  `TextToggle` (`components/compounds/entry-card-system.tsx`) and the
+  cut-off notice's fix link in `entry-card.tsx` share a link-button
+  shape: a named group, the web cursor and outline reset, a focus ring
+  on the inner text, and phone tap padding cancelled by margins. Five
+  more sites look like links and differ:
+  `components/ui/banner.tsx`, `overview-parts.tsx`,
+  `collision-list-row.tsx`, `peek-head.tsx` and
+  `embedder-download-dialog.tsx`, with the ring on the text, on the
+  `Pressable` or absent, and the tap floor by padding, `min-h-touch`,
+  `hitSlop` or nothing. Extracting a primitive would normalise
+  behaviour rather than dedupe, so it wants a call on one variant or
+  two.
+
 - **M9.2 — `ListRow`'s `aria-label` hides its channel content.** The
   row's `aria-label` replaces its child content, so status, lead and
   in-scene never reach screen readers. Only part of that is the label:

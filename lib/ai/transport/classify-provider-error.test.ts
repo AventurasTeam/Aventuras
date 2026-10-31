@@ -5,6 +5,7 @@ import {
   capabilityHintOf,
   classifyProviderError,
   describeProviderError,
+  streamErrorReason,
   ProviderTimeoutError,
   recognizeOverflow,
 } from './classify-provider-error'
@@ -129,9 +130,7 @@ describe('classifyProviderError', () => {
 
   it.each([
     [400, 'unknown'],
-    [401, 'auth'],
     [403, 'auth'],
-    [429, 'network'],
   ] as const)('attaches a capability hint to a %i whose body names one', (status, reason) => {
     expect(
       classifyProviderError(rejection(status, errorBody('thinking is not supported')), CARRIED_BOTH)
@@ -163,6 +162,49 @@ describe('classifyProviderError', () => {
     const uncarried = classifyProviderError(error, { reasoning: false, structuredOutput: true })
     expect('possibleCapabilityMismatch' in uncarried.error).toBe(false)
     expect('possibleCapabilityMismatch' in classifyProviderError(error).error).toBe(false)
+  })
+})
+
+// A status that names its own cause isn't a capability rejection (generation-pipeline.md → Fatal
+// error categories); a 403 stays, being what a capability gate sends.
+describe('capabilityHintOf, a status with its own cause', () => {
+  it.each([401, 429])('gives a %i no hint, whatever its body says', (status) => {
+    const error = rejection(status, errorBody('thinking is not supported'))
+    expect(capabilityHintOf(error, CARRIED_BOTH)).toBeUndefined()
+    expect(classifyProviderError(error, CARRIED_BOTH).error).not.toHaveProperty(
+      'possibleCapabilityMismatch',
+    )
+  })
+
+  it('leaves the reason a 401 and a 429 report', () => {
+    const body = errorBody('thinking is not supported')
+    expect(classifyProviderError(rejection(401, body), CARRIED_BOTH).error).toMatchObject({
+      reason: 'auth',
+    })
+    expect(classifyProviderError(rejection(429, body), CARRIED_BOTH).error).toMatchObject({
+      reason: 'network',
+    })
+  })
+})
+
+describe('streamErrorReason', () => {
+  it.each([
+    [401, 'auth'],
+    [403, 'auth'],
+    [429, 'network'],
+    [400, 'unknown'],
+    [404, 'unknown'],
+    [500, 'network'],
+  ] as const)('reads a %i as %s, as a structured call does', (status, reason) => {
+    expect(streamErrorReason(rejection(status, errorBody('nope')))).toBe(reason)
+  })
+
+  it.each([
+    ['a dropped connection', new TypeError('terminated')],
+    ['an in-stream error string', 'upstream hung up'],
+    ['a provider error object', { type: 'overloaded_error', message: 'Overloaded' }],
+  ])('reads %s as network: no HTTP status names another cause', (_label, error) => {
+    expect(streamErrorReason(error)).toBe('network')
   })
 })
 
@@ -221,6 +263,19 @@ describe('describeProviderError', () => {
 
   it('labels a throwable that cannot be coerced to a string', () => {
     expect(describeProviderError(Object.create(null))).toBe('[uncoercible value]')
+  })
+
+  // Anthropic's mid-stream `error` event reaches onError as this plain object.
+  it('spells out a plain object rather than [object Object]', () => {
+    expect(describeProviderError({ type: 'overloaded_error', message: 'Overloaded' })).toBe(
+      '{"type":"overloaded_error","message":"Overloaded"}',
+    )
+  })
+
+  it('keeps a circular object coercion-safe', () => {
+    const circular: Record<string, unknown> = {}
+    circular.self = circular
+    expect(describeProviderError(circular)).toBe('[uncoercible value]')
   })
 })
 

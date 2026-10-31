@@ -3,8 +3,9 @@ import { eq, sql } from 'drizzle-orm'
 
 import {
   describeProviderError,
-  isCutOff,
   replyCutOff,
+  replyStopOf,
+  streamErrorReason,
   resolveModel,
   resolveModelCapabilities,
   streamText,
@@ -117,6 +118,8 @@ function logCutOff(
 // data-model.md → Entry metadata shape: a cause without the limit it names reads as `unknown`.
 function cutOffMark(failure: ReplyCutOffFailure): CutOffMark {
   const outputTokens = failure.outputTokens !== null ? { outputTokens: failure.outputTokens } : {}
+  if (failure.cause === 'interrupted' || failure.cause === 'content-filter')
+    return { cause: failure.cause, ...outputTokens }
   const limit =
     failure.cause === 'max-output'
       ? failure.maxOutput
@@ -186,9 +189,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   let errorBeforeTimeout: unknown
   // Assigned once the call returns; onError fires only while the stream runs.
   let timedOut = (): boolean => false
-  // streamText (ai@6) does NOT throw from textStream on a network/connection failure —
-  // it terminates iteration silently and surfaces the error only via onError. Capture it
-  // there and gate the commit on it.
+  // A failure lands in onError or the iteration's throw; capture both and gate the commit.
   const call = streamText('narrative', {
     prompt,
     config: {
@@ -281,7 +282,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       status: 'failed',
       error: {
         kind: 'provider',
-        reason: 'network',
+        reason: streamErrorReason(streamError),
         detail: describeProviderError(streamError),
         ...(hint !== undefined ? { possibleCapabilityMismatch: hint } : {}),
       },
@@ -291,15 +292,18 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // Provenance is best-effort: usage or reasoning a provider omits stays off the optional metadata.
   const usage = await Promise.resolve(stream.usage).catch(() => undefined)
   const reasoningText = await Promise.resolve(stream.reasoningText).catch(() => undefined)
-  // Only 'length' is a cut; a finish reason the SDK rejects, unread, reads as finished.
+  // A finish reason the SDK rejects, unread, reads as finished.
   const finishReason = await Promise.resolve(stream.finishReason).catch(() => undefined)
+  const rawFinishReason = await Promise.resolve(stream.rawFinishReason).catch(() => undefined)
+  const stop = replyStopOf(finishReason, rawFinishReason)
   let cut: { failure: ReplyCutOffFailure; inBlock: boolean } | undefined
-  if (isCutOff(finishReason)) {
+  if (stop !== null) {
     // Before anything parses the reply: a root opener cut mid-name would otherwise read as prose.
     const read = readCutOffReply(content)
     content = read.content
     cut = {
       failure: replyCutOff({
+        stop,
         usage,
         maxOutput: call.maxOutput,
         window: call.window.tokens,
@@ -337,19 +341,16 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // The column stores prose only (docs/memory/piggyback.md → Persistence and
   // stripping); everything the block carried is persisted structurally instead.
   const { prose, stateRaw, outOfPosition } = stripTrailingBlocks(content)
-  if (cut !== undefined) {
-    // Ahead of the fold, so no create is planned for a reply that commits nothing. Trimmed: with no
-    // block span, stripTrailingBlocks hands back the raw text.
-    if (prose.trim() === '') {
-      logCutOff(ctx.log, cut.failure, entryId, 'failed')
-      return {
-        status: 'failed',
-        error: { kind: 'reply-cut-off', target: 'narrative', ...cut.failure },
-      }
+  // Ahead of the fold: no create planned for a reply that commits nothing. Trimmed: a span-less
+  // reply comes back raw from stripTrailingBlocks.
+  if (cut !== undefined && stop === 'length' && prose.trim() === '') {
+    logCutOff(ctx.log, cut.failure, entryId, 'failed')
+    return {
+      status: 'failed',
+      error: { kind: 'reply-cut-off', target: 'narrative', ...cut.failure },
     }
-    // Before the fold, whose reads can throw and fail the turn.
-    logCutOff(ctx.log, cut.failure, entryId, cut.inBlock ? 'in-block' : 'marked')
-  } else if (content.trim() === '') {
+  }
+  if (content.trim() === '') {
     return {
       status: 'failed',
       error: {
@@ -359,6 +360,9 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       },
     }
   }
+  // Before the fold, whose reads can throw and fail the turn.
+  if (cut !== undefined)
+    logCutOff(ctx.log, cut.failure, entryId, cut.inBlock ? 'in-block' : 'marked')
   if (outOfPosition) ctx.log.warn('classifier.state_block_out_of_position', { entryId })
   // A reply that is nothing but a block strips to nothing. Persist the raw text
   // instead of committing a blank row: the reader strips it again at display, so
@@ -474,7 +478,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   ctx.intermediates.suggestionsCaptured = suggestionsCaptured
 
   const metadata: EntryMetadata = {
-    ...(usage
+    // The SDK hands over a usage object of undefined fields when a stream reports none.
+    ...(usage?.inputTokens != null || usage?.outputTokens != null
       ? {
           tokens: {
             prompt: usage.inputTokens ?? 0,

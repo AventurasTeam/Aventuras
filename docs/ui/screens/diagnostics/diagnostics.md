@@ -725,7 +725,7 @@ actionId chip.
 
 ```
 [▸] 14:02:18  warn  classifier.delta_clamped  { originalDelta: -1800, … }  tr_a3kf
-[▾] 14:02:17  warn  provider.retry_succeeded  { attempt: 2, latencyMs: 1840 }  tr_a3kf
+[▾] 14:02:17  warn  provider.reply_cut_off    { cause: "unknown", … }          tr_a3kf
     └─ expanded JSON block (see below)
 [▸] 14:02:16  error retrieval.knn_error       { reason: "vec0_index_corrupt", … }  tr_a3kf
 ```
@@ -769,16 +769,16 @@ JSON:
 ├────────────────────────────────────────────────────┤
 │                                          [📋 Copy] │
 │ {                                                  │
-│   "attempt": 2,                                    │
-│   "latencyMs": 1840,                               │
-│   "status": 200,                                   │
-│   "source": "provider:anthropic-main"              │
+│   "cause": "unknown",                              │
+│   "outputTokens": 2048,                            │
+│   "outcome": "marked",                             │
+│   "providerId": "anthropic-main"                   │
 │ }                                                  │
 └────────────────────────────────────────────────────┘
 ```
 
 Pretty-printed JSON, monospace, full-width within the row. Copy
-icon-action at top-right. Reuses the
+button at top-right. Reuses the
 [Raw JSON viewer body content shape](../../patterns/data.md#json-content-block--inline-use)
 (JSONBlock) — the inline use is the same content as the Sheet body,
 sans drawer chrome.
@@ -798,7 +798,7 @@ Two-line row, no chevron. Whole row tappable; tap opens the
 classifier.delta_clamped
 ─────────────────────────────────────────────────────────────
 14:02:17  warn                                       tr_a3kf
-provider.retry_succeeded
+provider.reply_cut_off
 ```
 
 Top line: time, level, actionId chip (right-aligned). Bottom line:

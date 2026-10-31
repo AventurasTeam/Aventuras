@@ -44,7 +44,7 @@ import type {
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore } from '@/lib/stores'
 
-import { toPipelineError } from '../call-error'
+import { retriedAttemptEvents } from '../call-error'
 import { classifierEmbedder } from './description-embedder'
 import { readLastTurns, readStoryPlace } from './entry-reads'
 import { buildGenerationContext } from './generation-context'
@@ -536,9 +536,7 @@ export async function* piggybackFallbackClassifierPhase(
         ctx.log,
       )
 
-  // generation-pipeline.md → Two retry tiers: one event per retried attempt, however the call ended.
-  for (const attempt of result.status === 'not-configured' ? [] : result.recoverable)
-    yield { type: 'recoverable_error', error: toPipelineError(attempt, 'classifier') }
+  yield* retriedAttemptEvents(result, 'classifier')
 
   // A cancelled run discards its writes rather than recording them as a classifier
   // failure. The signal as well as the status: generateClassifierState returns the

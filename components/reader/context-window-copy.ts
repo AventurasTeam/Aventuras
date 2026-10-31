@@ -23,7 +23,11 @@ export function windowCopyOf(failure: ContextWindowFailure): WindowCopy | null {
       key: 'provider',
       values: {
         estimate,
-        message: failure.detail?.trim() ? failure.detail : describeContextWindow(failure),
+        // Every surface follows the closing quote with its own period.
+        message: (failure.detail?.trim() ? failure.detail : describeContextWindow(failure)).replace(
+          /\.+\s*$/,
+          '',
+        ),
       },
     }
   }

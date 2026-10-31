@@ -474,6 +474,14 @@ export async function generateStructured<T>(
   // generation-pipeline.md → Cut-off replies: a cut reply is accepted only as a strict document,
   // since jsonrepair would close a truncated one into a valid but shorter reply.
   const parse = (reply: StructuredReply): T => {
+    if (reply.finishReason === 'content-filter') {
+      try {
+        return parseStructured(reply.text, schema, { repair: false })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        throw new Error(`content filter stopped the reply: ${message}`)
+      }
+    }
     if (!isCutOff(reply.finishReason)) return parseStructured(reply.text, schema)
     const failure = replyCutOff({
       usage: reply.usage,

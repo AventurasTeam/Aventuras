@@ -11,6 +11,9 @@ type Pair = {
 type NonTextPair = { fg: keyof Theme['colors']; bg: keyof Theme['colors']; floor: number }
 type AdvisoryPair = { fg: keyof Theme['colors']; bg: keyof Theme['colors'] }
 
+const SEMANTIC_TEXT = ['--success-text', '--warning-text', '--danger-text', '--info-text'] as const
+const SURFACES = ['--bg-base', '--bg-raised', '--bg-sunken', '--bg-overlay'] as const
+
 export const AUDIT_PAIRS = {
   text: [
     { fg: '--fg-primary', bg: '--bg-base', aaFloor: 4.5, aaaTarget: 7 },
@@ -25,6 +28,7 @@ export const AUDIT_PAIRS = {
     { fg: '--warning-fg', bg: '--warning', aaFloor: 4.5 },
     { fg: '--danger-fg', bg: '--danger', aaFloor: 4.5 },
     { fg: '--info-fg', bg: '--info', aaFloor: 4.5 },
+    ...SEMANTIC_TEXT.flatMap((fg) => SURFACES.map((bg): Pair => ({ fg, bg, aaFloor: 4.5 }))),
     { fg: '--fg-primary', bg: '--selection-bg', aaFloor: 4.5 },
     { fg: '--fg-primary', bg: '--recently-classified-bg', aaFloor: 4.5 },
   ] satisfies Pair[],
@@ -43,16 +47,6 @@ export const AUDIT_PAIRS = {
   ] satisfies AdvisoryPair[],
 } as const
 
-// Pairs that fail by canonical design and are knowingly accepted.
-// Catppuccin Latte's mid-luminance Green/Yellow/Sky cannot reach
-// AA 4.5 as filled pills with any foreground; verbatim-Catppuccin
-// is honored over the floor.
-const EXEMPT: ReadonlySet<string> = new Set([
-  'catppuccin-latte|--success-fg|--success',
-  'catppuccin-latte|--warning-fg|--warning',
-  'catppuccin-latte|--info-fg|--info',
-])
-
 export type AuditRow = {
   kind: 'text' | 'non-text' | 'advisory'
   fg: string
@@ -60,7 +54,7 @@ export type AuditRow = {
   ratio: number
   aa?: 'pass' | 'fail'
   aaa?: 'pass' | 'fail'
-  status: 'pass' | 'fail' | 'warn' | 'info' | 'exempt'
+  status: 'pass' | 'fail' | 'warn' | 'info'
 }
 
 export type AuditResult = {
@@ -75,7 +69,6 @@ export function auditTheme(theme: Theme): AuditResult {
     const ratio = contrastRatio(theme.colors[p.fg], theme.colors[p.bg])
     const aa = ratio >= p.aaFloor ? 'pass' : 'fail'
     const aaa = p.aaaTarget ? (ratio >= p.aaaTarget ? 'pass' : 'fail') : undefined
-    const exempt = EXEMPT.has(`${theme.id}|${p.fg}|${p.bg}`)
     rows.push({
       kind: 'text',
       fg: p.fg,
@@ -83,7 +76,7 @@ export function auditTheme(theme: Theme): AuditResult {
       ratio,
       aa,
       aaa,
-      status: exempt ? 'exempt' : aa === 'fail' ? 'fail' : aaa === 'fail' ? 'warn' : 'pass',
+      status: aa === 'fail' ? 'fail' : aaa === 'fail' ? 'warn' : 'pass',
     })
   }
 

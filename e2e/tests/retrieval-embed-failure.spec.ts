@@ -163,7 +163,7 @@ test.describe.serial('retrieval — a failed embed blocks the turn', () => {
     clipboardBefore = await swapClipboardText(CLIPBOARD_SENTINEL)
     await reader.copySystemEntryHeldText(app.window, entryId).click()
     await expect(
-      toast.withText(app.window, t('reader:systemEntry.copied')),
+      toast.withText(app.window, t('common:clipboard.copied')),
       'the host reports the copy took',
     ).toBeVisible()
     await expect.poll(clipboardText, { message: 'the kept text is on the clipboard' }).toBe(ACTION)

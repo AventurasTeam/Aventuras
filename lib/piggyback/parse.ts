@@ -571,41 +571,61 @@ export function parseSuggestionsBlock(raw: string): ParseSuggestionsBlockResult 
 // still cut when nothing but markup follows it — that is a truncated stream, not prose.
 type BlockSpan = { tag: string; start: number; end: number }
 
-function findBlockSpan(raw: string, tag: string): BlockSpan | undefined {
-  const close = `</${tag}>`
-  const closeIdx = raw.lastIndexOf(close)
-  if (closeIdx !== -1) {
-    const start = raw.lastIndexOf(`<${tag}>`, closeIdx)
-    return start === -1 ? undefined : { tag, start, end: closeIdx + close.length }
-  }
-  const start = raw.lastIndexOf(`<${tag}>`)
-  if (start === -1) return undefined
+// The model opens a block at a line start or right after a root close tag.
+function atBlockBoundary(raw: string, index: number): boolean {
+  const before = raw.slice(raw.lastIndexOf('\n', index) + 1, index).trim()
+  return before === '' || TRAILING_ROOT_TAGS.some((tag) => before.endsWith(`</${tag}>`))
+}
+
+function unclosedBlockSpan(
+  raw: string,
+  tag: string,
+  start: number | undefined,
+  closedTo: number,
+): BlockSpan[] {
+  if (start === undefined || start < closedTo) return []
+  // Past a closed block of its kind, a mid-line opener is a mention in the prose that follows.
+  if (closedTo > 0 && !atBlockBoundary(raw, start)) return []
   const rest = raw.slice(start + tag.length + 2).trimStart()
-  if (rest !== '' && !rest.startsWith('<')) return undefined
-  return { tag, start, end: boundedEnd(raw, start + 1, tag) }
+  if (rest !== '' && !rest.startsWith('<')) return []
+  return [{ tag, start, end: boundedEnd(raw, start + 1, tag) }]
+}
+
+// Every closed pair, and a trailing opener with nothing but markup after it. A stack, so each close
+// claims its nearest opener: a repeat or a block nested in its own kind leaves no tag behind.
+function blockSpans(raw: string, tag: string): BlockSpan[] {
+  const closed: BlockSpan[] = []
+  const openers: number[] = []
+  let closedTo = 0
+  for (const match of raw.matchAll(new RegExp(`</?${tag}>`, 'g'))) {
+    if (!match[0].startsWith('</')) {
+      openers.push(match.index)
+      continue
+    }
+    const start = openers.pop()
+    if (start === undefined) continue
+    closedTo = match.index + match[0].length
+    closed.push({ tag, start, end: closedTo })
+  }
+  const spans = [...closed, ...unclosedBlockSpan(raw, tag, openers.at(-1), closedTo)]
+  // Ahead of the last span, a mid-line pair is quoted prose.
+  return spans.filter((span, i) => i === spans.length - 1 || atBlockBoundary(raw, span.start))
 }
 
 function trailingBlockSpans(raw: string): BlockSpan[] {
-  return TRAILING_ROOT_TAGS.map((tag) => findBlockSpan(raw, tag))
-    .filter((s): s is BlockSpan => s !== undefined)
-    .sort((a, b) => a.start - b.start)
+  return TRAILING_ROOT_TAGS.flatMap((tag) => blockSpans(raw, tag)).sort((a, b) => a.start - b.start)
 }
 
 /**
- * Where the server cut a reply it stopped at `length` (generation-pipeline.md → Cut-off replies):
+ * Where a reply that stopped short ended (generation-pipeline.md → Cut-off replies):
  * `inBlock` once a trailing block had begun. A root opener cut mid-name is removed from `content`.
  */
 export function readCutOffReply(raw: string): { content: string; inBlock: boolean } {
-  // `<sta` opens no span findBlockSpan sees. The model opens a block at a line start or right
-  // after a root close tag, so only a fragment there means a block had begun.
+  // `<sta` opens no span blockSpans sees, so only a fragment at a block boundary means one began.
   const lt = raw.lastIndexOf('<')
   if (lt !== -1) {
     const fragment = raw.slice(lt + 1)
-    const before = raw.slice(raw.lastIndexOf('\n', lt) + 1, lt).trim()
-    if (
-      (before === '' || TRAILING_ROOT_TAGS.some((tag) => before.endsWith(`</${tag}>`))) &&
-      TRAILING_ROOT_TAGS.some((tag) => tag.startsWith(fragment))
-    )
+    if (atBlockBoundary(raw, lt) && TRAILING_ROOT_TAGS.some((tag) => tag.startsWith(fragment)))
       return { content: raw.slice(0, lt).trimEnd(), inBlock: true }
   }
   const spans = trailingBlockSpans(raw)
@@ -630,7 +650,8 @@ export function stripTrailingBlocks(raw: string): {
   let cursor = 0
   for (const span of spans) {
     kept.push(raw.slice(cursor, span.start))
-    cursor = span.end
+    // A nested span ends inside the one that holds it.
+    cursor = Math.max(cursor, span.end)
   }
   kept.push(raw.slice(cursor))
 

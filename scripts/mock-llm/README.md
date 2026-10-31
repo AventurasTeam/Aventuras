@@ -86,7 +86,7 @@ obvious.
 | Kind                | What the app sees                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `http`              | The chosen status. 401/403 is non-retryable, 429 and 5xx are retryable — see [`classify-provider-error.ts`](../../lib/ai/transport/classify-provider-error.ts).                                                                                                                                                                                                                                                                                                                    |
-| `malformed`         | A reply that cannot be repaired into a valid object, exercising the parse-retry path. On narrative it appends a truncated `<state>` block instead, exercising piggyback parse recovery.                                                                                                                                                                                                                                                                                            |
+| `malformed`         | A reply that cannot be repaired into a valid object, exercising the parse-retry path. On narrative it swaps the reply's `<state>` block for a truncated one instead, exercising piggyback parse recovery.                                                                                                                                                                                                                                                                          |
 | `stream-cut`        | The SSE stream opens, emits, then closes with no stop frame and no `[DONE]`.                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `hang`              | The socket opens and never finishes, until the client times out or cancels.                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `length`            | The first half of the reply, by characters, then a normal ending with `finish_reason: 'length'`, where `stream-cut` sends none (a stream gets the terminal frame and `[DONE]`, a structured reply is one completion): a reply the server stopped at its length limit. A structured one is refused, not repaired; a narrative one cut in its prose commits with a cut-off notice ([`generation-pipeline.md → Cut-off replies`](../../docs/generation-pipeline.md#cut-off-replies)). |
@@ -96,16 +96,21 @@ obvious.
 **Structured calls retry once.** `generateStructured` wraps the call in
 `callWithRetry` with `maxProviderAttempts: 2`, so a failure budget of 1 on a
 structured lane is swallowed before the app ever sees it. Use 2 or more.
-`length` and the two overflow kinds are the exceptions: a cut reply and an
+`http` with a status the app doesn't retry (401, 403), `hang` with no profile
+timeout, `length` and the two overflow kinds are the exceptions: a cut reply and an
 overflow rejection are never retried, so a budget of 1 reaches the app.
+
+`malformed`, `stream-cut` and `length` alter a canned reply, so on a passthrough
+lane they do nothing and stay armed; `http`, `hang` and the overflow kinds still
+fire there.
 
 Narrative has no such wrapper, so one `http` failure fails the run, as does a
 `hang` once the client times out, and an overflow kind fails it with the
 **Prompt too large for the model's window** entry quoting the body's message.
 The other kinds commit: `malformed` through
-piggyback parse recovery, `stream-cut` as a finished reply holding what
-arrived (the SDK reports the missing stop frame as `other`, and only `length`
-counts as cut off), and `length` as below.
+piggyback parse recovery, `stream-cut` as a reply holding what arrived, with
+an `interrupted` notice when the cut fell in the prose (the SDK reports the
+missing stop frame as `other` with no raw reason), and `length` as below.
 
 Where a narrative `length` cut lands depends on the active response: the mock
 halves the rendered reply, prose plus its trailing blocks. On "Long scene" the

@@ -993,7 +993,8 @@ reversal are the signal to revisit.
 A pass or a close whose abort's own reversal fails leaves its writes
 to boot recovery, and its gate lifts anyway
 ([`generation-pipeline.md → Recovery-failure policy`](./generation-pipeline.md#recovery-failure-policy)),
-so the user can write to the branch before recovery runs. If the
+so the user can write to the branch before recovery runs; a boot whose
+recovery failed leaves the same window until the next one. If the
 latest scene names a character the pass created and the user deletes
 it in World, the delete's tail-scene update still names it. Recovery
 would prune that delete with the create it holds, so it refuses as
@@ -1358,6 +1359,43 @@ measured. Parked
 2026-10-26; the signal is refusals near the window, a truncation
 warning on a server that didn't truncate, or the logged ratios sitting
 far from 1 for a model in use.
+
+#### Overflow shapes beyond llama.cpp's and OpenAI's
+
+**Overflow recognition misses shapes beyond llama.cpp's and OpenAI's.**
+[`architecture.md → Recognizing an overflow rejection`](./architecture.md#recognizing-an-overflow-rejection)
+is verified against those two servers only. Checked in SGLang's
+source (`tokenizer_manager.py`), a server canon names under
+[Detection](./architecture.md#detection): a prompt over its window
+is a 400 reading "The input (N tokens) is longer than the model's
+context length (M tokens).", which no canon keyword matches, so it
+reads as a plain provider failure. A "context length" keyword would
+catch it and LM Studio's wording, but may also catch a max-output
+rejection phrased against the context length, whose remedy is a lower
+max output, not a shorter prompt. Recalled by the context
+window check's reviews and not checked against each server:
+Anthropic rejects a prompt plus `max_tokens` with "input length and
+`max_tokens` exceed context limit", and LM Studio says "context
+length"; neither matches a canon keyword, so both read as a plain
+provider failure. `@ai-sdk/anthropic` sends the model's whole max
+output as `max_tokens` when the profile sets none, and Anthropic's
+docs say models from Claude 4.5 accept such a request and stop at the
+window (`model_context_window_exceeded`, read as a `length` cut-off),
+so only earlier models reject it. Gemini's OpenAI-compatible endpoint may wrap its
+error body in an array, which still matches by keyword but quotes the
+whole JSON as the provider's message. An overflow sent inside the
+stream after an HTTP 200 isn't recognized past the first chunk, where
+`@ai-sdk/anthropic` rethrows an error as an `APICallError`:
+`@ai-sdk/openai-compatible` hands it over as a plain string, not an
+`APICallError`, so the turn fails as a provider `network` error, or,
+reproduced through the real SDK, as a provider timeout when a stall
+follows, because an expired stream fails as a timeout
+([`generation-pipeline.md → Two retry tiers, both at phase level`](./generation-pipeline.md#two-retry-tiers-both-at-phase-level));
+the servers above reject an overflow with a 400 before streaming.
+Raised by the context window check.
+
+A real server's overflow reading as a plain provider failure is the
+signal to revisit; none we run sends these shapes.
 
 #### A per-provider switch for stream usage
 
@@ -3510,6 +3548,13 @@ in English. When a second locale ships, switch Zod's locale with the app
 language in `lib/i18n` (`z.config(z.locales.<lang>())`) rather than
 schema by schema. Only `locales/en` ships today.
 
+#### The context window's source as a translated fragment
+
+`common:contextWindowSource.*` is a translated fragment slotted into
+sentences; a language with grammatical gender can't agree it with
+"window". i18next's `context` option would let each sentence carry its
+own wording. Only `locales/en` ships; a second locale is the signal.
+
 Raised in Slice 4.6 (2026-10-08); the signal is the first non-English
 locale.
 
@@ -3572,6 +3617,34 @@ hit area, and a guessed edge band would also catch content presses
 beside it, which nothing here can test without a macOS desktop. Parked
 2026-10-25 from a review of the triage pass; the signal to revisit is a
 macOS desktop build in testing.
+
+#### Markdown in a quoted provider message
+
+The provider's message is quoted in a window failure's entry content,
+which renders through `marked`, so markdown in it (`*x*`, a `#` line)
+changes the quote. It is sanitized, so not a security issue, and
+Details keeps it verbatim. Escaping can't live in the shared copy
+helper, as the wizard's copy goes through plain `t()`. A real
+provider's message that reads wrong in the entry is the signal.
+
+#### Native reader rows rerender per emission
+
+On native, every row in the loaded window rerenders on each prop
+emission, and `rows` crosses as a fresh JSON copy each time
+([lesson](./implementation/lessons-learned/expo-dom-bridge-identity-and-rejections.md)).
+While streaming that's once per chunk: 50 rows at open, more after
+boundary loads, plus serialising the window on the host and parsing it
+in the WebView, which a memo fix wouldn't touch. Markdown stays cached,
+since `content` is a primitive. Read from the source, not measured, so
+which cost dominates is unknown. Levers, cheapest first: throttle
+`setStreaming`, which helps every cost; reuse row objects at a seam in
+`reader-document.tsx`, which helps only the row cost; send chunks
+through the imperative handle, which needs a canon change.
+
+M9.5's performance budget audit is where to measure: `ReaderRow` commit
+time per chunk over `chrome://inspect`, the `$$props` payload for a
+50-row window with reasoning, and dropped frames while streaming on a
+mid-tier Android device. Visible jank there is the signal.
 
 #### Continuing a cut-off reply
 
@@ -3709,3 +3782,14 @@ on still gets releases under the `ai-v6` dist-tag, and neither line
 sends Anthropic's browser-access header, which the app now sets itself.
 Parked 2026-10-24; the signal is a v7-only feature or fix the app needs,
 or the `ai-v6` line going unmaintained.
+
+#### A setup factory for the periodic classifier spec
+
+`e2e/tests/periodic-classifier.spec.ts` repeats one describe setup in
+each of its twelve `beforeAll` blocks: seed, embedder, mock, endpoint,
+launch and cadence. The overflow describe's `beforeAll` differs from the
+cut-off one's by two lines. A factory would be a change to the whole
+file, and no defect sits behind the repetition.
+
+A spec failure that had to be fixed in several of those blocks is the
+signal to revisit.

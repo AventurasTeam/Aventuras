@@ -110,7 +110,7 @@ export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
   // per-turn's chain names the pass at a turn's commit; an unregistered kind chains nothing.
   ensurePeriodicClassifierPipelineRegistered()
   // Recovery must never block boot: a failure of the orphan pass itself (not just
-  // a per-orphan delta) is logged and boot proceeds to hydrate.
+  // a per-orphan delta) is logged and reported, and boot proceeds to hydrate.
   let recovery: RecoveryReport | null = null
   try {
     recovery = await recoverInFlightRuns(ctx)
@@ -148,6 +148,7 @@ export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
     reversed: recovery?.reversed ?? [],
     failures: recovery?.failures ?? [],
     heldStoryIds,
+    ...(recovery === null ? { passFailed: true } : {}),
   })
   // ctx.db (not the module-level default) so recovery and hydrate hit the
   // same instance.

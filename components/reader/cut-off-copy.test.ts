@@ -146,12 +146,26 @@ describe('cutOffNoticeText', () => {
   })
 })
 
+describe('cutOffNoticeText, a reply that ended early', () => {
+  it('says the reply may be incomplete, not that a limit stopped it', () => {
+    expect(cutOffNoticeText({ cause: 'interrupted', outputTokens: 300 })).toBe(
+      'The provider ended this reply without saying it had finished, so it may be incomplete.',
+    )
+  })
+
+  it('names the content filter', () => {
+    expect(cutOffNoticeText({ cause: 'content-filter' })).toBe(
+      "The provider's content filter stopped this reply.",
+    )
+  })
+})
+
 describe('offersProfileFix', () => {
   it.each(['max-output', 'unknown', undefined])('offers the profile for cause %s', (cause) => {
     expect(offersProfileFix(cause)).toBe(true)
   })
 
-  it('offers no profile for a window cut-off', () => {
-    expect(offersProfileFix('window')).toBe(false)
+  it.each(['window', 'interrupted', 'content-filter'])('offers no profile for %s', (cause) => {
+    expect(offersProfileFix(cause)).toBe(false)
   })
 })

@@ -985,8 +985,14 @@ on its existing failure path:
   the turns the same way; a conversation that outgrows the window later
   only stops its task
   ([`memory/chapter-close.md → When a task stops`](./memory/chapter-close.md#when-a-task-stops));
-- suggestion refresh, the fallback classifier and wizard-assist on
-  their own.
+- suggestion refresh and wizard-assist on their own, each naming the
+  remedy that fits what its prompt holds: the suggestion prompt has no
+  memory pools, so its copy names the history buffer, and the wizard
+  has no story yet, so its copy names what's been entered. The strip
+  keeps `Retry`, which is how the user gets unstuck once they've acted
+  on the remedy; wizard-assist's overlay can't change the prompt, so
+  it offers none;
+- the fallback classifier on its own.
 
 ### Recognizing an overflow rejection
 
@@ -1021,9 +1027,9 @@ After a call whose provider reported input tokens, the reported count
 (`usage.inputTokens`, cached tokens included) is divided by the
 pre-send estimate. Below `0.5`, the server likely dropped part of the
 prompt, or a configured figure is above the real window. `lib/ai`
-signals it; the app shows a warning toast once per model per app
-session, naming both counts with a `Set window` action, and logs a
-warning. The committed result is untouched and nothing is stored. The
+signals it; the app shows a warning toast once per provider and model
+per app session, naming both counts with a `Set window` action, and
+logs a warning. The committed result is untouched and nothing is stored. The
 threshold sits well clear of tokenizer differences and is a starting
 value for tuning. The ratio itself is logged at debug level on every
 call, the evidence a calibration of the estimate would start from

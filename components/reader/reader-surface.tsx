@@ -104,10 +104,9 @@ type ReaderRowProps = {
   onCopySystemText: (text: string) => Promise<void>
 }
 
-// Memoized so a stream chunk (which re-renders the surface) doesn't reconcile
-// the whole loaded window: a committed row's props are all referentially stable
-// (row identity, stable callbacks, null editContent), so only the editing row
-// and the live streaming card re-render.
+// Memo: on web committed-row props are referentially stable, so a stream chunk re-renders only the
+// editing row and live card. Native props lose identity over the expo-dom bridge, so there it
+// holds only for document-internal renders.
 const ReaderRow = memo(function ReaderRow({
   row,
   tier,

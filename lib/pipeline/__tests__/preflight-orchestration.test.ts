@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { branches, deltas, pipelineRuns } from '@/lib/db'
@@ -11,7 +11,7 @@ import {
   type PhaseFn,
   type PipelineEvent,
 } from '@/lib/pipeline'
-import { generationStore, hydrateAppSettings } from '@/lib/stores'
+import { appSettingsStore, generationStore, hydrateAppSettings } from '@/lib/stores'
 
 import { expectRan, makeHarness, resetSingletons } from './harness'
 
@@ -178,6 +178,35 @@ describe('runPipeline config pre-flight', () => {
       lastError: 'classifier: no-profile-assigned',
       lastSuccessAt: null,
       processedThrough: null,
+    })
+  })
+
+  // The hook's other arm: a resolver failure records its kind, anything else its detail.
+  it('records why a pre-flight that threw stopped a cadence-triggered classifier', async () => {
+    const { db, ctx } = await makeHarness()
+    await hydrateAppSettings(async () => WIRED_CONFIG)
+    const read = appSettingsStore.getAppSettings
+    const spy = vi.spyOn(appSettingsStore, 'getAppSettings')
+    spy.mockImplementationOnce(() => {
+      throw new Error('settings unreadable')
+    })
+    spy.mockImplementation(read)
+
+    ensurePeriodicClassifierPipelineRegistered()
+    const result = expectRan(await runPipeline(PERIODIC_CLASSIFIER_KIND, ctx))
+    spy.mockRestore()
+
+    expect(result).toMatchObject({
+      outcome: 'failed',
+      error: { kind: 'orchestrator', detail: 'settings unreadable' },
+    })
+    const [row] = await db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(row.status).toMatchObject({
+      state: 'failed',
+      lastError: 'classifier: settings unreadable',
     })
   })
 

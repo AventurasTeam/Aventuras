@@ -124,18 +124,20 @@ describe('describeSuggestionFailure for a prompt over the context window', () =>
     detail: LLAMACPP_MESSAGE,
   } satisfies PipelineError
 
+  const REMEDIES =
+    'Shorten the history buffer in Story Settings, raise the window if the model allows more, or switch the suggestion model to one with a larger window.'
   const providerCopy = (message: string) =>
-    `The provider rejected the suggestion prompt. Its message suggests it exceeded the model's context window: “${message}”.`
+    `The provider rejected the suggestion prompt. Its message suggests it exceeded the model's context window: “${message}”. ${REMEDIES}`
 
   it("names the rounded estimate and the model's window with its source", () => {
     expect(describeSuggestionFailure(refused)).toBe(
-      "The suggestion prompt is about 71,300 tokens, over llama3.1:70b's 65,536-token context window (set by you). Nothing was sent.",
+      `The suggestion prompt is about 71,300 tokens, over llama3.1:70b's 65,536-token context window (set by you). Nothing was sent. ${REMEDIES}`,
     )
   })
 
   it('names a detected window as detected', () => {
     expect(describeSuggestionFailure({ ...refused, windowSource: 'detected' })).toBe(
-      "The suggestion prompt is about 71,300 tokens, over llama3.1:70b's 65,536-token context window (detected). Nothing was sent.",
+      `The suggestion prompt is about 71,300 tokens, over llama3.1:70b's 65,536-token context window (detected). Nothing was sent. ${REMEDIES}`,
     )
   })
 
