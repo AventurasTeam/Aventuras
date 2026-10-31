@@ -3511,6 +3511,13 @@ in English. When a second locale ships, switch Zod's locale with the app
 language in `lib/i18n` (`z.config(z.locales.<lang>())`) rather than
 schema by schema. Only `locales/en` ships today.
 
+#### The context window's source as a translated fragment
+
+`common:contextWindowSource.*` is a translated fragment slotted into
+sentences; a language with grammatical gender can't agree it with
+"window". i18next's `context` option would let each sentence carry its
+own wording. Only `locales/en` ships; a second locale is the signal.
+
 Raised in Slice 4.6 (2026-10-08); the signal is the first non-English
 locale.
 
@@ -3573,6 +3580,15 @@ hit area, and a guessed edge band would also catch content presses
 beside it, which nothing here can test without a macOS desktop. Parked
 2026-10-25 from a review of the triage pass; the signal to revisit is a
 macOS desktop build in testing.
+
+#### Markdown in a quoted provider message
+
+The provider's message is quoted in a window failure's entry content,
+which renders through `marked`, so markdown in it (`*x*`, a `#` line)
+changes the quote. It is sanitized, so not a security issue, and
+Details keeps it verbatim. Escaping can't live in the shared copy
+helper, as the wizard's copy goes through plain `t()`. A real
+provider's message that reads wrong in the entry is the signal.
 
 #### Continuing a cut-off reply
 

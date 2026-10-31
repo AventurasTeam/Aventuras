@@ -2120,8 +2120,8 @@ the field itself.
 Best-effort only — provider error messages are not standardised;
 the field is a hint for the UI, never an assertion that a user
 override was wrong. The copy names the setting and hedges: "The
-provider's message mentions `thinking`. That can mean this model
-doesn't support reasoning: check the profile's thinking setting and
+provider rejected the request. Its message mentions `thinking`. That
+can mean this model doesn't support reasoning: check the profile's thinking setting and
 the model's 🧠 badge. The provider may also have rejected the request
 for another reason." Its action is `Fix profile`, since the profile
 holds the per-call setting and App Settings · Providers the model's

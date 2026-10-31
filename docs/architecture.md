@@ -1027,9 +1027,9 @@ After a call whose provider reported input tokens, the reported count
 (`usage.inputTokens`, cached tokens included) is divided by the
 pre-send estimate. Below `0.5`, the server likely dropped part of the
 prompt, or a configured figure is above the real window. `lib/ai`
-signals it; the app shows a warning toast once per model per app
-session, naming both counts with a `Set window` action, and logs a
-warning. The committed result is untouched and nothing is stored. The
+signals it; the app shows a warning toast once per provider and model
+per app session, naming both counts with a `Set window` action, and
+logs a warning. The committed result is untouched and nothing is stored. The
 threshold sits well clear of tokenizer differences and is a starting
 value for tuning. The ratio itself is logged at debug level on every
 call, the evidence a calibration of the estimate would start from

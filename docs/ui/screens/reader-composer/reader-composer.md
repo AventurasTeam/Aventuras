@@ -573,9 +573,9 @@ row.
 
 When a provider's rejection names a capability the request carried
 ([`generation-pipeline.md → Fatal error categories`](../../../generation-pipeline.md#fatal-error-categories)),
-the **LLM call failed** or **Memory update failed** entry adds the
-hedged hint naming the profile's setting and the model's badge, and
-gains `Fix profile`.
+the hedged hint naming the profile's setting and the model's badge
+takes the place of **LLM call failed**'s line, or follows **Memory
+update failed**'s lead sentence, and the entry gains `Fix profile`.
 
 The embed-failure system entry follows the same visual shape as the
 LLM-failure entry — the contract is "transient pipeline failure

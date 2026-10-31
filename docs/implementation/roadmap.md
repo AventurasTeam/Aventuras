@@ -658,7 +658,9 @@ the underlying configuration surfaces.
   and `Set window` wired on the surfaces the context window check left
   without it (the turn and pass `context-window` entries, a
   `window` cut-off's notice and entries, the
-  [truncation toast](../architecture.md#truncation-cross-check)),
+  [truncation toast](../architecture.md#truncation-cross-check), which
+  should also name the provider, since it shows once per provider and
+  model and one model id on two providers reads as a repeat),
   which needs the model target persisted on failure entries and the
   cut-off mark (a change to both shapes in
   [`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)))

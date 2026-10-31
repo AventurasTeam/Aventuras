@@ -119,23 +119,6 @@ slice-planning gate forces its resolution before that slice is planned.
   rather than a refusal. The dev router runs `--parallel 1`, so this is
   unchecked. Raised by the context window check.
 
-- **Window-failure copy has rough edges.** From the context window
-  check's reviews:
-  - The provider's message is quoted in the entry's content, which
-    renders through `marked`, so markdown in it (`*x*`, a `#` line)
-    changes the quote. It is sanitized, so not a security issue.
-  - `common:contextWindowSource.*` is a translated fragment slotted into
-    sentences; a language with grammatical gender can't agree it with
-    "window". i18next's `context` option would let each sentence carry
-    its own wording.
-  - A hinted provider failure replaces "LLM call failed." with copy
-    that starts "The provider rejected the request.", where
-    [`reader-composer.md → Transient pipeline failures`](../ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)
-    says the entry adds the hint.
-  - The truncation toast names only the model, while it shows once per
-    provider and model, so one model id on two providers can show two
-    identical toasts.
-
 - **The stored system-failure shape is looser than the data model.**
   `systemFailure` in `lib/db/story-entries/entry-metadata.ts` parses on
   any entry kind, while
