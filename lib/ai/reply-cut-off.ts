@@ -19,7 +19,7 @@ export type ReplyCutOffFailure = {
   modelId: string
 }
 
-/** On a structured call only `'length'` is a cut-off; any other value, or none, is finished. */
+/** On a structured call only `'length'` is a cut-off; generateStructured treats a filter apart. */
 export function isCutOff(finishReason: FinishReason | undefined): boolean {
   return finishReason === 'length'
 }

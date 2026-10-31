@@ -1933,8 +1933,16 @@ ambiguity safe: a false `interrupted` costs a notice on a reply with
 no block, where a failure would stop every turn on such a server. A
 raw reason the SDK doesn't know, such as `eos`, is the server's own
 finish word and stays finished, and a blank reply fails as `empty-reply`
-whichever way it stopped. Structured calls stay on `'length'` alone: a
-reply cut short fails its parse and is retried.
+whichever way it stopped.
+
+**A structured reply a filter stopped gets no repair either**, for the
+same reason a cut-off one doesn't: `jsonrepair` would close it into a
+shorter list that a pass saves as whole. It's accepted only if it parses
+strictly. Otherwise it fails as a parse failure, not `reply-cut-off`,
+and is retried, since a filter may not trip twice, with a detail naming
+the filter. `'other'` with no raw reason stays finished on a structured
+call: there's no stream to end early, and a body that omits its
+`finish_reason` still arrives whole.
 
 **The cause** comes from what the call knows: `max-output` when the
 profile sets `maxOutput` and the output tokens reached it, or the
