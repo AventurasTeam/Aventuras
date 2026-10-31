@@ -68,13 +68,6 @@ slice-planning gate forces its resolution before that slice is planned.
   unreachable. Canon doesn't say which is meant. Raised by the
   2026-10-31 triage pass.
 
-- **A synchronous throw from the narrative's `streamText` escapes its
-  error handling.** It's outside the `try` in
-  `lib/pipeline/definitions/per-turn.ts`, so it lands in the
-  orchestrator's catch as `orchestrator`, and `boundedSignal`'s timer
-  isn't disposed. Bounding `maxOutput` removed the one known trigger.
-  Read, not run. Raised by the 2026-10-31 triage pass.
-
 - **Latte's muted text misses AA on sunken surfaces.** `--fg-muted` is
   3.20 and `--fg-secondary` 4.05 on `--bg-sunken`; the audit checks both
   only on `--bg-base`. Raised by the 2026-10-31 triage pass.
