@@ -125,29 +125,6 @@ slice-planning gate forces its resolution before that slice is planned.
   used to be relabelled `provider`. Raised by the cut-off replies slice
   review.
 
-- **E2E entry-id helpers are copied per spec, and reader locators scope
-  unevenly.** `entryIdByContent` and `pollEntryId` live in three specs
-  (`reader-regenerate`, `periodic-classifier` and, since the cut-off
-  replies work, `reader-failure-retry`), with different poll timeouts
-  and a `page()` getter in one, so lifting them into
-  `e2e/harness/db.ts` needs page and timeout parameters rather than a
-  move. In `e2e/locators/reader.ts`, `dismissSystemEntry` is scoped to
-  the entry rows while `retrySystemEntry`, `systemEntryFailure` and
-  `fixProfile` match page-wide; `fixProfile`'s comment says to scope it
-  to a row, and neither of its callers does. Playwright's strict mode fails
-  loudly on a second match, so nothing passes by accident today. Raised
-  by the cut-off replies slice review; the simplifier left the lift for
-  a home. The context window check added a fourth copy
-  (`context-window.spec.ts`), and `e2e/harness/seed.ts` now repeats
-  its providers read-modify-write block three times
-  (`setProviderEndpoint`, `addProviderCustomModel`,
-  `setContextWindowOverride`). `e2e/tests/periodic-classifier.spec.ts`
-  repeats one describe setup in each of its twelve `beforeAll` blocks
-  (the seed, `passProbe`, the stream and failure counts); the window
-  check's overflow describe is a near-copy of the cut-off one. A setup
-  factory is a change to the whole file, which the slice review's
-  simplifier left alone.
-
 - **Overflow recognition misses shapes beyond llama.cpp's and OpenAI's.**
   [`architecture.md → Recognizing an overflow rejection`](../architecture.md#recognizing-an-overflow-rejection)
   is verified against those two servers only. Checked in SGLang's
@@ -217,23 +194,6 @@ slice-planning gate forces its resolution before that slice is planned.
   - The truncation toast names only the model, while it shows once per
     provider and model, so one model id on two providers can show two
     identical toasts.
-
-- **The E2E mock repeats the dev mock's helpers.**
-  `e2e/harness/mock-llm.ts` has its own `promptText` (the dev mock's is
-  in `scripts/mock-llm/routing.ts`), and both mocks' usage counts now
-  depend on it, so they can drift apart. Its `cors` object repeats
-  `CORS_HEADERS` from `scripts/mock-llm/respond/wire.ts`, its
-  `JSON.parse` of a request body is unguarded (the dev mock answers a
-  bad body with a 400), and its one-shot controls are never reset
-  between tests in a describe, so one armed in a test that fails before
-  its call carries into the next. Raised by the context window check.
-  The harness's own tests repeat their helpers too:
-  `scripts/mock-llm/harness-usage.test.ts` copies `provider()` and
-  `classifierCall()` from `harness-cut.test.ts`, and `blockOf`,
-  `structuredCall` and `started()` from `harness-hold.test.ts`; a
-  shared `scripts/mock-llm/harness-calls.ts` beside them would hold one
-  copy (the slice review's simplifier left it, as it touches files the
-  slice didn't change).
 
 - **A cut-off's `window` cause reads the estimate, not the server's
   count.** `replyCutOff` (`lib/ai/reply-cut-off.ts`) gives `window` only

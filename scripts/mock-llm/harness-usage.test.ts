@@ -1,23 +1,13 @@
-import { APICallError, wrapLanguageModel, type LanguageModelUsage } from 'ai'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { z } from 'zod'
+import { APICallError, type LanguageModelUsage } from 'ai'
+import { describe, expect, it, vi } from 'vitest'
 
-import type { JsonSchema } from '@/lib/ai'
-import { jsonResponseFormatMiddleware, promptSchemaMiddleware } from '@/lib/ai/prompt-schema'
 import { createProviderModel } from '@/lib/ai/providers'
 import { recognizeOverflow } from '@/lib/ai/transport/classify-provider-error'
-import { runProviderCall, streamProviderCall } from '@/lib/ai/transport/provider-call'
-import { fallbackClassifierSchema } from '@/lib/pipeline'
+import { streamProviderCall } from '@/lib/ai/transport/provider-call'
 
+import { classifierCall, harnessPerTest, provider, structuredCall } from './harness-calls'
 import { overflowBody, overflowCounts } from './respond/wire'
-import { STRUCTURED_SHAPES } from './shapes'
-import {
-  EXAMPLES,
-  mockUsage,
-  promptOf,
-  startMockLlm,
-  type MockLlm,
-} from '../../e2e/harness/mock-llm'
+import { EXAMPLES, mockUsage, promptOf, type MockLlm } from '../../e2e/harness/mock-llm'
 
 // SDK-facing checks run through the app's own provider, so the usage and rejections E2E specs
 // rely on are the ones @ai-sdk/openai-compatible actually reads; raw fetches pin the wire bytes.
@@ -30,28 +20,7 @@ const PROMPT_TOKENS = 200
 const UNDER_REPORTED = 20
 const DEFAULT_NARRATIVE_TOKENS = 28
 
-let mock: MockLlm | undefined
-
-afterEach(async () => {
-  await mock?.close()
-  mock = undefined
-})
-
-async function started(): Promise<MockLlm> {
-  mock = await startMockLlm()
-  return mock
-}
-
-function provider(llm: MockLlm): Parameters<typeof createProviderModel>[0] {
-  return {
-    id: 'prov_harness',
-    type: 'openai-compatible',
-    displayName: 'Harness',
-    apiKey: '',
-    favoriteModelIds: [],
-    endpoint: llm.url,
-  }
-}
+const started = harnessPerTest()
 
 async function narrativeCall(
   llm: MockLlm,
@@ -80,41 +49,6 @@ async function narrativeError(llm: MockLlm): Promise<unknown> {
   for await (const delta of stream.textStream) text += delta
   expect(text).toBe('')
   return error
-}
-
-/** The fallback classifier's shape, so the harness routes it to 'per-turn-classifier'. */
-function classifierCall(llm: MockLlm): ReturnType<typeof runProviderCall> {
-  const model = wrapLanguageModel({
-    model: createProviderModel(provider(llm), 'mock') as Parameters<
-      typeof wrapLanguageModel
-    >[0]['model'],
-    middleware: [
-      jsonResponseFormatMiddleware(z.toJSONSchema(fallbackClassifierSchema) as JsonSchema),
-      promptSchemaMiddleware(),
-    ],
-  }) as Parameters<typeof runProviderCall>[0]['model']
-  return runProviderCall({ model, prompt: 'Classify the turn.' })
-}
-
-function blockOf(name: string): string {
-  const shape = STRUCTURED_SHAPES.find((s) => s.name === name)
-  if (shape === undefined) throw new Error(`no structured shape named ${name}`)
-  return shape.block
-}
-
-/** A raw request whose prompt carries `name`'s schema block, as the app's auto path sends it. */
-function structuredCall(llm: MockLlm, name: string): Promise<Response> {
-  return fetch(`${llm.url}/chat/completions`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      model: 'mock',
-      messages: [
-        { role: 'system', content: blockOf(name) },
-        { role: 'user', content: 'Classify the turn.' },
-      ],
-    }),
-  })
 }
 
 /** A raw streaming request that asks for usage, the way the app's provider does. */

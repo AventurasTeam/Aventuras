@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
 import { waitForTurnTerminal } from '../flows/turn'
-import { currentBranchId, queryApp } from '../harness/db'
+import { currentBranchId, entryIdOf, pollEntryIdOf, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { copyNumber, copyPattern, t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -54,30 +54,6 @@ async function failureRow(page: Page, branchId: string): Promise<SystemRow> {
     .toEqual([expect.any(String)])
   const [row] = await systemRows(page, branchId)
   return row
-}
-
-// More than one row for a marker would be a duplicated write.
-async function entryIdByContent(
-  page: Page,
-  branchId: string,
-  marker: string,
-): Promise<string | undefined> {
-  const rows = await queryApp(
-    page,
-    `SELECT id FROM story_entries WHERE branch_id = ? AND content LIKE ?`,
-    [branchId, `%${marker}%`],
-  )
-  expect(rows.length, `${marker} row count`).toBeLessThanOrEqual(1)
-  return rows[0]?.[0] as string | undefined
-}
-
-async function pollEntryId(page: Page, branchId: string, marker: string): Promise<string> {
-  await expect
-    .poll(() => entryIdByContent(page, branchId, marker), { timeout: 30_000 })
-    .toBeDefined()
-  const id = await entryIdByContent(page, branchId, marker)
-  if (id === undefined) throw new Error(`${marker}: present at the poll, gone on read-back`)
-  return id
 }
 
 async function promptTotal(page: Page, entryId: string): Promise<number> {
@@ -143,7 +119,7 @@ test.describe('context window — a turn over a configured window', () => {
     expect(copyNumber(copy, 'estimate')).toBeGreaterThan(WINDOW)
     // The check refuses before anything is sent: nothing reached the server.
     expect(mock.requests).toHaveLength(0)
-    expect(await entryIdByContent(page, branchId, 'E2E-WINDOW-CHECK-U1')).toBeUndefined()
+    expect(await entryIdOf(page, branchId, 'E2E-WINDOW-CHECK-U1')).toBeUndefined()
 
     await expect(reader.retrySystemEntry(page)).toBeVisible()
     await expect(reader.dismissSystemEntry(page)).toBeVisible()
@@ -225,9 +201,9 @@ test.describe('context window — a provider overflow, then the truncation cross
 
     await reader.retrySystemEntry(page).click()
 
-    await pollEntryId(page, branchId, 'E2E-OVERFLOW-R1')
+    await pollEntryIdOf(page, branchId, 'E2E-OVERFLOW-R1')
     expect(
-      await entryIdByContent(page, branchId, 'E2E-OVERFLOW-U1'),
+      await entryIdOf(page, branchId, 'E2E-OVERFLOW-U1'),
       'Retry resent the held input',
     ).toBeDefined()
     await expect
@@ -242,7 +218,7 @@ test.describe('context window — a provider overflow, then the truncation cross
     await waitForTurnTerminal(page)
 
     await send('E2E-USAGE-U1 I step off the ferry.', 'E2E-USAGE-R1 the bank is mud to the ankle.')
-    const replyId = await pollEntryId(page, branchId, 'E2E-USAGE-R1')
+    const replyId = await pollEntryIdOf(page, branchId, 'E2E-USAGE-R1')
     await waitForTurnTerminal(page)
 
     // includeUsage asks for it; without it a stream reports none and the total reads 0.
@@ -262,7 +238,7 @@ test.describe('context window — a provider overflow, then the truncation cross
     // The toast dismisses itself after 5 s: read its text before any DB round trip.
     await expect(truncationToast()).toBeVisible({ timeout: 10_000 })
     const toastText = (await truncationToast().textContent())?.trim() ?? ''
-    const replyId = await pollEntryId(page, branchId, 'E2E-USAGE-R2')
+    const replyId = await pollEntryIdOf(page, branchId, 'E2E-USAGE-R2')
     const reported = await promptTotal(page, replyId)
     // The server's count reached the entry under-reported, under half the usage test's full prompt.
     expect(reported).toBeLessThan(fullPrompt / 2)
@@ -280,7 +256,7 @@ test.describe('context window — a provider overflow, then the truncation cross
 
     mock.underReportNextUsage()
     await send('E2E-USAGE-U3 I turn toward the town.', 'E2E-USAGE-R3 smoke rises over the roofs.')
-    const replyId = await pollEntryId(page, branchId, 'E2E-USAGE-R3')
+    const replyId = await pollEntryIdOf(page, branchId, 'E2E-USAGE-R3')
 
     // The ratio fell under 0.5 again, so only the once-per-model rule keeps the toast down.
     expect(await promptTotal(page, replyId)).toBeLessThan(fullPrompt / 2)

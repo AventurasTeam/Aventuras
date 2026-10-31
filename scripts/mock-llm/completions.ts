@@ -7,6 +7,7 @@ import { passthrough } from './passthrough'
 import { deliveredByCut, streamNarrative } from './respond/narrative'
 import { renderNarrative, type NarrativeValue } from './respond/tagged-block'
 import {
+  readBody,
   CORS_HEADERS,
   SSE_HEADERS,
   completionBody,
@@ -57,15 +58,6 @@ function asNarrativeValue(value: unknown): NarrativeValue {
     ...(record.state !== undefined ? { state: record.state } : {}),
     ...(record.suggestions !== undefined ? { suggestions: record.suggestions } : {}),
   }
-}
-
-export function readBody(req: IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let data = ''
-    req.on('data', (c) => (data += c))
-    req.on('end', () => resolve(data))
-    req.on('error', reject)
-  })
 }
 
 function sendHttpFailure(res: ServerResponse, status: number): void {

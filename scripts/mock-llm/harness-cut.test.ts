@@ -1,40 +1,15 @@
-import { wrapLanguageModel } from 'ai'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { z } from 'zod'
+import { describe, expect, it, vi } from 'vitest'
 
-import type { JsonSchema } from '@/lib/ai'
-import { jsonResponseFormatMiddleware, promptSchemaMiddleware } from '@/lib/ai/prompt-schema'
 import { createProviderModel } from '@/lib/ai/providers'
-import { runProviderCall, streamProviderCall } from '@/lib/ai/transport/provider-call'
-import { fallbackClassifierSchema } from '@/lib/pipeline'
+import { streamProviderCall } from '@/lib/ai/transport/provider-call'
 
-import { EXAMPLES, startMockLlm, type MockLlm } from '../../e2e/harness/mock-llm'
+import { classifierCall, harnessPerTest, provider } from './harness-calls'
+import { EXAMPLES, type MockLlm } from '../../e2e/harness/mock-llm'
 
 // Through the app's own provider, so the finish reason the E2E specs rely on is the one
 // @ai-sdk/openai-compatible actually reports.
 
-let mock: MockLlm | undefined
-
-afterEach(async () => {
-  await mock?.close()
-  mock = undefined
-})
-
-async function started(): Promise<MockLlm> {
-  mock = await startMockLlm()
-  return mock
-}
-
-function provider(llm: MockLlm): Parameters<typeof createProviderModel>[0] {
-  return {
-    id: 'prov_harness',
-    type: 'openai-compatible',
-    displayName: 'Harness',
-    apiKey: '',
-    favoriteModelIds: [],
-    endpoint: llm.url,
-  }
-}
+const started = harnessPerTest()
 
 async function narrativeCall(
   llm: MockLlm,
@@ -48,20 +23,6 @@ async function narrativeCall(
   let text = ''
   for await (const delta of stream.textStream) text += delta
   return { text, finishReason: await stream.finishReason }
-}
-
-/** The fallback classifier's shape, so the harness routes it to 'per-turn-classifier'. */
-function classifierCall(llm: MockLlm): ReturnType<typeof runProviderCall> {
-  const model = wrapLanguageModel({
-    model: createProviderModel(provider(llm), 'mock') as Parameters<
-      typeof wrapLanguageModel
-    >[0]['model'],
-    middleware: [
-      jsonResponseFormatMiddleware(z.toJSONSchema(fallbackClassifierSchema) as JsonSchema),
-      promptSchemaMiddleware(),
-    ],
-  }) as Parameters<typeof runProviderCall>[0]['model']
-  return runProviderCall({ model, prompt: 'Classify the turn.' })
 }
 
 describe('startMockLlm — a cut narrative', () => {

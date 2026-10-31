@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 
 import { goToWorld, openStory } from '../flows/navigation'
 import { takeTurn } from '../flows/turn'
-import { currentBranchId, queryApp } from '../harness/db'
+import { currentBranchId, entryIdOf, pollEntryIdOf, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { copyNumber, copyPattern, t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -737,24 +737,8 @@ function passProbe(page: () => Page, mockLlm: () => MockLlm) {
     return currentBranchId(page(), 'story_hero')
   }
 
-  // A reply streams into the DOM before its row commits, so callers poll the row; more than one
-  // row for a marker would be a duplicated write.
-  async function entryIdByContent(branch: string, marker: string): Promise<string | undefined> {
-    const rows = await queryApp(
-      page(),
-      `SELECT id FROM story_entries WHERE branch_id = ? AND content LIKE ?`,
-      [branch, `%${marker}%`],
-    )
-    expect(rows.length, `${marker} row count`).toBeLessThanOrEqual(1)
-    return rows[0]?.[0] as string | undefined
-  }
-
-  async function pollEntryId(branch: string, marker: string): Promise<string> {
-    await expect.poll(() => entryIdByContent(branch, marker), { timeout: 30_000 }).toBeDefined()
-    const id = await entryIdByContent(branch, marker)
-    if (id === undefined) throw new Error(`${marker}: present at the poll, gone on read-back`)
-    return id
-  }
+  const entryIdByContent = (branch: string, marker: string) => entryIdOf(page(), branch, marker)
+  const pollEntryId = (branch: string, marker: string) => pollEntryIdOf(page(), branch, marker)
 
   async function createDelta(
     branch: string,

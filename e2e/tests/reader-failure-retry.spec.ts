@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 import { waitForTurnTerminal } from '../flows/turn'
-import { currentBranchId, queryApp } from '../harness/db'
+import { currentBranchId, entryIdOf, pollEntryIdOf, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { mockUsage, startMockLlm, type MockLlm } from '../harness/mock-llm'
@@ -116,23 +116,10 @@ test.describe('reader — a reply cut off at its length limit', () => {
     removeUserDataDir(userDataDir)
   })
 
-  // More than one row for a marker would be a duplicated write.
-  async function entryIdByContent(branchId: string, marker: string): Promise<string | undefined> {
-    const rows = await queryApp(
-      app.window,
-      `SELECT id FROM story_entries WHERE branch_id = ? AND content LIKE ?`,
-      [branchId, `%${marker}%`],
-    )
-    expect(rows.length, `${marker} row count`).toBeLessThanOrEqual(1)
-    return rows[0]?.[0] as string | undefined
-  }
-
-  async function pollEntryId(branchId: string, marker: string): Promise<string> {
-    await expect.poll(() => entryIdByContent(branchId, marker), { timeout: 30_000 }).toBeDefined()
-    const id = await entryIdByContent(branchId, marker)
-    if (id === undefined) throw new Error(`${marker}: present at the poll, gone on read-back`)
-    return id
-  }
+  const entryIdByContent = (branchId: string, marker: string) =>
+    entryIdOf(app.window, branchId, marker)
+  const pollEntryId = (branchId: string, marker: string) =>
+    pollEntryIdOf(app.window, branchId, marker)
 
   async function replyCount(branchId: string): Promise<number> {
     const rows = await queryApp(

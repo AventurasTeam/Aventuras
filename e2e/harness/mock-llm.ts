@@ -1,20 +1,23 @@
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { createServer, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 
 import {
   completionBody,
   contentFrame,
+  CORS_HEADERS,
   mockUsage,
   overflowBody,
   overflowCounts,
+  readBody,
   roleFrame,
+  SSE_HEADERS,
   stopFrames,
   wantsStreamUsage,
   type FinishReason,
   type MockUsage,
   type OverflowShape,
 } from '../../scripts/mock-llm/respond/wire'
-import { matchShape } from '../../scripts/mock-llm/routing'
+import { matchShape, promptText } from '../../scripts/mock-llm/routing'
 
 /** The counter behind every usage the harness reports, for specs that assert a count. */
 export { mockUsage }
@@ -185,33 +188,9 @@ function narrativeSse(content: string, finishReason: FinishReason, usage?: MockU
   return roleFrame() + narrativeTail(content, finishReason, usage)
 }
 
-// The injected schema block lives in the message content (the app's auto path
-// renders it into the prompt); flatten every message to one searchable string.
-function promptText(body: Record<string, unknown>): string {
-  const messages = Array.isArray(body.messages) ? body.messages : []
-  return messages
-    .map((m) => {
-      const content = (m as { content?: unknown }).content
-      if (typeof content === 'string') return content
-      if (Array.isArray(content))
-        return content.map((p) => (p as { text?: string }).text ?? '').join('\n')
-      return ''
-    })
-    .join('\n')
-}
-
 /** A recorded request's prompt as the mock matched it: every message's text, in order. */
 export function promptOf(request: MockRequest): string {
   return promptText(request.body)
-}
-
-function readBody(req: IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let data = ''
-    req.on('data', (c) => (data += c))
-    req.on('end', () => resolve(data))
-    req.on('error', reject)
-  })
 }
 
 export async function startMockLlm(): Promise<MockLlm> {
@@ -262,11 +241,7 @@ export async function startMockLlm(): Promise<MockLlm> {
   // The renderer fetches cross-origin (its own origin → this server), which
   // triggers a CORS preflight; answer it and tag every response, so the call
   // isn't blocked in dev (http origin) the way it would be without headers.
-  const cors = {
-    'access-control-allow-origin': '*',
-    'access-control-allow-methods': 'POST, OPTIONS',
-    'access-control-allow-headers': '*',
-  }
+  const cors = CORS_HEADERS
 
   // A server refuses an overlong prompt before generating, so nothing streams.
   const rejectOverflow = (res: ServerResponse, shape: OverflowShape, prompt: string): void => {
@@ -309,7 +284,15 @@ export async function startMockLlm(): Promise<MockLlm> {
         return
       }
       const raw = await readBody(req)
-      const body = (raw ? JSON.parse(raw) : {}) as Record<string, unknown>
+      let body: Record<string, unknown>
+      try {
+        body = (raw ? JSON.parse(raw) : {}) as Record<string, unknown>
+      } catch {
+        // Unanswered, the client hangs on a rejection no spec would see.
+        res.writeHead(400, { ...cors, 'content-type': 'application/json' })
+        res.end(JSON.stringify({ error: { message: 'mock got an unreadable body' } }))
+        return
+      }
       const streamed = body.stream === true
 
       if (streamed) {
@@ -328,12 +311,7 @@ export async function startMockLlm(): Promise<MockLlm> {
           )
           return
         }
-        res.writeHead(200, {
-          ...cors,
-          'content-type': 'text/event-stream',
-          'cache-control': 'no-cache',
-          connection: 'keep-alive',
-        })
+        res.writeHead(200, SSE_HEADERS)
         if (holdNarrativeNext) {
           holdNarrativeNext = false
           // Open the stream but don't finish it: the run stays in-flight

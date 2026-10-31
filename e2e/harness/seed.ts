@@ -33,18 +33,16 @@ export function createSeededUserDataDir(): { userDataDir: string; dbPath: string
   return { userDataDir, dbPath }
 }
 
-// Repoint every openai-compatible provider at the mock server. Runs before
-// launch, so the app reads the mock URL into its settings store on boot.
-export function setProviderEndpoint(dbPath: string, url: string): void {
+// Read, change and write back the providers blob. Runs before launch, so the app reads the result
+// into its settings store on boot.
+function updateProviders<P>(dbPath: string, change: (providers: P[]) => void): void {
   const db = new DatabaseSync(dbPath)
   try {
     const row = db.prepare(`SELECT providers FROM app_settings WHERE id = 'singleton'`).get() as {
       providers: string
     }
-    const providers = JSON.parse(row.providers) as { type: string; endpoint?: string }[]
-    for (const provider of providers) {
-      if (provider.type === 'openai-compatible') provider.endpoint = url
-    }
+    const providers = JSON.parse(row.providers) as P[]
+    change(providers)
     db.prepare(`UPDATE app_settings SET providers = ? WHERE id = 'singleton'`).run(
       JSON.stringify(providers),
     )
@@ -53,16 +51,20 @@ export function setProviderEndpoint(dbPath: string, url: string): void {
   }
 }
 
+// Repoint every openai-compatible provider at the mock server.
+export function setProviderEndpoint(dbPath: string, url: string): void {
+  updateProviders<{ type: string; endpoint?: string }>(dbPath, (providers) => {
+    for (const provider of providers) {
+      if (provider.type === 'openai-compatible') provider.endpoint = url
+    }
+  })
+}
+
 // Add a custom model id to every openai-compatible provider, so the Models tab offers a second id
 // that can't be confused with the one the seeded profile resolves to. `providerSources` merges
 // customModelIds into the picker catalog, so no cachedModels entry is needed. Runs before launch.
 export function addProviderCustomModel(dbPath: string, modelId: string): void {
-  const db = new DatabaseSync(dbPath)
-  try {
-    const row = db.prepare(`SELECT providers FROM app_settings WHERE id = 'singleton'`).get() as {
-      providers: string
-    }
-    const providers = JSON.parse(row.providers) as { type: string; customModelIds?: string[] }[]
+  updateProviders<{ type: string; customModelIds?: string[] }>(dbPath, (providers) => {
     const targets = providers.filter((provider) => provider.type === 'openai-compatible')
     // Writing the providers back untouched would surface much later as a timeout
     // on the picker option, reading as a selector bug rather than a seed gap.
@@ -72,26 +74,16 @@ export function addProviderCustomModel(dbPath: string, modelId: string): void {
     for (const provider of targets) {
       provider.customModelIds = [...(provider.customModelIds ?? []), modelId]
     }
-    db.prepare(`UPDATE app_settings SET providers = ? WHERE id = 'singleton'`).run(
-      JSON.stringify(providers),
-    )
-  } finally {
-    db.close()
-  }
+  })
 }
 
 // The harness serves no /models, so a spec makes a model's window known through the user's figure.
 // Runs before launch.
 export function setContextWindowOverride(dbPath: string, modelId: string, tokens: number): void {
-  const db = new DatabaseSync(dbPath)
-  try {
-    const row = db.prepare(`SELECT providers FROM app_settings WHERE id = 'singleton'`).get() as {
-      providers: string
-    }
-    const providers = JSON.parse(row.providers) as {
-      type: string
-      contextWindowOverrides?: Record<string, number>
-    }[]
+  updateProviders<{
+    type: string
+    contextWindowOverrides?: Record<string, number>
+  }>(dbPath, (providers) => {
     const targets = providers.filter((provider) => provider.type === 'openai-compatible')
     // An unwritten figure leaves the window unknown, where the check never refuses: the spec
     // would time out waiting for a refusal, reading as a product bug.
@@ -103,12 +95,7 @@ export function setContextWindowOverride(dbPath: string, modelId: string, tokens
     for (const provider of targets) {
       provider.contextWindowOverrides = { ...provider.contextWindowOverrides, [modelId]: tokens }
     }
-    db.prepare(`UPDATE app_settings SET providers = ? WHERE id = 'singleton'`).run(
-      JSON.stringify(providers),
-    )
-  } finally {
-    db.close()
-  }
+  })
 }
 
 // Move the app-level embedding default off the seeded stories' model, which is
@@ -461,25 +448,15 @@ export function unassignClassifierAgent(dbPath: string): void {
 // in-band — forcing the per-turn fallback classifier (a separate structured
 // call) to fire. Runs before launch.
 export function disablePiggybackCapability(dbPath: string): void {
-  const db = new DatabaseSync(dbPath)
-  try {
-    const row = db.prepare(`SELECT providers FROM app_settings WHERE id = 'singleton'`).get() as {
-      providers: string
-    }
-    const providers = JSON.parse(row.providers) as {
-      cachedModels?: { capabilities?: Record<string, unknown> }[]
-    }[]
+  updateProviders<{
+    cachedModels?: { capabilities?: Record<string, unknown> }[]
+  }>(dbPath, (providers) => {
     for (const provider of providers) {
       for (const model of provider.cachedModels ?? []) {
         if (model.capabilities) delete model.capabilities.taggedBlockReliable
       }
     }
-    db.prepare(`UPDATE app_settings SET providers = ? WHERE id = 'singleton'`).run(
-      JSON.stringify(providers),
-    )
-  } finally {
-    db.close()
-  }
+  })
 }
 
 export const CORRUPT_DRAFT_ID = 'e2e_corrupt_draft'

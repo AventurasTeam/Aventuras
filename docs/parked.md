@@ -3709,3 +3709,14 @@ on still gets releases under the `ai-v6` dist-tag, and neither line
 sends Anthropic's browser-access header, which the app now sets itself.
 Parked 2026-10-24; the signal is a v7-only feature or fix the app needs,
 or the `ai-v6` line going unmaintained.
+
+#### A setup factory for the periodic classifier spec
+
+`e2e/tests/periodic-classifier.spec.ts` repeats one describe setup in
+each of its twelve `beforeAll` blocks: seed, embedder, mock, endpoint,
+launch and cadence. The overflow describe's `beforeAll` differs from the
+cut-off one's by two lines. A factory would be a change to the whole
+file, and no defect sits behind the repetition.
+
+A spec failure that had to be fixed in several of those blocks is the
+signal to revisit.
