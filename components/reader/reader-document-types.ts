@@ -28,7 +28,7 @@ export type ReaderSurfaceProps = {
   rows: StoryEntry[]
   /** Host-computed world-time labels + monotonicity flags, keyed by entry id.
    *  Deliberately a side table, not merged into `rows` — merging would hand
-   *  ReaderRow fresh row objects on every entries patch and void its memo. */
+   *  ReaderRow fresh row objects on every entries patch and void its memo on web. */
   worldTimeDecorations: Record<string, WorldTimeDecoration>
   /** Registry-resolved calendar + story origin (fallback applied) — null hides/inerts footers. */
   worldTimeFrame: CalendarFrame | null
@@ -56,9 +56,9 @@ export type ReaderSurfaceProps = {
   onEditWorldTime: (entryId: string, nextWorldTime: number) => Promise<EditResult>
   /** Phone tier: the document requests; the host presents the native Sheet. */
   onRequestEditWorldTime: (entryId: string) => Promise<void>
-  /** Resolution pool for every id the world-state panel renders. Stable identity. */
+  /** Resolution pool for every id the world-state panel renders. Stable identity on web. */
   entityNames: readonly { id: string; name?: string }[]
-  /** Candidate pool for the scene editor's selects. Stable identity. */
+  /** Candidate pool for the scene editor's selects. Stable identity on web. */
   sceneOptions: {
     characters: { id: string; name: string }[]
     items: { id: string; name: string }[]

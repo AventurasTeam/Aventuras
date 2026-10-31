@@ -142,14 +142,20 @@ Serializable props in (native → document):
   native). It is a side table rather than
   fields merged into `rows` so that re-walking the window doesn't
   hand the document fresh row objects and defeat per-row
-  memoization. `worldTimeFrame` — the active calendar definition
+  memoization, on web. On native every prop crosses as a fresh JSON
+  copy, and callbacks get new proxies, so nothing here keeps its
+  identity across the bridge
+  ([lesson](../../implementation/lessons-learned/expo-dom-bridge-identity-and-rejections.md)).
+  `worldTimeFrame` — the active calendar definition
   paired with the story's `worldTimeOrigin` — crosses as data too,
   seeding the in-document edit Dialog. The two travel as one
   memoized object so the seam sees a single stable identity rather
   than two nullables checked apart.
 - `streaming` — the live stream row (`content`, `reasoning`,
-  `phase`) or null. Buffer throttling stays native; cadence
-  variance is accepted.
+  `phase`) or null. The stream buffer withholds partial tags but sets
+  no time throttle, so on native each chunk is one prop emission,
+  carrying the whole window with it; a throttle is
+  [parked until a device shows the cost](../../parked.md#native-reader-rows-rerender-per-emission).
 - `hasOlder` — older entries may exist above the loaded window.
   Host-derived from window-size math (a full first window means
   maybe-more; any short load proves the branch top is in the

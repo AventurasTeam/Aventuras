@@ -1625,7 +1625,9 @@ isn't a per-feature concern.
   [`memory/retrieval.md → Compute lifecycle`](../memory/retrieval.md#compute-lifecycle)
   (naive 100k rows would take ~16 min).
 - M9.5 — Cross-platform parity smoke (Linux desktop + Android),
-  performance budget audit, accessibility audit
+  performance budget audit, including the
+  [native reader's per-emission rerender](../parked.md#native-reader-rows-rerender-per-emission),
+  accessibility audit
   ([`accessibility skill`](./conventions.md) checks).
 - M9.6 — v1 ship: changelog, release notes, distribution
   packaging; **app icon + splash screen** replacing Expo

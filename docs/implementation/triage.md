@@ -61,14 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **On native, the reader rows' memo misses on every host render.**
-  expo-dom hands every function prop a new identity per prop emission
-  and emits on every host render (`node_modules/expo/src/dom/`:
-  `dom-entry.tsx`, `marshal.tsx`, `webview-wrapper.tsx`), so the
-  stable-callback reasoning in `components/reader/reader-surface.tsx`
-  holds on web only. Read from the expo source, not measured on a
-  device. Raised by the cut-off replies Task 10 review.
-
 - **The truncation cross-check may warn on every warm turn of a server
   that counts only uncached prompt tokens.** Canon names Ollama as a
   server that cuts prompts silently

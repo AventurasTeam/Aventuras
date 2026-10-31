@@ -3627,6 +3627,25 @@ Details keeps it verbatim. Escaping can't live in the shared copy
 helper, as the wizard's copy goes through plain `t()`. A real
 provider's message that reads wrong in the entry is the signal.
 
+#### Native reader rows rerender per emission
+
+On native, every row in the loaded window rerenders on each prop
+emission, and `rows` crosses as a fresh JSON copy each time
+([lesson](./implementation/lessons-learned/expo-dom-bridge-identity-and-rejections.md)).
+While streaming that's once per chunk: 50 rows at open, more after
+boundary loads, plus serialising the window on the host and parsing it
+in the WebView, which a memo fix wouldn't touch. Markdown stays cached,
+since `content` is a primitive. Read from the source, not measured, so
+which cost dominates is unknown. Levers, cheapest first: throttle
+`setStreaming`, which helps every cost; reuse row objects at a seam in
+`reader-document.tsx`, which helps only the row cost; send chunks
+through the imperative handle, which needs a canon change.
+
+M9.5's performance budget audit is where to measure: `ReaderRow` commit
+time per chunk over `chrome://inspect`, the `$$props` payload for a
+50-row window with reasoning, and dropped frames while streaming on a
+mid-tier Android device. Visible jank there is the signal.
+
 #### Continuing a cut-off reply
 
 A narrative reply the server cut off in its prose commits with a notice
