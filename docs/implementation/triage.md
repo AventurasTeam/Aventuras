@@ -61,13 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **A `partialChapterBuffer` of 0 reads as 1.** The Memory tab and
-  `storySettingsSchema` accept 0, and the comment in
-  `lib/retrieval/buffer.ts` says 0 "asks for no window at all", but
-  `settingsCount(…, 1)` floors it to 1 and `buffer.test.ts` calls it
-  unreachable. Canon doesn't say which is meant. Raised by the
-  2026-10-31 triage pass.
-
 - **Latte's muted text misses AA on sunken surfaces.** `--fg-muted` is
   3.20 and `--fg-secondary` 4.05 on `--bg-sunken`; the audit checks both
   only on `--bg-base`. Raised by the 2026-10-31 triage pass.

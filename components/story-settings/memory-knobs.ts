@@ -110,7 +110,7 @@ function isBudgetShare(value: number | null): value is number {
 /** Each knob's rule, keyed by the problem it reports; `budget` holds for every budget. */
 export const KNOB_RULES = {
   threshold: (value: number | null) => isCount(value, 1),
-  partialBuffer: (value: number | null) => isCount(value, 0),
+  partialBuffer: (value: number | null) => isCount(value, 1),
   protectedBuffer: (value: number | null) => isCount(value, 0),
   cadence: (value: number | null) => isCount(value, 1),
   budget: (value: number | null) => isCount(value, 0),

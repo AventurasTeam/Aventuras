@@ -129,7 +129,7 @@ export const storySettingsSchema = z.object({
   chapterTokenThreshold: z.number().int().positive().default(24000),
   chapterAutoClose: z.boolean().default(true),
   fullChapterInBuffer: z.boolean().default(false),
-  partialChapterBuffer: z.number().int().nonnegative().default(10),
+  partialChapterBuffer: z.number().int().positive().default(10),
   protectedBuffer: z.number().int().nonnegative().default(10),
   // Integral and ≥ 1 to match the knob rules the Memory tab enforces: a stored 0 or
   // fraction is a value no surface can produce and none can repair.

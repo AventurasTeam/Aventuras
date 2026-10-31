@@ -233,6 +233,20 @@ describe('storySettingsSchema spec-pinned defaults', () => {
       expect(r.success).toBe(false)
     },
   )
+
+  // The turn's own action reaches the prompt as this window's last entry.
+  it('rejects a partialChapterBuffer of 0 and takes 1', () => {
+    const at = (partialChapterBuffer: number) =>
+      storySettingsSchema.safeParse({ ...VALID_SETTINGS, partialChapterBuffer }).success
+    expect(at(0)).toBe(false)
+    expect(at(1)).toBe(true)
+  })
+
+  // Unlike the window, only a spillover floor: 0 asks for none.
+  it('takes a protectedBuffer of 0', () => {
+    const r = storySettingsSchema.safeParse({ ...VALID_SETTINGS, protectedBuffer: 0 })
+    expect(r.success).toBe(true)
+  })
 })
 
 describe('storySettingsSchema keywordRetrieval', () => {
