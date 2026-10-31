@@ -851,7 +851,7 @@ export const RefineFailureTryAgainRetriesRefine: Story = {
     await userEvent.type(await screen.findByPlaceholderText('e.g. make it darker'), 'darker please')
     await userEvent.click(screen.getByRole('button', { name: 'Refine…' }))
     expect(
-      await screen.findByText("Couldn't generate. Provider request timed out after 3 retries."),
+      await screen.findByText("Couldn't generate. The provider rejected the request."),
     ).toBeInTheDocument()
 
     // Try again must retry the REFINE that failed — same 'current', same
@@ -1265,7 +1265,7 @@ export const ListResult_FailedGenerateMoreKeepsPageAndAppendsOnRetry: Story = {
 
     await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
     expect(
-      await screen.findByText("Couldn't generate. Provider request timed out after 3 retries."),
+      await screen.findByText("Couldn't generate. The provider rejected the request."),
     ).toBeInTheDocument()
 
     // Try again must retry the SAME `Generate more` call — appending, not
@@ -1304,7 +1304,7 @@ export const ListResult_FailedFirstGenerateThenRetrySucceedsWithExactPage: Story
     await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
     expect(
-      await screen.findByText("Couldn't generate. Provider request timed out after 3 retries."),
+      await screen.findByText("Couldn't generate. The provider rejected the request."),
     ).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
@@ -1574,7 +1574,7 @@ export const FailureCancelKeepingAListAsksBeforeDiscarding: Story = {
     await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Sunken Archive' }))
     await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
-    await screen.findByText("Couldn't generate. Provider request timed out after 3 retries.")
+    await screen.findByText("Couldn't generate. The provider rejected the request.")
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     const dialog = await screen.findByRole('alertdialog')
@@ -1602,12 +1602,12 @@ export const FailureCancelWithNothingGeneratedClosesOutright: Story = {
   play: async () => {
     await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
-    await screen.findByText("Couldn't generate. Provider request timed out after 3 retries.")
+    await screen.findByText("Couldn't generate. The provider rejected the request.")
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() =>
       expect(
-        screen.queryByText("Couldn't generate. Provider request timed out after 3 retries."),
+        screen.queryByText("Couldn't generate. The provider rejected the request."),
       ).not.toBeInTheDocument(),
     )
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
@@ -1700,7 +1700,7 @@ export const FailureCancelKeepingAnUntouchedListAsksBeforeDiscarding: Story = {
     await screen.findByText('Sunken Archive')
     // Deliberately no checkbox click — the page exists, the selection is empty.
     await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
-    await screen.findByText("Couldn't generate. Provider request timed out after 3 retries.")
+    await screen.findByText("Couldn't generate. The provider rejected the request.")
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
