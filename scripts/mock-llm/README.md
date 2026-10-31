@@ -103,9 +103,9 @@ Narrative has no such wrapper, so one `http` failure fails the run, as does a
 `hang` once the client times out, and an overflow kind fails it with the
 **Prompt too large for the model's window** entry quoting the body's message.
 The other kinds commit: `malformed` through
-piggyback parse recovery, `stream-cut` as a finished reply holding what
-arrived (the SDK reports the missing stop frame as `other`, and only `length`
-counts as cut off), and `length` as below.
+piggyback parse recovery, `stream-cut` as a reply holding what arrived, with
+an `interrupted` notice when the cut fell in the prose (the SDK reports the
+missing stop frame as `other` with no raw reason), and `length` as below.
 
 Where a narrative `length` cut lands depends on the active response: the mock
 halves the rendered reply, prose plus its trailing blocks. On "Long scene" the

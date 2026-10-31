@@ -69,7 +69,7 @@ type EntryCardProps = {
   onBranch?: () => void // ai, opening
   onFlipEra?: () => void // user, ai, opening — host hides when eras: null
 
-  // ai_reply only — the server cut the prose off at its limit (see Cut-off notice):
+  // ai_reply only — the prose ended early (see Cut-off notice):
   cutOffNotice?: { text: string; action?: { label: string; onPress: () => void } }
 
   // Streaming-only:
@@ -659,8 +659,7 @@ included.
 
 ## Cut-off notice
 
-An `ai_reply` whose story text the server cut off at its length limit
-carries `metadata.cutOff`
+An `ai_reply` whose story text ended early carries `metadata.cutOff`
 ([`data-model.md → Entry metadata shape`](../../data-model.md#entry-metadata-shape)),
 and the card shows it as one muted, warning-tinted line under the
 prose, above the world-time footer. The host builds the copy from the
@@ -678,6 +677,11 @@ cause and passes the route as an inline link:
   carries it and the notice names it instead: "The server stopped the
   reply at its own limit, short of the narrative profile's 4,096-token
   max output." with `Fix profile`.
+- **`interrupted`**: "The provider ended this reply without saying it
+  had finished, so it may be incomplete." No link: nothing in the
+  profile causes it.
+- **`content-filter`**: "The provider's content filter stopped this
+  reply." No link, for the same reason.
 
 Regenerate is already in the action cluster. The notice is not
 dismissible: a committed edit clears it

@@ -599,7 +599,7 @@ function trailingBlockSpans(raw: string): BlockSpan[] {
 }
 
 /**
- * Where the server cut a reply it stopped at `length` (generation-pipeline.md → Cut-off replies):
+ * Where a reply that stopped short ended (generation-pipeline.md → Cut-off replies):
  * `inBlock` once a trailing block had begun. A root opener cut mid-name is removed from `content`.
  */
 export function readCutOffReply(raw: string): { content: string; inBlock: boolean } {

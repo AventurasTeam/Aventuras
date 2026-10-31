@@ -5,11 +5,13 @@ import type { ReplyCutOffFailure } from '../reply-cut-off'
 
 // lib/ai-local error vocabulary. The pipeline layer maps these to PipelineError
 // when it yields recoverable_error events — keeps lib/ai free of an upward
+export type ProviderReason = 'auth' | 'network' | 'timeout' | 'unknown'
+
 // lib/pipeline type dependency.
 export type CallRetryError =
   | {
       tier: 'provider'
-      reason: 'auth' | 'network' | 'timeout' | 'unknown'
+      reason: ProviderReason
       detail?: string
       possibleCapabilityMismatch?: CapabilityHint
     }
@@ -32,7 +34,8 @@ const MAX_CAUSE_DEPTH = 5
 // throws, which would replace the provider failure with a TypeError.
 function coerce(value: unknown): string {
   try {
-    return String(value)
+    const text = String(value)
+    return text === '[object Object]' ? JSON.stringify(value) : text
   } catch {
     return '[uncoercible value]'
   }
@@ -209,6 +212,11 @@ export function capabilityHintOf(
 }
 
 type ProviderFailure = Extract<CallRetryError, { tier: 'provider' }>
+
+/** The narrative's stream error: a rejection has a status to read, anything else is the transport. */
+export function streamErrorReason(error: unknown): ProviderReason {
+  return APICallError.isInstance(error) ? classifyProviderError(error).error.reason : 'network'
+}
 
 /** `carried`: what the failed request carried, for the hint; a caller that doesn't say gets none. */
 export function classifyProviderError(

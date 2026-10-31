@@ -174,19 +174,6 @@ slice-planning gate forces its resolution before that slice is planned.
   used to be relabelled `provider`. Raised by the cut-off replies slice
   review.
 
-- **A narrative stream that ends without its final frame commits as
-  finished.** Canon fails the phase on a mid-stream provider error
-  ([`generation-pipeline.md → Streaming resilience — thin v1`](../generation-pipeline.md#streaming-resilience--thin-v1)),
-  but when the SSE body just ends, with no finish frame and no
-  `[DONE]`, the OpenAI-compatible provider raises nothing: it reports
-  the finish reason as `other` and hands back the partial text (probed
-  through the app's transport against the dev mock's `stream-cut`).
-  The narrative phase reads anything but `length` as finished, so the
-  truncated prose commits with no cut-off notice; read from
-  `lib/pipeline/definitions/per-turn.ts`, not run end to end. The logger
-  has no `stream_interrupted` kind either, though `observability.md`
-  lists one. Raised by the cut-off replies slice review.
-
 - **E2E entry-id helpers are copied per spec, and reader locators scope
   unevenly.** `entryIdByContent` and `pollEntryId` live in three specs
   (`reader-regenerate`, `periodic-classifier` and, since the cut-off
@@ -290,17 +277,6 @@ slice-planning gate forces its resolution before that slice is planned.
   - The truncation toast names only the model, while it shows once per
     provider and model, so one model id on two providers can show two
     identical toasts.
-
-- **The narrative reports every non-window stream error as `network`.**
-  `lib/pipeline/definitions/per-turn.ts` maps a stream error to
-  `reason: 'network'`, a 401 or 403 and other 4xx included, where
-  `classifyProviderError` would give `auth` or `unknown`; the reader
-  then shows "network: APICallError: Unauthorized". The context window
-  check kept it, as a separate behaviour change. The provider `reason`
-  union is also spelled twice, in
-  `lib/ai/transport/classify-provider-error.ts` and
-  `lib/pipeline/types.ts`, with nothing tying the copies together.
-  Raised by the context window check.
 
 - **The E2E mock repeats the dev mock's helpers.**
   `e2e/harness/mock-llm.ts` has its own `promptText` (the dev mock's is

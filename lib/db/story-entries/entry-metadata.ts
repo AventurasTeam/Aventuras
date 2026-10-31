@@ -37,9 +37,9 @@ export const entryMetadataSchema = z.object({
   model: z.string().optional(),
   generationTimingMs: z.number().optional(),
   reasoning: z.string().optional(),
-  // The server cut the story text off at its limit; authored, never inherited (data-model.md →
-  // Entry metadata shape). `limit` is the number the cause names; an `unknown` cut's `maxOutput`
-  // is the one the call sent and the reply fell short of.
+  // The story text ended early; authored, never inherited (data-model.md → Entry metadata shape).
+  // `limit` is the number the cause names; an `unknown` cut's `maxOutput` is the one the call sent
+  // and the reply fell short of.
   cutOff: z
     .discriminatedUnion('cause', [
       z.strictObject({
@@ -51,6 +51,10 @@ export const entryMetadataSchema = z.object({
         cause: z.literal('unknown'),
         outputTokens: z.number().optional(),
         maxOutput: z.number().optional(),
+      }),
+      z.strictObject({
+        cause: z.enum(['interrupted', 'content-filter']),
+        outputTokens: z.number().optional(),
       }),
     ])
     .optional(),

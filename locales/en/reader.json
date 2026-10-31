@@ -152,7 +152,9 @@
     "maxOutput": "Cut off at the narrative profile's {{limit, number}}-token max output.",
     "window": "Cut off where the prompt and reply filled the model's {{limit, number}}-token window.",
     "unknown": "The server stopped the reply at its own limit. Setting a max output on the profile overrides it.",
-    "unknownWithMaxOutput": "The server stopped the reply at its own limit, short of the narrative profile's {{limit, number}}-token max output."
+    "unknownWithMaxOutput": "The server stopped the reply at its own limit, short of the narrative profile's {{limit, number}}-token max output.",
+    "interrupted": "The provider ended this reply without saying it had finished, so it may be incomplete.",
+    "contentFilter": "The provider's content filter stopped this reply."
   },
   "worldTimeEdit": {
     "title": "Edit time",

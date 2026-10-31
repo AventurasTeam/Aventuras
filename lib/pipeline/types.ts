@@ -2,6 +2,7 @@ import type { PipelineAction } from '@/lib/actions/types'
 import type {
   CapabilityHint,
   ContextWindowFailure,
+  ProviderReason,
   ReplyCutOffFailure,
   ResolveFailureKind,
   ResolveTarget,
@@ -14,7 +15,7 @@ import type { AppSettingsSnapshot, DeferredWorkKind, RunState } from '@/lib/stor
 export type PipelineError =
   | {
       kind: 'provider'
-      reason: 'auth' | 'network' | 'timeout' | 'unknown'
+      reason: ProviderReason
       detail?: string
       // Best-effort hint: a 4xx body naming a capability the request carried
       // (generation-pipeline.md → Fatal error categories).

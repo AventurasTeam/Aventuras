@@ -2004,7 +2004,7 @@ story_entries.metadata: {
   model?: string
   generationTimingMs?: number
   reasoning?: string                // persisted reasoning text from providers that expose it; mirrors `tokens.reasoning` (the count). Optional — undefined when the provider doesn't surface reasoning.
-  cutOff?:                          // the server stopped this reply at its limit inside the prose; authored, never inherited. See "Cut-off mark" below
+  cutOff?:                          // this reply ended early inside the prose; authored, never inherited. See "Cut-off mark" below
     | {
         cause: 'max-output' | 'window'
         outputTokens?: number       // as the provider reported
@@ -2014,6 +2014,10 @@ story_entries.metadata: {
         cause: 'unknown'            // no limit the call knew of was reached
         outputTokens?: number
         maxOutput?: number          // the max output the call sent, which the reply fell short of; absent when it sent none
+      }
+    | {
+        cause: 'interrupted' | 'content-filter'  // no finish signal arrived, or a filter stopped it
+        outputTokens?: number
       }
   injectedHappenings?: string[]     // the happenings the ranker seated in this turn's prompt; authored, never inherited, absent when it seated none. The periodic classifier lists them (memory/classifier.md#what-the-classifier-reads)
 
@@ -2080,9 +2084,10 @@ export/backup includes it as part of the entry record. Search
 scope intentionally excludes it (provenance, not searchable
 narrative content).
 
-**Cut-off mark.** `cutOff` is written on an `ai_reply` whose reply the
-server stopped at `length` before any trailing block began, so the story
-text itself ends early
+**Cut-off mark.** `cutOff` is written on an `ai_reply` whose reply
+ended before any trailing block began, so the story text itself ends
+early: the server stopped it at `length`, a filter stopped it, or the
+stream closed with no finish signal
 ([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)).
 The card shows it as a notice
 ([`entry-card.md → Cut-off notice`](./ui/patterns/entry-card.md#cut-off-notice)).

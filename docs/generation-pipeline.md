@@ -1868,7 +1868,8 @@ Every call through `lib/ai` reads the SDK's `finishReason`. Both
 providers report a reply the server stopped at its output limit or at
 the model's window as `'length'`: Anthropic's `max_tokens` and
 `model_context_window_exceeded`, OpenAI-compatible `length`. Any other
-value, or none, is treated as finished.
+value, or none, is treated as finished, but for the two ways a
+narrative reply can end early, below.
 
 **A structured reply cut off is refused, not repaired.** On `'length'`
 the reply is accepted only if it parses strictly, with no repair: a
@@ -1907,6 +1908,23 @@ and with `phase-logic` (subsystem `empty-reply`) when the model stopped
 normally with no text at all. A reply that is only a trailing block
 keeps its raw text, as before.
 
+**A narrative reply that ended early takes the same path.** Two stops
+aren't a limit but still leave a reply short. `'content-filter'`, which
+Anthropic's `refusal` maps to, is a filter stopping it. `'other'` with
+no raw reason is a stream that closed with no finish signal: the SDK
+reports a body that just ends that way, and `[DONE]` with no
+`finish_reason`, so a cut stream can't be told from a server that never
+sends one. Each commits with a mark of its own cause, `content-filter`
+or `interrupted`, under the same rules: a fragment of an opener is
+removed, and a closed trailing block means the prose ended, so it
+marks nothing. Marking rather than failing is what makes that
+ambiguity safe: a false `interrupted` costs a notice on a reply with
+no block, where a failure would stop every turn on such a server. A
+raw reason the SDK doesn't know, such as `eos`, is the server's own
+finish word and stays finished, and a blank reply fails as `empty-reply`
+whichever way it stopped. Structured calls stay on `'length'` alone: a
+reply cut short fails its parse and is retried.
+
 **The cause** comes from what the call knows: `max-output` when the
 profile sets `maxOutput` and the output tokens reached it, or the
 provider reported none; `window` when the model's window is known and
@@ -1928,8 +1946,7 @@ of telling the user to set one.
 Every cut-off, committed or failed, logs a warning with the cause and
 the numbers. A plain-text call other than the narrative, such as a
 future translation call, reads `finishReason` itself and decides what
-a cut reply means for it. A `content-filter` stop is not a cut-off and
-commits as before.
+a cut reply means for it.
 
 ### Phase-level recovery is the v1 transparency goal
 
@@ -1955,7 +1972,10 @@ doesn't auto-retry.
 Phase-level retry doesn't help mid-stream failures: partial content
 has already been side-channelled into the store; can't re-call
 cleanly. V1: mid-stream provider error → fatal phase return →
-reverse-replay → orphan placeholder cleanup → user re-prompts.
+reverse-replay → orphan placeholder cleanup → user re-prompts. A
+stream that closes with no error and no finish signal isn't one of
+these: it commits with a mark
+([Cut-off replies](#cut-off-replies)).
 
 ### Chapter-close partial failure
 

@@ -44,22 +44,32 @@ export function passCutOffContent(failure: ReplyCutOffFailure): string {
     : t(`reader:systemEntry.failure.memoryCutOff.${copy.key}`, { limit: copy.limit })
 }
 
-/** The notice on an `ai_reply` card whose prose the server cut off. */
+/** The notice on an `ai_reply` card whose prose ended early. */
 export function cutOffNoticeText(mark: CutOffMark): string {
-  if (mark.cause === 'unknown') {
-    return mark.maxOutput !== undefined
-      ? t('reader:cutOffNotice.unknownWithMaxOutput', { limit: mark.maxOutput })
-      : t('reader:cutOffNotice.unknown')
+  switch (mark.cause) {
+    case 'unknown':
+      return mark.maxOutput !== undefined
+        ? t('reader:cutOffNotice.unknownWithMaxOutput', { limit: mark.maxOutput })
+        : t('reader:cutOffNotice.unknown')
+    case 'max-output':
+      return t('reader:cutOffNotice.maxOutput', { limit: mark.limit })
+    case 'window':
+      return t('reader:cutOffNotice.window', { limit: mark.limit })
+    case 'interrupted':
+      return t('reader:cutOffNotice.interrupted')
+    case 'content-filter':
+      return t('reader:cutOffNotice.contentFilter')
   }
-  return mark.cause === 'max-output'
-    ? t('reader:cutOffNotice.maxOutput', { limit: mark.limit })
-    : t('reader:cutOffNotice.window', { limit: mark.limit })
 }
 
-/**
- * A window cut-off's remedy is `Set window`, not the profile. Widened past the cause set: a
- * system entry's cause is a persisted `z.string()`.
- */
+// A window's remedy is `Set window`; a reply that ended early has none in the profile.
+const NO_PROFILE_FIX: readonly string[] = [
+  'window',
+  'interrupted',
+  'content-filter',
+] satisfies CutOffMark['cause'][]
+
+/** Widened past the cause set: a system entry's cause is a persisted `z.string()`. */
 export function offersProfileFix(cause: CutOffMark['cause'] | (string & {}) | undefined): boolean {
-  return cause !== ('window' satisfies CutOffMark['cause'])
+  return cause === undefined || !NO_PROFILE_FIX.includes(cause)
 }

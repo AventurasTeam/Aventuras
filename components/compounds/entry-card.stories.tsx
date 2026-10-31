@@ -296,6 +296,8 @@ const FIX_PROFILE = t('reader:systemEntry.fixProfile')
 const NOTICE_MAX_OUTPUT = cutOffNoticeText({ cause: 'max-output', outputTokens: 4096, limit: 4096 })
 const NOTICE_WINDOW = cutOffNoticeText({ cause: 'window', outputTokens: 1200, limit: 65536 })
 const NOTICE_UNKNOWN = cutOffNoticeText({ cause: 'unknown', outputTokens: 2048 })
+const NOTICE_INTERRUPTED = cutOffNoticeText({ cause: 'interrupted' })
+const NOTICE_CONTENT_FILTER = cutOffNoticeText({ cause: 'content-filter' })
 
 // entry-card.md → Cut-off notice.
 function expectNoticeBetweenProseAndFooter(text: string) {
@@ -357,6 +359,26 @@ export const CutOffNoticeUnknown: StoryT = {
     await expect(screen.getByText(NOTICE_UNKNOWN)).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: 'Fix profile' }))
     await waitFor(() => expect(args.cutOffNotice?.action?.onPress).toHaveBeenCalledTimes(1))
+  },
+}
+
+/** No finish signal arrived: says it may be incomplete, with nothing in the profile to fix. */
+export const CutOffNoticeInterrupted: StoryT = {
+  ...wrap,
+  args: { ...baseProps, ...aiEntry, cutOffNotice: { text: NOTICE_INTERRUPTED } },
+  play: async () => {
+    await expect(screen.getByText(NOTICE_INTERRUPTED)).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Fix profile' })).not.toBeInTheDocument()
+  },
+}
+
+/** A filter stopped the reply: names it, with nothing in the profile to fix. */
+export const CutOffNoticeContentFilter: StoryT = {
+  ...wrap,
+  args: { ...baseProps, ...aiEntry, cutOffNotice: { text: NOTICE_CONTENT_FILTER } },
+  play: async () => {
+    await expect(screen.getByText(NOTICE_CONTENT_FILTER)).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Fix profile' })).not.toBeInTheDocument()
   },
 }
 

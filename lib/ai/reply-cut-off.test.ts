@@ -6,6 +6,7 @@ import {
   isCutOff,
   ReplyCutOffError,
   replyCutOff,
+  replyStopOf,
   type ReplyCutOffFailure,
   type ReplyCutOffInput,
 } from './reply-cut-off'
@@ -47,7 +48,37 @@ describe('isCutOff', () => {
   })
 })
 
+describe('replyStopOf', () => {
+  it.each<[FinishReason | undefined, string | undefined, string | null]>([
+    ['length', 'length', 'length'],
+    ['length', undefined, 'length'],
+    ['content-filter', 'content_filter', 'content-filter'],
+    ['content-filter', 'refusal', 'content-filter'],
+    ['other', undefined, 'interrupted'],
+    ['other', 'eos', null],
+    ['stop', 'stop', null],
+    ['stop', undefined, null],
+    ['tool-calls', 'tool_calls', null],
+    ['error', undefined, null],
+    [undefined, undefined, null],
+  ])('reads %s with raw %s as %s', (finishReason, raw, expected) => {
+    expect(replyStopOf(finishReason, raw)).toBe(expected)
+  })
+})
+
 describe('replyCutOff', () => {
+  it.each(['interrupted', 'content-filter'] as const)(
+    'takes %s as the cause, whatever the limits say',
+    (stop) => {
+      expect(replyCutOff({ ...BASE, stop, usage: usage(512), maxOutput: 512 }).cause).toBe(stop)
+    },
+  )
+
+  it('works the cause out from the limits on a length stop', () => {
+    const input = { ...BASE, stop: 'length', usage: usage(512), maxOutput: 512 } as const
+    expect(replyCutOff(input).cause).toBe('max-output')
+  })
+
   it('reads max-output when the output reached the profile limit', () => {
     expect(replyCutOff({ ...BASE, usage: usage(512), maxOutput: 512 })).toEqual({
       cause: 'max-output',

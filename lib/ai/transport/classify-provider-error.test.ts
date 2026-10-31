@@ -5,6 +5,7 @@ import {
   capabilityHintOf,
   classifyProviderError,
   describeProviderError,
+  streamErrorReason,
   ProviderTimeoutError,
   recognizeOverflow,
 } from './classify-provider-error'
@@ -166,6 +167,27 @@ describe('classifyProviderError', () => {
   })
 })
 
+describe('streamErrorReason', () => {
+  it.each([
+    [401, 'auth'],
+    [403, 'auth'],
+    [429, 'network'],
+    [400, 'unknown'],
+    [404, 'unknown'],
+    [500, 'network'],
+  ] as const)('reads a %i as %s, as a structured call does', (status, reason) => {
+    expect(streamErrorReason(rejection(status, errorBody('nope')))).toBe(reason)
+  })
+
+  it.each([
+    ['a dropped connection', new TypeError('terminated')],
+    ['an in-stream error string', 'upstream hung up'],
+    ['a provider error object', { type: 'overloaded_error', message: 'Overloaded' }],
+  ])('reads %s as network: no HTTP status names another cause', (_label, error) => {
+    expect(streamErrorReason(error)).toBe('network')
+  })
+})
+
 describe('describeProviderError', () => {
   // The shape the AI SDK produces when a response handler throws: the envelope
   // names itself, the root cause is one link down (post-to-api.ts).
@@ -221,6 +243,19 @@ describe('describeProviderError', () => {
 
   it('labels a throwable that cannot be coerced to a string', () => {
     expect(describeProviderError(Object.create(null))).toBe('[uncoercible value]')
+  })
+
+  // Anthropic's mid-stream `error` event reaches onError as this plain object.
+  it('spells out a plain object rather than [object Object]', () => {
+    expect(describeProviderError({ type: 'overloaded_error', message: 'Overloaded' })).toBe(
+      '{"type":"overloaded_error","message":"Overloaded"}',
+    )
+  })
+
+  it('keeps a circular object coercion-safe', () => {
+    const circular: Record<string, unknown> = {}
+    circular.self = circular
+    expect(describeProviderError(circular)).toBe('[uncoercible value]')
   })
 })
 

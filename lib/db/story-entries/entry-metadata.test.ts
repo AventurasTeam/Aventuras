@@ -353,6 +353,9 @@ describe('cutOff', () => {
     { cause: 'window', outputTokens: 1200, limit: 65536 },
     { cause: 'unknown' },
     { cause: 'unknown', outputTokens: 300, maxOutput: 512 },
+    { cause: 'interrupted' },
+    { cause: 'interrupted', outputTokens: 300 },
+    { cause: 'content-filter', outputTokens: 300 },
   ])('keeps a $cause mark with its numbers', (mark) => {
     expect(entryMetadataSchema.parse({ ...base, cutOff: mark }).cutOff).toEqual(mark)
   })
@@ -367,6 +370,8 @@ describe('cutOff', () => {
     { cause: 'max-output', outputTokens: 512 },
     { cause: 'window' },
     { cause: 'unknown', limit: 5 },
+    { cause: 'interrupted', limit: 5 },
+    { cause: 'content-filter', maxOutput: 5 },
   ])('rejects a $cause mark whose limit does not match its cause', (mark) => {
     expect(entryMetadataSchema.safeParse({ ...base, cutOff: mark }).success).toBe(false)
   })
