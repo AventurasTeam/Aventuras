@@ -110,21 +110,29 @@ function reserveRun(kind: string, ctx: RunCtx): RunState {
   return run
 }
 
-// Ends a run abortRun/commitRun can't, so it stops gating edits or a retry; run_complete reports
-// idle and failure, as a successor's predecessor sent its own while this one was registered.
-function unwindRun(run: RunState, detail: string): void {
-  generationStore.abortRun(run.runId, 'unwound')
-  // A capture left open is never evicted. Before beginTurn (a failed marker insert) there is none.
-  turnCaptureSink.endTurn(run.actionId, 'failed', 'unwound')
+function emitRunComplete(
+  run: RunState,
+  outcome: 'completed' | 'aborted' | 'failed',
+  error?: PipelineError,
+): void {
   pipelineEventBus.emit({
     type: 'run_complete',
     runId: run.runId,
     kind: run.kind,
     actionId: run.actionId,
     beforeTurn: run.beforeTurn,
-    outcome: 'failed',
-    error: { kind: 'orchestrator', detail },
+    outcome,
+    ...(error ? { error } : {}),
   })
+}
+
+// Ends a run abortRun/commitRun can't, so it stops gating edits or a retry; run_complete reports
+// idle and failure, as a successor's predecessor sent its own while this one was registered.
+function unwindRun(run: RunState, detail: string): void {
+  generationStore.abortRun(run.runId, 'unwound')
+  // A capture left open is never evicted. Before beginTurn (a failed marker insert) there is none.
+  turnCaptureSink.endTurn(run.actionId, 'failed', 'unwound')
+  emitRunComplete(run, 'failed', { kind: 'orchestrator', detail })
   run.resolveTerminal()
 }
 
@@ -174,7 +182,7 @@ async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx)
     } catch (e) {
       // A throw from the action layer (e.g. a DB constraint) is an action-layer
       // failure, not an orchestrator bug — preserve the kind for diagnostics.
-      throw new ActionLayerError(e instanceof Error ? e.message : String(e))
+      throw new ActionLayerError(messageOf(e))
     }
     if (result.status === 'rejected') {
       // A handler marks a rejection 'noop' when the action was well-formed and
@@ -287,7 +295,7 @@ async function nextKindOf(run: RunState, ctx: RunCtx): Promise<string | null> {
   } catch (e) {
     logger.error(
       'pipeline.chain_eval_failed',
-      { runId: run.runId, kind: run.kind, error: e instanceof Error ? e.message : String(e) },
+      { runId: run.runId, kind: run.kind, error: messageOf(e) },
       { actionId: run.actionId },
     )
     return null
@@ -342,14 +350,7 @@ async function commitRun(
     { runId: run.runId, kind: run.kind, outcome: 'completed' },
     { actionId: run.actionId },
   )
-  pipelineEventBus.emit({
-    type: 'run_complete',
-    runId: run.runId,
-    kind: run.kind,
-    actionId: run.actionId,
-    beforeTurn: run.beforeTurn,
-    outcome: 'completed',
-  })
+  emitRunComplete(run, 'completed')
   run.resolveTerminal()
   return { tx: { runId: run.runId, actionId: run.actionId, outcome: 'completed' }, successor }
 }
@@ -366,7 +367,7 @@ async function runHook(
       failureKind,
       {
         runId: run.runId,
-        error: hookError instanceof Error ? hookError.message : String(hookError),
+        error: messageOf(hookError),
       },
       { actionId: run.actionId },
     )
@@ -461,15 +462,7 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
     },
     { actionId: run.actionId },
   )
-  pipelineEventBus.emit({
-    type: 'run_complete',
-    runId: run.runId,
-    kind: run.kind,
-    actionId: run.actionId,
-    beforeTurn: run.beforeTurn,
-    outcome,
-    ...(failure ? { error: failure } : {}),
-  })
+  emitRunComplete(run, outcome, failure)
   if (newlyDeferred)
     pipelineEventBus.emit({
       type: 'run_deferred',
@@ -518,7 +511,7 @@ async function runPhases(run: RunState, ctx: RunCtx): Promise<PhaseOutcome> {
     const error: PipelineError =
       e instanceof ActionLayerError
         ? { kind: 'action-layer', detail: e.detail }
-        : { kind: 'orchestrator', detail: e instanceof Error ? e.message : String(e) }
+        : { kind: 'orchestrator', detail: messageOf(e) }
     logger.error(
       'pipeline.phase_exception',
       { runId: run.runId, errorKind: error.kind, errorDetail: error.detail },
@@ -546,7 +539,7 @@ async function driveRun(
       storySettings: currentStoryStore.getCurrentStory()?.settings,
     })
   } catch (e) {
-    preflightError = { kind: 'orchestrator', detail: e instanceof Error ? e.message : String(e) }
+    preflightError = { kind: 'orchestrator', detail: messageOf(e) }
   }
   if (preflightError) {
     logger.error(
