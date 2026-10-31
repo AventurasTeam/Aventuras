@@ -213,23 +213,7 @@ slice-planning gate forces its resolution before that slice is planned.
   show "so it's kept here" over no quote. Older code; raised by the
   held-text slice review's type-design pass.
 
-- **`JSONBlock`'s copy fails silently.** `components/ui/json-block.tsx`
-  writes the clipboard with `.catch(() => {})` on both platforms and
-  gives no feedback either way, while a system entry's copy
-  (`components/reader/copy-system-text.ts`) toasts its outcome. Canon
-  ([`data.md`](../ui/patterns/data.md)) doesn't say what the Diagnostics
-  copy confirms. Raised by the held-text slice review.
-
-- **Two shapes the held-text slice review's simplifier left for a
-  home.**
-  - Three sites split the clipboard into web `navigator.clipboard` and
-    native `expo-clipboard` on their own: `copySystemText`'s writer,
-    `JSONBlock`'s copy and `ImportDialog`'s read
-    (`components/compounds/import-dialog.tsx`). A `lib/clipboard`
-    module with a read and a write would hold one copy. The writers'
-    failure policies differ (see the `JSONBlock` entry above), and
-    the system copy's `reader.clipboard_unavailable` warning names its
-    subsystem, so sharing is a decision, not a dedupe.
+- **A shape the held-text slice review's simplifier left for a home.**
   - `TextToggle` (`components/compounds/entry-card-system.tsx`) and the
     cut-off notice's fix link in `entry-card.tsx` share a link-button
     shape: a named group, the web cursor and outline reset, a focus

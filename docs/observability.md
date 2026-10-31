@@ -331,11 +331,7 @@ convention, and the expectation that subsystems route through
   peek `Set as lead` whose `setStoryLead` threw rather than refused,
   or that had no story id to write with because the reader's hydration
   hadn't landed; the user sees the generic lead-failure toast either
-  way). A system entry's copy adds two more
-  (`components/reader/copy-system-text.ts`):
-  `system_text_copy_failed` (a clipboard write that threw) and
-  `clipboard_unavailable` (warn, no Clipboard API on web); the user
-  sees the copy-failed toast after either. `Dismiss` adds two, each
+  way). `Dismiss` adds two, each
   with its own toast (`components/reader/system-entry-actions.tsx`):
   `system_entry_dismiss_failed` (the delete failed, the entry stands)
   and `system_entry_reload_failed` (the delete landed, the card is
@@ -375,6 +371,9 @@ signal that corrects or explains one that already bypassed.
   for the same reason its accusation does — a retraction gated out
   of every configuration that recorded the accusation would read as
   a permanent false positive instead of a correction.
+- `app.clipboard_copy_failed` and `app.clipboard_unavailable` — a copy
+  whose write threw, and a copy on web with no Clipboard API, at warn
+  (`lib/clipboard`). The user sees the copy-failed toast after either.
 - `app.rejection_tracker_unavailable` — no tracker could be
   installed at all; the signal that the backstop itself isn't
   running, which matters most in exactly the configuration

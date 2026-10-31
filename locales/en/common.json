@@ -64,6 +64,11 @@
     "resetSettings": "Reset settings",
     "resetWarning": "Resetting erases your saved providers and API keys. Your stories are not affected."
   },
+  "clipboard": {
+    "copy": "Copy",
+    "copied": "Copied.",
+    "copyFailed": "Couldn't copy to the clipboard."
+  },
   "crashRecovery": {
     "title": "Story recovered",
     "ok": "OK",

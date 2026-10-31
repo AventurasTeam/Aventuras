@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, screen } from 'storybook/test'
+import { expect, screen, spyOn, userEvent, waitFor } from 'storybook/test'
 
 import { JSONBlock } from './json-block'
 
@@ -34,6 +34,21 @@ export const Basic: Story = {
     const inset = parseFloat(getComputedStyle(text).paddingTop)
     expect(inset).toBeGreaterThan(0)
     expect(copy.getBoundingClientRect().top - text.getBoundingClientRect().top).toBe(inset)
+  },
+}
+
+/** Writes the block's formatted text; `lib/clipboard` owns the toasts. */
+export const CopiesFormattedJson: Story = {
+  render: () => (
+    <View className="w-96 p-4">
+      <JSONBlock data={{ attempt: 2 }} />
+    </View>
+  ),
+  play: async () => {
+    const write = spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
+    await userEvent.click(await screen.findByRole('button', { name: 'Copy' }))
+    await waitFor(() => expect(write).toHaveBeenCalledWith('{\n  "attempt": 2\n}'))
+    write.mockRestore()
   },
 }
 

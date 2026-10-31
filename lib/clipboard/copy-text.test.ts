@@ -5,7 +5,7 @@ import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { toast } from '@/lib/toast'
 
-import { copySystemText } from './copy-system-text'
+import { copyText } from './copy-text'
 
 const platform = vi.hoisted(() => ({ OS: 'web', Version: 0 }))
 
@@ -20,7 +20,7 @@ vi.mock('@/lib/toast', () => ({ toast: { info: vi.fn(), error: vi.fn() } }))
 
 const TEXT = 'I open the letter.\n\nThen I read it.'
 
-describe('copySystemText', () => {
+describe('copyText', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -33,9 +33,9 @@ describe('copySystemText', () => {
 
   it('writes the text verbatim and confirms', async () => {
     const write = vi.fn(async () => true)
-    await copySystemText(TEXT, write)
+    await copyText(TEXT, write)
     expect(write).toHaveBeenCalledWith(TEXT)
-    expect(toast.info).toHaveBeenCalledWith(t('reader:systemEntry.copied'))
+    expect(toast.info).toHaveBeenCalledWith(t('common:clipboard.copied'))
     expect(toast.error).not.toHaveBeenCalled()
     expect(logger.error).not.toHaveBeenCalled()
     expect(logger.warn).not.toHaveBeenCalled()
@@ -43,18 +43,18 @@ describe('copySystemText', () => {
 
   // The web writer reports a missing Clipboard API as `false`; native writes fail only by throwing.
   it('reports a write that resolves false', async () => {
-    await copySystemText(TEXT, async () => false)
-    expect(toast.error).toHaveBeenCalledWith(t('reader:systemEntry.copyFailed'))
+    await copyText(TEXT, async () => false)
+    expect(toast.error).toHaveBeenCalledWith(t('common:clipboard.copyFailed'))
     expect(toast.info).not.toHaveBeenCalled()
   })
 
   it('reports a write that throws', async () => {
-    await copySystemText(TEXT, async () => {
+    await copyText(TEXT, async () => {
       throw new Error('denied')
     })
-    expect(toast.error).toHaveBeenCalledWith(t('reader:systemEntry.copyFailed'))
+    expect(toast.error).toHaveBeenCalledWith(t('common:clipboard.copyFailed'))
     expect(toast.info).not.toHaveBeenCalled()
-    expect(logger.error).toHaveBeenCalledWith('reader.system_text_copy_failed', {
+    expect(logger.error).toHaveBeenCalledWith('app.clipboard_copy_failed', {
       error: 'denied',
     })
   })
@@ -63,29 +63,29 @@ describe('copySystemText', () => {
     it('writes through the Clipboard API on web, not expo-clipboard', async () => {
       const writeText = vi.fn(async () => undefined)
       vi.stubGlobal('navigator', { clipboard: { writeText } })
-      await copySystemText(TEXT)
+      await copyText(TEXT)
       expect(writeText).toHaveBeenCalledWith(TEXT)
       expect(setStringAsync).not.toHaveBeenCalled()
-      expect(toast.info).toHaveBeenCalledWith(t('reader:systemEntry.copied'))
+      expect(toast.info).toHaveBeenCalledWith(t('common:clipboard.copied'))
       expect(toast.error).not.toHaveBeenCalled()
     })
 
     it('reports a web clipboard without the Clipboard API', async () => {
       vi.stubGlobal('navigator', {})
-      await copySystemText(TEXT)
+      await copyText(TEXT)
       expect(setStringAsync).not.toHaveBeenCalled()
-      expect(toast.error).toHaveBeenCalledWith(t('reader:systemEntry.copyFailed'))
+      expect(toast.error).toHaveBeenCalledWith(t('common:clipboard.copyFailed'))
       expect(toast.info).not.toHaveBeenCalled()
-      expect(logger.warn).toHaveBeenCalledWith('reader.clipboard_unavailable')
+      expect(logger.warn).toHaveBeenCalledWith('app.clipboard_unavailable')
     })
 
     it('writes through expo-clipboard on native', async () => {
       platform.OS = 'android'
       platform.Version = 32
       vi.mocked(setStringAsync).mockResolvedValue(true)
-      await copySystemText(TEXT)
+      await copyText(TEXT)
       expect(setStringAsync).toHaveBeenCalledWith(TEXT)
-      expect(toast.info).toHaveBeenCalledWith(t('reader:systemEntry.copied'))
+      expect(toast.info).toHaveBeenCalledWith(t('common:clipboard.copied'))
       expect(toast.error).not.toHaveBeenCalled()
     })
 
@@ -93,7 +93,7 @@ describe('copySystemText', () => {
       platform.OS = 'android'
       platform.Version = 33
       vi.mocked(setStringAsync).mockResolvedValue(true)
-      await copySystemText(TEXT)
+      await copyText(TEXT)
       expect(setStringAsync).toHaveBeenCalledWith(TEXT)
       expect(toast.info).not.toHaveBeenCalled()
       expect(toast.error).not.toHaveBeenCalled()
@@ -103,8 +103,8 @@ describe('copySystemText', () => {
       platform.OS = 'android'
       platform.Version = 33
       vi.mocked(setStringAsync).mockRejectedValue(new Error('binder'))
-      await copySystemText(TEXT)
-      expect(toast.error).toHaveBeenCalledWith(t('reader:systemEntry.copyFailed'))
+      await copyText(TEXT)
+      expect(toast.error).toHaveBeenCalledWith(t('common:clipboard.copyFailed'))
       expect(toast.info).not.toHaveBeenCalled()
     })
   })

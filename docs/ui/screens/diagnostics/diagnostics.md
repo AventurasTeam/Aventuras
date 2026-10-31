@@ -778,7 +778,7 @@ JSON:
 ```
 
 Pretty-printed JSON, monospace, full-width within the row. Copy
-icon-action at top-right. Reuses the
+button at top-right. Reuses the
 [Raw JSON viewer body content shape](../../patterns/data.md#json-content-block--inline-use)
 (JSONBlock) — the inline use is the same content as the Sheet body,
 sans drawer chrome.

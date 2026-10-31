@@ -51,7 +51,10 @@ component reused everywhere; no per-surface variants.
   (e.g. entity row + `state` JSON; happening row + involvements +
   awareness summary). Monospace, indented, low-fi syntax tone in v1
   (real syntax highlighting with visual identity).
-- Top-right: **Copy** button.
+- Top-right: **Copy** button. It confirms as every copy in the app
+  does: a `Copied.` toast, none on Android 13 and later where the OS
+  confirms the copy itself, and an error toast wherever the write
+  fails (`lib/clipboard`).
 - Footer hint: `Edit raw — coming later` (disabled placeholder).
 
 **Read-only in v1.** Edit-mode (raw-edit + zod-validate on save) is
@@ -63,7 +66,7 @@ on, so switching to another row closes it.
 ### JSON content block — inline use
 
 The drawer / Sheet body content (pretty-printed JSON + Copy
-icon-action at top-right) is the reusable shape; the drawer chrome
+button at top-right) is the reusable shape; the drawer chrome
 (header, footer hint) wraps it. The same content block also lands
 inline as the expanded body of accordion-style row expansion —
 notably [Diagnostics Logs row-expand on tablet+](../screens/diagnostics/diagnostics.md#row-expansion--tablet)

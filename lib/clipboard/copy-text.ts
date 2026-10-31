@@ -11,7 +11,7 @@ type ClipboardWrite = (text: string) => Promise<boolean>
 async function writeClipboard(text: string): Promise<boolean> {
   if (Platform.OS !== 'web') return setStringAsync(text)
   if (typeof navigator === 'undefined' || navigator.clipboard == null) {
-    logger.warn('reader.clipboard_unavailable')
+    logger.warn('app.clipboard_unavailable')
     return false
   }
   await navigator.clipboard.writeText(text)
@@ -23,8 +23,8 @@ function osConfirmsCopy(): boolean {
   return Platform.OS === 'android' && Platform.Version >= 33
 }
 
-/** A system entry's copy request: writes the clipboard and toasts whether it took. */
-export async function copySystemText(
+/** Writes the clipboard and toasts whether it took (ui/patterns/data.md → Copy feedback). Never rejects. */
+export async function copyText(
   text: string,
   write: ClipboardWrite = writeClipboard,
 ): Promise<void> {
@@ -32,11 +32,11 @@ export async function copySystemText(
   try {
     written = await write(text)
   } catch (error: unknown) {
-    logger.error('reader.system_text_copy_failed', {
+    logger.error('app.clipboard_copy_failed', {
       error: error instanceof Error ? error.message : String(error),
     })
     written = false
   }
-  if (!written) toast.error(t('reader:systemEntry.copyFailed'))
-  else if (!osConfirmsCopy()) toast.info(t('reader:systemEntry.copied'))
+  if (!written) toast.error(t('common:clipboard.copyFailed'))
+  else if (!osConfirmsCopy()) toast.info(t('common:clipboard.copied'))
 }
