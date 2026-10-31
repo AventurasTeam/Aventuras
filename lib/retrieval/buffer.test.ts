@@ -103,8 +103,8 @@ describe('promptBufferTake — partialChapterBuffer against protectedBuffer', ()
   })
 })
 
-// storySettingsSchema bounds both counts, so these harden against settings that never went through
-// it rather than pinning reachable values — the same hardening lib/prompts/filters.ts → recent pins.
+// storySettingsSchema bounds both counts, so these harden against settings
+// that bypassed it, as lib/prompts/filters.ts → recent does.
 describe('promptBufferTake — unvalidated settings', () => {
   it.each([0, -5, Number.NaN, undefined])(
     "floors partialChapterBuffer at 1 for %s, so the window keeps the turn's action",

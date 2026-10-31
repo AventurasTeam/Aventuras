@@ -584,7 +584,7 @@ describe('dismissSystemEntry', () => {
     expect(warn).not.toHaveBeenCalled()
   })
 
-  // Runs through the dispatch gate: a Retry or Send under the delete would run beside the hand-back.
+  // Gated as a dispatch: a Retry or Send under the delete would run beside the hand-back.
   it('does nothing while another dispatch holds the gate', async () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     const h = harness({ beginDispatch: () => false })
