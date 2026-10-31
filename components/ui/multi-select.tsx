@@ -14,6 +14,7 @@ import { ContextScrollView } from '@/components/ui/scroll-component'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 import {
@@ -291,7 +292,7 @@ function Overlay({
         className={cn('h-control-xs justify-center px-2', state.kind === 'all' && 'opacity-50')}
       >
         <Text size="xs" className="text-fg-primary">
-          Select all
+          {t('common:multiSelect.selectAll')}
         </Text>
       </Pressable>
       <Pressable
@@ -301,7 +302,7 @@ function Overlay({
         className={cn('h-control-xs justify-center px-2', state.kind === 'none' && 'opacity-50')}
       >
         <Text size="xs" className="text-fg-primary">
-          Clear all
+          {t('common:multiSelect.clearAll')}
         </Text>
       </Pressable>
     </View>

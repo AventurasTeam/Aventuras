@@ -42,6 +42,15 @@
     "invalidHex": "Enter a hex color, e.g. {{example}}",
     "apply": "Apply"
   },
+  "jsonViewer": {
+    "title": "Raw JSON",
+    "close": "Close raw JSON viewer",
+    "editComingLater": "Edit raw — coming later"
+  },
+  "multiSelect": {
+    "selectAll": "Select all",
+    "clearAll": "Clear all"
+  },
   "inlineEditableName": {
     "edit": "Edit {{name}}",
     "editUnnamed": "Edit name"
