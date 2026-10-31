@@ -2121,7 +2121,7 @@ absolute after an edit is the correct outcome and is rendered as such
 (see [EntryCard → World-state panel](./ui/patterns/entry-card.md#world-state-panel)).
 
 **The report records what was emitted and what `apply.ts` and the
-create planner did with it.** Four things can differ from the
+create planner did with it.** Five things can differ from the
 absolute state beside them:
 
 - `currentLocation` is rejected when the id does not resolve to a
@@ -2146,6 +2146,10 @@ absolute state beside them:
 - A condition is rejected when its id isn't a place or item the
   prompt showed with its state, or its text is blank; `rejected`
   records that, and `classifier.condition_unseen` logs the first.
+- A visual change's or a condition's text is bounded to 500 UTF-16
+  units before it's written. The report keeps the text as emitted, so
+  the panel can show more than World holds; `classifier.visual_truncated`
+  and `classifier.condition_truncated` log the cut.
 
 The decision is recorded rather than re-derived, because the
 difference alone does not identify its cause. An emitted location

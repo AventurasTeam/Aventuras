@@ -61,14 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **The state report shows a change as emitted, not as stored.**
-  `buildPiggybackActions` bounds a visual change's and a condition's text
-  before writing it (`boundStateText` in `lib/piggyback/apply.ts`), but
-  the report keeps the emitted text, so the entry card's panel can show
-  more than World holds. Canon doesn't say which the panel shows.
-  Raised by the 2026-10-24 triage pass's verification; filed by its
-  slice review.
-
 - **The `provider.*` log kinds in `observability.md` are stale.**
   [`observability.md`](../observability.md) lists `retry_succeeded`,
   `rate_limited`, `stream_interrupted`, `request_failed` and
