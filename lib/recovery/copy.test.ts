@@ -103,7 +103,7 @@ describe('formatRecoveryReport', () => {
 
 describe('a recovery pass that failed', () => {
   const PASS_FAILED =
-    "Aventuras couldn't check for updates left unfinished when it last closed. Your story content is intact, and restarting the app retries automatically."
+    "Aventuras couldn't check for updates left unfinished when it last closed. Restarting the app retries automatically."
   const passFailed: BootRecoveryReport = {
     reversed: [],
     failures: [],

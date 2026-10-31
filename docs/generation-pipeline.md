@@ -1263,7 +1263,9 @@ throwing, the one thing the per-orphan catch can't hold. Boot logs
 work from, and carries on, and the next boot retries. The modal still
 opens, titled _"Recovery incomplete"_, with a line saying the check
 for unfinished updates failed: logging alone would leave orphans on
-disk that the user could write over without knowing.
+disk that the user could write over without knowing. That line does
+not call the content intact: no orphan was read, so an interrupted
+reply could still be on disk.
 
 No max-retry counter and no admin "drop orphan" affordance for v1;
 stuck orphans remain visible in Logs across boots. Nearly every

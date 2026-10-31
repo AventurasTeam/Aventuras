@@ -141,7 +141,8 @@ export const PassFailed: Story = {
   play: async () => {
     expect(screen.getByText('Recovery incomplete')).toBeInTheDocument()
     const description = screen.getByText(/couldn't check for updates left unfinished/)
-    expect(description.textContent).toContain('restarting the app retries automatically')
+    expect(description.textContent).toContain('Restarting the app retries automatically')
+    expect(description.textContent).not.toContain('intact')
   },
 }
 
