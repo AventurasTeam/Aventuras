@@ -71,7 +71,3 @@ slice-planning gate forces its resolution before that slice is planned.
 - **Latte's muted text misses AA on sunken surfaces.** `--fg-muted` is
   3.20 and `--fg-secondary` 4.05 on `--bg-sunken`; the audit checks both
   only on `--bg-base`. Raised by the 2026-10-31 triage pass.
-
-- **A profile's `timeout` is still a bare `z.number()`.** `maxOutput` and
-  `thinking` got bounds in the 2026-10-31 triage pass; nobody checked
-  what `boundedSignal` does with 0 or a negative. Raised by that pass.
