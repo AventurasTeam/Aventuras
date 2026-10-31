@@ -45,13 +45,20 @@ three above plus `--focus-ring` and `--selection-bg`). Algorithm
 in [Accent-derivation algorithm](#accent-derivation-algorithm)
 below.
 
-**Semantic states (8).** Each carries a background slot + an `-fg`
-text-on-state slot:
+**Semantic states (12).** Each carries a background slot, an `-fg`
+text-on-state slot and a `-text` slot for the state's own colour used as
+text or an icon on a surface:
 
-- `--success` / `--success-fg`
-- `--warning` / `--warning-fg`
-- `--danger` / `--danger-fg`
-- `--info` / `--info-fg`
+- `--success` / `--success-fg` / `--success-text`
+- `--warning` / `--warning-fg` / `--warning-text`
+- `--danger` / `--danger-fg` / `--danger-text`
+- `--info` / `--info-fg` / `--info-text`
+
+A fill has one job the `-text` slot doesn't: it has to read as the
+state across pills and tints, while text has to read on a surface. So
+`-text` equals its fill unless the fill fails AA as text, and then it
+moves only as far as it takes. `text-warning` and its siblings resolve
+to the `-text` slot, and `bg-`, `border-` and `fill-` to the fill.
 
 **Borders (2).**
 
@@ -94,17 +101,18 @@ audit reports but never fails. The
 
 ### Text-on-background
 
-| Pair                                                                           | Target      | Floor    | Notes                                                      |
-| ------------------------------------------------------------------------------ | ----------- | -------- | ---------------------------------------------------------- |
-| `--fg-primary` × `--bg-base`                                                   | **AAA 7:1** | AA 4.5:1 | body prose — the load-bearing pair                         |
-| `--fg-primary` × `--bg-raised` / `--bg-sunken` / `--bg-overlay`                | AA 4.5:1    | AA 4.5:1 | text on cards / system-entry / popovers                    |
-| `--fg-secondary` × `--bg-base`                                                 | AA 4.5:1    | AA 4.5:1 | captions, sub-labels                                       |
-| `--fg-muted` × `--bg-base`                                                     | AA 4.5:1    | 3:1      | placeholders may relax to 3:1; other muted use aims higher |
-| `--accent-fg` × `--accent`                                                     | AA 4.5:1    | AA 4.5:1 | button text — load-bearing for accent-override auto-flip   |
-| `--accent-fg` × `--accent-hover`                                               | AA 4.5:1    | AA 4.5:1 | button text in the hover state                             |
-| `--success-fg` / `--warning-fg` / `--danger-fg` / `--info-fg` × their state bg | AA 4.5:1    | AA 4.5:1 | semantic pills / banners                                   |
-| `--fg-primary` × `--selection-bg`                                              | AA 4.5:1    | AA 4.5:1 | text under text-selection                                  |
-| `--fg-primary` × `--recently-classified-bg`                                    | AA 4.5:1    | AA 4.5:1 | row content with the classifier tint applied               |
+| Pair                                                                                          | Target      | Floor    | Notes                                                                                                                                                                        |
+| --------------------------------------------------------------------------------------------- | ----------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--fg-primary` × `--bg-base`                                                                  | **AAA 7:1** | AA 4.5:1 | body prose — the load-bearing pair                                                                                                                                           |
+| `--fg-primary` × `--bg-raised` / `--bg-sunken` / `--bg-overlay`                               | AA 4.5:1    | AA 4.5:1 | text on cards / system-entry / popovers                                                                                                                                      |
+| `--fg-secondary` × `--bg-base`                                                                | AA 4.5:1    | AA 4.5:1 | captions, sub-labels                                                                                                                                                         |
+| `--fg-muted` × `--bg-base`                                                                    | AA 4.5:1    | 3:1      | placeholders may relax to 3:1; other muted use aims higher                                                                                                                   |
+| `--accent-fg` × `--accent`                                                                    | AA 4.5:1    | AA 4.5:1 | button text — load-bearing for accent-override auto-flip                                                                                                                     |
+| `--accent-fg` × `--accent-hover`                                                              | AA 4.5:1    | AA 4.5:1 | button text in the hover state                                                                                                                                               |
+| `--success-fg` / `--warning-fg` / `--danger-fg` / `--info-fg` × their state bg                | AA 4.5:1    | AA 4.5:1 | semantic pills / banners                                                                                                                                                     |
+| `--success-text` / `--warning-text` / `--danger-text` / `--info-text` × each `--bg-*` surface | AA 4.5:1    | AA 4.5:1 | state text and icons on cards, sunken boxes and overlays. A theme's `--warning-text` also clears it on the 12% warning tint over `--bg-overlay`, the import dialog's banners |
+| `--fg-primary` × `--selection-bg`                                                             | AA 4.5:1    | AA 4.5:1 | text under text-selection                                                                                                                                                    |
+| `--fg-primary` × `--recently-classified-bg`                                                   | AA 4.5:1    | AA 4.5:1 | row content with the classifier tint applied                                                                                                                                 |
 
 The body-prose **AAA 7:1** target is reach-where-feasible.
 Opinionated palettes that fall short of it remain valid —
@@ -485,9 +493,8 @@ advisory by design; it never blocks a commit or build.
 pnpm themes:audit
 ```
 
-Lives as a script under `scripts/` (path TBD at implementation).
-Reads from the theme registry (`lib/themes/index.ts` or wherever),
-runs the checks, prints to stdout.
+Lives at `scripts/themes-audit.ts`. Reads from the theme registry
+(`lib/themes/core/registry.ts`), runs the checks, prints to stdout.
 
 ### What it checks per theme
 
@@ -516,12 +523,7 @@ For each theme in the registry:
 ### Output shape
 
 Plaintext table per theme. Columns: **pair**, **ratio**,
-**status** (`pass` / `warn` / `fail` / `exempt`). The `exempt`
-status marks pairs that fail by canonical design and are knowingly
-accepted — currently Catppuccin Latte's `--success` / `--warning` /
-`--info` semantic-pill pairs, whose mid-luminance canonical fills
-cannot reach AA 4.5 with any foreground (the verbatim-Catppuccin
-decision is honored over the floor). Footer summary: total fails
+**status** (`pass` / `warn` / `fail`). Footer summary: total fails
 per theme; **exit code 0 even on fails** (no CI gate).
 
 ### Out of scope

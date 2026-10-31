@@ -9,6 +9,13 @@ module.exports = {
   presets: [require('nativewind/preset')],
   theme: {
     extend: {
+      // Text and icons read a slot of their own: a semantic fill needn't pass as text on a surface.
+      textColor: {
+        success: { DEFAULT: 'var(--success-text)' },
+        warning: { DEFAULT: 'var(--warning-text)' },
+        danger: { DEFAULT: 'var(--danger-text)' },
+        info: { DEFAULT: 'var(--info-text)' },
+      },
       colors: {
         bg: {
           base: 'var(--bg-base)',

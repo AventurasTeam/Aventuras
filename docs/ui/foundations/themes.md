@@ -75,6 +75,9 @@ NativeWind 4 runtime context (Expo native).
 
 ### Common slot recipes
 
+A theme's block below lists a `-text` slot only where it differs from
+its fill ([`color.md → Final slot inventory`](./color.md#final-slot-inventory)).
+
 - **Disabled pair.** `--bg-disabled` neutralizes `--bg-raised`
   toward `--bg-base`; `--fg-disabled` desaturates `--fg-muted`
   one more step. Intentionally low-contrast — WCAG exempts
@@ -151,8 +154,8 @@ cascades through the
 --accent-fg:      #ffffff
 
 --success:        #15803d   --success-fg: #ffffff
---warning:        #b45309   --warning-fg: #ffffff
---danger:         #dc2626   --danger-fg:  #ffffff
+--warning:        #b45309   --warning-fg: #ffffff   --warning-text: #ac4f09
+--danger:         #dc2626   --danger-fg:  #ffffff   --danger-text:  #d72525
 --info:           #0369a1   --info-fg:    #ffffff
 
 --border:         #e4e4e7
@@ -293,10 +296,10 @@ with it from IDE / terminal use.
 --accent-hover:   #1852c4
 --accent-fg:      #ffffff
 
---success:        #40a02b    /* Green */    --success-fg: #ffffff
---warning:        #df8e1d    /* Yellow */   --warning-fg: #ffffff
---danger:         #d20f39    /* Red */      --danger-fg:  #ffffff
---info:           #04a5e5    /* Sky */      --info-fg:    #ffffff
+--success:        #40a02b    /* Green */    --success-fg: #1e1e2e   --success-text: #28651b
+--warning:        #df8e1d    /* Yellow */   --warning-fg: #1e1e2e   --warning-text: #7c4f10
+--danger:         #d20f39    /* Red */      --danger-fg:  #ffffff   --danger-text:  #b10d30
+--info:           #04a5e5    /* Sky */      --info-fg:    #1e1e2e   --info-text:    #025f84
 
 --border:         #bcc0cc    /* Surface 1 */
 --border-strong:  #acb0be    /* Surface 2 */
@@ -313,11 +316,13 @@ canonical values land at the edge; depending on rounding the
 audit utility may report this as `pass` or `warn`). All non-text
 targets clear 3:1. `--fg-secondary` / `--fg-muted` are re-mapped
 down the canonical gray ladder (to `Subtext 1` / `Subtext 0`) to
-clear the text floor. The `--success` / `--warning` / `--info`
-semantic pills are **audit-exempt**: Catppuccin's mid-luminance
-Green / Yellow / Sky cannot reach AA 4.5 as filled pills with any
-foreground, and the verbatim-Catppuccin decision is honored over
-the floor.
+clear the text floor. Verbatim Catppuccin applies to the **fills**:
+Green, Yellow, Sky and Red stay as published on pills and tints. No
+Catppuccin colour clears AA as text on these surfaces (Red comes
+closest, at 4.46 on `--bg-raised`), so the `-text` slots are the fills
+darkened only as far as it takes, off the palette. `#1e1e2e` is
+Mocha's Base: white fails on those three fills and Latte's own Text
+reaches only 3.05, while it clears AA on all three.
 
 ---
 
@@ -350,7 +355,7 @@ Catppuccin identity.
 
 --success:        #a6e3a1    /* Green */    --success-fg: #1e1e2e
 --warning:        #f9e2af    /* Yellow */   --warning-fg: #1e1e2e
---danger:         #f38ba8    /* Red */      --danger-fg:  #1e1e2e
+--danger:         #f38ba8    /* Red */      --danger-fg:  #1e1e2e   --danger-text: #f59fb7
 --info:           #89dceb    /* Sky */      --info-fg:    #1e1e2e
 
 --border:         #45475a    /* Surface 1 */
@@ -542,7 +547,7 @@ structurally-locked radii.
 
 --success:        #00ff00    --success-fg: #000000
 --warning:        #ffa500    --warning-fg: #000000
---danger:         #ff0000    --danger-fg:  #000000
+--danger:         #ff0000    --danger-fg:  #000000   --danger-text: #ff2121
 --info:           #00ffff    --info-fg:    #000000
 
 --border:         #404040
@@ -593,7 +598,7 @@ warm-cream + deep palette, swapped modes).
 
 --success:        #98c96e    /* green */         --success-fg: #0e2240
 --warning:        #d4a85a    /* warm amber */    --warning-fg: #0e2240
---danger:         #d97070    /* clear red */     --danger-fg:  #0e2240
+--danger:         #d97070    /* clear red */     --danger-fg:  #0e2240   --danger-text: #de8181
 --info:           #94b8d4    /* cool steel */    --info-fg:    #0e2240
 
 --border:         #2a3d5e

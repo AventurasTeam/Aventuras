@@ -16,15 +16,19 @@ export type ThemeColorSlots = {
   '--accent': string
   '--accent-hover': string
   '--accent-fg': string
-  // Semantic states (8)
+  // Semantic states (12)
   '--success': string
   '--success-fg': string
+  '--success-text': string
   '--warning': string
   '--warning-fg': string
+  '--warning-text': string
   '--danger': string
   '--danger-fg': string
+  '--danger-text': string
   '--info': string
   '--info-fg': string
+  '--info-text': string
   // Borders (2)
   '--border': string
   '--border-strong': string
@@ -69,12 +73,16 @@ export const COLOR_SLOT_KEYS = [
   '--accent-fg',
   '--success',
   '--success-fg',
+  '--success-text',
   '--warning',
   '--warning-fg',
+  '--warning-text',
   '--danger',
   '--danger-fg',
+  '--danger-text',
   '--info',
   '--info-fg',
+  '--info-text',
   '--border',
   '--border-strong',
   '--focus-ring',

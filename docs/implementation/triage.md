@@ -79,14 +79,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `request_failed` by those names. The cut-off replies PR adds its own
   `reply_cut_off`. Raised by the cut-off replies Task 4 review.
 
-- **Warning text fails contrast in Catppuccin Latte.** Latte's
-  `--warning` (`#df8e1d`) on `--bg-raised` (`#e6e9ef`) is 2.15:1, so every
-  `text-warning` line on a card (the state-problems box, the cut-off
-  notice) misses AA. Every other theme passes. The
-  [contrast audit](../ui/foundations/color.md) has no warning
-  text-on-surface pair, and its Latte exemption covers only the pill
-  fills. Raised by the cut-off replies Task 9 review.
-
 - **On native, the reader rows' memo misses on every host render.**
   expo-dom hands every function prop a new identity per prop emission
   and emits on every host render (`node_modules/expo/src/dom/`:
