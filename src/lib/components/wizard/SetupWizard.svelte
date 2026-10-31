@@ -57,7 +57,10 @@
     }, MODAL_CLOSE_TRANSITION_MS)
   }
 
-  onDestroy(() => releaseOrphanScrollLock())
+  onDestroy(() => {
+    releaseOrphanScrollLock()
+    exitQuestion.answer(false)
+  })
 
   // Initialize Wizard Store
   const wizard = new WizardStore(() => handleClose())

@@ -10,15 +10,18 @@
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { cn } from '#lib/utils/cn.ts'
 
-  interface Props {
-    /** Names the saved fold state, so it must not be shared with another explanation. */
-    id?: string
-    /** Only without an `id`. */
-    open?: boolean
+  type Props = {
     summary: string
     class?: string
     children: Snippet
-  }
+  } & (
+    | {
+        /** Names the saved fold state, so it must not be shared with another explanation. */
+        id: string
+        open?: never
+      }
+    | { id?: never; open?: boolean }
+  )
 
   let { id, open = $bindable(true), summary, class: className, children }: Props = $props()
 

@@ -5,6 +5,7 @@
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { cn } from '#lib/utils/cn.ts'
   import { FEATURE_COLORS, type ActionTone } from './featureColors'
+  import { PAIR_BUTTON, PAIR_ROW } from './buttonPair'
 
   /** A confirmation modal's footer: Cancel and the action, side by side on a phone. */
   let {
@@ -39,14 +40,10 @@
   {#if alternative}
     <span class="flex w-full max-sm:order-1 sm:mr-auto sm:w-auto">{@render alternative()}</span>
   {/if}
-  <!-- On a phone half the width each, stacking in reading order when a label does not fit; from
-       640px up both as wide as the wider. -->
-  <span
-    class="flex w-full flex-wrap gap-2 sm:inline-grid sm:w-auto sm:auto-cols-fr sm:grid-flow-col"
-  >
+  <span class={PAIR_ROW}>
     <Button
       variant="outline"
-      class="basis-pair grow"
+      class={PAIR_BUTTON}
       onclick={onCancel}
       disabled={busy && !cancelWhileBusy}
     >
@@ -55,7 +52,7 @@
     <Button
       variant={tone === 'default' ? 'default' : 'feature'}
       onclick={onConfirm}
-      class={cn('basis-pair grow', tone !== 'default' && FEATURE_COLORS[tone].vars)}
+      class={cn(PAIR_BUTTON, tone !== 'default' && FEATURE_COLORS[tone].vars)}
       disabled={disabled || busy}
     >
       {#if busy}

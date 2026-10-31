@@ -301,7 +301,7 @@
 
   /**
    * Enter in a text field does what its `enterkeyhint` says: `next` focuses the next text field,
-   * `go` acts, `done` drops the keyboard; without one it is the field's own. Ctrl+Enter always acts,
+   * or drops the keyboard when none follows, `go` acts, `done` drops the keyboard; without one it is the field's own. Ctrl+Enter always acts,
    * so a modal whose Enter only moves on still has a key to finish.
    */
   function handleEnter(e: KeyboardEvent) {
@@ -317,7 +317,9 @@
       field.blur()
     } else {
       const fields = [...(frame?.querySelectorAll<HTMLElement>(TEXT_FIELD) ?? [])]
-      fields[fields.indexOf(field) + 1]?.focus()
+      const next = fields[fields.indexOf(field) + 1]
+      if (next) next.focus()
+      else field.blur()
     }
   }
 

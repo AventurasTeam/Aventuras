@@ -2,6 +2,7 @@
   import { Button } from '#lib/components/ui/button/index.ts'
   import { cn } from '#lib/utils/cn.ts'
   import { FEATURE_COLORS } from './featureColors'
+  import { PAIR_BUTTON, PAIR_ROW } from './buttonPair'
   import type { PendingQuestion } from './pendingQuestion.svelte'
 
   let { question }: { question: PendingQuestion } = $props()
@@ -46,15 +47,13 @@
       </p>
 
       <!-- The same pair as an action modal's footer: neutral to stay, the delete tone to go. -->
-      <div
-        class="mt-5 flex flex-wrap gap-2 sm:ml-auto sm:grid sm:w-fit sm:auto-cols-fr sm:grid-flow-col"
-      >
-        <Button variant="outline" class="basis-pair grow" onclick={() => question.answer(false)}>
+      <div class={cn('mt-5 sm:ml-auto', PAIR_ROW)}>
+        <Button variant="outline" class={PAIR_BUTTON} onclick={() => question.answer(false)}>
           {shown?.keepLabel ?? 'Keep editing'}
         </Button>
         <Button
           variant="feature"
-          class={cn('basis-pair grow', FEATURE_COLORS.delete.vars)}
+          class={cn(PAIR_BUTTON, FEATURE_COLORS.delete.vars)}
           onclick={() => question.answer(true)}
         >
           {shown?.confirmLabel ?? 'Discard'}

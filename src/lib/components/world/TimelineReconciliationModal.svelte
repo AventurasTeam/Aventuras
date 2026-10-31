@@ -540,8 +540,11 @@
     reset()
   })
 
+  // The screen stays mounted when closed, so a question still up must not greet the next opening.
   $effect(() => {
-    if (!open) reset()
+    if (open) return
+    reset()
+    question.answer(false)
   })
 
   /** Anything the reader would lose by leaving the range: a restated boundary or a typed weight. */

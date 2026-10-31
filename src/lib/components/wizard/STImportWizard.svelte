@@ -47,7 +47,10 @@
     }, MODAL_CLOSE_TRANSITION_MS)
   }
 
-  onDestroy(() => releaseOrphanScrollLock())
+  onDestroy(() => {
+    releaseOrphanScrollLock()
+    exitQuestion.answer(false)
+  })
 
   const wizard = new STImportWizardStore(() => handleClose())
 
