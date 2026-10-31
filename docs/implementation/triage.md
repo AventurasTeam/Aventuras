@@ -68,12 +68,6 @@ slice-planning gate forces its resolution before that slice is planned.
   unreachable. Canon doesn't say which is meant. Raised by the
   2026-10-31 triage pass.
 
-- **A chapter close can't persist its failure's `close` field.**
-  [`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)
-  gives `systemFailure` a `close?`, and `lib/db/story-entries/entry-metadata.ts`
-  has none, so zod would strip it. No writer exists yet; M5's must add
-  it. Read, not exercised. Raised by the 2026-10-31 triage pass.
-
 - **A synchronous throw from the narrative's `streamText` escapes its
   error handling.** It's outside the `try` in
   `lib/pipeline/definitions/per-turn.ts`, so it lands in the

@@ -271,6 +271,19 @@ describe('systemFailure', () => {
     const parsed = entryMetadataSchema.parse({ ...base, systemFailure: { kind: 'provider' } })
     expect(parsed.systemFailure).not.toHaveProperty('pass')
   })
+
+  it.each(['failed', 'resolved'])('keeps a close-failure entry %s', (close) => {
+    const systemFailure = { kind: 'provider', close }
+    expect(entryMetadataSchema.parse({ ...base, systemFailure }).systemFailure).toEqual(
+      systemFailure,
+    )
+  })
+
+  // A close has no held state, unlike a pass (data-model.md → Entry metadata shape).
+  it('rejects a close state outside its set', () => {
+    const systemFailure = { kind: 'provider', close: 'held' }
+    expect(entryMetadataSchema.safeParse({ ...base, systemFailure }).success).toBe(false)
+  })
 })
 
 // data-model.md → Entry metadata shape.
