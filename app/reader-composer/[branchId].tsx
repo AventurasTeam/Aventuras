@@ -999,12 +999,13 @@ export default function ReaderComposerRoute() {
       dismissSystemEntry({
         branchId,
         submission: systemFailure?.submission,
+        beginDispatch,
+        endDispatch,
         clear: () => clearSystemEntry(branchId, ctx),
-        reload,
         stillOnBranch: () => branchUnchanged(branchId),
         handBack: handBackSubmission,
       }),
-    [branchId, reload, handBackSubmission, systemFailure, branchUnchanged],
+    [branchId, beginDispatch, endDispatch, handBackSubmission, systemFailure, branchUnchanged],
   )
 
   // Held until the pass ends: no double tap or Send slips in, head reversals wait;

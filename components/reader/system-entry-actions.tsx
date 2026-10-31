@@ -29,42 +29,49 @@ export type SystemEntryFixAction = { label: string; onPress: () => void } | unde
 
 type LeaveStory = (proceed: () => void) => void
 
-/**
- * Hands the draft back only once the entry is gone (a composer copy beside Retry would run the turn
- * twice), even if reload rejects; off-branch it's dropped with a warning. Never rejects: the card
- * fires it unawaited and on native a rejection dies in the WebView.
- */
-export async function dismissSystemEntry(deps: {
+type DismissDeps = {
   branchId: string
   submission: SystemFailureMeta['submission']
+  beginDispatch: () => boolean
+  endDispatch: () => void
   clear: () => Promise<void>
-  reload: () => Promise<void>
   stillOnBranch: () => boolean
   handBack: (submission: SystemFailureMeta['submission']) => void
-}): Promise<void> {
-  const { branchId } = deps
+}
+
+async function clearedOrToasted(deps: DismissDeps): Promise<boolean> {
   try {
     await deps.clear()
+    return true
   } catch (error: unknown) {
     logger.error('reader.system_entry_dismiss_failed', {
-      branchId,
+      branchId: deps.branchId,
       error: error instanceof Error ? error.message : String(error),
     })
     toast.error(t('reader:systemEntry.dismissFailed'))
+    return false
+  }
+}
+
+/**
+ * Hands the draft back only once the entry is gone (a composer copy beside Retry would run the turn
+ * twice); off-branch it's dropped with a warning. A dispatch, so no Retry or Send runs under the
+ * delete. Never rejects: the card fires it unawaited and on native a rejection dies in the WebView.
+ */
+export async function dismissSystemEntry(deps: DismissDeps): Promise<void> {
+  const { branchId } = deps
+  if (!deps.beginDispatch()) {
+    logger.warn('reader.system_entry_dismiss_suppressed', { branchId })
     return
   }
   try {
-    await deps.reload()
-  } catch (error: unknown) {
-    logger.error('reader.system_entry_reload_failed', {
-      branchId,
-      error: error instanceof Error ? error.message : String(error),
-    })
-    toast.error(t('reader:systemEntry.dismissReloadFailed'))
+    if (!(await clearedOrToasted(deps))) return
+    if (deps.stillOnBranch()) deps.handBack(deps.submission)
+    else if (keptSubmissionText(deps.submission) != null)
+      logger.warn('reader.handback_skipped_left_branch', { branchId, source: 'dismiss' })
+  } finally {
+    deps.endDispatch()
   }
-  if (deps.stillOnBranch()) deps.handBack(deps.submission)
-  else if (keptSubmissionText(deps.submission) != null)
-    logger.warn('reader.handback_skipped_left_branch', { branchId, source: 'dismiss' })
 }
 
 // Exhaustive per wording set: a new resolver kind is a type error, not another kind's copy.

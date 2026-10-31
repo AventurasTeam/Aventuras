@@ -641,14 +641,15 @@ putting it back hands the submission to the composer draft once its
 own text has settled**: `Dismiss`, and every regenerate outcome but
 the rejection (a completed take, a failed or blocked one, a cancel, a
 throw). A regenerate whose own text is the same, on its new failure
-entry or back in the draft, hands nothing back. `Dismiss` and a
-regenerate hand the text back once the row is deleted, even when the
-reload after it fails: the stale card left on screen no longer holds
-it, and a toast says the reader didn't refresh. A delete that fails
-hands nothing back and toasts that the dismiss failed: the entry and
-its `Retry` still stand, and a copy in the draft would run the turn
-twice. A draft already holding the text owes nothing back, as on a
-second `Dismiss` over that stale card. The same rule keeps a regenerate's own text off the draft once its new
+entry or back in the draft, hands nothing back. The delete takes the
+card with it, so no card outlives its row: `Dismiss` reads nothing
+back, and it and a regenerate hand the text back once the row is
+deleted, a regenerate even when the reload after it fails. `Dismiss`
+is a dispatch, so no `Retry` or Send runs under the delete. A delete
+that fails hands nothing back and toasts that the dismiss failed: the
+entry and its `Retry` still stand, and a copy in the draft would run
+the turn twice. A draft already holding the text owes nothing back.
+The same rule keeps a regenerate's own text off the draft once its new
 failure entry is written, even when the reload after it fails. An
 empty draft receives the text verbatim under composer mode
 `Free`, since the stored content is already wrapped and must not be

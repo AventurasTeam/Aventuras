@@ -341,9 +341,9 @@ DB-backed `openRegionTokens` resolves all of them.
 - **M5.1 — The same strip is non-monotonic across a reload.** `entriesStore`
   grows within a session (`patch` never evicts) but `reload()`
   re-hydrates to the trailing 50, discarding paged-in older rows.
-  `reload()` fires on turn failure, on submit-with-system-tail, and on
-  system-entry dismissal — so **dismissing a system entry visibly
-  shrinks the progress strip**, as does restarting the app. Same story,
+  `reload()` fires on turn failure and on submit-with-system-tail — so
+  **a failed turn visibly shrinks the progress strip**, as does
+  restarting the app. Same story,
   same open region, different number. Follows from the entry above and
   is fixed by the same change. Surfaced by M3.4 Task 19 (2026-08-02).
 - **M5.1 — `countEntryTokens` now runs on the reader's first render, adding a

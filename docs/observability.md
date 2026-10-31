@@ -338,11 +338,9 @@ convention, and the expectation that subsystems route through
   peek `Set as lead` whose `setStoryLead` threw rather than refused,
   or that had no story id to write with because the reader's hydration
   hadn't landed; the user sees the generic lead-failure toast either
-  way). `Dismiss` adds two, each
-  with its own toast (`components/reader/system-entry-actions.tsx`):
+  way). `Dismiss` adds one, with
+  its own toast (`components/reader/system-entry-actions.tsx`):
   `system_entry_dismiss_failed` (the delete failed, the entry stands)
-  and `system_entry_reload_failed` (the delete landed, the card is
-  stale)
 
 Kinds grow organically as subsystems land.
 

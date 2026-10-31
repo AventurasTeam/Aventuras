@@ -2,6 +2,7 @@ import { and, eq, sql } from 'drizzle-orm'
 
 import { storyEntries, type SystemFailureMeta } from '@/lib/db'
 import { generateId } from '@/lib/ids'
+import { entriesStore } from '@/lib/stores'
 
 import type { DbCtx } from '../types'
 
@@ -12,8 +13,11 @@ function deleteSystemEntries(branchId: string, ctx: DbCtx) {
     .toSQL()
 }
 
+// The store copy goes with the row: a card left standing offers a Retry for an entry that's gone.
 export async function clearSystemEntry(branchId: string, ctx: DbCtx): Promise<void> {
   await ctx.runInTransaction([deleteSystemEntries(branchId, ctx)])
+  for (const row of entriesStore.getEntries().values())
+    if (row.kind === 'system') entriesStore.patch(branchId, { op: 'delete', id: row.id })
 }
 
 export async function writeSystemEntry(

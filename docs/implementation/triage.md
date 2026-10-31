@@ -81,12 +81,6 @@ slice-planning gate forces its resolution before that slice is planned.
   isn't disposed. Bounding `maxOutput` removed the one known trigger.
   Read, not run. Raised by the 2026-10-31 triage pass.
 
-- **A stale `Retry` after a failed reload can run the turn the composer
-  still holds.** A `Dismiss` whose reload fails leaves the card up with
-  its `Retry`, beside the text it handed back, and `Dismiss` takes no
-  dispatch guard. The toast now says to reopen the story; nothing stops
-  the tap. Read, not run. Raised by the 2026-10-31 triage pass.
-
 - **Raw strings skip `t()`.** `components/ui/multi-select.tsx` and the
   `Edit raw — coming later` hint in `components/compounds/json-viewer.tsx`.
   Raised by the 2026-10-31 triage pass.
