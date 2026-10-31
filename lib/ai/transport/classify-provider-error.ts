@@ -197,12 +197,16 @@ export function recognizeOverflow(error: unknown): { detail: string } | null {
   return { detail: providerMessage(error, body) }
 }
 
-/** A 4xx body naming a capability the request carried; never on a body recognized as an overflow. */
+/**
+ * A 4xx body naming a capability the request carried; never on a body recognized as an overflow,
+ * nor on a 401 or a 429, whose status already names the cause.
+ */
 export function capabilityHintOf(
   error: unknown,
   carried: CarriedCapabilities,
 ): CapabilityHint | undefined {
   if (!isRejection(error) || error.statusCode >= 500) return undefined
+  if (error.statusCode === 401 || error.statusCode === 429) return undefined
   if (recognizeOverflow(error) !== null) return undefined
   const text = searchableText(error)
   const hit = CAPABILITY_HINT_KEYWORDS.find(

@@ -228,16 +228,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the servers above reject an overflow with a 400 before streaming.
   Raised by the context window check.
 
-- **The capability hint matches any 4xx status.** The hint
-  ([`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories))
-  names only a capability the request carried, and within that it
-  matches any 4xx, a 429 included: on an Anthropic call that sent a
-  thinking budget, a rate-limit body that mentions `thinking` or
-  `reasoning` gets the hint and `Fix profile`, and a 401 or 403 that
-  mentions one ("no access to reasoning models") gets it too, since the
-  hint is matched before the status branches. Raised by the context
-  window check.
-
 - **The truncation cross-check may warn on every warm turn of a server
   that counts only uncached prompt tokens.** Canon names Ollama as a
   server that cuts prompts silently

@@ -130,9 +130,7 @@ describe('classifyProviderError', () => {
 
   it.each([
     [400, 'unknown'],
-    [401, 'auth'],
     [403, 'auth'],
-    [429, 'network'],
   ] as const)('attaches a capability hint to a %i whose body names one', (status, reason) => {
     expect(
       classifyProviderError(rejection(status, errorBody('thinking is not supported')), CARRIED_BOTH)
@@ -164,6 +162,28 @@ describe('classifyProviderError', () => {
     const uncarried = classifyProviderError(error, { reasoning: false, structuredOutput: true })
     expect('possibleCapabilityMismatch' in uncarried.error).toBe(false)
     expect('possibleCapabilityMismatch' in classifyProviderError(error).error).toBe(false)
+  })
+})
+
+// A status that names its own cause isn't a capability rejection (generation-pipeline.md → Fatal
+// error categories); a 403 stays, being what a capability gate sends.
+describe('capabilityHintOf, a status with its own cause', () => {
+  it.each([401, 429])('gives a %i no hint, whatever its body says', (status) => {
+    const error = rejection(status, errorBody('thinking is not supported'))
+    expect(capabilityHintOf(error, CARRIED_BOTH)).toBeUndefined()
+    expect(classifyProviderError(error, CARRIED_BOTH).error).not.toHaveProperty(
+      'possibleCapabilityMismatch',
+    )
+  })
+
+  it('leaves the reason a 401 and a 429 report', () => {
+    const body = errorBody('thinking is not supported')
+    expect(classifyProviderError(rejection(401, body), CARRIED_BOTH).error).toMatchObject({
+      reason: 'auth',
+    })
+    expect(classifyProviderError(rejection(429, body), CARRIED_BOTH).error).toMatchObject({
+      reason: 'network',
+    })
   })
 })
 

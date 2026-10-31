@@ -2094,7 +2094,9 @@ the prompt. So the narrative, which sends neither on an
 OpenAI-compatible provider, gets no hint from a body such as
 `model 'Qwen3-30B-A3B-Thinking-2507' not found`. Matching runs after
 overflow recognition, so a body recognized as an overflow carries no
-hint. A hit sets the field on the `provider` `CallRetryError` to the
+hint. A 401 or a 429 carries none either: a status that names its own
+cause isn't a capability rejection, whatever its body says. A 403
+stays, being what a capability gate sends. A hit sets the field on the `provider` `CallRetryError` to the
 capability and the matched word, and the phase copies it onto
 `PipelineError.provider` as it maps the error; otherwise it's omitted.
 The narrative's stream error never passes through `callWithRetry`, so
