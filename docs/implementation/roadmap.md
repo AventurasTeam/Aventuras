@@ -770,6 +770,13 @@ code before it moved; resolve with the slice it names.
   already anticipates a main-process emit path, which is where the design
   should start. Surfaced by Slice 3.12a review (2026-08-19), routed
   2026-08-20.
+- **M7.1 — The reasoning slider must stay below the model's output cap.**
+  The Anthropic SDK sends max output plus the thinking budget as
+  `max_tokens`, so the two can't clash on their own, but it then clamps to
+  the cap of a model it knows. A budget at or above that cap goes out
+  without room under `max_tokens`, and Anthropic requires it lower. Nothing
+  writes `thinking` yet, so the slider's range is the place to bound it.
+  Surfaced by the PR #673 review (2026-10-31).
 - **M7.1 — Tagged-block capability detection is unspecified, and its
   reliability question is open at depth.**
   [`memory/piggyback.md → Capability gate`](../memory/piggyback.md#capability-gate)
