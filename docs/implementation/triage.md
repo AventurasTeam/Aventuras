@@ -60,7 +60,3 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
-
-- **Latte's muted text misses AA on sunken surfaces.** `--fg-muted` is
-  3.20 and `--fg-secondary` 4.05 on `--bg-sunken`; the audit checks both
-  only on `--bg-base`. Raised by the 2026-10-31 triage pass.

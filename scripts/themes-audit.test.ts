@@ -31,6 +31,30 @@ describe.each(themes.map((theme) => [theme.id, theme] as const))('%s', (_id, the
     )
     expect(semantic.sort()).toEqual(expected.sort())
   })
+
+  it('audits muted on all four surfaces, and secondary on all but sunken', () => {
+    const pairs = rows.filter((row) => row.kind === 'text').map((row) => `${row.fg} ${row.bg}`)
+    expect(pairs).toEqual(
+      expect.arrayContaining([
+        '--fg-muted --bg-base',
+        '--fg-muted --bg-raised',
+        '--fg-muted --bg-sunken',
+        '--fg-muted --bg-overlay',
+        '--fg-secondary --bg-base',
+        '--fg-secondary --bg-raised',
+        '--fg-secondary --bg-overlay',
+      ]),
+    )
+    expect(pairs).not.toContain('--fg-secondary --bg-sunken')
+  })
+})
+
+describe('AUDIT_PAIRS muted floor', () => {
+  it('holds muted to 3:1 on every surface', () => {
+    const floors = AUDIT_PAIRS.text.filter((pair) => pair.fg === '--fg-muted')
+    expect(floors).toHaveLength(4)
+    for (const pair of floors) expect(pair).toMatchObject({ aaFloor: 3, aaaTarget: 4.5 })
+  })
 })
 
 describe('auditTheme', () => {
