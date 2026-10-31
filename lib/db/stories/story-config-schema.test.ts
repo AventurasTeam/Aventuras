@@ -478,12 +478,12 @@ describe('storySettingsSchema — knob bounds', () => {
       ...VALID_SETTINGS,
       chapterTokenThreshold: 1,
       classifierCadence: 1,
-      partialChapterBuffer: 0,
+      partialChapterBuffer: 1,
       protectedBuffer: 0,
     })
     expect(parsed.chapterTokenThreshold).toBe(1)
     expect(parsed.classifierCadence).toBe(1)
-    expect(parsed.partialChapterBuffer).toBe(0)
+    expect(parsed.partialChapterBuffer).toBe(1)
   })
 
   // Deliberately looser than its neighbours: a hand-edited 0 degrades at read time
