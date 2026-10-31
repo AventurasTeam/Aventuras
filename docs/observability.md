@@ -214,11 +214,18 @@ convention, and the expectation that subsystems route through
   (warn: the description embed call threw, so every namesake went
   unscored)
 - `retrieval.*` — `row_skipped_stale`, `empty_pool`, `knn_error`
-- `provider.*` — `retry_succeeded`, `rate_limited`,
-  `stream_interrupted`, `request_failed`, `url_redaction_failed`
+- `provider.*` — `url_redaction_failed`
   (the URL pass failed to parse a span and left it unredacted —
-  it fails open, so it must not fail silently), `reply_cut_off` (warn:
-  the server stopped a reply at its length limit; logged with the
+  it fails open, so it must not fail silently),
+  `narrative_stream_failed` (error: a stream error that fails the turn,
+  with its detail and, for a rejection, the status and redacted URL),
+  `http_call_buffer_full`, `wizard_assist_failed` and
+  `wizard_assist_threw` (a wizard call that failed, or threw before it
+  went out), `wizard_opening_unresolved_refs`, `setup_save_failed`,
+  `setup_fetch_models_failed`, `setup_quick_wire_failed`,
+  `setup_add_custom_failed`, `reply_cut_off` (warn:
+  a reply stopped short, at a length limit, by a filter or with no
+  finish signal; logged with the
   cause, the numbers and an `outcome`, `refused` or `accepted` for a
   structured call and `failed`, `marked` or `in-block` for the
   narrative; a refused structured call also carries `parseError`,

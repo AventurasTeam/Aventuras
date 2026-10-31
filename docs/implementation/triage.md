@@ -61,16 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **The `provider.*` log kinds in `observability.md` are stale.**
-  [`observability.md`](../observability.md) lists `retry_succeeded`,
-  `rate_limited`, `stream_interrupted`, `request_failed` and
-  `url_redaction_failed`. The code also logs `http_call_buffer_full`,
-  `narrative_stream_failed`, `wizard_assist_failed`,
-  `wizard_assist_threw`, `wizard_opening_unresolved_refs` and four
-  `setup_*` kinds, and logs no `rate_limited`, `stream_interrupted` or
-  `request_failed` by those names. The cut-off replies PR adds its own
-  `reply_cut_off`. Raised by the cut-off replies Task 4 review.
-
 - **On native, the reader rows' memo misses on every host render.**
   expo-dom hands every function prop a new identity per prop emission
   and emits on every host render (`node_modules/expo/src/dom/`:
