@@ -113,18 +113,6 @@ slice-planning gate forces its resolution before that slice is planned.
   possibly ending in a doubled period. Raised by the cut-off replies
   Task 11 review.
 
-- **The dev mock's failure injection misreports in three spots.** In
-  `scripts/mock-llm/completions.ts`, a lane with an upstream selected
-  spends a `malformed`, `stream-cut` or `length` failure and logs the
-  call as failed, then relays the upstream reply untouched; the
-  [mock README](../../scripts/mock-llm/README.md) doesn't say these
-  kinds apply in mock mode only. `piggybackNote` blames
-  `taggedBlockReliable` when the fallback fires after an injected
-  `malformed` or `length` cut inside `<state>`. The control UI's
-  "a single injected failure is swallowed" hint also shows for an HTTP
-  401 or 403, which the app doesn't retry. Raised by the cut-off
-  replies Task 12 review.
-
 - **The orchestrator never fills a phase-logic error's `phaseName` or
   `retryAttempt`.** Canon has it fill both when it wraps a phase's
   error

@@ -60,6 +60,15 @@ function jittered(ms: number, jitterMs: number): number {
 }
 
 /** Emits the SSE body. Headers must already be written by the caller. */
+function cutChunks(content: string, chunkSize: number): string[] {
+  const chunks = chunkContent(content, chunkSize)
+  return chunks.slice(0, Math.max(1, Math.floor(chunks.length / 2)))
+}
+
+/** What a `stream-cut` delivers of `content`. */
+export const deliveredByCut = (content: string, chunkSize: number): string =>
+  cutChunks(content, chunkSize).join('')
+
 export async function streamNarrative(res: ServerResponse, opts: StreamOptions): Promise<void> {
   const { ending } = opts
   await write(res, roleFrame())
@@ -71,9 +80,10 @@ export async function streamNarrative(res: ServerResponse, opts: StreamOptions):
     return
   }
 
-  const chunks = chunkContent(opts.content, opts.chunkSize)
   const emit =
-    ending === 'stream-cut' ? chunks.slice(0, Math.max(1, Math.floor(chunks.length / 2))) : chunks
+    ending === 'stream-cut'
+      ? cutChunks(opts.content, opts.chunkSize)
+      : chunkContent(opts.content, opts.chunkSize)
 
   for (const chunk of emit) {
     if (opts.aborted()) return
