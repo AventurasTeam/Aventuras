@@ -11,9 +11,13 @@ import {
   type ReplyCutOffInput,
 } from './reply-cut-off'
 
-function usage(outputTokens: number | undefined, reasoningTokens?: number): LanguageModelUsage {
+function usage(
+  outputTokens: number | undefined,
+  reasoningTokens?: number,
+  inputTokens?: number,
+): LanguageModelUsage {
   return {
-    inputTokens: 1000,
+    inputTokens,
     inputTokenDetails: {
       noCacheTokens: undefined,
       cacheReadTokens: undefined,
@@ -137,6 +141,35 @@ describe('replyCutOff', () => {
   })
 
   describe('the window branch', () => {
+    // Measured on llama.cpp at n_ctx 65536: a reply stopped at the window reported exactly this.
+    it("reads window when the provider's input count plus the output reach the window", () => {
+      expect(
+        replyCutOff({ ...BASE, usage: usage(711, undefined, 64_825), window: 65_536 }).cause,
+      ).toBe('window')
+    })
+
+    it("trusts the provider's count over an estimate that reads low", () => {
+      const reported = usage(5536, undefined, 60_000)
+      expect(
+        replyCutOff({ ...BASE, usage: reported, window: 65_536, promptEstimate: 56_000 }).cause,
+      ).toBe('window')
+    })
+
+    it("trusts the provider's count over an estimate that reads high", () => {
+      const reported = usage(100, undefined, 20_000)
+      expect(
+        replyCutOff({ ...BASE, usage: reported, window: 65_536, promptEstimate: 66_000 }).cause,
+      ).toBe('unknown')
+    })
+
+    // OpenAI-compatible reports a missing count as 0.
+    it.each([[0], [undefined]])('falls back to the estimate on an input count of %s', (input) => {
+      const reported = usage(1000, undefined, input)
+      expect(
+        replyCutOff({ ...BASE, usage: reported, window: 8192, promptEstimate: 7192 }).cause,
+      ).toBe('window')
+    })
+
     it('reads window when the prompt estimate plus the output reach the window', () => {
       expect(
         replyCutOff({ ...BASE, usage: usage(1000), window: 8192, promptEstimate: 7192 }),

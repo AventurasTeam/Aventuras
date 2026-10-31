@@ -1939,16 +1939,19 @@ reply cut short fails its parse and is retried.
 **The cause** comes from what the call knows: `max-output` when the
 profile sets `maxOutput` and the output tokens reached it, or the
 provider reported none; `window` when the model's window is known and
-the prompt estimate plus the output tokens reach it; `unknown`
+the prompt plus the output tokens reach it, reading the prompt from the
+provider's input count and from the estimate only when it reported
+none, since o200k can miss a server's own count by a quarter either
+way; `unknown`
 otherwise, on hosted servers usually their own default `max_tokens`,
 which a profile max output overrides. Output tokens include reasoning
 on both providers, so a model that spends its allowance thinking reads
 as `max-output`, with `reasoningTokens` saying how much went there.
 An `unknown` cut-off on a call that sent a max output stopped short of
 it: most likely at a full window the call couldn't see as full, its
-figure unknown or above the server's real window, or the prompt larger
-than the estimate (a known window that the estimate plus the output
-reaches reads as `window`); or at a provider's own ceiling below it
+figure unknown or above the server's real window, or, on a server that
+reports no input count, the prompt larger than the estimate; or at a
+provider's own ceiling below it
 (`@ai-sdk/anthropic` lowers `max_tokens` to a known model's maximum).
 The failure carries the limit in `maxOutput` and the entry's mark keeps
 it, so each surface says the server stopped short of that limit instead

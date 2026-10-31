@@ -136,23 +136,6 @@ slice-planning gate forces its resolution before that slice is planned.
     provider and model, so one model id on two providers can show two
     identical toasts.
 
-- **A cut-off's `window` cause reads the estimate, not the server's
-  count.** `replyCutOff` (`lib/ai/reply-cut-off.ts`) gives `window` only
-  when the o200k estimate plus the output reaches the figure
-  ([`generation-pipeline.md → Cut-off replies`](../generation-pipeline.md#cut-off-replies)).
-  On a model whose tokenizer counts above o200k, as Gemma 4 does English
-  ([`parked.md → Calibrating the token estimate per model`](../parked.md#calibrating-the-token-estimate-per-model)
-  records 6-7%), a genuinely full known
-  window lands below the figure and reads `unknown`, and the notice
-  points at `Fix profile`, which the roadmap's M7.1 item on a cut-off
-  under a story's model override already revisits. On one that counts
-  below it, as Gemma 4 does Japanese (25%), a stop at the server's own
-  default can reach the figure and read `window`, whose notice offers no
-  action until M7.1 wires `Set window`. With `includeUsage` on, a cut-off reply now
-  usually carries the provider's own input count, which would make the
-  cause exact. A canon design change. Raised by the context window
-  check.
-
 - **The stored system-failure shape is looser than the data model.**
   `systemFailure` in `lib/db/story-entries/entry-metadata.ts` parses on
   any entry kind, while

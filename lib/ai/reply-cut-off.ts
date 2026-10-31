@@ -58,14 +58,15 @@ export function replyCutOff(input: ReplyCutOffInput): ReplyCutOffFailure {
   const reasoningTokens = input.usage?.outputTokenDetails?.reasoningTokens ?? null
   const maxOutput = input.maxOutput ?? null
   const { window, promptEstimate } = input
+  // 0 reads as unreported: OpenAI-compatible reports a missing count as 0.
+  const reportedInput = input.usage?.inputTokens
+  const promptTokens = reportedInput ? reportedInput : promptEstimate
   const cause: CutOffCause =
     input.stop === 'interrupted' || input.stop === 'content-filter'
       ? input.stop
       : maxOutput !== null && (outputTokens === null || outputTokens >= maxOutput)
         ? 'max-output'
-        : window !== null &&
-            promptEstimate !== null &&
-            promptEstimate + (outputTokens ?? 0) >= window
+        : window !== null && promptTokens !== null && promptTokens + (outputTokens ?? 0) >= window
           ? 'window'
           : 'unknown'
   return {
