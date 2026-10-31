@@ -23,7 +23,7 @@ describe.each(themes.map((theme) => [theme.id, theme] as const))('%s', (_id, the
 
   it('audits each semantic text slot on all four solid surfaces', () => {
     const semantic = rows
-      .filter((row) => row.fg.endsWith('-text'))
+      .filter((row) => row.kind === 'text' && row.fg.endsWith('-text'))
       .map((row) => `${row.fg} ${row.bg}`)
     const expected = ['--success-text', '--warning-text', '--danger-text', '--info-text'].flatMap(
       (fg) =>
