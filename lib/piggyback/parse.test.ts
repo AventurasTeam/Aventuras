@@ -609,6 +609,20 @@ describe('stripTrailingBlocks', () => {
       expect(stripTrailingBlocks(`Prose.\n\n${state('a')}<state>\n<summary>b`).prose).toBe('Prose.')
     })
 
+    it('leaves a closed pair quoted mid-line ahead of the real block', () => {
+      const { prose, stateRaw, outOfPosition } = stripTrailingBlocks(
+        `He wrote <state>awake</state>.\n\n${state('a')}`,
+      )
+      expect(prose).toBe('He wrote <state>awake</state>.')
+      expect(stateRaw).toBe(state('a'))
+      expect(outOfPosition).toBeUndefined()
+    })
+
+    it('leaves a closed pair quoted mid-line ahead of an unclosed block', () => {
+      const raw = 'He wrote <state>awake</state>.\n\n<state>\n<summary>b'
+      expect(stripTrailingBlocks(raw).prose).toBe('He wrote <state>awake</state>.')
+    })
+
     it('leaves a stray close tag no opener claims', () => {
       expect(stripTrailingBlocks('He wrote </state> on the wall.').prose).toBe(
         'He wrote </state> on the wall.',

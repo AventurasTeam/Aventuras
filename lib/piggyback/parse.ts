@@ -577,10 +577,24 @@ function atBlockBoundary(raw: string, index: number): boolean {
   return before === '' || TRAILING_ROOT_TAGS.some((tag) => before.endsWith(`</${tag}>`))
 }
 
+function unclosedBlockSpan(
+  raw: string,
+  tag: string,
+  start: number | undefined,
+  closedTo: number,
+): BlockSpan[] {
+  if (start === undefined || start < closedTo) return []
+  // Past a closed block of its kind, a mid-line opener is a mention in the prose that follows.
+  if (closedTo > 0 && !atBlockBoundary(raw, start)) return []
+  const rest = raw.slice(start + tag.length + 2).trimStart()
+  if (rest !== '' && !rest.startsWith('<')) return []
+  return [{ tag, start, end: boundedEnd(raw, start + 1, tag) }]
+}
+
 // Every closed pair, and a trailing opener with nothing but markup after it. A stack, so each close
 // claims its nearest opener: a repeat or a block nested in its own kind leaves no tag behind.
 function blockSpans(raw: string, tag: string): BlockSpan[] {
-  const spans: BlockSpan[] = []
+  const closed: BlockSpan[] = []
   const openers: number[] = []
   let closedTo = 0
   for (const match of raw.matchAll(new RegExp(`</?${tag}>`, 'g'))) {
@@ -591,15 +605,11 @@ function blockSpans(raw: string, tag: string): BlockSpan[] {
     const start = openers.pop()
     if (start === undefined) continue
     closedTo = match.index + match[0].length
-    spans.push({ tag, start, end: closedTo })
+    closed.push({ tag, start, end: closedTo })
   }
-  const start = openers.at(-1)
-  if (start === undefined || start < closedTo) return spans
-  // Past a closed block of its kind, a mid-line opener is a mention in the prose that follows.
-  if (closedTo > 0 && !atBlockBoundary(raw, start)) return spans
-  const rest = raw.slice(start + tag.length + 2).trimStart()
-  if (rest !== '' && !rest.startsWith('<')) return spans
-  return [...spans, { tag, start, end: boundedEnd(raw, start + 1, tag) }]
+  const spans = [...closed, ...unclosedBlockSpan(raw, tag, openers.at(-1), closedTo)]
+  // Ahead of the last span, a mid-line pair is quoted prose.
+  return spans.filter((span, i) => i === spans.length - 1 || atBlockBoundary(raw, span.start))
 }
 
 function trailingBlockSpans(raw: string): BlockSpan[] {
