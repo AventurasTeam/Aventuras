@@ -2127,11 +2127,14 @@ badge
 
 **Structured-context fields on `phase-logic` and `action-layer`**
 (O4). All optional so existing call sites keep compiling.
-Orchestrator auto-populates `phaseName` and `retryAttempt` when
-wrapping phase-emitted errors (it owns that context). `subsystem`
-and `targetRef` are call-site populated when the failing code
-knows them. `tableName` / `targetId` / `constraintViolated` for
-the action-layer variant come from the SQLite error mapper.
+`phaseName` and `subsystem` are call-site populated when the failing
+code knows them; the orchestrator returns a phase's failure as it is,
+and `pipeline.phase_failed` logs the phase either way, so a bare
+`phase-logic` loses nothing a reader needs. An attempt number stays in
+`lib/ai`, where the retry runs, and reaches the pipeline as one
+`recoverable_error` per retried attempt. `tableName` / `targetId` /
+`constraintViolated` for the action-layer variant come from the SQLite
+error mapper.
 Diagnostics UI renders structured fields when present, falls back
 to `detail` alone otherwise.
 

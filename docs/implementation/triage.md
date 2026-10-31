@@ -87,18 +87,6 @@ slice-planning gate forces its resolution before that slice is planned.
   holds on web only. Read from the expo source, not measured on a
   device. Raised by the cut-off replies Task 10 review.
 
-- **The orchestrator never fills a phase-logic error's `phaseName` or
-  `retryAttempt`.** Canon has it fill both when it wraps a phase's
-  error
-  ([`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories)),
-  but nothing in `lib/pipeline/runtime/orchestrator.ts` sets either,
-  the `phase-logic` arm in `lib/pipeline/types.ts` has no
-  `retryAttempt`, and `toPipelineError` drops a parse failure's
-  `attempt`. Since the cut-off replies work, a pass's or a suggestion
-  refresh's exhausted parse retries reach this bare arm, where they
-  used to be relabelled `provider`. Raised by the cut-off replies slice
-  review.
-
 - **Overflow recognition misses shapes beyond llama.cpp's and OpenAI's.**
   [`architecture.md → Recognizing an overflow rejection`](../architecture.md#recognizing-an-overflow-rejection)
   is verified against those two servers only. Checked in SGLang's
