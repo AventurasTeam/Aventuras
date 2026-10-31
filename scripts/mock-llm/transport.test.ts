@@ -2,7 +2,7 @@ import { APICallError, wrapLanguageModel } from 'ai'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import { fetchModelCatalog, parseStructured } from '@/lib/ai'
+import { fetchModelCatalog, parseStructured, replyStopOf } from '@/lib/ai'
 import type { JsonSchema } from '@/lib/ai'
 import { jsonResponseFormatMiddleware, promptSchemaMiddleware } from '@/lib/ai/prompt-schema'
 import { createProviderModel } from '@/lib/ai/providers'
@@ -106,6 +106,25 @@ describe('the app transport against the mock', () => {
     const model = classifierModel()
 
     await expect(runProviderCall({ model, prompt: 'Classify the turn.' })).rejects.toThrow()
+  })
+
+  // generation-pipeline.md → Cut-off replies rests on what the SDK reports for each ending.
+  it.each([
+    ['a whole reply', 'none', null],
+    ['a length stop', 'length', 'length'],
+    ['a stream with no finish frame', 'stream-cut', 'interrupted'],
+  ] as const)('reads %s as the stop it was', async (_label, kind, stop) => {
+    const lane = mock.ctx.lane('narrative')
+    lane.failure = { kind, status: 500, remaining: kind === 'none' ? 0 : 1 }
+    const stream = streamProviderCall({
+      model: createProviderModel(provider(), 'seed/narrative'),
+      prompt: 'Continue the scene.',
+    })
+
+    await stream.consumeStream()
+
+    expect(replyStopOf(await stream.finishReason, await stream.rawFinishReason)).toBe(stop)
+    lane.failure = { kind: 'none', status: 500, remaining: 0 }
   })
 
   it("reports a lane's length failure as the SDK's finishReason on both paths", async () => {
