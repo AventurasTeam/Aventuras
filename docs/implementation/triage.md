@@ -60,3 +60,48 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
+
+- **A `partialChapterBuffer` of 0 reads as 1.** The Memory tab and
+  `storySettingsSchema` accept 0, and the comment in
+  `lib/retrieval/buffer.ts` says 0 "asks for no window at all", but
+  `settingsCount(…, 1)` floors it to 1 and `buffer.test.ts` calls it
+  unreachable. Canon doesn't say which is meant. Raised by the
+  2026-10-31 triage pass.
+
+- **A chapter close can't persist its failure's `close` field.**
+  [`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)
+  gives `systemFailure` a `close?`, and `lib/db/story-entries/entry-metadata.ts`
+  has none, so zod would strip it. No writer exists yet; M5's must add
+  it. Read, not exercised. Raised by the 2026-10-31 triage pass.
+
+- **A synchronous throw from the narrative's `streamText` escapes its
+  error handling.** It's outside the `try` in
+  `lib/pipeline/definitions/per-turn.ts`, so it lands in the
+  orchestrator's catch as `orchestrator`, and `boundedSignal`'s timer
+  isn't disposed. Bounding `maxOutput` removed the one known trigger.
+  Read, not run. Raised by the 2026-10-31 triage pass.
+
+- **A stale `Retry` after a failed reload can run the turn the composer
+  still holds.** A `Dismiss` whose reload fails leaves the card up with
+  its `Retry`, beside the text it handed back, and `Dismiss` takes no
+  dispatch guard. The toast now says to reopen the story; nothing stops
+  the tap. Read, not run. Raised by the 2026-10-31 triage pass.
+
+- **Raw strings skip `t()`.** `components/ui/multi-select.tsx` and the
+  `Edit raw — coming later` hint in `components/compounds/json-viewer.tsx`.
+  Raised by the 2026-10-31 triage pass.
+
+- **Latte's muted text misses AA on sunken surfaces.** `--fg-muted` is
+  3.20 and `--fg-secondary` 4.05 on `--bg-sunken`; the audit checks both
+  only on `--bg-base`. Raised by the 2026-10-31 triage pass.
+
+- **Canon's capability hint covers tool calling, and the code doesn't.**
+  [`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories)
+  lists `tools` and `tool_choice`; `CAPABILITY_HINT_KEYWORDS` in
+  `lib/ai/transport/classify-provider-error.ts` has neither. May simply
+  be unbuilt until M5's close steps send tools. Raised by the 2026-10-31
+  triage pass.
+
+- **A profile's `timeout` is still a bare `z.number()`.** `maxOutput` and
+  `thinking` got bounds in the 2026-10-31 triage pass; nobody checked
+  what `boundedSignal` does with 0 or a negative. Raised by that pass.
