@@ -5,7 +5,7 @@ import {
   type ResolveTarget,
 } from '@/lib/ai'
 
-import type { PipelineError } from './types'
+import type { PhaseEmittedEvent, PipelineError } from './types'
 
 // CallRetryError is lib/ai's vocabulary; the pipeline maps it to PipelineError
 // when it surfaces recoverable_error / fatal events (generation-pipeline.md →
@@ -35,6 +35,16 @@ export function toPipelineError(e: CallRetryError, target: ResolveTarget): Pipel
 }
 
 /** Log and status detail: the arm's own (may span lines), or the window or cut-off described. */
+/** generation-pipeline.md → Two retry tiers: one event per retried attempt, however the call ended. */
+export function* retriedAttemptEvents(
+  result: { recoverable: readonly CallRetryError[] } | { status: 'not-configured' },
+  target: ResolveTarget,
+): Generator<PhaseEmittedEvent, void> {
+  if (!('recoverable' in result)) return
+  for (const attempt of result.recoverable)
+    yield { type: 'recoverable_error', error: toPipelineError(attempt, target) }
+}
+
 export function pipelineErrorDetail(e: PipelineError): string | undefined {
   switch (e.kind) {
     case 'context-window':
