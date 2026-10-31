@@ -181,7 +181,6 @@
     "copyHeldText": "Copy your text",
     "copyDetails": "Copy details",
     "dismissFailed": "Couldn't dismiss this. Try again.",
-    "dismissReloadFailed": "Dismissed, but the reader couldn't refresh. Reopen the story to update it.",
     "assignProfile": "Assign profile",
     "fixProfile": "Fix profile",
     "fixDefault": "Fix default",

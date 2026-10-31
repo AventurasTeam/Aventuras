@@ -436,7 +436,7 @@ The two-mode axis:
   close phase 0 catches up unclassified entries).
 
 **Partial chapter buffer.** Per-story setting
-`stories.settings.partialChapterBuffer: number` (entries). Default 10. Size of the current-chapter slice in partial mode. Greyed when
+`stories.settings.partialChapterBuffer: number` (entries). Default 10, minimum 1: the turn's own action reaches the prompt as the slice's last entry. Size of the current-chapter slice in partial mode. Greyed when
 `fullChapterInBuffer = true`; the value is preserved for when the
 mode flips back.
 

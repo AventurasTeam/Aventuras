@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { Flag, MapPin, Package, User } from 'lucide-react-native'
 import { View } from 'react-native'
+import { expect, within } from 'storybook/test'
 
 import { themes } from '@/lib/themes'
 
@@ -128,4 +129,17 @@ export const ThemeMatrix: Story = {
       ))}
     </View>
   ),
+}
+
+// Secondary misses AA on Latte's sunken fill (color.md → Text-on-background).
+export const FallbackInitialsOnPrimaryText: Story = {
+  args: { alt: 'Dora Vale', fallback: 'DV' },
+  play: async ({ canvasElement }) => {
+    const probe = document.createElement('span')
+    probe.className = 'text-fg-primary'
+    canvasElement.append(probe)
+    const initials = within(canvasElement).getByText('DV')
+    await expect(getComputedStyle(initials).color).toBe(getComputedStyle(probe).color)
+    probe.remove()
+  },
 }

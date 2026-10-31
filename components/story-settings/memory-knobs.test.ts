@@ -116,6 +116,7 @@ describe('memory knobs draft', () => {
     ['threshold', { chapterTokenThreshold: 0 }],
     ['threshold', { chapterTokenThreshold: null }],
     ['partialBuffer', { partialChapterBuffer: -1 }],
+    ['partialBuffer', { partialChapterBuffer: 0 }],
     ['protectedBuffer', { protectedBuffer: -1 }],
     ['protectedBuffer', { protectedBuffer: null }],
     ['cadence', { classifierCadence: 0 }],
@@ -139,7 +140,7 @@ describe('memory knobs draft', () => {
     const floor: MemoryKnobsDraft = {
       ...toMemoryKnobsDraft(SETTINGS),
       chapterTokenThreshold: 1,
-      partialChapterBuffer: 0,
+      partialChapterBuffer: 1,
       protectedBuffer: 0,
       classifierCadence: 1,
       retrievalBudgets: { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },

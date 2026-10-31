@@ -282,7 +282,7 @@
       "cascadeMaxDepthNeedsCascade": "Turn on Cascade to set a depth.",
       "invalid": {
         "threshold": "Chapter threshold must be a whole number of at least 1",
-        "partialBuffer": "Partial chapter buffer must be a whole number of at least 0",
+        "partialBuffer": "Partial chapter buffer must be a whole number of at least 1",
         "protectedBuffer": "Protected buffer must be a whole number of at least 0",
         "cadence": "Classifier cadence must be a whole number of at least 1",
         "budget": "Every retrieval budget must be a whole number of at least 0",

@@ -145,7 +145,7 @@ Primitives in `components/ui/`, domain-agnostic compounds in
 ## i18n discipline
 
 No raw user-facing strings; chrome routes through `t()`.
-Convention-only until `i18next` lands (Slice 1.7). See
+Convention-only: no lint rule catches a raw string. See
 [code-conventions.md → i18n discipline](../../docs/code-conventions.md#i18n-discipline).
 
 ## Testing discipline
@@ -158,8 +158,8 @@ thresholds. See
 ## Forms
 
 Input clusters with a submit button use `react-hook-form`; inline
-single inputs stay component-local. Convention-only until
-`react-hook-form` lands (Slice 2.3). See
+single inputs stay component-local. Convention-only: no lint rule
+checks this. See
 [code-conventions.md → Forms](../../docs/code-conventions.md#forms).
 
 ## pnpm and patches

@@ -10,8 +10,8 @@ export type BufferSettings = {
   protectedBuffer: number
 }
 
-// The floors differ on purpose: partialChapterBuffer 0 asks for no window at
-// all, whereas protectedBuffer 0 only means "no spillover floor".
+// Floors differ on purpose: the window's last entry carries the turn's action,
+// so partialChapterBuffer can't empty it; protectedBuffer 0 means no spillover.
 /**
  * How many entries the window holds, given the size of the open region.
  * Spillover is gated on that region running out, so protectedBuffer widens this

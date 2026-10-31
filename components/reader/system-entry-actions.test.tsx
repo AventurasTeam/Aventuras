@@ -536,31 +536,31 @@ describe('dismissSystemEntry', () => {
 
   function harness(
     over: {
+      beginDispatch?: () => boolean
       clear?: () => Promise<void>
-      reload?: () => Promise<void>
       stillOnBranch?: () => boolean
     } = {},
   ) {
     const order: string[] = []
+    const endDispatch = vi.fn(() => {
+      order.push('endDispatch')
+    })
     const handBack = vi.fn<(s: SystemFailureMeta['submission']) => void>(() => {
       order.push('handBack')
     })
     return {
       order,
       handBack,
+      endDispatch,
       deps: {
         branchId: 'branch_a',
         submission: SUBMISSION,
+        beginDispatch: over.beginDispatch ?? ((): boolean => true),
+        endDispatch,
         clear:
           over.clear ??
           ((): Promise<void> => {
             order.push('clear')
-            return Promise.resolve()
-          }),
-        reload:
-          over.reload ??
-          ((): Promise<void> => {
-            order.push('reload')
             return Promise.resolve()
           }),
         stillOnBranch: over.stillOnBranch ?? ((): boolean => true),
@@ -579,9 +579,22 @@ describe('dismissSystemEntry', () => {
 
     await dismissSystemEntry(h.deps)
 
-    expect(h.order).toEqual(['clear', 'reload', 'handBack'])
+    expect(h.order).toEqual(['clear', 'handBack', 'endDispatch'])
     expect(h.handBack).toHaveBeenCalledWith(SUBMISSION)
     expect(warn).not.toHaveBeenCalled()
+  })
+
+  // Gated as a dispatch: a Retry or Send under the delete would run beside the hand-back.
+  it('does nothing while another dispatch holds the gate', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const h = harness({ beginDispatch: () => false })
+
+    await dismissSystemEntry(h.deps)
+
+    expect(h.order).toEqual([])
+    expect(warn).toHaveBeenCalledWith('reader.system_entry_dismiss_suppressed', {
+      branchId: 'branch_a',
+    })
   })
 
   // The notice and its Retry survive a rejected clear, so a copy in the composer
@@ -599,33 +612,11 @@ describe('dismissSystemEntry', () => {
     await expect(dismissSystemEntry(h.deps)).resolves.toBeUndefined()
 
     expect(h.handBack).not.toHaveBeenCalled()
-    expect(h.order).toEqual(['clear'])
+    expect(h.order).toEqual(['clear', 'endDispatch'])
     expect(toasted).toHaveBeenCalledExactlyOnceWith(t('reader:systemEntry.dismissFailed'))
     expect(logged).toHaveBeenCalledWith('reader.system_entry_dismiss_failed', {
       branchId: 'branch_a',
       error: 'db gone',
-    })
-  })
-
-  // The row holding the text is already deleted, so the stale card is not a copy to keep it in.
-  it('still hands the draft back when the reload rejects, and says the card is stale', async () => {
-    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {})
-    const toasted = vi.spyOn(toast, 'error').mockReturnValue('')
-    const h = harness({
-      reload: () => {
-        h.order.push('reload')
-        return Promise.reject(new Error('read failed'))
-      },
-    })
-
-    await expect(dismissSystemEntry(h.deps)).resolves.toBeUndefined()
-
-    expect(h.handBack).toHaveBeenCalledWith(SUBMISSION)
-    expect(h.order).toEqual(['clear', 'reload', 'handBack'])
-    expect(toasted).toHaveBeenCalledExactlyOnceWith(t('reader:systemEntry.dismissReloadFailed'))
-    expect(logged).toHaveBeenCalledWith('reader.system_entry_reload_failed', {
-      branchId: 'branch_a',
-      error: 'read failed',
     })
   })
 

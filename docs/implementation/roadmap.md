@@ -341,9 +341,9 @@ DB-backed `openRegionTokens` resolves all of them.
 - **M5.1 — The same strip is non-monotonic across a reload.** `entriesStore`
   grows within a session (`patch` never evicts) but `reload()`
   re-hydrates to the trailing 50, discarding paged-in older rows.
-  `reload()` fires on turn failure, on submit-with-system-tail, and on
-  system-entry dismissal — so **dismissing a system entry visibly
-  shrinks the progress strip**, as does restarting the app. Same story,
+  `reload()` fires on turn failure and on submit-with-system-tail — so
+  **a failed turn visibly shrinks the progress strip**, as does
+  restarting the app. Same story,
   same open region, different number. Follows from the entry above and
   is fixed by the same change. Surfaced by M3.4 Task 19 (2026-08-02).
 - **M5.1 — `countEntryTokens` now runs on the reader's first render, adding a
@@ -395,6 +395,13 @@ DB-backed `openRegionTokens` resolves all of them.
   - Detecting and gating `toolCalling`: the schema lacks it, the catalog
     can't produce it, and `runPreflight` returns only
     `ConfigResolverError`.
+  - Canon's capability hint covers tool calling, and the code doesn't:
+    [`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories)
+    lists `tools` and `tool_choice`; `CAPABILITY_HINT_KEYWORDS` in
+    `lib/ai/transport/classify-provider-error.ts` has neither, and
+    `carriedCapabilities` in `lib/ai/generate.ts` has no arm for them.
+    Unbuilt until the close's steps send tools, as nothing in `lib/`
+    does yet, and the hint's fix needs the flag above.
   - The mock LLM and the stub can't drive tools: a request with no schema
     block gets `{}` and `stop`, so an E2E close would pass with no writes.
   - Capture and progress: `HTTP_CALLS_CAP` is 200 where seven tasks at 24

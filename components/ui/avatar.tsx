@@ -72,7 +72,7 @@ export function Avatar({
       <AvatarPrimitive.Fallback
         className={cn('flex size-full items-center justify-center', fallbackClassName)}
       >
-        <TextClassContext.Provider value="text-fg-secondary">
+        <TextClassContext.Provider value="text-fg-primary">
           {isStringFallback(fallback) ? (
             <Text
               className={cn(

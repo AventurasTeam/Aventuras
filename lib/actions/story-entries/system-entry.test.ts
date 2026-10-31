@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { branches, stories, storyEntries } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { entriesStore } from '@/lib/stores'
 
 import { clearSystemEntry, writeSystemEntry } from './system-entry'
 
@@ -23,6 +24,7 @@ beforeEach(async () => {
 })
 afterEach(() => {
   ctx = undefined as never
+  entriesStore.__reset()
 })
 
 const systemRows = () => ctx.db.select().from(storyEntries).where(eq(storyEntries.kind, 'system'))
@@ -84,5 +86,42 @@ describe('clearSystemEntry', () => {
     await clearSystemEntry('b1', ctx)
     expect(await systemRows()).toHaveLength(0)
     expect((await ctx.db.select().from(storyEntries)).length).toBe(2) // content entries untouched
+  })
+
+  describe('the reader store', () => {
+    const hydrateAll = async () =>
+      entriesStore.hydrate('b1', await ctx.db.select().from(storyEntries))
+    const heldIds = () => [...entriesStore.getEntries().keys()].sort()
+
+    // A card the store kept would offer a Retry for a row that's gone, and Dismiss reloads nothing.
+    it('takes the card out with the row, and nothing else', async () => {
+      await writeSystemEntry({ branchId: 'b1', content: 'x' }, ctx)
+      await hydrateAll()
+      expect(heldIds()).toHaveLength(3)
+
+      await clearSystemEntry('b1', ctx)
+
+      expect(heldIds()).toEqual(['e1', 'e2'])
+    })
+
+    it('leaves the card standing when the delete rejects', async () => {
+      const id = await writeSystemEntry({ branchId: 'b1', content: 'x' }, ctx)
+      await hydrateAll()
+      const refusing = { ...ctx, runInTransaction: () => Promise.reject(new Error('db gone')) }
+
+      await expect(clearSystemEntry('b1', refusing)).rejects.toThrow('db gone')
+
+      expect(heldIds()).toContain(id)
+    })
+
+    it("leaves a held branch's card alone when clearing another branch", async () => {
+      const id = await writeSystemEntry({ branchId: 'b1', content: 'x' }, ctx)
+      await hydrateAll()
+      await ctx.db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'o', createdAt: 1 })
+
+      await clearSystemEntry('b2', ctx)
+
+      expect(heldIds()).toContain(id)
+    })
   })
 })

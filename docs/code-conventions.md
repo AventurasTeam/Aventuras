@@ -3,9 +3,8 @@
 How the source tree stays consistent — module boundaries, state
 placement, the action layer, type design, component taxonomy, and the
 smaller disciplines (i18n, testing, forms, package manager). Some rules are
-mechanically enforced today; others are convention-only until the
-tooling they depend on lands in a later slice. Each section says
-which.
+mechanically enforced today; others are convention-only. Each section
+says which.
 
 The operational reminder layer lives in
 [`.claude/rules/code.md`](../.claude/rules/code.md) — it cites back
@@ -227,9 +226,8 @@ No raw user-facing strings in components. All chrome (labels,
 buttons, menu items, toasts) routes through `t()`. Author copy as
 translation keys, not inline literals.
 
-Convention-only this slice. ESLint enforcement gates on `i18next`,
-which installs in Slice 1.7 — until then the discipline is upheld by
-review.
+Convention-only: `eslint.config.js` has no literal-string rule, so a
+raw string lints clean and review is what upholds this.
 
 ## Testing discipline
 
@@ -307,9 +305,8 @@ field forms with validation and a commit step. Inline single inputs
 (a rename field, a search box, a toggle row) stay component-local
 with plain `useState`; pulling them into a form library buys nothing.
 
-Convention-only this slice. `react-hook-form` installs in Slice 2.3;
-until then, follow the convention and keep form clusters shaped so
-the adoption is mechanical.
+Convention-only: no lint rule tells a form cluster from an inline
+input, so review is what upholds this.
 
 ## pnpm and patches
 

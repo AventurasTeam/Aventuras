@@ -7,6 +7,7 @@ import { JSONBlock } from '@/components/ui/json-block'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
+import { t } from '@/lib/i18n'
 
 type JSONViewerProps = {
   /** Controlled open state. Caller owns mount lifecycle. */
@@ -39,7 +40,7 @@ export function JSONViewer({ open, onOpenChange, name, data, className }: JSONVi
         <View className="flex-row items-center gap-3 border-b border-border pb-3">
           <View nativeID={headingId} className="min-w-0 flex-1 flex-row items-baseline gap-1">
             <Text numberOfLines={1} className="shrink-0 font-semibold">
-              Raw JSON
+              {t('common:jsonViewer.title')}
             </Text>
             <Text variant="muted" className="shrink-0">
               ·
@@ -50,7 +51,7 @@ export function JSONViewer({ open, onOpenChange, name, data, className }: JSONVi
           </View>
           {showCloseButton ? (
             <View className="shrink-0">
-              <IconAction icon={X} label="Close raw JSON viewer" onPress={handleClose} />
+              <IconAction icon={X} label={t('common:jsonViewer.close')} onPress={handleClose} />
             </View>
           ) : null}
         </View>
@@ -61,7 +62,7 @@ export function JSONViewer({ open, onOpenChange, name, data, className }: JSONVi
 
         <View className="border-t border-border pt-3">
           <Text size="xs" variant="muted">
-            Edit raw — coming later
+            {t('common:jsonViewer.editComingLater')}
           </Text>
         </View>
       </SheetContent>
