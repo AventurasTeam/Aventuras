@@ -31,6 +31,12 @@ once. The chain is defined here and invoked once per item — nothing
 downstream commits a second time.
 </HARD-GATE>
 
+<HARD-GATE>
+**A pass adds no entry to the queue.** What it finds joins the pass; see
+[What the pass raises](#what-the-pass-raises). Filing a finding instead
+hands it to another pass, unverified.
+</HARD-GATE>
+
 ## Phase 1 — Scope and classify
 
 Read at runtime rather than assuming; the destinations move as the
@@ -132,6 +138,25 @@ compress it.
    as open. `Held` is the exception and stays put; see
    [Outcomes](#outcomes).
 
+## What the pass raises
+
+Whatever the pass finds that no entry covers joins the pass: a defect
+next to the item you are fixing, a question a fix leaves open, a review
+finding on the pass's branch. This holds until the branch merges, so a
+finding that lands after the close-out reopens it. During a pass it
+overrides the `triage.md` routing in other skills and agents, including
+the code reviewer's and `aventuras-slice-review`'s.
+
+Work it like an entry: id, class and destination in the ledger, a place
+in the waves by the Phase 2 rule, then Phase 3. It is a claim too, so
+verify it before you route it. Filing it straight to `parked.md` is the
+same deferral under another name.
+
+It closes on the same [Outcomes](#outcomes) except `Held`, which keeps
+an entry a raised item never had. When no action is available, verifying
+it included, it is `Routed` to `parked.md` with its revisit signal and
+marked unverified.
+
 ## Outcomes
 
 Six, and only the first three are the obvious ones:
@@ -225,27 +250,30 @@ change. Keep:
 
 ## Close-out
 
-The pass is done when every in-scope item has landed on one of the six
-[Outcomes](#outcomes) — fixed, canon-decided, routed, dissolved, split,
-or explicitly held. Then:
+The pass is done when every in-scope item, raised ones included, has
+landed on one of the six [Outcomes](#outcomes) — fixed, canon-decided,
+routed, dissolved, split, or explicitly held. Then:
 
 - Confirm the queue shrank by the number you closed, counting a `Split`
   as closed only for its answered half, and that no entry you resolved
   is still present. A `Split`'s refiled half and a `Held` item are both
-  expected to still be there.
+  expected to still be there. Raised items were never queued, so leave
+  them out of that count, and confirm the pass added no entry.
 - Run the full gated verification once more across the whole batch.
-- Report totals per outcome, the items you held and why, the owner on
-  each `Split`'s refiled half, anything you reclassified, and any
-  process failure of your own — an unverified claim you acted on, a
-  commit that landed red. Those are the most useful part of the report
-  and the easiest to omit.
+- Report totals per outcome, how many items the pass raised, the items
+  you held and why, the owner on each `Split`'s refiled half, anything
+  you reclassified, and any process failure of your own — an unverified
+  claim you acted on, a commit that landed red. Those are the most
+  useful part of the report and the easiest to omit.
 
 ## Out of scope
 
-- **Filing new deferrals.** A new item is a one-line append to the
-  queue; it does not need this skill.
-- **Widening the batch opportunistically.** Fix what is in scope. The
-  exception is a paired item (see Phase 2), which you widen to
-  deliberately and say so.
+- **Filing a deferral outside a pass.** That is a one-line append to the
+  queue and does not need this skill. Inside a pass, see
+  [What the pass raises](#what-the-pass-raises).
+- **Widening the batch opportunistically.** Fix what is in scope, and
+  leave other queued entries queued. The exceptions are a paired item
+  (see Phase 2), which you widen to deliberately and say so, and
+  [what the pass raises](#what-the-pass-raises).
 - **Deciding a user's product questions.** Escalate them with ground
   truth attached.
