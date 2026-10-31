@@ -26,9 +26,13 @@ export type RecoveryReport = { reversed: RecoveredRun[]; failures: RecoveryFailu
 /**
  * What boot tells the user: the report, plus the stories whose branch it left held (classifier
  * state still `running` after the reset). `null` when that read failed: every pass failure then
- * reads as holding its branch.
+ * reads as holding its branch. `passFailed` when the pass itself threw, so empty lists mean no
+ * orphan was read, not that none exist.
  */
-export type BootRecoveryReport = RecoveryReport & { heldStoryIds: readonly string[] | null }
+export type BootRecoveryReport = RecoveryReport & {
+  heldStoryIds: readonly string[] | null
+  passFailed?: true
+}
 
 // Per-orphan failures are logged and reported, so one bad orphan can't block the rest; an
 // uncommitted one keeps its marker open for the next boot. Only the orphan query itself can throw.

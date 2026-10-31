@@ -993,7 +993,8 @@ reversal are the signal to revisit.
 A pass or a close whose abort's own reversal fails leaves its writes
 to boot recovery, and its gate lifts anyway
 ([`generation-pipeline.md → Recovery-failure policy`](./generation-pipeline.md#recovery-failure-policy)),
-so the user can write to the branch before recovery runs. If the
+so the user can write to the branch before recovery runs; a boot whose
+recovery failed leaves the same window until the next one. If the
 latest scene names a character the pass created and the user deletes
 it in World, the delete's tail-scene update still names it. Recovery
 would prune that delete with the create it holds, so it refuses as

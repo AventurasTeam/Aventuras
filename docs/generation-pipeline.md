@@ -1257,6 +1257,14 @@ So this is not an observability-only state:
   boot refuses that one again, so its copy says the update could not
   be undone without breaking later changes and promises no retry.
 
+A failure of the pass itself is the query that lists the orphans
+throwing, the one thing the per-orphan catch can't hold. Boot logs
+`bootstrap.recovery_failed`, skips the reset, which has no report to
+work from, and carries on, and the next boot retries. The modal still
+opens, titled _"Recovery incomplete"_, with a line saying the check
+for unfinished updates failed: logging alone would leave orphans on
+disk that the user could write over without knowing.
+
 No max-retry counter and no admin "drop orphan" affordance for v1;
 stuck orphans remain visible in Logs across boots. Nearly every
 failure is transient DB IO that self-heals on the next boot. Three
@@ -1268,9 +1276,12 @@ case, which that work resolves),
 and
 [a reversal refused as an integrity error](./parked.md#a-boot-recovery-refused-as-an-integrity-error-never-settles).
 Reaching either of the first two takes a build and data from
-different versions. The third needs a run whose abort's own reversal
-failed: the orchestrator lifts the run's gate even then, so a user
-write can land that the reversal would break, and
+different versions. The third needs a user write to land while an
+orphan's writes are still there: after a run whose abort's own reversal
+failed, since the orchestrator lifts the run's gate even then, or after
+a boot whose recovery failed on that orphan or as a whole, since
+nothing but a held branch stops a turn. That write can be one the
+reversal would break, and
 [Reverse-replay](#reverse-replay) refuses the reversal as `write-back`
 on each boot. The orphan's writes stay, and for a pass its branch
 takes no turns; a branch from an entry before the orphan starts idle

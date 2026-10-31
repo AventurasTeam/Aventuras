@@ -132,6 +132,19 @@ export const BranchHeldRefused: Story = {
   },
 }
 
+/** The pass itself threw: no orphan was read, so there's no story to name. */
+export const PassFailed: Story = {
+  args: {
+    report: { reversed: [], failures: [], heldStoryIds: [], passFailed: true },
+    storyNames: {},
+  },
+  play: async () => {
+    expect(screen.getByText('Recovery incomplete')).toBeInTheDocument()
+    const description = screen.getByText(/couldn't check for updates left unfinished/)
+    expect(description.textContent).toContain('restarting the app retries automatically')
+  },
+}
+
 export const MissingStoryName: Story = {
   args: {
     report: singleReport,

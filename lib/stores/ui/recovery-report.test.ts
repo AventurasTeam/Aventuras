@@ -45,6 +45,12 @@ describe('recoveryReportStore', () => {
   })
 
   // A reset that threw or never ran can hold a branch with no orphan to report.
+  it('publishes a report that only says the recovery pass failed', () => {
+    const report = { reversed: [], failures: [], heldStoryIds: [], passFailed: true as const }
+    recoveryReportStore.publish(report)
+    expect(recoveryReportStore.getSnapshot().pendingRecoveryReport).toEqual(report)
+  })
+
   it('publishes a report that only has a held story', () => {
     const heldReport = { reversed: [], failures: [], heldStoryIds: ['s1'] }
 

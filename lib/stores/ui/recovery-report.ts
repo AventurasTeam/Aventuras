@@ -18,7 +18,8 @@ const store = createStore<RecoveryReportSnapshot>()(() => INITIAL_SNAPSHOT)
 export const recoveryReportStore = {
   publish: (report: BootRecoveryReport): void => {
     const held = report.heldStoryIds?.length ?? 0
-    if (report.reversed.length === 0 && report.failures.length === 0 && held === 0) return
+    const nothingToSay = report.reversed.length === 0 && report.failures.length === 0 && held === 0
+    if (nothingToSay && report.passFailed !== true) return
     store.setState({ pendingRecoveryReport: report })
   },
   claim: (): BootRecoveryReport | null => {
