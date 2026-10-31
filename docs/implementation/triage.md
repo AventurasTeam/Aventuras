@@ -61,16 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **A failed Dismiss tells the user nothing.** The reader passes
-  `handleDismissSystemEntry` unwrapped, and the card fires it as
-  `() => void onDismissSystemEntry()` (`components/reader/reader-surface.tsx`),
-  so a throw becomes an unhandled rejection. A failed delete leaves the
-  tap doing nothing. A failed reload, which the hand-back now survives,
-  leaves "text restored" beside a stale card. A pass entry's Retry goes
-  through `runAction` and toasts its failure; Dismiss doesn't. The
-  `void` predates the 2026-10-24 triage pass; raised by its slice
-  review.
-
 - **A boot whose recovery pass throws reports nothing.** When
   `recoverInFlightRuns` itself throws, `bootstrap.ts` logs
   `bootstrap.recovery_failed` and publishes the report with empty

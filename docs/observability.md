@@ -335,7 +335,11 @@ convention, and the expectation that subsystems route through
   (`components/reader/copy-system-text.ts`):
   `system_text_copy_failed` (a clipboard write that threw) and
   `clipboard_unavailable` (warn, no Clipboard API on web); the user
-  sees the copy-failed toast after either
+  sees the copy-failed toast after either. `Dismiss` adds two, each
+  with its own toast (`components/reader/system-entry-actions.tsx`):
+  `system_entry_dismiss_failed` (the delete failed, the entry stands)
+  and `system_entry_reload_failed` (the delete landed, the card is
+  stale)
 
 Kinds grow organically as subsystems land.
 

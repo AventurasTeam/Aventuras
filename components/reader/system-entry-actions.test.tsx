@@ -15,6 +15,7 @@ import {
   type TxResult,
 } from '@/lib/pipeline'
 import { embedderSwapStore } from '@/lib/stores'
+import { toast } from '@/lib/toast'
 
 import type { PassRefusal } from './send-run'
 import {
@@ -585,7 +586,9 @@ describe('dismissSystemEntry', () => {
 
   // The notice and its Retry survive a rejected clear, so a copy in the composer
   // beside them is the same turn queued to send twice.
-  it('leaves the draft with the entry when the clear rejects', async () => {
+  it('leaves the draft with the entry when the clear rejects, and says so', async () => {
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const toasted = vi.spyOn(toast, 'error').mockReturnValue('')
     const h = harness({
       clear: () => {
         h.order.push('clear')
@@ -593,14 +596,21 @@ describe('dismissSystemEntry', () => {
       },
     })
 
-    await expect(dismissSystemEntry(h.deps)).rejects.toThrow('db gone')
+    await expect(dismissSystemEntry(h.deps)).resolves.toBeUndefined()
 
     expect(h.handBack).not.toHaveBeenCalled()
     expect(h.order).toEqual(['clear'])
+    expect(toasted).toHaveBeenCalledExactlyOnceWith(t('reader:systemEntry.dismissFailed'))
+    expect(logged).toHaveBeenCalledWith('reader.system_entry_dismiss_failed', {
+      branchId: 'branch_a',
+      error: 'db gone',
+    })
   })
 
   // The row holding the text is already deleted, so the stale card is not a copy to keep it in.
-  it('still hands the draft back when the reload rejects', async () => {
+  it('still hands the draft back when the reload rejects, and says the card is stale', async () => {
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const toasted = vi.spyOn(toast, 'error').mockReturnValue('')
     const h = harness({
       reload: () => {
         h.order.push('reload')
@@ -608,10 +618,23 @@ describe('dismissSystemEntry', () => {
       },
     })
 
-    await expect(dismissSystemEntry(h.deps)).rejects.toThrow('read failed')
+    await expect(dismissSystemEntry(h.deps)).resolves.toBeUndefined()
 
-    expect(h.order).toEqual(['clear', 'reload', 'handBack'])
     expect(h.handBack).toHaveBeenCalledWith(SUBMISSION)
+    expect(h.order).toEqual(['clear', 'reload', 'handBack'])
+    expect(toasted).toHaveBeenCalledExactlyOnceWith(t('reader:systemEntry.dismissReloadFailed'))
+    expect(logged).toHaveBeenCalledWith('reader.system_entry_reload_failed', {
+      branchId: 'branch_a',
+      error: 'read failed',
+    })
+  })
+
+  it('toasts nothing when the dismiss lands', async () => {
+    const toasted = vi.spyOn(toast, 'error').mockReturnValue('')
+
+    await dismissSystemEntry(harness().deps)
+
+    expect(toasted).not.toHaveBeenCalled()
   })
 
   // One composer serves every branch, so the text can't follow the user; the log records the loss.

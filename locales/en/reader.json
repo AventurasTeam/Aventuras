@@ -180,6 +180,8 @@
     "copyDetails": "Copy details",
     "copied": "Copied.",
     "copyFailed": "Couldn't copy to the clipboard.",
+    "dismissFailed": "Couldn't dismiss this. Try again.",
+    "dismissReloadFailed": "Dismissed, but the reader couldn't refresh. Reopen the story to update it.",
     "assignProfile": "Assign profile",
     "fixProfile": "Fix profile",
     "fixDefault": "Fix default",

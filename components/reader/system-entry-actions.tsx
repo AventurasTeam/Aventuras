@@ -14,6 +14,7 @@ import {
   type TxResult,
 } from '@/lib/pipeline'
 import { openEmbedderSwapDialog } from '@/lib/stores'
+import { toast } from '@/lib/toast'
 
 import { keptSubmissionText } from './composer-draft'
 import {
@@ -30,7 +31,8 @@ type LeaveStory = (proceed: () => void) => void
 
 /**
  * Hand the draft back only once the entry is gone (a rejected clear keeps Retry; a composer copy
- * would run the turn twice), even if reload rejects. Off-branch it's dropped with a warning.
+ * would run the turn twice), even if reload rejects. Off-branch it's dropped with a warning. Settles
+ * rather than rejects: the card fires this unawaited, and on native a rejection dies in the WebView.
  */
 export async function dismissSystemEntry(deps: {
   branchId: string
@@ -40,17 +42,29 @@ export async function dismissSystemEntry(deps: {
   stillOnBranch: () => boolean
   handBack: (submission: SystemFailureMeta['submission']) => void
 }): Promise<void> {
-  await deps.clear()
+  const { branchId } = deps
+  try {
+    await deps.clear()
+  } catch (error: unknown) {
+    logger.error('reader.system_entry_dismiss_failed', {
+      branchId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    toast.error(t('reader:systemEntry.dismissFailed'))
+    return
+  }
   try {
     await deps.reload()
-  } finally {
-    if (deps.stillOnBranch()) deps.handBack(deps.submission)
-    else if (keptSubmissionText(deps.submission) != null)
-      logger.warn('reader.handback_skipped_left_branch', {
-        branchId: deps.branchId,
-        source: 'dismiss',
-      })
+  } catch (error: unknown) {
+    logger.error('reader.system_entry_reload_failed', {
+      branchId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    toast.error(t('reader:systemEntry.dismissReloadFailed'))
   }
+  if (deps.stillOnBranch()) deps.handBack(deps.submission)
+  else if (keptSubmissionText(deps.submission) != null)
+    logger.warn('reader.handback_skipped_left_branch', { branchId, source: 'dismiss' })
 }
 
 // Exhaustive per wording set: a new resolver kind is a type error, not another kind's copy.

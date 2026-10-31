@@ -644,9 +644,11 @@ throw). A regenerate whose own text is the same, on its new failure
 entry or back in the draft, hands nothing back. `Dismiss` and a
 regenerate hand the text back once the row is deleted, even when the
 reload after it fails: the stale card left on screen no longer holds
-it. A delete that fails hands nothing back: the entry and its `Retry`
-still stand, and a copy in the draft would run the turn twice. The
-same rule keeps a regenerate's own text off the draft once its new
+it, and a toast says the reader didn't refresh. A delete that fails
+hands nothing back and toasts that the dismiss failed: the entry and
+its `Retry` still stand, and a copy in the draft would run the turn
+twice. A draft already holding the text owes nothing back, as on a
+second `Dismiss` over that stale card. The same rule keeps a regenerate's own text off the draft once its new
 failure entry is written, even when the reload after it fails. An
 empty draft receives the text verbatim under composer mode
 `Free`, since the stored content is already wrapped and must not be
