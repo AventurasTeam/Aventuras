@@ -69,37 +69,6 @@ slice-planning gate forces its resolution before that slice is planned.
   holds on web only. Read from the expo source, not measured on a
   device. Raised by the cut-off replies Task 10 review.
 
-- **Overflow recognition misses shapes beyond llama.cpp's and OpenAI's.**
-  [`architecture.md → Recognizing an overflow rejection`](../architecture.md#recognizing-an-overflow-rejection)
-  is verified against those two servers only. Checked in SGLang's
-  source (`tokenizer_manager.py`), a server canon names under
-  [Detection](../architecture.md#detection): a prompt over its window
-  is a 400 reading "The input (N tokens) is longer than the model's
-  context length (M tokens).", which no canon keyword matches, so it
-  reads as a plain provider failure. A "context length" keyword would
-  catch it and LM Studio's wording, but may also catch a max-output
-  rejection phrased against the context length, whose remedy is a lower
-  max output, not a shorter prompt. Recalled by the context
-  window check's reviews and not checked against each server:
-  Anthropic rejects a prompt plus `max_tokens` with "input length and
-  `max_tokens` exceed context limit", and LM Studio says "context
-  length"; neither matches a canon keyword, so both read as a plain
-  provider failure. `@ai-sdk/anthropic` sends the model's whole max
-  output as `max_tokens` when the profile sets none, and Anthropic's
-  docs say models from Claude 4.5 accept such a request and stop at the
-  window (`model_context_window_exceeded`, read as a `length` cut-off),
-  so only earlier models reject it. Gemini's OpenAI-compatible endpoint may wrap its
-  error body in an array, which still matches by keyword but quotes the
-  whole JSON as the provider's message. An overflow sent inside the
-  stream after an HTTP 200 is never recognized:
-  `@ai-sdk/openai-compatible` hands it over as a plain string, not an
-  `APICallError`, so the turn fails as a provider `network` error, or,
-  reproduced through the real SDK, as a provider timeout when a stall
-  follows, because an expired stream fails as a timeout
-  ([`generation-pipeline.md → Two retry tiers, both at phase level`](../generation-pipeline.md#two-retry-tiers-both-at-phase-level));
-  the servers above reject an overflow with a 400 before streaming.
-  Raised by the context window check.
-
 - **The truncation cross-check may warn on every warm turn of a server
   that counts only uncached prompt tokens.** Canon names Ollama as a
   server that cuts prompts silently
@@ -130,14 +99,6 @@ slice-planning gate forces its resolution before that slice is planned.
   on `kind === 'system'`, but a resolved row read back without text would
   show "so it's kept here" over no quote. Older code; raised by the
   held-text slice review's type-design pass.
-
-- **A shape the held-text slice review's simplifier left for a home.**
-  - `TextToggle` (`components/compounds/entry-card-system.tsx`) and the
-    cut-off notice's fix link in `entry-card.tsx` share a link-button
-    shape: a named group, the web cursor and outline reset, a focus
-    ring on the inner text, and phone tap padding cancelled by
-    margins. Two uses don't pay for a primitive; a third link-style
-    button is the signal to extract one.
 
 - **`ClassifierWindow` doesn't tie `turns` to `isEmpty`.** The two are
   separate fields (`lib/classifier/window.ts`), so a caller reads

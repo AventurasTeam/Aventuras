@@ -1360,6 +1360,43 @@ measured. Parked
 warning on a server that didn't truncate, or the logged ratios sitting
 far from 1 for a model in use.
 
+#### Overflow shapes beyond llama.cpp's and OpenAI's
+
+**Overflow recognition misses shapes beyond llama.cpp's and OpenAI's.**
+[`architecture.md → Recognizing an overflow rejection`](./architecture.md#recognizing-an-overflow-rejection)
+is verified against those two servers only. Checked in SGLang's
+source (`tokenizer_manager.py`), a server canon names under
+[Detection](./architecture.md#detection): a prompt over its window
+is a 400 reading "The input (N tokens) is longer than the model's
+context length (M tokens).", which no canon keyword matches, so it
+reads as a plain provider failure. A "context length" keyword would
+catch it and LM Studio's wording, but may also catch a max-output
+rejection phrased against the context length, whose remedy is a lower
+max output, not a shorter prompt. Recalled by the context
+window check's reviews and not checked against each server:
+Anthropic rejects a prompt plus `max_tokens` with "input length and
+`max_tokens` exceed context limit", and LM Studio says "context
+length"; neither matches a canon keyword, so both read as a plain
+provider failure. `@ai-sdk/anthropic` sends the model's whole max
+output as `max_tokens` when the profile sets none, and Anthropic's
+docs say models from Claude 4.5 accept such a request and stop at the
+window (`model_context_window_exceeded`, read as a `length` cut-off),
+so only earlier models reject it. Gemini's OpenAI-compatible endpoint may wrap its
+error body in an array, which still matches by keyword but quotes the
+whole JSON as the provider's message. An overflow sent inside the
+stream after an HTTP 200 isn't recognized past the first chunk, where
+`@ai-sdk/anthropic` rethrows an error as an `APICallError`:
+`@ai-sdk/openai-compatible` hands it over as a plain string, not an
+`APICallError`, so the turn fails as a provider `network` error, or,
+reproduced through the real SDK, as a provider timeout when a stall
+follows, because an expired stream fails as a timeout
+([`generation-pipeline.md → Two retry tiers, both at phase level`](./generation-pipeline.md#two-retry-tiers-both-at-phase-level));
+the servers above reject an overflow with a 400 before streaming.
+Raised by the context window check.
+
+A real server's overflow reading as a plain provider failure is the
+signal to revisit; none we run sends these shapes.
+
 #### A per-provider switch for stream usage
 
 The OpenAI-compatible provider always asks for streamed usage through

@@ -1816,6 +1816,20 @@ own.
   component from `components/compounds/entity-picker.tsx`. Raised
   2026-10-24 by the AI writer map's slice review. Routed from triage
   2026-10-25.
+- **M9.2 — Link-style buttons disagree on focus ring and tap floor.**
+  `TextToggle` (`components/compounds/entry-card-system.tsx`) and the
+  cut-off notice's fix link in `entry-card.tsx` share a link-button
+  shape: a named group, the web cursor and outline reset, a focus ring
+  on the inner text, and phone tap padding cancelled by margins. Five
+  more sites look like links and differ:
+  `components/ui/banner.tsx`, `overview-parts.tsx`,
+  `collision-list-row.tsx`, `peek-head.tsx` and
+  `embedder-download-dialog.tsx`, with the ring on the text, on the
+  `Pressable` or absent, and the tap floor by padding, `min-h-touch`,
+  `hitSlop` or nothing. Extracting a primitive would normalise
+  behaviour rather than dedupe, so it wants a call on one variant or
+  two.
+
 - **M9.2 — `ListRow`'s `aria-label` hides its channel content.** The
   row's `aria-label` replaces its child content, so status, lead and
   in-scene never reach screen readers. Only part of that is the label:
