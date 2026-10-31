@@ -59,7 +59,6 @@ function jittered(ms: number, jitterMs: number): number {
   return Math.max(0, ms + (Math.random() * 2 - 1) * jitterMs)
 }
 
-/** Emits the SSE body. Headers must already be written by the caller. */
 function cutChunks(content: string, chunkSize: number): string[] {
   const chunks = chunkContent(content, chunkSize)
   return chunks.slice(0, Math.max(1, Math.floor(chunks.length / 2)))
@@ -69,6 +68,7 @@ function cutChunks(content: string, chunkSize: number): string[] {
 export const deliveredByCut = (content: string, chunkSize: number): string =>
   cutChunks(content, chunkSize).join('')
 
+/** Emits the SSE body. Headers must already be written by the caller. */
 export async function streamNarrative(res: ServerResponse, opts: StreamOptions): Promise<void> {
   const { ending } = opts
   await write(res, roleFrame())

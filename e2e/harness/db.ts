@@ -35,9 +35,8 @@ export async function queryApp(
   return result.rows
 }
 
-// A reply streams into the DOM before its row commits, so a caller polls the row rather than
-// reading it once. The cardinality assert is the other half: more than one row for a marker is a
-// duplicated write, which a bare presence check would pass.
+// A reply streams into the DOM before its row commits, so callers poll. The cardinality assert
+// catches a duplicated write that a bare presence check would pass.
 export async function entryIdOf(
   page: Page,
   branchId: string,

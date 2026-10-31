@@ -33,8 +33,7 @@ export function createSeededUserDataDir(): { userDataDir: string; dbPath: string
   return { userDataDir, dbPath }
 }
 
-// Read, change and write back the providers blob. Runs before launch, so the app reads the result
-// into its settings store on boot.
+// Read, change and write back the providers blob; runs before launch so boot reads the result.
 function updateProviders<P>(dbPath: string, change: (providers: P[]) => void): void {
   const db = new DatabaseSync(dbPath)
   try {

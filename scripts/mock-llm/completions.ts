@@ -83,10 +83,8 @@ function resolveUpstream(ctx: MockContext, lane: Lane) {
   return ctx.state.upstreams.find((u) => u.id === lane.upstreamId) ?? null
 }
 
-// Not the whole story on its own — a narrative that carried <state> and is
-// still followed by a classifier call means the piggyback fold did not take: the
-// block failed to parse, or the resolved narrative model has no taggedBlockReliable
-// capability. Without this the fallback path looks identical to the real one.
+// Narrative carried <state> yet a classifier still ran: the fold failed (block unparsed, or model
+// lacks taggedBlockReliable); otherwise this path looks identical to the real one.
 function piggybackNote(ctx: MockContext, key: string): string | undefined {
   if (!PER_TURN_CLASSIFIER_LANES.has(key)) return undefined
   if (ctx.log.lastNarrativeHadState === true)

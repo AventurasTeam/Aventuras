@@ -3,11 +3,9 @@ import { APICallError } from 'ai'
 import type { ContextWindowFailure } from '../context-window'
 import type { ReplyCutOffFailure } from '../reply-cut-off'
 
-// lib/ai-local error vocabulary. The pipeline layer maps these to PipelineError
-// when it yields recoverable_error events — keeps lib/ai free of an upward
 export type ProviderReason = 'auth' | 'network' | 'timeout' | 'unknown'
 
-// lib/pipeline type dependency.
+// lib/ai-local vocabulary; the pipeline maps it to PipelineError, so lib/ai has no upward import.
 export type CallRetryError =
   | {
       tier: 'provider'

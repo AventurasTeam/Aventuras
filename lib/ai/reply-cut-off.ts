@@ -26,10 +26,8 @@ export function isCutOff(finishReason: FinishReason | undefined): boolean {
 
 export type ReplyStop = 'length' | 'interrupted' | 'content-filter'
 
-/**
- * generation-pipeline.md → Cut-off replies: how the narrative's stream ended short of finished, or
- * null. `other` with no raw reason means no finish signal arrived; a raw reason is the server's own.
- */
+/** Why the stream ended short, else null (generation-pipeline.md → Cut-off replies).
+ *  `other` with no raw reason = no finish signal arrived. */
 export function replyStopOf(
   finishReason: FinishReason | undefined,
   rawFinishReason: string | undefined,

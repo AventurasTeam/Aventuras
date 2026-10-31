@@ -34,7 +34,6 @@ export function toPipelineError(e: CallRetryError, target: ResolveTarget): Pipel
   }
 }
 
-/** Log and status detail: the arm's own (may span lines), or the window or cut-off described. */
 /** generation-pipeline.md → Two retry tiers: one event per retried attempt, however the call ended. */
 export function* retriedAttemptEvents(
   result: { recoverable: readonly CallRetryError[] } | { status: 'not-configured' },
@@ -45,6 +44,7 @@ export function* retriedAttemptEvents(
     yield { type: 'recoverable_error', error: toPipelineError(attempt, target) }
 }
 
+/** Log and status detail: the arm's own (may span lines), or the window or cut-off described. */
 export function pipelineErrorDetail(e: PipelineError): string | undefined {
   switch (e.kind) {
     case 'context-window':

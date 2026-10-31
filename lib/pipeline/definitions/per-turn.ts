@@ -189,8 +189,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   let errorBeforeTimeout: unknown
   // Assigned once the call returns; onError fires only while the stream runs.
   let timedOut = (): boolean => false
-  // A stream failure reaches either onError or the iteration's throw, depending on where it
-  // lands, so both are captured and the commit gates on them.
+  // A failure lands in onError or the iteration's throw; capture both and gate the commit.
   const call = streamText('narrative', {
     prompt,
     config: {
@@ -342,8 +341,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // The column stores prose only (docs/memory/piggyback.md → Persistence and
   // stripping); everything the block carried is persisted structurally instead.
   const { prose, stateRaw, outOfPosition } = stripTrailingBlocks(content)
-  // Ahead of the fold, so no create is planned for a reply that commits nothing. Trimmed: with no
-  // block span, stripTrailingBlocks hands back the raw text.
+  // Ahead of the fold: no create planned for a reply that commits nothing. Trimmed: a span-less
+  // reply comes back raw from stripTrailingBlocks.
   if (cut !== undefined && stop === 'length' && prose.trim() === '') {
     logCutOff(ctx.log, cut.failure, entryId, 'failed')
     return {

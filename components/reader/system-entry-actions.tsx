@@ -30,9 +30,9 @@ export type SystemEntryFixAction = { label: string; onPress: () => void } | unde
 type LeaveStory = (proceed: () => void) => void
 
 /**
- * Hand the draft back only once the entry is gone (a rejected clear keeps Retry; a composer copy
- * would run the turn twice), even if reload rejects. Off-branch it's dropped with a warning. Settles
- * rather than rejects: the card fires this unawaited, and on native a rejection dies in the WebView.
+ * Hands the draft back only once the entry is gone (a composer copy beside Retry would run the turn
+ * twice), even if reload rejects; off-branch it's dropped with a warning. Never rejects: the card
+ * fires it unawaited and on native a rejection dies in the WebView.
  */
 export async function dismissSystemEntry(deps: {
   branchId: string

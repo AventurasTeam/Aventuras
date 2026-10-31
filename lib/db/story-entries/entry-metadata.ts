@@ -38,8 +38,7 @@ export const entryMetadataSchema = z.object({
   generationTimingMs: z.number().optional(),
   reasoning: z.string().optional(),
   // The story text ended early; authored, never inherited (data-model.md → Entry metadata shape).
-  // `limit` is the number the cause names; an `unknown` cut's `maxOutput` is the one the call sent
-  // and the reply fell short of.
+  // `limit` is the number the cause names; an `unknown` cut's `maxOutput` is what the call sent.
   cutOff: z
     .discriminatedUnion('cause', [
       z.strictObject({

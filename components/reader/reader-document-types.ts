@@ -26,9 +26,8 @@ export type EditGate = 'open' | 'interruptible' | 'closed'
  */
 export type ReaderSurfaceProps = {
   rows: StoryEntry[]
-  /** Host-computed world-time labels + monotonicity flags, keyed by entry id.
-   *  Deliberately a side table, not merged into `rows` — merging would hand
-   *  ReaderRow fresh row objects on every entries patch and void its memo on web. */
+  /** Host-computed world-time labels + monotonicity flags, by entry id. Side table, not merged
+   *  into `rows`: merging hands ReaderRow fresh objects each patch and voids its memo on web. */
   worldTimeDecorations: Record<string, WorldTimeDecoration>
   /** Registry-resolved calendar + story origin (fallback applied) — null hides/inerts footers. */
   worldTimeFrame: CalendarFrame | null
