@@ -3330,6 +3330,26 @@ describe('narrative — how the reply ended', () => {
     })
   })
 
+  it('records no tokens when the stream reported no counts', async () => {
+    const { entry } = await runReply({
+      text: PROSE,
+      finishReason: 'stop',
+      usage: { inputTokens: undefined, outputTokens: undefined },
+    })
+
+    expect(entry?.metadata).not.toHaveProperty('tokens')
+  })
+
+  it('keeps the count a stream did report', async () => {
+    const { entry } = await runReply({
+      text: PROSE,
+      finishReason: 'stop',
+      usage: { inputTokens: 900, outputTokens: undefined },
+    })
+
+    expect(entry?.metadata?.tokens).toEqual({ prompt: 900, completion: 0 })
+  })
+
   it("leaves a server's own finish word finished", async () => {
     const { entry, log } = await runReply({
       text: PROSE,

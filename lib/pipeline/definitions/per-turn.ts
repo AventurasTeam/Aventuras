@@ -479,7 +479,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   ctx.intermediates.suggestionsCaptured = suggestionsCaptured
 
   const metadata: EntryMetadata = {
-    ...(usage
+    // The SDK hands over a usage object of undefined fields when a stream reports none.
+    ...(usage?.inputTokens != null || usage?.outputTokens != null
       ? {
           tokens: {
             prompt: usage.inputTokens ?? 0,
