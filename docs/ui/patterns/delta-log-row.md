@@ -34,6 +34,10 @@ Used by:
   — the deltas emitted during a turn (pipeline emissions +
   user-edit deltas), turn- or run-scoped; `source`-labeled per row,
   `onPress` routes to the Delta log tab focused on the row.
+- [Chapter Timeline · Review window](../screens/chapter-timeline/chapter-timeline.md#review-window)
+  — the deltas of one chapter close, grouped by area by the host, with
+  the write's reason under each row; `onPress` opens the row in World or
+  Plot.
 
 ## Compound API
 
@@ -186,9 +190,9 @@ summary (2-line ellipsis), non-interactive variant
 ## What this design defers
 
 - **Action grouping (`action_id`).** v1 renders one row per
-  delta; clustering deltas that share an action (e.g.,
-  chapter-close producing many state mutations) is a future
-  affordance. The data is present; the rendering is not.
+  delta; clustering deltas that share an action is a future
+  affordance. The data is present; the rendering is not. The review
+  window scopes its list to one close and groups it itself.
 - **Inline diff expansion.** v1 truncates summary to 2 lines;
   full-detail expansion via the
   [JSONViewer pattern](./data.md#raw-json-viewer--shared-modal-pattern)

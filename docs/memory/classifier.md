@@ -250,7 +250,8 @@ alias list (the keywords bullet below).
   ([`world.md → Surfacing`](../ui/screens/world/world.md#surfacing)),
   its partner gone, its pair no longer namesakes once the keyword is
   counted, or a `same-parent` pair no longer sharing a parent, counts
-  as no flag: the rename re-points it at the holder.
+  as no flag: the rename re-points it at the holder. A close's
+  `duplicate` flag holds while its partner exists, so a rename leaves it.
 - **Where a place sits** — a listed place's parent, when the turns
   place one the Places list shows unplaced or move one; and the
   top-level mark for an unplaced place nothing on the map could
@@ -544,7 +545,9 @@ elsewhere share its name. The per-turn writer gives an item's exact
 namesake `alike` or `ambiguous` by the same bands. A pass whose rename
 meets, as it lands, a name another row of the kind holds flags the
 entity `name-taken`, with the oldest such row as its partner
-([What the classifier writes](#what-the-classifier-writes)). World
+([What the classifier writes](#what-the-classifier-writes)). A chapter
+close adds `duplicate`
+([`chapter-close.md → 3f`](./chapter-close.md#3f--world-upkeep)). World
 pairs a flagged row with its partner and states the reason in the
 resolve dialog
 ([`world.md → Collision review and entity merge`](../ui/screens/world/world.md#collision-review-and-entity-merge)).

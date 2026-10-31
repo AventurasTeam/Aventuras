@@ -254,7 +254,7 @@ reversal as rollback, per
 — then re-runs generation from the same input.
 
 **No confirm in the common case.** When the turn reversed is the
-reply alone (no chained chapter close), regenerate fires
+reply alone (no chapter close ends on it), regenerate fires
 immediately; discarding that take is the point of the action, and
 prompting every time would nag.
 
@@ -263,9 +263,9 @@ interrupts it instead, with no confirm: nothing of it has committed to
 re-run. The pass or close moves to the next turn, and a toast says so
 ([During a memory update](#during-a-memory-update)).
 
-**Confirm when the turn closed a chapter.** If the turn chained a
-chapter close that committed, its lore-management writes (the
-chapter-close sub-jobs) reverse and re-run. The gate is cost, not data loss —
+**Confirm when the turn closed a chapter.** If a committed chapter
+close ends on this turn, as a manual close may, its
+lore-management writes (the chapter-close sub-jobs) reverse and re-run. The gate is cost, not data loss —
 regenerate owns the loss of the prior take intrinsically; what
 warrants consent is re-running the expensive sub-jobs, a boundary
 rare enough that the confirm never turns routine. It reuses the
@@ -299,20 +299,25 @@ interrupt or the pill's Cancel shows an info
 - `Chapter close moved to your next turn.`
 
 A pass that fails shows a warning toast,
-`Memory update failed. It runs again before your next turn.`
+`Memory update failed. It runs again before your next turn.` A close
+that fails shows the same with `Chapter close failed.`
+
+A close that commits shows `Chapter closed: <title>`, or
+`Chapter closed, but 2 tasks stopped early` as a warning, with a
+`Review` button opening the
+[review window](../chapter-timeline/chapter-timeline.md#review-window).
 
 At the next Send the deferred or failed work runs first, the banner
 reading `Updating memory before your turn…`, and the turn follows;
 Cancel then cancels the whole Send and keeps the text in the composer
 ([`memory/classifier.md → Pipeline framing`](../../../memory/classifier.md#pipeline-framing)).
-If the pass fails there, the Send fails too: the turn doesn't start,
+If that work fails there, the Send fails too: the turn doesn't start,
 the text goes back to an empty composer (else onto the entry), and the
 failure shows as a
 [system entry](#transient-pipeline-failures--system-entries-in-chat)
 ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy)).
-Its `Retry` runs the pass alone, and that pass holds the reader's
-actions, head reversals included, until it ends; the pill's Cancel
-ends it.
+Its `Retry` runs that work alone, and it holds the reader's actions,
+head reversals included, until it ends; the pill's Cancel ends it.
 
 ### Save and regenerate on a content edit
 
@@ -518,6 +523,8 @@ chrome blip.
 | **Memory updated** on `Retry`, its text kept on the entry ([Custody of the turn's text](#custody-of-the-turns-text))                                                                                                   | `Dismiss`                               |
 | **Embed call failed** mid-turn (blocking per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle); the composer is not gated — a resubmit re-runs the same blocking sync stage) | `Switch embedder` · `Retry` · `Dismiss` |
 | **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `Dismiss`               |
+| **Chapter close failed** before the turn, failing the Send ([`memory/chapter-close.md → Failure modes`](../../../memory/chapter-close.md#failure-modes-and-atomic-rollback))                                           | `Retry` · `Dismiss`                     |
+| **Chapter close's model can't call tools** (pre-flight; [`memory/chapter-close.md → Tool calling`](../../../memory/chapter-close.md#tool-calling))                                                                     | `Fix profile` · `Dismiss`               |
 | **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `Dismiss`               |
 | **Agent has no profile assigned** (`assignments[agentId]` unset)                                                                                                                                                       | `Assign profile` · `Dismiss`            |
 | **Agent default model's provider missing**                                                                                                                                                                             | `Fix default` · `Dismiss`               |

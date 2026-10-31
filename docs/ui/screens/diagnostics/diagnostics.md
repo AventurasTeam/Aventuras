@@ -106,7 +106,7 @@ pane renders one run or the whole turn depending on selection.
 │ ▾ entry #47 · 14:02:18          3 runs  │                                          │
 │    [●] per-turn      8.4s  → entry #47  │  Timeline                                │
 │    [●] classifier    1.2s  #44–47       │  [gantt bars — all runs on one axis]     │
-│    [●] chapter close 3.1s  ch. 3        │                                          │
+│    [●] chapter close 412s  ch. 3        │                                          │
 │ ▸ entry #46 · 14:01:34   ● ●    2 runs  │  Calls (5)                               │
 │ ▸ entry #45 · 13:58:02   ○      1 run   │  ▾ 14:02:18  POST api…  200  0.34s    ↗  │
 │                                         │                                          │

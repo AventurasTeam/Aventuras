@@ -27,11 +27,14 @@ Used by:
   the `translation-retry` pipeline.
 - [Reader](../screens/reader-composer/reader-composer.md#during-a-memory-update)
   — a pass or a chapter close interrupted and moved to the next turn,
-  info severity, no action; a pass that failed, warning severity, no
-  action; a system entry's text or detail copied, info severity (none
+  info severity, no action; a pass or a close that failed, warning
+  severity, no action; a system entry's text or detail copied, info severity (none
   on Android 13 and later, which confirm a copy themselves), or error
   when the clipboard write fails
   ([`entry-card.md → System entry`](./entry-card.md#system-entry)).
+  A chapter close that commits, info severity, or warning when a task
+  stopped early, with a `Review` action opening the
+  [review window](../screens/chapter-timeline/chapter-timeline.md#review-window).
 - Any surface whose generation call came back with far fewer input
   tokens than were sent
   ([`architecture.md → Truncation cross-check`](../../architecture.md#truncation-cross-check))
@@ -75,7 +78,7 @@ Per-severity duration:
 
 - **success** — 3000ms.
 - **info** — 5000ms.
-- **warning** — 5000ms (the action-bearing toasts use warning; ample
+- **warning** — 5000ms (most action-bearing toasts use warning; ample
   time to click the action without holding attention as long as
   errors do).
 - **error** — 7000ms (long enough to act on, still bounded — avoids

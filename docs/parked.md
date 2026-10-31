@@ -639,10 +639,10 @@ are built.
   [branch model](./data-model.md#branch-model) and
   [Entry mutability & rollback](./data-model.md#entry-mutability--rollback)
   already define (boundary is `min(log_position)` among the entry's
-  deltas). A chapter-close cascade sits later in the same suffix and
-  is swept automatically — no enumerating `actionId` groups, no
-  captured watermark; the rollback derivation already yields the
-  boundary.
+  deltas). A chapter close ending on that turn sits later in the same
+  suffix and is swept automatically, and one ending earlier survives by
+  its anchor — no enumerating `actionId` groups, no captured watermark;
+  the rollback derivation already yields the boundary.
 - **Storage: an `entry_swipes` table.** Persisted (survives reload
   and resurfaces when an entry becomes head again via rollback or
   branch), branch-scoped, empty when no swipes. Each take stores its
@@ -951,18 +951,18 @@ promises no stop
 The cost is that the next pass reads prose including the failed run's
 leftover writes, which the turns since already build on.
 
-Benign in every reachable case except a close's (open below), which is
-why it is parked rather than fixed:
+Benign in every reachable case, which is why it is parked rather than
+fixed:
 
 - **On the boot path it needs the version skew above, or a close.** Every other
   reversal failure is transient and the next boot's retry clears it,
   or is
   [an integrity refusal](#a-boot-recovery-refused-as-an-integrity-error-never-settles),
   which boot meets only for a pass's or a close's orphan. A pass's
-  branch it holds back. A close's it doesn't, and whether a pass over a
-  close's leftover writes is benign depends on the close's write set,
-  not yet designed (the Chapter-close agent design item in
-  [`followups.md → Data-model`](./followups.md#data-model)).
+  branch it holds back. A close's it doesn't: each of a close's writes
+  is cited and stands alone, so a pass reads a partial close, not broken
+  state
+  ([`memory/chapter-close.md → Failure modes`](./memory/chapter-close.md#failure-modes-and-atomic-rollback)).
 - **In-session it needs a later turn or Send.** A pass starts only
   from a turn's commit (per-turn's `chainsTo`) or before a turn at
   Send, when one is owed
@@ -1289,10 +1289,9 @@ turn's pace. Beyond that:
   reusing nothing once a prompt diverged about 8k tokens before its
   end, so order alone may not serve every server.
 
-Parked 2026-10-11; the signal is the prompt shapes settling, through
-the prompt content pass in
-[`followups.md → Data-model`](./followups.md#data-model), with test data
-and per-provider measurements to tune against.
+Parked 2026-10-11; the signal is the prompt shapes settling, which the
+prompt content pass began, with test data and per-provider measurements
+to tune against.
 
 #### A model whose chat template rejects the system role
 
@@ -1735,7 +1734,8 @@ strips them. `state-patch-actions.ts` merges without parsing at all. The
 obvious fix, writing `parsed.data`, would silently drop a stackable
 named `__proto__`, which the pane and piggyback store deliberately:
 zod's record skips that key. Parked 2026-10-09; the signal is a writer
-that can emit model-shaped state, such as an agentic classifier.
+that can emit model-shaped state, such as an agentic classifier. Chapter
+close's agent isn't one: its typed tools write named fields.
 
 That stackable doesn't land today either. `encodeField` in
 `lib/actions/delta/delta-encoding.ts` builds the undo payload by
@@ -1790,8 +1790,21 @@ after a keyword write of a turn between them. The general fix is an
 undo that removes only the terms its own write added.
 
 Parked 2026-10-24; the signal is a keyword of a surviving turn lost to
-a reversal, or a second keyword writer, such as chapter close, landing
-terms out of turn order.
+a reversal, or a second keyword writer landing terms out of turn order.
+Chapter close isn't one: it skips a keyword list a turn past its
+chapter wrote.
+
+#### Resuming a failed close
+
+A close that fails reverses whole and runs again from its first task
+([`memory/chapter-close.md → Failure modes`](./memory/chapter-close.md#failure-modes-and-atomic-rollback)),
+so a failure at the last task discards the earlier work, which can be
+20 minutes or more on a local model. Resuming from the failed task would
+keep a failed run's writes and persist its progress, which splits the
+single reversal group a CTRL-Z relies on.
+
+Parked 2026-10-31; the signal is play showing failures common enough
+that the lost work matters.
 
 #### An unattributed pass fact can be lost to a reversal
 

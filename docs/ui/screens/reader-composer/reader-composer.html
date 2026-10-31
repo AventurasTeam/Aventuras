@@ -735,6 +735,13 @@
   </div>
 
   <div class="rb-group">
+    <span class="gl">chapter-close toast:</span>
+    <button class="rb-btn" data-close-toast="closed">closed</button>
+    <button class="rb-btn" data-close-toast="stopped">stopped early</button>
+    <button class="rb-btn" data-close-toast="failed">failed</button>
+  </div>
+
+  <div class="rb-group">
     <span class="gl">error entry text:</span>
     <button class="rb-btn active" data-held="short">kept, short</button>
     <button class="rb-btn" data-held="long">kept, long (clamped)</button>
@@ -912,7 +919,7 @@
   <button class="gen-banner-cancel" id="gen-banner-cancel">Cancel</button>
 </div>
 
-<!-- Toast — the deferral a Cancel of a pass or a close fires, and a failed pass's notice -->
+<!-- Toast — the deferral a Cancel of a pass or a close fires, a failed pass's notice, and how a close ended -->
 <div class="gen-toast" id="gen-toast" role="status" aria-live="polite"></div>
 
 <!-- Layout -->
@@ -1874,6 +1881,20 @@
     b.addEventListener('click', () => {
       deferredWork = true;
       showToast('Memory update failed. It runs again before your next turn.');
+    });
+  });
+
+  // How a close ended: a commit offers Review (the review window lives in chapter-timeline.html);
+  // a failure, like a failed pass, runs first at the next Send (before-turn).
+  const closeToasts = {
+    closed: 'Chapter closed: The Tithe of Hours   [Review]',
+    stopped: '⚠ Chapter closed, but 2 tasks stopped early   [Review]',
+    failed: '⚠ Chapter close failed. It runs again before your next turn.',
+  };
+  document.querySelectorAll('[data-close-toast]').forEach(b => {
+    b.addEventListener('click', () => {
+      if (b.dataset.closeToast === 'failed') deferredWork = true;
+      showToast(closeToasts[b.dataset.closeToast]);
     });
   });
 

@@ -257,6 +257,7 @@ binds to one primitive:
 | Branch chip popover (`⎇`)        | Popover             | Sheet (short)             | Was "bottom drawer" pre-foundations; reconciled in Group B |
 | Branch creation                  | Modal               | Modal                     | Pre-foundations: "creation modal is unchanged on mobile"   |
 | Rollback confirm                 | Modal               | Modal                     | Pre-foundations: "modal renders identically on mobile"     |
+| Chapter close review window      | Modal               | Sheet (tall)              | Long scrolling list; the head stays pinned                 |
 | Calendar swap warnings           | Modal               | Modal                     | Per `patterns/calendar-picker.md`                          |
 | Calendar picker                  | Popover             | Sheet (medium)            | Rich content (preset rows, summary panel)                  |
 | Model picker dropdown            | Popover             | Sheet (medium)            | Per `app-settings.md` "popover-rendered, virtualized list" |

@@ -156,7 +156,8 @@
 
   /* modal */
   .modal-backdrop { position: absolute; inset: 0; background: var(--bg-dim); z-index: 6; display: none; align-items: center; justify-content: center; }
-  body[data-modal="close"] .modal-backdrop { display: flex; }
+  body[data-modal="close"] #modal-backdrop,
+  body[data-modal="review"] #review-backdrop { display: flex; }
   .modal { width: 480px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); overflow: hidden; }
   .modal-head { padding: 14px 18px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; }
   .modal-title { font-size: 14px; font-weight: 600; color: var(--ink); }
@@ -199,12 +200,40 @@
   .modal-foot .btn { padding: 7px 18px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 13px; cursor: pointer; font-family: inherit; }
   .modal-foot .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; }
 
+  /* review window — read-only, its body scrolling under a pinned head (chapter-timeline.md → Review window) */
+  .review-modal { display: flex; flex-direction: column; max-height: calc(100% - 32px); }
+  .review-modal .modal-head, .review-modal .modal-foot { flex-shrink: 0; }
+  .review-modal .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .review-modal .sheet-handle { display: none; width: 36px; height: 4px; background: var(--line); border-radius: 2px; margin: 8px auto 0; flex-shrink: 0; }
+  .review-stopped { margin-bottom: 14px; padding: 8px 12px; background: var(--warn-bg); border: 1px solid var(--warn); border-radius: 3px; font-size: 12px; }
+  .review-stopped-title { font-weight: 600; }
+  .review-na { margin-bottom: 14px; border: 1px solid var(--line-soft); border-radius: 3px; }
+  .review-na-head { display: flex; align-items: center; gap: 6px; width: 100%; padding: 7px 12px; border: none; background: none; font-family: inherit; font-size: 12px; color: var(--ink); text-align: left; cursor: pointer; }
+  .review-na-head:hover { background: var(--bg-highlight); }
+  .review-na-arrow { color: var(--ink-faint); font-size: 11px; transition: transform 0.12s; }
+  .review-na-body { display: none; padding: 0 12px; border-top: 1px solid var(--line-soft); }
+  body[data-not-applied="expanded"] .review-na-arrow { transform: rotate(90deg); }
+  body[data-not-applied="expanded"] .review-na-body { display: block; }
+
+  /* history row look — .history-op per world.html, stacked per patterns/delta-log-row.md → Visual shape */
+  .history-op { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+  .history-op.create { color: var(--ok); }
+  .history-op.update { color: var(--ink-muted); }
+  .review-row { padding: 8px 4px; border-bottom: 1px dotted var(--line-soft); font-size: 12px; }
+  .review-row:last-child { border-bottom: none; }
+  .review-row.pressable { cursor: pointer; }
+  .review-row.pressable:hover { background: var(--bg-highlight); }
+  .review-row-value { margin-top: 2px; color: var(--ink); }
+  .review-row-why { margin-top: 2px; color: var(--ink-muted); }
+  .review-entry-link { color: var(--ink); text-decoration: underline; white-space: nowrap; cursor: pointer; }
+
   /* =========================================================
      Tier overrides — container queries on .viewport.
      Single-pane surface per docs/ui/foundations/mobile/collapse.md
      → Single-pane surfaces. Phone reflow tightens chrome and
      wraps the per-card action row; chapter-close modal stays
-     Modal at every tier per layout.md → Surface bindings.
+     Modal at every tier per layout.md → Surface bindings; the
+     review window turns Sheet (chapter-timeline.md → Mobile expression).
      ========================================================= */
   @container (max-width: 639px) {
     .topbar { padding: 8px 12px; gap: 8px; }
@@ -218,13 +247,13 @@
 
     .card-head { padding: 10px 12px; }
     .card-body { padding: 12px; }
-    /* Phone tier: keep Jump as the primary affordance, tuck Regenerate +
-       Delete behind a ⋯ overflow trigger that opens a Sheet (short) per
-       layout.md → Surface bindings. Avoids the 2-row wrap that read as
-       cluttered and gave Delete the same weight as Jump. */
+    /* Phone tier: keep Jump as the primary affordance, tuck Regenerate,
+       Review changes and Delete behind a ⋯ overflow trigger that opens a
+       Sheet (short) per layout.md → Surface bindings. Avoids the 2-row
+       wrap that read as cluttered and gave Delete the same weight as Jump. */
     .card-actions { gap: 8px; }
     .card-action-jump { flex: 1 1 auto; min-width: 0; }
-    .card-action-regen, .card-action-delete { display: none; }
+    .card-action-regen, .card-action-review, .card-action-delete { display: none; }
     .card-action-more {
       display: inline-flex;
       align-items: center;
@@ -246,10 +275,16 @@
     .modal { width: 100%; max-width: calc(100% - 24px); margin: 0 12px; max-height: 85vh; overflow-y: auto; }
     .modal-foot { padding: 12px 16px; flex-wrap: wrap; }
     .modal-foot .btn { flex: 1 1 auto; }
+
+    /* review window — a Sheet here: bottom-anchored, drag handle in place of the ×, head still pinned */
+    #review-backdrop { align-items: flex-end; }
+    .review-modal { max-width: none; margin: 0; overflow: hidden; border-width: 1px 0 0; border-radius: 12px 12px 0 0; }
+    .review-modal .sheet-handle { display: block; }
+    .review-modal .modal-close { display: none; }
   }
 </style>
 </head>
-<body data-card-state="expanded" data-empty="no" data-modal="hidden" data-progress="safe" data-picker="closed" data-gen-state="idle">
+<body data-card-state="expanded" data-empty="no" data-modal="hidden" data-not-applied="collapsed" data-progress="safe" data-picker="closed" data-gen-state="idle">
 
 <div class="screen-label"><strong>Wireframe:</strong> Chapter Timeline &mdash; responsive across phone / tablet / desktop &mdash; low-fi, interactive</div>
 
@@ -272,9 +307,15 @@
     <button class="rb-btn" data-empty="yes">empty (only in-progress)</button>
   </div>
   <div class="rb-group">
-    <span class="gl">close modal:</span>
+    <span class="gl">modal:</span>
     <button class="rb-btn active" data-modal="hidden">hidden</button>
-    <button class="rb-btn" data-modal="close">visible</button>
+    <button class="rb-btn" data-modal="close">close chapter</button>
+    <button class="rb-btn" data-modal="review">review window</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">not applied:</span>
+    <button class="rb-btn active" data-not-applied="collapsed">collapsed</button>
+    <button class="rb-btn" data-not-applied="expanded">expanded</button>
   </div>
   <div class="rb-group">
     <span class="gl">end picker:</span>
@@ -344,7 +385,7 @@
     </div>
 
     <!-- Chapter 2 — the demo target for expanded / dirty states -->
-    <div class="chapter-card" data-card="2" id="card-2">
+    <div class="chapter-card expanded" data-card="2" id="card-2">
       <div class="card-head">
         <span class="num">Ch 2</span>
         <div class="head-body">
@@ -390,11 +431,12 @@
         <div class="card-actions">
           <button class="card-action card-action-jump">Jump to chapter &rarr;</button>
           <button class="card-action card-action-regen">Regenerate summary</button>
+          <button class="card-action card-action-review" id="review-changes">Review changes</button>
           <button class="card-action danger card-action-delete">Delete&hellip;</button>
           <!-- Phone-tier overflow trigger — primary action (Jump) stays
-               full-label; Regenerate + Delete tuck behind ⋯ which opens
-               a Sheet (short) per layout.md → Surface bindings. Visual
-               placeholder; sheet content is the two destructive actions. -->
+               full-label; Regenerate, Review changes and Delete tuck behind
+               ⋯ which opens a Sheet (short) per layout.md → Surface bindings.
+               Visual placeholder; sheet content is those three actions. -->
           <button class="card-action card-action-more" title="More actions">&middot;&middot;&middot;</button>
         </div>
 
@@ -547,6 +589,66 @@
   </div>
 </div>
 
+<!-- review window — chapter-timeline.md → Review window, on card 2's chapter. The sketch's rows,
+     with their citations moved into this chapter's entries 23–58: a close refuses a turn outside it. -->
+<div class="modal-backdrop" id="review-backdrop">
+  <div class="modal review-modal">
+    <div class="sheet-handle"></div>
+    <div class="modal-head">
+      <span class="modal-title">Review &mdash; Chapter 2: The Trail North</span>
+      <span class="modal-close" id="review-close">&times;</span>
+    </div>
+    <div class="modal-body">
+      <div class="review-stopped">
+        <div class="review-stopped-title">&#9888; Stopped early</div>
+        <div>Identity, part 2 &mdash; reached its step limit</div>
+      </div>
+
+      <div class="review-na">
+        <button class="review-na-head" id="review-na-head" type="button"><span class="review-na-arrow">&#9656;</span> Not applied (3)</button>
+        <div class="review-na-body">
+          <div class="review-row">
+            <div><span class="history-op create">create</span> &middot; <b>The Ferryman's Due</b></div>
+            <div class="review-row-value">A coin at every river crossing, paid to the toll-keepers.</div>
+            <div class="review-row-why">Over the lore cap.</div>
+          </div>
+          <div class="review-row">
+            <div><span class="history-op update">update</span> &middot; <b>Aria</b> &middot; <code>voice</code></div>
+            <div class="review-row-value">measured, guarded</div>
+            <div class="review-row-why">You changed this field after the cited entry.</div>
+          </div>
+          <div class="review-row">
+            <div><span class="history-op update">update</span> &middot; <b>Tolfden</b> &middot; <code>description</code></div>
+            <div class="review-row-value">Ridge town under the warden's banners.</div>
+            <div class="review-row-why">A later turn wrote this field.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-section">
+        <div class="modal-section-label">Lore</div>
+        <div class="review-row pressable">
+          <div><span class="history-op create">create</span> &middot; <b>The Tithe of Hours</b></div>
+          <div class="review-row-value">Every adult owes the temple one hour a year.</div>
+          <div class="review-row-why">Sael explains the tithe. <span class="review-entry-link">entry 31 &rarr;</span></div>
+        </div>
+      </div>
+
+      <div class="modal-section">
+        <div class="modal-section-label">Characters and factions</div>
+        <div class="review-row pressable">
+          <div><span class="history-op update">update</span> &middot; <b>Kael</b> &middot; <code>voice</code></div>
+          <div class="review-row-value">wry, joking &rarr; short, flat sentences</div>
+          <div class="review-row-why">He stops joking after Oss. <span class="review-entry-link">entry 47 &rarr;</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn primary" id="review-done">Done</button>
+    </div>
+  </div>
+</div>
+
     </div><!-- /.viewport -->
   </div><!-- /.vp-stage-wrap -->
 </div><!-- /.vp-stage -->
@@ -625,6 +727,8 @@
     document.querySelectorAll('.rb-btn[data-modal]').forEach(b => {
       b.classList.toggle('active', b.dataset.modal === state);
     });
+    // The viewport grows with an expanded card, which would leave a bottom Sheet below the fold.
+    if (state === 'review') document.querySelector('.review-modal').scrollIntoView({ block: 'nearest' });
   }
   document.querySelectorAll('.rb-btn[data-modal]').forEach(b => {
     b.addEventListener('click', () => setModal(b.dataset.modal));
@@ -667,6 +771,23 @@
   // close-chapter button opens the modal
   document.getElementById('close-chapter-btn').addEventListener('click', () => setModal('close'));
 
+  // review changes opens the review window
+  document.getElementById('review-changes').addEventListener('click', () => setModal('review'));
+
+  // not-applied accordion — collapsed by default; review control + click on its head
+  function setNotApplied(state) {
+    body.dataset.notApplied = state;
+    document.querySelectorAll('.rb-btn[data-not-applied]').forEach(b => {
+      b.classList.toggle('active', b.dataset.notApplied === state);
+    });
+  }
+  document.querySelectorAll('.rb-btn[data-not-applied]').forEach(b => {
+    b.addEventListener('click', () => setNotApplied(b.dataset.notApplied));
+  });
+  document.getElementById('review-na-head').addEventListener('click', () => {
+    setNotApplied(body.dataset.notApplied === 'expanded' ? 'collapsed' : 'expanded');
+  });
+
   // end-entry picker — open/closed state via review control + click on picker button
   function setPicker(state) {
     body.dataset.picker = state;
@@ -702,11 +823,15 @@
   document.getElementById('modal-close').addEventListener('click', () => setModal('hidden'));
   document.getElementById('modal-cancel').addEventListener('click', () => setModal('hidden'));
   document.getElementById('modal-confirm').addEventListener('click', () => setModal('hidden'));
-  document.getElementById('modal-backdrop').addEventListener('click', (e) => {
-    if (e.target.id === 'modal-backdrop') setModal('hidden');
+  document.getElementById('review-close').addEventListener('click', () => setModal('hidden'));
+  document.getElementById('review-done').addEventListener('click', () => setModal('hidden'));
+  ['modal-backdrop', 'review-backdrop'].forEach(id => {
+    document.getElementById(id).addEventListener('click', (e) => {
+      if (e.target.id === id) setModal('hidden');
+    });
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && body.dataset.modal === 'close') setModal('hidden');
+    if (e.key === 'Escape' && body.dataset.modal !== 'hidden') setModal('hidden');
   });
 </script>
 

@@ -15,51 +15,7 @@ for the placement rule.
 
 ## Data-model
 
-- **Chapter-close agent design.** Chapter close's write set is fixed
-  by the
-  [authorship contract](./data-model.md#authorship-contract), and
-  [`memory/chapter-close.md`](./memory/chapter-close.md) specs its
-  phases and sub-jobs: a tool loop that hands rejections back, chained
-  behind the turn's pass under the gate, interruptible and deferred to
-  the next Send, its phase 0 a chain of ordinary passes. Its agent
-  isn't designed concretely enough to implement. The design decides:
-  - the tool set and what each tool returns, the loop's budget and
-    stopping rule on a long chapter;
-  - a tool-calling capability flag, detected and user-overridable, and
-    what a close does when the `lore-mgmt` model lacks it;
-  - the boundary and metadata calls (entries by position, structured
-    output);
-  - how the close logs and anchors its writes: `story_entries.chapter_id`
-    stamped in its own group, anchored on its end entry (the roadmap's
-    M5 notes);
-  - the actions it needs and lacks: a happening merge, an earliest-wins
-    awareness merge, the per-chapter `retrieval_count` reset; and a
-    thread it resolves through `updateThread` keeps the
-    `resolved_at_entry_id` it had, since only a user's status change
-    clears it, so the close sets the ref itself;
-  - whether a cluster it can't decide gets a review flag (happenings
-    have no column for one), and what it does with a row already
-    flagged;
-  - the `name_collision_reason` a flag it raises stores, which
-    [`data-model.md → Diagram`](./data-model.md#diagram) leaves open:
-    the pair a close judges duplicates is usually not a namesake pair,
-    and World clears a flag whose pair isn't one at the next rename or
-    merge that touches it
-    ([`world.md → Surfacing`](./ui/screens/world/world.md#surfacing)),
-    so the reason comes with a way to keep the pair paired;
-  - how the user reviews what a close changed;
-  - whether boot holds a branch on a close's unreversed orphan as it
-    does on a pass's: the reset counts only the pass's, so the next
-    pass reads a graph carrying the close's leftover writes
-    ([`parked.md → The classifier can read a window holding un-reversed writes`](./parked.md#the-classifier-can-read-a-window-holding-un-reversed-writes)).
-
-  Its failure policy is the pass's: a close that fails runs before the
-  next turn and must succeed
-  ([`classifier.md → Failure policy`](./memory/classifier.md#failure-policy)).
-
-  Promoted from the developer's notes 2026-10-10; write set fixed
-  2026-10-20, failure policy 2026-10-22; its flag's reason left to it
-  by the AI writer map.
+No open items.
 
 ## UX
 
@@ -77,6 +33,16 @@ for the placement rule.
   (`usage.inputTokenDetails`), the only measure of whether a cache
   marker pays.
   Wanted in v1, design deferred. Raised by the developer 2026-10-10.
+
+- **Story model overrides carry no settings.** A story's override
+  (`stories.settings.models`) names a provider and a model, not a
+  profile, so it has no output limit, thinking, timeout, temperature or
+  structured-output mode, and a chapter close under one runs on the
+  defaults
+  ([`chapter-close.md → Conversations`](./memory/chapter-close.md#conversations)).
+  Overrides need those settings, likely in a form close to App Settings'
+  model select; the form is open. Raised by the developer 2026-10-31 in
+  the chapter-close agent design.
 
 ## Tuning and play testing
 
@@ -198,6 +164,28 @@ breakdown under [UX](#ux).
   an agent given the instructions, or as a probe step calling a judge
   model is open. Raised 2026-10-29 by the classifier prompt's tuning.
 
+- **Tune the close's agent.** Nothing has measured the agent at size.
+  The design's tests used a chapter of about 100 words, five tools and
+  three tasks; a real close has 24k tokens, seven tasks and up to six
+  tools a task, and only played stories have such a chapter. Play tunes
+  the task prompts on the dev model, as the classifier's were, and
+  extends the probe to a close, saving each step's messages. It also
+  measures what the design left open:
+  - whether the agent keeps to the rules at full size, and how many
+    steps a task takes against its budget of 24;
+  - reasoning spirals: one prompt shape sent the dev model through its
+    whole output limit in 7 of 14 runs, with no known cause, so the 8k
+    bound and the prompts both need a measure;
+  - a rule refined in a later part, which landed as a second lore row in
+    3 of 10 runs that dropped reasoning, and needs repeating with it;
+  - the profile switches on a few models: whether a list of 17 tools
+    costs a weak model what fewer tools are said to save, and whether a
+    single conversation does better anywhere;
+  - part size, half the window, and how a chapter cut in parts reads;
+  - servers that take the tool list and ignore it.
+
+  Raised 2026-10-31 by the chapter-close agent design.
+
 - **Parked items play gives a signal for.** Each waits on evidence
   only play produces, so play checks them rather than letting the
   signal pass unseen:
@@ -209,4 +197,5 @@ breakdown under [UX](#ux).
   - [Calibrating the token estimate per model](./parked.md#calibrating-the-token-estimate-per-model)
   - [A limited narrator in second and third person](./parked.md#a-limited-narrator-in-second-and-third-person)
   - [A twin across a placement](./parked.md#a-twin-across-a-placement)
+  - [Resuming a failed close](./parked.md#resuming-a-failed-close)
   - [A staged row has no retirement](./parked.md#a-staged-row-has-no-retirement)

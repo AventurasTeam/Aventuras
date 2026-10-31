@@ -294,8 +294,8 @@ Implementation contract is in
   pipeline** with the banner. Phase detail in
   [`memory/classifier.md → Pipeline framing`](../memory/classifier.md#pipeline-framing).
 - **Chapter-close pipeline** — catch-up passes, then boundary →
-  chapter metadata → lore-mgmt (sub-jobs 3a–3f, one tool loop) →
-  lifecycle review under one `actionId`. Triggered by token-threshold
+  chapter metadata → lore-mgmt (sub-jobs 3a–3f, ordered tool-calling
+  tasks) → lifecycle review under one `actionId`. Triggered by token-threshold
   cross at turn-commit time, behind that turn's pass, or by explicit
   user close. Decided as a **blocking pipeline**: the user is gated
   for its full duration with a banner affordance (no streaming surface

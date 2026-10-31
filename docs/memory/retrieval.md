@@ -232,6 +232,9 @@ every vec0 reader:
   stage on demand before its KNN (probe reader-model is still open;
   see
   [`memory-probe.md`](../ui/screens/memory-probe/memory-probe.md)).
+- **Chapter close's clustering** — embeds the happenings in its range
+  before comparing them
+  ([`chapter-close.md → 3e`](./chapter-close.md#3e--happenings-consolidation)).
 
 Between retrievals vec0 may lag the live rows. That is deliberate
 and harmless: nothing reads it without first running the sync stage.
@@ -695,6 +698,7 @@ The provider-model capability JSON carries:
 app_settings.providers[].cachedModels[].capabilities = {
   reasoning?: boolean,
   structuredOutput?: boolean,
+  toolCalling?: boolean,            // chapter-close.md → Tool calling
   embeddingDim?: number,             // native output dimension learned by a probe
   matryoshkaSupported?: boolean,
   matryoshkaDims?: number[],        // curated ladder, e.g. [256, 512, 1024, 1536, 2048, 3072]

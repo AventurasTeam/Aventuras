@@ -752,7 +752,7 @@ stratification in [`memory/cadence.md`](./memory/cadence.md):
 | -------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Piggyback**              | Every AI reply, inline on the narrative call (capability-gated)                           | Physical state a turn changes — `sceneEntities`, `currentLocationId`, `worldTime`, visual mutations, conditions, item transfers and drops, and the new locations and items they name                                                                                                                 |
 | **Periodic classifier**    | Chained after a turn every `stories.settings.classifierCadence` entries; blocks the story | Facts evidenced across turns — happenings, involvements, awareness, threads, new characters and factions with their first profiles and (by story setting) mentioned places, names, where places sit, faction standing and memberships, entity status flips, keyword appends, character relationships |
-| **Chapter-close pipeline** | Token threshold crossed OR user-triggered                                                 | 5-phase pipeline: catch-up passes, boundary, metadata, lore-mgmt (six sub-jobs in one tool loop), lifecycle review                                                                                                                                                                                   |
+| **Chapter-close pipeline** | Token threshold crossed OR user-triggered                                                 | 5-phase pipeline: catch-up passes, boundary, metadata, lore-mgmt (six sub-jobs, run as ordered tool-calling tasks), lifecycle review                                                                                                                                                                 |
 
 The periodic classifier is itself a Pipeline (per
 [`generation-pipeline.md`](./generation-pipeline.md)) — same
@@ -869,8 +869,9 @@ the full opening contract.
 ### Chapter-close pipeline
 
 Chapter-close is its own pipeline kind: catch-up passes chained ahead
-of it, then boundary selection, metadata, lore-mgmt (six sub-jobs in
-one tool loop) and lifecycle review under one `actionId`. A single
+of it, then boundary selection, metadata, lore-mgmt and lifecycle review
+(ordered tasks, each a native tool-calling conversation) under one
+`actionId`. A single
 CTRL-Z from the user reverses the entire chapter-close. Full design in
 [`memory/chapter-close.md`](./memory/chapter-close.md). Chapter-close
 holds the user-edit gate via `gateBehavior: 'hard-gate'`, and a head
@@ -946,10 +947,12 @@ only sign that one is missing.
 
 ### The pre-send check
 
-`lib/ai` checks every call made through `streamText` and
-`generateStructured`, so every caller is covered without opting in. It
-counts the request as sent, after middleware, the JSON contract
-injected for structured output included, with `countTokens`: o200k, an
+`lib/ai` checks every call made through `streamText`,
+`generateStructured` and a close's tool steps, so every caller is
+covered without opting in. It counts the request as sent, after
+middleware, the JSON contract injected for structured output included,
+and on a tool step the tool definitions, calls, results and reasoning,
+with `countTokens`: o200k, an
 estimate for every provider. When the window is known and the estimate
 exceeds it, the call is not sent and not retried.
 
@@ -978,6 +981,10 @@ on its existing failure path:
 - a pass's failure, which stops the branch's turns until the figure or
   the model changes
   ([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy));
+- a close's failure when a task's first call doesn't fit, which stops
+  the turns the same way; a conversation that outgrows the window later
+  only stops its task
+  ([`memory/chapter-close.md → When a task stops`](./memory/chapter-close.md#when-a-task-stops));
 - suggestion refresh, the fallback classifier and wizard-assist on
   their own.
 
@@ -1089,7 +1096,8 @@ tuple succeeds or fails on its own; the phase always returns
 [Graceful degradation contract](#graceful-degradation-contract) below.
 
 The phase is reused by `chapter-close` (translates the chapter title
-and summary) and by `translation-retry` (translates the outstanding-miss
+and summary, and the translatable fields the close wrote) and by
+`translation-retry` (translates the outstanding-miss
 set on explicit user retry). All three contexts populate
 `intermediates.intendedTranslations` differently at phase entry; the
 phase iterates that single shape.

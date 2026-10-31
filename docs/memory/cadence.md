@@ -217,6 +217,10 @@ to existing rows resolve that, field by field, by the precedence below.
 The per-turn writer needs none of it: its prose is always newer than
 any user edit.
 
+A close also skips a field a turn past its chapter wrote, whichever
+writer it was
+([`chapter-close.md → Tools and writes`](./chapter-close.md#tools-and-writes)).
+
 **Idempotent writes.** Status, keyword, faction and link writes check
 the row or rows as they stand when the write lands:
 

@@ -131,7 +131,8 @@ The compound owns phase → copy and error → copy:
 `memory-incomplete` is pluralised (`_one` / `_other`), so the count is
 `{{count}}` rather than a named field.
 
-No error code reports the periodic classifier. A failed pass, a
+No error code reports the periodic classifier or a chapter close. A
+failed pass or close, a
 [config pre-flight failure](../../generation-pipeline.md#config-pre-flight-validation)
 included, shows as a toast, and as the reader's system entry when it
 fails a Send

@@ -103,6 +103,7 @@
       .segment > .seg { padding: 6px 14px; font-size: 12px; color: var(--ink-muted); cursor: pointer; background: var(--bg-region); }
       .segment > .seg.active { background: var(--ink); color: #fff; }
       .segment > .seg + .seg { border-left: 1px solid var(--line); }
+      .segment.disabled { opacity: 0.5; pointer-events: none; }
 
       /* SwitchRow pattern — canonical shape for boolean settings. Full-width
          row with label + optional hint on the left, switch indicator on the
@@ -124,6 +125,9 @@
       .model-select .dropdown-arrow { color: var(--ink-faint); font-family: system-ui, sans-serif; }
       .cap-badge { font-size: 11px; color: var(--ink-faint); }
       .cap-badge.on { color: var(--ink); }
+      /* color alone doesn't reach a color emoji, so 🧠 and 🔧 read on when off */
+      .cap-badge:not(.on) { filter: grayscale(1); opacity: 0.5; }
+      .cap-badge.unknown { outline: 1px dashed var(--ink-faint); outline-offset: 1px; }
       .ctx-info { font-size: 10px; color: var(--ink-faint); margin-top: 4px; line-height: 1.5; font-family: system-ui, sans-serif; }
       .ctx-info b { color: var(--ink-muted); }
 
@@ -248,6 +252,8 @@
       .assignments-row { display: grid; grid-template-columns: 200px 1fr; gap: 14px; align-items: center; padding: 8px 0; border-bottom: 1px dotted var(--line-soft); }
       .assignments-row:last-child { border-bottom: none; }
       .assignments-row .a-name { font-family: ui-monospace, monospace; font-size: 12px; color: var(--ink); }
+      .assignments-row .a-warn { display: none; grid-column: 2; font-size: 11px; color: var(--warn); }
+      .assignments-row .a-warn.visible { display: block; }
 
       /* save bar */
       .save-bar { display: none; padding: 10px 20px; border-top: 1px solid var(--line); background: #fff7dc; justify-content: space-between; align-items: center; gap: 12px; }
@@ -433,6 +439,11 @@
         <button class="rb-btn active" data-dirty="clean">clean</button>
         <button class="rb-btn" data-dirty="dirty">dirty (1 change)</button>
       </div>
+      <div class="rb-group">
+        <span class="gl">lore-mgmt tool calling:</span>
+        <button class="rb-btn active" data-lore-tools="on">on</button>
+        <button class="rb-btn" data-lore-tools="off">off (warning)</button>
+      </div>
       <span class="rb-note">click rail nav · expand profiles &middot; flip viewport via 1/2/3</span>
     </div>
 
@@ -561,6 +572,7 @@
                       <span class="m-caps">
                         <span class="cap-badge on" title="reasoning">&#129504;</span>
                         <span class="cap-badge on" title="structured output">&#9881;</span>
+                        <span class="cap-badge on" title="tool calling">&#128295;</span>
                       </span>
                       <span class="win-chip" data-win="sonnet" title="context window &middot; detected">200k</span>
                       <span class="remove" title="remove from cache">&times;</span>
@@ -568,7 +580,7 @@
                     <div class="win-popover" data-win-popover="sonnet" hidden>
                       <div class="win-title">Context window &middot; claude-sonnet-4-7</div>
                       <input class="win-input" placeholder="200000" /> tokens
-                      <div class="win-note">Server reports 200,000. A lower figure caps every role on this model: calls past it are refused, not shortened.</div>
+                      <div class="win-note">Server reports 200,000. A lower figure caps every role on this model: calls past it are refused, not shortened. A small window also splits a chapter close into parts, which can lower its quality.</div>
                       <div class="win-actions"><span class="disabled">Reset to detected</span></div>
                     </div>
                     <div class="model-row">
@@ -577,6 +589,7 @@
                       <span class="m-caps">
                         <span class="cap-badge on" title="reasoning">&#129504;</span>
                         <span class="cap-badge on" title="structured output">&#9881;</span>
+                        <span class="cap-badge on" title="tool calling">&#128295;</span>
                       </span>
                       <span class="win-chip" title="context window &middot; detected">200k</span>
                       <span class="remove" title="remove from cache">&times;</span>
@@ -595,28 +608,28 @@
                         <div class="model-row">
                           <span class="pin on">&#9733;</span>
                           <span class="m-name">claude-sonnet-4-7</span>
-                          <span class="m-caps"><span class="cap-badge on">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                          <span class="m-caps"><span class="cap-badge on">&#129504;</span><span class="cap-badge on">&#9881;</span><span class="cap-badge on">&#128295;</span></span>
                           <span class="win-chip">200k</span>
                           <span class="remove">&times;</span>
                         </div>
                         <div class="model-row">
                           <span class="pin on">&#9733;</span>
                           <span class="m-name">claude-opus-4-7</span>
-                          <span class="m-caps"><span class="cap-badge on">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                          <span class="m-caps"><span class="cap-badge on">&#129504;</span><span class="cap-badge on">&#9881;</span><span class="cap-badge on">&#128295;</span></span>
                           <span class="win-chip">200k</span>
                           <span class="remove">&times;</span>
                         </div>
                         <div class="model-row">
                           <span class="pin">&#9734;</span>
                           <span class="m-name">claude-haiku-4-5</span>
-                          <span class="m-caps"><span class="cap-badge">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                          <span class="m-caps"><span class="cap-badge">&#129504;</span><span class="cap-badge on">&#9881;</span><span class="cap-badge unknown" title="tool calling unknown: a close still runs">&#128295;</span></span>
                           <span class="win-chip">200k</span>
                           <span class="remove">&times;</span>
                         </div>
                         <div class="model-row">
                           <span class="pin">&#9734;</span>
                           <span class="m-name">claude-3-5-haiku</span>
-                          <span class="m-caps"><span class="cap-badge">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                          <span class="m-caps"><span class="cap-badge">&#129504;</span><span class="cap-badge on">&#9881;</span><span class="cap-badge unknown" title="tool calling unknown: a close still runs">&#128295;</span></span>
                           <span class="win-chip">200k</span>
                           <span class="remove">&times;</span>
                         </div>
@@ -728,6 +741,7 @@
                       <span class="m-caps">
                         <span class="cap-badge" title="capability data unavailable">&#129504;</span>
                         <span class="cap-badge" title="capability data unavailable">&#9881;</span>
+                        <span class="cap-badge unknown" title="capability data unavailable &middot; chapter close still runs">&#128295;</span>
                       </span>
                       <span class="win-chip set" data-win="llama" title="context window &middot; set by you">32k</span>
                       <span class="remove">&times;</span>
@@ -744,6 +758,7 @@
                       <span class="m-caps">
                         <span class="cap-badge">&#129504;</span>
                         <span class="cap-badge">&#9881;</span>
+                        <span class="cap-badge unknown" title="capability data unavailable &middot; chapter close still runs">&#128295;</span>
                       </span>
                       <span class="win-chip unknown" data-win="qwen" title="context window &middot; unknown">ctx ?</span>
                       <span class="remove">&times;</span>
@@ -760,6 +775,7 @@
                       <span class="m-caps">
                         <span class="cap-badge">&#129504;</span>
                         <span class="cap-badge">&#9881;</span>
+                        <span class="cap-badge unknown" title="capability data unavailable &middot; chapter close still runs">&#128295;</span>
                       </span>
                       <span class="win-chip unknown" title="context window &middot; unknown">ctx ?</span>
                       <span class="remove">&times;</span>
@@ -1041,6 +1057,38 @@
                   <div class="ctx-info"><b>auto</b> resolves to <b>force-on</b> for this model (capability supported).</div>
                 </div>
               </div>
+
+              <!-- Chapter close — on every agent profile, read only by a close (app-settings.md → Agent profiles).
+                   Segments, not SwitchRows: each picks between two named values, neither of them "off". -->
+              <div class="model-list-head">
+                <h4>Chapter close</h4>
+                <span class="meta">does nothing for any other agent</span>
+              </div>
+              <div class="field-row">
+                <div class="field-label">conversation
+                  <span class="hint">one per task, or one for all</span>
+                </div>
+                <div>
+                  <div class="segment" id="close-conversation">
+                    <span class="seg active">split</span>
+                    <span class="seg">single</span>
+                  </div>
+                  <div class="ctx-info"><b>single</b> needs a large window.</div>
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field-label">tools
+                  <span class="hint">each task's own, or all on every task</span>
+                </div>
+                <div>
+                  <div class="segment" id="close-tools">
+                    <span class="seg active">separate</span>
+                    <span class="seg">shared</span>
+                  </div>
+                  <div class="ctx-info"><b>shared</b> keeps the chapter cached on more models, at some cost to a weak one. Disabled under <b>single</b>, where it has no effect.</div>
+                </div>
+              </div>
+
               <details class="advanced">
                 <summary>Advanced &mdash; custom JSON payload</summary>
                 <div class="body">
@@ -1080,6 +1128,7 @@
             <div class="assignments-row">
               <span class="a-name">lore-mgmt</span>
               <div class="input-select" style="border-color: var(--warn);"><span>Heavy reasoning <span style="font-size: 10px; color: var(--warn);">&#9888;</span></span><span style="color: var(--ink-faint);">&#9662;</span></div>
+              <div class="a-warn" id="lore-tools-warn">&#9888; This model's tool calling is off, so a chapter close can't start on it.</div>
             </div>
             <div class="assignments-row">
               <span class="a-name">retrieval</span>
@@ -1743,6 +1792,25 @@
             const state = b.dataset.err;
             banner.classList.toggle('visible', state === 'broken');
             document.querySelectorAll('[data-err]').forEach((x) => x.classList.toggle('active', x.dataset.err === state));
+          })
+        );
+
+        // lore-mgmt warning — the assigned model's toolCalling off
+        const loreToolsWarn = document.getElementById('lore-tools-warn');
+        document.querySelectorAll('[data-lore-tools]').forEach((b) =>
+          b.addEventListener('click', () => {
+            const state = b.dataset.loreTools;
+            loreToolsWarn.classList.toggle('visible', state === 'off');
+            document.querySelectorAll('[data-lore-tools]').forEach((x) => x.classList.toggle('active', x.dataset.loreTools === state));
+          })
+        );
+
+        // Chapter close segments — Tools has no effect under Conversation: single, so it disables there
+        const closeTools = document.getElementById('close-tools');
+        document.querySelectorAll('#close-conversation .seg, #close-tools .seg').forEach((s) =>
+          s.addEventListener('click', () => {
+            s.parentElement.querySelectorAll('.seg').forEach((x) => x.classList.toggle('active', x === s));
+            if (s.parentElement.id === 'close-conversation') closeTools.classList.toggle('disabled', s.textContent === 'single');
           })
         );
 

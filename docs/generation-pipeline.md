@@ -138,9 +138,10 @@ type PipelineEvent =
   // phase-emitted core
   | { type: 'stream_chunk'; targetEntryId: string; text: string; channel: 'text' | 'reasoning' }
   | { type: 'delta_emitted'; action: PipelineAction; entryId?: string | null }
+  | { type: 'delta_group_emitted'; actions: readonly PipelineAction[]; entryId: string }
   | { type: 'recoverable_error'; error: PipelineError }
   // phase-emitted specific — grows additively
-  | { type: 'lore_mgmt_subjob_complete'; jobName: string; done: number; total: number }
+  | { type: 'close_task_complete'; task: string; part: number; done: number; total: number }
   | { type: 'retrieval_stage'; stage: 'embedding' | 'ranking' | 'budget-fill' }
 ```
 
@@ -418,19 +419,25 @@ emission from the LLM is a prompt bug, not a runtime case to handle.
 
 **Via events the orchestrator dispatches:**
 
-- `delta_emitted` — every persisted write. Orchestrator routes
+- `delta_emitted` — every persisted write but a close's tool calls.
+  Orchestrator routes
   through the action layer with `source: 'pipeline'` + the current
   `actionId`, and the event's `entryId` (the entry the write belongs
   to, `null` when none) onto the delta row; a `createStoryEntry` with
   one also records the turn capture's target entry. Phase doesn't
   touch delta log / SQLite / undo_payload.
+- `delta_group_emitted` — one tool call of a chapter close: its writes
+  land whole, and each action's outcome comes back to the phase as the
+  `yield`'s value, so a refusal goes to the model instead of failing the
+  run
+  ([`memory/chapter-close.md → Tools and writes`](./memory/chapter-close.md#tools-and-writes)).
 - `stream_chunk` — display-token path (`channel` splits narrative
   text from streamed reasoning). Orchestrator dispatches a
   side-channel append action; **no delta** until stream completion
   (commit fires a regular `delta_emitted` for the entry's
   `op=create`).
 
-**Never:** delta-loggable writes outside `delta_emitted`, delta-log
+**Never:** delta-loggable writes outside those two events, delta-log
 appends, persisted-store mutations, another phase's intermediates.
 
 **Reads are fine** — a phase resolves tail positions and working sets
@@ -496,7 +503,7 @@ per branch inside a `parallel` group). Sub-work inside a phase body
 is **opaque** — no framework identity, no pill update.
 
 If sub-progress wants to surface, the phase yields phase-specific
-events (e.g., `lore_mgmt_subjob_complete`); consumers filter and
+events (e.g., `close_task_complete`); consumers filter and
 interpret. Sub-work doesn't get promoted to phase status — pill
 still shows the declared phase.
 
@@ -613,6 +620,9 @@ checks:
   `providers[]` entry. Broken-model-catalog cases (a model id the
   provider no longer serves) surface via the existing global
   broken-config banner.
+- For a chapter close: the `lore-mgmt` model isn't flagged off for tool
+  calling. Unknown passes
+  ([`memory/chapter-close.md → Tool calling`](./memory/chapter-close.md#tool-calling)).
 
 Per-story embedder pointers (`stories.settings.embedding_provider_id`)
 are **not validated** here — they're an invariant maintained by
@@ -630,7 +640,7 @@ of those two calls fires, so it adds nothing to the per-turn
 pre-flight; the dedicated `suggestion` agent belongs to the
 `suggestion-refresh` pipeline kind and is pre-flighted independently
 when that pipeline runs. The chapter-close pipeline validates the
-chapter-close agent's resolved config; the periodic classifier
+chapter-close agent's resolved config and its tool calling; the periodic classifier
 validates classifier's config at the start of each pass. The memory
 probe is not a pipeline — it captures as a side-effect of the
 per-turn pipeline's retrieval phase, covered by that pipeline's
@@ -684,10 +694,11 @@ async function runNode(node: PhaseNode, run: RunState): Promise<PhaseResult> {
 }
 
 async function consumePhase(gen: AsyncGenerator<PhaseEmittedEvent, PhaseResult>, run: RunState) {
+  let outcome: GroupOutcome | undefined // what a delta_group_emitted's yield evaluates to
   while (true) {
-    const next = await gen.next()
+    const next = await gen.next(outcome)
     if (next.done) return next.value
-    handleEvent(next.value, run)
+    outcome = await handleEvent(next.value, run)
   }
 }
 ```
@@ -696,6 +707,8 @@ async function consumePhase(gen: AsyncGenerator<PhaseEmittedEvent, PhaseResult>,
 
 - `delta_emitted` → action-layer dispatch with `source: 'pipeline'` +
   `run.actionId` (see [Action-layer integration](#action-layer-integration)).
+- `delta_group_emitted` → the same dispatch through
+  `applyDeltaActionGroup`, its per-action outcome returned to the phase.
 - `stream_chunk` → side-channel append action.
 - everything else → no internal handling.
 
@@ -835,6 +848,11 @@ arises (scoped-gate), `writeSet` can land then.
 ### Two write paths from the orchestrator
 
 #### Path A — `delta_emitted` → action layer
+
+`delta_group_emitted` takes this path too, through
+`applyDeltaActionGroup`, one transaction per event. It reports each
+action's outcome, a skipped one included, where a rejected
+`delta_emitted` fails the run.
 
 ```ts
 function dispatchAction(action: PipelineAction, actionId: string) {
@@ -1323,7 +1341,9 @@ unprocessed, and a pass first when a close is owed and something is
 `chapterAutoClose = false` owes no close past the threshold (the close
 is surfaced as a manual affordance instead). A manual close records
 `pendingClose` with the user's end entry and starts the same way: a
-pass first when entries are unprocessed, the close otherwise.
+pass first when entries are unprocessed, the close otherwise. The
+record is in memory: a restart drops it, and so does a reversal that
+removes that entry.
 
 Every chained run generates its **own fresh `actionId`**; the
 orchestrator never carries the predecessor's into the successor. A
@@ -1349,8 +1369,11 @@ shows the failure
 ([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)). A pass or a close that commits
 some other way, Run now or a manual close, clears its record. Send also runs a pass first
 when none is deferred but the cadence is due, as a failed chained pass
-leaves it. The record is in memory only: after a restart, that check
-finds the interrupted pass, and the next turn's commit the owed close.
+leaves it, and a close first when `closeOwed` reads true, as a failed
+close leaves it. A close record clears at Send when no close is owed
+any more, as after a rollback below the threshold. The record is in
+memory only: after a restart, those checks find the interrupted pass
+and the owed close.
 
 ### Chained transition — "no user-edit window"
 
@@ -1500,10 +1523,11 @@ as World's Save drops an emptied `stackables`, records the record's old
 keys, the same as an edit of those keys, so the undo would restore a
 key the user removed with it. Nothing reaches that today, since the
 reversals that run after later user edits take only a pass's or a
-close's facts, whose `state` writes are all whole values (a
-character's faction, a faction's standing, a place's parent, unplaced
-mark and condition, an item's condition); it needs a guard once one of
-them takes a write to a record. The same reach keeps the rule from
+close's facts, whose `state` writes are whole values (a character's
+faction, a faction's standing, a place's parent, unplaced mark and
+condition, an item's condition), with one exception. A close's stackable
+normalization writes a record, so its undo carries that guard. The same
+reach keeps the rule from
 splitting one move across two rows: undoing a turn's `<item>` or
 `<drop>` after the user moved the item in World would restore the
 holder's inventory but keep the user's position, so the item would be
@@ -1546,8 +1570,9 @@ holds both; a user's thread, which has no refs, logs the status alone.
 An undo that restores an absent `unplaced` mark without the parent puts
 the place back top-level, since the mark alone changed and an unplaced
 place's parent is null.
-`happenings_mutual_excl` would break if a machine write ever updated a
-happening.
+`happenings_mutual_excl` holds through a close's merge, the one machine
+update of a happening: it clusters only rows with an
+`occurred_at_entry_id`, and a user edit writes both columns.
 
 **Undoing a `create` consults no cascade.**
 A domain may register a cascade hook for its child rows, but that hook
@@ -1780,6 +1805,7 @@ type CallRetryError =
 type CapabilityHint = // matched: the keyword that matched, for the copy
   | { capability: 'structuredOutput'; matched: 'response_format' | 'json_schema' }
   | { capability: 'reasoning'; matched: 'budget_tokens' | 'thinking' | 'reasoning' }
+  | { capability: 'toolCalling'; matched: 'tools' | 'tool_choice' }
 
 type ContextWindowFailure = {
   detectedBy: 'check' | 'provider' // the pre-send check, or a recognized provider rejection
@@ -1859,6 +1885,11 @@ the fallback classifier fails and the turn commits with the failure in
 its state report; suggestion refresh and wizard-assist show their own
 errors, naming the limit as the reader does.
 
+**A close's tool step reads the same `'length'`.** A cut-off reply is
+never a finished task, whatever it holds. The step is retried once, and
+the task stops there if it's cut off again, keeping what landed
+([`memory/chapter-close.md → When a task stops`](./memory/chapter-close.md#when-a-task-stops)).
+
 **A narrative reply cut off in its prose commits with a mark.** When
 no trailing block had begun, so the cut falls in the story text, the
 entry records `metadata.cutOff`
@@ -1930,7 +1961,10 @@ reverse-replay → orphan placeholder cleanup → user re-prompts.
 
 Phase-level retry means most mid-chapter-close hiccups never
 escalate to fatal. Only when retries exhaust does chapter-close
-abort whole. One `actionId` per pipeline run = atomic CTRL-Z; the
+abort whole, and a task that stops early, or a write refused, doesn't
+count
+([`memory/chapter-close.md → Failure modes`](./memory/chapter-close.md#failure-modes-and-atomic-rollback)).
+One `actionId` per pipeline run = atomic CTRL-Z; the
 contract holds. If a future pipeline ever needs partial-commit
 semantics, it requires a different design (multiple actionIds per
 pipeline, orchestrator commits each phase's actionId as it
@@ -2027,9 +2061,10 @@ banner / dialog for persistent.
 
 **`provider.possibleCapabilityMismatch`** (best-effort hint, A5).
 `classifyProviderError` matches a 4xx body against words naming the
-two capabilities a request can carry: `thinking`, `reasoning` and
+three capabilities a request can carry: `thinking`, `reasoning` and
 `budget_tokens` for **reasoning**, `response_format` and `json_schema`
-for **structured output**. Only the words of a capability the request
+for **structured output**, `tools` and `tool_choice` for **tool
+calling**. Only the words of a capability the request
 as sent carried are matched, a profile's `customJson` keys included.
 Reasoning is carried when a thinking setting went out: an Anthropic
 call with a thinking budget, since a disabled setting sends no field.
@@ -2135,7 +2170,7 @@ const chapterClosePipeline: Pipeline = {
   concurrencyPolicy: {
     blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close', 'translation-retry'],
   },
-  // chained start bypasses (orchestrator-internal)
+  // chained start bypasses (orchestrator-internal); no chainsTo: a further close waits for a turn
 }
 
 const suggestionRefreshPipeline: Pipeline = {

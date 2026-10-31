@@ -225,12 +225,15 @@ provider's metadata doesn't recognize).
 capability badges relevant to its category as small clickable
 chips. Click toggles the user override; visual state distinguishes
 detected-on (filled), user-overridden-on (filled, marked), and
-off (outline).
+off (outline). `toolCalling` has a fourth, unknown (dashed outline), since
+a close runs on an unknown model and refuses one flagged off; most models
+sit there until a catalog publishes the capability or the user sets it.
 
 | Category         | Badge | Capability                                                                                                                                                                   |
 | ---------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Text models      | 🧠    | `reasoning` — model exposes thinking-tokens API                                                                                                                              |
 | Text models      | ⚙     | `structuredOutput` — model supports the JSON-schema / structured-output mode                                                                                                 |
+| Text models      | 🔧    | `toolCalling` — model takes native tool calls, which chapter close needs                                                                                                     |
 | Embedding models | 🪆    | `matryoshkaSupported` — model trained for representation truncation (per [`retrieval.md → Matryoshka effective dim`](../../../memory/retrieval.md#matryoshka-effective-dim)) |
 
 When the Matryoshka badge is on, the tooltip shows the model's
@@ -267,7 +270,10 @@ have no chip: the embedder's input window is its own user-supplied
 ([`retrieval.md → Capability flags — provider-side`](../../../memory/retrieval.md#capability-flags--provider-side)),
 whose editor lands with the embedder tab in M7.1. Lowering a figure below the
 model's maximum caps every role using the model and refuses calls
-past it rather than shortening them.
+past it rather than shortening them. A small window also splits a
+chapter close into parts, which can lower its quality, since no single
+call then sees the whole chapter
+([`chapter-close.md → Parts`](../../../memory/chapter-close.md#parts)).
 
 ### Override semantic — trust-the-user
 
@@ -285,9 +291,10 @@ than second-guessing it.
 
 If a request later fails for what looks like a capability mismatch,
 the provider-error mapper does best-effort keyword matching against the
-response body for the two capabilities a request carries — `thinking`,
+response body for the three capabilities a request carries — `thinking`,
 `reasoning` or `budget_tokens` for reasoning, `response_format` or
-`json_schema` for structured output — and, when the request as sent
+`json_schema` for structured output, `tools` or `tool_choice` for tool
+calling — and, when the request as sent
 carried the capability named, threads the capability and the matched
 word through
 `PipelineError.provider.possibleCapabilityMismatch` (see
@@ -397,7 +404,8 @@ Fields:
   - Capability data unavailable → slider visible, info text
     `Reasoning: capability data unavailable — slider applies if model supports it`.
 - **timeout** — 5–300s slider, `[✎ custom]` for outliers. Unset by
-  default: no limit, except a classifier pass's ten minutes
+  default: no limit, except the ten minutes of a classifier pass or a
+  chapter close's call
   ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy)).
 - **structured output** — agent profiles only; not on narrative.
 - **Advanced — custom JSON payload** — collapsed by default. Per-field
@@ -416,6 +424,18 @@ same fields as Narrative plus `structured output` (auto / force on
 - **`auto`** uses capability data: model supports → force-on; model
   doesn't → force-off; data unavailable → force-off (conservative).
 - **force on / force off** override the auto logic.
+
+Under a **Chapter close** label, two switches set how a close uses this
+profile, since the right shape depends on the model. They do nothing for
+any other agent, which the label says.
+
+- **Conversation** (`split` / `single`): one conversation per task, or
+  one for all of them. `single` needs a large window.
+- **Tools** (`separate` / `shared`): each task's own tools, or all of them
+  on every task. `shared` keeps the chapter cached on more models, at some
+  cost to a weak one. Disabled under `single`, where it has no effect.
+
+See [`chapter-close.md → Conversations`](../../../memory/chapter-close.md#conversations).
 
 `+ New profile` adds a profile (name + description + standard fields).
 Profile `⋯` menu offers rename, duplicate, delete. Delete is permitted
@@ -448,7 +468,9 @@ Each agent dropdown picks a profile. Agents currently in the system:
 - `classifier` — every reply
 - `translation` — pipeline phase
 - `suggestion` — next-turn suggestion pane
-- `lore-mgmt` — chapter close
+- `lore-mgmt` — chapter close. A warning shows here when the assigned
+  model's `toolCalling` is off, since a close can't start on it
+  ([`chapter-close.md → Tool calling`](../../../memory/chapter-close.md#tool-calling)).
 - `retrieval` — retrieval phase (when designed)
 - `wizard-assist` — story-creation wizard AI-assist calls
 

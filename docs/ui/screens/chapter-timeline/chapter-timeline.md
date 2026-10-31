@@ -126,7 +126,7 @@ Read-only context shown alongside (not part of the form):
 
 ### Per-card actions
 
-Three buttons in a row beneath the form, before the save bar:
+Four buttons in a row beneath the form, before the save bar:
 
 - **Jump to chapter →** — routes back to the reader scrolled to the
   chapter's start entry. The reader's chapter chip would highlight
@@ -138,6 +138,8 @@ Three buttons in a row beneath the form, before the save bar:
   out of scope for v1 — see
   [open questions](#screen-specific-open-questions)). Confirm modal
   warns "this overwrites the current title/summary/theme/keywords."
+- **Review changes** — opens the [review window](#review-window) for
+  this chapter's close. Hidden on a chapter no close wrote.
 - **Delete…** — destructive. Opens the
   [rollback-confirm modal](../reader-composer/rollback-confirm/rollback-confirm.md)
   pre-targeted at the chapter's `start_entry_id`. Deleting the
@@ -322,6 +324,60 @@ flow. A shared modal:
   [save-sessions navigate-away guard](../../patterns/save-sessions.md#navigate-away-guard--global-intercept)
   precedent — same modal, same copy across surfaces.
 
+## Review window
+
+What a chapter close changed, opened from the close's toast or a card's
+`Review changes`. It doesn't open by itself: a close ends while the user
+reads, and a window would interrupt that. A
+[Modal](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces),
+a Sheet at phone width, read-only, and available for as long as the
+close stands.
+
+```
+┌── Review — Chapter 5: The Tithe of Hours ─────── × ─┐
+│                                                     │
+│  ⚠ Stopped early                                    │
+│    Identity, part 2 — reached its step limit        │
+│                                                     │
+│  ▸ Not applied (3)                                  │
+│                                                     │
+│  LORE                                               │
+│  create · The Tithe of Hours                        │
+│     Every adult owes the temple one hour a year.    │
+│     Sael explains the tithe. entry 112 →            │
+│                                                     │
+│  CHARACTERS AND FACTIONS                            │
+│  update · Kael · voice                              │
+│     wry, joking → short, flat sentences             │
+│     He stops joking after Oss. entry 118 →          │
+│                                                     │
+│                                          [ Done ]   │
+└─────────────────────────────────────────────────────┘
+```
+
+- **Stopped early** comes first when a task stopped, naming the task, the
+  part and why: its step limit, the window, or a reply cut off twice. The
+  work is partial, so it isn't folded away. The note that no task called
+  a tool sits here too.
+- **Not applied** is a collapsed
+  [Accordion](../../patterns/accordion.md): each write that was refused
+  or skipped with its proposed value and reason, such as the lore cap or
+  a field the user changed. A write the same task later landed is left
+  out, being a slip the model corrected
+  ([`chapter-close.md → Review`](../../../memory/chapter-close.md#review)).
+- **Changes** are grouped by area (Lore, Characters and factions, Places
+  and items, Threads, Happenings, Awareness), one
+  [DeltaLogRow](../../patterns/delta-log-row.md) per change, with the
+  write's `why` and a link to the cited entry under it. `chapter_id`
+  stamps and `retrieval_count` resets stay out as noise.
+- **Pressing a row** opens it in World or Plot, where any edit is an
+  ordinary user edit that user precedence protects from then on. A merged
+  happening's row opens the one that survived, and a row since deleted
+  doesn't press.
+- **No per-change revert.** Reverting a merge or a delete isn't simple,
+  and the old value is on screen. CTRL-Z undoes the whole close while it
+  is the latest action.
+
 ## Empty state
 
 When the story has no closed chapters yet (entries 1..N all in the
@@ -361,13 +417,13 @@ end-entry picker in-flow inside it.
 - **Per-card action row** collapses on phone to one primary button
   plus a `⋯` overflow trigger. `[Jump to chapter →]` keeps its full
   label as the primary affordance (navigation, non-destructive,
-  most-used). `Regenerate summary` and `Delete…` tuck behind the
-  `⋯` chip, which opens a Sheet (short) on phone per
+  most-used). `Regenerate summary`, `Review changes` and `Delete…`
+  tuck behind the `⋯` chip, which opens a Sheet (short) on phone per
   [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
   Same pattern as the
   [World detail-head's `⋯` overflow menu](../world/world.md#detail-head-structure);
   both destructive actions retain their existing confirmation flows
-  inside the Sheet. Desktop and tablet keep all three buttons
+  inside the Sheet. Desktop and tablet keep all four buttons
   inline (the row fits naturally).
 - **In-card save bar** appears at the card's bottom edge when
   dirty per
@@ -378,6 +434,8 @@ end-entry picker in-flow inside it.
 - **In-progress chapter card** (specialized last card; no DB row
   yet). `[Close chapter…]` button full-width on phone for
   tap-target clarity. Token-progress bar reflows naturally.
+- **Review window** is a Sheet at phone width, its changes scrolling
+  under a pinned header.
 - **Chapter-close modal** stays Modal at every tier per
   [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
   Modal width caps at viewport-minus-padding on phone per the modal

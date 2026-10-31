@@ -34,8 +34,8 @@ the shape.
   mentions, mentioned places, factions, threads, pipeline framing.
 - **[chapter-close.md](./chapter-close.md)** — 5-phase chapter-close
   pipeline: catch-up passes, boundary selection, metadata, lore-mgmt
-  (six sub-jobs, one tool loop), lifecycle review, failure modes,
-  manual close.
+  (six sub-jobs, run as ordered tool-calling tasks), lifecycle review,
+  failure modes, review, manual close.
 - **[retrieval.md](./retrieval.md)** — embedding infrastructure,
   query construction, candidate pools, hybrid retrieval per type,
   pinning (`decay_resistance`), per-type budgets, the ranker

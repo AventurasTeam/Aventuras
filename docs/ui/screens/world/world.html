@@ -308,7 +308,7 @@
   .resolve-head .reason { margin-top: 6px; font-size: 12px; color: var(--ink); }
   /* Partial and keyword pairs differ by name, so the merge grid adds a name radio and a keywords row. */
   .resolve-modal[data-pair="exact"] .pair-only { display: none; }
-  .resolve-modal:not([data-pair="partial"]):not([data-pair="place"]) .partial-only { display: none; }
+  .resolve-modal:not([data-pair="partial"]):not([data-pair="place"]):not([data-pair="duplicate"]) .partial-only { display: none; }
   .resolve-paths { padding: 12px 18px 0; display: flex; gap: 6px; flex-wrap: wrap; }
   .resolve-path-btn { padding: 6px 14px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); font-size: 12px; color: var(--ink); cursor: pointer; }
   .resolve-path-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
@@ -599,6 +599,7 @@
     <button class="rb-btn" data-pair="partial">partial name</button>
     <button class="rb-btn" data-pair="keyword">via keyword</button>
     <button class="rb-btn" data-pair="place">same place parent</button>
+    <button class="rb-btn" data-pair="duplicate">chapter close duplicate</button>
   </div>
   <span class="rb-note">click a row · tab · ⓘ help · + new menu &middot; flip viewport via 1/2/3</span>
 </div>
@@ -1844,6 +1845,11 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     place: { older: 'the wine cellar', newer: 'the cellar', rename: 'the cellar', title: '\u201cthe cellar\u201d may be \u201cthe wine cellar\u201d',
       reason: 'Both are in \u201cThe Rusty Anchor\u201d.', basis: '',
       keep: '<b>the wine cellar</b> and <b>the cellar</b> will both continue to exist. The flag clears; no other writes.' },
+    // A pair a chapter close judged one row (reason duplicate): usually no namesakes, so the header
+    // takes the differing-names shape, there's no basis line, and the name not kept joins the keywords.
+    duplicate: { older: 'Kael', newer: 'the hooded stranger', rename: 'the hooded stranger', title: '“the hooded stranger” may be “Kael”',
+      reason: 'The chapter close judged these the same.', basis: '',
+      keep: '<b>Kael</b> and <b>the hooded stranger</b> will both continue to exist. The flag clears; no other writes.' },
   };
   const exactKeep = document.getElementById('keep-copy')?.innerHTML ?? '';
   function setPair(p) {

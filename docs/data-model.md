@@ -83,8 +83,8 @@ erDiagram
         text injection_mode "always | auto | disabled; short-circuited by active+in-scene invariant"
         integer priority "0..100; orders keyword-inject overflow ONLY — unlike lore.priority it does not feed the ranker pin_signal, which stays 0 for entities. See docs/memory/retrieval.md → Keyword injection budget"
         integer name_collision_flag "0 | 1; 1 = possible duplicate of an exact or partial namesake, raised when the classifier or the per-turn writer creates the row, when a pass's rename meets a name another row holds, or by chapter close on a row it judges a duplicate; surfaces in World panel for review. See docs/memory/edge-cases.md → Name collision"
-        text name_collision_partner_id "set iff flagged: the same-branch namesake the row's writer compared it against, or the row a merge re-pointed it at, which World pairs it with; a flag whose pair no longer holds is dormant. See docs/memory/classifier.md → Disambiguation"
-        text name_collision_reason "set iff flagged: alike | ambiguous | distinct | in-scene | name-taken | no-signal | same-parent | unplaced, why the row's writer flagged it (name-taken: a pass's rename met a name another row of the kind holds; unplaced: an unplaced place created while places elsewhere share its name); a chapter-close flag's value is open (docs/followups.md → Chapter-close agent design)"
+        text name_collision_partner_id "set iff flagged: the same-branch namesake the row's writer compared it against, the row a chapter close judged it a duplicate of, or the row a merge re-pointed it at, which World pairs it with; a flag whose pair no longer holds is dormant. See docs/memory/classifier.md → Disambiguation"
+        text name_collision_reason "set iff flagged: alike | ambiguous | distinct | duplicate | in-scene | name-taken | no-signal | same-parent | unplaced, why the row's writer flagged it (duplicate: a chapter close judged the two one row, which holds while the partner exists, whatever the names; name-taken: a pass's rename met a name another row of the kind holds; unplaced: an unplaced place created while places elsewhere share its name)"
         json state "typed per kind"
         json tags
         integer embedding_stale "0 | 1; 1 = embedded fields (name/description) need (re-)embedding. Set on any embedded-field write whose content hash differs from the vector's source_hash (edit, create, or failed sync); cleared when the pre-retrieval sync stage embeds the row or content reverts to the embedded value. Still flagged at retrieval means the sync stage couldn't embed it (embedder unavailable), so it is excluded. See docs/memory/retrieval.md → Compute lifecycle"
@@ -185,6 +185,7 @@ erDiagram
         text end_entry_id "FK-less ref into story_entries; always set — only closed chapters exist as rows"
         integer token_count "accumulated across chapter entries"
         integer closed_at
+        json close_report "what the close's deltas don't hold: its action_id, each tool call's task, rows, why and turns, the writes that didn't land and any task that stopped early; null on a chapter no close wrote. See docs/memory/chapter-close.md → Review"
         integer embedding_stale "0 | 1; 1 = embedded fields (summary/theme) need (re-)embedding. Set on any embedded-field write whose content hash differs from the vector's source_hash (edit, create, or failed sync); cleared when the pre-retrieval sync stage embeds the row or content reverts to the embedded value. Still flagged at retrieval means the sync stage couldn't embed it (embedder unavailable), so it is excluded. See docs/memory/retrieval.md → Compute lifecycle"
         integer created_at
         integer updated_at
@@ -264,7 +265,7 @@ erDiagram
     deltas {
         text id PK
         text branch_id FK
-        text entry_id FK "survival anchor: reverse this delta iff this entry is reversed. The entry the delta is about, whoever wrote it. Foreground turn: its entry's create → that entry, the fold's state writes → null (they sit in the turn's own suffix, so either anchor reverses them); periodic_classifier fact → its provenance entry; translation → its target's content-defining-delta anchor; user edit → the entry it edits, or null when it edits no entry; null (chapter close, entity / lore / thread / happening edits) → reverse positionally by own commit position. See Entry mutability & rollback → Survival anchor"
+        text entry_id FK "survival anchor: reverse this delta iff this entry is reversed. The entry the delta is about, whoever wrote it. Foreground turn: its entry's create → that entry, the fold's state writes → null (they sit in the turn's own suffix, so either anchor reverses them); periodic_classifier fact → its provenance entry; translation → its target's content-defining-delta anchor; chapter close → the chapter's end entry; user edit → the entry it edits, or null when it edits no entry; null (entity / lore / thread / happening edits) → reverse positionally by own commit position. See Entry mutability & rollback → Survival anchor"
         text action_id "groups deltas into one user-visible action (used for CTRL-Z batching)"
         integer log_position "append-only ordering within branch"
         text source "ai_classifier | piggyback_tagged_block | per_turn_classifier | periodic_classifier | user_edit | lore_agent | chapter_close"
@@ -451,8 +452,8 @@ the latest entry):
 1. Copy parent's CURRENT rows for every branch-scoped table per the
    manifest below into the new branch.
 2. Copy parent's deltas with `log_position < L` into the new branch —
-   plus any background (`periodic_classifier`) delta with
-   `log_position >= L` whose survival anchor is a kept entry
+   plus any background (`periodic_classifier` or `chapter_close`) delta
+   with `log_position >= L` whose survival anchor is a kept entry
    (`position(entry_id) <= position(N)`). A lagging fact about an entry
    ≤ N that committed late would otherwise be rewound away in step 3,
    silently dropping facts about kept turns (see
@@ -1232,7 +1233,9 @@ correct and consolidate. Three rules hold across them:
 
 - **Order.** A turn, then a pass, then a close, never overlapping
   ([`memory/cadence.md → Concurrency`](./memory/cadence.md#concurrency)),
-  so a field can have two AI writers and the later write wins.
+  so a field can have two AI writers and the later write wins. A close
+  runs after the turns past its chapter, so it skips a field they wrote
+  ([`memory/chapter-close.md → Tools and writes`](./memory/chapter-close.md#tools-and-writes)).
 - **User precedence.** A user edit made after the prose an AI write
   rests on stands. A per-turn or pass write rests on its source entry;
   a chapter-close write rests on the latest entry it cites
@@ -1242,14 +1245,14 @@ correct and consolidate. Three rules hold across them:
 
 **Entities, top-level:**
 
-| Field                                           | First write                                                                                 | Later writes                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`                                          | Whoever creates the row                                                                     | The periodic classifier, when the prose establishes the entity's own name ("the hooded stranger is Kael"), keeping the old name as a keyword; a name another row of the kind holds (for a place, one it is compared with: a real sibling, or any place when either is unplaced) raises a collision flag instead. The user                                                                                                                                                         |
-| `description`                                   | Whoever creates the row ([Description vs `state` boundary](#description-vs-state-boundary)) | Chapter close, on a material change; the user                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `status`, `retired_reason`                      | The wizard and the user; an AI creates `active`                                             | The per-turn writer: staged → active. The periodic classifier: staged → active, active → retired on hard finality, retired → active for a character back in the scene now. Chapter close: active → retired on chapter-scope finality. The user. Only the user retires a place or brings one back ([LocationState shape](#locationstate-shape))                                                                                                                                    |
-| `keywords`                                      | The periodic classifier at create; the wizard and the user                                  | The periodic classifier appends. Chapter close adds, including a place's or an item's first, and removes only keywords an AI added. The user                                                                                                                                                                                                                                                                                                                                      |
-| `name_collision_flag`, `_partner_id`, `_reason` | The periodic classifier (Layer B, or a place's matching) or the per-turn writer, at create  | The periodic classifier raises one on an unflagged row whose rename meets a name another row of the kind holds, a [dormant](./ui/screens/world/world.md#surfacing) flag counting as none, so it re-points that flag at the holder; chapter close may raise one on an unflagged row it judges a duplicate of another. Otherwise user-only: clearing, or a merge re-pointing the partner (with the deleted row's reason when it takes over the deleted row's partner); delta-logged |
-| `injection_mode`, `priority`, `tags`            | Defaults; the wizard and the user                                                           | User-only                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Field                                           | First write                                                                                 | Later writes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                                          | Whoever creates the row                                                                     | The periodic classifier, when the prose establishes the entity's own name ("the hooded stranger is Kael"), keeping the old name as a keyword; a name another row of the kind holds (for a place, one it is compared with: a real sibling, or any place when either is unplaced) raises a collision flag instead. The user                                                                                                                                                                                                                                         |
+| `description`                                   | Whoever creates the row ([Description vs `state` boundary](#description-vs-state-boundary)) | Chapter close, on a material change; the user                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `status`, `retired_reason`                      | The wizard and the user; an AI creates `active`                                             | The per-turn writer: staged → active. The periodic classifier: staged → active, active → retired on hard finality, retired → active for a character back in the scene now. Chapter close: active → retired on chapter-scope finality. The user. Only the user retires a place or brings one back ([LocationState shape](#locationstate-shape))                                                                                                                                                                                                                    |
+| `keywords`                                      | The periodic classifier at create; the wizard and the user                                  | The periodic classifier appends. Chapter close adds, including a place's or an item's first, and removes only keywords an AI added. The user                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `name_collision_flag`, `_partner_id`, `_reason` | The periodic classifier (Layer B, or a place's matching) or the per-turn writer, at create  | The periodic classifier raises one on an unflagged row whose rename meets a name another row of the kind holds, a [dormant](./ui/screens/world/world.md#surfacing) flag counting as none, so it re-points that flag at the holder; chapter close may raise one, with the reason `duplicate`, on a row with no live flag it judges a duplicate of another, unless the user already resolved the pair. Otherwise user-only: clearing, or a merge re-pointing the partner (with the deleted row's reason when it takes over the deleted row's partner); delta-logged |
+| `injection_mode`, `priority`, `tags`            | Defaults; the wizard and the user                                                           | User-only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 **Entity `state`, per kind:**
 
@@ -1275,11 +1278,11 @@ correct and consolidate. Three rules hold across them:
 | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Happenings: `title`, `description`, `category`, `icon`, `occurred_at_entry_id` or `temporal` | The periodic classifier; the user                                                     | Chapter close, when it merges happenings; the user                                                                                                                                                                             |
 | Happening `common_knowledge`                                                                 | 0                                                                                     | Chapter close; the user                                                                                                                                                                                                        |
-| Involvements                                                                                 | The periodic classifier; the user                                                     | Chapter close re-points them on a merge; the user                                                                                                                                                                              |
+| Involvements                                                                                 | The periodic classifier; the user                                                     | Chapter close carries them over on a merge; the user                                                                                                                                                                           |
 | Awareness                                                                                    | The periodic classifier, for a happening it creates or one its prompt lists; the user | Chapter close tunes `decay_resistance`, and on a happening merge keeps the earliest `learned_at_entry_id`, the highest `decay_resistance` and both sources. Retrieval counts `retrieval_count`; each close resets it. The user |
 | Relationships                                                                                | The periodic classifier, one view per fact; the user                                  | The periodic classifier, on contradicting prose; the user                                                                                                                                                                      |
 | Threads: `title`, `description`, `category`, `icon`, `status`                                | The periodic classifier, `pending` or `active`; the user                              | The periodic classifier moves `status` on explicit prose. Chapter close merges duplicates, brings descriptions up to date, and resolves or fails stale threads. The user                                                       |
-| Thread `triggered_at_entry_id`, `resolved_at_entry_id`                                       | The periodic classifier                                                               | The periodic classifier, on resolution. AI-only; a user's thread keeps them null, and a user's change of a thread's status clears `resolved_at_entry_id`                                                                       |
+| Thread `triggered_at_entry_id`, `resolved_at_entry_id`                                       | The periodic classifier                                                               | The periodic classifier, on resolution; chapter close, when it resolves or fails a thread. AI-only; a user's thread keeps them null, and a user's change of a thread's status clears `resolved_at_entry_id`                    |
 | Lore: `title`, `body`, `category`, `keywords`                                                | Chapter close, always with a body; the wizard and the user                            | Chapter close extends or corrects a row; the user                                                                                                                                                                              |
 | Thread and lore `injection_mode`, lore `priority` and `tags`                                 | Defaults (`auto`; priority 0); the wizard and the user                                | User-only                                                                                                                                                                                                                      |
 | Chapters                                                                                     | Chapter close, at the boundary it picks or the user's                                 | The user: `title`, `summary`, `theme`, `keywords`                                                                                                                                                                              |
@@ -1663,6 +1666,7 @@ app_settings.providers: Array<{
     capabilities?: {
       reasoning?: boolean
       structuredOutput?: boolean
+      toolCalling?: boolean                  // model takes native tool calls; chapter close's agent refuses a model flagged off and runs on an unknown one. Detected where a catalog publishes it; user-overridable like every capability flag. See docs/memory/chapter-close.md → Tool calling
       embedding?: boolean                    // model serves the provider's embedding endpoint; drives the Providers-tab Embedding models split and the Memory-tab embedder picker. Detected from /models metadata where reported; user-overridable like every capability flag
       embeddingDim?: number                  // positive native output dimension, persisted from a successful native-dimension probe when this model is selected
       matryoshkaSupported?: boolean          // NEW: model supports Matryoshka representation truncation. See docs/memory/retrieval.md → Matryoshka effective dim
@@ -1693,8 +1697,10 @@ app_settings.profiles: Array<{
   temperature?: number                       // 0-2 (provider-dependent; Anthropic caps at 1, OpenAI/Google allow 2)
   maxOutput?: number
   thinking?: number                          // reasoning slider; conditional on model capability
-  timeout?: number                           // seconds; unset = no limit, except a classifier pass's ten minutes
+  timeout?: number                           // seconds; unset = no limit, except a classifier pass's or a chapter close's call's ten minutes
   structuredOutput?: 'auto' | 'force-on' | 'force-off'  // agent profiles only
+  closeConversation?: 'split' | 'single'     // agent profiles only; chapter close's shape, default split. See docs/memory/chapter-close.md → Conversations
+  closeTools?: 'separate' | 'shared'         // agent profiles only; default separate; has no effect under closeConversation 'single'
   customJson?: Record<string, unknown>       // advanced — per-field merge over constructed payload
 }>
 ```
@@ -2057,6 +2063,7 @@ story_entries.metadata: {
       content: string
       composerMode: string
     }
+    close?: 'failed' | 'resolved'   // a close-failure entry, as `pass` below; a close has no held state
     pass?: 'failed' | 'held' | 'resolved'  // a pass-failure entry: its Retry runs the pass alone; held has no Retry; resolved is what a committed Retry leaves when the composer couldn't take the submission back, a notice holding it with no Retry
   }
 }
@@ -3003,8 +3010,9 @@ character whose faction it removes stays with none. The same predicate drives th
 which cancels an in-flight pass or close, not committed deltas.
 
 For this to hold, background-source (`periodic_classifier`) deltas stamp
-`entry_id` with per-fact **provenance**, and translation deltas stamp
-their target's content-defining-delta anchor — see
+`entry_id` with per-fact **provenance**, a chapter close's with its end
+entry, and translation deltas with their target's content-defining-delta
+anchor — see
 [classifier.md → Provenance attribution](./memory/classifier.md#provenance-attribution)
 and [Translation](#translation).
 
@@ -3015,9 +3023,10 @@ whose subject is a specific entry — `metadata.worldTime`,
 [Entry metadata shape](#entry-metadata-shape) — stamps that entry, so
 correcting an old entry from the reader and then rolling back a later
 turn keeps the correction on the entry that survives. A content edit anchors the same way, on the same rule: its subject is
-the entry whose prose changed. `null` is for deltas with no entry subject
-at all: chapter close, and direct edits to entities / lore / threads /
-happenings.
+the entry whose prose changed. A chapter close anchors every delta on
+the chapter's end entry, the entry its work rests on, so a rollback past
+that entry spares it. `null` is for deltas with no entry subject at all:
+direct edits to entities / lore / threads / happenings.
 
 The same `B` clamps the per-branch classifier watermark —
 `processedThrough ← min(processedThrough, position(B) − 1)`, in the sweep

@@ -118,7 +118,7 @@ A regenerate confirm does the same through `regenerateTurn`
 ## Cross-chapter case
 
 When the rollback range crosses one or more chapter boundaries —
-i.e. at least one chapter was created after the target entry — the
+i.e. at least one chapter ends past the target entry — the
 chapter line surfaces with the **re-open** consequence bolded in the
 copy:
 

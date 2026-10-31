@@ -970,7 +970,10 @@ same kind, and the same name trimmed and lowercased, one name's
 words inside the other's, or one name among the other's keywords;
 staged and retired rows included. A flag is live while its partner is
 on the branch, the two are still namesakes, and, for a `same-parent`
-flag, the two still share a parent
+flag, the two still share a parent. A `duplicate` flag, which a chapter
+close raises on a pair it judges one row, needs only its partner on the
+branch: the pair is usually no namesake pair
+([`chapter-close.md → 3f`](../../../memory/chapter-close.md#3f--world-upkeep))
 ([`piggyback.md → Matching before creating`](../../../memory/piggyback.md#matching-before-creating)).
 Any other flag is dormant: it gets no strip and counts toward no pill
 or badge, and every reader of a flag counts it as none, the
@@ -992,6 +995,9 @@ action and delta-logged, so CTRL-Z re-flags the row:
   its name, or a place's parent. A surviving row whose own flag named
   the deleted row takes the deleted row's live partner and reason
   instead ([Reversibility](#reversibility)).
+
+A `duplicate` flag was never a namesake pair, so no rename, re-parent
+or merge clears it while its partner stands.
 
 A reversal can still leave one, such as undoing the partner's
 create, and so can a pass's rename that renames the row, which writes
@@ -1022,6 +1028,7 @@ flagged:
 | `alike`       | Their descriptions read alike.                                                                |
 | `ambiguous`   | Their descriptions are partly alike.                                                          |
 | `distinct`    | Their descriptions differ.                                                                    |
+| `duplicate`   | The chapter close judged these the same.                                                      |
 | `in-scene`    | Their descriptions differ, but "Kael Stormborn" was in the scene where "Kael" first appeared. |
 | `name-taken`  | The turns call "the hooded stranger" by a name "Kael" already holds.                          |
 | `no-signal`   | Their descriptions couldn't be compared.                                                      |
@@ -1278,7 +1285,7 @@ names (folded into that row's rename when it has one). A flag
 naming a third row that is live under the new names stays, as its
 own question, even one that was dormant before. A flag on any other
 row clears too when the rename leaves that row and its partner no
-longer namesakes ([Surfacing](#surfacing)). No other writes — both
+longer namesakes, a `duplicate` flag excepted ([Surfacing](#surfacing)). No other writes — both
 rows continue to exist. Names save trimmed.
 
 Validation: a name must change, both trimmed names must be
@@ -1468,7 +1475,8 @@ pair that names a third row stays, since it is a separate question, and a merge 
 the flag at the surviving row. A surviving row whose own partner was
 the deleted row takes the deleted row's live partner and reason
 instead, when that row pairs with the merged row under that reason (a
-namesake, and for `same-parent` one sharing its parent).
+namesake, for `same-parent` one sharing its parent, and for `duplicate`
+any row).
 So a dormant flag clears the next time its row is in a resolved
 pair. N-way merge UI is not v1.
 

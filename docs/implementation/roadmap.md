@@ -208,13 +208,6 @@ companions.
   `rollbackToEntry` / `regenerateTurn` refuse `counts-changed` when
   the set resolved at confirm differs from the counts the user saw,
   so a close committing under an open modal is covered.
-  Slice-authoring note: `orchestrator.handleEvent` stamps
-  `turnCaptureSink.recordTargetEntry` on **any** `createStoryEntry`
-  delta with per-turn anchor semantics — correct while `per-turn`
-  is the only registered kind, but chapter-close also emits
-  `createStoryEntry` deltas, so this slice must gate the stamping
-  on `run.kind === 'per-turn'` (or "beginTurn set no anchor") or
-  its runs mis-stamp their anchors (surfaced by Slice 2.7).
   Slice-authoring note: `interruptMemoryRuns`
   (`lib/stores/generation/generation.ts`) aborts one snapshot of the
   branch's interruptible runs. Once this slice gives the pass its
@@ -231,11 +224,11 @@ companions.
   deferred pass.
   Slice-authoring note: `undoLastAction` reads its target before the
   gate decision, and `selectUndoTarget` skips only `periodic_classifier`
-  deltas. A close logs its own under `chapter_close` and emits
-  `createStoryEntry`, so the selector may classify the close's group as
-  a `turn` and CTRL-Z may reverse it as one, or refuse it while the
-  close runs. This slice must settle which target CTRL-Z picks for a
-  close.
+  deltas. While a close runs its own deltas sit at the head, so the
+  selector returns a group and undo refuses, where canon has CTRL-Z of
+  the turn interrupt the close. Writing as tools run makes that window
+  most of the run. This slice must skip the running close's deltas, and
+  only those: a committed close stays the undo target.
   Slice-authoring note: the Actions menu puts `Close chapter…` under
   `STORY TOOLS` on every in-story surface
   ([`actions-menu.md`](../ui/patterns/actions-menu.md)), so a close is
@@ -374,25 +367,49 @@ DB-backed `openRegionTokens` resolves all of them.
   [lessons-learned → No "harmless" id leaks](./lessons-learned/no-harmless-id-leaks.md)
   records. Surfaced by the M3.4 whole-slice review (2026-08-03).
 
-- **M5.1 / M5.2 — A close reverses by its commit position, and leaves
-  its entries' `chapter_id` behind.** A chapter close logs with a null
-  anchor, and null-anchored deltas reverse whenever they sit at or above
-  the sweep's first position
-  ([`data-model.md → Survival anchor`](../data-model.md#survival-anchor)).
-  A close commits at the head, which can sit past the chapter's end
-  entry, since auto-close picks its boundary inside the open region; a
-  rollback or regenerate into that gap then takes the close back, with
-  its lore and metadata work, although every entry of the chapter
-  survives. Anchoring a close on its end entry is the obvious candidate
-  (M5.2 owns the close writer, M5.5 the deep-rollback surface). And
-  `story_entries.chapter_id` has no foreign key and no place in
-  `REF_COLUMNS` (`lib/actions/delta/live-refs.ts`), so a reversed close
-  leaves its entries naming a chapter that no longer exists unless M5.1
-  logs the assignments in the close's own action. The dev seed
-  (`lib/db/devtools/seed-dataset.ts`) sets `chapterId` directly and
-  shows exactly that once a close is taken back. Found while the
-  2026-10-05 triage pass re-placed the seed's chapter closes; verified
-  against canon and the schema, not reproduced in a real close.
+- **M5.2 — What the close's agent needs that the code doesn't have.**
+  Read against `lib/` on 2026-10-31, with no tests run.
+  [`memory/chapter-close.md → The agent`](../memory/chapter-close.md#the-agent)
+  is the spec; these are the gaps it meets:
+  - A phase can't land a group or read a verdict: the action port has no
+    group method, `lib/pipeline` can't import actions, `delta_emitted` is
+    the only write event, `consumePhase` passes nothing back, and a
+    rejection throws.
+  - `applyDeltaActionGroup` drops a noop and reports an all-noop group as
+    `ok`, with no ids, so a tool call can't tell `skipped` from `ok`, and
+    a noop isn't only user precedence.
+  - The window check can't see a tool conversation: `countPromptTokens`
+    counts system and text parts only, so tools, calls, results and
+    reasoning go uncounted, and only a recognized provider rejection
+    would show a conversation outgrowing the window.
+  - The AI SDK runs a step's tool `execute`s in parallel, racing a read
+    before a write, so the loop gives tools no `execute` and dispatches a
+    step's calls itself, in order. `promptParams` takes only strings.
+  - An action makes one delta, so merges are groups: `groupConflict` trips
+    on an involvement re-point, and the awareness upsert moves
+    `learned_at_entry_id` only for user sources and zeroes the count on a
+    pipeline create.
+  - `raiseRefusal` refuses `duplicate` as `not-namesakes`, and
+    `stillPaired` serves `flagStillHolds`, `brokenFlags` and
+    `pairFlagsToClear`; `COLLISION_REASONS` needs the value.
+  - Detecting and gating `toolCalling`: the schema lacks it, the catalog
+    can't produce it, and `runPreflight` returns only
+    `ConfigResolverError`.
+  - The mock LLM and the stub can't drive tools: a request with no schema
+    block gets `{}` and `stop`, so an E2E close would pass with no writes.
+  - Capture and progress: `HTTP_CALLS_CAP` is 200 where seven tasks at 24
+    steps reach 168 calls a part, `phases` is static, so parts sit inside
+    one phase, and nothing carries `close_task_complete` to the banner.
+  - Failure surfaces are the pass's: `systemFailure.pass`,
+    `useMemoryRunToasts` and `nextMemoryRun`'s return type.
+  - A stale `deferred.close`: a rollback below the threshold leaves
+    `closeOwed` false, and nothing clears the record, so `nextMemoryRun`
+    stops chaining until a close commits.
+  - A close's stackable normalization writes a record, so its undo needs
+    the guard `generation-pipeline.md` names.
+  - `flag_duplicate` refuses a pair the user resolved by reading the row's
+    deltas for a user clear naming that partner: Keep as distinct writes
+    nothing else.
 - **M5.2 — The close's awareness merge must pass the prose it cites.**
   The awareness upsert (`lib/actions/happenings/register-awareness.ts`)
   checks user precedence when its payload carries a `proseEntryId`,
@@ -416,7 +433,7 @@ DB-backed `openRegionTokens` resolves all of them.
   ([`chapter-close.md → Phase 0`](../memory/chapter-close.md#phase-0--catch-up-passes)),
   Send must wait on the whole chain, or a failed catch-up pass or close
   lets the turn run. A failed close also keeps its `{ close: true }`
-  record, since only a commit clears a deferral. Raised 2026-10-23 by
+  record until it commits, or Send finds no close owed. Raised 2026-10-23 by
   the pass failure policy slice review.
 
 **Gates.** M4 (chapter-close compacts entities + lore the world
