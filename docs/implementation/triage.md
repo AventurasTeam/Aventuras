@@ -137,16 +137,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `request_failed` by those names. The cut-off replies PR adds its own
   `reply_cut_off`. Raised by the cut-off replies Task 4 review.
 
-- **Two trailing-block shapes leak markup into the prose.**
-  `findBlockSpan` (`lib/piggyback/parse.ts`) pairs the last close tag
-  with the opener before it, so in `<state>a</state>` followed by an
-  unclosed `<state>` it never sees the second block, which stays in the
-  prose and sets `outOfPosition`; on a cut-off reply the entry is also
-  marked. When one block nests inside the other, `stripTrailingBlocks`'
-  cursor moves backwards and the outer block's tail (its close tag
-  included) is left in the prose. Both are rare model outputs. Raised by
-  the cut-off replies Task 5 review.
-
 - **Warning text fails contrast in Catppuccin Latte.** Latte's
   `--warning` (`#df8e1d`) on `--bg-raised` (`#e6e9ef`) is 2.15:1, so every
   `text-warning` line on a card (the state-problems box, the cut-off

@@ -571,24 +571,31 @@ export function parseSuggestionsBlock(raw: string): ParseSuggestionsBlockResult 
 // still cut when nothing but markup follows it — that is a truncated stream, not prose.
 type BlockSpan = { tag: string; start: number; end: number }
 
-function findBlockSpan(raw: string, tag: string): BlockSpan | undefined {
-  const close = `</${tag}>`
-  const closeIdx = raw.lastIndexOf(close)
-  if (closeIdx !== -1) {
-    const start = raw.lastIndexOf(`<${tag}>`, closeIdx)
-    return start === -1 ? undefined : { tag, start, end: closeIdx + close.length }
+// Every closed pair, and a trailing opener with nothing but markup after it. A stack, so each close
+// claims its nearest opener: a repeat or a block nested in its own kind leaves no tag behind.
+function blockSpans(raw: string, tag: string): BlockSpan[] {
+  const spans: BlockSpan[] = []
+  const openers: number[] = []
+  let closedTo = 0
+  for (const match of raw.matchAll(new RegExp(`</?${tag}>`, 'g'))) {
+    if (!match[0].startsWith('</')) {
+      openers.push(match.index)
+      continue
+    }
+    const start = openers.pop()
+    if (start === undefined) continue
+    closedTo = match.index + match[0].length
+    spans.push({ tag, start, end: closedTo })
   }
-  const start = raw.lastIndexOf(`<${tag}>`)
-  if (start === -1) return undefined
+  const start = openers.at(-1)
+  if (start === undefined || start < closedTo) return spans
   const rest = raw.slice(start + tag.length + 2).trimStart()
-  if (rest !== '' && !rest.startsWith('<')) return undefined
-  return { tag, start, end: boundedEnd(raw, start + 1, tag) }
+  if (rest !== '' && !rest.startsWith('<')) return spans
+  return [...spans, { tag, start, end: boundedEnd(raw, start + 1, tag) }]
 }
 
 function trailingBlockSpans(raw: string): BlockSpan[] {
-  return TRAILING_ROOT_TAGS.map((tag) => findBlockSpan(raw, tag))
-    .filter((s): s is BlockSpan => s !== undefined)
-    .sort((a, b) => a.start - b.start)
+  return TRAILING_ROOT_TAGS.flatMap((tag) => blockSpans(raw, tag)).sort((a, b) => a.start - b.start)
 }
 
 /**
@@ -630,7 +637,8 @@ export function stripTrailingBlocks(raw: string): {
   let cursor = 0
   for (const span of spans) {
     kept.push(raw.slice(cursor, span.start))
-    cursor = span.end
+    // A nested span ends inside the one that holds it.
+    cursor = Math.max(cursor, span.end)
   }
   kept.push(raw.slice(cursor))
 
