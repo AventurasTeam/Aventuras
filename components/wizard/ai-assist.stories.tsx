@@ -1264,9 +1264,7 @@ export const ListResult_FailedGenerateMoreKeepsPageAndAppendsOnRetry: Story = {
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Sunken Archive' }))
 
     await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
-    expect(
-      await screen.findByText("Couldn't generate. The provider rejected the request."),
-    ).toBeInTheDocument()
+    expect(await screen.findByText("Couldn't generate. The request timed out.")).toBeInTheDocument()
 
     // Try again must retry the SAME `Generate more` call — appending, not
     // replacing — and page one's checked row must survive the failure
@@ -1303,9 +1301,7 @@ export const ListResult_FailedFirstGenerateThenRetrySucceedsWithExactPage: Story
   play: async () => {
     await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
-    expect(
-      await screen.findByText("Couldn't generate. The provider rejected the request."),
-    ).toBeInTheDocument()
+    expect(await screen.findByText("Couldn't generate. The request timed out.")).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
     // Exactly page one's two rows — a failed FIRST Generate must leave an
@@ -1574,7 +1570,7 @@ export const FailureCancelKeepingAListAsksBeforeDiscarding: Story = {
     await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Sunken Archive' }))
     await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
-    await screen.findByText("Couldn't generate. The provider rejected the request.")
+    await screen.findByText("Couldn't generate. The request timed out.")
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     const dialog = await screen.findByRole('alertdialog')
@@ -1700,7 +1696,7 @@ export const FailureCancelKeepingAnUntouchedListAsksBeforeDiscarding: Story = {
     await screen.findByText('Sunken Archive')
     // Deliberately no checkbox click — the page exists, the selection is empty.
     await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
-    await screen.findByText("Couldn't generate. The provider rejected the request.")
+    await screen.findByText("Couldn't generate. The request timed out.")
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
