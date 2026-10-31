@@ -571,6 +571,12 @@ export function parseSuggestionsBlock(raw: string): ParseSuggestionsBlockResult 
 // still cut when nothing but markup follows it — that is a truncated stream, not prose.
 type BlockSpan = { tag: string; start: number; end: number }
 
+// The model opens a block at a line start or right after a root close tag.
+function atBlockBoundary(raw: string, index: number): boolean {
+  const before = raw.slice(raw.lastIndexOf('\n', index) + 1, index).trim()
+  return before === '' || TRAILING_ROOT_TAGS.some((tag) => before.endsWith(`</${tag}>`))
+}
+
 // Every closed pair, and a trailing opener with nothing but markup after it. A stack, so each close
 // claims its nearest opener: a repeat or a block nested in its own kind leaves no tag behind.
 function blockSpans(raw: string, tag: string): BlockSpan[] {
@@ -589,6 +595,8 @@ function blockSpans(raw: string, tag: string): BlockSpan[] {
   }
   const start = openers.at(-1)
   if (start === undefined || start < closedTo) return spans
+  // Past a closed block of its kind, a mid-line opener is a mention in the prose that follows.
+  if (closedTo > 0 && !atBlockBoundary(raw, start)) return spans
   const rest = raw.slice(start + tag.length + 2).trimStart()
   if (rest !== '' && !rest.startsWith('<')) return spans
   return [...spans, { tag, start, end: boundedEnd(raw, start + 1, tag) }]
@@ -603,16 +611,11 @@ function trailingBlockSpans(raw: string): BlockSpan[] {
  * `inBlock` once a trailing block had begun. A root opener cut mid-name is removed from `content`.
  */
 export function readCutOffReply(raw: string): { content: string; inBlock: boolean } {
-  // `<sta` opens no span findBlockSpan sees. The model opens a block at a line start or right
-  // after a root close tag, so only a fragment there means a block had begun.
+  // `<sta` opens no span blockSpans sees, so only a fragment at a block boundary means one began.
   const lt = raw.lastIndexOf('<')
   if (lt !== -1) {
     const fragment = raw.slice(lt + 1)
-    const before = raw.slice(raw.lastIndexOf('\n', lt) + 1, lt).trim()
-    if (
-      (before === '' || TRAILING_ROOT_TAGS.some((tag) => before.endsWith(`</${tag}>`))) &&
-      TRAILING_ROOT_TAGS.some((tag) => tag.startsWith(fragment))
-    )
+    if (atBlockBoundary(raw, lt) && TRAILING_ROOT_TAGS.some((tag) => tag.startsWith(fragment)))
       return { content: raw.slice(0, lt).trimEnd(), inBlock: true }
   }
   const spans = trailingBlockSpans(raw)

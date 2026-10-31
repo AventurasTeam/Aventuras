@@ -620,7 +620,9 @@ persisted raw rather than committed blank.
 **A reply can hold more than the one of each block the prompt asks
 for.** Every closed pair is excised, a repeat or a block nested in
 another included, and so is an unclosed block after them, so none of
-that markup reaches the column either. With repeats, the parser reads
+that markup reaches the column either. That unclosed block has to open
+at a line start or right after a root close tag: mid-line, its opener
+is a mention in the prose that follows. With repeats, the parser reads
 the first `<state>`, and the raw the report keeps is that same block.
 
 Three consequences:

@@ -597,6 +597,18 @@ describe('stripTrailingBlocks', () => {
       expect(outOfPosition).toBe(true)
     })
 
+    it('leaves a mention followed by markup after a closed block in the prose', () => {
+      const { prose, outOfPosition } = stripTrailingBlocks(
+        `Prose.\n\n${state('a')}\nA <state> <em>alarm</em>.`,
+      )
+      expect(prose).toBe('Prose.\n\n\nA <state> <em>alarm</em>.')
+      expect(outOfPosition).toBe(true)
+    })
+
+    it('excises an unclosed block right after the close of a closed one', () => {
+      expect(stripTrailingBlocks(`Prose.\n\n${state('a')}<state>\n<summary>b`).prose).toBe('Prose.')
+    })
+
     it('leaves a stray close tag no opener claims', () => {
       expect(stripTrailingBlocks('He wrote </state> on the wall.').prose).toBe(
         'He wrote </state> on the wall.',
@@ -630,7 +642,7 @@ describe('readCutOffReply', () => {
     expect(readCutOffReply('')).toEqual({ content: '', inBlock: false })
   })
 
-  // findBlockSpan opens no span on a mention followed by prose, so neither does the cut.
+  // blockSpans opens no span on a mention followed by prose, so neither does the cut.
   it('reads prose that mentions a root tag in passing as prose', () => {
     const raw = 'The city declared a <state> of emergency that mor'
     expect(readCutOffReply(raw)).toEqual({ content: raw, inBlock: false })
@@ -681,6 +693,11 @@ describe('readCutOffReply', () => {
   it('reads a cut in an unclosed block after a closed one as in the block', () => {
     const raw = 'Prose.\n\n<state><summary>a</summary></state>\n<state>\n<summary>b'
     expect(readCutOffReply(raw).inBlock).toBe(true)
+  })
+
+  it('reads a cut in prose that mentions the tag after a closed block as outside it', () => {
+    const raw = `${PROSE}<state><summary>a</summary></state>\nA <state> <em>alarm</em>.`
+    expect(readCutOffReply(raw)).toEqual({ content: raw, inBlock: false })
   })
 
   it('reads an opener cut after a closed block as in the block, and removes it', () => {
