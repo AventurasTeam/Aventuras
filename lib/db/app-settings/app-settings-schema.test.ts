@@ -150,6 +150,10 @@ describe('modelProfileSchema — numeric limits', () => {
   it('takes 0, which turns thinking off', () => {
     expect(accepts({ thinking: 0 })).toBe(true)
   })
+
+  it('takes a positive whole thinking budget', () => {
+    expect(accepts({ thinking: 1024 })).toBe(true)
+  })
 })
 
 describe('appSettingsConfigSchema', () => {

@@ -2,6 +2,9 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
 import { expect, screen, spyOn, userEvent, waitFor } from 'storybook/test'
 
+import { t } from '@/lib/i18n'
+import { toastStore, type ToastItem } from '@/lib/toast'
+
 import { JSONBlock } from './json-block'
 
 const meta: Meta<typeof JSONBlock> = {
@@ -37,18 +40,36 @@ export const Basic: Story = {
   },
 }
 
-/** Writes the block's formatted text; `lib/clipboard` owns the toasts. */
 export const CopiesFormattedJson: Story = {
   render: () => (
     <View className="w-96 p-4">
       <JSONBlock data={{ attempt: 2 }} />
     </View>
   ),
-  play: async () => {
+  beforeEach: () => {
+    // A toast left by another story would satisfy the assertion below.
+    toastStore.__reset()
     const write = spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
-    await userEvent.click(await screen.findByRole('button', { name: 'Copy' }))
-    await waitFor(() => expect(write).toHaveBeenCalledWith('{\n  "attempt": 2\n}'))
-    write.mockRestore()
+    return () => write.mockRestore()
+  },
+  play: async () => {
+    let toasts: ToastItem[] = []
+    const stop = toastStore.subscribe((next) => {
+      toasts = next
+    })
+    try {
+      await userEvent.click(await screen.findByRole('button', { name: 'Copy' }))
+      await waitFor(() =>
+        expect(navigator.clipboard.writeText).toHaveBeenCalledWith('{\n  "attempt": 2\n}'),
+      )
+      await waitFor(() =>
+        expect(toasts.map((item) => [item.severity, item.message])).toEqual([
+          ['info', t('common:clipboard.copied')],
+        ]),
+      )
+    } finally {
+      stop()
+    }
   },
 }
 

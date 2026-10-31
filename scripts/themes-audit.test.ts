@@ -22,8 +22,14 @@ describe.each(themes.map((theme) => [theme.id, theme] as const))('%s', (_id, the
   })
 
   it('audits each semantic text slot on all four solid surfaces', () => {
-    const semantic = rows.filter((row) => row.fg.endsWith('-text'))
-    expect(semantic).toHaveLength(16)
+    const semantic = rows
+      .filter((row) => row.fg.endsWith('-text'))
+      .map((row) => `${row.fg} ${row.bg}`)
+    const expected = ['--success-text', '--warning-text', '--danger-text', '--info-text'].flatMap(
+      (fg) =>
+        ['--bg-base', '--bg-raised', '--bg-sunken', '--bg-overlay'].map((bg) => `${fg} ${bg}`),
+    )
+    expect(semantic.sort()).toEqual(expected.sort())
   })
 })
 
