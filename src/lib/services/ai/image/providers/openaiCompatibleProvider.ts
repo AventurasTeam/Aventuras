@@ -8,7 +8,13 @@
  */
 
 import * as z from 'zod'
-import { formatImageSize, isSizeString, pickSize, specToPixels } from '#lib/utils/image.ts'
+import {
+  atLeastMinPixels,
+  formatImageSize,
+  isSizeString,
+  pickSize,
+  specToPixels,
+} from '#lib/utils/image.ts'
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type {
   ImageProvider,
@@ -119,7 +125,9 @@ export function createOpenAICompatibleProvider(config: ImageProviderConfig): Ima
         serviceId: 'openai-compatible-image',
         model,
         prompt,
-        size: isSizeString(listed) ? listed : formatImageSize(specToPixels(spec)),
+        size: isSizeString(listed)
+          ? listed
+          : formatImageSize(atLeastMinPixels(specToPixels(spec), modelInfo?.minPixels)),
         referenceImages,
         signal,
       })

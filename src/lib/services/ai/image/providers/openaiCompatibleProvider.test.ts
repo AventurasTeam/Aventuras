@@ -87,6 +87,20 @@ describe('OpenAI Compatible image generation', () => {
     expect(lastGenerate().size).toBe('1536x864')
   })
 
+  it('raises canonical pixels to a pixel floor, and leaves a listed size alone', async () => {
+    const provider = createOpenAICompatibleProvider({ apiKey: 'k', baseUrl: BASE_URL })
+    const spec = { orientation: 'square', size: 'tiny' } as const
+
+    await provider.generate(options({ spec, modelInfo: { minPixels: 655_360 } }))
+    const [width, height] = (lastGenerate().size ?? '').split('x').map(Number)
+    expect(width * height).toBeGreaterThanOrEqual(655_360)
+
+    await provider.generate(
+      options({ spec, modelInfo: { minPixels: 655_360, supportedResolutions: ['512x512'] } }),
+    )
+    expect(lastGenerate().size).toBe('512x512')
+  })
+
   it('sends canonical pixels when the listed size is not WxH', async () => {
     await createOpenAICompatibleProvider({ apiKey: 'k', baseUrl: BASE_URL }).generate(
       options({ modelInfo: { supportedResolutions: ['square_hd', 'auto'] } }),
