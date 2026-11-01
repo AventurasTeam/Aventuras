@@ -1,5 +1,34 @@
 import { describe, it, expect } from 'vitest'
-import { errorSummary } from './error'
+import { describeLoadError, errorSummary, HttpStatusError } from './error'
+
+describe('describeLoadError', () => {
+  it("leads with a provider's JSON error message and keeps the whole error as the detail", () => {
+    const error = new HttpStatusError(401, '{"error":{"message":"Invalid API key"}}', 'Image API')
+    expect(describeLoadError(error)).toEqual({
+      summary: '401 · Invalid API key',
+      detail: 'Image API error 401: {"error":{"message":"Invalid API key"}}',
+    })
+  })
+
+  it('falls back to the first line of a body that is not JSON', () => {
+    const error = new HttpStatusError(502, '<html>\n<body>Bad gateway</body>\n</html>', 'Image API')
+    expect(describeLoadError(error).summary).toBe('502 · <html>')
+  })
+
+  it('uses the first line of any other error', () => {
+    expect(describeLoadError(new Error('boom\nstack'))).toEqual({
+      summary: 'boom',
+      detail: 'boom\nstack',
+    })
+  })
+
+  it('accepts a string rejection', () => {
+    expect(describeLoadError('Request failed')).toEqual({
+      summary: 'Request failed',
+      detail: 'Request failed',
+    })
+  })
+})
 
 describe('errorSummary', () => {
   it('returns a single short line unchanged', () => {

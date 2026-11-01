@@ -70,3 +70,13 @@ export function providerMessage(body: string | undefined): string | null {
   }
   return null
 }
+
+/** One line for a failed load, and the full text behind it. */
+export function describeLoadError(error: unknown): { summary: string; detail: string } {
+  const detail = errMessage(error)
+  if (error instanceof HttpStatusError) {
+    const reason = providerMessage(error.body) ?? errorSummary(error.body)
+    return { summary: errorSummary(`${error.status} · ${reason}`), detail }
+  }
+  return { summary: errorSummary(detail), detail }
+}
