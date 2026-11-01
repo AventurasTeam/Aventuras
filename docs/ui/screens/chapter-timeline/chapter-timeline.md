@@ -119,7 +119,8 @@ Read-only context shown alongside (not part of the form):
 
 - **Time range** — `<start time> – <end time>` formatted via the
   active calendar formatter.
-- **Token count** — accumulated `token_count` across the chapter.
+- **Token count** — `token_count`, the chapter's size when it closed.
+  A later edit in the chapter leaves it.
 - **Closed at** — wall-clock `closed_at` timestamp, muted small.
 - **Entry range** — `start_entry_id` → `end_entry_id`, displayed as
   entry numbers (e.g. `entries 12–34`).
