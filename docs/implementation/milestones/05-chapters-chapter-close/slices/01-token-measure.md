@@ -433,6 +433,12 @@ and numbers corrected.
   2026-11-01).** `components/wizard/finish.ts:339` reaches
   `create-story.ts`' count before any open, so the first story created
   after launch pays the build at Finish. It stays as it is.
+- **The warm has no `try`/`catch` (provisional).** The build reads only
+  a static bundled table, so it throws on every run or never, and a
+  throw would show on the first launch of any build. The asymmetry: on
+  Android a throw in a scheduled task is fatal, so it would stop the app
+  at story open rather than log a failure. The alternative is a
+  `try`/`catch` with `logger.warn`, a new event and a changed test.
 - **A turn runs on `story_rich`,** a creative story with no lead, so the
   strip's E2E uses it and adds no harness rows. The fallback of filler
   on the hero branch wasn't needed. Its undo presses CTRL-Z, as the
