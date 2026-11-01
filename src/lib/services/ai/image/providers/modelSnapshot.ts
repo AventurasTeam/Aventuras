@@ -47,6 +47,16 @@ export function sameSnapshot(a: ImageModelSnapshot, b: ImageModelSnapshot): bool
   )
 }
 
+/** The listed model with this id, else the one the provider also serves under it as an alias. */
+export function findListedModel(models: ImageModelInfo[], id: string): ImageModelInfo | undefined {
+  return models.find((m) => m.id === id) ?? models.find((m) => m.aliases?.includes(id))
+}
+
+/** The listed model's own id for `id`, which may be one of its aliases; any other id is returned as it is. */
+export function canonicalModelId(id: string, models: ImageModelInfo[]): string {
+  return findListedModel(models, id)?.id ?? id
+}
+
 /** Identifies the inputs a model list was loaded for. */
 export function modelListKey(
   providerType: ImageProviderType,

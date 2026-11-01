@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ImageProfile } from '#lib/types/index.ts'
 import {
   IMAGE_MODEL_SNAPSHOT_VERSION,
+  canonicalModelId,
   chooseModelSnapshot,
   modelListKey,
   sameSnapshot,
@@ -189,5 +190,23 @@ describe('sameSnapshot', () => {
     expect(sameSnapshot(a, snapshotModel('m2', info()))).toBe(false)
     expect(sameSnapshot(a, { ...a, version: a.version + 1 })).toBe(false)
     expect(sameSnapshot(a, snapshotModel('m1', info({ supportedResolutions: ['1k'] })))).toBe(false)
+  })
+})
+
+describe('canonicalModelId', () => {
+  const models = [info({ id: 'flux', aliases: ['flux-dev', 'f'] }), info({ id: 'turbo' })]
+
+  it('keeps an id the list has, and any id it does not know', () => {
+    expect(canonicalModelId('flux', models)).toBe('flux')
+    expect(canonicalModelId('mystery', models)).toBe('mystery')
+  })
+
+  it('swaps an alias for its model id', () => {
+    expect(canonicalModelId('flux-dev', models)).toBe('flux')
+  })
+
+  it('prefers a model whose id is the typed text over another model listing it as an alias', () => {
+    const list = [info({ id: 'a', aliases: ['b'] }), info({ id: 'b' })]
+    expect(canonicalModelId('b', list)).toBe('b')
   })
 })

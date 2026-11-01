@@ -27,6 +27,7 @@
     referenceLimit,
     suggestReferenceInputs,
     chooseModelSnapshot,
+    canonicalModelId,
     modelListKey,
     capturesModelSnapshot,
     type ComfyCustomWorkflow,
@@ -492,6 +493,11 @@
     return opts
   }
 
+  // Whether the loaded model list is for the form's current provider, key and URL.
+  const modelsSettled = $derived(
+    profileModelsKey === modelListKey(profileProviderType, connection.apiKey, connection.baseUrl),
+  )
+
   function buildModelSnapshot() {
     if (!capturesModelSnapshot(profileProviderType)) return undefined
     return chooseModelSnapshot({
@@ -499,9 +505,7 @@
       providerType: profileProviderType,
       baseUrl: connection.baseUrl,
       models: profileModels,
-      settled:
-        profileModelsKey ===
-        modelListKey(profileProviderType, connection.apiKey, connection.baseUrl),
+      settled: modelsSettled,
       stored: editingProfileId ? settings.getImageProfile(editingProfileId) : undefined,
     })
   }
@@ -1375,7 +1379,7 @@
         models={profileModels}
         selectedModelId={profileModel}
         onModelChange={(id) => {
-          profileModel = id
+          profileModel = modelsSettled ? canonicalModelId(id, profileModels) : id
         }}
         showImg2ImgIndicator={true}
         showDescription={profileProviderType === 'comfyui'}

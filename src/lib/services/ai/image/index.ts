@@ -37,6 +37,7 @@ export {
 
 export {
   IMAGE_MODEL_SNAPSHOT_VERSION,
+  canonicalModelId,
   chooseModelSnapshot,
   modelListKey,
   snapshotModel,

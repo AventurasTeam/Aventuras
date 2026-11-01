@@ -16,6 +16,7 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
+import { findListedModel } from './modelSnapshot'
 import { parseModelList } from './parseModelList'
 import { generateOpenAICompatibleImage } from './openaiCompatible'
 
@@ -130,7 +131,7 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
       const models = await listModels()
       // An unreadable reply parses to an empty list, which must not read as an unknown model.
       if (!models.length) throw new Error('Pollinations returned no image models')
-      return models.find((m) => m.id === model) ?? models.find((m) => m.aliases?.includes(model))
+      return findListedModel(models, model)
     },
   }
 }
