@@ -43,9 +43,8 @@ type ScreenShellProps = {
   statusSlot?: ReactNode
 
   /**
-   * In-story only. `percent` drives the token-progress strip width.
-   * When undefined, the strip renders at 0 % (layout stability).
-   * Spec: always rendered for in-story, never hidden.
+   * In-story only. `percent` (clamped to 0–100) drives the token-progress strip width.
+   * Undefined renders at 0 % — the strip is always rendered for in-story (layout stability).
    */
   chapterProgress?: ChapterProgress
 

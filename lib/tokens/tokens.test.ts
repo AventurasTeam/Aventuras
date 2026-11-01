@@ -13,15 +13,13 @@ describe('countTokens', () => {
   })
 
   it('pins the encoding every token budget is calibrated against', () => {
-    // Swapping the rank table silently re-scales every budget-fill decision, and
-    // ASCII counts identically under cl100k/o200k — only non-Latin separates
-    // them, so the pin has to be non-Latin to bite (cl100k counts this 31).
+    // Swapping the rank table silently re-scales every budget fill; ASCII counts the same under
+    // cl100k and o200k, so the pin has to be non-Latin to bite (cl100k counts this 31).
     expect(countTokens('彼は剣を抜いた。彼女は逃げた。誰も動かなかった。')).toBe(21)
   })
 
   it('counts a known short string', () => {
-    // Pinned to the invariant that matters for budget-fill — monotonic and
-    // proportional, never zero for non-empty text.
+    // Pins what budget-fill relies on: monotonic, proportional, never zero for non-empty text.
     const short = countTokens('hello world')
     const long = countTokens('hello world '.repeat(50))
     expect(short).toBeGreaterThan(0)
@@ -29,9 +27,8 @@ describe('countTokens', () => {
   })
 
   it('counts a tiktoken special-token literal instead of throwing', () => {
-    // js-tiktoken's encode() defaults to disallowedSpecial: "all" and throws
-    // on literals like "<|endoftext|>" — real user/LLM prose can contain
-    // them, and a throw mid budget-fill loop or mid render is not acceptable.
+    // encode() defaults to disallowedSpecial: "all" and throws on literals like "<|endoftext|>",
+    // which real user/LLM prose can contain; a throw mid budget fill or render is unacceptable.
     expect(() => countTokens('the end <|endoftext|> more')).not.toThrow()
     expect(countTokens('the end <|endoftext|> more')).toBeGreaterThan(0)
   })

@@ -11,9 +11,8 @@ import { chrome } from '../locators/chrome'
 import { reader } from '../locators/reader'
 import { world } from '../locators/world'
 
-// The strip against SQL on the seeded branch past the reader's 50-entry window, so a strip that
-// reads the working set under-reports at the first assertion. Serial: each test goes on from the
-// screen the last one left. See docs/testing.md → Tier 1 — assert in the database.
+// The seeded branch is past the reader's 50-entry window: a strip reading the working set would
+// under-report. Serial: each test continues the last one's screen. docs/testing.md → Tier 1.
 const STORY_ID = 'story_rich'
 const STORY_TITLE = 'The Gallery of Impossible Rooms'
 const ENTRIES_WINDOW = 50
