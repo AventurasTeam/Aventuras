@@ -68,5 +68,9 @@ describe('lib module edges', () => {
         await boundaryHits("import { normalizeTerm } from '@/lib/keyword-terms'\n", fixture),
       ).toBe(0)
     })
+
+    it('permits another lib module', async () => {
+      expect(await boundaryHits("import { oneLine } from '@/lib/text'\n", fixture)).toBe(0)
+    })
   })
 })

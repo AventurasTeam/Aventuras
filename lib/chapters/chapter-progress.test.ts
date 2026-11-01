@@ -20,7 +20,12 @@ describe('canEndChapter', () => {
 
 describe('chapterProgressOf', () => {
   it('reads a series against its threshold', () => {
-    expect(chapterProgressOf([row('opening', 300), row('ai_reply', 700)], 4_000)).toEqual({
+    expect(
+      chapterProgressOf(
+        [row('opening', 300), row('user_action', 200), row('ai_reply', 500)],
+        4_000,
+      ),
+    ).toEqual({
       tokens: 1_000,
       threshold: 4_000,
       percent: 25,
@@ -63,13 +68,20 @@ describe('chapterProgressOf', () => {
     expect(progress.threshold).toBe(threshold)
   })
 
+  it('reads an infinite sum over an infinite threshold as 0', () => {
+    expect(
+      chapterProgressOf([row('ai_reply', Number.POSITIVE_INFINITY)], Number.POSITIVE_INFINITY)
+        .percent,
+    ).toBe(0)
+  })
+
   it.each([
-    [79, 'success'],
-    [80, 'warning'],
-    [90, 'danger'],
-    [250, 'danger'],
-  ])('takes tone from percent for %d tokens of 100', (tokens, tone) => {
-    expect(chapterProgressOf([row('ai_reply', tokens)], 100).tone).toBe(tone)
+    [3_160, 'success'],
+    [3_200, 'warning'],
+    [3_600, 'danger'],
+    [10_000, 'danger'],
+  ])('takes tone from percent for %d tokens of 4,000', (tokens, tone) => {
+    expect(chapterProgressOf([row('ai_reply', tokens)], 4_000).tone).toBe(tone)
   })
 
   it('can close once the region holds an ai_reply, whatever else it holds', () => {
@@ -78,5 +90,6 @@ describe('chapterProgressOf', () => {
     expect(
       chapterProgressOf([row('opening'), row('user_action'), row('ai_reply')], 100).canClose,
     ).toBe(true)
+    expect(chapterProgressOf([row('ai_reply'), row('user_action')], 100).canClose).toBe(true)
   })
 })
