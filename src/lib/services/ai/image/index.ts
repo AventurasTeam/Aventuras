@@ -41,6 +41,8 @@ export {
   canonicalModelId,
   chooseModelSnapshot,
   modelListKey,
+  overriddenFields,
+  overrideConflicts,
   snapshotModel,
 } from './providers/modelSnapshot'
 

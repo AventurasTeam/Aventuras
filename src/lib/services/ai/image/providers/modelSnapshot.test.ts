@@ -6,6 +6,8 @@ import {
   canonicalModelId,
   chooseModelSnapshot,
   modelListKey,
+  overriddenFields,
+  overrideConflicts,
   sameSnapshot,
   snapshotModel,
 } from './modelSnapshot'
@@ -231,6 +233,39 @@ describe('applyCapabilityOverride', () => {
 
   it('applies over a model the provider knows nothing about', () => {
     expect(applyCapabilityOverride(undefined, { minPixels: 100 })).toEqual({ minPixels: 100 })
+  })
+})
+
+describe('overrideConflicts', () => {
+  it('warns when References is Off for a model the provider says needs a reference', () => {
+    const conflicts = overrideConflicts({ references: false }, { requiresReferenceImage: true })
+    expect(conflicts.map((c) => c.field)).toEqual(['references'])
+  })
+
+  it('is quiet when nothing contradicts the published capabilities', () => {
+    expect(overrideConflicts({ references: false }, { supportsImg2Img: true })).toEqual([])
+    expect(overrideConflicts({ references: true }, { requiresReferenceImage: true })).toEqual([])
+    expect(overrideConflicts({ sizes: ['1024x1024'] }, { requiresReferenceImage: true })).toEqual(
+      [],
+    )
+    expect(overrideConflicts(undefined, { requiresReferenceImage: true })).toEqual([])
+    expect(overrideConflicts({ references: false }, undefined)).toEqual([])
+  })
+})
+
+describe('overriddenFields', () => {
+  it('names the fields that replace something the provider published', () => {
+    expect(
+      overriddenFields(
+        { sizes: ['1024x1024'], references: false, minPixels: 100 },
+        { supportedResolutions: ['1k'], supportsImg2Img: true },
+      ),
+    ).toEqual(['sizes', 'references'])
+  })
+
+  it('names nothing where the provider published nothing', () => {
+    expect(overriddenFields({ sizes: ['1024x1024'], references: false }, {})).toEqual([])
+    expect(overriddenFields({ sizes: ['1024x1024'] }, undefined)).toEqual([])
   })
 })
 

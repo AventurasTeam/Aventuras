@@ -400,7 +400,12 @@ export async function generateImage(options: {
       : undefined
 
   if (capabilities?.requiresReferenceImage && !cleanRefs?.length) {
-    throw new Error(`${model} needs a reference image, and none could be sent`)
+    throw new Error(
+      takesCapabilityOverride(profile.providerType) &&
+        profile.capabilityOverride?.references === false
+        ? `${model} needs a reference image, but this profile's References override is Off`
+        : `${model} needs a reference image, and none could be sent`,
+    )
   }
 
   return provider.generate({

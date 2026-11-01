@@ -56,6 +56,39 @@ export function applyCapabilityOverride(
   return merged
 }
 
+/** The override fields that replace something the provider published for the model. */
+export function overriddenFields(
+  override: ImageCapabilityOverride | undefined,
+  published: ImageModelCapabilities | undefined,
+): Array<'sizes' | 'references'> {
+  const fields: Array<'sizes' | 'references'> = []
+  if (override?.sizes?.length && published?.supportedResolutions?.length) fields.push('sizes')
+  if (override?.references !== undefined && published?.supportsImg2Img !== undefined) {
+    fields.push('references')
+  }
+  return fields
+}
+
+export interface OverrideConflict {
+  field: 'references'
+  message: string
+}
+
+/** Where an override contradicts what the provider published in a way that may fail generation. */
+export function overrideConflicts(
+  override: ImageCapabilityOverride | undefined,
+  published: ImageModelCapabilities | undefined,
+): OverrideConflict[] {
+  const conflicts: OverrideConflict[] = []
+  if (override?.references === false && published?.requiresReferenceImage) {
+    conflicts.push({
+      field: 'references',
+      message: 'The provider says this model needs a reference image, so generation may fail.',
+    })
+  }
+  return conflicts
+}
+
 /**
  * Whether two snapshots say the same thing, whatever time each was captured. A key set to
  * `undefined` counts as missing: a stored snapshot has lost those keys to JSON.

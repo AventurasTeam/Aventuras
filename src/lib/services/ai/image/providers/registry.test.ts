@@ -530,6 +530,19 @@ describe('Image Provider Registry', () => {
         expect(await supportsReferenceImages('p', 'm')).toBe(true)
       })
 
+      it('names the override when it leaves a model that needs a reference without one', async () => {
+        vi.mocked(settings.getImageProfile).mockReturnValue(
+          profile('openai-compatible', {
+            model: 'm',
+            capabilityOverride: { references: false },
+            modelSnapshot: snapshotOf({ requiresReferenceImage: true }),
+          }),
+        )
+        await expect(generateImage({ profileId: 'p', model: 'm', prompt: 'x' })).rejects.toThrow(
+          'References override is Off',
+        )
+      })
+
       it('is ignored by a provider that takes none', async () => {
         vi.mocked(settings.getImageProfile).mockReturnValue(
           profile('openrouter', { capabilityOverride: { references: false } }),
