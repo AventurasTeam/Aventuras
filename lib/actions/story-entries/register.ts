@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import type { EntryMetadata, NewStoryEntry, StoryEntry } from '@/lib/db'
 import { entryMetadataSchema, inheritedEntryMetadata, storyEntries } from '@/lib/db'
 import { entriesStore } from '@/lib/stores'
+import { countTokens } from '@/lib/tokens'
 import { PLACE_REFUSAL } from '@/lib/world'
 
 import { computeUndoPayload } from '../delta/delta-encoding'
@@ -48,7 +49,7 @@ function fullRow(entry: NewStoryEntry): StoryEntry {
     position: entry.position,
     kind: entry.kind,
     content: entry.content,
-    contentTokens: entry.contentTokens ?? null,
+    contentTokens: countTokens(entry.content),
     chapterId: entry.chapterId ?? null,
     metadata: entry.metadata ?? null,
     createdAt: entry.createdAt,

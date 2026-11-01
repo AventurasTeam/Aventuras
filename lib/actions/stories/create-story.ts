@@ -22,6 +22,7 @@ import {
 } from '@/lib/db'
 import { embedAndBuildVecOps, type EmbedderConfig } from '@/lib/embedder'
 import { generateId } from '@/lib/ids'
+import { countTokens } from '@/lib/tokens'
 
 import type { DbCtx } from '../types'
 
@@ -159,6 +160,7 @@ export async function createStoryWithBranch(
         position: 1,
         kind: 'opening',
         content: input.openingContent,
+        contentTokens: countTokens(input.openingContent),
         metadata,
         createdAt: nowMs,
       })
