@@ -13,10 +13,11 @@ type ShownRead = { branchId: string; series: readonly OpenRegionRow[] }
 const EMPTY_SERIES: readonly OpenRegionRow[] = []
 
 /**
- * Progress of `storyId`'s open region (milestone C5), zeros with `canClose` false when that story
- * isn't the open one. The scope argument is required because the open story is global and nothing
- * clears it on navigation: an unscoped read would show the last-opened story's progress.
- * settleCount and the tail cover every story_entries write, as in `useEntryIndex`.
+ * Progress of `storyId`'s open region, zeros with `canClose` false when that story isn't the open
+ * one. The scope argument is required because the open story is global and nothing clears it on
+ * navigation: an unscoped read would show the last-opened story's progress.
+ * settleCount and the tail cover every write to a column the series reads: a new write path must
+ * settle a run or reversal, or move the tail.
  */
 export function useChapterProgress(storyId: string | null | undefined): ChapterProgress {
   const branchId = currentStoryStore.useCurrentStory((open) =>

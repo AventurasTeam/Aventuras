@@ -277,7 +277,7 @@ describe('useChapterProgress', () => {
   it('logs a failed read once and keeps the last number', async () => {
     openStory()
     reads.series.mockResolvedValueOnce([reply('e1', 100)])
-    renderProbe()
+    const { rerenderWith } = renderProbe()
     await waitFor(() => expect(latest?.tokens).toBe(100))
 
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
@@ -291,6 +291,10 @@ describe('useChapterProgress', () => {
     })
     expect(reads.series).toHaveBeenCalledTimes(2)
     expect(latest?.tokens).toBe(100)
+
+    // Host routes re-render on every stream chunk, and a failed key stays failed across them.
+    rerenderWith(1)
+    expect(warnSpy).toHaveBeenCalledTimes(1)
 
     warnSpy.mockRestore()
   })
@@ -307,6 +311,30 @@ describe('useChapterProgress', () => {
     expect(latest).toEqual({ ...ZEROS, threshold: 1_000 })
 
     warnSpy.mockRestore()
+  })
+
+  it('drops the held number when the branch leaves before the next read lands', async () => {
+    openStory()
+    reads.series.mockResolvedValueOnce([reply('e1', 100)])
+    renderProbe()
+    await waitFor(() => expect(latest?.tokens).toBe(100))
+
+    deferredRead()
+    act(() => openStory({ branchId: 'b2' }))
+    await waitFor(() => expect(reads.series).toHaveBeenCalledTimes(2))
+
+    // The settle puts the return on a new key, so the cached read can't answer it.
+    deferredRead()
+    settle()
+    await waitFor(() => expect(reads.series).toHaveBeenCalledTimes(3))
+
+    const land = deferredRead()
+    act(() => openStory({ branchId: 'b1' }))
+    expect(latest?.tokens).toBe(0)
+    await act(async () => {
+      land([reply('e1', 120)])
+    })
+    await waitFor(() => expect(latest?.tokens).toBe(120))
   })
 
   // The read is local, so a lost network must not pause it.
