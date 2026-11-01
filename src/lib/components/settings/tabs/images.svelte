@@ -31,7 +31,10 @@
     capturesModelSnapshot,
     type ComfyCustomWorkflow,
     type ImageModelInfo,
+    type LoadedList,
+    type LoadFailure,
   } from '#lib/services/ai/image/index.ts'
+  import { isAbortError } from '#lib/services/activity/index.ts'
   import {
     validateApiWorkflow,
     detectWorkflowFields,
@@ -48,8 +51,8 @@
   import IconRow from '#lib/components/ui/icon-row.svelte'
   import ImageResolutionSelector from '#lib/components/settings/ImageResolutionSelector.svelte'
   import { defaultImageSpec, normalizeImageDataUrl, type ImageSpec } from '#lib/utils/image.ts'
-  import { errMessage } from '#lib/utils/error.ts'
   import { parseHttpUrl } from '#lib/utils/url.ts'
+  import { describeLoadError } from '#lib/utils/error.ts'
 
   const imageStyles = [
     { value: 'image-style-soft-anime', label: 'Soft Anime' },
@@ -135,7 +138,7 @@
   // The `modelListKey` of the inputs `profileModels` was loaded for.
   let profileModelsKey = $state<string | null>(null)
   let isLoadingProfileModels = $state(false)
-  let profileModelsError = $state<string | null>(null)
+  let profileLoadFailures = $state<LoadFailure[]>([])
 
   // ComfyUI specific state
   let profileSampler = $state('dpmpp_2m_sde_gpu')
@@ -207,7 +210,6 @@
   let availableVaes = $state<string[]>([])
   // Fields the form filled from a single-entry server list, as opposed to ones the user set.
   const autoFilled = $state({ clip: false, vae: false })
-  let isLoadingUnetModels = $state(false)
   const clipItems = $derived(availableClips.map((c) => ({ value: c, label: c })))
   const vaeItems = $derived(availableVaes.map((v) => ({ value: v, label: v })))
 
@@ -254,18 +256,17 @@
   // aborted request is never still current when its catch runs.
   const MODEL_LOAD_DEBOUNCE_MS = 400
   let modelsRequest: AbortController | null = null
-  let unetRequest: AbortController | null = null
   let modelsDebounce: ReturnType<typeof setTimeout> | undefined
+  // Whether the current request also reads the UNet text encoder and VAE lists.
+  let requestHasUnetLists = false
 
   function stopProfileModels() {
     clearTimeout(modelsDebounce)
     modelsDebounce = undefined
     modelsRequest?.abort()
-    unetRequest?.abort()
     modelsRequest = null
-    unetRequest = null
+    requestHasUnetLists = false
     isLoadingProfileModels = false
-    isLoadingUnetModels = false
   }
 
   async function loadProfileForm(force: boolean) {
@@ -274,46 +275,100 @@
     const request = new AbortController()
     modelsRequest = request
     isLoadingProfileModels = true
-    profileModelsError = null
+    profileLoadFailures = []
 
     const providerType = profileProviderType
     const { apiKey, baseUrl } = connection
+    const timeoutMs = settings.apiSettings.llmTimeoutMs
+    const unet = providerType === 'comfyui' && profileMode === ComfyMode.UnetTxt2Img
+    requestHasUnetLists = unet
 
-    async function loadModels() {
+    // A reply for another profile or server is dropped; a failure is reported unless it is a cancel.
+    async function read<T>(list: LoadedList, load: () => Promise<T>, apply: (value: T) => void) {
       try {
-        const models = await listImageModelsByProvider(
-          providerType,
-          apiKey,
-          force,
-          baseUrl,
-          request.signal,
-        )
-        if (modelsRequest !== request) return
-        profileModels = models
-        profileModelsKey = modelListKey(providerType, apiKey, baseUrl)
+        const value = await load()
+        if (modelsRequest === request) apply(value)
       } catch (error) {
-        if (modelsRequest !== request) return
-        profileModels = []
-        profileModelsKey = null
-        profileModelsError = errMessage(error)
+        if (modelsRequest !== request || isAbortError(error)) return
+        profileLoadFailures = [...profileLoadFailures, { list, ...describeLoadError(error) }]
       }
     }
 
-    const reads = [loadModels()]
-    if (providerType === 'comfyui') {
-      reads.push(loadSamplerInfo(request, baseUrl, 'comfyui'), loadLoras(request, baseUrl))
-      if (profileMode === ComfyMode.UnetTxt2Img) void loadUnetModels()
-    } else if (providerType === 'a1111') {
-      reads.push(loadSamplerInfo(request, baseUrl, 'a1111'))
+    const reads = [
+      read(
+        'models',
+        () => listImageModelsByProvider(providerType, apiKey, force, baseUrl, request.signal),
+        (models) => {
+          profileModels = models
+          profileModelsKey = modelListKey(providerType, apiKey, baseUrl)
+        },
+      ),
+    ]
+    if (providerType === 'comfyui' || providerType === 'a1111') {
+      reads.push(
+        read(
+          'samplers',
+          () => getProviderSamplerInfo(baseUrl, providerType, request.signal),
+          (info) => {
+            profileSamplers = info.samplers.map((s) => ({ value: s, label: s }))
+            profileSchedulers = info.schedulers.map((s) => ({ value: s, label: s }))
+            if (info.schedulersUnavailable) {
+              profileLoadFailures = [
+                ...profileLoadFailures,
+                {
+                  list: 'schedulers',
+                  summary: info.schedulersUnavailable,
+                  detail: info.schedulersUnavailable,
+                },
+              ]
+            }
+          },
+        ),
+      )
     } else {
       profileSamplers = []
       profileSchedulers = []
     }
+    if (providerType === 'comfyui') {
+      reads.push(
+        read(
+          'loras',
+          () => listLoras(baseUrl, request.signal),
+          (loras) => (availableLoras = loras),
+        ),
+      )
+    }
+    if (unet) {
+      reads.push(
+        read(
+          'textEncoders',
+          () => fetchModelList(baseUrl, 'text_encoders', timeoutMs, request.signal),
+          (clips) => {
+            availableClips = clips
+            if (!profileClipName && clips.length === 1) {
+              profileClipName = clips[0]
+              autoFilled.clip = true
+            }
+          },
+        ),
+        read(
+          'vaes',
+          () => fetchModelList(baseUrl, 'vae', timeoutMs, request.signal),
+          (vaes) => {
+            availableVaes = vaes
+            if (!profileVaeName && vaes.length === 1) {
+              profileVaeName = vaes[0]
+              autoFilled.vae = true
+            }
+          },
+        ),
+      )
+    }
 
-    try {
-      await Promise.allSettled(reads)
-    } finally {
-      if (modelsRequest === request) isLoadingProfileModels = false
+    await Promise.all(reads)
+    if (modelsRequest === request) {
+      isLoadingProfileModels = false
+      requestHasUnetLists = false
     }
   }
 
@@ -342,7 +397,7 @@
       if (invalid || profileModelsKey !== modelListKey(providerType, apiKey, baseUrl)) {
         profileModels = []
         profileModelsKey = null
-        profileModelsError = null
+        profileLoadFailures = []
       }
       if (invalid) {
         stopProfileModels()
@@ -357,23 +412,6 @@
       modelsDebounce = setTimeout(() => void loadProfileForm(false), MODEL_LOAD_DEBOUNCE_MS)
     })
   })
-
-  async function loadSamplerInfo(
-    request: AbortController,
-    baseUrl: string | undefined,
-    providerType: 'comfyui' | 'a1111',
-  ) {
-    const info = await getProviderSamplerInfo(baseUrl, providerType, request.signal)
-    if (modelsRequest !== request) return
-    profileSamplers = info.samplers.map((s) => ({ value: s, label: s }))
-    profileSchedulers = info.schedulers.map((s) => ({ value: s, label: s }))
-  }
-
-  async function loadLoras(request: AbortController, baseUrl: string | undefined) {
-    const loras = await listLoras(baseUrl, request.signal)
-    if (modelsRequest !== request) return
-    availableLoras = loras
-  }
 
   async function handleTestGenerate() {
     if (isGeneratingTestImage || !testProfileId || !testPrompt.trim()) return
@@ -782,54 +820,13 @@
     workflowFileName = null
   }
 
-  // ---------------------------------------------------------------------------
-  // UNet model loading
-  // ---------------------------------------------------------------------------
-
-  async function loadUnetModels() {
-    if (profileProviderType !== 'comfyui') return
-    const baseUrl = resolveComfyBaseUrl(profileBaseUrl)
-    unetRequest?.abort()
-    const request = new AbortController()
-    unetRequest = request
-    isLoadingUnetModels = true
-    try {
-      const timeoutMs = settings.apiSettings.llmTimeoutMs
-      const [clips, vaes] = await Promise.all([
-        fetchModelList(baseUrl, 'text_encoders', timeoutMs, request.signal),
-        fetchModelList(baseUrl, 'vae', timeoutMs, request.signal),
-      ])
-      if (unetRequest !== request) return
-      // A reply for another profile or server must not fill this one.
-      if (profileProviderType !== 'comfyui' || resolveComfyBaseUrl(profileBaseUrl) !== baseUrl) {
-        return
-      }
-      availableClips = clips
-      availableVaes = vaes
-      if (!profileClipName && clips.length === 1) {
-        profileClipName = clips[0]
-        autoFilled.clip = true
-      }
-      if (!profileVaeName && vaes.length === 1) {
-        profileVaeName = vaes[0]
-        autoFilled.vae = true
-      }
-    } catch {
-      // A failed list leaves the pickers as they were; there is nothing to report here.
-    } finally {
-      if (unetRequest === request) {
-        unetRequest = null
-        isLoadingUnetModels = false
-      }
-    }
-  }
-
-  // Switching into UNet mode loads the lists. A base-URL change reloads them through the
-  // debounced model load instead, so the list length is read untracked.
+  // Switching into UNet mode loads the lists, unless a pending or running load reads them.
   $effect(() => {
     if (profileMode !== ComfyMode.UnetTxt2Img || profileProviderType !== 'comfyui') return
     untrack(() => {
-      if (availableClips.length === 0 && !unetRequest) void loadUnetModels()
+      if (availableClips.length > 0 || modelsDebounce !== undefined) return
+      if (modelsRequest && requestHasUnetLists) return
+      void loadProfileForm(false)
     })
   })
 
@@ -1361,7 +1358,8 @@
         showImg2ImgIndicator={true}
         showDescription={profileProviderType === 'comfyui'}
         isLoading={isLoadingProfileModels}
-        errorMessage={profileModelsError}
+        failures={profileLoadFailures}
+        labelLists={profileProviderType === 'comfyui' || profileProviderType === 'a1111'}
         showRefreshButton={true}
         onRefresh={() => loadProfileForm(true)}
         onStop={stopProfileModels}
@@ -1726,17 +1724,7 @@
       {#if profileMode === ComfyMode.UnetTxt2Img}
         <div class="grid grid-cols-2 gap-4 pt-2">
           <div class="col-span-2 space-y-2">
-            <div class="flex items-center justify-between">
-              <Label>CLIP / Text Encoder</Label>
-              <button
-                type="button"
-                class="text-muted-foreground hover:text-foreground text-xs underline"
-                disabled={isLoadingUnetModels}
-                onclick={loadUnetModels}
-              >
-                {isLoadingUnetModels ? 'Loading…' : '↻ Refresh'}
-              </button>
-            </div>
+            <Label>CLIP / Text Encoder</Label>
             <Autocomplete
               items={clipItems}
               selected={availableClips.includes(profileClipName)

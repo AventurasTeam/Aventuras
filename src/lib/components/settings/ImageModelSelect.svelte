@@ -1,11 +1,16 @@
 <script lang="ts">
-  import type { ImageModelInfo } from '#lib/services/ai/image/index.ts'
+  import {
+    groupLoadFailures,
+    LOADED_LIST_LABELS,
+    sortLoadFailures,
+    type ImageModelInfo,
+    type LoadFailure,
+  } from '#lib/services/ai/image/index.ts'
   import { Autocomplete } from '#lib/components/ui/autocomplete/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
   import * as Collapsible from '#lib/components/ui/collapsible/index.ts'
   import { RefreshCw, Loader2, Check, ImagePlus, Square, ChevronRight } from '@lucide/svelte'
   import { cn } from '#lib/utils/cn.ts'
-  import { errorSummary } from '#lib/utils/error.ts'
 
   interface Props {
     models: ImageModelInfo[]
@@ -18,7 +23,9 @@
 
     // Loading state
     isLoading?: boolean
-    errorMessage?: string | null
+    failures?: LoadFailure[]
+    // Prefix each failure line with the lists it covers, for providers that load several.
+    labelLists?: boolean
     showRefreshButton?: boolean
     onRefresh?: () => void
     onStop?: () => void
@@ -34,23 +41,37 @@
     showImg2ImgIndicator = false,
     showDescription = false,
     isLoading = false,
-    errorMessage = null,
+    failures = [],
+    labelLists = false,
     showRefreshButton = false,
     onRefresh,
     onStop,
     placeholder = 'Select a model',
   }: Props = $props()
 
-  const errorLine = $derived(errorMessage ? errorSummary(errorMessage) : '')
-  const hasDetails = $derived(!!errorMessage && errorMessage.trim() !== errorLine)
+  const orderedFailures = $derived(sortLoadFailures(failures))
+  const failureLines = $derived(
+    groupLoadFailures(orderedFailures).map(({ lists, summary }) =>
+      labelLists ? `${lists.map((l) => LOADED_LIST_LABELS[l]).join(', ')}: ${summary}` : summary,
+    ),
+  )
+  const detailsText = $derived(
+    orderedFailures
+      .map(({ list, detail }) => (labelLists ? `${LOADED_LIST_LABELS[list]}\n${detail}` : detail))
+      .join('\n\n'),
+  )
+  const hasDetails = $derived(
+    orderedFailures.some(({ summary, detail }) => detail.trim() !== summary) ||
+      orderedFailures.length > 1,
+  )
 
   let copied = $state(false)
   let copiedTimer: ReturnType<typeof setTimeout> | undefined
 
   async function copyDetails() {
-    if (!errorMessage) return
+    if (!detailsText) return
     try {
-      await navigator.clipboard.writeText(errorMessage)
+      await navigator.clipboard.writeText(detailsText)
       copied = true
       clearTimeout(copiedTimer)
       copiedTimer = setTimeout(() => (copied = false), 1500)
@@ -155,26 +176,35 @@
       "{selectedModelId}" is not in the list fetched from this provider. It will be sent as typed.
     </p>
   {/if}
-  {#if errorMessage}
-    <p class="text-destructive text-xs" role="alert">{errorLine}</p>
-    {#if hasDetails}
-      <Collapsible.Root>
-        <Collapsible.Trigger
-          class="group/details text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
-        >
-          <ChevronRight
-            class="size-3 transition-transform duration-200 group-data-[state=open]/details:rotate-90"
-          />
-          Details
-        </Collapsible.Trigger>
-        <Collapsible.Content class="space-y-2 pt-1">
-          <pre
-            class="bg-muted max-h-48 overflow-auto rounded-md p-2 text-xs break-all whitespace-pre-wrap">{errorMessage}</pre>
-          <Button variant="outline" size="sm" onclick={copyDetails}>
-            {copied ? 'Copied' : 'Copy'}
-          </Button>
-        </Collapsible.Content>
-      </Collapsible.Root>
-    {/if}
+  {#each failureLines as line, i (i)}
+    <p class="text-destructive text-xs" role="alert">{line}</p>
+  {/each}
+  {#if hasDetails}
+    <Collapsible.Root>
+      <Collapsible.Trigger
+        class="group/details text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
+      >
+        <ChevronRight
+          class="size-3 transition-transform duration-200 group-data-[state=open]/details:rotate-90"
+        />
+        Details
+      </Collapsible.Trigger>
+      <Collapsible.Content class="space-y-2 pt-1">
+        {#each orderedFailures as failure (failure.list)}
+          <div class="space-y-1">
+            {#if labelLists}
+              <p class="text-muted-foreground text-xs font-medium">
+                {LOADED_LIST_LABELS[failure.list]}
+              </p>
+            {/if}
+            <pre
+              class="bg-muted max-h-48 overflow-auto rounded-md p-2 text-xs break-all whitespace-pre-wrap">{failure.detail}</pre>
+          </div>
+        {/each}
+        <Button variant="outline" size="sm" onclick={copyDetails}>
+          {copied ? 'Copied' : 'Copy'}
+        </Button>
+      </Collapsible.Content>
+    </Collapsible.Root>
   {/if}
 </div>
