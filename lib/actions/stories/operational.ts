@@ -192,7 +192,9 @@ async function loadAndPublish(
   // Warm the vec cache for a story opened with pre-existing stale rows; no-op
   // until boot wires the drain controller, and the sync stage owns correctness.
   kickStoryDrain(row.storyId)
-  // Off the open's own task: the encoder's build then sits ahead of neither first paint nor a Send.
+  // Off the open's own task, so the encoder's build doesn't land on the first Send. React Native
+  // has no real idle signal, so on Android it runs during the open, ahead of the reader's first
+  // paint.
   requestIdleCallback(warmTokenEncoder, { timeout: TOKEN_WARM_TIMEOUT_MS })
   return { status: 'ok', storyId: row.storyId, branchId }
 }
