@@ -42,6 +42,14 @@ export {
   snapshotModel,
 } from './providers/modelSnapshot'
 
+export {
+  LOADED_LIST_LABELS,
+  groupLoadFailures,
+  sortLoadFailures,
+  type LoadFailure,
+  type LoadedList,
+} from './loadFailures'
+
 // Image generation utilities
 export {
   isImageGenerationEnabled,
