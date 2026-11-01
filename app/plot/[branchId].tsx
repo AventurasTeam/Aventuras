@@ -33,11 +33,11 @@ import { ScreenShell } from '@/components/shells/screen-shell'
 import { storyPillPhase, useStoryGenerationGate } from '@/components/story-settings/generation-run'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
 import { single as singleParam, worldHref } from '@/components/world/world-selection'
+import { useChapterProgress } from '@/hooks/use-chapter-progress'
 import { useColdOpenStory } from '@/hooks/use-cold-open-story'
 import { useEntryIndex } from '@/hooks/use-entry-index'
 import { useIsRouteFocused } from '@/hooks/use-is-route-focused'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
-import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useRouteLink } from '@/hooks/use-route-link'
 import { useRowImport } from '@/hooks/use-row-import'
 import { useRowSessionGuard } from '@/hooks/use-row-session-guard'
@@ -154,7 +154,7 @@ export default function PlotRoute() {
 
   const { activeRunKind, editBlocked, gateReason, beforeTurn, cancelPillRun } =
     useStoryGenerationGate(storyId ?? undefined, branchId)
-  const openRegionPct = useOpenRegionTokens(storyId)
+  const openRegionPct = useChapterProgress(storyId).percent
 
   const { onSession, guard, navigateGuarded } = useRowSessionGuard()
   const plotDelete = usePlotDelete(branchId, ctx, guard)
