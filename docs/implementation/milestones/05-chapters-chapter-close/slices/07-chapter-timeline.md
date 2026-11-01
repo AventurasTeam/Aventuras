@@ -261,7 +261,7 @@ and `goToChapterTimelineRow` in `e2e/locators/chrome.ts`.
 - `useChapterProgress` and `chapterProgressTone`
   ([Slice 5.1](./01-token-measure.md)).
 - What `chapters.token_count` means after an edit in a closed chapter:
-  [Slice 5.1 → Open questions](./01-token-measure.md#open-questions).
+  [Slice 5.1 → Implementation notes](./01-token-measure.md#implementation-notes).
   The card shows the stored column.
 - A CTRL-Z binding on this route: the key stays the reader's.
 - `chapter-timeline.md`'s modal, review-window and delete sections, and

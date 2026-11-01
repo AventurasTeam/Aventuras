@@ -195,6 +195,11 @@ the log.
   since `createInsertSchema` would otherwise take any JSON.
 - `fullRow`, `UPDATABLE` and `ChapterUpdatePatch` in
   `lib/actions/chapters/register.ts`.
+- `UPDATABLE` narrows to `title`, `summary`, `theme`, `keywords` and
+  `closeReport`, per
+  [Slice 5.1 → Implementation notes](./01-token-measure.md#implementation-notes).
+  The `register.test.ts` cases on the other columns move to allowed
+  ones, and one asserts a patch of only those columns is rejected.
 - The projection at the `patcher`, the matching hydrate select at
   `lib/actions/stories/operational.ts:164`, and the store's row type, all
   as C4 pins them.

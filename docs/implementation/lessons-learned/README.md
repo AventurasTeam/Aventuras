@@ -217,9 +217,11 @@ slice plans when relevant.
   Metro but can crash every Storybook story importing that module; alias
   the specifier to a stub in `viteFinal`, don't touch the guard.
 - [Token-counting fixtures must be prose, not a repeated character](./token-fixtures-need-real-prose.md)
-  — `'x'.repeat(4000)` reaches tiktoken's byte-pair loop as one word and
-  costs ~620 ms against ~0 ms for prose of the same length; the tell is a
-  timeout that only ever fires on CI.
+  — a raw `encode` of `'x'.repeat(4000)` reaches tiktoken's byte-pair loop
+  as one word and costs ~620 ms against ~0 ms for prose of the same length.
+  `countTokens` now cuts runs at 512 characters, at about 20 ms per 1,000
+  ASCII characters of a run, so such a fixture is slow, not catastrophic; the
+  tell is a timeout that only ever fires on CI.
 - [`eslint --fix` merges a module and its `.native` sibling into one import](./eslint-fix-merges-native-sibling-import.md)
   — the resolver maps both specifiers to one module, so `import/no-duplicates`
   aliases the native symbol onto the web implementation inside the pre-commit

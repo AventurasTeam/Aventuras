@@ -513,6 +513,13 @@ confirm at slice planning. Canon follows the answer.
   chapter's size, since the fallback closes nearly the whole region. The
   scope leaves the chain alone; the alternative is the turn's chain
   skipping a close when its Send ran one.
+- **Do `closeOwed`'s fixtures hold real counts?**
+  `lib/pipeline/definitions/__tests__/phase-db.ts`,
+  `e2e/harness/seed.ts` and `bench/fixture.ts` insert entries with no
+  `content_tokens`, so those rows read 0, which
+  [Slice 5.1](./01-token-measure.md) leaves on purpose. A "below the
+  threshold, owes nothing" case seeded through them passes for the wrong
+  reason, so a test of that bound needs a real count on its rows.
 
 ## Implementation notes
 
