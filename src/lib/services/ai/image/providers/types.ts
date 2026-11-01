@@ -12,6 +12,8 @@ import type { Json } from './comfyImage'
 export type ComfySamplerInfo = {
   samplers: string[]
   schedulers: string[]
+  /** Why `schedulers` is empty when the server cannot list them, as opposed to having none. */
+  schedulersUnavailable?: string
 }
 
 /** A user-uploaded ComfyUI API-format workflow with auto-detected field paths. */

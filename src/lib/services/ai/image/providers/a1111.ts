@@ -23,6 +23,11 @@ import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
 const DEFAULT_BASE_URL = 'http://localhost:7860'
 
+/** The first release with `/sdapi/v1/schedulers`. */
+export const MIN_A1111_SCHEDULERS_VERSION = '1.9.1'
+
+const SCHEDULERS_UNAVAILABLE = `This server has no /sdapi/v1/schedulers. Listing schedulers needs A1111 ${MIN_A1111_SCHEDULERS_VERSION} or newer.`
+
 /** A1111 sends references only when the profile opts in: sd.cpp and KoboldCpp read `extra_images`. */
 export const a1111ReferenceLimit = (
   providerOptions: Record<string, unknown> | undefined,
@@ -89,39 +94,34 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
         ? { Authorization: `Bearer ${config.apiKey}` }
         : undefined
 
-      const [samplersRes, schedulersRes] = await Promise.allSettled([
-        imageGetFetch(`${baseUrl}/sdapi/v1/samplers`, authHeaders, {
-          serviceId: 'a1111-samplers',
+      const readNames = async (
+        path: string,
+        serviceId: string,
+        allowStatuses?: number[],
+      ): Promise<string[] | undefined> => {
+        const response = await imageGetFetch(`${baseUrl}/sdapi/v1/${path}`, authHeaders, {
+          serviceId,
+          allowStatuses,
           signal,
-        }),
-        imageGetFetch(`${baseUrl}/sdapi/v1/schedulers`, authHeaders, {
-          serviceId: 'a1111-schedulers',
-          signal,
-        }),
+        })
+        if (!response.ok) {
+          await response.body?.cancel()
+          return undefined
+        }
+        return (expectList(await response.json(), `A1111 /sdapi/v1/${path}`) as { name?: string }[])
+          .map((s) => s.name ?? '')
+          .filter(Boolean)
+      }
+
+      const [samplers, schedulers] = await Promise.all([
+        readNames('samplers', 'a1111-samplers'),
+        readNames('schedulers', 'a1111-schedulers', [404]),
       ])
-
-      const toNames = (data: unknown): string[] =>
-        Array.isArray(data)
-          ? (data as { name?: string }[]).map((s) => s.name ?? '').filter(Boolean)
-          : []
-
-      const samplers: string[] =
-        samplersRes.status === 'fulfilled'
-          ? await samplersRes.value
-              .json()
-              .then(toNames)
-              .catch(() => [])
-          : []
-
-      const schedulers: string[] =
-        schedulersRes.status === 'fulfilled'
-          ? await schedulersRes.value
-              .json()
-              .then(toNames)
-              .catch(() => [])
-          : []
-
-      return { samplers, schedulers }
+      return {
+        samplers: samplers ?? [],
+        schedulers: schedulers ?? [],
+        ...(schedulers === undefined && { schedulersUnavailable: SCHEDULERS_UNAVAILABLE }),
+      }
     },
   }
 }

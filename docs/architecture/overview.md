@@ -591,6 +591,10 @@ release with a single job-status route and a cancel that can only stop the app's
 someone else's. Older servers are refused with a message asking the user to update; a server that
 cannot be asked its version is let through.
 
+**A1111 scheduler list: 1.9.1 and later** (`MIN_A1111_SCHEDULERS_VERSION` in `a1111.ts`), the first
+release with `/sdapi/v1/schedulers`. A server without the route still lists its samplers and generates;
+the form says that schedulers need the newer version.
+
 **Parsing replies from these servers.** The parsing of a response follows what the response is for:
 
 1. An error body is parsed with `safeParse` and falls back to the raw excerpt, so the original failure is

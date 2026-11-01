@@ -83,6 +83,55 @@ describe('model discovery', () => {
     for (const [, , options] of calls) expect(options?.signal).toBe(signal)
   })
 
+  describe('A1111 sampler info', () => {
+    const missing = { ok: false, status: 404, body: null } as unknown as Response
+
+    it('reads sampler and scheduler names', async () => {
+      vi.mocked(imageGetFetch).mockImplementation(async (url) =>
+        String(url).endsWith('/samplers')
+          ? reply([{ name: 'Euler a' }, { name: 'DPM++ 2M' }])
+          : reply([{ name: 'karras' }]),
+      )
+      expect(await createA1111Provider({ apiKey: '' }).getSamplerInfo!()).toEqual({
+        samplers: ['Euler a', 'DPM++ 2M'],
+        schedulers: ['karras'],
+      })
+    })
+
+    it('keeps the samplers and names the minimum version when there is no schedulers route', async () => {
+      vi.mocked(imageGetFetch).mockImplementation(async (url, _headers, options) =>
+        String(url).endsWith('/schedulers') && options?.allowStatuses?.includes(404)
+          ? missing
+          : reply([{ name: 'Euler a' }]),
+      )
+      const info = await createA1111Provider({ apiKey: '' }).getSamplerInfo!()
+      expect(info.samplers).toEqual(['Euler a'])
+      expect(info.schedulers).toEqual([])
+      expect(info.schedulersUnavailable).toContain('1.9.1')
+    })
+
+    it('rejects when the samplers request fails or the schedulers one fails otherwise', async () => {
+      vi.mocked(imageGetFetch).mockImplementation(async (url) => {
+        if (String(url).endsWith('/samplers')) throw new Error('Image API error 404')
+        return reply([])
+      })
+      await expect(createA1111Provider({ apiKey: '' }).getSamplerInfo!()).rejects.toThrow('404')
+
+      vi.mocked(imageGetFetch).mockImplementation(async (url) => {
+        if (String(url).endsWith('/schedulers')) throw new Error('Image API error 500')
+        return reply([])
+      })
+      await expect(createA1111Provider({ apiKey: '' }).getSamplerInfo!()).rejects.toThrow('500')
+    })
+
+    it('rejects a reply that is not a list', async () => {
+      vi.mocked(imageGetFetch).mockResolvedValue(reply('<html></html>'))
+      await expect(createA1111Provider({ apiKey: '' }).getSamplerInfo!()).rejects.toThrow(
+        'did not return a list',
+      )
+    })
+  })
+
   it('makes no OpenAI request without a key', async () => {
     expect(await createOpenAIProvider({ apiKey: '' }).listModels('')).toEqual([])
     expect(imageGetFetch).not.toHaveBeenCalled()
