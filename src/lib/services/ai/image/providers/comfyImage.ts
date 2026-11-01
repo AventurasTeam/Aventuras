@@ -462,7 +462,15 @@ export function createComfyImage(settings: ComfyImageSettings) {
               cancel = 'never'
               throw await failure(queued, queueUrl, body)
             }
-            const accepted = QueuedPrompt.parse(await queued.json())
+            const queuedText = await queued.text()
+            const queuedReply = QueuedPrompt.safeParse(parseJson(queuedText))
+            if (!queuedReply.success) {
+              throw new InvalidResponseDataError({
+                data: queuedText.slice(0, 200),
+                message: `ComfyUI returned an unreadable queue response: ${responseExcerpt(queuedText, queued.status)}`,
+              })
+            }
+            const accepted = queuedReply.data
             promptId = accepted.prompt_id
             cancel = 'once'
 

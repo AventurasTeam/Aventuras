@@ -267,6 +267,16 @@ describe('request', () => {
     expect(String(pollMock.mock.calls[0][0])).toBe(`${BASE_URL}/api/jobs/server-id`)
   })
 
+  it.each([
+    ['a reply of the wrong shape', () => json({ unexpected: true })],
+    ['a reply that is not JSON', () => new Response('<html>oops</html>')],
+  ])('reports %s from the queue as an unreadable response', async (_name, reply) => {
+    serve({ prompt: reply })
+    const error = await rejection(model().doGenerate(callOptions()))
+    expect(InvalidResponseDataError.isInstance(error)).toBe(true)
+    expect((error as Error).message).toContain('unreadable queue response')
+  })
+
   it('warns when size has nowhere to go, and for aspect ratio, unused files and mask', async () => {
     const { width: _w, height: _h, ...paths } = PATHS
     const result = await model().doGenerate(
