@@ -3,11 +3,13 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { getRollbackCounts, undoLastAction } from '@/lib/actions'
 import { REF_COLUMNS, rowRefs } from '@/lib/actions/delta/live-refs'
+import { isContentEditDelta } from '@/lib/actions/story-entries/classifier-facts'
 import { deltas, storyEntries, type Delta } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { ID_PATTERN, IdBiMap, SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
 import { detectRichEntryHtml, parseMarkdownToHtml } from '@/lib/markdown'
 import { entriesStore, resetAllStores } from '@/lib/stores'
+import { countTokens } from '@/lib/tokens'
 import { selectUndoTarget } from '@/lib/undo'
 
 import { buildSeedSteps } from './seed-dataset'
@@ -371,6 +373,40 @@ describe('seeded rollback', () => {
     expect(target).toBeNull()
     expect(selected).toContain('act_create_br_hero_main_entry_hero_0022')
     expect(selected).not.toContain('act_class_1')
+  })
+})
+
+// Over every row, never by entry position: seeded chapter boundaries can move.
+describe('seeded content tokens', () => {
+  type EntryRow = { id: string; kind: string; content: string; contentTokens?: number | null }
+
+  function entries(): EntryRow[] {
+    return rowsOf('story_entries') as EntryRow[]
+  }
+
+  it('counts every non-system row from its stored content', () => {
+    const counted = entries().filter((e) => e.kind !== 'system')
+    expect(counted.length).toBeGreaterThan(100)
+    for (const entry of counted) {
+      expect(entry.contentTokens, entry.id).toBe(countTokens(entry.content))
+      expect(entry.contentTokens, entry.id).toBeGreaterThan(0)
+    }
+  })
+
+  it('leaves system rows uncounted, as writeSystemEntry does', () => {
+    const system = entries().filter((e) => e.kind === 'system')
+    expect(system.length).toBeGreaterThan(0)
+    for (const entry of system) expect(entry.contentTokens ?? null, entry.id).toBeNull()
+  })
+
+  // A payload holding only the text would restore it and leave the edited count on the row.
+  it('records the old count in every seeded content edit', () => {
+    const edits = (rowsOf('deltas') as unknown as Delta[]).filter(isContentEditDelta)
+    expect(edits.length).toBeGreaterThan(0)
+    for (const edit of edits) {
+      const payload = edit.undoPayload as { content: string; contentTokens?: number }
+      expect(payload.contentTokens, edit.id).toBe(countTokens(payload.content))
+    }
   })
 })
 
