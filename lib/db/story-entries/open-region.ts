@@ -10,7 +10,7 @@ export type OpenRegionRow = {
   tokens: number
 }
 
-/** data-model.md → Chapters / memory system: a branch's entries no chapter has closed over. */
+/** data-model.md → Chapters / memory system: a branch's non-`system` entries no chapter has closed over. */
 export function openRegionWhere(branchId: string): SQL | undefined {
   return and(
     eq(storyEntries.branchId, branchId),

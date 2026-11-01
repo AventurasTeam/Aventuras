@@ -36,7 +36,7 @@ const row = (
 describe('openRegionSeries', () => {
   it('returns every row of a 60-row region in position order, across gaps', async () => {
     const db = await seedBranches()
-    // Newest first, with createdAt running against position: only a position sort restores it.
+    // Inserted newest first, with createdAt running against position.
     const positions = Array.from({ length: 60 }, (_, i) => (60 - i) * 3)
     await db
       .insert(storyEntries)
