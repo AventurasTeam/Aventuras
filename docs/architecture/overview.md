@@ -591,6 +591,18 @@ release with a single job-status route and a cancel that can only stop the app's
 someone else's. Older servers are refused with a message asking the user to update; a server that
 cannot be asked its version is let through.
 
+**Parsing replies from these servers.** The parsing of a response follows what the response is for:
+
+1. An error body is parsed with `safeParse` and falls back to the raw excerpt, so the original failure is
+   never masked.
+2. A reply the operation depends on is parsed with `safeParse`, and a failure throws a readable error whose
+   first line names the endpoint, followed by `z.prettifyError` or a body excerpt. It is never a raw
+   `ZodError` (its message is multi-line JSON and shows as `[`), and never an empty result in its place: a
+   server that answers 200 with something else is not the server the profile names, and the form shows that.
+3. A best-effort probe, such as the ComfyUI system stats or a job cancel, may swallow its failure, because
+   the request that matters reports its own.
+4. In a list, an entry that does not match is skipped; a reply that is not a list throws.
+
 Resolution is chosen as an **intent** — orientation (1:1 / 16:9 / 9:16) plus one of four size
 steps — and each adapter turns it into what its backend accepts: an aspect ratio plus an `imageSize`
 tier where the model has them for Google (its capabilities are a table in the adapter, because

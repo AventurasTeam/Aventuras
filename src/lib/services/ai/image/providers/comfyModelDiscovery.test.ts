@@ -77,11 +77,11 @@ describe('ComfyUI model discovery', () => {
     for (const [, , options] of calls) expect(options?.signal).toBe(signal)
   })
 
-  it('lists LoRAs, and none when the folder cannot be read', async () => {
+  it('lists LoRAs, and rejects when the folder cannot be read', async () => {
     serveModels({ loras: ['detail.safetensors'] })
     expect(await createComfyProvider({ apiKey: '' }).listLoras!()).toEqual(['detail.safetensors'])
     serveModels({})
-    expect(await createComfyProvider({ apiKey: '' }).listLoras!()).toEqual([])
+    await expect(createComfyProvider({ apiKey: '' }).listLoras!()).rejects.toThrow('404')
   })
 
   it('reads samplers and schedulers from the KSampler node', async () => {
@@ -127,6 +127,13 @@ describe('ComfyUI model discovery', () => {
     expect(error).toBeInstanceOf(Error)
     expect((error as Error).message.split('\n')[0]).toBe(
       'ComfyUI sent an unreadable /object_info/KSampler reply',
+    )
+  })
+
+  it('rejects a model folder reply that is not a list', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(reply('<html></html>'))
+    await expect(createComfyProvider({ apiKey: '' }).listLoras!()).rejects.toThrow(
+      'ComfyUI /models/loras did not return a list',
     )
   })
 

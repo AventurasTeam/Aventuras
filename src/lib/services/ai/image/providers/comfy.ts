@@ -693,11 +693,7 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
     },
 
     async listLoras(signal?: AbortSignal): Promise<string[]> {
-      try {
-        return await fetchModels('loras', signal)
-      } catch {
-        return []
-      }
+      return fetchModels('loras', signal)
     },
 
     async getSamplerInfo(signal?: AbortSignal): Promise<ComfySamplerInfo> {

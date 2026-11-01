@@ -12,6 +12,7 @@ import type { ImageModelCapabilities, ImageProfile, ImageProviderType } from '#l
 import { parseImageSpec, describeImageSpec, type ImageSpec } from '#lib/utils/image.ts'
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type {
+  ComfySamplerInfo,
   ImageProvider,
   ImageProviderConfig,
   ImageGenerateResult,
@@ -481,51 +482,30 @@ export async function lookupModelCapabilities(
   return models.find((m) => m.id === model)
 }
 
-/**
- * Get sampler/scheduler info for a ComfyUI or A1111 provider.
- */
+/** Sampler and scheduler names for a ComfyUI or A1111 server. Rejects when the server cannot be read. */
 export async function getProviderSamplerInfo(
   baseUrl?: string,
   providerType: Extract<ImageProviderType, 'comfyui' | 'a1111'> = 'comfyui',
   signal?: AbortSignal,
-): Promise<{ samplers: string[]; schedulers: string[] }> {
-  try {
-    const config: ImageProviderConfig = {
-      apiKey: '',
-      baseUrl,
-      timeoutMs: settings.apiSettings.llmTimeoutMs,
-    }
-    const provider =
-      providerType === 'a1111' ? createA1111Provider(config) : createComfyProvider(config)
-    if (provider.getSamplerInfo) {
-      return await provider.getSamplerInfo(signal)
-    }
-    return { samplers: [], schedulers: [] }
-  } catch (error) {
-    if (!isAbortError(error)) log('Error getting sampler info', { error })
-    return { samplers: [], schedulers: [] }
+): Promise<ComfySamplerInfo> {
+  const config: ImageProviderConfig = {
+    apiKey: '',
+    baseUrl,
+    timeoutMs: settings.apiSettings.llmTimeoutMs,
   }
+  const provider =
+    providerType === 'a1111' ? createA1111Provider(config) : createComfyProvider(config)
+  return (await provider.getSamplerInfo?.(signal)) ?? { samplers: [], schedulers: [] }
 }
 
-/**
- * List available LoRAs for a ComfyUI provider.
- */
+/** LoRA names for a ComfyUI server. Rejects when the server cannot be read. */
 export async function listLoras(baseUrl?: string, signal?: AbortSignal): Promise<string[]> {
-  try {
-    const config: ImageProviderConfig = {
-      apiKey: '',
-      baseUrl,
-      timeoutMs: settings.apiSettings.llmTimeoutMs,
-    }
-    const provider = createComfyProvider(config)
-    if (provider.listLoras) {
-      return await provider.listLoras(signal)
-    }
-    return []
-  } catch (error) {
-    if (!isAbortError(error)) log('Error getting LoRA list', { error })
-    return []
-  }
+  const provider = createComfyProvider({
+    apiKey: '',
+    baseUrl,
+    timeoutMs: settings.apiSettings.llmTimeoutMs,
+  })
+  return (await provider.listLoras?.(signal)) ?? []
 }
 
 // Re-export types for convenience
