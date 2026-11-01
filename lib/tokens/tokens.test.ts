@@ -132,6 +132,15 @@ describe('countTokens on long runs', () => {
     expect(encodedParts(atTheCut)).toEqual([atTheCut])
   })
 
+  // No spaces around the newlines: with them the whitespace run would be 514 long and rightly cut.
+  it.each([
+    ['non-whitespace', `intro ${'x'.repeat(512)} outro`],
+    ['emoji', `intro ${'😀'.repeat(512)} outro`],
+    ['whitespace', `intro${'\n'.repeat(512)}outro`],
+  ])('sends text around a 512-long %s run once, whole', (_name, text) => {
+    expect(encodedParts(text)).toEqual([text])
+  })
+
   // The offset matters: 512 is even, so a cut by UTF-16 unit lands between the pairs of a run
   // of nothing but emoji, and only a preceding single unit puts it inside one.
   it.each([
