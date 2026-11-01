@@ -121,6 +121,15 @@ describe('ComfyUI model discovery', () => {
     expect(info).toEqual({ samplers: ['euler', 'dpmpp_2m'], schedulers: ['karras', 'simple'] })
   })
 
+  it('names the endpoint on the first line of an unreadable KSampler reply', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(reply({ KSampler: { input: {} } }))
+    const error = await createComfyProvider({ apiKey: '' }).getSamplerInfo!().catch((e: Error) => e)
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message.split('\n')[0]).toBe(
+      'ComfyUI sent an unreadable /object_info/KSampler reply',
+    )
+  })
+
   it('finds no choices in an input of another type', async () => {
     vi.mocked(imageGetFetch).mockResolvedValue(
       reply({

@@ -706,8 +706,13 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
         timeoutMs: config.timeoutMs,
         signal,
       })
-      const { sampler_name, scheduler } = KSamplerInfo.parse(await response.json()).KSampler.input
-        .required
+      const info = KSamplerInfo.safeParse(await response.json())
+      if (!info.success) {
+        throw new Error(
+          `ComfyUI sent an unreadable /object_info/KSampler reply\n${z.prettifyError(info.error)}`,
+        )
+      }
+      const { sampler_name, scheduler } = info.data.KSampler.input.required
       return { samplers: choices(sampler_name), schedulers: choices(scheduler) }
     },
   }
