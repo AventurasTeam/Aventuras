@@ -45,7 +45,6 @@
   import * as Alert from '#lib/components/ui/alert/index.ts'
   import { Card, CardContent } from '#lib/components/ui/card/index.ts'
   import * as Collapsible from '#lib/components/ui/collapsible/index.ts'
-  import { SvelteSet } from 'svelte/reactivity'
   import IconRow from '#lib/components/ui/icon-row.svelte'
   import ImageResolutionSelector from '#lib/components/settings/ImageResolutionSelector.svelte'
   import { defaultImageSpec, normalizeImageDataUrl, type ImageSpec } from '#lib/utils/image.ts'
@@ -129,7 +128,6 @@
   let profileBaseUrl = $state('')
   let showApiKey = $state(false)
   let showCopyDropdown = $state(false)
-  let openProfileIds = new SvelteSet<string>()
 
   // Profile form model state
   let profileModel = $state('')
@@ -567,7 +565,6 @@
     availableVaes = []
     showApiKey = false
     showCopyDropdown = false
-    openProfileIds.clear()
   }
 
   function startEditProfile(profile: ImageProfile) {
@@ -634,7 +631,6 @@
 
     showApiKey = false
     showCopyDropdown = false
-    openProfileIds.add(profile.id)
   }
 
   function resetEditState() {
@@ -677,7 +673,6 @@
         saveEditingProfile()
         resetEditState()
       }
-      openProfileIds.delete(profile.id)
     }
   }
 
@@ -935,7 +930,7 @@
             {#each settings.imageProfiles as profile (profile.id)}
               <div class="bg-card text-card-foreground rounded-lg border shadow-sm">
                 <Collapsible.Root
-                  open={openProfileIds.has(profile.id)}
+                  open={!isNewProfile && editingProfileId === profile.id}
                   onOpenChange={(open) => handleProfileOpenChange(open, profile)}
                 >
                   <div class="flex items-center gap-3 p-3 pl-4">
