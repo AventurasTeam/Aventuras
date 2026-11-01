@@ -1,23 +1,39 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { SyncServerInfo, SyncStoryPreview, SyncConnectionData } from '#lib/types/sync.ts'
-import type { AventuraExport } from './export'
+import type {
+  SyncAction,
+  SyncConnectionData,
+  SyncPeer,
+  SyncReceivedItem,
+  SyncServerInfo,
+} from '#lib/types/sync.ts'
+import type { AventuraExport } from '../export'
+import type { PackBindingExport } from '../import'
 // The one piece of the `.avt` exporter sync shares. See the note on `exportStoryToJson` for what
 // is deliberately *not* shared.
-import { gatherPackBinding, NOT_VOUCHED, type ExportTracking } from './export'
-import { marksForExport, recordsForExport } from './stateTracking'
-import { database } from './database'
+import { gatherPackBinding, NOT_VOUCHED, type ExportTracking } from '../export'
+import { marksForExport, recordsForExport } from '../stateTracking'
+import { database } from '../database'
+
+/** Sync alone names the pack's identity: it stays out of `.avt` files. */
+async function withPackSyncId(
+  storyId: string,
+  binding: PackBindingExport,
+): Promise<PackBindingExport> {
+  const packId = await database.getStoryPackId(storyId)
+  const record = packId ? await database.getSyncRecord('pack', packId) : null
+  return record ? { ...binding, packSyncId: record.syncId } : binding
+}
 
 /**
  * Service for local network sync functionality
  */
 class SyncService {
   /**
-   * Start the sync server with all local stories available
-   * @param storiesJson Array of story JSON strings in Aventura export format
+   * Start the sync server
    * @returns Server info including QR code
    */
-  async startServer(storiesJson: string[]): Promise<SyncServerInfo> {
-    return invoke('start_sync_server', { storiesJson })
+  async startServer(): Promise<SyncServerInfo> {
+    return invoke('start_sync_server')
   }
 
   /**
@@ -28,53 +44,42 @@ class SyncService {
   }
 
   /**
-   * Get stories that were pushed to this server
+   * Get items that were pushed to this server
    */
-  async getReceivedStories(): Promise<string[]> {
-    return invoke('get_received_stories')
+  async getReceivedItems(): Promise<SyncReceivedItem[]> {
+    return invoke('get_received_items')
   }
 
   /**
-   * Clear received stories after processing
+   * Clear received items after processing
    */
-  async clearReceivedStories(): Promise<void> {
-    return invoke('clear_received_stories')
+  async clearReceivedItems(): Promise<void> {
+    return invoke('clear_received_items')
   }
 
   /**
-   * Connect to a remote sync server and list available stories
+   * Send one request to a remote sync server
+   * @returns The remote webview's JSON, or null for a push
    */
-  async connect(connection: SyncConnectionData): Promise<SyncStoryPreview[]> {
-    return invoke('sync_connect', {
+  async request(
+    connection: SyncConnectionData,
+    peer: SyncPeer,
+    action: SyncAction,
+  ): Promise<string | null> {
+    return invoke('sync_request', {
       ip: connection.ip,
       port: connection.port,
       token: connection.token,
+      peer,
+      action,
     })
   }
 
   /**
-   * Pull a story from a remote server
-   * @returns Story JSON in Aventura export format
+   * Answer a request forwarded by this device's server
    */
-  async pullStory(connection: SyncConnectionData, storyId: string): Promise<string> {
-    return invoke('sync_pull_story', {
-      ip: connection.ip,
-      port: connection.port,
-      token: connection.token,
-      storyId,
-    })
-  }
-
-  /**
-   * Push a story to a remote server
-   */
-  async pushStory(connection: SyncConnectionData, storyJson: string): Promise<void> {
-    return invoke('sync_push_story', {
-      ip: connection.ip,
-      port: connection.port,
-      token: connection.token,
-      storyJson,
-    })
+  async respond(requestId: string, answer: { data?: string; error?: string }): Promise<void> {
+    return invoke('sync_respond', { requestId, ...answer })
   }
 
   /**
@@ -160,29 +165,10 @@ class SyncService {
       worldStateMarks,
       // Omitted rather than written as null, so a story with no pack keeps the shape that takes
       // the legacy import path — matching what `exportToAventura` produces.
-      ...(packBinding ? { packBinding } : {}),
+      ...(packBinding ? { packBinding: await withPackSyncId(storyId, packBinding) } : {}),
     }
 
     return JSON.stringify(exportData)
-  }
-
-  /**
-   * Export all stories to JSON strings
-   */
-  async exportAllStoriesToJson(tracking: ExportTracking = NOT_VOUCHED): Promise<string[]> {
-    const allStories = await database.getAllStories()
-    const exports: string[] = []
-
-    for (const s of allStories) {
-      try {
-        const json = await this.exportStoryToJson(s.id, tracking)
-        exports.push(json)
-      } catch (e) {
-        console.error(`Failed to export story ${s.id}:`, e)
-      }
-    }
-
-    return exports
   }
 
   /**
@@ -199,6 +185,7 @@ class SyncService {
         port: parsed.port,
         token: parsed.token,
         version: parsed.version, // May be undefined for older QR codes
+        protocol: parsed.protocol,
       }
     } catch {
       throw new Error('Invalid QR code data')
@@ -206,45 +193,10 @@ class SyncService {
   }
 
   /**
-   * Check if a story with the given title already exists locally
-   */
-  async checkStoryExists(title: string): Promise<boolean> {
-    const allStories = await database.getAllStories()
-    return allStories.some((s) => s.title === title)
-  }
-
-  /**
-   * Find story ID by title (for replacement)
-   */
-  async findStoryIdByTitle(title: string): Promise<string | null> {
-    const allStories = await database.getAllStories()
-    const found = allStories.find((s) => s.title === title)
-    return found?.id ?? null
-  }
-
-  /**
    * Delete a story by ID
    */
   async deleteStory(storyId: string): Promise<void> {
     await database.deleteStory(storyId)
-  }
-
-  /**
-   * Get story preview from JSON string
-   */
-  getStoryPreview(json: string): SyncStoryPreview | null {
-    try {
-      const data: AventuraExport = JSON.parse(json)
-      return {
-        id: data.story.id,
-        title: data.story.title,
-        genre: data.story.genre ?? null,
-        updatedAt: data.story.updatedAt,
-        entryCount: data.entries.length,
-      }
-    } catch {
-      return null
-    }
   }
 }
 

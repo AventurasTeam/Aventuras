@@ -3,20 +3,21 @@ use image::Luma;
 use qrcode::QrCode;
 use std::io::Cursor;
 use std::sync::Arc;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use super::server::{ServerState, StoriesData, bind_listener, build_router, spawn_server};
+use super::server::{ServerState, WEBVIEW_TIMEOUT, bind_listener, build_router, spawn_server};
 use super::types::{
-    QrCodeData, SyncAction, SyncRequest, SyncResponse, SyncServerInfo, SyncStoryPreview,
+    PROTOCOL_VERSION, QrCodeData, ReceivedItem, SyncAction, SyncPeer, SyncRequest, SyncResponse,
+    SyncServerInfo,
 };
 
 /// State managed by Tauri for sync operations
 pub struct SyncState {
     /// Handle to the running server task
     server_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
-    /// Current server state (for accessing received stories)
+    /// Current server state (for accessing received items)
     server_state: Arc<Mutex<Option<ServerState>>>,
 }
 
@@ -51,44 +52,11 @@ fn get_local_ip() -> Result<String, String> {
         .map_err(|e| format!("Failed to get local IP: {}", e))
 }
 
-/// Parse story preview from Aventura export JSON
-fn parse_story_preview(json: &str) -> Result<SyncStoryPreview, String> {
-    let data: serde_json::Value =
-        serde_json::from_str(json).map_err(|e| format!("Invalid JSON: {}", e))?;
-
-    let story = data.get("story").ok_or("Missing 'story' field in export")?;
-    let entries = data
-        .get("entries")
-        .and_then(|e| e.as_array())
-        .map(|a| a.len())
-        .unwrap_or(0);
-
-    Ok(SyncStoryPreview {
-        id: story
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string(),
-        title: story
-            .get("title")
-            .and_then(|v| v.as_str())
-            .unwrap_or("Untitled")
-            .to_string(),
-        genre: story
-            .get("genre")
-            .and_then(|v| v.as_str())
-            .map(String::from),
-        updated_at: story.get("updatedAt").and_then(|v| v.as_i64()).unwrap_or(0),
-        entry_count: entries,
-    })
-}
-
-/// Start the sync server with available stories
+/// Start the sync server
 #[tauri::command]
 pub async fn start_sync_server(
     app: AppHandle,
     state: State<'_, SyncState>,
-    stories_json: Option<Vec<String>>,
 ) -> Result<SyncServerInfo, String> {
     // Stop any existing server first
     stop_sync_server(state.clone()).await?;
@@ -97,25 +65,12 @@ pub async fn start_sync_server(
     let token = Uuid::new_v4().to_string();
 
     // Create server state
-    let server_state = ServerState::new(token.clone());
-
-    // Add stories if provided
-    if let Some(stories) = stories_json {
-        let mut stories_data = server_state.stories.lock().await;
-        for story_json in stories {
-            match parse_story_preview(&story_json) {
-                Ok(preview) => {
-                    stories_data.push(StoriesData {
-                        preview,
-                        full_data: story_json,
-                    });
-                }
-                Err(e) => {
-                    eprintln!("Failed to parse story: {}", e);
-                }
-            }
-        }
-    }
+    let emitter = app.clone();
+    let server_state = ServerState::new(token.clone(), move |request| {
+        emitter
+            .emit("sync://request", request)
+            .map_err(|e| format!("Failed to reach the app: {}", e))
+    });
 
     // Bind listener before starting the server task
     let listener = bind_listener().await?;
@@ -133,6 +88,7 @@ pub async fn start_sync_server(
         port,
         token: token.clone(),
         version: app.package_info().version.to_string(),
+        protocol: PROTOCOL_VERSION,
     };
     let qr_json = serde_json::to_string(&qr_data)
         .map_err(|e| format!("Failed to serialize QR data: {}", e))?;
@@ -165,48 +121,74 @@ pub async fn stop_sync_server(state: State<'_, SyncState>) -> Result<(), String>
     Ok(())
 }
 
-/// Get stories that were pushed to this server
+/// The webview's answer to a `sync://request`
 #[tauri::command]
-pub async fn get_received_stories(state: State<'_, SyncState>) -> Result<Vec<String>, String> {
+pub async fn sync_respond(
+    state: State<'_, SyncState>,
+    request_id: String,
+    data: Option<String>,
+    error: Option<String>,
+) -> Result<(), String> {
+    if let Some(ref ss) = *state.server_state.lock().await {
+        let result = match error {
+            Some(message) => Err(message),
+            None => Ok(data.unwrap_or_default()),
+        };
+        ss.answer(&request_id, result).await;
+    }
+    Ok(())
+}
+
+/// Get items that were pushed to this server
+#[tauri::command]
+pub async fn get_received_items(state: State<'_, SyncState>) -> Result<Vec<ReceivedItem>, String> {
     let server_state = state.server_state.lock().await;
     if let Some(ref ss) = *server_state {
-        let received = ss.received_stories.lock().await;
+        let received = ss.received.lock().await;
         Ok(received.clone())
     } else {
         Ok(Vec::new())
     }
 }
 
-/// Clear received stories after processing
+/// Clear received items after processing
 #[tauri::command]
-pub async fn clear_received_stories(state: State<'_, SyncState>) -> Result<(), String> {
+pub async fn clear_received_items(state: State<'_, SyncState>) -> Result<(), String> {
     let server_state = state.server_state.lock().await;
     if let Some(ref ss) = *server_state {
-        let mut received = ss.received_stories.lock().await;
-        received.clear();
+        ss.received.lock().await.clear();
     }
     Ok(())
 }
 
-/// Connect to a remote sync server and list available stories
+/// Send one request to a remote sync server. Answers with the remote webview's JSON, or nothing
+/// for an action the server handles itself.
 #[tauri::command]
-pub async fn sync_connect(
+pub async fn sync_request(
     ip: String,
     port: u16,
     token: String,
-) -> Result<Vec<SyncStoryPreview>, String> {
+    peer: SyncPeer,
+    action: SyncAction,
+) -> Result<Option<String>, String> {
     let url = format!("http://{}:{}/sync", ip, port);
 
     let request = SyncRequest {
         token,
-        action: SyncAction::ListStories,
+        protocol: PROTOCOL_VERSION,
+        peer,
+        action,
     };
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Connection failed: {}", e))?;
     let response = client
         .post(&url)
         .json(&request)
-        .timeout(std::time::Duration::from_secs(10))
+        // Past the server's wait, so its own timeout is the one reported.
+        .timeout(WEBVIEW_TIMEOUT + std::time::Duration::from_secs(30))
         .send()
         .await
         .map_err(|e| format!("Connection failed: {}", e))?;
@@ -217,82 +199,8 @@ pub async fn sync_connect(
         .map_err(|e| format!("Invalid response: {}", e))?;
 
     match sync_response {
-        SyncResponse::StoriesList { stories } => Ok(stories),
+        SyncResponse::Reply { data } => Ok(Some(data)),
+        SyncResponse::Success { .. } => Ok(None),
         SyncResponse::Error { message } => Err(message),
-        _ => Err("Unexpected response type".to_string()),
-    }
-}
-
-/// Pull a story from a remote server
-#[tauri::command]
-pub async fn sync_pull_story(
-    ip: String,
-    port: u16,
-    token: String,
-    story_id: String,
-) -> Result<String, String> {
-    let url = format!("http://{}:{}/sync", ip, port);
-
-    let request = SyncRequest {
-        token,
-        action: SyncAction::PullStory { story_id },
-    };
-
-    let client = reqwest::Client::new();
-    let response = client
-        .post(&url)
-        .json(&request)
-        .timeout(std::time::Duration::from_secs(30))
-        .send()
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
-
-    let sync_response: SyncResponse = response
-        .json()
-        .await
-        .map_err(|e| format!("Invalid response: {}", e))?;
-
-    match sync_response {
-        SyncResponse::StoryData { data } => Ok(data),
-        SyncResponse::Error { message } => Err(message),
-        _ => Err("Unexpected response type".to_string()),
-    }
-}
-
-/// Push a story to a remote server
-#[tauri::command]
-pub async fn sync_push_story(
-    ip: String,
-    port: u16,
-    token: String,
-    story_json: String,
-) -> Result<(), String> {
-    let url = format!("http://{}:{}/sync", ip, port);
-
-    let request = SyncRequest {
-        token,
-        action: SyncAction::PushStory {
-            story_data: story_json,
-        },
-    };
-
-    let client = reqwest::Client::new();
-    let response = client
-        .post(&url)
-        .json(&request)
-        .timeout(std::time::Duration::from_secs(30))
-        .send()
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
-
-    let sync_response: SyncResponse = response
-        .json()
-        .await
-        .map_err(|e| format!("Invalid response: {}", e))?;
-
-    match sync_response {
-        SyncResponse::Success { .. } => Ok(()),
-        SyncResponse::Error { message } => Err(message),
-        _ => Err("Unexpected response type".to_string()),
     }
 }
