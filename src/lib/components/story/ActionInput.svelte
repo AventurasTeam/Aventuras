@@ -42,7 +42,11 @@
     setKeepAliveStage,
     supportsBackgroundGeneration,
   } from '#lib/utils/backgroundKeepAlive.ts'
-  import { findPrecedingUserAction, GENERATION_ERROR_SOURCE } from '#lib/utils/storyEntries.ts'
+  import {
+    findPrecedingUserAction,
+    GENERATION_ERROR_SOURCE,
+    trailingAction,
+  } from '#lib/utils/storyEntries.ts'
   import { errMessage } from '#lib/utils/error.ts'
   import {
     GenerationPipeline,
@@ -62,7 +66,6 @@
     type BackgroundTaskInput,
     type PipelineUICallbacks,
     type PipelineEventState,
-    type RestoreResult,
   } from '#lib/services/generation/index.ts'
   import { InlineImageTracker } from '#lib/services/ai/image/index.ts'
   import { sameBranchScope, type BranchScope } from '#lib/utils/branchScope.ts'
@@ -138,7 +141,8 @@
   let isRawActionChoice = $state(false)
   let stopRequested = false
   let activeAbortController: AbortController | null = null
-  // Set once the narration is saved: what follows does not honour the abort, so Stop cannot end it.
+  // Set once the narration is complete: what follows does not honour the abort, and a Stop
+  // past this point would leave a saved narration without its world update.
   let stopUnavailable = $state(false)
   let textareaRef: HTMLTextAreaElement | null = $state(null)
 
@@ -243,6 +247,11 @@
   $effect(() => {
     ui.setRegenerateNarrationCallback(handleRegenerateNarration)
     return () => ui.setRegenerateNarrationCallback(null)
+  })
+
+  $effect(() => {
+    ui.setGenerateFromActionCallback(handleGenerateFromAction)
+    return () => ui.setGenerateFromActionCallback(null)
   })
 
   $effect(() => {
@@ -530,7 +539,7 @@
     try {
       await run(lease)
     } finally {
-      await lease.finish()
+      lease.finish()
     }
   }
 
@@ -610,14 +619,10 @@
     const releaseKeepAlive = useBackgroundService
       ? await holdBackgroundKeepAlive(() => {
           keepAliveEnded = true
-          // Before the narration is saved, end the turn like the in-app Stop so the action
-          // returns to the input; afterwards only the later phases are cut short. Without a
-          // backup there is nothing to rewind to, so the abort fails the turn instead.
+          // Before the narration is saved, end the turn like the in-app Stop; afterwards only
+          // the later phases are cut short.
           activeAbortController?.abort()
-          const backup = ui.retryBackup
-          if (!ending.narrationSaved && backup && backup.storyId === story.currentStory?.id) {
-            void handleStopGeneration()
-          }
+          if (!ending.narrationSaved) handleStopGeneration()
         }, settings.experimentalFeatures.generationNotifications)
       : () => {}
     let turnRecordId = ''
@@ -796,6 +801,8 @@
 
         if (event.type === 'phase_complete' && event.phase === 'narrative' && fullResponse.trim()) {
           generationMeta.generationTime = Date.now() - generationStartedAt
+          // Before the await: a Stop during the save would end the turn short of its world update.
+          stopUnavailable = true
           narrationEntry = await story.addEntry(
             'narration',
             fullResponse,
@@ -805,7 +812,6 @@
             narrationEntryId,
           )
           ui.endStreaming()
-          stopUnavailable = true
           ending.narrationSaved = true
           setKeepAliveStage('world')
           emitNarrativeResponse(narrationEntry.id, fullResponse)
@@ -1282,97 +1288,20 @@
     })
   }
 
-  // A retry runs its own rewind, which a Stop part way through would contend with.
   const stopBlockedBy = $derived(
-    ui.isRetryingLastMessage
-      ? 'Stop is not available during a retry.'
-      : stopUnavailable
-        ? 'Stop is not available at the moment: the turn is finishing steps that cannot be interrupted.'
-        : null,
+    stopUnavailable
+      ? 'Stop is not available at the moment: the turn is finishing steps that cannot be interrupted.'
+      : null,
   )
 
-  async function handleStopGeneration() {
+  // Abandons the request and leaves the action in place, for the reader to generate from or edit.
+  function handleStopGeneration() {
     if (stopRequested || stopBlockedBy) return
 
     stopRequested = true
     activeAbortController?.abort()
     ui.endStreaming()
     ui.setGenerating(false)
-
-    const backup = ui.retryBackup
-    if (!backup || !story.currentStory || backup.storyId !== story.currentStory.id) {
-      if (backup) ui.clearRetryBackup()
-      return
-    }
-
-    // Read when the rewind actually runs, not now: it is deferred until the generation
-    // drains, and another story can be opened in between. Capturing here would hand the
-    // service a scope that was true only at the moment Stop was pressed.
-    const activeScope = () => ({
-      storyId: story.currentStory?.id ?? '',
-      branchId: story.currentStory?.currentBranchId ?? null,
-    })
-    const runRestore = () =>
-      retryService.handleStopGeneration(
-        backup,
-        {
-          restoreFromRetryBackup: story.restoreFromRetryBackup.bind(story),
-          deleteEntriesFromPosition: story.deleteEntriesFromPosition.bind(story),
-          deleteEntitiesCreatedAfterBackup: story.deleteEntitiesCreatedAfterBackup.bind(story),
-          restoreCharacterSnapshots: story.restoreCharacterSnapshots.bind(story),
-          restoreTimeTrackerSnapshot: story.restoreTimeTrackerSnapshot.bind(story),
-          assertEntriesRemovable: story.assertEntriesRemovable.bind(story),
-          rewindThroughRecords: (position) => story.rewindForRetry(position),
-          lockRetryInProgress: story.lockRetryInProgress.bind(story),
-          unlockRetryInProgress: story.unlockRetryInProgress.bind(story),
-          restoreActivationData: ui.restoreActivationData.bind(ui),
-          clearActivationData: () => ui.clearActivationData(),
-          setLastLorebookRetrieval: ui.setLastLorebookRetrieval.bind(ui),
-        },
-        {
-          clearGenerationError: () => ui.clearGenerationError(),
-          clearSuggestions: () => ui.clearSuggestions(story.currentStory!.id),
-          clearActionChoices: () => ui.clearActionChoices(story.currentStory!.id),
-        },
-        activeScope(),
-      )
-
-    // Aborting the request is not the end of the generation's writes: a classification
-    // already entered keeps going. Hand the rewind to the lease, which runs it once those
-    // have drained and only then gives the branch up. The lease's holder releases, not this.
-    let result: RestoreResult
-    const lease = story.currentGenerationLease
-    if (lease) {
-      let deferred: RestoreResult | undefined
-      const settled = lease.deferRestore(async () => {
-        deferred = await runRestore()
-      })
-      if (settled) {
-        await settled
-        result = deferred ?? { success: false, error: 'The restore did not run' }
-      } else {
-        result = await runRestore()
-      }
-    } else {
-      result = await runRestore()
-    }
-
-    if (!result.success) {
-      // The backup is the only way back to the pre-action story, so a refused restore keeps it.
-      ui.showToast(result.error ?? 'Could not restore the story', 'error')
-      return
-    }
-
-    // Cleared only now: a refused restore leaves the story untouched, so wiping lorebook
-    // stickiness and the retrieval cache on the way in would be the one thing preflight
-    // exists to prevent. RetryService clears the lorebook debug state itself once it commits.
-    ui.setLastRetrievalResult(null)
-
-    await tick()
-    actionType = (result.restoredActionType as ActionType) ?? actionType
-    isRawActionChoice = result.restoredWasRawActionChoice ?? false
-    inputValue = result.restoredRawInput ?? ''
-    ui.clearRetryBackup(true)
   }
 
   async function handleRetry() {
@@ -1457,6 +1386,25 @@
     })
   }
 
+  /** Answer an action that ends the story: nothing to undo, so the turn starts from there. */
+  async function handleGenerateFromAction(entryId: string) {
+    if (ui.isGenerating || story.isGenerationLeaseHeld || !story.currentStory) return
+
+    const userActionEntry = trailingAction(story.entries)
+    if (userActionEntry?.id !== entryId) return
+    const storyId = story.currentStory.id
+
+    await withGenerationLease(async (lease) => {
+      ui.clearSuggestions(storyId)
+      const cachedRetrieval = retrievalKeyFor(userActionEntry.content)
+      await generateResponse(lease, userActionEntry.id, userActionEntry.content, {
+        countStyleReview: false,
+        styleReviewSource: 'generate-from-action',
+        cachedRetrievalResult: cachedRetrieval ? ui.retrievalResultFor(cachedRetrieval) : null,
+      })
+    })
+  }
+
   async function handleRetryLastMessage(keep?: RevertKeep) {
     const backup = ui.retryBackup
     console.log('[handleRetryLastMessage] called', {
@@ -1524,17 +1472,12 @@
       // matches once the restore has put the story back where retrieval ran.
       const cacheKey = retrievalKeyFor(promptContent)
 
-      ui.setRetryingLastMessage(true)
-      try {
-        await generateResponse(lease, userActionEntry.id, promptContent, {
-          countStyleReview: false,
-          styleReviewSource: 'retry-last-message',
-          cachedRetrievalResult: cacheKey ? ui.retrievalResultFor(cacheKey) : null,
-          inputTranslation,
-        })
-      } finally {
-        ui.setRetryingLastMessage(false)
-      }
+      await generateResponse(lease, userActionEntry.id, promptContent, {
+        countStyleReview: false,
+        styleReviewSource: 'retry-last-message',
+        cachedRetrievalResult: cacheKey ? ui.retrievalResultFor(cacheKey) : null,
+        inputTranslation,
+      })
     })
   }
 

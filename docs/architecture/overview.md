@@ -460,8 +460,7 @@ a switch is queued but unsettled, and `performBranchSwitch` refuses while a leas
 second check sits inside the queued body rather than at `switchBranch`'s entrance, because a switch
 accepted while idle reaches the front of the queue _after_ a generation may have begun.
 
-Two moments are distinct. **Drained** is when the turn's own writes have settled; **finished**
-is when a rewind deferred by Stop has run too, and only then is the branch given up.
+The lease is held until the turn's own writes have settled, and only then is the branch given up.
 
 The lease does **not** cover the post-turn background tasks — chapter creation and lore
 management are started un-awaited and outlive it. Lore management refuses a write whose branch
@@ -473,13 +472,15 @@ that branch is open. Analyzed images outlive it too; a
 generated portrait is saved only if its story and branch are still open and the character has no
 portrait yet (`story.saveGeneratedPortrait`), and the write — including any copy-on-write
 override — lands on the captured branch and reaches the in-memory list only while that branch is
-still the open one. Stop registers
-its rewind on the lease and waits for it rather than releasing — aborting the request to the model
-is not the completion of the generation's writes, and an `applyClassificationResult` already entered
-keeps going regardless. One release owner throughout, so the rewind cannot race the writes it
-exists to reverse. Once the narration is saved, Stop is refused outright — the button dims and a tap
-explains — since nothing after the narration observes the abort. "Generate a different response"
-refuses it throughout, as its own rewind of the previous turn is already running.
+still the open one. Stop abandons the request and does not release: the holder does, once the turn
+has settled. Stop does not rewind either. Nothing writes the world before the narration, and Stop is
+refused from the moment the narration is complete — the button dims and a tap explains — since nothing
+after it observes the abort. So a Stop on any turn leaves the action as the last entry, and the
+action's card offers **Generate a response** for any action nothing answers, however it got there
+(a Stop, a deleted narration, the app closing mid-turn).
+
+A press on Regenerate locks the entries at once (`ui.regeneratePending`), before the previews that
+precede the lease, so a repeated press starts nothing.
 
 **Why the switch is refused rather than the writes redirected.** `applyClassificationResult` reads
 the active branch and mutates the in-memory `characters`/`locations`/`items`/`storyBeats` arrays,

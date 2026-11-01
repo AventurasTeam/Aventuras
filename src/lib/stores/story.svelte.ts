@@ -5348,11 +5348,6 @@ class StoryStore {
     return lease
   }
 
-  /** The lease a stop or a late write must check itself against, if one is held. */
-  get currentGenerationLease(): GenerationLease | null {
-    return this.generationLease
-  }
-
   /**
    * Switch to a different branch.
    * This reloads entries from the database filtered by the target branch.

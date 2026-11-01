@@ -28,6 +28,7 @@
     X,
     RefreshCw,
     RotateCcw,
+    Send,
     Loader2,
     GitBranch,
     Anchor,
@@ -49,7 +50,11 @@
     resolveTTSSanitizeOptions,
   } from '#lib/services/ai/utils/ttsText.ts'
   import { parseMarkdown, parseStoryMarkdown } from '#lib/utils/markdown.ts'
-  import { findPrecedingUserAction, isGenerationErrorEntry } from '#lib/utils/storyEntries.ts'
+  import {
+    findPrecedingUserAction,
+    isGenerationErrorEntry,
+    trailingAction,
+  } from '#lib/utils/storyEntries.ts'
   import { canCreateCheckpointAt, entryNumber } from '#lib/utils/storyNavigation.ts'
   import { sanitizeTextForTTS } from '#lib/utils/htmlSanitize.ts'
   import {
@@ -212,7 +217,10 @@
   // preparation before a turn and for the drain after Stop, and the store refuses across
   // both. A retry restore rewrites the same entries a generation does, so it counts too.
   const entriesLocked = $derived(
-    ui.isGenerating || story.isRetryInProgress || story.isGenerationLeaseHeld,
+    ui.isGenerating ||
+      ui.regeneratePending ||
+      story.isRetryInProgress ||
+      story.isGenerationLeaseHeld,
   )
 
   // The tracked failure counts only while its error entry ends this story and branch: it is held in
@@ -254,6 +262,8 @@
       !errorPending &&
       !!findPrecedingUserAction(story.entries, entry.id),
   )
+
+  const canGenerate = $derived(trailingAction(story.entries)?.id === entry.id && !entriesLocked)
 
   /**
    * Dismiss/delete this error entry from the story.
@@ -1605,6 +1615,19 @@
             title="Generate a different response"
           >
             <RotateCcw class="h-4 w-4" />
+          </Button>
+        {:else if canGenerate}
+          <Button
+            variant="text"
+            size="icon"
+            onclick={() => void ui.triggerGenerateFromAction(entry.id)}
+            disabled={settings.hasGenerationConfigIssues}
+            class="h-7 w-7 text-amber-700 hover:text-amber-800 dark:text-amber-500 dark:hover:text-amber-600"
+            title={settings.hasGenerationConfigIssues
+              ? 'AI configuration incomplete — check Settings'
+              : 'Generate a response'}
+          >
+            <Send class="h-4 w-4" />
           </Button>
         {/if}
         {#if canBranch}

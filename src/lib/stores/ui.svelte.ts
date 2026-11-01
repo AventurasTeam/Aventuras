@@ -143,6 +143,8 @@ class UIStore {
   deleteEntryId = $state<string | null>(null)
   deleteChapterId = $state<string | null>(null)
   regenerateRequest = $state<{ entryId: string; retry: boolean } | null>(null)
+  // From the press until its generation holds the lease or the reader cancels.
+  regeneratePending = $state(false)
   branchCheckpointId = $state<string | null>(null)
   sidebarOpen = $state(typeof window !== 'undefined' ? window.innerWidth >= 640 : false)
   // Persisted like `sidebarOpen`, but defaults closed at every width: it is a place the
@@ -153,7 +155,6 @@ class UIStore {
   restoreComplete = $state(false)
   restoreCloseHint = $state<string | null>(null)
   isGenerating = $state(false)
-  isRetryingLastMessage = $state(false) // Hide stop button during completed-message retries
   vaultTab = $state<VaultTab>('characters')
 
   // Image generation state. Both are counts, because the narration analysis and the
@@ -372,6 +373,9 @@ class UIStore {
   private regenerateNarrationCallback:
     ((entryId: string, keep?: RevertKeep) => Promise<void>) | null = null
 
+  // Generate from action callback - set by ActionInput, for an action nothing answers.
+  private generateFromActionCallback: ((entryId: string) => Promise<void>) | null = null
+
   // Reasoning block state persistence
   streamingReasoningExpanded = $state(false)
   expandedReasoningIds = new SvelteSet<string>()
@@ -445,8 +449,20 @@ class UIStore {
   }
 
   /** `retry` restores the backup taken before the last action; otherwise the narration alone. */
-  requestRegenerate(request: { entryId: string; retry: boolean } | null) {
+  requestRegenerate(request: { entryId: string; retry: boolean }) {
+    if (this.regeneratePending) return
+    this.regeneratePending = true
     this.regenerateRequest = request
+  }
+
+  takeRegenerateRequest() {
+    const request = this.regenerateRequest
+    this.regenerateRequest = null
+    return request
+  }
+
+  settleRegenerate() {
+    this.regeneratePending = false
   }
 
   requestBranchFrom(checkpointId: string | null) {
@@ -627,10 +643,6 @@ class UIStore {
 
   setGenerationStatus(status: string) {
     this.generationStatus = status
-  }
-
-  setRetryingLastMessage(value: boolean) {
-    this.isRetryingLastMessage = value
   }
 
   /**
@@ -1497,6 +1509,14 @@ class UIStore {
     } else {
       console.log('[UI] No regenerate narration callback registered!')
     }
+  }
+
+  setGenerateFromActionCallback(callback: ((entryId: string) => Promise<void>) | null) {
+    this.generateFromActionCallback = callback
+  }
+
+  async triggerGenerateFromAction(entryId: string) {
+    await this.generateFromActionCallback?.(entryId)
   }
 
   // Style reviewer methods

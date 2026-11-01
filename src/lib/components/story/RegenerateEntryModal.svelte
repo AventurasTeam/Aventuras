@@ -21,11 +21,12 @@
   } | null>(null)
 
   $effect(() => {
-    const request = ui.regenerateRequest
-    if (!request) return
-    ui.requestRegenerate(null)
-    void start(request.entryId, request.retry)
+    if (!ui.regenerateRequest) return
+    const request = ui.takeRegenerateRequest()
+    if (request) void start(request.entryId, request.retry)
   })
+
+  $effect(() => () => ui.settleRegenerate())
 
   // A regenerate the reader confirms keeps none of their or Tidy's changes in its range.
   function regenerate(entryId: string, retry: boolean) {
@@ -34,6 +35,14 @@
   }
 
   async function start(entryId: string, retry: boolean) {
+    try {
+      await prepare(entryId, retry)
+    } finally {
+      if (!pending) ui.settleRegenerate()
+    }
+  }
+
+  async function prepare(entryId: string, retry: boolean) {
     const entry = story.entries.find((e) => e.id === entryId)
     if (!entry) return
     const position = retry ? ui.retryBackup?.entryCountBeforeAction : entry.position
@@ -70,6 +79,12 @@
     const { entry, retry } = pending
     pending = null
     regenerate(entry.id, retry)
+    ui.settleRegenerate()
+  }
+
+  function cancel() {
+    pending = null
+    ui.settleRegenerate()
   }
 </script>
 
@@ -77,7 +92,7 @@
   bind:open={
     () => pending !== null,
     (next) => {
-      if (!next) pending = null
+      if (!next) cancel()
     }
   }
 >
@@ -110,12 +125,7 @@
             tidy={preview.tidy}
           />
         </div>
-        <ModalActions
-          label="Regenerate"
-          icon={RotateCcw}
-          onCancel={() => (pending = null)}
-          onConfirm={confirm}
-        />
+        <ModalActions label="Regenerate" icon={RotateCcw} onCancel={cancel} onConfirm={confirm} />
       </div>
     {/if}
   </ResponsiveModal.Content>
