@@ -20,12 +20,33 @@ export function warmTokenEncoder(): void {
   getEncoder()
 }
 
-export function countTokens(text: string): number {
-  if (text === '') return 0
+// js-tiktoken's merge is quadratic in one regex word, and o200k's pattern takes a whole run of
+// either kind as one word. Cutting a long run keeps the cost linear, within about 1% on its count.
+const LONGEST_ENCODED_RUN = 512
+const LONG_RUN = new RegExp(
+  `\\S{${LONGEST_ENCODED_RUN + 1},}|\\s{${LONGEST_ENCODED_RUN + 1},}`,
+  'gu',
+)
+const RUN_PIECE = new RegExp(`[\\s\\S]{1,${LONGEST_ENCODED_RUN}}`, 'gu')
+
+function encodedLength(text: string): number {
   // Empty allow/disallow lists: tiktoken special-token literals (e.g.
   // "<|endoftext|>") can appear in ordinary user/LLM prose here, and the
   // default "disallowedSpecial: all" throws instead of counting them.
   return getEncoder().encode(text, [], []).length
+}
+
+export function countTokens(text: string): number {
+  if (text === '') return 0
+  let tokens = 0
+  let encodedTo = 0
+  for (const match of text.matchAll(LONG_RUN)) {
+    if (match.index > encodedTo) tokens += encodedLength(text.slice(encodedTo, match.index))
+    for (const [piece] of match[0].matchAll(RUN_PIECE)) tokens += encodedLength(piece)
+    encodedTo = match.index + match[0].length
+  }
+  if (encodedTo < text.length) tokens += encodedLength(text.slice(encodedTo))
+  return tokens
 }
 
 // The id keys the memo but the content is stored beside the count and compared
