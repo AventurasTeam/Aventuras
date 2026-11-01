@@ -29,7 +29,10 @@
     chooseModelSnapshot,
     canonicalModelId,
     modelListKey,
+    overriddenFields,
+    overrideConflicts,
     capturesModelSnapshot,
+    takesCapabilityOverride,
     type ComfyCustomWorkflow,
     type ImageModelInfo,
     type LoadedList,
@@ -44,14 +47,25 @@
     resolveComfyBaseUrl,
   } from '#lib/services/ai/image/providers/comfy.ts'
   import ImageModelSelect from '#lib/components/settings/ImageModelSelect.svelte'
-  import type { ImageProfile, ImageProviderType, APIProfile } from '#lib/types/index.ts'
+  import type {
+    ImageProfile,
+    ImageProviderType,
+    ImageCapabilityOverride,
+    APIProfile,
+  } from '#lib/types/index.ts'
   import * as Tabs from '#lib/components/ui/tabs/index.ts'
   import * as Alert from '#lib/components/ui/alert/index.ts'
   import { Card, CardContent } from '#lib/components/ui/card/index.ts'
   import * as Collapsible from '#lib/components/ui/collapsible/index.ts'
   import IconRow from '#lib/components/ui/icon-row.svelte'
   import ImageResolutionSelector from '#lib/components/settings/ImageResolutionSelector.svelte'
-  import { defaultImageSpec, normalizeImageDataUrl, type ImageSpec } from '#lib/utils/image.ts'
+  import {
+    defaultImageSpec,
+    isSizeString,
+    normalizeImageDataUrl,
+    type ImageSpec,
+  } from '#lib/utils/image.ts'
+  import { cn } from '#lib/utils/cn.ts'
   import { describeLoadError } from '#lib/utils/error.ts'
   import { normalizeBaseUrl, parseHttpUrl } from '#lib/utils/url.ts'
 
@@ -141,6 +155,18 @@
   let isLoadingProfileModels = $state(false)
   let profileLoadFailures = $state<LoadFailure[]>([])
 
+  // Capability override form state; a blank field means unset.
+  let profileMinPixels = $state<number | null>(null)
+  let profileSizesText = $state('')
+  let profileReferences = $state<'' | 'on' | 'off'>('')
+  let capabilitiesOpen = $state(false)
+  const markedClass = 'ring-2 ring-amber-500/60'
+  const referencesItems = [
+    { value: '', label: 'From the provider' },
+    { value: 'on', label: 'On' },
+    { value: 'off', label: 'Off' },
+  ] as const
+
   // ComfyUI specific state
   let profileSampler = $state('dpmpp_2m_sde_gpu')
   let profileScheduler = $state('sgm_uniform')
@@ -177,6 +203,10 @@
     if (!isEditingReferenceProfile) return null
     if (referenceLimit(profileProviderType, buildProviderOptions()) === 0) {
       return NO_REFERENCES_REASON[profileProviderType] ?? 'it cannot send reference images.'
+    }
+    const references = capabilityOverride?.references
+    if (references !== undefined) {
+      return references ? null : 'reference images are switched off under Model capabilities.'
     }
     return !!profileModel &&
       profileModels.find((m) => m.id === profileModel)?.supportsImg2Img === false
@@ -228,7 +258,18 @@
       !!profileBaseUrl.trim() &&
       !parseHttpUrl(profileBaseUrl.trim()),
   )
-  const canSaveProfile = $derived(!!profileName.trim() && !needsWorkflow && !baseUrlInvalid)
+  const takesOverride = $derived(takesCapabilityOverride(profileProviderType))
+  const parsedSizes = $derived(
+    profileSizesText
+      .split(/[\s,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+  )
+  const invalidSizes = $derived(parsedSizes.filter((s) => !isSizeString(s)))
+  const sizesInvalid = $derived(takesOverride && invalidSizes.length > 0)
+  const canSaveProfile = $derived(
+    !!profileName.trim() && !needsWorkflow && !baseUrlInvalid && !sizesInvalid,
+  )
 
   onDestroy(() => {
     flushAutoSave()
@@ -510,6 +551,36 @@
     })
   }
 
+  // Undefined when every field is blank or the provider takes no override; the form keeps what was typed.
+  const capabilityOverride = $derived.by((): ImageCapabilityOverride | undefined => {
+    if (!takesOverride) return undefined
+    const override: ImageCapabilityOverride = {}
+    if (profileMinPixels && profileMinPixels > 0) override.minPixels = profileMinPixels
+    const sizes = parsedSizes.filter(isSizeString)
+    if (sizes.length > 0) override.sizes = sizes
+    if (profileReferences) override.references = profileReferences === 'on'
+    return Object.keys(override).length > 0 ? override : undefined
+  })
+
+  function loadCapabilityOverride(override: ImageCapabilityOverride | undefined) {
+    profileMinPixels = override?.minPixels ?? null
+    profileSizesText = override?.sizes?.join('\n') ?? ''
+    profileReferences = override?.references === undefined ? '' : override.references ? 'on' : 'off'
+    capabilitiesOpen = !!override
+  }
+
+  // What the provider published for the current model: the loaded list once it is for these
+  // inputs, otherwise the stored snapshot.
+  const publishedCapabilities = $derived.by(() => {
+    if (modelsSettled) return profileModels.find((m) => m.id === profileModel)
+    const stored = editingProfileId ? settings.getImageProfile(editingProfileId) : undefined
+    return stored?.modelSnapshot?.model === profileModel
+      ? stored.modelSnapshot.capabilities
+      : undefined
+  })
+  const overridden = $derived(overriddenFields(capabilityOverride, publishedCapabilities))
+  const conflicts = $derived(overrideConflicts(capabilityOverride, publishedCapabilities))
+
   // Save current profile edits (called when collapsible closes)
   async function autoSaveProfile() {
     if (isNewProfile || !editingProfileId || !canSaveProfile) return
@@ -521,6 +592,7 @@
       baseUrl: connection.baseUrl,
       model: profileModel,
       modelSnapshot: buildModelSnapshot(),
+      capabilityOverride,
       providerOptions: buildProviderOptions(),
     })
   }
@@ -534,6 +606,9 @@
         profileApiKey,
         profileBaseUrl,
         profileModel,
+        profileMinPixels,
+        profileSizesText,
+        profileReferences,
         profileSampler,
         profileScheduler,
         profileMode,
@@ -603,6 +678,7 @@
     profileModel = ''
     profileModels = []
     profileModelsKey = null
+    loadCapabilityOverride(undefined)
     profileSampler = 'dpmpp_2m_sde_gpu'
     profileScheduler = 'sgm_uniform'
     profileMode = ComfyMode.BasicTxt2Img
@@ -646,6 +722,7 @@
     profileModel = profile.model || ''
     profileModels = []
     profileModelsKey = null
+    loadCapabilityOverride(profile.capabilityOverride)
     profileTakesReferences = profile.providerOptions?.takesReferences === true
     profileInputReferences = profile.providerOptions?.inputReferences === true
 
@@ -713,6 +790,7 @@
       baseUrl: connection.baseUrl,
       model: profileModel,
       modelSnapshot: buildModelSnapshot(),
+      capabilityOverride,
       providerOptions: buildProviderOptions(),
     })
 
@@ -1405,6 +1483,88 @@
       <div class="space-y-2">
         {@render modelSelectContent()}
       </div>
+      {#if takesOverride}
+        <Collapsible.Root bind:open={capabilitiesOpen}>
+          <Collapsible.Trigger
+            class="group/caps text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm"
+          >
+            <ChevronRight
+              class="size-4 transition-transform duration-200 group-data-[state=open]/caps:rotate-90"
+            />
+            Model capabilities
+          </Collapsible.Trigger>
+          <Collapsible.Content class="space-y-4 pt-3">
+            <p class="text-muted-foreground text-xs">
+              Set what the provider's list leaves out or gets wrong. A blank field uses the
+              provider's own value.
+            </p>
+            <div class="space-y-2">
+              <Label for="override-min-pixels">Minimum pixels</Label>
+              <Input
+                id="override-min-pixels"
+                type="number"
+                bind:value={profileMinPixels}
+                placeholder="None"
+                min="1"
+                step="1"
+              />
+              <p class="text-muted-foreground text-xs">
+                Smaller sizes are raised to at least this many pixels, ratio kept.
+              </p>
+            </div>
+            <div class="space-y-2">
+              <Label for="override-sizes">Sizes</Label>
+              <Textarea
+                id="override-sizes"
+                bind:value={profileSizesText}
+                placeholder="1024x1024, 1536x1024"
+                rows={2}
+                aria-invalid={sizesInvalid}
+                class={cn(overridden.includes('sizes') && markedClass)}
+              />
+              {#if sizesInvalid}
+                <p class="text-destructive text-xs" role="alert">
+                  Not a WxH size: {invalidSizes.join(', ')}
+                </p>
+              {:else if overridden.includes('sizes') && publishedCapabilities?.supportedResolutions}
+                <p class="text-xs text-amber-600 dark:text-amber-400">
+                  Replaces the provider's list: {publishedCapabilities.supportedResolutions.join(
+                    ', ',
+                  )}
+                </p>
+              {:else}
+                <p class="text-muted-foreground text-xs">
+                  One WxH per line or comma-separated. Replaces the provider's size list.
+                </p>
+              {/if}
+            </div>
+            <div class="space-y-2">
+              <Label>References</Label>
+              <Autocomplete
+                items={referencesItems}
+                selected={referencesItems.find((o) => o.value === profileReferences)}
+                onSelect={(v) => {
+                  profileReferences = (v as (typeof referencesItems)[number]).value
+                }}
+                itemLabel={(o: { label: string }) => o.label}
+                itemValue={(o: { value: string }) => o.value}
+                placeholder="From the provider"
+                class={cn(overridden.includes('references') && markedClass)}
+              />
+              {#if overridden.includes('references')}
+                <p class="text-xs text-amber-600 dark:text-amber-400">
+                  Replaces what the provider says about reference images
+                </p>
+              {/if}
+              {#each conflicts as conflict (conflict.field)}
+                <p class="text-xs text-amber-600 dark:text-amber-400" role="alert">
+                  {conflict.message}
+                </p>
+              {/each}
+            </div>
+          </Collapsible.Content>
+        </Collapsible.Root>
+      {/if}
     {/if}
     {#if profileProviderType === 'a1111'}
       <div class="space-y-2">
