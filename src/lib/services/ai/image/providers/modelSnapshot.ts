@@ -35,6 +35,18 @@ export function snapshotModel(model: string, info?: ImageModelCapabilities): Ima
   }
 }
 
+/**
+ * Whether two snapshots say the same thing, whatever time each was captured. A key set to
+ * `undefined` counts as missing: a stored snapshot has lost those keys to JSON.
+ */
+export function sameSnapshot(a: ImageModelSnapshot, b: ImageModelSnapshot): boolean {
+  return (
+    a.model === b.model &&
+    a.version === b.version &&
+    JSON.stringify(a.capabilities) === JSON.stringify(b.capabilities)
+  )
+}
+
 /** Identifies the inputs a model list was loaded for. */
 export function modelListKey(
   providerType: ImageProviderType,
@@ -60,11 +72,15 @@ export function chooseModelSnapshot(args: {
 }): ImageModelSnapshot | undefined {
   const { model, providerType, baseUrl, models, settled, stored } = args
   if (!model) return undefined
-  const listed = settled ? models.find((m) => m.id === model) : undefined
-  if (listed) return snapshotModel(model, listed)
-
   const sameEndpoint =
     stored?.providerType === providerType &&
     normalizeBaseUrl(stored.baseUrl) === normalizeBaseUrl(baseUrl)
-  return sameEndpoint && stored.modelSnapshot?.model === model ? stored.modelSnapshot : undefined
+  const keep =
+    sameEndpoint && stored.modelSnapshot?.model === model ? stored.modelSnapshot : undefined
+
+  const listed = settled ? models.find((m) => m.id === model) : undefined
+  if (!listed) return keep
+
+  const captured = snapshotModel(model, listed)
+  return keep && sameSnapshot(keep, captured) ? keep : captured
 }

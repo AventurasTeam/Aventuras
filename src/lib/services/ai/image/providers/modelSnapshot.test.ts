@@ -4,6 +4,7 @@ import {
   IMAGE_MODEL_SNAPSHOT_VERSION,
   chooseModelSnapshot,
   modelListKey,
+  sameSnapshot,
   snapshotModel,
 } from './modelSnapshot'
 import type { ImageModelInfo } from './types'
@@ -156,5 +157,37 @@ describe('chooseModelSnapshot', () => {
 
   it('is undefined without a model', () => {
     expect(chooseModelSnapshot({ ...base, model: '' })).toBeUndefined()
+  })
+
+  it('returns the stored snapshot when the list says the same thing, as loaded from JSON', () => {
+    const reloaded: ImageProfile = JSON.parse(JSON.stringify(base.stored))
+    const snap = chooseModelSnapshot({ ...base, stored: reloaded })
+    expect(snap).toBe(reloaded.modelSnapshot)
+  })
+
+  it('captures anew when the listed capabilities changed', () => {
+    const reloaded: ImageProfile = JSON.parse(JSON.stringify(base.stored))
+    const snap = chooseModelSnapshot({
+      ...base,
+      stored: reloaded,
+      models: [info({ maxReferenceImages: 5 })],
+    })
+    expect(snap).not.toBe(reloaded.modelSnapshot)
+    expect(snap?.capabilities.maxReferenceImages).toBe(5)
+  })
+})
+
+describe('sameSnapshot', () => {
+  it('ignores when it was captured and keys left undefined', () => {
+    const a = snapshotModel('m1', info())
+    const b = { ...JSON.parse(JSON.stringify(a)), capturedAt: a.capturedAt + 1 }
+    expect(sameSnapshot(a, b)).toBe(true)
+  })
+
+  it('differs by model, version or capabilities', () => {
+    const a = snapshotModel('m1', info())
+    expect(sameSnapshot(a, snapshotModel('m2', info()))).toBe(false)
+    expect(sameSnapshot(a, { ...a, version: a.version + 1 })).toBe(false)
+    expect(sameSnapshot(a, snapshotModel('m1', info({ supportedResolutions: ['1k'] })))).toBe(false)
   })
 })
