@@ -51,7 +51,7 @@
   onCancel={cancel}
   title="Create a branch"
   action={{
-    label: 'Create branch',
+    label: 'Create',
     icon: GitBranch,
     tone: 'branch',
     disabled: !name.trim() || !checkpoint,

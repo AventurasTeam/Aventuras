@@ -23,8 +23,9 @@ rest:
   held near the top when it has a text field. Only a tool with no text field is a bottom sheet
   with a handle (see below), where only the handle drags and the content scrolls.
 - **Buttons.** An outlined Cancel and the action, side by side on a phone and at the trailing edge
-  on desktop, where both are as wide as the wider. On a phone each takes half the width, and when a
-  label does not fit they stack in reading order, Cancel above the action. The action's icon turns into a spinner while it runs.
+  on desktop, where both share one width: the same on every modal, and wider for both only when a
+  label needs it. The discard question centres its pair under its short content. On a phone each takes half the width, and when a label does not fit they stack in
+  reading order, Cancel above the action. The action's icon turns into a spinner while it runs.
 - **Ways out.** Cancel, Escape, Android's back press (claimed by the open modal through
   `utils/backPress.ts`, and decided as Escape) and a click outside all go
   through one decision, `shared/actionModalClose.ts`, which has its own tests. A sheet's swipe or
@@ -123,7 +124,7 @@ leaves the user unsure which swipe closes what.
 
 A modal that interrupts a flow to resolve an exception, like the prompt-pack question during an
 import, is not a step of the control that started the flow. Its title asks its own question, its
-buttons say what they do to the larger flow ("Cancel import", "Import story"), and its action
+buttons say what they do to the larger flow ("Cancel import", "Import"), and its action
 carries no glyph of that control.
 
 ### Focus and Enter
@@ -175,12 +176,14 @@ be deleted" under "Delete entry 47" says nothing.
   its question: "Which prompt pack should this story use?"
 - **The description says what the title cannot,** a consequence or context, and never repeats it.
   No deletion says "This cannot be undone": none can be, and each says what is lost instead.
-- **The action repeats the title's verb without the article,** "Create branch", "Save", and is
-  never "Continue" or "OK". When verb and object would not fit half a phone's width beside Cancel,
-  the verb alone does: Manual chapter's "Create", the lorebook's "Delete".
+- **The action is one word, the title's verb:** "Create", "Save", "Delete"; the title already names
+  the object. It is never "OK". More words are for what the title and the verb cannot carry:
+  "Restore & Close App" warns of what else happens, and "Continue" on the backup warning leads on
+  to the step that was asked for.
 - **The discard and removal questions name both outcomes:** "Keep editing" or "Discard", "Keep
-  anchor" or "Delete anchor". Their buttons are the footer's pair: Outline to stay, and the
-  `feature` variant in the `delete` tone to go.
+  anchor" or "Delete anchor". The question has the shell's frame, a centred title band, a body and
+  a footer band, and the footer's pair: Outline to stay, and the `feature` variant in the `delete`
+  tone to go.
 
 - **A warning icon only where a confirmation warns of a risk beyond the action itself,** like a
   backup that carries API keys, or a restore that replaces the database and closes the app. The

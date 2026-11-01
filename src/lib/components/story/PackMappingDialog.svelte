@@ -128,7 +128,7 @@
   title={lockedPack
     ? 'Which value should this story use?'
     : 'Which prompt pack should this story use?'}
-  action={{ label: 'Import story', disabled: loading, onConfirm: confirm }}
+  action={{ label: 'Import', disabled: loading, onConfirm: confirm }}
   cancelLabel="Cancel import"
   dirty
   discardQuestion={{

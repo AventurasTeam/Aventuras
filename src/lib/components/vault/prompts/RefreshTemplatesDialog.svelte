@@ -85,7 +85,7 @@
   {onCancel}
   title={`Refresh "${packName}" from the shipped prompts`}
   action={{
-    label: 'Replace templates',
+    label: 'Replace',
     tone: 'overwrite',
     disabled: total === 0,
     onConfirm: () => onConfirm(scope),

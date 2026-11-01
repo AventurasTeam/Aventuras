@@ -158,7 +158,7 @@
   onCancel={cancel}
   title={entry ? `Create a checkpoint at entry ${entryNumber(entry)}` : 'Create a checkpoint'}
   action={{
-    label: 'Create checkpoint',
+    label: 'Create',
     icon: Bookmark,
     tone: 'checkpoint',
     disabled: !name.trim() || blocked,

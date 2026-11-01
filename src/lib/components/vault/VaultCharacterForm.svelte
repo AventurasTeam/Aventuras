@@ -134,7 +134,7 @@
   onCancel={onClose}
   title={isEditing ? 'Edit the character' : 'Create a character'}
   action={{
-    label: isEditing ? 'Save' : 'Create character',
+    label: isEditing ? 'Save' : 'Create',
     disabled: !formData.name.trim(),
     onConfirm: () => void handleSubmit(),
   }}

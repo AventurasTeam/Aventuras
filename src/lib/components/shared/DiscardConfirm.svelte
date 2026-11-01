@@ -29,35 +29,40 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="bg-background/80 absolute -inset-1 z-50 flex items-center justify-center rounded-xl p-5 backdrop-blur-sm"
+    class="bg-background/80 absolute -inset-1 z-50 flex items-center justify-center rounded-xl p-3 backdrop-blur-sm"
     onclick={(e) => e.target === e.currentTarget && question.answer(false)}
   >
     <div
       bind:this={box}
       tabindex="-1"
-      class="bg-card w-full max-w-sm rounded-lg border p-5 shadow-lg outline-none"
+      class="bg-background w-full max-w-sm overflow-hidden rounded-lg border shadow-lg outline-none"
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="{uid}-title"
       aria-describedby="{uid}-description"
     >
-      <h2 id="{uid}-title" class="font-semibold">{shown?.title}</h2>
-      <p id="{uid}-description" class="text-muted-foreground mt-1 text-sm">
+      <!-- An action modal's frame: title band, body, and its footer's pair. -->
+      <div class="bg-muted/40 border-b px-6 py-4">
+        <h2 id="{uid}-title" class="text-center text-lg leading-none font-semibold tracking-tight">
+          {shown?.title}
+        </h2>
+      </div>
+      <p id="{uid}-description" class="text-muted-foreground px-6 py-4 text-sm">
         {shown?.description}
       </p>
-
-      <!-- The same pair as an action modal's footer: neutral to stay, the delete tone to go. -->
-      <div class={cn('mt-5 sm:ml-auto', PAIR_ROW)}>
-        <Button variant="outline" class={PAIR_BUTTON} onclick={() => question.answer(false)}>
-          {shown?.keepLabel ?? 'Keep editing'}
-        </Button>
-        <Button
-          variant="feature"
-          class={cn(PAIR_BUTTON, FEATURE_COLORS.delete.vars)}
-          onclick={() => question.answer(true)}
-        >
-          {shown?.confirmLabel ?? 'Discard'}
-        </Button>
+      <div class="bg-muted/40 border-t px-6 py-4">
+        <div class={cn('sm:mx-auto', PAIR_ROW)}>
+          <Button variant="outline" class={PAIR_BUTTON} onclick={() => question.answer(false)}>
+            {shown?.keepLabel ?? 'Keep editing'}
+          </Button>
+          <Button
+            variant="feature"
+            class={cn(PAIR_BUTTON, FEATURE_COLORS.delete.vars)}
+            onclick={() => question.answer(true)}
+          >
+            {shown?.confirmLabel ?? 'Discard'}
+          </Button>
+        </div>
       </div>
     </div>
   </div>
