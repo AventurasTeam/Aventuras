@@ -122,6 +122,25 @@ describe('countTokens on long runs', () => {
     expect(parts.join('')).toBe(text)
   })
 
+  // o200k's punctuation word runs on through newlines and slashes, so these texts are one regex
+  // word of any length though their longest run of either kind is 2.
+  it.each([
+    ['slash then newline', '/\n'.repeat(2_000)],
+    ['two slashes then newline', '//\n'.repeat(1_333)],
+  ])('cuts a run of slashes and newlines: %s', (_name, text) => {
+    const parts = encodedParts(text)
+
+    expect(parts.length).toBeGreaterThan(1)
+    expect(Math.max(...parts.map((part) => [...part].length))).toBeLessThanOrEqual(512)
+    expect(parts.join('')).toBe(text)
+  })
+
+  it('sends a slash-and-newline run of 512 whole and cuts one of 513', () => {
+    const half = '/\n'.repeat(256)
+    expect(encodedParts(half)).toEqual([half])
+    expect(encodedParts(`${half}/`)).toEqual([half, '/'])
+  })
+
   it('sends prose once, whole', () => {
     const prose = PROSE.repeat(70)
     expect(encodedParts(prose)).toEqual([prose])
