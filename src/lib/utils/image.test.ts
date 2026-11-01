@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   parseImageSpec,
   pickResolution,
+  atLeastMinPixels,
   pickSize,
   specFromPixels,
   specToPixels,
@@ -407,5 +408,23 @@ describe('bytesToBase64 / base64ToBytes', () => {
   it('handles empty input', () => {
     expect(bytesToBase64(new Uint8Array())).toBe('')
     expect(base64ToBytes('')).toEqual(new Uint8Array())
+  })
+})
+
+describe('atLeastMinPixels', () => {
+  it('keeps a size that meets the floor, or any size without one', () => {
+    expect(atLeastMinPixels({ width: 1024, height: 1024 }, 655_360)).toEqual({
+      width: 1024,
+      height: 1024,
+    })
+    expect(atLeastMinPixels({ width: 64, height: 64 })).toEqual({ width: 64, height: 64 })
+  })
+
+  it('raises a smaller size, ratio kept, to multiples of 16 above the floor', () => {
+    const { width, height } = atLeastMinPixels({ width: 512, height: 288 }, 655_360)
+    expect(width * height).toBeGreaterThanOrEqual(655_360)
+    expect(width % 16).toBe(0)
+    expect(height % 16).toBe(0)
+    expect(Math.abs(width / height - 512 / 288)).toBeLessThan(0.05)
   })
 })

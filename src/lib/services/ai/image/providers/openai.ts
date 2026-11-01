@@ -10,11 +10,11 @@ import { createOpenAI } from '@ai-sdk/openai'
 import * as z from 'zod'
 import type { ImageModelCapabilities } from '#lib/types/index.ts'
 import {
+  atLeastMinPixels,
   formatImageSize,
   isSizeString,
   pickSize,
   specToPixels,
-  type ImageResolution,
 } from '#lib/utils/image.ts'
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type {
@@ -71,17 +71,6 @@ export const openaiModelCapabilities = (model: string): ImageModelCapabilities |
 
 // Free-form sizes have a pixel floor: the tiny tier and non-square small are below it.
 const MIN_PIXELS = 655_360
-const EDGE_MULTIPLE = 16
-
-/** The size raised, ratio kept, to the smallest multiple-of-16 pair above the pixel floor. */
-function atLeastMinPixels({ width, height }: ImageResolution): ImageResolution {
-  const pixels = width * height
-  if (pixels >= MIN_PIXELS) return { width, height }
-
-  const scale = Math.sqrt(MIN_PIXELS / pixels)
-  const raise = (edge: number) => Math.ceil((edge * scale) / EDGE_MULTIPLE) * EDGE_MULTIPLE
-  return { width: raise(width), height: raise(height) }
-}
 
 export function createOpenAIProvider(config: ImageProviderConfig): ImageProvider {
   const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL
@@ -103,7 +92,9 @@ export function createOpenAIProvider(config: ImageProviderConfig): ImageProvider
         model: openai.image(model),
         prompt,
         referenceImages,
-        size: isSizeString(listed) ? listed : formatImageSize(atLeastMinPixels(specToPixels(spec))),
+        size: isSizeString(listed)
+          ? listed
+          : formatImageSize(atLeastMinPixels(specToPixels(spec), MIN_PIXELS)),
         signal,
       })
     },

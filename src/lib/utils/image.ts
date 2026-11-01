@@ -100,6 +100,19 @@ export function parseImageSize(size: string | undefined): ImageResolution | unde
 export const isSizeString = (value: string | undefined): value is `${number}x${number}` =>
   parseImageSize(value) !== undefined
 
+/** The size raised, ratio kept, to the smallest multiple-of-16 pair of at least `minPixels`. */
+export function atLeastMinPixels(
+  { width, height }: ImageResolution,
+  minPixels = 0,
+): ImageResolution {
+  const pixels = width * height
+  if (pixels >= minPixels) return { width, height }
+
+  const scale = Math.sqrt(minPixels / pixels)
+  const raise = (edge: number) => Math.ceil((edge * scale) / PIXEL_GRID) * PIXEL_GRID
+  return { width: raise(width), height: raise(height) }
+}
+
 /** `WIDTHxHEIGHT`, for the providers whose parameter is a string in that shape. */
 export function formatImageSize(res: ImageResolution): `${number}x${number}` {
   return `${res.width}x${res.height}`
