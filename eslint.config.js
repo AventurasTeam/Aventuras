@@ -139,6 +139,17 @@ module.exports = defineConfig([
               message:
                 'lib/tokens is a leaf: the seed imports it on the boot path, and a value cycle there fails only on Android. See milestone C5.',
             },
+            {
+              from: [{ type: 'lib-module', captured: { name: 'chapters' } }],
+              disallow: [
+                {
+                  to: { type: 'lib-module', captured: { name: 'db' } },
+                  dependency: { kind: 'value' },
+                },
+              ],
+              message:
+                'lib/chapters takes no value import of lib/db: it holds pure rules, and the seed and DOM reader code reach it. See milestone C5.',
+            },
           ],
         },
       ],

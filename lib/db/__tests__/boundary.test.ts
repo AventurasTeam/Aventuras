@@ -45,4 +45,28 @@ describe('lib module edges', () => {
       expect(await boundaryHits("import { Tiktoken } from 'js-tiktoken/lite'\n", fixture)).toBe(0)
     })
   })
+
+  describe('lib/chapters takes no value import of lib/db', () => {
+    const fixture = 'lib/chapters/__edge-fixture.ts'
+
+    it('flags a value import', async () => {
+      expect(await boundaryHits("import { storySettingsSchema } from '@/lib/db'\n", fixture)).toBe(
+        1,
+      )
+    })
+
+    it('flags the inline type spelling, which counts as a value import', async () => {
+      expect(await boundaryHits("import { type StoryEntry } from '@/lib/db'\n", fixture)).toBe(1)
+    })
+
+    it('permits an import type declaration', async () => {
+      expect(await boundaryHits("import type { StoryEntry } from '@/lib/db'\n", fixture)).toBe(0)
+    })
+
+    it('permits lib/keyword-terms, which the leaf rule would not', async () => {
+      expect(
+        await boundaryHits("import { normalizeTerm } from '@/lib/keyword-terms'\n", fixture),
+      ).toBe(0)
+    })
+  })
 })
