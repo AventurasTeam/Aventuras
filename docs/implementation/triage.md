@@ -102,3 +102,8 @@ slice-planning gate forces its resolution before that slice is planned.
   `lib/actions/story-entries/register.test.ts:308` names `Slice "Kind
 coverage"`, a class `.claude/rules/code.md` bans. Raised 2026-11-01 by
   Slice 5.1's review.
+- **Two docs lag the tokenizer.** `tech-stack.md`'s token-counting
+  section says `cl100k_base` or `o200k_base` and that tables load on
+  demand, where `lib/tokens` imports o200k's ranks statically. The token
+  lesson says the build takes ~272 ms, and `lib/tokens/index.ts` ~285 ms.
+  Raised 2026-11-01 by Slice 5.1's review.

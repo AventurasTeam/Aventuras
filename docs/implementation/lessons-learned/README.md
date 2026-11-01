@@ -89,6 +89,10 @@ slice plans when relevant.
 - [`expo-clipboard`'s web write reports success it never checked](./expo-clipboard-web-reports-false-success.md)
   — its `execCommand` fallback resolves `true` on a refused copy; write
   `navigator.clipboard` directly on web and catch the throw everywhere.
+- [On Android, `requestIdleCallback` is not an idle callback](./rn-requestidlecallback-has-no-idle-signal.md)
+  — the `timeout` option is ignored and there are no idle periods, so the
+  task runs when the JS queue first drains, ahead of a WebView's first
+  paint; hook the paint signal instead.
 
 ### rn-primitives substrate
 

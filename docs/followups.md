@@ -206,3 +206,9 @@ breakdown under [UX](#ux).
   - [A twin across a placement](./parked.md#a-twin-across-a-placement)
   - [Resuming a failed close](./parked.md#resuming-a-failed-close)
   - [A staged row has no retirement](./parked.md#a-staged-row-has-no-retirement)
+
+- **Measure the encoder build on a phone.** Slice 5.1 measured it on an
+  x86_64 emulator's debug build, 942 to 1,325 ms during the open
+  ([Slice 5.1 → Implementation notes](./implementation/milestones/05-chapters-chapter-close/slices/01-token-measure.md#implementation-notes)).
+  A real phone on a release build is unmeasured, and so is a tap during
+  the build.

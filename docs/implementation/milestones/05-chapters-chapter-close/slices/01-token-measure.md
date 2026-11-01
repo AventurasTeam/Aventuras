@@ -85,7 +85,8 @@ that path counts for itself.
   prevents fails only on Android at boot. It disallows `lib-module` and
   `lib-file` targets both: `lib/*.ts` is a separate element
   (`eslint.config.js:46-50`), so naming one would let
-  `@/lib/keyword-terms` through.
+  `@/lib/keyword-terms` through. `countTokens` guards long runs, per
+  Implementation notes.
 - **Counting at create.** `fullRow`
   (`lib/actions/story-entries/register.ts:44-55`) sets
   `contentTokens: countTokens(entry.content)`, whatever the payload
@@ -114,8 +115,9 @@ that path counts for itself.
   `warmTokenEncoder()` builds the encoder once. `loadAndPublish`
   (`lib/actions/stories/operational.ts:188-191`) schedules it after
   `publish`, beside `kickStoryDrain`, off the open's own task, so the
-  ~285 ms build doesn't sit in front of first paint or land on the first
-  Send. `openStory` and `loadOpenStory` both pass through there.
+  build doesn't land on the first Send. On Android it runs during the
+  open, ahead of first paint, per Implementation notes. `openStory` and
+  `loadOpenStory` both pass through there.
 - **The read.** `lib/db/story-entries/open-region.ts`, exported from
   `@/lib/db`, which `lib/retrieval`, `lib/pipeline` and `hooks` already
   import, so the read adds no module edge:
@@ -273,9 +275,14 @@ and numbers corrected.
 - **Encoder.** `git grep -E "countEntryTokens|TokenCache|__token" -- hooks lib`
   finds nothing. One encoder is built across a warm and two counts
   (`lib/tokens` test, with a constructor spy). A story open schedules
-  one warm past `publish`, doesn't run it inline, and a cancelled open
-  schedules none (`lib/actions/stories/operational.test.ts`). The build's
-  time on the Android dev client is in Implementation notes.
+  one warm past `publish`, doesn't run it inline, and an open cancelled
+  before publish schedules none
+  (`lib/actions/stories/operational.test.ts`). The build's time on the
+  Android dev client is in Implementation notes.
+- **Count guard.** `lib/tokens/tokens.test.ts`, on an `encode` spy: a run
+  of non-whitespace, of whitespace, or of newlines and slashes over 512
+  code points is cut, never inside a surrogate pair, and no text is
+  dropped. Text with no such run reaches `encode` once, whole.
 - **Module edges.** `lintText` cases in
   `lib/db/__tests__/boundary.test.ts`, on fixture paths inside each
   module, read `boundaries/dependencies`, so the check needs no
@@ -400,21 +407,26 @@ and numbers corrected.
   opens the encoder build took 982 ms (942 to 1,325, the highest on the
   first open after Metro's bundle), starting within about 0.3 s of the
   tap in the two runs timed and at least 1,714 ms ahead of the host's
-  first-paint message. Both cross the plan's lines, so the developer
-  chose. With the warm no-oped, tap to first paint took 1.92 to 1.99 s
-  against 2.04 and 2.17 s, so the warm costs about 0.05 to 0.25 s, since
-  the WebView's boot overlaps it. That's three samples against two, and
-  the warmed runs also carried a temporary count of about 0.5 s on the
-  JS thread that shipped code doesn't, so it likely overstates the cost.
-  `first-paint` is when the host hears of it, not when the user sees it.
-  A tap during the build is untested. Without the warm that second lands on the first Send, and
-  past first paint, where a plain timer would put it, it lands while
-  someone may be typing; no timer was measured. On the same device a
-  count of 2,006 characters of prose took 3.7 ms and 10,030 took 13 ms,
-  and the guard's first run on Hermes read `tokens=500` on 4,000 `x`
-  characters, in 480 to 560 ms (940 on the first open). Other long-run
-  shapes weren't measured on Hermes, and on Node a run of emoji costs
-  about 15 times a run of `x`.
+  first-paint message. Both cross the lines this slice's planning drew,
+  a build of 1,000 ms or more and a warm ahead of first paint, so the
+  developer chose. With the warm no-oped, tap to first paint took 1.92
+  to 1.99 s against 2.04 and 2.17 s, so the warm costs about 0.05 to
+  0.25 s, since the WebView's boot overlaps it. That's three samples
+  against two, and the warmed runs also carried a temporary count of
+  about 0.5 s on the JS thread that shipped code doesn't, so it likely
+  overstates the cost. `first-paint` is when the host hears of it, not
+  when the user sees it. A tap during the build is untested. Without the
+  warm that second lands on the first Send, and past first paint, where
+  a plain timer would put it, it lands while someone may be typing; no
+  timer was measured. On the same device a count of 2,006 characters of
+  prose took 3.7 ms and 10,030 took 13 ms, and the guard's first run on
+  Hermes read `tokens=500` on 4,000 `x` characters, in 480 to 560 ms
+  (940 on the first open). Other long-run shapes weren't measured on
+  Hermes, and on Node a run of emoji costs about 15 times a run of `x`.
+  Plain Node has no `requestIdleCallback` either, so `loadOpenStory`
+  throws under `tsx`;
+  [Slice 5.5a's probe](./05a-task-runner.md#open-questions) carries that
+  question.
 - **The warm doesn't cover story creation (developer decision,
   2026-11-01).** `components/wizard/finish.ts:339` reaches
   `create-story.ts`' count before any open, so the first story created
@@ -422,4 +434,4 @@ and numbers corrected.
 - **A turn runs on `story_rich`,** a creative story with no lead, so the
   strip's E2E uses it and adds no harness rows. The fallback of filler
   on the hero branch wasn't needed. Its undo presses CTRL-Z, as the
-  acceptance says, where the plan's spec went through the Actions menu.
+  acceptance says.
