@@ -6,7 +6,7 @@
  */
 
 import { APICallError, RetryError } from 'ai'
-import { errMessage } from '#lib/utils/error.ts'
+import { errMessage, providerMessage } from '#lib/utils/error.ts'
 
 /** A reason is shown in full, but a provider can echo a whole prompt back in its error body. */
 const MAX_REASON_LENGTH = 300
@@ -65,26 +65,6 @@ function messageOf(error: unknown): string {
     return error.statusCode ? `${error.statusCode} · ${message}` : message
   }
   return errMessage(error)
-}
-
-/** The message field of a provider's JSON error body, in the shapes providers actually use. */
-function providerMessage(body: string | undefined): string | null {
-  if (!body) return null
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(body)
-  } catch {
-    return null
-  }
-  if (!parsed || typeof parsed !== 'object') return null
-  const { error, message, detail } = parsed as Record<string, unknown>
-  if (error && typeof error === 'object' && typeof (error as any).message === 'string') {
-    return (error as any).message
-  }
-  for (const candidate of [error, message, detail]) {
-    if (typeof candidate === 'string' && candidate) return candidate
-  }
-  return null
 }
 
 function cap(text: string): string {

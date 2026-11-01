@@ -37,3 +37,24 @@ export function errorSummary(text: string, max = 200): string {
   const line = first.trim()
   return line.length > max ? `${line.slice(0, max - 1)}…` : line
 }
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null
+
+/** The message field of a provider's JSON error body, in the shapes providers actually use. */
+export function providerMessage(body: string | undefined): string | null {
+  if (!body) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(body)
+  } catch {
+    return null
+  }
+  if (!isRecord(parsed)) return null
+  const { error, message, detail } = parsed
+  if (isRecord(error) && typeof error.message === 'string') return error.message
+  for (const candidate of [error, message, detail]) {
+    if (typeof candidate === 'string' && candidate) return candidate
+  }
+  return null
+}
