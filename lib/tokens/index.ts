@@ -20,10 +20,9 @@ export function warmTokenEncoder(): void {
   getEncoder()
 }
 
-// js-tiktoken's merge is quadratic in one regex word. o200k's pattern takes a run of non-whitespace,
-// of whitespace, or of newlines and slashes after punctuation as one word, so cutting those three
-// kinds bounds a word at 1,025 code points and keeps the cost linear. The count drifts about 1%,
-// under 2% on newline-and-slash runs.
+// js-tiktoken's merge is quadratic in one regex word, and o200k takes a run of non-whitespace, of
+// whitespace, or of newlines and slashes after punctuation as one. Cutting all three caps a word
+// at 1,025 code points, so the cost stays linear; each cut moves the count by a few tokens.
 const LONGEST_ENCODED_RUN = 512
 const LONG_RUN = new RegExp(
   `\\S{${LONGEST_ENCODED_RUN + 1},}|\\s{${LONGEST_ENCODED_RUN + 1},}|[\\r\\n/]{${LONGEST_ENCODED_RUN + 1},}`,

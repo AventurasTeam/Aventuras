@@ -127,6 +127,7 @@ describe('countTokens on long runs', () => {
   it.each([
     ['slash then newline', '/\n'.repeat(2_000)],
     ['two slashes then newline', '//\n'.repeat(1_333)],
+    ['slash then CRLF', '/\r\n'.repeat(1_333)],
   ])('cuts a run of slashes and newlines: %s', (_name, text) => {
     const parts = encodedParts(text)
 
