@@ -51,8 +51,8 @@
   import IconRow from '#lib/components/ui/icon-row.svelte'
   import ImageResolutionSelector from '#lib/components/settings/ImageResolutionSelector.svelte'
   import { defaultImageSpec, normalizeImageDataUrl, type ImageSpec } from '#lib/utils/image.ts'
-  import { parseHttpUrl } from '#lib/utils/url.ts'
   import { describeLoadError } from '#lib/utils/error.ts'
+  import { normalizeBaseUrl, parseHttpUrl } from '#lib/utils/url.ts'
 
   const imageStyles = [
     { value: 'image-style-soft-anime', label: 'Soft Anime' },
@@ -530,7 +530,6 @@
         profileApiKey,
         profileBaseUrl,
         profileModel,
-        profileModels,
         profileSampler,
         profileScheduler,
         profileMode,
@@ -557,6 +556,29 @@
       }
       triggerAutoSave()
     }
+  })
+
+  // A list load saves only the snapshot, and only when it changed; a user's edit saves the form.
+  $effect(() => {
+    void profileModels
+    void profileModelsKey
+    untrack(() => {
+      if (isNewProfile || !editingProfileId || suppressAutoSave) return
+      if (!capturesModelSnapshot(profileProviderType)) return
+      const stored = settings.getImageProfile(editingProfileId)
+      if (
+        !stored ||
+        stored.providerType !== profileProviderType ||
+        stored.model !== profileModel ||
+        normalizeBaseUrl(stored.baseUrl) !== normalizeBaseUrl(connection.baseUrl)
+      ) {
+        return
+      }
+      const modelSnapshot = buildModelSnapshot()
+      if (modelSnapshot && modelSnapshot !== stored.modelSnapshot) {
+        void settings.updateImageProfile(editingProfileId, { modelSnapshot })
+      }
+    })
   })
 
   // Aliased for clarity in UI but uses the same logic
