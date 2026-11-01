@@ -273,6 +273,12 @@ rare enough that the confirm never turns routine. It reuses the
 cross-chapter copy, reframed as re-run rather than re-open: the
 chapter returns to in-progress and regenerates.
 
+The same confirm fires when a close's work is all that's left on this
+turn, after its divider was
+[removed](../chapter-timeline/chapter-timeline.md#delete-a-chapter): the
+regenerate reverses that work, and no close re-runs it, so the copy says
+it goes.
+
 **Its counts stay true while it is open**, as the rollback modal's do
 ([`rollback-confirm.md → Counts`](./rollback-confirm/rollback-confirm.md#counts)):
 it recounts each time a run settles under it, and `regenerateTurn`
@@ -308,7 +314,8 @@ A close that commits shows `Chapter closed: <title>`, or
 [review window](../chapter-timeline/chapter-timeline.md#review-window).
 
 At the next Send the deferred or failed work runs first, the banner
-reading `Updating memory before your turn…`, and the turn follows;
+reading `Updating memory before your turn…`, or
+`Closing chapter before your turn…` for a close, and the turn follows;
 Cancel then cancels the whole Send and keeps the text in the composer
 ([`memory/classifier.md → Pipeline framing`](../../../memory/classifier.md#pipeline-framing)).
 If that work fails there, the Send fails too: the turn doesn't start,

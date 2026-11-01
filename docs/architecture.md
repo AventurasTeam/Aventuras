@@ -36,9 +36,9 @@ read them.
   it references `intermediates.narrativeResult` from the same context
   that the narrative template used to receive `entries`.
 - **Pipeline intermediates flow through the context.** `retrievalResult`,
-  `narrativeResult`, `classificationResult`, `translationResult`,
-  `chapterAnalysis` are written by phases into the run's `intermediates`
-  and become available to later templates in the same run.
+  `narrativeResult`, `classificationResult` and `translationResult` are
+  written by phases into the run's `intermediates` and become available
+  to later templates in the same run.
 - **Pack variables (user-defined custom fields) sit alongside built-ins.**
   A pack author sees the same API surface a built-in template sees.
 - **No prop-drilling between phases or templates.** A phase calls the
@@ -259,6 +259,13 @@ system half that reads a per-call variable. A block that points at
 user-half content by position ("the LAST entry above") stays in the
 user half beside it.
 
+A close's task templates are the one exception. They hold the chapter or
+part in the system half, so it stays cached across tasks whose tool lists
+differ
+([`memory/chapter-close.md → Conversations`](./memory/chapter-close.md#conversations)),
+and that half is stable across a part's tasks, not across the story. A
+close's boundary and metadata calls follow the rule.
+
 **The cache marker.** OpenAI-compatible servers generally reuse a
 request's longest matching token prefix on their own, so for them the
 order of the blocks is what counts. Anthropic
@@ -425,19 +432,19 @@ buried in code that isn't reachable from a template.
 Different surfaces need different variable sets. The template registry
 maps every `templateId` to exactly one group:
 
-| Group               | Consumers                                                                                                                                                                                                                        |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `generationContext` | Pipeline + post-pipeline generation templates: fallback classifier, narrative, suggestions, action-choices, chapter-analysis, chapter-summarization, translate-\*, style-reviewer, agentic-retrieval, image-prompt-analysis, ... |
-| `classifierContext` | The periodic classifier: the unclassified turn window with each turn's saved scene, the branch's entity, relationship and thread rosters, its places as a tree, and a bounded happenings list                                    |
-| `wizard`            | Story-creation flow: setting expansion, character elaboration, opening generation, supporting characters                                                                                                                         |
-| `vault`             | Vault (reusable library) AI interactions                                                                                                                                                                                         |
-| `lore`              | Lore-management agent templates (at chapter close)                                                                                                                                                                               |
-| `import`            | Character-card imports, vault imports, lorebook classifiers                                                                                                                                                                      |
-| `portrait`          | Character portrait generation                                                                                                                                                                                                    |
-| `translateWizard`   | Translation-wizard flow                                                                                                                                                                                                          |
-| `staticContent`     | Variable-free macros (output-format directives, boilerplate blocks) — includable from any group                                                                                                                                  |
+| Group               | Consumers                                                                                                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generationContext` | Pipeline + post-pipeline generation templates: fallback classifier, narrative, suggestions, action-choices, translate-\*, style-reviewer, agentic-retrieval, image-prompt-analysis, ...       |
+| `classifierContext` | The periodic classifier: the unclassified turn window with each turn's saved scene, the branch's entity, relationship and thread rosters, its places as a tree, and a bounded happenings list |
+| `wizard`            | Story-creation flow: setting expansion, character elaboration, opening generation, supporting characters                                                                                      |
+| `vault`             | Vault (reusable library) AI interactions                                                                                                                                                      |
+| `chapter`           | Chapter-close templates: boundary selection, metadata and the lore-management agent's tasks, over a whole chapter or part                                                                     |
+| `import`            | Character-card imports, vault imports, lorebook classifiers                                                                                                                                   |
+| `portrait`          | Character portrait generation                                                                                                                                                                 |
+| `translateWizard`   | Translation-wizard flow                                                                                                                                                                       |
+| `staticContent`     | Variable-free macros (output-format directives, boilerplate blocks) — includable from any group                                                                                               |
 
-V1 ships `generationContext`, `classifierContext` and `wizard`. The
+V1 ships `generationContext`, `classifierContext`, `wizard` and `chapter`. The
 others land with their corresponding features. The group system itself is day-one
 infrastructure; without it the prompt editor can't provide autocomplete
 or validate references.

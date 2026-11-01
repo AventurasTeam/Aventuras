@@ -89,7 +89,9 @@ system no one answers, and the chapter or part; the user half holds the
 task's instructions, its starting rows and a code-built list of the
 writes so far. Nothing task-specific goes in the system half: a prompt
 is reused up to its first difference, so that would cost the chapter's
-cache at every task. On a template that puts the tools first (GLM, Qwen,
+cache at every task. Holding the chapter there is the one exception to
+the [stable system half](../architecture.md#system-and-user-halves): a
+close's is stable across a part's tasks, not across the story. On a template that puts the tools first (GLM, Qwen,
 MiMo and Kimi among those checked) a task's own tool list already costs
 it, which the switches below trade against.
 
@@ -146,23 +148,38 @@ is named before it lands
 
 A write returns one of three results:
 
-- `ok`, with the new id on a create.
+- `ok`, with the new id on a create. A value already stored is `ok` too,
+  with nothing written: the model isn't wrong, and nothing was lost.
 - `rejected`, with the reason and what to do: the row wasn't read, it
   cites nothing or a turn outside the chapter, it's over the lore cap or
-  a soft cap, it removes a keyword the user added, or it breaks a rule
-  of its sub-job.
+  a soft cap, it removes a keyword the user added, it breaks a rule of
+  its sub-job, or the row moved or went since the task read it, saying
+  where it went.
 - `skipped`, when the field stands and a retry won't help: the user wrote
   it after the cited prose, or a later turn did.
 
 **A close leaves alone what later turns wrote.** A close runs after the
 turns past its chapter but anchors before them, so it skips a field one
-of them wrote, whichever writer it was, and a merge refuses a row they
-touched. A rollback's undo would otherwise write over the close, and
-older chapter evidence over a newer fact. Those turns fall in the next
-chapter, whose close reviews the same rows. The `retrieval_count` reset
-is exempt: a stale counter does no harm.
+of them wrote, whichever writer it was, and a merge touching a row they
+touched is `skipped` whole. A rollback's undo would otherwise write over
+the close, and older chapter evidence over a newer fact. Those turns
+fall in the next chapter, whose close reviews the same rows.
 
-Each tool call lands whole, and a step's calls run in order.
+A write counts as a later turn's when it anchors past the end entry, or
+has no anchor and belongs to a turn past it. A `retrieval_count` bump
+doesn't count, or most merges of recently retrieved rows would be
+refused, and the reset is exempt on the same grounds: a stale counter
+does no harm. A `chapter_close` delta doesn't count either, so work a
+divider-only removal kept
+([Deleting a chapter](#deleting-a-chapter)) doesn't read as a later
+turn's when the chapter closes again.
+
+A step's calls run in order, and each lands all or nothing on failure.
+Precedence doesn't fail a call: when some of its fields are protected,
+or one of its writes is refused and another lands, what can land does,
+and the result is `ok` naming the fields that didn't, each with its
+reason. A merge is the exception and skips whole
+([3e](#3e--happenings-consolidation)).
 
 ### When a task stops
 
@@ -273,9 +290,15 @@ lower limit stops an early pick making a tiny chapter that closes again
 on the next turn; the upper limit closes a story that turns auto-close
 on late in sensible sizes, one per turn. The newest reply stays out
 because regenerating it, the commonest reversal, would reverse the
-whole close. With no candidate, the latest turn before the head is the
-end, with no model call; a head with no turn before it ends the chapter
-itself.
+whole close.
+
+A chapter ends only on an `ai_reply`, so a candidate is a reply. A
+`system` entry deletes with no delta and would strand the anchor, the
+`opening` is the rollback floor, and a `user_action` splits a turn. With
+no candidate, the latest reply in the open region before the head is the
+end, with no model call, else the head if it's a reply. A region with no
+reply owes no close
+([`generation-pipeline.md → chainsTo on predecessor`](../generation-pipeline.md#chainsto-on-predecessor)).
 
 **Prompt context:**
 
@@ -297,8 +320,8 @@ itself.
 **Validation.** `end_entry_id` must be a candidate. Invalid output
 triggers the standard `callWithRetry` same-prompt retry (per
 [`generation-pipeline.md → Error, cancel, and retry`](../generation-pipeline.md#error-cancel-and-retry));
-an unusable reply across the retry budget falls back to the latest turn
-before the head, which loses nothing. A provider failure is a failed
+an unusable reply across the retry budget falls back as with no
+candidate, which loses nothing. A provider failure is a failed
 call. (Prompts aren't generated on the fly — the retry contract is
 "same prompt, sampling variance catches transient malformed output.")
 
@@ -332,7 +355,7 @@ them.
 The `keywords` here are **chapter-level browse keywords**, distinct
 from `lore.keywords` retrieval keywords. Not load-bearing for v1
 retrieval — embedding similarity over candidates is the retrieval
-signal. They surface in the chapter list and browse rail.
+signal. They surface in the Chapter Timeline.
 
 **Failure mode:** a call that still fails after its retries, parse
 failures included, fails the close ([Failure modes](#failure-modes-and-atomic-rollback)).
@@ -567,7 +590,7 @@ row is a merge that keeps the kept row's text. Keep distinct is no call.
 **A merge lands whole, once per row.** Code checks user precedence on
 every row of a merge before any of it lands, so a merge can't delete a
 row while its composite is skipped: one protected row skips the whole
-merge. A merge can't absorb a row this close already wrote, since redo
+merge, as does a row a later turn touched. A merge can't absorb a row this close already wrote, since redo
 refuses an update and a delete of one row in one group, and CTRL-Z of
 the close would then be refused for good. The agent merges everything
 in one call instead of in a chain.
@@ -657,7 +680,7 @@ that removes its end entry.
 | Phase                      | Failure mode                                                                                         |
 | -------------------------- | ---------------------------------------------------------------------------------------------------- |
 | **0** (catch-up passes)    | The failed pass stops the chain; it runs before the next turn, and the close follows it.             |
-| **1** (boundary selection) | `callWithRetry` same-prompt retry; an unusable reply falls back to the latest turn before the head.  |
+| **1** (boundary selection) | `callWithRetry` same-prompt retry; an unusable reply falls back to the latest reply before the head. |
 | **2** (metadata)           | A failed call fails the close.                                                                       |
 | **3** (lore-mgmt)          | A refused write goes back to the task; a failed call, an embedder failure included, fails the close. |
 | **4** (lifecycle review)   | As phase 3.                                                                                          |
@@ -694,22 +717,32 @@ state, and the next pass reading it is benign.
 A close changes rows the user wrote or relies on, with no suggestion
 queue, so the user reviews it after the fact. `chapters.close_report`
 holds what the deltas don't: the close's `action_id`, each tool call's
-task, rows, `why` and `turns`, the writes that didn't land, and any task
-that stopped early. It's written last, in the close's group. Old and new
-values come from the deltas under that `action_id`. The surface is
+task, rows, `why`, `turns` and result, each landed write's new value,
+the writes that didn't land, and any task that stopped early. A merge
+names the row that survived. It's written last, in the close's group.
+
+A delta holds only the prior value, so old values come from the deltas
+under that `action_id` and new ones from the report, cut to a bound; the
+row itself has the full text. A restated value wrote nothing, so the
+report holds no value for it and the review leaves it out. The review
+also leaves out stamps, `retrieval_count` resets and stackable
+normalization, which is code with no `why`, and a spelling cleanup. The
+surface is
 [`chapter-timeline.md → Review window`](../ui/screens/chapter-timeline/chapter-timeline.md#review-window).
 
 A write counts as not applied when it was refused or skipped and the same
-task didn't later land the same tool on the same row, which would make
-it a slip the model corrected. The report keeps its proposed value, cut
-to a bound, and its reason, so the user can apply it by hand.
+task didn't later land the same tool on the same row and field, which
+would make it a slip the model corrected. It's judged per field, so a
+partly landed call appears under both changes and not applied. The
+report keeps the proposed value, cut to a bound, and its reason, so the
+user can apply it by hand.
 
 ## Manual user-triggered close
 
 User can manually trigger chapter close at any time, regardless of
-threshold. The user picks the boundary entry explicitly (Phase 1
-skipped), the newest reply included: that's often where the user means
-the chapter to stop, and regenerating it confirms first that the close
+threshold. The user picks the end among the open region's replies
+(Phase 1 skipped), the newest included: that's often where the user
+means the chapter to stop, and regenerating it confirms first that the close
 will re-run
 ([`reader-composer.md → Regenerate confirmation`](../ui/screens/reader-composer/reader-composer.md#regenerate-confirmation)).
 Phases 0, 2-4 run normally, under the same gate and interrupt rule as an
@@ -722,3 +755,44 @@ selected entry as boundary.
 When `chapterAutoClose = false` AND the threshold is crossed, the
 UI shows a "Ready to close" indicator near chapter management
 controls, but doesn't auto-fire. User confirms the close manually.
+
+## Deleting a chapter
+
+Deleting a chapter undoes what its close did and leaves every entry in
+place. It isn't a rollback. It's CTRL-Z of the close, still available
+after later turns, and only for the latest chapter, since an earlier gap
+would strand entries before a closed one. The surface is
+[`chapter-timeline.md → Delete a chapter`](../ui/screens/chapter-timeline/chapter-timeline.md#delete-a-chapter).
+Neither mode can be undone.
+
+- **Delete the chapter.** The close's `action_id` group reverses: stamps
+  clear, merged rows come back, and lore it created goes, even a row the
+  user edited since, as any machine create does.
+- **Remove the divider only.** The chapter row, its report and its stamps
+  reverse, and everything else the close did stays. Those deltas stay in
+  the log, anchored on the end entry, so a rollback into the range still
+  takes them, and with no later turn the next CTRL-Z reverses them. The
+  review goes with the row; each row's History keeps the writes.
+
+**Later writes win.** A field keeps its value when anything logged after
+the close wrote it, whichever writer, except a `retrieval_count` bump
+([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)).
+A normalized stackable record a later write touched stays normalized,
+since undoing it could double-count.
+
+A later write's own undo holds the value it replaced, which may be the
+close's, so rolling that turn back after a delete writes it again, and
+the value before it isn't in the log. That's accepted: the order is rare,
+the state stays valid, and the next pass or close corrects it.
+
+**What follows.** The chapter's tokens return to the open region. With
+auto-close on and the region at the threshold, the next Send closes
+again, which re-derives the memory the delete removed. Under it, a close
+waits for the region to grow. With auto-close off the chapter stays open,
+and "Ready to close" shows once the threshold is met. A threshold changed
+first simply applies. After a divider-only removal the same close runs
+on top of the kept work, at full cost.
+
+**Prose stays.** Turns since the chapter stay as written and can still
+reflect what the close added. Full coherence is a rollback to the
+chapter's last entry, then a delete.

@@ -9,7 +9,7 @@ The reader's chapter popover handles **glance + jump + simple
 close**. This screen handles everything richer: viewing the
 LLM-generated metadata (summary, theme, keywords), editing it,
 closing the current chapter with explicit end-entry picking, and
-deleting a chapter (which routes through rollback).
+deleting the latest chapter.
 
 Cross-cutting principles that govern this screen are in
 [principles.md](../../principles.md). Relevant sections:
@@ -50,7 +50,7 @@ Cross-cutting principles that govern this screen are in
 │  │ Summary: [textarea, ~3 lines visible]                  │   │
 │  │ Keywords: [chip] [chip] [chip] +                       │   │
 │  │                                                         │   │
-│  │ [Jump to chapter →]  [Regenerate summary]  [Delete…]   │   │
+│  │ [Jump to chapter →]  [Regenerate summary]              │   │
 │  │ ┌─ save bar (when dirty) ──────────────────────────┐   │   │
 │  │ │ 2 unsaved changes      [Discard]  [Save ⌘S]      │   │   │
 │  │ └──────────────────────────────────────────────────┘   │   │
@@ -126,7 +126,8 @@ Read-only context shown alongside (not part of the form):
 
 ### Per-card actions
 
-Four buttons in a row beneath the form, before the save bar:
+Buttons in a row beneath the form, before the save bar, four on the
+latest chapter's card and three on the others:
 
 - **Jump to chapter →** — routes back to the reader scrolled to the
   chapter's start entry. The reader's chapter chip would highlight
@@ -140,11 +141,11 @@ Four buttons in a row beneath the form, before the save bar:
   warns "this overwrites the current title/summary/theme/keywords."
 - **Review changes** — opens the [review window](#review-window) for
   this chapter's close. Hidden on a chapter no close wrote.
-- **Delete…** — destructive. Opens the
-  [rollback-confirm modal](../reader-composer/rollback-confirm/rollback-confirm.md)
-  pre-targeted at the chapter's `start_entry_id`. Deleting the
-  chapter means rolling back to before the chapter's start; the
-  rollback flow already handles cascade + cross-chapter warnings.
+- **Delete…** — destructive, on the latest chapter's card only. Opens
+  the [delete confirm](#delete-a-chapter). It undoes what the close did
+  and leaves the chapter's entries in place. Removing entries is
+  [rollback](../reader-composer/rollback-confirm/rollback-confirm.md)'s
+  job, from the reader.
 
 ### Save session — per card
 
@@ -160,6 +161,49 @@ contained edit surface, so the save bar belongs with the card it
 applies to. If a user scrolls away from a dirty card, scrolling
 back is the way to commit — there's no global "save dirty card"
 chrome at the screen edge.
+
+### Delete a chapter
+
+Deleting a chapter undoes its close, for the latest chapter only
+([`chapter-close.md → Deleting a chapter`](../../../memory/chapter-close.md#deleting-a-chapter)).
+An [AlertDialog](../../patterns/alert-dialog.md), disabled while a
+generation pipeline is in flight:
+
+```
+┌──── Delete chapter 5? ───────────────────────────┐
+│                                                  │
+│  This undoes what the chapter's close did.       │
+│  Its entries stay.                               │
+│                                                  │
+│  • 2 lore rows removed, your edits included      │
+│  • 31 other changes reversed                     │
+│  • 14 turns since stay as written, and can still │
+│    reflect what it added                         │
+│                                                  │
+│  A close runs again before your next turn.       │
+│                                                  │
+│  **This cannot be undone.**                      │
+│                                                  │
+│  [ Cancel ]  [ Remove divider only ]             │
+│                          [ Delete chapter ]      │
+└──────────────────────────────────────────────────┘
+```
+
+- **Counts.** Rows the close created, then the other changes it made.
+  The third line is omitted when no turn followed the chapter.
+- **The line after the list** reads the open region as the delete would
+  leave it. With auto-close on and the region at the threshold, it's the
+  line above. Under the threshold, `A close waits until the chapter grows
+past the threshold.` With auto-close off,
+  `The chapter stays open until you close it.`
+- **`Remove divider only`** keeps everything else the close did and takes
+  only the chapter and its review. With auto-close on at the threshold,
+  the confirm says the same prose closes again on top of the kept work.
+- **If a close landed while the confirm was open,** this is no longer the
+  latest chapter, and the delete is refused with a toast.
+
+The reader beneath stays where it is, and the chapter's inline break
+goes.
 
 ## In-progress chapter card
 
@@ -244,7 +288,7 @@ Fields, left-to-right:
 - **Number** — `entry <N>` in muted monospace.
 - **Optional tag** — small chip-style label when applicable
   (`Chapter <N> ended here` on the start row; `latest` on the
-  picker trigger when the latest entry is selected).
+  picker trigger when the latest reply is selected).
 - **Snippet** — first ~80 chars of `story_entries.content`,
   italicized. Single line; trailing ellipsis when truncated.
 - **Time** — right-aligned. Formatted via the active calendar
@@ -258,11 +302,14 @@ end below).
 
 ### End-entry picker — dropdown panel
 
-Default selection: the latest entry in the open region.
+Default selection: the latest reply in the open region. A chapter ends
+only on an `ai_reply`
+([`chapter-close.md → Phase 1`](../../../memory/chapter-close.md#phase-1--boundary-selection)),
+so the picker offers only replies.
 
 Clicking the picker trigger opens a dropdown panel **in-flow**
 below it (the modal grows vertically; panel is scrollable when
-more entries exist than fit in ~320px). Entries are listed
+more replies exist than fit in ~320px). Replies are listed
 newest-first, back to the start of the open region.
 
 Each dropdown item is a **two-line layout** (richer preview than
@@ -298,7 +345,7 @@ chapter close is exactly the place users want to choose a natural
 ending point (per
 [data-model → Chapters / memory system](../../../data-model.md#chapters--memory-system):
 "User can also manually trigger chapter-create at any time,
-choosing the ending entry explicitly"). Latest-by-default covers
+picking the ending reply explicitly"). Latest-by-default covers
 the common case; the picker covers the rest, and the
 snippet + time are what make picking meaningful instead of
 guesswork on bare numbers.
@@ -362,21 +409,26 @@ close stands.
 - **Not applied** is a collapsed
   [Accordion](../../patterns/accordion.md): each write that was refused
   or skipped with its proposed value and reason, such as the lore cap or
-  a field the user changed. A write the same task later landed is left
-  out, being a slip the model corrected
+  a field the user changed. A write the same task later landed on that
+  field is left out, being a slip the model corrected
   ([`chapter-close.md → Review`](../../../memory/chapter-close.md#review)).
+  A call that landed in part appears under both.
 - **Changes** are grouped by area (Lore, Characters and factions, Places
   and items, Threads, Happenings, Awareness), one
   [DeltaLogRow](../../patterns/delta-log-row.md) per change, with the
-  write's `why` and a link to the cited entry under it. `chapter_id`
-  stamps and `retrieval_count` resets stay out as noise.
+  write's `why` and a link to the cited entry under it. The old value
+  comes from the delta and the new one from the report, cut to a bound.
+  `chapter_id` stamps, `retrieval_count` resets and stackable
+  normalization stay out as noise, as does a write that restated a value.
 - **Pressing a row** opens it in World or Plot, where any edit is an
   ordinary user edit that user precedence protects from then on. A merged
   happening's row opens the one that survived, and a row since deleted
   doesn't press.
 - **No per-change revert.** Reverting a merge or a delete isn't simple,
   and the old value is on screen. CTRL-Z undoes the whole close while it
-  is the latest action.
+  is the latest action, and [`Delete…`](#delete-a-chapter) after that.
+- **If the close reverses while the window is open,** the window closes,
+  since its chapter is gone. A toast's `Review` does nothing by then.
 
 ## Empty state
 
@@ -417,14 +469,14 @@ end-entry picker in-flow inside it.
 - **Per-card action row** collapses on phone to one primary button
   plus a `⋯` overflow trigger. `[Jump to chapter →]` keeps its full
   label as the primary affordance (navigation, non-destructive,
-  most-used). `Regenerate summary`, `Review changes` and `Delete…`
-  tuck behind the `⋯` chip, which opens a Sheet (short) on phone per
+  most-used). `Regenerate summary`, `Review changes` and, on the latest
+  chapter's card, `Delete…` tuck behind the `⋯` chip, which opens a Sheet (short) on phone per
   [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
   Same pattern as the
   [World detail-head's `⋯` overflow menu](../world/world.md#detail-head-structure);
   both destructive actions retain their existing confirmation flows
-  inside the Sheet. Desktop and tablet keep all four buttons
-  inline (the row fits naturally).
+  inside the Sheet. Desktop and tablet keep every button inline (the
+  row fits naturally).
 - **In-card save bar** appears at the card's bottom edge when
   dirty per
   [`patterns/save-sessions.md`](../../patterns/save-sessions.md).
@@ -466,8 +518,8 @@ end-entry picker in-flow inside it.
   heavy enough that users don't fire it casually." See
   [`docs/memory/chapter-close.md`](../../../memory/chapter-close.md)
   for the phase contract.
-- **Bulk chapter operations.** Multi-select to delete or
-  re-generate-summary multiple chapters at once. Defer; matches
+- **Bulk chapter operations.** Multi-select to regenerate summaries
+  across chapters at once. Defer; matches
   the
   [bulk operations on entities](../../../parked.md#bulk-operations-on-entities)
   followup which sets the precedent.

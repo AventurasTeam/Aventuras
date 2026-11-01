@@ -323,7 +323,7 @@ mid-flight. A pass is never an undo target; CTRL-Z steps over it.
 User-origin mutations to: story entries, entities (fields, status,
 state, `injection_mode`), happenings, awareness links, lore,
 threads, branch operations (rollback, switch, branch creation),
-translations, story settings, app settings that feed
+chapter delete, translations, story settings, app settings that feed
 `generationContext`, calendar swap, lead switch, mode switch,
 narration switch, manual `worldTime` correction, story-level
 backup / export when reachable from inside the story (the Actions
@@ -383,8 +383,14 @@ user is on when the run starts shows it.
 
 ```
 Updating memory… [Cancel]
-Closing chapter: 2 of 4 — generating chapter metadata… [Cancel]
+Closing chapter: 3 of 7 — Identity… [Cancel]
 ```
+
+A close's `N of M` counts the agent's tasks, so a one-part chapter is
+`of 7`. Before the first task the banner names the step instead,
+boundary selection or the chapter's metadata, with no count, and the last
+task's label stands until the close writes its report. Before a turn the
+banner reads `Closing chapter before your turn…`.
 
 Per-turn pipelines do not use the banner — the streaming narrative
 is the ambient progress indicator and the composer's send/cancel

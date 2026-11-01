@@ -141,7 +141,7 @@ type PipelineEvent =
   | { type: 'delta_group_emitted'; actions: readonly PipelineAction[]; entryId: string }
   | { type: 'recoverable_error'; error: PipelineError }
   // phase-emitted specific — grows additively
-  | { type: 'close_task_complete'; task: string; part: number; done: number; total: number }
+  | { type: 'close_task_start'; task: string; part: number; index: number; total: number }
   | { type: 'retrieval_stage'; stage: 'embedding' | 'ranking' | 'budget-fill' }
 ```
 
@@ -427,9 +427,9 @@ emission from the LLM is a prompt bug, not a runtime case to handle.
   one also records the turn capture's target entry. Phase doesn't
   touch delta log / SQLite / undo_payload.
 - `delta_group_emitted` — one tool call of a chapter close: its writes
-  land whole, and each action's outcome comes back to the phase as the
-  `yield`'s value, so a refusal goes to the model instead of failing the
-  run
+  land together, and each action's outcome, with its reason, comes back
+  to the phase as the `yield`'s value, so a refusal goes to the model
+  instead of failing the run
   ([`memory/chapter-close.md → Tools and writes`](./memory/chapter-close.md#tools-and-writes)).
 - `stream_chunk` — display-token path (`channel` splits narrative
   text from streamed reasoning). Orchestrator dispatches a
@@ -503,7 +503,7 @@ per branch inside a `parallel` group). Sub-work inside a phase body
 is **opaque** — no framework identity, no pill update.
 
 If sub-progress wants to surface, the phase yields phase-specific
-events (e.g., `close_task_complete`); consumers filter and
+events (e.g., `close_task_start`); consumers filter and
 interpret. Sub-work doesn't get promoted to phase status — pill
 still shows the declared phase.
 
@@ -1311,12 +1311,15 @@ async function nextMemoryRun(
   return passable && unprocessed >= story.settings.classifierCadence ? 'periodic-classifier' : null
 }
 
-// A close the user asked for, or the open region past the threshold
-// with auto-close on.
-const closeOwed = async (branchId: string, story: Story, ctx): Promise<boolean> =>
-  pendingClose.has(branchId) ||
-  (story.settings.chapterAutoClose &&
-    (await openRegionTokens(branchId, ctx)) >= story.settings.chapterTokenThreshold)
+// A close the user asked for, or the open region past the threshold with
+// auto-close on and a reply to end the chapter on.
+const closeOwed = async (branchId: string, story: Story, ctx): Promise<boolean> => {
+  if (pendingClose.has(branchId)) return true
+  if (!story.settings.chapterAutoClose) return false
+  const region = await openRegionSeries(branchId, ctx)
+  const openRegionTokens = sum(region.map((e) => e.tokens))
+  return openRegionTokens >= story.settings.chapterTokenThreshold && region.some(canEndChapter)
+}
 
 const perTurnPipeline: Pipeline = {
   kind: 'per-turn',
@@ -1352,7 +1355,10 @@ cadence comes due, a close when one is owed and nothing is
 unprocessed, and a pass first when a close is owed and something is
 ([`memory/chapter-close.md → Phase 0`](./memory/chapter-close.md#phase-0--catch-up-passes)).
 `chapterAutoClose = false` owes no close past the threshold (the close
-is surfaced as a manual affordance instead). A manual close records
+is surfaced as a manual affordance instead), and neither does a region
+with no reply: a chapter ends only on an `ai_reply`, so an opening alone
+over a low threshold would otherwise fail every Send, and no turn could
+land to supply one. A manual close records
 `pendingClose` with the user's end entry and starts the same way: a
 pass first when entries are unprocessed, the close otherwise. The
 record is in memory: a restart drops it, and so does a reversal that
@@ -1586,6 +1592,18 @@ place's parent is null.
 `happenings_mutual_excl` holds through a close's merge, the one machine
 update of a happening: it clusters only rows with an
 `occurred_at_entry_id`, and a user edit writes both columns.
+
+**A chapter delete keeps later writes from any source.** It reverses a
+close's group with turns above it, the one reversal that does
+([`memory/chapter-close.md → Deleting a chapter`](./memory/chapter-close.md#deleting-a-chapter)).
+So the rule above widens for it: a field yields to any delta outside the
+set logged after it, whatever its source, except one that only moved
+`retrieval_count`. The set carries that mode, since the closure reads
+later writes too when it decides what a `state` reference will hold. It
+runs in the reversal bracket, refused while the gate is closed, and
+rechecks there that the chapter is still the latest. Removing only the
+divider seeds the same reversal with the chapter row's deltas and the
+stamps, and leaves the group's other deltas in the log.
 
 **Undoing a `create` consults no cascade.**
 A domain may register a cascade hook for its child rows, but that hook

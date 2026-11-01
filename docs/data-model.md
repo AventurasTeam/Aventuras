@@ -66,7 +66,8 @@ erDiagram
         integer position "ordered within branch"
         text kind "user_action | ai_reply | system | opening"
         text content
-        text chapter_id FK "null while in open region; set at chapter-create time"
+        integer content_tokens "o200k count of stored content, for the chapter trigger and its progress; null on a row written before the column, read as 0"
+        text chapter_id "null while in open region; set at chapter-create time. No FK: redo runs newest-first, so a stamp lands before its chapter row"
         json metadata "worldTime + sceneEntities + currentLocationId + generation provenance; see 'Entry metadata shape' decision below"
         integer created_at
     }
@@ -185,7 +186,7 @@ erDiagram
         text end_entry_id "FK-less ref into story_entries; always set — only closed chapters exist as rows"
         integer token_count "accumulated across chapter entries"
         integer closed_at
-        json close_report "what the close's deltas don't hold: its action_id, each tool call's task, rows, why and turns, the writes that didn't land and any task that stopped early; null on a chapter no close wrote. See docs/memory/chapter-close.md → Review"
+        json close_report "what the close's deltas don't hold: its action_id, each tool call's task, rows, why, turns and result, each landed write's new value, the writes that didn't land and any task that stopped early; null on a chapter no close wrote. Kept out of the working-set store. See docs/memory/chapter-close.md → Review"
         integer embedding_stale "0 | 1; 1 = embedded fields (summary/theme) need (re-)embedding. Set on any embedded-field write whose content hash differs from the vector's source_hash (edit, create, or failed sync); cleared when the pre-retrieval sync stage embeds the row or content reverts to the embedded value. Still flagged at retrieval means the sync stage couldn't embed it (embedder unavailable), so it is excluded. See docs/memory/retrieval.md → Compute lifecycle"
         integer created_at
         integer updated_at
@@ -3254,12 +3255,17 @@ chapter is created that includes them.
 
 **Boundary trigger.** Per-story token threshold
 (`stories.settings.chapterTokenThreshold`, default 24k, user-
-configurable). When the open region's accumulated token count crosses
-the threshold AND `stories.settings.chapterAutoClose=true`, the
-chapter-close pipeline fires. With `chapterAutoClose=false`, the UI
-shows a "ready to close" indicator but doesn't auto-fire. User can
-also manually trigger chapter-create at any time, picking the ending
-entry explicitly.
+configurable). When the open region's accumulated token count, the sum
+of its entries' `content_tokens`, crosses the threshold AND
+`stories.settings.chapterAutoClose=true`, the chapter-close pipeline
+fires. With `chapterAutoClose=false`, the UI shows a "ready to close"
+indicator but doesn't auto-fire. User can also manually trigger
+chapter-create at any time, picking the ending reply explicitly. A
+chapter ends only on an `ai_reply`.
+
+`content_tokens` counts stored `content`, in o200k through `countTokens`,
+so it's the source language on a translated story. It's written with the
+entry, on a content edit, and restored by that edit's undo.
 
 **Chapter-close is the single cadence trigger** for the 5-phase
 pipeline (catch-up classifier, boundary selection, chapter metadata,
@@ -3289,6 +3295,11 @@ point and aren't copied.
 **No chapter-boundary restrictions on rollback or branching** — see
 Branch model above. Chapters are user-visible structure, not
 gatekeepers.
+
+**Deleting a chapter undoes its close, not its entries.** The latest
+chapter only, in two modes, a full reversal of the close or only the
+divider. See
+[docs/memory/chapter-close.md → Deleting a chapter](./memory/chapter-close.md#deleting-a-chapter).
 
 ### Backup & export format
 

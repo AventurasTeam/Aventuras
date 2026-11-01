@@ -145,9 +145,10 @@
   .progress-summary-placeholder { padding: 0 16px 12px 76px; font-size: 12px; color: var(--ink-faint); font-style: italic; }
   .in-progress-actions { padding: 4px 16px 14px 76px; }
   .close-chapter-btn { padding: 7px 18px; border: 1px solid var(--ink); border-radius: 4px; background: var(--ink); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
-  /* gen-in-flight: disable Close-chapter + per-card save buttons (per principles → Edit restrictions) */
+  /* gen-in-flight: disable Close-chapter, Delete and per-card save buttons (per principles → Edit restrictions) */
   body[data-gen-state="in-flight"] .close-chapter-btn { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
   body[data-gen-state="in-flight"] .save-btn { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
+  body[data-gen-state="in-flight"] .card-action-delete { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
   /* gen-status pill is visible only during in-flight phases (per generation-status-pill pattern) */
   body[data-gen-state="idle"] .gen-status { display: none; }
 
@@ -157,7 +158,10 @@
   /* modal */
   .modal-backdrop { position: absolute; inset: 0; background: var(--bg-dim); z-index: 6; display: none; align-items: center; justify-content: center; }
   body[data-modal="close"] #modal-backdrop,
-  body[data-modal="review"] #review-backdrop { display: flex; }
+  body[data-modal="review"] #review-backdrop,
+  body[data-modal="delete"] #delete-backdrop { display: flex; }
+  /* Delete… shows on the latest chapter's card only. */
+  body[data-latest="no"] .card-action-delete { display: none; }
   .modal { width: 480px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); overflow: hidden; }
   .modal-head { padding: 14px 18px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; }
   .modal-title { font-size: 14px; font-weight: 600; color: var(--ink); }
@@ -199,6 +203,8 @@
   .modal-foot { padding: 14px 24px; border-top: 1px solid var(--line-soft); display: flex; justify-content: flex-end; gap: 10px; background: #fcfcfc; }
   .modal-foot .btn { padding: 7px 18px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 13px; cursor: pointer; font-family: inherit; }
   .modal-foot .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; }
+  .modal-foot .btn.danger { background: var(--warn); color: #fff; border-color: var(--warn); font-weight: 600; }
+  .delete-impact { font-size: 13px; color: var(--ink); margin: 0 0 14px; padding-left: 18px; line-height: 1.55; }
 
   /* review window — read-only, its body scrolling under a pinned head (chapter-timeline.md → Review window) */
   .review-modal { display: flex; flex-direction: column; max-height: calc(100% - 32px); }
@@ -302,6 +308,11 @@
     <button class="rb-btn" data-card-state="dirty">dirty + save bar</button>
   </div>
   <div class="rb-group">
+    <span class="gl">card 2 is:</span>
+    <button class="rb-btn active" data-latest="no">an earlier chapter</button>
+    <button class="rb-btn" data-latest="yes">the latest chapter</button>
+  </div>
+  <div class="rb-group">
     <span class="gl">empty state:</span>
     <button class="rb-btn active" data-empty="no">has chapters</button>
     <button class="rb-btn" data-empty="yes">empty (only in-progress)</button>
@@ -311,6 +322,7 @@
     <button class="rb-btn active" data-modal="hidden">hidden</button>
     <button class="rb-btn" data-modal="close">close chapter</button>
     <button class="rb-btn" data-modal="review">review window</button>
+    <button class="rb-btn" data-modal="delete">delete chapter</button>
   </div>
   <div class="rb-group">
     <span class="gl">not applied:</span>
@@ -436,7 +448,8 @@
           <!-- Phone-tier overflow trigger — primary action (Jump) stays
                full-label; Regenerate, Review changes and Delete tuck behind
                ⋯ which opens a Sheet (short) per layout.md → Surface bindings.
-               Visual placeholder; sheet content is those three actions. -->
+               Visual placeholder; sheet content is those actions, Delete on
+               the latest chapter's card only. -->
           <button class="card-action card-action-more" title="More actions">&middot;&middot;&middot;</button>
         </div>
 
@@ -545,36 +558,36 @@
               </div>
               <div class="picker-item-snippet">&ldquo;She stops at the threshold and listens. The room beyond is quieter than it should be. Lantern light catches on the bouncer's shoulder near the back door.&rdquo;</div>
             </div>
-            <div class="picker-item" data-entry="101" data-tag="" data-snippet="&ldquo;Kael waves her forward, palm open. 'It's clear,' he murmurs, and steps through the doorway into the lamp-lit corridor.&rdquo;" data-time="Day 9 &middot; 22:14">
+            <div class="picker-item" data-entry="100" data-tag="" data-snippet="&ldquo;Kael waves her forward, palm open. 'It's clear,' he murmurs, and steps through the doorway into the lamp-lit corridor.&rdquo;" data-time="Day 9 &middot; 22:14">
               <div class="picker-item-head">
-                <span class="entry-num">entry 101</span>
+                <span class="entry-num">entry 100</span>
                 <span class="entry-time">Day 9 &middot; 22:14</span>
               </div>
               <div class="picker-item-snippet">&ldquo;Kael waves her forward, palm open. 'It's clear,' he murmurs, and steps through the doorway into the lamp-lit corridor.&rdquo;</div>
             </div>
-            <div class="picker-item" data-entry="100" data-tag="" data-snippet="&ldquo;They reach the back hall, narrow and dim. Crates have been piled against the rear door &mdash; recent and deliberate, the wood still pale where it was dragged.&rdquo;" data-time="Day 9 &middot; 21:50">
+            <div class="picker-item" data-entry="98" data-tag="" data-snippet="&ldquo;They reach the back hall, narrow and dim. Crates have been piled against the rear door &mdash; recent and deliberate, the wood still pale where it was dragged.&rdquo;" data-time="Day 9 &middot; 21:50">
               <div class="picker-item-head">
-                <span class="entry-num">entry 100</span>
+                <span class="entry-num">entry 98</span>
                 <span class="entry-time">Day 9 &middot; 21:50</span>
               </div>
               <div class="picker-item-snippet">&ldquo;They reach the back hall, narrow and dim. Crates have been piled against the rear door &mdash; recent and deliberate, the wood still pale where it was dragged.&rdquo;</div>
             </div>
-            <div class="picker-item" data-entry="99" data-tag="" data-snippet="&ldquo;Two bouncers stand by the side door, watching the room with practiced disinterest. The taller one's hand rests inside his coat. He looks tired.&rdquo;" data-time="Day 9 &middot; 21:38">
+            <div class="picker-item" data-entry="96" data-tag="" data-snippet="&ldquo;Two bouncers stand by the side door, watching the room with practiced disinterest. The taller one's hand rests inside his coat. He looks tired.&rdquo;" data-time="Day 9 &middot; 21:38">
               <div class="picker-item-head">
-                <span class="entry-num">entry 99</span>
+                <span class="entry-num">entry 96</span>
                 <span class="entry-time">Day 9 &middot; 21:38</span>
               </div>
               <div class="picker-item-snippet">&ldquo;Two bouncers stand by the side door, watching the room with practiced disinterest. The taller one's hand rests inside his coat. He looks tired.&rdquo;</div>
             </div>
-            <div class="picker-item" data-entry="98" data-tag="" data-snippet="&ldquo;The room's volume drops a notch. Eyes flick toward the door, then back to drinks &mdash; nobody wants to look interested in whoever just walked in.&rdquo;" data-time="Day 9 &middot; 21:25">
+            <div class="picker-item" data-entry="94" data-tag="" data-snippet="&ldquo;The room's volume drops a notch. Eyes flick toward the door, then back to drinks &mdash; nobody wants to look interested in whoever just walked in.&rdquo;" data-time="Day 9 &middot; 21:25">
               <div class="picker-item-head">
-                <span class="entry-num">entry 98</span>
+                <span class="entry-num">entry 94</span>
                 <span class="entry-time">Day 9 &middot; 21:25</span>
               </div>
               <div class="picker-item-snippet">&ldquo;The room's volume drops a notch. Eyes flick toward the door, then back to drinks &mdash; nobody wants to look interested in whoever just walked in.&rdquo;</div>
             </div>
             <div class="picker-item-tail">
-              + 9 more entries (scrollable back to entry 89)
+              + 2 more replies (scrollable back to entry 90)
             </div>
           </div>
         </div>
@@ -585,6 +598,30 @@
     <div class="modal-foot">
       <button class="btn" id="modal-cancel">Cancel</button>
       <button class="btn primary" id="modal-confirm">Close chapter</button>
+    </div>
+  </div>
+</div>
+
+<!-- delete confirm — chapter-timeline.md → Delete a chapter. An AlertDialog: an outside click does nothing. -->
+<div class="modal-backdrop" id="delete-backdrop">
+  <div class="modal">
+    <div class="modal-head">
+      <span class="modal-title">Delete chapter 2?</span>
+    </div>
+    <div class="modal-body">
+      <p class="modal-context">This undoes what the chapter's close did. Its entries stay.</p>
+      <ul class="delete-impact">
+        <li>2 lore rows removed, your edits included</li>
+        <li>31 other changes reversed</li>
+        <li>14 turns since stay as written, and can still reflect what it added</li>
+      </ul>
+      <p class="modal-context">A close runs again before your next turn.</p>
+      <p class="modal-context"><b>This cannot be undone.</b></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="delete-cancel">Cancel</button>
+      <button class="btn" id="delete-divider">Remove divider only</button>
+      <button class="btn danger" id="delete-confirm">Delete chapter</button>
     </div>
   </div>
 </div>
@@ -707,6 +744,18 @@
     b.addEventListener('click', () => setCardState(b.dataset.cardState));
   });
 
+  // whether card 2 stands in for the latest chapter, the only one with Delete…
+  function setLatest(state) {
+    body.dataset.latest = state;
+    document.querySelectorAll('.rb-btn[data-latest]').forEach(b => {
+      b.classList.toggle('active', b.dataset.latest === state);
+    });
+  }
+  document.querySelectorAll('.rb-btn[data-latest]').forEach(b => {
+    b.addEventListener('click', () => setLatest(b.dataset.latest));
+  });
+  setLatest('no');
+
   // empty state
   function setEmpty(state) {
     body.dataset.empty = state;
@@ -774,6 +823,9 @@
   // review changes opens the review window
   document.getElementById('review-changes').addEventListener('click', () => setModal('review'));
 
+  // delete opens its confirm
+  document.querySelector('.card-action-delete').addEventListener('click', () => setModal('delete'));
+
   // not-applied accordion — collapsed by default; review control + click on its head
   function setNotApplied(state) {
     body.dataset.notApplied = state;
@@ -825,6 +877,9 @@
   document.getElementById('modal-confirm').addEventListener('click', () => setModal('hidden'));
   document.getElementById('review-close').addEventListener('click', () => setModal('hidden'));
   document.getElementById('review-done').addEventListener('click', () => setModal('hidden'));
+  ['delete-cancel', 'delete-divider', 'delete-confirm'].forEach(id => {
+    document.getElementById(id).addEventListener('click', () => setModal('hidden'));
+  });
   ['modal-backdrop', 'review-backdrop'].forEach(id => {
     document.getElementById(id).addEventListener('click', (e) => {
       if (e.target.id === id) setModal('hidden');

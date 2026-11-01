@@ -113,15 +113,15 @@ shifts into the gap on transitions.
 
 The compound owns phase → copy and error → copy:
 
-| Phase                    | Label                                                                           |
-| ------------------------ | ------------------------------------------------------------------------------- |
-| `reasoning`              | `reasoning…`                                                                    |
-| `recalling-memory`       | `recalling memory…`                                                             |
-| `generating-narrative`   | `generating narrative…`                                                         |
-| `classifying`            | `classifying…`                                                                  |
-| `updating-memory`        | `updating memory…`, or `updating memory before your turn…` for Send's owed pass |
-| `closing-chapter`        | `closing chapter…`                                                              |
-| `refreshing-suggestions` | `refreshing suggestions…`                                                       |
+| Phase                    | Label                                                                            |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| `reasoning`              | `reasoning…`                                                                     |
+| `recalling-memory`       | `recalling memory…`                                                              |
+| `generating-narrative`   | `generating narrative…`                                                          |
+| `classifying`            | `classifying…`                                                                   |
+| `updating-memory`        | `updating memory…`, or `updating memory before your turn…` for Send's owed pass  |
+| `closing-chapter`        | `closing chapter…`, or `closing chapter before your turn…` for Send's owed close |
+| `refreshing-suggestions` | `refreshing suggestions…`                                                        |
 
 | Error code          | Label                                          |
 | ------------------- | ---------------------------------------------- |
@@ -168,7 +168,8 @@ Cancelling either doesn't drop the work: it runs before the next turn
 instead, and a toast says so
 ([`memory/classifier.md → Pipeline framing`](../../memory/classifier.md#pipeline-framing)).
 A pass that runs as Send's owed pass, before the turn, reads
-`updating memory before your turn…`.
+`updating memory before your turn…`, and a close Send owes reads
+`closing chapter before your turn…`.
 
 `updating-memory` stays a separate phase from `classifying`, which is
 the per-turn piggyback fallback: one is the turn's own work, the other

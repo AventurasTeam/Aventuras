@@ -678,6 +678,7 @@
     <button class="rb-btn" data-gen="recalling-memory">recalling-memory</button>
     <button class="rb-btn" data-gen="updating-memory">updating-memory</button>
     <button class="rb-btn" data-gen="before-turn">before-turn</button>
+    <button class="rb-btn" data-gen="before-turn-close">before-turn (close)</button>
     <button class="rb-btn" data-gen="error-swap-paused">error-swap-paused</button>
     <button class="rb-btn" data-gen="error-stale">error-stale</button>
   </div>
@@ -915,7 +916,7 @@
 <!-- Memory-run banner — sticky below chrome during a pass (updating-memory) or a chapter close -->
 <div class="gen-banner" id="gen-banner">
   <span class="gen-banner-icon"></span>
-  <span class="gen-banner-label" id="gen-banner-label">Closing chapter: 2 of 4 &mdash; generating chapter metadata&hellip;</span>
+  <span class="gen-banner-label" id="gen-banner-label">Closing chapter: 3 of 7 &mdash; Identity&hellip;</span>
   <button class="gen-banner-cancel" id="gen-banner-cancel">Cancel</button>
 </div>
 
@@ -1712,6 +1713,7 @@
     'recalling-memory': 'recalling memory…',
     'updating-memory': 'updating memory…',
     'before-turn': 'updating memory before your turn…',
+    'before-turn-close': 'closing chapter before your turn…',
     'error-swap-paused': 'Embedder switch paused — waiting on you',
     'error-stale': 'Memory incomplete — 12 rows pending',
   };
@@ -1730,7 +1732,7 @@
       deferral: 'Memory update moved to your next turn.',
     },
     'chapter-close': {
-      banner: 'Closing chapter: 2 of 4 — generating chapter metadata…',
+      banner: 'Closing chapter: 3 of 7 — Identity…',
       cancel: 'Cancel chapter close',
       sendWaits: 'Chapter close in progress. Cancel to edit.',
       deferral: 'Chapter close moved to your next turn.',
@@ -1741,6 +1743,7 @@
   // Cancelling a pass or a close defers it: the next Send runs it first (before-turn).
   let genState = 'idle';
   let deferredWork = false;
+  let deferredClose = false;
 
   const toast = document.getElementById('gen-toast');
   let toastTimer = null;
@@ -1794,16 +1797,19 @@
         bannerLabel.textContent = memoryRun.banner;
         banner.classList.add('visible');
         cancelAction.textContent = memoryRun.cancel;
-      } else if (state === 'before-turn') {
+      } else if (state === 'before-turn' || state === 'before-turn-close') {
         // Send's deferred work runs before its turn: no streaming card yet; Send turns into
         // Cancel, which cancels the whole Send and keeps the text in the composer.
         streamingEntry.classList.remove('visible');
         composer.classList.add('generating');
         sendBtn.classList.add('hidden');
         cancelBtn.classList.remove('hidden');
-        bannerLabel.textContent = 'Updating memory before your turn\u2026';
+        const closing = state === 'before-turn-close';
+        bannerLabel.textContent = closing
+          ? 'Closing chapter before your turn\u2026'
+          : 'Updating memory before your turn\u2026';
         banner.classList.add('visible');
-        cancelAction.textContent = 'Cancel memory update';
+        cancelAction.textContent = closing ? 'Cancel chapter close' : 'Cancel memory update';
       } else {
         // Active generation phase — streaming surface + composer-cancel mode.
         streamingEntry.classList.add('visible');
@@ -1862,7 +1868,7 @@
   // Send waits while a pass or a close holds the gate; with work deferred, it runs that first.
   sendBtn.addEventListener('click', () => {
     if (memoryRuns[genState]) return;
-    setGenState(deferredWork ? 'before-turn' : 'generating');
+    setGenState(deferredWork ? (deferredClose ? 'before-turn-close' : 'before-turn') : 'generating');
   });
   // The composer's Cancel ends the whole Send; deferred work stays deferred.
   cancelBtn.addEventListener('click', () => setGenState('idle'));
@@ -1870,9 +1876,11 @@
   // The pill's and the banner's Cancel defer a pass or a close to the next Send, and say so.
   function cancelFromChrome() {
     const memoryRun = memoryRuns[genState];
+    const wasClose = genState === 'chapter-close';
     setGenState('idle');
     if (!memoryRun) return;
     deferredWork = true;
+    deferredClose = wasClose;
     showToast(memoryRun.deferral);
   }
 
@@ -1893,7 +1901,10 @@
   };
   document.querySelectorAll('[data-close-toast]').forEach(b => {
     b.addEventListener('click', () => {
-      if (b.dataset.closeToast === 'failed') deferredWork = true;
+      if (b.dataset.closeToast === 'failed') {
+        deferredWork = true;
+        deferredClose = true;
+      }
       showToast(closeToasts[b.dataset.closeToast]);
     });
   });
