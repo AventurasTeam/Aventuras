@@ -1363,7 +1363,6 @@
         onModelChange={(id) => {
           profileModel = id
         }}
-        showCost={true}
         showImg2ImgIndicator={true}
         showDescription={profileProviderType === 'comfyui'}
         isLoading={isLoadingProfileModels}

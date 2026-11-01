@@ -11,7 +11,6 @@ import type { ImageModelInfo } from './types'
 const info = (over: Partial<ImageModelInfo> = {}): ImageModelInfo => ({
   id: 'm1',
   name: 'Model One',
-  costPerImage: 0.01,
   inputModalities: ['text'],
   supportsImg2Img: true,
   maxReferenceImages: 3,
@@ -52,7 +51,6 @@ describe('snapshotModel', () => {
         supportedAspectRatios: ['1:1', '16:9'],
       },
     })
-    expect(snap.capabilities).not.toHaveProperty('costPerImage')
     expect(snap.capabilities).not.toHaveProperty('name')
   })
 

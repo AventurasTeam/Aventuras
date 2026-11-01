@@ -176,18 +176,6 @@ describe('Pollinations adapter', () => {
       expect(both.requiresReferenceImage).toBeUndefined()
     })
 
-    it('sets no price', async () => {
-      catalogue(
-        image('a/priced', {
-          pricing: { currency: 'pollen', completionImageTokens: '0.004', promptTextTokens: '1' },
-        }),
-      )
-      const [model] = await list()
-      expect(model).not.toHaveProperty('costPerImage')
-      expect(model).not.toHaveProperty('costPerTextToken')
-      expect(model).not.toHaveProperty('costPerImageToken')
-    })
-
     it('sends the key when there is one', async () => {
       catalogue(image('a/m'))
       await list('arg-key')

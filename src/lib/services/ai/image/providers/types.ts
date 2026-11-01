@@ -60,9 +60,6 @@ export interface ImageModelInfo extends ImageModelCapabilities {
   /** Other ids the provider serves this model under. */
   aliases?: string[]
   description?: string
-  costPerImage?: number
-  costPerTextToken?: number
-  costPerImageToken?: number
   inputModalities?: string[]
   outputModalities?: string[]
 }

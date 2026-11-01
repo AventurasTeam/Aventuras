@@ -6,10 +6,6 @@
   import { RefreshCw, Loader2, Check, ImagePlus, Square, ChevronRight } from '@lucide/svelte'
   import { cn } from '#lib/utils/cn.ts'
   import { errorSummary } from '#lib/utils/error.ts'
-  import {
-    DEFAULT_AVG_PROMPT_TOKENS,
-    DEFAULT_AVG_IMAGE_TOKENS,
-  } from '#lib/services/ai/image/constants.ts'
 
   interface Props {
     models: ImageModelInfo[]
@@ -17,7 +13,6 @@
     onModelChange: (modelId: string) => void
 
     // Optional features
-    showCost?: boolean
     showImg2ImgIndicator?: boolean
     showDescription?: boolean
 
@@ -36,7 +31,6 @@
     models,
     selectedModelId,
     onModelChange,
-    showCost = false,
     showImg2ImgIndicator = false,
     showDescription = false,
     isLoading = false,
@@ -67,39 +61,6 @@
 
   $effect(() => () => clearTimeout(copiedTimer))
 
-  // Format cost per image
-  function formatCost(model: ImageModelInfo): string {
-    if (!model.costPerImage) return ''
-
-    const costPerTextToken = model.costPerTextToken ?? 0
-    const costPerImageToken = model.costPerImageToken ?? 0
-
-    const totalCost =
-      model.costPerImage +
-      costPerTextToken * DEFAULT_AVG_PROMPT_TOKENS +
-      costPerImageToken * DEFAULT_AVG_IMAGE_TOKENS
-
-    // Format cost with appropriate decimal places
-    if (totalCost < 0.001) {
-      return `$${totalCost.toFixed(4)}`
-    } else if (totalCost < 0.01) {
-      return `$${totalCost.toFixed(3)}`
-    } else {
-      return `$${totalCost.toFixed(2)}`
-    }
-  }
-
-  // Generate label with optional cost and img2img indicator
-  function getModelLabel(model: ImageModelInfo): string {
-    let label = model.name
-
-    if (showCost && model.costPerImage) {
-      label += ` (${formatCost(model)})`
-    }
-
-    return label
-  }
-
   // Get current selection object
   const selectedModel = $derived(models.find((m) => m.id === selectedModelId))
 
@@ -108,7 +69,7 @@
   // about the saved id.
   const selectedIsUnavailable = $derived(!!selectedModelId && models.length > 0 && !selectedModel)
   const selectedLabel = $derived(
-    selectedModel ? getModelLabel(selectedModel) : selectedModelId || placeholder,
+    selectedModel ? selectedModel.name : selectedModelId || placeholder,
   )
 
   /** `undefined` is the dropdown giving us nothing; an empty string is a deliberate clear. */
@@ -138,7 +99,7 @@
                 <Check
                   class={cn('h-4 w-4', selectedModelId === model.id ? 'opacity-100' : 'opacity-0')}
                 />
-                <span class="truncate">{getModelLabel(model)}</span>
+                <span class="truncate">{model.name}</span>
               </div>
               {#if showImg2ImgIndicator && model.supportsImg2Img}
                 <ImagePlus class="text-muted-foreground h-4 w-4 shrink-0" />

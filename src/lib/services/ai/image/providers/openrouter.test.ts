@@ -248,11 +248,6 @@ describe('OpenRouter model discovery', () => {
 
     expect(list.map((m) => m.id)).toEqual(['black-forest-labs/flux.2-pro', 'openai/gpt-image-1'])
     expect(list[0]).toMatchObject({ name: 'black-forest-labs/flux.2-pro name', description: 'd' })
-    for (const model of list) {
-      expect(model).not.toHaveProperty('costPerImage')
-      expect(model).not.toHaveProperty('costPerTextToken')
-      expect(model).not.toHaveProperty('costPerImageToken')
-    }
   })
 
   it('reads the reference count and an unlisted resolution as absent', async () => {
