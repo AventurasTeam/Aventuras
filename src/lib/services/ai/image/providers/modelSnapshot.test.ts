@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ImageProfile } from '#lib/types/index.ts'
 import {
   IMAGE_MODEL_SNAPSHOT_VERSION,
+  applyCapabilityOverride,
   canonicalModelId,
   chooseModelSnapshot,
   modelListKey,
@@ -190,6 +191,46 @@ describe('sameSnapshot', () => {
     expect(sameSnapshot(a, snapshotModel('m2', info()))).toBe(false)
     expect(sameSnapshot(a, { ...a, version: a.version + 1 })).toBe(false)
     expect(sameSnapshot(a, snapshotModel('m1', info({ supportedResolutions: ['1k'] })))).toBe(false)
+  })
+})
+
+describe('applyCapabilityOverride', () => {
+  const listed = {
+    supportsImg2Img: true,
+    maxReferenceImages: 3,
+    supportedResolutions: ['1k'],
+  }
+
+  it('changes nothing without an override or with a blank one', () => {
+    expect(applyCapabilityOverride(listed, undefined)).toBe(listed)
+    expect(applyCapabilityOverride(listed, {})).toEqual(listed)
+  })
+
+  it('replaces the sizes and sets the pixel floor', () => {
+    expect(applyCapabilityOverride(listed, { sizes: ['1024x1024'], minPixels: 655_360 })).toEqual({
+      ...listed,
+      supportedResolutions: ['1024x1024'],
+      minPixels: 655_360,
+    })
+  })
+
+  it('turns references off, whatever the list says', () => {
+    expect(applyCapabilityOverride(listed, { references: false })).toMatchObject({
+      supportsImg2Img: false,
+      maxReferenceImages: 0,
+    })
+  })
+
+  it('turns references on, lifting a listed limit of none', () => {
+    const result = applyCapabilityOverride(
+      { supportsImg2Img: false, maxReferenceImages: 0 },
+      { references: true },
+    )
+    expect(result).toEqual({ supportsImg2Img: true })
+  })
+
+  it('applies over a model the provider knows nothing about', () => {
+    expect(applyCapabilityOverride(undefined, { minPixels: 100 })).toEqual({ minPixels: 100 })
   })
 })
 

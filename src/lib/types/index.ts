@@ -879,6 +879,16 @@ export interface ImageModelCapabilities {
   supportedResolutions?: string[]
   /** The `w:h` ratios this model accepts, verbatim; options like `auto` are left out. */
   supportedAspectRatios?: string[]
+  /** The fewest pixels a request may ask for. Set only by a profile's override, never listed. */
+  minPixels?: number
+}
+
+/** What a profile says about its model where the provider publishes nothing usable. A blank field defers to the provider. */
+export interface ImageCapabilityOverride {
+  minPixels?: number
+  /** Sizes to send, as `WxH`. */
+  sizes?: string[]
+  references?: boolean
 }
 
 /** What generation needs from the profile's model, captured when the model is picked. */
@@ -899,6 +909,8 @@ export interface ImageProfile {
   model: string
   /** Saved only for providers whose capabilities come from an API; absent means never captured. */
   modelSnapshot?: ImageModelSnapshot
+  /** Saved only for providers that take one. */
+  capabilityOverride?: ImageCapabilityOverride
   providerOptions: Record<string, unknown>
   createdAt: number
 }

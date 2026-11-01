@@ -496,6 +496,47 @@ describe('Image Provider Registry', () => {
       vi.mocked(settings.getImageProfile).mockReturnValue(undefined)
       expect(await supportsReferenceImages('p', 'm')).toBe(false)
     })
+
+    describe('capability override', () => {
+      const snapshotOf = (capabilities: ImageModelCapabilities) => ({
+        model: 'm',
+        version: IMAGE_MODEL_SNAPSHOT_VERSION,
+        capturedAt: 1,
+        capabilities,
+      })
+      const profile = (providerType: ImageProviderType, over: Partial<ImageProfile>) =>
+        ({
+          providerType,
+          apiKey: 'k',
+          providerOptions: {},
+          modelSnapshot: snapshotOf({ supportsImg2Img: true }),
+          ...over,
+        }) as ImageProfile
+
+      it('turns references off over a model the list says takes them', async () => {
+        vi.mocked(settings.getImageProfile).mockReturnValue(
+          profile('openai-compatible', { capabilityOverride: { references: false } }),
+        )
+        expect(await supportsReferenceImages('p', 'm')).toBe(false)
+      })
+
+      it('turns references on over a model the list says lacks them', async () => {
+        vi.mocked(settings.getImageProfile).mockReturnValue(
+          profile('openai-compatible', {
+            capabilityOverride: { references: true },
+            modelSnapshot: snapshotOf({ supportsImg2Img: false }),
+          }),
+        )
+        expect(await supportsReferenceImages('p', 'm')).toBe(true)
+      })
+
+      it('is ignored by a provider that takes none', async () => {
+        vi.mocked(settings.getImageProfile).mockReturnValue(
+          profile('openrouter', { capabilityOverride: { references: false } }),
+        )
+        expect(await supportsReferenceImages('p', 'm')).toBe(true)
+      })
+    })
   })
   describe('model snapshot', () => {
     // The failure set and the model cache outlive a test, so each case gets its own profile.

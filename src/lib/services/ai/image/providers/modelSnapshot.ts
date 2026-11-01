@@ -1,4 +1,5 @@
 import type {
+  ImageCapabilityOverride,
   ImageModelCapabilities,
   ImageModelSnapshot,
   ImageProfile,
@@ -33,6 +34,26 @@ export function snapshotModel(model: string, info?: ImageModelCapabilities): Ima
     capturedAt: Date.now(),
     capabilities: pickCapabilities(info),
   }
+}
+
+/** The capabilities with each field the profile's override sets replaced; a blank field defers to the provider. */
+export function applyCapabilityOverride(
+  capabilities: ImageModelCapabilities | undefined,
+  override: ImageCapabilityOverride | undefined,
+): ImageModelCapabilities | undefined {
+  if (!override) return capabilities
+  const { minPixels, sizes, references } = override
+  const merged: ImageModelCapabilities = { ...capabilities }
+  if (minPixels) merged.minPixels = minPixels
+  if (sizes?.length) merged.supportedResolutions = sizes
+  if (references === false) {
+    merged.supportsImg2Img = false
+    merged.maxReferenceImages = 0
+  } else if (references === true) {
+    merged.supportsImg2Img = true
+    if (merged.maxReferenceImages === 0) delete merged.maxReferenceImages
+  }
+  return merged
 }
 
 /**

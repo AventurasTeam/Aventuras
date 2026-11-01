@@ -20,7 +20,11 @@ import type {
 } from './types'
 import { createLogger } from '#lib/log.ts'
 import { fetchPublicImageBase64 } from './fetchAdapter'
-import { IMAGE_MODEL_SNAPSHOT_VERSION, snapshotModel } from './modelSnapshot'
+import {
+  IMAGE_MODEL_SNAPSHOT_VERSION,
+  applyCapabilityOverride,
+  snapshotModel,
+} from './modelSnapshot'
 
 // Provider factory imports (lazy)
 import { createNanoGPTProvider } from './nanogpt'
@@ -147,6 +151,10 @@ const PROVIDER_CAPABILITIES: Record<ImageProviderType, CapabilitySource> = {
   a1111: { kind: 'none' },
 }
 
+/** Whether a profile of this provider type has a capability override: only the type that fronts hosts publishing nothing usable. */
+export const takesCapabilityOverride = (providerType: ImageProviderType): boolean =>
+  providerType === 'openai-compatible'
+
 /** Whether a profile of this provider type saves a snapshot of its model's capabilities. */
 export const capturesModelSnapshot = (providerType: ImageProviderType): boolean =>
   PROVIDER_CAPABILITIES[providerType].kind === 'snapshot'
@@ -185,8 +193,18 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
 }
 
-/** What a profile's model can do, from the source its provider declares. */
+/** What a profile's model can do: the source its provider declares, then the profile's own override. */
 async function modelCapabilities(
+  profile: ImageProfile,
+  model: string,
+): Promise<ImageModelCapabilities | undefined> {
+  const provided = await providedCapabilities(profile, model)
+  return takesCapabilityOverride(profile.providerType)
+    ? applyCapabilityOverride(provided, profile.capabilityOverride)
+    : provided
+}
+
+async function providedCapabilities(
   profile: ImageProfile,
   model: string,
 ): Promise<ImageModelCapabilities | undefined> {
