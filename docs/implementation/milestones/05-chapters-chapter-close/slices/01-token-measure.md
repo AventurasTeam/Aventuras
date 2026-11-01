@@ -82,11 +82,12 @@ that path counts for itself.
   two. `lib/retrieval/run.ts:53` and the tests that import `./tokens`
   take the leaf. A `boundaries/dependencies` rule in `eslint.config.js`,
   beside `lib/diagnostics`', keeps it a leaf, since the value cycle it
-  prevents fails only on Android at boot. It disallows `lib-module` and
-  `lib-file` targets both: `lib/*.ts` is a separate element
+  prevents fails only on Android at boot. It disallows `lib-module`,
+  `lib-file` and `app-code` targets: `lib/*.ts` is a separate element
   (`eslint.config.js:46-50`), so naming one would let
-  `@/lib/keyword-terms` through. `countTokens` guards long runs, per
-  Implementation notes.
+  `@/lib/keyword-terms` through, and a hook importing `@/lib/db` would
+  reopen the cycle. `countTokens` guards long runs, per Implementation
+  notes.
 - **Counting at create.** `fullRow`
   (`lib/actions/story-entries/register.ts:44-55`) sets
   `contentTokens: countTokens(entry.content)`, whatever the payload
@@ -287,8 +288,9 @@ and numbers corrected.
   `lib/db/__tests__/boundary.test.ts`, on fixture paths inside each
   module, read `boundaries/dependencies`, so the check needs no
   hand-made mutation and holds on every later PR:
-  - In `lib/tokens`, `@/lib/text` (a `lib-module`) and
-    `@/lib/keyword-terms` (a `lib-file`) are flagged, and `js-tiktoken`
+  - In `lib/tokens`, `@/lib/text` (a `lib-module`),
+    `@/lib/keyword-terms` (a `lib-file`), and `@/hooks/use-tier` and
+    `@/constants/theme` (`app-code`) are flagged, and `js-tiktoken`
     isn't.
   - In `lib/chapters`, a value import of `@/lib/db` and the inline
     `import { type X }` spelling are flagged. `import type` from
@@ -408,7 +410,7 @@ and numbers corrected.
   first open after Metro's bundle), starting within about 0.3 s of the
   tap in the two runs timed and at least 1,714 ms ahead of the host's
   first-paint message. Both cross the lines this slice's planning drew,
-  a build of 1,000 ms or more and a warm ahead of first paint, so the
+  any build of 1,000 ms or more and a warm ahead of first paint, so the
   developer chose. With the warm no-oped, tap to first paint took 1.92
   to 1.99 s against 2.04 and 2.17 s, so the warm costs about 0.05 to
   0.25 s, since the WebView's boot overlaps it. That's three samples
