@@ -1466,7 +1466,7 @@ export default function ReaderComposerRoute() {
   )
 
   const jumpButtonEnabled = appSettingsStore.useAppSettings((s) => s.appearance.showJumpToBottom)
-  const openRegionPct = useChapterProgress(openForBranch?.storyId).percent
+  const chapterProgress = useChapterProgress(openForBranch?.storyId)
   const { theme } = useTheme()
 
   useLayoutEffect(() => {
@@ -1520,7 +1520,7 @@ export default function ReaderComposerRoute() {
           {storyTitle ?? t('reader:placeholderTitle')}
         </TruncatedText>
       }
-      chapterProgress={openRegionPct}
+      chapterProgress={chapterProgress}
       mobileChipAction={
         tier === 'phone' ? (
           <ReaderBrowseChip

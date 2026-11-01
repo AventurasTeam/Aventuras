@@ -219,7 +219,7 @@ export default function WorldRoute() {
 
   const { activeRunKind, editBlocked, gateReason, beforeTurn, cancelPillRun } =
     useStoryGenerationGate(storyId ?? undefined, branchId)
-  const openRegionPct = useChapterProgress(storyId).percent
+  const chapterProgress = useChapterProgress(storyId)
 
   const { onSession, guard, navigateGuarded } = useRowSessionGuard()
   const worldDelete = useWorldDelete(branchId, ctx, guard)
@@ -586,7 +586,7 @@ export default function WorldRoute() {
     <ScreenShell
       variant="in-story"
       title={<Breadcrumb segments={titleSegments} />}
-      chapterProgress={openRegionPct}
+      chapterProgress={chapterProgress}
       onBack={handleBack}
       onOpenStorySettings={() => {
         if (storyId != null) navigateGuarded(`/story-settings/${storyId}`)

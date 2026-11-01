@@ -8,6 +8,7 @@ import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
 import { TextClassContext } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
+import type { ChapterProgress } from '@/lib/chapters'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
@@ -42,11 +43,11 @@ type ScreenShellProps = {
   statusSlot?: ReactNode
 
   /**
-   * In-story only. 0–100. Drives the token-progress strip width.
+   * In-story only. `percent` drives the token-progress strip width.
    * When undefined, the strip renders at 0 % (layout stability).
    * Spec: always rendered for in-story, never hidden.
    */
-  chapterProgress?: number
+  chapterProgress?: ChapterProgress
 
   /**
    * Banner stack above the bar (AI-not-configured, profile-errors).
@@ -163,7 +164,7 @@ export function ScreenShell({
     <IconAction icon={ArrowLeft} label={t('chrome.back')} onPress={onBack} size="lg" />
   )
 
-  const progress = clampProgress(chapterProgress)
+  const progress = clampProgress(chapterProgress?.percent)
 
   return (
     <View
