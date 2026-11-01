@@ -9,7 +9,7 @@
 import { IMAGE_TIMEOUT_DEFAULT } from '#lib/constants/timeout.ts'
 import { isAbortError } from '#lib/services/activity/index.ts'
 import { debug } from '#lib/stores/debug.svelte.ts'
-import { errMessage } from '#lib/utils/error.ts'
+import { errMessage, HttpStatusError } from '#lib/utils/error.ts'
 import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
 import { bytesToBase64 } from '#lib/utils/image.ts'
 import { isPublicHttpUrl } from '#lib/utils/url.ts'
@@ -93,7 +93,7 @@ export async function imageGetFetch(
         errorText,
       )
       statusLogged = true
-      throw new Error(`Image API error ${response.status}: ${errorText}`)
+      throw new HttpStatusError(response.status, errorText, 'Image API')
     }
 
     debug.addDebugResponse(debugId, serviceId, { status: response.status }, startTime)

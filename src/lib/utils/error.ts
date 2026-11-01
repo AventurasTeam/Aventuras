@@ -38,6 +38,18 @@ export function errorSummary(text: string, max = 200): string {
   return line.length > max ? `${line.slice(0, max - 1)}…` : line
 }
 
+/** A response that was not a success, with the status and body it came back with. */
+export class HttpStatusError extends Error {
+  override name = 'HttpStatusError'
+  constructor(
+    readonly status: number,
+    readonly body: string,
+    what: string,
+  ) {
+    super(`${what} error ${status}: ${body}`)
+  }
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 
