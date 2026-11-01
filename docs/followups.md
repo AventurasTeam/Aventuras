@@ -186,6 +186,13 @@ breakdown under [UX](#ux).
 
   Raised 2026-10-31 by the chapter-close agent design.
 
+- **World's "stale active" surface.**
+  [`chapter-close.md → Phase 4`](./memory/chapter-close.md#phase-4--lifecycle-review)
+  puts a character far past `lastSeenAt` in the World panel as "stale
+  active", derived with no schema column. `world.md` has no such surface,
+  "far back" needs played stories to define, and a close doesn't produce
+  it. Moved out of M5 at its promotion, 2026-11-01.
+
 - **Parked items play gives a signal for.** Each waits on evidence
   only play produces, so play checks them rather than letting the
   signal pass unseen:

@@ -60,3 +60,10 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
+
+- **A turn's `config-resolver` entry offers Retry.**
+  `useSystemEntryActions` (`components/reader/system-entry-actions.tsx`)
+  returns `onRetry` unless the pass is `held` or `resolved`, where
+  [`reader-composer.md`](../ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)
+  lists `Fix profile · Dismiss` for a missing provider. Existing drift
+  that no M5 slice owns. Raised 2026-11-01 by the M5 promotion.

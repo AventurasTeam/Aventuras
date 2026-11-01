@@ -17,8 +17,9 @@ defined `milestone.md`.
   [M1.5 — Data foundation](./milestones/01b-data-foundation/milestone.md)
   (inserted between M1 and M2; no renumber),
   [M2 — First user loop](./milestones/02-first-user-loop/milestone.md),
-  [M3 — Memory floor](./milestones/03-memory-floor/milestone.md), and
-  [M4 — World + Plot read surfaces](./milestones/04-world-plot-read-surfaces/milestone.md).
+  [M3 — Memory floor](./milestones/03-memory-floor/milestone.md),
+  [M4 — World + Plot read surfaces](./milestones/04-world-plot-read-surfaces/milestone.md), and
+  [M5 — Chapters + chapter-close](./milestones/05-chapters-chapter-close/milestone.md).
   M1.5 front-loads
   the full relational schema, typed working-set stores, and Tier-1 CRUD
   arms, so the planned milestones below **no longer carry their own
@@ -122,9 +123,8 @@ Standing look-ahead candidates, by in-flight milestone: during M2 —
 M3.1 (embedder infra, independent of the M2 loop), M3.6's editor
 build (once M2.3's wizard shell merges), M4 read surfaces on seeded
 rows, M7's appearance tab and M7.3 diagnostics screen (M1-era
-substrate; turn-capture shape extends later); during M4 — M5.1
-membership; during M7 — M8.3 vault shell; during M8 — M9.1 and
-M9.3.
+substrate; turn-capture shape extends later); during M7 — M8.3
+vault shell; during M8 — M9.1 and M9.3.
 
 ---
 
@@ -156,298 +156,9 @@ M9.3.
 
 ### M5 — Chapters + chapter-close
 
-**Goal.** Chapter timeline ships as a real surface; chapter-close
-pipeline runs at chapter boundaries doing the
-[`memory/chapter-close.md`](../memory/chapter-close.md) phase
-sequence (3a–3f). Threads management lands. Reader gains chapter
-management affordances (insert break, view chapter context, etc.).
-
-**Why now.** Chapter-close is the second-largest piece of memory-
-pipeline complexity after the per-turn classifier. It's a boundary
-event, so it can be developed and tested independently of per-turn
-flow. The threads model and chapter-timeline UI are natural
-companions.
-
-**Likely slices.**
-
-- M5.1 — Chapter membership and boundaries (thin gate): assigns
-  `story_entries.chapter_id` across closed ranges, detects
-  boundaries (token-threshold crossing, auto-close), and lands the
-  manual-boundary primitive consumed by M5.4's insert-break. An
-  earlier sketch absorbed this into M5.2 as too thin to stand alone
-  (the M1.5 chapters slice shipped the full updatable-column
-  primitive surface) — reinstated because a thin gate is the
-  intended gate-then-parallel milestone shape, and the absorption
-  made the close pipeline gate every UI slice in the milestone.
-- M5.2 — Chapter-close pipeline: phases 3a–3f, agent invocations,
-  delta writes. Chapter-close consolidates the `threads` rows the
-  periodic classifier writes
-  ([`memory/classifier.md → Threads`](../memory/classifier.md#threads));
-  surface (plot panel threads tab) already exists
-  from M4.3. Per-chapter `retrieval_count`
-  reset under the chapter-close `action_id` (paired with M3.4's
-  per-injection increment). Extends the M1.5 awareness upsert arm
-  with an earliest-wins `learned_at_entry_id` merge path — the
-  shipped arm keeps-first with no write path to that column
-  (forward seam named in the M1.5 happenings slice), and the
-  lore-mgmt phase needs it. M5.2 extends `nextMemoryRun`
-  (`lib/pipeline/definitions/memory-chain.ts`), per-turn's `chainsTo`,
-  with the close branch, gives the pass a `chainsTo` of its own for
-  phase 0, adds `pendingClose`, `closeOwed` and the open-region read,
-  and builds the chapter-close pipeline. The close branch of
-  `nextMemoryRun` reads at commit under the gate, in SQL as the pass
-  branch does, with no in-memory mirror of the open region's tokens.
-  The chain it extends is in place: the orchestrator awaits `chainsTo`
-  at commit while the run holds the gate and starts the successor with
-  a fresh `actionId`, and an `interruptible` run's abort records its
-  kind in `txState.deferred`, so a close declared `interruptible` is
-  interrupted, recorded and toasted (`chrome.deferredWork.close`) like
-  a pass.
-  Slice-authoring note: the reader's rollback and regenerate confirms
-  recount whenever a run settles while they are open, and
-  `rollbackToEntry` / `regenerateTurn` refuse `counts-changed` when
-  the set resolved at confirm differs from the counts the user saw,
-  so a close committing under an open modal is covered.
-  Slice-authoring note: `interruptMemoryRuns`
-  (`lib/stores/generation/generation.ts`) aborts one snapshot of the
-  branch's interruptible runs. Once this slice gives the pass its
-  `chainsTo`, a pass committing during the interrupt can chain a close
-  that the snapshot misses and that then runs beside the reversal's
-  sweep. This slice must loop as `cancelStoryRuns` does, or have
-  `commitRun` refuse an interruptible successor while
-  `reversalInProgress`.
-  Slice-authoring note: Send runs a deferred pass before the turn
-  (`owedPassAtSend` reads only `deferred.pass`), and `nextMemoryRun`
-  returns null while the branch holds a `close` record, so a
-  `{ close: true }` record would stop all memory work on the branch
-  until a restart. This slice must run the deferred close after the
-  deferred pass.
-  Slice-authoring note: `undoLastAction` reads its target before the
-  gate decision, and `selectUndoTarget` skips only `periodic_classifier`
-  deltas. While a close runs its own deltas sit at the head, so the
-  selector returns a group and undo refuses, where canon has CTRL-Z of
-  the turn interrupt the close. Writing as tools run makes that window
-  most of the run. This slice must skip the running close's deltas, and
-  only those: a committed close stays the undo target.
-  Slice-authoring note: the Actions menu puts `Close chapter…` under
-  `STORY TOOLS` on every in-story surface
-  ([`actions-menu.md`](../ui/patterns/actions-menu.md)), so a close is
-  the first run startable from World, Plot or Story Settings, and a
-  screen that is both dirty and busy answers one back with two dialogs,
-  the story-leave confirm and the unsaved-changes one. It is
-  unreachable today: busy means edit-blocked, those screens disable
-  their inputs then, and nothing starts work from them. The fix shape:
-  the story-leave guard takes `dirty`, drops its own `usePreventRemove`
-  while dirty and exposes a removal-aware `guardRemoval(proceed)`, and
-  each route's unsaved guard calls
-  `requestLeave(() => guardRemoval(proceed))` (World and Plot thread it
-  through `useRowSessionGuard`). The two dialogs are the lesser cost.
-  World's Save no longer merges concurrent writes into a dirty pane's
-  keywords and relationships, since a pane is never dirty across a pass
-  ([`world.md → Relationships — character-to-character`](../ui/screens/world/world.md#relationships--character-to-character)),
-  and Plot's Save keeps a dirty links array whole. A close started from
-  the Actions menu over a dirty World or Plot pane would run under the
-  draft, and the pane's later Save would write its dirty fields, whole
-  arrays included, over the close's writes to them. That is the
-  revisit signal of
-  [`parked.md → A dirty links array on Save overwrites concurrent link writes`](../parked.md#a-dirty-links-array-on-save-overwrites-concurrent-link-writes),
-  whose first candidate is this close: this slice must keep a close
-  from starting over a dirty pane, or bring back the three-way merge
-  that entry describes, for both surfaces.
-  Slice-authoring note: the memory banner labels only the pass
-  (`use-memory-run-banner.ts`, and its test pins that a close shows
-  nothing); canon shows it for a pass or a chapter-close transaction
-  ([`principles.md → Affordance loci`](../ui/principles.md#affordance-loci)),
-  so this slice adds the close's label and flips that test.
-- M5.3 — Chapter timeline screen per
-  [`docs/ui/screens/chapter-timeline/chapter-timeline.md`](../ui/screens/chapter-timeline/chapter-timeline.md);
-  chapter delete routes through the deep-rollback surface (M5.5).
-- M5.4 — Reader chapter affordances: insert break, navigate by
-  chapter, chapter context badge.
-- M5.5 — Deep rollback surface: multi-chapter reverse-replay
-  flow extending M2.5's rollback-confirm modal with cascade
-  warning for rollback spanning closed chapters (per
-  [`data-model.md → Branch model`](../data-model.md#branch-model)).
-  Consumed by chapter delete (M5.3) and rollback-to-entry-N from
-  the reader.
-
-**Parallel paths.** M5.1 is the gate, and it's thin; then
-{M5.2} || {M5.3} || {M5.4} || {M5.5}. M5.3's timeline renders
-membership-populated chapters; M5.4's insert-break consumes M5.1's
-boundary primitive; M5.5's reverse-replay walks the delta log
-regardless of which action wrote the deltas, so it develops against
-synthetic close deltas and integration-validates the cascade
-warning once M5.2's real close output exists.
-
-**Slice-authoring notes.** M5.3's chapter delete routes through
-M5.5's deep-rollback surface — pin that surface's API as a slice
-contract so the two parallel slices don't collide.
-
-Carried deferrals, routed out of
-[`followups.md`](../followups.md) 2026-08-18, verified against the
-code first. The four token-progress entries are one work item: a
-DB-backed `openRegionTokens` resolves all of them.
-
-- **M5.1 — `metadata.tokens.completion` is the wrong measure for the chapter
-  threshold, on four independent counts.** M5 needs
-  `openRegionTokens(branchId)` as a DB read
-  ([`generation-pipeline.md → chainsTo on predecessor`](../generation-pipeline.md#chainsto-on-predecessor)),
-  and `story_entries.metadata.tokens` already looks like the answer.
-  It is not. (1) **Stale on edit** — `updateStoryEntryContent`
-  (`lib/actions/story-entries/operational.ts:45`) sets only `{ content }`,
-  so the count survives a rewrite unchanged. (2) **Wrong text even when
-  fresh** — it is provider `usage.outputTokens`
-  (`lib/pipeline/definitions/per-turn.ts:256`), counting everything the
-  model emitted, including the state block stripped before persist — a gap
-  the world-state-block pass widened deliberately when it moved the block
-  out of `content`
-  ([`entry-card.md → World-state panel`](../ui/patterns/entry-card.md#world-state-panel)).
-  (3) **Wrong tokenizer** — provider-side, whichever
-  one that provider uses, while `chapterTokenThreshold` and the
-  token-progress strip measure in o200k via `countTokens`. A story that
-  switches providers mid-run would sum two incompatible token scales.
-  (4) **AI entries only** — `usage` exists only on a generation call, so
-  `user_action` rows carry no count at all, and they are part of the open
-  region (`kind !== 'system'`). A SUM over `completion` undercounts by
-  every user turn. The decision is therefore a **new field, not a
-  rename**: `tokens.{prompt, completion, reasoning}` is a coherent
-  provider-usage triple worth keeping for cost provenance, and
-  repurposing one leg of it to mean "o200k count of the stored content"
-  makes the other two incoherent. Open sub-questions: a real
-  `story_entries` column (SUM-able and indexable, which a JSON field is
-  not — and M5's trigger reads this per turn) versus another metadata
-  key; which write paths must maintain it (generation, edit, prose
-  reversal, system entries, import/seed); backfill for existing rows;
-  whether a translated story counts the original or the translation
-  (the original feeds the prompt buffer, so presumably that); and which
-  number the entry card shows now that "reply tokens" and "content
-  tokens" diverge
-  ([`entry-card.md`](../ui/patterns/entry-card.md#reasoning-expansion)).
-  Sits with the three token-progress-strip entries below, which the same
-  change would resolve. Surfaced by review discussion (2026-08-06).
-- **M5.1 — The token-progress strip reads a 50-entry window, so it cannot
-  reach its own threshold.** `useOpenRegionTokens` sums the open region
-  out of `entriesStore`, which holds a trailing `ENTRIES_WINDOW_SIZE`
-  (50) slice rather than the branch. Measured: 50 entries at realistic
-  length is **37.7%** of the default 24 000 `chapterTokenThreshold`, and
-  reaching 100% would need ~132 entries. Once the open region exceeds 50
-  — the normal state, since nothing closes a chapter before M5 — the
-  strip reports a fraction of the truth and reads "plenty of room" while
-  chapter-close is overdue. `generation-pipeline.md → Chapter close`
-  sketches `openRegionTokens(branchId)` reading from the **DB**, so the
-  two will diverge the moment M5 wires the real trigger. The strip is
-  still better than the hardcoded `0` it replaced; the number is not
-  trustworthy. Surfaced by M3.4 Task 19 (2026-08-02).
-- **M5.1 — The same strip is non-monotonic across a reload.** `entriesStore`
-  grows within a session (`patch` never evicts) but `reload()`
-  re-hydrates to the trailing 50, discarding paged-in older rows.
-  `reload()` fires on turn failure and on submit-with-system-tail — so
-  **a failed turn visibly shrinks the progress strip**, as does
-  restarting the app. Same story,
-  same open region, different number. Follows from the entry above and
-  is fixed by the same change. Surfaced by M3.4 Task 19 (2026-08-02).
-- **M5.1 — `countEntryTokens` now runs on the reader's first render, adding a
-  synchronous tiktoken encoder build before first paint.** It had zero
-  production callers before M3.4 Task 19 — `countTokens` was reached
-  only through the ranker, inside the async per-turn retrieval phase.
-  The BPE map build measured **116ms** on desktop under Node
-  (`lib/retrieval/tokens.ts` documents ~135ms) and will be worse on
-  Android. If story-open shows a hitch, this is it, and the fix is to
-  warm the encoder during story open rather than to change the hook.
-  **Unmeasured on device.** Surfaced by M3.4 Task 19 (2026-08-02).
-- **M5.1 — `countEntryTokens`' memo is never pruned.** `lib/retrieval/tokens.ts`
-  keys an unbounded module-level `Map` on entry id and holds it for the
-  process lifetime, across deletes, rollbacks, branch switches and story
-  switches; `__resetTokenCache` has no production caller. Deleting an
-  entry and later reinstating that id — reverse-replay of a delete
-  re-inserts with the original id — resurrects a memo entry written
-  before the deletion. The content check on read bounds the damage to a
-  stale-content miss rather than a wrong count, so this is a leak rather
-  than a defect today, but it is precisely the shape
-  [lessons-learned → No "harmless" id leaks](./lessons-learned/no-harmless-id-leaks.md)
-  records. Surfaced by the M3.4 whole-slice review (2026-08-03).
-
-- **M5.2 — What the close's agent needs that the code doesn't have.**
-  Read against `lib/` on 2026-10-31, with no tests run.
-  [`memory/chapter-close.md → The agent`](../memory/chapter-close.md#the-agent)
-  is the spec; these are the gaps it meets:
-  - A phase can't land a group or read a verdict: the action port has no
-    group method, `lib/pipeline` can't import actions, `delta_emitted` is
-    the only write event, `consumePhase` passes nothing back, and a
-    rejection throws.
-  - `applyDeltaActionGroup` drops a noop and reports an all-noop group as
-    `ok`, with no ids, so a tool call can't tell `skipped` from `ok`, and
-    a noop isn't only user precedence.
-  - The window check can't see a tool conversation: `countPromptTokens`
-    counts system and text parts only, so tools, calls, results and
-    reasoning go uncounted, and only a recognized provider rejection
-    would show a conversation outgrowing the window.
-  - The AI SDK runs a step's tool `execute`s in parallel, racing a read
-    before a write, so the loop gives tools no `execute` and dispatches a
-    step's calls itself, in order. `promptParams` takes only strings.
-  - An action makes one delta, so merges are groups: `groupConflict` trips
-    on an involvement re-point, and the awareness upsert moves
-    `learned_at_entry_id` only for user sources and zeroes the count on a
-    pipeline create.
-  - `raiseRefusal` refuses `duplicate` as `not-namesakes`, and
-    `stillPaired` serves `flagStillHolds`, `brokenFlags` and
-    `pairFlagsToClear`; `COLLISION_REASONS` needs the value.
-  - Detecting and gating `toolCalling`: the schema lacks it, the catalog
-    can't produce it, and `runPreflight` returns only
-    `ConfigResolverError`.
-  - Canon's capability hint covers tool calling, and the code doesn't:
-    [`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories)
-    lists `tools` and `tool_choice`; `CAPABILITY_HINT_KEYWORDS` in
-    `lib/ai/transport/classify-provider-error.ts` has neither, and
-    `carriedCapabilities` in `lib/ai/generate.ts` has no arm for them.
-    Unbuilt until the close's steps send tools, as nothing in `lib/`
-    does yet, and the hint's fix needs the flag above.
-  - The mock LLM and the stub can't drive tools: a request with no schema
-    block gets `{}` and `stop`, so an E2E close would pass with no writes.
-  - Capture and progress: `HTTP_CALLS_CAP` is 200 where seven tasks at 24
-    steps reach 168 calls a part, `phases` is static, so parts sit inside
-    one phase, and nothing carries `close_task_complete` to the banner.
-  - Failure surfaces are the pass's: `systemFailure.pass`,
-    `useMemoryRunToasts` and `nextMemoryRun`'s return type.
-  - A stale `deferred.close`: a rollback below the threshold leaves
-    `closeOwed` false, and nothing clears the record, so `nextMemoryRun`
-    stops chaining until a close commits.
-  - A close's stackable normalization writes a record, so its undo needs
-    the guard `generation-pipeline.md` names.
-  - `flag_duplicate` refuses a pair the user resolved by reading the row's
-    deltas for a user clear naming that partner: Keep as distinct writes
-    nothing else.
-- **M5.2 — The close's awareness merge must pass the prose it cites.**
-  The awareness upsert (`lib/actions/happenings/register-awareness.ts`)
-  checks user precedence when its payload carries a `proseEntryId`,
-  since the AI writer map, whose pass reached user rows first: a pair
-  the user created after that prose keeps its values, a `source` or
-  `decay_resistance` the user wrote after it stands, and a pair the
-  user deleted since stays deleted. A payload without one checks
-  nothing, as a user write needs. Canon settles the close's case the
-  same way: a user-written row keeps its values when the user wrote
-  them after the cited prose
-  ([`memory/chapter-close.md → 3e`](../memory/chapter-close.md#3e--happenings-consolidation)),
-  so the close's cluster merge passes the latest entry it cites as
-  `proseEntryId`. Found in 4.2c's slice review (2026-10-07); the check
-  landed with the AI writer map.
-- **M5.2 — Send checks only the first run of its owed pass's chain.**
-  `runPipeline` resolves with the origin run's result alone
-  (`lib/pipeline/runtime/orchestrator.ts`), and `submitTurn`
-  (`lib/actions/turns/submit-turn.ts`) starts the turn on it. Once the
-  pass's `chainsTo` returns a catch-up pass or the close while a close
-  is pending
-  ([`chapter-close.md → Phase 0`](../memory/chapter-close.md#phase-0--catch-up-passes)),
-  Send must wait on the whole chain, or a failed catch-up pass or close
-  lets the turn run. A failed close also keeps its `{ close: true }`
-  record until it commits, or Send finds no close owed. Raised 2026-10-23 by
-  the pass failure policy slice review.
-
-**Gates.** M4 (chapter-close compacts entities + lore the world
-panel renders; surfaces would be invisible without M4).
-
-**Scope: out.** Cross-chapter semantic dedup (parked); lore-mgmt
-cross-arc callback detection (parked).
+**Promoted** — defined in
+[`milestones/05-chapters-chapter-close/`](./milestones/05-chapters-chapter-close/milestone.md)
+(milestone + thirteen slice docs).
 
 ---
 
@@ -473,8 +184,9 @@ churn.
 - M6.1 — Branch-copy at fork time + FK rewriting (the `branches` table,
   incl. `classifier_status`, landed in M1.5; this slice is the fork
   orchestration), including the survival-anchor partition of post-fork
-  deltas (copy lagging `periodic_classifier` facts about kept entries
-  instead of rewinding them, unless they name a row the rewind
+  deltas (copy lagging `periodic_classifier` or `chapter_close` facts
+  about kept entries instead of rewinding them, unless they name a row
+  the rewind
   removes) per
   [`data-model.md → Branch model`](../data-model.md#branch-model).
 - M6.2 — Delta-log branch filtering (reads scope to current
@@ -526,8 +238,9 @@ verified against the code first. Resolve with the slice each names.
   Slice 3.5 Task 14 review (2026-08-09).
 - **M6.1 — steps 2 and 3 of the fork partition use different predicates,
   so a foreground edit about a kept entry falls between them.** Step 2
-  copies deltas below `L` plus, above `L`, only `periodic_classifier`
-  deltas anchored to a kept entry; step 3 reverse-applies everything above
+  copies deltas below `L` plus, above `L`, only background
+  (`periodic_classifier` or `chapter_close`) deltas anchored to a kept
+  entry; step 3 reverse-applies everything above
   `L` except `entry_id IS NULL OR position(entry_id) >= position(N+1)` —
   by anchor, whatever the source. A `user_edit` delta anchored at or below
   `N` therefore matches neither: not copied, not rewound, just dropped.
@@ -583,6 +296,11 @@ verified against the code first. Resolve with the slice each names.
   allows (ten minutes by default), then apply, and longer while a
   reconcile embed hangs, which nothing bounds yet (M7.1's embed-timeout
   item below). Routed from triage 2026-09-27.
+- **M6.3 — A branch delete drops the branch's close records.** M5 keeps
+  `deferred` and `pendingClose` in `generationStore`'s `TxState`, keyed
+  by branch. Nothing deletes a branch yet. The action that does clears
+  both, so no record outlives its branch. Raised 2026-11-01 by the M5
+  promotion.
 - **M6.3 — No shared branch filter for store rows.** About twenty call sites
   in `lib`, `components` and `app` filter a store's rows by
   `branchId` inline; 4.2c added two more (`branchRows` in
@@ -1304,12 +1022,11 @@ code before it moved; resolve with the slice it names.
   Revisit trigger: the
   first long-story prompt-size or cost signal. Routed from triage
   2026-09-27.
-- **M7.3 — Reader jump-to-entry from a delta row.** The reader route
-  takes only `branchId` and `ReaderSurfaceHandle` exposes
-  `jumpToBottom`; History rows (4.2b) and the Diagnostics delta log
-  want an entry link: an `entry` route param, load-older until the
-  entry is present, scroll into view with a transient highlight.
-  Surfaced by 4.2b planning (2026-09-28).
+- **M7.3 — Reader jump-to-entry from the Diagnostics delta log.**
+  [Slice 5.3](./milestones/05-chapters-chapter-close/slices/03-reader-chapters.md)
+  ships the jump and History's entry link, moved in from here at M5's
+  promotion, since three M5 surfaces consume it. M7.3 keeps wiring the
+  delta log's rows to it. Surfaced by 4.2b planning (2026-09-28).
 - **M7.1 — A date-time format setting, independent of the UI
   language.** Past a week, History rows and the story card show a date
   and time from `relativeTimeLabel` (`lib/i18n`), in the shape its
@@ -1350,7 +1067,9 @@ code before it moved; resolve with the slice it names.
   `lib/pipeline/definitions/periodic-classifier.ts`), where the next
   Send shows the held entry instead. The panel slice words both from
   what it can read (a pass owed, the branch held) or drops the promise.
-  Raised 2026-10-23 by the pass failure policy slice review.
+  Raised 2026-10-23 by the pass failure policy slice review. A failed
+  chapter close's toast repeats the promise, so the wording covers both
+  (added at M5's promotion, 2026-11-01).
 - **M7.2 — `lastError` mixes prefixed and bare causes.** The status
   block renders `classifier_status.lastError`. The pass's hooks
   (`onPreflightFailure`, `onPhaseException` in
@@ -1367,6 +1086,9 @@ code before it moved; resolve with the slice it names.
   [`classifier.md → Failure policy`](../memory/classifier.md#failure-policy)
   bounds only the pass's structured call, so a hung remote embedder
   holds the pass, and the gate, until it returns or the user cancels.
+  A close's
+  [3e embed](../memory/chapter-close.md#3e--happenings-consolidation) is
+  a third such call: M5 honours the signal and bounds nothing.
   Options: extend the pass bound over reconcile, one deadline for the
   call and its matching, or an embed timeout read from the embedder
   profile, which the embedder settings would carry. Raised 2026-10-23
@@ -1380,7 +1102,50 @@ code before it moved; resolve with the slice it names.
   `ProviderTimeoutError` is classified for never starts. Predates the
   2026-10-24 triage pass, which routed it here and lost it; filed by
   its slice review. Options: a pass bound longer than one attempt's,
-  or a per-attempt share of the pass bound.
+  or a per-attempt share of the pass bound. A chapter close's calls
+  have the same shape, so the fix covers them too.
+- **M7.1 — A close's two profile switches.** `closeConversation` and
+  `closeTools`
+  ([`chapter-close.md → Conversations`](../memory/chapter-close.md#conversations)),
+  with their `single` and `shared` drivers. M5 runs `split` and
+  `separate` only, since nothing can set either switch before the
+  profile editor. `single` is a second driver and only the default was
+  tuned, so what it does on outgrowing the window, and the read check
+  after that, need settling first. Moved here at M5's promotion (2026-11-01).
+- **M7.1 — A close's capability surfaces.** The tool badge, the
+  `lore-mgmt` warning and `Set window` on a close's entries, none of
+  which has a settings surface in M5. Until this slice `Fix profile`
+  lands on the Providers tab with `toolCalling` settable only by DB or
+  catalog. Moved here at M5's promotion (2026-11-01).
+- **M7.1 — The lore cap's setting.**
+  [`chapter-close.md → 3a`](../memory/chapter-close.md#3a--lore-creation)
+  makes the cap of 3 creates per chapter tunable in app settings. Slice
+  5.8 ships a constant, and the setting has no key yet. Raised
+  2026-11-01 by the M5 promotion.
+- **M7.2 — `Regenerate summary`.** Slice 5.7 renders it disabled.
+  [`chapter-timeline.md → Per-card actions`](../ui/screens/chapter-timeline/chapter-timeline.md#per-card-actions)
+  names it, but the run has no kind, gate, cancel, toast, delta source
+  or undo story, and no answer for a chapter closed in parts. Moved here at M5's promotion (2026-11-01).
+- **M7.2 — `Set lead character…` in the Actions menu.**
+  [`actions-menu.md → Curated core`](../ui/patterns/actions-menu.md#curated-core)
+  lists it and only the lead picker names it, so it lands with the
+  picker. Raised 2026-11-01 by the M5 promotion.
+- **M7.3 — `HTTP_CALLS_CAP` under a close.** The sink keeps 200 calls
+  (`lib/diagnostics/sinks/http-call-sink.ts`), where seven tasks at 24
+  steps reach 168 calls a part. Capture is off by default and the
+  inspector is its first reader, so decide this against the memory
+  ceiling there. Moved here at M5's promotion (2026-11-01).
+- **M7.3 — A close's turn capture has no anchor.** M5's close capture
+  carries no run anchor on `beginTurn`, and the `ch. 3` run summary
+  doesn't exist. Both land with the inspector, their first reader.
+  Moved here at M5's promotion (2026-11-01).
+- **M7.5 — The probe's chapter pointer stays null after a close.**
+  `chapter_id` is captured from the open-region tail
+  (`per-turn-retrieval.ts:205-208`), where
+  [`probe.md`](../memory/probe.md#what-gets-captured--light-mode-default)
+  and Story Settings' "newest pointer (chapter + turn)" want a real
+  chapter. Read the entry's current chapter instead. The null is read
+  from the code, not run after a close. Moved here at M5's promotion (2026-11-01).
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware
@@ -1579,6 +1344,15 @@ each names.
   no canon rule bans a compound's stories importing domain configs, and
   this is the only compound story that does. Routed from triage
   2026-10-09.
+- **M8.1 — A close's display translation.** Step 9 of
+  [`chapter-close.md → Run order`](../memory/chapter-close.md#run-order)
+  has no slot until the translation pipeline exists, and M5 ships none.
+  M8.1 adds the step and M8.2 shows it. Moved here at M5's promotion (2026-11-01).
+- **M8.1 — `user-action-translation` recounts `content_tokens`.** It
+  rewrites `content`, and M5 stores each entry's token count beside it
+  ([Slice 5.1](./milestones/05-chapters-chapter-close/slices/01-token-measure.md)),
+  so the chapter threshold would read the old text. Raised 2026-11-01
+  by the M5 promotion.
 
 **Gates.** M7 (settings surfaces translation toggles).
 
@@ -1638,7 +1412,9 @@ isn't a per-feature concern.
   resilience. Bulk-import embed batching with progress UI for
   `.avts` import and DB-migration paths per
   [`memory/retrieval.md → Compute lifecycle`](../memory/retrieval.md#compute-lifecycle)
-  (naive 100k rows would take ~16 min).
+  (naive 100k rows would take ~16 min). The envelope carries each
+  chapter's `close_report`: M5 names the column in the export manifest
+  and exports nothing.
 - M9.5 — Cross-platform parity smoke (Linux desktop + Android),
   performance budget audit, including the
   [native reader's per-emission rerender](../parked.md#native-reader-rows-rerender-per-emission),
@@ -2091,6 +1867,10 @@ own.
   doubles the work on desktop, where the rail column and the peek both
   mount. Profile a classifier burst first. Routed from triage
   2026-10-09.
+- **M9.5 — Route re-renders under a close.** A close's stamps and tool
+  writes reach the reader route, on top of the classifier burst the item
+  above profiles. Unmeasured, so a full close joins that profile.
+  Moved here at M5's promotion (2026-11-01).
 - **M9.5 — `useRowSignals` returns new `rowTints` and `inScene` identities on
   unrelated writes.** `hooks/use-row-signals.ts:107-131` changes them on lore,
   thread and entry writes, so rail lists re-render through a classifier
@@ -2265,10 +2045,10 @@ the screen its goal requires; later milestones extend.
     chip, rail-as-Sheet) and peek drawer. The earlier "awareness chips
     on entries" phrase was dropped at promotion — no canonical doc
     specs it.
-  - **M5** — Chapter management affordances (insert break,
-    navigate by chapter, chapter context badge); deep-rollback
-    surface extends rollback-confirm with multi-chapter cascade
-    warning.
+  - **M5** — Chapter chip and popover, inline breaks and jump to
+    entry (5.3), the close modal and `Close chapter here` (5.10), the
+    review window (5.11), and chapter copy in the rollback and
+    regenerate confirms (5.12).
   - **M6** — Branch picker + branch creation flow.
   - **M7.2** — Era-flip reader affordances (time-chip popover,
     per-entry icon, Actions menu entry, flip-era modal).
@@ -2280,7 +2060,7 @@ the screen its goal requires; later milestones extend.
 - **Plot panel** ([plot.md](../ui/screens/plot/plot.md)).
   - **M4.3** — Plot panel shell + threads tab + happenings tab +
     happening awareness tab. Threads come from the periodic
-    classifier and the user; M5.2's chapter close consolidates them.
+    classifier and the user; M5's chapter close consolidates them.
 - **App settings**
   ([app-settings.md](../ui/screens/app-settings/app-settings.md)).
   - **M3.1** — Embedder integration with minimal app-settings
@@ -2336,7 +2116,7 @@ explicit.
   - **M2.3** — Wizard's calendar-summary preview samples the
     renderer to show how dates will format (`computeSampleRender`);
     M3.6a confirmed it needed no further work.
-  - **M5.3** — Chapter timeline time column consumes the renderer.
+  - **M5.7** — Chapter timeline time column consumes the renderer.
   - **M7.1** — App settings calendar tab (`default_calendar_id`
     picker into the registry). The pointer ships nullable (null at
     first init); whether to seed a built-in default here versus
@@ -2358,7 +2138,7 @@ explicit.
   - **M3.4** — Memory templates extend the engine to inject
     retrieved bundles (entities / lore / happenings) into
     rendered context.
-  - **M5.2** — Chapter-close templates render against
+  - **M5** — Chapter-close templates render against
     chapter-scoped context.
   - **M7.2** — Pack tab in story settings edits live packs
     (runtime validation surface partial — full pack-format editor
@@ -2412,10 +2192,11 @@ explicit.
   - **M3.9** — CTRL-Z action-batched extension: prose-turn undo
     reverses the positional suffix from the turn's start, skipping
     `periodic_classifier` deltas (survival-anchor-gated).
-  - **M5.5** — Deep rollback surface: multi-chapter reverse-replay
-    flow extending the rollback-confirm modal with cascade
-    warning for rollback spanning closed chapters; consumed by
-    chapter delete (M5.3) and rollback-to-entry-N from reader.
+  - **M5.12** — No new rollback surface: the modal already spans
+    closed chapters, so rollback and regenerate gain chapter copy and
+    honest counts. Chapter delete isn't a rollback, and keeps the
+    chapter's entries
+    ([`chapter-close.md → Deleting a chapter`](../memory/chapter-close.md#deleting-a-chapter)).
 - **Import / `ImportDialog` compound**
   ([`patterns/import-dialog.md`](../ui/patterns/import-dialog.md)).
   Design pass landed 2026-05-26

@@ -1975,6 +1975,17 @@ shows on a model the app targets that a rule's wording doesn't reach,
 such as where a turn's prose ends or which rule governs a list; each
 change is measured on the set alone.
 
+#### An empty prompt at `protectedBuffer` 0
+
+A prompt takes `max(protectedBuffer, min(openCount, wanted))` entries
+(`lib/retrieval/buffer.ts`), and the knob allows 0. So once a manual close
+at the newest reply empties the open region, a read with no new entry
+composes no prose at all, as
+`lib/pipeline/definitions/generation-context.test.ts` pins for the
+classifier. A suggestion refresh is that read; this is traced from the
+code, not run. Signal: a story on a buffer of 0 reaches an empty prompt.
+Parked at M5's promotion, 2026-11-01.
+
 ### UX (parked)
 
 #### Drag-and-drop file import for ImportDialog

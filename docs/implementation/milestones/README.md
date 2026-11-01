@@ -32,3 +32,9 @@ directory (`NN-name/`) with a `milestone.md` definition and a
   panel, reader Browse rail and peek drawer, Story Settings basic surface,
   per-row `.avts` import and export; nine slices, three day-one
   startable.
+- [Milestone 5 — Chapters + chapter-close](./05-chapters-chapter-close/milestone.md).
+  Chapters become real: one LLM close, started at the token threshold or
+  at an entry the user picks, with its seven-task agent, phase 0 catch-up
+  and reversal as one action; reader chapters, Chapter Timeline, the
+  review window, and chapter delete that keeps the entries; thirteen
+  slices, four day-one startable.
