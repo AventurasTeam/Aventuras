@@ -14,7 +14,7 @@
    ```
 
    `--model <id> --effort <level>` apply only to Claude, Codex, Cursor, Antigravity and Muse. Other agents, OMP and opencode included, review with the model their own config sets.
-4. **Wait in the background:** `orca orchestration check --run <run> --wait --types "worker_done,escalation,question" --timeout-ms 3300000 --json`. Answer a `question` with `orca orchestration reply --id <message_id> --body "<answer>"`, from the plan, the slice doc and canon; ask the developer when they don't settle it. Acknowledge each delivery with the next wait.
+4. **Wait in the background:** `pnpm exec tsx scripts/orca-run-wait.ts --run <run> [--ack <delivery_id>]`. It acknowledges heartbeat-only deliveries itself and ends on anything else, printing what `orca orchestration check --json` printed. If Orca's `You have N orchestration messages…` arrives anyway, end your turn while the wait is running, and start it again if it isn't. Answer a `question` with `orca orchestration reply --id <message_id> --body "<answer>"`, from the plan, the slice doc and canon; ask the developer when they don't settle it. Acknowledge each delivery with the next wait.
 5. **On `worker_done`,** read the review file, then `orca orchestration worker-release --dispatch <id>`. If it reports `retained`, tell the developer which terminal stays open.
 
 A reviewer that fails, or never writes the file, is not a pass: tell the developer, and offer the fresh-subagent route instead.

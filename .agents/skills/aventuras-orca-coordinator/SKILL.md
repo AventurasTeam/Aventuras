@@ -13,7 +13,7 @@ You run in the repository's main checkout, start one supervised Orca worker per 
 
 **Core principles:** only the developer decides load-bearing questions, and you never go blind to the other workers while one waits.
 
-**REQUIRED BACKGROUND:** the Orca orchestration guide (`orca skills get orchestration`). This skill overrides it on acknowledgement timing and wait length.
+**REQUIRED BACKGROUND:** the Orca orchestration guide (`orca skills get orchestration`). This skill overrides it on the wait command, acknowledgement timing and wait length.
 
 ## Start and recovery
 
@@ -42,10 +42,12 @@ You are its only writer. Update it before acting and before every acknowledgemen
 Keep exactly one consuming wait, always in the background (`run_in_background`), then end your turn. You wake on a worker message or on a developer message.
 
 ```bash
-orca orchestration check --run <run> [--ack <delivery_id>] --wait --types "worker_done,escalation,question" --timeout-ms 3300000 --json
+pnpm exec tsx scripts/orca-run-wait.ts --run <run> [--ack <delivery_id>]
 ```
 
-Never wait in the foreground; you would miss the developer. Read the output with `grep -v _keepalive`: Orca writes a keepalive line every 15 s. Heartbeats arrive despite `--types`, batched up to 50: a delivery of heartbeats alone gets acknowledged with the next wait, and a backlog is paged through with non-waiting `check --ack <id> --json` calls, a ledger line before each. A wait that ends within seconds with an error is a failure to read and fix, not a timeout; don't restart it blindly.
+Never wait in the foreground; you would miss the developer. The script waits with no `--types`, because Orca types `You have N orchestration messages…` into an idle terminal for any mail a wait's `--types` leave out, and every heartbeat would then cost you a turn. It acknowledges heartbeat-only deliveries itself, and those need no ledger line. It ends on anything else, or after 55 minutes, printing what `orca orchestration check --json` printed. A delivery it hands you is unacknowledged, and any heartbeats in it need no action. One holding only heartbeats means its acknowledgement didn't clear: start the wait again with `--ack`, and treat a repeat as an error. A wait that ends within seconds with an error is a failure to read and fix, not a timeout; don't restart it blindly.
+
+**If `You have N orchestration messages…` arrives anyway,** check your wait. Still running: a message landed between two of its calls, and the wait will report it if it needs you, so end your turn. Not running: start it again as above; it returns that mail.
 
 **A timeout is a checkpoint.** Run `orca orchestration worker-list --run <run> --include-remote --json` and act on what needs attention, as the guide says. Read each live worker's screen too: a permission dialog or a stopped worker whose escalation failed to send shows only there. Check every `PR #n ready` slice with `gh pr view <n> --json state`; a merged one is `merged` in the ledger, and a slice queued behind it, or whose Execution gate now holds, starts now. If another unmerged slice also changes the schema, mark it `needs its migration regenerated` in the ledger: a follow-up worker in its worktree (Review follow-ups) merges `origin/main` in and regenerates the migration with drizzle-kit. Start that follow-up only once the slice's own worker has reported done and been released; two agents in one worktree commit over each other. Then restart the wait.
 
@@ -129,7 +131,7 @@ On "address review on PR #n", start a fresh worker in that slice's existing work
 
 - Answering a load-bearing question yourself, even with "reply to overrule"
 - Holding an acknowledgement until the developer answers
-- A foreground wait, or two waits at once
+- A foreground wait, two waits at once, or calling `orca orchestration check --wait` directly
 - Relaying the developer's words without the normalised option
 - Relaying a slice review's decisions without checking them against the code
 - Starting a second schema-changing slice
