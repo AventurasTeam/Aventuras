@@ -41,6 +41,14 @@ describe('lib module edges', () => {
       ).toBe(1)
     })
 
+    it('flags a hook, which would carry the db in', async () => {
+      expect(await boundaryHits("import { useTier } from '@/hooks/use-tier'\n", fixture)).toBe(1)
+    })
+
+    it('flags app code outside lib', async () => {
+      expect(await boundaryHits("import { Colors } from '@/constants/theme'\n", fixture)).toBe(1)
+    })
+
     it('permits js-tiktoken', async () => {
       expect(await boundaryHits("import { Tiktoken } from 'js-tiktoken/lite'\n", fixture)).toBe(0)
     })

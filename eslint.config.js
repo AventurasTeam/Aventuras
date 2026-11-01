@@ -132,10 +132,12 @@ module.exports = defineConfig([
                 'lib/diagnostics must not import lib/stores — the diagnostics gate is injected via configureDiagnosticsGate, never imported. See docs/observability.md#store-ownership-and-gate-wiring.',
             },
             // lib/*.ts files are a separate element, so naming lib-module alone would let
-            // @/lib/keyword-terms through.
+            // @/lib/keyword-terms through; app-code covers hooks/ and constants/.
             {
               from: [{ type: 'lib-module', captured: { name: 'tokens' } }],
-              disallow: [{ to: [{ type: 'lib-module' }, { type: 'lib-file' }] }],
+              disallow: [
+                { to: [{ type: 'lib-module' }, { type: 'lib-file' }, { type: 'app-code' }] },
+              ],
               message:
                 'lib/tokens is a leaf: the seed imports it on the boot path, and a value cycle there fails only on Android. See milestone C5.',
             },

@@ -59,11 +59,11 @@ describe('countTokens on long runs', () => {
     expect(countTokens(text)).toBe(count)
   })
 
-  it('stays within 1% when a cut lands inside a token', () => {
+  it('stays within a few tokens when a cut lands inside a token', () => {
     expect(Math.abs(countTokens('ha'.repeat(2_000)) - 1001)).toBeLessThanOrEqual(10)
   })
 
-  it('stays within 1% on unspaced prose past the cut', () => {
+  it('stays within a few tokens per cut on unspaced prose', () => {
     const unspaced =
       '彼は剣を抜いた。彼女は逃げた。誰も動かなかった。城門の向こうには誰もいない広間があり、冷たい風だけが吹き抜けていた。'.repeat(
         20,
