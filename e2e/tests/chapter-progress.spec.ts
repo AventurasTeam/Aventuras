@@ -128,8 +128,10 @@ test.describe.serial('chapter progress strip', () => {
     await expect.poll(() => sqlPercent(page, branchId), { timeout: 15_000 }).toBeGreaterThan(before)
     await expectStripMatchesSql(page, branchId)
 
-    await chrome.actionsTrigger(page).click()
-    await reader.undoRow(page).click()
+    // Blur first: the global shortcut ignores editable targets, and the saved edit's textarea may
+    // still hold focus.
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+    await page.keyboard.press('Control+z')
 
     await expect.poll(() => sqlPercent(page, branchId), { timeout: 15_000 }).toBeCloseTo(before, 6)
     await expectStripMatchesSql(page, branchId)
