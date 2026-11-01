@@ -24,10 +24,16 @@ Three levels:
   app is meaningfully more capable or more architecturally complete
   than before. The _goal_ of a milestone is stable once defined; if
   the goal shifts, that's a new milestone, not an edit.
-- **Slice** — a PR-sized unit of work. One slice = one PR. Slices
-  within a milestone should aim to be independently mergeable where
-  the dependency graph allows. Sizing rule: days, not weeks; split
-  if a slice keeps stretching.
+- **Slice** — the largest piece of work one implementation plan
+  covers well and one slice review holds. It ships as one PR, or as
+  a stacked set of PRs when it passes CodeRabbit's file cap, which
+  tests fill quickly: a stack is still one slice, and says nothing
+  about its size. Slices within a milestone should aim to be
+  independently mergeable where the dependency graph allows. Sizing
+  rule: size a slice against shipped slices, and keep work together
+  unless a split frees a dependency edge another slice needs or
+  separates work that could be shed. Above about 20 plan tasks, split
+  it or record why it can't split.
 - **Task** — bite-sized work step inside a slice. Tasks live in
   the PR description (or the team's tracker), **not** in `docs/`.
   During local AI-assisted planning, full execution plans live in
@@ -224,14 +230,16 @@ instead of quietly reshaping the spec.
 
 ## Authorship
 
-- **Milestone docs**: solo-authored by the project owner.
-  Milestone authoring is concentrated work that doesn't
-  parallelize well; returning collaborators don't need to
-  participate in milestone definition.
-- **Slice docs**: solo-authored, same reason. Returning
-  collaborators execute against them once written. Slice docs land
-  **before** the PR that implements them — the slice doc is the
-  brief, the PR is the work against it.
+- **Milestone docs**: owned by the project owner. The layout
+  (slices, order, contracts) stays in one planning session because
+  those decisions depend on each other; subagents research it,
+  propose alternatives and audit it. Returning collaborators don't
+  need to participate in milestone definition.
+- **Slice docs**: written by subagents from the approved layout,
+  against its fixed contracts, and audited before they land.
+  Returning collaborators execute against them once written. Slice
+  docs land **before** the PR that implements them — the slice doc
+  is the brief, the PR is the work against it.
 - **Tasks / execution plans**: filled in by the executing dev as
   they break the slice down into steps. Use `.impl-plans/` before a
   PR exists, then the PR body or tracker. Not in `docs/`.
