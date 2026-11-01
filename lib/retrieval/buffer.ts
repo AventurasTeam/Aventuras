@@ -1,6 +1,6 @@
-import { and, count, desc, eq, isNull, ne } from 'drizzle-orm'
+import { and, count, desc, eq, ne } from 'drizzle-orm'
 
-import { storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
+import { openRegionWhere, storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { settingsCount } from '@/lib/settings-number'
 
@@ -62,7 +62,7 @@ export async function readPromptBuffer(
   const [open] = await db
     .select({ openCount: count() })
     .from(storyEntries)
-    .where(and(narrative, isNull(storyEntries.chapterId)))
+    .where(openRegionWhere(branchId))
 
   const take = promptBufferTake(open?.openCount ?? 0, settings)
   if (take === 0) return []

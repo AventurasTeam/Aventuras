@@ -124,6 +124,8 @@ export { reseedDevDatabase, type ReseedSummary } from './devtools/reseed'
 export { entryMetadataSchema } from './story-entries/entry-metadata'
 export type { CutOffMark, EntryMetadata, SystemFailureMeta } from './story-entries/entry-metadata'
 export { inheritedEntryMetadata } from './story-entries/inherited-metadata'
+export { openRegionSeries, openRegionWhere } from './story-entries/open-region'
+export type { OpenRegionRow } from './story-entries/open-region'
 export {
   appSettings,
   assets,
