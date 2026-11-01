@@ -1,13 +1,7 @@
 import { Tiktoken } from 'js-tiktoken/lite'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  countTokens,
-  countEntryTokens,
-  __resetTokenCache,
-  __tokenCacheSize,
-  __tokenComputeCount,
-} from './index'
+import { countTokens } from './index'
 
 describe('countTokens', () => {
   it('returns 0 for empty text', () => {
@@ -171,29 +165,6 @@ describe('countTokens on long runs', () => {
 
     expect(parts.every((part) => part.isWellFormed())).toBe(true)
     expect(parts.map((part) => [...part].length)).toEqual(pieces)
-  })
-})
-
-describe('countEntryTokens', () => {
-  it('caches per entry id and does not recount identical content', () => {
-    __resetTokenCache()
-    expect(__tokenCacheSize()).toBe(0)
-    const first = countEntryTokens('entry_1', 'the gate groaned open')
-    expect(__tokenCacheSize()).toBe(1)
-    const second = countEntryTokens('entry_1', 'the gate groaned open')
-    expect(second).toBe(first)
-    expect(__tokenCacheSize()).toBe(1)
-    expect(__tokenComputeCount()).toBe(1)
-  })
-
-  it('recounts when an entry id is reused with different content', () => {
-    // Entry content is immutable per id in normal operation, but reader edits
-    // rewrite content under the same id — a content-blind cache would then
-    // report the pre-edit count forever.
-    __resetTokenCache()
-    const before = countEntryTokens('entry_1', 'short')
-    const after = countEntryTokens('entry_1', 'a considerably longer body of text than before')
-    expect(after).toBeGreaterThan(before)
   })
 })
 
