@@ -358,7 +358,7 @@ and numbers corrected.
   step. `TOKENIZER_IDENTITY.version` stays: it names the vocabulary,
   which didn't change. One run of about 5.6 million code units overflows
   V8's regexp stack and `countTokens` throws, where the encoder alone
-  didn't. That's about 1.4 million tokens, so it stays; Hermes is
+  didn't. That's at least about 700,000 tokens, so it stays; Hermes is
   unmeasured.
 - **`chapters.token_count` is a snapshot at close (developer decision,
   2026-11-01).** An edit in a closed chapter leaves it, and a re-close
@@ -398,18 +398,23 @@ and numbers corrected.
   No phone was available, so these are from an x86_64 emulator
   (`sdk_gphone64_x86_64`, Android 16) on a debug build. Over three cold
   opens the encoder build took 982 ms (942 to 1,325, the highest on the
-  first open after Metro's bundle), about 0.3 s after the tap and at
-  least 1,714 ms ahead of the host's first-paint message. Both cross the
-  plan's lines, so the developer chose. With the warm no-oped, tap to
-  first paint took 1.92 to 1.99 s against 2.04 and 2.17 s, so the warm
-  costs about 0.1 to 0.25 s, since the WebView's boot overlaps it. That's
-  three samples against two, and `first-paint` is when the host hears of
-  it, not when the user sees it. A tap during the build is untested.
-  Without the warm that second lands on the first Send, and past first
-  paint it lands while someone may be typing. On the same device a count
-  of 2,006 characters of prose took 3.7 ms and 10,030 took 13 ms, and
-  the guard's first run on Hermes read `tokens=500` on its worst-case
-  string of 4,000 characters, in about 500 ms.
+  first open after Metro's bundle), starting within about 0.3 s of the
+  tap in the two runs timed and at least 1,714 ms ahead of the host's
+  first-paint message. Both cross the plan's lines, so the developer
+  chose. With the warm no-oped, tap to first paint took 1.92 to 1.99 s
+  against 2.04 and 2.17 s, so the warm costs about 0.05 to 0.25 s, since
+  the WebView's boot overlaps it. That's three samples against two, and
+  the warmed runs also carried a temporary count of about 0.5 s on the
+  JS thread that shipped code doesn't, so it likely overstates the cost.
+  `first-paint` is when the host hears of it, not when the user sees it.
+  A tap during the build is untested. Without the warm that second lands on the first Send, and
+  past first paint, where a plain timer would put it, it lands while
+  someone may be typing; no timer was measured. On the same device a
+  count of 2,006 characters of prose took 3.7 ms and 10,030 took 13 ms,
+  and the guard's first run on Hermes read `tokens=500` on 4,000 `x`
+  characters, in 480 to 560 ms (940 on the first open). Other long-run
+  shapes weren't measured on Hermes, and on Node a run of emoji costs
+  about 15 times a run of `x`.
 - **The warm doesn't cover story creation (developer decision,
   2026-11-01).** `components/wizard/finish.ts:339` reaches
   `create-story.ts`' count before any open, so the first story created

@@ -3,8 +3,9 @@ import o200kBase from 'js-tiktoken/ranks/o200k_base'
 
 // Every provider is an estimate here, so o200k is picked to track the modern
 // field's vocab scale: ASCII matches cl100k exactly, non-Latin runs ~30% lower.
-// The BPE map build is ~285ms and a 200k-entry Map; the 2.2 MB rank table is a
-// static import (countTokens must stay sync for the pure ranker).
+// The BPE map build is ~285ms on desktop and about 1 s on an Android emulator, and a
+// 200k-entry Map; the 2.2 MB rank table is a static import (countTokens must stay sync
+// for the pure ranker).
 let encoder: Tiktoken | null = null
 
 /** The tokenizer vocabulary behind countTokens, frozen for the probe capture (lib/db → CaptureTokenizer). */
