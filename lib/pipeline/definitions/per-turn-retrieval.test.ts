@@ -144,6 +144,7 @@ function entry(
     position,
     kind,
     content,
+    contentTokens: null,
     chapterId: null,
     metadata,
     createdAt: position,

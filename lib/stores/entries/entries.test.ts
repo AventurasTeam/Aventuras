@@ -13,6 +13,7 @@ function row(id: string, position: number): StoryEntry {
     position,
     kind: 'ai_reply',
     content: `c${id}`,
+    contentTokens: null,
     chapterId: null,
     metadata: { sceneEntities: [], currentLocationId: null, worldTime: 0 },
     createdAt: 1,

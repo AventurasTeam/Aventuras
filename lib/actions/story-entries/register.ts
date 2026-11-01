@@ -48,6 +48,7 @@ function fullRow(entry: NewStoryEntry): StoryEntry {
     position: entry.position,
     kind: entry.kind,
     content: entry.content,
+    contentTokens: entry.contentTokens ?? null,
     chapterId: entry.chapterId ?? null,
     metadata: entry.metadata ?? null,
     createdAt: entry.createdAt,

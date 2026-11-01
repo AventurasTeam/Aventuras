@@ -502,6 +502,7 @@ describe('applyRedo and embedding_stale', () => {
       position: 1,
       kind: 'opening' as const,
       content: 'once upon a time',
+      contentTokens: null,
       chapterId: null,
       metadata: { sceneEntities: [], currentLocationId: null, worldTime: 5 },
       createdAt: 1,

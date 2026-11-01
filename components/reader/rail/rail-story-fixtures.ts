@@ -130,6 +130,7 @@ export function railFixtureTurn(position: number): StoryEntry {
     position,
     kind: 'ai_reply',
     content: '',
+    contentTokens: null,
     chapterId: null,
     metadata: null,
     createdAt: position,

@@ -56,7 +56,7 @@ async function seedBranch(db: TestDb, entries: SeedEntry[], processed: number) {
   await db.insert(storyEntries).values(rows)
   entriesStore.hydrate(
     'b1',
-    rows.map((r) => ({ ...r, chapterId: null, metadata: r.metadata ?? null })),
+    rows.map((r) => ({ ...r, contentTokens: null, chapterId: null, metadata: r.metadata ?? null })),
   )
   await db.insert(deltas).values({
     id: 'd_turn',

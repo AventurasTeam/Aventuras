@@ -25,6 +25,7 @@ function entryRows() {
       position: 1,
       kind: 'ai_reply' as const,
       content: 'first',
+      contentTokens: null,
       chapterId: null,
       metadata: { sceneEntities: [], currentLocationId: null, worldTime: 60 },
       createdAt: 1,
@@ -35,6 +36,7 @@ function entryRows() {
       position: 2,
       kind: 'ai_reply' as const,
       content: 'second',
+      contentTokens: null,
       chapterId: null,
       metadata: {
         sceneEntities: ['ent1'],
@@ -50,6 +52,7 @@ function entryRows() {
       position: 3,
       kind: 'ai_reply' as const,
       content: 'third',
+      contentTokens: null,
       chapterId: null,
       metadata: null,
       createdAt: 3,

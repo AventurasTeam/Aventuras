@@ -53,6 +53,7 @@ const entry = (
   position,
   kind,
   content: `${id} content`,
+  contentTokens: null,
   chapterId: null,
   metadata,
   createdAt: position,

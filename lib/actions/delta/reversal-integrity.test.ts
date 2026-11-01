@@ -49,6 +49,7 @@ const entry = (id: string, position: number, kind: StoryEntry['kind']): StoryEnt
   position,
   kind,
   content: `${id} content`,
+  contentTokens: null,
   chapterId: null,
   metadata: null,
   createdAt: position,

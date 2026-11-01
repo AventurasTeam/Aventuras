@@ -110,6 +110,7 @@ describe('updateStoryEntryContent', () => {
         position: 1,
         kind: 'ai_reply',
         content: 'old',
+        contentTokens: null,
         chapterId: null,
         metadata: null,
         createdAt: 1,
@@ -180,6 +181,7 @@ describe('updateStoryEntryContent', () => {
         position: 1,
         kind: 'ai_reply',
         content: 'old',
+        contentTokens: null,
         chapterId: null,
         metadata: null,
         createdAt: 1,
@@ -203,6 +205,7 @@ describe('updateStoryEntryContent', () => {
         position: 1,
         kind: 'ai_reply',
         content: 'old',
+        contentTokens: null,
         chapterId: null,
         metadata: null,
         createdAt: 1,
@@ -617,7 +620,7 @@ async function seedClassifiedTail(db: Awaited<ReturnType<typeof createTestDb>>['
   await db.insert(storyEntries).values(entries)
   entriesStore.hydrate(
     'b1',
-    entries.map((e) => ({ ...e, chapterId: null, metadata: null })),
+    entries.map((e) => ({ ...e, contentTokens: null, chapterId: null, metadata: null })),
   )
   await db.insert(happenings).values([
     {
@@ -684,7 +687,7 @@ async function seedHeadTurn(db: Awaited<ReturnType<typeof createTestDb>>['db']) 
   await db.insert(storyEntries).values(entries)
   entriesStore.hydrate(
     'b1',
-    entries.map((e) => ({ ...e, chapterId: null, metadata: null })),
+    entries.map((e) => ({ ...e, contentTokens: null, chapterId: null, metadata: null })),
   )
   await db.insert(happenings).values(
     (['e1', 'e2', 'e3'] as const).map((entryId, i) => ({
@@ -724,7 +727,7 @@ async function seedHeadTurnUnderFailure(db: Awaited<ReturnType<typeof createTest
   await db.insert(storyEntries).values(entries)
   entriesStore.hydrate(
     'b1',
-    entries.map((e) => ({ ...e, chapterId: null, metadata: null })),
+    entries.map((e) => ({ ...e, contentTokens: null, chapterId: null, metadata: null })),
   )
   await db.insert(happenings).values(
     (['e1', 'e2'] as const).map((entryId, i) => ({

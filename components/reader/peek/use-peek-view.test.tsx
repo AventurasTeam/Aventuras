@@ -85,6 +85,7 @@ function entry(
     position,
     kind,
     content: '',
+    contentTokens: null,
     chapterId: null,
     metadata: { sceneEntities: [], currentLocationId: null, worldTime },
     createdAt: position,

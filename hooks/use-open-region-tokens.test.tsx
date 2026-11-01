@@ -104,6 +104,7 @@ function row(id: string, content: string, chapterId: string | null = null): Stor
     position: Number(id.slice(1)),
     kind: 'ai_reply',
     content,
+    contentTokens: null,
     chapterId,
     metadata: { sceneEntities: [], currentLocationId: null, worldTime: 0 },
     createdAt: 1,

@@ -30,6 +30,7 @@ function entry(id: string, position: number, branchId = 'br_1'): StoryEntry {
     position,
     kind: 'user_action',
     content: '',
+    contentTokens: null,
     chapterId: null,
     metadata: null,
     createdAt: position,

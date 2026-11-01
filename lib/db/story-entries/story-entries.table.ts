@@ -15,6 +15,7 @@ export const storyEntries = sqliteTable(
     position: integer('position').notNull(),
     kind: text('kind', { enum: ['user_action', 'ai_reply', 'system', 'opening'] }).notNull(),
     content: text('content').notNull(),
+    contentTokens: integer('content_tokens'),
     chapterId: text('chapter_id'),
     metadata: text('metadata', { mode: 'json' }).$type<EntryMetadata>(),
     createdAt: integer('created_at').notNull(),

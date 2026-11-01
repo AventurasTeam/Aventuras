@@ -1786,6 +1786,7 @@ describe('narrative fold — creates', () => {
         position: 1,
         kind: 'opening',
         content: 'The tide is out at Saltmere.',
+        contentTokens: null,
         chapterId: null,
         metadata: SCENE,
         createdAt: 1,
