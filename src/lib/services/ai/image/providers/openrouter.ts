@@ -159,7 +159,11 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
         key ? { Authorization: `Bearer ${key}` } : undefined,
         { serviceId: 'openrouter-image-models', signal },
       )
-      return parseModelList(await response.json(), OpenRouterModel).map(toModelInfo)
+      return parseModelList(
+        await response.json(),
+        OpenRouterModel,
+        'OpenRouter /images/models',
+      ).map(toModelInfo)
     },
   }
 }

@@ -17,6 +17,7 @@ import type {
   ComfySamplerInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
+import { expectList } from './imageModelUtils'
 import { createA1111Image } from './a1111Image'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
@@ -71,9 +72,13 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
         serviceId: 'a1111-models',
         signal,
       })
-      const data: { title?: string; model_name?: string; name?: string }[] = await response.json()
+      const data = expectList(await response.json(), 'A1111 /sdapi/v1/sd-models') as {
+        title?: string
+        model_name?: string
+        name?: string
+      }[]
 
-      return (Array.isArray(data) ? data : []).map((m) => ({
+      return data.map((m) => ({
         id: m.title || m.model_name || m.name || '',
         name: m.title || m.model_name || m.name || '',
       }))

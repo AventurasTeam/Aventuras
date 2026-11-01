@@ -193,7 +193,7 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
       serviceId: DISCOVERY_SERVICE_ID,
       signal,
     })
-    return parseModelList(await response.json(), NanoGptModel)
+    return parseModelList(await response.json(), NanoGptModel, 'NanoGPT /images/models')
   }
 
   return {

@@ -126,7 +126,7 @@ async function fetchOpenAIImageModels(
     { Authorization: `Bearer ${apiKey}` },
     { serviceId: 'openai-image-models', signal },
   )
-  return parseModelList(await response.json(), ModelEntry)
+  return parseModelList(await response.json(), ModelEntry, 'OpenAI /models')
     .filter(({ id }) => isOpenAIImageModel(id))
     .map(({ id }) => ({ id, name: id, ...openaiImageCapabilities(id) }))
 }

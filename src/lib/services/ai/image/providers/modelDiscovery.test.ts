@@ -43,6 +43,11 @@ describe('model discovery', () => {
       expect(await create().listModels('k')).toEqual([])
     })
 
+    it('rejects a reply that is not a list, rather than listing nothing', async () => {
+      vi.mocked(imageGetFetch).mockResolvedValue(reply('<html>not the API</html>'))
+      await expect(create().listModels('k')).rejects.toThrow(/did not return a (model )?list/)
+    })
+
     it('forwards the abort signal to its request', async () => {
       vi.mocked(imageGetFetch).mockResolvedValue(reply(emptyBody))
       const { signal } = new AbortController()

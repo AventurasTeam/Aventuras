@@ -148,7 +148,7 @@ async function fetchEntries(
     await response.body?.cancel()
     return undefined
   }
-  return parseModelList(await response.json(), ModelEntry)
+  return parseModelList(await response.json(), ModelEntry, url)
 }
 
 async function fetchImageModels(

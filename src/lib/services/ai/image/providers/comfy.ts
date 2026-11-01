@@ -22,6 +22,7 @@ import { formatImageSize, specToPixels } from '#lib/utils/image.ts'
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { isNewerVersion } from '#lib/utils/version.ts'
 import { imageGetFetch } from './fetchAdapter'
+import { expectList } from './imageModelUtils'
 import { MIN_COMFYUI_VERSION, createComfyImage, type ComfyImageOptions } from './comfyImage'
 import { createImageSdkFetch, createPollImageSdkFetch, generateSdkImage } from './sdkImage'
 
@@ -70,7 +71,7 @@ export async function fetchModelList(
     timeoutMs,
     signal,
   })
-  return (await resp.json()) as string[]
+  return expectList(await resp.json(), `ComfyUI /models/${type}`).filter(isString)
 }
 
 export function clearComfyCacheForUrl(baseUrl: string | undefined): void {

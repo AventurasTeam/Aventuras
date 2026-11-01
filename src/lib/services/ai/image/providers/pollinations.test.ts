@@ -229,9 +229,9 @@ describe('Pollinations adapter', () => {
       expect(await lookup('nope')).toBeUndefined()
     })
 
-    it('rejects when the reply holds no image models', async () => {
+    it('rejects when the reply is no model list, or holds no image models', async () => {
       vi.mocked(imageGetFetch).mockResolvedValue(reply({ error: 'nope' }))
-      await expect(lookup('flux')).rejects.toThrow('no image models')
+      await expect(lookup('flux')).rejects.toThrow('did not return a model list')
 
       catalogue()
       await expect(lookup('flux')).rejects.toThrow('no image models')

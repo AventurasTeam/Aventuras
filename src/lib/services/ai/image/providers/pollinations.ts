@@ -92,7 +92,7 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
       serviceId: 'pollinations-image-models',
       signal,
     })
-    return parseModelList(await response.json(), PollinationsModel)
+    return parseModelList(await response.json(), PollinationsModel, MODELS_ENDPOINT)
       .filter((model) => model.output_modalities?.includes('image'))
       .map(toModelInfo)
   }
