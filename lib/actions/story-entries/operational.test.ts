@@ -136,7 +136,7 @@ describe('updateStoryEntryContent', () => {
       // Survival anchor: a rollback above this entry must spare the delta.
       entryId: 'e1',
       op: 'update',
-      undoPayload: { content: 'old' },
+      undoPayload: { content: 'old', contentTokens: null },
       encodingVersion: 1,
     })
   })

@@ -6,6 +6,7 @@ import { logger } from '@/lib/diagnostics'
 import { headTurnEntries } from '@/lib/head-turn'
 import { generateId } from '@/lib/ids'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
+import { countTokens } from '@/lib/tokens'
 
 import { withBranchWriteShared } from '../delta/branch-write-lock'
 import { computeUndoPayload } from '../delta/delta-encoding'
@@ -127,18 +128,25 @@ function withoutCutOff(metadata: EntryMetadata): EntryMetadata {
 
 // In SQL: the reversal sharing this transaction may write the row's other metadata keys after the
 // action's read. The store patch reads the row after the reversal's patches for the same reason.
-function contentEditSet(content: string, clear: CutOffClear) {
-  if (!clear.clearsCutOff) return { content }
-  return { content, metadata: sql`json_remove(${storyEntries.metadata}, '$.cutOff')` }
+function contentEditSet(content: string, contentTokens: number, clear: CutOffClear) {
+  if (!clear.clearsCutOff) return { content, contentTokens }
+  return {
+    content,
+    contentTokens,
+    metadata: sql`json_remove(${storyEntries.metadata}, '$.cutOff')`,
+  }
 }
 
 function contentEditPatchColumns(
   id: string,
   content: string,
+  contentTokens: number,
   clear: CutOffClear,
-): { content: string; metadata?: EntryMetadata } {
+): { content: string; contentTokens: number; metadata?: EntryMetadata } {
   const stored = clear.clearsCutOff ? entriesStore.getById(id)?.metadata : null
-  return stored ? { content, metadata: withoutCutOff(stored) } : { content }
+  return stored
+    ? { content, contentTokens, metadata: withoutCutOff(stored) }
+    : { content, contentTokens }
 }
 
 /**
@@ -175,6 +183,7 @@ async function updateStoryEntryContentBracketed(
 
   const invalidation = await resolveContentEditInvalidation(branchId, id, ctx)
   const clear = cutOffClearOf(current.metadata)
+  const contentTokens = countTokens(content)
 
   // In scope the clamp is unconditional: a pass that read the entry and extracted
   // nothing still advanced the watermark past it, and the op no-ops when the watermark
@@ -186,7 +195,7 @@ async function updateStoryEntryContentBracketed(
     await commitNewAction(set, ctx, [
       ctx.db
         .update(storyEntries)
-        .set(contentEditSet(content, clear))
+        .set(contentEditSet(content, contentTokens, clear))
         .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
         .toSQL(),
       // Spliced, not dispatched: applyDeltaAction's own transaction isn't atomic with the reversal,
@@ -204,7 +213,7 @@ async function updateStoryEntryContentBracketed(
           targetId: id,
           op: 'update',
           undoPayload: contentEditUndoPayload(
-            current.content,
+            current,
             invalidation.scope,
             clear.clearsCutOff ? clear.metadataUndo : undefined,
           ),
@@ -220,7 +229,7 @@ async function updateStoryEntryContentBracketed(
   entriesStore.patch(branchId, {
     op: 'update',
     id,
-    columns: contentEditPatchColumns(id, content, clear),
+    columns: contentEditPatchColumns(id, content, contentTokens, clear),
   })
   return { status: 'ok' }
 }

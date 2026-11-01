@@ -15,12 +15,14 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entitiesStore, entriesStore, undoRedoStore } from '@/lib/stores'
+import { countTokens } from '@/lib/tokens'
 
 import { applyDeltaAction } from './apply-delta-action'
 import { __redoGroupForTest, applyRedo, prepareUndo } from './redo'
 import { register } from './registry'
 import { ReversalIntegrityError } from './reverse-replay'
 import { selectReversalSet } from './row-closure'
+import { updateStoryEntryContent } from '../story-entries/operational'
 import type { PipelineAction } from '../types'
 
 // Throwaway domain (raw SQL only) with a unique table name so registering it
@@ -527,6 +529,38 @@ describe('applyRedo and embedding_stale', () => {
     // Drizzle drops a key the table has no column for, so an ungated force shows
     // up only here — as a phantom column merged into the held-branch store row.
     expect(entriesStore.getById('e1')).not.toHaveProperty('embeddingStale')
+  })
+
+  it('redoes a content edit back to the count it wrote', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    const original = 'the courier rode north'
+    const edited = 'the courier turned back at the ford and waited out the snow'
+    const entry = {
+      id: 'e1',
+      branchId: 'b1',
+      position: 1,
+      kind: 'ai_reply' as const,
+      content: original,
+      contentTokens: countTokens(original),
+      chapterId: null,
+      metadata: null,
+      createdAt: 1,
+    }
+    await db.insert(storyEntries).values(entry)
+    entriesStore.hydrate('b1', [entry])
+    await updateStoryEntryContent('b1', 'e1', edited, ctx)
+    const [edit] = await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))
+    const group = await undoOf(ctx, edit.actionId)
+    const [undone] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e1'))
+    expect(undone.contentTokens).toBe(countTokens(original))
+
+    await applyRedo(group, ctx)
+
+    const [row] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e1'))
+    expect(row.contentTokens).toBe(countTokens(edited))
+    expect(entriesStore.getById('e1')?.contentTokens).toBe(countTokens(edited))
   })
 
   it('writes nothing for a null-rowBeforeUndo create on an embeddable table', async () => {
