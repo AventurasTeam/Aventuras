@@ -156,10 +156,12 @@ describe('a content edit under a system entry', () => {
     await seedTurn(db)
     await writeSystemEntry({ branchId: 'b1', content: 'the provider refused' }, ctx)
     const [banner] = await db.select().from(storyEntries).where(eq(storyEntries.kind, 'system'))
+    vi.mocked(countTokens).mockClear()
 
     const result = await updateStoryEntryContent('b1', banner.id, 'rewritten', ctx)
 
     expect(result.status).toBe('rejected')
+    expect(vi.mocked(countTokens)).not.toHaveBeenCalled()
     // `clearSystemEntry` takes the row without a delta, so a delta written here outlives
     // its anchor and the survival predicate then spares it from every rollback window.
     const written = await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))
@@ -902,10 +904,25 @@ describe('the count of an edited entry', () => {
     expect((await replyRow(db)).metadata?.cutOff).toEqual(MARK)
   })
 
+  it('counts nothing for an edit of an entry that does not exist', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seedCountedReply(db, countTokens(ORIGINAL))
+    vi.mocked(countTokens).mockClear()
+
+    const result = await updateStoryEntryContent('b1', 'e_missing', EDITED, {
+      db,
+      runInTransaction,
+    })
+
+    expect(result.status).toBe('rejected')
+    expect(vi.mocked(countTokens)).not.toHaveBeenCalled()
+  })
+
   it('writes nothing on a Save with unchanged text', async () => {
     const { db, runInTransaction } = await createTestDb()
     // Not ORIGINAL's count: a recount on this path would move it.
     await seedCountedReply(db, 999)
+    vi.mocked(countTokens).mockClear()
 
     const result = await updateStoryEntryContent('b1', 'e_reply', ORIGINAL, {
       db,
@@ -914,6 +931,7 @@ describe('the count of an edited entry', () => {
 
     expect(result.status).toBe('ok')
     await expectCount(db, 999)
+    expect(vi.mocked(countTokens)).not.toHaveBeenCalled()
     expect(await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))).toEqual([])
   })
 })
