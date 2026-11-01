@@ -15,6 +15,11 @@ function getEncoder(): Tiktoken {
   return encoder
 }
 
+/** Builds the encoder ahead of the first count; a no-op once it exists. */
+export function warmTokenEncoder(): void {
+  getEncoder()
+}
+
 export function countTokens(text: string): number {
   if (text === '') return 0
   // Empty allow/disallow lists: tiktoken special-token literals (e.g.

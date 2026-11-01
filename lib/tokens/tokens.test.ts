@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import type { Tiktoken } from 'js-tiktoken/lite'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   countTokens,
@@ -6,7 +7,7 @@ import {
   __resetTokenCache,
   __tokenCacheSize,
   __tokenComputeCount,
-} from './tokens'
+} from './index'
 
 describe('countTokens', () => {
   it('returns 0 for empty text', () => {
@@ -62,5 +63,50 @@ describe('countEntryTokens', () => {
     const before = countEntryTokens('entry_1', 'short')
     const after = countEntryTokens('entry_1', 'a considerably longer body of text than before')
     expect(after).toBeGreaterThan(before)
+  })
+})
+
+describe('warmTokenEncoder', () => {
+  afterEach(() => {
+    vi.doUnmock('js-tiktoken/lite')
+    vi.resetModules()
+  })
+
+  // The encoder is module state, so the spy needs a fresh instance of this module.
+  async function freshModuleCountingBuilds() {
+    const built = vi.fn()
+    vi.resetModules()
+    vi.doMock('js-tiktoken/lite', async (importOriginal) => {
+      const actual = await importOriginal<{ Tiktoken: typeof Tiktoken }>()
+      class CountedTiktoken extends actual.Tiktoken {
+        constructor(...args: ConstructorParameters<typeof Tiktoken>) {
+          super(...args)
+          built()
+        }
+      }
+      return { ...actual, Tiktoken: CountedTiktoken }
+    })
+    return { built, tokens: await import('./index') }
+  }
+
+  it('builds the encoder, and a later warm or count reuses it', async () => {
+    const { built, tokens } = await freshModuleCountingBuilds()
+    expect(built).not.toHaveBeenCalled()
+
+    tokens.warmTokenEncoder()
+    expect(built).toHaveBeenCalledTimes(1)
+
+    tokens.warmTokenEncoder()
+    tokens.countTokens('the gate groaned open')
+    tokens.countTokens('and the hall beyond it stood empty')
+    expect(built).toHaveBeenCalledTimes(1)
+  })
+
+  it('reuses the encoder a count already built', async () => {
+    const { built, tokens } = await freshModuleCountingBuilds()
+
+    tokens.countTokens('the gate groaned open')
+    tokens.warmTokenEncoder()
+    expect(built).toHaveBeenCalledTimes(1)
   })
 })

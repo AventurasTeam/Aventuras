@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { Entity } from '@/lib/db'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
+import { countTokens } from '@/lib/tokens'
 import { buildEntityViews } from '@/lib/world'
 
 import {
@@ -14,7 +15,6 @@ import {
   itemLine,
   measuredEntity,
 } from './rendered-text'
-import { countTokens } from './tokens'
 
 const NO_SCENE = { sceneEntities: [], currentLocationId: null }
 
