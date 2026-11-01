@@ -57,8 +57,8 @@ A modal's width follows what it does, not its content on the day it was written.
 | Width       | For                                              | Examples                                                                               |
 | ----------- | ------------------------------------------------ | -------------------------------------------------------------------------------------- |
 | `md`        | a question, a command, a short options form      | Delete entry, Create a branch, Create a checkpoint, Replace this pack, Lorebook export |
-| `lg`        | an editor of a few fields, or a step with a list | Edit story, the time edit, the anchor editor, Manual chapter, Sync, the imports        |
-| `2xl`       | a large form, a list or an inspector             | the character editors, Duplicates, Timeline anomalies, Tag manager                     |
+| `lg`        | an editor of a few fields, or a step with a list | the time edit, the anchor editor, Manual chapter, Sync, the imports                    |
+| `2xl`       | a large form, a list or an inspector             | Edit story, the character editors, Duplicates, Timeline anomalies, Tag manager         |
 | `3xl`–`4xl` | a multi-step surface or an image viewer          | the wizards, the reconciliation, the gallery, Debug log                                |
 | `6xl`–`7xl` | a workspace                                      | Settings, the lorebook editor, Discovery                                               |
 

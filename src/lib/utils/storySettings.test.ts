@@ -1,9 +1,28 @@
 import { describe, it, expect } from 'vitest'
 import type { StorySettings } from '#lib/types/index.ts'
-import { IMAGE_GENERATION_MODES, readStorySettings } from './storySettings'
+import { IMAGE_GENERATION_MODES, readStorySettings, storyPov, storyTense } from './storySettings'
 
 // Settings as an older version, or a hand-edited export, may have stored them.
 const legacy = (settings: object) => settings as StorySettings
+
+describe('storyPov and storyTense', () => {
+  it('reads what is stored', () => {
+    const story = { mode: 'adventure', settings: { pov: 'third', tense: 'past' } } as const
+    expect(storyPov(story)).toBe('third')
+    expect(storyTense(story)).toBe('past')
+  })
+
+  it('falls back by mode', () => {
+    expect(storyPov({ mode: 'adventure', settings: null })).toBe('first')
+    expect(storyPov({ mode: 'creative-writing', settings: null })).toBe('third')
+    expect(storyTense({ mode: 'adventure', settings: null })).toBe('present')
+  })
+
+  it('keeps Creative Writing in past tense whatever is stored', () => {
+    const story = { mode: 'creative-writing', settings: { tense: 'present' } } as const
+    expect(storyTense(story)).toBe('past')
+  })
+})
 
 describe('readStorySettings', () => {
   it.each(IMAGE_GENERATION_MODES)('keeps a saved %s', (mode) => {

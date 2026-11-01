@@ -1,18 +1,23 @@
 <!--
-  Edits a library story's title, genre, genre colour and description. Every field wraps and
-  grows, since a card's header cannot show a long title and a description can run to
-  paragraphs. Mounted fresh for each edit and seeded from the stored story, so dismissing it
-  leaves nothing behind to reset.
+  Edits a library story's title, genre, genre colour, description and narrative voice. Every text
+  field wraps and grows, since a card's header cannot show a long title and a description can run
+  to paragraphs. The voice stays locked until asked for, since it changes every new entry. Mounted
+  fresh for each edit and seeded from the stored story, so dismissing it leaves nothing behind to
+  reset.
 -->
 <script lang="ts">
   import { untrack } from 'svelte'
   import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import ExplanationFold from '#lib/components/shared/ExplanationFold.svelte'
-  import { ChevronDown, Check } from '@lucide/svelte'
+  import NarrativeVoiceFields from '#lib/components/shared/NarrativeVoiceFields.svelte'
+  import { TENSE_FIXED_REASON } from '#lib/components/shared/narrativeVoice.ts'
+  import { AlertTriangle, ChevronDown, Check } from '@lucide/svelte'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
   import { Label } from '#lib/components/ui/label/index.ts'
   import TagBadge from '#lib/components/tags/TagBadge.svelte'
   import { cn } from '#lib/utils/cn.ts'
+  import { storyPov, storyTense } from '#lib/utils/storySettings.ts'
   import type { Story, StoryDetails } from '#lib/types/index.ts'
   import {
     GENRE_COLORS,
@@ -40,14 +45,22 @@
   // but saving untouched must not quietly drop it.
   let genreColor = $state<string | null>(initial.settings?.genreColor ?? null)
   let colorsOpen = $state(false)
+  const initialPOV = storyPov(initial)
+  const initialTense = storyTense(initial)
+  let pov = $state(initialPOV)
+  let tense = $state(initialTense)
+  let voiceUnlocked = $state(false)
+  const tenseFixed = initial.mode === 'creative-writing'
   let saving = $state(false)
   let isOpen = $state(true)
 
+  const voiceChanged = $derived(pov !== initialPOV || tense !== initialTense)
   const dirty = $derived(
     title.trim() !== initial.title.trim() ||
       genre.trim() !== (initial.genre ?? '').trim() ||
       description.trim() !== (initial.description ?? '').trim() ||
-      genreColor !== (initial.settings?.genreColor ?? null),
+      genreColor !== (initial.settings?.genreColor ?? null) ||
+      voiceChanged,
   )
 
   const canSave = $derived(title.trim().length > 0 && !saving)
@@ -62,13 +75,21 @@
     if (!canSave) return
     saving = true
     try {
-      await onSave({ title, genre, description, genreColor })
+      await onSave({ title, genre, description, genreColor, pov, tense })
     } catch {
       return
     } finally {
       saving = false
     }
     isOpen = false
+  }
+
+  /** Locking again restores the stored voice, so a locked field never hides a change. */
+  function setVoiceUnlocked(unlocked: boolean) {
+    voiceUnlocked = unlocked
+    if (unlocked) return
+    pov = initialPOV
+    tense = initialTense
   }
 
   /** Title and genre are single values that wrap for display; a line break is never stored. */
@@ -97,12 +118,12 @@
     title: 'Discard your changes?',
     description: 'Your edits to this story will be lost.',
   }}
-  size="lg"
+  size="2xl"
 >
   <ExplanationFold id="story_edit_help" summary="How these are used">
     <p>
-      Genre and description are used when generating every new entry in this story. Old entries are
-      not affected.
+      Genre, description, perspective and tense are used when generating every new entry in this
+      story. Old entries are not affected.
     </p>
   </ExplanationFold>
   <div class="space-y-1.5">
@@ -189,5 +210,36 @@
   <div class="space-y-1.5">
     <Label for="story-edit-description">Description</Label>
     <Textarea id="story-edit-description" placeholder="No description" bind:value={description} />
+  </div>
+
+  <div class="space-y-3 border-t pt-4">
+    <div class="flex items-center justify-between gap-3">
+      <h3 class="text-sm font-medium">Narrative voice</h3>
+      <div class="flex items-center gap-2">
+        <Label for="story-edit-voice-unlock" class="text-muted-foreground text-xs">Unlock</Label>
+        <Switch
+          id="story-edit-voice-unlock"
+          checked={voiceUnlocked}
+          onCheckedChange={setVoiceUnlocked}
+        />
+      </div>
+    </div>
+    <NarrativeVoiceFields
+      selectedPOV={pov}
+      selectedTense={tense}
+      onPOVChange={(v) => (pov = v)}
+      onTenseChange={(v) => (tense = v)}
+      disabled={{ pov: !voiceUnlocked, tense: !voiceUnlocked || tenseFixed }}
+      reasons={{ tense: tenseFixed ? TENSE_FIXED_REASON : undefined }}
+    />
+    {#if voiceChanged}
+      <p
+        class="text-muted-foreground flex items-start gap-2 text-xs"
+        {@attach (el) => el.scrollIntoView({ block: 'nearest' })}
+      >
+        <AlertTriangle class="mt-px h-4 w-4 shrink-0 text-amber-500" />
+        Old entries keep their wording. New entries are written in the new voice.
+      </p>
+    {/if}
   </div>
 </ActionModal>

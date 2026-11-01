@@ -159,6 +159,7 @@ import { createLogger } from '#lib/log.ts'
 import { withUniqueEntryTerms } from '#lib/utils/lorebookTerms.ts'
 import { sameEntityName, uniqueTerms } from '#lib/utils/text.ts'
 import { storyDetailsUpdate } from '#lib/utils/storyDetails.ts'
+import { storyPov, storyTense } from '#lib/utils/storySettings.ts'
 import { grammarService } from '#lib/services/grammar.ts'
 import {
   clearTier3SelectionCache,
@@ -376,27 +377,11 @@ class StoryStore {
   }
 
   get pov(): 'first' | 'second' | 'third' {
-    const mode = this.currentStory?.mode ?? 'adventure'
-    const stored = this.currentStory?.settings?.pov ?? null
-    // For creative-writing mode, respect the user's stored POV choice
-    // (wizard allows selecting first, second, or third person)
-    if (stored) {
-      return stored
-    }
-    // Default based on mode
-    if (mode === 'creative-writing') {
-      return 'third'
-    }
-    return 'first'
+    return storyPov(this.currentStory)
   }
 
   get tense(): 'past' | 'present' {
-    const mode = this.currentStory?.mode ?? 'adventure'
-    const stored = this.currentStory?.settings?.tense ?? null
-    if (mode === 'creative-writing') {
-      return 'past'
-    }
-    return stored ?? 'present'
+    return storyTense(this.currentStory)
   }
 
   get inventoryItems(): Item[] {
@@ -6048,8 +6033,8 @@ class StoryStore {
   }
 
   /**
-   * Save the library card's edit dialog: title, genre, description and the genre badge colour,
-   * in one write. Blank genre or description clears it; a blank title is refused. Nothing is
+   * Save the library card's edit dialog: title, genre, description, the genre badge colour and
+   * the narrative voice, in one write. Blank genre or description clears it; a blank title is refused. Nothing is
    * written when nothing changed, so opening and saving the dialog does not bump the story up
    * the library.
    */
