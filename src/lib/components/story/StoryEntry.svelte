@@ -1633,7 +1633,11 @@
             size="icon"
             onclick={() => void ui.triggerGenerateFromAction(entry.id)}
             disabled={settings.hasGenerationConfigIssues}
-            class="h-7 w-7 text-amber-700 hover:text-amber-800 dark:text-amber-500 dark:hover:text-amber-600"
+            class={cn(
+              'size-7',
+              FEATURE_COLORS.regenerate.text,
+              FEATURE_COLORS.regenerate.hoverText,
+            )}
             title={settings.hasGenerationConfigIssues
               ? 'AI configuration incomplete — check Settings'
               : 'Generate a response'}
