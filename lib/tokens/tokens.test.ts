@@ -1,6 +1,7 @@
 import { Tiktoken } from 'js-tiktoken/lite'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { countEncoderBuilds, stopCountingEncoderBuilds } from './__tests__/count-encoder-builds'
 import { countTokens } from './index'
 
 describe('countTokens', () => {
@@ -180,25 +181,10 @@ describe('countTokens on long runs', () => {
 })
 
 describe('warmTokenEncoder', () => {
-  afterEach(() => {
-    vi.doUnmock('js-tiktoken/lite')
-    vi.resetModules()
-  })
+  afterEach(stopCountingEncoderBuilds)
 
-  // The encoder is module state, so the spy needs a fresh instance of this module.
   async function freshModuleCountingBuilds() {
-    const built = vi.fn()
-    vi.resetModules()
-    vi.doMock('js-tiktoken/lite', async (importOriginal) => {
-      const actual = await importOriginal<{ Tiktoken: typeof Tiktoken }>()
-      class CountedTiktoken extends actual.Tiktoken {
-        constructor(...args: ConstructorParameters<typeof Tiktoken>) {
-          super(...args)
-          built()
-        }
-      }
-      return { ...actual, Tiktoken: CountedTiktoken }
-    })
+    const built = countEncoderBuilds()
     return { built, tokens: await import('./index') }
   }
 

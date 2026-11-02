@@ -6,7 +6,7 @@ import { GenerationStatusPill } from '@/components/compounds/generation-status-p
 import { TruncatedText } from '@/components/compounds/truncated-text'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
-import { chapterProgressTone, type ChapterProgress } from '@/lib/chapters'
+import { chapterProgressOf, type ChapterProgress } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { STORY_SETTINGS_DEFAULTS, storyDefinitionSchema } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -30,13 +30,7 @@ function BodyPlaceholder({ label }: { label: string }) {
 }
 
 function progressAt(percent: number): ChapterProgress {
-  return {
-    tokens: percent * 240,
-    threshold: 24_000,
-    percent,
-    tone: chapterProgressTone(percent),
-    canClose: true,
-  }
+  return chapterProgressOf([{ kind: 'ai_reply', tokens: percent * 240 }], 24_000)
 }
 
 const STRIP_VARIANTS = [progressAt(0), progressAt(50), progressAt(100)]

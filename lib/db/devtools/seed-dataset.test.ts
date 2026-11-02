@@ -1,6 +1,5 @@
 import { desc, eq } from 'drizzle-orm'
-import type { Tiktoken } from 'js-tiktoken/lite'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { getRollbackCounts, undoLastAction } from '@/lib/actions'
 import { REF_COLUMNS, rowRefs } from '@/lib/actions/delta/live-refs'
@@ -12,6 +11,10 @@ import { ID_PATTERN, IdBiMap, SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
 import { detectRichEntryHtml, parseMarkdownToHtml } from '@/lib/markdown'
 import { entriesStore, resetAllStores } from '@/lib/stores'
 import { countTokens } from '@/lib/tokens'
+import {
+  countEncoderBuilds,
+  stopCountingEncoderBuilds,
+} from '@/lib/tokens/__tests__/count-encoder-builds'
 import { selectUndoTarget } from '@/lib/undo'
 
 import { buildSeedSteps } from './seed-dataset'
@@ -481,24 +484,10 @@ describe('seeded classifier watermarks', () => {
 // lib/db re-exports the native reseed, so Android evaluates this module on every launch, and the
 // encoder takes about a second to build there.
 describe('importing the seed', () => {
-  afterEach(() => {
-    vi.doUnmock('js-tiktoken/lite')
-    vi.resetModules()
-  })
+  afterEach(stopCountingEncoderBuilds)
 
   it('builds no token encoder until a seed build counts a row', async () => {
-    const built = vi.fn()
-    vi.resetModules()
-    vi.doMock('js-tiktoken/lite', async (importOriginal) => {
-      const actual = await importOriginal<{ Tiktoken: typeof Tiktoken }>()
-      class CountedTiktoken extends actual.Tiktoken {
-        constructor(...args: ConstructorParameters<typeof Tiktoken>) {
-          super(...args)
-          built()
-        }
-      }
-      return { ...actual, Tiktoken: CountedTiktoken }
-    })
+    const built = countEncoderBuilds()
 
     const seed = await import('./seed-dataset')
     expect(built).not.toHaveBeenCalled()

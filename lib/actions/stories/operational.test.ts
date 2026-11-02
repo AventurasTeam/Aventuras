@@ -355,17 +355,16 @@ describe('stories column writes', () => {
 })
 
 describe('token encoder warm', () => {
-  const idle = vi.fn<(callback: () => void, options: { timeout: number }) => number>(() => 0)
   let openAtSchedule: string | null | undefined
+  const idle = vi.fn<(callback: () => void, options: { timeout: number }) => number>(() => {
+    openAtSchedule = currentStoryStore.getCurrentStory()?.storyId ?? null
+    return 0
+  })
 
   beforeEach(() => {
     tokens.warm.mockClear()
     openAtSchedule = undefined
-    idle.mockReset()
-    idle.mockImplementation(() => {
-      openAtSchedule = currentStoryStore.getCurrentStory()?.storyId ?? null
-      return 0
-    })
+    idle.mockClear()
     vi.stubGlobal('requestIdleCallback', idle)
   })
 

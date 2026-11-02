@@ -29,69 +29,52 @@ describe('lib module edges', () => {
   }
 
   describe('lib/tokens is a leaf', () => {
-    const fixture = 'lib/tokens/__leaf-fixture.ts'
-
-    it('flags a lib module', async () => {
-      expect(await boundaryHits("import { oneLine } from '@/lib/text'\n", fixture)).toBe(1)
-    })
-
-    it('flags a bare lib file', async () => {
-      expect(
-        await boundaryHits("import { normalizeTerm } from '@/lib/keyword-terms'\n", fixture),
-      ).toBe(1)
-    })
-
-    it('flags a hook, which would carry the db in', async () => {
-      expect(await boundaryHits("import { useTier } from '@/hooks/use-tier'\n", fixture)).toBe(1)
-    })
-
-    it('flags app code outside lib', async () => {
-      expect(await boundaryHits("import { Colors } from '@/constants/theme'\n", fixture)).toBe(1)
-    })
-
-    it('permits js-tiktoken', async () => {
-      expect(await boundaryHits("import { Tiktoken } from 'js-tiktoken/lite'\n", fixture)).toBe(0)
+    it.each([
+      ['flags a lib module', "import { oneLine } from '@/lib/text'\n", 1],
+      ['flags a bare lib file', "import { normalizeTerm } from '@/lib/keyword-terms'\n", 1],
+      [
+        'flags a hook, which would carry the db in',
+        "import { useTier } from '@/hooks/use-tier'\n",
+        1,
+      ],
+      ['flags app code outside lib', "import { Colors } from '@/constants/theme'\n", 1],
+      ['permits js-tiktoken', "import { Tiktoken } from 'js-tiktoken/lite'\n", 0],
+    ])('%s', async (_name, source, hits) => {
+      expect(await boundaryHits(source, 'lib/tokens/__leaf-fixture.ts')).toBe(hits)
     })
   })
 
   describe('lib/chapters takes no value import of a lib module or app code', () => {
-    const fixture = 'lib/chapters/__edge-fixture.ts'
-
-    it('flags a value import', async () => {
-      expect(await boundaryHits("import { storySettingsSchema } from '@/lib/db'\n", fixture)).toBe(
+    it.each([
+      ['flags a value import', "import { storySettingsSchema } from '@/lib/db'\n", 1],
+      [
+        'flags the inline type spelling, which counts as a value import',
+        "import { type StoryEntry } from '@/lib/db'\n",
         1,
-      )
-    })
-
-    it('flags the inline type spelling, which counts as a value import', async () => {
-      expect(await boundaryHits("import { type StoryEntry } from '@/lib/db'\n", fixture)).toBe(1)
-    })
-
-    it('permits an import type declaration', async () => {
-      expect(await boundaryHits("import type { StoryEntry } from '@/lib/db'\n", fixture)).toBe(0)
-    })
-
-    it('permits lib/keyword-terms, which the leaf rule would not', async () => {
-      expect(
-        await boundaryHits("import { normalizeTerm } from '@/lib/keyword-terms'\n", fixture),
-      ).toBe(0)
-    })
-
-    it('flags another lib module, which would carry the db in', async () => {
-      expect(await boundaryHits("import { chaptersStore } from '@/lib/stores'\n", fixture)).toBe(1)
-    })
-
-    it('flags a hook, which would carry the db in', async () => {
-      expect(
-        await boundaryHits(
-          "import { useChapterProgress } from '@/hooks/use-chapter-progress'\n",
-          fixture,
-        ),
-      ).toBe(1)
-    })
-
-    it('permits an import type declaration from another lib module', async () => {
-      expect(await boundaryHits("import type { OpenStory } from '@/lib/stores'\n", fixture)).toBe(0)
+      ],
+      ['permits an import type declaration', "import type { StoryEntry } from '@/lib/db'\n", 0],
+      [
+        'permits lib/keyword-terms, which the leaf rule would not',
+        "import { normalizeTerm } from '@/lib/keyword-terms'\n",
+        0,
+      ],
+      [
+        'flags another lib module, which would carry the db in',
+        "import { chaptersStore } from '@/lib/stores'\n",
+        1,
+      ],
+      [
+        'flags a hook, which would carry the db in',
+        "import { useChapterProgress } from '@/hooks/use-chapter-progress'\n",
+        1,
+      ],
+      [
+        'permits an import type declaration from another lib module',
+        "import type { OpenStory } from '@/lib/stores'\n",
+        0,
+      ],
+    ])('%s', async (_name, source, hits) => {
+      expect(await boundaryHits(source, 'lib/chapters/__edge-fixture.ts')).toBe(hits)
     })
   })
 })

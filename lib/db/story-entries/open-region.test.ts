@@ -71,14 +71,7 @@ describe('openRegionSeries', () => {
 
   it('reads a row inserted with no count as 0', async () => {
     const db = await seedBranches()
-    await db.insert(storyEntries).values({
-      id: 'e_old',
-      branchId: 'b1',
-      position: 1,
-      kind: 'ai_reply',
-      content: 'written before the column',
-      createdAt: 1,
-    })
+    await db.insert(storyEntries).values(row('e_old', 1, { contentTokens: null }))
 
     expect(await openRegionSeries('b1', { db })).toEqual([
       { id: 'e_old', kind: 'ai_reply', position: 1, tokens: 0 },
