@@ -80,6 +80,16 @@ export function serializePackFile(file: WrittenPackFile): string {
   return stringifyYaml(ordered, { lineWidth: 0 })
 }
 
+/** The format version a `pack.yaml` claims, whatever else it holds; `null` if it names none. */
+export function declaredFormatVersion(text: string): number | null {
+  try {
+    const result = z.object({ formatVersion: z.number().int() }).safeParse(parseYaml(text))
+    return result.success ? result.data.formatVersion : null
+  } catch {
+    return null
+  }
+}
+
 /** Read `pack.yaml`, refusing a format this version cannot read. */
 export function parsePackFile(text: string): ParseResult<PackFile> {
   let data: unknown

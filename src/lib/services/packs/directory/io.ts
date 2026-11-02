@@ -9,7 +9,7 @@
 import { open } from '@tauri-apps/plugin-dialog'
 import { mkdir, readDir, readTextFile, remove, rename, writeTextFile } from '@tauri-apps/plugin-fs'
 import { classifyPath } from './layout'
-import type { FolderChanges, Tree } from './tree'
+import { emptiedFolderCandidates, type FolderChanges, type Tree } from './tree'
 
 /** Ask for a directory, adding it to the fs scope. `null` if the user cancelled. */
 export async function pickDirectory(title: string): Promise<string | null> {
@@ -95,5 +95,10 @@ export async function writeTree(
 
   for (const path of prunePaths) {
     await remove(joinPath(root, path))
+  }
+
+  // Only folders the prune emptied: one the user left empty themselves is not touched.
+  for (const folder of emptiedFolderCandidates(prunePaths)) {
+    if ((await readDir(joinPath(root, folder))).length === 0) await remove(joinPath(root, folder))
   }
 }

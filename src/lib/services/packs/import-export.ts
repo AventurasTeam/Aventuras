@@ -134,6 +134,11 @@ class ImportExportService {
     // `pack.yaml` alone does not: other tools use it too, and treating a stranger's folder
     // as a previous export would delete the Markdown nested inside it.
     const origin = folderOrigin(packFileText)
+    if (origin === 'newer') {
+      throw new Error(
+        'This folder was exported by a newer version of Aventuras. Update the app to export into it.',
+      )
+    }
     const isKnownExport = origin !== 'foreign'
     const { prunePaths, renames } = planFolderChanges(existingPaths, tree, origin)
 

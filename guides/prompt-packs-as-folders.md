@@ -103,11 +103,19 @@ so a mangled tag will stop you at the import rather than reach a story.
 Two conflicts have a fixed answer:
 
 - **`_reference/version.md`** names the Aventuras version the reference files describe. Keep the
-  shipped side (`git checkout --theirs _reference/version.md`). It only conflicts when your branch
-  was exported by a different version than the shipped branch's previous export.
+  shipped side, then mark it resolved. It only conflicts when your branch was exported by a
+  different version than the shipped branch's previous export.
+
+  ```bash
+  git checkout --theirs _reference/version.md
+  git add _reference/version.md
+  ```
+
 - **A prompt "deleted by them"** usually means a release moved that prompt to another group, and
   rewrote enough of it that git did not recognise the move. Look for the same filename in another
-  folder, carry your edit over to it, and delete the old file.
+  folder, carry your edit over to it, then `git rm` the old file.
+
+Once every conflict is resolved, `git commit` finishes the merge.
 
 ## 5. Coming from an older export
 
@@ -115,7 +123,8 @@ Folders exported by Aventuras before format 2 look different. The first export i
 brings it up to date, and the confirmation lists everything it is about to change:
 
 - every prompt moves into a numbered group folder, `Analysis/` becoming `02 Analysis/`, so the
-  folders sort in the order the pack editor lists them. git records these as renames;
+  folders sort in the order the pack editor lists them. git records these as renames, and the old
+  folders are removed once empty;
 - `ABOUT.md` is deleted. This file replaces it;
 - a `README.md` of your own is renamed to `README_user.md`, never overwritten;
 - `_reference/` loses `template-variables.md` and `template-status.md`, and gains `version.md`.

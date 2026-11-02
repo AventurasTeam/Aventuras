@@ -23,6 +23,7 @@ import {
 import { gitattributesDoc, readmeDoc, variablesDoc, versionDoc } from './reference'
 import {
   DIRECTORY_FORMAT_VERSION,
+  declaredFormatVersion,
   parsePackFile,
   serializePackFile,
   serializeTemplate,
@@ -127,6 +128,10 @@ export function buildShippedBaselineTree(appVersion: string): Tree {
   })
 }
 
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, '/')
+}
+
 /**
  * Which files of an existing tree this export leaves behind.
  *
@@ -142,10 +147,9 @@ export function planPrune(existingPaths: string[], tree: Tree): string[] {
   // case-sensitive system is the safe failure -- it surfaces as a refused import naming both
   // paths, not as a template silently missing from a successful export.
   const written = new Set([...tree.keys()].map((path) => path.toLowerCase()))
-  const normalized = (path: string) => path.replace(/\\/g, '/')
 
   return existingPaths
-    .map(normalized)
+    .map(normalizePath)
     .filter((path) => !written.has(path.toLowerCase()))
     .filter(
       (path) =>
@@ -155,14 +159,12 @@ export function planPrune(existingPaths: string[], tree: Tree): string[] {
     .sort()
 }
 
-/**
- * Who wrote the chosen folder, as far as its `pack.yaml` says: this format, an earlier one, or
- * nobody this version recognises.
- */
-export type FolderOrigin = 'current' | 'earlier' | 'foreign'
+/** Who wrote the chosen folder, as far as its `pack.yaml` says. */
+export type FolderOrigin = 'current' | 'earlier' | 'newer' | 'foreign'
 
 export function folderOrigin(packFileText: string | undefined): FolderOrigin {
   if (packFileText === undefined) return 'foreign'
+  if ((declaredFormatVersion(packFileText) ?? 0) > DIRECTORY_FORMAT_VERSION) return 'newer'
   const parsed = parsePackFile(packFileText)
   if (!parsed.ok) return 'foreign'
   return parsed.value.formatVersion < DIRECTORY_FORMAT_VERSION ? 'earlier' : 'current'
@@ -180,42 +182,53 @@ export interface FolderChanges {
   renames: FileRename[]
 }
 
-/** Finds `name` among root paths without case, as Windows and macOS would. */
-function findRootFile(paths: string[], name: string): string | undefined {
-  return paths.find((path) => path.toLowerCase() === name.toLowerCase())
+/** Every root path spelling `name`, compared without case: one file on Windows and macOS, several on Linux. */
+function findRootFiles(paths: string[], name: string): string[] {
+  return paths.filter((path) => path.toLowerCase() === name.toLowerCase())
 }
 
-/** A `README.md` the export did not write moves to the first free `README_user[_N].md`. */
-function planReadmeRename(paths: string[]): FileRename[] {
-  const readme = findRootFile(paths, README_FILE)
-  if (readme === undefined) return []
-
+/** Each `README.md` the export did not write moves to the next free `README_user[_N].md`. */
+function planReadmeRenames(paths: string[]): FileRename[] {
   const taken = new Set(paths.map((path) => path.toLowerCase()))
-  let to = `${USER_README_STEM}.md`
-  for (let n = 2; taken.has(to.toLowerCase()); n++) to = `${USER_README_STEM}_${n}.md`
-  return [{ from: readme, to }]
+  return findRootFiles(paths, README_FILE)
+    .toSorted()
+    .map((from) => {
+      let to = `${USER_README_STEM}.md`
+      for (let n = 2; taken.has(to.toLowerCase()); n++) to = `${USER_README_STEM}_${n}.md`
+      taken.add(to.toLowerCase())
+      return { from, to }
+    })
 }
 
-/**
- * Plan the changes to a folder's existing files.
- *
- * Nothing is pruned from a folder this version does not recognise. A `README.md` is the export's
- * own only in a tree the current format wrote; anywhere else it is the user's, and is moved aside
- * rather than overwritten. An earlier format's `ABOUT.md` is generated, so it goes.
- */
+/** Plan the changes to a folder's existing files; the rules are in docs/architecture/prompts.md. */
 export function planFolderChanges(
   existingPaths: string[],
   tree: Tree,
-  origin: FolderOrigin,
+  origin: Exclude<FolderOrigin, 'newer'>,
 ): FolderChanges {
-  const paths = existingPaths.map((path) => path.replace(/\\/g, '/'))
+  const paths = existingPaths.map(normalizePath)
   const prunePaths = origin === 'foreign' ? [] : planPrune(paths, tree)
-
-  const about = origin === 'earlier' ? findRootFile(paths, ABOUT_FILE) : undefined
-  if (about !== undefined) prunePaths.push(about)
+  if (origin === 'earlier') prunePaths.push(...findRootFiles(paths, ABOUT_FILE))
 
   return {
     prunePaths: prunePaths.toSorted(),
-    renames: origin === 'current' ? [] : planReadmeRename(paths),
+    renames: origin === 'current' ? [] : planReadmeRenames(paths),
   }
+}
+
+/**
+ * Folders that may be left empty once `prunePaths` are gone, deepest first, so a parent is
+ * checked after its children.
+ */
+export function emptiedFolderCandidates(prunePaths: string[]): string[] {
+  const folders = new Set<string>()
+  for (const path of prunePaths) {
+    const segments = normalizePath(path).split('/').slice(0, -1)
+    for (let depth = 1; depth <= segments.length; depth++) {
+      folders.add(segments.slice(0, depth).join('/'))
+    }
+  }
+  return [...folders].toSorted(
+    (a, b) => b.split('/').length - a.split('/').length || a.localeCompare(b),
+  )
 }

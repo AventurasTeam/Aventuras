@@ -36,9 +36,9 @@
       <ResponsiveModal.Description>
         {#if plan && !plan.isKnownExport}
           This folder already holds files and was not written by a previous export. Nothing in it
-          will be deleted, and a README.md in it is kept under a new name. Any other file sharing a
-          name with one of the exported files — including .gitattributes and any prompt of the same
-          name — will be overwritten.
+          will be deleted, but any file sharing a name with one of the exported files — including
+          {renames.length > 0 ? '' : 'README.md, '}.gitattributes and any prompt of the same name —
+          will be overwritten.
         {:else}
           Exporting keeps the folder matching the pack, so files it no longer contains are removed.
           A Markdown file you kept beside the prompts looks the same as a prompt this pack has

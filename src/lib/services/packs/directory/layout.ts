@@ -44,9 +44,6 @@ export const UNGROUPED_DIR = folderForGroup(UNGROUPED_GROUP)
 /** Suffix marking a prompt's user-message half, as stored. */
 export const USER_HALF_SUFFIX = '-user'
 
-/** Files the export writes and overwrites; everything else at the root belongs to the user. */
-export const RESERVED_ROOT_FILES = [PACK_FILE, README_FILE, GITATTRIBUTES_FILE]
-
 /** How a path in an exported tree is treated on import. */
 export type PathRole = 'template' | 'pack-file' | 'ignored'
 

@@ -13,8 +13,22 @@ export interface TemplateGroup {
   templates: PromptTemplate[]
 }
 
+/** Group display order */
+const GROUP_ORDER = [
+  'Story Generation',
+  'Analysis',
+  'Memory',
+  'Suggestions & Actions',
+  'Image',
+  'Translation',
+  'Wizard',
+] as const
+
+/** A group the editor lists; a template can only be mapped to one of these. */
+type GroupName = (typeof GROUP_ORDER)[number]
+
 /** Template IDs mapped to display group names */
-const TEMPLATE_GROUP_MAP: Record<string, string> = {
+const TEMPLATE_GROUP_MAP: Record<string, GroupName> = {
   // Story Generation
   adventure: 'Story Generation',
   'creative-writing': 'Story Generation',
@@ -71,17 +85,6 @@ const TEMPLATE_GROUP_MAP: Record<string, string> = {
   'vault-character-import': 'Wizard',
 }
 
-/** Group display order */
-const GROUP_ORDER = [
-  'Story Generation',
-  'Analysis',
-  'Memory',
-  'Suggestions & Actions',
-  'Image',
-  'Translation',
-  'Wizard',
-]
-
 /** The group a template without one of its own is listed under, after every named group. */
 export const UNGROUPED_GROUP = 'Other'
 
@@ -100,7 +103,7 @@ export function getTemplateGroups(): TemplateGroup[] {
     groupMap.get(groupName)!.push(template)
   }
 
-  const orderedGroups = GROUP_ORDER.filter((name) => groupMap.has(name))
+  const orderedGroups: string[] = GROUP_ORDER.filter((name) => groupMap.has(name))
   if (groupMap.has(UNGROUPED_GROUP)) {
     orderedGroups.push(UNGROUPED_GROUP)
   }
@@ -118,7 +121,7 @@ export function getTemplateGroup(templateId: string): string {
 
 /** A group's 1-based position in the editor's list; the ungrouped group comes after every other. */
 export function groupPosition(group: string): number {
-  const index = GROUP_ORDER.indexOf(group)
+  const index = GROUP_ORDER.findIndex((name) => name === group)
   return index === -1 ? GROUP_ORDER.length + 1 : index + 1
 }
 

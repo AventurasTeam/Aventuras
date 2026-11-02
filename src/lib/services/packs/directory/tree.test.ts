@@ -12,6 +12,7 @@ import {
 import {
   buildShippedBaselineTree,
   buildTree,
+  emptiedFolderCandidates,
   folderOrigin,
   planFolderChanges,
   planPrune,
@@ -162,6 +163,11 @@ describe('folderOrigin', () => {
     expect(folderOrigin(undefined)).toBe('foreign')
     expect(folderOrigin('name: someone else’s tool\n')).toBe('foreign')
   })
+
+  // A newer format may change the rest of the schema, so only its declared version is trusted.
+  it('recognises a newer format even when the rest of pack.yaml no longer parses', () => {
+    expect(folderOrigin('formatVersion: 99\nsomethingNew: true\n')).toBe('newer')
+  })
 })
 
 describe('planFolderChanges', () => {
@@ -215,10 +221,30 @@ describe('planFolderChanges', () => {
     expect(prunePaths).toEqual([])
   })
 
+  it('moves aside every spelling of README.md a case-sensitive filesystem can hold', () => {
+    expect(planFolderChanges(['readme.md', README_FILE], tree, 'foreign').renames).toEqual([
+      { from: README_FILE, to: 'README_user.md' },
+      { from: 'readme.md', to: 'README_user_2.md' },
+    ])
+  })
+
   it('overwrites its own README and keeps a user’s ABOUT.md in a current tree', () => {
     const { prunePaths, renames } = planFolderChanges([...tree.keys(), ABOUT_FILE], tree, 'current')
     expect(renames).toEqual([])
     expect(prunePaths).toEqual([])
+  })
+})
+
+describe('emptiedFolderCandidates', () => {
+  it('lists each pruned file’s folders, deepest first, and no root', () => {
+    expect(
+      emptiedFolderCandidates([
+        'Analysis/classifier.md',
+        'Analysis/old/deep.md',
+        `${REFERENCE_DIR}/template-status.md`,
+        ABOUT_FILE,
+      ]),
+    ).toEqual(['Analysis/old', REFERENCE_DIR, 'Analysis'])
   })
 })
 

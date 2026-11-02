@@ -218,9 +218,13 @@ and two builds of one version would write different READMEs.
 Format 1 wrote `appVersion` into `pack.yaml`, unnumbered folders, `ABOUT.md` and two more reference files;
 format 2 is the current one. `formatVersion` tells them apart, so an export into a format 1 tree prunes
 `ABOUT.md` as well, and a `README.md` there — or in a folder with no readable `pack.yaml` — is the user's and
-is renamed to `README_user.md` (`_2`, … when taken) rather than overwritten. Renames run before the write,
-through `plugin-fs`'s `rename`, and the confirmation lists them beside the deletions. Import reads both
-formats.
+is renamed to `README_user.md` (`_2`, … when taken) rather than overwritten; every case-insensitive match is,
+since Linux can hold several. Renames run before the write, through `plugin-fs`'s `rename`, and the
+confirmation lists them beside the deletions. A folder emptied by the prune is removed after it, so a
+migrated tree keeps no unnumbered group folders. Import reads both formats.
+
+An export into a tree a **newer** format wrote is refused, as an import of one is. Treating it as a
+stranger's folder would rename that version's own `README.md` as the user's and downgrade `pack.yaml`.
 
 ### Why the Baseline Lives in Git
 
