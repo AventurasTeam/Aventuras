@@ -540,6 +540,14 @@ that ran)
   spend its window on one structured call. The small route is an optional
   output default on `StructuredCallOptions`, which boundary can share. The
   other is leaving it to the server. Decide at planning.
+- **Does the headless route open a story under `tsx`?** The import check
+  above stops short of an open: `loadAndPublish` calls
+  `requestIdleCallback` for the encoder warm with no fallback, and plain
+  Node has no such global, so `loadOpenStory` throws after `publish`. This
+  slice lands before [Slice 5.5a](./05a-task-runner.md#open-questions),
+  which asks the same for `pnpm probe:close`, so a `pnpm dataset:chapter`
+  that opens a story meets it first. Starting answer: the script sets a
+  no-op before its first open, as `vitest.setup.ts` does.
 
 ## Implementation notes
 

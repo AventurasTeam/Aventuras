@@ -71,7 +71,7 @@ slice-planning gate forces its resolution before that slice is planned.
   `createQueryClient` (`lib/cache/query-client.ts`) sets no
   `networkMode`, so once the window's `offline` event fires a read on a
   new key pauses, though these are local SQLite reads.
-  `useEntryIndex` (`hooks/use-entry-index.ts:99`) and `useRowSignals`
+  `useEntryIndex` (`hooks/use-entry-index.ts:91`) and `useRowSignals`
   (`hooks/use-row-signals.ts:67`) have this on main, and
   `useChapterProgress` opts out for itself. One default in
   `createQueryClient` fixes all three, and that hook's own line can then
@@ -99,11 +99,52 @@ slice-planning gate forces its resolution before that slice is planned.
   only, so on desktop a throw in a timer or an idle callback reaches the
   console alone. Raised 2026-11-01 by Slice 5.1's review.
 - **A test comment cites a slice.**
-  `lib/actions/story-entries/register.test.ts:308` names `Slice "Kind
-coverage"`, a class `.claude/rules/code.md` bans. Raised 2026-11-01 by
+  `lib/actions/story-entries/register.test.ts:308` names the slice "Kind
+  coverage", a class `.claude/rules/code.md` bans. Raised 2026-11-01 by
   Slice 5.1's review.
-- **Two docs lag the tokenizer.** `tech-stack.md`'s token-counting
-  section says `cl100k_base` or `o200k_base` and that tables load on
-  demand, where `lib/tokens` imports o200k's ranks statically. The token
-  lesson says the build takes ~272 ms, and `lib/tokens/index.ts` ~285 ms.
+- **Two docs lag the tokenizer.**
+  [`tech-stack.md → js-tiktoken`](../tech-stack.md#6-js-tiktoken) says
+  `cl100k_base` or `o200k_base` and that tables load on demand, where
+  `lib/tokens` imports o200k's ranks statically.
+  [The token lesson](./lessons-learned/token-fixtures-need-real-prose.md)
+  says the build takes ~272 ms, and `lib/tokens/index.ts` ~285 ms.
   Raised 2026-11-01 by Slice 5.1's review.
+- **Slice 5.1's doc needs two corrections.** Its brief kept the doc
+  read-only for the closing review.
+  - [Implementation notes](./milestones/05-chapters-chapter-close/slices/01-token-measure.md#implementation-notes)
+    say the guard's overflow comes at "at least about 700,000 tokens".
+    That's the density of `x` alone. The limit is about 5.6 million code
+    points of one run whatever its shape, and a run of spaces reaches it
+    at about 43,700 tokens, dashes at 87,400 and newlines at 350,000. The
+    note's conclusion holds for a better reason: counting 5.5 million
+    spaces blocks for about 120 s under Node first, and past the limit
+    the turn fails with nothing written.
+  - Scope and Acceptance describe the `lib/chapters` rule as a `disallow`
+    on `lib/db`. It now bars value imports of every lib module and of app
+    code, per
+    [C5](./milestones/05-chapters-chapter-close/milestone.md#c5--token-reads-and-the-progress-hook).
+
+  Raised 2026-11-02 by Slice 5.1's closing review.
+
+- **A route mounted during a read starts the strip at 0.**
+  `useChapterProgress` holds its last read per hook, so World, Plot or
+  Story Settings mounting while a read runs show 0 until it lands, though
+  the hidden reader still holds the number. The window is the read's own
+  length, on the order of milliseconds, and it heals by itself. Slice
+  5.3's count labels make it readable. `useEntryIndex`'s
+  `seedFromLastRead` is the precedent if it ever shows. Raised 2026-11-02
+  by Slice 5.1's closing review.
+- **A failed Send logs nothing.** The reader's catch
+  (`app/reader-composer/[branchId].tsx:804`) writes the failure card and
+  no log line, and nothing emits `action_layer.user_write_rejected`, which
+  [`observability.md → Subsystem emission inventory`](../observability.md#subsystem-emission-inventory)
+  lists. Slice 5.1 adds one route there, `countTokens` throwing on a run
+  of about 5.6 million code points, and the card still shows the failure.
+  The fix belongs with every user write, not this one. Raised 2026-11-02
+  by Slice 5.1's closing review.
+- **Two older types the token slice builds on stay loose.**
+  `contentEditUndoPayload` (`lib/actions/story-entries/classifier-facts.ts:98`)
+  returns `Record<string, unknown>`, though its keys are known.
+  `ScreenShell`'s `chapterProgress` is in-story only by doc comment on a
+  flat props type, where a union on `variant` would make in-story callers
+  pass it. Raised 2026-11-02 by Slice 5.1's closing review.
