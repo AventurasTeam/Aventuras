@@ -37,6 +37,7 @@ import {
   ui,
   NAV_FILTER_SETTING,
   EXPLANATION_FOLD_PREFIX,
+  EXPLANATION_FOLD_IDS,
   isExplanationFoldId,
 } from '#lib/stores/ui.svelte.ts'
 import { LANDMARK_FILTER_GROUPS } from '#lib/utils/storyNavigation.ts'
@@ -3096,6 +3097,7 @@ class SettingsStore {
     await ui.setNavPanelOpen(false)
     await ui.setGalleryNewestFirst(false)
     for (const group of LANDMARK_FILTER_GROUPS) await ui.setNavFilter(group, true)
+    for (const id of EXPLANATION_FOLD_IDS) await ui.setExplanationFolded(id, false)
 
     // Reset font to default
     this.applyFontFamily('default', 'default')
