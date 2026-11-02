@@ -35,23 +35,23 @@
     <div
       bind:this={box}
       tabindex="-1"
-      class="bg-background w-full max-w-sm overflow-hidden rounded-lg border shadow-lg outline-none"
+      class="bg-background w-full max-w-sm overflow-hidden rounded-lg border shadow-lg outline-none sm:w-fit sm:max-w-full"
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="{uid}-title"
       aria-describedby="{uid}-description"
     >
-      <!-- An action modal's frame: title band, body, and its footer's pair. -->
-      <div class="bg-muted/40 border-b px-6 py-4">
+      <!-- An action modal's frame, as wide as its footer's pair: the text wraps to that width. -->
+      <div class="bg-muted/40 w-0 min-w-full border-b p-4">
         <h2 id="{uid}-title" class="text-center text-lg leading-none font-semibold tracking-tight">
           {shown?.title}
         </h2>
       </div>
-      <p id="{uid}-description" class="text-muted-foreground px-6 py-4 text-sm">
+      <p id="{uid}-description" class="text-muted-foreground w-0 min-w-full p-4 text-sm">
         {shown?.description}
       </p>
-      <div class="bg-muted/40 border-t px-6 py-4">
-        <div class={cn('sm:mx-auto', PAIR_ROW)}>
+      <div class="bg-muted/40 border-t p-4">
+        <div class={PAIR_ROW}>
           <Button variant="outline" class={PAIR_BUTTON} onclick={() => question.answer(false)}>
             {shown?.keepLabel ?? 'Keep editing'}
           </Button>
