@@ -57,8 +57,6 @@ export async function readPromptBuffer(
   branchId: string,
   settings: BufferSettings,
 ): Promise<StoryEntry[]> {
-  const narrative = and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system'))
-
   const [open] = await db
     .select({ openCount: count() })
     .from(storyEntries)
@@ -70,7 +68,7 @@ export async function readPromptBuffer(
   const rows = await db
     .select()
     .from(storyEntries)
-    .where(narrative)
+    .where(and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system')))
     .orderBy(desc(storyEntries.position), desc(storyEntries.createdAt))
     .limit(take)
   warnOnDuplicatePositions(rows, branchId)

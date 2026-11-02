@@ -40,7 +40,6 @@ function encodedLength(text: string): number {
 }
 
 export function countTokens(text: string): number {
-  if (text === '') return 0
   let tokens = 0
   let encodedTo = 0
   for (const match of text.matchAll(LONG_RUN)) {

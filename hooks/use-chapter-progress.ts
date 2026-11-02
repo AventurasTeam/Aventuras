@@ -10,10 +10,8 @@ import { useBranchTailId } from './use-branch-tail-id'
 
 type ShownRead = { branchId: string; series: readonly OpenRegionRow[] }
 
-const EMPTY_SERIES: readonly OpenRegionRow[] = []
-
 // Logs from the shared fetch, since every mounted observer receives the same error.
-async function readSeries(branchId: string): Promise<OpenRegionRow[]> {
+async function readSeries(branchId: string): Promise<readonly OpenRegionRow[]> {
   try {
     return await openRegionSeries(branchId, { db })
   } catch (error) {
@@ -61,8 +59,5 @@ export function useChapterProgress(storyId: string | null | undefined): ChapterP
   }
   if (shown !== lastRead) setLastRead(shown)
 
-  return useMemo(
-    () => chapterProgressOf(shown?.series ?? EMPTY_SERIES, threshold),
-    [shown, threshold],
-  )
+  return useMemo(() => chapterProgressOf(shown?.series ?? [], threshold), [shown, threshold])
 }
