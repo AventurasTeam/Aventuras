@@ -24,7 +24,12 @@
     if (request) void start(request.entryId, request.retry)
   })
 
-  $effect(() => () => ui.settleRegenerate())
+  // Set on teardown: a preparation still awaiting its previews must not act or settle again.
+  let disposed = false
+  $effect(() => () => {
+    disposed = true
+    ui.settleRegenerate()
+  })
 
   // A regenerate the reader confirms keeps none of their or Tidy's changes in its range.
   function regenerate(entryId: string, retry: boolean) {
@@ -36,7 +41,7 @@
     try {
       await prepare(entryId, retry)
     } finally {
-      if (!pending) ui.settleRegenerate()
+      if (!pending && !disposed) ui.settleRegenerate()
     }
   }
 
@@ -61,6 +66,7 @@
       ui.showToast(`Could not check what regenerating undoes: ${errMessage(error)}`, 'error')
       return
     }
+    if (disposed) return
     // A chapter starting or ending on a removed entry goes with it, recorded or not.
     const chapters = position !== undefined ? story.chaptersRemovedFrom(position) : []
     const toDecide =
