@@ -27,9 +27,11 @@ export const STORY_ENTRY_REJECTION = {
 export type StoryEntryRejectionCode =
   (typeof STORY_ENTRY_REJECTION)[keyof typeof STORY_ENTRY_REJECTION]
 
+type UncountedStoryEntry = Omit<NewStoryEntry, 'contentTokens'>
+
 declare module '@/lib/actions/action-map' {
   interface PipelineActionMap {
-    createStoryEntry: { source: DeltaSource; payload: { entry: NewStoryEntry } }
+    createStoryEntry: { source: DeltaSource; payload: { entry: UncountedStoryEntry } }
     updateStoryEntryMetadata: {
       source: DeltaSource
       // Partial: the handler merges onto the row it reads, so a writer only ever
@@ -42,7 +44,7 @@ declare module '@/lib/actions/action-map' {
   }
 }
 
-function fullRow(entry: NewStoryEntry): StoryEntry {
+function fullRow(entry: UncountedStoryEntry): StoryEntry {
   return {
     id: entry.id,
     branchId: entry.branchId,
