@@ -141,16 +141,18 @@ module.exports = defineConfig([
               message:
                 'lib/tokens is a leaf: the seed imports it on the boot path, and a value cycle there fails only on Android. See docs/implementation/milestones/05-chapters-chapter-close/milestone.md#c5--token-reads-and-the-progress-hook.',
             },
+            // Stores, actions, retrieval and the progress hook all bring lib/db in at runtime, so
+            // banning lib/db alone wouldn't hold. lib-file stays open for @/lib/keyword-terms.
             {
               from: [{ type: 'lib-module', captured: { name: 'chapters' } }],
               disallow: [
                 {
-                  to: { type: 'lib-module', captured: { name: 'db' } },
+                  to: [{ type: 'lib-module' }, { type: 'app-code' }],
                   dependency: { kind: 'value' },
                 },
               ],
               message:
-                'lib/chapters takes no value import of lib/db: it holds pure rules, and the seed and DOM reader code reach it. See docs/implementation/milestones/05-chapters-chapter-close/milestone.md#c5--token-reads-and-the-progress-hook.',
+                'lib/chapters takes no value import of a lib module or app code, which can bring lib/db in at runtime: it holds pure rules, and the seed and DOM reader code reach it. See docs/implementation/milestones/05-chapters-chapter-close/milestone.md#c5--token-reads-and-the-progress-hook.',
             },
           ],
         },

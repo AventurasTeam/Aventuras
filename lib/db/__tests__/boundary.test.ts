@@ -54,7 +54,7 @@ describe('lib module edges', () => {
     })
   })
 
-  describe('lib/chapters takes no value import of lib/db', () => {
+  describe('lib/chapters takes no value import of a lib module or app code', () => {
     const fixture = 'lib/chapters/__edge-fixture.ts'
 
     it('flags a value import', async () => {
@@ -77,8 +77,21 @@ describe('lib module edges', () => {
       ).toBe(0)
     })
 
-    it('permits another lib module', async () => {
-      expect(await boundaryHits("import { oneLine } from '@/lib/text'\n", fixture)).toBe(0)
+    it('flags another lib module, which would carry the db in', async () => {
+      expect(await boundaryHits("import { chaptersStore } from '@/lib/stores'\n", fixture)).toBe(1)
+    })
+
+    it('flags a hook, which would carry the db in', async () => {
+      expect(
+        await boundaryHits(
+          "import { useChapterProgress } from '@/hooks/use-chapter-progress'\n",
+          fixture,
+        ),
+      ).toBe(1)
+    })
+
+    it('permits an import type declaration from another lib module', async () => {
+      expect(await boundaryHits("import type { OpenStory } from '@/lib/stores'\n", fixture)).toBe(0)
     })
   })
 })
