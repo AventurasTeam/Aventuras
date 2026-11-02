@@ -110,30 +110,24 @@ The one swipe inside a panel that may not bubble up is over the Branches panel's
 could still scroll in the swipe's direction as the gesture starts, it stops the `touchend`, so the
 swipe scrolls the tree and changes no tab and no panel. At the tree's edge the swipe goes through.
 
-## Drawer swipes, and the one place we reach into `vaul`
+## Drawer sheets
 
-A drawer that holds unsaved work has to answer a swipe with a question rather than a close, and
-`vaul` offers no veto: it decides inside its own release handler. `createDrawerSwipeGuard`
-(`ui/drawer/swipe-guard.ts`) takes the one seam there is — `vaul` calls the content's
-`onpointerup` just before it measures the swipe — and, when the caller says the drawer is dirty,
-puts the sheet back at rest so that measurement finds nothing to act on, then animates the settle
-itself.
+`vaul` offers no veto over a close: a swipe past `closeThreshold` (0.75, set in `drawer.svelte`) or
+a tap on the handle closes a sheet, even one that is not dismissible. So nothing with unsaved work
+is a sheet: the action modals that hold edits are dialogs on a phone too (see
+[ui-components.md](../development/ui-components.md)). Escape and an outside click reach their guard
+through bits-ui, which can be vetoed. Android's back press does not rely on that: an open action
+modal claims it (`utils/backPress.ts`), and the layout's back handler offers it to the claims,
+latest first, before it tries anything else. A claim declines when another layer, such as a
+Select's list, was opened over its modal, and the press falls through to the handler's Escape. The synthetic Escape the handler sends to other dialogs closed a
+dirty action modal without asking. A close driven from our side
+never reaches `vaul`'s restore, so the scroll lock is released by hand (see `utils/scrollLock`).
 
-**On upgrading `vaul-svelte`**, check three things against the new version, because the guard
-copies them rather than importing them (they are internal):
+A sheet spans the screen, so `ResponsiveModal.Content` drops a caller's width classes (`w-*`,
+`max-w-*`, `min-w-*`, under any variant) before they reach it; they size the dialog only.
 
-- the release callback still runs before the swipe is measured (`use-drawer-content.svelte.js`),
-- `VELOCITY_THRESHOLD` and the settle transition in `internal/constants.js`, mirrored in the
-  guard, and
-- `closeThreshold`, which the guard reads from `DRAWER_CLOSE_THRESHOLD` and `drawer.svelte`
-  passes to `vaul`; the two must stay one constant.
-
-If the seam closes, the fallback still holds: a dirty drawer that closes anyway comes back as a
-fresh sheet once the old one has released its scroll lock — slower, but not broken.
-
-Two other `vaul` behaviours the callers have to know: it closes a non-dismissible drawer when its
-handle is tapped, and a close driven from our side never reaches its restore, so the scroll lock
-is released by hand (see `utils/scrollLock`).
+Sheets open and close in 180ms, set in `app.css` over `vaul`'s 0.5s animation. Only the open and
+close animations change; a drag's settle keeps `vaul`'s timing.
 
 ## The soft keyboard
 
@@ -193,8 +187,9 @@ Two controls that do the same thing make the reader wonder how they differ, and 
 confirming action is the clearer of the two wherever the dialog asks for a decision. Such a dialog
 passes `closeButton={false}` to `ResponsiveModal.Header`; the X stays for dialogs that only show
 something and have no action to cancel. The rule is about controls drawn on the dialog, not the
-platform's own gestures: on a phone the dialog is a drawer, and swiping it down stays available
-whenever Cancel is (`dismissible`), so it is withheld only while a write is in flight.
+platform's own gestures: where a dialog is a sheet on a phone, swiping it down stays available
+whenever Cancel is (`dismissible`), so it is withheld only while a write is in flight. Which
+dialogs are sheets on a phone is in [ui-components.md](../development/ui-components.md).
 
 ## Data Model
 

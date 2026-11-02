@@ -183,6 +183,8 @@ export interface StoryDetails {
   genre: string | null
   description: string | null
   genreColor: string | null
+  pov: POV
+  tense: Tense
 }
 
 export interface StoryEntry {

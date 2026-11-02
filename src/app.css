@@ -31,6 +31,9 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
+  /* Half a row of two, less half a gap-2 (for basis-pair) */
+  --container-pair: calc(50% - 0.25rem);
+
   /* Colors - map to Tailwind theme system */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -430,4 +433,20 @@
   to {
     height: 0;
   }
+}
+
+/*
+ * Sheets open and close in 180ms instead of vaul's 0.5s. Only the open and close animations
+ * change: the settle after a drag is set inline by vaul.
+ * Specificity beats vaul's own rules whatever order they load in.
+ */
+[data-vaul-drawer][data-vaul-snap-points='false'],
+[data-vaul-overlay][data-vaul-snap-points='false'][data-state] {
+  animation-duration: 180ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+/* Held at the end until bits-ui unmounts it, when the animation finishes. */
+[data-vaul-drawer][data-vaul-snap-points='false'][data-state='closed'],
+[data-vaul-overlay][data-vaul-snap-points='false'][data-state='closed'] {
+  animation-fill-mode: forwards;
 }

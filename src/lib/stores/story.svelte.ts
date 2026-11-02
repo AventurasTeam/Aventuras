@@ -159,6 +159,7 @@ import { createLogger } from '#lib/log.ts'
 import { withUniqueEntryTerms } from '#lib/utils/lorebookTerms.ts'
 import { sameEntityName, uniqueTerms } from '#lib/utils/text.ts'
 import { storyDetailsUpdate } from '#lib/utils/storyDetails.ts'
+import { storyPov, storyTense } from '#lib/utils/storySettings.ts'
 import { grammarService } from '#lib/services/grammar.ts'
 import {
   clearTier3SelectionCache,
@@ -376,27 +377,11 @@ class StoryStore {
   }
 
   get pov(): 'first' | 'second' | 'third' {
-    const mode = this.currentStory?.mode ?? 'adventure'
-    const stored = this.currentStory?.settings?.pov ?? null
-    // For creative-writing mode, respect the user's stored POV choice
-    // (wizard allows selecting first, second, or third person)
-    if (stored) {
-      return stored
-    }
-    // Default based on mode
-    if (mode === 'creative-writing') {
-      return 'third'
-    }
-    return 'first'
+    return storyPov(this.currentStory)
   }
 
   get tense(): 'past' | 'present' {
-    const mode = this.currentStory?.mode ?? 'adventure'
-    const stored = this.currentStory?.settings?.tense ?? null
-    if (mode === 'creative-writing') {
-      return 'past'
-    }
-    return stored ?? 'present'
+    return storyTense(this.currentStory)
   }
 
   get inventoryItems(): Item[] {
@@ -4348,7 +4333,11 @@ class StoryStore {
    * deterministic boundary and a single summarizeChapter call, never
    * analyzeForChapter.
    */
-  private async buildAndSaveChapter(startIndex: number, endIndex: number): Promise<Chapter> {
+  private async buildAndSaveChapter(
+    startIndex: number,
+    endIndex: number,
+    signal?: AbortSignal,
+  ): Promise<Chapter> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const chapterEntries = this.entries.slice(startIndex, endIndex)
@@ -4368,7 +4357,11 @@ class StoryStore {
       this.pov,
       this.tense,
       this.memoryConfig.summaryDetail,
+      undefined,
+      signal,
     )
+    // A Stop that lands after the summary has returned must still save nothing.
+    signal?.throwIfAborted()
 
     // Get the next chapter number
     const chapterNumber = await this.getNextChapterNumber()
@@ -4406,7 +4399,7 @@ class StoryStore {
 
   // Create a manual chapter at a specific entry index
   /** @returns the chapter written; null is a refusal, not a failure. */
-  async createManualChapter(endEntryIndex: number): Promise<Chapter | null> {
+  async createManualChapter(endEntryIndex: number, signal?: AbortSignal): Promise<Chapter | null> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     // The button is disabled while a turn's background tasks run, but that is the visible
@@ -4431,7 +4424,7 @@ class StoryStore {
       throw new Error('Invalid entry index for chapter creation')
     }
 
-    const chapter = await this.buildAndSaveChapter(startIndex, endEntryIndex)
+    const chapter = await this.buildAndSaveChapter(startIndex, endEntryIndex, signal)
     log('Manual chapter created:', chapter.number, chapter.title)
     return chapter
   }
@@ -6042,8 +6035,8 @@ class StoryStore {
   }
 
   /**
-   * Save the library card's edit dialog: title, genre, description and the genre badge colour,
-   * in one write. Blank genre or description clears it; a blank title is refused. Nothing is
+   * Save the library card's edit dialog: title, genre, description, the genre badge colour and
+   * the narrative voice, in one write. Blank genre or description clears it; a blank title is refused. Nothing is
    * written when nothing changed, so opening and saving the dialog does not bump the story up
    * the library.
    */

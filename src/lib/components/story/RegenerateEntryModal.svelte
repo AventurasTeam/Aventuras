@@ -6,9 +6,8 @@
   import { settings } from '#lib/stores/settings.svelte.ts'
   import { entryNumber } from '#lib/utils/storyNavigation.ts'
   import { errMessage } from '#lib/utils/error.ts'
-  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { RotateCcw } from '@lucide/svelte'
-  import ModalActions from '#lib/components/shared/ModalActions.svelte'
+  import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import RevertSummary from './RevertSummary.svelte'
 
   // Set only while the reader decides: a regenerate with nothing to decide runs at once.
@@ -73,50 +72,24 @@
   }
 </script>
 
-<ResponsiveModal.Root
-  bind:open={
-    () => pending !== null,
-    (next) => {
-      if (!next) pending = null
-    }
-  }
+<ActionModal
+  open={pending !== null}
+  onCancel={() => (pending = null)}
+  action={{ label: 'Regenerate', icon: RotateCcw, tone: 'regenerate', onConfirm: confirm }}
+  title={pending ? `Regenerate entry ${entryNumber(pending.entry)}` : 'Regenerate entry'}
 >
-  <ResponsiveModal.Content
-    class="flex max-h-[85dvh] max-w-md flex-col gap-0 p-0"
-    interactOutsideBehavior="ignore"
-  >
-    {#if pending}
-      {@const preview = pending.preview}
-      <ResponsiveModal.Header class="border-b px-6 py-4" closeButton={false}>
-        <ResponsiveModal.Title>Regenerate entry {entryNumber(pending.entry)}</ResponsiveModal.Title>
-        <ResponsiveModal.Description>
-          {settings.experimentalFeatures.stateTracking
-            ? 'Regenerating this entry will undo the world state changes recorded for it.'
-            : 'Regenerating this entry will replace it.'}
-        </ResponsiveModal.Description>
-      </ResponsiveModal.Header>
-      <!-- Buttons scroll with the content, so what they do is read before them. -->
-      <div class="min-h-0 flex-1 overflow-y-auto">
-        <div class="space-y-3 px-6 py-4">
-          <RevertSummary
-            lines={removalLines(
-              pending.chapters,
-              pending.snapshots,
-              preview.classifier,
-              preview.lore,
-            )}
-            heading="These changes will be reverted too:"
-            manual={preview.manual}
-            tidy={preview.tidy}
-          />
-        </div>
-        <ModalActions
-          label="Regenerate"
-          icon={RotateCcw}
-          onCancel={() => (pending = null)}
-          onConfirm={confirm}
-        />
-      </div>
-    {/if}
-  </ResponsiveModal.Content>
-</ResponsiveModal.Root>
+  {#snippet description()}
+    {settings.experimentalFeatures.stateTracking
+      ? 'Regenerating this entry will undo the world state changes recorded for it.'
+      : 'Regenerating this entry will replace it.'}
+  {/snippet}
+  {#if pending}
+    {@const preview = pending.preview}
+    <RevertSummary
+      lines={removalLines(pending.chapters, pending.snapshots, preview.classifier, preview.lore)}
+      heading="These changes will be reverted too:"
+      manual={preview.manual}
+      tidy={preview.tidy}
+    />
+  {/if}
+</ActionModal>

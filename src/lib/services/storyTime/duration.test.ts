@@ -6,6 +6,7 @@ import {
   parseStoryTime,
   formatStoryTime,
   storyTimeIsInvalid,
+  convertedStoryTime,
 } from './duration'
 
 const DAY = 24 * 60
@@ -125,5 +126,21 @@ describe('storyTimeIsInvalid', () => {
   it('is true only for text that is not a story time', () => {
     expect(storyTimeIsInvalid('Y1 D4 14:30')).toBe(false)
     expect(storyTimeIsInvalid('half past two')).toBe(true)
+  })
+})
+
+describe('convertedStoryTime', () => {
+  it('says nothing for a time stored as typed', () => {
+    expect(convertedStoryTime('Y1 D4 14:30')).toBeNull()
+    expect(convertedStoryTime('14:30')).toBeNull()
+  })
+
+  it('names the carried-over time when the days overflow a year', () => {
+    expect(convertedStoryTime('D400 14:30')).toBe('Y2 D35 14:30')
+  })
+
+  it('says nothing for text that is not a time', () => {
+    expect(convertedStoryTime('soon')).toBeNull()
+    expect(convertedStoryTime('')).toBeNull()
   })
 })

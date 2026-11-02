@@ -73,6 +73,7 @@ export class MemoryService extends BaseAIService {
     tense: string = 'present',
     summaryDetail: SummaryDetail = 'auto',
     activityParentId?: string,
+    signal?: AbortSignal,
   ): Promise<ChapterSummaryResult> {
     log('summarizeChapter', {
       entryCount: entries.length,
@@ -105,6 +106,7 @@ export class MemoryService extends BaseAIService {
       prompt,
       'chapter-summarization',
       activityParentId,
+      signal,
     )
 
     log('summarizeChapter complete', {

@@ -533,6 +533,7 @@ class AIService {
     tense?: Tense,
     summaryDetail: SummaryDetail = 'auto',
     activityParentId?: string,
+    signal?: AbortSignal,
   ): Promise<ChapterSummaryResult> {
     const memoryService = serviceFactory.createMemoryService()
     return memoryService.summarizeChapter(
@@ -544,6 +545,7 @@ class AIService {
       tense,
       summaryDetail,
       activityParentId,
+      signal,
     )
   }
 

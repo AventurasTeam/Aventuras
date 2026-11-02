@@ -33,7 +33,13 @@ import {
   migrateWorldStateBudget,
   migrateWorldStateInjection,
 } from './settingsMigrations'
-import { ui, NAV_FILTER_SETTING } from '#lib/stores/ui.svelte.ts'
+import {
+  ui,
+  NAV_FILTER_SETTING,
+  EXPLANATION_FOLD_PREFIX,
+  EXPLANATION_FOLD_IDS,
+  isExplanationFoldId,
+} from '#lib/stores/ui.svelte.ts'
 import { LANDMARK_FILTER_GROUPS } from '#lib/utils/storyNavigation.ts'
 import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '#lib/constants/timeout.ts'
@@ -1644,8 +1650,9 @@ class SettingsStore {
         if (shown !== null) ui.navFilter[group] = shown === 'true'
       }
 
-      const checkpointHelpFolded = await database.getSetting('checkpoint_help_folded')
-      if (checkpointHelpFolded !== null) ui.checkpointHelpFolded = checkpointHelpFolded === 'true'
+      for (const [id, value] of await database.getSettingsWithPrefix(EXPLANATION_FOLD_PREFIX)) {
+        if (isExplanationFoldId(id)) ui.explanationFolded.set(id, value === 'true')
+      }
 
       const galleryNewestFirst = await database.getSetting('gallery_newest_first')
       if (galleryNewestFirst !== null) ui.galleryNewestFirst = galleryNewestFirst === 'true'
@@ -3090,6 +3097,7 @@ class SettingsStore {
     await ui.setNavPanelOpen(false)
     await ui.setGalleryNewestFirst(false)
     for (const group of LANDMARK_FILTER_GROUPS) await ui.setNavFilter(group, true)
+    for (const id of EXPLANATION_FOLD_IDS) await ui.setExplanationFolded(id, false)
 
     // Reset font to default
     this.applyFontFamily('default', 'default')

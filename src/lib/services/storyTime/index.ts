@@ -65,4 +65,5 @@ export {
   parseStoryTime,
   formatStoryTime,
   storyTimeIsInvalid,
+  convertedStoryTime,
 } from './duration'

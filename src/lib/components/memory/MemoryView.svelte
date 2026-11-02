@@ -4,6 +4,7 @@
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { aiService } from '#lib/services/ai/index.ts'
   import { runManualLoreManagement } from '#lib/services/generation/index.ts'
+  import { isAbortError } from '#lib/services/activity/index.ts'
   import MemoryHeader from './MemoryHeader.svelte'
   import MemorySettings from './MemorySettings.svelte'
   import ChapterCard from './ChapterCard.svelte'
@@ -23,18 +24,32 @@
     return story.getChapterEntries(chapter)
   }
 
+  /** The summary being written for a manual chapter, so leaving the modal can stop it. */
+  let manualChapterRun: AbortController | null = null
+
   // Handle manual chapter creation
   async function handleCreateManualChapter(endEntryIndex: number, readAfter: boolean) {
+    const run = new AbortController()
+    manualChapterRun = run
     ui.setMemoryLoading(true)
     try {
-      const chapter = await story.createManualChapter(endEntryIndex)
+      const chapter = await story.createManualChapter(endEntryIndex, run.signal)
       ui.closeManualChapterModal()
 
       // A refused creation leaves nothing new to read: the pass would be a wasted call.
       if (chapter) void runManualLoreManagement(chapter, undefined, { readAfterChapter: readAfter })
+    } catch (error) {
+      if (!isAbortError(error)) throw error
+      ui.showToast('Chapter creation stopped', 'info')
     } finally {
+      if (manualChapterRun === run) manualChapterRun = null
       ui.setMemoryLoading(false)
     }
+  }
+
+  function closeManualChapter() {
+    manualChapterRun?.abort()
+    ui.closeManualChapterModal()
   }
 
   // Handle resummarization
@@ -129,10 +144,7 @@
 
   <!-- Modals -->
   {#if ui.manualChapterModalOpen}
-    <ManualChapterModal
-      onConfirm={handleCreateManualChapter}
-      onClose={() => ui.closeManualChapterModal()}
-    />
+    <ManualChapterModal onConfirm={handleCreateManualChapter} onClose={closeManualChapter} />
   {/if}
 
   <DeleteChapterModal />
