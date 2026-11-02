@@ -139,7 +139,7 @@ module.exports = defineConfig([
                 { to: [{ type: 'lib-module' }, { type: 'lib-file' }, { type: 'app-code' }] },
               ],
               message:
-                'lib/tokens is a leaf: the seed imports it on the boot path, and a value cycle there fails only on Android. See milestone C5.',
+                'lib/tokens is a leaf: the seed imports it on the boot path, and a value cycle there fails only on Android. See docs/implementation/milestones/05-chapters-chapter-close/milestone.md#c5--token-reads-and-the-progress-hook.',
             },
             {
               from: [{ type: 'lib-module', captured: { name: 'chapters' } }],
@@ -150,7 +150,7 @@ module.exports = defineConfig([
                 },
               ],
               message:
-                'lib/chapters takes no value import of lib/db: it holds pure rules, and the seed and DOM reader code reach it. See milestone C5.',
+                'lib/chapters takes no value import of lib/db: it holds pure rules, and the seed and DOM reader code reach it. See docs/implementation/milestones/05-chapters-chapter-close/milestone.md#c5--token-reads-and-the-progress-hook.',
             },
           ],
         },
