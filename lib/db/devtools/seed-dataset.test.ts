@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getRollbackCounts, undoLastAction } from '@/lib/actions'
 import { REF_COLUMNS, rowRefs } from '@/lib/actions/delta/live-refs'
 import { isContentEditDelta } from '@/lib/actions/story-entries/classifier-facts'
-import { deltas, storyEntries, type Delta } from '@/lib/db'
+import { deltas, storyEntries, type Delta, type NewStoryEntry } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { ID_PATTERN, IdBiMap, SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
 import { detectRichEntryHtml, parseMarkdownToHtml } from '@/lib/markdown'
@@ -379,7 +379,7 @@ describe('seeded rollback', () => {
 
 // Over every row, never by entry position: seeded chapter boundaries can move.
 describe('seeded content tokens', () => {
-  type EntryRow = { id: string; kind: string; content: string; contentTokens?: number | null }
+  type EntryRow = Pick<NewStoryEntry, 'id' | 'kind' | 'content' | 'contentTokens'>
 
   function entries(): EntryRow[] {
     return rowsOf('story_entries') as EntryRow[]
