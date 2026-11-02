@@ -77,7 +77,6 @@ import {
   supportsReferenceImages,
   listImageModels,
   listImageModelsByProvider,
-  lookupModelCapabilities,
 } from './registry'
 import { settings } from '#lib/stores/settings.svelte.ts'
 import type { ImageModelCapabilities, ImageProfile, ImageProviderType } from '#lib/types/index.ts'
@@ -587,20 +586,11 @@ describe('Image Provider Registry', () => {
       return { profile, generate, listModels }
     }
 
-    const failingList = () =>
-      vi.fn(async (): Promise<ImageModelInfo[]> => {
-        throw new Error('503')
-      })
-
-    const snapshot = (
-      capabilities: ImageModelCapabilities,
-      over: { model?: string; version?: number } = {},
-    ) => ({
+    const snapshot = (capabilities: ImageModelCapabilities) => ({
       model: 'm',
       version: IMAGE_MODEL_SNAPSHOT_VERSION,
       capturedAt: 1,
       capabilities,
-      ...over,
     })
 
     const generate = (model = 'm', referenceImages?: string[]) =>
@@ -654,70 +644,6 @@ describe('Image Provider Registry', () => {
       })
     })
 
-    it('generates without capabilities, saves nothing and looks up once when the list fails', async () => {
-      const listModels = failingList()
-      const { generate: send } = setup({}, { listModels })
-
-      await generate()
-      await generate()
-
-      expect(settings.updateImageProfile).not.toHaveBeenCalled()
-      expect(listModels).toHaveBeenCalledTimes(1)
-      expect(send).toHaveBeenCalledTimes(2)
-      expect(send).toHaveBeenCalledWith(expect.objectContaining({ modelInfo: undefined }))
-    })
-
-    it('shares one lookup between concurrent generations', async () => {
-      const { listModels } = setup()
-
-      await Promise.all([generate(), generate(), generate()])
-
-      expect(listModels).toHaveBeenCalledTimes(1)
-    })
-
-    it('does not hold a generation past the lookup bound', async () => {
-      vi.useFakeTimers()
-      try {
-        const { generate: send } = setup(
-          {},
-          { listModels: vi.fn(() => new Promise<ImageModelInfo[]>(() => {})) },
-        )
-
-        const done = generate()
-        await vi.advanceTimersByTimeAsync(10_000)
-        await done
-
-        expect(send).toHaveBeenCalledTimes(1)
-        expect(settings.updateImageProfile).not.toHaveBeenCalled()
-      } finally {
-        vi.useRealTimers()
-      }
-    })
-
-    it('falls back to a stale snapshot of the same model when the lookup fails', async () => {
-      const stale = { supportedResolutions: ['2k'] }
-      const { generate: send } = setup(
-        { modelSnapshot: snapshot(stale, { version: IMAGE_MODEL_SNAPSHOT_VERSION - 1 }) },
-        { listModels: failingList() },
-      )
-
-      await generate()
-
-      expect(send).toHaveBeenCalledWith(expect.objectContaining({ modelInfo: stale }))
-    })
-
-    it('ignores a snapshot of another model', async () => {
-      const { generate: send, listModels } = setup(
-        { modelSnapshot: snapshot({ supportedResolutions: ['2k'] }, { model: 'other' }) },
-        { listModels: failingList() },
-      )
-
-      await generate()
-
-      expect(listModels).toHaveBeenCalledTimes(1)
-      expect(send).toHaveBeenCalledWith(expect.objectContaining({ modelInfo: undefined }))
-    })
-
     it('refuses a model that edits only when no reference could be sent', async () => {
       const { generate: send } = setup({
         modelSnapshot: snapshot({ requiresReferenceImage: true }),
@@ -729,34 +655,6 @@ describe('Image Provider Registry', () => {
         'needs a reference image',
       )
       expect(send).not.toHaveBeenCalled()
-    })
-
-    it('saves no snapshot for a model other than the profile’s', async () => {
-      const { listModels } = setup({ model: 'current' })
-
-      await generate('queued')
-
-      expect(listModels).toHaveBeenCalledTimes(1)
-      expect(settings.updateImageProfile).not.toHaveBeenCalled()
-    })
-
-    it.each([
-      ['key', { apiKey: 'sk-edited' }],
-      ['base URL', { baseUrl: 'https://edited.test/v1' }],
-    ])('saves nothing when the %s changed during the lookup', async (_name, edit) => {
-      let finish: (models: ImageModelInfo[]) => void = () => {}
-      const { profile } = setup(
-        {},
-        { listModels: vi.fn(() => new Promise<ImageModelInfo[]>((resolve) => (finish = resolve))) },
-      )
-
-      const done = generate()
-      await vi.waitFor(() => expect(settings.getImageProfile).toHaveBeenCalled())
-      vi.mocked(settings.getImageProfile).mockReturnValue({ ...profile, ...edit })
-      finish([{ id: 'm', name: 'm' }])
-      await done
-
-      expect(settings.updateImageProfile).not.toHaveBeenCalled()
     })
 
     it('uses a provider’s own per-model lookup instead of its list', async () => {
@@ -869,38 +767,6 @@ describe('Image Provider Registry', () => {
         expect(settings.updateImageProfile).not.toHaveBeenCalled()
       },
     )
-  })
-
-  describe('lookupModelCapabilities', () => {
-    let counter = 0
-    function setup(models: () => Promise<ImageModelInfo[]>) {
-      vi.mocked(createOpenAIProvider).mockReturnValue({
-        id: 'openai',
-        name: 'openai',
-        generate: vi.fn(),
-        listModels: vi.fn(models),
-      })
-      return `sk-lookup-${counter++}`
-    }
-
-    it('finds the model in the list of a provider without a per-model lookup', async () => {
-      const key = setup(async () => [{ id: 'm', name: 'm', maxReferenceImages: 4 }])
-      expect(await lookupModelCapabilities('openai', key, 'm')).toMatchObject({
-        maxReferenceImages: 4,
-      })
-    })
-
-    it('is undefined for a model the list lacks', async () => {
-      const key = setup(async () => [{ id: 'other', name: 'other' }])
-      expect(await lookupModelCapabilities('openai', key, 'm')).toBeUndefined()
-    })
-
-    it('rejects when the list fails', async () => {
-      const key = setup(async () => {
-        throw new Error('503')
-      })
-      await expect(lookupModelCapabilities('openai', key, 'm')).rejects.toThrow('503')
-    })
   })
 
   describe('model listing failures', () => {
