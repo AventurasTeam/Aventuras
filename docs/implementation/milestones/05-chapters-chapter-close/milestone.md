@@ -438,7 +438,7 @@ Provider: [Slice 5.1](./slices/01-token-measure.md). Consumers: 5.2, 5.3,
   `token_count`.
 - **`useChapterProgress(storyId)`** returns
   `{ tokens, threshold, percent, tone, canClose }`, and replaces
-  `useOpenRegionTokens` (`hooks/use-open-region-tokens.ts:38`).
+  `useOpenRegionTokens`.
   `canClose` says the region holds an entry that can end a chapter, and
   `Ready to close` and `Close chapter…`'s availability both read it. It
   refetches on `settleCount` and the tail, as `useEntryIndex` does
@@ -454,7 +454,9 @@ Provider: [Slice 5.1](./slices/01-token-measure.md). Consumers: 5.2, 5.3,
   below `lib/db/index.ts:123`, and `'use dom'` reader code can't reach the
   DB. It holds pure rules and constants, and 5.1's boundaries rule holds
   it there beside `lib/tokens`, so no later slice can reopen this past a
-  one-time check.
+  one-time check. Stores, actions, retrieval and the hooks bring `lib/db`
+  in at runtime, so the rule bars value imports of every lib module and
+  of app code. Bare lib files such as `lib/keyword-terms` stay open.
 
 Until 5.1 lands, consumers render a percent with no number.
 

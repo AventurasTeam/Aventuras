@@ -3268,6 +3268,10 @@ chapter ends only on an `ai_reply`.
 so it's the source language on a translated story. It's written with the
 entry, on a content edit, and restored by that edit's undo.
 
+`chapters.token_count` is a snapshot at close, the sum of `content_tokens`
+over the chapter's non-system entries: an edit in a closed chapter leaves
+it, and a re-close after a delete recomputes it.
+
 **Chapter-close is the single cadence trigger** for the 5-phase
 pipeline (catch-up classifier, boundary selection, chapter metadata,
 lore management, lifecycle review). Phases 1–4 share one `action_id`
