@@ -171,6 +171,39 @@ export function viewRows(rows: SyncRow[], search: string, prefs: SyncListPrefs):
   }
 }
 
+function sameItem(a: SyncRow, b: SyncRow): boolean {
+  if (a.local && b.local && a.local.localId === b.local.localId) return true
+  return !!a.remote && !!b.remote && a.remote.localId === b.remote.localId
+}
+
+/**
+ * Keeps the rows on screen in the order they had, with their fresh data, so a transfer does not
+ * move or hide them. Rows that are new since go after the row with key `after`.
+ */
+export function holdOrder(
+  view: SyncListView,
+  rows: SyncRow[],
+  held: SyncRow[],
+  after: string,
+): SyncListView {
+  const unmatched = new Set(rows)
+  const kept: SyncRow[] = []
+  for (const old of held) {
+    const fresh = [...unmatched].find((r) => sameItem(old, r))
+    if (!fresh) continue
+    unmatched.delete(fresh)
+    kept.push(fresh)
+  }
+  const added = view.rows.filter((r) => unmatched.has(r))
+  const anchor = held.find((r) => r.key === after)
+  const at = anchor ? kept.findIndex((r) => sameItem(anchor, r)) : -1
+  const shown = new Set(view.rows)
+  return {
+    rows: at === -1 ? [...kept, ...added] : kept.toSpliced(at + 1, 0, ...added),
+    hidden: view.hidden - kept.filter((r) => !shown.has(r)).length,
+  }
+}
+
 /** "3d ago", for rows and sheets. */
 export function formatAgo(time: number, now = Date.now()): string {
   const minutes = Math.floor((now - time) / 60_000)

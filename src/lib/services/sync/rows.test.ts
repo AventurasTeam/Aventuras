@@ -6,6 +6,7 @@ import {
   buildRows,
   countByStatus,
   formatAgo,
+  holdOrder,
   parseListPrefs,
   sortRows,
   viewRows,
@@ -152,6 +153,48 @@ describe('viewRows', () => {
   it('counts only hidden items that match the search', () => {
     const prefs = { ...DEFAULT_LIST_PREFS, statuses: [...NEEDS_ACTION] }
     expect(viewRows(sample(), 'zed', prefs).hidden).toBe(0)
+  })
+})
+
+describe('holdOrder', () => {
+  const needsAction = { ...DEFAULT_LIST_PREFS, statuses: [...NEEDS_ACTION] }
+  const before = buildRows(
+    'stories',
+    [local('Here'), local('Both', shared('b', { a: 1, peer: 0 }))],
+    [remote('There'), remote('Both', shared('b', { a: 0, peer: 1 }))],
+    'peer',
+  )
+  const held = viewRows(before, '', needsAction).rows
+
+  it('keeps a row that is now in sync where it was', () => {
+    const after = buildRows(
+      'stories',
+      [
+        local('Here'),
+        local('Both', shared('b', { a: 1, peer: 0 })),
+        local('There', shared('t', { peer: 1 })),
+      ],
+      [remote('There', shared('t', { peer: 1 })), remote('Both', shared('b', { a: 0, peer: 1 }))],
+      'peer',
+    )
+    const view = holdOrder(viewRows(after, '', needsAction), after, held, 'there:r-There')
+    expect(view.rows.map((r) => r.name)).toEqual(held.map((r) => r.name))
+    expect(view.rows.find((r) => r.name === 'There')?.status).toBe('inSync')
+    expect(view.hidden).toBe(0)
+  })
+
+  it('puts a new row after the one it came from', () => {
+    const after = buildRows(
+      'stories',
+      [local('Here'), local('Both', shared('b', { a: 1, peer: 0 })), local('Both (copy)')],
+      [remote('There'), remote('Both', shared('b', { a: 0, peer: 1 }))],
+      'peer',
+    )
+    const both = held.find((r) => r.name === 'Both')!
+    const view = holdOrder(viewRows(after, '', needsAction), after, held, both.key)
+    const names = view.rows.map((r) => r.name)
+    expect(names[names.indexOf('Both') + 1]).toBe('Both (copy)')
+    expect(names).toHaveLength(4)
   })
 })
 

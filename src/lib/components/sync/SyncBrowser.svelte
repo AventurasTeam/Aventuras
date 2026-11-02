@@ -27,6 +27,7 @@
     countByStatus,
     fetchListing,
     formatAgo,
+    holdOrder,
     listLocalItems,
     loadListPrefs,
     pullEnvelope,
@@ -90,6 +91,8 @@
   let busy = $state<string | null>(null)
   let notice = $state<string | null>(null)
   let error = $state<string | null>(null)
+  /** The list as it stood before the latest transfer, kept until the user reorders or leaves it. */
+  let held = $state.raw<{ rows: SyncRow[]; after: string } | null>(null)
   /** Sends the other device has yet to accept, by sync id. */
   const sent = new SvelteMap<string, SyncVector>()
 
@@ -97,7 +100,10 @@
     section ? (prefs[section] ?? DEFAULT_LIST_PREFS) : DEFAULT_LIST_PREFS,
   )
   const currentRows = $derived(section ? (rowsBySection[section] ?? []) : [])
-  const view = $derived(viewRows(currentRows, search, currentPrefs))
+  const view = $derived.by(() => {
+    const fresh = viewRows(currentRows, search, currentPrefs)
+    return held ? holdOrder(fresh, currentRows, held.rows, held.after) : fresh
+  })
   const counts = $derived(countByStatus(currentRows))
 
   function statusLabel(status: SyncStatus): string {
@@ -171,6 +177,7 @@
   function openSection(name: SyncSection) {
     section = name
     search = ''
+    held = null
     void refresh(name)
   }
 
@@ -184,6 +191,7 @@
 
   function updatePrefs(change: Partial<SyncListPrefs>) {
     if (!section) return
+    held = null
     prefs[section] = { ...currentPrefs, ...change }
     void saveListPrefs($state.snapshot(prefs))
   }
@@ -207,6 +215,7 @@
     if (!section || busy) return
     const name = section
     busy = row.key
+    held = { rows: view.rows, after: row.key }
     error = null
     notice = null
     openRow = null
@@ -378,6 +387,7 @@
     <div class="min-w-0 flex-1">
       <Input
         bind:value={search}
+        oninput={() => (held = null)}
         leftIcon={Search}
         class="h-10"
         type="search"

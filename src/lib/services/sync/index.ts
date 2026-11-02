@@ -33,6 +33,7 @@ export {
   buildRows,
   countByStatus,
   formatAgo,
+  holdOrder,
   parseListPrefs,
   viewRows,
 } from './rows'
