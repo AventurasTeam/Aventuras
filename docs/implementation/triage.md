@@ -81,8 +81,10 @@ slice-planning gate forces its resolution before that slice is planned.
   though its comment says it mirrors `countTokens`. On a fixture with a
   run over 512 code points the two differ by a few tokens per cut, and
   the mock pays the quadratic cost. No `e2e/` or mock fixture repeats
-  100 times or more, so nothing hits this today. Raised 2026-11-01 by
-  Slice 5.1's review.
+  100 times or more, so nothing hits this today. Now that `lib/tokens` is
+  a leaf the mock could import `countTokens`, as `scripts/mock-llm/control.ts`
+  already value-imports `@/lib`, though long-run counts would change and
+  that wants an E2E run. Raised 2026-11-01 by Slice 5.1's review.
 - **Two definitions of the open region omit `system`.**
   [`data-model.md → Chapters / memory system`](../data-model.md#chapters--memory-system)
   and `readPromptBuffer`'s docblock (`lib/retrieval/buffer.ts:49`) define
@@ -142,6 +144,12 @@ slice-planning gate forces its resolution before that slice is planned.
   of about 5.6 million code points, and the card still shows the failure.
   The fix belongs with every user write, not this one. Raised 2026-11-02
   by Slice 5.1's closing review.
+- **Two test and logging helpers have no home yet.** The `run()` and
+  `entry()` factories repeat across `hooks` tests: the terminal stub
+  appears in 28 files, and more than 12 define their own `entry`. The
+  `error instanceof Error ? …` log field has 40 or more sites and no
+  shared helper. Each needs a new home and a sweep of files on main.
+  Raised 2026-11-02 by Slice 5.1's closing review.
 - **Two older types the token slice builds on stay loose.**
   `contentEditUndoPayload` (`lib/actions/story-entries/classifier-facts.ts:98`)
   returns `Record<string, unknown>`, though its keys are known.
