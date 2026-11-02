@@ -3794,6 +3794,22 @@ sends Anthropic's browser-access header, which the app now sets itself.
 Parked 2026-10-24; the signal is a v7-only feature or fix the app needs,
 or the `ai-v6` line going unmaintained.
 
+#### A cached-rank merge in place of the count guard
+
+`countTokens` cuts long runs because `js-tiktoken`'s merge is quadratic in
+one regex word. Patching the merge to cache ranks would fix the cost at
+its source. A scratch rewrite in Slice 5.1's closing review matched the
+real token arrays on 1,500 fuzz cases, under Node: `x` × 4,000 took 14 ms
+against 453 ms through the guard, emoji × 16,000 took 1.8 s against 8.5 s,
+40,000 characters of unspaced Japanese or Chinese ran 3 to 4 times faster,
+and the guard's drift went away. It stays superlinear, so a coarse cap
+would remain, and the change would have to go into all three dist bundles
+of `patches/js-tiktoken.patch`. The guard is a developer decision and it
+works, so this waits. Parked 2026-11-02; the signal is a count that shows
+as a stall on a phone, or a place where the guard's drift matters. An
+x86_64 emulator's debug build already takes about 2 s on 40,000 characters
+of Japanese, so the phone measure in `followups.md` is what decides this.
+
 #### A setup factory for the periodic classifier spec
 
 `e2e/tests/periodic-classifier.spec.ts` repeats one describe setup in

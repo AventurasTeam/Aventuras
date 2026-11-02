@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
-import { goToWorld, openStory } from '../flows/navigation'
+import { goToPlot, goToStorySettings, goToWorld, openStory } from '../flows/navigation'
 import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -8,7 +8,9 @@ import { startMockLlm, type MockLlm } from '../harness/mock-llm'
 import { reloadFromMain } from '../harness/reload'
 import { createSeededUserDataDir, removeUserDataDir, setProviderEndpoint } from '../harness/seed'
 import { chrome } from '../locators/chrome'
+import { plot } from '../locators/plot'
 import { reader } from '../locators/reader'
+import { storySettings } from '../locators/story-settings'
 import { world } from '../locators/world'
 
 // The seeded branch is past the reader's 50-entry window: a strip reading the working set would
@@ -147,6 +149,19 @@ test.describe.serial('chapter progress strip', () => {
     await expect(async () => {
       expect(await stripPercent(page)).toBeCloseTo(inReader, 6)
     }).toPass({ timeout: 15_000 })
+    await expectStripMatchesSql(page, branchId)
+  })
+
+  test('shows the same value on Plot and on Story Settings', async () => {
+    const page = app.window
+
+    // The screens below stay mounted, hidden: wait for each route before reading a strip.
+    await goToPlot(page)
+    await expect(plot.segmentCell(page, 'thread')).toBeVisible()
+    await expectStripMatchesSql(page, branchId)
+
+    await goToStorySettings(page)
+    await expect(storySettings.breadcrumb(page)).toBeVisible()
     await expectStripMatchesSql(page, branchId)
   })
 })

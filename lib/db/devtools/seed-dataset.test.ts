@@ -4,12 +4,17 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { getRollbackCounts, undoLastAction } from '@/lib/actions'
 import { REF_COLUMNS, rowRefs } from '@/lib/actions/delta/live-refs'
 import { isContentEditDelta } from '@/lib/actions/story-entries/classifier-facts'
-import { deltas, storyEntries, type Delta } from '@/lib/db'
+import { ENTRIES_WINDOW_SIZE } from '@/lib/actions/story-entries/recent-window'
+import { deltas, storyEntries, type Delta, type NewStoryEntry } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { ID_PATTERN, IdBiMap, SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
 import { detectRichEntryHtml, parseMarkdownToHtml } from '@/lib/markdown'
 import { entriesStore, resetAllStores } from '@/lib/stores'
 import { countTokens } from '@/lib/tokens'
+import {
+  countEncoderBuilds,
+  stopCountingEncoderBuilds,
+} from '@/lib/tokens/__tests__/count-encoder-builds'
 import { selectUndoTarget } from '@/lib/undo'
 
 import { buildSeedSteps } from './seed-dataset'
@@ -378,7 +383,10 @@ describe('seeded rollback', () => {
 
 // Over every row, never by entry position: seeded chapter boundaries can move.
 describe('seeded content tokens', () => {
-  type EntryRow = { id: string; kind: string; content: string; contentTokens?: number | null }
+  type EntryRow = Pick<
+    NewStoryEntry,
+    'id' | 'branchId' | 'kind' | 'content' | 'contentTokens' | 'chapterId'
+  >
 
   function entries(): EntryRow[] {
     return rowsOf('story_entries') as EntryRow[]
@@ -391,6 +399,14 @@ describe('seeded content tokens', () => {
       expect(entry.contentTokens, entry.id).toBe(countTokens(entry.content))
       expect(entry.contentTokens, entry.id).toBeGreaterThan(0)
     }
+  })
+
+  // e2e/tests/chapter-progress.spec.ts proves the strip reads past the reader's window here.
+  it('seeds the rich story past the reader window', () => {
+    const open = entries().filter(
+      (e) => e.branchId === 'br_rich_main' && e.kind !== 'system' && e.chapterId == null,
+    )
+    expect(open.length).toBeGreaterThan(ENTRIES_WINDOW_SIZE)
   })
 
   it('leaves system rows uncounted, as writeSystemEntry does', () => {
@@ -462,5 +478,21 @@ describe('seeded classifier watermarks', () => {
     expect(statusOf.get('br_hero_fork')).toMatchObject({ processedThrough: 12 })
     expect(statusOf.get('br_rich_main')).toMatchObject({ processedThrough: 60 })
     expect(statusOf.get('br_active2_main')).toMatchObject({ processedThrough: 4 })
+  })
+})
+
+// lib/db re-exports the native reseed, so Android evaluates this module on every launch, and the
+// encoder takes about a second to build there.
+describe('importing the seed', () => {
+  afterEach(stopCountingEncoderBuilds)
+
+  it('builds no token encoder until a seed build counts a row', async () => {
+    const built = countEncoderBuilds()
+
+    const seed = await import('./seed-dataset')
+    expect(built).not.toHaveBeenCalled()
+
+    seed.buildSeedSteps()
+    expect(built).toHaveBeenCalledTimes(1)
   })
 })

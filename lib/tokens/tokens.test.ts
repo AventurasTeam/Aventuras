@@ -1,6 +1,7 @@
 import { Tiktoken } from 'js-tiktoken/lite'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { countEncoderBuilds, stopCountingEncoderBuilds } from './__tests__/count-encoder-builds'
 import { countTokens } from './index'
 
 describe('countTokens', () => {
@@ -13,8 +14,8 @@ describe('countTokens', () => {
   })
 
   it('pins the encoding every token budget is calibrated against', () => {
-    // Swapping the rank table silently re-scales every budget fill; ASCII counts the same under
-    // cl100k and o200k, so the pin has to be non-Latin to bite (cl100k counts this 31).
+    // Swapping the rank table silently re-scales every budget fill; ASCII prose barely separates
+    // cl100k and o200k, so the pin is non-Latin (cl100k counts this 31).
     expect(countTokens('彼は剣を抜いた。彼女は逃げた。誰も動かなかった。')).toBe(21)
   })
 
@@ -39,10 +40,12 @@ describe('countTokens on long runs', () => {
 
   function encodedParts(text: string): string[] {
     const encode = vi.spyOn(Tiktoken.prototype, 'encode')
-    countTokens(text)
-    const parts = encode.mock.calls.map(([part]) => part)
-    encode.mockRestore()
-    return parts
+    try {
+      countTokens(text)
+      return encode.mock.calls.map(([part]) => part)
+    } finally {
+      encode.mockRestore()
+    }
   }
 
   const longestRun = (text: string): number =>
@@ -127,6 +130,18 @@ describe('countTokens on long runs', () => {
     expect(parts.join('')).toBe(text)
   })
 
+  // A slash-and-newline match can take the first character of a longer run, and what it leaves of
+  // that run still has to be cut.
+  it.each([
+    ['a non-whitespace run after a slash', `${'\n/'.repeat(300)}${'x'.repeat(600)}`],
+    ['a space run after a newline', `${'/\n'.repeat(300)}${' '.repeat(600)}`],
+  ])('cuts %s that ends a slash-and-newline run', (_name, text) => {
+    const parts = encodedParts(text)
+
+    expect(Math.max(...parts.map(longestRun))).toBeLessThanOrEqual(512)
+    expect(parts.join('')).toBe(text)
+  })
+
   it('sends a slash-and-newline run of 512 whole and cuts one of 513', () => {
     const half = '/\n'.repeat(256)
     expect(encodedParts(half)).toEqual([half])
@@ -166,25 +181,10 @@ describe('countTokens on long runs', () => {
 })
 
 describe('warmTokenEncoder', () => {
-  afterEach(() => {
-    vi.doUnmock('js-tiktoken/lite')
-    vi.resetModules()
-  })
+  afterEach(stopCountingEncoderBuilds)
 
-  // The encoder is module state, so the spy needs a fresh instance of this module.
   async function freshModuleCountingBuilds() {
-    const built = vi.fn()
-    vi.resetModules()
-    vi.doMock('js-tiktoken/lite', async (importOriginal) => {
-      const actual = await importOriginal<{ Tiktoken: typeof Tiktoken }>()
-      class CountedTiktoken extends actual.Tiktoken {
-        constructor(...args: ConstructorParameters<typeof Tiktoken>) {
-          super(...args)
-          built()
-        }
-      }
-      return { ...actual, Tiktoken: CountedTiktoken }
-    })
+    const built = countEncoderBuilds()
     return { built, tokens: await import('./index') }
   }
 

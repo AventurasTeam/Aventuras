@@ -89,7 +89,7 @@ through `lib/actions/index.ts`:
   1. Refuse `in-flight` on `generationStore.isUserEditBlocked()`, with no
      `await` before `bracketProseReversal`, so a second press is refused
      rather than thrown as re-entry
-     (`lib/actions/story-entries/operational.ts:75-79` makes the same
+     (`lib/actions/story-entries/operational.ts:76-80` makes the same
      point). Every read below sits inside the bracket.
   2. Refuse `not-found` on a gone row, and `not-latest` when the chapter
      isn't the branch's highest `sequence_number`.
@@ -108,7 +108,7 @@ through `lib/actions/index.ts`:
 - `getChapterDeletePreview(branchId, chapterId, story, ctx)`, under
   `withBranchWriteShared` as `getRollbackCounts` is, with the same
   refusals and the same set. It takes `story` as `closeOwed` does.
-- `commitNewAction` (`operational.ts:45-57`) gains `export`. It stays out
+- `commitNewAction` (`operational.ts:46-58`) gains `export`. It stays out
   of the module's index: `regenerate-turn.ts` imports its siblings the
   same way.
 
@@ -210,14 +210,14 @@ go from `register.ts` too, since only a delete reads a cascade.
 
 **Regenerate's close arm.**
 
-- `RollbackCounts` (`operational.ts:228`) gains three fields:
+- `RollbackCounts` (`operational.ts:232`) gains three fields:
   - `closeWrites: number`, compared by `sameRollbackCounts`.
   - `reopenedChapter: number | null`, the `sequence_number` of the chapter
     the target falls inside.
   - `removedChapters: number[]`, those whose every entry goes, oldest
     first. Neither chapter field needs comparing: for one target, the same
     `chapters` count means the same chapters.
-- `resolveSweep` (`operational.ts:301-321`) returns, beside `set` and
+- `resolveSweep` (`operational.ts:305-325`) returns, beside `set` and
   `clampOps`:
   - `closeWrites`, from `rows`, the window before the closure: rows with
     `source = 'chapter_close'`, skipping the running run's action and
@@ -237,7 +237,7 @@ go from `register.ts` too, since only a delete reads a cascade.
   default under [Open questions](#open-questions).
 - The preview takes that read inside the shared section. `getRollbackCounts`
   calls `rollbackCountsOf` after releasing `withBranchWriteShared` today
-  (`operational.ts:359-363`), and a CTRL-Z landing between the two would give
+  (`operational.ts:363-367`), and a CTRL-Z landing between the two would give
   `chapters: 1` with neither chapter line. Both calls move inside the hold.
 - `classifyRegenerateGate` (`components/reader/regenerate-gate.ts:35-38`):
 

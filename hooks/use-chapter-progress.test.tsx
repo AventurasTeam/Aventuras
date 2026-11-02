@@ -3,14 +3,10 @@ import { onlineManager, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { STORY_DEFINITION } from '@/lib/actions/turns/__tests__/fixtures'
 import { createQueryClient } from '@/lib/cache'
 import type { ChapterProgress } from '@/lib/chapters'
-import {
-  STORY_SETTINGS_DEFAULTS,
-  storyDefinitionSchema,
-  type OpenRegionRow,
-  type StoryEntry,
-} from '@/lib/db'
+import { STORY_SETTINGS_DEFAULTS, type OpenRegionRow, type StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import {
   currentStoryStore,
@@ -31,24 +27,13 @@ vi.mock('@/lib/db', async (importOriginal) => ({
   openRegionSeries: reads.series,
 }))
 
-const DEFINITION = storyDefinitionSchema.parse({
-  mode: 'adventure',
-  leadEntityId: 'char_00000000-0000-4000-8000-000000000001',
-  narration: 'first',
-  genre: { label: 'Fantasy', promptBody: 'high fantasy' },
-  tone: { label: 'Wry', promptBody: 'wry' },
-  setting: 'A keep on a hill.',
-  calendarSystemId: 'gregorian',
-  worldTimeOrigin: { year: 0 },
-})
-
 const ZEROS = { tokens: 0, percent: 0, tone: 'success', canClose: false }
 
 function openStory({ branchId = 'b1', threshold = 1_000 } = {}): void {
   currentStoryStore.set({
     storyId: 's1',
     branchId,
-    definition: DEFINITION,
+    definition: STORY_DEFINITION,
     settings: { ...STORY_SETTINGS_DEFAULTS, chapterTokenThreshold: threshold },
   })
 }
@@ -107,20 +92,29 @@ function deferredRead() {
 
 let latest: ChapterProgress | null = null
 
-function Probe({ storyId = 's1' }: { storyId?: string | null; nonce?: number }) {
+function Probe({ storyId }: { storyId: string | null | undefined }) {
   latest = useChapterProgress(storyId)
   return null
 }
 
-function renderProbe(storyId?: string | null) {
+// An options object, so an explicit undefined reaches the hook instead of tripping a default.
+function renderProbe({ storyId }: { storyId: string | null | undefined } = { storyId: 's1' }) {
   const client = createQueryClient()
-  const view = (nonce: number) => (
+  const view = () => (
     <QueryClientProvider client={client}>
-      <Probe storyId={storyId} nonce={nonce} />
+      <Probe storyId={storyId} />
     </QueryClientProvider>
   )
-  const { rerender } = render(view(0))
-  return { rerenderWith: (nonce: number) => rerender(view(nonce)) }
+  const { rerender } = render(view())
+  return { rerender: () => rerender(view()) }
+}
+
+async function renderAtHundredTokens() {
+  openStory()
+  reads.series.mockResolvedValueOnce([reply('e1', 100)])
+  const probe = renderProbe()
+  await waitFor(() => expect(latest?.tokens).toBe(100))
+  return probe
 }
 
 describe('useChapterProgress', () => {
@@ -132,6 +126,7 @@ describe('useChapterProgress', () => {
   afterEach(() => {
     cleanup()
     onlineManager.setOnline(true)
+    vi.restoreAllMocks()
   })
 
   it('reads the open region through openRegionSeries and sums it against the threshold', async () => {
@@ -155,18 +150,16 @@ describe('useChapterProgress', () => {
   it('reads as zeros with no read for another story, and no story, while one is open', async () => {
     openStory()
 
-    renderProbe('s2')
-    await act(async () => {})
-    expect(latest).toEqual({ ...ZEROS, threshold: 0 })
-    cleanup()
-
-    renderProbe(null)
-    await act(async () => {})
-    expect(latest).toEqual({ ...ZEROS, threshold: 0 })
+    // The reader passes undefined until its hydration succeeds.
+    for (const storyId of ['s2', null, undefined]) {
+      renderProbe({ storyId })
+      await act(async () => {})
+      expect(latest).toEqual({ ...ZEROS, threshold: 0 })
+      cleanup()
+    }
     expect(reads.series).not.toHaveBeenCalled()
 
     // Positive control: the same store state reads for the story's own caller.
-    cleanup()
     reads.series.mockResolvedValueOnce([reply('e1', 100)])
     renderProbe()
     await waitFor(() => expect(latest?.tokens).toBe(100))
@@ -193,10 +186,7 @@ describe('useChapterProgress', () => {
   })
 
   it('reads again on a settle', async () => {
-    openStory()
-    reads.series.mockResolvedValueOnce([reply('e1', 100)])
-    renderProbe()
-    await waitFor(() => expect(latest?.tokens).toBe(100))
+    await renderAtHundredTokens()
 
     // Negative control: starting a run alone isn't a settle.
     act(() => generationStore.startRun(run('r1')))
@@ -211,10 +201,7 @@ describe('useChapterProgress', () => {
 
   it('reads again when the tail moves without a settle', async () => {
     entriesStore.hydrate('b1', [entry('e1', 1)])
-    openStory()
-    reads.series.mockResolvedValueOnce([reply('e1', 100)])
-    renderProbe()
-    await waitFor(() => expect(latest?.tokens).toBe(100))
+    await renderAtHundredTokens()
 
     reads.series.mockResolvedValueOnce([reply('e1', 100), reply('e2', 40)])
     act(() => {
@@ -226,10 +213,7 @@ describe('useChapterProgress', () => {
 
   it('does not read again for a row on another branch', async () => {
     entriesStore.hydrate('b1', [entry('e1', 1)])
-    openStory()
-    reads.series.mockResolvedValueOnce([reply('e1', 100)])
-    renderProbe()
-    await waitFor(() => expect(latest?.tokens).toBe(100))
+    await renderAtHundredTokens()
 
     act(() => {
       entriesStore.patch('b1', { op: 'create', id: 'x9', row: entry('x9', 9, 'b2') })
@@ -239,10 +223,7 @@ describe('useChapterProgress', () => {
   })
 
   it('holds the last number while the next read is pending', async () => {
-    openStory()
-    reads.series.mockResolvedValueOnce([reply('e1', 100)])
-    renderProbe()
-    await waitFor(() => expect(latest?.tokens).toBe(100))
+    await renderAtHundredTokens()
 
     const land = deferredRead()
     settle()
@@ -258,10 +239,7 @@ describe('useChapterProgress', () => {
   })
 
   it("shows no earlier branch's number after a switch", async () => {
-    openStory()
-    reads.series.mockResolvedValueOnce([reply('e1', 100)])
-    renderProbe()
-    await waitFor(() => expect(latest?.tokens).toBe(100))
+    await renderAtHundredTokens()
 
     const land = deferredRead()
     act(() => openStory({ branchId: 'b2' }))
@@ -275,10 +253,8 @@ describe('useChapterProgress', () => {
   })
 
   it('moves percent with the threshold and no new read', async () => {
-    openStory()
-    reads.series.mockResolvedValueOnce([reply('e1', 100)])
-    renderProbe()
-    await waitFor(() => expect(latest?.percent).toBe(10))
+    await renderAtHundredTokens()
+    expect(latest?.percent).toBe(10)
 
     act(() => openStory({ threshold: 200 }))
     expect(latest?.percent).toBe(50)
@@ -289,10 +265,7 @@ describe('useChapterProgress', () => {
   })
 
   it('logs a failed read once and keeps the last number', async () => {
-    openStory()
-    reads.series.mockResolvedValueOnce([reply('e1', 100)])
-    const { rerenderWith } = renderProbe()
-    await waitFor(() => expect(latest?.tokens).toBe(100))
+    const { rerender } = await renderAtHundredTokens()
 
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     reads.series.mockRejectedValueOnce(new Error('boom'))
@@ -307,10 +280,27 @@ describe('useChapterProgress', () => {
     expect(latest?.tokens).toBe(100)
 
     // Host routes re-render on every stream chunk, and a failed key stays failed across them.
-    rerenderWith(1)
+    rerender()
     expect(warnSpy).toHaveBeenCalledTimes(1)
+  })
 
-    warnSpy.mockRestore()
+  // The reader stays mounted, hidden, under the routes that show their own strip.
+  it('logs a failed read once across mounted instances', async () => {
+    openStory()
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    reads.series.mockRejectedValue(new Error('boom'))
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <Probe storyId="s1" />
+        <Probe storyId="s1" />
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(warnSpy).toHaveBeenCalled())
+    await act(async () => {})
+    expect(reads.series).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledTimes(1)
   })
 
   it('reads as zeros when the first read fails, and never retries', async () => {
@@ -323,15 +313,10 @@ describe('useChapterProgress', () => {
     await waitFor(() => expect(warnSpy).toHaveBeenCalledTimes(1))
     expect(reads.series).toHaveBeenCalledTimes(1)
     expect(latest).toEqual({ ...ZEROS, threshold: 1_000 })
-
-    warnSpy.mockRestore()
   })
 
   it('drops the held number when the branch leaves before the next read lands', async () => {
-    openStory()
-    reads.series.mockResolvedValueOnce([reply('e1', 100)])
-    renderProbe()
-    await waitFor(() => expect(latest?.tokens).toBe(100))
+    await renderAtHundredTokens()
 
     deferredRead()
     act(() => openStory({ branchId: 'b2' }))
@@ -353,10 +338,7 @@ describe('useChapterProgress', () => {
 
   // The read is local, so a lost network must not pause it.
   it('keeps reading while the app is offline', async () => {
-    openStory()
-    reads.series.mockResolvedValueOnce([reply('e1', 100)])
-    renderProbe()
-    await waitFor(() => expect(latest?.tokens).toBe(100))
+    await renderAtHundredTokens()
 
     act(() => onlineManager.setOnline(false))
     reads.series.mockResolvedValueOnce([reply('e1', 180)])
@@ -365,14 +347,11 @@ describe('useChapterProgress', () => {
   })
 
   it('returns the same object while nothing changes', async () => {
-    openStory()
-    reads.series.mockResolvedValueOnce([reply('e1', 100)])
-    const { rerenderWith } = renderProbe()
-    await waitFor(() => expect(latest?.tokens).toBe(100))
+    const { rerender } = await renderAtHundredTokens()
 
     const first = latest
-    rerenderWith(1)
-    rerenderWith(2)
+    rerender()
+    rerender()
     expect(latest).toBe(first)
   })
 })

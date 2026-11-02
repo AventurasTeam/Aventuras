@@ -126,27 +126,22 @@ function withoutCutOff(metadata: EntryMetadata): EntryMetadata {
   return cleared
 }
 
+type CountedContent = { content: string; contentTokens: number }
+
 // In SQL: the reversal sharing this transaction may write the row's other metadata keys after the
 // action's read. The store patch reads the row after the reversal's patches for the same reason.
-function contentEditSet(content: string, contentTokens: number, clear: CutOffClear) {
-  if (!clear.clearsCutOff) return { content, contentTokens }
-  return {
-    content,
-    contentTokens,
-    metadata: sql`json_remove(${storyEntries.metadata}, '$.cutOff')`,
-  }
+function contentEditSet(counted: CountedContent, clear: CutOffClear) {
+  if (!clear.clearsCutOff) return counted
+  return { ...counted, metadata: sql`json_remove(${storyEntries.metadata}, '$.cutOff')` }
 }
 
 function contentEditPatchColumns(
   id: string,
-  content: string,
-  contentTokens: number,
+  counted: CountedContent,
   clear: CutOffClear,
-): { content: string; contentTokens: number; metadata?: EntryMetadata } {
+): CountedContent & { metadata?: EntryMetadata } {
   const stored = clear.clearsCutOff ? entriesStore.getById(id)?.metadata : null
-  return stored
-    ? { content, contentTokens, metadata: withoutCutOff(stored) }
-    : { content, contentTokens }
+  return stored ? { ...counted, metadata: withoutCutOff(stored) } : counted
 }
 
 /**
@@ -183,7 +178,7 @@ async function updateStoryEntryContentBracketed(
 
   const invalidation = await resolveContentEditInvalidation(branchId, id, ctx)
   const clear = cutOffClearOf(current.metadata)
-  const contentTokens = countTokens(content)
+  const counted = { content, contentTokens: countTokens(content) }
 
   // In scope the clamp is unconditional: a pass that read the entry and extracted
   // nothing still advanced the watermark past it, and the op no-ops when the watermark
@@ -195,7 +190,7 @@ async function updateStoryEntryContentBracketed(
     await commitNewAction(set, ctx, [
       ctx.db
         .update(storyEntries)
-        .set(contentEditSet(content, contentTokens, clear))
+        .set(contentEditSet(counted, clear))
         .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
         .toSQL(),
       // Spliced, not dispatched: applyDeltaAction's own transaction isn't atomic with the reversal,
@@ -229,7 +224,7 @@ async function updateStoryEntryContentBracketed(
   entriesStore.patch(branchId, {
     op: 'update',
     id,
-    columns: contentEditPatchColumns(id, content, contentTokens, clear),
+    columns: contentEditPatchColumns(id, counted, clear),
   })
   return { status: 'ok' }
 }

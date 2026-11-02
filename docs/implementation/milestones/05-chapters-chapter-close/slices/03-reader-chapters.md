@@ -166,8 +166,8 @@ and tablet, Sheet (medium) on phone, dispatched as `OverflowMenu` does:
 - Pressing a closed row closes the overlay, then jumps to its
   `startEntryId`.
 - The progress bar and `chapter progress · 8,420 / 24,000 tok`, in the
-  strip's tone. With 5.1 on main the label binds directly and no percent
-  branch ships; without it, `chapter progress · 42%` until 5.1's flip.
+  strip's tone. The label binds directly to 5.1's numbers, and no percent
+  branch ships.
 - `Close chapter manually` and `Manage chapters →`, disabled with a
   reason (C16). Each is an optional callback, so a flip is a line: 5.10
   passes `openCloseModal({ branchId })` and 5.7 the route. The Timeline
@@ -215,9 +215,8 @@ and tablet, Sheet (medium) on phone, dispatched as `OverflowMenu` does:
 - `components/compounds/chapter-progress-bar.tsx` holds the one map from
   tone to `bg-success`, `bg-warning` and `bg-danger`. The strip and the
   popover render it, and 5.7's in-progress card reuses it.
-- A hover tooltip with the exact numbers through `ReasonTooltip`, a
-  percent until 5.1. It's a no-op on native, and every in-story surface
-  gets it from the shell.
+- A hover tooltip with the exact numbers through `ReasonTooltip`. It's a
+  no-op on native, and every in-story surface gets it from the shell.
 - `onChapterProgressPress` from the route. Only the reader passes it, at
   tablet and desktop, and it opens the popover. The phone strip stays
   passive: it is 3 px, and the chip sits right under it.
@@ -313,8 +312,8 @@ and tablet, Sheet (medium) on phone, dispatched as `OverflowMenu` does:
 11. The popover's stories at both tiers show closed rows with ranges, the
     highlighted `in progress` row with `since`, both disabled actions with
     their reasons, a long list opened on its last row, and the progress
-    label: `chapter progress · 8,420 / 24,000 tok` when 5.1 is on main,
-    else the percent (`components/reader/chapter-popover.stories.tsx`).
+    label: `chapter progress · 8,420 / 24,000 tok`
+    (`components/reader/chapter-popover.stories.tsx`).
 12. `lib/db/story-entries/chapter-time-ranges.test.ts`:
     `readChapterTimeRanges` groups by chapter, excludes 0, null and `system`
     rows, keys the open region as `null`, and omits a chapter with no time.
@@ -334,9 +333,9 @@ and tablet, Sheet (medium) on phone, dispatched as `OverflowMenu` does:
     expectations: 79.9 is `success`, 80 and 89.9 are `warning`, 90 and 100
     are `danger`.
 17. In `components/shells/screen-shell.stories.tsx` the strip paints each
-    tone and carries its tooltip, the exact numbers when 5.1 is on main,
-    else the percent; with `onChapterProgressPress` a click fires it, and
-    without it the strip doesn't press. Whichever of 5.1 and 5.3 lands
+    tone and carries its tooltip with the exact numbers; with
+    `onChapterProgressPress` a click fires it, and without it the strip
+    doesn't press. Whichever of 5.1 and 5.3 lands
     second, `git grep -E "function chapterProgressTone|chapterProgressTone ="`
     finds one definition.
 

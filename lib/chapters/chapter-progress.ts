@@ -3,13 +3,13 @@ import type { StoryEntry } from '@/lib/db'
 import { canEndChapter } from './can-end-chapter'
 import { chapterProgressTone, type ChapterProgressTone } from './chapter-progress-tone'
 
-export type ChapterProgress = {
+export type ChapterProgress = Readonly<{
   tokens: number
   threshold: number
   percent: number
   tone: ChapterProgressTone
   canClose: boolean
-}
+}>
 
 /** `percent` is 0–100, and reads 0 for a non-positive or non-finite threshold. */
 export function chapterProgressOf(

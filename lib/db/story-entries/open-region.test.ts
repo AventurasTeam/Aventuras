@@ -1,4 +1,4 @@
-import { count } from 'drizzle-orm'
+import { asc } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import { createTestDb } from '../__tests__/test-db'
@@ -71,14 +71,7 @@ describe('openRegionSeries', () => {
 
   it('reads a row inserted with no count as 0', async () => {
     const db = await seedBranches()
-    await db.insert(storyEntries).values({
-      id: 'e_old',
-      branchId: 'b1',
-      position: 1,
-      kind: 'ai_reply',
-      content: 'written before the column',
-      createdAt: 1,
-    })
+    await db.insert(storyEntries).values(row('e_old', 1, { contentTokens: null }))
 
     expect(await openRegionSeries('b1', { db })).toEqual([
       { id: 'e_old', kind: 'ai_reply', position: 1, tokens: 0 },
@@ -124,11 +117,14 @@ describe('openRegionWhere', () => {
         row('e_there', 4, { branchId: 'b2' }),
       ])
 
-    const [open] = await db
-      .select({ rows: count() })
+    const selected = await db
+      .select({ id: storyEntries.id })
       .from(storyEntries)
       .where(openRegionWhere('b1'))
+      .orderBy(asc(storyEntries.position))
+    const series = await openRegionSeries('b1', { db })
 
-    expect(open.rows).toBe(2)
+    expect(selected.map((r) => r.id)).toEqual(['e_opening', 'e_reply'])
+    expect(series.map((r) => r.id)).toEqual(selected.map((r) => r.id))
   })
 })

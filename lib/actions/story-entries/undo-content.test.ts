@@ -797,10 +797,10 @@ describe('the count of an edited entry', () => {
   const EDITED = 'the courier turned back at the ford and waited out the snow'
 
   async function seedCountedReply(
-    db: TestDb,
     contentTokens: number | null,
     metadata: EntryMetadata | null = null,
   ) {
+    const { db, runInTransaction } = await createTestDb()
     await seedBranch(
       db,
       [
@@ -816,6 +816,7 @@ describe('the count of an edited entry', () => {
       ],
       2,
     )
+    return { db, ctx: { db, runInTransaction } }
   }
 
   async function expectCount(db: TestDb, count: number | null) {
@@ -828,29 +829,26 @@ describe('the count of an edited entry', () => {
   })
 
   it('writes the new count to the row and the store', async () => {
-    const { db, runInTransaction } = await createTestDb()
-    await seedCountedReply(db, countTokens(ORIGINAL))
+    const { db, ctx } = await seedCountedReply(countTokens(ORIGINAL))
 
-    await updateStoryEntryContent('b1', 'e_reply', EDITED, { db, runInTransaction })
+    await updateStoryEntryContent('b1', 'e_reply', EDITED, ctx)
 
     await expectCount(db, countTokens(EDITED))
   })
 
   it('counts the new text once', async () => {
-    const { db, runInTransaction } = await createTestDb()
-    await seedCountedReply(db, countTokens(ORIGINAL))
+    const { ctx } = await seedCountedReply(countTokens(ORIGINAL))
     vi.mocked(countTokens).mockClear()
 
-    await updateStoryEntryContent('b1', 'e_reply', EDITED, { db, runInTransaction })
+    await updateStoryEntryContent('b1', 'e_reply', EDITED, ctx)
 
     expect(vi.mocked(countTokens).mock.calls).toEqual([[EDITED]])
   })
 
   it('records the old count on the delta, under the column key', async () => {
-    const { db, runInTransaction } = await createTestDb()
-    await seedCountedReply(db, countTokens(ORIGINAL))
+    const { db, ctx } = await seedCountedReply(countTokens(ORIGINAL))
 
-    await updateStoryEntryContent('b1', 'e_reply', EDITED, { db, runInTransaction })
+    await updateStoryEntryContent('b1', 'e_reply', EDITED, ctx)
 
     const [edit] = await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))
     expect(edit.undoPayload).toMatchObject({
@@ -861,9 +859,7 @@ describe('the count of an edited entry', () => {
   })
 
   it('CTRL-Z restores the old count and redo the new one, in both', async () => {
-    const { db, runInTransaction } = await createTestDb()
-    const ctx = { db, runInTransaction }
-    await seedCountedReply(db, countTokens(ORIGINAL))
+    const { db, ctx } = await seedCountedReply(countTokens(ORIGINAL))
     await updateStoryEntryContent('b1', 'e_reply', EDITED, ctx)
 
     expect((await undoLastAction('b1', ctx)).status).toBe('ok')
@@ -874,9 +870,7 @@ describe('the count of an edited entry', () => {
   })
 
   it('round-trips a null count as null, not as a recount', async () => {
-    const { db, runInTransaction } = await createTestDb()
-    const ctx = { db, runInTransaction }
-    await seedCountedReply(db, null)
+    const { db, ctx } = await seedCountedReply(null)
 
     await updateStoryEntryContent('b1', 'e_reply', EDITED, ctx)
     await expectCount(db, countTokens(EDITED))
@@ -891,9 +885,10 @@ describe('the count of an edited entry', () => {
   })
 
   it('counts an edit that clears a cut-off mark, and undoes the two together', async () => {
-    const { db, runInTransaction } = await createTestDb()
-    const ctx = { db, runInTransaction }
-    await seedCountedReply(db, countTokens(ORIGINAL), { ...REPLY_META, cutOff: MARK })
+    const { db, ctx } = await seedCountedReply(countTokens(ORIGINAL), {
+      ...REPLY_META,
+      cutOff: MARK,
+    })
 
     await updateStoryEntryContent('b1', 'e_reply', EDITED, ctx)
     await expectCount(db, countTokens(EDITED))
@@ -905,29 +900,21 @@ describe('the count of an edited entry', () => {
   })
 
   it('counts nothing for an edit of an entry that does not exist', async () => {
-    const { db, runInTransaction } = await createTestDb()
-    await seedCountedReply(db, countTokens(ORIGINAL))
+    const { ctx } = await seedCountedReply(countTokens(ORIGINAL))
     vi.mocked(countTokens).mockClear()
 
-    const result = await updateStoryEntryContent('b1', 'e_missing', EDITED, {
-      db,
-      runInTransaction,
-    })
+    const result = await updateStoryEntryContent('b1', 'e_missing', EDITED, ctx)
 
     expect(result.status).toBe('rejected')
     expect(vi.mocked(countTokens)).not.toHaveBeenCalled()
   })
 
   it('writes nothing on a Save with unchanged text', async () => {
-    const { db, runInTransaction } = await createTestDb()
     // Not ORIGINAL's count: a recount on this path would move it.
-    await seedCountedReply(db, 999)
+    const { db, ctx } = await seedCountedReply(999)
     vi.mocked(countTokens).mockClear()
 
-    const result = await updateStoryEntryContent('b1', 'e_reply', ORIGINAL, {
-      db,
-      runInTransaction,
-    })
+    const result = await updateStoryEntryContent('b1', 'e_reply', ORIGINAL, ctx)
 
     expect(result.status).toBe('ok')
     await expectCount(db, 999)

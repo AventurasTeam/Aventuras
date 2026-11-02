@@ -44,6 +44,19 @@ No open items.
   model select; the form is open. Raised by the developer 2026-10-31 in
   the chapter-close agent design.
 
+- **Measure the encoder build and a CJK count on a phone.** Slice 5.1
+  measured the build on an x86_64 emulator's debug build, 942 to 1,325 ms
+  during the open
+  ([Slice 5.1 → Implementation notes](./implementation/milestones/05-chapters-chapter-close/slices/01-token-measure.md#implementation-notes)).
+  A tap during it is queued, not lost: in three cold opens a Back tap ran
+  23 ms after the build ended, so it waits out what's left of it. Text
+  entry during the build is untested. On the same device a count of
+  40,000 characters took 35 ms of English, 591 ms of Chinese and 2,088 ms
+  of Japanese, on the JS thread, and the prompt is counted on every model
+  call. A real phone on a release build is unmeasured. Raised 2026-11-01
+  by Slice 5.1, moved here 2026-11-02 by its closing review, which added
+  the tap and CJK numbers.
+
 ## Tuning and play testing
 
 v1 work held for the end of the cycle, once every base system is
@@ -206,9 +219,3 @@ breakdown under [UX](#ux).
   - [A twin across a placement](./parked.md#a-twin-across-a-placement)
   - [Resuming a failed close](./parked.md#resuming-a-failed-close)
   - [A staged row has no retirement](./parked.md#a-staged-row-has-no-retirement)
-
-- **Measure the encoder build on a phone.** Slice 5.1 measured it on an
-  x86_64 emulator's debug build, 942 to 1,325 ms during the open
-  ([Slice 5.1 → Implementation notes](./implementation/milestones/05-chapters-chapter-close/slices/01-token-measure.md#implementation-notes)).
-  A real phone on a release build is unmeasured, and so is a tap during
-  the build.
