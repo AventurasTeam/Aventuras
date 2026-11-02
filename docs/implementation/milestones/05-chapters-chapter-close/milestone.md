@@ -208,14 +208,14 @@ anchor reverses positionally, which is the seed's bug.
 - The `chapters` create comes first, then the stamps, then agent writes,
   then the `close_report` update.
 - A stamp is a new action kind, `stampEntryChapter`, registered beside
-  `updateStoryEntryMetadata` (`lib/actions/story-entries/register.ts:189-195`)
+  `updateStoryEntryMetadata` (`lib/actions/story-entries/register.ts:193-199`)
   with a `LOCK_KEY` entry (`lib/actions/delta/apply-delta-action.ts:51`).
   One delta per entry, payload `{ chapterId: <prior> }`, since a delta
   reverses one row (`reverse-replay.ts`, `undoTargetOf`).
 - No stamp carries a `content` key: `isContentEditDelta` keys on it
   (`lib/actions/story-entries/classifier-facts.ts:58-67`).
 - `story_entries.chapter_id` stays FK-less
-  (`lib/db/story-entries/story-entries.table.ts:18`), because redo runs
+  (`lib/db/story-entries/story-entries.table.ts:19`), because redo runs
   newest-first and stamps land before their chapter row.
 - Stamps go through the shipped `delta_emitted` path, a burst under one
   `actionId`. The metadata phase checks `abortSignal` between stamps,
@@ -312,7 +312,7 @@ writer, store projection). Writers: 5.5a's ledger, used by 5.5b, 5.8 and
 5.9. Consumers: 5.7, 5.11.
 
 A nullable JSON column on `chapters`
-(`lib/db/story-entries/story-entries.table.ts:30-55`), added to
+(`lib/db/story-entries/story-entries.table.ts:31-56`), added to
 `fullRow` and `UPDATABLE` (`lib/actions/chapters/register.ts:37-46`),
 with its Zod schema in `lib/db/story-entries/close-report.ts`. It may
 grow; a field's meaning doesn't change.
@@ -403,9 +403,9 @@ Provider: [Slice 5.1](./slices/01-token-measure.md). Consumers: 5.2, 5.3,
 - **`story_entries.content_tokens`,** a nullable integer. It counts
   stored `content`, which is the source language, so a translated story
   needs no separate rule. Written at the create handler
-  (`lib/actions/story-entries/register.ts:57-84`), at `create-story`
-  (`lib/actions/stories/create-story.ts:153-166`), and on a content edit
-  (`lib/actions/story-entries/operational.ts:130-133`), with the old
+  (`lib/actions/story-entries/register.ts:61-88`), at `create-story`
+  (`lib/actions/stories/create-story.ts:154-168`), and on a content edit
+  (`lib/actions/story-entries/operational.ts:133-136`), with the old
   value in the edit's undo payload. No backfill: dev DBs reseed, and a
   null reads as 0. 5.1 fills the column in the seed, so seeded stories
   read real numbers.
@@ -425,10 +425,8 @@ Provider: [Slice 5.1](./slices/01-token-measure.md). Consumers: 5.2, 5.3,
   an older `when` silently skips on a migrated DB and stays green on a
   fresh one.
 - **One open-region predicate:** `kind != 'system' AND chapter_id IS NULL`,
-  as at `lib/retrieval/buffer.ts:62-65` and
-  `lib/pipeline/definitions/entry-reads.ts:81-85`, held as
-  `openRegionWhere(branchId)` in `lib/db/story-entries/open-region.ts`,
-  exported from `@/lib/db`.
+  held as `openRegionWhere(branchId)` in
+  `lib/db/story-entries/open-region.ts`, exported from `@/lib/db`.
 - **`openRegionSeries(branchId, ctx)`,** in the same file, returning
   `{ id, kind, position, tokens }[]` in position order, is the one read.
   `closeOwed` and the hook take the sum, canon's `openRegionTokens`, and
@@ -442,7 +440,7 @@ Provider: [Slice 5.1](./slices/01-token-measure.md). Consumers: 5.2, 5.3,
   `canClose` says the region holds an entry that can end a chapter, and
   `Ready to close` and `Close chapter…`'s availability both read it. It
   refetches on `settleCount` and the tail, as `useEntryIndex` does
-  (`hooks/use-entry-index.ts:65`); a content edit runs in the reversal
+  (`hooks/use-entry-index.ts:67`); a content edit runs in the reversal
   bracket, so it ticks `settleCount`.
 - **`ScreenShell.chapterProgress`** (`components/shells/screen-shell.tsx:49`)
   takes the hook's return, with `tokens` and `threshold` optional until
@@ -525,12 +523,12 @@ Provider: [Slice 5.2](./slices/02-first-chapter.md). Consumers: 5.1, 5.3,
 
 5.2 gives the seed a real close shape: end-entry anchors, stamp deltas,
 and chapters ending on a reply. `CHAP1_END` and `CHAP2_END`
-(`lib/db/devtools/seed-dataset.ts:208-209`) are even positions, which are
+(`lib/db/devtools/seed-dataset.ts:209-210`) are even positions, which are
 `user_action` rows, so they become 29 and 57. Chapter 2 starts at
-`CHAP1_END + 1`, replacing the literal at `:342`, and entry 59 stays
-open: it's Plot's only live open-region anchor (`:883-886`), and two
-E2Es need it there. `delta_hero_3` and `delta_hero_9` (`:1188`, `:1202`)
-gain `entryId`, and `seed-dataset.test.ts:325-343` flips to canon.
+`CHAP1_END + 1`, replacing the literal at `:343`, and entry 59 stays
+open: it's Plot's only live open-region anchor (`:884-887`), and two
+E2Es need it there. `delta_hero_3` and `delta_hero_9` (`:1191`, `:1205`)
+gain `entryId`, and `seed-dataset.test.ts:332-350` flips to canon.
 Seeded chapter ids and titles don't change. Consumers assert by chapter
 title or number, never by entry position.
 
@@ -694,7 +692,7 @@ chapter would strand its entries before a closed one. They use
 `selectReversalSet` and `reverseAndPruneDeltaRows`
 (`lib/actions/delta/row-closure.ts:398`, `reverse-replay.ts:714`) with
 `keepRedoExact: false`, through `commitNewAction`
-(`lib/actions/story-entries/operational.ts:45-57`), exported, which clears
+(`lib/actions/story-entries/operational.ts:46-58`), exported, which clears
 redo even when the store sync fails after the commit. Neither is undoable. `deleteChapter`
 (`lib/actions/chapters/register.ts:150`) has no production caller and
 dangles stamps; 5.12 removes it.

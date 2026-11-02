@@ -95,7 +95,7 @@ Code the contracts don't already point at:
 `lib/pipeline/definitions/periodic-classifier.ts:251-470` is the shape of
 a phase with one structured call, `lib/pipeline/definitions/classifier-pass.ts`
 and `lib/actions/classifier/run-now.ts` of a start, and
-`lib/db/devtools/seed-dataset.ts:1258-1272` of how hero deltas slot into
+`lib/db/devtools/seed-dataset.ts:1261-1275` of how hero deltas slot into
 the log.
 
 ## Scope: in
@@ -245,9 +245,9 @@ the log.
   `{ chapterId: null }` as the undo payload and the end entry as anchor,
   so `heroDeltas` keeps C1's order.
 - `'lore-mgmt': 'prof_classifier'` joins the dataset's `assignments`
-  (`seed-dataset.ts:1763`). C2 declares `resolves` on that target, so
+  (`seed-dataset.ts:1766`). C2 declares `resolves` on that target, so
   without it every seeded close fails at pre-flight.
-- `seed-dataset.test.ts:325-343` flips to canon, and the comment at
+- `seed-dataset.test.ts:332-350` flips to canon, and the comment at
   `e2e/tests/plot.spec.ts:74` follows the new range.
 
 **Reversal on a real chapter.** No change to `lib/actions/delta/` is
@@ -278,7 +278,7 @@ close that ran. These should need no code, so a failure is a finding.
 - The forward burst and the reversal are measured on it, on desktop and
   Android.
 
-**Stale comments.** `lib/db/story-entries/story-entries.table.ts:38-40`
+**Stale comments.** `lib/db/story-entries/story-entries.table.ts:39-41`
 stops promising placeholder content, which canon reversed, and
 `lib/stores/generation/generation.ts:28` stops naming a chapter-close
 drain, which canon doesn't have.
