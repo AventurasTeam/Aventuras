@@ -1,0 +1,273 @@
+# UI components
+
+`components/ui/` holds primitives: a `Button`, a `Dialog`, a `Textarea`. They say nothing about
+what a delete button or a confirmation looks like, so every call site used to decide that again.
+This catalog lists the patterns built on top of them. Before building one of these by hand, use the
+component named here; if a new pattern repeats, add it.
+
+Nothing enforces the catalog. It is the place to look, and the place to point at in a review.
+
+## A modal that ends in Cancel plus one action
+
+Use `shared/ActionModal.svelte`. A caller passes what the modal says and does; the shell owns the
+rest:
+
+- **Layout.** A header with the centred title alone and no close button: Cancel is the way out.
+  The description opens the body.
+  The header and the buttons' panel are tinted (`bg-muted/40`) with a rule each, so they frame the
+  body. The header stays pinned. On desktop the buttons are pinned under the body too, and only the body
+  scrolls; on a phone the body and the buttons scroll together, leaving the small screen to the
+  content. Nothing inside scrolls on its own: an autosizing `Textarea`
+  in the body drops its height cap and lets the modal scroll.
+- **Phone.** Below 768px an action modal is a dialog inset from the screen's edges: centred, or
+  held near the top when it has a text field. Only a tool with no text field is a bottom sheet
+  with a handle (see below), where only the handle drags and the content scrolls.
+- **Buttons.** An outlined Cancel and the action, side by side on a phone and at the trailing edge
+  on desktop, where both share one width: the same on every modal, and wider for both only when a
+  label needs it. The discard question is only as wide as its pair, which fills its footer. On a
+  phone each takes half the width, and when a label does not fit they stack in reading order,
+  Cancel above the action. The action's icon turns into a spinner while it runs.
+- **Ways out.** Cancel, Escape, Android's back press (claimed by the open modal through
+  `utils/backPress.ts`, and decided as Escape) and a click outside all go
+  through one decision, `shared/actionModalClose.ts`, which has its own tests. A sheet's swipe or
+  handle tap closes it without asking, which is why a sheet holds nothing to lose.
+- **The busy lock.** While `busy`, no way out closes the modal or asks anything, unless
+  `cancelWhileBusy` says Cancel stops the running action.
+
+| Prop                       | For                                                                              |
+| -------------------------- | -------------------------------------------------------------------------------- |
+| `open` / `onCancel`        | `onCancel` runs when the user leaves without the action; it defaults to closing  |
+| `onClosed`                 | after the close transition, for a caller that unmounts the modal then            |
+| `title` / `description`    | `description` is a string or a snippet                                           |
+| `children`                 | the body; a confirmation whose description says it all has none                  |
+| `action`                   | `{ label, icon?, tone?, disabled?, onConfirm }`                                  |
+| `busy`, `cancelWhileBusy`  | the busy lock                                                                    |
+| `dirty`, `discardQuestion` | see below                                                                        |
+| `cancelLabel`              | only when Cancel ends more than the modal: "Cancel import"                       |
+| `titleIcon`                | only for a risk beyond the action itself; see Wording                            |
+| `alternative`              | another way to do the job, left of the buttons; see Wording                      |
+| `removal`                  | removing the thing the modal edits; see below                                    |
+| `size`                     | `md` (the default), `lg` or `2xl`; see the width scale below                     |
+| `requireChange`            | for a modal that edits existing values: the action waits until something changed |
+| `presentation`             | `sheet` only for a tool with no text field; see below                            |
+
+### Width
+
+A modal's width follows what it does, not its content on the day it was written. On desktop:
+
+| Width       | For                                              | Examples                                                                               |
+| ----------- | ------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `md`        | a question, a command, a short options form      | Delete entry, Create a branch, Create a checkpoint, Replace this pack, Lorebook export |
+| `lg`        | an editor of a few fields, or a step with a list | the time edit, the anchor editor, Manual chapter, Sync, the imports                    |
+| `2xl`       | a large form, a list or an inspector             | Edit story, the character editors, Duplicates, Timeline anomalies, Tag manager         |
+| `3xl`–`4xl` | a multi-step surface or an image viewer          | the wizards, the reconciliation, the gallery, Debug log                                |
+| `6xl`–`7xl` | a workspace                                      | Settings, the lorebook editor, Discovery                                               |
+
+A list of results a command shows does not make it wider: Create a checkpoint and Refresh
+templates list a lot, but stay `md`.
+
+An editor of existing values passes `requireChange`, so Save stays inactive until something was
+changed. The discard and removal question preselects neither answer.
+
+### When to pass `dirty`
+
+A modal asks before it is closed when it holds something that would be lost:
+
+- a multi-line text field,
+- more than one field to fill in,
+- values that already existed and have been edited, or
+- a result that is costly to produce again, such as a read import file.
+- an AI run in progress that Cancel would stop, such as Manual chapter's summary: it spends
+  tokens, so Cancel asks "Stop creating the chapter?" and only then aborts it. Pass
+  `dirty={running}` with `cancelWhileBusy`, and abort the run in `onCancel`.
+
+A field is something the user fills in: text, or a choice the action saves. A toggle that only
+shapes what the action does is not a field. So the only modal that never asks is one whose single
+field is an empty, single-line one, like a branch name: retyping one word is cheap. Several short
+fields count, because moving between them is exactly when a click lands outside the form.
+
+`dirty` stays a boolean the caller computes, since only the caller knows what its fields are.
+`discardQuestion` words the question for the case: "Discard your changes?" for edits, "Cancel this
+import?" for an import.
+
+### A click outside is Cancel
+
+A click outside does exactly what Cancel would: close, ask, or nothing while busy. There is no
+option to ignore it. Whatever an ignored click would protect is protected already, by the discard
+question when there is something to lose, or by the busy lock while the action runs.
+
+### Removing the thing the modal edits
+
+`removal` puts a small outlined button in the `delete` red after the body, before Cancel and the action, so it
+scrolls with the content and is read after what it would remove. It asks inside the modal before
+running. Use it only to remove the thing the modal edits, never as a general third action.
+
+### Sheet or dialog
+
+On a phone an action modal is a **dialog**, unless it is a **tool with no text field and nothing to
+lose**, which may be a sheet with `presentation="sheet"`. None is today: Manual chapter, which picks
+from a list, became a dialog once its running summary counted as something to lose.
+
+A bottom sheet reads as more of the page it rises from, so it suits controls tied to that content,
+and it is dismissed casually. But an editor in a sheet moves with the keyboard: the sheet sits on
+the bottom edge, so it rises when the keyboard opens and drops when the keyboard closes, and a tap
+outside the field closes the keyboard before the discard question can open, in a sheet that has
+just fallen. A dialog with a text field is held near the top of the screen instead, where the
+keyboard only takes height from its bottom edge, and the question opens where the fields were. A
+sheet also cannot be guarded: `vaul` closes it on a handle tap or a swipe with no way to veto, so
+anything with something to lose is a dialog.
+
+**Sheets never stack.** A modal opened from inside another modal, such as a confirmation in
+Settings or the pack question during a sync, is a dialog whatever its kind. A sheet on a sheet
+leaves the user unsure which swipe closes what.
+
+### Anomaly handlers
+
+A modal that interrupts a flow to resolve an exception, like the prompt-pack question during an
+import, is not a step of the control that started the flow. Its title asks its own question, its
+buttons say what they do to the larger flow ("Cancel import", "Import"), and its action
+carries no glyph of that control.
+
+### Focus and Enter
+
+Mark a field `data-autofocus` when it is the first control that decides the action and it is a
+single-line text field: a name to create, a model to add, a time to set. The shell focuses it on
+opening, so a phone raises its keyboard. The dialog it sits in is already held near the top, so
+the keyboard only takes height from its bottom edge, and the content scrolls. Mark nothing when the
+first such control is a toggle, or when the modal edits a whole record whose fields the user may
+each want or not: Edit story opens with no keyboard. An unmarked text field is never focused on
+opening, even when it comes first, where bits-ui would focus it; the modal takes the focus itself. iOS raises no keyboard for this focus, so
+there it waits for a tap.
+
+Enter in a single-line field moves to the next text field, with `enterkeyhint="next"`. In the
+last one, a modal that creates or adds performs its action (`enterkeyhint="go"`). A modal that
+edits existing values only drops the keyboard (`enterkeyhint="done"`): an edit is saved through the
+on-screen button, never by a key under the thumb. The shell does what the attribute says, so a
+caller sets only `enterkeyhint`; a field without one, such as a multi-line note, keeps its Enter.
+
+Ctrl+Enter (Cmd+Enter on a Mac) in any field of an action modal performs its action, unless the
+action is disabled or running. A phone keyboard has no such key, so it cannot save by accident.
+
+### Wording
+
+The header holds only the title, centred at every width. The description is the first line of the
+body, where a sentence that wraps reads well, and it scrolls with the body; anything else, even a
+switch that changes what the body says, follows it. A way to do the job other than this modal, such
+as the character editor's "Ask assistant", is an `alternative`: it sits left of Cancel, and on a
+phone on a full-width row above them. The snippet gets `leaveFor(next)`, which asks the discard
+question first when the modal holds edits and then runs `next`, since leaving for the other route
+drops what was typed here.
+
+A body more than 2.5 screens long, measured against the tallest it has been while open so a phone's
+keyboard does not show and hide them, gets chevron buttons floating at the bottom right of the body,
+styled like the story screen's: jump to the top once it has scrolled down, jump to the bottom under
+it while it is not there (`shared/scrollJump.ts`, drawn by `shared/ScrollEdgeButton.svelte`, which
+the story screen uses too). Each keeps its place and fades, so the other never moves. A jump hides
+both and fades in what applies at the far end: on a phone, the end of the body is above the footer.
+They come with the shell, so no caller adds them. Jumping to the bottom with a phone's keyboard up
+closes the keyboard first and waits for the body to regain its height, so the jump lands where the
+keyboard no longer is.
+
+The body never repeats the title: "Entry 47 will
+be deleted" under "Delete entry 47" says nothing.
+
+- **Sentence case** for titles and buttons.
+- **A command's title is a statement:** a verb, its object with an article, and the target when
+  there is one: "Delete entry 47", "Create a checkpoint at entry 12". An anomaly handler's title is
+  its question: "Which prompt pack should this story use?"
+- **The description says what the title cannot,** a consequence or context, and never repeats it.
+  No deletion says "This cannot be undone": none can be, and each says what is lost instead.
+- **The action is one word, the title's verb:** "Create", "Save", "Delete"; the title already names
+  the object. It is never "OK". More words are for what the title and the verb cannot carry:
+  "Restore & Close App" warns of what else happens, and "Continue" on the backup warning leads on
+  to the step that was asked for.
+- **The discard and removal questions name both outcomes:** "Keep editing" or "Discard", "Keep
+  anchor" or "Delete anchor". The question has the shell's frame, a centred title band, a body and
+  a footer band, and the footer's pair: Outline to stay, and the `feature` variant in the `delete`
+  tone to go.
+
+- **A warning icon only where a confirmation warns of a risk beyond the action itself,** like a
+  backup that carries API keys, or a restore that replaces the database and closes the app. The
+  discard and removal questions carry none: they confirm what the user just chose, and their
+  description says what is lost.
+
+The backup and restore confirmations keep their own wording.
+
+### `ModalActions` on its own
+
+`shared/ModalActions.svelte` is the shell's footer. Reach for it alone only for a modal whose body
+cannot live in the shell's one scroller.
+
+### Not migrated yet
+
+These end in Cancel plus an action but are still assembled by hand: `LorebookExportModal`,
+`LorebookImportModal`, `LorebookVaultImportModal`, `ResummarizeModal`, `SyncModal`,
+`VaultExportModal`, `STChatImportModal`, and in `vault/prompts/` `CreatePackDialog`,
+`ExportIntoFolderDialog`, `ImportPreviewDialog`, `TestVariablesModal` and the pack deletion in
+`PromptPackList`. Move one onto the shell when you
+are in it anyway.
+
+These are not Cancel plus one action, and stay as they are: `TimelineAnomaliesModal` (a list with
+Close), `TimelineReconciliationModal` (a multi-step wizard), the unsaved-changes question in
+`PromptPackEditor` (three choices) and `RestoreCompleteDialog` (a status screen).
+
+A screen like these that asks before discarding still asks the shell's way: `shared/DiscardConfirm`
+inside its own content, over an `inert` body, never the native `ask()` of
+`@tauri-apps/plugin-dialog`. The question is a `PendingQuestion` (`shared/pendingQuestion.svelte.ts`):
+`await question.ask({ title, description })` is true when the reader discards, and an attempt made
+while one is up gets false. The action modal, both wizards and `TimelineReconciliationModal` use
+it, and each answers Escape and an outside click with "keep" while the question is up. Every
+caller names what is lost: the overlay has no wording of its own beyond "Keep editing" and
+"Discard".
+
+## Folding explanations
+
+An explanation of how something works, which a reader needs once and then knows, is a
+`shared/ExplanationFold`: a muted summary line ("How past checkpoints work", "What an anchor does")
+that unfolds the text below it, built on the bits-ui Collapsible, so it slides open and shut. It
+starts open, and whether the reader folded it is saved per explanation, across stories and
+sessions, under the `id` it is given, which no other explanation may share. A search for
+`ExplanationFold` finds them all.
+
+In an action modal it goes in the body, above the fields, not in the description: an explanation
+the reader has read should not keep its height there. A description is for what the reader needs
+every time.
+
+Not every fold is one. A notice about this particular item, like the time edit's "This entry is a
+fork point", opens again each time, since what it says changes with the item. It is the same
+component without an `id`, its state bound by the caller through `open`, as is the past
+checkpoint's "Advanced".
+
+## Story-time fields
+
+A field that takes a story time is a `shared/StoryTimeField`: its label above and the input, with
+the error under it, example spellings included, when the text is not a time. Times are stored
+carried over, so when what was typed overflows (D400 is Y2 D35), an (i) beside the input opens
+what it is stored as (`convertedStoryTime` in `services/storyTime`). Otherwise the field shows
+nothing more: a reading of every time repeated the input and, beside it, widened the form. The
+caller's own help text goes below the field. The input is sized for `Y999999 D9999 23:59`;
+longer text scrolls inside it.
+
+## Feature colours
+
+Some features have a colour: Branch and Regenerate are amber, Checkpoint is blue, Delete is red.
+`shared/featureColors.ts` holds one colour per feature for light themes and one for dark themes,
+the same in every theme of a mode. Both the control that opens a feature's modal and the modal's
+action read it, so they cannot drift apart.
+
+- **A trigger** in the colour uses `text` and darkens one shade on hover with `hoverText`. A
+  trigger muted until hovered, like an entry's delete button, uses `revealText`.
+- **A modal's action** takes the trigger's tone, as `action.tone`. It is drawn by the `Button`
+  variant `feature`: the label in the colour, on a 16% wash of it over the theme's background, with
+  Cancel's border.
+- **A trigger with no colour** gives its action the primary button, unless the action does
+  something the user should see coming. Then the modal picks a tone named for what the action does,
+  like `overwrite` for restoring a backup over the database.
+
+Recognising the trigger's colour comes before the label's contrast against its wash. Some labels
+fall below 4.5:1, light-theme amber and red most of all. Do not deepen a shade to fix that in one
+place: the trigger and the action would stop matching. A change to the colours is a change to the
+map.
+
+Tones are named after their trigger or their effect. None is named `danger` or `destructive`: the
+theme's `--destructive` red and `Button`'s `destructive` variant are louder, and stay out of this.

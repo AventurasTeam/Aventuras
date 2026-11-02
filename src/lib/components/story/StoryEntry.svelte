@@ -16,6 +16,7 @@
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { cn } from '#lib/utils/cn.ts'
+  import { FEATURE_COLORS } from '#lib/components/shared/featureColors.ts'
   import { normalizeImageDataUrl } from '#lib/utils/image.ts'
   import { settings } from '#lib/stores/settings.svelte.ts'
   import {
@@ -1603,7 +1604,11 @@
             variant="text"
             size="icon"
             onclick={() => ui.requestRegenerate({ entryId: entry.id, retry: true })}
-            class="h-7 w-7 text-amber-700 hover:text-amber-800 dark:text-amber-500 dark:hover:text-amber-600"
+            class={cn(
+              'size-7',
+              FEATURE_COLORS.regenerate.text,
+              FEATURE_COLORS.regenerate.hoverText,
+            )}
             title="Generate a different response"
           >
             <RotateCcw class="h-4 w-4" />
@@ -1613,7 +1618,11 @@
             variant="text"
             size="icon"
             onclick={() => ui.requestRegenerate({ entryId: entry.id, retry: false })}
-            class="h-7 w-7 text-amber-700 hover:text-amber-800 dark:text-amber-500 dark:hover:text-amber-600"
+            class={cn(
+              'size-7',
+              FEATURE_COLORS.regenerate.text,
+              FEATURE_COLORS.regenerate.hoverText,
+            )}
             title="Generate a different response"
           >
             <RotateCcw class="h-4 w-4" />
@@ -1637,7 +1646,11 @@
             variant="text"
             size="icon"
             onclick={() => ui.requestBranchFrom(entryCheckpoint?.id ?? null)}
-            class="hidden h-7 w-7 text-amber-700 hover:text-amber-800 @min-[23rem]:flex dark:text-amber-500 dark:hover:text-amber-600"
+            class={cn(
+              'hidden size-7 @min-[23rem]:flex',
+              FEATURE_COLORS.branch.text,
+              FEATURE_COLORS.branch.hoverText,
+            )}
             title="Branch from here"
           >
             <GitBranch class="h-4 w-4" />
@@ -1652,7 +1665,7 @@
               'hidden h-7 w-7 @min-[23rem]:flex',
               // Accent only where a checkpoint is the usual next step: at the latest entry.
               isLatestEntry
-                ? 'text-blue-700 hover:text-blue-800 dark:text-blue-500 dark:hover:text-blue-600'
+                ? cn(FEATURE_COLORS.checkpoint.text, FEATURE_COLORS.checkpoint.hoverText)
                 : 'text-muted-foreground hover:text-foreground',
             )}
             title="Create checkpoint"
@@ -1843,7 +1856,11 @@
             size="icon"
             onclick={handleRetryFromEntry}
             disabled={entriesLocked}
-            class="h-7 w-7 text-amber-700 hover:text-amber-800 dark:text-amber-500 dark:hover:text-amber-600"
+            class={cn(
+              'size-7',
+              FEATURE_COLORS.regenerate.text,
+              FEATURE_COLORS.regenerate.hoverText,
+            )}
             title="Generate a response in its place"
           >
             <RotateCcw class="h-4 w-4" />
@@ -1871,7 +1888,7 @@
         size="icon"
         onclick={() => ui.requestEntryDelete(entry.id)}
         disabled={entriesLocked}
-        class="text-muted-foreground h-7 w-7 hover:text-red-700 dark:hover:text-red-500"
+        class={cn('text-muted-foreground size-7', FEATURE_COLORS.delete.revealText)}
         title={entriesLocked ? 'Cannot delete during generation or retry' : 'Delete'}
       >
         <Trash2 class="h-4 w-4" />
