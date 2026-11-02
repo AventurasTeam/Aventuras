@@ -1,4 +1,4 @@
-import { count } from 'drizzle-orm'
+import { asc } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import { createTestDb } from '../__tests__/test-db'
@@ -124,11 +124,14 @@ describe('openRegionWhere', () => {
         row('e_there', 4, { branchId: 'b2' }),
       ])
 
-    const [open] = await db
-      .select({ rows: count() })
+    const selected = await db
+      .select({ id: storyEntries.id })
       .from(storyEntries)
       .where(openRegionWhere('b1'))
+      .orderBy(asc(storyEntries.position))
+    const series = await openRegionSeries('b1', { db })
 
-    expect(open.rows).toBe(2)
+    expect(selected.map((r) => r.id)).toEqual(['e_opening', 'e_reply'])
+    expect(series.map((r) => r.id)).toEqual(selected.map((r) => r.id))
   })
 })
