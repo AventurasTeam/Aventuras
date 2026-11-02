@@ -1,9 +1,10 @@
 import { Tiktoken } from 'js-tiktoken/lite'
 import o200kBase from 'js-tiktoken/ranks/o200k_base'
 
-// Every provider is an estimate, so o200k tracks the modern vocab scale (ASCII = cl100k, non-Latin
-// ~30% lower). BPE map build (200k entries): ~285 ms desktop, ~1 s Android emulator. The 2.2 MB
-// rank table is a static import: countTokens must stay sync for the pure ranker.
+// Every provider is an estimate, so o200k tracks the modern vocab scale (ASCII prose about 1% under
+// cl100k, CJK about 30% lower). BPE map build (200k entries): ~285 ms desktop, ~1 s Android
+// emulator. The 2.2 MB rank table is a static import: countTokens must stay sync for the pure
+// ranker.
 let encoder: Tiktoken | null = null
 
 /** The vocabulary behind countTokens, frozen for the probe capture (lib/db → CaptureTokenizer). */

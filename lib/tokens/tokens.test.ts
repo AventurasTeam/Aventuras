@@ -13,8 +13,8 @@ describe('countTokens', () => {
   })
 
   it('pins the encoding every token budget is calibrated against', () => {
-    // Swapping the rank table silently re-scales every budget fill; ASCII counts the same under
-    // cl100k and o200k, so the pin has to be non-Latin to bite (cl100k counts this 31).
+    // Swapping the rank table silently re-scales every budget fill; ASCII prose barely separates
+    // cl100k and o200k, so the pin is non-Latin (cl100k counts this 31).
     expect(countTokens('彼は剣を抜いた。彼女は逃げた。誰も動かなかった。')).toBe(21)
   })
 
@@ -39,10 +39,12 @@ describe('countTokens on long runs', () => {
 
   function encodedParts(text: string): string[] {
     const encode = vi.spyOn(Tiktoken.prototype, 'encode')
-    countTokens(text)
-    const parts = encode.mock.calls.map(([part]) => part)
-    encode.mockRestore()
-    return parts
+    try {
+      countTokens(text)
+      return encode.mock.calls.map(([part]) => part)
+    } finally {
+      encode.mockRestore()
+    }
   }
 
   const longestRun = (text: string): number =>
