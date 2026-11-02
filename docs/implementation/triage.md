@@ -111,7 +111,7 @@ slice-planning gate forces its resolution before that slice is planned.
   [The token lesson](./lessons-learned/token-fixtures-need-real-prose.md)
   says the build takes ~272 ms, and `lib/tokens/index.ts` ~285 ms.
   Raised 2026-11-01 by Slice 5.1's review.
-- **Slice 5.1's doc needs two corrections.** Its brief kept the doc
+- **Slice 5.1's doc needs three corrections.** Its brief kept the doc
   read-only for the closing review.
   - [Implementation notes](./milestones/05-chapters-chapter-close/slices/01-token-measure.md#implementation-notes)
     say the guard's overflow comes at "at least about 700,000 tokens".
@@ -125,6 +125,9 @@ slice-planning gate forces its resolution before that slice is planned.
     on `lib/db`. It now bars value imports of every lib module and of app
     code, per
     [C5](./milestones/05-chapters-chapter-close/milestone.md#c5--token-reads-and-the-progress-hook).
+  - Implementation notes say a tap during the build is untested. The
+    closing review ran three on the emulator, and each was queued and
+    handled 23 ms after the build ended.
 
   Raised 2026-11-02 by Slice 5.1's closing review.
 

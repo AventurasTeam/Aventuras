@@ -3806,7 +3806,9 @@ and the guard's drift went away. It stays superlinear, so a coarse cap
 would remain, and the change would have to go into all three dist bundles
 of `patches/js-tiktoken.patch`. The guard is a developer decision and it
 works, so this waits. Parked 2026-11-02; the signal is a count that shows
-as a stall on a phone, or a place where the guard's drift matters.
+as a stall on a phone, or a place where the guard's drift matters. An
+x86_64 emulator's debug build already takes about 2 s on 40,000 characters
+of Japanese, so the phone measure in `followups.md` is what decides this.
 
 #### A setup factory for the periodic classifier spec
 

@@ -422,6 +422,12 @@ literals so a test can't derive its expectation from the constant.
 
 ## Open questions
 
+- **Does the whole-prompt count hold for a story in Japanese or Chinese?**
+  An English dataset chapter says little about those. On an x86_64
+  emulator's debug build a count of 40,000 characters took 35 ms of
+  English, 591 ms of Chinese and 2,088 ms of Japanese, on the JS thread
+  ([Slice 5.1's closing review](../../../../followups.md#ux)), and this
+  slice counts per tool step. Measure a CJK prompt beside the English one.
 - **What bar does the measure have to clear?** Set it at slice planning
   and amend this question with it, since a bar written after the runs
   proves nothing. Suggested: both tasks finish in 8 of 10 runs, with no
