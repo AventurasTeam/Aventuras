@@ -1,12 +1,22 @@
 # Prompt packs as folders: a user guide
 
-Aventuras can write a prompt pack out as a folder of Markdown files, one per prompt, and read such
-a folder back in. The folder is meant to live in a git repository. That is the whole point of it:
-your own prompt edits sit on one branch, the prompts Aventuras ships sit on another, and every
+Editing Aventuras prompts in the built-in editor is fun (no), but there are some limitations that
+bite. First, the editor itself is very basic: there's no cross-prompt search, side-by-side
+comparison, change tracking, agentic analysis and assistance, and so on. Second, the moment I make
+a custom prompt pack and save my first edited prompt, that prompt stops receiving the updates new
+app versions ship. At best that means a slightly worse experience; if I'm unlucky, it can break a
+feature or two outright.
+
+To deal with that on a budget (as if we had a budget), Aventuras can write a prompt pack out as a
+folder of Markdown files, one per prompt, and read such a folder back in. The idea is to open the
+folder as a project in a decent editor like VS Code or Emacs and get the full range of a modern
+IDE's capabilities, which solves the first point. To solve the updates, the easiest way is to
+initialize a git repository in the prompt packs folder and keep each pack on a separate branch.
+Your own prompt edits sit on one branch, the prompts Aventuras ships sit on another, and every
 release you let git merge the two instead of finding by hand what changed.
 
-The folder export is available on desktop only. Every exported folder carries a copy of this guide
-as its `README.md`, written by the same version of Aventuras that wrote the prompts beside it.
+The folder export is available on desktop only, which makes sense given the reasons above: text
+editing and git on mobile are too questionable to be worth the effort.
 
 ## 1. Why a folder
 
@@ -18,7 +28,7 @@ format hands to git.
 Three things make that work:
 
 - **One prompt, one file.** git can then merge each prompt on its own and show you exactly which
-  lines a release touched.
+  lines a release touched and how they cross your edits.
 - **Nothing in the folder changes unless a prompt does.** Two exports of the same pack are
   byte-identical, so a commit only ever holds real changes.
 - **The shipped prompts can be exported on their own**, from the text compiled into Aventuras, so
@@ -37,7 +47,7 @@ You need git and an empty folder.
 
 2. In Aventuras, open the Vault's prompt packs, open the built-in pack, and in its **Pack
    Settings** choose **Export shipped prompts to folder**. Pick the folder.
-3. Commit it, naming the version you exported:
+3. Commit it:
 
    ```bash
    git add -A
@@ -74,6 +84,9 @@ After updating Aventuras:
    git commit -m "Shipped prompts 1.5.0"
    ```
 
+   This commit is also where you can see exactly what changed in the shipped prompts between
+   versions.
+
 3. Merge them into your branch and resolve any conflicts (see the next section):
 
    ```bash
@@ -83,10 +96,6 @@ After updating Aventuras:
 
 4. In Aventuras, replace your pack from the folder: the pack's replace button, then **Folder of
    Markdown**.
-
-Export the shipped prompts before you re-export your own pack after an update. If your branch is
-exported by a newer version than the last shipped export, the two disagree about the version in
-`_reference/version.md`, and the merge stops on it.
 
 ### Editing in the app and in the folder
 
