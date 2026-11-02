@@ -122,8 +122,8 @@
 >
   <ExplanationFold id="story_edit_help" summary="How these are used">
     <p>
-      Genre, description, perspective and tense are used when generating every new entry in this
-      story. Old entries are not affected.
+      Genre, description, perspective and tense are used when generating new entries in this story,
+      unless a custom system prompt leaves them out. Old entries are not affected.
     </p>
   </ExplanationFold>
   <div class="space-y-1.5">

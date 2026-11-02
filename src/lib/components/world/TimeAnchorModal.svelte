@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { untrack } from 'svelte'
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
@@ -68,7 +67,7 @@
     if (!target) {
       if (!fixedEntry) timeText = ''
       note = ''
-      seeded = { number: untrack(() => seeded.number), time: timeText, note }
+      seeded = { number: '', time: timeText, note }
       return
     }
 
@@ -77,11 +76,7 @@
     const seed = anchor?.assertedTime ?? target.metadata?.timeEnd ?? null
     timeText = seed ? formatStoryTime(seed) : ''
     note = anchor?.note ?? ''
-    seeded = {
-      number: fixedEntry ? numberText : untrack(() => seeded.number),
-      time: timeText,
-      note,
-    }
+    seeded = { number: numberText, time: timeText, note }
   })
 
   function recordedSpan(entry: StoryEntry): string {
