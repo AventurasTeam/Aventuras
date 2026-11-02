@@ -22,8 +22,8 @@
     "lint:fix": "node scripts/pm.js run lint:ts:fix && node scripts/pm.js run lint:rust:fix",
     "lint:ts": "eslint .",
     "lint:ts:fix": "eslint . --fix",
-    "lint:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo +1.99.0 clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
-    "lint:rust:fix": "cargo +1.99.0 clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features --fix --allow-dirty -- -D warnings && cargo fmt --manifest-path src-tauri/Cargo.toml",
+    "lint:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo +1.99.1 clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
+    "lint:rust:fix": "cargo +1.99.1 clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features --fix --allow-dirty -- -D warnings && cargo fmt --manifest-path src-tauri/Cargo.toml",
     "format": "prettier --write \"**/*.{ts,js,svelte,json,css,html}\""
   },
   "license": "AGPL-3.0",
