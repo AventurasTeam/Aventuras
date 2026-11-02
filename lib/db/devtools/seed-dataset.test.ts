@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getRollbackCounts, undoLastAction } from '@/lib/actions'
 import { REF_COLUMNS, rowRefs } from '@/lib/actions/delta/live-refs'
 import { isContentEditDelta } from '@/lib/actions/story-entries/classifier-facts'
+import { ENTRIES_WINDOW_SIZE } from '@/lib/actions/story-entries/recent-window'
 import { deltas, storyEntries, type Delta, type NewStoryEntry } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { ID_PATTERN, IdBiMap, SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
@@ -379,7 +380,10 @@ describe('seeded rollback', () => {
 
 // Over every row, never by entry position: seeded chapter boundaries can move.
 describe('seeded content tokens', () => {
-  type EntryRow = Pick<NewStoryEntry, 'id' | 'kind' | 'content' | 'contentTokens'>
+  type EntryRow = Pick<
+    NewStoryEntry,
+    'id' | 'branchId' | 'kind' | 'content' | 'contentTokens' | 'chapterId'
+  >
 
   function entries(): EntryRow[] {
     return rowsOf('story_entries') as EntryRow[]
@@ -392,6 +396,14 @@ describe('seeded content tokens', () => {
       expect(entry.contentTokens, entry.id).toBe(countTokens(entry.content))
       expect(entry.contentTokens, entry.id).toBeGreaterThan(0)
     }
+  })
+
+  // e2e/tests/chapter-progress.spec.ts proves the strip reads past the reader's window here.
+  it('seeds the rich story past the reader window', () => {
+    const open = entries().filter(
+      (e) => e.branchId === 'br_rich_main' && e.kind !== 'system' && e.chapterId == null,
+    )
+    expect(open.length).toBeGreaterThan(ENTRIES_WINDOW_SIZE)
   })
 
   it('leaves system rows uncounted, as writeSystemEntry does', () => {
