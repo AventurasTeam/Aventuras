@@ -141,6 +141,10 @@ device with no camera. A camera that cannot start opens the code screen.
 The token is what authorises requests, and it is a fresh UUID each time a server starts, so a code
 stops working with its session. It is encoded, not encrypted: treat it as a temporary password.
 
+The host's connected screen has **Back** alongside **Finish**. Back returns to the pairing screen
+with the server still running, so the same code reconnects a device that dropped its session. Finish
+stops the server.
+
 After pasting a code, **Change address** overrides the address and port. The server takes its
 address from `local_ip`, which can pick the wrong interface on a host with a VPN or several
 networks. An override changes only where the client connects; the token still decides whether it is

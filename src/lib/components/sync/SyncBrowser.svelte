@@ -200,6 +200,7 @@
     currentPrefs.statuses.length === NEEDS_ACTION.length &&
       NEEDS_ACTION.every((s) => currentPrefs.statuses.includes(s)),
   )
+  const isEverything = $derived(STATUS_ORDER.every((s) => currentPrefs.statuses.includes(s)))
 
   /** Runs one transfer, then re-reads both devices so the row shows its real status. */
   async function transfer(row: SyncRow, work: (name: SyncSection) => Promise<string | void>) {
@@ -457,7 +458,10 @@
       >
         Needs action
       </Button>
-      <Button variant="outline" onclick={() => updatePrefs({ statuses: [...STATUS_ORDER] })}>
+      <Button
+        variant={isEverything ? 'default' : 'outline'}
+        onclick={() => updatePrefs({ statuses: [...STATUS_ORDER] })}
+      >
         Everything
       </Button>
     </div>
@@ -565,17 +569,21 @@
       <div class="flex flex-col gap-2">
         {#if row.action === 'resolve' || row.action === 'choose'}
           <Button variant="outline" class="h-auto flex-col py-2" onclick={() => send(row)}>
-            Keep this device's version
-            <span class="text-xs font-normal opacity-80">Send it; replaces the remote version</span>
+            Send to replace
+            <span class="text-xs font-normal break-words whitespace-normal opacity-80">
+              Replaces the remote device's version
+            </span>
           </Button>
           <Button variant="outline" class="h-auto flex-col py-2" onclick={() => get(row)}>
-            Keep the remote device's version
-            <span class="text-xs font-normal opacity-80">Get it; replaces this device's</span>
+            Get and replace
+            <span class="text-xs font-normal break-words whitespace-normal opacity-80">
+              Replaces this device's version
+            </span>
           </Button>
           <Button variant="outline" class="h-auto flex-col py-2" onclick={() => keepBoth(row)}>
-            Keep both
+            Get as a copy
             <span class="text-xs font-normal break-words whitespace-normal opacity-80">
-              Get it as a separate copy
+              Keeps both versions <strong class="font-semibold">on this device</strong>
             </span>
           </Button>
         {:else}

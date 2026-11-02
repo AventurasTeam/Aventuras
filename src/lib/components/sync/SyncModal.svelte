@@ -497,6 +497,13 @@
     }
   }
 
+  // The server keeps running, so the code on screen still pairs. A peer still connected returns
+  // here with its next request.
+  function showPairing() {
+    connectedPeer = null
+    syncMessage = null
+  }
+
   function renameDevice(name: string) {
     if (self) self = { ...self, name }
     void renameSelf(name)
@@ -816,7 +823,10 @@
             {#if syncMessage}
               <p class="text-muted-foreground break-words">{syncMessage}</p>
             {/if}
-            <Button class="mt-6" onclick={close}>Finish</Button>
+            <div class="mt-6 flex gap-3">
+              <Button variant="outline" onclick={showPairing}>Back</Button>
+              <Button onclick={close}>Finish</Button>
+            </div>
           </div>
         {:else if serverInfo}
           {#if self}
