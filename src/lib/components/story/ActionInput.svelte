@@ -1297,6 +1297,8 @@
     activeAbortController?.abort()
     ui.endStreaming()
     ui.setGenerating(false)
+    // The stopped turn kept none of its activations, so the next one runs retrieval again.
+    ui.setLastRetrievalResult(null)
   }
 
   async function handleRetry() {

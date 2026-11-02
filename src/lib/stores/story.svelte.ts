@@ -1028,6 +1028,9 @@ class StoryStore {
 
     // Reload entries into the store
     await this.reloadEntriesForCurrentBranch()
+    // Both describe entries the import replaced.
+    ui.clearRetryBackup(true)
+    this.invalidateRetrievalCache()
 
     // The chat is the story's new start. What follows before the next turn — the world-state
     // choice, batch chapterization — belongs to the last imported entry's state.
