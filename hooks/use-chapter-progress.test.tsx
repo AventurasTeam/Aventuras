@@ -107,12 +107,13 @@ function deferredRead() {
 
 let latest: ChapterProgress | null = null
 
-function Probe({ storyId = 's1' }: { storyId?: string | null; nonce?: number }) {
+function Probe({ storyId }: { storyId: string | null | undefined; nonce?: number }) {
   latest = useChapterProgress(storyId)
   return null
 }
 
-function renderProbe(storyId?: string | null) {
+// An options object, so an explicit undefined reaches the hook instead of tripping a default.
+function renderProbe({ storyId }: { storyId: string | null | undefined } = { storyId: 's1' }) {
   const client = createQueryClient()
   const view = (nonce: number) => (
     <QueryClientProvider client={client}>
@@ -155,12 +156,18 @@ describe('useChapterProgress', () => {
   it('reads as zeros with no read for another story, and no story, while one is open', async () => {
     openStory()
 
-    renderProbe('s2')
+    renderProbe({ storyId: 's2' })
     await act(async () => {})
     expect(latest).toEqual({ ...ZEROS, threshold: 0 })
     cleanup()
 
-    renderProbe(null)
+    renderProbe({ storyId: null })
+    await act(async () => {})
+    expect(latest).toEqual({ ...ZEROS, threshold: 0 })
+    cleanup()
+
+    // The reader passes undefined until its hydration succeeds.
+    renderProbe({ storyId: undefined })
     await act(async () => {})
     expect(latest).toEqual({ ...ZEROS, threshold: 0 })
     expect(reads.series).not.toHaveBeenCalled()
@@ -321,8 +328,8 @@ describe('useChapterProgress', () => {
 
     render(
       <QueryClientProvider client={createQueryClient()}>
-        <Probe />
-        <Probe />
+        <Probe storyId="s1" />
+        <Probe storyId="s1" />
       </QueryClientProvider>,
     )
 
