@@ -120,7 +120,7 @@ Once every conflict is resolved, `git commit` finishes the merge.
 ## 5. Coming from an older export
 
 Folders exported by Aventuras before format 2 look different. The first export into such a folder
-brings it up to date, and the confirmation lists everything it is about to change:
+brings it up to date, and the confirmation says what it is about to change:
 
 - every prompt moves into a numbered group folder, `Analysis/` becoming `02 Analysis/`, so the
   folders sort in the order the pack editor lists them. git records these as renames, and the old
@@ -129,8 +129,8 @@ brings it up to date, and the confirmation lists everything it is about to chang
 - a `README.md` of your own is renamed to `README_user.md`, never overwritten;
 - `_reference/` loses `template-variables.md` and `template-status.md`, and gains `version.md`.
 
-The list of deleted files in that confirmation is long, often around eighty entries. That is
-expected once: the same prompts are written back in their new folders by the same export.
+The confirmation counts the prompts that move rather than listing them, and lists only the files
+that are really going away. A prompt your pack no longer has is in that list, not in the count.
 
 ## 6. What is in an exported folder
 

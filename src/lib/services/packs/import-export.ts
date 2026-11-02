@@ -17,7 +17,7 @@ import {
   buildTree,
   folderOrigin,
   planFolderChanges,
-  type FileRename,
+  type FolderChanges,
   type Tree,
 } from './directory/tree'
 
@@ -43,13 +43,9 @@ export interface ImportValidationResult {
 export type ConflictStrategy = 'rename' | 'cancel'
 
 /** An export worked out but not yet written, so the user can be asked about an unfamiliar folder. */
-export interface DirectoryExportPlan {
+export interface DirectoryExportPlan extends FolderChanges {
   root: string
   tree: Tree
-  /** Template and reference files of a previous export that this one no longer writes. */
-  prunePaths: string[]
-  /** Files the user owns that would otherwise be overwritten, moved aside first. */
-  renames: FileRename[]
   /** The folder carries a `pack.yaml` this version can parse, so it is a tree we own. */
   isKnownExport: boolean
   /**
@@ -124,6 +120,7 @@ class ImportExportService {
         root,
         tree,
         prunePaths: [],
+        movedPaths: [],
         renames: [],
         isKnownExport: false,
         needsConfirmation: true,
@@ -140,12 +137,13 @@ class ImportExportService {
       )
     }
     const isKnownExport = origin !== 'foreign'
-    const { prunePaths, renames } = planFolderChanges(existingPaths, tree, origin)
+    const { prunePaths, movedPaths, renames } = planFolderChanges(existingPaths, tree, origin)
 
     return {
       root,
       tree,
       prunePaths,
+      movedPaths,
       renames,
       isKnownExport,
       needsConfirmation:

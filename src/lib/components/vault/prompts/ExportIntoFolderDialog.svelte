@@ -13,13 +13,16 @@
 
   let { plan, onConfirm, onCancel }: Props = $props()
 
-  let removals = $derived(plan?.prunePaths ?? [])
+  let moves = $derived(plan?.movedPaths ?? [])
+  let removals = $derived((plan?.prunePaths ?? []).filter((path) => !moves.includes(path)))
   let renames = $derived(plan?.renames ?? [])
 
   let title = $derived.by(() => {
-    if (removals.length > 0 && renames.length > 0) return 'Rename and delete files in this folder?'
+    const kinds = [moves, removals, renames].filter((list) => list.length > 0).length
+    if (kinds > 1) return 'Update this folder?'
     if (removals.length > 0) return 'Delete files no longer in this pack?'
     if (renames.length > 0) return 'Rename a file in this folder?'
+    if (moves.length > 0) return 'Move prompts into their new folders?'
     return 'Export into this folder?'
   })
 </script>
@@ -47,8 +50,16 @@
       </ResponsiveModal.Description>
     </ResponsiveModal.Header>
 
-    {#if renames.length > 0 || removals.length > 0}
+    {#if moves.length > 0 || renames.length > 0 || removals.length > 0}
       <div class="flex flex-col gap-4 px-6 py-4">
+        {#if moves.length > 0}
+          <p class="text-sm">
+            {moves.length === 1
+              ? '1 prompt moves into its new folder.'
+              : `${moves.length} prompts move into their new folders.`}
+          </p>
+        {/if}
+
         {#if renames.length > 0}
           <div class="flex flex-col gap-1">
             <p class="text-sm font-medium">

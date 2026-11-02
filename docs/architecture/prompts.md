@@ -223,6 +223,10 @@ since Linux can hold several. Renames run before the write, through `plugin-fs`'
 confirmation lists them beside the deletions. A folder emptied by the prune is removed after it, so a
 migrated tree keeps no unnumbered group folders. Import reads both formats.
 
+A pruned template file whose id the tree writes again is a **move**, by the same rule that makes the
+filename the identity, so the confirmation counts moves in one line and lists only what is really going.
+Listed among the deletions, a migration's ~80 moves would bury the one prompt a pack actually dropped.
+
 An export into a tree a **newer** format wrote is refused, as an import of one is. Treating it as a
 stranger's folder would rename that version's own `README.md` as the user's and downgrade `pack.yaml`.
 

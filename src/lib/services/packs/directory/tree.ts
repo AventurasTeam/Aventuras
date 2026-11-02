@@ -18,6 +18,7 @@ import {
   VERSION_FILE,
   classifyPath,
   isWritableTemplateId,
+  templateIdFromPath,
   templatePath,
 } from './layout'
 import { gitattributesDoc, readmeDoc, variablesDoc, versionDoc } from './reference'
@@ -178,8 +179,21 @@ export interface FileRename {
 /** What an export does to a folder's existing files besides overwriting the ones it writes. */
 export interface FolderChanges {
   prunePaths: string[]
+  /** The part of `prunePaths` whose template the tree writes again in another folder: moved, not lost. */
+  movedPaths: string[]
   /** Applied before the tree is written, so the export's own file can take the old name. */
   renames: FileRename[]
+}
+
+/** Pruned template files whose id the tree still writes, which is what makes them a move. */
+function movedTemplatePaths(prunePaths: string[], tree: Tree): string[] {
+  const writtenIds = new Set(
+    [...tree.keys()].map((path) => templateIdFromPath(path)?.toLowerCase()),
+  )
+  return prunePaths.filter((path) => {
+    const templateId = templateIdFromPath(path)
+    return templateId !== null && writtenIds.has(templateId.toLowerCase())
+  })
 }
 
 /** Every root path spelling `name`, compared without case: one file on Windows and macOS, several on Linux. */
@@ -209,9 +223,11 @@ export function planFolderChanges(
   const paths = existingPaths.map(normalizePath)
   const prunePaths = origin === 'foreign' ? [] : planPrune(paths, tree)
   if (origin === 'earlier') prunePaths.push(...findRootFiles(paths, ABOUT_FILE))
+  const sorted = prunePaths.toSorted()
 
   return {
-    prunePaths: prunePaths.toSorted(),
+    prunePaths: sorted,
+    movedPaths: movedTemplatePaths(sorted, tree),
     renames: origin === 'current' ? [] : planReadmeRenames(paths),
   }
 }

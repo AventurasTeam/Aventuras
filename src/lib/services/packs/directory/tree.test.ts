@@ -204,6 +204,25 @@ describe('planFolderChanges', () => {
     )
   })
 
+  it('tells templates that move to a numbered folder from files that are gone', () => {
+    const { movedPaths } = planFolderChanges(formatOne, tree, 'earlier')
+    expect(movedPaths).toEqual([
+      'Other/retired-prompt.md',
+      'Story Generation/adventure-user.md',
+      'Story Generation/adventure.md',
+    ])
+  })
+
+  it('still counts a template the pack no longer has as deleted, not moved', () => {
+    const { prunePaths, movedPaths } = planFolderChanges(
+      [...tree.keys(), '02 Analysis/dropped-prompt.md'],
+      tree,
+      'current',
+    )
+    expect(prunePaths).toEqual(['02 Analysis/dropped-prompt.md'])
+    expect(movedPaths).toEqual([])
+  })
+
   it('takes the next free name when README_user.md is taken', () => {
     const taken = [...formatOne, 'readme_user.md', 'README_user_2.md']
     expect(planFolderChanges(taken, tree, 'earlier').renames).toEqual([
