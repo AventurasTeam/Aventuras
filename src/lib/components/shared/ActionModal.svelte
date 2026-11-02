@@ -114,6 +114,8 @@
   let bodyScroller = $state<HTMLDivElement | null>(null)
   let jump = $state<JumpState>({ long: false, atTop: true, atBottom: false })
   let tallestScroller = 0
+  /** The width `tallestScroller` was measured at; the other width uses the other scroller. */
+  let measuredWide: boolean | null = null
   const KEYBOARD_CLOSE_MS = 600
   /** Hides the buttons through a jump, which can move them by the height of the footer. */
   let jumping = $state(false)
@@ -132,6 +134,10 @@
     if (!el) {
       setJump({ long: false, atTop: true, atBottom: false })
       return
+    }
+    if (wide.current !== measuredWide) {
+      measuredWide = wide.current
+      tallestScroller = 0
     }
     tallestScroller = Math.max(tallestScroller, el.clientHeight)
     setJump(
