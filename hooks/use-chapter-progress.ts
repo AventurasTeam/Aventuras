@@ -1,5 +1,5 @@
 import { skipToken, useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { chapterProgressOf, type ChapterProgress } from '@/lib/chapters'
 import { db, openRegionSeries, type OpenRegionRow } from '@/lib/db'
@@ -11,6 +11,19 @@ import { useBranchTailId } from './use-branch-tail-id'
 type ShownRead = { branchId: string; series: readonly OpenRegionRow[] }
 
 const EMPTY_SERIES: readonly OpenRegionRow[] = []
+
+// Logs from the shared fetch, since every mounted observer receives the same error.
+async function readSeries(branchId: string): Promise<OpenRegionRow[]> {
+  try {
+    return await openRegionSeries(branchId, { db })
+  } catch (error) {
+    logger.warn('app.chapter_progress_read_failed', {
+      branchId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
+}
 
 /**
  * Progress of `storyId`'s open region, zeros with `canClose` false when that story isn't the open
@@ -29,9 +42,9 @@ export function useChapterProgress(storyId: string | null | undefined): ChapterP
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
   const tailId = useBranchTailId(branchId)
 
-  const { data, error } = useQuery({
+  const { data } = useQuery({
     queryKey: ['chapter-progress', branchId, settleCount, tailId],
-    queryFn: branchId == null ? skipToken : () => openRegionSeries(branchId, { db }),
+    queryFn: branchId == null ? skipToken : () => readSeries(branchId),
     // Local DB read, not a flaky network call — a failure is worth logging, not retrying.
     retry: false,
     gcTime: 30_000,
@@ -47,14 +60,6 @@ export function useChapterProgress(storyId: string | null | undefined): ChapterP
     shown = { branchId, series: data }
   }
   if (shown !== lastRead) setLastRead(shown)
-
-  useEffect(() => {
-    if (error == null) return
-    logger.warn('app.chapter_progress_read_failed', {
-      branchId,
-      error: error instanceof Error ? error.message : String(error),
-    })
-  }, [error, branchId])
 
   return useMemo(
     () => chapterProgressOf(shown?.series ?? EMPTY_SERIES, threshold),

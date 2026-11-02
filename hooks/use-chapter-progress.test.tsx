@@ -313,6 +313,27 @@ describe('useChapterProgress', () => {
     warnSpy.mockRestore()
   })
 
+  // The reader stays mounted, hidden, under the routes that show their own strip.
+  it('logs a failed read once across mounted instances', async () => {
+    openStory()
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    reads.series.mockRejectedValue(new Error('boom'))
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <Probe />
+        <Probe />
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(warnSpy).toHaveBeenCalled())
+    await act(async () => {})
+    expect(reads.series).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+
+    warnSpy.mockRestore()
+  })
+
   it('reads as zeros when the first read fails, and never retries', async () => {
     openStory()
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
