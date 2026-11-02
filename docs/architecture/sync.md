@@ -1,7 +1,7 @@
 # Local network sync
 
-Two devices on one network pair with a QR code. The one showing the code runs a server; the one
-that scanned it, the client, drives everything. Sync carries five sections: stories, characters,
+Two devices on one network pair with a QR code or a connection code. The one showing it runs a
+server; the one that scanned or entered it, the client, drives everything. Sync carries five sections: stories, characters,
 lorebooks, scenarios and prompt packs.
 
 Code lives in `src-tauri/src/sync/` (the server and its protocol), `services/sync/` (status, rows,
@@ -51,7 +51,7 @@ compares as 0.
 
 ## Edits are counted by triggers
 
-Migration 044 puts triggers on every story, vault and pack table. A write method in `database.ts`
+Migration 045 puts triggers on every story, vault and pack table. A write method in `database.ts`
 cannot forget them, which is how `stories.updated_at` used to go wrong, and they fire whichever
 connection writes.
 
@@ -93,11 +93,16 @@ Replacing a version that holds edits the incoming one lacks gives `max(mine, the
 the resolving device. The result outranks both, so a discarded version on a third device reads as
 older.
 
-A send records nothing locally, resolved or not. A push only reaches a queue, and the receiver can
-refuse it, so a resolved vector kept at send time would outrank edits this device has never seen:
-the row would read as newer here, and a plain Send would overwrite them without asking. The client
-remembers what it sent, and when a listing shows the other device holding that vector, it adopts it
-and stamps the last sync. Until then the row keeps its status.
+A send records nothing locally, resolved or not. The receiver can refuse a push, so a resolved
+vector kept at send time would outrank edits this device has never seen: the row would read as newer
+here, and a plain Send would overwrite them without asking. The client remembers what it sent, and
+when a listing shows the other device holding that vector, it adopts it and stamps the last sync.
+Until then the row keeps its status.
+
+The push request stays open until the receiver applies the item (`applied`) or declines it
+(`declined`), so the sender re-reads the section once, when there is something to see, and nothing
+polls. A receiver may be across the room, so after `WEBVIEW_TIMEOUT` the server replies `waiting`
+and keeps the item queued. A later answer has no one to reach; the sender's next listing shows it.
 
 After a pull the client sends `settleVector` with the vector it replaced and the one it ended with,
 and the server adopts the new one only if its own still matches. That is the only point the server
@@ -111,7 +116,8 @@ Rust holds no data. A `list`, `pull` or `settleVector` request is emitted as `sy
 a request ID, and the handler waits on a oneshot until `sync_respond` arrives, up to
 `WEBVIEW_TIMEOUT`. Client timeouts are longer, so the server's message is the one reported. Nothing
 is exported up front, so a listing is always current and carries no content. Pushes go to a queue
-the receiving modal polls, because the receiver may need to ask its user something.
+the receiving modal polls, because the receiver may need to ask its user something. Each queued item
+carries its request ID, and the answer comes back through `sync_respond` the same way.
 
 Items travel in a `SyncEnvelope`: section, sync ID, vector, `updatedAt`, name, and `document`, the
 item's existing export as text. On the wire the header is one JSON line and the document follows
@@ -126,9 +132,23 @@ The protocol is versioned by `PROTOCOL_VERSION`, carried in the QR code and in e
 different version refuses to sync, because keeping an older peer working would keep the preload and
 title matching alive.
 
+## Pairing
+
+A QR code and a connection code hold the same thing: address, port, token, app version and protocol
+version. The connection code is that JSON as one line of text, `av1-` plus URL-safe base64, for a
+device with no camera. A camera that cannot start opens the code screen.
+
+The token is what authorises requests, and it is a fresh UUID each time a server starts, so a code
+stops working with its session. It is encoded, not encrypted: treat it as a temporary password.
+
+After pasting a code, **Change address** overrides the address and port. The server takes its
+address from `local_ip`, which can pick the wrong interface on a host with a VPN or several
+networks. An override changes only where the client connects; the token still decides whether it is
+let in.
+
 ## Device identity
 
-The self row in `sync_device` is created by migration 044, so triggers can read it before any
+The self row in `sync_device` is created by migration 045, so triggers can read it before any
 frontend code runs. The name defaults to a platform label and can be changed on the QR and scan
 screens. It is not in the QR code, which a rename would leave stale: the server's name comes back in
 listings and the client's goes in every request.

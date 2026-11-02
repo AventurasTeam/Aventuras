@@ -66,7 +66,7 @@ mod tests {
 
     async fn schema() -> SqlitePool {
         let pool = memory_pool().await;
-        run_migrations(&pool, 0, 44).await;
+        run_migrations(&pool, 0, 45).await;
         exec(&pool, "UPDATE sync_device SET device_id = 'me'").await;
         pool
     }
@@ -114,7 +114,7 @@ mod tests {
     #[tokio::test]
     async fn the_migration_creates_one_self_device() {
         let pool = memory_pool().await;
-        run_migrations(&pool, 0, 44).await;
+        run_migrations(&pool, 0, 45).await;
         let rows: Vec<String> =
             sqlx::query_scalar("SELECT device_id FROM sync_device WHERE is_self = 1")
                 .fetch_all(&pool)
@@ -138,7 +138,7 @@ mod tests {
                ('c', 'new', 'narration', '', 0, 100);",
         )
         .await;
-        run_migrations(&pool, 43, 44).await;
+        run_migrations(&pool, 43, 45).await;
         let rows = sqlx::query("SELECT id, updated_at FROM stories")
             .fetch_all(&pool)
             .await

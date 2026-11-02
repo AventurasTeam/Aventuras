@@ -13,6 +13,7 @@ import { compareVectors } from './vectors'
 /** Most in need of attention first. */
 export const STATUS_ORDER: readonly SyncStatus[] = [
   'changedOnBoth',
+  'sameName',
   'newerThere',
   'newerHere',
   'onlyThere',
@@ -23,13 +24,14 @@ export const STATUS_ORDER: readonly SyncStatus[] = [
 export const NEEDS_ACTION: readonly SyncStatus[] = STATUS_ORDER.filter((s) => s !== 'inSync')
 
 export const DEFAULT_LIST_PREFS: SyncListPrefs = {
-  statuses: [...NEEDS_ACTION],
+  statuses: [...STATUS_ORDER],
   sort: 'status',
   reversed: false,
 }
 
 const ACTIONS: Record<SyncStatus, SyncRowAction> = {
-  changedOnBoth: 'choose',
+  changedOnBoth: 'resolve',
+  sameName: 'choose',
   newerThere: 'get',
   newerHere: 'send',
   onlyThere: 'get',
@@ -42,14 +44,12 @@ function row(
   local: SyncLocalItem | null,
   remote: SyncListItem | null,
   peerId: string,
-  sameNameOnly = false,
 ): SyncRow {
   return {
     key: local ? `here:${local.localId}` : `there:${remote?.localId}`,
     name: local?.name ?? remote?.name ?? '',
     status,
     action: ACTIONS[status],
-    sameNameOnly,
     local,
     remote,
     lastSyncedAt: local?.lastSynced[peerId] ?? null,
@@ -109,7 +109,7 @@ export function buildRows(
     const remote = remoteByKey.get(key)
     if (remote && (!local.syncId || !remote.syncId)) {
       paired.add(local).add(remote)
-      rows.push(row('changedOnBoth', local, remote, peerId, true))
+      rows.push(row('sameName', local, remote, peerId))
     }
   }
 
@@ -147,7 +147,7 @@ const COMPARATORS: Record<SyncSort, (a: SyncRow, b: SyncRow) => number> = {
 export function sortRows(rows: SyncRow[], sort: SyncSort, reversed: boolean): SyncRow[] {
   const direction = reversed ? -1 : 1
   const compare = COMPARATORS[sort]
-  return [...rows].sort((a, b) => {
+  return rows.toSorted((a, b) => {
     if (sort === 'lastSynced' && (a.lastSyncedAt === null) !== (b.lastSyncedAt === null)) {
       return a.lastSyncedAt === null ? 1 : -1
     }

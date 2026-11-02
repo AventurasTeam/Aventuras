@@ -32,7 +32,7 @@ pub struct SyncRequest {
 
 /// Actions that can be performed on the sync server.
 ///
-/// Sections and payloads are opaque here: everything but a push is answered by the webview.
+/// Sections and payloads are opaque here: the webview answers them all.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(
     tag = "type",
@@ -44,7 +44,7 @@ pub enum SyncAction {
     List { section: String },
     /// Fetch one item
     Pull { section: String, local_id: String },
-    /// Hand over one item, held for the receiver to apply
+    /// Hand over one item, held until the receiver applies or declines it
     Push { payload: String },
     /// Adopt a resolved vector, for content both devices already hold
     SettleVector {
@@ -61,8 +61,6 @@ pub enum SyncAction {
 pub enum SyncResponse {
     /// The webview's answer, as JSON text
     Reply { data: String },
-    /// Operation succeeded
-    Success { message: String },
     /// Operation failed
     Error { message: String },
 }
@@ -80,6 +78,7 @@ pub struct WebviewRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReceivedItem {
+    pub request_id: String,
     pub peer: SyncPeer,
     pub payload: String,
 }

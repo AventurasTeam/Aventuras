@@ -18,6 +18,7 @@ import type {
   SyncListing,
   SyncListPrefs,
   SyncPeer,
+  SyncPushOutcome,
   SyncSection,
   SyncVector,
   SyncWebviewRequest,
@@ -156,7 +157,7 @@ export async function fetchListing(
   section: SyncSection,
 ): Promise<SyncListing> {
   const reply = await syncService.request(connection, self, { type: 'list', section })
-  const listing: SyncListing = JSON.parse(reply ?? 'null')
+  const listing: SyncListing = JSON.parse(reply)
   await database.transaction([
     rememberDeviceStatement(listing.device.deviceId, listing.device.name),
   ])
@@ -167,9 +168,9 @@ export async function fetchListing(
  * Sends an item. `theirs` is the other device's vector for this item, when sending replaces a
  * version with edits this one lacks.
  *
- * Nothing is recorded here: the receiver can still refuse, and a resolved vector kept for a send
- * that never landed would outrank edits this device has not seen. Returns what `confirmSends`
- * looks for in a later listing.
+ * Waits for the receiver's answer. Nothing is recorded here: it can still refuse, and a resolved
+ * vector kept for a send that never landed would outrank edits this device has not seen. Returns
+ * what `confirmSends` looks for in a later listing.
  */
 export async function sendItem(
   connection: SyncConnectionData,
@@ -178,7 +179,7 @@ export async function sendItem(
   localId: string,
   tracking: ExportTracking,
   theirs: SyncVector | null,
-): Promise<{ syncId: string; vector: SyncVector }> {
+): Promise<{ syncId: string; vector: SyncVector; outcome: SyncPushOutcome }> {
   const record = await identified(section, localId, self.deviceId)
   const { syncId } = record
   const vector =
@@ -187,11 +188,12 @@ export async function sendItem(
       : record.vector
 
   const envelope = await envelopeFor(section, localId, tracking, syncId, vector)
-  await syncService.request(connection, self, {
+  const reply = await syncService.request(connection, self, {
     type: 'push',
     payload: encodeEnvelope(envelope),
   })
-  return { syncId, vector }
+  const outcome = reply === 'applied' || reply === 'declined' ? reply : 'waiting'
+  return { syncId, vector, outcome }
 }
 
 /** Records sends the other device's listing shows it has applied. */
@@ -241,7 +243,7 @@ export async function pullEnvelope(
     section,
     localId: remoteId,
   })
-  return decodeEnvelope(reply ?? '')
+  return decodeEnvelope(reply)
 }
 
 /** Tells the other device the item landed, and the vector both should now hold. */

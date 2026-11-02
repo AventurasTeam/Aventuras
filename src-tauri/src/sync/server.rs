@@ -17,6 +17,9 @@ use super::types::{
 /// How long a request waits on the webview. Clients must allow longer.
 pub const WEBVIEW_TIMEOUT: Duration = Duration::from_secs(60);
 
+/// A push's reply when its receiver has not answered in time. The item stays queued.
+const PUSH_UNANSWERED: &str = "waiting";
+
 const UPDATE_NEEDED: &str = "This device is on a different sync version. Update both devices.";
 
 type Pending = Arc<Mutex<HashMap<String, oneshot::Sender<Result<String, String>>>>>;
@@ -49,11 +52,31 @@ impl ServerState {
         }
     }
 
-    /// Ask the webview, waiting up to the timeout.
-    async fn ask_webview(&self, peer: SyncPeer, action: SyncAction) -> Result<String, String> {
+    async fn register(&self) -> (String, oneshot::Receiver<Result<String, String>>) {
         let request_id = Uuid::new_v4().to_string();
         let (tx, rx) = oneshot::channel();
         self.pending.lock().await.insert(request_id.clone(), tx);
+        (request_id, rx)
+    }
+
+    /// The webview's answer, or None once the timeout passes.
+    async fn wait(
+        &self,
+        request_id: &str,
+        rx: oneshot::Receiver<Result<String, String>>,
+    ) -> Option<Result<String, String>> {
+        let answer = tokio::time::timeout(self.timeout, rx).await;
+        self.pending.lock().await.remove(request_id);
+        match answer {
+            Ok(Ok(result)) => Some(result),
+            Ok(Err(_)) => Some(Err("The other device dropped the request".to_string())),
+            Err(_) => None,
+        }
+    }
+
+    /// Ask the webview, waiting up to the timeout.
+    async fn ask_webview(&self, peer: SyncPeer, action: SyncAction) -> Result<String, String> {
+        let (request_id, rx) = self.register().await;
 
         let sent = (self.emit)(WebviewRequest {
             request_id: request_id.clone(),
@@ -65,13 +88,22 @@ impl ServerState {
             return Err(e);
         }
 
-        let answer = tokio::time::timeout(self.timeout, rx).await;
-        self.pending.lock().await.remove(&request_id);
-        match answer {
-            Ok(Ok(result)) => result,
-            Ok(Err(_)) => Err("The other device dropped the request".to_string()),
-            Err(_) => Err("The other device did not answer in time".to_string()),
-        }
+        self.wait(&request_id, rx)
+            .await
+            .unwrap_or_else(|| Err("The other device did not answer in time".to_string()))
+    }
+
+    /// Queue a pushed item and wait for its receiver's answer.
+    async fn receive(&self, peer: SyncPeer, payload: String) -> Result<String, String> {
+        let (request_id, rx) = self.register().await;
+        self.received.lock().await.push(ReceivedItem {
+            request_id: request_id.clone(),
+            peer,
+            payload,
+        });
+        self.wait(&request_id, rx)
+            .await
+            .unwrap_or_else(|| Ok(PUSH_UNANSWERED.to_string()))
     }
 
     /// Hand the webview's answer to the waiting request. A late answer has no one to reach.
@@ -136,20 +168,13 @@ async fn respond(state: &ServerState, body: serde_json::Value) -> SyncResponse {
         };
     }
 
-    match request.action {
-        SyncAction::Push { payload } => {
-            state.received.lock().await.push(ReceivedItem {
-                peer: request.peer,
-                payload,
-            });
-            SyncResponse::Success {
-                message: "Item received successfully".to_string(),
-            }
-        }
-        action => match state.ask_webview(request.peer, action).await {
-            Ok(data) => SyncResponse::Reply { data },
-            Err(message) => SyncResponse::Error { message },
-        },
+    let answer = match request.action {
+        SyncAction::Push { payload } => state.receive(request.peer, payload).await,
+        action => state.ask_webview(request.peer, action).await,
+    };
+    match answer {
+        Ok(data) => SyncResponse::Reply { data },
+        Err(message) => SyncResponse::Error { message },
     }
 }
 
@@ -258,16 +283,41 @@ mod tests {
         );
     }
 
+    fn push() -> serde_json::Value {
+        request(json!({ "type": "push", "payload": "{}" }))
+    }
+
     #[tokio::test]
-    async fn a_push_is_queued_with_its_sender() {
+    async fn a_push_is_queued_and_answered_by_its_receiver() {
         let (state, seen) = silent_server();
-        let body = request(json!({ "type": "push", "payload": "{}" }));
-        assert!(matches!(
-            respond(&state, body).await,
-            SyncResponse::Success { .. }
-        ));
-        let received = state.received.lock().await;
-        assert_eq!(received[0].peer.name, "Phone");
+        let pushing = state.clone();
+        let request = tokio::spawn(async move { respond(&pushing, push()).await });
+
+        let id = loop {
+            if let Some(item) = state.received.lock().await.first() {
+                assert_eq!(item.peer.name, "Phone");
+                break item.request_id.clone();
+            }
+            tokio::task::yield_now().await;
+        };
+        state.answer(&id, Ok("applied".to_string())).await;
+
+        match request.await.unwrap() {
+            SyncResponse::Reply { data } => assert_eq!(data, "applied"),
+            other => panic!("expected a reply, got {other:?}"),
+        }
         assert!(seen.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn an_unanswered_push_stays_queued() {
+        let (mut state, _) = silent_server();
+        state.timeout = Duration::from_millis(10);
+        match respond(&state, push()).await {
+            SyncResponse::Reply { data } => assert_eq!(data, PUSH_UNANSWERED),
+            other => panic!("expected a reply, got {other:?}"),
+        }
+        assert_eq!(state.received.lock().await.len(), 1);
+        assert!(state.pending.lock().await.is_empty());
     }
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { SyncListItem, SyncLocalItem, SyncRow } from '#lib/types/sync.ts'
 import {
   DEFAULT_LIST_PREFS,
+  NEEDS_ACTION,
   buildRows,
   countByStatus,
   formatAgo,
@@ -43,6 +44,16 @@ describe('buildRows', () => {
     expect(rows.map((r) => r.status).sort()).toEqual(['onlyHere', 'onlyThere'])
   })
 
+  it('resolves a real conflict', () => {
+    const [row] = buildRows(
+      'stories',
+      [local('Both', shared('s', { a: 2 }))],
+      [remote('Both', shared('s', { a: 1, b: 1 }))],
+      'peer',
+    )
+    expect(row).toMatchObject({ status: 'changedOnBoth', action: 'resolve' })
+  })
+
   it('suggests an action from the status', () => {
     const rows = buildRows(
       'characters',
@@ -56,13 +67,13 @@ describe('buildRows', () => {
   it('pairs a unique unsynced name into one row that asks', () => {
     const rows = buildRows('stories', [local('Keep')], [remote('Keep')], 'peer')
     expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({ status: 'changedOnBoth', action: 'choose', sameNameOnly: true })
+    expect(rows[0]).toMatchObject({ status: 'sameName', action: 'choose' })
   })
 
   it('pairs when only one side has an identity', () => {
     const rows = buildRows('stories', [local('Keep', shared('s', { a: 1 }))], [remote('Keep')], 'p')
     expect(rows).toHaveLength(1)
-    expect(rows[0].sameNameOnly).toBe(true)
+    expect(rows[0].status).toBe('sameName')
   })
 
   it('refuses to pair an ambiguous name', () => {
@@ -76,7 +87,7 @@ describe('buildRows', () => {
       [remote('Twin')],
       'peer',
     )
-    expect(rows.filter((r) => r.sameNameOnly)).toHaveLength(0)
+    expect(rows.filter((r) => r.status === 'sameName')).toHaveLength(0)
     expect(rows).toHaveLength(4)
   })
 
@@ -120,9 +131,16 @@ function sample(): SyncRow[] {
 }
 
 describe('viewRows', () => {
-  it('hides in-sync items by default, counts them, and puts conflicts first', () => {
+  it('shows everything by default, with conflicts first', () => {
     const view = viewRows(sample(), '', DEFAULT_LIST_PREFS)
-    expect(view.rows.map((r) => r.name)[0]).toBe('Conflict')
+    expect(view.rows[0].name).toBe('Conflict')
+    expect(view.rows.at(-1)?.status).toBe('inSync')
+    expect(view.hidden).toBe(0)
+  })
+
+  it('counts what a filter hides', () => {
+    const prefs = { ...DEFAULT_LIST_PREFS, statuses: [...NEEDS_ACTION] }
+    const view = viewRows(sample(), '', prefs)
     expect(view.rows.some((r) => r.status === 'inSync')).toBe(false)
     expect(view.hidden).toBe(1)
   })
@@ -132,7 +150,8 @@ describe('viewRows', () => {
   })
 
   it('counts only hidden items that match the search', () => {
-    expect(viewRows(sample(), 'zed', DEFAULT_LIST_PREFS).hidden).toBe(0)
+    const prefs = { ...DEFAULT_LIST_PREFS, statuses: [...NEEDS_ACTION] }
+    expect(viewRows(sample(), 'zed', prefs).hidden).toBe(0)
   })
 })
 

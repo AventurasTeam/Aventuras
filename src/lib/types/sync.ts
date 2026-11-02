@@ -65,9 +65,13 @@ export interface SyncEnvelope {
 
 /** A pushed item waiting on this device. */
 export interface SyncReceivedItem {
+  requestId: string
   peer: SyncPeer
   payload: string
 }
+
+/** How a push ended. `waiting`: the receiver did not answer in time, and may still accept. */
+export type SyncPushOutcome = 'applied' | 'declined' | 'waiting'
 
 export type SyncAction =
   | { type: 'list'; section: SyncSection }
@@ -100,9 +104,16 @@ export interface SyncConnectionData {
 }
 
 export type SyncStatus =
-  'changedOnBoth' | 'newerThere' | 'newerHere' | 'onlyThere' | 'onlyHere' | 'inSync'
+  | 'changedOnBoth'
+  /** The two copies share a name and have never synced. */
+  | 'sameName'
+  | 'newerThere'
+  | 'newerHere'
+  | 'onlyThere'
+  | 'onlyHere'
+  | 'inSync'
 
-export type SyncRowAction = 'send' | 'get' | 'choose' | null
+export type SyncRowAction = 'send' | 'get' | 'resolve' | 'choose' | null
 
 /** One item across both devices. */
 export interface SyncRow {
@@ -110,8 +121,6 @@ export interface SyncRow {
   name: string
   status: SyncStatus
   action: SyncRowAction
-  /** The two copies share a name and have never synced. */
-  sameNameOnly: boolean
   local: SyncLocalItem | null
   remote: SyncListItem | null
   lastSyncedAt: number | null

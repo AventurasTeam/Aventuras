@@ -23,6 +23,7 @@ export {
   storySyncRecord,
 } from './actions'
 export type { ApplyResult, ReceiveTarget } from './actions'
+export { decodeConnectionCode, encodeConnectionCode, isValidPort } from './connectionCode'
 export { decodeEnvelope } from './envelope'
 export { listLocalItems } from './sections'
 export {

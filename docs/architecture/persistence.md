@@ -19,7 +19,7 @@ The database, the native layer that moves bytes around it, and the settings blob
 - **Line endings matter**: `sqlx` checksums each migration file to detect drift, so migrations must use LF
   line endings on every platform. This is enforced by `.gitattributes` (forces `eol=lf` for
   `src-tauri/migrations/*.sql`) and by the `check_migrations` pre-commit hook below.
-- **A migration that rewrites rows must hold `sync_suspend`.** Migration 044 put triggers on every
+- **A migration that rewrites rows must hold `sync_suspend`.** Migration 045 put triggers on every
   story, vault and pack table that count edits for sync and stamp `stories.updated_at`. A rewrite
   would read as an edit on every device, so every synced item would show as changed on both after
   the update. SQLite cannot disable a trigger, so each one checks that table: insert a row at the

@@ -265,8 +265,14 @@ describe('sendItem', () => {
     const sent = await actions.sendItem(connection, self, 'characters', 'c', tracking, { pc: 4 })
 
     expect(pushed().vector).toEqual({ me: 3, pc: 4 })
-    expect(sent).toEqual({ syncId: 'sync-1', vector: { me: 3, pc: 4 } })
+    expect(sent).toMatchObject({ syncId: 'sync-1', vector: { me: 3, pc: 4 } })
     expect(vectorWrites()).toEqual([])
+  })
+
+  it.each(['applied', 'declined', 'waiting'])('reports the answer %s', async (reply) => {
+    sync.request.mockResolvedValueOnce(reply)
+    const sent = await actions.sendItem(connection, self, 'characters', 'c', tracking, null)
+    expect(sent.outcome).toBe(reply)
   })
 })
 

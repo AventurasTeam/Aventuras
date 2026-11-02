@@ -13,6 +13,7 @@ import type { PackBindingExport } from '../import'
 import { gatherPackBinding, NOT_VOUCHED, type ExportTracking } from '../export'
 import { marksForExport, recordsForExport } from '../stateTracking'
 import { database } from '../database'
+import { parseConnectionData } from './connectionCode'
 
 /** Sync alone names the pack's identity: it stays out of `.avt` files. */
 async function withPackSyncId(
@@ -59,13 +60,13 @@ class SyncService {
 
   /**
    * Send one request to a remote sync server
-   * @returns The remote webview's JSON, or null for a push
+   * @returns The remote webview's reply
    */
   async request(
     connection: SyncConnectionData,
     peer: SyncPeer,
     action: SyncAction,
-  ): Promise<string | null> {
+  ): Promise<string> {
     return invoke('sync_request', {
       ip: connection.ip,
       port: connection.port,
@@ -175,21 +176,9 @@ class SyncService {
    * Parse QR code data
    */
   parseQrCode(data: string): SyncConnectionData {
-    try {
-      const parsed = JSON.parse(data)
-      if (!parsed.ip || !parsed.port || !parsed.token) {
-        throw new Error('Missing required fields')
-      }
-      return {
-        ip: parsed.ip,
-        port: parsed.port,
-        token: parsed.token,
-        version: parsed.version, // May be undefined for older QR codes
-        protocol: parsed.protocol,
-      }
-    } catch {
-      throw new Error('Invalid QR code data')
-    }
+    const connection = parseConnectionData(data)
+    if (!connection) throw new Error('Invalid QR code data')
+    return connection
   }
 
   /**

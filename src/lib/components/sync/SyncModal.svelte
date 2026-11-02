@@ -10,6 +10,7 @@
     applyItem,
     applyStory,
     decodeEnvelope,
+    encodeConnectionCode,
     findReceiveTarget,
     loadSelf,
     renameSelf,
@@ -27,12 +28,15 @@
     SyncConnectionData,
     SyncEnvelope,
     SyncPeer,
+    SyncPushOutcome,
     SyncReceivedItem,
     SyncSection,
     SyncServerInfo,
     SyncWebviewRequest,
   } from '#lib/types/sync.ts'
   import SyncBrowser from './SyncBrowser.svelte'
+  import SyncCodeDisplay from './SyncCodeDisplay.svelte'
+  import SyncCodeEntry from './SyncCodeEntry.svelte'
   import SyncDeviceName from './SyncDeviceName.svelte'
   import { onDestroy, untrack } from 'svelte'
   import PackMappingDialog from '#lib/components/story/PackMappingDialog.svelte'
@@ -41,6 +45,7 @@
   import type { PackBindingContext, PackBindingResolution } from '#lib/services/import/index.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
   import { Card, CardHeader, CardTitle, CardDescription } from '#lib/components/ui/card/index.ts'
 
   /** Non-null only while a transfer is waiting on the user's pack choice. */
@@ -89,15 +94,20 @@
 
   // State
   let serverInfo = $state<SyncServerInfo | null>(null)
+  let connectionCode = $state<string | null>(null)
+  /** Which of the two pairing screens this side is on. */
+  let pairingView = $state<'visual' | 'code'>('visual')
+  let cameraNote = $state<string | null>(null)
   let connection = $state<SyncConnectionData | null>(null)
   let self = $state<SyncPeer | null>(null)
   let loading = $state(false)
   let error = $state<string | null>(null)
-  let syncSuccess = $state(false)
+  /** The device using this server. Requests are stateless, so it stays until the server stops. */
+  let connectedPeer = $state<SyncPeer | null>(null)
   let syncMessage = $state<string | null>(null)
 
   // State for receiving pushed items (when in generate mode)
-  let received = $state<{ envelope: SyncEnvelope; peer: SyncPeer } | null>(null)
+  let received = $state<{ envelope: SyncEnvelope; peer: SyncPeer; requestId: string } | null>(null)
   /** Null until worked out, so a failed lookup cannot leave the previous item's target behind. */
   let receivedTarget = $state<ReceiveTarget | null>(null)
   /** Read once: a replacing import that fails has already deleted the story. */
@@ -141,10 +151,13 @@
     // dialog would leave resolveIncomingPack suspended forever.
     cancelPendingPackMapping()
     serverInfo = null
+    connectionCode = null
+    pairingView = 'visual'
+    cameraNote = null
     connection = null
     loading = false
     error = null
-    syncSuccess = false
+    connectedPeer = null
     syncMessage = null
     received = null
     receivedTarget = null
@@ -160,7 +173,15 @@
     showVersionWarning = false
     pendingConnection = null
     stopPolling()
-    void loadSelf().then((device) => (self = device))
+    void loadDevice()
+  }
+
+  async function loadDevice() {
+    try {
+      self = await loadSelf()
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e)
+    }
   }
 
   function cancelPendingPackMapping() {
@@ -203,11 +224,13 @@
       envelope = decodeEnvelope(item.payload)
     } catch {
       error = 'Received an invalid payload'
+      answerPush(item.requestId, { error: 'The other device could not read the item' })
       resumeReceivedItems()
       return
     }
 
-    received = { envelope, peer: item.peer }
+    received = { envelope, peer: item.peer, requestId: item.requestId }
+    connectedPeer = item.peer
     receivedTarget = null
     receivedPrevious = null
     receivedStoryNeedsPack = false
@@ -239,6 +262,11 @@
       error = e instanceof Error ? e.message : 'Could not prepare the received item'
       receivingStory = false
     }
+  }
+
+  /** A sender that stopped waiting has nothing to hear, so a failed answer changes nothing. */
+  function answerPush(requestId: string, answer: { data: SyncPushOutcome } | { error: string }) {
+    syncService.respond(requestId, answer).catch(() => {})
   }
 
   function resumeReceivedItems() {
@@ -362,7 +390,7 @@
     }
 
     received = null
-    syncSuccess = true
+    answerPush(pending.requestId, { data: 'applied' })
     syncMessage = renamedTo
       ? `Received "${pending.envelope.name}" as "${renamedTo}": that name was taken.`
       : `Successfully received "${pending.envelope.name}"`
@@ -381,6 +409,7 @@
     receivingStory = false
     receivedStoryNeedsPack = false
     receivedSession++
+    if (received) answerPush(received.requestId, { data: 'declined' })
     received = null
     resumeReceivedItems()
   }
@@ -391,17 +420,20 @@
     cleanup()
   })
 
+  async function stopScanner() {
+    const running = scanner
+    scanner = null
+    try {
+      await running?.stop()
+    } catch {
+      // Ignore errors when stopping
+    }
+  }
+
   async function cleanup() {
     stopPolling()
     stopServing()
-    if (scanner) {
-      try {
-        await scanner.stop()
-      } catch {
-        // Ignore errors when stopping
-      }
-      scanner = null
-    }
+    await stopScanner()
     if (serverInfo) {
       try {
         await syncService.stopServer()
@@ -424,6 +456,7 @@
   }
 
   async function serveRequest(request: SyncWebviewRequest) {
+    connectedPeer = request.peer
     try {
       const data = await answerSyncRequest(request, trackingForExport())
       await syncService.respond(request.requestId, { data })
@@ -435,6 +468,7 @@
 
   async function startGenerateMode() {
     ui.setSyncMode('generate')
+    pairingView = 'visual'
     loading = true
     error = null
 
@@ -443,7 +477,15 @@
       unlistenRequests = await listen<SyncWebviewRequest>('sync://request', ({ payload }) => {
         void serveRequest(payload)
       })
-      serverInfo = await syncService.startServer()
+      const info = await syncService.startServer()
+      serverInfo = info
+      connectionCode = encodeConnectionCode({
+        ip: info.ip,
+        port: info.port,
+        token: info.token,
+        version: await getVersion(),
+        protocol: SYNC_PROTOCOL_VERSION,
+      })
       // Start polling for pushed items
       startPolling()
     } catch (e) {
@@ -462,18 +504,21 @@
 
   async function startScanMode() {
     ui.setSyncMode('scan')
+    pairingView = 'visual'
+    cameraNote = null
     error = null
 
     // Wait for DOM to update
     await new Promise((resolve) => setTimeout(resolve, 100))
-    await initScanner()
+    if (ui.syncMode === 'scan' && pairingView === 'visual') await initScanner()
   }
 
   async function initScanner() {
     try {
-      scanner = new Html5Qrcode(scannerElementId)
+      const instance = new Html5Qrcode(scannerElementId)
+      scanner = instance
 
-      await scanner.start(
+      await instance.start(
         {
           facingMode: 'environment',
         },
@@ -489,6 +534,12 @@
           // Ignore scan failures during continuous scanning
         },
       )
+
+      // The user can leave this screen while the camera is starting.
+      if (scanner !== instance) {
+        await instance.stop()
+        return
+      }
 
       // Apply zoom after camera starts (more reliable on mobile)
       try {
@@ -512,46 +563,50 @@
         // Zoom not supported on this device, continue without it
       }
     } catch {
-      error = 'Camera access denied or not available'
-      ui.setSyncMode('select')
+      await stopScanner()
+      if (ui.syncMode !== 'scan' || pairingView !== 'visual') return
+      pairingView = 'code'
+      cameraNote = 'No camera available. Paste the code from the other device.'
     }
   }
 
+  async function enterCodeInstead() {
+    await stopScanner()
+    pairingView = 'code'
+  }
+
   async function handleQrScanned(data: string) {
-    if (scanner) {
-      try {
-        await scanner.stop()
-      } catch {
-        // Ignore
-      }
-      scanner = null
-    }
+    await stopScanner()
 
     try {
-      const parsed = syncService.parseQrCode(data)
-      if (parsed.protocol !== SYNC_PROTOCOL_VERSION) {
-        error = 'The other device is on a different sync version. Update both devices.'
-        ui.setSyncMode('select')
-        return
-      }
-
-      const appVersion = await getVersion()
-
-      // Check for version mismatch or unknown remote version
-      if (!parsed.version || parsed.version !== appVersion) {
-        pendingConnection = parsed
-        remoteVersion = parsed.version ?? null
-        localVersion = appVersion
-        showVersionWarning = true
-        return
-      }
-
-      // No mismatch, proceed normally
-      await proceedWithConnection(parsed)
+      await pair(syncService.parseQrCode(data))
     } catch (e) {
       error = e instanceof Error ? e.message : 'Connection failed'
       ui.setSyncMode('select')
     }
+  }
+
+  async function pair(parsed: SyncConnectionData) {
+    if (parsed.protocol !== SYNC_PROTOCOL_VERSION) {
+      error = 'The other device is on a different sync version. Update both devices.'
+      if (pairingView === 'visual') ui.setSyncMode('select')
+      return
+    }
+    error = null
+
+    const appVersion = await getVersion()
+
+    // Check for version mismatch or unknown remote version
+    if (!parsed.version || parsed.version !== appVersion) {
+      pendingConnection = parsed
+      remoteVersion = parsed.version ?? null
+      localVersion = appVersion
+      showVersionWarning = true
+      return
+    }
+
+    // No mismatch, proceed normally
+    await proceedWithConnection(parsed)
   }
 
   function cancelVersionMismatch() {
@@ -559,7 +614,7 @@
     pendingConnection = null
     remoteVersion = null
     localVersion = null
-    ui.setSyncMode('select')
+    if (pairingView === 'visual') ui.setSyncMode('select')
   }
 
   async function proceedWithVersionMismatch() {
@@ -598,24 +653,24 @@
 </script>
 
 <ResponsiveModal.Root open={ui.syncModalOpen} {onOpenChange}>
-  <ResponsiveModal.Content class="sm:max-w-lg">
-    <ResponsiveModal.Header>
+  <ResponsiveModal.Content class="flex max-h-[85dvh] flex-col gap-0 p-0 sm:max-w-lg">
+    <ResponsiveModal.Header class="px-6">
       <ResponsiveModal.Title class="flex items-center gap-2">
         <RefreshCw class="text-primary h-5 w-5" />
         {#if ui.syncMode === 'select'}
           Local Network Sync
         {:else if ui.syncMode === 'generate'}
-          {syncSuccess
-            ? 'Item Received'
-            : receivingStory
-              ? loading
-                ? 'Importing'
-                : 'Preparing Import'
-              : received
-                ? 'Item Received'
+          {receivingStory
+            ? loading
+              ? 'Importing'
+              : 'Preparing Import'
+            : received
+              ? 'Item Received'
+              : connectedPeer
+                ? 'Connected'
                 : 'Waiting for Connection'}
         {:else if ui.syncMode === 'scan'}
-          Scan QR Code
+          {pairingView === 'code' ? 'Enter Connection Code' : 'Scan QR Code'}
         {:else if ui.syncMode === 'connected'}
           Sync
         {/if}
@@ -624,24 +679,28 @@
         {#if ui.syncMode === 'select'}
           Sync stories, vault items and prompt packs between devices on the same network.
         {:else if ui.syncMode === 'generate'}
-          {syncSuccess
-            ? 'The received item was imported successfully.'
-            : receivingStory
-              ? loading
-                ? 'Importing the received item.'
-                : 'Preparing the received item for import.'
-              : received
-                ? 'Review the item received from the connected device.'
-                : 'Show this QR code to another device to connect.'}
+          {receivingStory
+            ? loading
+              ? 'Importing the received item.'
+              : 'Preparing the received item for import.'
+            : received
+              ? 'Review the item received from the connected device.'
+              : connectedPeer
+                ? 'Keep this screen open while syncing.'
+                : pairingView === 'code'
+                  ? 'Enter this code on the other device.'
+                  : 'Show this QR code to another device to connect.'}
         {:else if ui.syncMode === 'scan'}
-          Scan the QR code shown on the other device.
+          {pairingView === 'code'
+            ? 'Paste the code shown on the other device.'
+            : 'Scan the QR code shown on the other device.'}
         {:else if ui.syncMode === 'connected'}
           Choose what to transfer between devices.
         {/if}
       </ResponsiveModal.Description>
     </ResponsiveModal.Header>
 
-    <div class="py-4">
+    <div class="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-4">
       {#if error}
         <div
           class="bg-destructive/15 text-destructive mb-4 flex items-center gap-2 rounded-lg p-3 text-sm"
@@ -651,17 +710,7 @@
         </div>
       {/if}
 
-      {#if syncSuccess}
-        <!-- Success State -->
-        <div class="flex flex-col items-center justify-center py-8 text-center">
-          <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20">
-            <Check class="h-8 w-8 text-green-500" />
-          </div>
-          <h3 class="mb-2 text-lg font-semibold">Sync Complete!</h3>
-          <p class="text-muted-foreground">{syncMessage}</p>
-          <Button class="mt-6" onclick={close}>Done</Button>
-        </div>
-      {:else if ui.syncMode === 'select'}
+      {#if ui.syncMode === 'select'}
         <!-- Mode Selection -->
         <div class="grid grid-cols-1 gap-4">
           <Card
@@ -673,8 +722,8 @@
                 <QrCode class="text-primary h-6 w-6" />
               </div>
               <div>
-                <CardTitle class="text-base">Generate QR Code</CardTitle>
-                <CardDescription>Show a QR code for another device to scan</CardDescription>
+                <CardTitle class="text-base">Show connection code</CardTitle>
+                <CardDescription>Another device connects to this one</CardDescription>
               </div>
             </CardHeader>
           </Card>
@@ -685,8 +734,8 @@
                 <Camera class="text-primary h-6 w-6" />
               </div>
               <div>
-                <CardTitle class="text-base">Scan QR Code</CardTitle>
-                <CardDescription>Scan a QR code from another device</CardDescription>
+                <CardTitle class="text-base">Connect to a device</CardTitle>
+                <CardDescription>Scan or enter its code</CardDescription>
               </div>
             </CardHeader>
           </Card>
@@ -756,24 +805,48 @@
               <Button onclick={retryReceived}>Import</Button>
             </div>
           </div>
+        {:else if connectedPeer}
+          <div class="flex flex-col items-center py-4 text-center">
+            <div class="mb-4 flex size-16 items-center justify-center rounded-full bg-green-500/20">
+              <Check class="size-8 text-green-500" />
+            </div>
+            <h3 class="mb-2 text-lg font-semibold break-words">
+              Connected to {connectedPeer.name}
+            </h3>
+            {#if syncMessage}
+              <p class="text-muted-foreground break-words">{syncMessage}</p>
+            {/if}
+            <Button class="mt-6" onclick={close}>Finish</Button>
+          </div>
         {:else if serverInfo}
           {#if self}
             <SyncDeviceName name={self.name} onRename={renameDevice} />
           {/if}
           <div class="flex flex-col items-center text-center">
-            <div class="mb-4 inline-block rounded-lg bg-white p-4">
-              <img
-                src="data:image/png;base64,{serverInfo.qrCodeBase64}"
-                alt="QR Code"
-                class="h-64 w-64"
-              />
-            </div>
-            <p class="text-muted-foreground text-sm">
-              Scan this QR code with another device running Aventuras
-            </p>
+            {#if pairingView === 'code' && connectionCode}
+              <SyncCodeDisplay code={connectionCode} />
+            {:else}
+              <div class="mb-4 inline-block rounded-lg bg-white p-4">
+                <img
+                  src="data:image/png;base64,{serverInfo.qrCodeBase64}"
+                  alt="QR Code"
+                  class="h-64 w-64"
+                />
+              </div>
+              <p class="text-muted-foreground text-sm">
+                Scan this QR code with another device running Aventuras
+              </p>
+            {/if}
             <p class="text-muted-foreground/60 mt-2 text-xs">
               Server: {serverInfo.ip}:{serverInfo.port}
             </p>
+            <Button
+              variant="outline"
+              class="mt-4"
+              onclick={() => (pairingView = pairingView === 'code' ? 'visual' : 'code')}
+            >
+              {pairingView === 'code' ? 'Show QR code instead' : 'Show a code instead'}
+            </Button>
           </div>
         {/if}
       {:else if ui.syncMode === 'scan'}
@@ -806,13 +879,24 @@
           {#if self}
             <SyncDeviceName name={self.name} onRename={renameDevice} />
           {/if}
-          <div class="flex flex-col items-center text-center">
-            <div
-              id={scannerElementId}
-              class="mb-4 overflow-hidden rounded-lg bg-black"
-              style="width: 300px; height: 300px;"
-            ></div>
-            <p class="text-muted-foreground text-sm">Point your camera at the QR code</p>
+          {#if pairingView === 'visual'}
+            <div class="flex flex-col items-center text-center">
+              <div
+                id={scannerElementId}
+                class="mb-4 overflow-hidden rounded-lg bg-black"
+                style="width: 300px; height: 300px;"
+              ></div>
+              <p class="text-muted-foreground text-sm">Point your camera at the QR code</p>
+              <Button variant="outline" class="mt-4" onclick={enterCodeInstead}>
+                Enter a code instead
+              </Button>
+            </div>
+          {/if}
+        {/if}
+        {#if pairingView === 'code'}
+          <!-- Stays mounted under the warning, which can hand back to it. -->
+          <div class={cn(showVersionWarning && 'hidden')}>
+            <SyncCodeEntry note={cameraNote} onConnect={pair} onScan={startScanMode} />
           </div>
         {/if}
       {:else if ui.syncMode === 'connected' && connection && self}

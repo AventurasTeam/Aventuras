@@ -3,16 +3,15 @@
   import { SvelteMap } from 'svelte/reactivity'
   import {
     AlertTriangle,
-    ArrowDownUp,
+    ArrowUpDown,
     ChevronLeft,
     ChevronRight,
-    ListFilter,
     Loader2,
-    RefreshCw,
     Search,
   } from '@lucide/svelte'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
+  import FilterButton from '#lib/components/ui/filter-button.svelte'
   import { Input } from '#lib/components/ui/input/index.ts'
   import type { ExportTracking } from '#lib/services/export.ts'
   import type { PackBindingResolution } from '#lib/services/import/index.ts'
@@ -25,7 +24,6 @@
     applyStory,
     buildRows,
     confirmSends,
-    copyName,
     countByStatus,
     fetchListing,
     formatAgo,
@@ -77,7 +75,7 @@
   const SORT_LABELS: Record<SyncSort, { label: string; hint: string }> = {
     status: { label: 'Status', hint: 'Changed on both first, in sync last' },
     name: { label: 'Name', hint: 'A to Z' },
-    lastSynced: { label: 'Last synced', hint: 'With this device; never synced last' },
+    lastSynced: { label: 'Last synced', hint: 'With the remote device; never synced last' },
     lastChanged: { label: 'Last changed', hint: 'Newest change on either device' },
   }
 
@@ -95,7 +93,6 @@
   /** Sends the other device has yet to accept, by sync id. */
   const sent = new SvelteMap<string, SyncVector>()
 
-  const peerName = $derived(peer?.name || 'the other device')
   const currentPrefs = $derived(
     section ? (prefs[section] ?? DEFAULT_LIST_PREFS) : DEFAULT_LIST_PREFS,
   )
@@ -107,14 +104,16 @@
     switch (status) {
       case 'changedOnBoth':
         return 'Changed on both'
+      case 'sameName':
+        return 'Same name'
       case 'newerThere':
-        return `Newer on ${peerName}`
+        return 'Newer on remote device'
       case 'newerHere':
-        return 'Newer here'
+        return 'Newer on this device'
       case 'onlyThere':
-        return `Only on ${peerName}`
+        return 'Only on remote device'
       case 'onlyHere':
-        return 'Only here'
+        return 'Only on this device'
       case 'inSync':
         return 'In sync'
     }
@@ -122,6 +121,7 @@
 
   const STATUS_CLASSES: Record<SyncStatus, string> = {
     changedOnBoth: 'bg-rose-500/15 text-rose-600 dark:text-rose-300',
+    sameName: 'bg-rose-500/15 text-rose-600 dark:text-rose-300',
     newerThere: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
     onlyThere: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
     newerHere: 'bg-blue-500/15 text-blue-700 dark:text-blue-300',
@@ -129,7 +129,7 @@
     inSync: 'bg-muted text-muted-foreground',
   }
 
-  const ACTION_LABELS = { send: 'Send', get: 'Get', choose: 'Choose' }
+  const ACTION_LABELS = { send: 'Send', get: 'Get', resolve: 'Resolve', choose: 'Choose' }
 
   function syncedLabel(row: SyncRow): string {
     return row.lastSyncedAt ? `synced ${formatAgo(row.lastSyncedAt)}` : 'never synced'
@@ -162,6 +162,7 @@
     return {
       total: rows.length,
       both: c.changedOnBoth,
+      sameName: c.sameName,
       send: c.newerHere + c.onlyHere,
       get: c.newerThere + c.onlyThere,
     }
@@ -226,7 +227,7 @@
     if (!local) return
     const theirs = row.remote?.syncId === local.syncId ? (row.remote?.vector ?? null) : null
     return transfer(row, async (name) => {
-      const { syncId, vector } = await sendItem(
+      const { syncId, vector, outcome } = await sendItem(
         connection,
         self,
         name,
@@ -234,8 +235,11 @@
         tracking(),
         theirs,
       )
+      if (outcome === 'declined') return 'The remote device declined it.'
       sent.set(syncId, vector)
-      return `Sent. It shows as in sync once ${peerName} has accepted it.`
+      if (outcome === 'waiting') {
+        return 'No answer yet. Once the remote device accepts it, reopen this section to see it.'
+      }
     })
   }
 
@@ -309,7 +313,9 @@
 {/if}
 
 {#if !section}
-  <p class="text-muted-foreground mb-3 text-sm">Connected to {peerName}</p>
+  <p class="text-muted-foreground mb-3 text-sm break-words">
+    Connected to {peer?.name ?? 'remote device'}
+  </p>
   <div class="flex flex-col gap-2">
     {#each SYNC_SECTIONS as name, i (i)}
       {@const summary = sectionCounts(name)}
@@ -321,7 +327,7 @@
           <span class="font-medium">{SECTION_LABELS[name]}</span>
           {#if !summary}
             <span class="text-muted-foreground text-xs">Loading...</span>
-          {:else if summary.both + summary.send + summary.get === 0}
+          {:else if summary.both + summary.sameName + summary.send + summary.get === 0}
             <span class="text-muted-foreground text-xs">
               {summary.total === 0 ? 'Nothing to sync' : `All ${summary.total} in sync`}
             </span>
@@ -330,6 +336,11 @@
               {#if summary.both}
                 <span class="rounded-full px-2 py-0.5 text-xs {STATUS_CLASSES.changedOnBoth}">
                   {summary.both} changed on both
+                </span>
+              {/if}
+              {#if summary.sameName}
+                <span class="rounded-full px-2 py-0.5 text-xs {STATUS_CLASSES.sameName}">
+                  {summary.sameName} same name
                 </span>
               {/if}
               {#if summary.send}
@@ -360,37 +371,32 @@
       <ChevronLeft class="h-5 w-5" />
     </Button>
     <h3 class="font-semibold">{SECTION_LABELS[section]}</h3>
-    <span class="text-muted-foreground ml-auto truncate text-xs">{peerName}</span>
-    <Button
-      variant="ghost"
-      size="icon"
-      aria-label="Refresh"
-      disabled={!!busy}
-      onclick={() => section && refresh(section)}
-    >
-      <RefreshCw class="h-4 w-4" />
-    </Button>
   </div>
 
-  <div class="relative mb-2">
-    <Search class="text-muted-foreground absolute top-3 left-3 h-4 w-4" />
-    <Input
-      bind:value={search}
-      class="h-10 pl-9"
-      type="search"
-      aria-label="Search {SECTION_LABELS[section]}"
-      placeholder="Search {SECTION_LABELS[section].toLowerCase()}"
+  <div class="mb-2 flex items-center gap-2">
+    <div class="min-w-0 flex-1">
+      <Input
+        bind:value={search}
+        leftIcon={Search}
+        class="h-10"
+        type="search"
+        aria-label="Search {SECTION_LABELS[section]}"
+        placeholder="Search {SECTION_LABELS[section].toLowerCase()}"
+      />
+    </div>
+    <FilterButton
+      class="size-10 shrink-0"
+      active={currentPrefs.statuses.length !== STATUS_ORDER.length}
+      label="Filter"
+      onclick={() => (sheet = 'filter')}
     />
-  </div>
-  <div class="mb-2 flex gap-2">
-    <Button variant="outline" size="sm" onclick={() => (sheet = 'filter')}>
-      <ListFilter class="mr-1 h-4 w-4" />
-      {isNeedsAction ? 'Needs action' : 'Filtered'} · {view.rows.length}
-    </Button>
-    <Button variant="outline" size="sm" onclick={() => (sheet = 'sort')}>
-      <ArrowDownUp class="mr-1 h-4 w-4" />
-      {SORT_LABELS[currentPrefs.sort].label}
-    </Button>
+    <FilterButton
+      class="size-10 shrink-0"
+      icon={ArrowUpDown}
+      active={currentPrefs.sort !== DEFAULT_LIST_PREFS.sort || currentPrefs.reversed}
+      label="Sort"
+      onclick={() => (sheet = 'sort')}
+    />
   </div>
 
   <div class="divide-y">
@@ -411,7 +417,7 @@
           <Button
             class="min-w-20 shrink-0"
             size="sm"
-            variant={row.action === 'send' ? 'default' : 'outline'}
+            variant="outline"
             disabled={!!busy}
             onclick={() => {
               if (row.action === 'send') void send(row)
@@ -437,8 +443,10 @@
   {/if}
 {/if}
 
-<ResponsiveModal.Root open={sheet === 'filter'} onOpenChange={(open) => !open && (sheet = null)}>
-  <ResponsiveModal.Content class="sm:max-w-sm">
+<ResponsiveModal.Root bind:open={() => sheet === 'filter', (open) => !open && (sheet = null)}>
+  <ResponsiveModal.Content
+    class="flex max-h-[85dvh] flex-col gap-3 overflow-y-auto px-4 pb-4 sm:max-w-sm"
+  >
     <ResponsiveModal.Header>
       <ResponsiveModal.Title>Show</ResponsiveModal.Title>
     </ResponsiveModal.Header>
@@ -473,8 +481,10 @@
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>
 
-<ResponsiveModal.Root open={sheet === 'sort'} onOpenChange={(open) => !open && (sheet = null)}>
-  <ResponsiveModal.Content class="sm:max-w-sm">
+<ResponsiveModal.Root bind:open={() => sheet === 'sort', (open) => !open && (sheet = null)}>
+  <ResponsiveModal.Content
+    class="flex max-h-[85dvh] flex-col gap-3 overflow-y-auto px-4 pb-4 sm:max-w-sm"
+  >
     <ResponsiveModal.Header>
       <ResponsiveModal.Title>Sort by</ResponsiveModal.Title>
     </ResponsiveModal.Header>
@@ -505,13 +515,15 @@
       Reversed
     </label>
     <ResponsiveModal.Footer>
-      <Button class="w-full" onclick={() => (sheet = null)}>Done</Button>
+      <Button class="w-full" onclick={() => (sheet = null)}>Close</Button>
     </ResponsiveModal.Footer>
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>
 
-<ResponsiveModal.Root open={!!openRow} onOpenChange={(open) => !open && (openRow = null)}>
-  <ResponsiveModal.Content class="sm:max-w-sm">
+<ResponsiveModal.Root bind:open={() => !!openRow, (open) => !open && (openRow = null)}>
+  <ResponsiveModal.Content
+    class="flex max-h-[85dvh] flex-col gap-3 overflow-y-auto px-4 pb-4 sm:max-w-sm"
+  >
     {#if openRow}
       {@const row = openRow}
       <ResponsiveModal.Header>
@@ -523,24 +535,25 @@
         </ResponsiveModal.Description>
       </ResponsiveModal.Header>
 
-      {#if row.status === 'changedOnBoth'}
+      {#if row.status === 'sameName'}
         <p class="text-muted-foreground text-sm">
-          {#if row.sameNameOnly}
-            Both devices hold an item with this name, and they have never synced. Pick which to
-            keep, or keep both.
-          {:else}
-            Edited on this device and on {peerName} since they last synced. Pick which version to keep.
-          {/if}
+          Both devices hold an item with this name, and they have never synced. Pick which to keep,
+          or keep both.
+        </p>
+      {:else if row.status === 'changedOnBoth'}
+        <p class="text-muted-foreground text-sm">
+          Edited on this device and on the remote device since they last synced. Pick which version
+          to keep.
         </p>
       {/if}
 
       <dl class="divide-y text-sm">
         <div class="flex min-h-10 items-center justify-between gap-3">
-          <dt class="text-muted-foreground">Changed here</dt>
+          <dt class="text-muted-foreground">Changed on this device</dt>
           <dd>{formatChanged(row.local?.updatedAt)}</dd>
         </div>
         <div class="flex min-h-10 items-center justify-between gap-3">
-          <dt class="text-muted-foreground">Changed on {peerName}</dt>
+          <dt class="text-muted-foreground">Changed on remote device</dt>
           <dd>{formatChanged(row.remote?.updatedAt)}</dd>
         </div>
         <div class="flex min-h-10 items-center justify-between gap-3">
@@ -550,19 +563,19 @@
       </dl>
 
       <div class="flex flex-col gap-2">
-        {#if row.status === 'changedOnBoth'}
-          <Button class="h-auto flex-col py-2" onclick={() => send(row)}>
+        {#if row.action === 'resolve' || row.action === 'choose'}
+          <Button variant="outline" class="h-auto flex-col py-2" onclick={() => send(row)}>
             Keep this device's version
-            <span class="text-xs font-normal opacity-80">Send it; replaces {peerName}'s</span>
+            <span class="text-xs font-normal opacity-80">Send it; replaces the remote version</span>
           </Button>
           <Button variant="outline" class="h-auto flex-col py-2" onclick={() => get(row)}>
-            Keep {peerName}'s version
+            Keep the remote device's version
             <span class="text-xs font-normal opacity-80">Get it; replaces this device's</span>
           </Button>
           <Button variant="outline" class="h-auto flex-col py-2" onclick={() => keepBoth(row)}>
             Keep both
             <span class="text-xs font-normal break-words whitespace-normal opacity-80">
-              Get it as "{peer ? copyName(row.name, peer) : row.name}"
+              Get it as a separate copy
             </span>
           </Button>
         {:else}
@@ -586,8 +599,10 @@
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>
 
-<ResponsiveModal.Root open={!!packConfirm} onOpenChange={(open) => !open && (packConfirm = null)}>
-  <ResponsiveModal.Content class="sm:max-w-sm">
+<ResponsiveModal.Root bind:open={() => !!packConfirm, (open) => !open && (packConfirm = null)}>
+  <ResponsiveModal.Content
+    class="flex max-h-[85dvh] flex-col gap-3 overflow-y-auto px-4 pb-4 sm:max-w-sm"
+  >
     {#if packConfirm}
       {@const confirm = packConfirm}
       <ResponsiveModal.Header>

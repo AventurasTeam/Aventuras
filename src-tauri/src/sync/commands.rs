@@ -161,8 +161,7 @@ pub async fn clear_received_items(state: State<'_, SyncState>) -> Result<(), Str
     Ok(())
 }
 
-/// Send one request to a remote sync server. Answers with the remote webview's JSON, or nothing
-/// for an action the server handles itself.
+/// Send one request to a remote sync server. Answers with the remote webview's reply.
 #[tauri::command]
 pub async fn sync_request(
     ip: String,
@@ -170,7 +169,7 @@ pub async fn sync_request(
     token: String,
     peer: SyncPeer,
     action: SyncAction,
-) -> Result<Option<String>, String> {
+) -> Result<String, String> {
     let url = format!("http://{}:{}/sync", ip, port);
 
     let request = SyncRequest {
@@ -199,8 +198,7 @@ pub async fn sync_request(
         .map_err(|e| format!("Invalid response: {}", e))?;
 
     match sync_response {
-        SyncResponse::Reply { data } => Ok(Some(data)),
-        SyncResponse::Success { .. } => Ok(None),
+        SyncResponse::Reply { data } => Ok(data),
         SyncResponse::Error { message } => Err(message),
     }
 }

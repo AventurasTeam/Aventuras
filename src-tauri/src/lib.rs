@@ -302,7 +302,7 @@ pub(crate) fn migrations() -> Vec<Migration> {
         Migration {
             version: 45,
             description: "sync_identity",
-            sql: include_str!("../migrations/044_sync_identity.sql"),
+            sql: include_str!("../migrations/045_sync_identity.sql"),
             kind: MigrationKind::Up,
         },
     ]
