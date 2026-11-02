@@ -2,7 +2,7 @@
   import type { Component, Snippet } from 'svelte'
   import { Loader2 } from '@lucide/svelte'
   import { Button } from '#lib/components/ui/button/index.ts'
-  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import ModalFooter from './ModalFooter.svelte'
   import { cn } from '#lib/utils/cn.ts'
   import { FEATURE_COLORS, type ActionTone } from './featureColors'
   import { PAIR_BUTTON, PAIR_ROW } from './buttonPair'
@@ -36,7 +36,7 @@
   } = $props()
 </script>
 
-<ResponsiveModal.Footer class="bg-muted/40 gap-2 border-t px-6 py-4 sm:space-x-0">
+<ModalFooter>
   {#if alternative}
     <span class="flex w-full max-sm:order-1 sm:mr-auto sm:w-auto">{@render alternative()}</span>
   {/if}
@@ -63,4 +63,4 @@
       {label}
     </Button>
   </span>
-</ResponsiveModal.Footer>
+</ModalFooter>

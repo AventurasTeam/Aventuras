@@ -17,6 +17,7 @@
   import { MODAL_CLOSE_TRANSITION_MS } from '#lib/constants/layout.ts'
   import { cn } from '#lib/utils/cn.ts'
   import ModalActions from './ModalActions.svelte'
+  import ModalHeader from './ModalHeader.svelte'
   import DiscardConfirm from './DiscardConfirm.svelte'
   import { PendingQuestion, type Question } from './pendingQuestion.svelte'
   import ScrollEdgeButton from './ScrollEdgeButton.svelte'
@@ -68,11 +69,6 @@
     requireChange?: boolean
     /** See the catalog's width scale. */
     size?: 'md' | 'lg' | '2xl'
-    /**
-     * A sheet on a phone, only for a tool with no text field, nothing to lose and an action Cancel
-     * can stop: `vaul` closes a sheet on a handle tap without asking. See the catalog.
-     */
-    presentation?: 'sheet' | 'dialog'
   }
 
   let {
@@ -96,7 +92,6 @@
     },
     requireChange = false,
     size = 'md',
-    presentation = 'dialog',
   }: Props = $props()
 
   setTextareaUncapped()
@@ -378,7 +373,7 @@
 <ResponsiveModal.Root
   bind:open={shownOpen}
   dismissible={!locked}
-  sheet={presentation === 'sheet'}
+  sheet={false}
   onOpenChange={handleOpenChange}
 >
   <ResponsiveModal.Content
@@ -386,12 +381,11 @@
       'flex max-h-[85dvh] flex-col gap-0 p-0',
       { md: 'max-w-md', lg: 'max-w-lg', '2xl': 'max-w-2xl' }[size],
       // Inset from a phone's edges, where the dialog would otherwise run full width.
-      presentation === 'dialog' && 'w-[calc(100%-2rem)] rounded-lg',
+      'w-[calc(100%-2rem)] rounded-lg',
       // Held near the top on a phone when it has a text field, so the keyboard shortening the
       // screen does not move it; only its bottom edge comes up, and the content scrolls. The
       // input selector is `INPUT`.
-      presentation === 'dialog' &&
-        'max-md:has-[input:not([type=hidden]):not([aria-hidden=true]),textarea]:top-[calc(var(--safe-top)+1rem)] max-md:has-[input:not([type=hidden]):not([aria-hidden=true]),textarea]:translate-y-0',
+      'max-md:has-[input:not([type=hidden]):not([aria-hidden=true]),textarea]:top-[calc(var(--safe-top)+1rem)] max-md:has-[input:not([type=hidden]):not([aria-hidden=true]),textarea]:translate-y-0',
     )}
     onInteractOutside={(e: PointerEvent) => {
       e.preventDefault()
@@ -410,19 +404,8 @@
       class="flex min-h-0 flex-1 flex-col outline-none"
       inert={question.open}
     >
-      <!-- The title alone, centred; the description opens the body, where wrapping reads well. -->
-      <!-- Tinted like the buttons' panel, so both read as a frame around the body. -->
-      <ResponsiveModal.Header
-        class="bg-muted/40 border-b px-6 py-4 text-center sm:text-center"
-        closeButton={false}
-      >
-        <ResponsiveModal.Title
-          class={cn('text-center', titleIcon && 'flex items-center justify-center gap-2')}
-        >
-          {@render titleIcon?.()}
-          {title}
-        </ResponsiveModal.Title>
-      </ResponsiveModal.Header>
+      <!-- The description opens the body, where wrapping reads well. -->
+      <ModalHeader {title} {titleIcon} />
 
       <!--
         On a phone the buttons scroll with the content, which leaves the small screen to it. From

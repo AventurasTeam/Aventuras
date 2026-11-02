@@ -21,7 +21,7 @@
   } from '#lib/services/sync/index.ts'
   import { getVersion } from '@tauri-apps/api/app'
   import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-  import { QrCode, Camera, Loader2, AlertTriangle, RefreshCw, Check } from '@lucide/svelte'
+  import { QrCode, Camera, Loader2, AlertTriangle, Check } from '@lucide/svelte'
   import { Html5Qrcode } from 'html5-qrcode'
   import { SYNC_PROTOCOL_VERSION } from '#lib/types/sync.ts'
   import type {
@@ -46,6 +46,8 @@
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
   import { cn } from '#lib/utils/cn.ts'
+  import { PAIR_BUTTON, PAIR_ROW } from '#lib/components/shared/buttonPair.ts'
+  import ModalHeader from '#lib/components/shared/ModalHeader.svelte'
   import { Card, CardHeader, CardTitle, CardDescription } from '#lib/components/ui/card/index.ts'
 
   /** Non-null only while a transfer is waiting on the user's pack choice. */
@@ -504,6 +506,21 @@
     syncMessage = null
   }
 
+  const title = $derived.by(() => {
+    switch (ui.syncMode) {
+      case 'select':
+        return 'Local network sync'
+      case 'generate':
+        if (receivingStory) return loading ? 'Importing' : 'Preparing import'
+        if (received) return 'Item received'
+        return connectedPeer ? 'Connected' : 'Waiting for connection'
+      case 'scan':
+        return pairingView === 'code' ? 'Enter a connection code' : 'Scan a QR code'
+      case 'connected':
+        return 'Sync'
+    }
+  })
+
   function renameDevice(name: string) {
     if (self) self = { ...self, name }
     void renameSelf(name)
@@ -661,28 +678,10 @@
 
 <ResponsiveModal.Root open={ui.syncModalOpen} {onOpenChange}>
   <ResponsiveModal.Content class="flex max-h-[85dvh] flex-col gap-0 p-0 sm:max-w-lg">
-    <ResponsiveModal.Header class="px-6">
-      <ResponsiveModal.Title class="flex items-center gap-2">
-        <RefreshCw class="text-primary h-5 w-5" />
-        {#if ui.syncMode === 'select'}
-          Local Network Sync
-        {:else if ui.syncMode === 'generate'}
-          {receivingStory
-            ? loading
-              ? 'Importing'
-              : 'Preparing Import'
-            : received
-              ? 'Item Received'
-              : connectedPeer
-                ? 'Connected'
-                : 'Waiting for Connection'}
-        {:else if ui.syncMode === 'scan'}
-          {pairingView === 'code' ? 'Enter Connection Code' : 'Scan QR Code'}
-        {:else if ui.syncMode === 'connected'}
-          Sync
-        {/if}
-      </ResponsiveModal.Title>
-      <ResponsiveModal.Description>
+    <ModalHeader {title} closeButton />
+
+    <div class="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-4">
+      <ResponsiveModal.Description class="mb-4">
         {#if ui.syncMode === 'select'}
           Sync stories, vault items and prompt packs between devices on the same network.
         {:else if ui.syncMode === 'generate'}
@@ -705,9 +704,7 @@
           Choose what to transfer between devices.
         {/if}
       </ResponsiveModal.Description>
-    </ResponsiveModal.Header>
 
-    <div class="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-4">
       {#if error}
         <div
           class="bg-destructive/15 text-destructive mb-4 flex items-center gap-2 rounded-lg p-3 text-sm"
@@ -768,7 +765,7 @@
             >
               <AlertTriangle class="h-8 w-8 text-amber-500" />
             </div>
-            <h3 class="mb-2 text-lg font-semibold">Already on This Device</h3>
+            <h3 class="mb-2 text-lg font-semibold">Already on this device</h3>
             <p class="text-muted-foreground mb-4 break-words">
               {#if receivedTarget?.kind === 'sameName'}
                 An item named "{received.envelope.name}" is already on this device, and the two have
@@ -789,12 +786,15 @@
                 A prompt pack must still be selected before the received story can be imported.
               </p>
             {/if}
-            <div class="flex flex-wrap justify-center gap-3">
-              <Button variant="outline" onclick={discardReceived}>Cancel</Button>
+            <div class={PAIR_ROW}>
+              <Button variant="outline" class={PAIR_BUTTON} onclick={discardReceived}>Cancel</Button
+              >
               {#if receivedTarget?.kind === 'sameName'}
-                <Button variant="outline" onclick={() => importReceived(null)}>Add as new</Button>
+                <Button variant="outline" class={PAIR_BUTTON} onclick={() => importReceived(null)}>
+                  Add as new
+                </Button>
               {/if}
-              <Button onclick={retryReceived}>Replace</Button>
+              <Button class={PAIR_BUTTON} onclick={retryReceived}>Replace</Button>
             </div>
           </div>
         {:else if received}
@@ -807,9 +807,11 @@
                 Received "{received.envelope.name}". Try importing again, or discard it.
               {/if}
             </p>
-            <div class="flex gap-3">
-              <Button variant="outline" onclick={discardReceived}>Discard</Button>
-              <Button onclick={retryReceived}>Import</Button>
+            <div class={PAIR_ROW}>
+              <Button variant="outline" class={PAIR_BUTTON} onclick={discardReceived}
+                >Discard</Button
+              >
+              <Button class={PAIR_BUTTON} onclick={retryReceived}>Import</Button>
             </div>
           </div>
         {:else if connectedPeer}
@@ -823,9 +825,9 @@
             {#if syncMessage}
               <p class="text-muted-foreground break-words">{syncMessage}</p>
             {/if}
-            <div class="mt-6 flex gap-3">
-              <Button variant="outline" onclick={showPairing}>Back</Button>
-              <Button onclick={close}>Finish</Button>
+            <div class={cn(PAIR_ROW, 'mt-6')}>
+              <Button variant="outline" class={PAIR_BUTTON} onclick={showPairing}>Back</Button>
+              <Button class={PAIR_BUTTON} onclick={close}>Finish</Button>
             </div>
           </div>
         {:else if serverInfo}
@@ -868,7 +870,7 @@
             >
               <AlertTriangle class="h-8 w-8 text-amber-500" />
             </div>
-            <h3 class="mb-2 text-lg font-semibold">Version Mismatch</h3>
+            <h3 class="mb-2 text-lg font-semibold">Version mismatch</h3>
             <p class="text-muted-foreground mb-2">
               The remote device is running a different version of Aventuras.
             </p>
@@ -879,9 +881,11 @@
             <p class="text-muted-foreground mb-4 text-sm">
               Syncing between different versions may cause issues. Continue anyway?
             </p>
-            <div class="flex gap-3">
-              <Button variant="outline" onclick={cancelVersionMismatch}>Cancel</Button>
-              <Button onclick={proceedWithVersionMismatch}>Continue Anyway</Button>
+            <div class={PAIR_ROW}>
+              <Button variant="outline" class={PAIR_BUTTON} onclick={cancelVersionMismatch}>
+                Cancel
+              </Button>
+              <Button class={PAIR_BUTTON} onclick={proceedWithVersionMismatch}>Continue</Button>
             </div>
           </div>
         {:else}

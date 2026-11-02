@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte'
+  import { onMount, untrack, type Snippet } from 'svelte'
   import { SvelteMap } from 'svelte/reactivity'
   import {
     AlertTriangle,
@@ -9,10 +9,13 @@
     Loader2,
     Search,
   } from '@lucide/svelte'
-  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import { Button } from '#lib/components/ui/button/index.ts'
   import FilterButton from '#lib/components/ui/filter-button.svelte'
+  import * as Popover from '#lib/components/ui/popover/index.ts'
+  import { createIsMobile } from '#lib/hooks/is-mobile.svelte.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
+  import SyncDialog from './SyncDialog.svelte'
   import type { ExportTracking } from '#lib/services/export.ts'
   import type { PackBindingResolution } from '#lib/services/import/index.ts'
   import {
@@ -73,6 +76,15 @@
     packs: 'Prompt packs',
   }
 
+  const DIALOG_BUTTON = 'w-full sm:w-auto sm:min-w-34'
+
+  type ListTool = 'filter' | 'sort'
+  const LIST_TOOLS: Record<ListTool, { label: string; title: string }> = {
+    filter: { label: 'Filter', title: 'Show' },
+    sort: { label: 'Sort', title: 'Sort by' },
+  }
+  const isMobile = createIsMobile()
+
   const SORT_LABELS: Record<SyncSort, { label: string; hint: string }> = {
     status: { label: 'Status', hint: 'Changed on both first, in sync last' },
     name: { label: 'Name', hint: 'A to Z' },
@@ -85,7 +97,7 @@
   let section = $state<SyncSection | null>(null)
   let search = $state('')
   let prefs = $state<Partial<Record<SyncSection, SyncListPrefs>>>({})
-  let sheet = $state<'filter' | 'sort' | null>(null)
+  let sheet = $state<ListTool | null>(null)
   let openRow = $state<SyncRow | null>(null)
   let packConfirm = $state<{ row: SyncRow; stories: number } | null>(null)
   let busy = $state<string | null>(null)
@@ -395,19 +407,8 @@
         placeholder="Search {SECTION_LABELS[section].toLowerCase()}"
       />
     </div>
-    <FilterButton
-      class="size-10 shrink-0"
-      active={currentPrefs.statuses.length !== STATUS_ORDER.length}
-      label="Filter"
-      onclick={() => (sheet = 'filter')}
-    />
-    <FilterButton
-      class="size-10 shrink-0"
-      icon={ArrowUpDown}
-      active={currentPrefs.sort !== DEFAULT_LIST_PREFS.sort || currentPrefs.reversed}
-      label="Sort"
-      onclick={() => (sheet = 'sort')}
-    />
+    {@render listTool('filter', filterOptions)}
+    {@render listTool('sort', sortOptions)}
   </div>
 
   <div class="divide-y">
@@ -454,189 +455,201 @@
   {/if}
 {/if}
 
-<ResponsiveModal.Root bind:open={() => sheet === 'filter', (open) => !open && (sheet = null)}>
-  <ResponsiveModal.Content
-    class="flex max-h-[85dvh] flex-col gap-3 overflow-y-auto px-4 pb-4 sm:max-w-sm"
-  >
-    <ResponsiveModal.Header>
-      <ResponsiveModal.Title>Show</ResponsiveModal.Title>
-    </ResponsiveModal.Header>
-    <div class="grid grid-cols-2 gap-2">
-      <Button
-        variant={isNeedsAction ? 'default' : 'outline'}
-        onclick={() => updatePrefs({ statuses: [...NEEDS_ACTION] })}
-      >
-        Needs action
-      </Button>
-      <Button
-        variant={isEverything ? 'default' : 'outline'}
-        onclick={() => updatePrefs({ statuses: [...STATUS_ORDER] })}
-      >
-        Everything
-      </Button>
-    </div>
-    <div class="divide-y">
-      {#each STATUS_ORDER as status, i (i)}
-        <label class="flex min-h-12 items-center gap-3">
-          <input
-            type="checkbox"
-            class="accent-primary h-5 w-5"
-            checked={currentPrefs.statuses.includes(status)}
-            onchange={(e) => toggleStatus(status, e.currentTarget.checked)}
+{#snippet filterOptions()}
+  <div class="grid grid-cols-2 gap-2">
+    <Button
+      variant={isNeedsAction ? 'default' : 'outline'}
+      onclick={() => updatePrefs({ statuses: [...NEEDS_ACTION] })}
+    >
+      Needs action
+    </Button>
+    <Button
+      variant={isEverything ? 'default' : 'outline'}
+      onclick={() => updatePrefs({ statuses: [...STATUS_ORDER] })}
+    >
+      Everything
+    </Button>
+  </div>
+  <div class="divide-y">
+    {#each STATUS_ORDER as status, i (i)}
+      <label class="flex min-h-12 items-center gap-3">
+        <input
+          type="checkbox"
+          class="accent-primary h-5 w-5"
+          checked={currentPrefs.statuses.includes(status)}
+          onchange={(e) => toggleStatus(status, e.currentTarget.checked)}
+        />
+        <span class="flex-1">{statusLabel(status)}</span>
+        <span class="text-muted-foreground text-sm">{counts[status]}</span>
+      </label>
+    {/each}
+  </div>
+{/snippet}
+
+{#snippet sortOptions()}
+  <div class="divide-y">
+    {#each Object.entries(SORT_LABELS) as [sort, { label, hint }] (sort)}
+      <label class="flex min-h-14 items-center gap-3">
+        <input
+          type="radio"
+          name="sync-sort"
+          class="accent-primary h-5 w-5"
+          checked={currentPrefs.sort === sort}
+          onchange={() => updatePrefs({ sort: sort as SyncSort })}
+        />
+        <span class="flex flex-col">
+          <span>{label}</span>
+          <span class="text-muted-foreground text-xs">{hint}</span>
+        </span>
+      </label>
+    {/each}
+  </div>
+  <label class="flex min-h-12 items-center gap-3">
+    <input
+      type="checkbox"
+      class="accent-primary h-5 w-5"
+      checked={currentPrefs.reversed}
+      onchange={(e) => updatePrefs({ reversed: e.currentTarget.checked })}
+    />
+    Reversed
+  </label>
+{/snippet}
+
+<!-- A popover under its button on desktop, a sheet with Apply on a phone. -->
+{#snippet listTool(tool: ListTool, options: Snippet)}
+  {@const { label, title } = LIST_TOOLS[tool]}
+  {@const active =
+    tool === 'filter'
+      ? currentPrefs.statuses.length !== STATUS_ORDER.length
+      : currentPrefs.sort !== DEFAULT_LIST_PREFS.sort || currentPrefs.reversed}
+  {#if isMobile.current}
+    <FilterButton
+      class="size-10 shrink-0"
+      icon={tool === 'sort' ? ArrowUpDown : undefined}
+      {active}
+      {label}
+      onclick={() => (sheet = tool)}
+    />
+    <SyncDialog open={sheet === tool} onClose={() => (sheet = null)} {title}>
+      {@render options()}
+      {#snippet footer()}
+        <Button class={DIALOG_BUTTON} onclick={() => (sheet = null)}>Back</Button>
+      {/snippet}
+    </SyncDialog>
+  {:else}
+    <Popover.Root bind:open={() => sheet === tool, (open) => (sheet = open ? tool : null)}>
+      <Popover.Trigger>
+        {#snippet child({ props })}
+          <FilterButton
+            {...props}
+            class="size-10 shrink-0"
+            icon={tool === 'sort' ? ArrowUpDown : undefined}
+            {active}
+            {label}
           />
-          <span class="flex-1">{statusLabel(status)}</span>
-          <span class="text-muted-foreground text-sm">{counts[status]}</span>
-        </label>
-      {/each}
-    </div>
-    <ResponsiveModal.Footer>
-      <Button class="w-full" onclick={() => (sheet = null)}>Show {view.rows.length}</Button>
-    </ResponsiveModal.Footer>
-  </ResponsiveModal.Content>
-</ResponsiveModal.Root>
+        {/snippet}
+      </Popover.Trigger>
+      <Popover.Content align="end" class="max-h-[60dvh] w-80 space-y-3 overflow-y-auto">
+        <p class="text-sm font-semibold">{title}</p>
+        {@render options()}
+      </Popover.Content>
+    </Popover.Root>
+  {/if}
+{/snippet}
 
-<ResponsiveModal.Root bind:open={() => sheet === 'sort', (open) => !open && (sheet = null)}>
-  <ResponsiveModal.Content
-    class="flex max-h-[85dvh] flex-col gap-3 overflow-y-auto px-4 pb-4 sm:max-w-sm"
-  >
-    <ResponsiveModal.Header>
-      <ResponsiveModal.Title>Sort by</ResponsiveModal.Title>
-    </ResponsiveModal.Header>
-    <div class="divide-y">
-      {#each Object.entries(SORT_LABELS) as [sort, { label, hint }] (sort)}
-        <label class="flex min-h-14 items-center gap-3">
-          <input
-            type="radio"
-            name="sync-sort"
-            class="accent-primary h-5 w-5"
-            checked={currentPrefs.sort === sort}
-            onchange={() => updatePrefs({ sort: sort as SyncSort })}
-          />
-          <span class="flex flex-col">
-            <span>{label}</span>
-            <span class="text-muted-foreground text-xs">{hint}</span>
+<SyncDialog open={!!openRow} onClose={() => (openRow = null)} title={openRow?.name ?? ''}>
+  {#if openRow}
+    {@const row = openRow}
+    <span class="inline-block rounded-full px-2 py-0.5 text-xs {STATUS_CLASSES[row.status]}">
+      {statusLabel(row.status)}
+    </span>
+
+    {#if row.status === 'sameName'}
+      <p class="text-muted-foreground text-sm">
+        Both devices hold an item with this name, and they have never synced. Pick which to keep, or
+        keep both.
+      </p>
+    {:else if row.status === 'changedOnBoth'}
+      <p class="text-muted-foreground text-sm">
+        Edited on this device and on the remote device since they last synced. Pick which version to
+        keep.
+      </p>
+    {/if}
+
+    <dl class="divide-y text-sm">
+      <div class="flex min-h-10 items-center justify-between gap-3">
+        <dt class="text-muted-foreground">Changed on this device</dt>
+        <dd>{formatChanged(row.local?.updatedAt)}</dd>
+      </div>
+      <div class="flex min-h-10 items-center justify-between gap-3">
+        <dt class="text-muted-foreground">Changed on remote device</dt>
+        <dd>{formatChanged(row.remote?.updatedAt)}</dd>
+      </div>
+      <div class="flex min-h-10 items-center justify-between gap-3">
+        <dt class="text-muted-foreground">Last synced</dt>
+        <dd>{row.lastSyncedAt ? formatAgo(row.lastSyncedAt) : 'Never'}</dd>
+      </div>
+    </dl>
+
+    <div class="flex flex-col gap-2">
+      {#if row.action === 'resolve' || row.action === 'choose'}
+        <Button variant="outline" class="h-auto flex-col py-2" onclick={() => send(row)}>
+          Send to replace
+          <span class="text-xs font-normal break-words whitespace-normal opacity-80">
+            Replaces the remote device's version
           </span>
-        </label>
-      {/each}
-    </div>
-    <label class="flex min-h-12 items-center gap-3">
-      <input
-        type="checkbox"
-        class="accent-primary h-5 w-5"
-        checked={currentPrefs.reversed}
-        onchange={(e) => updatePrefs({ reversed: e.currentTarget.checked })}
-      />
-      Reversed
-    </label>
-    <ResponsiveModal.Footer>
-      <Button class="w-full" onclick={() => (sheet = null)}>Close</Button>
-    </ResponsiveModal.Footer>
-  </ResponsiveModal.Content>
-</ResponsiveModal.Root>
-
-<ResponsiveModal.Root bind:open={() => !!openRow, (open) => !open && (openRow = null)}>
-  <ResponsiveModal.Content
-    class="flex max-h-[85dvh] flex-col gap-3 overflow-y-auto px-4 pb-4 sm:max-w-sm"
-  >
-    {#if openRow}
-      {@const row = openRow}
-      <ResponsiveModal.Header>
-        <ResponsiveModal.Title class="break-words">{row.name}</ResponsiveModal.Title>
-        <ResponsiveModal.Description>
-          <span class="rounded-full px-2 py-0.5 text-xs {STATUS_CLASSES[row.status]}">
-            {statusLabel(row.status)}
+        </Button>
+        <Button variant="outline" class="h-auto flex-col py-2" onclick={() => get(row)}>
+          Get and replace
+          <span class="text-xs font-normal break-words whitespace-normal opacity-80">
+            Replaces this device's version
           </span>
-        </ResponsiveModal.Description>
-      </ResponsiveModal.Header>
-
-      {#if row.status === 'sameName'}
-        <p class="text-muted-foreground text-sm">
-          Both devices hold an item with this name, and they have never synced. Pick which to keep,
-          or keep both.
-        </p>
-      {:else if row.status === 'changedOnBoth'}
-        <p class="text-muted-foreground text-sm">
-          Edited on this device and on the remote device since they last synced. Pick which version
-          to keep.
-        </p>
-      {/if}
-
-      <dl class="divide-y text-sm">
-        <div class="flex min-h-10 items-center justify-between gap-3">
-          <dt class="text-muted-foreground">Changed on this device</dt>
-          <dd>{formatChanged(row.local?.updatedAt)}</dd>
-        </div>
-        <div class="flex min-h-10 items-center justify-between gap-3">
-          <dt class="text-muted-foreground">Changed on remote device</dt>
-          <dd>{formatChanged(row.remote?.updatedAt)}</dd>
-        </div>
-        <div class="flex min-h-10 items-center justify-between gap-3">
-          <dt class="text-muted-foreground">Last synced</dt>
-          <dd>{row.lastSyncedAt ? formatAgo(row.lastSyncedAt) : 'Never'}</dd>
-        </div>
-      </dl>
-
-      <div class="flex flex-col gap-2">
-        {#if row.action === 'resolve' || row.action === 'choose'}
-          <Button variant="outline" class="h-auto flex-col py-2" onclick={() => send(row)}>
-            Send to replace
-            <span class="text-xs font-normal break-words whitespace-normal opacity-80">
-              Replaces the remote device's version
-            </span>
-          </Button>
-          <Button variant="outline" class="h-auto flex-col py-2" onclick={() => get(row)}>
-            Get and replace
-            <span class="text-xs font-normal break-words whitespace-normal opacity-80">
-              Replaces this device's version
-            </span>
-          </Button>
-          <Button variant="outline" class="h-auto flex-col py-2" onclick={() => keepBoth(row)}>
-            Get as a copy
-            <span class="text-xs font-normal break-words whitespace-normal opacity-80">
-              Keeps both versions <strong class="font-semibold">on this device</strong>
-            </span>
-          </Button>
-        {:else}
-          {#if row.action === 'send'}
-            <Button onclick={() => send(row)}>Send</Button>
-          {:else if row.action === 'get'}
-            <Button onclick={() => get(row)}>Get</Button>
+        </Button>
+        <Button variant="outline" class="h-auto flex-col py-2" onclick={() => keepBoth(row)}>
+          Get as a copy
+          <span class="text-xs font-normal break-words whitespace-normal opacity-80">
+            Keeps both versions <strong class="font-semibold">on this device</strong>
+          </span>
+        </Button>
+      {:else}
+        {#if row.action === 'send'}
+          <Button onclick={() => send(row)}>Send</Button>
+        {:else if row.action === 'get'}
+          <Button onclick={() => get(row)}>Get</Button>
+        {/if}
+        {#if row.local && row.remote}
+          {#if row.action !== 'get'}
+            <Button variant="outline" onclick={() => get(row)}>Get anyway</Button>
           {/if}
-          {#if row.local && row.remote}
-            {#if row.action !== 'get'}
-              <Button variant="outline" onclick={() => get(row)}>Get anyway</Button>
-            {/if}
-            {#if row.action !== 'send'}
-              <Button variant="outline" onclick={() => send(row)}>Send anyway</Button>
-            {/if}
+          {#if row.action !== 'send'}
+            <Button variant="outline" onclick={() => send(row)}>Send anyway</Button>
           {/if}
         {/if}
-        <Button variant="ghost" onclick={() => (openRow = null)}>Cancel</Button>
-      </div>
-    {/if}
-  </ResponsiveModal.Content>
-</ResponsiveModal.Root>
+      {/if}
+    </div>
+  {/if}
+  {#snippet footer()}
+    <Button variant="outline" class={DIALOG_BUTTON} onclick={() => (openRow = null)}>Cancel</Button>
+  {/snippet}
+</SyncDialog>
 
-<ResponsiveModal.Root bind:open={() => !!packConfirm, (open) => !open && (packConfirm = null)}>
-  <ResponsiveModal.Content
-    class="flex max-h-[85dvh] flex-col gap-3 overflow-y-auto px-4 pb-4 sm:max-w-sm"
-  >
+<ActionModal
+  open={!!packConfirm}
+  onCancel={() => (packConfirm = null)}
+  title="Replace this pack"
+  action={{
+    label: 'Replace',
+    tone: 'overwrite',
+    onConfirm: () => {
+      if (packConfirm) void get(packConfirm.row)
+    },
+  }}
+>
+  {#snippet description()}
     {#if packConfirm}
-      {@const confirm = packConfirm}
-      <ResponsiveModal.Header>
-        <ResponsiveModal.Title>Replace this pack?</ResponsiveModal.Title>
-        <ResponsiveModal.Description>
-          {confirm.stories}
-          {confirm.stories === 1 ? 'story uses' : 'stories use'} "{confirm.row.name}" on this device
-          and will narrate through the incoming version.
-        </ResponsiveModal.Description>
-      </ResponsiveModal.Header>
-      <ResponsiveModal.Footer>
-        <div class="flex w-full justify-end gap-2">
-          <Button variant="outline" onclick={() => (packConfirm = null)}>Cancel</Button>
-          <Button onclick={() => get(confirm.row)}>Replace</Button>
-        </div>
-      </ResponsiveModal.Footer>
+      {packConfirm.stories}
+      {packConfirm.stories === 1 ? 'story uses' : 'stories use'} "{packConfirm.row.name}" on this
+      device and will narrate through the incoming version.
     {/if}
-  </ResponsiveModal.Content>
-</ResponsiveModal.Root>
+  {/snippet}
+</ActionModal>
