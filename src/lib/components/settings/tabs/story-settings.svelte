@@ -9,6 +9,7 @@
   import { DEFAULT_PACK_ID } from '#lib/services/packs/binding.ts'
   import type { PresetPack } from '#lib/services/packs/types.ts'
   import WritingStyleFields from '#lib/components/shared/WritingStyleFields.svelte'
+  import { TENSE_FIXED_REASON } from '#lib/components/shared/narrativeVoice.ts'
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Label } from '#lib/components/ui/label/index.ts'
@@ -244,7 +245,7 @@
 
   <WritingStyleFields
     selectedPOV={storySettings.pov ?? 'second'}
-    selectedTense={storySettings.tense ?? 'present'}
+    selectedTense={story.tense}
     tone={storySettings.tone ?? ''}
     visualProseMode={storySettings.visualProseMode ?? false}
     imageGenerationEnabled={imageGenEnabled}
@@ -269,6 +270,10 @@
     narratorReinforcementDisabledReason={reinforcementUnavailableReason}
     disabledFields={{ pov: true, tense: true, visualProseMode: true }}
     disabledReason="Cannot be changed mid-story. Set during story creation."
+    voiceDisabledReason="Change it with Edit story, on the story's card in the library."
+    tenseDisabledReason={story.currentStory?.mode === 'creative-writing'
+      ? TENSE_FIXED_REASON
+      : undefined}
   />
 
   <!-- ── Custom System Prompt ─────────────────────────────────────────────── -->

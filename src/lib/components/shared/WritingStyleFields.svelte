@@ -4,7 +4,8 @@
   import { Label } from '#lib/components/ui/label/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
   import { Switch } from '#lib/components/ui/switch/index.ts'
-  import { BookOpen, User, Eye, AlignLeft, Repeat } from '@lucide/svelte'
+  import { Eye, AlignLeft, Repeat } from '@lucide/svelte'
+  import NarrativeVoiceFields from './NarrativeVoiceFields.svelte'
   import { IMAGE_GENERATION_MODES } from '#lib/utils/storySettings.ts'
   import type {
     POV,
@@ -50,6 +51,10 @@
       visualProseMode?: boolean
     }
     disabledReason?: string
+    /** Overrides `disabledReason` for perspective and tense. */
+    voiceDisabledReason?: string
+    /** Overrides both for tense alone. */
+    tenseDisabledReason?: string
   }
 
   let {
@@ -78,6 +83,8 @@
     onNarratorReinforcementChange,
     disabledFields,
     disabledReason,
+    voiceDisabledReason,
+    tenseDisabledReason,
   }: Props = $props()
 
   const IMAGE_MODE_TEXT: Record<ImageGenerationMode, { label: string; description: string }> = {
@@ -154,96 +161,17 @@
 </script>
 
 <div class="space-y-4">
-  <!-- Narrative Config -->
-  <section class="grid gap-4 sm:gap-8 md:grid-cols-2">
-    <!-- Perspective -->
-    <div
-      class="space-y-1"
-      class:opacity-50={disabledFields?.pov}
-      class:pointer-events-none={disabledFields?.pov}
-    >
-      <Label class="flex items-center gap-2 text-base font-semibold">
-        <User class="h-4 w-4" />
-        Perspective
-      </Label>
-      <RadioGroup.Root
-        value={selectedPOV}
-        onValueChange={(v) => onPOVChange(v as POV)}
-        class="grid grid-cols-3 gap-2"
-        disabled={disabledFields?.pov}
-      >
-        {#each ['first', 'second', 'third'] as pov, i (i)}
-          <Label
-            for={`pov-${pov}`}
-            class="border-muted bg-popover hover:bg-accent hover:text-accent-foreground has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[:focus-visible]:ring-ring flex cursor-pointer flex-col items-center justify-center rounded-md border-2 p-3 text-center has-[:focus-visible]:ring-2"
-          >
-            <RadioGroup.Item
-              value={pov}
-              id={`pov-${pov}`}
-              class="sr-only"
-              disabled={disabledFields?.pov}
-            />
-            <span class="font-medium capitalize">{pov}</span>
-          </Label>
-        {/each}
-      </RadioGroup.Root>
-      <p class="text-muted-foreground min-h-[1.25rem] text-xs">
-        {#if selectedPOV === 'first'}
-          "I draw my sword..."
-        {:else if selectedPOV === 'second'}
-          "You draw your sword..."
-        {:else}
-          "He/She/They draw their sword..."
-        {/if}
-      </p>
-      {#if disabledFields?.pov && disabledReason}
-        <p class="text-muted-foreground/70 text-xs italic">{disabledReason}</p>
-      {/if}
-    </div>
-
-    <!-- Tense -->
-    <div
-      class="space-y-1"
-      class:opacity-50={disabledFields?.tense}
-      class:pointer-events-none={disabledFields?.tense}
-    >
-      <Label class="flex items-center gap-2 text-base font-semibold">
-        <BookOpen class="h-4 w-4" />
-        Tense
-      </Label>
-      <RadioGroup.Root
-        value={selectedTense}
-        onValueChange={(v) => onTenseChange(v as Tense)}
-        class="grid grid-cols-2 gap-2"
-        disabled={disabledFields?.tense}
-      >
-        {#each ['present', 'past'] as tense, i (i)}
-          <Label
-            for={`tense-${tense}`}
-            class="border-muted bg-popover hover:bg-accent hover:text-accent-foreground has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[:focus-visible]:ring-ring flex cursor-pointer flex-col items-center justify-center rounded-md border-2 p-3 text-center has-[:focus-visible]:ring-2"
-          >
-            <RadioGroup.Item
-              value={tense}
-              id={`tense-${tense}`}
-              class="sr-only"
-              disabled={disabledFields?.tense}
-            />
-            <span class="font-medium capitalize">{tense}</span>
-          </Label>
-        {/each}
-      </RadioGroup.Root>
-      <p class="text-muted-foreground min-h-[1.25rem] text-xs">
-        {#if selectedTense === 'present'}
-          Action happens now.
-        {:else}
-          Action happened in the past.
-        {/if}
-      </p>
-      {#if disabledFields?.tense && disabledReason}
-        <p class="text-muted-foreground/70 text-xs italic">{disabledReason}</p>
-      {/if}
-    </div>
-  </section>
+  <NarrativeVoiceFields
+    {selectedPOV}
+    {selectedTense}
+    {onPOVChange}
+    {onTenseChange}
+    disabled={disabledFields}
+    reasons={{
+      pov: voiceDisabledReason ?? disabledReason,
+      tense: tenseDisabledReason ?? voiceDisabledReason ?? disabledReason,
+    }}
+  />
 
   <!-- Tone -->
   <section class="space-y-2 pt-1">

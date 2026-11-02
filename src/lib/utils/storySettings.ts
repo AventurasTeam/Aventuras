@@ -1,6 +1,19 @@
-import type { ImageGenerationMode, StorySettings } from '#lib/types/index.ts'
+import type { ImageGenerationMode, POV, Story, StorySettings, Tense } from '#lib/types/index.ts'
 
 export const IMAGE_GENERATION_MODES: readonly ImageGenerationMode[] = ['none', 'agentic', 'inline']
+
+type Voiced = Pick<Story, 'mode' | 'settings'>
+
+/** The perspective a story is written in. */
+export function storyPov(story: Voiced | null | undefined): POV {
+  return story?.settings?.pov ?? (story?.mode === 'creative-writing' ? 'third' : 'first')
+}
+
+/** The tense a story is written in; Creative Writing is always past, whatever is stored. */
+export function storyTense(story: Voiced | null | undefined): Tense {
+  if (story?.mode === 'creative-writing') return 'past'
+  return story?.settings?.tense ?? 'present'
+}
 
 /**
  * A story's settings as they come off disk. An image mode that is not a current value (older

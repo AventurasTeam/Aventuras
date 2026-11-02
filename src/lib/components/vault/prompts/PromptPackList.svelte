@@ -345,7 +345,7 @@
     if (!v) deleteTarget = null
   }}
 >
-  <ResponsiveModal.Content class="p-0 sm:max-w-sm">
+  <ResponsiveModal.Content class="p-0 sm:max-w-md">
     <ResponsiveModal.Header class="border-b px-6 py-4">
       <ResponsiveModal.Title>Delete Pack</ResponsiveModal.Title>
       <ResponsiveModal.Description>

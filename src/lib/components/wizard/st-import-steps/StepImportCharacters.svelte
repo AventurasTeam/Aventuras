@@ -6,7 +6,7 @@
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
   import { Label } from '#lib/components/ui/label/index.ts'
   import { Badge } from '#lib/components/ui/badge/index.ts'
-  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import VaultCharacterFormFields from '#lib/components/vault/VaultCharacterFormFields.svelte'
   import UniversalVaultBrowser from '#lib/components/vault/UniversalVaultBrowser.svelte'
   import { characterVault } from '#lib/stores/characterVault.svelte.ts'
@@ -87,6 +87,22 @@
   // Protagonist-specific fields
   let editBackground = $state('')
   let editMotivation = $state('')
+  /** The edit as it opened, so the modal knows when it holds changes. */
+  let editSeed = $state('')
+  let editPortraitSeed = $state<string | null>(null)
+  // The portrait, an image data URL, is compared by identity rather than serialised per keystroke.
+  const editState = $derived(
+    JSON.stringify([
+      { ...editFormData, portrait: null },
+      editRole,
+      editRelationship,
+      editBackground,
+      editMotivation,
+    ]),
+  )
+  const editDirty = $derived(
+    editState !== editSeed || (editFormData.portrait ?? null) !== editPortraitSeed,
+  )
   // Track which characters were saved to vault
   let savedToVault = $state<Set<number>>(new Set())
 
@@ -103,6 +119,8 @@
     }
     editBackground = protagonist.background || ''
     editMotivation = protagonist.motivation || ''
+    editSeed = editState
+    editPortraitSeed = editFormData.portrait ?? null
   }
 
   function startEdit(index: number) {
@@ -118,6 +136,8 @@
     }
     editRole = char.role || ''
     editRelationship = char.relationship || ''
+    editSeed = editState
+    editPortraitSeed = editFormData.portrait ?? null
   }
 
   function closeEdit() {
@@ -420,85 +440,63 @@
 
 <!-- Edit Character Modal -->
 {#if editingIndex !== null || editingProtagonist}
-  <ResponsiveModal.Root
+  <ActionModal
     open={true}
-    onOpenChange={(open) => {
-      if (!open) closeEdit()
-    }}
+    onCancel={closeEdit}
+    title={editingProtagonist ? 'Edit the protagonist' : 'Edit the character'}
+    action={{ label: 'Save', disabled: !editFormData.name.trim(), onConfirm: saveEdit }}
+    dirty={editDirty}
+    requireChange
+    size="2xl"
   >
-    <ResponsiveModal.Content class="flex flex-col md:h-auto md:max-h-[90vh] md:max-w-150">
-      <ResponsiveModal.Header title={editingProtagonist ? 'Edit Protagonist' : 'Edit Character'} />
-
-      <div class="flex-1 overflow-y-auto px-4 sm:pr-4">
-        <form
-          id="edit-char-form"
-          onsubmit={(e) => {
-            e.preventDefault()
-            saveEdit()
-          }}
-        >
-          {#if editingProtagonist}
-            <!-- Protagonist-specific fields -->
-            <div class="mb-4 grid grid-cols-2 gap-3">
-              <div>
-                <Label for="edit-background">Background</Label>
-                <Input
-                  id="edit-background"
-                  value={editBackground}
-                  oninput={(e) => (editBackground = e.currentTarget.value)}
-                  placeholder="Character background"
-                />
-              </div>
-              <div>
-                <Label for="edit-motivation">Motivation</Label>
-                <Input
-                  id="edit-motivation"
-                  value={editMotivation}
-                  oninput={(e) => (editMotivation = e.currentTarget.value)}
-                  placeholder="Character motivation"
-                />
-              </div>
-            </div>
-          {:else}
-            <!-- Supporting character fields -->
-            <div class="mb-4 grid grid-cols-2 gap-3">
-              <div>
-                <Label for="edit-role">Role</Label>
-                <Input
-                  id="edit-role"
-                  value={editRole}
-                  oninput={(e) => (editRole = e.currentTarget.value)}
-                  placeholder="e.g., ally, mentor, antagonist..."
-                />
-              </div>
-              <div>
-                <Label for="edit-relationship">Relationship</Label>
-                <Input
-                  id="edit-relationship"
-                  value={editRelationship}
-                  oninput={(e) => (editRelationship = e.currentTarget.value)}
-                  placeholder="Relationship to protagonist"
-                />
-              </div>
-            </div>
-          {/if}
-          <VaultCharacterFormFields
-            data={editFormData}
-            onUpdate={(newData) => (editFormData = newData)}
+    {#if editingProtagonist}
+      <!-- Protagonist-specific fields -->
+      <div class="mb-4 grid grid-cols-2 gap-3">
+        <div>
+          <Label for="edit-background">Background</Label>
+          <Input
+            id="edit-background"
+            value={editBackground}
+            oninput={(e) => (editBackground = e.currentTarget.value)}
+            placeholder="Character background"
           />
-        </form>
+        </div>
+        <div>
+          <Label for="edit-motivation">Motivation</Label>
+          <Input
+            id="edit-motivation"
+            value={editMotivation}
+            oninput={(e) => (editMotivation = e.currentTarget.value)}
+            placeholder="Character motivation"
+          />
+        </div>
       </div>
-
-      <ResponsiveModal.Footer>
-        <Button
-          type="submit"
-          form="edit-char-form"
-          disabled={!editFormData.name.trim()}
-          class="w-full"
-        >
-          Save Changes
-        </Button>
-      </ResponsiveModal.Footer>
-    </ResponsiveModal.Content>
-  </ResponsiveModal.Root>
+    {:else}
+      <!-- Supporting character fields -->
+      <div class="mb-4 grid grid-cols-2 gap-3">
+        <div>
+          <Label for="edit-role">Role</Label>
+          <Input
+            id="edit-role"
+            value={editRole}
+            oninput={(e) => (editRole = e.currentTarget.value)}
+            placeholder="e.g., ally, mentor, antagonist..."
+          />
+        </div>
+        <div>
+          <Label for="edit-relationship">Relationship</Label>
+          <Input
+            id="edit-relationship"
+            value={editRelationship}
+            oninput={(e) => (editRelationship = e.currentTarget.value)}
+            placeholder="Relationship to protagonist"
+          />
+        </div>
+      </div>
+    {/if}
+    <VaultCharacterFormFields
+      data={editFormData}
+      onUpdate={(newData) => (editFormData = newData)}
+    />
+  </ActionModal>
 {/if}

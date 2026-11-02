@@ -154,7 +154,7 @@
               size="icon"
               class={triggerClass}
               onclick={() => onUpdateFromFile?.()}
-              title="Update from file"
+              title="Replace this pack"
             >
               <RefreshCw class="h-4 w-4" />
             </Button>
