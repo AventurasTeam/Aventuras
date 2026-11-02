@@ -12,6 +12,20 @@ export async function goToWorld(page: Page): Promise<void> {
   await page.waitForURL(/\/world\//)
 }
 
+// Any in-story screen → Plot over GO TO.
+export async function goToPlot(page: Page): Promise<void> {
+  await chrome.actionsTrigger(page).click()
+  await chrome.goToPlotRow(page).click()
+  await page.waitForURL(/\/plot\//)
+}
+
+// Any in-story screen → Story Settings over GO TO.
+export async function goToStorySettings(page: Page): Promise<void> {
+  await chrome.actionsTrigger(page).click()
+  await chrome.goToStorySettingsRow(page).click()
+  await page.waitForURL(/\/story-settings\//)
+}
+
 // World → Reader over GO TO, then the Actions menu's Undo row (CTRL-Z's touch-tier twin).
 export async function undoFromReader(page: Page): Promise<void> {
   await chrome.actionsTrigger(page).click()
