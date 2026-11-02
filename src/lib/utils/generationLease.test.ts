@@ -12,7 +12,6 @@ describe('GenerationLease', () => {
     lease.finish()
 
     expect(onRelease).toHaveBeenCalledTimes(1)
-    expect(lease.isFinished).toBe(true)
   })
 
   it('carries a null branch for the main branch without conflating it', () => {

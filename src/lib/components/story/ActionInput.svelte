@@ -928,14 +928,9 @@
         }
       }
 
-      ui.updateActivationData(activationTracker, currentStoryRef.id)
+      // Before the activations are kept: an abandoned turn leaves nothing sticky.
       if (stopRequested) return
-
-      // Stop was unavailable (a retry) or has no backup to rewind to, so the turn cannot be rewound:
-      // fail it, which records the error and offers Retry.
-      if (keepAliveEnded && !ending.narrationSaved) {
-        throw new Error('The system ended background generation before the story was written.')
-      }
+      ui.updateActivationData(activationTracker, currentStoryRef.id)
 
       if (!fullResponse.trim()) {
         // The reason when the pipeline gave one: with reporting off, nothing else shows it.
@@ -1226,7 +1221,7 @@
   }
 
   async function handleSubmit() {
-    if (!inputValue.trim() || ui.isGenerating || !story.currentStory) return
+    if (!inputValue.trim() || ui.isGenerating || ui.regeneratePending || !story.currentStory) return
     const currentStory = story.currentStory
 
     await withGenerationLease(async (lease) => {
@@ -1398,14 +1393,13 @@
       ui.clearSuggestions(storyId)
       const cachedRetrieval = retrievalKeyFor(userActionEntry.content)
       await generateResponse(lease, userActionEntry.id, userActionEntry.content, {
-        countStyleReview: false,
         styleReviewSource: 'generate-from-action',
         cachedRetrievalResult: cachedRetrieval ? ui.retrievalResultFor(cachedRetrieval) : null,
       })
     })
   }
 
-  async function handleRetryLastMessage(keep?: RevertKeep) {
+  async function handleRetryLastMessage(keep: RevertKeep) {
     const backup = ui.retryBackup
     console.log('[handleRetryLastMessage] called', {
       hasBackup: !!backup,

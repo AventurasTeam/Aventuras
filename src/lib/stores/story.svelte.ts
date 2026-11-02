@@ -5814,7 +5814,7 @@ class StoryStore {
    * A retry's rewind while State Tracking is on: the delete path, through the records, from the
    * position before the retried action. A failed revert throws before any entry is removed.
    */
-  async rewindForRetry(position: number, keep: RevertKeep = KEEP_ALL): Promise<void> {
+  async rewindForRetry(position: number, keep: RevertKeep): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
     this.assertNoBranchForkAtOrAfter(position)
     const summary = await this.rollbackFrom(position, keep)
@@ -5847,8 +5847,7 @@ class StoryStore {
 
     // Backstop for a caller that bypasses RetryService: this deletes the active branch's
     // world state and re-inserts the snapshot's rows. The story is checked as well as the
-    // branch — a deferred rewind runs after Stop, by which time another story may be open,
-    // and two stories' main branches are both null.
+    // branch: two stories' main branches are both null.
     const scope = { storyId: backup.storyId, branchId: backup.branchId ?? null }
     if (!this.isOpen(scope)) {
       throw new Error('Cannot restore a retry backup taken in another story or branch')

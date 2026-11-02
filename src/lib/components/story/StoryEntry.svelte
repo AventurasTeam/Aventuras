@@ -231,9 +231,11 @@
   )
 
   // Branch as well as story: a snapshot taken elsewhere would be refused on restore, and
-  // offering it here hides the regenerate that does work on this branch.
+  // offering it here hides the regenerate that does work on this branch. A trailing action holds
+  // the backup after a Stop, so a retry would answer it, not this narration.
   const canRetry = $derived(
     isLatestNarration &&
+      !trailingAction(story.entries) &&
       ui.retryBackup &&
       story.currentScope &&
       sameBranchScope(ui.retryBackup, story.currentScope) &&

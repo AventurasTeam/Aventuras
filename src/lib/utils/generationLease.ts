@@ -19,10 +19,6 @@ export class GenerationLease {
     private readonly onRelease: () => void,
   ) {}
 
-  get isFinished(): boolean {
-    return this.finished
-  }
-
   /** Mark the generation settled and release. Idempotent. */
   finish(): void {
     if (this.finished) return

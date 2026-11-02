@@ -365,7 +365,7 @@ class UIStore {
   private retryCallback: (() => Promise<void>) | null = null
 
   // Retry last message callback - set by ActionInput for edit-and-retry feature
-  private retryLastMessageCallback: ((keep?: RevertKeep) => Promise<void>) | null = null
+  private retryLastMessageCallback: ((keep: RevertKeep) => Promise<void>) | null = null
 
   // Regenerate narration callback - set by ActionInput. Lighter-weight fallback used when
   // no full retry backup is available (e.g. the latest narration survived a manual delete
@@ -1480,11 +1480,11 @@ class UIStore {
   }
 
   // Retry last message callback management (for edit-and-retry feature)
-  setRetryLastMessageCallback(callback: ((keep?: RevertKeep) => Promise<void>) | null) {
+  setRetryLastMessageCallback(callback: ((keep: RevertKeep) => Promise<void>) | null) {
     this.retryLastMessageCallback = callback
   }
 
-  async triggerRetryLastMessage(keep?: RevertKeep) {
+  async triggerRetryLastMessage(keep: RevertKeep) {
     console.log('[UI] triggerRetryLastMessage called', {
       hasCallback: !!this.retryLastMessageCallback,
     })

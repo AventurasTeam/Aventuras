@@ -21,7 +21,6 @@
   } | null>(null)
 
   $effect(() => {
-    if (!ui.regenerateRequest) return
     const request = ui.takeRegenerateRequest()
     if (request) void start(request.entryId, request.retry)
   })
