@@ -127,6 +127,18 @@ describe('countTokens on long runs', () => {
     expect(parts.join('')).toBe(text)
   })
 
+  // A slash-and-newline match can take the first character of a longer run, and what it leaves of
+  // that run still has to be cut.
+  it.each([
+    ['a non-whitespace run after a slash', `${'\n/'.repeat(300)}${'x'.repeat(600)}`],
+    ['a space run after a newline', `${'/\n'.repeat(300)}${' '.repeat(600)}`],
+  ])('cuts %s that ends a slash-and-newline run', (_name, text) => {
+    const parts = encodedParts(text)
+
+    expect(Math.max(...parts.map(longestRun))).toBeLessThanOrEqual(512)
+    expect(parts.join('')).toBe(text)
+  })
+
   it('sends a slash-and-newline run of 512 whole and cuts one of 513', () => {
     const half = '/\n'.repeat(256)
     expect(encodedParts(half)).toEqual([half])

@@ -21,10 +21,12 @@ export function warmTokenEncoder(): void {
 
 // js-tiktoken's merge is quadratic in one regex word, and o200k takes a run of non-whitespace, of
 // whitespace, or of newlines and slashes after punctuation as one. Cutting all three caps a word
-// at 1,025 code points, so the cost stays linear; each cut moves the count by a few tokens.
+// at 1,025 code points, so the merge stays linear; each cut moves the count by a few tokens. The
+// lookbehinds spare the scan a retry at every position in a run, except after `/` or a newline,
+// where the last alternative can stop partway through one.
 const LONGEST_ENCODED_RUN = 512
 const LONG_RUN = new RegExp(
-  `\\S{${LONGEST_ENCODED_RUN + 1},}|\\s{${LONGEST_ENCODED_RUN + 1},}|[\\r\\n/]{${LONGEST_ENCODED_RUN + 1},}`,
+  `(?<![^\\s/])\\S{${LONGEST_ENCODED_RUN + 1},}|(?<![^\\S\\r\\n])\\s{${LONGEST_ENCODED_RUN + 1},}|[\\r\\n/]{${LONGEST_ENCODED_RUN + 1},}`,
   'gu',
 )
 const RUN_PIECE = new RegExp(`[\\s\\S]{1,${LONGEST_ENCODED_RUN}}`, 'gu')
