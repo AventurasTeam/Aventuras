@@ -6,7 +6,7 @@ import { GenerationStatusPill } from '@/components/compounds/generation-status-p
 import { TruncatedText } from '@/components/compounds/truncated-text'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
-import type { ChapterProgress, ChapterProgressTone } from '@/lib/chapters'
+import { chapterProgressTone, type ChapterProgress } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { STORY_SETTINGS_DEFAULTS, storyDefinitionSchema } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -29,11 +29,17 @@ function BodyPlaceholder({ label }: { label: string }) {
   )
 }
 
-function progressAt(percent: number, tone: ChapterProgressTone = 'success'): ChapterProgress {
-  return { tokens: percent * 240, threshold: 24_000, percent, tone, canClose: true }
+function progressAt(percent: number): ChapterProgress {
+  return {
+    tokens: percent * 240,
+    threshold: 24_000,
+    percent,
+    tone: chapterProgressTone(percent),
+    canClose: true,
+  }
 }
 
-const STRIP_VARIANTS = [progressAt(0), progressAt(50), progressAt(100, 'danger')]
+const STRIP_VARIANTS = [progressAt(0), progressAt(50), progressAt(100)]
 
 let memoryRun: RunState | undefined
 
@@ -328,7 +334,7 @@ export const ChapterProgressVariants: Story = {
   },
 }
 
-// No read yet: the strip stays mounted at 0, for layout stability.
+// No prop: the strip stays mounted at 0, for layout stability.
 export const ChapterProgressUndefined: Story = {
   render: () => (
     <ScreenShell
