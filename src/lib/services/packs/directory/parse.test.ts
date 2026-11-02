@@ -5,7 +5,6 @@ import { validateTree } from './parse'
 
 const packYaml = serializePackFile({
   formatVersion: DIRECTORY_FORMAT_VERSION,
-  appVersion: '0.7.9',
   source: 'pack',
   name: 'My Pack',
   variables: [
@@ -116,7 +115,6 @@ describe('validateTree', () => {
   it('refuses a format version it cannot read', () => {
     const future = serializePackFile({
       formatVersion: DIRECTORY_FORMAT_VERSION + 1,
-      appVersion: '9.9.9',
       source: 'pack',
       name: 'From the future',
       variables: [],
@@ -130,9 +128,8 @@ describe('validateTree', () => {
   it('carries the shipped-baseline marker through', () => {
     const baseline = serializePackFile({
       formatVersion: DIRECTORY_FORMAT_VERSION,
-      appVersion: '0.7.9',
       source: 'shipped-baseline',
-      name: 'Aventuras 0.7.9 shipped prompts',
+      name: 'Aventuras shipped prompts',
       variables: [],
     })
 

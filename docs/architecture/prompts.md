@@ -181,28 +181,46 @@ the root for metadata and custom variables, generated reference material under `
 folder reaches `fs_scope.allow_directory`, so the capability's `$APPDATA`/`$TEMP` scope is not a constraint
 and the whole thing is plain `plugin-fs` from TypeScript.
 
-**The filename is the identity; the folder is presentation.** `<group>/<id>.md`, where the group comes from
-`TEMPLATE_GROUP_MAP` — which is code, and changes between releases. Were the path the identity, a template
-the app regroups would read as a delete plus an add of a file the user may also have edited. As a stem it is
-a rename, which git detects. Import ignores the folder entirely, so two files sharing a name anywhere in the
-tree are refused rather than resolved.
+**The filename is the identity; the folder is presentation.** `<NN group>/<id>.md`, where the group comes
+from `TEMPLATE_GROUP_MAP` and `NN` is its two-digit position in the editor's `GROUP_ORDER`, so file browsers
+and git list the folders in the editor's order; `Other` takes the position after the last group. Both are
+code and change between releases. Were the path the identity, a template the app regroups — or a group
+inserted mid-order, which renumbers every folder after it — would read as a delete plus an add of a file the
+user may also have edited. As a stem it is a rename, which git detects. Position rather than a fixed number
+per group, because matching the editor is the point. Import ignores the folder entirely, so two files
+sharing a name anywhere in the tree are refused rather than resolved.
 
 Import reads `pack.yaml` and `.md` files inside folders. Root `.md` files and `_`-prefixed folders are
-ignored silently, which is what lets a user's `README.md`, their notes, and the generated reference share
-one tree with no manifest saying which is which. Export writes into that tree, and prunes template files and
-reference material it did not write — but only in a directory already carrying a `pack.yaml`, and never a
-root file it does not own.
+ignored silently, which is what lets the generated `README.md`, a user's notes, and the generated reference
+share one tree with no manifest saying which is which. Export writes into that tree, and prunes template
+files and reference material it did not write — but only in a directory already carrying a `pack.yaml`, and
+never a root file it does not own.
 
 Two exports of unchanged content must be byte-identical or git cannot merge them, which is the whole point.
 Hence LF endings, one trailing newline, fixed key order in `pack.yaml`, variables sorted by `sortOrder` then
 name, and **no timestamp** — a value that moves between two exports of the same pack conflicts on every
 merge and says nothing the commit does not.
 
-`_reference/template-status.md` names the templates carrying an edit, and speaks a different language per
-source. For `default-pack` it uses `classifyTemplate`'s three states, because there the baseline *is* the
-shipped text; those rows are what would otherwise ride silently into a merge base. For a custom pack it uses
-`isUntouched` alone — a shipped comparison there would flag every row of a pack whose baseline was never the
-shipped text — and names what the next replace destroys.
+**`pack.yaml` holds nothing that changes between releases.** A custom tree always differs from the shipped
+baseline in `source` and `name`, and git merges adjacent changed lines as one hunk, so any per-release value
+beside them — an application version, a versioned baseline name — conflicts with the custom branch on every
+release. Without one, the baseline's `pack.yaml` is the same in `base` and `theirs` and drops out of the
+merge. The version lives in `_reference/version.md`, a file of its own beside the two variable lists it
+describes: when a custom tree was last exported by a release whose baseline export was skipped, the version
+conflicts, and as one isolated line whose answer is always "take theirs". Nothing under `_reference/`
+depends on the exported templates, so an edit never touches it.
+
+**`README.md` is `guides/prompt-packs-as-folders.md`**, imported with `?raw` so the user guide and every
+tree's README are one text, and the README a tree carries is the guide from the version that wrote it. It is
+normalised to line feeds on export: a checkout with `core.autocrlf` would otherwise put CRLF in the bundle,
+and two builds of one version would write different READMEs.
+
+Format 1 wrote `appVersion` into `pack.yaml`, unnumbered folders, `ABOUT.md` and two more reference files;
+format 2 is the current one. `formatVersion` tells them apart, so an export into a format 1 tree prunes
+`ABOUT.md` as well, and a `README.md` there — or in a folder with no readable `pack.yaml` — is the user's and
+is renamed to `README_user.md` (`_2`, … when taken) rather than overwritten. Renames run before the write,
+through `plugin-fs`'s `rename`, and the confirmation lists them beside the deletions. Import reads both
+formats.
 
 ### Why the Baseline Lives in Git
 

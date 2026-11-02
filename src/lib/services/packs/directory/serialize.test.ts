@@ -6,12 +6,11 @@ import {
   parseTemplateFile,
   serializePackFile,
   serializeTemplate,
-  type PackFile,
+  type WrittenPackFile,
 } from './serialize'
 
-const packFile: PackFile = {
+const packFile: WrittenPackFile = {
   formatVersion: DIRECTORY_FORMAT_VERSION,
-  appVersion: '0.7.9',
   source: 'pack',
   name: 'My Pack',
   description: 'A pack',
@@ -45,23 +44,23 @@ describe('serializePackFile', () => {
   })
 
   it('orders variables by sortOrder then name, whatever order they arrive in', () => {
-    const reversed: PackFile = { ...packFile, variables: [...packFile.variables].reverse() }
+    const reversed: WrittenPackFile = { ...packFile, variables: [...packFile.variables].reverse() }
     expect(serializePackFile(reversed)).toBe(serializePackFile(packFile))
 
     const yaml = serializePackFile(packFile)
     expect(yaml.indexOf('aside_frequency')).toBeLessThan(yaml.indexOf('writing_style'))
   })
 
-  it('writes the versions and source, and no timestamp', () => {
+  it('writes the format version and source, and no application version or timestamp', () => {
     const yaml = serializePackFile(packFile)
     expect(yaml).toContain(`formatVersion: ${DIRECTORY_FORMAT_VERSION}`)
-    expect(yaml).toContain('appVersion: 0.7.9')
+    expect(yaml).not.toContain('appVersion')
     expect(yaml).toContain('source: pack')
     expect(yaml).not.toMatch(/\d{4}-\d{2}-\d{2}/)
   })
 
   it('omits an absent description and author rather than writing null', () => {
-    const bare: PackFile = { ...packFile, description: undefined, author: undefined }
+    const bare: WrittenPackFile = { ...packFile, description: undefined, author: undefined }
     const yaml = serializePackFile(bare)
     expect(yaml).not.toContain('description:')
     expect(yaml).not.toContain('author:')
@@ -87,6 +86,20 @@ describe('parsePackFile', () => {
       expect(result.error).toContain(String(DIRECTORY_FORMAT_VERSION + 1))
       expect(result.error).toContain(String(DIRECTORY_FORMAT_VERSION))
     }
+  })
+
+  it('reads a format 1 file, which recorded the application version', () => {
+    const formatOne = [
+      'formatVersion: 1',
+      'appVersion: 0.7.9',
+      'source: pack',
+      'name: My Pack',
+      'variables: []',
+      '',
+    ].join('\n')
+    const result = parsePackFile(formatOne)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.value.formatVersion).toBe(1)
   })
 
   it('refuses malformed YAML', () => {

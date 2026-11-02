@@ -10,14 +10,15 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { CustomVariableSchema } from '../validation'
 
 /** Version of the directory layout, not of any pack. */
-export const DIRECTORY_FORMAT_VERSION = 1
+export const DIRECTORY_FORMAT_VERSION = 2
 
 /** Whether a tree came from a pack's stored rows or from the text the app ships. */
 export type TreeSource = 'pack' | 'shipped-baseline'
 
 const PackFileSchema = z.object({
   formatVersion: z.number().int().positive(),
-  appVersion: z.string(),
+  /** Written by format 1 only. */
+  appVersion: z.string().optional(),
   source: z.enum(['pack', 'shipped-baseline']),
   name: z.string().min(1),
   description: z.string().optional(),
@@ -27,12 +28,15 @@ const PackFileSchema = z.object({
 
 export type PackFile = z.infer<typeof PackFileSchema>
 
+/** What an export writes: nothing that varies with the application version. */
+export type WrittenPackFile = Omit<PackFile, 'appVersion'>
+
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string }
 
 /** Ordering that survives a rename: author intent first, then name for anything it leaves tied. */
 function bySortOrderThenName(
-  a: PackFile['variables'][number],
-  b: PackFile['variables'][number],
+  a: WrittenPackFile['variables'][number],
+  b: WrittenPackFile['variables'][number],
 ): number {
   const order = (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
   return order !== 0 ? order : a.variableName.localeCompare(b.variableName)
@@ -41,14 +45,13 @@ function bySortOrderThenName(
 /**
  * Write `pack.yaml`.
  *
- * Keys are emitted in a fixed order and no timestamp is written: a value that changes
- * between two exports of the same pack conflicts on every merge and says nothing the commit
- * does not already.
+ * Keys are emitted in a fixed order, and neither a timestamp nor the application version is
+ * written: a value that changes between two exports of the same pack conflicts on every merge
+ * and says nothing the commit does not already.
  */
-export function serializePackFile(file: PackFile): string {
+export function serializePackFile(file: WrittenPackFile): string {
   const ordered: Record<string, unknown> = {
     formatVersion: file.formatVersion,
-    appVersion: file.appVersion,
     source: file.source,
     name: file.name,
   }

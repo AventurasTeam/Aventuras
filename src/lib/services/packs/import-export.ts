@@ -12,15 +12,14 @@ import type { PresetPack } from './types'
 import { PACK_FILE } from './directory/layout'
 import { pickDirectory, readTree, writeTree } from './directory/io'
 import { validateTree, type DirectoryValidationResult } from './directory/parse'
-import { parsePackFile } from './directory/serialize'
 import {
   buildShippedBaselineTree,
   buildTree,
-  planPrune,
-  shippedTemplateRows,
+  folderOrigin,
+  planFolderChanges,
+  type FileRename,
   type Tree,
 } from './directory/tree'
-import type { StatusSource } from './directory/reference'
 
 interface TemplateError {
   templateId: string
@@ -49,13 +48,15 @@ export interface DirectoryExportPlan {
   tree: Tree
   /** Template and reference files of a previous export that this one no longer writes. */
   prunePaths: string[]
+  /** Files the user owns that would otherwise be overwritten, moved aside first. */
+  renames: FileRename[]
   /** The folder carries a `pack.yaml` this version can parse, so it is a tree we own. */
   isKnownExport: boolean
   /**
    * Ask before writing. True when the folder holds files we did not put there — one sharing a
    * name with a file being written is still overwritten — and whenever anything would be
-   * deleted, because a `.md` a user kept beside the prompts is indistinguishable from a
-   * template this export has dropped.
+   * deleted or renamed, because a `.md` a user kept beside the prompts is indistinguishable
+   * from a template this export has dropped.
    */
   needsConfirmation: boolean
 }
@@ -119,21 +120,31 @@ class ImportExportService {
       // A folder that cannot be read is not one this export owns: nothing is pruned from it,
       // and the confirmation stands in for the certainty we could not get.
       console.error('[ImportExportService] Failed to read the chosen folder:', e)
-      return { root, tree, prunePaths: [], isKnownExport: false, needsConfirmation: true }
+      return {
+        root,
+        tree,
+        prunePaths: [],
+        renames: [],
+        isKnownExport: false,
+        needsConfirmation: true,
+      }
     }
 
     // Pruning deletes files, so the folder has to prove it is one of ours. The name
     // `pack.yaml` alone does not: other tools use it too, and treating a stranger's folder
     // as a previous export would delete the Markdown nested inside it.
-    const isKnownExport = packFileText !== undefined && parsePackFile(packFileText).ok
-    const prunePaths = isKnownExport ? planPrune(existingPaths, tree) : []
+    const origin = folderOrigin(packFileText)
+    const isKnownExport = origin !== 'foreign'
+    const { prunePaths, renames } = planFolderChanges(existingPaths, tree, origin)
 
     return {
       root,
       tree,
       prunePaths,
+      renames,
       isKnownExport,
-      needsConfirmation: (!isKnownExport && existingPaths.length > 0) || prunePaths.length > 0,
+      needsConfirmation:
+        (!isKnownExport && existingPaths.length > 0) || prunePaths.length > 0 || renames.length > 0,
     }
   }
 
@@ -144,10 +155,6 @@ class ImportExportService {
 
     const root = await pickDirectory('Export prompt pack to folder')
     if (!root) return null
-
-    const status: StatusSource = fullPack.pack.isDefault
-      ? { kind: 'default-pack', rows: fullPack.templates, shippedHashes: await shippedHashes() }
-      : { kind: 'custom-pack', rows: fullPack.templates }
 
     const tree = buildTree({
       source: 'pack',
@@ -166,7 +173,6 @@ class ImportExportService {
         description: v.description,
         sortOrder: v.sortOrder,
       })),
-      status,
     })
 
     return this.planWrite(root, tree)
@@ -181,7 +187,7 @@ class ImportExportService {
   }
 
   async applyDirectoryExport(plan: DirectoryExportPlan): Promise<void> {
-    await writeTree(plan.root, plan.tree, plan.prunePaths)
+    await writeTree(plan.root, plan.tree, plan)
   }
 
   /** Pick a folder and validate it in full. `null` if the user cancelled. */
@@ -346,16 +352,6 @@ class ImportExportService {
 
     return pack.id
   }
-}
-
-/** The hash of the text the app ships, per stored row id, for the status report. */
-async function shippedHashes(): Promise<Map<string, string>> {
-  const entries = await Promise.all(
-    shippedTemplateRows().map(
-      async (row) => [row.templateId, await hashContent(row.content)] as [string, string],
-    ),
-  )
-  return new Map(entries)
 }
 
 export const importExportService = new ImportExportService()

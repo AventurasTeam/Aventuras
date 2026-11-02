@@ -82,6 +82,9 @@ const GROUP_ORDER = [
   'Wizard',
 ]
 
+/** The group a template without one of its own is listed under, after every named group. */
+export const UNGROUPED_GROUP = 'Other'
+
 /**
  * Build template groups from PROMPT_TEMPLATES.
  * Returns ordered array of groups, each containing their templates.
@@ -90,17 +93,16 @@ export function getTemplateGroups(): TemplateGroup[] {
   const groupMap = new Map<string, PromptTemplate[]>()
 
   for (const template of PROMPT_TEMPLATES) {
-    const groupName = TEMPLATE_GROUP_MAP[template.id] ?? 'Other'
+    const groupName = getTemplateGroup(template.id)
     if (!groupMap.has(groupName)) {
       groupMap.set(groupName, [])
     }
     groupMap.get(groupName)!.push(template)
   }
 
-  // Include 'Other' group at the end if it exists
   const orderedGroups = GROUP_ORDER.filter((name) => groupMap.has(name))
-  if (groupMap.has('Other')) {
-    orderedGroups.push('Other')
+  if (groupMap.has(UNGROUPED_GROUP)) {
+    orderedGroups.push(UNGROUPED_GROUP)
   }
 
   return orderedGroups.map((name) => ({
@@ -111,7 +113,13 @@ export function getTemplateGroups(): TemplateGroup[] {
 
 /** Get the group name for a template ID */
 export function getTemplateGroup(templateId: string): string {
-  return TEMPLATE_GROUP_MAP[templateId] ?? 'Other'
+  return TEMPLATE_GROUP_MAP[templateId] ?? UNGROUPED_GROUP
+}
+
+/** A group's 1-based position in the editor's list; the ungrouped group comes after every other. */
+export function groupPosition(group: string): number {
+  const index = GROUP_ORDER.indexOf(group)
+  return index === -1 ? GROUP_ORDER.length + 1 : index + 1
 }
 
 /** A stored template row named for a reader rather than by its id. */

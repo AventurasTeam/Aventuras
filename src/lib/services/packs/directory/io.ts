@@ -7,9 +7,9 @@
  */
 
 import { open } from '@tauri-apps/plugin-dialog'
-import { mkdir, readDir, readTextFile, remove, writeTextFile } from '@tauri-apps/plugin-fs'
+import { mkdir, readDir, readTextFile, remove, rename, writeTextFile } from '@tauri-apps/plugin-fs'
 import { classifyPath } from './layout'
-import type { Tree } from './tree'
+import type { FolderChanges, Tree } from './tree'
 
 /** Ask for a directory, adding it to the fs scope. `null` if the user cancelled. */
 export async function pickDirectory(title: string): Promise<string | null> {
@@ -68,8 +68,17 @@ export async function readTree(root: string): Promise<ReadTree> {
   return { allPaths, contents }
 }
 
-/** Write every file of `tree`, creating folders as needed, then remove `prunePaths`. */
-export async function writeTree(root: string, tree: Tree, prunePaths: string[]): Promise<void> {
+/** Apply `renames`, write every file of `tree`, creating folders as needed, then prune. */
+export async function writeTree(
+  root: string,
+  tree: Tree,
+  { prunePaths, renames }: FolderChanges,
+): Promise<void> {
+  // First: a renamed file can share a name with one the tree is about to write.
+  for (const { from, to } of renames) {
+    await rename(joinPath(root, from), joinPath(root, to))
+  }
+
   const directories = new Set<string>()
   for (const path of tree.keys()) {
     const lastSlash = path.lastIndexOf('/')

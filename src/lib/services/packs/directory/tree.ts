@@ -11,22 +11,19 @@ import {
   ABOUT_FILE,
   GITATTRIBUTES_FILE,
   PACK_FILE,
+  README_FILE,
   REFERENCE_DIR,
   USER_HALF_SUFFIX,
+  USER_README_STEM,
+  VERSION_FILE,
   classifyPath,
   isWritableTemplateId,
   templatePath,
 } from './layout'
-import {
-  aboutDoc,
-  gitattributesDoc,
-  templateStatusDoc,
-  templateVariablesDoc,
-  variablesDoc,
-  type StatusSource,
-} from './reference'
+import { gitattributesDoc, readmeDoc, variablesDoc, versionDoc } from './reference'
 import {
   DIRECTORY_FORMAT_VERSION,
+  parsePackFile,
   serializePackFile,
   serializeTemplate,
   type TreeSource,
@@ -45,7 +42,6 @@ export interface TreeInput {
   author?: string
   templates: StoredTemplate[]
   variables: PackExport['variables']
-  status: StatusSource
 }
 
 /** A tree, as relative path to file contents. */
@@ -95,17 +91,14 @@ export function buildTree(input: TreeInput): Tree {
 
   const tree: Tree = new Map()
 
-  const contentById = new Map<string, string>()
   for (const template of input.templates) {
     tree.set(templatePath(template.templateId), serializeTemplate(template.content))
-    contentById.set(template.templateId, template.content)
   }
 
   tree.set(
     PACK_FILE,
     serializePackFile({
       formatVersion: DIRECTORY_FORMAT_VERSION,
-      appVersion: input.appVersion,
       source: input.source,
       name: input.name,
       description: input.description,
@@ -113,12 +106,11 @@ export function buildTree(input: TreeInput): Tree {
       variables: input.variables,
     }),
   )
-  tree.set(ABOUT_FILE, aboutDoc())
+  tree.set(README_FILE, readmeDoc())
   tree.set(GITATTRIBUTES_FILE, gitattributesDoc())
   tree.set(`${REFERENCE_DIR}/system-variables.md`, variablesDoc('system'))
   tree.set(`${REFERENCE_DIR}/runtime-variables.md`, variablesDoc('runtime'))
-  tree.set(`${REFERENCE_DIR}/template-variables.md`, templateVariablesDoc(contentById))
-  tree.set(`${REFERENCE_DIR}/template-status.md`, templateStatusDoc(input.status))
+  tree.set(`${REFERENCE_DIR}/${VERSION_FILE}`, versionDoc(input.appVersion))
 
   return tree
 }
@@ -128,11 +120,10 @@ export function buildShippedBaselineTree(appVersion: string): Tree {
   return buildTree({
     source: 'shipped-baseline',
     appVersion,
-    name: `Aventuras ${appVersion} shipped prompts`,
+    name: 'Aventuras shipped prompts',
     description: 'The prompt text this version of Aventuras ships. Exported as a merge base.',
     templates: shippedTemplateRows(),
     variables: [],
-    status: { kind: 'shipped-baseline' },
   })
 }
 
@@ -162,4 +153,69 @@ export function planPrune(existingPaths: string[], tree: Tree): string[] {
         path.toLowerCase().startsWith(`${REFERENCE_DIR.toLowerCase()}/`),
     )
     .sort()
+}
+
+/**
+ * Who wrote the chosen folder, as far as its `pack.yaml` says: this format, an earlier one, or
+ * nobody this version recognises.
+ */
+export type FolderOrigin = 'current' | 'earlier' | 'foreign'
+
+export function folderOrigin(packFileText: string | undefined): FolderOrigin {
+  if (packFileText === undefined) return 'foreign'
+  const parsed = parsePackFile(packFileText)
+  if (!parsed.ok) return 'foreign'
+  return parsed.value.formatVersion < DIRECTORY_FORMAT_VERSION ? 'earlier' : 'current'
+}
+
+export interface FileRename {
+  from: string
+  to: string
+}
+
+/** What an export does to a folder's existing files besides overwriting the ones it writes. */
+export interface FolderChanges {
+  prunePaths: string[]
+  /** Applied before the tree is written, so the export's own file can take the old name. */
+  renames: FileRename[]
+}
+
+/** Finds `name` among root paths without case, as Windows and macOS would. */
+function findRootFile(paths: string[], name: string): string | undefined {
+  return paths.find((path) => path.toLowerCase() === name.toLowerCase())
+}
+
+/** A `README.md` the export did not write moves to the first free `README_user[_N].md`. */
+function planReadmeRename(paths: string[]): FileRename[] {
+  const readme = findRootFile(paths, README_FILE)
+  if (readme === undefined) return []
+
+  const taken = new Set(paths.map((path) => path.toLowerCase()))
+  let to = `${USER_README_STEM}.md`
+  for (let n = 2; taken.has(to.toLowerCase()); n++) to = `${USER_README_STEM}_${n}.md`
+  return [{ from: readme, to }]
+}
+
+/**
+ * Plan the changes to a folder's existing files.
+ *
+ * Nothing is pruned from a folder this version does not recognise. A `README.md` is the export's
+ * own only in a tree the current format wrote; anywhere else it is the user's, and is moved aside
+ * rather than overwritten. An earlier format's `ABOUT.md` is generated, so it goes.
+ */
+export function planFolderChanges(
+  existingPaths: string[],
+  tree: Tree,
+  origin: FolderOrigin,
+): FolderChanges {
+  const paths = existingPaths.map((path) => path.replace(/\\/g, '/'))
+  const prunePaths = origin === 'foreign' ? [] : planPrune(paths, tree)
+
+  const about = origin === 'earlier' ? findRootFile(paths, ABOUT_FILE) : undefined
+  if (about !== undefined) prunePaths.push(about)
+
+  return {
+    prunePaths: prunePaths.toSorted(),
+    renames: origin === 'current' ? [] : planReadmeRename(paths),
+  }
 }
