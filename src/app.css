@@ -445,7 +445,7 @@
   animation-duration: 180ms;
   animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
-/* Held at the end until unmounted, which vaul times to its own 0.5s. */
+/* Held at the end until bits-ui unmounts it, when the animation finishes. */
 [data-vaul-drawer][data-vaul-snap-points='false'][data-state='closed'],
 [data-vaul-overlay][data-vaul-snap-points='false'][data-state='closed'] {
   animation-fill-mode: forwards;

@@ -1593,7 +1593,7 @@
             size="icon"
             onclick={() => ui.requestRegenerate({ entryId: entry.id, retry: true })}
             class={cn(
-              'h-7 w-7',
+              'size-7',
               FEATURE_COLORS.regenerate.text,
               FEATURE_COLORS.regenerate.hoverText,
             )}
@@ -1607,7 +1607,7 @@
             size="icon"
             onclick={() => ui.requestRegenerate({ entryId: entry.id, retry: false })}
             class={cn(
-              'h-7 w-7',
+              'size-7',
               FEATURE_COLORS.regenerate.text,
               FEATURE_COLORS.regenerate.hoverText,
             )}
@@ -1622,7 +1622,7 @@
             size="icon"
             onclick={() => ui.requestBranchFrom(entryCheckpoint?.id ?? null)}
             class={cn(
-              'hidden h-7 w-7 @min-[23rem]:flex',
+              'hidden size-7 @min-[23rem]:flex',
               FEATURE_COLORS.branch.text,
               FEATURE_COLORS.branch.hoverText,
             )}
@@ -1832,7 +1832,7 @@
             onclick={handleRetryFromEntry}
             disabled={entriesLocked}
             class={cn(
-              'h-7 w-7',
+              'size-7',
               FEATURE_COLORS.regenerate.text,
               FEATURE_COLORS.regenerate.hoverText,
             )}
@@ -1863,7 +1863,7 @@
         size="icon"
         onclick={() => ui.requestEntryDelete(entry.id)}
         disabled={entriesLocked}
-        class={cn('text-muted-foreground h-7 w-7', FEATURE_COLORS.delete.revealText)}
+        class={cn('text-muted-foreground size-7', FEATURE_COLORS.delete.revealText)}
         title={entriesLocked ? 'Cannot delete during generation or retry' : 'Delete'}
       >
         <Trash2 class="h-4 w-4" />

@@ -33,7 +33,12 @@ import {
   migrateWorldStateBudget,
   migrateWorldStateInjection,
 } from './settingsMigrations'
-import { ui, NAV_FILTER_SETTING, EXPLANATION_FOLD_PREFIX } from '#lib/stores/ui.svelte.ts'
+import {
+  ui,
+  NAV_FILTER_SETTING,
+  EXPLANATION_FOLD_PREFIX,
+  isExplanationFoldId,
+} from '#lib/stores/ui.svelte.ts'
 import { LANDMARK_FILTER_GROUPS } from '#lib/utils/storyNavigation.ts'
 import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '#lib/constants/timeout.ts'
@@ -1645,7 +1650,7 @@ class SettingsStore {
       }
 
       for (const [id, value] of await database.getSettingsWithPrefix(EXPLANATION_FOLD_PREFIX)) {
-        ui.explanationFolded.set(id, value === 'true')
+        if (isExplanationFoldId(id)) ui.explanationFolded.set(id, value === 'true')
       }
 
       const galleryNewestFirst = await database.getSetting('gallery_newest_first')

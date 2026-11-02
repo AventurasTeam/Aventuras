@@ -4360,6 +4360,8 @@ class StoryStore {
       undefined,
       signal,
     )
+    // A Stop that lands after the summary has returned must still save nothing.
+    signal?.throwIfAborted()
 
     // Get the next chapter number
     const chapterNumber = await this.getNextChapterNumber()

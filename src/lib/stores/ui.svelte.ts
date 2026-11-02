@@ -135,6 +135,21 @@ export interface LoreRetry extends BranchScope {
 /** Prefixes the setting each `shared/ExplanationFold` saves its state under. */
 export const EXPLANATION_FOLD_PREFIX = 'explanation_folded:'
 
+/** One per explanation: each names its own saved fold state. */
+export const EXPLANATION_FOLD_IDS = [
+  'checkpoint_help',
+  'story_edit_help',
+  'pack_refresh_help',
+  'pack_update_help',
+  'entry_time_help',
+  'time_anchor_help',
+] as const
+export type ExplanationFoldId = (typeof EXPLANATION_FOLD_IDS)[number]
+
+export function isExplanationFoldId(id: string): id is ExplanationFoldId {
+  return (EXPLANATION_FOLD_IDS as readonly string[]).includes(id)
+}
+
 class UIStore {
   activePanel = $state<ActivePanel>('story')
   sidebarTab = $state<SidebarTab>('characters')
@@ -184,7 +199,7 @@ class UIStore {
   /** Whether the landmark list shows snapshots. Kept for the session only, not saved. */
   navShowSnapshots = $state(false)
   /** Which folding explanations are folded; an id missing here is open. */
-  explanationFolded = new SvelteMap<string, boolean>()
+  explanationFolded = new SvelteMap<ExplanationFoldId, boolean>()
 
   // Streaming state
   streamingContent = $state('')
@@ -480,7 +495,7 @@ class UIStore {
       .catch((err) => console.warn('[UI] Failed to persist gallery order:', err))
   }
 
-  setExplanationFolded(id: string, folded: boolean): Promise<void> {
+  setExplanationFolded(id: ExplanationFoldId, folded: boolean): Promise<void> {
     this.explanationFolded.set(id, folded)
     return database
       .setSetting(EXPLANATION_FOLD_PREFIX + id, folded.toString())

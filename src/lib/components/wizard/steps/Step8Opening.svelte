@@ -135,8 +135,6 @@
     onCheckStartReception()
   })
 
-  /** What a typed value comes to once days roll into years: `Y1 D400` is a year and 35 days. */
-
   function resultStartNote(): string {
     if (isEditingOpening)
       return 'A manual override for the automatically generated value. Cancel restores the previous time.'

@@ -41,8 +41,6 @@
       ? 'border-l-2 border-l-blue-400/50 bg-blue-500/5 pl-3 -ml-3 rounded-lg'
       : ''
 
-  /** What the typed value comes to once days roll into years: `Y1 D400` is a year and 35 days. */
-
   let showCharacterSelector = $state(false)
   let charSearchQuery = $state('')
   let activeTab = $state('general')

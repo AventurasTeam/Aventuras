@@ -124,7 +124,7 @@
       leaveFor(() => onOpenAssistant?.({ entityType: 'character', entityId: id, entityName: name }))
     }}
   >
-    <Bot class="h-4 w-4" />
+    <Bot class="size-4" />
     Ask assistant
   </Button>
 {/snippet}

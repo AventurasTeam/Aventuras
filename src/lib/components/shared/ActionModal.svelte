@@ -11,7 +11,8 @@
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { setTextareaUncapped } from '#lib/components/ui/textarea/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
-  import { releaseOrphanScrollLock } from '#lib/utils/scrollLock.ts'
+  import { blurFocusedElement, releaseOrphanScrollLock } from '#lib/utils/scrollLock.ts'
+  import { createIsMobile } from '#lib/hooks/is-mobile.svelte.ts'
   import { claimBackPress } from '#lib/utils/backPress.ts'
   import { MODAL_CLOSE_TRANSITION_MS } from '#lib/constants/layout.ts'
   import { cn } from '#lib/utils/cn.ts'
@@ -101,6 +102,7 @@
   setTextareaUncapped()
 
   const question = new PendingQuestion()
+  const isMobile = createIsMobile()
   /** What the modal shows; a close is routed through `leave` before `open` follows. */
   let shownOpen = $state(untrack(() => open))
   let wasOpen = untrack(() => open)
@@ -128,16 +130,25 @@
     if (jumping) return
     const el = activeScroller()
     if (!el) {
-      jump = { long: false, atTop: true, atBottom: false }
+      setJump({ long: false, atTop: true, atBottom: false })
       return
     }
     tallestScroller = Math.max(tallestScroller, el.clientHeight)
-    jump = readJumpState({
-      scrollTop: el.scrollTop,
-      scrollHeight: el.scrollHeight,
-      clientHeight: el.clientHeight,
-      tallest: tallestScroller,
-    })
+    setJump(
+      readJumpState({
+        scrollTop: el.scrollTop,
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+        tallest: tallestScroller,
+      }),
+    )
+  }
+
+  // Runs on every scroll frame, so the state is replaced only when what it shows changes.
+  function setJump(next: JumpState) {
+    if (next.long !== jump.long || next.atTop !== jump.atTop || next.atBottom !== jump.atBottom) {
+      jump = next
+    }
   }
 
   async function jumpTo(edge: 'top' | 'bottom') {
@@ -194,10 +205,12 @@
     measureJump()
     return () => observer.disconnect()
   })
+  // A real text input, not a hidden form value. Written out again in the phone placement class,
+  // which Tailwind must find whole.
+  const INPUT = 'input:not([type=hidden]):not([aria-hidden=true])'
+  const TEXT_FIELD = `${INPUT}:enabled, textarea:enabled`
   // What bits-ui's open focus could land on: a hidden form input or a disabled control cannot.
-  const FOCUSABLE =
-    'input:not([type=hidden]):not([aria-hidden=true]):enabled, textarea:enabled, select:enabled, button:enabled, [href], [tabindex="0"]'
-  const TEXT_FIELD = 'input:not([type=hidden]):not([aria-hidden=true]):enabled, textarea:enabled'
+  const FOCUSABLE = `${TEXT_FIELD}, select:enabled, button:enabled, [href], [tabindex="0"]`
   // A popup layer bits-ui portals to the end of the body, latest opened last.
   const OPEN_LAYER =
     '[data-state="open"]:is([role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"])'
@@ -217,10 +230,17 @@
     if (open === wasOpen) return
     wasOpen = open
     if (open) {
+      // A close still finishing would otherwise call `onClosed` on the reopened modal.
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
       shownOpen = true
       tallestScroller = 0
       return
     }
+    // A close driven from here never reaches the root's own blur, which would drop the keyboard.
+    blurFocusedElement(isMobile.current)
     shownOpen = false
     question.answer(false)
     // Unmounting skips `vaul`'s own restore, so the lock is released here; see `utils/scrollLock`.
@@ -306,7 +326,7 @@
    */
   function handleEnter(e: KeyboardEvent) {
     const field = e.target
-    if (e.key !== 'Enter' || e.isComposing) return
+    if (e.key !== 'Enter' || e.isComposing || e.defaultPrevented) return
     if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)) return
     const hint = e.ctrlKey || e.metaKey ? 'go' : field.enterKeyHint
     if (hint !== 'next' && hint !== 'go' && hint !== 'done') return
@@ -362,7 +382,8 @@
       // Inset from a phone's edges, where the dialog would otherwise run full width.
       presentation === 'dialog' && 'w-[calc(100%-2rem)] rounded-lg',
       // Held near the top on a phone when it has a text field, so the keyboard shortening the
-      // screen does not move it; only its bottom edge comes up, and the content scrolls.
+      // screen does not move it; only its bottom edge comes up, and the content scrolls. The
+      // input selector is `INPUT`.
       presentation === 'dialog' &&
         'max-md:has-[input:not([type=hidden]):not([aria-hidden=true]),textarea]:top-[calc(var(--safe-top)+1rem)] max-md:has-[input:not([type=hidden]):not([aria-hidden=true]),textarea]:translate-y-0',
     )}
@@ -431,7 +452,7 @@
                 disabled={busy}
                 onclick={() => void askThen(removal.question, removal.onRemove)}
               >
-                <Trash2 class="h-4 w-4" />
+                <Trash2 class="size-4" />
                 {removal.label}
               </Button>
             </div>

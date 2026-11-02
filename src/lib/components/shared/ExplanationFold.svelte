@@ -7,7 +7,7 @@
   import type { Snippet } from 'svelte'
   import { ChevronRight } from '@lucide/svelte'
   import * as Collapsible from '#lib/components/ui/collapsible/index.ts'
-  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { ui, type ExplanationFoldId } from '#lib/stores/ui.svelte.ts'
   import { cn } from '#lib/utils/cn.ts'
 
   type Props = {
@@ -16,8 +16,7 @@
     children: Snippet
   } & (
     | {
-        /** Names the saved fold state, so it must not be shared with another explanation. */
-        id: string
+        id: ExplanationFoldId
         open?: never
       }
     | { id?: never; open?: boolean }
@@ -40,7 +39,7 @@
 >
   <Collapsible.Trigger class="group hover:text-foreground justify-start gap-1 text-xs">
     <ChevronRight
-      class="h-3.5 w-3.5 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-90"
+      class="size-3.5 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-90"
     />
     {summary}
   </Collapsible.Trigger>

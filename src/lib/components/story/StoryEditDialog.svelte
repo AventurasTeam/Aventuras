@@ -162,7 +162,7 @@
       {#if hasGenre}
         <TagBadge name={genre.trim()} color={resolveGenreColor(genre.trim(), genreColor)} />
       {/if}
-      <ChevronDown class={cn('h-3.5 w-3.5 transition-transform', showColors && 'rotate-180')} />
+      <ChevronDown class={cn('size-3.5 transition-transform', showColors && 'rotate-180')} />
     </button>
 
     {#if showColors}
@@ -192,14 +192,14 @@
             aria-label={GENRE_COLORS[key].label}
             title={GENRE_COLORS[key].label}
             class={cn(
-              'flex h-7 w-7 items-center justify-center rounded-full',
+              'flex size-7 items-center justify-center rounded-full',
               GENRE_COLORS[key].swatch,
               selectedKey === key && 'ring-ring ring-2 ring-offset-1',
             )}
             onclick={() => (genreColor = key)}
           >
             {#if selectedKey === key}
-              <Check class="h-4 w-4 text-white" />
+              <Check class="size-4 text-white" />
             {/if}
           </button>
         {/each}
@@ -237,7 +237,7 @@
         class="text-muted-foreground flex items-start gap-2 text-xs"
         {@attach (el) => el.scrollIntoView({ block: 'nearest' })}
       >
-        <AlertTriangle class="mt-px h-4 w-4 shrink-0 text-amber-500" />
+        <AlertTriangle class="mt-px size-4 shrink-0 text-amber-500" />
         Old entries keep their wording. New entries are written in the new voice.
       </p>
     {/if}

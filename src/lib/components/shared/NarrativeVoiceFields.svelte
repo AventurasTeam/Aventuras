@@ -27,7 +27,7 @@
 <section class="grid gap-4 sm:gap-8 md:grid-cols-2">
   <div class={cn('space-y-1', disabled?.pov && 'pointer-events-none opacity-50')}>
     <Label class="flex items-center gap-2 text-base font-semibold">
-      <User class="h-4 w-4" />
+      <User class="size-4" />
       Perspective
     </Label>
     <RadioGroup.Root
@@ -64,7 +64,7 @@
 
   <div class={cn('space-y-1', disabled?.tense && 'pointer-events-none opacity-50')}>
     <Label class="flex items-center gap-2 text-base font-semibold">
-      <BookOpen class="h-4 w-4" />
+      <BookOpen class="size-4" />
       Tense
     </Label>
     <RadioGroup.Root

@@ -64,7 +64,7 @@
 
     {#if edited > 0}
       <Alert.Root variant="destructive">
-        <AlertTriangle class="h-4 w-4" />
+        <AlertTriangle class="size-4" />
         <Alert.Title>
           {edited}
           {edited === 1 ? 'template carries' : 'templates carry'} your edits
@@ -82,7 +82,7 @@
             onclick={onExportFirst}
             disabled={exporting || updating}
           >
-            <Download class="h-4 w-4" />
+            <Download class="size-4" />
             {exporting ? 'Exporting…' : 'Export current pack'}
           </Button>
         </Alert.Description>

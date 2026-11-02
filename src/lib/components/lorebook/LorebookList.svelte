@@ -316,7 +316,7 @@
         title="Delete all entries"
         onclick={() => (deleteAllDialogOpen = true)}
       >
-        <Trash2 class="h-4 w-4" />
+        <Trash2 class="size-4" />
       </Button>
       <ActionModal
         bind:open={deleteAllDialogOpen}

@@ -758,7 +758,7 @@
 </div>
 
 {#snippet warning()}
-  <AlertTriangle class="h-5 w-5 text-amber-500" />
+  <AlertTriangle class="size-5 text-amber-500" />
 {/snippet}
 
 <ActionModal

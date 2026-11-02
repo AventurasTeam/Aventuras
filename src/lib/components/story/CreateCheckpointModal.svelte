@@ -277,12 +277,12 @@
         <p>The world state at this entry is known:</p>
         {#each pastCheckpoint.skipped as position, i (i)}
           <p class="flex items-start gap-1.5">
-            <TriangleAlert class="mt-px h-3.5 w-3.5 shrink-0 text-amber-500" />
+            <TriangleAlert class="mt-px size-3.5 shrink-0 text-amber-500" />
             {skippedSnapshotText(position)}
           </p>
         {/each}
         <p class="flex items-start gap-1.5">
-          <Check class="mt-px h-3.5 w-3.5 shrink-0 text-green-500" />
+          <Check class="mt-px size-3.5 shrink-0 text-green-500" />
           {pastCheckpoint.source.position === entry.position
             ? `${capitalize(anchorText(pastCheckpoint.source))} exists, so no rollback is needed.`
             : `Built by a rollback from ${anchorText(pastCheckpoint.source)}.`}
