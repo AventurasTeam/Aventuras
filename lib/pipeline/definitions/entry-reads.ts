@@ -1,6 +1,13 @@
-import { and, desc, eq, gte, inArray, isNull, lt, lte, min, ne, type SQL } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, lt, lte, min, ne, type SQL } from 'drizzle-orm'
 
-import { chunked, deltas, storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
+import {
+  chunked,
+  deltas,
+  openRegionWhere,
+  storyEntries,
+  type DbCtx,
+  type StoryEntry,
+} from '@/lib/db'
 import { NARRATIVE_KINDS } from '@/lib/piggyback'
 import { settingsCount } from '@/lib/settings-number'
 import { storyPlaceOf, type StoryPlace } from '@/lib/world'
@@ -82,7 +89,7 @@ export async function readRecentEntryIds(
   const [open] = await db
     .select({ start: min(storyEntries.position) })
     .from(storyEntries)
-    .where(and(nonSystem, isNull(storyEntries.chapterId)))
+    .where(openRegionWhere(branchId))
   let floor = Math.min(open?.start ?? bounds.firstPosition, bounds.firstPosition)
   const reach = settingsCount(bounds.protectedBuffer, 0)
   if (reach > 0) {

@@ -35,9 +35,12 @@ import {
   type OpenFailureKind,
   type OpenStory,
 } from '@/lib/stores'
+import { warmTokenEncoder } from '@/lib/tokens'
 
 import { readRecentEntries } from '../story-entries/recent-window'
 import type { DbCtx } from '../types'
+
+const TOKEN_WARM_TIMEOUT_MS = 2_000
 
 export async function setStoryFavorite(id: string, favorite: boolean, ctx: DbCtx): Promise<void> {
   await ctx.runInTransaction([
@@ -189,6 +192,10 @@ async function loadAndPublish(
   // Warm the vec cache for a story opened with pre-existing stale rows; no-op
   // until boot wires the drain controller, and the sync stage owns correctness.
   kickStoryDrain(row.storyId)
+  // Off the open's own task, so the encoder's build doesn't land on the first Send. React Native
+  // has no real idle signal, so on Android it runs during the open, ahead of the reader's first
+  // paint.
+  requestIdleCallback(warmTokenEncoder, { timeout: TOKEN_WARM_TIMEOUT_MS })
   return { status: 'ok', storyId: row.storyId, branchId }
 }
 

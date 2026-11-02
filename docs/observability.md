@@ -264,6 +264,8 @@ convention, and the expectation that subsystems route through
   `rejection_tracker_unavailable`. `row_signals_read_failed`
   (`hooks/use-row-signals.ts`, a bounded-read failure),
   `entry_index_read_failed` (`hooks/use-entry-index.ts`, same shape),
+  `chapter_progress_read_failed` (`hooks/use-chapter-progress.ts`, same
+  shape; the strip keeps its last number),
   `history_load_failed` / `history_load_more_failed`
   (`components/history/use-history-chunks.ts` — a chunk load or a
   load-more rejected; a failed load-more keeps the rows already

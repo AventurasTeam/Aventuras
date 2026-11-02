@@ -15,6 +15,7 @@ import {
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { logger } from '@/lib/diagnostics'
 import { entriesStore, generationStore, happeningsStore, undoRedoStore } from '@/lib/stores'
+import { countTokens } from '@/lib/tokens'
 
 import { shownCounts } from './__tests__/shown-counts'
 import { isContentEditDelta } from './classifier-facts'
@@ -22,6 +23,11 @@ import { rollbackToEntry, updateStoryEntryContent } from './operational'
 import { writeSystemEntry } from './system-entry'
 import { redoLastAction, undoLastAction } from './undo'
 import { __redoGroupForTest } from '../delta/redo'
+
+vi.mock('@/lib/tokens', async (importOriginal) => {
+  const actual = await importOriginal<{ countTokens: (text: string) => number }>()
+  return { ...actual, countTokens: vi.fn(actual.countTokens) }
+})
 
 afterEach(() => {
   entriesStore.__reset()
@@ -32,7 +38,10 @@ afterEach(() => {
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>['db']
 
-type SeedEntry = Pick<NewStoryEntry, 'id' | 'position' | 'kind' | 'content' | 'metadata'>
+type SeedEntry = Pick<
+  NewStoryEntry,
+  'id' | 'position' | 'kind' | 'content' | 'contentTokens' | 'metadata'
+>
 
 const status = (processedThrough: number): ClassifierStatus => ({
   state: 'idle',
@@ -56,7 +65,12 @@ async function seedBranch(db: TestDb, entries: SeedEntry[], processed: number) {
   await db.insert(storyEntries).values(rows)
   entriesStore.hydrate(
     'b1',
-    rows.map((r) => ({ ...r, chapterId: null, metadata: r.metadata ?? null })),
+    rows.map((r) => ({
+      ...r,
+      contentTokens: r.contentTokens ?? null,
+      chapterId: null,
+      metadata: r.metadata ?? null,
+    })),
   )
   await db.insert(deltas).values({
     id: 'd_turn',
@@ -142,10 +156,12 @@ describe('a content edit under a system entry', () => {
     await seedTurn(db)
     await writeSystemEntry({ branchId: 'b1', content: 'the provider refused' }, ctx)
     const [banner] = await db.select().from(storyEntries).where(eq(storyEntries.kind, 'system'))
+    vi.mocked(countTokens).mockClear()
 
     const result = await updateStoryEntryContent('b1', banner.id, 'rewritten', ctx)
 
     expect(result.status).toBe('rejected')
+    expect(vi.mocked(countTokens)).not.toHaveBeenCalled()
     // `clearSystemEntry` takes the row without a delta, so a delta written here outlives
     // its anchor and the survival predicate then spares it from every rollback window.
     const written = await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))
@@ -227,6 +243,7 @@ describe('the recorded invalidation scope', () => {
     const [edit] = await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))
     expect(edit.undoPayload).toEqual({
       content: 'the courier rode north',
+      contentTokens: null,
       $invalidationScope: { entryIds: ['e_reply'], editedPosition: 2 },
     })
   })
@@ -534,6 +551,7 @@ describe('a two-entry recorded scope', () => {
     const [edit] = await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))
     expect(edit.undoPayload).toEqual({
       content: 'i ride north',
+      contentTokens: null,
       $invalidationScope: { entryIds: ['e_act', 'e_reply'], editedPosition: 2 },
     })
   })
@@ -622,6 +640,7 @@ describe('a content edit of a cut-off reply', () => {
     expect(edits).toHaveLength(1)
     expect(edits[0].undoPayload).toEqual({
       content: 'the courier rode north',
+      contentTokens: null,
       metadata: { cutOff: MARK },
       $invalidationScope: { entryIds: ['e_reply'], editedPosition: 2 },
     })
@@ -728,6 +747,7 @@ describe('a content edit of a cut-off reply', () => {
     const [edit] = await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))
     expect(edit.undoPayload).toEqual({
       content: 'the courier rode north',
+      contentTokens: null,
       metadata: { cutOff: MARK },
     })
     expect((await replyRow(db)).metadata).toEqual(REPLY_META)
@@ -767,6 +787,151 @@ describe('a content edit of a cut-off reply', () => {
 
     expect(result.status).toBe('ok')
     expect((await replyRow(db)).metadata?.cutOff).toEqual(MARK)
+    expect(await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))).toEqual([])
+  })
+})
+
+// data-model.md → Chapters / memory system: written on a content edit, restored by its undo.
+describe('the count of an edited entry', () => {
+  const ORIGINAL = 'the courier rode north'
+  const EDITED = 'the courier turned back at the ford and waited out the snow'
+
+  async function seedCountedReply(
+    db: TestDb,
+    contentTokens: number | null,
+    metadata: EntryMetadata | null = null,
+  ) {
+    await seedBranch(
+      db,
+      [
+        { id: 'e_open', position: 1, kind: 'opening', content: 'once upon a time' },
+        {
+          id: 'e_reply',
+          position: 2,
+          kind: 'ai_reply',
+          content: ORIGINAL,
+          contentTokens,
+          metadata,
+        },
+      ],
+      2,
+    )
+  }
+
+  async function expectCount(db: TestDb, count: number | null) {
+    expect((await replyRow(db)).contentTokens).toBe(count)
+    expect(entriesStore.getById('e_reply')?.contentTokens).toBe(count)
+  }
+
+  it('tells the two texts apart, or nothing below could fail', () => {
+    expect(countTokens(EDITED)).not.toBe(countTokens(ORIGINAL))
+  })
+
+  it('writes the new count to the row and the store', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seedCountedReply(db, countTokens(ORIGINAL))
+
+    await updateStoryEntryContent('b1', 'e_reply', EDITED, { db, runInTransaction })
+
+    await expectCount(db, countTokens(EDITED))
+  })
+
+  it('counts the new text once', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seedCountedReply(db, countTokens(ORIGINAL))
+    vi.mocked(countTokens).mockClear()
+
+    await updateStoryEntryContent('b1', 'e_reply', EDITED, { db, runInTransaction })
+
+    expect(vi.mocked(countTokens).mock.calls).toEqual([[EDITED]])
+  })
+
+  it('records the old count on the delta, under the column key', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seedCountedReply(db, countTokens(ORIGINAL))
+
+    await updateStoryEntryContent('b1', 'e_reply', EDITED, { db, runInTransaction })
+
+    const [edit] = await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))
+    expect(edit.undoPayload).toMatchObject({
+      content: ORIGINAL,
+      contentTokens: countTokens(ORIGINAL),
+    })
+    expect(isContentEditDelta(edit)).toBe(true)
+  })
+
+  it('CTRL-Z restores the old count and redo the new one, in both', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedCountedReply(db, countTokens(ORIGINAL))
+    await updateStoryEntryContent('b1', 'e_reply', EDITED, ctx)
+
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+    await expectCount(db, countTokens(ORIGINAL))
+
+    expect((await redoLastAction('b1', ctx)).status).toBe('ok')
+    await expectCount(db, countTokens(EDITED))
+  })
+
+  it('round-trips a null count as null, not as a recount', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedCountedReply(db, null)
+
+    await updateStoryEntryContent('b1', 'e_reply', EDITED, ctx)
+    await expectCount(db, countTokens(EDITED))
+    const [edit] = await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))
+    expect(edit.undoPayload).toHaveProperty('contentTokens', null)
+
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+    await expectCount(db, null)
+
+    expect((await redoLastAction('b1', ctx)).status).toBe('ok')
+    await expectCount(db, countTokens(EDITED))
+  })
+
+  it('counts an edit that clears a cut-off mark, and undoes the two together', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedCountedReply(db, countTokens(ORIGINAL), { ...REPLY_META, cutOff: MARK })
+
+    await updateStoryEntryContent('b1', 'e_reply', EDITED, ctx)
+    await expectCount(db, countTokens(EDITED))
+    expect(entriesStore.getById('e_reply')?.metadata).toStrictEqual(REPLY_META)
+
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+    await expectCount(db, countTokens(ORIGINAL))
+    expect((await replyRow(db)).metadata?.cutOff).toEqual(MARK)
+  })
+
+  it('counts nothing for an edit of an entry that does not exist', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seedCountedReply(db, countTokens(ORIGINAL))
+    vi.mocked(countTokens).mockClear()
+
+    const result = await updateStoryEntryContent('b1', 'e_missing', EDITED, {
+      db,
+      runInTransaction,
+    })
+
+    expect(result.status).toBe('rejected')
+    expect(vi.mocked(countTokens)).not.toHaveBeenCalled()
+  })
+
+  it('writes nothing on a Save with unchanged text', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    // Not ORIGINAL's count: a recount on this path would move it.
+    await seedCountedReply(db, 999)
+    vi.mocked(countTokens).mockClear()
+
+    const result = await updateStoryEntryContent('b1', 'e_reply', ORIGINAL, {
+      db,
+      runInTransaction,
+    })
+
+    expect(result.status).toBe('ok')
+    await expectCount(db, 999)
+    expect(vi.mocked(countTokens)).not.toHaveBeenCalled()
     expect(await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))).toEqual([])
   })
 })

@@ -11,6 +11,9 @@ import { registerAllDomains } from '@/lib/actions/delta/registrations'
 import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { configureDeltaActionPort } from '@/lib/pipeline/runtime/action-port'
 
+// Node and jsdom lack this global; a no-op also keeps tests from building the encoder unasked.
+globalThis.requestIdleCallback ??= () => 0
+
 registerAllDomains()
 configureDeltaActionPort({
   applyDeltaAction,

@@ -9,6 +9,7 @@ import {
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { EmbedderCancelledError, type EmbedderErrorKind } from '@/lib/embedder'
+import { countTokens } from '@/lib/tokens'
 import { placeModes } from '@/lib/world'
 
 import { loadAwarenessForScene, type AwarenessRow } from './awareness'
@@ -50,7 +51,6 @@ import {
   type Stale,
 } from './source-rows'
 import { classifyEmbedderFailure, runSyncStage, type SyncStageDeps } from './sync'
-import { countTokens } from './tokens'
 import {
   isHappeningCandidate,
   RETRIEVAL_TYPES,

@@ -49,11 +49,11 @@ import {
   type WorldSelection,
 } from '@/components/world/world-selection'
 import { useBranchWorldTime } from '@/hooks/use-branch-world-time'
+import { useChapterProgress } from '@/hooks/use-chapter-progress'
 import { useColdOpenStory } from '@/hooks/use-cold-open-story'
 import { useEntryIndex } from '@/hooks/use-entry-index'
 import { useIsRouteFocused } from '@/hooks/use-is-route-focused'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
-import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useRouteLink } from '@/hooks/use-route-link'
 import { useRowImport } from '@/hooks/use-row-import'
 import { useRowSessionGuard } from '@/hooks/use-row-session-guard'
@@ -219,7 +219,7 @@ export default function WorldRoute() {
 
   const { activeRunKind, editBlocked, gateReason, beforeTurn, cancelPillRun } =
     useStoryGenerationGate(storyId ?? undefined, branchId)
-  const openRegionPct = useOpenRegionTokens(storyId)
+  const chapterProgress = useChapterProgress(storyId)
 
   const { onSession, guard, navigateGuarded } = useRowSessionGuard()
   const worldDelete = useWorldDelete(branchId, ctx, guard)
@@ -586,7 +586,7 @@ export default function WorldRoute() {
     <ScreenShell
       variant="in-story"
       title={<Breadcrumb segments={titleSegments} />}
-      chapterProgress={openRegionPct}
+      chapterProgress={chapterProgress}
       onBack={handleBack}
       onOpenStorySettings={() => {
         if (storyId != null) navigateGuarded(`/story-settings/${storyId}`)

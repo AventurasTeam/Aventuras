@@ -18,6 +18,7 @@ function entry(kind: StoryEntry['kind'], worldTime: number | null): StoryEntry {
     position,
     kind,
     content: 'x',
+    contentTokens: null,
     chapterId: null,
     createdAt: 1,
     metadata: worldTime == null ? null : { sceneEntities: [], currentLocationId: null, worldTime },

@@ -26,6 +26,7 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import type { StoryDefinition } from '@/lib/db/stories/story-config-schema'
 import { buildStorySettings } from '@/lib/db/stories/story-settings-defaults'
 import { EmbedderCallError, EmbedderInitError, type EmbedderConfig } from '@/lib/embedder'
+import { countTokens } from '@/lib/tokens'
 
 import { createStoryWithBranch, type WizardCastEntityInput } from './create-story'
 
@@ -224,6 +225,7 @@ describe('createStoryWithBranch', () => {
       position: 1,
       kind: 'opening',
       content: 'Once upon a time',
+      contentTokens: countTokens('Once upon a time'),
     })
 
     expect(await db.select().from(deltas)).toHaveLength(0)

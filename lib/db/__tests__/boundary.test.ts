@@ -19,3 +19,66 @@ describe('lib/* public-API boundary', () => {
     expect(result.messages.map((m) => m.ruleId)).not.toContain('boundaries/dependencies')
   })
 })
+
+describe('lib module edges', () => {
+  const eslint = new ESLint({ cwd: process.cwd() })
+
+  async function boundaryHits(source: string, filePath: string): Promise<number> {
+    const [result] = await eslint.lintText(source, { filePath })
+    return result.messages.filter((m) => m.ruleId === 'boundaries/dependencies').length
+  }
+
+  describe('lib/tokens is a leaf', () => {
+    const fixture = 'lib/tokens/__leaf-fixture.ts'
+
+    it('flags a lib module', async () => {
+      expect(await boundaryHits("import { oneLine } from '@/lib/text'\n", fixture)).toBe(1)
+    })
+
+    it('flags a bare lib file', async () => {
+      expect(
+        await boundaryHits("import { normalizeTerm } from '@/lib/keyword-terms'\n", fixture),
+      ).toBe(1)
+    })
+
+    it('flags a hook, which would carry the db in', async () => {
+      expect(await boundaryHits("import { useTier } from '@/hooks/use-tier'\n", fixture)).toBe(1)
+    })
+
+    it('flags app code outside lib', async () => {
+      expect(await boundaryHits("import { Colors } from '@/constants/theme'\n", fixture)).toBe(1)
+    })
+
+    it('permits js-tiktoken', async () => {
+      expect(await boundaryHits("import { Tiktoken } from 'js-tiktoken/lite'\n", fixture)).toBe(0)
+    })
+  })
+
+  describe('lib/chapters takes no value import of lib/db', () => {
+    const fixture = 'lib/chapters/__edge-fixture.ts'
+
+    it('flags a value import', async () => {
+      expect(await boundaryHits("import { storySettingsSchema } from '@/lib/db'\n", fixture)).toBe(
+        1,
+      )
+    })
+
+    it('flags the inline type spelling, which counts as a value import', async () => {
+      expect(await boundaryHits("import { type StoryEntry } from '@/lib/db'\n", fixture)).toBe(1)
+    })
+
+    it('permits an import type declaration', async () => {
+      expect(await boundaryHits("import type { StoryEntry } from '@/lib/db'\n", fixture)).toBe(0)
+    })
+
+    it('permits lib/keyword-terms, which the leaf rule would not', async () => {
+      expect(
+        await boundaryHits("import { normalizeTerm } from '@/lib/keyword-terms'\n", fixture),
+      ).toBe(0)
+    })
+
+    it('permits another lib module', async () => {
+      expect(await boundaryHits("import { oneLine } from '@/lib/text'\n", fixture)).toBe(0)
+    })
+  })
+})

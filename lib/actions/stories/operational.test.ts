@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   branches,
@@ -30,6 +30,13 @@ import {
   setStoryFavorite,
   touchStoryOpened,
 } from './operational'
+
+const tokens = vi.hoisted(() => ({ warm: vi.fn() }))
+
+vi.mock('@/lib/tokens', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  warmTokenEncoder: tokens.warm,
+}))
 
 // openStory now runs loadOpenStory (Slice 2.7 Task 7) before navigating, which
 // requires a config that parses — story_1 needs a valid definition/settings so
@@ -344,5 +351,73 @@ describe('stories column writes', () => {
     expect(
       (await db.select().from(stories).where(eq(stories.id, 'story_1')))[0].lastOpenedAt,
     ).toBeNull()
+  })
+})
+
+describe('token encoder warm', () => {
+  const idle = vi.fn<(callback: () => void, options: { timeout: number }) => number>(() => 0)
+  let openAtSchedule: string | null | undefined
+
+  beforeEach(() => {
+    tokens.warm.mockClear()
+    openAtSchedule = undefined
+    idle.mockReset()
+    idle.mockImplementation(() => {
+      openAtSchedule = currentStoryStore.getCurrentStory()?.storyId ?? null
+      return 0
+    })
+    vi.stubGlobal('requestIdleCallback', idle)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('schedules one warm past publish on a story open, without running it inline', async () => {
+    const { ctx } = await setup()
+
+    await openStory('story_1', ctx, vi.fn(), 999)
+
+    expect(idle).toHaveBeenCalledTimes(1)
+    expect(idle).toHaveBeenCalledWith(tokens.warm, { timeout: 2_000 })
+    expect(openAtSchedule).toBe('story_1')
+    expect(tokens.warm).not.toHaveBeenCalled()
+
+    // Positive control: what it scheduled is the warm itself.
+    idle.mock.calls[0][0]()
+    expect(tokens.warm).toHaveBeenCalledTimes(1)
+  })
+
+  it('schedules one warm on a route hydration too', async () => {
+    const { ctx } = await setup()
+
+    await loadOpenStory('br_1', ctx)
+
+    expect(idle).toHaveBeenCalledTimes(1)
+    expect(openAtSchedule).toBe('story_1')
+  })
+
+  it('schedules none for an open cancelled before publish', async () => {
+    const { ctx } = await setup()
+    const isCurrent = vi.fn<() => boolean>().mockReturnValueOnce(true).mockReturnValue(false)
+
+    const result = await openStory('story_1', ctx, vi.fn(), 999, isCurrent)
+
+    expect(result).toEqual({ status: 'cancelled' })
+    expect(currentStoryStore.getCurrentStory()).toBeNull()
+    expect(idle).not.toHaveBeenCalled()
+  })
+
+  it('schedules none for an open that fails', async () => {
+    const { db, ctx } = await setup()
+    await db
+      .update(stories)
+      .set({ definition: { leadEntityId: null } as unknown as StoryDefinition })
+      .where(eq(stories.id, 'story_1'))
+
+    const result = await openStory('story_1', ctx, vi.fn(), 999)
+
+    expect(result).toEqual({ status: 'open-failed', kind: 'definition-corrupt' })
+    expect(idle).not.toHaveBeenCalled()
   })
 })

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { EmbeddedFieldRow } from '@/lib/db'
 import { EmbedderCallError, EmbedderCancelledError, EmbedderInitError } from '@/lib/embedder'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
+import { countTokens } from '@/lib/tokens'
 
 import { KNN_K, RANKER_DEFAULTS } from './constants'
 import {
@@ -12,7 +13,6 @@ import {
   type RetrievalParams,
   type RetrievalSuccess,
 } from './run'
-import { countTokens } from './tokens'
 import { isHappeningCandidate, type QueryAll } from './types'
 
 const DIM = 2

@@ -1,0 +1,1 @@
+ALTER TABLE `story_entries` ADD `content_tokens` integer;

@@ -51,6 +51,12 @@ describe('schema', () => {
     expect(primaryKeys[0].columns.map((c) => c.name).sort()).toEqual(['branch_id', 'id'])
   })
 
+  it('story_entries.content_tokens is a nullable integer', () => {
+    const column = getTableConfig(storyEntries).columns.find((c) => c.name === 'content_tokens')
+    expect(column?.notNull).toBe(false)
+    expect(column?.getSQLType()).toBe('integer')
+  })
+
   it('stories.current_branch_id is FK-less (cycle break)', () => {
     const { foreignKeys } = getTableConfig(stories)
     expect(foreignKeys).toHaveLength(0)

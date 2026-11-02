@@ -27,6 +27,7 @@ function entry(
 ): StoryEntry {
   return {
     branchId: 'branch_story',
+    contentTokens: null,
     chapterId: null,
     metadata: null,
     createdAt: NOW,

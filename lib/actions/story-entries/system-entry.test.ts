@@ -43,6 +43,12 @@ describe('writeSystemEntry', () => {
     })
   })
 
+  it('leaves the count null, since a system row sits outside the region', async () => {
+    await writeSystemEntry({ branchId: 'b1', content: 'config broken' }, ctx)
+    const [row] = await systemRows()
+    expect(row.contentTokens).toBeNull()
+  })
+
   it('is a singleton — a second write replaces the first at the new tail', async () => {
     await writeSystemEntry({ branchId: 'b1', content: 'first' }, ctx)
     await writeSystemEntry({ branchId: 'b1', content: 'second' }, ctx)

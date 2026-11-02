@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { deltas, type Delta, type SqlOp } from '@/lib/db'
+import { deltas, type Delta, type SqlOp, type StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { headTurnEntries } from '@/lib/head-turn'
 
@@ -94,14 +94,15 @@ export async function resolveContentEditInvalidation(
   return { ...(await invalidationForScope(branchId, scope, ctx)), scope }
 }
 
-/** The content delta's payload: prior prose, the metadata undo if written, the covered scope. */
+/** The content delta's payload: prior prose and count, the metadata undo if written, the scope. */
 export function contentEditUndoPayload(
-  previousContent: string,
+  previous: Pick<StoryEntry, 'content' | 'contentTokens'>,
   scope: InvalidationScope | null,
   metadataUndo?: Record<string, unknown>,
 ): Record<string, unknown> {
   return {
-    content: previousContent,
+    content: previous.content,
+    contentTokens: previous.contentTokens,
     ...(metadataUndo !== undefined ? { metadata: metadataUndo } : {}),
     ...(scope ? { [INVALIDATION_SCOPE_KEY]: scope } : {}),
   }

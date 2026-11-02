@@ -50,6 +50,7 @@ const OPENING: StoryEntry = {
   position: 1,
   kind: 'opening',
   content: 'The keep looms over the valley.',
+  contentTokens: null,
   chapterId: null,
   metadata: null,
   createdAt: 1,

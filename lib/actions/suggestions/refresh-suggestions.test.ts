@@ -63,6 +63,7 @@ const ENTRY = {
   position: 1,
   kind: 'ai_reply' as const,
   content: 'The gate groans open.',
+  contentTokens: null,
   chapterId: null,
   metadata: { sceneEntities: [], currentLocationId: null, worldTime: 7 },
   createdAt: 1,

@@ -380,7 +380,7 @@ type CloseReportCall = {
   out of the review.** Normalization is code with no `why` or `turns`,
   and its keys are a spelling cleanup.
 - **The report stays out of `chaptersStore`.** Story open hydrates chapter
-  rows whole (`lib/actions/stories/operational.ts:164`), and the create
+  rows whole (`lib/actions/stories/operational.ts:167`), and the create
   handler, the update handler and redo all patch the row
   (`lib/actions/chapters/register.ts:88,146`,
   `lib/actions/delta/redo.ts:325-330`), while the store casts past its

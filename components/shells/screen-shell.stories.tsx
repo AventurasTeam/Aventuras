@@ -6,6 +6,7 @@ import { GenerationStatusPill } from '@/components/compounds/generation-status-p
 import { TruncatedText } from '@/components/compounds/truncated-text'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
+import type { ChapterProgress, ChapterProgressTone } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { STORY_SETTINGS_DEFAULTS, storyDefinitionSchema } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -27,6 +28,12 @@ function BodyPlaceholder({ label }: { label: string }) {
     </View>
   )
 }
+
+function progressAt(percent: number, tone: ChapterProgressTone = 'success'): ChapterProgress {
+  return { tokens: percent * 240, threshold: 24_000, percent, tone, canClose: true }
+}
+
+const STRIP_VARIANTS = [progressAt(0), progressAt(50), progressAt(100, 'danger')]
 
 let memoryRun: RunState | undefined
 
@@ -112,7 +119,7 @@ export const InStoryWorld: Story = {
     <ScreenShell
       variant="in-story"
       title={<Text size="base">Aria&apos;s Descent / World</Text>}
-      chapterProgress={35}
+      chapterProgress={progressAt(35)}
       statusSlot={
         <GenerationStatusPill
           activePhase="generating-narrative"
@@ -134,7 +141,7 @@ export const InStoryStorySettings: Story = {
     <ScreenShell
       variant="in-story"
       title={<Text size="base">Aria&apos;s Descent / Story Settings</Text>}
-      chapterProgress={35}
+      chapterProgress={progressAt(35)}
       hideSelfReferentialIcon
       statusSlot={
         <GenerationStatusPill activePhase="reasoning" onCancel={noop} onErrorTap={noop} />
@@ -157,7 +164,7 @@ export const InStoryReader: Story = {
       <ScreenShell
         variant="in-story"
         title={<Text size="base">Aria&apos;s Descent</Text>}
-        chapterProgress={50}
+        chapterProgress={progressAt(50)}
         centerExtras={
           <>
             <Tag tone="soft">Chap 3</Tag>
@@ -199,7 +206,7 @@ export const InStoryReaderPhone: Story = {
       <ScreenShell
         variant="in-story"
         title={<Text size="base">Aria&apos;s Descent</Text>}
-        chapterProgress={50}
+        chapterProgress={progressAt(50)}
         centerExtras={
           <>
             <Tag tone="soft">Chap 3</Tag>
@@ -235,7 +242,7 @@ export const InStoryLongTitle: Story = {
             {LONG_TITLE}
           </TruncatedText>
         }
-        chapterProgress={50}
+        chapterProgress={progressAt(50)}
         onBack={noop}
         onOpenStorySettings={noop}
         onOpenActions={noop}
@@ -275,7 +282,7 @@ export const WithStatusSlotMultiPill: Story = {
     <ScreenShell
       variant="in-story"
       title={<Text size="base">Aria&apos;s Descent / World</Text>}
-      chapterProgress={70}
+      chapterProgress={progressAt(70)}
       statusSlot={
         <>
           <GenerationStatusPill activePhase="classifying" onCancel={noop} onErrorTap={noop} />
@@ -294,10 +301,10 @@ export const WithStatusSlotMultiPill: Story = {
 export const ChapterProgressVariants: Story = {
   render: () => (
     <View className="gap-4 p-4">
-      {[0, 50, 100].map((progress) => (
-        <View key={progress} className="gap-1">
+      {STRIP_VARIANTS.map((progress) => (
+        <View key={progress.percent} className="gap-1">
           <Text variant="muted" size="sm">
-            chapterProgress={progress}
+            percent={progress.percent}
           </Text>
           <View className="h-32 overflow-hidden rounded-md border border-border">
             <ScreenShell
@@ -308,13 +315,36 @@ export const ChapterProgressVariants: Story = {
               onOpenStorySettings={noop}
               onOpenActions={noop}
             >
-              <BodyPlaceholder label={`Strip at ${progress}%`} />
+              <BodyPlaceholder label={`Strip at ${progress.percent}%`} />
             </ScreenShell>
           </View>
         </View>
       ))}
     </View>
   ),
+  play: async () => {
+    const strips = await screen.findAllByRole('progressbar', { name: t('chrome.chapterProgress') })
+    expect(strips.map((strip) => strip.getAttribute('aria-valuenow'))).toEqual(['0', '50', '100'])
+  },
+}
+
+// No read yet: the strip stays mounted at 0, for layout stability.
+export const ChapterProgressUndefined: Story = {
+  render: () => (
+    <ScreenShell
+      variant="in-story"
+      title={<Text size="base">Aria&apos;s Descent / World</Text>}
+      onBack={noop}
+      onOpenStorySettings={noop}
+      onOpenActions={noop}
+    >
+      <BodyPlaceholder label="No chapterProgress prop" />
+    </ScreenShell>
+  ),
+  play: async () => {
+    const strip = await screen.findByRole('progressbar', { name: t('chrome.chapterProgress') })
+    expect(strip).toHaveAttribute('aria-valuenow', '0')
+  },
 }
 
 export const ThemeMatrix: Story = {
@@ -334,7 +364,7 @@ export const ThemeMatrix: Story = {
             <ScreenShell
               variant="in-story"
               title={<Text size="base">Aria&apos;s Descent / World</Text>}
-              chapterProgress={45}
+              chapterProgress={progressAt(45)}
               statusSlot={
                 <GenerationStatusPill
                   activePhase="generating-narrative"
@@ -381,7 +411,7 @@ export const InStoryMemoryRun: Story = {
     <ScreenShell
       variant="in-story"
       title={<Text size="base">Aria&apos;s Descent</Text>}
-      chapterProgress={35}
+      chapterProgress={progressAt(35)}
       onBack={noop}
       onOpenStorySettings={noop}
       onOpenActions={noop}
@@ -412,7 +442,7 @@ export const InStoryMemoryRunPhone: Story = {
     <ScreenShell
       variant="in-story"
       title={<Text size="base">Aria&apos;s Descent</Text>}
-      chapterProgress={35}
+      chapterProgress={progressAt(35)}
       centerExtras={<Tag tone="soft">Chap 3</Tag>}
       mobileChipAction={<Tag tone="default">Browse</Tag>}
       onBack={noop}

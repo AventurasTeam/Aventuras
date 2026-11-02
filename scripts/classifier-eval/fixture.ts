@@ -203,6 +203,7 @@ export function entries(
     position: i + 1,
     kind: turn.kind,
     content: turn.prose,
+    contentTokens: null,
     chapterId: null,
     metadata: entryMetadataSchema.parse({
       sceneEntities: turn.scene ?? scene.scene,

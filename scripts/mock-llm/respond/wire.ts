@@ -41,7 +41,7 @@ export const MOCK_CONTEXT_WINDOW = 131072
 export type MockUsage = { prompt_tokens: number; completion_tokens: number; total_tokens: number }
 export type OverflowShape = 'llamacpp' | 'openai'
 
-// countTokens' ranks and encode options (lib/retrieval/tokens.ts), so a reported count sits
+// countTokens' ranks and encode options (lib/tokens/index.ts), so a reported count sits
 // near the app's own estimate and the truncation cross-check reads a ratio near 1.
 let encoder: Tiktoken | null = null
 

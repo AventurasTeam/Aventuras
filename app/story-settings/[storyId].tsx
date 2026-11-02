@@ -37,8 +37,8 @@ import {
   type StorySettingsTabId,
 } from '@/components/story-settings/tabs'
 import { EmptyState } from '@/components/ui/empty-state'
+import { useChapterProgress } from '@/hooks/use-chapter-progress'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
-import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import { useTier } from '@/hooks/use-tier'
@@ -210,7 +210,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
   // Scoped to THIS route's story: the open story survives navigation, so an
   // unscoped read would show whichever story the session last opened in the
   // reader against that story's threshold.
-  const openRegionPct = useOpenRegionTokens(storyId)
+  const chapterProgress = useChapterProgress(storyId)
 
   const isDirty = session.snapshot.dirtyFields.length > 0
   useUnsavedChangesGuard(isDirty, session.requestLeave)
@@ -344,7 +344,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
     <ScreenShell
       variant="in-story"
       title={<Breadcrumb segments={titleSegments} testID="story-settings-breadcrumb" />}
-      chapterProgress={openRegionPct}
+      chapterProgress={chapterProgress}
       hideSelfReferentialIcon
       onBack={handleBack}
       actions={

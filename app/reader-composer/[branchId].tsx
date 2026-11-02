@@ -87,10 +87,10 @@ import {
 } from '@/components/story-settings/generation-run'
 import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
+import { useChapterProgress } from '@/hooks/use-chapter-progress'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { useLeaveFailedStoryOpen } from '@/hooks/use-leave-failed-story-open'
 import { useSwapState } from '@/hooks/use-memory-health'
-import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import { useTier } from '@/hooks/use-tier'
@@ -1466,7 +1466,7 @@ export default function ReaderComposerRoute() {
   )
 
   const jumpButtonEnabled = appSettingsStore.useAppSettings((s) => s.appearance.showJumpToBottom)
-  const openRegionPct = useOpenRegionTokens(openForBranch?.storyId)
+  const chapterProgress = useChapterProgress(openForBranch?.storyId)
   const { theme } = useTheme()
 
   useLayoutEffect(() => {
@@ -1520,7 +1520,7 @@ export default function ReaderComposerRoute() {
           {storyTitle ?? t('reader:placeholderTitle')}
         </TruncatedText>
       }
-      chapterProgress={openRegionPct}
+      chapterProgress={chapterProgress}
       mobileChipAction={
         tier === 'phone' ? (
           <ReaderBrowseChip

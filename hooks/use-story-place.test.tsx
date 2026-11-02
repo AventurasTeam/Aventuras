@@ -20,6 +20,7 @@ function entry(
     position,
     kind,
     content: '',
+    contentTokens: null,
     chapterId: null,
     metadata: { sceneEntities: [], currentLocationId, worldTime: 0 },
     createdAt: position,

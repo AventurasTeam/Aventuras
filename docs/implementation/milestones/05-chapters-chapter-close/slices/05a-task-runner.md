@@ -531,6 +531,15 @@ vitest and the probe share. It never reaches a production slot.
   [`architecture.md → System and user halves`](../../../../architecture.md#system-and-user-halves).
   Until planning says so the driver passes none, as that list has it.
   Nothing changes shape either way.
+- **How does `pnpm probe:close` open a story under `tsx`?**
+  `loadAndPublish` calls `requestIdleCallback` for the encoder warm with
+  no fallback
+  ([Slice 5.1 → Implementation notes](./01-token-measure.md#implementation-notes)),
+  and plain Node has no such global, so `loadOpenStory` throws there,
+  after `publish`. Only `vitest.setup.ts` supplies it outside the app.
+  Starting answer: the script sets the same no-op before its first open.
+  The alternative is an optional call at the site, which would also let
+  the setup's no-op go.
 
 ## Implementation notes
 

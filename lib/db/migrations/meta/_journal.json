@@ -127,6 +127,13 @@
       "when": 1791604296000,
       "tag": "0017_classifier_mentioned_places",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1793560501917,
+      "tag": "0018_story_entry_content_tokens",
+      "breakpoints": true
     }
   ]
 }

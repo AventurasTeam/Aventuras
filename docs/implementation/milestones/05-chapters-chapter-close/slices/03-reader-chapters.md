@@ -113,7 +113,7 @@ the numbers, the device and the build go in Implementation notes.
   out: each chunk would re-emit the whole window, and `patch` clones the
   Map and notifies every selector per row
   (`lib/stores/factory/working-set-store.ts:21-36`,
-  `hooks/use-entry-index.ts:77`), so the store factory gains a bulk
+  `hooks/use-branch-tail-id.ts:5`), so the store factory gains a bulk
   insert.
 - A `reload()` or a boundary load landing during that read can't leave a
   gap: if the window's oldest row moved, the read reruns against it, and
@@ -208,13 +208,10 @@ and tablet, Sheet (medium) on phone, dispatched as `OverflowMenu` does:
 
 **Strip (C5).**
 
-- `ScreenShell.chapterProgress` takes the hook's return, with `tokens`
-  and `threshold` optional. On main without 5.1, the four routes pass
-  `{ percent, tone }` from `useOpenRegionTokens`; with 5.1 they already
-  pass `useChapterProgress`.
-- `chapterProgressTone` in `lib/chapters`, created here if 5.1 hasn't,
-  with C5's values: `'success'` under 80, `'warning'` from 80,
-  `'danger'` from 90.
+- `ScreenShell.chapterProgress` already takes the whole `ChapterProgress`
+  from `useChapterProgress` on the four routes, as 5.1 shipped it.
+- `chapterProgressTone` is already in `lib/chapters`, with C5's values:
+  `'success'` under 80, `'warning'` from 80, `'danger'` from 90.
 - `components/compounds/chapter-progress-bar.tsx` holds the one map from
   tone to `bg-success`, `bg-warning` and `bg-danger`. The strip and the
   popover render it, and 5.7's in-progress card reuses it.

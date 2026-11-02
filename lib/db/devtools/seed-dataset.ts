@@ -2,6 +2,7 @@ import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 
 import { DEFAULT_CALENDAR_ID } from '@/lib/calendar'
 import { BUNDLED_PACK_ID } from '@/lib/prompts'
+import { countTokens } from '@/lib/tokens'
 
 import { remapSeedIds } from './seed-ids'
 import {
@@ -1104,7 +1105,9 @@ const heroDeltas: SlottedDelta[] = [
     targetTable: 'story_entries',
     targetId: entryId('hero', 14),
     op: 'update',
-    undoPayload: { content: 'I draw the blade and wait.' },
+    // A literal: this array builds at import, and on Android that's the boot path, so a countTokens
+    // here would build the encoder on every launch. The seed test pins it to the count.
+    undoPayload: { content: 'I draw the blade and wait.', contentTokens: 7 },
     encodingVersion: 1,
     createdAt: BASE + 14 * MIN,
   },
@@ -1785,6 +1788,12 @@ const appSettingsRow: NewAppSettings = {
 
 // ---------------------------------------------------------------------------
 
+// A `system` row sits outside the open region, and writeSystemEntry leaves it uncounted too.
+function withContentTokens(entry: NewStoryEntry): NewStoryEntry {
+  if (entry.kind === 'system') return entry
+  return { ...entry, contentTokens: countTokens(entry.content) }
+}
+
 // Parked at the last prose row, not MAX(position): the first Send deletes a trailing `system` row
 // and writes its user_action there (docs/testing.md → Fixture + seed contract).
 function parkedClassifierStatus(
@@ -1806,7 +1815,9 @@ function parkedClassifierStatus(
 export function buildSeedSteps(): SeedStep[] {
   const filler = fillerStoryRows()
   const rich = richStoryRows()
-  const allEntries = [...heroEntries(), ...forkEntries(), ...rich.entries, ...filler.entries]
+  const allEntries = [...heroEntries(), ...forkEntries(), ...rich.entries, ...filler.entries].map(
+    withContentTokens,
+  )
   const deltaRows = interleaveHeroDeltas(entryCreateDeltas(allEntries))
 
   const heroStory: NewStory = {

@@ -82,10 +82,12 @@ that path counts for itself.
   two. `lib/retrieval/run.ts:53` and the tests that import `./tokens`
   take the leaf. A `boundaries/dependencies` rule in `eslint.config.js`,
   beside `lib/diagnostics`', keeps it a leaf, since the value cycle it
-  prevents fails only on Android at boot. It disallows `lib-module` and
-  `lib-file` targets both: `lib/*.ts` is a separate element
+  prevents fails only on Android at boot. It disallows `lib-module`,
+  `lib-file` and `app-code` targets: `lib/*.ts` is a separate element
   (`eslint.config.js:46-50`), so naming one would let
-  `@/lib/keyword-terms` through.
+  `@/lib/keyword-terms` through, and a hook importing `@/lib/db` would
+  reopen the cycle. `countTokens` guards long runs, per Implementation
+  notes.
 - **Counting at create.** `fullRow`
   (`lib/actions/story-entries/register.ts:44-55`) sets
   `contentTokens: countTokens(entry.content)`, whatever the payload
@@ -114,8 +116,9 @@ that path counts for itself.
   `warmTokenEncoder()` builds the encoder once. `loadAndPublish`
   (`lib/actions/stories/operational.ts:188-191`) schedules it after
   `publish`, beside `kickStoryDrain`, off the open's own task, so the
-  ~285 ms build doesn't sit in front of first paint or land on the first
-  Send. `openStory` and `loadOpenStory` both pass through there.
+  build doesn't land on the first Send. On Android it runs during the
+  open, ahead of first paint, per Implementation notes. `openStory` and
+  `loadOpenStory` both pass through there.
 - **The read.** `lib/db/story-entries/open-region.ts`, exported from
   `@/lib/db`, which `lib/retrieval`, `lib/pipeline` and `hooks` already
   import, so the read adds no module edge:
@@ -273,15 +276,21 @@ and numbers corrected.
 - **Encoder.** `git grep -E "countEntryTokens|TokenCache|__token" -- hooks lib`
   finds nothing. One encoder is built across a warm and two counts
   (`lib/tokens` test, with a constructor spy). A story open schedules
-  one warm past `publish`, doesn't run it inline, and a cancelled open
-  schedules none (`lib/actions/stories/operational.test.ts`). The build's
-  time on the Android dev client is in Implementation notes.
+  one warm past `publish`, doesn't run it inline, and an open cancelled
+  before publish schedules none
+  (`lib/actions/stories/operational.test.ts`). The build's time on the
+  Android dev client is in Implementation notes.
+- **Count guard.** `lib/tokens/tokens.test.ts`, on an `encode` spy: a run
+  of non-whitespace, of whitespace, or of newlines and slashes over 512
+  code points is cut, never inside a surrogate pair, and no text is
+  dropped. Text with no such run reaches `encode` once, whole.
 - **Module edges.** `lintText` cases in
   `lib/db/__tests__/boundary.test.ts`, on fixture paths inside each
   module, read `boundaries/dependencies`, so the check needs no
   hand-made mutation and holds on every later PR:
-  - In `lib/tokens`, `@/lib/text` (a `lib-module`) and
-    `@/lib/keyword-terms` (a `lib-file`) are flagged, and `js-tiktoken`
+  - In `lib/tokens`, `@/lib/text` (a `lib-module`),
+    `@/lib/keyword-terms` (a `lib-file`), and `@/hooks/use-tier` and
+    `@/constants/theme` (`app-code`) are flagged, and `js-tiktoken`
     isn't.
   - In `lib/chapters`, a value import of `@/lib/db` and the inline
     `import { type X }` spelling are flagged. `import type` from
@@ -331,44 +340,106 @@ and numbers corrected.
   write in each test file now pays the encoder build, which CI runs
   several times slower: a new timeout there is that build, not a flake.
 
-## Open questions
-
-- **Which number does the entry card show?** Canon pins
-  `tokens.completion`
-  ([`entry-card.md → Compound API`](../../../../ui/patterns/entry-card.md#compound-api)),
-  and this slice leaves it. That number goes stale on an edit, includes
-  the state block, and shows nothing on a `user_action`, while the strip
-  beside it now counts stored `content`. Should the card change, and if
-  so, whose design pass is it?
-- **What happens to `chapters.token_count` when an entry in a closed
-  chapter is edited?** Canon is silent. The edit doesn't touch the
-  chapter row, and the user isn't granted that column, so the Timeline
-  keeps the number from the close. Is that snapshot right, or should the
-  card sum `content_tokens` by `chapter_id`? This slice owns the question
-  and settles it at its planning. [Slice 5.7](./07-chapter-timeline.md)
-  prints the number and cites the answer, and
-  [Slice 5.12](./12-chapter-delete-rollback.md) already reads it as a
-  snapshot.
-- **Should `updateChapter` stay this wide?** `UPDATABLE`
-  (`lib/actions/chapters/register.ts:37-46`) allows `sequenceNumber`,
-  `startEntryId`, `endEntryId` and `tokenCount`, which canon gives no
-  writer. M1.5 kept them for re-close and boundary adjustment, and
-  neither exists. Nothing here depends on the answer, and 5.2 edits that
-  list for `closeReport`.
-- **Does a count on the write path need a guard?** `countTokens` is
-  quadratic in a run with no word boundary: 620 ms for 4,000 repeated
-  characters. It now runs synchronously on Send and on Save. The hook
-  paid the same cost during render, so this moves a cost rather than
-  adding one. Is a pasted unbroken run accepted as it stands?
-- **How is the warm scheduled on Android?** The build has never been
-  measured on a device. Does a plain timer clear first paint there, or
-  does the warm need to wait for interactions?
-- **Can a turn run on `story_rich`?** No spec opens that story yet, and
-  it's a creative story with no lead and rich payloads. If a Send can't
-  run there, the spec seeds filler on the hero branch instead, setting
-  `content_tokens` directly, since `seedClassifierBacklog`'s rows hold a
-  null and would read as 0.
-
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **`countTokens` guards long runs (developer decision, 2026-11-01).**
+  An addition to the brief. `js-tiktoken`'s merge is quadratic in one
+  regex word: 16,000 repeated characters took 10 s raw and about 320 ms
+  through the guard, which cuts any run of non-whitespace, of
+  whitespace, or of newlines and slashes at 512 code points and sums the
+  parts. Whitespace needs its own arm, since o200k's pattern matches a
+  whole whitespace run as one word. The third kind came in during
+  implementation: o200k's punctuation word runs on through newlines and
+  slashes, so `//\n` repeated is one word with no long run of the other
+  two kinds, and took 10 s at 16,000 characters against 345 ms cut. That
+  is the only arm mixing the two at unbounded length, so the three kinds
+  cap every word at 1,025 code points. Each cut moves the count by a few
+  tokens, the most measured being 4, which proves no bound. A percentage
+  is the wrong unit: a short run can move 18%, and the "about 1%" the
+  developer first accepted held only on long fixtures. Spaced prose
+  never reaches the cut; a long CJK paragraph has no whitespace, so it's
+  cut too, which moved one count by 0.06%. A run's cost follows its
+  UTF-8 bytes, so a guarded emoji run takes about 340 ms per 1,000:
+  linear, and kept at 512. It sits inside `countTokens` because
+  `windowCheckMiddleware` counts the whole prompt on every model call,
+  so one such reply would stall each later call while it sits in the
+  buffer, and [Slice 5.5b](./05b-identity-threads.md) counts per tool
+  step. `TOKENIZER_IDENTITY.version` stays: it names the vocabulary,
+  which didn't change. One run of about 5.6 million code units overflows
+  V8's regexp stack and `countTokens` throws, where the encoder alone
+  didn't. That's at least about 700,000 tokens, so it stays; Hermes is
+  unmeasured.
+- **`chapters.token_count` is a snapshot at close (developer decision,
+  2026-11-01).** An edit in a closed chapter leaves it, and a re-close
+  after a delete recomputes it. That needs no new write path, and
+  [Slice 5.12](./12-chapter-delete-rollback.md) already reads it this
+  way, summing `content_tokens` where it needs a live number. Canon
+  says so in
+  [`data-model.md → Chapters / memory system`](../../../../data-model.md#chapters--memory-system)
+  and
+  [`chapter-timeline.md → Expanded state`](../../../../ui/screens/chapter-timeline/chapter-timeline.md#expanded-state).
+- **`updateChapter` narrows in [Slice 5.2](./02-first-chapter.md), not
+  here (developer decision, 2026-11-01).** `UPDATABLE` goes down to
+  `title`, `summary`, `theme`, `keywords` and `closeReport`. 5.2 already
+  edits that list, and only `lib/actions/chapters/register.test.ts` uses
+  the columns going.
+- **The entry card stays on `tokens.completion` (developer decision,
+  2026-11-01).** The card reports what the provider said a generation
+  produced, and the strip measures story text against the chapter
+  budget. After an edit the card still describes the generation
+  truthfully.
+- **A warm can outlive a cancelled open (developer decision,
+  2026-11-01).** A narrowing of the brief. The warm is scheduled in
+  `loadAndPublish`, and `openStory` can still return cancelled after
+  that publishes, so "a cancelled open schedules none" holds for a
+  cancel before publish. A later cancel's warm does no harm: it's a
+  no-op once the encoder exists, and the open that replaced this one
+  needs the encoder anyway.
+- **The warm stays in `loadAndPublish` on `requestIdleCallback`
+  (developer decision, 2026-11-01).** A narrowing of the brief, which
+  wanted the build clear of first paint. `InteractionManager` is
+  deprecated in React Native 0.83 and Electron's renderer has the
+  global. Node and jsdom don't, so `vitest.setup.ts` gives one no-op and
+  production code carries no fallback. The 2,000 ms timeout only works
+  on Electron: React Native 0.83.6's `NativeIdleCallbacks.cpp` never
+  assigns it and has no idle signal, so on Android the warm is the
+  lowest-priority task, with no 2 s bound, and it runs during the open.
+  No phone was available, so these are from an x86_64 emulator
+  (`sdk_gphone64_x86_64`, Android 16) on a debug build. Over three cold
+  opens the encoder build took 982 ms (942 to 1,325, the highest on the
+  first open after Metro's bundle), starting within about 0.3 s of the
+  tap in the two runs timed and at least 1,714 ms ahead of the host's
+  first-paint message. Both cross the lines this slice's planning drew,
+  any build of 1,000 ms or more and a warm ahead of first paint, so the
+  developer chose. With the warm no-oped, tap to first paint took 1.92
+  to 1.99 s against 2.04 and 2.17 s, so the warm costs about 0.05 to
+  0.25 s, since the WebView's boot overlaps it. That's three samples
+  against two, and the warmed runs also carried a temporary count of
+  about 0.5 s on the JS thread that shipped code doesn't, so it likely
+  overstates the cost. `first-paint` is when the host hears of it, not
+  when the user sees it. A tap during the build is untested. Without the
+  warm that second lands on the first Send, and past first paint, where
+  a plain timer would put it, it lands while someone may be typing; no
+  timer was measured. On the same device a count of 2,006 characters of
+  prose took 3.7 ms and 10,030 took 13 ms, and the guard's first run on
+  Hermes read `tokens=500` on 4,000 `x` characters, in 480 to 560 ms
+  (940 on the first open). Other long-run shapes weren't measured on
+  Hermes, and on Node a run of emoji costs about 15 times a run of `x`.
+  Plain Node has no `requestIdleCallback` either, so `loadOpenStory`
+  throws under `tsx`;
+  [Slice 5.5a's probe](./05a-task-runner.md#open-questions) carries that
+  question.
+- **The warm doesn't cover story creation (developer decision,
+  2026-11-01).** `components/wizard/finish.ts:339` reaches
+  `create-story.ts`' count before any open, so the first story created
+  after launch pays the build at Finish. It stays as it is.
+- **The warm has no `try`/`catch` (provisional).** The build reads only
+  a static bundled table, so it throws on every run or never, and a
+  throw would show on the first launch of any build. The asymmetry: on
+  Android a throw in a scheduled task is fatal, so it would stop the app
+  at story open rather than log a failure. The alternative is a
+  `try`/`catch` with `logger.warn`, a new event and a changed test.
+- **A turn runs on `story_rich`,** a creative story with no lead, so the
+  strip's E2E uses it and adds no harness rows. The fallback of filler
+  on the hero branch wasn't needed. Its undo presses CTRL-Z, as the
+  acceptance says.

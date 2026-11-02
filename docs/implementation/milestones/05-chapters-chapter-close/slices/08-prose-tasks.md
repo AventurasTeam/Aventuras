@@ -152,7 +152,7 @@ bounds it there, `condition` by `boundStateText` and `description` by
   them ahead, from `lib/world` and `ctx.db`: the target is a live place
   and isn't retired, `placementDrop` finds no loop and no move that hides
   the story, and `top` goes only on an unplaced row. The story comes from
-  `readStoryPlace` (`lib/pipeline/definitions/entry-reads.ts:61`), so
+  `readStoryPlace` (`lib/pipeline/definitions/entry-reads.ts:68`), so
   `storyInside` holds for a close, where today it's gated to a pass. A
   refused placement drops from the call: what can land does, and the
   result is `ok` naming it with its reason. Sent alone, it's `rejected`.

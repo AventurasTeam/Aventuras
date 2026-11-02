@@ -10,7 +10,9 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { db } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { indexEntryRefs, readEntryIndex, type EntryIndex, type EntryRef } from '@/lib/entry-refs'
-import { entriesStore, generationStore } from '@/lib/stores'
+import { generationStore } from '@/lib/stores'
+
+import { useBranchTailId } from './use-branch-tail-id'
 
 /**
  * `ready` is a neutral "not read yet" marker — while `!ready`, no id counts as dangling.
@@ -74,17 +76,7 @@ export function useEntryIndex(
   options?: { enabled?: boolean; seedFromLastRead?: boolean },
 ): EntryIndexSnapshot {
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
-  const tailId = entriesStore.useEntries((m) => {
-    let last: string | null = null
-    let position = -1
-    for (const e of m.values()) {
-      if (e.branchId === branchId && e.position > position) {
-        position = e.position
-        last = e.id
-      }
-    }
-    return last
-  })
+  const tailId = useBranchTailId(branchId)
 
   const read = useContext(EntryIndexReadContext)
   const client = useQueryClient()

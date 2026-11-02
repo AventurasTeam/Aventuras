@@ -67,3 +67,43 @@ slice-planning gate forces its resolution before that slice is planned.
   [`reader-composer.md`](../ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)
   lists `Fix profile · Dismiss` for a missing provider. Existing drift
   that no M5 slice owns. Raised 2026-11-01 by the M5 promotion.
+- **React Query reads pause offline in the Electron renderer.**
+  `createQueryClient` (`lib/cache/query-client.ts`) sets no
+  `networkMode`, so once the window's `offline` event fires a read on a
+  new key pauses, though these are local SQLite reads.
+  `useEntryIndex` (`hooks/use-entry-index.ts:99`) and `useRowSignals`
+  (`hooks/use-row-signals.ts:67`) have this on main, and
+  `useChapterProgress` opts out for itself. One default in
+  `createQueryClient` fixes all three, and that hook's own line can then
+  go. Raised 2026-11-01 by Slice 5.1's planning.
+- **The mock LLM's token count has no run guard.**
+  `scripts/mock-llm/respond/wire.ts:48-52` keeps its own `countO200k`,
+  though its comment says it mirrors `countTokens`. On a fixture with a
+  run over 512 code points the two differ by a few tokens per cut, and
+  the mock pays the quadratic cost. No `e2e/` or mock fixture repeats
+  100 times or more, so nothing hits this today. Raised 2026-11-01 by
+  Slice 5.1's review.
+- **Two definitions of the open region omit `system`.**
+  [`data-model.md → Chapters / memory system`](../data-model.md#chapters--memory-system)
+  and `readPromptBuffer`'s docblock (`lib/retrieval/buffer.ts:49`) define
+  it by `chapter_id IS NULL` alone, while `openRegionWhere` also leaves
+  out `system` rows. Raised 2026-11-01 by Slice 5.1's review.
+- **`useEntryIndex`'s docblock overclaims.** `hooks/use-entry-index.ts:67`
+  says `settleCount` and the tail cover every `story_entries` write, but
+  world-time edits and system entries move neither. It's harmless there,
+  since `readEntryIndex` selects no metadata and excludes `system`.
+  `useChapterProgress`' docblock has the narrower wording. Raised
+  2026-11-01 by Slice 5.1's review.
+- **Uncaught synchronous renderer errors reach no diagnostics entry.**
+  `lib/boot/rejection-handler.ts:67` listens for `unhandledrejection`
+  only, so on desktop a throw in a timer or an idle callback reaches the
+  console alone. Raised 2026-11-01 by Slice 5.1's review.
+- **A test comment cites a slice.**
+  `lib/actions/story-entries/register.test.ts:308` names `Slice "Kind
+coverage"`, a class `.claude/rules/code.md` bans. Raised 2026-11-01 by
+  Slice 5.1's review.
+- **Two docs lag the tokenizer.** `tech-stack.md`'s token-counting
+  section says `cl100k_base` or `o200k_base` and that tables load on
+  demand, where `lib/tokens` imports o200k's ranks statically. The token
+  lesson says the build takes ~272 ms, and `lib/tokens/index.ts` ~285 ms.
+  Raised 2026-11-01 by Slice 5.1's review.

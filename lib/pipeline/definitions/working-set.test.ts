@@ -28,6 +28,7 @@ function entry(id: string, position: number, branchId = 'b1'): StoryEntry {
     position,
     kind: 'ai_reply',
     content: id,
+    contentTokens: null,
     chapterId: null,
     metadata: { sceneEntities: [], currentLocationId: null, worldTime: 0 },
     createdAt: 1,

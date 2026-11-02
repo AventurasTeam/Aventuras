@@ -108,6 +108,7 @@ const ENTRY = (
   position,
   kind,
   content,
+  contentTokens: null,
   chapterId: null,
   metadata: null,
   createdAt: position,

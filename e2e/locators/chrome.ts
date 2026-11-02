@@ -12,6 +12,10 @@ export const chrome = {
   actionsTrigger: (page: Page): Locator =>
     page.getByRole('button', { name: new RegExp(t('chrome.actions')) }),
 
+  // The strip under the top bar, on every in-story screen.
+  chapterProgress: (page: Page): Locator =>
+    page.getByRole('progressbar', { name: t('chrome.chapterProgress') }),
+
   // GO TO rows are listbox options (searchable-overlay-list.tsx) named by their label.
   goToReaderRow: (page: Page): Locator =>
     page.getByRole('option', { name: t('chrome.goTo.openReader'), exact: true }),
