@@ -503,6 +503,8 @@ export const ChipStripPhone: Story = {
     const strip = screen.getByTestId('reader-chip-strip')
     const browseLeft = browse.getBoundingClientRect().left
 
+    // The scroller itself starts 16 px in: a swipe from the edge is the OS's back gesture.
+    expect(strip.getBoundingClientRect().left).toBe(16)
     expect(first.getBoundingClientRect().left).toBe(16)
     expect(second.getBoundingClientRect().left - first.getBoundingClientRect().right).toBe(8)
     // A chip's hit slop must land inside the scroller: a scroll view won't hit-test past its edge.

@@ -91,13 +91,7 @@ type ScreenShellProps = {
   children: ReactNode
 }
 
-// touch.md → Chip-strip safe zone: 16 px of visual padding; the scroller itself starts at x = 0.
-const CHIP_STRIP_CONTENT: ViewStyle = {
-  alignItems: 'center',
-  gap: 8,
-  paddingLeft: 16,
-  paddingVertical: 4,
-}
+const CHIP_STRIP_CONTENT: ViewStyle = { alignItems: 'center', gap: 8, paddingVertical: 4 }
 
 function clampProgress(n: number | undefined): number {
   if (n == null || Number.isNaN(n)) return 0
@@ -271,7 +265,8 @@ export function ScreenShell({
       </View>
 
       {isPhone && (chipStripCenterExtras != null || mobileChipAction != null) ? (
-        <View className="flex-row items-center gap-2 border-b border-border bg-bg-base py-1 pr-3">
+        // touch.md → Chip-strip safe zone: the scroller starts 16 px in, clear of the edge swipe.
+        <View className="flex-row items-center gap-2 border-b border-border bg-bg-base py-1 pl-4 pr-3">
           <ScrollView
             testID="reader-chip-strip"
             horizontal
