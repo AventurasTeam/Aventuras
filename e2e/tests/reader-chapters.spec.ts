@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
+import { ENTRIES_WINDOW_SIZE } from '@/lib/actions'
+
 import { goToWorld, openStory } from '../flows/navigation'
 import { currentBranchId, queryApp } from '../harness/db'
 import { t } from '../harness/i18n'
@@ -41,16 +43,25 @@ async function deltaAnchor(page: Page, branchId: string, deltaId: string): Promi
   }
 }
 
-// The oldest of the branch's newest 50 rows, which is what a fresh reader holds.
+// The oldest row a fresh reader's window holds.
 async function oldestInWindow(page: Page, branchId: string): Promise<number> {
   const [[oldest]] = await queryApp(
     page,
     `SELECT min(position) FROM (
-       SELECT position FROM story_entries WHERE branch_id = ? ORDER BY position DESC LIMIT 50
+       SELECT position FROM story_entries WHERE branch_id = ? ORDER BY position DESC LIMIT ?
      )`,
-    [branchId],
+    [branchId, ENTRIES_WINDOW_SIZE],
   )
   return oldest as number
+}
+
+async function tailEntryId(page: Page, branchId: string): Promise<string> {
+  const [[id]] = await queryApp(
+    page,
+    `SELECT id FROM story_entries WHERE branch_id = ? AND kind != 'system' ORDER BY position DESC LIMIT 1`,
+    [branchId],
+  )
+  return id as string
 }
 
 // A wheel, not a `scrollTop` write: only a gesture stops the bottom pin and an unsettled landing,
@@ -109,6 +120,8 @@ test.describe.serial('Reader chapters', () => {
 
     // A seed change that pulls the anchor into the window must fail here, not pass unproven.
     expect(fire.position).toBeLessThan(await oldestInWindow(page, branchId))
+    // openStory waits only for the composer, which can paint before any row.
+    await expect(reader.row(page, await tailEntryId(page, branchId))).toBeVisible()
     await expect(reader.row(page, fire.entryId)).toHaveCount(0)
 
     await openHappeningHistory(page, fireTitle)
@@ -256,12 +269,9 @@ test.describe.serial('Reader chapter chrome', () => {
 
     // The chip and an entry footer format world time down two paths. The seed spaces entries 3 s
     // apart and the label stops at minutes, so this can't tell the tail from a row near it.
-    const [[tailId]] = await queryApp(
-      page,
-      `SELECT id FROM story_entries WHERE branch_id = ? AND kind != 'system' ORDER BY position DESC LIMIT 1`,
-      [branchId],
-    )
-    const tailLabel = await reader.worldTimeFooter(page, tailId as string).innerText()
+    const tailLabel = await reader
+      .worldTimeFooter(page, await tailEntryId(page, branchId))
+      .innerText()
     await expect(reader.timeChip(page)).toContainText(tailLabel)
   })
 
