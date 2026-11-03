@@ -80,6 +80,26 @@ No open items.
   That is arithmetic, not measured, and the reply's lag is the closer
   proxy.
 
+  On a long story a jump to an early chapter can outlast the jump veil's
+  30 s bound (`JUMP_VEIL_TIMEOUT_MS` in
+  `components/reader/use-entry-jump.ts`). The bound starts at the press
+  and restarts when the read's rows reach the store, so the read and the
+  landing each get 30 s. A jump that runs out is dropped: the veil lifts,
+  `reader.entry_jump_dropped` logs cause `bound`
+  ([`observability.md → Subsystem emission inventory`](./observability.md#subsystem-emission-inventory)),
+  and no toast shows. A read still out then neither writes nor lands. A
+  landing already sent to the document isn't withdrawn, so the reader
+  may still move to the target once the document commits, with no veil;
+  that is read from the code, not seen on a device. In 5.3's device
+  session on the Fold (release build, the 60-chapter fixture), a jump to
+  chapter 1, pressed during a jump to chapter 5, held the veil about 22 s
+  in all, and jumps to chapter 5 alone about 17 to 21 s. In the Android
+  measure the read was about 0.4 s of the 10.7 s a jump to entry 1 took
+  at 60 chapters, so nearly all of the wait runs under the landing's
+  30 s. The bound will drop these jumps on longer stories or slower
+  phones until the sliding window below lands. The code stays as built
+  (developer decision R2, 2026-11-03).
+
   Slice 5.3 ships as built, and the fix is to be planned as a slice in
   M5. The measure reopened the far-end trim that
   [`reader-composer.md → Loaded-set model`](./ui/screens/reader-composer/reader-composer.md#loaded-set-model)
