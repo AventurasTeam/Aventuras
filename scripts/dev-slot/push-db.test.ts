@@ -71,5 +71,7 @@ describe('push-db', () => {
     expect(status).toBe(0)
     expect(calls.filter((call) => call.includes(STAGED))).toHaveLength(1)
     expect(calls.at(-1)).toContain('wc -c')
+    // Where expo-sqlite opens the app's database; the size check reads the same constant.
+    expect(calls.some((call) => call.includes('cat > files/SQLite/aventuras.db'))).toBe(true)
   })
 })
