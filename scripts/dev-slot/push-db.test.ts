@@ -84,6 +84,23 @@ describe('push-db', () => {
     expect(calls.some((call) => call.includes('cat > files/SQLite/aventuras.db'))).toBe(true)
   })
 
+  it('fails when the staged copy stays behind after an otherwise good push', () => {
+    const { status, stderr, calls } = runPushDb(STAGED)
+    expect(status).toBe(1)
+    expect(stderr).toContain('/data/local/tmp/aventuras.db is still on the device')
+    expect(calls.at(-1)).toContain(STAGED)
+  })
+
+  it('reports the failed step first when the staged copy also stays behind', () => {
+    const { status, stderr } = runPushDb('cat /data/local/tmp', STAGED)
+    expect(status).toBe(1)
+    const stepFailure = stderr.indexOf('run-as failed')
+    const leftover = stderr.indexOf('/data/local/tmp/aventuras.db is still on the device')
+    expect(stepFailure).toBeGreaterThan(-1)
+    expect(leftover).toBeGreaterThan(-1)
+    expect(stepFailure).toBeLessThan(leftover)
+  })
+
   it.each(['-wal', '-journal'])(
     'refuses a source with a %s sidecar before any device call',
     (suffix) => {
