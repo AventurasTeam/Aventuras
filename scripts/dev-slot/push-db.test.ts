@@ -4,8 +4,10 @@ import {
   existsSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -18,11 +20,13 @@ const STAGED = 'rm -f /data/local/tmp/aventuras.db'
 
 let dir: string
 let db: string
+let pushed: string
 let log: string
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'push-db-'))
   db = join(dir, 'source.db')
+  pushed = db
   log = join(dir, 'adb.log')
   const sqlite = new DatabaseSync(db)
   sqlite.exec('CREATE TABLE t (id INTEGER)')
@@ -50,7 +54,7 @@ function runPushDb(...failOn: string[]) {
   chmodSync(fake, 0o755)
   const result = spawnSync(
     join(process.cwd(), 'node_modules/.bin/tsx'),
-    ['scripts/dev-slot/push-db.ts', db],
+    ['scripts/dev-slot/push-db.ts', pushed],
     {
       encoding: 'utf8',
       env: {
@@ -111,4 +115,14 @@ describe('push-db', () => {
       expect(calls).toEqual([])
     },
   )
+
+  it('refuses a symlinked source whose target has a -wal sidecar', () => {
+    pushed = join(dir, 'link.db')
+    symlinkSync(db, pushed)
+    writeFileSync(`${db}-wal`, 'pending changes')
+    const { status, stderr, calls } = runPushDb()
+    expect(status).toBe(1)
+    expect(stderr).toContain(`${realpathSync(db)}-wal`)
+    expect(calls).toEqual([])
+  })
 })
