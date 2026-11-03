@@ -121,6 +121,34 @@ describe('push-db', () => {
     expect(stderr).not.toContain('debuggable')
   })
 
+  it('refuses to run without ANDROID_SERIAL before any device call', () => {
+    const { status, stderr, calls } = runPushDb({ serial: null })
+    expect(status).toBe(1)
+    expect(stderr).toContain('set ANDROID_SERIAL')
+    expect(calls).toEqual([])
+  })
+
+  it('stops after get-state when the device is not in the device state', () => {
+    const { status, stderr, calls } = runPushDb({ state: 'unauthorized' })
+    expect(status).toBe(1)
+    expect(stderr).toContain('device fake is not reachable (unauthorized)')
+    expect(calls).toEqual(['-s fake get-state'])
+  })
+
+  it('blames a release install when the run-as probe fails, before touching the app', () => {
+    const { status, stderr, calls } = runPushDb({ failOn: ['run-as com.aventuras.app true'] })
+    expect(status).toBe(1)
+    expect(stderr).toContain('must be a debuggable install')
+    expect(calls.at(-1)).toBe('-s fake shell run-as com.aventuras.app true')
+  })
+
+  it('fails when the database on the device differs in size from the source', () => {
+    const size = statSync(db).size
+    const { status, stderr } = runPushDb({ deviceSize: size - 1 })
+    expect(status).toBe(1)
+    expect(stderr).toContain(`size mismatch: local ${size}, device ${size - 1}`)
+  })
+
   it.each(['-wal', '-journal'])(
     'refuses a source with a %s sidecar before any device call',
     (suffix) => {
