@@ -6,11 +6,12 @@ import { ScrollView, type ScrollViewProps } from 'react-native'
 
 /** All a list may call on its scroll ref: gorhom's scroll view lacks most ScrollView methods. */
 export type ScrollComponentHandle = Pick<ScrollView, 'scrollTo'>
-export type ScrollComponent = ComponentType<ScrollViewProps & { ref?: Ref<ScrollComponentHandle> }>
+type ScrollComponentProps = ScrollViewProps & { ref?: Ref<ScrollComponentHandle> }
+export type ScrollComponent = ComponentType<ScrollComponentProps>
 export const ScrollComponentContext = createContext<ScrollComponent>(ScrollView)
 
 /** The host's scroll container, read where it renders: inside a fixed-detent Sheet, the Sheet's. */
-export function ContextScrollView(props: ScrollViewProps) {
+export function ContextScrollView(props: ScrollComponentProps) {
   const Scroll = useContext(ScrollComponentContext)
   return <Scroll {...props} />
 }

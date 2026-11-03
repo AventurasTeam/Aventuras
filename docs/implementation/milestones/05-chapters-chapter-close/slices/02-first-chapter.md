@@ -513,6 +513,14 @@ that ran)
   device, for this slice's measure and for 5.5b's. 5.5b needs the chapter
   to fit half the served model's window, so read that window before
   fixing the size.
+- **Does the close's measure run once with the reader grown?** Criterion
+  28 measures the stamp burst on Android. With the reader holding a grown
+  window, each update re-sends the whole window
+  ([followup](../../../../followups.md#ux), "Native reader rows rerender per
+  emission"). This slice's dataset is one chapter of about 132 entries,
+  so a grown case at 20-chapter scale would need `pnpm db:seed:long`.
+  Should it also run one close with the reader grown, or leave the grown
+  case to that followup's slice?
 - **What number reopens the stamp burst?** The milestone says a bad number
   reopens the approach and names none. Set the bar at planning, for the
   forward burst and for a CTRL-Z. A move to one group comes after 5.5a's

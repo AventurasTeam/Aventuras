@@ -23,7 +23,12 @@ const SEARCH_DEBOUNCE_MS = 250
 /** How long refresh triggers must hold still before the tab refetches once for all of them. */
 export const REFRESH_COALESCE_MS = 150
 
-export type HistoryTabProps = { branchId: string; targetTable: HistoryTable; targetId: string }
+export type HistoryTabProps = {
+  branchId: string
+  targetTable: HistoryTable
+  targetId: string
+  onOpenEntry: (entryId: string) => void
+}
 
 /** C4: one row's delta log; keyed by target so switching rows remounts and resets it. */
 export function HistoryTab(props: HistoryTabProps) {
@@ -77,7 +82,7 @@ function useOtherEndChanges(
   }, [names, ids, searching, onChange])
 }
 
-function HistoryTabForTarget({ branchId, targetTable, targetId }: HistoryTabProps) {
+function HistoryTabForTarget({ branchId, targetTable, targetId, onOpenEntry }: HistoryTabProps) {
   const [searchInput, setSearchInput] = useState('')
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DEBOUNCE_MS)
   const [op, setOp] = useState<HistoryOp | null>(null)
@@ -133,6 +138,7 @@ function HistoryTabForTarget({ branchId, targetTable, targetId }: HistoryTabProp
       onSortChange={setSort}
       onLoadMore={chunks.loadMore}
       onRetry={chunks.retry}
+      onOpenEntry={onOpenEntry}
     />
   )
 }

@@ -71,7 +71,14 @@ the inventory below is the slot list at a glance.
   (emphasis; hover, focus surrounds, table heads).
 - **Focus (1).** `--focus-ring` — keyboard-focus indicator. Own
   slot; not aliased to `--accent` (themes get tone control).
-- **Selection (1).** `--selection-bg` — text-selection background.
+- **Selection (1).** `--selection-bg` — text-selection background, and
+  the landed entry card's tint after a jump
+  ([`reader-composer.md → Loaded-set model`](../screens/reader-composer/reader-composer.md#loaded-set-model)).
+  Dark themes also set `--landed-tint-share`, the share of
+  `--selection-bg` the landed card's tint lays over the card. Each theme
+  picks it so the peak stands out from its fainter card kind
+  (`--bg-raised` or `--bg-sunken`) at least as far as default-light's
+  tint from its `--bg-sunken` (OKLab ΔE). It is not a colour slot.
 - **Pattern-driven (1).** `--recently-classified-bg` — row tint
   for the recently-classified pattern (per
   [`../patterns/entity.md`](../patterns/entity.md)). Two visual

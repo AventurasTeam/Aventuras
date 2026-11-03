@@ -86,6 +86,12 @@ slice plans when relevant.
 - [The expo-dom bridge keeps neither identity nor rejections](./expo-dom-bridge-identity-and-rejections.md)
   — props are fresh JSON per emission and callbacks new proxies, so a memo
   misses on native; a host rejection dies silently in the WebView.
+- [Time a WebView from inside it](./webview-timing-needs-the-document.md)
+  — the host's `injectJavaScript` returns at once, so a host-side timing
+  passes on a frozen screen; the two `performance.now()` clocks don't
+  compare, and a release build drops the WebView's console. Stamp in the
+  document after the paint, buffer, and flush in one call per run
+  through a callback.
 - [`expo-clipboard`'s web write reports success it never checked](./expo-clipboard-web-reports-false-success.md)
   — its `execCommand` fallback resolves `true` on a refused copy; write
   `navigator.clipboard` directly on web and catch the throw everywhere.

@@ -47,6 +47,8 @@ export type EntityPaneProps = {
   onSession: (handle: RowSessionHandle | null) => void
   onOpenEntity: (id: string) => void
   onOpenHappening: (id: string) => void
+  /** A History row's entry link; the route navigates through the session's leave guard. */
+  onOpenEntry: (entryId: string) => void
   onSetLead: (id: string) => void
   /** `⋯ → Delete entity`; the surface raises the confirm. */
   onDelete: (row: Entity) => void

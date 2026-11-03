@@ -1,11 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useEffect, useState, type ComponentProps } from 'react'
+import { useEffect, useRef, useState, type ComponentProps } from 'react'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 import type { CutOffMark, StoryEntry, SystemFailureMeta } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
+import type { ChapterBreaks } from './chapter-breaks'
+import type { ReaderSurfaceHandle } from './reader-document-types'
 import { ReaderSurface } from './reader-surface'
 import {
   describePassFailure,
@@ -93,6 +95,7 @@ const noopHandlers = {
   onCopySystemText: async () => {},
   onFixSystemEntry: async () => {},
   onFixCutOff: async () => {},
+  onEntryLanded: async () => {},
 }
 
 const HEAD_TURN_ROWS = ROWS.slice(0, 3)
@@ -172,6 +175,7 @@ const meta = {
     // Footer behavior is covered at the compound layer (entry-card.stories);
     // these stories exercise the surface's scroll/edit machinery instead.
     worldTimeDecorations: {},
+    chapterBreaks: {},
     worldTimeFrame: null,
     streaming: null,
     branchKey: 'branch_story',
@@ -685,6 +689,114 @@ const REPLY_TEXT = 'The corridor folds shut behind you.'
 // loop is what absorbs layout that lands after the pin's first write.
 const LATE_GROWTH_FRAMES = 5
 
+// Handle calls from a button, as the host's would arrive: `o_later` is a row no commit brings.
+function LandingSignalHarness(props: ComponentProps<typeof ReaderSurface>) {
+  const ref = useRef<ReaderSurfaceHandle>(null)
+  return (
+    <div style={{ display: 'flex', height: '100%', flexDirection: 'column' }}>
+      <button type="button" onClick={() => ref.current?.jumpToEntry('o1')}>
+        Jump to o1
+      </button>
+      <button type="button" onClick={() => ref.current?.jumpToEntry('o_later')}>
+        Jump to a later row
+      </button>
+      <div style={{ minHeight: 0, flex: 1 }}>
+        <ReaderSurface {...props} ref={ref} />
+      </div>
+    </div>
+  )
+}
+
+// The landed frame, then a double rAF; the loop's settle end comes ten frames later.
+const LANDED_SIGNAL_FRAMES = 5
+
+/** The host's veil lifts on a landing's first painted write, and only once. */
+export const EntryLandedOnLanding: Story = {
+  args: { rows: OVERFLOW_ROWS, onEntryLanded: fn(async () => {}) },
+  render: (args) => <LandingSignalHarness {...args} />,
+  play: async ({ args }) => {
+    await settleLanding(readerScroller())
+    screen.getByRole('button', { name: 'Jump to o1' }).click()
+    for (let i = 0; i < LANDED_SIGNAL_FRAMES; i++) await nextFrame()
+    expect(args.onEntryLanded).toHaveBeenCalledTimes(1)
+    expect(args.onEntryLanded).toHaveBeenCalledWith('o1')
+    expect(entryRow('o1')).toHaveAttribute('data-landed')
+    for (let i = 0; i < 20; i++) await nextFrame()
+    expect(args.onEntryLanded).toHaveBeenCalledTimes(1)
+  },
+}
+
+/** A row already in place lands without a write, and must still lift the veil. */
+export const EntryLandedWithoutAWrite: Story = {
+  args: { rows: OVERFLOW_ROWS, onEntryLanded: fn(async () => {}) },
+  render: (args) => <JumpHarness {...args} />,
+  play: async ({ args }) => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Jump')
+    await landedOn(JUMP_TARGET, scroller)
+    await outlastLanding()
+    expect(args.onEntryLanded).toHaveBeenCalledTimes(1)
+    const landedTop = scroller.scrollTop
+    press('Jump')
+    for (let i = 0; i < LANDED_SIGNAL_FRAMES; i++) await nextFrame()
+    expect(args.onEntryLanded).toHaveBeenCalledTimes(2)
+    expect(scroller.scrollTop).toBe(landedTop)
+  },
+}
+
+/** A jump between a landing and its paint replaces it: the newer target must not report early. */
+export const EntryLandedNotForAReplacingJump: Story = {
+  args: { rows: OVERFLOW_ROWS, onEntryLanded: fn(async () => {}) },
+  render: (args) => <LandingSignalHarness {...args} />,
+  play: async ({ args }) => {
+    await settleLanding(readerScroller())
+    const replaced = new Promise<void>((resolve) => {
+      const observer = new MutationObserver(() => {
+        if (!entryRow('o1').hasAttribute('data-landed')) return
+        observer.disconnect()
+        screen.getByRole('button', { name: 'Jump to a later row' }).click()
+        resolve()
+      })
+      observer.observe(entryRow('o1'), { attributes: true })
+    })
+    screen.getByRole('button', { name: 'Jump to o1' }).click()
+    await replaced
+    for (let i = 0; i < 20; i++) await nextFrame()
+    expect(args.onEntryLanded).toHaveBeenCalledTimes(1)
+    expect(args.onEntryLanded).toHaveBeenCalledWith('o1')
+  },
+}
+
+/** A wheel drops a target that never arrived, and the veil must still lift. */
+export const EntryLandedOnDroppedTarget: Story = {
+  args: { rows: OVERFLOW_ROWS, onEntryLanded: fn(async () => {}) },
+  render: (args) => <LandingSignalHarness {...args} />,
+  play: async ({ args }) => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await userEvent.click(screen.getByRole('button', { name: 'Jump to a later row' }))
+    for (let i = 0; i < 5; i++) await nextFrame()
+    expect(args.onEntryLanded).not.toHaveBeenCalled()
+
+    scroller.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }))
+    await waitFor(() => expect(args.onEntryLanded).toHaveBeenCalledWith('o_later'))
+  },
+}
+
+/** A reload that drops the row before it lands ends the landing, and the veil must still lift. */
+export const EntryLandedOnDetachedRow: Story = {
+  args: { rows: OVERFLOW_ROWS, onEntryLanded: fn(async () => {}) },
+  render: (args) => <JumpHarness {...args} />,
+  play: async ({ args }) => {
+    await settleLanding(scrollerOf('o1'))
+    press('Jump')
+    press('Drop target')
+    await waitFor(() => expect(args.onEntryLanded).toHaveBeenCalledWith(JUMP_TARGET))
+    expect(screen.queryByText(/Corridor 3:/)).toBeNull()
+  },
+}
+
 // The surface across a stream's end: the streaming card gives way to its committed row, which
 // then grows a few frames later.
 function StreamEndHarness(props: ComponentProps<typeof ReaderSurface>) {
@@ -879,6 +991,18 @@ export const StreamFollowBrokenByArrowUp: Story = {
   },
 }
 
+/** Only an upward key takes the reader off the live edge: a downward one leaves it following. */
+export const StreamFollowHoldsThroughADownwardKey: Story = {
+  render: (args) => <StreamChunksHarness {...args} />,
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    scroller.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true }))
+    await nextChunk(scroller)
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+  },
+}
+
 const RAIL_START_PX = 1000
 
 /**
@@ -929,6 +1053,292 @@ export const StreamFollowBrokenByKeyAfterReaderPress: Story = {
     expect(distance).toBeLessThan(80)
     await nextChunk(scroller)
     expect(distanceFromBottom(scroller)).toBeGreaterThan(distance)
+  },
+}
+
+/** Below its end row, as the row's sibling: inside ReaderRow it would void the memo. */
+export const ChapterBreakBelowItsEndRow: Story = {
+  args: { chapterBreaks: { e3: { number: 3, timeLabel: 'Day 12 · 14:33' } } },
+  play: async () => {
+    const rule = await screen.findByRole('separator', { name: 'Chapter 3 · Day 12 · 14:33' })
+    expect(rule).toHaveTextContent('Chapter 3 · Day 12 · 14:33')
+    expect(entryRow('e3').nextElementSibling).toBe(rule)
+    expect(rule.nextElementSibling).toBe(entryRow('e4'))
+  },
+}
+
+/** No decoration on the end row means no time, and the label stands alone. */
+export const ChapterBreakWithoutTime: Story = {
+  args: { chapterBreaks: { e3: { number: 3 } } },
+  play: async () => {
+    const rule = await screen.findByRole('separator', { name: 'Chapter 3' })
+    expect(rule).toHaveTextContent(/^Chapter 3$/)
+  },
+}
+
+type BreakCommitProps = ComponentProps<typeof ReaderSurface> & {
+  after: { rows?: StoryEntry[]; chapterBreaks?: ChapterBreaks }
+  jumpTo?: string
+}
+
+// One commit on a press, so the play can place the reader first. A jump is called ahead of the
+// commit, as the host's is: useEntryJump lands right after its store write.
+function BreakCommitHarness({ after, jumpTo, ...props }: BreakCommitProps) {
+  const surfaceRef = useRef<ReaderSurfaceHandle>(null)
+  const [committed, setCommitted] = useState(false)
+  return (
+    <div style={{ display: 'flex', height: '100%', flexDirection: 'column' }}>
+      <button
+        type="button"
+        onClick={() => {
+          if (jumpTo != null) surfaceRef.current?.jumpToEntry(jumpTo)
+          setCommitted(true)
+        }}
+      >
+        Commit
+      </button>
+      <div style={{ minHeight: 0, flex: 1 }}>
+        <ReaderSurface {...props} {...(committed ? after : {})} ref={surfaceRef} />
+      </div>
+    </div>
+  )
+}
+
+const topBelowReaderEdge = (el: Element, scroller: HTMLElement) =>
+  el.getBoundingClientRect().top - scroller.getBoundingClientRect().top
+
+async function pressCommit() {
+  screen.getByRole('button', { name: 'Commit' }).click()
+  await nextFrame()
+  await nextFrame()
+}
+
+const LATE_BREAK = { o12: { number: 2, timeLabel: 'Day 2, dawn' } }
+
+/** A close landing under a reader at the bottom leaves it at the bottom. */
+export const BreakAtBottomRepins: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  render: (args) => <BreakCommitHarness {...args} after={{ chapterBreaks: LATE_BREAK }} />,
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    await pressCommit()
+    await screen.findByRole('separator', { name: 'Chapter 2 · Day 2, dawn' })
+    await scrollSettled(scroller)
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+  },
+}
+
+/** The tolerance reads the height before the break: its own height must not push a reader out. */
+export const BreakNearBottomRepins: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  render: (args) => <BreakCommitHarness {...args} after={{ chapterBreaks: LATE_BREAK }} />,
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    await scrollToDistance(scroller, 15)
+    await pressCommit()
+    await scrollSettled(scroller)
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+  },
+}
+
+/** Further up nothing is written, though a break above the viewport shifts content. */
+export const BreakAwayFromBottomWritesNothing: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  render: (args) => (
+    <BreakCommitHarness {...args} after={{ chapterBreaks: { o2: { number: 2 } } }} />
+  ),
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    await scrollToDistance(scroller, 200)
+    const scrollTop = scroller.scrollTop
+    await pressCommit()
+    await scrollSettled(scroller)
+    expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
+/** Nothing is written under a finger, even for a reader at the bottom. */
+export const BreakDuringTouchHolds: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  render: (args) => <BreakCommitHarness {...args} after={{ chapterBreaks: LATE_BREAK }} />,
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    const scrollTop = scroller.scrollTop
+    scroller.dispatchEvent(new Event('touchstart', { bubbles: true }))
+    await pressCommit()
+    await scrollSettled(scroller)
+    expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
+/**
+ * A boundary load carrying a break: the anchor rule's scrollTop write in that commit must not read
+ * as a reader at the bottom, or the prepend would throw it to the far end.
+ */
+export const BreakInBoundaryLoadHolds: Story = {
+  args: { rows: OVERFLOW_ROWS.slice(6) },
+  render: (args) => (
+    <BreakCommitHarness
+      {...args}
+      after={{ rows: OVERFLOW_ROWS, chapterBreaks: { o3: { number: 2 } } }}
+    />
+  ),
+  play: async () => {
+    const scroller = scrollerOf('o7')
+    await settleLanding(scroller)
+    scroller.scrollTop = 0
+    await scrollSettled(scroller)
+    await pressCommit()
+    expect(entryRow('o1')).toBeInstanceOf(HTMLElement)
+    // Read before the settle too: the hold would restore a thrown reader, after a visible jump.
+    expect(topBelowReaderEdge(entryRow('o7'), scroller)).toBeCloseTo(0, 0)
+    await scrollSettled(scroller)
+    expect(topBelowReaderEdge(entryRow('o7'), scroller)).toBeCloseTo(0, 0)
+  },
+}
+
+/** A target still waiting for its row owns the position: nothing pins under a pending jump. */
+export const BreakWhileJumpPendingHolds: Story = {
+  args: { rows: OVERFLOW_ROWS.slice(1) },
+  render: (args) => (
+    <BreakCommitHarness {...args} after={{ chapterBreaks: LATE_BREAK }} jumpTo="o1" />
+  ),
+  play: async () => {
+    const scroller = scrollerOf('o2')
+    await settleLanding(scroller)
+    const scrollTop = scroller.scrollTop
+    await pressCommit()
+    await scrollSettled(scroller)
+    expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
+/** A jump to a chapter's start opens under the heading that names it. */
+export const LandingOpensUnderTheBreak: Story = {
+  args: { rows: OVERFLOW_ROWS, chapterBreaks: { o5: { number: 2, timeLabel: 'Day 2, dawn' } } },
+  render: (args) => <BreakCommitHarness {...args} after={{}} jumpTo="o6" />,
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    await pressCommit()
+    await waitFor(() => expect(entryRow('o6')).toHaveAttribute('data-landed'))
+    await scrollSettled(scroller)
+    const rule = screen.getByRole('separator', { name: 'Chapter 2 · Day 2, dawn' })
+    expect(Math.abs(topBelowReaderEdge(rule, scroller) - 12)).toBeLessThan(2)
+  },
+}
+
+/** The first chapter has no break above it. The shimmer leaves room to land the row itself. */
+export const LandingOnTheFirstChapterHasNoBreak: Story = {
+  args: {
+    rows: OVERFLOW_ROWS,
+    hasOlder: true,
+    chapterBreaks: { o5: { number: 2, timeLabel: 'Day 2, dawn' } },
+  },
+  render: (args) => <BreakCommitHarness {...args} after={{}} jumpTo="o1" />,
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    await pressCommit()
+    await scrollSettled(scroller)
+    expect(Math.abs(topBelowReaderEdge(entryRow('o1'), scroller) - 12)).toBeLessThan(2)
+  },
+}
+
+/** A long jump mounts breaks in the same commit as its rows; no pin drags it back down. */
+export const JumpMountingBreaksLands: Story = {
+  args: { rows: OVERFLOW_ROWS.slice(8) },
+  render: (args) => (
+    <BreakCommitHarness
+      {...args}
+      after={{
+        rows: OVERFLOW_ROWS,
+        chapterBreaks: { o3: { number: 2 }, o11: { number: 3 } },
+      }}
+      jumpTo="o4"
+    />
+  ),
+  play: async () => {
+    const scroller = scrollerOf('o9')
+    await settleLanding(scroller)
+    await pressCommit()
+    await scrollSettled(scroller)
+    const rule = screen.getByRole('separator', { name: 'Chapter 2' })
+    expect(Math.abs(topBelowReaderEdge(rule, scroller) - 12)).toBeLessThan(2)
+  },
+}
+
+type BreakStepsProps = ComponentProps<typeof ReaderSurface> & {
+  steps: { rows?: StoryEntry[]; chapterBreaks?: ChapterBreaks }[]
+}
+
+function BreakStepsHarness({ steps, ...props }: BreakStepsProps) {
+  const [step, setStep] = useState(0)
+  return (
+    <div style={{ display: 'flex', height: '100%', flexDirection: 'column' }}>
+      <button type="button" onClick={() => setStep((n) => n + 1)}>
+        Next step
+      </button>
+      <div style={{ minHeight: 0, flex: 1 }}>
+        <ReaderSurface {...props} {...(step > 0 ? steps[step - 1] : {})} />
+      </div>
+    </div>
+  )
+}
+
+async function pressNextStep(scroller: HTMLElement) {
+  screen.getByRole('button', { name: 'Next step' }).click()
+  await frames(3)
+  await scrollSettled(scroller)
+}
+
+/** A commit made while the reader had no layout leaves no height for a later break to read. */
+export const BreakAfterHiddenCommitWritesNothing: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  render: (args) => (
+    <BreakStepsHarness {...args} steps={[{}, { chapterBreaks: { o3: { number: 2 } } }]} />
+  ),
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    await scrollToDistance(scroller, 300)
+    const scrollTop = scroller.scrollTop
+    const box = scroller.parentElement?.parentElement
+    if (box == null) throw new Error('no reader box')
+    box.style.display = 'none'
+    await pressNextStep(scroller)
+    box.style.display = ''
+    await frames(3)
+    expect(scroller.scrollTop).toBe(scrollTop)
+    await pressNextStep(scroller)
+    expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
+/** Rows growing below a reader that doesn't follow move the bottom away before a break lands. */
+export const BreakAfterGrowthBelowWritesNothing: Story = {
+  args: { rows: OVERFLOW_ROWS.slice(0, 12) },
+  render: (args) => (
+    <BreakStepsHarness
+      {...args}
+      steps={[
+        { rows: OVERFLOW_ROWS },
+        { rows: OVERFLOW_ROWS, chapterBreaks: { o3: { number: 2 } } },
+      ]}
+    />
+  ),
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    await pressNextStep(scroller)
+    const scrollTop = scroller.scrollTop
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(20)
+    await pressNextStep(scroller)
+    expect(scroller.scrollTop).toBe(scrollTop)
   },
 }
 
@@ -1267,5 +1677,1144 @@ export const CutOffNoticeWithoutFixLabel: Story = {
       ),
     ).toBeVisible()
     expect(within(row).queryByRole('button', { name: 'Fix profile' })).not.toBeInTheDocument()
+  },
+}
+
+const LANDING_GAP_PX = 12
+const JUMP_TARGET = 'o3'
+const contentReads = { count: 0 }
+const GROWN_CONTENT = Array.from({ length: 8 }, () => REPLY_TEXT.repeat(6)).join('\n\n')
+const PARTIAL_ROWS = OVERFLOW_ROWS.slice(7)
+
+const grownAboveTarget = (row: StoryEntry): StoryEntry =>
+  row.id === 'o2' ? { ...row, content: GROWN_CONTENT } : row
+
+// The host around a jump: each button is one thing the route or the bridge does to the surface.
+function JumpHarness(props: ComponentProps<typeof ReaderSurface>) {
+  const surfaceRef = useRef<ReaderSurfaceHandle>(null)
+  const [rows, setRows] = useState(props.rows)
+  const [branchKey, setBranchKey] = useState(props.branchKey)
+  const [hasOlder, setHasOlder] = useState(props.hasOlder)
+  const [chunks, setChunks] = useState(0)
+  const content = Array.from({ length: chunks }, () => REPLY_TEXT).join('\n\n')
+  const actions = {
+    Jump: () => surfaceRef.current?.jumpToEntry(JUMP_TARGET),
+    'Jump to tail': () => surfaceRef.current?.jumpToEntry('o14'),
+    'Bottom button': () => surfaceRef.current?.jumpToBottom(),
+    'Load all rows': () => setRows(OVERFLOW_ROWS),
+    'Prepend and grow': () =>
+      setRows((current) => [OVERFLOW_ROWS[0]!, ...current].map(grownAboveTarget)),
+    'Grow above target': () => setRows((current) => current.map(grownAboveTarget)),
+    'Drop target': () => setRows((current) => current.filter((row) => row.id !== JUMP_TARGET)),
+    'Switch branch': () => {
+      setBranchKey('branch_other')
+      setRows(OVERFLOW_ROWS.map((row) => ({ ...row, branchId: 'branch_other' })))
+    },
+    'Next chunk': () => setChunks((n) => n + 1),
+    'Prove branch top': () => setHasOlder(false),
+  }
+  return (
+    <div style={{ display: 'flex', height: '100%', flexDirection: 'column' }}>
+      <div>
+        {Object.entries(actions).map(([label, onClick]) => (
+          <button key={label} type="button" onClick={onClick}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <div style={{ minHeight: 0, flex: 1 }}>
+        <ReaderSurface
+          {...props}
+          ref={surfaceRef}
+          rows={rows}
+          branchKey={branchKey}
+          hasOlder={hasOlder}
+          streaming={chunks > 0 ? { content, reasoning: '' } : null}
+        />
+      </div>
+    </div>
+  )
+}
+
+const press = (name: string) => screen.getByRole('button', { name }).click()
+
+async function frames(count: number) {
+  for (let i = 0; i < count; i++) await nextFrame()
+}
+
+function scrollerOf(rowId: string): HTMLElement {
+  const scroller = entryRow(rowId).parentElement
+  if (scroller == null) throw new Error('no reader scroller')
+  return scroller
+}
+
+function topOffset(rowId: string, scroller: HTMLElement): number {
+  return entryRow(rowId).getBoundingClientRect().top - scroller.getBoundingClientRect().top
+}
+
+async function landedOn(rowId: string, scroller: HTMLElement) {
+  await waitFor(() =>
+    expect(Math.abs(topOffset(rowId, scroller) - LANDING_GAP_PX)).toBeLessThan(1.5),
+  )
+}
+
+// Past the loop's own 10 settled frames, so a pass means it held rather than hadn't moved yet.
+const outlastLanding = () => frames(20)
+
+// A scrollbar press: on the scroller itself, past its client width.
+function pressScrollbar(scroller: HTMLElement) {
+  const box = scroller.getBoundingClientRect()
+  scroller.dispatchEvent(
+    new PointerEvent('pointerdown', {
+      bubbles: true,
+      clientX: box.left + scroller.clientWidth + 2,
+      clientY: box.top + 10,
+    }),
+  )
+}
+
+// Each stands in for a gesture the reader treats as the user taking over.
+const LANDING_BREAKERS: Record<string, (scroller: HTMLElement) => void> = {
+  wheelUp: (s) => s.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true })),
+  wheelDown: (s) => s.dispatchEvent(new WheelEvent('wheel', { deltaY: 100, bubbles: true })),
+  touchDrag: (s) => {
+    s.dispatchEvent(new Event('touchstart', { bubbles: true }))
+    s.dispatchEvent(new Event('touchmove', { bubbles: true }))
+    s.dispatchEvent(new Event('touchend', { bubbles: true }))
+  },
+  scrollbarPress: pressScrollbar,
+  upwardKey: (s) => s.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageUp', bubbles: true })),
+}
+
+// The loop would pull the view back on the next frame, so the row growing above the target is
+// what tells a broken landing from one that merely hadn't written yet.
+function landingBrokenBy(breaker: (scroller: HTMLElement) => void): Story {
+  return {
+    render: (args) => <JumpHarness {...args} />,
+    args: { rows: OVERFLOW_ROWS },
+    play: async () => {
+      const scroller = scrollerOf('o1')
+      await settleLanding(scroller)
+      press('Jump')
+      await landedOn(JUMP_TARGET, scroller)
+      breaker(scroller)
+      press('Grow above target')
+      await nextFrame()
+      const offset = topOffset(JUMP_TARGET, scroller)
+      expect(offset).toBeGreaterThan(LANDING_GAP_PX + 100)
+      await outlastLanding()
+      expect(topOffset(JUMP_TARGET, scroller)).toBe(offset)
+    },
+  }
+}
+
+/** A row in the window lands under the viewport's top at once, marked for the highlight. */
+export const JumpLandsRowInWindow: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Jump')
+    await landedOn(JUMP_TARGET, scroller)
+    const row = entryRow(JUMP_TARGET)
+    expect(row).toHaveAttribute('data-landed')
+    const card = row.querySelector<HTMLElement>(':scope > .reader-entry-card')
+    expect(card).not.toBeNull()
+    if (card == null) return
+    expect(getComputedStyle(card).animationName).toBe('reader-card-landed')
+    expect(getComputedStyle(card).animationDuration).toBe('1.5s')
+    expect(getComputedStyle(row).animationName).toBe('none')
+    expect(getComputedStyle(row).backgroundColor).toBe('rgba(0, 0, 0, 0)')
+    const animations = card.getAnimations()
+    expect(animations).toHaveLength(1)
+    const tint = animations[0]
+    // A slow landing can resolve after the fade's first frame; the seek reads its start colour.
+    tint.currentTime = 0
+    const probe = document.createElement('div')
+    probe.style.backgroundColor = 'var(--selection-bg)'
+    document.body.append(probe)
+    try {
+      expect(getComputedStyle(card).backgroundColor).toBe(getComputedStyle(probe).backgroundColor)
+    } finally {
+      probe.remove()
+    }
+    const landedBackground = getComputedStyle(card).backgroundColor
+    expect(document.querySelectorAll('[data-landed]')).toHaveLength(1)
+    await waitFor(() => expect(row).not.toHaveAttribute('data-landed'), { timeout: 4_000 })
+    expect(getComputedStyle(card).animationName).toBe('none')
+    expect(getComputedStyle(card).backgroundColor).not.toBe(landedBackground)
+  },
+}
+
+function paintedPixel(...layers: string[]): number[] {
+  const canvas = document.createElement('canvas')
+  canvas.width = 1
+  canvas.height = 1
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (ctx == null) throw new Error('2d canvas unavailable')
+  for (const layer of layers) {
+    ctx.fillStyle = '#ff00ff'
+    ctx.fillStyle = layer
+    expect(ctx.fillStyle, `canvas rejected "${layer}"`).not.toBe('#ff00ff')
+    ctx.fillRect(0, 0, 1, 1)
+  }
+  return Array.from(ctx.getImageData(0, 0, 1, 1).data)
+}
+
+/** In a dark theme the landed tint is a 30% layer over the card's own background. */
+export const JumpLandsRowInWindowDark: Story = {
+  globals: { theme: 'default-dark' },
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    expect(document.documentElement).toHaveClass('dark')
+    expect(document.documentElement).toHaveAttribute('data-theme', 'default-dark')
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Jump')
+    await landedOn(JUMP_TARGET, scroller)
+    const row = entryRow(JUMP_TARGET)
+    const card = row.querySelector<HTMLElement>(':scope > .reader-entry-card')
+    expect(card).not.toBeNull()
+    if (card == null) return
+    expect(getComputedStyle(card).animationName).toBe('reader-card-landed-dark')
+    expect(getComputedStyle(card).animationDuration).toBe('1.5s')
+    expect(getComputedStyle(card).animationTimingFunction).toBe('ease-out')
+    const animations = card.getAnimations()
+    expect(animations).toHaveLength(1)
+    const tint = animations[0]
+    // A slow landing can resolve after the fade's first frame; the seek reads its start colour.
+    tint.currentTime = 0
+    const cardBackground = getComputedStyle(card).backgroundColor
+    const tintValue = getComputedStyle(card).getPropertyValue('--reader-landed-tint')
+    expect(getComputedStyle(card).backgroundImage).toBe(
+      `linear-gradient(${tintValue}, ${tintValue})`,
+    )
+    const peak = paintedPixel(cardBackground, tintValue)
+    // default-dark's landedTintShare, 22%, of --selection-bg #1e3a8a
+    // over its --bg-sunken #08090a is #0d1426.
+    const expectedPeak = [13, 20, 38]
+    expectedPeak.forEach((channel, i) => expect(Math.abs(peak[i] - channel)).toBeLessThanOrEqual(1))
+    const rest = paintedPixel(cardBackground)
+    tint.currentTime = 750
+    const half = paintedPixel(
+      getComputedStyle(card).backgroundColor,
+      getComputedStyle(card).getPropertyValue('--reader-landed-tint'),
+    )
+    expect(half[2]).toBeGreaterThan(rest[2])
+    expect(half[2]).toBeLessThan(peak[2])
+    expect(document.querySelectorAll('[data-landed]')).toHaveLength(1)
+    await waitFor(() => expect(row).not.toHaveAttribute('data-landed'), { timeout: 4_000 })
+    expect(getComputedStyle(card).animationName).toBe('none')
+    expect(getComputedStyle(card).backgroundImage).toBe('none')
+    expect(getComputedStyle(card).backgroundColor).toBe(cardBackground)
+  },
+}
+
+/** On native `rows` and the call cross apart, so the target waits for the commit bringing it. */
+export const JumpHoldsUntilRowsBringTheRow: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: PARTIAL_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o14')
+    await settleLanding(scroller)
+    const before = scroller.scrollTop
+    press('Jump')
+    await outlastLanding()
+    expect(scroller.scrollTop).toBe(before)
+    press('Load all rows')
+    await landedOn(JUMP_TARGET, scroller)
+    await outlastLanding()
+    await landedOn(JUMP_TARGET, scroller)
+  },
+}
+
+/** Late layout above the target must not leave it short: the loop re-asserts until height holds. */
+export const JumpReassertsThroughLateLayout: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Jump')
+    await frames(6)
+    press('Grow above target')
+    await frames(3)
+    await landedOn(JUMP_TARGET, scroller)
+  },
+}
+
+/**
+ * A boundary load landing mid-jump starts the anchor hold, on a row that isn't the target. Left
+ * running, it would undo each write as the two loops fought; landing wins and cancels it.
+ */
+export const JumpBeatsBoundaryLoad: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS.slice(1), hasOlder: true },
+  play: async () => {
+    const scroller = scrollerOf('o14')
+    await settleLanding(scroller)
+    press('Jump')
+    await landedOn(JUMP_TARGET, scroller)
+    press('Prepend and grow')
+    await outlastLanding()
+    await landedOn(JUMP_TARGET, scroller)
+  },
+}
+
+/** The other order: a hold already running when a jump arrives, on a row that isn't the target. */
+export const JumpBeatsARunningHold: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS.slice(1), hasOlder: true },
+  play: async () => {
+    const scroller = scrollerOf('o14')
+    await settleLanding(scroller)
+    press('Prepend and grow')
+    await nextFrame()
+    press('Jump')
+    await outlastLanding()
+    await landedOn(JUMP_TARGET, scroller)
+  },
+}
+
+/** With no jump in play a commit leaves the anchor hold running, or late layout would slip past. */
+export const HoldSurvivesWithoutAJump: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS.slice(1), hasOlder: true },
+  play: async () => {
+    const scroller = scrollerOf('o14')
+    await settleLanding(scroller)
+    press('Prepend and grow')
+    await nextFrame()
+    const before = topOffset('o2', scroller)
+    entryRow('o1').style.paddingBottom = '300px'
+    await outlastLanding()
+    expect(Math.abs(topOffset('o2', scroller) - before)).toBeLessThan(1.5)
+  },
+}
+
+/**
+ * An empty near-top load flips `hasOlder` alone, so the skeleton's unmount starts a hold with no
+ * `rows` commit to go with it. The growth is a style, as a `rows` commit would hide the gap.
+ */
+export const JumpBeatsAHasOlderFlip: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS, hasOlder: true },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Jump')
+    press('Prove branch top')
+    await nextFrame()
+    entryRow('o2').style.paddingBottom = '300px'
+    await outlastLanding()
+    await landedOn(JUMP_TARGET, scroller)
+  },
+}
+
+/** A row too near the tail to reach the top stops at the bottom, and the loop still ends. */
+export const JumpToTailRowStopsAtBottom: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Jump')
+    await landedOn(JUMP_TARGET, scroller)
+    press('Jump to tail')
+    await waitFor(() => expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1))
+    await outlastLanding()
+    expect(topOffset('o14', scroller)).toBeGreaterThan(LANDING_GAP_PX + 100)
+    press('Grow above target')
+    await outlastLanding()
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(100)
+  },
+}
+
+/** reader-composer.md → Autoscroll: a jump disengages, so the next chunk leaves the view alone. */
+export const StreamGrowingBelowJumpHolds: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Next chunk')
+    await frames(2)
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+    press('Jump')
+    await landedOn(JUMP_TARGET, scroller)
+    const distance = distanceFromBottom(scroller)
+    for (let i = 0; i < 3; i++) {
+      press('Next chunk')
+      await frames(2)
+    }
+    await landedOn(JUMP_TARGET, scroller)
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(distance)
+  },
+}
+
+export const JumpBrokenByWheelUp = landingBrokenBy(LANDING_BREAKERS.wheelUp!)
+export const JumpBrokenByWheelDown = landingBrokenBy(LANDING_BREAKERS.wheelDown!)
+export const JumpBrokenByTouchDrag = landingBrokenBy(LANDING_BREAKERS.touchDrag!)
+export const JumpBrokenByScrollbarPress = landingBrokenBy(LANDING_BREAKERS.scrollbarPress!)
+
+/** A short reader still reserves the gutter, but a press there is no scrollbar press. */
+export const GutterPressOnAShortReaderKeepsAutoscroll: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS.slice(0, 2) },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Next chunk')
+    await frames(2)
+    expect(scroller.scrollHeight).toBeLessThanOrEqual(scroller.clientHeight)
+    pressScrollbar(scroller)
+    for (let i = 0; i < 30; i++) {
+      press('Next chunk')
+      await nextFrame()
+    }
+    expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
+    await waitFor(() => expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1))
+  },
+}
+export const JumpBrokenByUpwardKey = landingBrokenBy(LANDING_BREAKERS.upwardKey!)
+
+/** A landing sits mid-document, where a downward key still moves the view: the loop lets it go. */
+export const JumpBrokenByDownwardKey: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Jump')
+    await frames(3)
+    // A dispatched key scrolls nothing, so the play makes the move the key would.
+    scroller.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true }))
+    scroller.scrollTop += 200
+    const scrollTop = scroller.scrollTop
+    await outlastLanding()
+    expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
+/** A plain Space typed into a field in the reader moves its caret, so the landing keeps going. */
+export const JumpSurvivesASpaceTypedInAField: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    const field = document.createElement('textarea')
+    field.style.position = 'absolute'
+    entryRow('o5').append(field)
+    press('Jump')
+    await frames(3)
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }))
+    press('Grow above target')
+    await frames(3)
+    await landedOn(JUMP_TARGET, scroller)
+  },
+}
+
+export const JumpBrokenByJumpToBottom: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Jump')
+    await landedOn(JUMP_TARGET, scroller)
+    press('Bottom button')
+    await waitFor(() => expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1), {
+      timeout: 3_000,
+    })
+    await outlastLanding()
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+  },
+}
+
+/** No scroll write lands under a finger, and a press that never drags still lands on release. */
+export const JumpWaitsOutARestingFinger: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS, onEntryLanded: fn(async () => {}) },
+  play: async ({ args }) => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    const before = scroller.scrollTop
+    scroller.dispatchEvent(new Event('touchstart', { bubbles: true }))
+    press('Jump')
+    await outlastLanding()
+    expect(scroller.scrollTop).toBe(before)
+    expect(args.onEntryLanded).not.toHaveBeenCalled()
+    scroller.dispatchEvent(new Event('touchend', { bubbles: true }))
+    await landedOn(JUMP_TARGET, scroller)
+  },
+}
+
+// Chromium's compositor drops a fling once its scroller stops being user-scrollable, yet the
+// fling's last delta, already in flight, still reaches the page a frame later (Fold-observed).
+function flingUntilHalted(scroller: HTMLElement, onFrame: () => void, onHalted = () => {}) {
+  const fling = { halted: false, foreignWrites: 0 }
+  const ended = new Promise<void>((resolve) => {
+    let left = scroller.scrollTop
+    let frame = 0
+    const stepPx = () => Math.max(2, Math.round(40 * 0.93 ** frame))
+    const move = () => {
+      if (Math.abs(scroller.scrollTop - left) >= 1) fling.foreignWrites += 1
+      scroller.scrollTop -= stepPx()
+      left = scroller.scrollTop
+    }
+    const step = () => {
+      if (frame === 40) {
+        resolve()
+        return
+      }
+      if (getComputedStyle(scroller).overflowY === 'hidden') {
+        fling.halted = true
+        onHalted()
+        requestAnimationFrame(() => {
+          move()
+          resolve()
+        })
+        return
+      }
+      onFrame()
+      move()
+      frame += 1
+      requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  })
+  return { fling, ended }
+}
+
+/**
+ * A fling's momentum scrolls on with no finger down, and a write mid-fling doesn't stop it: an
+ * explicit jump halts the fling and lands at once, writing nothing while the fling still runs.
+ */
+export const JumpHaltsMomentum: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    let highlightedMidFling = false
+    const { fling, ended } = flingUntilHalted(scroller, () => {
+      if (entryRow(JUMP_TARGET).hasAttribute('data-landed')) highlightedMidFling = true
+    })
+    await frames(5)
+    press('Jump')
+    let landedAt = -1
+    for (let frame = 1; frame <= 8 && landedAt < 0; frame++) {
+      await nextFrame()
+      if (Math.abs(topOffset(JUMP_TARGET, scroller) - LANDING_GAP_PX) < 1.5) landedAt = frame
+    }
+    await ended
+    expect(fling.halted).toBe(true)
+    expect(fling.foreignWrites).toBe(0)
+    expect(highlightedMidFling).toBe(false)
+    expect(landedAt).toBeGreaterThan(0)
+    expect(getComputedStyle(scroller).overflowY).toBe('auto')
+    await waitFor(() => expect(entryRow(JUMP_TARGET)).toHaveAttribute('data-landed'))
+    await outlastLanding()
+    await landedOn(JUMP_TARGET, scroller)
+  },
+}
+
+// The reader reads a wheel's own time, so the chain sets it: frame spacing in a slow run can't
+// break it, and a gap is exactly as long as a story makes it.
+function wheelAt(scroller: HTMLElement, deltaY: number, timeStamp: number) {
+  const event = new WheelEvent('wheel', { deltaY, bubbles: true })
+  Object.defineProperty(event, 'timeStamp', { value: timeStamp })
+  scroller.dispatchEvent(event)
+}
+
+const WHEEL_EVENT_SPACING_MS = 16
+
+// Momentum is wheel events a frame apart; a dispatched wheel scrolls nothing, so each frame also
+// moves the scroller, unless hidden (no wheel scrolls it). `startAt` is the first event's time.
+function wheelChain(
+  scroller: HTMLElement,
+  length: number,
+  stepPx: number,
+  onFrame: () => void,
+  startAt = performance.now(),
+) {
+  const chain = { foreignWrites: 0, hidden: false, lastAt: startAt }
+  const ended = new Promise<void>((resolve) => {
+    let left = scroller.scrollTop
+    let frame = 0
+    const step = () => {
+      if (frame === length) {
+        resolve()
+        return
+      }
+      if (Math.abs(scroller.scrollTop - left) >= 1) chain.foreignWrites += 1
+      const hidden = getComputedStyle(scroller).overflowY === 'hidden'
+      if (hidden) chain.hidden = true
+      onFrame()
+      chain.lastAt = startAt + frame * WHEEL_EVENT_SPACING_MS
+      wheelAt(scroller, stepPx, chain.lastAt)
+      if (!hidden) scroller.scrollTop += stepPx
+      left = scroller.scrollTop
+      frame += 1
+      requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  })
+  return { chain, ended }
+}
+
+/** A gesture dropping the landing between the halt and its restore leaves the reader scrollable. */
+export const JumpDroppedMidHaltRestoresOverflow: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    const { fling, ended } = flingUntilHalted(
+      scroller,
+      () => {},
+      () => LANDING_BREAKERS.wheelUp!(scroller),
+    )
+    await frames(5)
+    press('Jump')
+    await ended
+    expect(fling.halted).toBe(true)
+    await outlastLanding()
+    expect(getComputedStyle(scroller).overflowY).toBe('auto')
+  },
+}
+
+// Momentum runs on as wheel events after the press. The landing holds overflow hidden while the
+// chain lasts, so it lands at once and the rest of the chain moves nothing.
+async function jumpMidWheelChain(startAt?: number) {
+  const scroller = scrollerOf('o1')
+  await settleLanding(scroller)
+  let jumped = false
+  let unheldFrames = 0
+  const { ended } = wheelChain(
+    scroller,
+    30,
+    -20,
+    () => {
+      if (jumped && getComputedStyle(scroller).overflowY !== 'hidden') unheldFrames += 1
+    },
+    startAt,
+  )
+  await frames(5)
+  jumped = true
+  press('Jump')
+  let landedAt = -1
+  let highlighted = false
+  for (let frame = 1; frame <= 8 && !(landedAt > 0 && highlighted); frame++) {
+    await nextFrame()
+    if (landedAt < 0 && Math.abs(topOffset(JUMP_TARGET, scroller) - LANDING_GAP_PX) < 1.5)
+      landedAt = frame
+    if (entryRow(JUMP_TARGET).hasAttribute('data-landed')) highlighted = true
+  }
+  await ended
+  expect(landedAt).toBeGreaterThan(0)
+  expect(unheldFrames).toBe(0)
+  expect(highlighted).toBe(true)
+  await landedOn(JUMP_TARGET, scroller)
+  await outlastLanding()
+  expect(getComputedStyle(scroller).overflowY).toBe('auto')
+  await landedOn(JUMP_TARGET, scroller)
+}
+
+export const JumpHaltsWheelMomentum: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: () => jumpMidWheelChain(),
+}
+
+/**
+ * Events queued behind a long commit reach the page late, stamped with their own older times. The
+ * chain is live while they keep arriving, so the hold lasts as long.
+ */
+export const JumpHaltsWheelMomentumQueuedBehindACommit: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: () => jumpMidWheelChain(performance.now() - 1_000),
+}
+
+/** A reload dropping the row mid-hold ends the loop, and gives the reader its scrolling back. */
+export const JumpRowDroppedMidWheelHoldRestoresOverflow: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    const { ended } = wheelChain(scroller, 10, -20, () => {})
+    await frames(5)
+    press('Jump')
+    await frames(3)
+    expect(getComputedStyle(scroller).overflowY).toBe('hidden')
+    press('Drop target')
+    await ended
+    await outlastLanding()
+    expect(getComputedStyle(scroller).overflowY).toBe('auto')
+  },
+}
+
+/**
+ * A chain that outlasts any momentum is the user's own scrolling, through the press: the hold lets
+ * go about 3 s after it began, ends the landing, and the chain scrolls the reader again.
+ */
+export const JumpReleasesAWheelHoldAfterItsBound: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    // Registered before the press, so each frame's wheel arrives before the landing reads it, as
+    // real input does; a play awaiting a frame would hand it a wheel a frame old.
+    const hold = { pressedAt: -1, releasedAfterMs: -1, movedAfterRelease: -1, stopped: false }
+    const ended = new Promise<void>((resolve) => {
+      let at = performance.now()
+      let releasedTop = 0
+      let framesSinceRelease = 0
+      const step = () => {
+        if (hold.stopped) {
+          resolve()
+          return
+        }
+        const hidden = getComputedStyle(scroller).overflowY === 'hidden'
+        if (hold.pressedAt >= 0 && hold.releasedAfterMs < 0 && !hidden) {
+          hold.releasedAfterMs = performance.now() - hold.pressedAt
+          releasedTop = scroller.scrollTop
+        }
+        at += WHEEL_EVENT_SPACING_MS
+        wheelAt(scroller, 20, at)
+        if (!hidden) scroller.scrollTop += 20
+        if (hold.releasedAfterMs >= 0 && ++framesSinceRelease === 20) {
+          hold.movedAfterRelease = scroller.scrollTop - releasedTop
+          hold.stopped = true
+        }
+        requestAnimationFrame(step)
+      }
+      requestAnimationFrame(step)
+    })
+    await frames(5)
+    press('Jump')
+    hold.pressedAt = performance.now()
+    await Promise.race([ended, new Promise((resolve) => setTimeout(resolve, 6_000))])
+    hold.stopped = true
+    expect(hold.releasedAfterMs).toBeGreaterThanOrEqual(3_000)
+    expect(hold.releasedAfterMs).toBeLessThan(4_000)
+    expect(hold.movedAfterRelease).toBeGreaterThanOrEqual(20 * 20 - 1)
+  },
+}
+
+/** Momentum never reverses: a wheel the other way is a new gesture, and drops the landing. */
+export const JumpDroppedByAWheelReversingTheChain: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    const { chain, ended } = wheelChain(scroller, 10, -20, () => {})
+    await frames(5)
+    press('Jump')
+    await ended
+    expect(getComputedStyle(scroller).overflowY).toBe('hidden')
+    wheelAt(scroller, 20, chain.lastAt + WHEEL_EVENT_SPACING_MS)
+    await nextFrame()
+    expect(getComputedStyle(scroller).overflowY).toBe('auto')
+  },
+}
+
+/** A target still waiting for its row holds nothing; the hold starts once the row arrives. */
+export const JumpPendingHaltsWheelMomentumOnceItsRowArrives: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: PARTIAL_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o14')
+    await settleLanding(scroller)
+    let hiddenBeforeRows = false
+    let rowsLoaded = false
+    let unheldAfterRows = 0
+    const { ended } = wheelChain(scroller, 30, -20, () => {
+      const hidden = getComputedStyle(scroller).overflowY === 'hidden'
+      if (!rowsLoaded && hidden) hiddenBeforeRows = true
+      if (rowsLoaded && !hidden) unheldAfterRows += 1
+    })
+    await frames(5)
+    press('Jump')
+    await frames(5)
+    rowsLoaded = true
+    press('Load all rows')
+    let landedAt = -1
+    for (let frame = 1; frame <= 6 && landedAt < 0; frame++) {
+      await nextFrame()
+      if (Math.abs(topOffset(JUMP_TARGET, scroller) - LANDING_GAP_PX) < 1.5) landedAt = frame
+    }
+    await ended
+    expect(hiddenBeforeRows).toBe(false)
+    expect(landedAt).toBeGreaterThan(0)
+    expect(unheldAfterRows).toBe(0)
+    await outlastLanding()
+    expect(getComputedStyle(scroller).overflowY).toBe('auto')
+    await landedOn(JUMP_TARGET, scroller)
+  },
+}
+
+/** A wheel after a gap drops a landing holding a chain, and gives the reader its scrolling back. */
+export const JumpDroppedMidWheelHoldRestoresOverflow: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    const { chain, ended } = wheelChain(scroller, 10, -20, () => {})
+    await frames(5)
+    press('Jump')
+    await ended
+    expect(getComputedStyle(scroller).overflowY).toBe('hidden')
+    wheelAt(scroller, -20, chain.lastAt + 150)
+    await nextFrame()
+    expect(getComputedStyle(scroller).overflowY).toBe('auto')
+  },
+}
+
+/** A wheel after a gap in the chain is a new gesture, and drops the jump as any wheel would. */
+export const JumpPendingDroppedByWheelAfterAGap: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: PARTIAL_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o14')
+    await settleLanding(scroller)
+    const { chain, ended } = wheelChain(scroller, 10, -20, () => {})
+    await frames(5)
+    press('Jump')
+    await ended
+    wheelAt(scroller, -20, chain.lastAt + 150)
+    press('Load all rows')
+    await outlastLanding()
+    expect(entryRow(JUMP_TARGET)).not.toHaveAttribute('data-landed')
+    expect(topOffset(JUMP_TARGET, scroller)).not.toBeCloseTo(LANDING_GAP_PX, 0)
+  },
+}
+
+/** The reader's own one-off write moves the scroll for a frame, which is no fling to halt. */
+export const JumpLeavesOverflowAloneOnAOneOffWrite: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS.slice(1), hasOlder: true },
+  play: async () => {
+    const scroller = scrollerOf('o14')
+    await settleLanding(scroller)
+    press('Jump')
+    await landedOn(JUMP_TARGET, scroller)
+    const overflows: string[] = []
+    const observer = new MutationObserver(() => overflows.push(scroller.style.overflowY))
+    observer.observe(scroller, { attributes: true, attributeFilter: ['style'] })
+    press('Prepend and grow')
+    await outlastLanding()
+    observer.disconnect()
+    expect(overflows).not.toContain('hidden')
+    await landedOn(JUMP_TARGET, scroller)
+  },
+}
+
+/**
+ * A frame the loop had to correct isn't a settled one, or it would stop following a row that still
+ * moves. Padding shifts from below the row to above it, so the scroll height never changes.
+ */
+export const JumpFollowsARowStillMoving: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    entryRow('o2').style.paddingBottom = '0px'
+    entryRow('o5').style.paddingBottom = '200px'
+    await settleLanding(scroller)
+    press('Jump')
+    await landedOn(JUMP_TARGET, scroller)
+    const height = scroller.scrollHeight
+    for (let shifted = 5; shifted <= 200; shifted += 5) {
+      entryRow('o2').style.paddingBottom = `${shifted}px`
+      entryRow('o5').style.paddingBottom = `${200 - shifted}px`
+      await nextFrame()
+    }
+    expect(scroller.scrollHeight).toBe(height)
+    await outlastLanding()
+    await landedOn(JUMP_TARGET, scroller)
+  },
+}
+
+/**
+ * Pins the landing's final position while the open-at-bottom pin is still running. The landing's
+ * stopBottomPin() is defence in depth: the pin's frame callback runs first, so no story isolates it.
+ */
+export const JumpCancelsTheBottomPin: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    press('Jump')
+    await outlastLanding()
+    await landedOn(JUMP_TARGET, scroller)
+  },
+}
+
+/**
+ * Jump to bottom opens a 500 ms window that reads as at-bottom. A stream starting inside it, once
+ * the landing has settled, gets no scroll event to correct that, so a jump has to close it.
+ */
+export const JumpClearsTheBottomSettle: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Bottom button')
+    press('Jump')
+    await frames(12)
+    press('Next chunk')
+    await frames(2)
+    press('Next chunk')
+    await frames(2)
+    await landedOn(JUMP_TARGET, scroller)
+  },
+}
+
+/** Landing inside the at-bottom band still disengages, or the next chunk would re-pin the view. */
+export const StreamGrowingBelowTailJumpHolds: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Next chunk')
+    await frames(2)
+    press('Jump to tail')
+    await outlastLanding()
+    const top = scroller.scrollTop
+    press('Next chunk')
+    await frames(2)
+    press('Next chunk')
+    await frames(2)
+    expect(scroller.scrollTop).toBe(top)
+  },
+}
+
+/** A stream starting on the jump's own tick still leaves the view on the target. */
+export const StreamStartingOnAJumpHolds: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Jump')
+    press('Next chunk')
+    await outlastLanding()
+    await landedOn(JUMP_TARGET, scroller)
+    press('Next chunk')
+    await frames(3)
+    await landedOn(JUMP_TARGET, scroller)
+  },
+}
+
+/**
+ * A landing waits a frame for scroll rest. A stream starting inside that wait must not keep
+ * autoscroll engaged: its write on every chunk would read as movement and keep the landing waiting.
+ */
+export const StreamChunkingEveryFrameOnAJumpHolds: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Jump')
+    let highlighted = false
+    for (let i = 0; i < 60; i++) {
+      press('Next chunk')
+      await nextFrame()
+      if (entryRow(JUMP_TARGET).hasAttribute('data-landed')) highlighted = true
+    }
+    expect(Math.abs(topOffset(JUMP_TARGET, scroller) - LANDING_GAP_PX)).toBeLessThan(1.5)
+    expect(highlighted).toBe(true)
+  },
+}
+
+/**
+ * A fling that outlives its halt is waited out. Should it carry the reader into the at-bottom band,
+ * the band must not re-engage autoscroll: its write on every chunk would keep the landing waiting.
+ */
+export const StreamChunkingAfterAFlingOutlivesItsHaltHolds: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Next chunk')
+    await frames(2)
+    await scrollToDistance(scroller, 400)
+    const flingEnded = new Promise<void>((resolve) => {
+      let frame = 0
+      const step = () => {
+        if (frame === 24) {
+          resolve()
+          return
+        }
+        scroller.scrollTop += 15
+        frame += 1
+        requestAnimationFrame(step)
+      }
+      requestAnimationFrame(step)
+    })
+    await frames(5)
+    press('Jump')
+    await flingEnded
+    expect(distanceFromBottom(scroller)).toBeLessThan(80)
+    let landed = false
+    let highlighted = false
+    // One quiet frame reads as rest and the next writes; the rest is margin for callback order.
+    for (let i = 0; i < 6 && !landed; i++) {
+      press('Next chunk')
+      await nextFrame()
+      landed = Math.abs(topOffset(JUMP_TARGET, scroller) - LANDING_GAP_PX) < 1.5
+      if (entryRow(JUMP_TARGET).hasAttribute('data-landed')) highlighted = true
+    }
+    expect(landed).toBe(true)
+    expect(highlighted).toBe(true)
+  },
+}
+
+/** A newer jump replaces a target still waiting for its row. */
+export const JumpReplacesAPendingTarget: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: PARTIAL_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o14')
+    await settleLanding(scroller)
+    press('Jump')
+    await nextFrame()
+    press('Jump to tail')
+    await outlastLanding()
+    press('Load all rows')
+    await waitFor(() => expect(entryRow(JUMP_TARGET)).toBeInstanceOf(HTMLElement))
+    await outlastLanding()
+    expect(entryRow(JUMP_TARGET)).not.toHaveAttribute('data-landed')
+    expect(entryRow('o14')).toHaveAttribute('data-landed')
+  },
+}
+
+/** A gesture before the row arrives drops the target too: the commit must not yank the view. */
+export const JumpPendingDroppedByWheel: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: PARTIAL_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o14')
+    await settleLanding(scroller)
+    press('Jump')
+    await nextFrame()
+    LANDING_BREAKERS.wheelUp!(scroller)
+    press('Load all rows')
+    await outlastLanding()
+    expect(entryRow(JUMP_TARGET)).not.toHaveAttribute('data-landed')
+    expect(topOffset(JUMP_TARGET, scroller)).not.toBeCloseTo(LANDING_GAP_PX, 0)
+  },
+}
+
+/** A branch switch drops a pending target even when the new branch holds that id. */
+export const JumpPendingDroppedByBranchChange: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: PARTIAL_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o14')
+    await settleLanding(scroller)
+    press('Jump')
+    await nextFrame()
+    press('Switch branch')
+    await waitFor(() => expect(entryRow(JUMP_TARGET)).toBeInstanceOf(HTMLElement))
+    await outlastLanding()
+    expect(entryRow(JUMP_TARGET)).not.toHaveAttribute('data-landed')
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+  },
+}
+
+/** A branch switch clears the highlight of a row that already landed. */
+export const JumpHighlightClearedByBranchChange: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Jump')
+    await landedOn(JUMP_TARGET, scroller)
+    press('Switch branch')
+    await waitFor(() => expect(document.querySelector('[data-landed]')).toBeNull())
+  },
+}
+
+/** A row a reload drops mid-landing ends the loop rather than reading a detached rect. */
+export const JumpEndsWhenTheRowLeaves: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Jump')
+    await nextFrame()
+    press('Drop target')
+    await nextFrame()
+    const top = scroller.scrollTop
+    await outlastLanding()
+    expect(scroller.scrollTop).toBe(top)
+  },
+}
+
+/**
+ * A reader under another screen has no layout: the loop waits it out and lands once it has one.
+ * The fade's clock waits with it, so the highlight can't run out on a row off screen.
+ */
+export const JumpWaitsOutAHiddenReader: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS, onEntryLanded: fn(async () => {}) },
+  play: async ({ args }) => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    const box = scroller.parentElement
+    if (box == null) throw new Error('no reader box')
+    box.style.display = 'none'
+    press('Jump')
+    await outlastLanding()
+    expect(document.querySelector('[data-landed]')).toBeNull()
+    expect(args.onEntryLanded).not.toHaveBeenCalled()
+    box.style.display = ''
+    await landedOn(JUMP_TARGET, scroller)
+    await waitFor(() => expect(entryRow(JUMP_TARGET)).toHaveAttribute('data-landed'))
+  },
+}
+
+/** The highlight is an attribute on the wrapper, so no row re-renders for it. */
+export const JumpHighlightSkipsTheRowMemo: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: {
+    rows: OVERFLOW_ROWS.map((row) => {
+      const counted = { ...row }
+      Object.defineProperty(counted, 'content', {
+        enumerable: true,
+        get: () => {
+          contentReads.count += 1
+          return row.content
+        },
+      })
+      return counted
+    }),
+  },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    const before = contentReads.count
+    expect(before).toBeGreaterThan(0)
+    press('Jump')
+    await landedOn(JUMP_TARGET, scroller)
+    await waitFor(() => expect(entryRow(JUMP_TARGET)).toHaveAttribute('data-landed'))
+    await nextFrame()
+    expect(contentReads.count).toBe(before)
   },
 }

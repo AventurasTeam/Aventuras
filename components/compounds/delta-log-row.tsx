@@ -58,6 +58,15 @@ export function DeltaLogRow({ delta, onPress, className }: DeltaLogRowProps) {
   const interactive = onPress != null
   const op = OP_STYLES[delta.op]
   const opLabel = t(`history:op.${delta.op}`)
+  // Rows of one target read alike, so a pressable row's name carries its entry.
+  const rowLabel =
+    interactive && delta.entryId != null
+      ? t('history:rowLabelWithEntry', {
+          op: opLabel,
+          name: delta.targetDisplayName,
+          entry: delta.entryId,
+        })
+      : t('history:rowLabel', { op: opLabel, name: delta.targetDisplayName })
 
   const metaParts = [
     t(`history:source.${delta.source}`),
@@ -71,7 +80,7 @@ export function DeltaLogRow({ delta, onPress, className }: DeltaLogRowProps) {
       disabled={!interactive}
       accessibilityRole={interactive ? 'button' : undefined}
       testID="delta-log-row"
-      aria-label={t('history:rowLabel', { op: opLabel, name: delta.targetDisplayName })}
+      aria-label={rowLabel}
       className={cn(
         'flex-row items-start gap-2.5 px-row-x-md py-row-y-md',
         interactive && 'active:bg-tint-press',

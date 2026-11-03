@@ -29,7 +29,7 @@ Used by:
   prefixing variant (`Entity · Kael`, `Thread · Iron Pact`, etc.);
   host wires `onPress` to open the [Raw JSON viewer Sheet](./data.md#raw-json-viewer--shared-modal-pattern)
   with the row's `undo_payload`, diverging from World's and Plot's
-  History tabs, which wire no press.
+  History tabs, whose press opens the row's entry in the reader.
 - [Diagnostics Hub · Per-turn inspector — Deltas section](../screens/diagnostics/diagnostics.md#deltas-per-turn-inspector)
   — the deltas emitted during a turn (pipeline emissions +
   user-edit deltas), turn- or run-scoped; `source`-labeled per row,
@@ -173,11 +173,21 @@ Muted foreground (`text-fg-muted text-xs`), middle-dot separators:
 When `onPress` is undefined, the row is non-interactive (no
 hover, no press affordance).
 
-World's and Plot's History tabs pass no `onPress`: rows are
-non-interactive. The target row is already open on the pane the
-tab lives in, and the entry link waits on the reader's entry deep
-link, an
+World's and Plot's History tabs pass `onPress` only for a row whose
+entry anchor resolved to a label, and it opens that entry in the
+reader, through the pane's unsaved-changes guard. The target row is
+already open on the pane the tab lives in, so the entry is where a
+press has to go. A row whose anchor is deleted or off the branch
+passes none and stays non-interactive. The Diagnostics delta log's
+link is an
 [M7 carried deferral](../../implementation/roadmap.md#m7--app-settings--diagnostics--onboarding).
+
+The row's accessible name is `<op> <target>` (`update Kael`). A
+pressable row whose `entryId` is non-null adds the entry label after
+a comma (`update Kael, entry #47`), because rows of one target read
+alike while a press opens different entries. That holds for any
+host's pressable row, whatever its press opens. A non-interactive row
+keeps `<op> <target>`, as does a pressable row with no `entryId`.
 
 ## Storybook (DeltaLogRow)
 

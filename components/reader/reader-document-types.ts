@@ -2,6 +2,7 @@
 import type { CalendarFrame } from '@/lib/calendar'
 import type { StoryEntry } from '@/lib/db'
 
+import type { ChapterBreaks } from './chapter-breaks'
 import type { WorldTimeDecoration } from './worldtime-decoration'
 
 export type StreamingPayload = { content: string; reasoning: string }
@@ -10,7 +11,10 @@ export type StreamingPayload = { content: string; reasoning: string }
 // offering a retry the refusal will never accept.
 export type EditResult = { ok: true } | { ok: false; code?: string }
 
-export type ReaderSurfaceHandle = { jumpToBottom: () => void }
+export type ReaderSurfaceHandle = {
+  jumpToBottom: () => void
+  jumpToEntry: (entryId: string) => void
+}
 
 /**
  * What the row controls may do: `open` lets everything through; `interruptible` (only a pass or a
@@ -29,6 +33,8 @@ export type ReaderSurfaceProps = {
   /** Host-computed world-time labels + monotonicity flags, by entry id. Side table, not merged
    *  into `rows`: merging hands ReaderRow fresh objects each patch and voids its memo on web. */
   worldTimeDecorations: Record<string, WorldTimeDecoration>
+  /** By end entry id; a side table, for the same reason as worldTimeDecorations. */
+  chapterBreaks: ChapterBreaks
   /** Registry-resolved calendar + story origin (fallback applied) — null hides/inerts footers. */
   worldTimeFrame: CalendarFrame | null
   /** Non-null only while the streaming row should be visible (host-gated). */
@@ -79,4 +85,6 @@ export type ReaderSurfaceProps = {
   onCopySystemText: (text: string) => Promise<void>
   onFixSystemEntry: () => Promise<void>
   onFixCutOff: () => Promise<void>
+  /** A landing's first frame has painted, or its target was dropped. Must settle, never reject. */
+  onEntryLanded: (entryId: string) => Promise<void>
 }

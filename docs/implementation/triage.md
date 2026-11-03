@@ -159,3 +159,285 @@ slice-planning gate forces its resolution before that slice is planned.
   `ScreenShell`'s `chapterProgress` is in-story only by doc comment on a
   flat props type, where a union on `variant` would make in-story callers
   pass it. Raised 2026-11-02 by Slice 5.1's closing review.
+
+- **`loadOlderEntries` doesn't re-check after its await.** It captures
+  `minPosition`, reads, and inserts
+  (`app/reader-composer/[branchId].tsx`), so a `reload()` during the
+  read leaves a gap, against
+  [`reader-composer.md`](../ui/screens/reader-composer/reader-composer.md#loaded-set-model)'s
+  one contiguous window. A short stale read clears `hasOlder`, and a
+  read from a branch just left sets it on the new one. A gap sits above
+  `oldestLoadedPosition`, where a jump's re-check can't see it, so
+  `useEntryJump` tells a row in the DB but not held "That entry is no
+  longer on this branch". `onNearTop`
+  (`components/reader/reader-surface.tsx`) has no in-flight guard
+  either, which is how two boundary loads can start from one oldest
+  row. A boundary load started before a jump to the branch's first row
+  and finishing after it sets `hasOlder` true again (its read is a full
+  50), so the shimmer comes back, and the next load at rest drops it
+  under a reader landed at `scrollTop` 0, shifting the row up. Nothing
+  at any layer covers `loadOlderEntries`: stories stub
+  `onNearTop`, and no unit test or E2E spec reaches it. Read from the
+  code, not reproduced. Raised 2026-11-02 by 5.3's task reviews; the
+  shimmer symptom added 2026-11-03 by 5.3's Task 19a review.
+
+- **The reader path is still built by hand.** `readerHref`
+  (`components/reader/reader-href.ts`) is the slice's one builder, but
+  `app/wizard.tsx`, `app/index.tsx`, `app/plot/[branchId].tsx`,
+  `app/world/[branchId].tsx`, `app/story-settings/[storyId].tsx` and
+  `components/compounds/go-to-group.ts` still write
+  `/reader-composer/${…}` themselves. Raised 2026-11-02 by 5.3's task
+  reviews.
+
+- **A pressable row has the browser's focus outline, not the canon
+  ring.** `components/compounds/delta-log-row.tsx` and
+  `components/compounds/list-row.tsx` show `outline: auto 1px` under
+  `:focus-visible` in Chromium, where
+  [`color.md`](../ui/foundations/color.md#focus) gives list rows the 2 px
+  `--focus-ring`. 5.3 makes History's rows interactive in production and
+  the slice leaves its focus styling unchanged. Raised 2026-11-02 by 5.3's
+  task reviews.
+
+- **`isEditableTarget` has never had a story on the upward path.**
+  `reader-surface.tsx` guards typing in a field from the scroll-key
+  gestures. 5.3 pins the downward half with a story; nothing fails if
+  the guard goes from the upward one. Raised 2026-11-02 by 5.3's task
+  reviews.
+
+- **`userInterrupted`'s comment says the opposite of its code.**
+  `lib/reader-scroll/autoscroll.ts` says it "Doesn't latch", and the
+  body latches. Raised 2026-11-02 by 5.3's task reviews.
+
+- **`history-tab.test.tsx` may hold a rare timing flake.** The test at
+  `components/history/history-tab.test.tsx:307` failed once during a
+  mutation run that can't reach it, then passed 43 reruns. The
+  message wasn't captured, so this is suspected, not confirmed. A second
+  test in the file, the one on refetching for an unshown link end's
+  rename while a search is set, failed once in a loaded run on the same
+  day and passed alone and in two reruns. Raised 2026-11-02 by 5.3's
+  task reviews.
+
+- **What marks a flashback is stated two ways.**
+  [`reader-composer.md`](../ui/screens/reader-composer/reader-composer.md#top-bar--in-world-time-display),
+  [`entry-card.md`](../ui/patterns/entry-card.md#world-time-footer) and
+  `components/reader/worldtime-decoration.ts` treat a stored `worldTime`
+  of 0 as a flashback, while
+  [`data-model.md`](../data-model.md#in-world-time-tracking)'s
+  classifier contract has a flashback emit a delta of 0, and
+  `lib/piggyback/apply.ts` stores the previous time plus the delta, so
+  a classifier-written flashback keeps the running clock. 5.3's chapter
+  ranges skip a world time of 0 as canon says, so they exclude no
+  classifier-written flashback but do exclude the opening: chapter 1's
+  range and `since <time>` start at the first row past the origin. The
+  developer's call whether the filter stays. Raised 2026-11-02 by 5.3's
+  task reviews.
+
+- **One failed read logs once per mounted `useEntryIndex`.** It logs
+  from an effect on `error` (`hooks/use-entry-index.ts`), and every
+  mounted observer receives the same error; `useChapterProgress` moved
+  its log into the fetch for this reason, and 5.3's two new hooks do the
+  same. Nothing pins `retry: false` on any of them either: a retry would
+  log three times and hold a label about 3 s. Raised 2026-11-02 by 5.3's
+  task reviews.
+
+- **`jumpToBottom` can throw before the reader document registers.** On
+  native, the route calls `documentRef.current?.jumpToBottom()`, and
+  expo's DOM proxy returns `undefined` for a method not yet registered,
+  so the Actions entry or the hotkey during the veil throws with no
+  catch. 5.3 routes a chapter press through the `entry` param's paint
+  gate; this path has none. Read from the code, not run. Raised
+  2026-11-02 by 5.3's task reviews.
+
+- **A scrollbar drag isn't a gesture to the reader's pins.**
+  `gestureActiveRef` in `components/reader/reader-surface.tsx` tracks
+  touch only, and a scrollbar press interrupts only at pointerdown, so a
+  pin that starts during a thumb drag (stream end, viewport shrink, a
+  chapter break) can tug the view for about 10 frames. Raised 2026-11-02
+  by 5.3's task reviews.
+
+- **Three overlay primitives carry stale or missing behaviour.**
+  `components/ui/popover.tsx` never clears rn-primitives' responder
+  claim on native, so every scroller inside a Popover has to route
+  around it. `components/ui/scroll-component.tsx` says gorhom's scroll
+  view "lacks most ScrollView methods", which its declared type
+  contradicts. A bottom `Sheet` ignores Escape on web
+  (`components/ui/sheet.tsx`), which matters in a narrow Electron window
+  at phone tier. Raised 2026-11-02 by 5.3's task reviews.
+
+- **The chapter popover's fixed cap has no short-window handling.**
+  Its list stops at 320 px, so the long-list popover measures 472 px,
+  and below about 560 px of window height its actions can fall
+  off-screen with nothing to scroll them. Not run at that height;
+  Electron sets no minimum window height. Raised 2026-11-02 by 5.3's
+  task reviews.
+
+- **A chip's hit slop misses the phone floor at compact density.**
+  `CHIP_HIT_SLOP` (`components/ui/chip.tsx`) gives 32 + 8 = 40 px at
+  compact on phone, Browse included, under
+  [`touch.md`](../ui/foundations/mobile/touch.md)'s 44 px floor, which
+  holds at every density. Raised 2026-11-02 by 5.3's task reviews.
+
+- **A story after a phone-viewport story can start at the wrong tier.**
+  In `components/shells/screen-shell.stories.tsx` the next story's first
+  render logged tier `phone` at width 1200, with `window.innerWidth`
+  already back at desktop, so a tier-sensitive negative assertion there
+  can pass vacuously; the same assertion went red alone with `-t` and
+  green in a full-file run. 5.3's phone stories wait for a phone-only
+  element first. Raised 2026-11-02 by 5.3's task reviews.
+
+- **Two test fixtures model states that can't happen.**
+  `ArchivedDraft` in `components/story/story-card.stories.tsx` is a
+  state [`story-card.md`](../ui/patterns/story-card.md) says never
+  exists. `worldTimeOf` in `e2e/tests/reader-worldtime-edit.spec.ts`
+  reads an entry by id alone, though entry ids repeat across branches;
+  not checked whether the seed trips it. Raised 2026-11-02 by 5.3's task
+  reviews.
+
+- **Four doc lines read stale after 5.3.**
+  [`story-list.md`](../ui/screens/story-list/story-list.md#story-card--text-first)
+  says the card shows the current chapter "for active stories", where
+  [`story-card.md`](../ui/patterns/story-card.md) and the shipped card
+  label archived stories too.
+  [`navigation.md`](../ui/foundations/mobile/navigation.md)'s phone diagram
+  labels the top bar ~44 px, while `--bar-h-md` runs 48 to 64 px by
+  density. [Milestone 5](./milestones/05-chapters-chapter-close/milestone.md)
+  still describes C5's percent interim and C16's `Count labels` flip,
+  which 5.3 never needed, since it binds 5.1 directly.
+  [`delta-log-row.md`](../ui/patterns/delta-log-row.md)'s Plot `Used by`
+  entry links Plot's mobile section, not its History tab. Raised
+  2026-11-02 by 5.3's task reviews.
+
+- **A `DeltaLogRow`'s name hides its content.** On a pressable row the
+  `aria-label` replaces the row's text as its name, so a screen reader
+  never hears the summary, field path, source or time, and two rows of
+  one target at one entry still sound alike. On a row that can't be
+  pressed the `aria-label` sits on a role-less element, which ARIA doesn't
+  let be named, so most screen readers ignore it.
+  [`testing.md`'s selector table](../testing.md#selector-strategy) also
+  still lists delta-log rows as having no role and no label. Raised
+  2026-11-02 by 5.3's task reviews.
+
+- **`--selection-bg` selects no text.**
+  [`color.md`](../ui/foundations/color.md#final-slot-inventory) and
+  [`tokens.md`](../ui/foundations/tokens.md#color-slots) give it the
+  text-selection role, but nothing applies it there: inputs select with
+  `selection:bg-accent selection:text-accent-fg` (`components/ui/input.tsx`,
+  `components/ui/textarea.tsx`, `components/compounds/tag-input.tsx`), and
+  narrative prose has no `::selection` rule. Since 5.3's Q7 a jump's landed
+  card tint is its only use. Either apply it to selection, and decide
+  whether inputs move to it, or narrow its documented role. Raised
+  2026-11-02 by 5.3's Q7 review.
+
+- **A second jump to the landed row doesn't restart its tint.** Within
+  1.5 s of a landing, a jump to the same entry calls `setLandedId` with
+  the id it already holds, so neither the clear timer nor the card's CSS
+  animation restarts, and the second landing shows only what's left of
+  the first fade (`components/reader/reader-surface.tsx`, `startLanding`
+  and the `landedId` effect). From reading, not run; the row fade before
+  Q7 behaved the same. Raised 2026-11-02 by 5.3's Q7 review.
+
+- **An accent override would fade the dark landed tint below its
+  floor.** Under an override, default-light's and default-dark's
+  `--selection-bg` is derived
+  ([`color.md → Accent-derivation algorithm`](../ui/foundations/color.md#accent-derivation-algorithm)),
+  and dark's is 30% accent over `--bg-base`, already soft. But
+  default-dark's `--landed-tint-share`, 22%, was tuned for its own
+  `#1e3a8a`. With the curated blue `#2563eb`, default-dark's own
+  accent, the landed card's peak falls to OKLab ΔE 2.3 on an
+  `ai_reply` and 3.9 on a `user_action`, below the 4.7 floor the
+  registry invariant holds dark themes to
+  ([`tokens.md → Color slots`](../ui/foundations/tokens.md#color-slots)).
+  Red, teal, violet and neutral grey give 1.9 to 2.6 on an `ai_reply`.
+  The override isn't wired yet: only the `accentOverride` setting
+  exists. The likely fix is to derive the share in JS where the theme
+  is applied, beside `--selection-bg`, and move the invariant onto that
+  derivation. Raised 2026-11-02 by 5.3's Q10 review.
+
+- **Parchment's landed tint barely shows on a `user_action` card.**
+  Light themes paint `--selection-bg` at full strength. Parchment's
+  `#e8d8a8` is only OKLab ΔE 1.7 (WCAG 1.04) from its `--bg-sunken`
+  `#ecdcb4`. Default-light's tint, by contrast, is 4.7 from its own,
+  which is the floor dark themes are now held to. Q10 left light themes
+  out by decision, so nothing pins this. Either hold light themes to the
+  same floor, which would need parchment's tint to change colour since
+  it is already at full strength, or accept it. Computed from tokens,
+  not recorded. Raised 2026-11-02 by 5.3's Q10 review.
+
+- **A gesture made before a jump's veil shows is lost, and the landing
+  yanks the view.** `useEntryJump` (`components/reader/use-entry-jump.ts`)
+  reads the target's rows from the database before it calls `land`, and
+  its `superseded` check knows only a newer jump or a branch change, so a
+  scroll, drag or wheel during the read isn't seen and `land` then moves
+  the view to the target anyway. The jump veil shows only after a short
+  delay (Slice 5.3's Q15), so the window left is the shorter of that delay
+  and the host read, which took 84 ms at the median at 20 chapters and
+  372 ms at 60 (Galaxy Z Fold, release build, from the
+  [Android measure](./milestones/05-chapters-chapter-close/slices/03-reader-chapters.md#android-measure)).
+  Once the veil shows it swallows touches: on the Fold, two swipes across
+  it moved nothing and didn't cancel the landing. On web a scroll key
+  with the page focused can still reach the reader under it. On desktop
+  a trackpad scroll started during the read is still a live wheel chain
+  when the landing arrives, so the landing holds it for up to about 3 s
+  rather than only moving the view. Nothing is built for the window
+  that's left. Raised 2026-11-02 by Slice 5.3's Android measure;
+  narrowed 2026-11-03 by the delayed veil.
+
+- **A jump to the window's oldest row lands without its break, and at
+  the branch's top can shift.** A target already in the window lands at
+  once and reads nothing (`components/reader/use-entry-jump.ts`), so
+  when it is the window's oldest loaded row, the previous chapter's end
+  row isn't loaded and its break doesn't exist when it lands; a later
+  boundary load mounts the break just above the screen. On a branch
+  whose first row is the window's oldest with `hasOlder` still true (a
+  50-row branch, or a last boundary load of exactly 50), entry 1 shifts
+  up about 12 px when the shimmer drops. Reading the row above first
+  doesn't hold on native: expo-dom injects the landing call before the
+  route's props emission, so the document lands on the old layout. A fix
+  has to order the landing after the document commits the host's write,
+  a bridge-contract change; the sliding window in
+  [`followups.md`](../followups.md#ux)'s "Native reader rows rerender
+  per emission" reworks this path. Raised 2026-11-03 by 5.3's final
+  review.
+
+- **A shrinking viewport can pull a landing to the bottom.** The
+  surface's `ResizeObserver` (`components/reader/reader-surface.tsx`)
+  writes `scrollTop` to the bottom when the viewport shrinks under a
+  reader near the bottom, with no landing guard, so an Android keyboard
+  opening during a landing that starts near the bottom pulls the reader
+  there. Predates Slice 5.3. Read from the code, not reproduced. Raised
+  2026-11-03 by 5.3's final review.
+
+- **The reader's back arrow does nothing after a cold deep link.** A
+  reader opened by `aventuras://reader-composer/<branch>` from a stopped
+  app has no screen under it, and its `←` doesn't fall back to the story
+  list. Seen on the Fold in 5.3's phone pass; the route's back handler
+  predates the slice. Raised 2026-11-03.
+
+- **Reader story plays log `Cannot find single active touch`.** The
+  synthetic `Event('touchstart')` and `touchend` dispatches in
+  `components/reader/reader-surface.stories.tsx` carry no `touches`, and
+  React Native Web's responder logs this error for each. The plays still
+  pass, but the noise hides real errors in a run's console. Raised
+  2026-11-02 by 5.3's fling-halt review.
+
+- **The jump landing loop wants a pure decision function.**
+  `startLanding` in `components/reader/reader-surface.tsx` now holds
+  about nine closure variables and four gates (layout, finger, wheel
+  chain, rest), the one-frame touch halt, the wheel hold and the settle
+  rule, tested only through rAF-timed plays. A per-frame decision
+  function in `lib/reader-scroll`, beside `createAutoscrollMachine`
+  (inputs: laid out, finger down, chain live, scroll position, row
+  offset, height; outputs: write, hide or restore overflow, highlight,
+  done), would make those rules unit-testable. A `useEntryLanding` hook
+  would only move the coupling. Do it before the next behaviour change
+  to the landing loop. Raised 2026-11-03 by 5.3's fling-halt review.
+
+- **`documentPainted` resets only on `onReady`.** In
+  `app/reader-composer/[branchId].tsx`, `documentPainted` and its ref
+  turn false in `handleReady` and true in `handleFirstPaint`, so if
+  `ReaderDocument` remounts behind the placeholder, the boot veil and
+  `entryLinkReady` read the old document's paint until the new one sends
+  `onReady`. The jump hand-off tolerates it (a landing sent into a
+  booting document is caught as lost), but it isn't confirmed whether a
+  remount within one route instance is reachable. Raised 2026-11-03 by
+  5.3's Task 9 review.

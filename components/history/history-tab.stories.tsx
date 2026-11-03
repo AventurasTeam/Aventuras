@@ -192,7 +192,12 @@ function SwitchTargetHarness() {
       >
         <Text>Switch to the happening</Text>
       </Button>
-      <HistoryTab branchId="br_1" targetTable={target.targetTable} targetId={target.targetId} />
+      <HistoryTab
+        branchId="br_1"
+        targetTable={target.targetTable}
+        targetId={target.targetId}
+        onOpenEntry={() => {}}
+      />
     </View>
   )
 }

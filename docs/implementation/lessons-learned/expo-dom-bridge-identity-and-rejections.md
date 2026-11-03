@@ -26,6 +26,9 @@ that fails does nothing at all.
   catch it host-side, log and toast there.
   `dismissSystemEntry` in `components/reader/system-entry-actions.tsx`
   is the worked example.
-- This was read from the expo source, not measured on a device. What
-  the identity loss costs is
-  [parked until a device shows it](../../parked.md#native-reader-rows-rerender-per-emission).
+- This was read from the expo source. What the identity loss costs on a
+  grown window was then measured on a device
+  ([Slice 5.3's measure](../milestones/05-chapters-chapter-close/slices/03-reader-chapters.md#android-measure)),
+  and the fix is a followup:
+  [`followups.md → UX`](../../followups.md#ux), "Native reader rows
+  rerender per emission".

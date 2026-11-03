@@ -8,6 +8,7 @@ import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { TruncatedText } from '@/components/compounds/truncated-text'
+import { chapterBreaksOf } from '@/components/reader/chapter-breaks'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { isDraftEmpty, planSubmissionHandback } from '@/components/reader/composer-draft'
 import {
@@ -19,6 +20,7 @@ import {
   type RollbackRefusal,
 } from '@/components/reader/confirm-refusal'
 import { useContentEditing } from '@/components/reader/content-editing'
+import { EntryJumpVeil } from '@/components/reader/entry-jump-veil'
 import { readerPillPhase } from '@/components/reader/generation-phase'
 import {
   draftSubmission,
@@ -31,6 +33,10 @@ import { ReaderPeekDrawer } from '@/components/reader/peek/reader-peek-drawer'
 import { ReaderBrowseChip } from '@/components/reader/rail/reader-browse-chip'
 import { ReaderRailColumn } from '@/components/reader/rail/reader-rail-column'
 import { useRailData } from '@/components/reader/rail/use-rail-data'
+import {
+  ReaderChapterChips,
+  type ReaderChapterChipsHandle,
+} from '@/components/reader/reader-chapter-chips'
 import ReaderDocument, { type ReaderDocumentRef } from '@/components/reader/reader-document'
 import { type ReaderSurfaceHandle } from '@/components/reader/reader-document-types'
 import { ReaderSurface } from '@/components/reader/reader-surface'
@@ -76,6 +82,7 @@ import {
   useSystemEntryActions,
 } from '@/components/reader/system-entry-actions'
 import { useLiveRollbackCounts } from '@/components/reader/use-live-rollback-counts'
+import { useReaderEntryJump } from '@/components/reader/use-reader-entry-jump'
 import { useWorldTimeEditing } from '@/components/reader/world-time-editing'
 import { WorldTimeEditSheet } from '@/components/reader/worldtime-edit-sheet'
 import { ScreenShell } from '@/components/shells/screen-shell'
@@ -87,10 +94,12 @@ import {
 } from '@/components/story-settings/generation-run'
 import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
+import { single as singleParam } from '@/components/world/world-selection'
 import { useChapterProgress } from '@/hooks/use-chapter-progress'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { useLeaveFailedStoryOpen } from '@/hooks/use-leave-failed-story-open'
 import { useSwapState } from '@/hooks/use-memory-health'
+import { useRouteLink } from '@/hooks/use-route-link'
 import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import { useTier } from '@/hooks/use-tier'
@@ -143,6 +152,7 @@ import {
   appSettingsStore,
   awaitRunTerminal,
   blockingOverlaysStore,
+  chaptersStore,
   currentStoryStore,
   entitiesStore,
   entriesStore,
@@ -219,7 +229,7 @@ export default function ReaderComposerRoute() {
   const tier = useTier()
   const showRail = tier !== 'phone'
   const isFocused = useIsFocused()
-  const { branchId } = useLocalSearchParams<{ branchId: string }>()
+  const { branchId, entry } = useLocalSearchParams<{ branchId: string; entry?: string }>()
   const branchIdRef = useRef(branchId)
   // Assigned post-commit, not during render: a discarded render would otherwise
   // publish a branch that never landed, and every reader of this ref treats a
@@ -322,6 +332,11 @@ export default function ReaderComposerRoute() {
     openForBranch?.definition.worldTimeOrigin,
     ctx,
   )
+  const chapterRows = chaptersStore.useChapters((m) => m)
+  const chapterBreaks = useMemo(
+    () => chapterBreaksOf([...chapterRows.values()], entries, worldTimeDecorations),
+    [chapterRows, entries, worldTimeDecorations],
+  )
 
   // Same snapshot-stability contract as `rows` above: select the raw map, derive
   // the array with useMemo. The whole branch, unwindowed — the panel resolves ids
@@ -410,6 +425,7 @@ export default function ReaderComposerRoute() {
   const composerRef = useRef<ComposerHandle>(null)
   const surfaceRef = useRef<ReaderSurfaceHandle>(null)
   const documentRef = useRef<ReaderDocumentRef>(null)
+  const chapterChipsRef = useRef<ReaderChapterChipsHandle>(null)
   const [syncNonce, setSyncNonce] = useState(0)
   const [documentPainted, setDocumentPainted] = useState(false)
 
@@ -519,9 +535,7 @@ export default function ReaderComposerRoute() {
       .orderBy(desc(storyEntries.position))
       .limit(ENTRIES_WINDOW_SIZE)) as StoryEntry[]
 
-    for (const row of older) {
-      entriesStore.patch(branchId, { op: 'create', id: row.id, row })
-    }
+    entriesStore.insertMany(branchId, older)
     setHasOlder(older.length >= ENTRIES_WINDOW_SIZE)
   }, [branchId])
 
@@ -1402,6 +1416,52 @@ export default function ReaderComposerRoute() {
     if (Platform.OS === 'web') surfaceRef.current?.jumpToBottom()
     else documentRef.current?.jumpToBottom()
   }, [])
+  const openChapterPopover = useCallback(() => chapterChipsRef.current?.openPopover(), [])
+  const markBranchTopLoaded = useCallback(() => setHasOlder(false), [])
+  const sendEntryLanding = useCallback((entryId: string) => {
+    if (Platform.OS === 'web') surfaceRef.current?.jumpToEntry(entryId)
+    else documentRef.current?.jumpToEntry(entryId)
+  }, [])
+  // Not entryLinkReady: a reader under another screen still takes the call; only a reload loses it.
+  const {
+    jump: jumpToEntry,
+    veil: entryJumpVeil,
+    landed: entryLanded,
+  } = useReaderEntryJump(
+    branchId,
+    ctx,
+    Platform.OS === 'web' || documentPainted,
+    sendEntryLanding,
+    markBranchTopLoaded,
+  )
+  // Settles: a rejection here would re-reject inside the WebView, where nothing logs it.
+  const handleEntryLanded = useCallback(
+    async (entryId: string) => entryLanded(entryId),
+    [entryLanded],
+  )
+  // useSurfaceNavigate sets the param before it dismisses: a reader under another screen isn't laid
+  // out, and a call into a document that hasn't sent onReady is lost.
+  const entryLinkReady =
+    isFocused && hydrationSucceeded && (Platform.OS === 'web' || documentPainted)
+  const arriveAtEntry = useCallback(
+    (entryId: string) => {
+      // Cleared first: useRouteLink re-arms when its key goes through null, so a second link to
+      // the same entry jumps again, and a reload doesn't.
+      router.setParams({ entry: undefined })
+      void jumpToEntry(entryId)
+    },
+    [router, jumpToEntry],
+  )
+  useRouteLink(singleParam(entry) ?? null, entryLinkReady, arriveAtEntry)
+  // Direct when the document can take the jump (a param would re-send the window twice on native);
+  // the chips are live before it paints, so then the param waits on entryLinkReady.
+  const followEntry = useCallback(
+    (entryId: string) => {
+      if (entryLinkReady) void jumpToEntry(entryId)
+      else router.setParams({ entry: entryId })
+    },
+    [entryLinkReady, jumpToEntry, router],
+  )
 
   const handleRetrySystemEntry = useCallback(async () => retrySystemEntry?.(), [retrySystemEntry])
   const handleFixSystemEntry = useCallback(async () => fixAction?.onPress(), [fixAction])
@@ -1484,6 +1544,7 @@ export default function ReaderComposerRoute() {
   const surfaceProps = {
     rows: entries,
     worldTimeDecorations,
+    chapterBreaks,
     worldTimeFrame,
     streaming: streamingPayload,
     branchKey: branchId,
@@ -1510,6 +1571,7 @@ export default function ReaderComposerRoute() {
     onCopySystemText: copyText,
     onFixSystemEntry: handleFixSystemEntry,
     onFixCutOff: handleFixCutOff,
+    onEntryLanded: handleEntryLanded,
   }
 
   return (
@@ -1520,7 +1582,23 @@ export default function ReaderComposerRoute() {
           {storyTitle ?? t('reader:placeholderTitle')}
         </TruncatedText>
       }
+      centerExtras={
+        hydrationSucceeded ? (
+          <ReaderChapterChips
+            ref={chapterChipsRef}
+            branchId={branchId}
+            entries={entries}
+            frame={worldTimeFrame}
+            progress={chapterProgress}
+            isFocused={isFocused}
+            onJumpToEntry={followEntry}
+          />
+        ) : undefined
+      }
       chapterProgress={chapterProgress}
+      onChapterProgressPress={
+        tier !== 'phone' && hydrationSucceeded ? openChapterPopover : undefined
+      }
       mobileChipAction={
         tier === 'phone' ? (
           <ReaderBrowseChip
@@ -1592,6 +1670,7 @@ export default function ReaderComposerRoute() {
                 ) : null}
               </View>
             )}
+            <EntryJumpVeil veil={entryJumpVeil} />
           </View>
           {stripVisible ? (
             <SuggestionStrip

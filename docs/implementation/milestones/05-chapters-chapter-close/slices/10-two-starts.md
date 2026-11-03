@@ -550,10 +550,16 @@ amends the scope above.
   show disabled with a reason instead?
 - **Where does `Ready to close` sit, and how does it differ from the red strip?**
   Canon says only "near chapter management controls". Default: text in the popover's
-  progress row and on the in-progress card. With 5.3's phone rule the popover isn't
-  reachable before the first close, so on phone only the Timeline shows it. At 90%
-  and over the strip's canon meaning is "close imminent", which is false with
-  auto-close off. Does that copy need a line?
+  progress row and on the in-progress card. At 90% and over the strip's canon meaning
+  is "close imminent", which is false with auto-close off. Does that copy need a line?
+- **Does a close landing under World or Plot hide the reply's last lines?** The reader's
+  surface records no height while it's hidden, so a break that commits then never re-pins.
+  Chromium keeps `scrollTop` across `display:none`, and a break committed while hidden at
+  the bottom left the reader short of the tail on return, with no scroll event to raise
+  the jump button. That shortfall was seen in Chromium, in a scratch story. On native a
+  covered WebView should keep its layout, which is reasoned, not run, so it hasn't been
+  observed on a device. Default: on return, re-pin when the reader was at the bottom as it
+  hid.
 - **Is any dirty-and-busy case left?** By trace, no: every start passes the guard,
   inputs disable while a run holds the gate, and only the reader otherwise starts
   a run. That trace predates 5.7's per-card session, so recheck it there first. A

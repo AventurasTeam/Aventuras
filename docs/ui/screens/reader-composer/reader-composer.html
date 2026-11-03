@@ -79,7 +79,7 @@
   .time-popover-action { padding: 6px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); font-size: 12px; cursor: pointer; color: var(--ink); text-align: center; display: block; }
   .time-popover-action:hover { background: var(--bg-highlight); }
 
-  /* thin progress strip along the bottom edge of the top-bar — passive chrome */
+  /* thin progress strip along the bottom edge of the top-bar — presses to the popover at tablet and desktop through a taller invisible hit area, passive on phone */
   .topbar-progress { height: 3px; background: var(--line-soft); position: relative; cursor: pointer; }
   .topbar-progress .fill { position: absolute; top: 0; left: 0; height: 100%; background: var(--ok); transition: width 0.4s, background 0.2s; }
   .topbar-progress.warn .fill { background: #d9a617; }
@@ -94,7 +94,6 @@
   .chapter-item:hover { background: var(--bg-highlight); }
   .chapter-item.current { background: var(--bg-highlight); font-weight: 500; cursor: default; }
   .chapter-item .ch-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .chapter-item .ch-meta { font-size: 10px; color: var(--ink-faint); font-family: ui-monospace, monospace; }
   .chapter-popover-progress { padding: 10px 12px; border-bottom: 1px solid var(--line-soft); background: var(--bg); }
   .chapter-popover-progress .label { font-size: 11px; color: var(--ink-muted); display: flex; justify-content: space-between; margin-bottom: 4px; }
   .chapter-popover-progress .bar { height: 6px; background: var(--line-soft); border-radius: 3px; overflow: hidden; }
@@ -859,15 +858,12 @@
       <div class="chapter-list">
         <div class="chapter-item">
           <span class="ch-title">1 &middot; Into the Undercity<br><span style="font-size: 10px; color: var(--ink-faint);">&#9201; Day 1 &rarr; Day 2, dawn</span></span>
-          <span class="ch-meta">12 entries &middot; 6.2k</span>
         </div>
         <div class="chapter-item">
           <span class="ch-title">2 &middot; The Warden's Mark<br><span style="font-size: 10px; color: var(--ink-faint);">&#9201; Day 2, dawn &rarr; Day 3, dusk</span></span>
-          <span class="ch-meta">9 entries &middot; 5.0k</span>
         </div>
         <div class="chapter-item current">
           <span class="ch-title">3 &middot; in progress<br><span style="font-size: 10px; color: var(--ink-faint);">&#9201; since Day 3, dusk</span></span>
-          <span class="ch-meta">5 entries &middot; 8.4k</span>
         </div>
       </div>
       <div class="chapter-popover-progress">
@@ -898,7 +894,7 @@
   </div>
 </header>
 
-<!-- Chapter progress strip — passive chrome, always visible -->
+<!-- Chapter progress strip — always visible; presses to the popover at tablet and desktop, passive on phone -->
 <div class="topbar-progress" data-label="Chapter 3 · 8,420 / 24,000 tok">
   <div class="fill" style="width: 35%"></div>
 </div>
@@ -934,7 +930,7 @@
            Hidden when at branch start (no older to load) or when not actively fetching. -->
       <div class="boundary-shimmer" id="boundary-top"><span class="dot">&middot;&middot;&middot;</span> loading older entries</div>
 
-      <div class="chapter-break"><span class="bk-title">Chapter 3<span class="bk-time">&#9201; Day 2, dawn</span></span></div>
+      <div class="chapter-break"><span class="bk-title">Chapter 3<span class="bk-time">&#9201; Day 3, dusk</span></span></div>
 
       <div class="entry user">
         <div class="bubble">

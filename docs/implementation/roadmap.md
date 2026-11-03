@@ -1416,8 +1416,10 @@ isn't a per-feature concern.
   chapter's `close_report`: M5 names the column in the export manifest
   and exports nothing.
 - M9.5 — Cross-platform parity smoke (Linux desktop + Android),
-  performance budget audit, including the
-  [native reader's per-emission rerender](../parked.md#native-reader-rows-rerender-per-emission),
+  performance budget audit (including a re-measure of the reader's
+  per-emission rerender on a mid-tier Android phone, since
+  [Slice 5.3's measure](./milestones/05-chapters-chapter-close/slices/03-reader-chapters.md#android-measure)
+  ran on a flagship Fold),
   accessibility audit
   ([`accessibility skill`](./conventions.md) checks).
 - M9.6 — v1 ship: changelog, release notes, distribution

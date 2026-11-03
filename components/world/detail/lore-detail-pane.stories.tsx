@@ -116,6 +116,7 @@ function Harness({
           onSaved={saved}
           onDelete={onDelete}
           onSession={onSession}
+          onOpenEntry={() => {}}
         />
       </View>
       <Button

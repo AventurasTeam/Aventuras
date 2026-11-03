@@ -76,8 +76,15 @@ to the `-text` slot, and `bg-`, `border-` and `fill-` to the fill.
 
 **Selection (1).**
 
-- `--selection-bg` — text-selection background. Load-bearing for a
-  reading-heavy app; users will spend long sessions selecting prose.
+- `--selection-bg` — text-selection background, and the landed entry
+  card's tint after a jump
+  ([`reader-composer.md → Loaded-set model`](../screens/reader-composer/reader-composer.md#loaded-set-model)).
+  Load-bearing for a reading-heavy app; users will spend long sessions
+  selecting prose. Dark themes also set `--landed-tint-share`, the share
+  of `--selection-bg` the landed card's tint lays over the card. Each
+  theme picks it so the peak stands out from its fainter card kind
+  (`--bg-raised` or `--bg-sunken`) at least as far as default-light's
+  tint from its `--bg-sunken` (OKLab ΔE). It is not a colour slot.
 
 **Pattern-driven (1).**
 

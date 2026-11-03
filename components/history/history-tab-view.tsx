@@ -26,14 +26,24 @@ export type HistoryTabViewProps = {
   onSortChange: (sort: HistorySort) => void
   onLoadMore: () => void
   onRetry: () => void
+  onOpenEntry: (entryId: string) => void
 }
 
 type BodyProps = Pick<
   HistoryTabViewProps,
-  'rows' | 'status' | 'hasMore' | 'filtered' | 'sort' | 'onLoadMore' | 'onRetry'
+  'rows' | 'status' | 'hasMore' | 'filtered' | 'sort' | 'onLoadMore' | 'onRetry' | 'onOpenEntry'
 >
 
-function HistoryBody({ rows, status, hasMore, sort, onLoadMore, onRetry, filtered }: BodyProps) {
+function HistoryBody({
+  rows,
+  status,
+  hasMore,
+  sort,
+  onLoadMore,
+  onRetry,
+  filtered,
+  onOpenEntry,
+}: BodyProps) {
   if (status === 'loading')
     return (
       <View className="items-center py-8">
@@ -57,8 +67,12 @@ function HistoryBody({ rows, status, hasMore, sort, onLoadMore, onRetry, filtere
     )
   return (
     <View>
-      {rows.map((row) => (
-        <DeltaLogRow key={row.id} delta={row} />
+      {rows.map(({ entry, ...row }) => (
+        <DeltaLogRow
+          key={row.id}
+          delta={{ ...row, entryId: entry?.label ?? null }}
+          onPress={entry != null ? () => onOpenEntry(entry.id) : undefined}
+        />
       ))}
       {hasMore ? (
         <View className="items-center pt-2">
@@ -87,6 +101,7 @@ export function HistoryTabView({
   onSortChange,
   onLoadMore,
   onRetry,
+  onOpenEntry,
 }: HistoryTabViewProps) {
   return (
     <View className="gap-3">
@@ -129,6 +144,7 @@ export function HistoryTabView({
         onLoadMore={onLoadMore}
         onRetry={onRetry}
         filtered={filtered}
+        onOpenEntry={onOpenEntry}
       />
     </View>
   )

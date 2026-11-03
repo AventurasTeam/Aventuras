@@ -63,6 +63,8 @@ export type ThreadDetailPaneProps = {
   onRejected?: (reason: string) => void
   /** The surface routes row switches, `←`, segment switches and GO TO through this. */
   onSession: (handle: RowSessionHandle | null) => void
+  /** A History row's entry link; the route navigates through the session's leave guard. */
+  onOpenEntry: (entryId: string) => void
   /** `⋯ → Delete thread`; the surface raises the confirm. */
   onDelete: (row: Thread) => void
   /** The host screen's focus state, for the save bar's Cmd/Ctrl-S. */
@@ -83,6 +85,7 @@ export function ThreadDetailPane({
   onSaved,
   onRejected,
   onSession,
+  onOpenEntry,
   onDelete,
   hotkeysEnabled = true,
 }: ThreadDetailPaneProps) {
@@ -163,7 +166,12 @@ export function ThreadDetailPane({
         {row == null ? (
           <EmptyState title={t('history:tab.afterSave')} subtext={t('history:tab.afterSaveBody')} />
         ) : (
-          <HistoryTab branchId={branchId} targetTable="threads" targetId={row.id} />
+          <HistoryTab
+            branchId={branchId}
+            targetTable="threads"
+            targetId={row.id}
+            onOpenEntry={onOpenEntry}
+          />
         )}
       </TabsContent>
     </RowDetailFrame>

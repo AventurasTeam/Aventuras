@@ -121,9 +121,18 @@ describe('humanizeDelta', () => {
       fieldPath: 'state.traits, state.drives',
       summary: 'Modified Traits, Drives',
       source: 'periodic_classifier',
-      entryId: 'entry #47',
+      entry: { label: 'entry #47', id: 'entry_47' },
       createdAtRelative: '2h ago',
     })
+  })
+
+  it('carries the raw anchor with its label, only when the label resolved', () => {
+    expect(humanizeDelta(own(delta({ entryId: 'entry_47' })), context).entry).toEqual({
+      label: 'entry #47',
+      id: 'entry_47',
+    })
+    expect(humanizeDelta(own(delta({ entryId: 'entry_gone' })), context).entry).toBeNull()
+    expect(humanizeDelta(own(delta({ entryId: null })), context).entry).toBeNull()
   })
 
   it("shows a classifier's membership as a faction change, naming no id", () => {

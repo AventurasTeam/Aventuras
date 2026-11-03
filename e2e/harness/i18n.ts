@@ -14,6 +14,7 @@ type Translate = (key: string, options?: Record<string, unknown>) => string
 // English that rots as copy changes. The react-i18next plugin is omitted: it
 // only backs the React hooks, not t(), so a bare i18next instance is faithful.
 const NAMESPACES = [
+  'chapters',
   'common',
   'embedder',
   'history',

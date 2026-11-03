@@ -44,10 +44,12 @@ export function TrailingTabs({
   row,
   data,
   onOpenHappening,
+  onOpenEntry,
 }: {
   row: Entity | null
   data: EntityPaneData
   onOpenHappening: (id: string) => void
+  onOpenEntry: (entryId: string) => void
 }) {
   return (
     <>
@@ -67,7 +69,12 @@ export function TrailingTabs({
             body={t('history:tab.afterSaveBody')}
           />
         ) : (
-          <HistoryTab branchId={data.branchId} targetTable="entities" targetId={row.id} />
+          <HistoryTab
+            branchId={data.branchId}
+            targetTable="entities"
+            targetId={row.id}
+            onOpenEntry={onOpenEntry}
+          />
         )}
       </TabsContent>
     </>

@@ -1,7 +1,8 @@
 # Dev environment
 
 How the development servers and the desktop dev app find their ports
-and data, and how several checkouts share one machine. The E2E suite
+and data, how several checkouts share one machine, and how to measure
+on a release build on a physical Android device. The E2E suite
 is not covered here: it binds dynamic ports and seeds its own temp
 `userData` (see [testing.md](./testing.md#launch-modes)), so it needs
 none of this.
@@ -128,3 +129,107 @@ environment: the MCP servers in `.mcp.json`, and `adb`.
    deletes the file: the agent working there still needs it.
 4. Create one AVD per slot you expect to use, named
    `Aventuras_Slot_N`.
+
+## Measuring on a release build
+
+A number that counts comes off a release APK on a physical device.
+The AVDs here render in software, and a debug build carries Metro and
+its dev checks. A release build refuses `run-as`, so the data goes in
+through a debug install, and the release APK goes over it with
+`adb install -r`, which keeps the app's files. Both APKs are built in
+one checkout, so they share `android/app/debug.keystore`. On a personal
+device this replaces whatever the app holds, so back its data up
+first.
+
+Set up the shell first. In a worker slot `.env.dev-slot.local` exports
+`ANDROID_SERIAL` for the slot's AVD, and on slot 0 with an AVD running a
+plain `adb` refuses with more than one device, so export the phone's
+serial over it: every `adb` call below and `pnpm device:push-db` then
+reach the phone.
+
+```sh
+export ANDROID_SERIAL=<phone serial>
+export PATH="$HOME/Android/Sdk/platform-tools:$PATH" ANDROID_HOME="$HOME/Android/Sdk"
+```
+
+`android/` is git-ignored, so the cleartext edit stays local; release
+needs it to reach the mock over `adb reverse`. The check prints `1`.
+Without the edit a turn fails with `CLEARTEXT communication not
+permitted` in logcat. The release APK embeds the JS, so any change to
+temporary marks means rebuilding it.
+
+```sh
+pnpm expo prebuild --platform android --no-install
+sed -i 's/<application android:name=".MainApplication"/<application android:usesCleartextTraffic="true" android:name=".MainApplication"/' android/app/src/main/AndroidManifest.xml
+grep -c 'usesCleartextTraffic="true"' android/app/src/main/AndroidManifest.xml
+(cd android && ./gradlew assembleDebug assembleRelease -PreactNativeArchitectures=arm64-v8a)
+```
+
+Write the fixture with `pnpm db:seed:long <file>`. A turn also needs
+the story's local embedder model: without it the turn fails before the
+narrative call, and the mock serves no embeddings. Fill the model cache
+in `~/.cache/aventuras-e2e/embedders` from a file outside the worktree,
+since `tsx -e` can't reach the export and stray files in the worktree
+break the gates. It prints
+`{"modelId":"Xenova/all-MiniLM-L6-v2","dim":384}`.
+
+```sh
+mkdir -p ~/.cache/aventuras-measure
+cat > ~/.cache/aventuras-measure/ensure-model.ts <<EOF
+import { ensureEmbedderModel } from '$PWD/e2e/harness/embedder'
+void ensureEmbedderModel().then((model) => console.log(JSON.stringify(model)))
+EOF
+pnpm exec tsx ~/.cache/aventuras-measure/ensure-model.ts
+```
+
+Then install the debug APK and start it once, since
+`pnpm device:push-db` expects an install that has run. With no Metro
+running the debug app shows an error screen; nothing here needs its
+JS. `run-as` can't traverse `/data/local/tmp`, so each model file is
+pushed there and piped in. `pnpm device:push-db` replaces the app's
+database and refuses to run without `ANDROID_SERIAL`.
+
+```sh
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+adb shell am start -n com.aventuras.app/.MainActivity
+sleep 5
+adb shell am force-stop com.aventuras.app
+adb shell run-as com.aventuras.app mkdir -p files/SQLite files/embedders/xenova--all-minilm-l6-v2
+for f in model.onnx config.json tokenizer.json tokenizer_config.json meta.json; do
+  adb push ~/.cache/aventuras-e2e/embedders/xenova--all-minilm-l6-v2/$f /data/local/tmp/$f
+  adb shell "cat /data/local/tmp/$f | run-as com.aventuras.app sh -c 'cat > files/embedders/xenova--all-minilm-l6-v2/$f'"
+  adb shell rm /data/local/tmp/$f
+done
+pnpm device:push-db <file>
+adb install -r android/app/build/outputs/apk/release/app-release.apk
+adb shell run-as com.aventuras.app true
+```
+
+The last line should fail with `package not debuggable`, which shows
+the measured build is the release one. `pnpm device:push-db` needs a
+debuggable install, so redoing the fixture means reinstalling debug
+first.
+
+Point the app at the mock. A positional seed path keeps the provider
+at 4319 on any slot, so force the port, and run the mock in its own
+terminal. The reply and its stream rate are set per lane through the
+mock's panel or control API
+([mock-llm README](../scripts/mock-llm/README.md#lanes)).
+
+```sh
+MOCK_LLM_PORT=4319 pnpm mock
+adb reverse tcp:4319 tcp:4319
+```
+
+Time inside the document, as
+[the lesson on timing a WebView](./implementation/lessons-learned/webview-timing-needs-the-document.md)
+explains. The host never waits for the WebView, since
+each emission is a fire-and-forget `injectJavaScript`, so a host-side
+time measures the mock. WebView console messages are dropped in
+non-debug builds, so buffer marks in the document, stamp them with
+`Date.now()`, and send them through a temporary callback once per run:
+after a reply's final paint, and after each landing. The host logs them
+in pieces of 3,000 characters to logcat as `ReactNativeJS`, because
+Android cuts a long line. Clear the log with `adb logcat -c` before each
+run, and read it with `adb logcat -d -s ReactNativeJS:V -v raw`. Don't
+take a `uiautomator` dump during a timed run: it walks the whole window.
