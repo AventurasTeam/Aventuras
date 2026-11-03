@@ -93,6 +93,10 @@ slice plans when relevant.
   — the `timeout` option is ignored and there are no idle periods, so the
   task runs when the JS queue first drains, ahead of a WebView's first
   paint; hook the paint signal instead.
+- [expo-dom's boot script can run after the document's bundle on Android](./expo-dom-boot-script-races-the-bundle.md)
+  — react-native-webview injects the host OS and first props from
+  `onPageStarted`, so a fast bundle finds them missing and the document
+  never mounts; `patches/expo.patch` makes the entry wait for the script.
 
 ### rn-primitives substrate
 
