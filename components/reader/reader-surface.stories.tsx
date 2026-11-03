@@ -2149,6 +2149,7 @@ export const JumpWaitsOutARestingFinger: Story = {
     expect(args.onEntryLanded).not.toHaveBeenCalled()
     scroller.dispatchEvent(new Event('touchend', { bubbles: true }))
     await landedOn(JUMP_TARGET, scroller)
+    await waitFor(() => expect(args.onEntryLanded).toHaveBeenCalledWith(JUMP_TARGET))
   },
 }
 
@@ -2800,6 +2801,7 @@ export const JumpWaitsOutAHiddenReader: Story = {
     box.style.display = ''
     await landedOn(JUMP_TARGET, scroller)
     await waitFor(() => expect(entryRow(JUMP_TARGET)).toHaveAttribute('data-landed'))
+    await waitFor(() => expect(args.onEntryLanded).toHaveBeenCalledWith(JUMP_TARGET))
   },
 }
 
