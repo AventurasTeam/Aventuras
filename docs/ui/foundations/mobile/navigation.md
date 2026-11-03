@@ -136,7 +136,7 @@ Layout: `[Chapter ▾] [<time chip>] [⎇N] ··· [☰ Browse]`.
   outside it, so the strip scrolls as the fallback. Per existing
   branch-chip rule, single-branch stories omit `[⎇]` from the
   strip — usually leaves enough room.
-- **Strip starts 16 px in from the screen edge.** Avoids
+- **Strip starts about 16 px in from the screen edge.** Avoids
   conflict with iOS's swipe-from-left-edge back gesture; visual
   padding doubles as gesture safe-zone. The scroller itself starts
   there, so a swipe from the edge never lands on it.
