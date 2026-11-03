@@ -207,8 +207,8 @@ test.describe.serial('Reader chapter chrome', () => {
     removeUserDataDir(userDataDir)
   })
 
-  // Chapters by title, never by position (C8). A renamed chapter throws: an undefined id would
-  // pass the `toHaveCount(0)` precondition below.
+  // Chapters by title, never by position: a seed change moves chapter ends. A renamed chapter
+  // throws: an undefined id would pass the `toHaveCount(0)` precondition below.
   async function chapterByTitle(page: Page, title: string) {
     const rows = await queryApp(
       page,

@@ -226,7 +226,6 @@ export const reader = {
       .suggestionRefresh(page)
       .or(page.getByRole('button', { name: t('reader:suggestions.generate'), exact: true })),
 
-  // Chapter chrome.
   chapterChip: (page: Page, number: number): Locator =>
     page.getByRole('button', { name: t('chapters:label', { number }), exact: true }),
   timeChip: (page: Page): Locator =>
