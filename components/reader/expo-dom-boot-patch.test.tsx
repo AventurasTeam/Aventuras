@@ -78,7 +78,6 @@ async function hostBootScript(): Promise<string> {
   return `(function() {\n${script};\n})();`
 }
 
-/** The script the wrapper injects when the host re-sends its props. */
 async function hostPropsScript(props: Record<string, string>): Promise<string> {
   const { getInjectEventScript } = await importExpoDom('injection')
   return getInjectEventScript({ type: '$$props', data: { names: ['onReady'], props } })
