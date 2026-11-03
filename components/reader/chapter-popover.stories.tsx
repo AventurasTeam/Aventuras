@@ -492,6 +492,53 @@ export const ShortListWheelThenGrowsShowsLastRow: Story = {
   },
 }
 
+/** Runs `play` with the window resized to `width`, then puts it back; a no-op outside Vitest. */
+async function withWindowWidth(width: number, play: () => Promise<void>) {
+  const browser = await import('vitest/browser').catch(() => null)
+  if (browser == null) return
+  const original = { width: window.innerWidth, height: window.innerHeight }
+  await browser.page.viewport(width, original.height)
+  try {
+    await play()
+  } finally {
+    await browser.page.viewport(original.width, original.height)
+  }
+}
+
+// The open arm unmounts with the tier; its owner would otherwise keep reading for an overlay that's gone.
+export const TierFlipToPhoneReportsClosed: Story = {
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    await openOverlay()
+    await expect(args.onOpenChange).toHaveBeenLastCalledWith(true)
+    await withWindowWidth(400, async () => {
+      await waitForTier('phone')
+      await expect(await chip()).toHaveAttribute('aria-expanded', 'false')
+      await expect(args.onOpenChange).toHaveBeenLastCalledWith(false)
+    })
+    // The flip back unmounts a closed arm, which has nothing to report.
+    await waitForTier('desktop')
+    await expect(args.onOpenChange).toHaveBeenCalledTimes(2)
+  },
+}
+
+export const TierFlipToDesktopReportsClosed: Story = {
+  globals: PHONE,
+  play: async ({ args }) => {
+    await waitForTier('phone')
+    await openOverlay()
+    await expect(args.onOpenChange).toHaveBeenLastCalledWith(true)
+    await withWindowWidth(1200, async () => {
+      await waitForTier('desktop')
+      await expect(await chip()).toHaveAttribute('aria-expanded', 'false')
+      await expect(args.onOpenChange).toHaveBeenLastCalledWith(false)
+    })
+    // The flip back unmounts a closed arm, which has nothing to report.
+    await waitForTier('phone')
+    await expect(args.onOpenChange).toHaveBeenCalledTimes(2)
+  },
+}
+
 // A key, not a button: a click outside the popover would dismiss it before the handle's close.
 function HandleHarness(props: ChapterPopoverProps) {
   const handle = useRef<ChapterPopoverHandle>(null)

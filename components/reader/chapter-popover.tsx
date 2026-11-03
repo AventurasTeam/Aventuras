@@ -1,6 +1,13 @@
 import { SCROLLABLE_STATUS, useBottomSheetInternal } from '@gorhom/bottom-sheet'
 import type { TriggerRef } from '@rn-primitives/popover'
-import { useImperativeHandle, useRef, useState, type ReactElement, type Ref } from 'react'
+import {
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type ReactElement,
+  type Ref,
+} from 'react'
 import {
   Platform,
   Pressable,
@@ -92,6 +99,17 @@ function useReportedOpen(onOpenChange: ChapterPopoverProps['onOpenChange']) {
     setOpen(next)
     onOpenChange?.(next)
   }
+  // A tier flip swaps the arms, and the open one unmounts without closing.
+  const committed = useRef({ open, onOpenChange })
+  useEffect(() => {
+    committed.current = { open, onOpenChange }
+  })
+  useEffect(
+    () => () => {
+      if (committed.current.open) committed.current.onOpenChange?.(false)
+    },
+    [],
+  )
   return [open, change] as const
 }
 
