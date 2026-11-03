@@ -180,6 +180,9 @@ export function ScreenShell({
 
   const progress = clampProgress(chapterProgress?.percent)
   const canPressProgress = onChapterProgressPress != null
+  // aria-haspopup is a web-only DOM attribute RN's prop types don't model.
+  const progressPopupProps =
+    canPressProgress && Platform.OS === 'web' ? ({ 'aria-haspopup': 'dialog' } as object) : null
   const progressCounts =
     chapterProgress != null && chapterProgress.threshold > 0
       ? chapterProgressCounts(chapterProgress)
@@ -245,7 +248,8 @@ export function ScreenShell({
               <Pressable
                 testID="chapter-progress-hit"
                 accessibilityRole={canPressProgress ? 'button' : undefined}
-                accessibilityLabel={canPressProgress ? t('chrome.chapterProgress') : undefined}
+                accessibilityLabel={canPressProgress ? t('chapters:popover.title') : undefined}
+                {...progressPopupProps}
                 // RN's Pressable defaults both to true, so a disabled one stays a screen-reader stop.
                 accessible={canPressProgress}
                 focusable={canPressProgress}

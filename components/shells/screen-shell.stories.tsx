@@ -423,7 +423,9 @@ export const ChapterProgressPress: Story = {
   args: { onChapterProgressPress: fn() },
   render: ({ onChapterProgressPress }) => stripShell({ onChapterProgressPress }),
   play: async ({ args }) => {
-    const hit = await screen.findByRole('button', { name: t('chrome.chapterProgress') })
+    // Named for what it opens, as the chapter chip is, not after the bar it sits on.
+    const hit = await screen.findByRole('button', { name: t('chapters:popover.title') })
+    expect(hit).toHaveAttribute('aria-haspopup', 'dialog')
     const strip = screen.getByRole('progressbar', { name: t('chrome.chapterProgress') })
     // A progressbar's children are presentational, and a touch can't land outside a 3 px parent.
     expect(strip.contains(hit)).toBe(false)
@@ -445,8 +447,9 @@ export const ChapterProgressNoPress: Story = {
     expect(hit).toHaveAttribute('aria-disabled', 'true')
     expect(hit.tagName).not.toBe('BUTTON')
     expect(hit).not.toHaveAttribute('aria-label')
+    expect(hit).not.toHaveAttribute('aria-haspopup')
     expect(getComputedStyle(hit).cursor).not.toBe('pointer')
-    expect(screen.queryByRole('button', { name: t('chrome.chapterProgress') })).toBeNull()
+    expect(screen.queryByRole('button', { name: t('chapters:popover.title') })).toBeNull()
   },
 }
 
