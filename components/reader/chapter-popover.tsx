@@ -119,11 +119,11 @@ function useReportedOpen(onOpenChange: ChapterPopoverProps['onOpenChange']) {
 // Radix closes on an outside pointerdown, before the click: an opener outside would reopen what its
 // own press just closed, where the chip toggles. Web only; a native overlay takes that press.
 function usePressStartedOutside() {
-  const pressStartedOutside = useRef(false)
+  const started = useRef(false)
   useEffect(() => {
     if (Platform.OS !== 'web') return
     const reset = () => {
-      pressStartedOutside.current = false
+      started.current = false
     }
     document.addEventListener('pointerdown', reset, true)
     document.addEventListener('keydown', reset, true)
@@ -132,7 +132,12 @@ function usePressStartedOutside() {
       document.removeEventListener('keydown', reset, true)
     }
   }, [])
-  return pressStartedOutside
+  return {
+    mark: () => {
+      started.current = true
+    },
+    started: () => started.current,
+  }
 }
 
 function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
@@ -151,7 +156,7 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
 
   useImperativeHandle(ref, () => ({
     open: () => {
-      if (!pressStartedOutside.current) trigger.current?.open()
+      if (!pressStartedOutside.started()) trigger.current?.open()
     },
     close,
   }))
@@ -168,9 +173,7 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
       <PopoverContent
         align="start"
         className="w-80 p-0"
-        onPointerDownOutside={() => {
-          pressStartedOutside.current = true
-        }}
+        onPointerDownOutside={pressStartedOutside.mark}
       >
         <ScrollComponentContext.Provider value={POPOVER_SCROLL}>
           <OverlayBody {...content} arm={POPOVER_ARM} close={close} lastClosedRow={lastClosedRow} />
