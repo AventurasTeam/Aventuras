@@ -1,26 +1,47 @@
 import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { parseArgs } from 'node:util'
 
 import { getTableName } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import { migrate } from 'drizzle-orm/sqlite-proxy/migrator'
 import { getLoadablePath } from 'sqlite-vec'
 
-import { buildLongBranchSteps, LONG_BRANCH_SCALES, longBranchId } from './long-branch'
+import { buildLongBranchSteps, entryIdAt, LONG_BRANCH_SCALES, longBranchId } from './long-branch'
 import { buildSeedSteps, type SeedStep } from '../../lib/db/devtools/seed-dataset'
 import { dbSchema } from '../../lib/db/schema'
-import type { NewStoryEntry } from '../../lib/db/types'
 import { resolveDevSlot } from '../dev-slot/resolve'
 import { slotPorts } from '../dev-slot/slot'
 
-const args = process.argv.slice(2)
+// Strict: an ignored typo would seed something other than what was asked for.
+function parseCli(argv: string[]): { path: string | undefined; longBranch: boolean } {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: { 'long-branch': { type: 'boolean', default: false } },
+    allowPositionals: true,
+  })
+  if (positionals.length > 1) {
+    throw new Error(
+      `one database path at most, got ${positionals.length}: ${positionals.join(' ')}`,
+    )
+  }
+  return { path: positionals[0], longBranch: values['long-branch'] }
+}
+
+let cli: ReturnType<typeof parseCli>
+try {
+  cli = parseCli(process.argv.slice(2))
+} catch (err) {
+  console.error(`[seed] ${err instanceof Error ? err.message : String(err)}`)
+  console.error('[seed] usage: pnpm db:seed [db path], or pnpm db:seed:long [db path]')
+  process.exit(1)
+}
 
 // Default is the dev slot's userData DB — slot 0 is the one drizzle.studio.config.ts browses.
-// Override with AVENTURAS_DB_PATH or a positional arg. Opt-in --long-branch adds its fixture.
+// Override with AVENTURAS_DB_PATH or a positional arg.
 function resolveTarget(): { dbPath: string; mockPort?: number } {
-  const arg = args.find((a) => !a.startsWith('-'))
-  if (arg) return { dbPath: arg }
+  if (cli.path) return { dbPath: cli.path }
   if (process.env.AVENTURAS_DB_PATH) return { dbPath: process.env.AVENTURAS_DB_PATH }
   const { slot, dataDir, ports } = resolveDevSlot()
   return { dbPath: join(dataDir, 'aventuras.db'), mockPort: slot === 0 ? undefined : ports.mock }
@@ -78,8 +99,7 @@ async function main() {
   })
 
   const steps = buildSeedSteps()
-  if (args.includes('--long-branch'))
-    steps.push(...LONG_BRANCH_SCALES.flatMap(buildLongBranchSteps))
+  if (cli.longBranch) steps.push(...LONG_BRANCH_SCALES.flatMap(buildLongBranchSteps))
   if (mockPort !== undefined) {
     repointSeedProvider(steps, mockPort)
     console.log(`[seed] provider endpoint: http://localhost:${mockPort}/v1`)
@@ -106,22 +126,14 @@ async function main() {
     throw err
   }
 
+  const rowsByTable = new Map<string, number>()
+  for (const s of steps) rowsByTable.set(s.name, (rowsByTable.get(s.name) ?? 0) + s.rows.length)
+  for (const [name, count] of rowsByTable) console.log(`[seed]   ${name}: ${count}`)
   const total = steps.reduce((n, s) => n + s.rows.length, 0)
-  for (const s of steps) console.log(`[seed]   ${s.name}: ${s.rows.length}`)
-  console.log(
-    `[seed] done — ${total} rows across ${new Set(steps.map((s) => s.name)).size} tables.`,
-  )
-  if (args.includes('--long-branch')) printLongBranches(steps)
-}
-
-function printLongBranches(steps: SeedStep[]): void {
-  const longBranches = new Set(LONG_BRANCH_SCALES.map(longBranchId))
-  for (const s of steps) {
-    if (getTableName(s.table) !== 'story_entries') continue
-    for (const row of s.rows as NewStoryEntry[]) {
-      if (row.position === 1 && longBranches.has(row.branchId)) {
-        console.log(`[seed] ${row.branchId}: first entry ${row.id}`)
-      }
+  console.log(`[seed] done — ${total} rows across ${rowsByTable.size} tables.`)
+  if (cli.longBranch) {
+    for (const chapters of LONG_BRANCH_SCALES) {
+      console.log(`[seed] ${longBranchId(chapters)}: first entry ${entryIdAt(chapters, 1)}`)
     }
   }
 }

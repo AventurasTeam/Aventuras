@@ -1,11 +1,14 @@
 import { ArrowLeft, BookOpen, MoreVertical, Settings, SlidersVertical } from 'lucide-react-native'
 import { type ReactNode } from 'react'
-import { View } from 'react-native'
+import { Platform, Pressable, ScrollView, View, type ViewStyle } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { ChapterProgressBar, clampPercent } from '@/components/compounds/chapter-progress-bar'
+import { chapterProgressCounts } from '@/components/compounds/chapter-progress-label'
 import { MemoryRunBanner } from '@/components/compounds/memory-run-banner'
 import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { TextClassContext } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import type { ChapterProgress } from '@/lib/chapters'
@@ -49,6 +52,12 @@ type ScreenShellProps = {
   chapterProgress?: ChapterProgress
 
   /**
+   * Makes the strip's hit area (tablet and desktop) a button that opens a dialog; without it the
+   * area stays inert and keeps its tooltip.
+   */
+  onChapterProgressPress?: () => void
+
+  /**
    * Banner stack above the bar (AI-not-configured, profile-errors).
    * Shell positions the slot; per-screen logic decides what's in it.
    */
@@ -82,12 +91,7 @@ type ScreenShellProps = {
   children: ReactNode
 }
 
-function clampProgress(n: number | undefined): number {
-  if (n == null || Number.isNaN(n)) return 0
-  if (n < 0) return 0
-  if (n > 100) return 100
-  return n
-}
+const CHIP_STRIP_CONTENT: ViewStyle = { alignItems: 'center', gap: 8, paddingVertical: 4 }
 
 export function ScreenShell({
   variant,
@@ -96,6 +100,7 @@ export function ScreenShell({
   mobileChipAction,
   statusSlot,
   chapterProgress,
+  onChapterProgressPress,
   banners,
   hideSelfReferentialIcon = false,
   onBack,
@@ -163,7 +168,15 @@ export function ScreenShell({
     <IconAction icon={ArrowLeft} label={t('chrome.back')} onPress={onBack} size="lg" />
   )
 
-  const progress = clampProgress(chapterProgress?.percent)
+  const progress = clampPercent(chapterProgress?.percent ?? 0)
+  const canPressProgress = onChapterProgressPress != null
+  // aria-haspopup is a web-only DOM attribute RN's prop types don't model.
+  const progressPopupProps =
+    canPressProgress && Platform.OS === 'web' ? ({ 'aria-haspopup': 'dialog' } as object) : null
+  const progressCounts =
+    chapterProgress != null && chapterProgress.threshold > 0
+      ? chapterProgressCounts(chapterProgress)
+      : undefined
 
   return (
     <View
@@ -177,52 +190,89 @@ export function ScreenShell({
     >
       {banners != null ? <View className="flex-col">{banners}</View> : null}
 
-      <View
-        // Bar height is structural (h-bar-md), not the tap-target control
-        // floor — a bar holds touchables but isn't one. Its actions render at
-        // IconAction size="lg" so they read as chrome, not row-nestled icons.
-        className={cn(
-          'h-bar-md flex-row items-center gap-2 border-b border-border bg-bg-base px-3',
-        )}
-      >
-        {leftSlot}
-        <View className="min-w-0 flex-1 flex-row items-center gap-3">
-          <TextClassContext.Provider value="text-fg-primary !leading-none translate-y-[0.08em]">
-            {/* Grows without inline extras, so a title's % max-width resolves against the bar. */}
-            <View
-              className={cn(
-                'min-w-0 flex-shrink flex-row items-center',
-                inlineCenterExtras == null && 'grow',
-              )}
-            >
-              {title}
-            </View>
-          </TextClassContext.Provider>
-          {inlineCenterExtras != null ? (
-            <View className="flex-row items-center gap-2">{inlineCenterExtras}</View>
-          ) : null}
+      <View className="relative">
+        <View
+          // Bar height is structural (h-bar-md), not the tap-target floor: a bar holds touchables
+          // but isn't one. Its actions use IconAction size="lg" to read as chrome, not row icons.
+          className={cn(
+            'h-bar-md flex-row items-center gap-2 border-b border-border bg-bg-base px-3',
+          )}
+        >
+          {leftSlot}
+          <View className="min-w-0 flex-1 flex-row items-center gap-3">
+            <TextClassContext.Provider value="text-fg-primary !leading-none translate-y-[0.08em]">
+              {/* Grows without inline extras, so a title's % max-width resolves against the bar. */}
+              <View
+                className={cn(
+                  'min-w-0 flex-shrink flex-row items-center',
+                  inlineCenterExtras == null && 'grow',
+                )}
+              >
+                {title}
+              </View>
+            </TextClassContext.Provider>
+            {inlineCenterExtras != null ? (
+              <View className="flex-row items-center gap-2">{inlineCenterExtras}</View>
+            ) : null}
+          </View>
+          {rightCluster}
         </View>
-        {rightCluster}
+
+        {isInStory ? (
+          <View
+            accessibilityRole="progressbar"
+            aria-label={t('chrome.chapterProgress')}
+            aria-valuenow={progress}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <ChapterProgressBar percent={progress} className="h-[3px]" />
+          </View>
+        ) : null}
+
+        {isInStory && !isPhone ? (
+          // On the wrapper, not the Pressable: a disabled Pressable takes no pointer on web, and
+          // the tooltip's box needs an in-flow child for its height.
+          <View className="absolute bottom-0 left-0 right-0">
+            <ReasonTooltip reason={progressCounts}>
+              <Pressable
+                testID="chapter-progress-hit"
+                accessibilityRole={canPressProgress ? 'button' : undefined}
+                accessibilityLabel={canPressProgress ? t('chapters:popover.title') : undefined}
+                {...progressPopupProps}
+                // RN's Pressable defaults both to true, so a disabled one stays a screen-reader stop.
+                accessible={canPressProgress}
+                focusable={canPressProgress}
+                disabled={!canPressProgress}
+                onPress={onChapterProgressPress}
+                className={cn(
+                  'h-[9px]',
+                  Platform.select({
+                    web: 'outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+                  }),
+                )}
+              />
+            </ReasonTooltip>
+          </View>
+        ) : null}
       </View>
 
-      {isInStory ? (
-        <View
-          accessibilityRole="progressbar"
-          aria-label={t('chrome.chapterProgress')}
-          aria-valuenow={progress}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          className="h-[3px] w-full bg-bg-sunken"
-        >
-          <View className="h-full bg-accent" style={{ width: `${progress}%` }} />
-        </View>
-      ) : null}
-
       {isPhone && (chipStripCenterExtras != null || mobileChipAction != null) ? (
-        <View className="flex-row items-center gap-2 border-b border-border bg-bg-base px-3 py-2">
-          <View className="flex-row items-center gap-2">{chipStripCenterExtras}</View>
-          <View className="flex-1" />
-          {mobileChipAction}
+        // touch.md → Chip-strip safe zone: the scroller starts 16 px in, clear of the edge swipe.
+        <View className="flex-row items-center gap-2 border-b border-border bg-bg-base py-1 pl-4 pr-3">
+          <ScrollView
+            testID="reader-chip-strip"
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            // The phone tap floor sits inside the scroller: a scroll view won't hit-test past its edge.
+            className="min-h-touch flex-1"
+            contentContainerStyle={CHIP_STRIP_CONTENT}
+          >
+            {chipStripCenterExtras}
+          </ScrollView>
+          {/* Padded like the chips' content, so the strip is as tall with or without them. */}
+          {mobileChipAction != null ? <View className="py-1">{mobileChipAction}</View> : null}
         </View>
       ) : null}
 

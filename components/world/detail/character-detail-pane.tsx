@@ -32,6 +32,7 @@ export function CharacterDetailPane({
   onSession,
   onOpenEntity,
   onOpenHappening,
+  onOpenEntry,
   onSetLead,
   onDelete,
   hotkeysEnabled = true,
@@ -116,7 +117,12 @@ export function CharacterDetailPane({
       <TabsContent value="settings">
         <SettingsTab control={asBaseControl(control)} {...gate} />
       </TabsContent>
-      <TrailingTabs row={row} data={data} onOpenHappening={onOpenHappening} />
+      <TrailingTabs
+        row={row}
+        data={data}
+        onOpenHappening={onOpenHappening}
+        onOpenEntry={onOpenEntry}
+      />
     </EntityDetailFrame>
   )
 }

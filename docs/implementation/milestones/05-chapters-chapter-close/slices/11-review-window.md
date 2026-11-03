@@ -481,6 +481,13 @@ stays covered. Ids, titles and positions don't move (C8).
 - **How long does the list get?** Report size is a guess until 5.5b's run.
   The list is a plain scroller; if that number reaches the hundreds, check
   it on Android before shipping it unvirtualized.
+- **Does a Changes row's name carry its entry?** Since 5.3 a pressable
+  `DeltaLogRow` is named `<op> <target>, entry #n` whatever its press
+  opens. Here the press opens World or Plot, the meta line is off, and
+  the footer's `entry #n →` link names the entry again, so a screen
+  reader hears it twice and the row's name points where its press
+  doesn't. Default: the host chooses, through a prop on the extension
+  above.
 
 ## Implementation notes
 

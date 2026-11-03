@@ -143,9 +143,24 @@ export const NonInteractive: Story = {
 export const PressFires: Story = {
   args: { delta: baseDelta, onPress: fn() },
   play: async ({ args }) => {
-    const button = screen.getByRole('button', { name: /update Kael/ })
+    const button = screen.getByRole('button', { name: 'update Kael, entry #47' })
     await userEvent.click(button)
     await waitFor(() => expect(args.onPress).toHaveBeenCalledTimes(1))
+  },
+}
+
+export const PressableNameWithoutEntry: Story = {
+  args: { delta: { ...baseDelta, entryId: null }, onPress: fn() },
+  play: async () => {
+    expect(screen.getByRole('button', { name: 'update Kael' })).toBeVisible()
+  },
+}
+
+export const NonInteractiveNameIgnoresEntry: Story = {
+  args: { delta: baseDelta },
+  play: async () => {
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.getByTestId('delta-log-row')).toHaveAttribute('aria-label', 'update Kael')
   },
 }
 

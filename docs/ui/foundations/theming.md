@@ -23,6 +23,7 @@ export interface Theme {
   description?: string // optional one-liner shown in picker
   family?: string // optional grouping ("Default", "Slate") for picker UX
   accentOverridable?: boolean // when true, user accent override applies; default false
+  landedTintShare?: number // dark themes only (required there): share of --selection-bg the landed entry card's tint lays over the card — see tokens.md
   leadingMultiplier?: number // default 1.0; scales reading-text line-heights — see typography.md
   tokens: {
     colors: Record<ColorToken, string>

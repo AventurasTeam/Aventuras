@@ -98,6 +98,8 @@ export type HappeningDetailPaneProps = {
   onSession: (handle: RowSessionHandle | null) => void
   /** A link row's `Open in World`; the route navigates through the session's leave guard. */
   onOpenEntity: (entity: Entity) => void
+  /** A History row's entry link; the route navigates through the session's leave guard. */
+  onOpenEntry: (entryId: string) => void
   /** `⋯ → Delete happening`; the surface raises the confirm. */
   onDelete: (row: Happening) => void
   /** The host screen's focus state, for the save bar's Cmd/Ctrl-S. */
@@ -121,6 +123,7 @@ export function HappeningDetailPane({
   onRejected,
   onSession,
   onOpenEntity,
+  onOpenEntry,
   onDelete,
   hotkeysEnabled = true,
 }: HappeningDetailPaneProps) {
@@ -240,7 +243,12 @@ export function HappeningDetailPane({
         {row == null ? (
           <EmptyState title={t('history:tab.afterSave')} subtext={t('history:tab.afterSaveBody')} />
         ) : (
-          <HistoryTab branchId={branchId} targetTable="happenings" targetId={row.id} />
+          <HistoryTab
+            branchId={branchId}
+            targetTable="happenings"
+            targetId={row.id}
+            onOpenEntry={onOpenEntry}
+          />
         )}
       </TabsContent>
     </RowDetailFrame>

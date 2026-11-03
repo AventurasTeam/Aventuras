@@ -59,4 +59,5 @@ implementation, and the open questions tracked across the project.
   discipline stays in code-conventions.md.
 - **[dev-environment.md](./dev-environment.md)** — dev slots: how dev
   servers and the desktop dev app pick ports and `userData`, and how
-  parallel worktrees share one machine.
+  parallel worktrees share one machine; measuring on a release build on
+  a physical Android device.

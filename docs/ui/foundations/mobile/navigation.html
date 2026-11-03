@@ -168,11 +168,20 @@
   .chip-strip {
     display: none;
     gap: 8px;
-    padding: 6px 12px;
+    padding: 6px 12px 6px 0;
     background: var(--bg-strip);
     border-bottom: 1px solid var(--line-soft);
+  }
+  /* The state chips scroll; Browse stays pinned right, outside the scroller. */
+  .chip-strip-scroller {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    gap: 8px;
+    padding-left: 16px;
     overflow-x: auto;
   }
+  .chip-strip-browse { margin-left: auto; }
   .chip-strip-pill {
     padding: 3px 10px;
     border: 1px dashed var(--line-soft);
@@ -310,7 +319,7 @@
               <span class="title" title="Aria's Descent of the Crown's Bargain">Aria's Descent of the Crown's Bargain</span>
               <span class="topbar-chips">
                 <span class="topbar-chip">Chap 3 ▾</span>
-                <span class="topbar-chip">Day 3 dusk ▾</span>
+                <span class="topbar-chip">Day 3 dusk</span>
                 <span class="topbar-chip">⎇3</span>
               </span>
               <div class="topbar-spacer"></div>
@@ -322,9 +331,12 @@
             </div>
             <div class="progress-strip show"></div>
             <div class="chip-strip">
-              <span class="chip-strip-pill">Chap 3 ▾</span>
-              <span class="chip-strip-pill">Day 3 dusk ▾</span>
-              <span class="chip-strip-pill">⎇3</span>
+              <div class="chip-strip-scroller">
+                <span class="chip-strip-pill">Chap 3 ▾</span>
+                <span class="chip-strip-pill">Day 3 dusk</span>
+                <span class="chip-strip-pill">⎇3</span>
+              </div>
+              <span class="chip-strip-pill chip-strip-browse">☰ Browse</span>
             </div>
           </div>
           <div class="body">

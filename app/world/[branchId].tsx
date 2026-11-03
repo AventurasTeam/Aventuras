@@ -13,6 +13,7 @@ import { rowAddOptions } from '@/components/compounds/row-add-options'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { distinctCategories } from '@/components/plot/plot-route-data'
 import { plotHref } from '@/components/plot/plot-selection'
+import { readerHref } from '@/components/reader/reader-href'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { storyPillPhase, useStoryGenerationGate } from '@/components/story-settings/generation-run'
@@ -356,6 +357,10 @@ export default function WorldRoute() {
       navigateGuarded(plotHref(branchId, { kind: 'happening', id, tab: 'involvements' })),
     [navigateGuarded, branchId],
   )
+  const openEntry = useCallback(
+    (entryId: string) => navigateGuarded(readerHref(branchId, entryId)),
+    [navigateGuarded, branchId],
+  )
   // A link set on this mounted screen (useSurfaceNavigate reuses it) selects as openEntity does,
   // and remounts the pane so it opens on the link's tab.
   const [linkMount, setLinkMount] = useState(0)
@@ -549,6 +554,7 @@ export default function WorldRoute() {
         onRejected={onRejected}
         onDelete={(row) => worldDelete.request({ kind: 'lore', row })}
         onSession={onSession}
+        onOpenEntry={openEntry}
         hotkeysEnabled={focused}
       />
     ) : (
@@ -576,6 +582,7 @@ export default function WorldRoute() {
         onSession={onSession}
         onOpenEntity={openEntity}
         onOpenHappening={openHappening}
+        onOpenEntry={openEntry}
         onSetLead={onSetLead}
         onDelete={(row) => worldDelete.request({ kind: 'entity', row })}
         hotkeysEnabled={focused}

@@ -13,8 +13,12 @@ import { ReaderSurface } from '@/components/reader/reader-surface'
 import { DensityProvider } from '@/lib/density'
 import { ThemeProvider, useTheme } from '@/lib/themes'
 
+type DOMImperativeArg = Parameters<DOMImperativeFactory[string]>[number]
+
 export interface ReaderDocumentRef extends DOMImperativeFactory {
   jumpToBottom: () => void
+  // The factory's index signature takes any JSONValue, so a `string` parameter won't compile.
+  jumpToEntry: (entryId: DOMImperativeArg) => void
 }
 
 type ReaderDocumentProps = ReaderSurfaceProps & {
@@ -57,6 +61,7 @@ export default function ReaderDocument({
     ref,
     () => ({
       jumpToBottom: () => surfaceRef.current?.jumpToBottom(),
+      jumpToEntry: (entryId) => surfaceRef.current?.jumpToEntry(String(entryId)),
     }),
     [],
   )

@@ -19,15 +19,24 @@ async function readNumbers(): Promise<ChapterNumbers> {
   }
 }
 
+function sameNumbers(a: ChapterNumbers, b: ChapterNumbers): boolean {
+  if (a.size !== b.size) return false
+  for (const [storyId, number] of a) if (b.get(storyId) !== number) return false
+  return true
+}
+
 /**
- * Each story's open chapter number, null until the first read lands. `focused` going true rereads:
- * the list stays mounted under the reader, its key doesn't move, and the client never goes stale.
+ * Each story's open chapter number, null until the first read lands, then the same object until
+ * the numbers change. Reads only while `focused`: the list stays mounted under the reader, where a
+ * settle neither reads nor rerenders it. `focused` going true rereads, since the client never goes
+ * stale.
  */
 export function useStoryChapterNumbers(focused: boolean): ChapterNumbers | null {
-  const settleCount = generationStore.useGeneration((s) => s.settleCount)
+  const settleCount = generationStore.useGeneration((s) => (focused ? s.settleCount : null))
   const { data, refetch } = useQuery({
     queryKey: ['story-chapter-numbers', settleCount],
     queryFn: readNumbers,
+    enabled: focused,
     // Local DB read, not a flaky network call: a failure is worth logging, not retrying.
     retry: false,
     gcTime: 30_000,
@@ -35,9 +44,10 @@ export function useStoryChapterNumbers(focused: boolean): ChapterNumbers | null 
     networkMode: 'always',
   })
 
-  // data is undefined while a new key loads and after a failed read; hold the last read.
+  // data is undefined while hidden, while a new key loads and after a failed read: hold the last.
   const [lastRead, setLastRead] = useState<ChapterNumbers | null>(null)
-  const shown = data ?? lastRead
+  const shown =
+    data === undefined || (lastRead !== null && sameNumbers(data, lastRead)) ? lastRead : data
   if (shown !== lastRead) setLastRead(shown)
 
   const wasFocusedRef = useRef(focused)

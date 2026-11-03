@@ -278,6 +278,7 @@ function Harness({
         onSession={() => {}}
         onOpenEntity={onOpenEntity}
         onOpenHappening={onOpenHappening}
+        onOpenEntry={() => {}}
         onSetLead={onSetLead}
         onDelete={onDelete}
       />

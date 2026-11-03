@@ -25,7 +25,7 @@ Used by:
 // StoryCardData = the canonical `stories` row + two derived display strings.
 type StoryCardData = Story & {
   lastOpenedRelative: string // pre-formatted "2h ago" / "12 Apr, 14:33" / "Never" (derived in the selector)
-  chapterLabel: string | null // pre-formatted "Chapter 3"; selector returns null for every row until chapters land
+  chapterLabel: string | null // pre-formatted "Chapter 3"; null for a draft, and until the first read lands
 }
 
 type StoryCardProps = {
@@ -68,11 +68,14 @@ the compound, so the card stays date-library agnostic.
 relative under a week, then the date and time, with the year outside
 the current year; `Never` for a story never opened.
 
-`chapterLabel` is a deferred slot: `toStoryCardData` returns `null`
-for **every** row in M2 (chapters land in a later milestone), so the
-meta row drops the chapter segment for all stories, not just drafts.
-The `string` half of the type is reserved for when chapter wiring
-lands.
+`chapterLabel` names the open chapter on the story's current branch:
+the highest closed `sequenceNumber` plus one, read per story through
+`useStoryChapterNumbers`, which reads again on each return to the
+list, since the list stays mounted under the reader. A story with no
+close reads `Chapter 1`, matching the reader's chip. A draft is
+`null`, and the meta row drops the chapter segment. Every row is
+also `null` until the first read lands, so a story with chapters
+never flashes `Chapter 1`.
 
 ## Per-state rendering
 
@@ -123,9 +126,8 @@ Chip.
   conditional status Chip (`Draft` or `Archived`). Title
   truncates with `numberOfLines={2}` if it overflows.
 - **Meta row.** Mode (written out: "Adventure" / "Creative"),
-  chapter label (`Chapter 3` — deferred, null for every row in
-  M2), last-opened time (`2h ago`, or `12 Apr, 14:33` past a
-  week). Middle-dot separators.
+  chapter label (`Chapter 3`, absent on a draft), last-opened time
+  (`2h ago`, or `12 Apr, 14:33` past a week). Middle-dot separators.
 - **Description.** 3-line ellipsis. `(no description yet)`
   italic placeholder when null.
 

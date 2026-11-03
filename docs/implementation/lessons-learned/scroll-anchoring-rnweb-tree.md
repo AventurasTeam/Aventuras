@@ -32,7 +32,8 @@ plain markup pass and tell you nothing.
   devices, compositor-owned scrolling overwrites main-thread
   `scrollTop` writes and the fight is visible stutter. Defer
   mutations to scroll rest (quiescent scroll events + no finger
-  down).
+  down), except an explicit jump, which halts the momentum first
+  ([`reader-document.md → Entry list`](../../ui/patterns/reader-document.md#entry-list-fully-rendered-flow-layout)).
 
 The reader document's full mechanism is canon:
 [`reader-document.md → Entry list`](../../ui/patterns/reader-document.md#entry-list-fully-rendered-flow-layout).

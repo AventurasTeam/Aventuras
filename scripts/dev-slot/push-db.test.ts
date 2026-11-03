@@ -37,8 +37,18 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-// A stand-in adb on PATH: logs each call and fails those whose arguments contain a `failOn` entry.
-function runPushDb(...failOn: string[]) {
+interface FakeAdb {
+  /** Calls whose arguments contain any of these fail with the call echoed on stderr. */
+  failOn?: string[]
+  state?: string
+  /** What `wc -c` reports for the app's database; the source's size by default. */
+  deviceSize?: number
+  /** Null runs with ANDROID_SERIAL unset. */
+  serial?: string | null
+}
+
+// A stand-in adb on PATH that logs each call.
+function runPushDb({ failOn = [], state = 'device', deviceSize, serial = 'fake' }: FakeAdb = {}) {
   const fake = join(dir, 'adb')
   writeFileSync(
     fake,
@@ -46,23 +56,19 @@ function runPushDb(...failOn: string[]) {
       '#!/bin/sh',
       `printf '%s\\n' "$*" >> '${log}'`,
       ...failOn.map((part) => `case "$*" in *'${part}'*) echo "failed: $*" >&2; exit 1;; esac`),
-      'case "$*" in *get-state*) echo device;; esac',
-      `case "$*" in *'wc -c'*) echo '${statSync(db).size} files/SQLite/aventuras.db';; esac`,
+      `case "$*" in *get-state*) echo '${state}';; esac`,
+      `case "$*" in *'wc -c'*) echo '${deviceSize ?? statSync(db).size} files/SQLite/aventuras.db';; esac`,
       'exit 0',
     ].join('\n'),
   )
   chmodSync(fake, 0o755)
+  const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${dir}${delimiter}${process.env.PATH}` }
+  if (serial === null) delete env.ANDROID_SERIAL
+  else env.ANDROID_SERIAL = serial
   const result = spawnSync(
     join(process.cwd(), 'node_modules/.bin/tsx'),
     ['scripts/dev-slot/push-db.ts', pushed],
-    {
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        ANDROID_SERIAL: 'fake',
-        PATH: `${dir}${delimiter}${process.env.PATH}`,
-      },
-    },
+    { encoding: 'utf8', env },
   )
   const calls = existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : []
   return { status: result.status, stderr: result.stderr, calls }
@@ -74,7 +80,7 @@ describe('push-db', () => {
     ['the copy into the app', 'cat /data/local/tmp'],
     ['clearing the sidecars', 'aventuras.db-wal'],
   ])('removes the staged copy when %s fails', (_, failOn) => {
-    const { status, calls } = runPushDb(failOn)
+    const { status, calls } = runPushDb({ failOn: [failOn] })
     expect(status).toBe(1)
     expect(calls.at(-1)).toContain(STAGED)
   })
@@ -89,20 +95,58 @@ describe('push-db', () => {
   })
 
   it('fails when the staged copy stays behind after an otherwise good push', () => {
-    const { status, stderr, calls } = runPushDb(STAGED)
+    const { status, stderr, calls } = runPushDb({ failOn: [STAGED] })
     expect(status).toBe(1)
     expect(stderr).toContain('/data/local/tmp/aventuras.db is still on the device')
     expect(calls.at(-1)).toContain(STAGED)
   })
 
   it('reports the failed step first when the staged copy also stays behind', () => {
-    const { status, stderr } = runPushDb('cat /data/local/tmp', STAGED)
+    const { status, stderr } = runPushDb({ failOn: ['cat /data/local/tmp', STAGED] })
     expect(status).toBe(1)
-    const stepFailure = stderr.indexOf('run-as failed')
+    const stepFailure = stderr.indexOf('copying the database into the app failed')
     const leftover = stderr.indexOf('/data/local/tmp/aventuras.db is still on the device')
     expect(stepFailure).toBeGreaterThan(-1)
     expect(leftover).toBeGreaterThan(-1)
     expect(stepFailure).toBeLessThan(leftover)
+  })
+
+  it.each([
+    ['the copy into the app', 'cat /data/local/tmp'],
+    ['the size check', 'wc -c'],
+  ])('reports %s failing with its own stderr, not the debuggable advice', (_, failOn) => {
+    const { status, stderr } = runPushDb({ failOn: [failOn] })
+    expect(status).toBe(1)
+    expect(stderr).toContain('failed: -s fake shell')
+    expect(stderr).not.toContain('debuggable')
+  })
+
+  it('refuses to run without ANDROID_SERIAL before any device call', () => {
+    const { status, stderr, calls } = runPushDb({ serial: null })
+    expect(status).toBe(1)
+    expect(stderr).toContain('set ANDROID_SERIAL')
+    expect(calls).toEqual([])
+  })
+
+  it('stops after get-state when the device is not in the device state', () => {
+    const { status, stderr, calls } = runPushDb({ state: 'unauthorized' })
+    expect(status).toBe(1)
+    expect(stderr).toContain('device fake is not reachable (unauthorized)')
+    expect(calls).toEqual(['-s fake get-state'])
+  })
+
+  it('blames a release install when the run-as probe fails, before touching the app', () => {
+    const { status, stderr, calls } = runPushDb({ failOn: ['run-as com.aventuras.app true'] })
+    expect(status).toBe(1)
+    expect(stderr).toContain('must be a debuggable install')
+    expect(calls.at(-1)).toBe('-s fake shell run-as com.aventuras.app true')
+  })
+
+  it('fails when the database on the device differs in size from the source', () => {
+    const size = statSync(db).size
+    const { status, stderr } = runPushDb({ deviceSize: size - 1 })
+    expect(status).toBe(1)
+    expect(stderr).toContain(`size mismatch: local ${size}, device ${size - 1}`)
   })
 
   it.each(['-wal', '-journal'])(

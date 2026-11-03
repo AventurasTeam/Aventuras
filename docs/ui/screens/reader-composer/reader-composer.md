@@ -89,7 +89,11 @@ Lean breadcrumb:
 
 **Progress strip** — thin 3px full-width bar along the bottom edge of
 the top-bar. Fill width = current chapter's tokens / threshold.
-Tooltip on hover shows exact numbers. Click opens chapter popover.
+Tooltip on hover shows exact numbers. On the reader at tablet and
+desktop a click opens the chapter popover. Both go through an
+invisible hit area of about 9 px that reaches up into the bar's empty
+bottom edge, since 3 px is a poor target. The phone strip is passive:
+it has no hit area, and the chapter chip sits right under it.
 
 **Color thresholds** (apply to both the top-strip AND the popover
 progress bar):
@@ -140,13 +144,17 @@ inside the template.
 **Surfaces:**
 
 - **Top-bar time chip** — small clock icon + label, after the chapter
-  chip. Always visible. Renders the formatter's output as opaque
-  text. `max-width: 260px` with ellipsis on overflow; full label in
-  tooltip. Becomes interactive (click → popover) when the active
-  calendar has surfaceable affordances; see
+  chip. Hidden only with no active calendar, when the formatter can't
+  render the time, or on an empty label. Renders the formatter's output
+  as opaque text. `max-width: 260px` with ellipsis on overflow; a
+  truncated label opens in full in the
+  [tap-to-tooltip popover](../../foundations/mobile/touch.md#tap-to-tooltip-on-inert-chrome-text),
+  on a 44 px touch target. Becomes interactive (click → popover) when
+  the active calendar has surfaceable affordances; see
   [Time-chip popover](#time-chip-popover) below.
-- **Chapter break (inline)** — each closed chapter's break in the
-  entries list shows time at close (formatter applied to that
+- **Chapter break (inline)** — each closed chapter's break sits below
+  its last entry and heads what follows, so it names the next chapter
+  and shows the time at close (formatter applied to the closed
   chapter's `end_entry_id` worldTime).
 - **Chapter popover rows** — each row shows a time range. Range
   endpoints are computed as `min(worldTime)` and `max(worldTime)`
@@ -1068,13 +1076,44 @@ state would be a surprise; the reader's auto-load fires only on
 **boundary approach** — the user explicitly asking for more in
 that direction.
 
-**No window swap.** The reader holds exactly one window at a time,
-and the only navigation that could jump to a disconnected region —
-jump-to-top — doesn't exist (see [Jump buttons](#jump-buttons)).
-[Jump-to-bottom](#jump-buttons) is always a same-window smooth
-scroll; auto-load-on-boundary always prepends/appends into the
-window already in memory. No unload, no scroll-position bookkeeping
-across windows.
+**No window swap.** The reader holds exactly one window at a time.
+There's no jump-to-top (see [Jump buttons](#jump-buttons)), and a
+jump to an entry above the window, from the chapter popover or an
+`entry` link, doesn't open a second one: it reads from the row above
+that entry (for a chapter jump, the row that carries its break) up to
+the window's oldest row and prepends them in one write, so the window
+grows to reach it.
+When that entry is the branch's first row, the boundary shimmer drops
+in the same commit, so nothing moves above a row landed at the top;
+otherwise it stays until a boundary load finds the top. [Jump-to-bottom](#jump-buttons) is always a
+same-window smooth scroll; auto-load-on-boundary always
+prepends/appends into the window already in memory. No unload, no
+scroll-position bookkeeping across windows.
+
+**Where a jump lands.** The row's top sits just under the viewport's
+top. With a chapter break directly above the row the break lands
+there instead, so a chapter jump opens under its heading. A row too
+near the tail stops at the bottom. The scroll has no animation; the landed
+row's card background tints with `--selection-bg` and fades back to its
+own background over about 1.5 s from the first frame it lands on. At
+full strength the tint reads as a selected card in dark themes, so there
+it lays over the card's own background at a per-theme share of
+`--selection-bg`, `--landed-tint-share`: the smallest share at which the
+fainter card kind stands out as far as in the default light theme
+([`tokens.md → Color slots`](../../foundations/tokens.md#color-slots)).
+A jump disengages autoscroll. A jump to a row outside the window that
+hasn't signalled its landing after a short delay covers the reader with its
+own veil, `Loading entries…`, which lifts when the landed row has
+painted or the jump drops; the host also lifts it if the row leaves the
+window or no landing comes within a fixed bound. A jump whose landing
+signals before the delay never shows it. Until the veil shows, a gesture
+during the read isn't seen and the landing still moves the view; while
+it shows, it takes the touches. With the veil down and the row in the
+window, a user gesture drops the jump. A jump made while the reader is
+still moving from a touch fling or a trackpad's momentum halts it and
+lands at once; a wheel after a pause or in the other direction is a
+new gesture and drops the jump
+([`reader-document.md → Entry list`](../../patterns/reader-document.md#entry-list-fully-rendered-flow-layout)).
 
 **"Branch top" semantics.** First entry of the **current branch** —
 first post-fork entry on a non-root branch, or entry #1 of the root
@@ -1161,23 +1200,25 @@ enough to bring the editor's row, Save and Cancel included, back
 into view, since Android's WebView never scrolls a focused field into
 view itself; an editor already in view holds its position.
 
+**A chapter break mounting at the bottom.** A close's break mounts
+below its end row, and when that row is the tail it adds height under
+a reader sitting at the bottom, with no scroll event to raise the
+[jump button](#jump-buttons) and the reply's last lines hidden. So a
+break that mounts while the reader sits within ~20px of the bottom
+re-pins it, as the viewport shrink above does; the distance is read
+against the previous commit's height, since the new commit already
+holds the break. It skips a reader under a finger, one with a jump
+pending or landing, and one that isn't laid out. Further up, the
+break's height is uncompensated, as any change between the leading row
+and the viewport is
+([`reader-document.md → Entry list`](../../patterns/reader-document.md#entry-list-fully-rendered-flow-layout)).
+
 **A system entry's opened block.** Opening a system entry's
 `Details` or `Show all` scrolls just far enough to show the block it
 opened, since the entry sits at the tail and the block can open below
 the fold
 ([`entry-card.md → System entry`](../../patterns/entry-card.md#system-entry)).
 Collapsing moves nothing.
-
-**Streaming while in a non-recent window.** Pipeline writes happen
-in the data layer regardless of which window is rendered. The
-streaming entry is at the live edge — outside the loaded window
-when the user has jumped to top. Render simply doesn't show it
-until the user returns to the recent window. The chrome status pill
-(per
-[`principles.md → Universal in-story chrome`](../../principles.md#universal-in-story-chrome))
-is the cross-window awareness signal that something is in flight.
-Render reattaches when the user returns; token append continues
-into the now-mounted entry.
 
 **Edit-restrictions.** Scroll is a read action. Per
 [`principles.md → What's not gated`](../../principles.md#whats-not-gated),
@@ -1730,7 +1771,7 @@ specifics below.
 - Clicking a suggestion fills composer text + sets mode=`Free`.
 - Entry hover reveals per-entry action icons at full opacity (they
   exist at 55% by default).
-- Chapter break inline separators are minimalist (thin rule + chapter
-  label + time at close).
+- Chapter break inline separators are minimalist: a thin rule, the
+  next chapter's label, the time at close.
 - Per-chapter in-world time shows as a range in the popover (closed
   chapters) or "since <time>" (current chapter).

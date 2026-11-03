@@ -12,8 +12,8 @@ import type { NewBranch, NewChapter, NewStory, NewStoryEntry } from '../../lib/d
 
 // The chapter counts bench/fixture.ts prices against; its long-branch test keeps the two equal.
 export const LONG_BRANCH_SCALES = [20, 60] as const
-export const ENTRIES_PER_CHAPTER = 132
-export const LONG_BRANCH_STEP_ROWS = 500
+const ENTRIES_PER_CHAPTER = 132
+const LONG_BRANCH_STEP_ROWS = 500
 
 export const longBranchId = (chapters: number): string => `br_long_${chapters}`
 
@@ -116,7 +116,7 @@ function chapterOfPosition(position: number, chapters: number): number | null {
 const chapterStart = (k: number): number => (k === 1 ? 1 : (k - 1) * ENTRIES_PER_CHAPTER + 2)
 const chapterEnd = (k: number): number => k * ENTRIES_PER_CHAPTER + 1
 
-const entryIdAt = (chapters: number, position: number): string =>
+export const entryIdAt = (chapters: number, position: number): string =>
   `entry_long_${chapters}_${String(position).padStart(4, '0')}`
 
 // The substitution layer rewrites only prefix_<uuid> ids (testing.md → Fixture + seed contract).
@@ -169,7 +169,7 @@ function chapterRow(chapters: number, k: number, t0: number, tokenCount: number)
     endEntryId: entryIdAt(chapters, chapterEnd(k)),
     tokenCount,
     closedAt,
-    embeddingStale: 0,
+    embeddingStale: 1,
     createdAt: closedAt,
     updatedAt: closedAt,
   }

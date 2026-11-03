@@ -139,7 +139,12 @@ function renderTab(load: HistoryLoader, targetId: string, targetTable: HistoryTa
   view.renders = 0
   return render(
     <HistoryLoaderProvider value={load}>
-      <HistoryTab branchId={BRANCH} targetTable={targetTable} targetId={targetId} />
+      <HistoryTab
+        branchId={BRANCH}
+        targetTable={targetTable}
+        targetId={targetId}
+        onOpenEntry={() => {}}
+      />
     </HistoryLoaderProvider>,
   )
 }
@@ -472,5 +477,49 @@ describe('HistoryTab over the link-row union', () => {
     await waitFor(() => expect(load).toHaveBeenCalledTimes(2))
     await pastCoalescing()
     expect(load).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('HistoryTab entry links', () => {
+  const anchored = (id: string, entryId: string): HistoryRow => ({
+    delta: { ...VIEW_EDIT, id, entryId, targetTable: 'entities', targetId: 'char_aria' },
+    via: { kind: 'own' },
+  })
+
+  beforeEach(() => {
+    view.props = null
+  })
+
+  afterEach(() => {
+    entryIndex.index.clear()
+  })
+
+  it('hands the view onOpenEntry, and a raw id only on a row whose anchor resolved', async () => {
+    entryIndex.index.set('entry_live', {
+      id: 'entry_live',
+      position: 47,
+      kind: 'ai_reply',
+      chapterId: null,
+      excerpt: '',
+    })
+    const onOpenEntry = vi.fn()
+    render(
+      <HistoryLoaderProvider
+        value={loader(() => [anchored('d_live', 'entry_live'), anchored('d_gone', 'entry_gone')])}
+      >
+        <HistoryTab
+          branchId={BRANCH}
+          targetTable="entities"
+          targetId="char_aria"
+          onOpenEntry={onOpenEntry}
+        />
+      </HistoryLoaderProvider>,
+    )
+    await waitFor(() => expect(view.props?.rows).toHaveLength(2))
+    expect(view.props?.onOpenEntry).toBe(onOpenEntry)
+    expect(view.props?.rows.map((row) => row.entry)).toEqual([
+      { label: 'entry #47', id: 'entry_live' },
+      null,
+    ])
   })
 })

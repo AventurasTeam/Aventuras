@@ -1,5 +1,6 @@
 {
   "label": "Chapter {{number}}",
+  "labelWithTime": "Chapter {{number}} · {{time}}",
   "progress": {
     "counts": "{{tokens, number}} / {{threshold, number}} tok",
     "label": "chapter progress · {{counts}}"
@@ -14,6 +15,7 @@
     "manage": "Manage chapters →"
   },
   "time": {
-    "label": "In-world time: {{time}}"
+    "label": "In-world time: {{time}}",
+    "range": "{{first}} → {{last}}"
   }
 }

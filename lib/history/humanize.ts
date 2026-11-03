@@ -12,7 +12,8 @@ import {
 } from './field-labels'
 import type { HistoryRow, HistoryVia } from './link-rows'
 
-/** DeltaLogRow's `delta` prop, pre-formatted (patterns/delta-log-row.md → Compound API). */
+/** DeltaLogRow's `delta` prop, pre-formatted (patterns/delta-log-row.md → Compound API), with
+ * `entryId` folded with the raw anchor its host presses with into `entry`. */
 export type HistoryRowView = {
   id: string
   op: Delta['op']
@@ -21,8 +22,8 @@ export type HistoryRowView = {
   targetDisplayName: string
   fieldPath: string | null
   summary: string
-  /** The pre-formatted `entry #n`, or null. */
-  entryId: string | null
+  /** The pre-formatted `entry #n` and the raw anchor behind it; null when no label resolved. */
+  entry: { label: string; id: string } | null
   createdAtRelative: string
   actionId: string
 }
@@ -117,6 +118,7 @@ function summary({ delta, via }: HistoryRow, context: HumanizeContext): string {
 export function humanizeDelta(row: HistoryRow, context: HumanizeContext): HistoryRowView {
   const { delta } = row
   const paths = changedPaths(delta)
+  const entryLabel = delta.entryId == null ? null : context.entryLabel(delta.entryId)
   return {
     id: delta.id,
     op: delta.op,
@@ -125,7 +127,8 @@ export function humanizeDelta(row: HistoryRow, context: HumanizeContext): Histor
     targetDisplayName: targetDisplayName(row.via, context),
     fieldPath: paths.length === 0 ? null : paths.join(', '),
     summary: summary(row, context),
-    entryId: delta.entryId == null ? null : context.entryLabel(delta.entryId),
+    entry:
+      delta.entryId == null || entryLabel == null ? null : { label: entryLabel, id: delta.entryId },
     createdAtRelative: relativeTimeLabel(delta.createdAt, context.nowMs),
     actionId: delta.actionId,
   }

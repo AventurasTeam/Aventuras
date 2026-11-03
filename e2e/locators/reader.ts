@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test'
 
-import { t } from '../harness/i18n'
+import { copyPattern, escapeRegExp, t } from '../harness/i18n'
 
 // Reader/composer locators, resolved through the app's own i18n keys
 // (docs/testing.md → Selector strategy, Tier 2).
@@ -10,7 +10,6 @@ import { t } from '../harness/i18n'
 // sentinel rather than at the punctuation around it, so the key's shape is free
 // to change.
 const BREAK_SENTINEL = '@@'
-const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const WORLD_TIME_BREAK_LABEL = new RegExp(
   escapeRegExp(
     t('reader:worldTimeEdit.monotonicityBreak', { previousLabel: BREAK_SENTINEL }).split(
@@ -27,6 +26,11 @@ const [WORLD_STATE_HEAD, WORLD_STATE_TAIL = ''] = t('reader:rollbackConfirm.worl
 }).split(String(COUNT_SENTINEL))
 const WORLD_STATE_OTHER = `•\\s*${escapeRegExp(WORLD_STATE_HEAD)}(\\d+)${escapeRegExp(WORLD_STATE_TAIL)}`
 const WORLD_STATE_ONE = `• ${t('reader:rollbackConfirm.worldState', { count: 1 })}`
+
+// `Chapter 1` must not match `Chapter 12`, which a bare substring would. A break's name goes on
+// with the time, so it can't be matched exactly.
+const chapterLabelPattern = (number: number): RegExp =>
+  new RegExp(`^${escapeRegExp(t('chapters:label', { number }))}(?!\\d)`)
 
 function rollbackDialog(page: Page): Locator {
   return page.getByRole('alertdialog').filter({ has: reader.rollbackConfirm(page) })
@@ -60,6 +64,22 @@ export const reader = {
   row: (page: Page, entryId: string): Locator => page.locator(`[data-entry-row="${entryId}"]`),
   // The rows' scroll container, the parent every `data-entry-row` shares.
   scroller: (page: Page): Locator => page.locator('[data-entry-row]').first().locator('..'),
+  // A History row is a button only once its anchor resolved (history-tab-view.tsx): the role is
+  // the wait: earlier clicks do nothing. Its name ends in the anchor's entry label (`position`).
+  historyEntryLink: (
+    page: Page,
+    op: 'create' | 'update' | 'delete',
+    name: string,
+    position: number,
+  ): Locator =>
+    page.getByRole('button', {
+      name: t('history:rowLabelWithEntry', {
+        op: t(`history:op.${op}`),
+        name,
+        entry: t('entryRef', { n: position }),
+      }),
+      exact: true,
+    }),
   editEntry: (page: Page, entryId: string): Locator =>
     reader.row(page, entryId).getByRole('button', { name: t('reader:entryCard.editEntry') }),
   // A gated row control takes the gate's reason as its accessible name (IconAction).
@@ -204,4 +224,24 @@ export const reader = {
     reader
       .suggestionRefresh(page)
       .or(page.getByRole('button', { name: t('reader:suggestions.generate'), exact: true })),
+
+  chapterChip: (page: Page, number: number): Locator =>
+    page.getByRole('button', { name: t('chapters:label', { number }), exact: true }),
+  timeChip: (page: Page): Locator =>
+    page.getByRole('group', { name: copyPattern('chapters:time.label', { texts: ['time'] }) }),
+  // A closed row's button, found by its title line, so its range line is in the locator's text.
+  // The copy's number is wildcarded: a spec names a chapter by title.
+  popoverRow: (page: Page, title: string): Locator =>
+    page.getByRole('button').filter({
+      has: page.getByText(
+        copyPattern('chapters:popover.closedRow', { texts: ['number'], fixed: { title } }),
+      ),
+    }),
+  // A break's accessible name is its visible text: the chapter it heads, then the time at close.
+  chapterBreak: (page: Page, number: number): Locator =>
+    page.getByRole('separator', { name: chapterLabelPattern(number) }),
+  // A button only on the reader at tablet/desktop; the progressbar shares the name, not the role.
+  chapterProgressHit: (page: Page): Locator =>
+    page.getByRole('button', { name: t('chapters:popover.title'), exact: true }),
+  jumpVeil: (page: Page): Locator => page.getByText(t('reader:jumpLoading'), { exact: true }),
 }

@@ -44,6 +44,7 @@ export function LocationDetailPane({
   onSession,
   onOpenEntity,
   onOpenHappening,
+  onOpenEntry,
   onDelete,
   hotkeysEnabled = true,
 }: EntityPaneProps) {
@@ -113,7 +114,12 @@ export function LocationDetailPane({
       <TabsContent value="settings">
         <SettingsTab control={asBaseControl(control)} place={{ disabledThrough }} {...gate} />
       </TabsContent>
-      <TrailingTabs row={row} data={data} onOpenHappening={onOpenHappening} />
+      <TrailingTabs
+        row={row}
+        data={data}
+        onOpenHappening={onOpenHappening}
+        onOpenEntry={onOpenEntry}
+      />
     </EntityDetailFrame>
   )
 }

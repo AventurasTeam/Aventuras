@@ -129,7 +129,8 @@ the
 - **History** — delta log filtered to this thread; structured search
   over field-path / op / change-summary text per
   [patterns → Search bar scope](../../patterns/lists.md#search-bar-scope).
-  Same shape as World's History tab; uses the
+  Same shape as World's History tab, down to a row opening its entry in
+  the reader; uses the
   [load-older pattern](../../patterns/lists.md#load-older--log-shaped-unbounded-lists),
   not virtualization.
 

@@ -54,6 +54,8 @@ export type LoreDetailPaneProps = {
   onDelete: (row: Lore) => void
   /** The surface routes row switches, `←`, category switches and GO TO through this. */
   onSession: (handle: RowSessionHandle | null) => void
+  /** A History row's entry link; the route navigates through the session's leave guard. */
+  onOpenEntry: (entryId: string) => void
   /** The host screen's focus state, for the save bar's Cmd/Ctrl-S. */
   hotkeysEnabled?: boolean
 }
@@ -72,6 +74,7 @@ export function LoreDetailPane({
   onRejected,
   onDelete,
   onSession,
+  onOpenEntry,
   hotkeysEnabled = true,
 }: LoreDetailPaneProps) {
   const values = useMemo(() => loreDraftFrom(row), [row])
@@ -143,7 +146,12 @@ export function LoreDetailPane({
             body={t('history:tab.afterSaveBody')}
           />
         ) : (
-          <HistoryTab branchId={branchId} targetTable="lore" targetId={row.id} />
+          <HistoryTab
+            branchId={branchId}
+            targetTable="lore"
+            targetId={row.id}
+            onOpenEntry={onOpenEntry}
+          />
         )}
       </TabsContent>
     </RowDetailFrame>

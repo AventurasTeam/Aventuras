@@ -59,19 +59,26 @@ Why not a JS virtualizer: its estimate corrections write scroll
 position mid-gesture — imperceptible on wheel input, visible
 stutter on touch flings (device-verified). The same rule governs
 the whole surface: **no programmatic scroll write may land
-mid-gesture.**
+mid-gesture.** One exception: an explicit jump (a chapter press or
+an `entry` link) halts the momentum of a touch fling or a trackpad
+and lands at once. A finger on the glass still wins, and every
+write the user didn't ask for still waits for scroll rest.
 
 DOM residency is bounded by the
 [loaded-set window](../screens/reader-composer/reader-composer.md#loaded-set-model),
 not the viewport: ~50 entries at open, growing by boundary
-auto-load — fired **only at scroll rest**. The boundary signal
-latches during the gesture and fires once scroll events quiesce
-with no finger down, so the prepend and its compensating scroll
-write never fight compositor-owned scrolling. While older entries
-may exist (`hasOlder`), a **boundary skeleton** permanently
-occupies the slot above the oldest loaded row — an indicator that
-mounted mid-scroll would itself shift content — and unmounts once,
-compensated, when a short load proves the branch top. If a long
+auto-load — fired **only at scroll rest** — or by a jump above the
+window, which prepends up to its target in one write
+([`reader-composer.md → Loaded-set model`](../screens/reader-composer/reader-composer.md#loaded-set-model)).
+The boundary signal latches during the gesture and fires once scroll
+events quiesce with no finger down, so the prepend and its
+compensating scroll write never fight compositor-owned scrolling.
+While older entries may exist (`hasOlder`), a **boundary skeleton**
+permanently occupies the slot above the oldest loaded row — an
+indicator that mounted mid-scroll would itself shift content — and
+unmounts once, compensated, when a short load proves the branch top,
+or in the jump's own write when its target is the branch's first
+row. If a long
 backwards-reading session makes window growth measurable (React
 commit time or document memory), the designed lever is a **far-end
 trim cap** on the loaded set — windowing at the data layer, never
@@ -95,6 +102,10 @@ felt on device; the rule extends naturally (anchor to the topmost
 in-viewport row instead) if they ever measure. A width reflow did
 measure, so it takes that extension
 ([`reader-composer.md → Anchor preservation under shifts`](../screens/reader-composer/reader-composer.md#anchor-preservation-under-shifts)).
+While a jump's landing runs it wins over the anchor rule
+([`reader-composer.md → Loaded-set model`](../screens/reader-composer/reader-composer.md#loaded-set-model)),
+and the chapter-break pin only re-pins a reader already at the bottom
+([`reader-composer.md → Autoscroll`](../screens/reader-composer/reader-composer.md#autoscroll)).
 
 Open-at-bottom is a document concern: land on the last entry
 before first paint and re-assert per frame until layout settles —
@@ -158,11 +169,18 @@ Serializable props in (native → document):
   seeding the in-document edit Dialog. The two travel as one
   memoized object so the seam sees a single stable identity rather
   than two nullables checked apart.
+- `chapterBreaks` — the inline chapter breaks, keyed by end entry id:
+  the number of the chapter that follows and the host-formatted time
+  at close. A host-computed side table, for the same reason as
+  `worldTimeDecorations`, holding only closed chapters whose end row
+  is in the window.
 - `streaming` — the live stream row (`content`, `reasoning`,
   `phase`) or null. The stream buffer withholds partial tags but sets
   no time throttle, so on native each chunk is one prop emission,
-  carrying the whole window with it; a throttle is
-  [parked until a device shows the cost](../../parked.md#native-reader-rows-rerender-per-emission).
+  carrying the whole window with it. A device showed the cost
+  ([Slice 5.3's measure](../../implementation/milestones/05-chapters-chapter-close/slices/03-reader-chapters.md#android-measure)),
+  and the fix is [a followup](../../followups.md#ux), "Native reader
+  rows rerender per emission".
 - `hasOlder` — older entries may exist above the loaded window.
   Host-derived from window-size math (a full first window means
   maybe-more; any short load proves the branch top is in the
@@ -197,15 +215,30 @@ Async function props out (document → native):
 - `onReady` — the readiness handshake (below).
 - `onFirstPaint` — once per boot, after the first non-empty rows
   paint (double-rAF); the host drops the loading veil on it.
+- `onEntryLanded` — a jump's first landing frame has painted
+  (double-rAF), or its target dropped; the host lifts its jump veil
+  on it, or cancels one still waiting out its short delay.
 
 Imperative native → document: `jumpToBottom` (End key, actions-menu
-entry). Carried via the DOM imperative handle, not a prop.
+entry) and `jumpToEntry` (an `entry` link, a chapter popover row).
+Carried via the DOM imperative handle, not a prop. `rows` and a jump
+cross apart, so the document holds a jump's target until a commit
+brings its row. A wheel, touch drag, scrollbar press or scroll key
+drops it, and so does a `branchKey` change. A wheel that continues a
+chain already running at the jump (a trackpad's momentum) doesn't:
+the landing halts the chain, for up to about 3 s, past which the
+chain is the user's own scrolling and the landing lets go. A wheel
+after a pause or in the other direction is a new gesture and drops
+it.
 
 **Readiness handshake.** Prop emissions into a document that isn't
 listening yet are lost. The document calls `onReady` once its
 listener is live (first boot _and_ every reload); the host responds
 by bumping `syncNonce`, forcing a fresh emission of current state.
-Native never assumes delivery before the first `onReady`.
+Native never assumes delivery before the first `onReady`. A jump's
+landing call waits in the host until the document has painted since
+it last booted, and a reload loses a call already made, so the host
+ends the jump's wait and lifts its veil if it shows.
 
 ## Streaming
 
@@ -275,7 +308,9 @@ recovery path is singular and must be boring:
 
 Cost: scroll position within the window is lost on recovery
 (reload-to-bottom). Accepted for v1; revisit only if renderer kills
-are observed outside memory-pressure extremes.
+are observed outside memory-pressure extremes. Each recovery after a
+paint logs `reader.document_reloaded`
+([`observability.md → Subsystem emission inventory`](../../observability.md#subsystem-emission-inventory)).
 
 ## What this retired
 

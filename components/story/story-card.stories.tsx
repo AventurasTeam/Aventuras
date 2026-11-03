@@ -78,6 +78,15 @@ export const Favorited: StoryT = {
   args: { story: makeStoryRow({ id: 's1', favorite: 1 }), ...handlers },
 }
 
+/** No closed chapter yet: the story is in its first, which the selector labels like any other. */
+export const FirstChapter: StoryT = {
+  ...cardCentered,
+  args: { story: makeStoryRow({ id: 's1', chapterLabel: 'Chapter 1' }), ...handlers },
+  play: async () => {
+    expect(await screen.findByText('Adventure · Chapter 1 · 2h ago')).toBeInTheDocument()
+  },
+}
+
 export const Draft: StoryT = {
   ...cardCentered,
   args: {

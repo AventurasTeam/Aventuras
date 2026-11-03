@@ -15,7 +15,7 @@ const view = (overrides: Partial<HistoryRowView>): HistoryRowView => ({
   targetDisplayName: 'Kael',
   fieldPath: 'state.traits',
   summary: 'Modified Traits',
-  entryId: null,
+  entry: null,
   createdAtRelative: '2h ago',
   actionId: 'act_1',
   ...overrides,
@@ -26,7 +26,7 @@ const ROWS: HistoryRowView[] = [
   view({
     id: 'd3',
     source: 'periodic_classifier',
-    entryId: 'entry #47',
+    entry: { label: 'entry #47', id: 'entry_47' },
     summary: 'Modified Traits, Drives',
     fieldPath: 'state.traits, state.drives',
   }),
@@ -42,7 +42,7 @@ const ROWS: HistoryRowView[] = [
     fieldPath: null,
     summary: 'Created',
     source: 'periodic_classifier',
-    entryId: 'entry #12',
+    entry: { label: 'entry #12', id: 'entry_12' },
   }),
 ]
 
@@ -84,25 +84,59 @@ const meta: Meta<typeof Harness> = {
   title: 'Compounds/History/HistoryTabView',
   component: Harness,
   parameters: { layout: 'padded' },
-  args: { rows: ROWS, status: 'ready', hasMore: true, onLoadMore: fn(), onRetry: fn(), onOp: fn() },
+  args: {
+    rows: ROWS,
+    status: 'ready',
+    hasMore: true,
+    onLoadMore: fn(),
+    onRetry: fn(),
+    onOp: fn(),
+    onOpenEntry: fn(),
+  },
 }
 export default meta
 type Story = StoryObj<typeof Harness>
 
-/** Every op and several sources; `entry #n` is meta text and rows aren't pressable. */
+/** Every op and several sources; a row with an `entry #n` presses, the others are inert. */
 export const Populated: Story = {
   args: { boxWidth: 1100 },
   play: async ({ args }) => {
     const rows = await screen.findAllByTestId('delta-log-row')
     expect(rows).toHaveLength(4)
     expect(within(rows[1]).getByText('periodic classifier · entry #47 · 2h ago')).toBeVisible()
-    expect(screen.queryAllByRole('button', { name: /^update Kael/ })).toHaveLength(0)
+    expect(screen.getAllByRole('button', { name: 'update Kael, entry #47' })).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'update Kael' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^delete Kael/ })).toBeNull()
 
     await userEvent.click(screen.getByRole('button', { name: 'Load older' }))
     expect(args.onLoadMore).toHaveBeenCalledTimes(1)
 
     await userEvent.click(screen.getByRole('button', { name: 'Deleted' }))
     expect(args.onOp).toHaveBeenLastCalledWith('delete')
+  },
+}
+
+const LINKED = view({
+  id: 'live',
+  targetDisplayName: 'Kael',
+  entry: { label: 'entry #47', id: 'entry_47' },
+})
+
+/** A row presses to its entry only when its anchor resolved. */
+export const EntryLinks: Story = {
+  args: {
+    rows: [LINKED, view({ id: 'gone', targetDisplayName: 'Mira' })],
+    hasMore: false,
+    boxWidth: 1100,
+    onOpenEntry: fn(),
+  },
+  play: async ({ args }) => {
+    expect(await screen.findAllByTestId('delta-log-row')).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: 'update Mira' })).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: 'update Kael, entry #47' }))
+    expect(args.onOpenEntry).toHaveBeenCalledTimes(1)
+    expect(args.onOpenEntry).toHaveBeenCalledWith('entry_47')
   },
 }
 

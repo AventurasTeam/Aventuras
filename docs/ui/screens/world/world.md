@@ -706,7 +706,10 @@ prose, then hands pre-formatted strings to the compound.
   found at the last one, since finding them reads every delete on the
   branch; other ends' names are read on every load.
   A `Load older` pressed while a refetch runs loads after it lands.
-- **Rows aren't pressable.** `entry #n` is meta text; see
+- **A row with a live entry opens it.** `entry #n` is the label of the
+  anchor, and pressing the row opens that entry in the reader, through
+  the pane's unsaved-changes guard. A row whose anchor is deleted or off
+  the branch has no press; see
   [DeltaLogRow → Click behavior](../../patterns/delta-log-row.md#click-behavior).
 
 Involvements table gets the same load-older pattern eventually; list

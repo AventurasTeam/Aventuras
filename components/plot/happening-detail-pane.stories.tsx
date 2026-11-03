@@ -285,6 +285,7 @@ function Harness({
         onSaved={onSaved}
         onRejected={onRejected}
         onSession={onSession}
+        onOpenEntry={() => {}}
         onOpenEntity={onOpenEntity}
         onDelete={onDelete}
       />

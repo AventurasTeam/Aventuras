@@ -93,7 +93,7 @@ function renderProbe(focused = true) {
     </QueryClientProvider>
   )
   const { rerender } = render(tree(focused))
-  return { setFocused: (next: boolean) => rerender(tree(next)) }
+  return { client, setFocused: (next: boolean) => rerender(tree(next)) }
 }
 
 describe('readStoryChapterNumbers', () => {
@@ -191,6 +191,35 @@ describe('useStoryChapterNumbers', () => {
     expect(shown.slice(firstLanded)).not.toContain(null)
   })
 
+  // The story list's cards memo keys on this object: a settle that moved no number keeps it.
+  it('keeps the same object when a read returns the same numbers', async () => {
+    const { client, setFocused } = renderProbe()
+    await waitFor(() => expect(latest()?.get('s1')).toBe(2))
+    const first = latest()
+
+    act(() => generationStore.startRun(run('r1')))
+    act(() => generationStore.finishRun('r1'))
+    const key = ['story-chapter-numbers', generationStore.getSettleCount()]
+    await waitFor(() => expect(client.getQueryState(key)?.status).toBe('success'))
+    expect(client.getQueryData(key)).not.toBe(first)
+    expect(client.getQueryData(key)).toEqual(first)
+    // A render now reads the landed result, whenever the query's own notify arrives.
+    setFocused(true)
+
+    expect(latest()).toBe(first)
+  })
+
+  it('returns the new numbers when a story drops out of the read', async () => {
+    renderProbe()
+    await waitFor(() => expect(latest()?.get('s1')).toBe(2))
+
+    await db.delete(chapters)
+    act(() => generationStore.startRun(run('r1')))
+    act(() => generationStore.finishRun('r1'))
+
+    await waitFor(() => expect(latest()?.size).toBe(0))
+  })
+
   it('reads again on a return to focus, with the key unchanged', async () => {
     const { setFocused } = renderProbe()
     await waitFor(() => expect(latest()?.get('s1')).toBe(2))
@@ -204,6 +233,36 @@ describe('useStoryChapterNumbers', () => {
     setFocused(true)
     await waitFor(() => expect(latest()?.get('s1')).toBe(3))
     expect(generationStore.getSettleCount()).toBe(settleCount)
+  })
+
+  it('reads and renders nothing while hidden, then reads once on the return', async () => {
+    const { setFocused } = renderProbe()
+    await waitFor(() => expect(latest()?.get('s1')).toBe(2))
+    const firstLanded = shown.findIndex((numbers) => numbers != null)
+    const lastFocused = latest()
+    const select = vi.spyOn(db, 'select')
+
+    setFocused(false)
+    const hiddenRenders = shown.length
+    await closeChapter(db, 'br_1', 2)
+    for (const id of ['r1', 'r2', 'r3', 'r4', 'r5']) {
+      act(() => generationStore.startRun(run(id)))
+      act(() => generationStore.finishRun(id))
+    }
+    await act(async () => {})
+    await act(async () => {})
+
+    expect(select).not.toHaveBeenCalled()
+    expect(shown.length).toBe(hiddenRenders)
+    expect(latest()).toBe(lastFocused)
+
+    setFocused(true)
+    await waitFor(() => expect(latest()?.get('s1')).toBe(3))
+    await act(async () => {})
+    await act(async () => {})
+
+    expect(select).toHaveBeenCalledTimes(1)
+    expect(shown.slice(firstLanded).map((numbers) => numbers?.get('s1'))).not.toContain(undefined)
   })
 
   it('logs a failed read', async () => {

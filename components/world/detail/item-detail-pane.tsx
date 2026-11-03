@@ -30,6 +30,7 @@ export function ItemDetailPane({
   onSession,
   onOpenEntity,
   onOpenHappening,
+  onOpenEntry,
   onDelete,
   hotkeysEnabled = true,
 }: EntityPaneProps) {
@@ -82,7 +83,12 @@ export function ItemDetailPane({
       <TabsContent value="settings">
         <SettingsTab control={asBaseControl(control)} {...gate} />
       </TabsContent>
-      <TrailingTabs row={row} data={data} onOpenHappening={onOpenHappening} />
+      <TrailingTabs
+        row={row}
+        data={data}
+        onOpenHappening={onOpenHappening}
+        onOpenEntry={onOpenEntry}
+      />
     </EntityDetailFrame>
   )
 }

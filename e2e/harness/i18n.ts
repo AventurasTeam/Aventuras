@@ -14,6 +14,7 @@ type Translate = (key: string, options?: Record<string, unknown>) => string
 // English that rots as copy changes. The react-i18next plugin is omitted: it
 // only backs the React hooks, not t(), so a bare i18next instance is faithful.
 const NAMESPACES = [
+  'chapters',
   'common',
   'embedder',
   'history',
@@ -62,7 +63,7 @@ export const t: Translate = (key, options) => {
   return cached(key, options)
 }
 
-const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+export const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 // `{{n, number}}` groups digits, so a number slot's sentinel is found as the app formats it.
 const NUMBER_SENTINEL = 987_654_000

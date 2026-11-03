@@ -684,3 +684,35 @@
     font-weight: var(--font-weight-bold);
   }
 }
+
+/* No `to` frame: each card kind fades back to its own background. The duration is
+ * --reader-landed-ms, set inline by the surface from the constant that clears the attribute. */
+@keyframes reader-card-landed {
+  from {
+    background-color: var(--selection-bg);
+  }
+}
+[data-landed] > .reader-entry-card {
+  animation: reader-card-landed var(--reader-landed-ms) ease-out;
+}
+
+/* A layer over whichever kind's own background, at the theme's --landed-tint-share, since full
+ * strength reads as a selected card. Registered so it interpolates instead of flipping. */
+@property --reader-landed-tint {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+@keyframes reader-card-landed-dark {
+  from {
+    --reader-landed-tint: color-mix(
+      in srgb,
+      var(--selection-bg) var(--landed-tint-share),
+      transparent
+    );
+  }
+}
+.dark [data-landed] > .reader-entry-card {
+  background-image: linear-gradient(var(--reader-landed-tint), var(--reader-landed-tint));
+  animation-name: reader-card-landed-dark;
+}

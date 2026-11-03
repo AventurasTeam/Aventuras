@@ -15,15 +15,11 @@ function failureOf(result: SpawnSyncReturns<string>): string {
   return result.error?.message ?? result.stderr.trim()
 }
 
-function runAsFailure(result: SpawnSyncReturns<string>): Error {
-  return new Error(
-    `run-as failed (${failureOf(result)}). ${APP_ID} must be a debuggable install, not release.`,
-  )
-}
-
 function deviceSize(serial: string): number {
   const count = adb(serial, ['shell', 'run-as', APP_ID, 'wc', '-c', APP_DB])
-  if (count.status !== 0) throw runAsFailure(count)
+  if (count.status !== 0) {
+    throw new Error(`reading the database size on the device failed: ${failureOf(count)}`)
+  }
   return Number.parseInt(count.stdout, 10)
 }
 
@@ -37,7 +33,9 @@ function installStaged(serial: string, file: string): void {
     'shell',
     `cat ${DEVICE_TMP} | run-as ${APP_ID} sh -c 'mkdir -p files/SQLite && cat > ${APP_DB}'`,
   ])
-  if (copy.status !== 0) throw runAsFailure(copy)
+  if (copy.status !== 0) {
+    throw new Error(`copying the database into the app failed: ${failureOf(copy)}`)
+  }
 
   // Sidecars left by the previous database would be replayed over the new file.
   const sidecars = ['-wal', '-shm', '-journal'].map((suffix) => `${APP_DB}${suffix}`)
@@ -80,7 +78,11 @@ function main(): void {
   }
 
   const probe = adb(serial, ['shell', 'run-as', APP_ID, 'true'])
-  if (probe.status !== 0) throw runAsFailure(probe)
+  if (probe.status !== 0) {
+    throw new Error(
+      `run-as failed (${failureOf(probe)}). ${APP_ID} must be a debuggable install, not release.`,
+    )
+  }
 
   const stop = adb(serial, ['shell', 'am', 'force-stop', APP_ID])
   if (stop.status !== 0) throw new Error(`force-stop failed: ${failureOf(stop)}`)

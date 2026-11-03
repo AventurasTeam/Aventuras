@@ -28,6 +28,7 @@ import {
 import { ThreadDetailPane } from '@/components/plot/thread-detail-pane'
 import { usePlotDelete } from '@/components/plot/use-plot-delete'
 import { usePlotSelection } from '@/components/plot/use-plot-selection'
+import { readerHref } from '@/components/reader/reader-href'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { storyPillPhase, useStoryGenerationGate } from '@/components/story-settings/generation-run'
@@ -329,6 +330,10 @@ export default function PlotRoute() {
       navigateGuarded(worldHref(branchId, { category: entity.kind, id: entity.id })),
     [navigateGuarded, branchId],
   )
+  const openEntry = useCallback(
+    (entryId: string) => navigateGuarded(readerHref(branchId, entryId)),
+    [navigateGuarded, branchId],
+  )
 
   const selectedName =
     selection == null
@@ -393,6 +398,7 @@ export default function PlotRoute() {
         onRejected={onRejected}
         onSession={onSession}
         onOpenEntity={openEntity}
+        onOpenEntry={openEntry}
         onDelete={(row) => plotDelete.request({ kind: 'happening', row })}
         hotkeysEnabled={focused}
       />
@@ -423,6 +429,7 @@ export default function PlotRoute() {
         onSaved={onSaved}
         onRejected={onRejected}
         onSession={onSession}
+        onOpenEntry={openEntry}
         onDelete={(row) => plotDelete.request({ kind: 'thread', row })}
         hotkeysEnabled={focused}
       />

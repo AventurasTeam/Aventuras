@@ -1,11 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
 import { TruncatedText } from '@/components/compounds/truncated-text'
+import { TimeChip } from '@/components/reader/time-chip'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
+import { EARTH_GREGORIAN, type CalendarFrame } from '@/lib/calendar'
 import { chapterProgressOf, type ChapterProgress } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { STORY_SETTINGS_DEFAULTS, storyDefinitionSchema } from '@/lib/db'
@@ -13,7 +15,7 @@ import { t } from '@/lib/i18n'
 import { currentStoryStore, generationStore, type RunState } from '@/lib/stores'
 import { themes } from '@/lib/themes'
 
-import { ScreenShell } from './screen-shell'
+import { ScreenShell, type ScreenShellProps } from './screen-shell'
 
 const noop = () => {
   console.log('[story] action')
@@ -34,6 +36,8 @@ function progressAt(percent: number): ChapterProgress {
 }
 
 const STRIP_VARIANTS = [progressAt(0), progressAt(50), progressAt(100)]
+
+const STRIP_TONES = [progressAt(35), progressAt(85), progressAt(95)]
 
 let memoryRun: RunState | undefined
 
@@ -112,6 +116,10 @@ export const AppAppSettings: Story = {
       <BodyPlaceholder label="app variant — [←] Return + [⚲ Actions]; ⚙ omitted (self-reference)" />
     </ScreenShell>
   ),
+  play: async () => {
+    await screen.findByText(/app variant/)
+    expect(screen.queryByTestId('chapter-progress-hit')).toBeNull()
+  },
 }
 
 export const InStoryWorld: Story = {
@@ -344,6 +352,295 @@ export const ChapterProgressUndefined: Story = {
   play: async () => {
     const strip = await screen.findByRole('progressbar', { name: t('chrome.chapterProgress') })
     expect(strip).toHaveAttribute('aria-valuenow', '0')
+    expect(document.querySelector('[title*="tok"]')).toBeNull()
+  },
+}
+
+export const ChapterProgressTones: Story = {
+  render: () => (
+    <View className="gap-4 p-4">
+      {STRIP_TONES.map((progress) => (
+        <View key={progress.tone} className="h-32 overflow-hidden rounded-md border border-border">
+          <ScreenShell
+            variant="in-story"
+            title={<Text size="base">Aria&apos;s Descent / World</Text>}
+            chapterProgress={progress}
+            onBack={noop}
+            onOpenStorySettings={noop}
+            onOpenActions={noop}
+          >
+            <BodyPlaceholder label={`Strip at ${progress.percent}%`} />
+          </ScreenShell>
+        </View>
+      ))}
+    </View>
+  ),
+  play: async () => {
+    const fills = await screen.findAllByTestId('chapter-progress-fill')
+    expect(fills[0]).toHaveClass('bg-success')
+    expect(fills[1]).toHaveClass('bg-warning')
+    expect(fills[2]).toHaveClass('bg-danger')
+    expect(new Set(fills.map((fill) => getComputedStyle(fill).backgroundColor)).size).toBe(3)
+  },
+}
+
+function stripShell(props: Partial<ScreenShellProps>) {
+  return (
+    <ScreenShell
+      variant="in-story"
+      title={<Text size="base">Aria&apos;s Descent</Text>}
+      chapterProgress={progressAt(35)}
+      onBack={noop}
+      onOpenStorySettings={noop}
+      onOpenActions={noop}
+      {...props}
+    >
+      <BodyPlaceholder label="Reader body" />
+    </ScreenShell>
+  )
+}
+
+// World, Plot and Story Settings pass no press: the pointer still has to reach the tooltip.
+export const ChapterProgressTooltip: Story = {
+  render: () => stripShell({}),
+  play: async () => {
+    const hit = await screen.findByTestId('chapter-progress-hit')
+    const { left, top, width, height } = hit.getBoundingClientRect()
+    const under = document.elementFromPoint(left + width / 2, top + height / 2)
+    expect(under?.closest('[title]')).toHaveAttribute('title', '8,400 / 24,000 tok')
+  },
+}
+
+export const ChapterProgressNoThreshold: Story = {
+  render: () => stripShell({ chapterProgress: { ...progressAt(0), threshold: 0 } }),
+  play: async () => {
+    await screen.findByTestId('chapter-progress-hit')
+    expect(document.querySelector('[title*="tok"]')).toBeNull()
+  },
+}
+
+export const ChapterProgressPress: Story = {
+  args: { onChapterProgressPress: fn() },
+  render: ({ onChapterProgressPress }) => stripShell({ onChapterProgressPress }),
+  play: async ({ args }) => {
+    // Named for what it opens, as the chapter chip is, not after the bar it sits on.
+    const hit = await screen.findByRole('button', { name: t('chapters:popover.title') })
+    expect(hit).toHaveAttribute('aria-haspopup', 'dialog')
+    const strip = screen.getByRole('progressbar', { name: t('chrome.chapterProgress') })
+    // A progressbar's children are presentational, and a touch can't land outside a 3 px parent.
+    expect(strip.contains(hit)).toBe(false)
+    expect(strip.getBoundingClientRect().height).toBe(3)
+    expect(hit.getBoundingClientRect().height).toBe(9)
+    expect(hit.getBoundingClientRect().width).toBe(strip.getBoundingClientRect().width)
+    expect(hit.getBoundingClientRect().bottom).toBe(strip.getBoundingClientRect().bottom)
+    expect(getComputedStyle(hit).cursor).toBe('pointer')
+
+    await userEvent.click(hit)
+    expect(args.onChapterProgressPress).toHaveBeenCalledTimes(1)
+  },
+}
+
+export const ChapterProgressNoPress: Story = {
+  render: () => stripShell({}),
+  play: async () => {
+    const hit = await screen.findByTestId('chapter-progress-hit')
+    expect(hit).toHaveAttribute('aria-disabled', 'true')
+    expect(hit.tagName).not.toBe('BUTTON')
+    expect(hit).not.toHaveAttribute('aria-label')
+    expect(hit).not.toHaveAttribute('aria-haspopup')
+    expect(getComputedStyle(hit).cursor).not.toBe('pointer')
+    expect(screen.queryByRole('button', { name: t('chapters:popover.title') })).toBeNull()
+  },
+}
+
+export const ChapterProgressPhone: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  args: { onChapterProgressPress: fn() },
+  render: ({ onChapterProgressPress }) =>
+    stripShell({ onChapterProgressPress, mobileChipAction: <Tag tone="default">Browse</Tag> }),
+  play: async () => {
+    await screen.findByText('Browse')
+    expect(screen.queryByTestId('chapter-progress-hit')).toBeNull()
+    expect(screen.getByRole('progressbar', { name: t('chrome.chapterProgress') })).toBeVisible()
+  },
+}
+
+// BrowseChip's box: a control-height row, as the reader mounts it.
+const BROWSE_CHIP = (
+  <View testID="strip-browse" className="h-control-xs justify-center">
+    <Tag tone="default">Browse</Tag>
+  </View>
+)
+
+const STRIP_CHIPS = ['First chip', 'A chip with a long label', 'Third chip', 'Last chip']
+
+// Chips sit in control-height Views (36 px at regular density): offsets are measured on the chip's
+// box, not its label, and the strip's vertical clearance needs a known chip height.
+export const ChipStripPhone: Story = {
+  globals: { viewport: { value: 'mobile1' }, density: 'regular' },
+  render: () => (
+    <ScreenShell
+      variant="in-story"
+      title={<Text size="base">Aria&apos;s Descent</Text>}
+      chapterProgress={progressAt(35)}
+      centerExtras={STRIP_CHIPS.map((label) => (
+        <View key={label} testID={`strip-${label}`} className="h-control-xs justify-center">
+          <Tag tone="soft">{label}</Tag>
+        </View>
+      ))}
+      mobileChipAction={BROWSE_CHIP}
+      onBack={noop}
+      onOpenStorySettings={noop}
+      onOpenActions={noop}
+    >
+      <BodyPlaceholder label="in-story phone — the state chips scroll, Browse stays" />
+    </ScreenShell>
+  ),
+  play: async () => {
+    const browse = await screen.findByTestId('strip-browse')
+    const first = screen.getByTestId(`strip-${STRIP_CHIPS[0]}`)
+    const second = screen.getByTestId(`strip-${STRIP_CHIPS[1]}`)
+    const strip = screen.getByTestId('reader-chip-strip')
+    const browseLeft = browse.getBoundingClientRect().left
+
+    // The scroller itself starts 16 px in: a swipe from the edge is the OS's back gesture.
+    expect(strip.getBoundingClientRect().left).toBe(16)
+    expect(first.getBoundingClientRect().left).toBe(16)
+    expect(second.getBoundingClientRect().left - first.getBoundingClientRect().right).toBe(8)
+    // A chip's hit slop must land inside the scroller: a scroll view won't hit-test past its edge.
+    expect(strip.getBoundingClientRect().height).toBe(44)
+    expect(first.getBoundingClientRect().top - strip.getBoundingClientRect().top).toBe(4)
+    expect(strip.getBoundingClientRect().bottom - first.getBoundingClientRect().bottom).toBe(4)
+    expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth)
+    expect(strip.getBoundingClientRect().right).toBeLessThanOrEqual(browseLeft)
+
+    strip.scrollLeft = 120
+    await waitFor(() => expect(first.getBoundingClientRect().left).toBe(-104))
+    expect(browse.getBoundingClientRect().left).toBe(browseLeft)
+  },
+}
+
+// At comfortable density a chip is 40 px, past the 44 px floor once padded: the 4 px stays, a
+// shorter chip stays centred, and the strip is as tall as with Browse alone.
+export const ChipStripTallChipPhone: Story = {
+  globals: { viewport: { value: 'mobile1' }, density: 'comfortable' },
+  render: () => (
+    <ScreenShell
+      variant="in-story"
+      title={<Text size="base">Aria&apos;s Descent</Text>}
+      chapterProgress={progressAt(35)}
+      centerExtras={
+        <>
+          <View testID="strip-tall" className="h-control-xs justify-center">
+            <Tag tone="soft">Tall chip</Tag>
+          </View>
+          <View testID="strip-short" className="h-6 justify-center">
+            <Tag tone="soft">Short chip</Tag>
+          </View>
+        </>
+      }
+      mobileChipAction={BROWSE_CHIP}
+      onBack={noop}
+      onOpenStorySettings={noop}
+      onOpenActions={noop}
+    >
+      <BodyPlaceholder label="in-story phone — a 40 px chip keeps 4 px clear" />
+    </ScreenShell>
+  ),
+  play: async () => {
+    const strip = await screen.findByTestId('reader-chip-strip')
+    const chip = screen.getByTestId('strip-tall')
+    const short = screen.getByTestId('strip-short')
+    const chipRect = chip.getBoundingClientRect()
+    const stripRect = strip.getBoundingClientRect()
+    const shortRect = short.getBoundingClientRect()
+    expect(chipRect.height).toBe(40)
+    expect(shortRect.height).toBe(24)
+    expect(chipRect.top - stripRect.top).toBe(4)
+    expect(stripRect.bottom - chipRect.bottom).toBe(4)
+    expect(shortRect.top + shortRect.height / 2).toBe(chipRect.top + chipRect.height / 2)
+    expect(stripRect.height).toBe(48)
+    expect(strip.parentElement?.getBoundingClientRect().height).toBe(57)
+  },
+}
+
+const LONG_TIME_FRAME: CalendarFrame = {
+  calendar: {
+    ...EARTH_GREGORIAN,
+    displayFormat:
+      'The eleventh day of the long rains in the third year of the reign of the Ashen Queen',
+  },
+  origin: { year: 2024, month: 1, day: 1, hour: 0, minute: 0, second: 0 },
+}
+
+// A truncated time chip is a 44 px target in a 36 px box: the strip must not grow to hold it.
+export const ChipStripTimeChipPhone: Story = {
+  globals: { viewport: { value: 'mobile1' }, density: 'regular' },
+  render: () => (
+    <ScreenShell
+      variant="in-story"
+      title={<Text size="base">Aria&apos;s Descent</Text>}
+      chapterProgress={progressAt(35)}
+      centerExtras={<TimeChip seconds={0} frame={LONG_TIME_FRAME} />}
+      mobileChipAction={BROWSE_CHIP}
+      onBack={noop}
+      onOpenStorySettings={noop}
+      onOpenActions={noop}
+    >
+      <BodyPlaceholder label="in-story phone — a truncated time chip keeps the strip's height" />
+    </ScreenShell>
+  ),
+  play: async () => {
+    const strip = await screen.findByTestId('reader-chip-strip')
+    const button = await within(strip).findByRole('button', { name: /long rains/ })
+    const stripRect = strip.getBoundingClientRect()
+    const buttonRect = button.getBoundingClientRect()
+    expect(stripRect.height).toBe(44)
+    expect(strip.parentElement?.getBoundingClientRect().height).toBe(53)
+    expect(buttonRect.height).toBe(44)
+    expect(buttonRect.top).toBeGreaterThanOrEqual(stripRect.top)
+    expect(buttonRect.bottom).toBeLessThanOrEqual(stripRect.bottom)
+  },
+}
+
+function browseOnlyShell() {
+  return (
+    <ScreenShell
+      variant="in-story"
+      title={<Text size="base">Aria&apos;s Descent</Text>}
+      chapterProgress={progressAt(35)}
+      mobileChipAction={BROWSE_CHIP}
+      onBack={noop}
+      onOpenStorySettings={noop}
+      onOpenActions={noop}
+    >
+      <BodyPlaceholder label="in-story phone — Browse alone" />
+    </ScreenShell>
+  )
+}
+
+// With no state chips, Browse still sits at the right edge, and the strip is as tall as it is with
+// chips at the same density (ChipStripTimeChipPhone: 53 px).
+export const ChipStripBrowseOnlyPhone: Story = {
+  globals: { viewport: { value: 'mobile1' }, density: 'regular' },
+  render: browseOnlyShell,
+  play: async () => {
+    const browse = await screen.findByTestId('strip-browse')
+    expect(browse.getBoundingClientRect().right).toBe(window.innerWidth - 12)
+    const strip = screen.getByTestId('reader-chip-strip')
+    expect(strip.getBoundingClientRect().height).toBe(44)
+    expect(strip.parentElement?.getBoundingClientRect().height).toBe(53)
+  },
+}
+
+// ChipStripTallChipPhone's strip at the same density: 57 px, so mounting chips doesn't shift it.
+export const ChipStripBrowseOnlyComfortablePhone: Story = {
+  globals: { viewport: { value: 'mobile1' }, density: 'comfortable' },
+  render: browseOnlyShell,
+  play: async () => {
+    await screen.findByTestId('strip-browse')
+    const strip = screen.getByTestId('reader-chip-strip')
+    expect(strip.parentElement?.getBoundingClientRect().height).toBe(57)
   },
 }
 

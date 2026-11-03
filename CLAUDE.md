@@ -25,7 +25,7 @@ vars, no BaaS.
   selector strategy; when a slice warrants an E2E test.
 - [`docs/dev-environment.md`](./docs/dev-environment.md) — dev slots:
   per-worktree ports and `userData` for parallel workers on one
-  machine.
+  machine; measuring on an Android release build.
 - [`docs/generation-pipeline.md`](./docs/generation-pipeline.md) —
   pipeline framework: phases, orchestrator, action layer, event bus,
   transactions, concurrency model.
