@@ -51,6 +51,12 @@ describe('Z.AI adapter', () => {
     expect(lastImageCall().baseUrl).toBe('https://normalized.test/v4')
   })
 
+  it('rejects a malformed base URL when listing models', async () => {
+    await expect(createZhipuProvider({ apiKey: 'k', baseUrl: 'h' }).listModels()).rejects.toThrow(
+      'Base URL is not an http(s) URL',
+    )
+  })
+
   it('passes the model through without a fallback', async () => {
     await createZhipuProvider({ apiKey: 'k' }).generate(options({ model: 'cogview-4-250304' }))
     expect(lastImageCall().model).toBe('cogview-4-250304')

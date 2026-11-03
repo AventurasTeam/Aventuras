@@ -7,6 +7,7 @@
  */
 
 import { specToPixels, formatImageSize, type ImageSpec } from '#lib/utils/image.ts'
+import { parseBaseUrl } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 import type {
   ImageProvider,
@@ -88,7 +89,7 @@ export function createZhipuProvider(config: ImageProviderConfig): ImageProvider 
 
     // api.z.ai answers `cogview-3-flash` as an unknown model, so CogView is listed for BigModel only.
     async listModels(): Promise<ImageModelInfo[]> {
-      const onBigModel = new URL(baseUrl).hostname === BIGMODEL_HOST
+      const onBigModel = parseBaseUrl(baseUrl).hostname === BIGMODEL_HOST
       return [...ZHIPU_IMAGE_MODELS]
         .filter(([id]) => onBigModel || !isCogView(id))
         .map(([id, name]) => ({ id, name, supportsImg2Img: false }))
