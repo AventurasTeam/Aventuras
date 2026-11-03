@@ -39,7 +39,6 @@ type PostMessage = (message: string) => void
 type BootGlobals = {
   $$EXPO_DOM_HOST_OS?: string
   $$EXPO_INITIAL_PROPS?: unknown
-  ReactNativeWebView?: { postMessage: PostMessage }
 }
 const win = window as unknown as BootGlobals
 
@@ -116,7 +115,7 @@ describe('expo-dom boot order (patches/expo.patch)', () => {
     vi.stubEnv('NODE_ENV', 'production')
     captured.props = null
     postMessage = vi.fn<PostMessage>()
-    win.ReactNativeWebView = { postMessage }
+    vi.stubGlobal('ReactNativeWebView', { postMessage })
     windowListeners = vi.spyOn(window, 'addEventListener')
     document.body.innerHTML = '<div id="root"></div>'
   })
@@ -134,7 +133,6 @@ describe('expo-dom boot order (patches/expo.patch)', () => {
     delete process.env.EXPO_DOM_HOST_OS
     delete win.$$EXPO_DOM_HOST_OS
     delete win.$$EXPO_INITIAL_PROPS
-    delete win.ReactNativeWebView
   })
 
   it('mounts once and talks both ways when the boot script lands after the bundle', async () => {
