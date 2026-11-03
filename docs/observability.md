@@ -267,7 +267,8 @@ convention, and the expectation that subsystems route through
   `chapter_progress_read_failed` (`hooks/use-chapter-progress.ts`, same
   shape; the strip keeps its last number),
   `chapter_time_ranges_read_failed` (`hooks/use-chapter-time-ranges.ts`,
-  same shape; a chapter row shows no time line),
+  same shape; after a settle the chapter rows show no time line, and a
+  failed refetch on reopening keeps the lines from before),
   `story_chapter_numbers_read_failed`
   (`hooks/use-story-chapter-numbers.ts`, a failed read; the cards keep
   their last label, or none before the first read),
@@ -348,10 +349,18 @@ convention, and the expectation that subsystems route through
   way). `Dismiss` adds one, with
   its own toast (`components/reader/system-entry-actions.tsx`):
   `system_entry_dismiss_failed` (the delete failed, the entry stands).
-  A jump adds one (`components/reader/use-entry-jump.ts`):
+  A jump adds two (`components/reader/use-entry-jump.ts`):
   `entry_jump_failed` (a read or the landing behind a chapter or History
   jump threw, and the reader didn't move; it toasts unless a newer jump
-  or a branch change replaced this one)
+  or a branch change replaced this one) and `entry_jump_dropped` (warn,
+  with `cause`: the jump's veil came down with no landing, because the
+  fixed bound ran out (`bound`), its row left the window, as a run
+  failure's reload trims it (`left_window`), or a document reload lost
+  the landing already sent (`document_reload`); no toast, and nothing is
+  logged for a jump a newer one or a branch change replaced). The route
+  adds `document_reloaded` (warn, `app/reader-composer/[branchId].tsx`:
+  a reader document that had painted booted again, a reload or a
+  renderer kill)
 
 Kinds grow organically as subsystems land.
 

@@ -301,7 +301,9 @@ recovery path is singular and must be boring:
 
 Cost: scroll position within the window is lost on recovery
 (reload-to-bottom). Accepted for v1; revisit only if renderer kills
-are observed outside memory-pressure extremes.
+are observed outside memory-pressure extremes. Each recovery after a
+paint logs `reader.document_reloaded`
+([`observability.md → Subsystem emission inventory`](../../observability.md#subsystem-emission-inventory)).
 
 ## What this retired
 

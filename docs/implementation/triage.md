@@ -481,9 +481,10 @@ slice-planning gate forces its resolution before that slice is planned.
   out-of-window jump's veil stays up for its 30 s bound, and an
   in-window jump does nothing. Shown with expo's wrapper and a stand-in
   WebView, not on a device. No remount within one route instance is
-  reachable today; an in-place branch switch would make one. Raised
-  2026-11-03 by 5.3's Task 9 review; the stale handle added by 5.3's
-  slice review.
+  reachable today; an in-place branch switch would make one, and would
+  also log a false `reader.document_reloaded`, which reads the same
+  painted state. Raised 2026-11-03 by 5.3's Task 9 review; the stale
+  handle added by 5.3's slice review.
 
 - **The native chapter list's pin doesn't follow the reader's own
   scrolls.** In `components/reader/chapter-popover.tsx`, native unpins
