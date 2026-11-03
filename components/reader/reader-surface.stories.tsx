@@ -2434,7 +2434,7 @@ const WHEEL_CHAIN_GAP_MS = 100
 /**
  * A target still waiting for its row holds nothing; the hold starts once the row arrives, in the
  * commit bringing it. A commit outlasting the chain's gap reads as the chain's end, so the hold
- * starts a frame later (triage: the landing loop's decision function).
+ * starts a frame later.
  */
 export const JumpPendingHaltsWheelMomentumOnceItsRowArrives: Story = {
   render: (args) => <JumpHarness {...args} />,
