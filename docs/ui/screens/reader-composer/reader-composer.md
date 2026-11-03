@@ -1080,8 +1080,9 @@ that direction.
 There's no jump-to-top (see [Jump buttons](#jump-buttons)), and a
 jump to an entry above the window, from the chapter popover or an
 `entry` link, doesn't open a second one: it reads from the row above
-that entry, which carries a chapter's break, up to the window's oldest
-row and prepends them in one write, so the window grows to reach it.
+that entry (for a chapter jump, the row that carries its break) up to
+the window's oldest row and prepends them in one write, so the window
+grows to reach it.
 When that entry is the branch's first row, the boundary shimmer drops
 in the same commit, so nothing moves above a row landed at the top;
 otherwise it stays until a boundary load finds the top. [Jump-to-bottom](#jump-buttons) is always a

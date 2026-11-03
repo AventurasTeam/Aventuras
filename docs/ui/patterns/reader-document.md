@@ -67,14 +67,18 @@ write the user didn't ask for still waits for scroll rest.
 DOM residency is bounded by the
 [loaded-set window](../screens/reader-composer/reader-composer.md#loaded-set-model),
 not the viewport: ~50 entries at open, growing by boundary
-auto-load — fired **only at scroll rest**. The boundary signal
-latches during the gesture and fires once scroll events quiesce
-with no finger down, so the prepend and its compensating scroll
-write never fight compositor-owned scrolling. While older entries
-may exist (`hasOlder`), a **boundary skeleton** permanently
-occupies the slot above the oldest loaded row — an indicator that
-mounted mid-scroll would itself shift content — and unmounts once,
-compensated, when a short load proves the branch top. If a long
+auto-load — fired **only at scroll rest** — or by a jump above the
+window, which prepends up to its target in one write
+([`reader-composer.md → Loaded-set model`](../screens/reader-composer/reader-composer.md#loaded-set-model)).
+The boundary signal latches during the gesture and fires once scroll
+events quiesce with no finger down, so the prepend and its
+compensating scroll write never fight compositor-owned scrolling.
+While older entries may exist (`hasOlder`), a **boundary skeleton**
+permanently occupies the slot above the oldest loaded row — an
+indicator that mounted mid-scroll would itself shift content — and
+unmounts once, compensated, when a short load proves the branch top,
+or in the jump's own write when its target is the branch's first
+row. If a long
 backwards-reading session makes window growth measurable (React
 commit time or document memory), the designed lever is a **far-end
 trim cap** on the loaded set — windowing at the data layer, never
