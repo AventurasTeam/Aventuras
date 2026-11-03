@@ -446,3 +446,14 @@ slice-planning gate forces its resolution before that slice is planned.
   booting document is caught as lost), but it isn't confirmed whether a
   remount within one route instance is reachable. Raised 2026-11-03 by
   5.3's Task 9 review.
+
+- **The native chapter list stays pinned through a non-drag scroll.** In
+  `components/reader/chapter-popover.tsx`, native unpins the list only in
+  `onScrollBeginDrag`, so an accessibility scroll (TalkBack's scroll
+  actions start no drag) leaves it pinned, and a later content-size or
+  layout change, such as a chapter closing while the list is open, pulls
+  it back to the last row. Web's upward-offset rule can't be reused as
+  is: on the phone Sheet, gorhom snaps the list to the top until the
+  Sheet unlocks, which would read as a scroll up. A fix needs a device to
+  verify it. Read from the code, not reproduced. Raised 2026-11-03 by
+  PR #698's review.
