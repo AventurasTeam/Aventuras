@@ -622,7 +622,9 @@ export function ReaderSurface({
   }, [reportLanded, stopBottomPin, stopLanding, syncJumpButton])
   const jumpToEntry = useCallback(
     (entryId: string) => {
-      // Reports a replaced target as dropped before the new one becomes the unreported one.
+      // Reports a replaced target as dropped before the new one becomes the unreported one. A
+      // repeat of it isn't reported: the host's veil waits on that id until the new one lands.
+      if (unreportedLandingRef.current?.entryId === entryId) unreportedLandingRef.current = null
       stopLanding()
       const landing = { entryId, running: false }
       unreportedLandingRef.current = landing

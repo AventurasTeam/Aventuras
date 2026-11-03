@@ -2937,6 +2937,26 @@ export const JumpReplacesAPendingTarget: Story = {
   },
 }
 
+/** A repeat press of a target still waiting for its row: the host's veil waits on that id. */
+export const EntryLandedOnceForARepeatedPendingTarget: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: PARTIAL_ROWS, onEntryLanded: fn(async () => {}) },
+  play: async ({ args }) => {
+    const scroller = scrollerOf('o14')
+    await settleLanding(scroller)
+    press('Jump')
+    await nextFrame()
+    press('Jump')
+    await outlastLanding()
+    expect(args.onEntryLanded).not.toHaveBeenCalled()
+    press('Load all rows')
+    await landedOn(JUMP_TARGET, scroller)
+    await outlastLanding()
+    expect(args.onEntryLanded).toHaveBeenCalledTimes(1)
+    expect(args.onEntryLanded).toHaveBeenCalledWith(JUMP_TARGET)
+  },
+}
+
 /** A gesture before the row arrives drops the target too: the commit must not yank the view. */
 export const JumpPendingDroppedByWheel: Story = {
   render: (args) => <JumpHarness {...args} />,
