@@ -245,19 +245,19 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
 
       const reply = ModelEndpoints.safeParse(await response.json())
       if (!reply.success) throw new Error(`NanoGPT sent an unreadable endpoint reply for ${model}`)
-      const [endpoint] = reply.data.endpoints
-      if (!endpoint) return undefined
+      const [served] = reply.data.endpoints
+      if (!served) return undefined
 
       // The list entry also knows the model's input modalities, which an endpoint does not.
       const canonical = models.find((m) => m.id === reply.data.id)
       if (canonical) return toCapabilities(canonical)
       return toCapabilities({
-        capabilities: endpoint.capabilities,
+        capabilities: served.capabilities,
         supported_parameters: {
-          ...endpoint.supported_parameters,
+          ...served.supported_parameters,
           input_image_constraints:
-            endpoint.supported_parameters.input_image_constraints ??
-            endpoint.input_reference_constraints,
+            served.supported_parameters.input_image_constraints ??
+            served.input_reference_constraints,
         },
       })
     },
