@@ -181,12 +181,16 @@ function OverlayBody({
     if (pinned.current) list.current?.scrollTo({ y: contentHeight.current, animated: false })
   }
   // Web has no drag, and a wheel, key or scrollbar can each move the list. Only the reader moves
-  // it up: the list's own scrolls go down to the end, and rows growing below move nothing.
+  // it up: the list's own scrolls go down to the end, rows growing below move nothing, and a list
+  // that shrank clamps the offset with no input.
   const lastOffset = useRef(0)
+  const lastContentHeight = useRef(0)
   const unpinOnScrollUp = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const offset = event.nativeEvent.contentOffset.y
-    if (offset < lastOffset.current - 1) pinned.current = false
-    lastOffset.current = offset
+    const { contentOffset, contentSize } = event.nativeEvent
+    const shrank = contentSize.height < lastContentHeight.current
+    if (contentOffset.y < lastOffset.current - 1 && !shrank) pinned.current = false
+    lastOffset.current = contentOffset.y
+    lastContentHeight.current = contentSize.height
   }
   // Android runs a frame's view commands before its mount, so a scroll for rows that just grew
   // clamps to their old height; the next frame's repeat lands after the mount.

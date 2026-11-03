@@ -407,6 +407,43 @@ export const LongListScrollUpKeepsPlace: Story = {
   },
 }
 
+// A closed row going away while the list is open (an undone close), then the open row's line.
+function RowLeavesHarness(props: ChapterPopoverProps) {
+  const [closed, setClosed] = useState(props.closed)
+  const [sinceLabel, setSinceLabel] = useState(props.sinceLabel)
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'F3') setClosed(LONG_LIST.slice(0, -1))
+      if (event.key === 'F4') setSinceLabel('Day 30, dusk')
+    }
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => document.removeEventListener('keydown', onKeyDown, true)
+  }, [])
+  return <ChapterPopover {...props} closed={closed} sinceLabel={sinceLabel} />
+}
+
+/** A shrink clamps the offset with no input, so the list stays pinned to the open row. */
+export const LongListShrinkKeepsPin: Story = {
+  args: { closed: LONG_LIST, sinceLabel: null },
+  render: (args) => <RowLeavesHarness {...args} />,
+  play: async () => {
+    await waitForTier('desktop')
+    await openOverlay()
+    await expectOpenedOnLastRow()
+
+    const list = await listScroller()
+    // Chromium's scroll anchoring happens to hide a lost pin here; the pin must hold without it.
+    list.style.overflowAnchor = 'none'
+    const pinnedTop = list.scrollTop
+    await userEvent.keyboard('{F3}')
+    await waitFor(() => expect(list.scrollTop).toBeLessThan(pinnedTop))
+    await twoFrames()
+    await userEvent.keyboard('{F4}')
+    await screen.findByText(/Day 30, dusk/)
+    await expectOpenedOnLastRow()
+  },
+}
+
 /** A wheel over a list too short to scroll moves nothing, so the list stays pinned as it grows. */
 export const ShortListWheelThenGrowsShowsLastRow: Story = {
   args: { closed: LONG_LIST.slice(0, 2) },
