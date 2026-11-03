@@ -126,7 +126,7 @@ describe.each([
     ])
   })
 
-  it('starts and ends each chapter where the close rule puts it', () => {
+  it('puts the opening and 132 entries in chapter 1, and 132 in chapter 2 and the last', () => {
     expect([positionOf(closed[0]!.startEntryId), positionOf(closed[0]!.endEntryId)]).toEqual([
       1, 133,
     ])
