@@ -958,6 +958,19 @@ describe('useEntryJump: jumping', () => {
     expect(result.current.veil.isWaiting()).toBe(false)
   })
 
+  // The web surface reports the landing it replaces from inside the newer landing call.
+  it('keeps a joined wait when the landing call signals the replaced target', async () => {
+    const ctx = await seedBranch()
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    await act(() => result.current.jump('entry_10'))
+    land.mockImplementation((id) => {
+      if (id === 'entry_100') result.current.landed('entry_10')
+    })
+
+    await act(() => result.current.jump('entry_100'))
+    expect(result.current.veil.isWaiting()).toBe(true)
+  })
+
   it('keeps the wait when a replaced read finishes under an in-window jump', async () => {
     const ctx = await seedBranch()
     const open = holdNextBetween()
