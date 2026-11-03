@@ -721,8 +721,18 @@ export const EntryLandedOnLanding: Story = {
   render: (args) => <LandingSignalHarness {...args} />,
   play: async ({ args }) => {
     await settleLanding(readerScroller())
+    const landed = args.onEntryLanded as ReturnType<typeof fn>
+    // The report waits for the highlight's paint, so none has gone out by its commit.
+    let reportsAtHighlight = -1
+    const observer = new MutationObserver(() => {
+      if (reportsAtHighlight < 0 && entryRow('o1').hasAttribute('data-landed'))
+        reportsAtHighlight = landed.mock.calls.length
+    })
+    observer.observe(entryRow('o1'), { attributes: true, attributeFilter: ['data-landed'] })
     screen.getByRole('button', { name: 'Jump to o1' }).click()
     for (let i = 0; i < LANDED_SIGNAL_FRAMES; i++) await nextFrame()
+    observer.disconnect()
+    expect(reportsAtHighlight).toBe(0)
     expect(args.onEntryLanded).toHaveBeenCalledTimes(1)
     expect(args.onEntryLanded).toHaveBeenCalledWith('o1')
     expect(entryRow('o1')).toHaveAttribute('data-landed')
@@ -2262,6 +2272,7 @@ export const JumpHaltsMomentum: Story = {
   play: async () => {
     const scroller = scrollerOf('o1')
     await settleLanding(scroller)
+    expect(getComputedStyle(scroller).getPropertyValue('scrollbar-gutter')).toBe('stable')
     let highlightedMidFling = false
     const { fling, ended } = flingUntilHalted(scroller, () => {
       if (entryRow(JUMP_TARGET).hasAttribute('data-landed')) highlightedMidFling = true
@@ -2552,6 +2563,24 @@ export const JumpDroppedMidWheelHoldRestoresOverflow: Story = {
   },
 }
 
+/** Momentum can skip a few frames: a wheel 70 ms after the last still continues the chain. */
+export const JumpKeptByAWheelInsideTheChainGap: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    const { chain, ended } = wheelChain(scroller, 10, -20, () => {})
+    await frames(5)
+    press('Jump')
+    await ended
+    wheelAt(scroller, -20, chain.lastAt + 70)
+    press('Grow above target')
+    await frames(3)
+    await landedOn(JUMP_TARGET, scroller)
+  },
+}
+
 /** A wheel after a gap in the chain is a new gesture, and drops the jump as any wheel would. */
 export const JumpPendingDroppedByWheelAfterAGap: Story = {
   render: (args) => <JumpHarness {...args} />,
@@ -2734,23 +2763,6 @@ export const JumpButtonRisesAsAStreamOutgrowsALandingOnTheTail: Story = {
   },
 }
 
-/** A stream starting on the jump's own tick still leaves the view on the target. */
-export const StreamStartingOnAJumpHolds: Story = {
-  render: (args) => <JumpHarness {...args} />,
-  args: { rows: OVERFLOW_ROWS },
-  play: async () => {
-    const scroller = scrollerOf('o1')
-    await settleLanding(scroller)
-    press('Jump')
-    press('Next chunk')
-    await outlastLanding()
-    await landedOn(JUMP_TARGET, scroller)
-    press('Next chunk')
-    await frames(3)
-    await landedOn(JUMP_TARGET, scroller)
-  },
-}
-
 /**
  * A landing waits a frame for scroll rest. A stream starting inside that wait must not keep
  * autoscroll engaged: its write on every chunk would read as movement and keep the landing waiting.
@@ -2773,9 +2785,32 @@ export const StreamChunkingEveryFrameOnAJumpHolds: Story = {
   },
 }
 
+// Counts the times the reader's overflow turns hidden: a record's new style is the next one's old.
+function watchOverflowHides(scroller: HTMLElement): () => number {
+  const hidden = (style: string | null) => /overflow-y:\s*hidden/.test(style ?? '')
+  let hides = 0
+  let last = scroller.getAttribute('style')
+  const tally = (records: MutationRecord[]) => {
+    records.forEach((_, i) => {
+      const next =
+        i + 1 < records.length ? records[i + 1]!.oldValue : scroller.getAttribute('style')
+      if (hidden(next) && !hidden(last)) hides += 1
+      last = next
+    })
+  }
+  const observer = new MutationObserver(tally)
+  observer.observe(scroller, { attributeFilter: ['style'], attributeOldValue: true })
+  return () => {
+    tally(observer.takeRecords())
+    observer.disconnect()
+    return hides
+  }
+}
+
 /**
- * A fling that outlives its halt is waited out. Should it carry the reader into the at-bottom band,
- * the band must not re-engage autoscroll: its write on every chunk would keep the landing waiting.
+ * A fling that outlives its halt is waited out, not halted again. Should it carry the reader into
+ * the at-bottom band, the band must not re-engage autoscroll: its write on every chunk would keep
+ * the landing waiting.
  */
 export const StreamChunkingAfterAFlingOutlivesItsHaltHolds: Story = {
   render: (args) => <JumpHarness {...args} />,
@@ -2800,6 +2835,7 @@ export const StreamChunkingAfterAFlingOutlivesItsHaltHolds: Story = {
       requestAnimationFrame(step)
     })
     await frames(5)
+    const countHides = watchOverflowHides(scroller)
     press('Jump')
     await flingEnded
     expect(distanceFromBottom(scroller)).toBeLessThan(80)
@@ -2814,6 +2850,7 @@ export const StreamChunkingAfterAFlingOutlivesItsHaltHolds: Story = {
     }
     expect(landed).toBe(true)
     expect(highlighted).toBe(true)
+    expect(countHides()).toBe(1)
   },
 }
 
