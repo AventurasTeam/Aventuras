@@ -159,8 +159,8 @@ the numbers, the device and the build go in Implementation notes.
   frame or on a format miss.
 - Both go in the reader's `centerExtras`, which `ScreenShell` already
   places inline or in the phone strip.
-- The phone strip's state chips sit in a horizontal `ScrollView` with
-  about 16 px of left padding. Browse stays outside it, right-anchored.
+- The phone strip's state chips sit in a horizontal `ScrollView` that
+  starts about 16 px in. Browse stays outside it, right-anchored.
 - The chapter chip shows on every tier, as `Chapter 1 ▾` with no closed
   chapter, and `navigation.md`'s empty state changes to match. The time
   chip hides only when it would render empty.
@@ -552,9 +552,9 @@ and tablet, Sheet (medium) on phone, dispatched as `OverflowMenu` does:
 - **A tail at world time 0 shows the story's origin time** on the time
   chip, as the entry footers do: `branchWorldTime` returns 0, and the
   formatter renders 0 as the origin.
-- **The phone chip strip keeps the 44 px touch floor.** Its padding sits
-  inside the scroller, since a scroll view doesn't hit-test past its own
-  edge, which makes the strip about 53 px, not canon's former ~36 px;
+- **The phone chip strip keeps the 44 px touch floor.** Its vertical
+  padding sits inside the scroller, since a scroll view doesn't hit-test
+  past its own edge, which makes the strip about 53 px, not canon's former ~36 px;
   `navigation.md` now says so.
 - **A chapter-popover press goes straight to the jump once the reader is
   ready,** since a round trip through the `entry` route param re-sends

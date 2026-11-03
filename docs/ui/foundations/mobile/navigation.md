@@ -138,8 +138,8 @@ Layout: `[Chapter ▾] [<time chip>] [⎇N] ··· [☰ Browse]`.
   strip — usually leaves enough room.
 - **Strip starts 16 px in from the screen edge.** Avoids
   conflict with iOS's swipe-from-left-edge back gesture; visual
-  padding doubles as gesture safe-zone. It's padding inside the
-  scroller, so a scrolled chip passes under the edge.
+  padding doubles as gesture safe-zone. The scroller itself starts
+  there, so a swipe from the edge never lands on it.
 - **Empty state.** The chapter chip always shows, as `Chapter 1 ▾`
   until the first close, so the popover and its token count stay
   reachable through a whole first chapter. A time chip that would
