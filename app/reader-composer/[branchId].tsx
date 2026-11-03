@@ -229,7 +229,10 @@ export default function ReaderComposerRoute() {
   const tier = useTier()
   const showRail = tier !== 'phone'
   const isFocused = useIsFocused()
-  const { branchId, entry } = useLocalSearchParams<{ branchId: string; entry?: string }>()
+  const { branchId, entry } = useLocalSearchParams<{
+    branchId: string
+    entry?: string | string[]
+  }>()
   const branchIdRef = useRef(branchId)
   // Assigned post-commit, not during render: a discarded render would otherwise
   // publish a branch that never landed, and every reader of this ref treats a
