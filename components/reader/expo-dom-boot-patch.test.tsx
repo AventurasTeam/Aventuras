@@ -3,7 +3,8 @@ import { cleanup, render } from '@testing-library/react'
 import { useEffect, type ComponentType } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
-// patches/expo.patch, replayed in both boot orders: docs/implementation/lessons-learned/expo-dom-boot-script-races-the-bundle.md
+// Replays patches/expo.patch in both boot orders; why:
+// docs/implementation/lessons-learned/expo-dom-boot-script-races-the-bundle.md
 
 const captured: { props: Record<string, unknown> | null } = { props: null }
 
