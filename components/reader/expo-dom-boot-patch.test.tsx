@@ -1,13 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, render } from '@testing-library/react'
 import { useEffect, type ComponentType } from 'react'
-import { createRoot } from 'react-dom/client'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
-// patches/expo.patch: on Android, react-native-webview runs the wrapper's boot script (host OS +
-// initial props) from onPageStarted with evaluateJavascript, which can land after the document's
-// bundle has run. Unpatched, the entry throws and the document never mounts. These tests replay
-// both orders with the wrapper's own script against the document runtime.
+// patches/expo.patch, replayed in both boot orders: docs/implementation/lessons-learned/expo-dom-boot-script-races-the-bundle.md
 
 const captured: { props: Record<string, unknown> | null } = { props: null }
 
@@ -22,14 +18,15 @@ vi.mock('@expo/metro-runtime', () => ({}))
 // The DOM bundle's launcher mounts into #root through AppRegistry; a plain root is enough here.
 vi.mock('expo/src/launch/registerRootComponent', () => ({
   default: (Component: ComponentType) => {
-    createRoot(document.getElementById('root')!).render(<Component />)
+    render(<Component />, { container: document.getElementById('root')! })
   },
 }))
 
+type PostMessage = (message: string) => void
 type BootGlobals = {
   $$EXPO_DOM_HOST_OS?: string
   $$EXPO_INITIAL_PROPS?: unknown
-  ReactNativeWebView?: { postMessage: (message: string) => void }
+  ReactNativeWebView?: { postMessage: PostMessage }
 }
 const win = window as unknown as BootGlobals
 
@@ -40,9 +37,16 @@ function DocumentUnderTest({ label, onReady }: { label: string; onReady: () => P
   return <p>{label}</p>
 }
 
+// A non-literal specifier keeps tsc out of expo's sources, which don't type-check in this repo.
+function importExpoDom<T>(file: string): Promise<T> {
+  return import(/* @vite-ignore */ `expo/src/dom/${file}`) as Promise<T>
+}
+
 /** The wrapper's boot script, as RNW evaluates it in the page (RNWebView.java wraps it so). */
 async function hostBootScript(): Promise<string> {
-  const { default: RawWebView } = await import('expo/src/dom/webview-wrapper')
+  const { default: RawWebView } = await importExpoDom<{
+    default: ComponentType<Record<string, unknown>>
+  }>('webview-wrapper')
   render(
     <RawWebView
       filePath="reader-document.html"
@@ -62,19 +66,23 @@ function runInPage(script: string) {
 
 /** Evaluates the document bundle's entry, as `expo/dom/entry.js` does in the WebView. */
 async function evaluateDocumentBundle() {
-  const { registerDOMComponent } = await import('expo/src/dom/dom-entry')
+  const { registerDOMComponent } = await importExpoDom<{
+    registerDOMComponent: (component: typeof DocumentUnderTest) => void
+  }>('dom-entry')
   registerDOMComponent(DocumentUnderTest)
 }
 
-function nativeActionsPosted(postMessage: ReturnType<typeof vi.fn>): string[] {
+function nativeActionsPosted(postMessage: Mock<PostMessage>): string[] {
   return postMessage.mock.calls
-    .map(([raw]) => JSON.parse(raw as string) as { type: string; data: { actionId?: string } })
+    .map(([raw]) => JSON.parse(raw) as { type: string; data: { actionId?: string } })
     .filter((m) => m.type === '$$native_action')
     .map((m) => m.data.actionId ?? '')
 }
 
+const rootText = () => document.getElementById('root')!.textContent
+
 describe('expo-dom boot order (patches/expo.patch)', () => {
-  let postMessage: ReturnType<typeof vi.fn>
+  let postMessage: Mock<PostMessage>
 
   beforeEach(() => {
     vi.resetModules()
@@ -82,7 +90,7 @@ describe('expo-dom boot order (patches/expo.patch)', () => {
     vi.stubGlobal('__DEV__', false)
     vi.stubEnv('NODE_ENV', 'production')
     captured.props = null
-    postMessage = vi.fn()
+    postMessage = vi.fn<PostMessage>()
     win.ReactNativeWebView = { postMessage }
     document.body.innerHTML = '<div id="root"></div>'
   })
@@ -96,15 +104,16 @@ describe('expo-dom boot order (patches/expo.patch)', () => {
     delete win.ReactNativeWebView
   })
 
-  it('mounts and reaches the host when the boot script lands after the bundle', async () => {
+  it('mounts once and reaches the host when the boot script lands after the bundle', async () => {
     const script = await hostBootScript()
 
     await evaluateDocumentBundle()
-    expect(document.getElementById('root')!.textContent).toBe('')
+    expect(rootText()).toBe('')
 
     runInPage(script)
+    runInPage(script)
 
-    await vi.waitFor(() => expect(document.getElementById('root')!.textContent).toBe('from host'))
+    await vi.waitFor(() => expect(rootText()).toBe('from host'))
     await vi.waitFor(() => expect(nativeActionsPosted(postMessage)).toEqual(['onReady']))
   })
 
@@ -113,7 +122,7 @@ describe('expo-dom boot order (patches/expo.patch)', () => {
 
     await evaluateDocumentBundle()
 
-    await vi.waitFor(() => expect(document.getElementById('root')!.textContent).toBe('from host'))
+    await vi.waitFor(() => expect(rootText()).toBe('from host'))
     await vi.waitFor(() => expect(nativeActionsPosted(postMessage)).toEqual(['onReady']))
   })
 })
