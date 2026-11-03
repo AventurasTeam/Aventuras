@@ -74,9 +74,9 @@ async function waitForTier(tier: 'desktop' | 'phone') {
   await waitFor(() => expect(screen.getByTestId('tier')).toHaveTextContent(tier))
 }
 
-async function openOverlay() {
-  await userEvent.click(await chip())
-  await waitFor(() => expect(screen.getByText('3 · in progress')).toBeVisible(), ANIMATION)
+async function openOverlay(number = 3) {
+  await userEvent.click(await chip(number))
+  await waitFor(() => expect(screen.getByText(`${number} · in progress`)).toBeVisible(), ANIMATION)
 }
 
 // gorhom's content keeps rising after it turns visible; a click on a row below the window makes
@@ -99,7 +99,7 @@ async function expectOpenedOnLastRow() {
     expect(list.scrollHeight).toBeGreaterThan(list.clientHeight)
     expect(list.scrollTop + list.clientHeight).toBeGreaterThanOrEqual(list.scrollHeight - 1)
   }, ANIMATION)
-  const openRow = screen.getByText('3 · in progress').getBoundingClientRect()
+  const openRow = screen.getByText(/^\d+ · in progress$/).getBoundingClientRect()
   expect(openRow.bottom).toBeLessThanOrEqual(list.getBoundingClientRect().bottom)
 }
 
@@ -116,7 +116,6 @@ const meta: Meta<typeof ChapterPopover> = {
   component: ChapterPopover,
   parameters: { layout: 'fullscreen' },
   args: {
-    number: 3,
     closed: CLOSED,
     sinceLabel: 'Day 3, dusk',
     progress: PROGRESS,
@@ -312,7 +311,7 @@ export const LongListDesktop: Story = {
   args: { closed: LONG_LIST },
   play: async () => {
     await waitForTier('desktop')
-    await openOverlay()
+    await openOverlay(31)
     await expectOpenedOnLastRow()
     await expect((await listScroller()).clientHeight).toBeLessThanOrEqual(320)
   },
@@ -323,7 +322,7 @@ export const LongListPhone: Story = {
   args: { closed: LONG_LIST },
   play: async () => {
     await waitForTier('phone')
-    await openOverlay()
+    await openOverlay(31)
     await waitForSheetSettled()
     await expectOpenedOnLastRow()
     await expect(screen.getByRole('button', { name: 'Manage chapters →' })).toBeVisible()
@@ -335,7 +334,7 @@ export const FocusStartsOnLastRow: Story = {
   args: { closed: LONG_LIST },
   play: async () => {
     await waitForTier('desktop')
-    await openOverlay()
+    await openOverlay(31)
     await expectOpenedOnLastRow()
     const lastRow = screen.getByRole('button', { name: /30 · Chapter title 30/ })
     await waitFor(() => expect(lastRow).toHaveFocus(), ANIMATION)
@@ -347,7 +346,7 @@ export const NoClosedRows: Story = {
   args: { closed: [] },
   play: async () => {
     await waitForTier('desktop')
-    await openOverlay()
+    await openOverlay(1)
     // Without a row to focus, Radix's own focus stays on its content.
     await waitFor(() =>
       expect(document.activeElement?.closest('[data-radix-popper-content-wrapper]')).not.toBeNull(),
@@ -373,7 +372,7 @@ export const LongListRangesLand: Story = {
   render: (args) => <RangesLandHarness {...args} />,
   play: async () => {
     await waitForTier('desktop')
-    await openOverlay()
+    await openOverlay(31)
     await expectOpenedOnLastRow()
 
     await userEvent.keyboard('{F2}')
@@ -394,7 +393,7 @@ export const LongListScrollUpKeepsPlace: Story = {
   render: (args) => <RangesLandHarness {...args} />,
   play: async () => {
     await waitForTier('desktop')
-    await openOverlay()
+    await openOverlay(31)
     await expectOpenedOnLastRow()
 
     const list = await listScroller()
@@ -428,7 +427,7 @@ export const LongListShrinkKeepsPin: Story = {
   render: (args) => <RowLeavesHarness {...args} />,
   play: async () => {
     await waitForTier('desktop')
-    await openOverlay()
+    await openOverlay(31)
     await expectOpenedOnLastRow()
 
     const list = await listScroller()
@@ -450,7 +449,7 @@ export const LongListShrinkWithAScrollUpUnpins: Story = {
   render: (args) => <RowLeavesHarness {...args} />,
   play: async () => {
     await waitForTier('desktop')
-    await openOverlay()
+    await openOverlay(31)
     await expectOpenedOnLastRow()
 
     const list = await listScroller()

@@ -109,15 +109,8 @@ describe('ReaderChapterChips', () => {
     cleanup()
   })
 
-  it('numbers the open chapter from this branch alone', () => {
-    chaptersStore.hydrate('br_1', [chapter(1), chapter(2), chapter(9, 'br_other')])
+  it('hands no closed rows with no closed chapter', () => {
     render(chips())
-    expect(stubs.popover?.number).toBe(3)
-  })
-
-  it('numbers the open chapter 1 with no closed chapter', () => {
-    render(chips())
-    expect(stubs.popover?.number).toBe(1)
     expect(stubs.popover?.closed).toEqual([])
   })
 

@@ -26,7 +26,7 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
-import type { ChapterProgress } from '@/lib/chapters'
+import { openChapterNumber, type ChapterProgress } from '@/lib/chapters'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
@@ -48,8 +48,6 @@ export type ChapterPopoverHandle = {
 }
 
 export type ChapterPopoverProps = {
-  /** The open chapter's number: `openChapterNumber(...)`. */
-  number: number
   /** Oldest first. */
   closed: readonly ChapterPopoverRow[]
   sinceLabel: string | null
@@ -73,10 +71,17 @@ const POPOVER_ARM: Arm = { root: 'gap-3 p-3', row: 'min-h-control-md', list: { m
 const POPOVER_SCROLL = GestureScrollView as ScrollComponent
 const SHEET_ARM: Arm = { root: 'flex-1 gap-3', row: 'min-h-control-lg', list: { flex: 1 } }
 
+type ArmProps = ChapterPopoverProps & { number: number }
+
 /** Popover on desktop and tablet, a medium bottom Sheet on phone, each opened from its own chip. */
 export function ChapterPopover(props: ChapterPopoverProps): ReactElement {
   const isPhone = useTier() === 'phone'
-  return isPhone ? <SheetArm {...props} /> : <PopoverArm {...props} />
+  const number = openChapterNumber(props.closed.map((row) => ({ sequenceNumber: row.number })))
+  return isPhone ? (
+    <SheetArm {...props} number={number} />
+  ) : (
+    <PopoverArm {...props} number={number} />
+  )
 }
 
 // TriggerRef.close() calls onOpenChange on a closed popover too; only a change is reported.
@@ -90,7 +95,7 @@ function useReportedOpen(onOpenChange: ChapterPopoverProps['onOpenChange']) {
   return [open, change] as const
 }
 
-function PopoverArm({ onOpenChange, ref, ...content }: ChapterPopoverProps) {
+function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
   const trigger = useRef<TriggerRef>(null)
   const lastClosedRow = useRef<View>(null)
   const [open, changeOpen] = useReportedOpen(onOpenChange)
@@ -123,7 +128,7 @@ function PopoverArm({ onOpenChange, ref, ...content }: ChapterPopoverProps) {
   )
 }
 
-function SheetArm({ onOpenChange, ref, ...content }: ChapterPopoverProps) {
+function SheetArm({ onOpenChange, ref, ...content }: ArmProps) {
   const [open, changeOpen] = useReportedOpen(onOpenChange)
   const close = () => changeOpen(false)
 
@@ -154,7 +159,7 @@ function SheetUnlockWatcher({ onUnlocked }: { onUnlocked: () => void }) {
   return null
 }
 
-type OverlayBodyProps = Omit<ChapterPopoverProps, 'onOpenChange' | 'ref'> & {
+type OverlayBodyProps = Omit<ArmProps, 'onOpenChange' | 'ref'> & {
   arm: Arm
   close: () => void
   lastClosedRow?: Ref<View>

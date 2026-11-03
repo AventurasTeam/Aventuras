@@ -10,7 +10,7 @@ import {
 
 import { useChapterTimeRanges } from '@/hooks/use-chapter-time-ranges'
 import type { CalendarFrame } from '@/lib/calendar'
-import { openChapterNumber, type ChapterProgress } from '@/lib/chapters'
+import type { ChapterProgress } from '@/lib/chapters'
 import type { StoryEntry } from '@/lib/db'
 import { chaptersStore } from '@/lib/stores'
 import { branchWorldTime } from '@/lib/world'
@@ -87,7 +87,6 @@ export function ReaderChapterChips({
     <>
       <ChapterPopover
         ref={popoverRef}
-        number={openChapterNumber(closed)}
         closed={rows}
         sinceLabel={sinceLabel}
         progress={progress}
