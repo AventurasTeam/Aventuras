@@ -1,5 +1,13 @@
 import { spawnSync } from 'node:child_process'
-import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -25,15 +33,15 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-// A stand-in adb on PATH: logs each call and fails the one whose arguments contain `failOn`.
-function runPushDb(failOn: string) {
+// A stand-in adb on PATH: logs each call and fails those whose arguments contain a `failOn` entry.
+function runPushDb(...failOn: string[]) {
   const fake = join(dir, 'adb')
   writeFileSync(
     fake,
     [
       '#!/bin/sh',
       `printf '%s\\n' "$*" >> '${log}'`,
-      `case "$*" in *'${failOn}'*) echo failed >&2; exit 1;; esac`,
+      ...failOn.map((part) => `case "$*" in *'${part}'*) echo "failed: $*" >&2; exit 1;; esac`),
       'case "$*" in *get-state*) echo device;; esac',
       `case "$*" in *'wc -c'*) echo '${statSync(db).size} files/SQLite/aventuras.db';; esac`,
       'exit 0',
@@ -52,7 +60,8 @@ function runPushDb(failOn: string) {
       },
     },
   )
-  return { status: result.status, calls: readFileSync(log, 'utf8').trim().split('\n') }
+  const calls = existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : []
+  return { status: result.status, stderr: result.stderr, calls }
 }
 
 describe('push-db', () => {
@@ -67,11 +76,22 @@ describe('push-db', () => {
   })
 
   it('removes the staged copy once on success, before the size check', () => {
-    const { status, calls } = runPushDb('no call matches this')
+    const { status, calls } = runPushDb()
     expect(status).toBe(0)
     expect(calls.filter((call) => call.includes(STAGED))).toHaveLength(1)
     expect(calls.at(-1)).toContain('wc -c')
     // Where expo-sqlite opens the app's database; the size check reads the same constant.
     expect(calls.some((call) => call.includes('cat > files/SQLite/aventuras.db'))).toBe(true)
   })
+
+  it.each(['-wal', '-journal'])(
+    'refuses a source with a %s sidecar before any device call',
+    (suffix) => {
+      writeFileSync(`${db}${suffix}`, 'pending changes')
+      const { status, stderr, calls } = runPushDb()
+      expect(status).toBe(1)
+      expect(stderr).toContain(`${db}${suffix}`)
+      expect(calls).toEqual([])
+    },
+  )
 })

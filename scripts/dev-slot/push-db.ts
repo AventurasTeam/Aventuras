@@ -33,6 +33,13 @@ function main(): void {
     throw new Error('usage: pnpm device:push-db <sqlite file>')
   }
   if (!isSqliteFile(file)) throw new Error(`${file} is not a SQLite database`)
+  // Only the main file is pushed, so changes still in a WAL or hot journal would be lost.
+  const sidecar = ['-wal', '-journal'].map((suffix) => `${file}${suffix}`).find(existsSync)
+  if (sidecar !== undefined) {
+    throw new Error(
+      `${sidecar} exists: close whatever has ${file} open, or open and close it once, then push`,
+    )
+  }
   const serial = process.env.ANDROID_SERIAL
   if (!serial) {
     throw new Error("set ANDROID_SERIAL to the target device's serial (see `adb devices`)")
