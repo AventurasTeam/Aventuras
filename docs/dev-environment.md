@@ -167,7 +167,10 @@ grep -c 'usesCleartextTraffic="true"' android/app/src/main/AndroidManifest.xml
 
 Write the fixture with `pnpm db:seed:long <file>`. A turn also needs
 the story's local embedder model: without it the turn fails before the
-narrative call, and the mock serves no embeddings. Fill the model cache
+narrative call, and the mock serves no embeddings. The fixture writes
+its chapters with no vectors, marked stale, so the first turn after a
+push embeds every chapter before its narrative call; time a turn after
+that one. Fill the model cache
 in `~/.cache/aventuras-e2e/embedders` from a file outside the worktree,
 since `tsx -e` can't reach the export and stray files in the worktree
 break the gates. It prints

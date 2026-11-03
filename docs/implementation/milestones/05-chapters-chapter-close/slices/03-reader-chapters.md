@@ -239,11 +239,12 @@ and tablet, Sheet (medium) on phone, dispatched as `OverflowMenu` does:
 - A per-story read beside `rehydrateStories`: `max(sequence_number) + 1`
   over each story's `current_branch_id`.
 - `useStoryChapterNumbers` reads it through React Query, keyed on
-  `settleCount`, and calls `refetch()` on each return to focus, since the
-  key doesn't move on focus and the client never goes stale. The list
-  stays mounted under the reader and `rehydrateStories` runs once at its
-  mount (`app/index.tsx:81-83`), so a close would otherwise leave the
-  label stale.
+  `settleCount` while the list is focused, and calls `refetch()` on each
+  return to focus, since the client never goes stale. The list stays
+  mounted under the reader and `rehydrateStories` runs once at its mount
+  (`app/index.tsx:81-83`), so a close would otherwise leave the label
+  stale. Hidden, it neither reads nor re-renders on a settle, and the
+  cards keep their last labels until the read on return lands.
 - `selectStoryCards` and `toStoryCardData` take the numbers: a draft stays
   null, and a story with no row reads 1.
 
