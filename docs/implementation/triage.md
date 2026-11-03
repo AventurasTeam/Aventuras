@@ -531,6 +531,17 @@ slice-planning gate forces its resolution before that slice is planned.
   which the entry sanitizer allows, may take Space too and weren't
   probed.
 
+- **A stale landed signal can end a newer jump's wait for the same
+  entry.** The host matches the surface's landed signal by entry id
+  alone (`landed` in `components/reader/use-entry-jump.ts`). If a
+  landing for entry X reports late, for example when a run failure's
+  reload detaches X's row mid-landing and the report crosses the native
+  bridge after the user has pressed X again, the new jump's veil lifts
+  while its read is still out. That read then lands with no veil, and
+  its bound later logs a spurious `bound` drop. Telling the two apart
+  needs a per-landing token on the signal, a bridge-contract change.
+  From reading, not reproduced. Raised 2026-11-03 by 5.3's slice review.
+
 - **Escape after a strip-opened chapter popover focuses the chip.** On
   web, the progress strip's hit area opens the popover through the
   chapter chip's trigger (`components/reader/reader-chapter-chips.tsx`),
