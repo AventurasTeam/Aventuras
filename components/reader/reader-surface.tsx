@@ -52,7 +52,7 @@ const LANDED_HIGHLIGHT_MS = 1_500
 const LANDING_SETTLED_FRAMES = 10
 const LANDING_MAX_FRAMES = 600
 // A trackpad's momentum arrives as wheel events about a frame apart; a longer gap is a new gesture.
-const WHEEL_CHAIN_GAP_MS = 100
+export const WHEEL_CHAIN_GAP_MS = 100
 // Trackpad momentum runs 1-3 s; a chain held longer is the user's own scrolling through the press.
 const WHEEL_HOLD_MAX_MS = 3_000
 // Custom properties inherit; the card's animation can't read the wrapper's animation-duration.

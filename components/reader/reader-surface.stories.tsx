@@ -8,7 +8,7 @@ import { t } from '@/lib/i18n'
 
 import type { ChapterBreaks } from './chapter-breaks'
 import type { ReaderSurfaceHandle } from './reader-document-types'
-import { ReaderSurface } from './reader-surface'
+import { ReaderSurface, WHEEL_CHAIN_GAP_MS } from './reader-surface'
 import {
   describePassFailure,
   describeTurnFailure,
@@ -2490,9 +2490,6 @@ export const JumpDroppedByAWheelReversingTheChain: Story = {
     expect(getComputedStyle(scroller).overflowY).toBe('auto')
   },
 }
-
-// The surface's chain gap: a wheel handled longer ago than this ends the chain.
-const WHEEL_CHAIN_GAP_MS = 100
 
 /**
  * A target still waiting for its row holds nothing; the hold starts once the row arrives, in the
