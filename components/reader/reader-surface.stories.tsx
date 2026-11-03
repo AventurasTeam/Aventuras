@@ -2241,7 +2241,8 @@ function wheelChain(
   onFrame: () => void,
   startAt = performance.now(),
 ) {
-  const chain = { foreignWrites: 0, hidden: false, lastAt: startAt }
+  // `dispatchedAt` is the clock the reader judges the chain by: when its last wheel was handled.
+  const chain = { foreignWrites: 0, hidden: false, lastAt: startAt, dispatchedAt: -1 }
   const ended = new Promise<void>((resolve) => {
     let left = scroller.scrollTop
     let frame = 0
@@ -2255,6 +2256,7 @@ function wheelChain(
       if (hidden) chain.hidden = true
       onFrame()
       chain.lastAt = startAt + frame * WHEEL_EVENT_SPACING_MS
+      chain.dispatchedAt = performance.now()
       wheelAt(scroller, stepPx, chain.lastAt)
       if (!hidden) scroller.scrollTop += stepPx
       left = scroller.scrollTop
@@ -2426,35 +2428,46 @@ export const JumpDroppedByAWheelReversingTheChain: Story = {
   },
 }
 
-/** A target still waiting for its row holds nothing; the hold starts once the row arrives. */
+// The surface's chain gap: a wheel handled longer ago than this ends the chain.
+const WHEEL_CHAIN_GAP_MS = 100
+
+/**
+ * A target still waiting for its row holds nothing; the hold starts once the row arrives, in the
+ * commit bringing it. A commit outlasting the chain's gap reads as the chain's end, so the hold
+ * starts a frame later (triage: the landing loop's decision function).
+ */
 export const JumpPendingHaltsWheelMomentumOnceItsRowArrives: Story = {
   render: (args) => <JumpHarness {...args} />,
   args: { rows: PARTIAL_ROWS },
   play: async () => {
     const scroller = scrollerOf('o14')
     await settleLanding(scroller)
-    let hiddenBeforeRows = false
-    let rowsLoaded = false
-    let unheldAfterRows = 0
-    const { ended } = wheelChain(scroller, 30, -20, () => {
+    const rowArrived = () => document.querySelector(`[data-entry-row="${JUMP_TARGET}"]`) != null
+    let hiddenBeforeRow = false
+    let unheldAfterRow = 0
+    const { chain, ended } = wheelChain(scroller, 30, -20, () => {
       const hidden = getComputedStyle(scroller).overflowY === 'hidden'
-      if (!rowsLoaded && hidden) hiddenBeforeRows = true
-      if (rowsLoaded && !hidden) unheldAfterRows += 1
+      if (!rowArrived() && hidden) hiddenBeforeRow = true
+      if (rowArrived() && !hidden) unheldAfterRow += 1
     })
     await frames(5)
     press('Jump')
     await frames(5)
-    rowsLoaded = true
     press('Load all rows')
+    // React commits a click's update in a microtask, ahead of this one.
+    await Promise.resolve()
+    expect(rowArrived()).toBe(true)
+    // Measured from before the wheel's dispatch, so never shorter than the gap the reader read.
+    const commitOutlastedChain = performance.now() - chain.dispatchedAt >= WHEEL_CHAIN_GAP_MS
     let landedAt = -1
     for (let frame = 1; frame <= 6 && landedAt < 0; frame++) {
       await nextFrame()
       if (Math.abs(topOffset(JUMP_TARGET, scroller) - LANDING_GAP_PX) < 1.5) landedAt = frame
     }
     await ended
-    expect(hiddenBeforeRows).toBe(false)
+    expect(hiddenBeforeRow).toBe(false)
     expect(landedAt).toBeGreaterThan(0)
-    expect(unheldAfterRows).toBe(0)
+    expect(unheldAfterRow).toBeLessThanOrEqual(commitOutlastedChain ? 1 : 0)
     await outlastLanding()
     expect(getComputedStyle(scroller).overflowY).toBe('auto')
     await landedOn(JUMP_TARGET, scroller)
