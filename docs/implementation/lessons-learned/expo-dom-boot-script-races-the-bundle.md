@@ -43,16 +43,26 @@ the probe, 8 of 16 opens ran the bundle first, and all 16 painted.
 
 ## How to apply
 
+- Inside a document, don't branch on `IS_DOM` from `expo/dom`. The
+  patch leaves it alone: it is an exported constant read at module
+  evaluation, so it is `false` whenever the bundle wins. Pass a prop
+  instead, as `model-card-document`'s `hostIsWebView` does. Two
+  dev-only readers have the same flaw: the Metro console forwarding in
+  `expo/src/async-require/setupHMR.ts`, and the Android LogBox
+  overlay, which injects its own globals from `onPageStarted`.
 - On an expo upgrade, the patch must still apply (pnpm fails the
-  install if it doesn't) and the fix must still be needed. expo 58
+  install if it doesn't) and the fix must still be needed. expo 58.0
   moved the globals to `injectedJavaScriptObject` and added a
-  DOM-ready signal. react-native-webview 14 delivers that object with
-  the same `onPageStarted` `evaluateJavascript`, so check the order
-  before dropping the patch. `components/reader/expo-dom-boot-patch.test.tsx`
-  replays both orders against the installed runtime.
-- Don't judge this race on the emulator: it can't lose it. Use a
-  release build on a phone.
+  DOM-ready signal. react-native-webview 14.0.1 delivers that object
+  with the same `onPageStarted` `evaluateJavascript`, so check the
+  order before dropping the patch.
+  `components/reader/expo-dom-boot-patch.test.tsx` replays both orders
+  against the installed runtime.
+- Don't judge this race on the emulator. It never lost in 16 opens
+  there, with a margin of about 400 ms. Use a release build on a phone.
 - To see inside a release document, set the `dom` prop's
   `webviewDebuggingEnabled` to `true` in a throwaway build. Then
   `adb forward tcp:<port> localabstract:webview_devtools_remote_<pid>`
-  and evaluate over the DevTools protocol.
+  and evaluate over the DevTools protocol. With the patch, a boot script
+  that never arrives no longer throws. It shows as an empty `#root`
+  with `$$EXPO_INITIAL_PROPS` undefined.
