@@ -431,6 +431,11 @@ slice-planning gate forces its resolution before that slice is planned.
   done), would make those rules unit-testable. A `useEntryLanding` hook
   would only move the coupling. Do it before the next behaviour change
   to the landing loop. Raised 2026-11-03 by 5.3's fling-halt review.
+  One known gap waits on it: the chain-live check reads the wall clock,
+  so a commit bringing a pending target's row that outlasts the 100 ms
+  chain gap reads as the chain's end, and the wheel hold starts a frame
+  late. A slow CI runner showed it; raised 2026-11-03 by PR #698's
+  review.
 
 - **`documentPainted` resets only on `onReady`.** In
   `app/reader-composer/[branchId].tsx`, `documentPainted` and its ref
