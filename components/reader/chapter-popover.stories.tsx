@@ -444,6 +444,37 @@ export const LongListShrinkKeepsPin: Story = {
   },
 }
 
+/** A scroll up in the shrink's own frame is still the reader's, so the list lets go. */
+export const LongListShrinkWithAScrollUpUnpins: Story = {
+  args: { closed: LONG_LIST, sinceLabel: null },
+  render: (args) => <RowLeavesHarness {...args} />,
+  play: async () => {
+    await waitForTier('desktop')
+    await openOverlay()
+    await expectOpenedOnLastRow()
+
+    const list = await listScroller()
+    list.style.overflowAnchor = 'none'
+    // A microtask after the commit runs before the frame's scroll event, so one event carries both.
+    const scrolledUp = new Promise<void>((resolve) => {
+      const observer = new MutationObserver(() => {
+        if (screen.queryByText('Day 30') != null) return
+        observer.disconnect()
+        list.scrollTop = 0
+        resolve()
+      })
+      observer.observe(list, { childList: true, subtree: true })
+    })
+    await userEvent.keyboard('{F3}')
+    await scrolledUp
+    await twoFrames()
+    await userEvent.keyboard('{F4}')
+    await screen.findByText(/Day 30, dusk/)
+    await twoFrames()
+    expect(list.scrollTop).toBe(0)
+  },
+}
+
 /** A wheel over a list too short to scroll moves nothing, so the list stays pinned as it grows. */
 export const ShortListWheelThenGrowsShowsLastRow: Story = {
   args: { closed: LONG_LIST.slice(0, 2) },
