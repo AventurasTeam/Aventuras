@@ -175,6 +175,22 @@ describe('useReaderEntryJump', () => {
     expect(warn).not.toHaveBeenCalled()
   })
 
+  it('warns when a reload loses an in-window landing that joined a wait', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const { result, rerender } = mount(true)
+    await act(() => result.current.jump('entry_10'))
+    await act(() => result.current.jump('entry_100'))
+    expect(send.mock.calls).toEqual([['entry_10'], ['entry_100']])
+
+    rerender({ branchId: BRANCH, ready: false })
+    expect(result.current.veil.isWaiting()).toBe(false)
+    expect(warn).toHaveBeenCalledExactlyOnceWith('reader.entry_jump_dropped', {
+      branchId: BRANCH,
+      entryId: 'entry_100',
+      cause: 'document_reload',
+    })
+  })
+
   it('lifts the veil when a second reload loses a landing it held', async () => {
     const { result, rerender } = mount(false)
     await act(() => result.current.jump('entry_10'))

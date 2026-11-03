@@ -751,7 +751,7 @@ describe('useEntryJump: jumping', () => {
     expect(result.current.veil.getSnapshot()).toBe(false)
   })
 
-  it('never shows the veil when a newer jump finds its row in the window first', async () => {
+  it('counts the veil from the first press when an in-window jump joins the wait', async () => {
     const ctx = await seedBranch()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
@@ -759,7 +759,11 @@ describe('useEntryJump: jumping', () => {
     vi.advanceTimersByTime(100)
 
     await act(() => result.current.jump('entry_100'))
-    vi.advanceTimersByTime(1_000)
+    vi.advanceTimersByTime(99)
+    expect(result.current.veil.getSnapshot()).toBe(false)
+    act(() => vi.advanceTimersByTime(1))
+    expect(result.current.veil.getSnapshot()).toBe(true)
+    act(() => result.current.landed('entry_100'))
     expect(result.current.veil.getSnapshot()).toBe(false)
   })
 
@@ -939,11 +943,75 @@ describe('useEntryJump: jumping', () => {
     expect(result.current.veil.isWaiting()).toBe(true)
   })
 
-  it('comes down when a newer jump finds its row in the window', async () => {
+  // On native the host's store runs ahead of the document, which may not have the row yet.
+  it('keeps the wait for an in-window jump made while it runs, until that row lands', async () => {
     const ctx = await seedBranch()
     const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
     await act(() => result.current.jump('entry_10'))
     await act(() => result.current.jump('entry_100'))
+    expect(land.mock.calls).toEqual([['entry_10'], ['entry_100']])
+    expect(result.current.veil.isWaiting()).toBe(true)
+
+    act(() => result.current.landed('entry_10'))
+    expect(result.current.veil.isWaiting()).toBe(true)
+    act(() => result.current.landed('entry_100'))
     expect(result.current.veil.isWaiting()).toBe(false)
+  })
+
+  it('keeps the wait when a replaced read finishes under an in-window jump', async () => {
+    const ctx = await seedBranch()
+    const open = holdNextBetween()
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    let first!: Promise<void>
+    act(() => {
+      first = result.current.jump('entry_10')
+    })
+    await vi.waitFor(() => expect(readEntriesBetween).toHaveBeenCalledTimes(1))
+
+    await act(() => result.current.jump('entry_100'))
+    await act(async () => {
+      open()
+      await first
+    })
+    expect(land).toHaveBeenCalledExactlyOnceWith('entry_100')
+    expect(result.current.veil.isWaiting()).toBe(true)
+    act(() => result.current.landed('entry_100'))
+    expect(result.current.veil.isWaiting()).toBe(false)
+  })
+
+  it('bounds a joined wait from the in-window landing call', async () => {
+    const ctx = await seedBranch()
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    await act(() => result.current.jump('entry_10'))
+    vi.advanceTimersByTime(15_000)
+    await act(() => result.current.jump('entry_100'))
+
+    act(() => vi.advanceTimersByTime(29_999))
+    expect(result.current.veil.isWaiting()).toBe(true)
+    act(() => vi.advanceTimersByTime(1))
+    expect(result.current.veil.isWaiting()).toBe(false)
+    expect(warn).toHaveBeenCalledExactlyOnceWith('reader.entry_jump_dropped', {
+      branchId: BRANCH,
+      entryId: 'entry_100',
+      cause: 'bound',
+    })
+  })
+
+  it('reads nothing and arms nothing for an in-window jump with no wait running', async () => {
+    const ctx = await seedBranch()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const heard = vi.fn()
+    const unsubscribe = result.current.veil.subscribe(heard)
+
+    await act(() => result.current.jump('entry_100'))
+    unsubscribe()
+    expect(land).toHaveBeenCalledExactlyOnceWith('entry_100')
+    expect(readEntryPosition).not.toHaveBeenCalled()
+    expect(readEntriesBetween).not.toHaveBeenCalled()
+    expect(heard).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

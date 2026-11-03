@@ -209,7 +209,12 @@ export function useEntryJump(
       const inWindow = entriesStore.getById(entryId)?.branchId === branchId
       try {
         if (inWindow) {
-          release()
+          // On native the host's store runs ahead of the document: lifting a running wait here
+          // would unveil the old view until the document renders this row.
+          if (veil.isWaiting()) {
+            targetRef.current = entryId
+            watchLanding(entryId)
+          }
           land(entryId)
           return
         }
