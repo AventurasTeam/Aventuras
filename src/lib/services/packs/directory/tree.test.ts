@@ -248,9 +248,23 @@ describe('planFolderChanges', () => {
   })
 
   it('overwrites its own README and keeps a user’s ABOUT.md in a current tree', () => {
-    const { prunePaths, renames } = planFolderChanges([...tree.keys(), ABOUT_FILE], tree, 'current')
+    const { prunePaths, renames, replacedPaths } = planFolderChanges(
+      [...tree.keys(), ABOUT_FILE],
+      tree,
+      'current',
+    )
     expect(renames).toEqual([])
     expect(prunePaths).toEqual([])
+    expect(replacedPaths).toEqual([])
+  })
+
+  it('names the files it would replace in a folder it does not recognise, not the README it moves aside', () => {
+    const { replacedPaths } = planFolderChanges(
+      [README_FILE, '.GitAttributes', 'notes.txt'],
+      tree,
+      'foreign',
+    )
+    expect(replacedPaths).toEqual(['.GitAttributes'])
   })
 })
 

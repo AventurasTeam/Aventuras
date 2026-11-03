@@ -203,7 +203,7 @@ cannot live in the shell's one scroller.
 These end in Cancel plus an action but are still assembled by hand: `LorebookExportModal`,
 `LorebookImportModal`, `LorebookVaultImportModal`, `ResummarizeModal`, `SyncModal`,
 `VaultExportModal`, `STChatImportModal`, and in `vault/prompts/` `CreatePackDialog`,
-`ExportIntoFolderDialog`, `ImportPreviewDialog`, `TestVariablesModal` and the pack deletion in
+`ImportPreviewDialog`, `TestVariablesModal` and the pack deletion in
 `PromptPackList`. Move one onto the shell when you
 are in it anyway.
 

@@ -9,6 +9,7 @@ import { templateEngine } from '#lib/services/templates/engine.ts'
 import { hashContent } from './hash'
 import { packUpdateSummary, type PackUpdateSummary } from './update-summary'
 import type { PresetPack } from './types'
+import { errMessage } from '#lib/utils/error.ts'
 import { PACK_FILE } from './directory/layout'
 import { pickDirectory, readTree, writeTree } from './directory/io'
 import { validateTree, type DirectoryValidationResult } from './directory/parse'
@@ -18,6 +19,7 @@ import {
   folderOrigin,
   planFolderChanges,
   type FolderChanges,
+  type FolderOrigin,
   type Tree,
 } from './directory/tree'
 
@@ -46,8 +48,8 @@ export type ConflictStrategy = 'rename' | 'cancel'
 export interface DirectoryExportPlan extends FolderChanges {
   root: string
   tree: Tree
-  /** The folder carries a `pack.yaml` this version can parse, so it is a tree we own. */
-  isKnownExport: boolean
+  /** Who wrote the folder; only `current` and `earlier` are trees we own. */
+  origin: Exclude<FolderOrigin, 'newer'>
   /**
    * Ask before writing. True when the folder holds files we did not put there — one sharing a
    * name with a file being written is still overwritten — and whenever anything would be
@@ -113,18 +115,9 @@ class ImportExportService {
       existingPaths = existing.allPaths
       packFileText = existing.contents.get(PACK_FILE)
     } catch (e) {
-      // A folder that cannot be read is not one this export owns: nothing is pruned from it,
-      // and the confirmation stands in for the certainty we could not get.
+      // Without its contents nothing can be pruned, moved aside or named before it is overwritten.
       console.error('[ImportExportService] Failed to read the chosen folder:', e)
-      return {
-        root,
-        tree,
-        prunePaths: [],
-        movedPaths: [],
-        renames: [],
-        isKnownExport: false,
-        needsConfirmation: true,
-      }
+      throw new Error(`Couldn't read this folder: ${errMessage(e)}`)
     }
 
     // Pruning deletes files, so the folder has to prove it is one of ours. The name
@@ -136,18 +129,17 @@ class ImportExportService {
         'This folder was exported by a newer version of Aventuras. Update the app to export into it.',
       )
     }
-    const isKnownExport = origin !== 'foreign'
-    const { prunePaths, movedPaths, renames } = planFolderChanges(existingPaths, tree, origin)
+    const changes = planFolderChanges(existingPaths, tree, origin)
 
     return {
       root,
       tree,
-      prunePaths,
-      movedPaths,
-      renames,
-      isKnownExport,
+      ...changes,
+      origin,
       needsConfirmation:
-        (!isKnownExport && existingPaths.length > 0) || prunePaths.length > 0 || renames.length > 0,
+        (origin === 'foreign' && existingPaths.length > 0) ||
+        changes.prunePaths.length > 0 ||
+        changes.renames.length > 0,
     }
   }
 

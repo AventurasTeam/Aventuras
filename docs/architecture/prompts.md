@@ -226,9 +226,13 @@ migrated tree keeps no unnumbered group folders. Import reads both formats.
 A pruned template file whose id the tree writes again is a **move**, by the same rule that makes the
 filename the identity, so the confirmation counts moves in one line and lists only what is really going.
 Listed among the deletions, a migration's ~80 moves would bury the one prompt a pack actually dropped.
+In a folder the export does not own, the plan also names each existing file the tree would overwrite, so
+the confirmation lists them rather than warning that some might be.
 
 An export into a tree a **newer** format wrote is refused, as an import of one is. Treating it as a
 stranger's folder would rename that version's own `README.md` as the user's and downgrade `pack.yaml`.
+So is an export into a folder that cannot be read: without its contents nothing can be pruned, moved
+aside or named before it is overwritten, and the error names what failed.
 
 ### Why the Baseline Lives in Git
 

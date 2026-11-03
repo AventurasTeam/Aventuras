@@ -183,6 +183,15 @@ export interface FolderChanges {
   movedPaths: string[]
   /** Applied before the tree is written, so the export's own file can take the old name. */
   renames: FileRename[]
+  /** Files of a folder the export does not own that the tree overwrites. */
+  replacedPaths: string[]
+}
+
+/** Existing files the tree writes over, compared without case, minus those moved aside first. */
+function replacedFiles(paths: string[], tree: Tree, renames: FileRename[]): string[] {
+  const written = new Set([...tree.keys()].map((path) => path.toLowerCase()))
+  const movedAside = new Set(renames.map(({ from }) => from))
+  return paths.filter((path) => written.has(path.toLowerCase()) && !movedAside.has(path)).toSorted()
 }
 
 /** Pruned template files whose id the tree still writes, which is what makes them a move. */
@@ -224,11 +233,13 @@ export function planFolderChanges(
   const prunePaths = origin === 'foreign' ? [] : planPrune(paths, tree)
   if (origin === 'earlier') prunePaths.push(...findRootFiles(paths, ABOUT_FILE))
   const sorted = prunePaths.toSorted()
+  const renames = origin === 'current' ? [] : planReadmeRenames(paths)
 
   return {
     prunePaths: sorted,
     movedPaths: movedTemplatePaths(sorted, tree),
-    renames: origin === 'current' ? [] : planReadmeRenames(paths),
+    renames,
+    replacedPaths: origin === 'foreign' ? replacedFiles(paths, tree, renames) : [],
   }
 }
 
