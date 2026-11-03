@@ -315,6 +315,12 @@ export function ReaderSurface({
   const streamActiveRef = useRef(false)
   const touchInterruptedRef = useRef(false)
   const [showJumpToBottom, setShowJumpToBottom] = useState(false)
+  // Content growing below a reader that doesn't follow fires no scroll event to raise the button.
+  const syncJumpButton = useCallback(() => {
+    const el = scrollRef.current
+    if (el == null || el.getClientRects().length === 0) return
+    setShowJumpToBottom(computeScrollMetrics(el).distanceFromBottomPx > NEAR_BOTTOM_THRESHOLD_PX)
+  }, [])
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState('')
@@ -589,6 +595,7 @@ export function ReaderSurface({
       // Read back: the browser clamps the write at either end, and a clamped write moved nothing.
       const after = el.scrollTop
       lastScrollTop = writable ? after : null
+      syncJumpButton()
       // One halt: should a fling outlive it, the loop waits for rest rather than fight it.
       halting = writable && !halted && movingFrames >= 2
       if (halting) {
@@ -610,7 +617,7 @@ export function ReaderSurface({
       landingRafRef.current = requestAnimationFrame(assertLanding)
     }
     assertLanding()
-  }, [reportLanded, stopBottomPin, stopLanding])
+  }, [reportLanded, stopBottomPin, stopLanding, syncJumpButton])
   const jumpToEntry = useCallback(
     (entryId: string) => {
       // Reports a replaced target as dropped before the new one becomes the unreported one.
@@ -786,8 +793,11 @@ export function ReaderSurface({
       const el = scrollRef.current
       if (el != null) el.scrollTop = el.scrollHeight
       machine.autoscrollApplied({ distanceFromBottomPx: 0 })
+    } else if (landingRef.current?.running !== true) {
+      // A running landing syncs after its own write; read here, before that write, it would flash.
+      syncJumpButton()
     }
-  }, [streaming, startBottomPin])
+  }, [streaming, startBottomPin, syncJumpButton])
 
   // A viewport shrinking under a reader at the bottom would otherwise hide the newest lines.
   useEffect(() => {

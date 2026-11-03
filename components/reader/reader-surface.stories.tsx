@@ -445,6 +445,11 @@ function distanceFromBottom(el: HTMLElement): number {
   return el.scrollHeight - el.scrollTop - el.clientHeight
 }
 
+// The jump button's near-bottom band.
+const NEAR_BOTTOM_PX = 20
+
+const jumpToBottomButton = () => screen.queryByRole('button', { name: t('reader:jumpToBottom') })
+
 // The landing pin re-asserts the bottom per frame until the scroll height holds for 10
 // frames; outlasting that keeps the pin from passing the shrink stories by itself.
 async function settleLanding(scroller: HTMLElement) {
@@ -1053,6 +1058,24 @@ export const StreamFollowBrokenByKeyAfterReaderPress: Story = {
     expect(distance).toBeLessThan(80)
     await nextChunk(scroller)
     expect(distanceFromBottom(scroller)).toBeGreaterThan(distance)
+  },
+}
+
+/**
+ * reader-composer.md → Jump buttons: the button shows once the reader leaves the bottom. A stream
+ * growing below a reader that doesn't follow moves the bottom away with no scroll event.
+ */
+export const JumpButtonRisesAsAStreamGrowsBelowAReaderInTheBand: Story = {
+  render: (args) => <StreamChunksHarness {...args} />,
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    scroller.dispatchEvent(new WheelEvent('wheel', { deltaY: -10, bubbles: true }))
+    await scrollToDistance(scroller, 10)
+    expect(jumpToBottomButton()).toBeNull()
+    await nextChunk(scroller)
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(NEAR_BOTTOM_PX)
+    await waitFor(() => expect(jumpToBottomButton()).toBeInTheDocument())
   },
 }
 
@@ -2650,6 +2673,67 @@ export const StreamGrowingBelowTailJumpHolds: Story = {
     press('Next chunk')
     await frames(2)
     expect(scroller.scrollTop).toBe(top)
+  },
+}
+
+/** A jump to the tail ends at the bottom; the reply growing on below it moves the bottom away. */
+export const JumpButtonRisesAsAStreamGrowsBelowALandedTail: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Next chunk')
+    await frames(2)
+    press('Jump to tail')
+    await outlastLanding()
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(NEAR_BOTTOM_PX)
+    expect(jumpToBottomButton()).toBeNull()
+    press('Next chunk')
+    await frames(2)
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(NEAR_BOTTOM_PX)
+    await waitFor(() => expect(jumpToBottomButton()).toBeInTheDocument())
+  },
+}
+
+/**
+ * The reply growing on every other frame keeps a landing on the tail from settling. While the row
+ * climbs, each frame ends at the bottom and the button stays down; once it tops out and the reply
+ * grows past the band, the button rises with the landing still running. Two frames a chunk, so no
+ * scroll event reads a chunk committed after the write it reports.
+ */
+export const JumpButtonRisesAsAStreamOutgrowsALandingOnTheTail: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    press('Next chunk')
+    await frames(2)
+    const label = `[aria-label="${t('reader:jumpToBottom')}"]`
+    const isButton = (node: Node) =>
+      node instanceof Element && (node.matches(label) || node.querySelector(label) != null)
+    const mounts = { added: 0, removed: 0 }
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        mounts.added += Array.from(record.addedNodes).filter(isButton).length
+        mounts.removed += Array.from(record.removedNodes).filter(isButton).length
+      }
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+    press('Jump to tail')
+    let toppedOutAt = -1
+    for (let i = 0; i < 40 && (toppedOutAt < 0 || i < toppedOutAt + 3); i++) {
+      press('Next chunk')
+      await frames(2)
+      if (toppedOutAt < 0 && Math.abs(topOffset('o14', scroller) - LANDING_GAP_PX) < 1.5)
+        toppedOutAt = i
+    }
+    observer.disconnect()
+    expect(toppedOutAt).toBeGreaterThanOrEqual(0)
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(NEAR_BOTTOM_PX)
+    expect(jumpToBottomButton()).toBeInTheDocument()
+    expect(mounts).toEqual({ added: 1, removed: 0 })
   },
 }
 
