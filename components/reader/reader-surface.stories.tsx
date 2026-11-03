@@ -450,6 +450,27 @@ const NEAR_BOTTOM_PX = 20
 
 const jumpToBottomButton = () => screen.queryByRole('button', { name: t('reader:jumpToBottom') })
 
+// Counts the jump button's mounts and unmounts, so a flash between two frames still shows.
+function watchJumpButtonMounts(): () => { added: number; removed: number } {
+  const label = `[aria-label="${t('reader:jumpToBottom')}"]`
+  const isButton = (node: Node) =>
+    node instanceof Element && (node.matches(label) || node.querySelector(label) != null)
+  const mounts = { added: 0, removed: 0 }
+  const tally = (records: MutationRecord[]) => {
+    for (const record of records) {
+      mounts.added += Array.from(record.addedNodes).filter(isButton).length
+      mounts.removed += Array.from(record.removedNodes).filter(isButton).length
+    }
+  }
+  const observer = new MutationObserver(tally)
+  observer.observe(document.body, { childList: true, subtree: true })
+  return () => {
+    tally(observer.takeRecords())
+    observer.disconnect()
+    return mounts
+  }
+}
+
 // The landing pin re-asserts the bottom per frame until the scroll height holds for 10
 // frames; outlasting that keeps the pin from passing the shrink stories by itself.
 async function settleLanding(scroller: HTMLElement) {
@@ -1086,6 +1107,60 @@ export const JumpButtonRisesAsAStreamGrowsBelowAReaderInTheBand: Story = {
     await nextChunk(scroller)
     expect(distanceFromBottom(scroller)).toBeGreaterThan(NEAR_BOTTOM_PX)
     await waitFor(() => expect(jumpToBottomButton()).toBeInTheDocument())
+  },
+}
+
+// A stream below a close that lands mid-stream: the break mounts under the tail row on a press.
+function StreamBreakHarness(props: ComponentProps<typeof ReaderSurface>) {
+  const [chunks, setChunks] = useState(1)
+  const [closed, setClosed] = useState(false)
+  const content = Array.from({ length: chunks }, () => REPLY_TEXT).join('\n\n')
+  return (
+    <div style={{ display: 'flex', height: '100%', flexDirection: 'column' }}>
+      <div>
+        <button type="button" onClick={() => setChunks((n) => n + 1)}>
+          Next chunk
+        </button>
+        <button type="button" onClick={() => setClosed(true)}>
+          Close chapter
+        </button>
+      </div>
+      <div style={{ minHeight: 0, flex: 1 }}>
+        <ReaderSurface
+          {...props}
+          rows={OVERFLOW_ROWS}
+          chapterBreaks={closed ? { o14: { number: 2 } } : {}}
+          streaming={{ content, reasoning: '' }}
+        />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * A break mounting near the bottom pins it, and the pin follows the reply as it grows: the button
+ * stays down rather than rising at each chunk's commit for the pin to take back a frame later.
+ */
+export const JumpButtonStaysDownWhileABreakPinFollowsAStream: Story = {
+  render: (args) => <StreamBreakHarness {...args} />,
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    scroller.dispatchEvent(new WheelEvent('wheel', { deltaY: -10, bubbles: true }))
+    // A fresh commit: the break measures the bottom against the last commit's height.
+    await nextChunk(scroller)
+    await scrollToDistance(scroller, 10)
+    screen.getByRole('button', { name: 'Close chapter' }).click()
+    await screen.findByRole('separator', { name: t('chapters:label', { number: 2 }) })
+    await frames(2)
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+    const buttonMounts = watchJumpButtonMounts()
+    for (let i = 0; i < 6; i++) {
+      screen.getByRole('button', { name: 'Next chunk' }).click()
+      await frames(2)
+    }
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+    expect(buttonMounts()).toEqual({ added: 0, removed: 0 })
   },
 }
 
@@ -2736,17 +2811,7 @@ export const JumpButtonRisesAsAStreamOutgrowsALandingOnTheTail: Story = {
     await settleLanding(scroller)
     press('Next chunk')
     await frames(2)
-    const label = `[aria-label="${t('reader:jumpToBottom')}"]`
-    const isButton = (node: Node) =>
-      node instanceof Element && (node.matches(label) || node.querySelector(label) != null)
-    const mounts = { added: 0, removed: 0 }
-    const observer = new MutationObserver((records) => {
-      for (const record of records) {
-        mounts.added += Array.from(record.addedNodes).filter(isButton).length
-        mounts.removed += Array.from(record.removedNodes).filter(isButton).length
-      }
-    })
-    observer.observe(document.body, { childList: true, subtree: true })
+    const buttonMounts = watchJumpButtonMounts()
     press('Jump to tail')
     let toppedOutAt = -1
     for (let i = 0; i < 40 && (toppedOutAt < 0 || i < toppedOutAt + 3); i++) {
@@ -2755,11 +2820,10 @@ export const JumpButtonRisesAsAStreamOutgrowsALandingOnTheTail: Story = {
       if (toppedOutAt < 0 && Math.abs(topOffset('o14', scroller) - LANDING_GAP_PX) < 1.5)
         toppedOutAt = i
     }
-    observer.disconnect()
     expect(toppedOutAt).toBeGreaterThanOrEqual(0)
     expect(distanceFromBottom(scroller)).toBeGreaterThan(NEAR_BOTTOM_PX)
     expect(jumpToBottomButton()).toBeInTheDocument()
-    expect(mounts).toEqual({ added: 1, removed: 0 })
+    expect(buttonMounts()).toEqual({ added: 1, removed: 0 })
   },
 }
 

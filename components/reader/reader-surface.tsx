@@ -796,8 +796,8 @@ export function ReaderSurface({
       const el = scrollRef.current
       if (el != null) el.scrollTop = el.scrollHeight
       machine.autoscrollApplied({ distanceFromBottomPx: 0 })
-    } else if (landingRef.current?.running !== true) {
-      // A running landing syncs after its own write; read here, before that write, it would flash.
+    } else if (landingRef.current?.running !== true && !pinActiveRef.current) {
+      // A running landing or pin moves the reader before the paint: read here, the button flashes.
       syncJumpButton()
     }
   }, [streaming, startBottomPin, syncJumpButton])
