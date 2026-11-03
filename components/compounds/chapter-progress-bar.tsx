@@ -10,15 +10,20 @@ const TONE_FILL: Record<ChapterProgressTone, string> = {
   danger: 'bg-danger',
 }
 
+/** 0–100; a NaN reads 0. */
+export function clampPercent(percent: number): number {
+  return percent > 0 ? Math.min(percent, 100) : 0
+}
+
 export type ChapterProgressBarProps = {
-  /** Clamped to 0–100; a NaN reads 0. Sets the tone too, through `chapterProgressTone`. */
+  /** Clamped through `clampPercent`. Sets the tone too, through `chapterProgressTone`. */
   percent: number
   /** Carries the track's height, which has no default. */
   className?: string
 }
 
 export function ChapterProgressBar({ percent, className }: ChapterProgressBarProps): ReactElement {
-  const width = percent > 0 ? Math.min(percent, 100) : 0
+  const width = clampPercent(percent)
   return (
     <View className={cn('w-full overflow-hidden bg-bg-sunken', className)}>
       <View

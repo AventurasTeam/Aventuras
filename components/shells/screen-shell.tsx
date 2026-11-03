@@ -3,7 +3,7 @@ import { type ReactNode } from 'react'
 import { Platform, Pressable, ScrollView, View, type ViewStyle } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { ChapterProgressBar } from '@/components/compounds/chapter-progress-bar'
+import { ChapterProgressBar, clampPercent } from '@/components/compounds/chapter-progress-bar'
 import { chapterProgressCounts } from '@/components/compounds/chapter-progress-label'
 import { MemoryRunBanner } from '@/components/compounds/memory-run-banner'
 import { Icon } from '@/components/ui/icon'
@@ -93,13 +93,6 @@ type ScreenShellProps = {
 
 const CHIP_STRIP_CONTENT: ViewStyle = { alignItems: 'center', gap: 8, paddingVertical: 4 }
 
-function clampProgress(n: number | undefined): number {
-  if (n == null || Number.isNaN(n)) return 0
-  if (n < 0) return 0
-  if (n > 100) return 100
-  return n
-}
-
 export function ScreenShell({
   variant,
   title,
@@ -175,7 +168,7 @@ export function ScreenShell({
     <IconAction icon={ArrowLeft} label={t('chrome.back')} onPress={onBack} size="lg" />
   )
 
-  const progress = clampProgress(chapterProgress?.percent)
+  const progress = clampPercent(chapterProgress?.percent ?? 0)
   const canPressProgress = onChapterProgressPress != null
   // aria-haspopup is a web-only DOM attribute RN's prop types don't model.
   const progressPopupProps =
