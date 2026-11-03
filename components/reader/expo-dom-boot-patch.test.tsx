@@ -1,7 +1,19 @@
 // @vitest-environment jsdom
 import { cleanup, render } from '@testing-library/react'
+import type { registerDOMComponent } from 'expo/build/dom/dom-entry'
+import type { getInjectEventScript } from 'expo/build/dom/injection'
+import type RawWebView from 'expo/build/dom/webview-wrapper'
 import { useEffect, type ComponentType } from 'react'
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+  type MockInstance,
+} from 'vitest'
 
 // Replays patches/expo.patch in both boot orders; why:
 // docs/implementation/lessons-learned/expo-dom-boot-script-races-the-bundle.md
@@ -34,20 +46,26 @@ const win = window as unknown as BootGlobals
 function DocumentUnderTest({ label, onReady }: { label: string; onReady: () => Promise<void> }) {
   useEffect(() => {
     void onReady()
-  }, [onReady])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per mount, like reader-document
+  }, [])
   return <p>{label}</p>
 }
 
-// A non-literal specifier keeps tsc out of expo's sources, which don't type-check in this repo.
-function importExpoDom<T>(file: string): Promise<T> {
-  return import(/* @vite-ignore */ `expo/src/dom/${file}`) as Promise<T>
+// Typed from expo's shipped declarations; the non-literal specifier keeps tsc out of expo's
+// sources, which don't type-check in this repo.
+type ExpoDomModules = {
+  'dom-entry': { registerDOMComponent: typeof registerDOMComponent }
+  'webview-wrapper': { default: typeof RawWebView }
+  injection: { getInjectEventScript: typeof getInjectEventScript }
 }
 
-/** The wrapper's boot script, as RNW evaluates it in the page (RNWebView.java wraps it so). */
+function importExpoDom<F extends keyof ExpoDomModules>(file: F): Promise<ExpoDomModules[F]> {
+  return import(/* @vite-ignore */ `expo/src/dom/${file}`)
+}
+
+/** The wrapper's boot script, wrapped as react-native-webview's RNCWebView.java evaluates it. */
 async function hostBootScript(): Promise<string> {
-  const { default: RawWebView } = await importExpoDom<{
-    default: ComponentType<Record<string, unknown>>
-  }>('webview-wrapper')
+  const { default: RawWebView } = await importExpoDom('webview-wrapper')
   render(
     <RawWebView
       filePath="reader-document.html"
@@ -61,15 +79,19 @@ async function hostBootScript(): Promise<string> {
   return `(function() {\n${script};\n})();`
 }
 
+/** The script the wrapper injects when the host re-sends its props. */
+async function hostPropsScript(props: Record<string, string>): Promise<string> {
+  const { getInjectEventScript } = await importExpoDom('injection')
+  return getInjectEventScript({ type: '$$props', data: { names: ['onReady'], props } })
+}
+
 function runInPage(script: string) {
   new Function(script)()
 }
 
 /** Evaluates the document bundle's entry, as `expo/dom/entry.js` does in the WebView. */
 async function evaluateDocumentBundle() {
-  const { registerDOMComponent } = await importExpoDom<{
-    registerDOMComponent: (component: typeof DocumentUnderTest) => void
-  }>('dom-entry')
+  const { registerDOMComponent } = await importExpoDom('dom-entry')
   registerDOMComponent(DocumentUnderTest)
 }
 
@@ -84,41 +106,55 @@ const rootText = () => document.getElementById('root')!.textContent
 
 describe('expo-dom boot order (patches/expo.patch)', () => {
   let postMessage: Mock<PostMessage>
+  let windowListeners: MockInstance<typeof window.addEventListener>
 
   beforeEach(() => {
     vi.resetModules()
-    // A release document: the entry skips its dev-only LogBox require.
+    // The wrapper reads __DEV__ on import, and vitest doesn't define it.
     vi.stubGlobal('__DEV__', false)
+    // A release document: the entry skips its dev-only LogBox require.
     vi.stubEnv('NODE_ENV', 'production')
     captured.props = null
     postMessage = vi.fn<PostMessage>()
     win.ReactNativeWebView = { postMessage }
+    windowListeners = vi.spyOn(window, 'addEventListener')
     document.body.innerHTML = '<div id="root"></div>'
   })
 
   afterEach(() => {
     cleanup()
+    // A boot listener left by a test that failed early would mount a second root in the next one.
+    for (const [type, listener] of windowListeners.mock.calls) {
+      if (type === '$$dom_boot') window.removeEventListener(type, listener)
+    }
+    windowListeners.mockRestore()
     vi.unstubAllGlobals()
     vi.unstubAllEnvs()
+    // The entry sets this directly, so unstubAllEnvs doesn't clear it.
+    delete process.env.EXPO_DOM_HOST_OS
     delete win.$$EXPO_DOM_HOST_OS
     delete win.$$EXPO_INITIAL_PROPS
     delete win.ReactNativeWebView
   })
 
-  it('mounts once and reaches the host when the boot script lands after the bundle', async () => {
-    const script = await hostBootScript()
+  it('mounts once and talks both ways when the boot script lands after the bundle', async () => {
+    const bootScript = await hostBootScript()
+    const propsScript = await hostPropsScript({ label: 'updated' })
 
     await evaluateDocumentBundle()
     expect(rootText()).toBe('')
 
-    runInPage(script)
-    runInPage(script)
-
+    runInPage(bootScript)
     await vi.waitFor(() => expect(rootText()).toBe('from host'))
     await vi.waitFor(() => expect(nativeActionsPosted(postMessage)).toEqual(['onReady']))
+
+    runInPage(bootScript)
+    runInPage(propsScript)
+    await vi.waitFor(() => expect(rootText()).toBe('updated'))
+    expect(nativeActionsPosted(postMessage)).toEqual(['onReady'])
   })
 
-  it('mounts at once when the boot script ran first', async () => {
+  it('mounts without waiting for the boot event when the script ran first', async () => {
     runInPage(await hostBootScript())
 
     await evaluateDocumentBundle()
