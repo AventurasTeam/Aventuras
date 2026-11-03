@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Pressable } from 'react-native'
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
@@ -9,7 +9,11 @@ import { EARTH_GREGORIAN } from '@/lib/calendar'
 import type { Chapter, StoryEntry } from '@/lib/db'
 import { chaptersStore } from '@/lib/stores'
 
-import { ReaderChapterChips, type ReaderChapterChipsProps } from './reader-chapter-chips'
+import {
+  ReaderChapterChips,
+  type ReaderChapterChipsHandle,
+  type ReaderChapterChipsProps,
+} from './reader-chapter-chips'
 
 const BRANCH = 'br_chips'
 
@@ -144,6 +148,45 @@ async function expectPopoverClosesOnFocusLoss() {
 export const ClosesWhenFocusLeaves: Story = {
   render: (args) => <FocusLossHarness {...args} />,
   play: expectPopoverClosesOnFocusLoss,
+}
+
+// The strip calls the chips' handle, as the reader route wires it.
+function StripHarness(args: ReaderChapterChipsProps) {
+  const chips = useRef<ReaderChapterChipsHandle>(null)
+  return (
+    <ScreenShell
+      variant="in-story"
+      title={<Text size="base">Aria&apos;s Descent</Text>}
+      centerExtras={<ReaderChapterChips {...args} ref={chips} />}
+      chapterProgress={args.progress}
+      onChapterProgressPress={() => chips.current?.openPopover()}
+      onBack={noop}
+      onOpenStorySettings={noop}
+      onOpenActions={noop}
+    >
+      <Text>Body</Text>
+    </ScreenShell>
+  )
+}
+
+/** A strip press while the popover is open closes it, as the chip's does. */
+export const StripPressToggles: Story = {
+  render: (args) => <StripHarness {...args} />,
+  play: async () => {
+    const strip = await screen.findByTestId('chapter-progress-hit')
+    const chip = screen.getByRole('button', { name: 'Chapter 1' })
+    await userEvent.click(strip)
+    await waitFor(() => expect(screen.getByText('1 · in progress')).toBeVisible(), {
+      timeout: 5_000,
+    })
+    await expect(chip).toHaveAttribute('aria-expanded', 'true')
+
+    await userEvent.click(strip)
+    await waitFor(() => expect(screen.queryByText('1 · in progress')).toBeNull())
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    expect(screen.queryByText('1 · in progress')).toBeNull()
+    await expect(chip).toHaveAttribute('aria-expanded', 'false')
+  },
 }
 
 export const ClosesWhenFocusLeavesPhone: Story = {

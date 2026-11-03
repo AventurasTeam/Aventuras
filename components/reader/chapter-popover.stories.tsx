@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { useWindowDimensions, View } from 'react-native'
+import { Pressable, useWindowDimensions, View } from 'react-native'
 import { expect, fireEvent, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
@@ -570,6 +570,54 @@ export const HandleOpensAndCloses: Story = {
     await waitFor(() => expect(screen.queryByText('3 · in progress')).toBeNull())
     await expect(args.onOpenChange).toHaveBeenCalledTimes(2)
     await expect(args.onOpenChange).toHaveBeenLastCalledWith(false)
+  },
+}
+
+// Stands in for the reader's progress strip: a press outside the popover that calls `open()`.
+function OutsideOpenerHarness(props: ChapterPopoverProps) {
+  const handle = useRef<ChapterPopoverHandle>(null)
+  return (
+    <>
+      <Pressable role="button" aria-label="Outside opener" onPress={() => handle.current?.open()}>
+        <Text>Outside opener</Text>
+      </Pressable>
+      <ChapterPopover {...props} ref={handle} />
+    </>
+  )
+}
+
+const openCalls = (onOpenChange: unknown) =>
+  (onOpenChange as ReturnType<typeof fn>).mock.calls.map(([open]) => open)
+
+/** Radix closes on the press's pointerdown; the press itself must not open it again. */
+export const OutsideOpenerToggles: Story = {
+  render: (args) => <OutsideOpenerHarness {...args} />,
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    const opener = screen.getByRole('button', { name: 'Outside opener' })
+    await userEvent.click(opener)
+    await waitFor(() => expect(screen.getByText('3 · in progress')).toBeVisible(), ANIMATION)
+
+    await userEvent.click(opener)
+    await waitFor(() => expect(screen.queryByText('3 · in progress')).toBeNull())
+    await twoFrames()
+    expect(openCalls(args.onOpenChange)).toEqual([true, false])
+
+    // The next press opens it, and the chip still toggles.
+    await userEvent.click(opener)
+    await waitFor(() => expect(screen.getByText('3 · in progress')).toBeVisible(), ANIMATION)
+    await userEvent.click(await chip())
+    await waitFor(() => expect(screen.queryByText('3 · in progress')).toBeNull())
+    expect(openCalls(args.onOpenChange)).toEqual([true, false, true, false])
+
+    // Closed by a press elsewhere, then opened from the keyboard.
+    await openOverlay()
+    await userEvent.click(screen.getByTestId('tier'))
+    await waitFor(() => expect(screen.queryByText('3 · in progress')).toBeNull())
+    opener.focus()
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(screen.getByText('3 · in progress')).toBeVisible(), ANIMATION)
+    expect(openCalls(args.onOpenChange)).toEqual([true, false, true, false, true, false, true])
   },
 }
 

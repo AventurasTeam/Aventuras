@@ -49,7 +49,10 @@ export type ChapterPopoverRow = {
 }
 
 export type ChapterPopoverHandle = {
-  /** Opens the Popover at tablet and desktop; a no-op on phone, where the Sheet opens from its own chip. */
+  /**
+   * Opens the Popover at tablet and desktop; a no-op on phone, where the Sheet opens from its own
+   * chip, and in a press that began outside the open Popover, which that press closes.
+   */
   open: () => void
   close: () => void
 }
@@ -113,10 +116,30 @@ function useReportedOpen(onOpenChange: ChapterPopoverProps['onOpenChange']) {
   return [open, change] as const
 }
 
+// Radix closes on an outside pointerdown, before the click: an opener outside would reopen what its
+// own press just closed, where the chip toggles. Web only; a native overlay takes that press.
+function usePressStartedOutside() {
+  const pressStartedOutside = useRef(false)
+  useEffect(() => {
+    if (Platform.OS !== 'web') return
+    const reset = () => {
+      pressStartedOutside.current = false
+    }
+    document.addEventListener('pointerdown', reset, true)
+    document.addEventListener('keydown', reset, true)
+    return () => {
+      document.removeEventListener('pointerdown', reset, true)
+      document.removeEventListener('keydown', reset, true)
+    }
+  }, [])
+  return pressStartedOutside
+}
+
 function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
   const trigger = useRef<TriggerRef>(null)
   const lastClosedRow = useRef<View>(null)
   const [open, changeOpen] = useReportedOpen(onOpenChange)
+  const pressStartedOutside = usePressStartedOutside()
   const close = () => trigger.current?.close()
 
   // Radix's default is the first row, far above the last one the list opens on.
@@ -126,7 +149,12 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
     lastClosedRow.current.focus()
   }
 
-  useImperativeHandle(ref, () => ({ open: () => trigger.current?.open(), close }))
+  useImperativeHandle(ref, () => ({
+    open: () => {
+      if (!pressStartedOutside.current) trigger.current?.open()
+    },
+    close,
+  }))
 
   return (
     <Popover
@@ -137,7 +165,13 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
       <PopoverTrigger ref={trigger} asChild>
         <ChapterChip number={content.number} expanded={open} />
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 p-0">
+      <PopoverContent
+        align="start"
+        className="w-80 p-0"
+        onPointerDownOutside={() => {
+          pressStartedOutside.current = true
+        }}
+      >
         <ScrollComponentContext.Provider value={POPOVER_SCROLL}>
           <OverlayBody {...content} arm={POPOVER_ARM} close={close} lastClosedRow={lastClosedRow} />
         </ScrollComponentContext.Provider>
