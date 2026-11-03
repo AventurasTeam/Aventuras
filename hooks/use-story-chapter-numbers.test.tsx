@@ -93,7 +93,7 @@ function renderProbe(focused = true) {
     </QueryClientProvider>
   )
   const { rerender } = render(tree(focused))
-  return { setFocused: (next: boolean) => rerender(tree(next)) }
+  return { client, setFocused: (next: boolean) => rerender(tree(next)) }
 }
 
 describe('readStoryChapterNumbers', () => {
@@ -189,6 +189,35 @@ describe('useStoryChapterNumbers', () => {
     await waitFor(() => expect(latest()?.get('s1')).toBe(3))
 
     expect(shown.slice(firstLanded)).not.toContain(null)
+  })
+
+  // The story list's cards memo keys on this object: a settle that moved no number keeps it.
+  it('keeps the same object when a read returns the same numbers', async () => {
+    const { client, setFocused } = renderProbe()
+    await waitFor(() => expect(latest()?.get('s1')).toBe(2))
+    const first = latest()
+
+    act(() => generationStore.startRun(run('r1')))
+    act(() => generationStore.finishRun('r1'))
+    const key = ['story-chapter-numbers', generationStore.getSettleCount()]
+    await waitFor(() => expect(client.getQueryState(key)?.status).toBe('success'))
+    expect(client.getQueryData(key)).not.toBe(first)
+    expect(client.getQueryData(key)).toEqual(first)
+    // A render now reads the landed result, whenever the query's own notify arrives.
+    setFocused(true)
+
+    expect(latest()).toBe(first)
+  })
+
+  it('returns the new numbers when a story drops out of the read', async () => {
+    renderProbe()
+    await waitFor(() => expect(latest()?.get('s1')).toBe(2))
+
+    await db.delete(chapters)
+    act(() => generationStore.startRun(run('r1')))
+    act(() => generationStore.finishRun('r1'))
+
+    await waitFor(() => expect(latest()?.size).toBe(0))
   })
 
   it('reads again on a return to focus, with the key unchanged', async () => {
