@@ -83,6 +83,16 @@ function holdNextBetween() {
   return open
 }
 
+function holdNextPosition() {
+  const { gate, open } = deferred()
+  const actual = vi.mocked(readEntryPosition).getMockImplementation()!
+  vi.mocked(readEntryPosition).mockImplementationOnce(async (...args) => {
+    await gate
+    return actual(...args)
+  })
+  return open
+}
+
 describe('useEntryJump', () => {
   let ctx: DbCtx
   const land = vi.fn<(entryId: string) => void>()
@@ -415,6 +425,8 @@ describe('useEntryJump: jumping', () => {
     entriesStore.__reset()
     vi.mocked(readEntryPosition).mockClear()
     vi.mocked(readEntriesBetween).mockClear()
+    vi.mocked(toast.warning).mockClear()
+    vi.mocked(toast.error).mockClear()
   })
 
   afterEach(() => {
@@ -521,6 +533,65 @@ describe('useEntryJump: jumping', () => {
       cause: 'bound',
     })
   })
+
+  // `rowsReads`: the rows reads made before the held read, which is where the jump stalls.
+  const stalls = [
+    { read: 'position', hold: holdNextPosition, rowsReads: 0 },
+    { read: 'rows', hold: holdNextBetween, rowsReads: 1 },
+  ]
+
+  it.each(stalls)(
+    'comes down and warns 30 s after the press when the $read read stalls',
+    async ({ hold, rowsReads }) => {
+      const ctx = await seedBranch()
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      hold()
+      const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+      act(() => {
+        void result.current.jump('entry_10')
+      })
+      await untilReadCalls(rowsReads)
+
+      vi.advanceTimersByTime(29_999)
+      expect(result.current.veil.isWaiting()).toBe(true)
+      vi.advanceTimersByTime(1)
+      expect(result.current.veil.isWaiting()).toBe(false)
+      expect(warn).toHaveBeenCalledExactlyOnceWith('reader.entry_jump_dropped', {
+        branchId: BRANCH,
+        entryId: 'entry_10',
+        cause: 'bound',
+      })
+    },
+  )
+
+  it.each(stalls)(
+    'neither writes, lands, toasts nor bounds again when the $read read ends after the bound',
+    async ({ hold, rowsReads }) => {
+      const ctx = await seedBranch()
+      vi.spyOn(logger, 'warn').mockImplementation(() => {})
+      const insertMany = vi.spyOn(entriesStore, 'insertMany')
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      const open = hold()
+      const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+      let pending!: Promise<void>
+      act(() => {
+        pending = result.current.jump('entry_10')
+      })
+      await untilReadCalls(rowsReads)
+      vi.advanceTimersByTime(30_000)
+
+      await act(async () => {
+        open()
+        await pending
+      })
+      expect(land).not.toHaveBeenCalled()
+      expect(insertMany).not.toHaveBeenCalled()
+      expect(toast.warning).not.toHaveBeenCalled()
+      expect(toast.error).not.toHaveBeenCalled()
+      expect(vi.getTimerCount()).toBe(0)
+    },
+  )
 
   it('warns for the newer target only when a replaced jump would have run out', async () => {
     const ctx = await seedBranch()

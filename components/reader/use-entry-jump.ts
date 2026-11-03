@@ -7,8 +7,9 @@ import { t } from '@/lib/i18n'
 import { entriesStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
-// Well past the 10.7 s a 60-chapter jump took to land on the Fold: a landing that never signals
-// must not leave the veil blocking the reader, and an early lift only shows a busy one.
+// Well past the 10.7 s a 60-chapter jump took to land on the Fold: a stalled read or a landing
+// that never signals must not leave the veil blocking the reader, and an early lift only shows a
+// busy one.
 export const JUMP_VEIL_TIMEOUT_MS = 30_000
 
 function oldestLoadedPosition(branchId: string): number | null {
@@ -152,28 +153,37 @@ export function useEntryJump(
   }, [unwatch, veil])
   const drop = useCallback(
     (entryId: string, cause: JumpDropCause) => {
+      // A read still out must not land the jump this drops.
+      generationRef.current += 1
       logger.warn('reader.entry_jump_dropped', { branchId, entryId, cause })
       release()
     },
     [branchId, release],
   )
+  // From the press on: a read can stall too.
+  const bindWait = useCallback(
+    (entryId: string, unsubscribe = () => {}) => {
+      unwatch()
+      const timer = setTimeout(() => drop(entryId, 'bound'), JUMP_VEIL_TIMEOUT_MS)
+      unwatchRef.current = () => {
+        clearTimeout(timer)
+        unsubscribe()
+      }
+    },
+    [drop, unwatch],
+  )
   // The surface's landed signal may never come: its row can leave the window or never mount.
   const watchLanding = useCallback(
     (entryId: string) => {
-      unwatch()
-      const timer = setTimeout(() => drop(entryId, 'bound'), JUMP_VEIL_TIMEOUT_MS)
       const unsubscribe = entriesStore.subscribe(() => {
         if (entriesStore.getById(entryId)?.branchId === branchId) return
         // Another branch loading means the reader is being left, not that it dropped the landing.
         if (entriesStore.getLoadedBranch() === branchId) drop(entryId, 'left_window')
         else release()
       })
-      unwatchRef.current = () => {
-        clearTimeout(timer)
-        unsubscribe()
-      }
+      bindWait(entryId, unsubscribe)
     },
-    [branchId, drop, release, unwatch],
+    [bindWait, branchId, drop, release],
   )
   // A replaced target's drop still signals, and must not lift the veil mid-jump.
   const landed = useCallback(
@@ -218,9 +228,9 @@ export function useEntryJump(
           land(entryId)
           return
         }
-        unwatch()
         targetRef.current = entryId
         veil.wait()
+        bindWait(entryId)
         const position = await readEntryPosition(branchId, entryId, ctx.db)
         if (superseded()) {
           if (current()) release()
@@ -252,7 +262,7 @@ export function useEntryJump(
         reportJumpFailure(branchId, entryId, error, superseded())
       }
     },
-    [branchId, ctx, land, release, topLoaded, unwatch, veil, watchLanding],
+    [bindWait, branchId, ctx, land, release, topLoaded, veil, watchLanding],
   )
 
   return { jump, veil, landed, lost }
