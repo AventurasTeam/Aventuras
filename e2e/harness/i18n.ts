@@ -63,7 +63,7 @@ export const t: Translate = (key, options) => {
   return cached(key, options)
 }
 
-const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+export const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 // `{{n, number}}` groups digits, so a number slot's sentinel is found as the app formats it.
 const NUMBER_SENTINEL = 987_654_000

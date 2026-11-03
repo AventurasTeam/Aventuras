@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test'
 
-import { copyPattern, t } from '../harness/i18n'
+import { copyPattern, escapeRegExp, t } from '../harness/i18n'
 
 // Reader/composer locators, resolved through the app's own i18n keys
 // (docs/testing.md → Selector strategy, Tier 2).
@@ -10,7 +10,6 @@ import { copyPattern, t } from '../harness/i18n'
 // sentinel rather than at the punctuation around it, so the key's shape is free
 // to change.
 const BREAK_SENTINEL = '@@'
-const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const WORLD_TIME_BREAK_LABEL = new RegExp(
   escapeRegExp(
     t('reader:worldTimeEdit.monotonicityBreak', { previousLabel: BREAK_SENTINEL }).split(
