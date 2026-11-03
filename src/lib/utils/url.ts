@@ -78,6 +78,13 @@ export function parseBaseUrl(url: string): URL {
   return parsed
 }
 
+/** `path` (no leading `/`) under a base URL's own path. Throws unless the base is absolute `http(s)`. */
+export function endpoint(baseUrl: string, path: string, query?: Record<string, string>): string {
+  const url = new URL(path, parseBaseUrl(baseUrl))
+  for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, value)
+  return url.href
+}
+
 /**
  * Whether an `http(s)` URL points at a host outside the user's own machine and network.
  * Judges the name and IP literals only: a public name that resolves to a private address passes.

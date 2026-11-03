@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isPublicHttpUrl, normalizeBaseUrl, parseBaseUrl, parseHttpUrl } from './url'
+import { endpoint, isPublicHttpUrl, normalizeBaseUrl, parseBaseUrl, parseHttpUrl } from './url'
 
 describe('parseHttpUrl', () => {
   it.each([
@@ -44,6 +44,27 @@ describe('parseBaseUrl', () => {
       expect(() => parseBaseUrl(input)).toThrow('Base URL is not an http(s) URL')
     },
   )
+})
+
+describe('endpoint', () => {
+  it.each([
+    ['https://host/v1', 'https://host/v1/images/models'],
+    ['https://host/v1/', 'https://host/v1/images/models'],
+    ['https://host', 'https://host/images/models'],
+    ['http://localhost:8188', 'http://localhost:8188/images/models'],
+  ])('appends to %j', (input, expected) => {
+    expect(endpoint(input, 'images/models')).toBe(expected)
+  })
+
+  it('adds query parameters', () => {
+    expect(endpoint('https://host/v1', 'models', { pageSize: '200' })).toBe(
+      'https://host/v1/models?pageSize=200',
+    )
+  })
+
+  it('throws for a base that is not an http(s) URL', () => {
+    expect(() => endpoint('h', 'models')).toThrow('Base URL is not an http(s) URL')
+  })
 })
 
 describe('isPublicHttpUrl', () => {
