@@ -505,7 +505,8 @@ async function withWindowWidth(width: number, play: () => Promise<void>) {
   }
 }
 
-// The open arm unmounts with the tier; its owner would otherwise keep reading for an overlay that's gone.
+// The open arm unmounts with the tier; its owner would otherwise keep reading an overlay that's
+// gone.
 export const TierFlipToPhoneReportsClosed: Story = {
   play: async ({ args }) => {
     await waitForTier('desktop')

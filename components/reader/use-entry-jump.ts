@@ -126,9 +126,9 @@ export type EntryJump = {
 type JumpDropCause = 'bound' | 'left_window' | 'document_reload'
 
 /**
- * `land` must be stable: the platform dispatch to the surface or the document. `topLoaded`, also
- * stable, runs in the store write's tick only when a read brings in a target that is the branch's
- * first row (never for an in-window one), so the host drops its boundary shimmer in that commit.
+ * `land` (platform dispatch) and `topLoaded` must be stable. `topLoaded` runs in the store write's
+ * tick only when a read brings in a target that is the branch's first row, so the host drops its
+ * shimmer in that commit.
  * `lost` reports a landing call for `entryId` that a document reload lost.
  */
 export function useEntryJump(

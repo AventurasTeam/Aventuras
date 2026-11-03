@@ -1093,8 +1093,8 @@ export const StreamFollowBrokenByKeyAfterReaderPress: Story = {
 }
 
 /**
- * reader-composer.md → Jump buttons: the button shows once the reader leaves the bottom. A stream
- * growing below a reader that doesn't follow moves the bottom away with no scroll event.
+ * reader-composer.md → Jump buttons: a stream growing below a reader that doesn't follow moves the
+ * bottom away with no scroll event.
  */
 export const JumpButtonRisesAsAStreamGrowsBelowAReaderInTheBand: Story = {
   render: (args) => <StreamChunksHarness {...args} />,
@@ -1138,8 +1138,8 @@ function StreamBreakHarness(props: ComponentProps<typeof ReaderSurface>) {
 }
 
 /**
- * A break mounting near the bottom pins it, and the pin follows the reply as it grows: the button
- * stays down rather than rising at each chunk's commit for the pin to take back a frame later.
+ * A break mounting near the bottom pins it and the pin follows the growing reply: the button must
+ * not rise at each chunk's commit and drop a frame later.
  */
 export const JumpButtonStaysDownWhileABreakPinFollowsAStream: Story = {
   render: (args) => <StreamBreakHarness {...args} />,
@@ -2798,10 +2798,9 @@ export const JumpButtonRisesAsAStreamGrowsBelowALandedTail: Story = {
 }
 
 /**
- * The reply growing on every other frame keeps a landing on the tail from settling. While the row
- * climbs, each frame ends at the bottom and the button stays down; once it tops out and the reply
- * grows past the band, the button rises with the landing still running. Two frames a chunk, so no
- * scroll event reads a chunk committed after the write it reports.
+ * A reply growing every other frame keeps a tail landing unsettled: the button stays down while the
+ * row climbs, then rises once the reply outgrows the band. Two frames a chunk, so no scroll event
+ * reads a chunk committed after the write it reports.
  */
 export const JumpButtonRisesAsAStreamOutgrowsALandingOnTheTail: Story = {
   render: (args) => <JumpHarness {...args} />,
@@ -2872,9 +2871,8 @@ function watchOverflowHides(scroller: HTMLElement): () => number {
 }
 
 /**
- * A fling that outlives its halt is waited out, not halted again. Should it carry the reader into
- * the at-bottom band, the band must not re-engage autoscroll: its write on every chunk would keep
- * the landing waiting.
+ * A fling outliving its halt is waited out, not halted again. If it carries the reader into the
+ * at-bottom band, that must not re-engage autoscroll: its per-chunk write would hold the landing.
  */
 export const StreamChunkingAfterAFlingOutlivesItsHaltHolds: Story = {
   render: (args) => <JumpHarness {...args} />,

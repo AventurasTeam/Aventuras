@@ -39,7 +39,7 @@ try {
 }
 
 // Default is the dev slot's userData DB — slot 0 is the one drizzle.studio.config.ts browses.
-// Override with AVENTURAS_DB_PATH or a positional arg. Opt-in --long-branch adds its fixture.
+// Override with AVENTURAS_DB_PATH or a positional arg.
 function resolveTarget(): { dbPath: string; mockPort?: number } {
   if (cli.path) return { dbPath: cli.path }
   if (process.env.AVENTURAS_DB_PATH) return { dbPath: process.env.AVENTURAS_DB_PATH }
