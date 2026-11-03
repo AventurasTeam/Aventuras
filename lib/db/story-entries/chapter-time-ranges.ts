@@ -3,7 +3,7 @@ import { and, eq, gt, ne, sql } from 'drizzle-orm'
 import type { DbCtx } from '../types'
 import { storyEntries } from './story-entries.table'
 
-export type ChapterTimeRange = { first: number; last: number }
+export type ChapterTimeRange = Readonly<{ first: number; last: number }>
 /** By chapter id; `null` is the open region. A chapter with no time has no key. */
 export type ChapterTimeRanges = ReadonlyMap<string | null, ChapterTimeRange>
 
