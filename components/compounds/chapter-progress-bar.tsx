@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react'
 import { View } from 'react-native'
 
-import type { ChapterProgressTone } from '@/lib/chapters'
+import { chapterProgressTone, type ChapterProgressTone } from '@/lib/chapters'
 import { cn } from '@/lib/utils'
 
 const TONE_FILL: Record<ChapterProgressTone, string> = {
@@ -11,24 +11,19 @@ const TONE_FILL: Record<ChapterProgressTone, string> = {
 }
 
 export type ChapterProgressBarProps = {
-  /** Clamped to 0–100; a NaN reads 0. */
+  /** Clamped to 0–100; a NaN reads 0. Sets the tone too, through `chapterProgressTone`. */
   percent: number
-  tone: ChapterProgressTone
   /** Carries the track's height, which has no default. */
   className?: string
 }
 
-export function ChapterProgressBar({
-  percent,
-  tone,
-  className,
-}: ChapterProgressBarProps): ReactElement {
+export function ChapterProgressBar({ percent, className }: ChapterProgressBarProps): ReactElement {
   const width = percent > 0 ? Math.min(percent, 100) : 0
   return (
     <View className={cn('w-full overflow-hidden bg-bg-sunken', className)}>
       <View
         testID="chapter-progress-fill"
-        className={cn('h-full', TONE_FILL[tone])}
+        className={cn('h-full', TONE_FILL[chapterProgressTone(width)])}
         style={{ width: `${width}%` }}
       />
     </View>

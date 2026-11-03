@@ -252,11 +252,7 @@ function OverlayBody({
       </ContextScrollView>
 
       <View className="gap-1">
-        <ChapterProgressBar
-          percent={progress.percent}
-          tone={progress.tone}
-          className="h-1.5 rounded-full"
-        />
+        <ChapterProgressBar percent={progress.percent} className="h-1.5 rounded-full" />
         <Text size="xs" variant="muted">
           {chapterProgressLabel(progress)}
         </Text>

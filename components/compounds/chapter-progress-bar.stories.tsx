@@ -25,9 +25,9 @@ type Story = StoryObj<typeof ChapterProgressBar>
 export const Tones: Story = {
   render: () => (
     <>
-      <ChapterProgressBar percent={35} tone="success" className="h-1.5" />
-      <ChapterProgressBar percent={85} tone="warning" className="h-1.5" />
-      <ChapterProgressBar percent={95} tone="danger" className="h-1.5" />
+      <ChapterProgressBar percent={35} className="h-1.5" />
+      <ChapterProgressBar percent={85} className="h-1.5" />
+      <ChapterProgressBar percent={95} className="h-1.5" />
     </>
   ),
   play: async () => {
@@ -43,9 +43,9 @@ export const Tones: Story = {
 export const ClampsPercent: Story = {
   render: () => (
     <>
-      <ChapterProgressBar percent={140} tone="danger" className="h-1.5" />
-      <ChapterProgressBar percent={-5} tone="success" className="h-1.5" />
-      <ChapterProgressBar percent={Number.NaN} tone="success" className="h-1.5" />
+      <ChapterProgressBar percent={140} className="h-1.5" />
+      <ChapterProgressBar percent={-5} className="h-1.5" />
+      <ChapterProgressBar percent={Number.NaN} className="h-1.5" />
     </>
   ),
   play: async () => {
@@ -57,7 +57,7 @@ export const ClampsPercent: Story = {
 }
 
 export const TakesItsHeightFromClassName: Story = {
-  args: { percent: 50, tone: 'success', className: 'h-[3px]' },
+  args: { percent: 50, className: 'h-[3px]' },
   play: async () => {
     const fill = await screen.findByTestId('chapter-progress-fill')
     await waitFor(() => expect(fill.getBoundingClientRect().height).toBe(3))

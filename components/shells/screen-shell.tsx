@@ -233,11 +233,7 @@ export function ScreenShell({
             aria-valuemin={0}
             aria-valuemax={100}
           >
-            <ChapterProgressBar
-              percent={progress}
-              tone={chapterProgress?.tone ?? 'success'}
-              className="h-[3px]"
-            />
+            <ChapterProgressBar percent={progress} className="h-[3px]" />
           </View>
         ) : null}
 
