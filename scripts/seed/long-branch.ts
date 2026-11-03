@@ -116,7 +116,7 @@ function chapterOfPosition(position: number, chapters: number): number | null {
 const chapterStart = (k: number): number => (k === 1 ? 1 : (k - 1) * ENTRIES_PER_CHAPTER + 2)
 const chapterEnd = (k: number): number => k * ENTRIES_PER_CHAPTER + 1
 
-const entryIdAt = (chapters: number, position: number): string =>
+export const entryIdAt = (chapters: number, position: number): string =>
   `entry_long_${chapters}_${String(position).padStart(4, '0')}`
 
 // The substitution layer rewrites only prefix_<uuid> ids (testing.md → Fixture + seed contract).

@@ -8,10 +8,9 @@ import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import { migrate } from 'drizzle-orm/sqlite-proxy/migrator'
 import { getLoadablePath } from 'sqlite-vec'
 
-import { buildLongBranchSteps, LONG_BRANCH_SCALES, longBranchId } from './long-branch'
+import { buildLongBranchSteps, entryIdAt, LONG_BRANCH_SCALES, longBranchId } from './long-branch'
 import { buildSeedSteps, type SeedStep } from '../../lib/db/devtools/seed-dataset'
 import { dbSchema } from '../../lib/db/schema'
-import type { NewStoryEntry } from '../../lib/db/types'
 import { resolveDevSlot } from '../dev-slot/resolve'
 import { slotPorts } from '../dev-slot/slot'
 
@@ -132,17 +131,9 @@ async function main() {
   console.log(
     `[seed] done — ${total} rows across ${new Set(steps.map((s) => s.name)).size} tables.`,
   )
-  if (cli.longBranch) printLongBranches(steps)
-}
-
-function printLongBranches(steps: SeedStep[]): void {
-  const longBranches = new Set(LONG_BRANCH_SCALES.map(longBranchId))
-  for (const s of steps) {
-    if (getTableName(s.table) !== 'story_entries') continue
-    for (const row of s.rows as NewStoryEntry[]) {
-      if (row.position === 1 && longBranches.has(row.branchId)) {
-        console.log(`[seed] ${row.branchId}: first entry ${row.id}`)
-      }
+  if (cli.longBranch) {
+    for (const chapters of LONG_BRANCH_SCALES) {
+      console.log(`[seed] ${longBranchId(chapters)}: first entry ${entryIdAt(chapters, 1)}`)
     }
   }
 }
