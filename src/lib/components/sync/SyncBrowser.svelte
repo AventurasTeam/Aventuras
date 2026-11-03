@@ -12,6 +12,7 @@
   import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import { Button } from '#lib/components/ui/button/index.ts'
   import FilterButton from '#lib/components/ui/filter-button.svelte'
+  import { cn } from '#lib/utils/cn.ts'
   import * as Popover from '#lib/components/ui/popover/index.ts'
   import { createIsMobile } from '#lib/hooks/is-mobile.svelte.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
@@ -137,12 +138,18 @@
     }
   }
 
+  // An item on both devices with one side newer: one tap syncs it, either way.
+  const STRAIGHT_SYNC_BADGE = 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+  const STRAIGHT_SYNC_BUTTON =
+    '[--feature:var(--color-emerald-700)] dark:[--feature:var(--color-emerald-400)]'
+  const isStraightSync = (status: SyncStatus) => status === 'newerThere' || status === 'newerHere'
+
   const STATUS_CLASSES: Record<SyncStatus, string> = {
     changedOnBoth: 'bg-rose-500/15 text-rose-600 dark:text-rose-300',
     sameName: 'bg-rose-500/15 text-rose-600 dark:text-rose-300',
-    newerThere: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
+    newerThere: STRAIGHT_SYNC_BADGE,
+    newerHere: STRAIGHT_SYNC_BADGE,
     onlyThere: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
-    newerHere: 'bg-blue-500/15 text-blue-700 dark:text-blue-300',
     onlyHere: 'bg-blue-500/15 text-blue-700 dark:text-blue-300',
     inSync: 'bg-muted text-muted-foreground',
   }
@@ -366,12 +373,12 @@
                 </span>
               {/if}
               {#if summary.send}
-                <span class="rounded-full px-2 py-0.5 text-xs {STATUS_CLASSES.newerHere}">
+                <span class="rounded-full px-2 py-0.5 text-xs {STATUS_CLASSES.onlyHere}">
                   {summary.send} to send
                 </span>
               {/if}
               {#if summary.get}
-                <span class="rounded-full px-2 py-0.5 text-xs {STATUS_CLASSES.newerThere}">
+                <span class="rounded-full px-2 py-0.5 text-xs {STATUS_CLASSES.onlyThere}">
                   {summary.get} to get
                 </span>
               {/if}
@@ -427,9 +434,9 @@
           <Loader2 class="text-primary mx-6 h-5 w-5 shrink-0 animate-spin" />
         {:else if row.action}
           <Button
-            class="min-w-20 shrink-0"
+            class={cn('min-w-20 shrink-0', isStraightSync(row.status) && STRAIGHT_SYNC_BUTTON)}
             size="sm"
-            variant="outline"
+            variant={isStraightSync(row.status) ? 'feature' : 'outline'}
             disabled={!!busy}
             onclick={() => {
               if (row.action === 'send') void send(row)

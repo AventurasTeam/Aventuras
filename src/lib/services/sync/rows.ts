@@ -10,12 +10,12 @@ import type {
 } from '#lib/types/sync.ts'
 import { compareVectors } from './vectors'
 
-/** Most in need of attention first. */
+/** A straight sync in either direction first, then what needs a decision. */
 export const STATUS_ORDER: readonly SyncStatus[] = [
-  'changedOnBoth',
-  'sameName',
   'newerThere',
   'newerHere',
+  'changedOnBoth',
+  'sameName',
   'onlyThere',
   'onlyHere',
   'inSync',

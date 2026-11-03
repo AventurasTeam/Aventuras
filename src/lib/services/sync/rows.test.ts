@@ -132,10 +132,14 @@ function sample(): SyncRow[] {
 }
 
 describe('viewRows', () => {
-  it('shows everything by default, with conflicts first', () => {
+  it('shows everything by default, straight syncs first', () => {
     const view = viewRows(sample(), '', DEFAULT_LIST_PREFS)
-    expect(view.rows[0].name).toBe('Conflict')
-    expect(view.rows.at(-1)?.status).toBe('inSync')
+    expect(view.rows.map((r) => r.status)).toEqual([
+      'newerThere',
+      'changedOnBoth',
+      'onlyThere',
+      'inSync',
+    ])
     expect(view.hidden).toBe(0)
   })
 
