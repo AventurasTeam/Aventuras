@@ -1,0 +1,106 @@
+diff --git a/src/dom/dom-entry.tsx b/src/dom/dom-entry.tsx
+index baf98794ab01fba6e3bfbdacdd4648dd044041ba..612c5a1c1a08e99c8a8a88021c2527eaf3a06ef7 100644
+--- a/src/dom/dom-entry.tsx
++++ b/src/dom/dom-entry.tsx
+@@ -4,6 +4,7 @@ import '@expo/metro-runtime';
+ import React from 'react';
+ 
+ import { JSONValue } from './dom.types';
++import { DOM_BOOT_EVENT } from './injection';
+ import { addEventListener, getActionsObject } from './marshal';
+ import registerRootComponent from '../launch/registerRootComponent';
+ 
+@@ -16,6 +17,7 @@ interface MarshalledProps {
+ interface WindowType {
+   $$EXPO_DOM_HOST_OS?: string;
+   $$EXPO_INITIAL_PROPS?: MarshalledProps;
++  addEventListener: Window['addEventListener'];
+ }
+ 
+ declare let window: WindowType;
+@@ -65,6 +67,10 @@ function convertError(error: any) {
+ }
+ 
+ export function registerDOMComponent(AppModule: any) {
++  if (typeof window.$$EXPO_INITIAL_PROPS === 'undefined') {
++    window.addEventListener(DOM_BOOT_EVENT, () => registerDOMComponent(AppModule), { once: true });
++    return;
++  }
+   if (typeof window.$$EXPO_DOM_HOST_OS === 'undefined') {
+     throw new Error(
+       'Top OS ($$EXPO_DOM_HOST_OS) is not defined. This is a bug in the DOM Component runtime.'
+diff --git a/src/dom/injection.ts b/src/dom/injection.ts
+index 66f6f35e768a9a29fa2d6697146c1a548cab030d..8824b4accd689177468ba95b77a17c34bf74b47a 100644
+--- a/src/dom/injection.ts
++++ b/src/dom/injection.ts
+@@ -5,6 +5,9 @@ export const NATIVE_ACTION_RESULT = '$$native_action_result';
+ export const DOM_EVENT = '$$dom_event';
+ export const MATCH_CONTENTS_EVENT = '$$match_contents_event';
+ export const REGISTER_DOM_IMPERATIVE_HANDLE_PROPS = '$$register_dom_imperative_handle_props';
++// Fired by the boot script once the globals are set. Android runs that script from onPageStarted,
++// which can land after the document's bundle, so the entry waits for this event.
++export const DOM_BOOT_EVENT = '$$dom_boot';
+ 
+ export const getInjectEventScript = <T extends BridgeMessage<any>>(detail: T) => {
+   return `;(function() {
+diff --git a/src/dom/marshal.tsx b/src/dom/marshal.tsx
+index 26e42d6da28d5060ce6564377c7851d6850196b7..02423d9592808524ec320bffc91a658ccfc5d5d6 100644
+--- a/src/dom/marshal.tsx
++++ b/src/dom/marshal.tsx
+@@ -1,7 +1,8 @@
+ import { BridgeMessage, JSONValue } from './dom.types';
+ import { DOM_EVENT, NATIVE_ACTION, NATIVE_ACTION_RESULT } from './injection';
+ 
+-const IS_DOM =
++// Read per call: on Android the boot globals can arrive after this module evaluates.
++const isDOM = () =>
+   typeof window !== 'undefined' &&
+   // @ts-expect-error: Added via expo/dom
+   typeof window.$$EXPO_INITIAL_PROPS !== 'undefined' &&
+@@ -9,7 +10,7 @@ const IS_DOM =
+   typeof window.ReactNativeWebView !== 'undefined';
+ 
+ const emit = <TData extends JSONValue>(message: BridgeMessage<TData>) => {
+-  if (!IS_DOM) {
++  if (!isDOM()) {
+     return;
+   }
+   (window as any).ReactNativeWebView.postMessage(JSON.stringify(message));
+@@ -18,7 +19,7 @@ const emit = <TData extends JSONValue>(message: BridgeMessage<TData>) => {
+ export const addEventListener = <TData extends JSONValue>(
+   onSubscribe: (message: BridgeMessage<TData>) => void
+ ): (() => void) => {
+-  if (!IS_DOM) {
++  if (!isDOM()) {
+     return () => {};
+   }
+   const listener = ({ detail }: any) => {
+@@ -33,7 +34,7 @@ export const addEventListener = <TData extends JSONValue>(
+ };
+ 
+ function invokeNativeAction(actionId: string, args: any[]): Promise<any> {
+-  if (!IS_DOM) {
++  if (!isDOM()) {
+     throw new Error('Cannot invoke native actions outside of a webview');
+   }
+   return new Promise((res, rej) => {
+diff --git a/src/dom/webview-wrapper.tsx b/src/dom/webview-wrapper.tsx
+index 1ae5364a232598c9d15b9302c19f3238d5905bb6..e1063769409bac63603c5446b15efd1393f67283 100644
+--- a/src/dom/webview-wrapper.tsx
++++ b/src/dom/webview-wrapper.tsx
+@@ -11,6 +11,7 @@ import { DOMPropsInternal } from './dom-internal.types';
+ import type { BridgeMessage, WebViewProps, WebViewRef } from './dom.types';
+ import { _emitGlobalEvent } from './global-events';
+ import {
++  DOM_BOOT_EVENT,
+   getInjectBodySizeObserverScript,
+   getInjectEventScript,
+   MATCH_CONTENTS_EVENT,
+@@ -143,6 +144,7 @@ const RawWebView = React.forwardRef<object, Props>((props, ref) => {
+       `window.$$EXPO_DOM_HOST_OS = ${JSON.stringify(process.env.EXPO_OS)};true;`,
+       // On first mount, inject `$$EXPO_INITIAL_PROPS` with the initial props.
+       `window.$$EXPO_INITIAL_PROPS = ${JSON.stringify(smartActions)};true;`,
++      `window.dispatchEvent(new Event(${JSON.stringify(DOM_BOOT_EVENT)}));true;`,
+       dom?.matchContents ? getInjectBodySizeObserverScript() : null,
+       dom?.injectedJavaScriptBeforeContentLoaded,
+       'true;',

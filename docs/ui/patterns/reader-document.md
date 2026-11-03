@@ -125,6 +125,13 @@ inset: 0` root) — expo-dom's mount root is a flex container in
   handshake completes and first rows have painted; the document
   stays hidden until then. A blank or top-anchored flash never
   shows.
+- **Boot globals.** expo-dom hands the document its host OS and
+  first props through a script that react-native-webview runs from
+  `onPageStarted` on Android, which can land after the bundle has run.
+  [`patches/expo.patch`](../../../patches/expo.patch) makes the
+  document wait for that script; unpatched, the document never mounts
+  and the veil never lifts
+  ([lesson](../../implementation/lessons-learned/expo-dom-boot-script-races-the-bundle.md)).
 - **Fonts:** the document loads the app's reading/UI/mono fonts
   from bundled assets so `--font-*` tokens resolve identically to
   desktop. Font delivery must satisfy the document CSP (below) —

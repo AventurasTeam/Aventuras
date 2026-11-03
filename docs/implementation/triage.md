@@ -100,6 +100,18 @@ slice-planning gate forces its resolution before that slice is planned.
   `lib/boot/rejection-handler.ts:67` listens for `unhandledrejection`
   only, so on desktop a throw in a timer or an idle callback reaches the
   console alone. Raised 2026-11-01 by Slice 5.1's review.
+- **A stale `node_modules` ships dependencies without their patches.**
+  After a pull that adds or changes a file in `patches/`, nothing makes
+  a developer run `pnpm install`: `lefthook.yml` has no post-merge or
+  post-checkout step, and `verifyDepsBeforeRun` is unset in
+  `pnpm-workspace.yaml`. Metro then bundles the unpatched package
+  without a word. For `patches/expo.patch` that brings back Android
+  readers stuck on `Loading story…`, which a phone shows and the
+  emulator doesn't
+  ([lesson](./lessons-learned/expo-dom-boot-script-races-the-bundle.md)).
+  It holds for all five patches. pnpm 10.33.1 has
+  `verify-deps-before-run`, which checks before any `pnpm run`. Raised
+  2026-11-03 by PR #700's closing review.
 - **A test comment cites a slice.**
   `lib/actions/story-entries/register.test.ts:308` names the slice "Kind
   coverage", a class `.claude/rules/code.md` bans. Raised 2026-11-01 by
