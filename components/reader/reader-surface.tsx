@@ -256,8 +256,10 @@ const ReaderRow = memo(function ReaderRow({
 })
 
 function ChapterBreakRule({ number, timeLabel }: ChapterBreak) {
-  const label = t('chapters:label', { number })
-  const text = timeLabel != null ? `${label} · ${timeLabel}` : label
+  const text =
+    timeLabel != null
+      ? t('chapters:labelWithTime', { number, time: timeLabel })
+      : t('chapters:label', { number })
   return (
     <div
       role="separator"

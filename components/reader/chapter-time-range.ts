@@ -1,5 +1,6 @@
 import { FormatMiss, formatWorldTime, type CalendarFrame } from '@/lib/calendar'
 import type { ChapterTimeRange } from '@/lib/db'
+import { t } from '@/lib/i18n'
 
 /** One world time as the calendar renders it; null with no frame, a format miss or empty label. */
 export function worldTimeLabel(seconds: number, frame: CalendarFrame | null): string | null {
@@ -17,5 +18,5 @@ export function chapterTimeRangeLabel(
   const first = worldTimeLabel(range.first, frame)
   const last = worldTimeLabel(range.last, frame)
   if (first == null || last == null) return null
-  return first === last ? first : `${first} → ${last}`
+  return first === last ? first : t('chapters:time.range', { first, last })
 }
