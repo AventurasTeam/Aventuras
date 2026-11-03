@@ -6,7 +6,11 @@ import { ScrollView, type ScrollViewProps } from 'react-native'
 
 /** All a list may call on its scroll ref: gorhom's scroll view lacks most ScrollView methods. */
 export type ScrollComponentHandle = Pick<ScrollView, 'scrollTo'>
-type ScrollComponentProps = ScrollViewProps & { ref?: Ref<ScrollComponentHandle> }
+type ScrollComponentProps = ScrollViewProps & {
+  ref?: Ref<ScrollComponentHandle>
+  /** Web only: RN-Web's ScrollView takes it, though RN's props don't declare it. */
+  onWheel?: () => void
+}
 export type ScrollComponent = ComponentType<ScrollComponentProps>
 export const ScrollComponentContext = createContext<ScrollComponent>(ScrollView)
 

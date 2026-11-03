@@ -187,8 +187,11 @@ function OverlayBody({
         ref={list}
         testID="chapter-popover-list"
         keyboardShouldPersistTaps="handled"
-        // A touch drag keeps the reader's place: no later trigger pulls it back. Web has no drag.
+        // A touch drag or a wheel keeps the reader's place: no later trigger pulls it back.
         onScrollBeginDrag={() => {
+          pinned.current = false
+        }}
+        onWheel={() => {
           pinned.current = false
         }}
         style={arm.list}

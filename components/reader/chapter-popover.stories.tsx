@@ -382,6 +382,26 @@ export const LongListRangesLand: Story = {
   },
 }
 
+/** Web has no drag: a wheel keeps the reader's place, so rows landing later don't pull it back. */
+export const LongListWheelKeepsPlace: Story = {
+  args: { closed: LONG_LIST.map((row) => ({ ...row, rangeLabel: null })) },
+  render: (args) => <RangesLandHarness {...args} />,
+  play: async () => {
+    await waitForTier('desktop')
+    await openOverlay()
+    await expectOpenedOnLastRow()
+
+    const list = await listScroller()
+    // A dispatched wheel scrolls nothing, so the play moves the list itself.
+    list.dispatchEvent(new WheelEvent('wheel', { deltaY: -400, bubbles: true }))
+    list.scrollTop = 0
+    await userEvent.keyboard('{F2}')
+    await screen.findByText('Day 30')
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    expect(list.scrollTop).toBe(0)
+  },
+}
+
 // A key, not a button: a click outside the popover would dismiss it before the handle's close.
 function HandleHarness(props: ChapterPopoverProps) {
   const handle = useRef<ChapterPopoverHandle>(null)
