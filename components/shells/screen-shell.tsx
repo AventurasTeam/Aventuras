@@ -51,7 +51,10 @@ type ScreenShellProps = {
    */
   chapterProgress?: ChapterProgress
 
-  /** Reader only, at tablet and desktop: opens the chapter popover. */
+  /**
+   * Makes the strip's hit area (tablet and desktop) a button that opens a dialog; without it the
+   * area stays inert and keeps its tooltip.
+   */
   onChapterProgressPress?: () => void
 
   /**

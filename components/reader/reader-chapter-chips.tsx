@@ -35,7 +35,6 @@ export type ReaderChapterChipsProps = {
   ref?: Ref<ReaderChapterChipsHandle>
 }
 
-/** The reader's chips: the chapter chip with its popover, then the time chip. */
 export function ReaderChapterChips({
   branchId,
   entries,
