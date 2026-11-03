@@ -198,6 +198,7 @@
     --focus-ring: #2563eb;
     --selection-bg: #1e3a8a;
     --recently-classified-bg: #422006;
+    --landed-tint-share: 22%;
   }
 
   [data-theme='parchment'] {
@@ -303,6 +304,7 @@
     --focus-ring: #cba6f7;
     --selection-bg: #45475a;
     --recently-classified-bg: #4a3d2a;
+    --landed-tint-share: 59%;
   }
 
   [data-theme='tokyo-night'] {
@@ -337,6 +339,7 @@
     --focus-ring: #7aa2f7;
     --selection-bg: #3d4775;
     --recently-classified-bg: #3b2e4a;
+    --landed-tint-share: 34%;
   }
 
   [data-theme='royal'] {
@@ -371,6 +374,7 @@
     --focus-ring: #fbbf24;
     --selection-bg: #4b2c75;
     --recently-classified-bg: #4a3a0a;
+    --landed-tint-share: 26%;
   }
 
   [data-theme='cyberpunk'] {
@@ -405,6 +409,7 @@
     --focus-ring: #faff00;
     --selection-bg: #1a4d5e;
     --recently-classified-bg: #2a4868;
+    --landed-tint-share: 30%;
   }
 
   [data-theme='fallen-down'] {
@@ -442,6 +447,7 @@
     --font-reading:
       ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
       monospace;
+    --landed-tint-share: 16%;
   }
 
   [data-theme='aventuras'] {
@@ -476,6 +482,7 @@
     --focus-ring: #d4c9a8;
     --selection-bg: #2a3d5e;
     --recently-classified-bg: #2a4068;
+    --landed-tint-share: 63%;
   }
 }
 

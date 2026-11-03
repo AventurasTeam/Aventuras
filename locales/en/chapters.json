@@ -1,0 +1,19 @@
+{
+  "label": "Chapter {{number}}",
+  "progress": {
+    "counts": "{{tokens, number}} / {{threshold, number}} tok",
+    "label": "chapter progress · {{counts}}"
+  },
+  "popover": {
+    "title": "Chapters",
+    "closedRow": "{{number}} · {{title}}",
+    "inProgress": "{{number}} · in progress",
+    "since": "since {{time}}",
+    "closeManually": "Close chapter manually",
+    "closeLandsLater": "Closing a chapter lands in a later milestone",
+    "manage": "Manage chapters →"
+  },
+  "time": {
+    "label": "In-world time: {{time}}"
+  }
+}

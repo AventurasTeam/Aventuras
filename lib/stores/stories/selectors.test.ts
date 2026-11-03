@@ -32,7 +32,8 @@ const Q = (partial: Partial<StoryListQuery> = {}): StoryListQuery => ({
   ...partial,
 })
 
-const ids = (rows: StoryRow[], q: StoryListQuery) => selectStoryCards(rows, q, NOW).map((c) => c.id)
+const ids = (rows: StoryRow[], q: StoryListQuery) =>
+  selectStoryCards(rows, q, NOW, null).map((c) => c.id)
 
 describe('selectStoryCards', () => {
   it('All hides archived; favorites float first', () => {
@@ -96,6 +97,12 @@ describe('selectStoryCards', () => {
       row({ id: 'arch-fav', status: 'archived', favorite: 1, lastOpenedAt: 50 }),
     ]
     expect(ids(rows, Q({ filter: 'archived' }))).toEqual(['arch-fav', 'arch-plain'])
+  })
+
+  it('hands the chapter numbers to every card', () => {
+    const rows = [row({ id: 'hero', lastOpenedAt: 9 }), row({ id: 'fresh', lastOpenedAt: 1 })]
+    const cards = selectStoryCards(rows, Q(), NOW, new Map([['hero', 3]]))
+    expect(cards.map((c) => c.chapterLabel)).toEqual(['Chapter 3', 'Chapter 1'])
   })
 
   it('keeps stable order for two never-opened rows (no NaN comparator)', () => {

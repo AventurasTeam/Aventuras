@@ -89,6 +89,14 @@ describe('useRouteLink', () => {
     expect(arrive).toHaveBeenCalledTimes(3)
   })
 
+  it('arrives again at the same link once it has gone through null', () => {
+    const { hook, arrive } = setup({ link: LINK, ready: true })
+    hook.rerender({ link: null, ready: true })
+    hook.rerender({ link: LINK, ready: true })
+    expect(arrive).toHaveBeenCalledTimes(2)
+    expect(arrive).toHaveBeenLastCalledWith(LINK, false)
+  })
+
   it('does nothing without a link', () => {
     const { hook, arrive } = setup({ link: null, ready: true })
     expect(hook.result.current).toBeNull()

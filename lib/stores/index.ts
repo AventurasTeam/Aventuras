@@ -13,7 +13,7 @@ import { happeningsStore } from './happenings/happenings'
 import { happeningInvolvementsStore } from './happenings/involvements'
 import { loreStore } from './lore/lore'
 import { navigationStore } from './navigation/navigation'
-import { rehydrateStories, storiesStore } from './stories/stories'
+import { readStoryChapterNumbers, rehydrateStories, storiesStore } from './stories/stories'
 import { threadsStore } from './threads/threads'
 import { translationsStore } from './translations/translations'
 import { blockingOverlaysStore, useRegisteredOverlay } from './ui/blocking-overlays'
@@ -76,6 +76,7 @@ export {
   loreStore,
   navigationStore,
   readerRailStore,
+  readStoryChapterNumbers,
   recoveryReportStore,
   rehydrateAppSettings,
   rehydrateStories,

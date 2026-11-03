@@ -36,6 +36,7 @@ describe('toStoryCardData', () => {
         definition: { mode: 'adventure', genre: { label: 'Dark Fantasy' } } as never,
       }),
       NOW,
+      new Map([['s1', 3]]),
     )
     expect(data).toMatchObject({
       id: 's1',
@@ -43,15 +44,32 @@ describe('toStoryCardData', () => {
       status: 'active',
       favorite: 1,
       definition: { mode: 'adventure', genre: { label: 'Dark Fantasy' } },
-      chapterLabel: null,
+      chapterLabel: 'Chapter 3',
       lastOpenedRelative: '2h ago',
     })
   })
 
   it('formats lastOpenedRelative from the row and yields chapterLabel null on a draft', () => {
-    const data = toStoryCardData(row({ status: 'draft', lastOpenedAt: null }), NOW)
+    const data = toStoryCardData(
+      row({ status: 'draft', lastOpenedAt: null }),
+      NOW,
+      new Map([['s1', 3]]),
+    )
     expect(data.status).toBe('draft')
     expect(data.lastOpenedRelative).toBe('Never')
     expect(data.chapterLabel).toBeNull()
+  })
+
+  it('reads a story with no number as Chapter 1', () => {
+    expect(toStoryCardData(row({}), NOW, new Map()).chapterLabel).toBe('Chapter 1')
+  })
+
+  it('leaves the label null until the numbers are read', () => {
+    expect(toStoryCardData(row({}), NOW, null).chapterLabel).toBeNull()
+  })
+
+  it('keeps the label on an archived story', () => {
+    const data = toStoryCardData(row({ status: 'archived' }), NOW, new Map([['s1', 2]]))
+    expect(data.chapterLabel).toBe('Chapter 2')
   })
 })

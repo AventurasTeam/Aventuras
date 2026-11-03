@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, lt } from 'drizzle-orm'
 
 import { storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
 
@@ -15,4 +15,37 @@ export async function readRecentEntries(branchId: string, db: DbCtx['db']): Prom
     .orderBy(desc(storyEntries.position))
     .limit(ENTRIES_WINDOW_SIZE)) as StoryEntry[]
   return rows.reverse()
+}
+
+export async function readEntryPosition(
+  branchId: string,
+  entryId: string,
+  db: DbCtx['db'],
+): Promise<number | null> {
+  const [row] = await db
+    .select({ position: storyEntries.position })
+    .from(storyEntries)
+    .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, entryId)))
+    .limit(1)
+  return row?.position ?? null
+}
+
+/** `fromPosition <= position < beforePosition`, ascending. */
+export async function readEntriesBetween(
+  branchId: string,
+  fromPosition: number,
+  beforePosition: number,
+  db: DbCtx['db'],
+): Promise<StoryEntry[]> {
+  return (await db
+    .select()
+    .from(storyEntries)
+    .where(
+      and(
+        eq(storyEntries.branchId, branchId),
+        gte(storyEntries.position, fromPosition),
+        lt(storyEntries.position, beforePosition),
+      ),
+    )
+    .orderBy(asc(storyEntries.position))) as StoryEntry[]
 }

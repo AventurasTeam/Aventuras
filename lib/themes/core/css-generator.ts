@@ -13,6 +13,9 @@ export function themeToCssBlock(theme: Theme, opts: BlockOptions): string {
       lines.push(`  ${key}: ${value};`)
     }
   }
+  if (theme.mode === 'dark') {
+    lines.push(`  --landed-tint-share: ${Math.round(theme.landedTintShare * 100)}%;`)
+  }
   lines.push('}')
   return lines.join('\n')
 }

@@ -1,3 +1,4 @@
+import { useIsFocused } from '@react-navigation/native'
 import { useRouter, type Href } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
 
@@ -22,6 +23,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
+import { useStoryChapterNumbers } from '@/hooks/use-story-chapter-numbers'
 import {
   clearLiveSession,
   deleteStory,
@@ -77,6 +79,8 @@ export default function Index() {
   const [storyRecovery, setStoryRecovery] = useState<PendingStoryRecovery | null>(null)
   const [recoveryCoordinator] = useState(createStoryRecoveryCoordinator)
   const sessionExists = useWizardSessionExists()
+  const isFocused = useIsFocused()
+  const chapterNumbers = useStoryChapterNumbers(isFocused)
 
   useEffect(() => {
     void rehydrateStories(db)
@@ -89,7 +93,10 @@ export default function Index() {
     [recoveryCoordinator],
   )
 
-  const cards = useMemo(() => selectStoryCards(rows, query, Date.now()), [rows, query])
+  const cards = useMemo(
+    () => selectStoryCards(rows, query, Date.now(), chapterNumbers),
+    [rows, query, chapterNumbers],
+  )
 
   const goWizard = (draftId?: string) =>
     router.push((draftId ? `/wizard?draftId=${draftId}` : '/wizard') as Href)

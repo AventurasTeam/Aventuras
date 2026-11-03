@@ -35,9 +35,10 @@ export function selectStoryCards(
   rows: readonly StoryRow[],
   query: StoryListQuery,
   nowMs: number,
+  chapterNumbers: ReadonlyMap<string, number> | null,
 ): StoryCardData[] {
   return rows
     .filter((r) => matchesFilter(r, query.filter) && matchesSearch(r, query.search))
     .sort((a, b) => compare(a, b, query.sort))
-    .map((r) => toStoryCardData(r, nowMs))
+    .map((r) => toStoryCardData(r, nowMs, chapterNumbers))
 }

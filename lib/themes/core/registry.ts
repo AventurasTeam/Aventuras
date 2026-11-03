@@ -44,6 +44,7 @@ export const themes: readonly Theme[] = [
     id: 'default-dark',
     name: 'Default Dark',
     mode: 'dark',
+    landedTintShare: 0.22,
     accentOverridable: true,
     colors: {
       '--bg-base': '#0e0f10',
@@ -165,6 +166,7 @@ export const themes: readonly Theme[] = [
     id: 'catppuccin-mocha',
     name: 'Catppuccin Mocha',
     mode: 'dark',
+    landedTintShare: 0.59,
     accentOverridable: false,
     colors: {
       '--bg-base': '#1e1e2e',
@@ -204,6 +206,7 @@ export const themes: readonly Theme[] = [
     id: 'tokyo-night',
     name: 'Tokyo Night',
     mode: 'dark',
+    landedTintShare: 0.34,
     accentOverridable: false,
     colors: {
       '--bg-base': '#1a1b26',
@@ -243,6 +246,7 @@ export const themes: readonly Theme[] = [
     id: 'royal',
     name: 'Royal',
     mode: 'dark',
+    landedTintShare: 0.26,
     accentOverridable: false,
     colors: {
       '--bg-base': '#14081f',
@@ -282,6 +286,7 @@ export const themes: readonly Theme[] = [
     id: 'cyberpunk',
     name: 'Cyberpunk',
     mode: 'dark',
+    landedTintShare: 0.3,
     accentOverridable: false,
     colors: {
       '--bg-base': '#0d1326',
@@ -321,6 +326,7 @@ export const themes: readonly Theme[] = [
     id: 'fallen-down',
     name: 'Fallen Down',
     mode: 'dark',
+    landedTintShare: 0.16,
     accentOverridable: false,
     fonts: {
       '--font-reading':
@@ -364,6 +370,7 @@ export const themes: readonly Theme[] = [
     id: 'aventuras',
     name: 'Aventuras',
     mode: 'dark',
+    landedTintShare: 0.63,
     accentOverridable: false,
     colors: {
       '--bg-base': '#0e2240',

@@ -32,6 +32,7 @@
     "chapter_close": "chapter close"
   },
   "rowLabel": "{{op}} {{name}}",
+  "rowLabelWithEntry": "{{op}} {{name}}, {{entry}}",
   "unknownTarget": "Unknown row",
   "linkLabel": {
     "character_relationships": "Relationship",

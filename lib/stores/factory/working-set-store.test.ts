@@ -1,8 +1,29 @@
-import { describe, expect, it } from 'vitest'
+// @vitest-environment jsdom
+import { act, cleanup, renderHook } from '@testing-library/react'
+import { afterEach, describe, expect, it } from 'vitest'
 
-import { createWorkingSetStore } from './working-set-store'
+import { createWorkingSetStore, type WorkingSetStore } from './working-set-store'
 
 type Row = { id: string; name: string }
+
+afterEach(cleanup)
+
+// Counts snapshots, not renders: React batches every store change inside one act() into a
+// single render, so a render count can't tell one notification from fifty.
+function trackNotifications(store: WorkingSetStore<Row>): () => number {
+  const seen = new Set<ReadonlyMap<string, Row>>()
+  renderHook(() =>
+    store.useRows((rows) => {
+      seen.add(rows)
+      return rows.size
+    }),
+  )
+  const before = seen.size
+  return () => seen.size - before
+}
+
+const rowsNamed = (count: number): Row[] =>
+  Array.from({ length: count }, (_, i) => ({ id: `x_${i}`, name: `row ${i}` }))
 
 describe('createWorkingSetStore', () => {
   it('hydrates a branch, patches create/update/delete, and reads via selector', () => {
@@ -71,5 +92,66 @@ describe('createWorkingSetStore', () => {
 
     expect(store.hydrateIfLoaded('br_1', [{ id: 'x_1', name: 'fresh' }])).toBe(true)
     expect([...store.getRows().values()]).toEqual([{ id: 'x_1', name: 'fresh' }])
+  })
+
+  describe('insertMany', () => {
+    it('writes every row in one notification', () => {
+      const store = createWorkingSetStore<Row>()
+      store.hydrate('br_1', [])
+      const notifications = trackNotifications(store)
+
+      act(() => store.insertMany('br_1', rowsNamed(50)))
+
+      expect(store.getRows().size).toBe(50)
+      expect(notifications()).toBe(1)
+    })
+
+    it('no-ops with no notification for a branch other than the loaded one', () => {
+      const store = createWorkingSetStore<Row>()
+      store.hydrate('br_1', [])
+      const notifications = trackNotifications(store)
+
+      act(() => store.insertMany('br_2', rowsNamed(3)))
+
+      expect(store.getRows().size).toBe(0)
+      expect(notifications()).toBe(0)
+    })
+
+    it('no-ops with no notification for an empty list', () => {
+      const store = createWorkingSetStore<Row>()
+      store.hydrate('br_1', [{ id: 'x_1', name: 'a' }])
+      const before = store.getRows()
+      const notifications = trackNotifications(store)
+
+      act(() => store.insertMany('br_1', []))
+
+      expect(store.getRows()).toBe(before)
+      expect(notifications()).toBe(0)
+    })
+
+    it('keeps a row already in the store over the incoming one', () => {
+      const store = createWorkingSetStore<Row>()
+      store.hydrate('br_1', [{ id: 'x_1', name: 'edited during the read' }])
+
+      store.insertMany('br_1', [
+        { id: 'x_1', name: 'stale read' },
+        { id: 'x_2', name: 'new' },
+      ])
+
+      expect(store.getRows().get('x_1')?.name).toBe('edited during the read')
+      expect(store.getRows().get('x_2')?.name).toBe('new')
+    })
+
+    it('no-ops with no notification when every incoming row is already held', () => {
+      const store = createWorkingSetStore<Row>()
+      store.hydrate('br_1', [{ id: 'x_1', name: 'a' }])
+      const before = store.getRows()
+      const notifications = trackNotifications(store)
+
+      act(() => store.insertMany('br_1', [{ id: 'x_1', name: 'stale read' }]))
+
+      expect(store.getRows()).toBe(before)
+      expect(notifications()).toBe(0)
+    })
   })
 })
