@@ -2,6 +2,7 @@ import type { SpawnSyncReturns } from 'node:child_process'
 import { existsSync, statSync } from 'node:fs'
 
 import { adb, APP_ID } from './adb'
+import { isSqliteFile } from './sqlite-file'
 
 // `pnpm device:push-db <file>`: replaces the debug install's database. The app must have run once
 // and be debuggable; a release APK installed over it keeps the data. ANDROID_SERIAL is required:
@@ -31,6 +32,7 @@ function main(): void {
   if (file === undefined || !existsSync(file)) {
     throw new Error('usage: pnpm device:push-db <sqlite file>')
   }
+  if (!isSqliteFile(file)) throw new Error(`${file} is not a SQLite database`)
   const serial = process.env.ANDROID_SERIAL
   if (!serial) {
     throw new Error("set ANDROID_SERIAL to the target device's serial (see `adb devices`)")
