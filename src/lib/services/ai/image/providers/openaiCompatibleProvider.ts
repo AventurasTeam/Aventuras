@@ -15,6 +15,7 @@ import {
   pickSize,
   specToPixels,
 } from '#lib/utils/image.ts'
+import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 import type {
   ImageProvider,
@@ -167,11 +168,11 @@ async function fetchImageModels(
   const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined
 
   const [general, dedicated] = await Promise.allSettled([
-    fetchEntries(`${baseUrl}/models`, headers, {
+    fetchEntries(endpoint(baseUrl, 'models'), headers, {
       serviceId: 'openai-compatible-image-models',
       signal,
     }),
-    fetchEntries(`${baseUrl}/images/models`, headers, {
+    fetchEntries(endpoint(baseUrl, 'images/models'), headers, {
       serviceId: 'openai-compatible-image-models',
       timeoutMs: DEDICATED_LIST_TIMEOUT_MS,
       allowStatuses: ABSENT_STATUSES,

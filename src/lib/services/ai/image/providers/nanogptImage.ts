@@ -5,7 +5,7 @@ import * as z from 'zod'
 import { InvalidResponseDataError } from 'ai'
 import type { ImageModelV4, SharedV4Warning } from '@ai-sdk/provider'
 import { bytesToBase64 } from '#lib/utils/image.ts'
-import { isPublicHttpUrl } from '#lib/utils/url.ts'
+import { endpoint, isPublicHttpUrl } from '#lib/utils/url.ts'
 import type { Fetch } from '#lib/services/ai/sdk/providers/index.ts'
 import {
   definedHeaders,
@@ -62,7 +62,7 @@ async function downloadBase64(fetch: Fetch, url: string, signal?: AbortSignal): 
 }
 
 export function createNanoGPTImage(settings: NanoGPTImageSettings) {
-  const url = `${settings.baseURL}/images`
+  const url = endpoint(settings.baseURL, 'images')
 
   return {
     imageModel(modelId: string): ImageModelV4 {

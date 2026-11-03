@@ -61,6 +61,10 @@ clients) takes the URL as given. Defaults we own (`PROVIDERS`, and the image pro
 `baseUrls.test.ts` pin them instead. An image adapter resolves its URL with `resolveBaseUrl`, which
 falls back to that table's default.
 
+The image adapters build their discovery endpoints with `endpoint(baseUrl, 'models')`, which
+parses the normalized string and appends the path, so a malformed base URL throws one message
+before any request rather than failing inside a fetch. SDK `baseURL`s stay strings.
+
 ## Reasoning Effort
 
 Every question about thinking effort is answered by `src/lib/services/ai/core/reasoning.ts`, a

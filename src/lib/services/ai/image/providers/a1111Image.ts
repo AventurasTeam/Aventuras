@@ -7,6 +7,7 @@ import { InvalidResponseDataError } from 'ai'
 import type { ImageModelV4 } from '@ai-sdk/provider'
 import type { Fetch } from '#lib/services/ai/sdk/providers/index.ts'
 import { parseImageSize } from '#lib/utils/image.ts'
+import { endpoint } from '#lib/utils/url.ts'
 import {
   definedHeaders,
   fileBase64,
@@ -47,7 +48,7 @@ function errorMessage(parsed: unknown, text: string, status: number): string {
 }
 
 export function createA1111Image(settings: A1111ImageSettings) {
-  const url = `${settings.baseURL}/sdapi/v1/txt2img`
+  const url = endpoint(settings.baseURL, 'sdapi/v1/txt2img')
 
   return {
     imageModel(modelId: string): ImageModelV4 {

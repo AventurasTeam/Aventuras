@@ -12,6 +12,7 @@ import { createNanoGPTImage } from './nanogptImage'
 import { parseModelList } from './parseModelList'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 import { specToPixels, formatImageSize, pickSize, specToAspectRatio } from '#lib/utils/image.ts'
+import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 
 const DISCOVERY_SERVICE_ID = 'nanogpt-image-models'
@@ -188,10 +189,14 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
   }
 
   async function fetchModels(apiKey?: string, signal?: AbortSignal): Promise<NanoGptModel[]> {
-    const response = await imageGetFetch(`${baseUrl}/images/models`, discoveryHeaders(apiKey), {
-      serviceId: DISCOVERY_SERVICE_ID,
-      signal,
-    })
+    const response = await imageGetFetch(
+      endpoint(baseUrl, 'images/models'),
+      discoveryHeaders(apiKey),
+      {
+        serviceId: DISCOVERY_SERVICE_ID,
+        signal,
+      },
+    )
     return parseModelList(await response.json(), NanoGptModel, 'NanoGPT /images/models')
   }
 
@@ -234,7 +239,7 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
 
       const path = model.split('/').map(encodeURIComponent).join('/')
       const response = await imageGetFetch(
-        `${baseUrl}/images/models/${path}/endpoints`,
+        endpoint(baseUrl, `images/models/${path}/endpoints`),
         discoveryHeaders(),
         { serviceId: DISCOVERY_SERVICE_ID, allowStatuses: [404] },
       )

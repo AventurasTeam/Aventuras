@@ -7,6 +7,7 @@
  */
 
 import { formatImageSize, specToPixels } from '#lib/utils/image.ts'
+import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 import type {
   ImageProvider,
@@ -71,7 +72,7 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
       const headers: Record<string, string> = {}
       if (apiKey) headers.Authorization = `Bearer ${apiKey}`
 
-      const response = await imageGetFetch(`${baseUrl}/sdapi/v1/sd-models`, headers, {
+      const response = await imageGetFetch(endpoint(baseUrl, 'sdapi/v1/sd-models'), headers, {
         serviceId: 'a1111-models',
         signal,
       })
@@ -97,7 +98,7 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
         serviceId: string,
         allowStatuses?: number[],
       ): Promise<string[] | undefined> => {
-        const response = await imageGetFetch(`${baseUrl}/sdapi/v1/${path}`, authHeaders, {
+        const response = await imageGetFetch(endpoint(baseUrl, `sdapi/v1/${path}`), authHeaders, {
           serviceId,
           allowStatuses,
           signal,

@@ -10,6 +10,7 @@ import { abortable, sleep } from '#lib/utils/async.ts'
 import { errMessage } from '#lib/utils/error.ts'
 import { sha256Hex } from '#lib/utils/hash.ts'
 import { parseImageSize } from '#lib/utils/image.ts'
+import { endpoint } from '#lib/utils/url.ts'
 import {
   definedHeaders,
   fileBytes,
@@ -226,7 +227,7 @@ function missingOutputFailure(graph: Graph, outputNodeId: string, job: Job): Err
 
 export function createComfyImage(settings: ComfyImageSettings) {
   const { baseURL } = settings
-  const jobUrl = (id: string) => `${baseURL}/api/jobs/${encodeURIComponent(id)}`
+  const jobUrl = (id: string) => endpoint(baseURL, `api/jobs/${encodeURIComponent(id)}`)
 
   async function failure(response: Response, url: string, body?: unknown) {
     const text = await response.text()
@@ -245,7 +246,7 @@ export function createComfyImage(settings: ComfyImageSettings) {
     headers: Record<string, string>,
     signal?: AbortSignal,
   ): Promise<string> {
-    const url = `${baseURL}/upload/image`
+    const url = endpoint(baseURL, 'upload/image')
     const response = await settings.fetch(url, { method: 'POST', headers, body: form, signal })
     const text = await response.text()
     if (!response.ok) {
@@ -449,7 +450,7 @@ export function createComfyImage(settings: ComfyImageSettings) {
 
           try {
             const body = { prompt: graph, prompt_id: clientId }
-            const queueUrl = `${baseURL}/prompt`
+            const queueUrl = endpoint(baseURL, 'prompt')
             abortSignal?.throwIfAborted()
             cancel = 'until-found'
             const queued = await settings.fetch(queueUrl, {
@@ -497,11 +498,11 @@ export function createComfyImage(settings: ComfyImageSettings) {
             const image = job.outputs?.[outputNodeId]?.images?.[0]
             if (!image) throw missingOutputFailure(graph, outputNodeId, job)
 
-            const viewUrl = `${baseURL}/view?${new URLSearchParams({
+            const viewUrl = endpoint(baseURL, 'view', {
               filename: image.filename,
               subfolder: image.subfolder ?? '',
               type: image.type ?? 'output',
-            })}`
+            })
             const view = await settings.fetch(viewUrl, { signal: abortSignal })
             if (!view.ok) throw new Error(`ComfyUI image download failed: HTTP ${view.status}`)
 

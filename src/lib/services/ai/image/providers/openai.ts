@@ -16,6 +16,7 @@ import {
   pickSize,
   specToPixels,
 } from '#lib/utils/image.ts'
+import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 import type {
   ImageProvider,
@@ -111,7 +112,7 @@ async function fetchOpenAIImageModels(
   if (!apiKey) return []
 
   const response = await imageGetFetch(
-    `${baseUrl}/models`,
+    endpoint(baseUrl, 'models'),
     { Authorization: `Bearer ${apiKey}` },
     { serviceId: 'openai-image-models', signal },
   )

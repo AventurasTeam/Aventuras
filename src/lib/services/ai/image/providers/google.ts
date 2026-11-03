@@ -2,6 +2,7 @@
 
 import type { ImageModelCapabilities } from '#lib/types/index.ts'
 import { pickResolution, specToAspectRatio } from '#lib/utils/image.ts'
+import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 import type {
   ImageProvider,
@@ -117,7 +118,7 @@ async function fetchGoogleImageModels(
 
   // The key goes in a header: the debug log records the request URL.
   const response = await imageGetFetch(
-    `${baseUrl}/models?pageSize=200`,
+    endpoint(baseUrl, 'models', { pageSize: '200' }),
     { 'x-goog-api-key': apiKey },
     { serviceId: 'google-image-models', signal },
   )

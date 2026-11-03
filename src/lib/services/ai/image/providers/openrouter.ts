@@ -9,6 +9,7 @@ import * as z from 'zod'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import type { ImageModelCapabilities } from '#lib/types/index.ts'
 import { pickResolution, specToAspectRatio } from '#lib/utils/image.ts'
+import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 import type {
   ImageProvider,
@@ -153,7 +154,7 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
     async listModels(apiKey?: string, signal?: AbortSignal): Promise<ImageModelInfo[]> {
       const key = apiKey || config.apiKey
       const response = await imageGetFetch(
-        `${baseUrl}/images/models`,
+        endpoint(baseUrl, 'images/models'),
         key ? { Authorization: `Bearer ${key}` } : undefined,
         { serviceId: 'openrouter-image-models', signal },
       )

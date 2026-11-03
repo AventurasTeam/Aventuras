@@ -647,6 +647,17 @@ describe('base URL', () => {
     )
   })
 
+  it('rejects a malformed base URL before any request', async () => {
+    await expect(fetchModelList('h', 'checkpoints')).rejects.toThrow(
+      'Base URL is not an http(s) URL',
+    )
+    expect(imageGetFetch).not.toHaveBeenCalled()
+  })
+
+  it('clears the cache for a malformed base URL without throwing', () => {
+    expect(() => clearComfyCacheForUrl('h')).not.toThrow()
+  })
+
   it('keys clearComfyCacheForUrl by the normalized base URL', async () => {
     const provider = createComfyProvider({ apiKey: '', baseUrl: 'http://localhost:8188' })
     await provider.generate(options({ providerOptions: { mode: ComfyMode.BasicTxt2Img } }))

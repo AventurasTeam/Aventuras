@@ -19,6 +19,7 @@ import BasicTxt2ImgWorkflow from './comfyWorkflows/basic-txt2img-workflow.json'
 import LoraTxt2ImgWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetTxt2ImgWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
 import { formatImageSize, specToPixels } from '#lib/utils/image.ts'
+import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 import { isNewerVersion } from '#lib/utils/version.ts'
 import { imageGetFetch } from './fetchAdapter'
@@ -62,7 +63,7 @@ export async function fetchModelList(
 ): Promise<string[]> {
   // Tauri HTTP, not the WebView's fetch (docs/architecture/overview.md, "Local image servers").
   const resp = await imageGetFetch(
-    `${resolveBaseUrl('comfyui', baseUrl)}/models/${type}`,
+    endpoint(resolveBaseUrl('comfyui', baseUrl), `models/${type}`),
     undefined,
     {
       serviceId: 'comfy-models',
@@ -85,7 +86,7 @@ async function readServerSystem(
   timeoutMs?: number,
 ): Promise<ServerSystem | undefined> {
   try {
-    const response = await imageGetFetch(`${baseUrl}/system_stats`, undefined, {
+    const response = await imageGetFetch(endpoint(baseUrl, 'system_stats'), undefined, {
       serviceId: 'comfy-system',
       timeoutMs: Math.min(timeoutMs ?? PROBE_TIMEOUT_MS, PROBE_TIMEOUT_MS),
     })
@@ -696,7 +697,7 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
     },
 
     async getSamplerInfo(signal?: AbortSignal): Promise<ComfySamplerInfo> {
-      const response = await imageGetFetch(`${baseUrl}/object_info/KSampler`, undefined, {
+      const response = await imageGetFetch(endpoint(baseUrl, 'object_info/KSampler'), undefined, {
         serviceId: 'comfy-samplers',
         timeoutMs: config.timeoutMs,
         signal,
