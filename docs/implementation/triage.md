@@ -512,6 +512,22 @@ slice-planning gate forces its resolution before that slice is planned.
   change doesn't pull a TalkBack-scrolled list back. Read from the
   code, not reproduced.
 
+- **The reader's bottom geometry is still read only at a few moments.**
+  `syncJumpButton` (`components/reader/reader-surface.tsx`) raises the
+  jump-to-bottom button as a stream grows below the reader and through
+  a landing, but other growth below still waits for a scroll event: the
+  commit that replaces a streaming card, a reply's late layout, a
+  classifier write that makes a row taller. Separately, the chapter
+  break's re-pin reads the reader's distance against the last commit's
+  height, and in one story setup late layout had shrunk the content
+  14 px since that commit (4 of 4 runs), so a reader 10 px from the
+  bottom read as 24 px and wasn't re-pinned; the cause isn't pinned
+  down. Both from 5.3's slice review, 2026-11-03, in stories, not on a
+  device. The same review left Space on a `<button>` or `<summary>` in
+  entry HTML to the control; `<video controls>` and `<audio controls>`,
+  which the entry sanitizer allows, may take Space too and weren't
+  probed.
+
 - **Escape after a strip-opened chapter popover focuses the chip.** On
   web, the progress strip's hit area opens the popover through the
   chapter chip's trigger (`components/reader/reader-chapter-chips.tsx`),
