@@ -64,6 +64,13 @@ async function tailEntryId(page: Page, branchId: string): Promise<string> {
   return id as string
 }
 
+// The veil shows only once a landing has gone unsignalled for JUMP_VEIL_DELAY_MS (200 ms), so a
+// check any sooner would pass even if the landing never signalled and the veil stayed up.
+async function expectJumpVeilLifted(page: Page): Promise<void> {
+  await page.waitForTimeout(500)
+  await expect(reader.jumpVeil(page)).toBeHidden()
+}
+
 // A wheel, not a `scrollTop` write: only a gesture stops the bottom pin and an unsettled landing,
 // either of which would undo a programmatic write.
 async function scrollAwayFrom(page: Page, entryId: string, deltaY: number): Promise<void> {
@@ -130,6 +137,7 @@ test.describe.serial('Reader chapters', () => {
     await page.waitForURL(/\/reader-composer\//)
     await expect(reader.row(page, fire.entryId)).toBeInViewport()
     await expect(plot.subHeader(page)).toHaveCount(0)
+    await expectJumpVeilLifted(page)
   })
 
   test('a second press of the same row jumps again, and ← reaches the story list', async () => {
@@ -286,6 +294,7 @@ test.describe.serial('Reader chapter chrome', () => {
 
     await expect(reader.popoverRow(page, FIRST_CHAPTER)).toBeHidden()
     await expect(reader.row(page, startEntryId)).toBeInViewport({ timeout: 20_000 })
+    await expectJumpVeilLifted(page)
   })
 
   test('a chapter jump opens under the break that heads it', async () => {
