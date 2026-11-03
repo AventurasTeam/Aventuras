@@ -466,7 +466,14 @@ slice-planning gate forces its resolution before that slice is planned.
     120 Hz), moving a target near the tail up as the reply makes room
     and keeping the break re-pin off meanwhile. Decide whether growth
     below the target counts against settling. Raised 2026-11-03 by
-    5.3's slice review.
+    5.3's slice review. On the Fold the target held still, against
+    that prediction: in 5.3's device session (release build, unfolded),
+    a near-tail jump pressed about 3 s into a 30 chars/s reply landed
+    with its target as high as the content allowed, about 250 px below
+    the top, and the reader's upper half didn't visibly move from the
+    landing at 5.6 s to 30 s while the reply grew below. The fixture
+    was modified to put a closed one-entry chapter on the tail. Why it
+    held isn't known.
   - **Two rules fail no test when removed:** the 600-frame cap and the
     height part of the settle rule. Pin both in unit tests once the
     loop is a function. Raised 2026-11-03 by 5.3's slice review.
