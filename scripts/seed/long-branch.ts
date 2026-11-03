@@ -12,8 +12,8 @@ import type { NewBranch, NewChapter, NewStory, NewStoryEntry } from '../../lib/d
 
 // The chapter counts bench/fixture.ts prices against; its long-branch test keeps the two equal.
 export const LONG_BRANCH_SCALES = [20, 60] as const
-export const ENTRIES_PER_CHAPTER = 132
-export const LONG_BRANCH_STEP_ROWS = 500
+const ENTRIES_PER_CHAPTER = 132
+const LONG_BRANCH_STEP_ROWS = 500
 
 export const longBranchId = (chapters: number): string => `br_long_${chapters}`
 
