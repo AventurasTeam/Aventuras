@@ -243,6 +243,6 @@ export const reader = {
     page.getByRole('separator', { name: chapterLabelPattern(number) }),
   // A button only on the reader at tablet/desktop; the progressbar shares the name, not the role.
   chapterProgressHit: (page: Page): Locator =>
-    page.getByRole('button', { name: t('chrome.chapterProgress'), exact: true }),
+    page.getByRole('button', { name: t('chapters:popover.title'), exact: true }),
   jumpVeil: (page: Page): Locator => page.getByText(t('reader:jumpLoading'), { exact: true }),
 }
