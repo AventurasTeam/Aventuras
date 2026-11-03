@@ -157,7 +157,7 @@ export function useEntryJump(
     },
     [branchId, release],
   )
-  // From the landing call on, only the surface can lift the veil, and its row may never mount.
+  // The surface's landed signal may never come: its row can leave the window or never mount.
   const watchLanding = useCallback(
     (entryId: string) => {
       unwatch()

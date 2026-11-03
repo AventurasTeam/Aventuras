@@ -1448,7 +1448,7 @@ export default function ReaderComposerRoute() {
     [entryLanded],
   )
   // useSurfaceNavigate sets the param before it dismisses: a reader under another screen isn't laid
-  // out, and a call into a document that hasn't sent onReady is lost.
+  // out, and a jump before the document's first paint would show its veil over the boot veil.
   const entryLinkReady =
     isFocused && hydrationSucceeded && (Platform.OS === 'web' || documentPainted)
   const arriveAtEntry = useCallback(
@@ -1461,8 +1461,8 @@ export default function ReaderComposerRoute() {
     [router, jumpToEntry],
   )
   useRouteLink(singleParam(entry) ?? null, entryLinkReady, arriveAtEntry)
-  // Direct when the document can take the jump (a param would re-send the window twice on native);
-  // the chips are live before it paints, so then the param waits on entryLinkReady.
+  // Direct when entryLinkReady (a param would re-send the window twice on native); a chip pressed
+  // before the document paints goes through the param, so its veil doesn't cover the boot veil.
   const followEntry = useCallback(
     (entryId: string) => {
       if (entryLinkReady) void jumpToEntry(entryId)
