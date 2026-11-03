@@ -27,12 +27,44 @@ function deviceSize(serial: string): number {
   return Number.parseInt(count.stdout, 10)
 }
 
+function installStaged(serial: string, file: string): void {
+  const push = adb(serial, ['push', file, DEVICE_TMP])
+  if (push.status !== 0) throw new Error(`adb push failed: ${failureOf(push)}`)
+
+  // The device's own pipe, not spawnSync's `input`: run-as can't read /data/local/tmp itself,
+  // and a utf8 pipe from here would corrupt the binary.
+  const copy = adb(serial, [
+    'shell',
+    `cat ${DEVICE_TMP} | run-as ${APP_ID} sh -c 'mkdir -p files/SQLite && cat > ${APP_DB}'`,
+  ])
+  if (copy.status !== 0) throw runAsFailure(copy)
+
+  // Sidecars left by the previous database would be replayed over the new file.
+  const sidecars = ['-wal', '-shm', '-journal'].map((suffix) => `${APP_DB}${suffix}`)
+  const clear = adb(serial, ['shell', 'run-as', APP_ID, 'rm', '-f', ...sidecars])
+  if (clear.status !== 0) throw new Error(`removing the old sidecars failed: ${failureOf(clear)}`)
+}
+
+/** Null once the staged copy is gone, else what to tell the user. */
+function removeStaged(serial: string): string | null {
+  const removal = adb(serial, ['shell', 'rm', '-f', DEVICE_TMP])
+  if (removal.status === 0) return null
+  return `${DEVICE_TMP} is still on the device (${failureOf(removal)}); remove it by hand`
+}
+
 function main(): void {
   const file = process.argv[2]
   if (file === undefined || !existsSync(file)) {
     throw new Error('usage: pnpm device:push-db <sqlite file>')
   }
   if (!isSqliteFile(file)) throw new Error(`${file} is not a SQLite database`)
+  // Only the main file is pushed, so changes still in a WAL or hot journal would be lost.
+  const sidecar = ['-wal', '-journal'].map((suffix) => `${file}${suffix}`).find(existsSync)
+  if (sidecar !== undefined) {
+    throw new Error(
+      `${sidecar} exists: close whatever has ${file} open, or open and close it once, then push`,
+    )
+  }
   const serial = process.env.ANDROID_SERIAL
   if (!serial) {
     throw new Error("set ANDROID_SERIAL to the target device's serial (see `adb devices`)")
@@ -51,26 +83,17 @@ function main(): void {
   const stop = adb(serial, ['shell', 'am', 'force-stop', APP_ID])
   if (stop.status !== 0) throw new Error(`force-stop failed: ${failureOf(stop)}`)
 
-  // The staged copy sits outside the app sandbox, so it goes whichever step fails.
+  // The staged copy sits outside the app sandbox, so it goes whichever step fails; a failed step
+  // stays the error reported first.
   try {
-    const push = adb(serial, ['push', file, DEVICE_TMP])
-    if (push.status !== 0) throw new Error(`adb push failed: ${failureOf(push)}`)
-
-    // The device's own pipe, not spawnSync's `input`: run-as can't read /data/local/tmp itself,
-    // and a utf8 pipe from here would corrupt the binary.
-    const copy = adb(serial, [
-      'shell',
-      `cat ${DEVICE_TMP} | run-as ${APP_ID} sh -c 'mkdir -p files/SQLite && cat > ${APP_DB}'`,
-    ])
-    if (copy.status !== 0) throw runAsFailure(copy)
-
-    // Sidecars left by the previous database would be replayed over the new file.
-    const sidecars = ['-wal', '-shm', '-journal'].map((suffix) => `${APP_DB}${suffix}`)
-    const clear = adb(serial, ['shell', 'run-as', APP_ID, 'rm', '-f', ...sidecars])
-    if (clear.status !== 0) throw new Error(`removing the old sidecars failed: ${failureOf(clear)}`)
-  } finally {
-    adb(serial, ['shell', 'rm', '-f', DEVICE_TMP])
+    installStaged(serial, file)
+  } catch (err) {
+    const leftover = removeStaged(serial)
+    if (leftover === null) throw err
+    throw new Error(`${err instanceof Error ? err.message : String(err)}; ${leftover}`)
   }
+  const leftover = removeStaged(serial)
+  if (leftover !== null) throw new Error(`the database was copied, but ${leftover}`)
 
   const local = statSync(file).size
   const remote = deviceSize(serial)

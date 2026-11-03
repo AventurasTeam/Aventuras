@@ -163,10 +163,16 @@ describe('createWorkingSetStore', () => {
 
     store.insertMany('br_1', rowsNamed(2))
     expect(listener).toHaveBeenCalledTimes(1)
+    store.insertMany('br_1', [{ id: 'x_7', name: 'second' }])
+    expect(listener).toHaveBeenCalledTimes(2)
+    store.patch('br_1', { op: 'update', id: 'x_7', columns: { name: 'renamed' } })
+    expect(listener).toHaveBeenCalledTimes(3)
+    store.hydrate('br_1', rowsNamed(3))
+    expect(listener).toHaveBeenCalledTimes(4)
 
     unsubscribe()
     store.insertMany('br_1', [{ id: 'x_9', name: 'late' }])
-    expect(listener).toHaveBeenCalledTimes(1)
+    expect(listener).toHaveBeenCalledTimes(4)
     expect(store.getRows().has('x_9')).toBe(true)
   })
 })

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -35,6 +35,13 @@ describe('isSqliteFile', () => {
   it('rejects a file shorter than the header', () => {
     const path = join(dir, 'short.db')
     writeFileSync(path, 'SQLite')
+    expect(isSqliteFile(path)).toBe(false)
+  })
+
+  // Opening a FIFO blocks until a writer appears; a directory fails the read with EISDIR.
+  it('rejects a path that is not a regular file, without opening it', () => {
+    const path = join(dir, 'folder.db')
+    mkdirSync(path)
     expect(isSqliteFile(path)).toBe(false)
   })
 
