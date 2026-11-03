@@ -382,8 +382,14 @@ export const LongListRangesLand: Story = {
   },
 }
 
-/** Web has no drag: a wheel keeps the reader's place, so rows landing later don't pull it back. */
-export const LongListWheelKeepsPlace: Story = {
+const twoFrames = () =>
+  new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+
+/**
+ * Web has no drag: a scroll up the list, by wheel, key or scrollbar, keeps the reader's place, so
+ * rows landing later don't pull it back. Setting `scrollTop` stands in for any of them.
+ */
+export const LongListScrollUpKeepsPlace: Story = {
   args: { closed: LONG_LIST.map((row) => ({ ...row, rangeLabel: null })) },
   render: (args) => <RangesLandHarness {...args} />,
   play: async () => {
@@ -392,13 +398,30 @@ export const LongListWheelKeepsPlace: Story = {
     await expectOpenedOnLastRow()
 
     const list = await listScroller()
-    // A dispatched wheel scrolls nothing, so the play moves the list itself.
-    list.dispatchEvent(new WheelEvent('wheel', { deltaY: -400, bubbles: true }))
     list.scrollTop = 0
+    await twoFrames()
     await userEvent.keyboard('{F2}')
     await screen.findByText('Day 30')
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    await twoFrames()
     expect(list.scrollTop).toBe(0)
+  },
+}
+
+/** A wheel over a list too short to scroll moves nothing, so the list stays pinned as it grows. */
+export const ShortListWheelThenGrowsShowsLastRow: Story = {
+  args: { closed: LONG_LIST.slice(0, 2) },
+  render: (args) => <RangesLandHarness {...args} />,
+  play: async () => {
+    await waitForTier('desktop')
+    await openOverlay()
+    const list = await listScroller()
+    expect(list.scrollHeight).toBeLessThanOrEqual(list.clientHeight)
+
+    list.dispatchEvent(new WheelEvent('wheel', { deltaY: -400, bubbles: true }))
+    await twoFrames()
+    await userEvent.keyboard('{F2}')
+    await screen.findByText('Day 30')
+    await expectOpenedOnLastRow()
   },
 }
 

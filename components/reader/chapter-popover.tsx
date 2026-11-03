@@ -1,7 +1,14 @@
 import { SCROLLABLE_STATUS, useBottomSheetInternal } from '@gorhom/bottom-sheet'
 import type { TriggerRef } from '@rn-primitives/popover'
 import { useImperativeHandle, useRef, useState, type ReactElement, type Ref } from 'react'
-import { Platform, Pressable, View, type ViewStyle } from 'react-native'
+import {
+  Platform,
+  Pressable,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  type ViewStyle,
+} from 'react-native'
 import { ScrollView as GestureScrollView } from 'react-native-gesture-handler'
 import { useAnimatedReaction } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
@@ -173,6 +180,14 @@ function OverlayBody({
   const scrollToEnd = () => {
     if (pinned.current) list.current?.scrollTo({ y: contentHeight.current, animated: false })
   }
+  // Web has no drag, and a wheel, key or scrollbar can each move the list. Only the reader moves
+  // it up: the list's own scrolls go down to the end, and rows growing below move nothing.
+  const lastOffset = useRef(0)
+  const unpinOnScrollUp = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offset = event.nativeEvent.contentOffset.y
+    if (offset < lastOffset.current - 1) pinned.current = false
+    lastOffset.current = offset
+  }
   // Android runs a frame's view commands before its mount, so a scroll for rows that just grew
   // clamps to their old height; the next frame's repeat lands after the mount.
   const showLastRow = () => {
@@ -187,13 +202,13 @@ function OverlayBody({
         ref={list}
         testID="chapter-popover-list"
         keyboardShouldPersistTaps="handled"
-        // A touch drag or a wheel keeps the reader's place: no later trigger pulls it back.
+        // A touch drag keeps the reader's place: no later trigger pulls it back.
         onScrollBeginDrag={() => {
           pinned.current = false
         }}
-        onWheel={() => {
-          pinned.current = false
-        }}
+        onScroll={Platform.OS === 'web' ? unpinOnScrollUp : undefined}
+        // RN-Web's default reports only a scroll's start and its end, 100 ms after it stops.
+        scrollEventThrottle={16}
         style={arm.list}
         onContentSizeChange={(_width, height) => {
           contentHeight.current = height
