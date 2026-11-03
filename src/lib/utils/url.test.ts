@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isPublicHttpUrl, normalizeBaseUrl, parseHttpUrl } from './url'
+import { isPublicHttpUrl, normalizeBaseUrl, parseBaseUrl, parseHttpUrl } from './url'
 
 describe('parseHttpUrl', () => {
   it.each([
@@ -33,6 +33,15 @@ describe('normalizeBaseUrl', () => {
     'gives an empty string for %j',
     (input) => {
       expect(normalizeBaseUrl(input)).toBe('')
+    },
+  )
+})
+
+describe('parseBaseUrl', () => {
+  it.each(['', 'h', 'open.bigmodel.cn/api', 'http://', 'ftp://example.com'])(
+    'throws for %j',
+    (input) => {
+      expect(() => parseBaseUrl(input)).toThrow('Base URL is not an http(s) URL')
     },
   )
 })

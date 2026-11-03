@@ -70,6 +70,14 @@ export function parseHttpUrl(url: string): URL | null {
   return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed : null
 }
 
+/** A base URL with a trailing-slash path, so `new URL('models', base)` appends. Throws unless absolute `http(s)`. */
+export function parseBaseUrl(url: string): URL {
+  const parsed = parseHttpUrl(url)
+  if (!parsed) throw new Error(`Base URL is not an http(s) URL: ${url}`)
+  if (!parsed.pathname.endsWith('/')) parsed.pathname += '/'
+  return parsed
+}
+
 /**
  * Whether an `http(s)` URL points at a host outside the user's own machine and network.
  * Judges the name and IP literals only: a public name that resolves to a private address passes.
