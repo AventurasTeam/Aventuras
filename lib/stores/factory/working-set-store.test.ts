@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createWorkingSetStore, type WorkingSetStore } from './working-set-store'
 
@@ -153,5 +153,20 @@ describe('createWorkingSetStore', () => {
       expect(store.getRows()).toBe(before)
       expect(notifications()).toBe(0)
     })
+  })
+
+  it('calls a direct subscriber once per change and stops after unsubscribe', () => {
+    const store = createWorkingSetStore<Row>()
+    store.hydrate('br_1', [])
+    const listener = vi.fn()
+    const unsubscribe = store.subscribe(listener)
+
+    store.insertMany('br_1', rowsNamed(2))
+    expect(listener).toHaveBeenCalledTimes(1)
+
+    unsubscribe()
+    store.insertMany('br_1', [{ id: 'x_9', name: 'late' }])
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(store.getRows().has('x_9')).toBe(true)
   })
 })

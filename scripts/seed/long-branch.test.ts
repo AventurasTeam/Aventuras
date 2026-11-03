@@ -17,11 +17,22 @@ function rowsOf<T>(steps: readonly SeedStep[], table: string): T[] {
   return steps.filter((s) => getTableName(s.table) === table).flatMap((s) => s.rows as T[])
 }
 
+// Thousands of rows repeat a few dozen texts; tokenizing every row takes seconds on CI.
+const tokenCounts = new Map<string, number>()
+function tokensOf(content: string): number {
+  let count = tokenCounts.get(content)
+  if (count === undefined) {
+    count = countTokens(content)
+    tokenCounts.set(content, count)
+  }
+  return count
+}
+
 function tokensByChapter(rows: readonly EntryRow[]): Map<string | null, number> {
   const totals = new Map<string | null, number>()
   for (const row of rows) {
     const chapterId = row.chapterId ?? null
-    totals.set(chapterId, (totals.get(chapterId) ?? 0) + countTokens(row.content))
+    totals.set(chapterId, (totals.get(chapterId) ?? 0) + tokensOf(row.content))
   }
   return totals
 }
@@ -42,6 +53,7 @@ describe.each([
   const [story] = rowsOf<NewStory>(steps, 'stories')
   const [branch] = rowsOf<NewBranch>(steps, 'branches')
   const byId = new Map(rows.map((r) => [r.id, r]))
+  const totals = tokensByChapter(rows)
   const positionOf = (id: string) => byId.get(id)!.position
 
   it('counts one story, one branch, its entries and its chapters', () => {
@@ -153,7 +165,6 @@ describe.each([
   })
 
   it('sums each chapter tokenCount over its entries', () => {
-    const totals = tokensByChapter(rows)
     for (const chapter of closed) expect(chapter.tokenCount).toBe(totals.get(chapter.id))
   })
 
@@ -165,7 +176,6 @@ describe.each([
   })
 
   it('comes to about 24,000 tokens a chapter', () => {
-    const totals = tokensByChapter(rows)
     for (const chapter of closed) {
       expect(totals.get(chapter.id)).toBeGreaterThanOrEqual(21_600)
       expect(totals.get(chapter.id)).toBeLessThanOrEqual(26_400)
@@ -173,7 +183,7 @@ describe.each([
   })
 
   it('carries each row its content tokens', () => {
-    for (const row of rows.slice(0, 40)) expect(row.contentTokens).toBe(countTokens(row.content))
+    for (const row of rows) expect(row.contentTokens).toBe(tokensOf(row.content))
   })
 
   it('parses every row metadata', () => {

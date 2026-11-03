@@ -96,6 +96,17 @@ function entryContent(position: number, kind: NewStoryEntry['kind']): string {
   return kind === 'user_action' ? ACTIONS[(position / 2) % ACTIONS.length]! : replyContent(position)
 }
 
+// Contents repeat from the pools above, so each distinct text is tokenized once.
+const tokenCounts = new Map<string, number>()
+function contentTokensOf(content: string): number {
+  let count = tokenCounts.get(content)
+  if (count === undefined) {
+    count = countTokens(content)
+    tokenCounts.set(content, count)
+  }
+  return count
+}
+
 /** 1-based; null past the last chapter. Position 1 plus the next 132 make up chapter 1. */
 function chapterOfPosition(position: number, chapters: number): number | null {
   const chapter = Math.max(1, Math.ceil((position - 1) / ENTRIES_PER_CHAPTER))
@@ -123,7 +134,7 @@ function entryRow(chapters: number, position: number, t0: number) {
     position,
     kind,
     content,
-    contentTokens: countTokens(content),
+    contentTokens: contentTokensOf(content),
     chapterId: chapter === null ? null : chapterIdOf(chapters, chapter),
     metadata: entryMetadataSchema.parse({
       sceneEntities: [],
