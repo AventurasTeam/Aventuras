@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { branches, stories, storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { logger } from '@/lib/diagnostics'
 import { entriesStore } from '@/lib/stores'
 
 import { useReaderEntryJump } from './use-reader-entry-jump'
@@ -53,7 +54,10 @@ describe('useReaderEntryJump', () => {
     ctx = await seedBranch()
   })
 
-  afterEach(cleanup)
+  afterEach(() => {
+    vi.restoreAllMocks()
+    cleanup()
+  })
 
   it('sends a landing straight to a ready reader', async () => {
     const { result } = mount(true)
@@ -135,6 +139,40 @@ describe('useReaderEntryJump', () => {
     expect(result.current.veil.isWaiting()).toBe(false)
     rerender({ branchId: BRANCH, ready: true })
     expect(send).toHaveBeenCalledTimes(1)
+  })
+
+  it('warns when a reload loses a landing its wait covers', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const { result, rerender } = mount(true)
+    await act(() => result.current.jump('entry_10'))
+    expect(warn).not.toHaveBeenCalled()
+
+    rerender({ branchId: BRANCH, ready: false })
+    expect(warn).toHaveBeenCalledExactlyOnceWith('reader.entry_jump_dropped', {
+      branchId: BRANCH,
+      entryId: 'entry_10',
+      cause: 'document_reload',
+    })
+  })
+
+  it('warns nothing when a reload follows a landing no wait covered', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const { result, rerender } = mount(true)
+    await act(() => result.current.jump('entry_100'))
+    expect(send).toHaveBeenCalledExactlyOnceWith('entry_100')
+
+    rerender({ branchId: BRANCH, ready: false })
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  it('warns nothing when a reload follows a landing that signalled', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const { result, rerender } = mount(true)
+    await act(() => result.current.jump('entry_10'))
+    act(() => result.current.landed('entry_10'))
+
+    rerender({ branchId: BRANCH, ready: false })
+    expect(warn).not.toHaveBeenCalled()
   })
 
   it('lifts the veil when a second reload loses a landing it held', async () => {

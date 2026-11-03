@@ -1321,14 +1321,19 @@ export default function ReaderComposerRoute() {
       })
   }, [terminalEntry, openForBranch, branchId])
 
+  const documentPaintedRef = useRef(false)
   const handleReady = useCallback(async () => {
     // Boot/reload handshake: emissions before onReady are lost, so bump the
     // nonce to force a fresh full-prop emission, and re-arm the loading veil.
+    if (documentPaintedRef.current)
+      logger.warn('reader.document_reloaded', { branchId: branchIdRef.current })
+    documentPaintedRef.current = false
     setDocumentPainted(false)
     setSyncNonce((n) => n + 1)
   }, [])
 
   const handleFirstPaint = useCallback(async () => {
+    documentPaintedRef.current = true
     setDocumentPainted(true)
   }, [])
 

@@ -123,17 +123,20 @@ export type EntryJump = {
   landed: (entryId: string) => void
 }
 
+type JumpDropCause = 'bound' | 'left_window' | 'document_reload'
+
 /**
  * `land` must be stable: the platform dispatch to the surface or the document. `topLoaded`, also
  * stable, runs in the store write's tick only when a read brings in a target that is the branch's
  * first row (never for an in-window one), so the host drops its boundary shimmer in that commit.
+ * `lost` reports a landing call for `entryId` that a document reload lost.
  */
 export function useEntryJump(
   branchId: string,
   ctx: DbCtx,
   land: (entryId: string) => void,
   topLoaded: () => void,
-): EntryJump {
+): EntryJump & { lost: (entryId: string) => void } {
   const generationRef = useRef(0)
   const targetRef = useRef<string | null>(null)
   const [veil] = useState(createJumpVeil)
@@ -147,20 +150,30 @@ export function useEntryJump(
     unwatch()
     veil.lift()
   }, [unwatch, veil])
+  const drop = useCallback(
+    (entryId: string, cause: JumpDropCause) => {
+      logger.warn('reader.entry_jump_dropped', { branchId, entryId, cause })
+      release()
+    },
+    [branchId, release],
+  )
   // From the landing call on, only the surface can lift the veil, and its row may never mount.
   const watchLanding = useCallback(
     (entryId: string) => {
       unwatch()
-      const timer = setTimeout(release, JUMP_VEIL_TIMEOUT_MS)
+      const timer = setTimeout(() => drop(entryId, 'bound'), JUMP_VEIL_TIMEOUT_MS)
       const unsubscribe = entriesStore.subscribe(() => {
-        if (entriesStore.getById(entryId)?.branchId !== branchId) release()
+        if (entriesStore.getById(entryId)?.branchId === branchId) return
+        // Another branch loading means the reader is being left, not that it dropped the landing.
+        if (entriesStore.getLoadedBranch() === branchId) drop(entryId, 'left_window')
+        else release()
       })
       unwatchRef.current = () => {
         clearTimeout(timer)
         unsubscribe()
       }
     },
-    [branchId, release, unwatch],
+    [branchId, drop, release, unwatch],
   )
   // A replaced target's drop still signals, and must not lift the veil mid-jump.
   const landed = useCallback(
@@ -168,6 +181,12 @@ export function useEntryJump(
       if (targetRef.current === entryId) release()
     },
     [release],
+  )
+  const lost = useCallback(
+    (entryId: string) => {
+      if (targetRef.current === entryId) drop(entryId, 'document_reload')
+    },
+    [drop],
   )
   // A branch change unmounts the surface on both platforms, so a pending landing never signals; a
   // read still out then must not land or start a bound, even back on this branch.
@@ -231,5 +250,5 @@ export function useEntryJump(
     [branchId, ctx, land, release, topLoaded, unwatch, veil, watchLanding],
   )
 
-  return { jump, veil, landed }
+  return { jump, veil, landed, lost }
 }

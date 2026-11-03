@@ -505,6 +505,87 @@ describe('useEntryJump: jumping', () => {
     expect(result.current.veil.isWaiting()).toBe(false)
   })
 
+  it('warns when the bound ends the wait', async () => {
+    const ctx = await seedBranch()
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    await act(() => result.current.jump('entry_10'))
+
+    vi.advanceTimersByTime(29_999)
+    expect(warn).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(warn).toHaveBeenCalledExactlyOnceWith('reader.entry_jump_dropped', {
+      branchId: BRANCH,
+      entryId: 'entry_10',
+      cause: 'bound',
+    })
+  })
+
+  it('warns for the newer target only when a replaced jump would have run out', async () => {
+    const ctx = await seedBranch()
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    await act(() => result.current.jump('entry_10'))
+    vi.advanceTimersByTime(15_000)
+    await act(() => result.current.jump('entry_5'))
+
+    vi.advanceTimersByTime(15_000)
+    expect(warn).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(15_000)
+    expect(warn).toHaveBeenCalledExactlyOnceWith('reader.entry_jump_dropped', {
+      branchId: BRANCH,
+      entryId: 'entry_5',
+      cause: 'bound',
+    })
+  })
+
+  it('warns when its target leaves the window after the landing call', async () => {
+    const ctx = await seedBranch()
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    await act(() => result.current.jump('entry_10'))
+    entriesStore.insertMany(BRANCH, [row(121)])
+    expect(warn).not.toHaveBeenCalled()
+
+    entriesStore.hydrate(
+      BRANCH,
+      Array.from({ length: 50 }, (_, i) => row(71 + i)),
+    )
+    expect(warn).toHaveBeenCalledExactlyOnceWith('reader.entry_jump_dropped', {
+      branchId: BRANCH,
+      entryId: 'entry_10',
+      cause: 'left_window',
+    })
+  })
+
+  // The reader is being left: not a landing the reader dropped.
+  it('comes down without a warn when another branch loads under the wait', async () => {
+    const ctx = await seedBranch()
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    await act(() => result.current.jump('entry_10'))
+
+    entriesStore.hydrate('br_other', [])
+    expect(result.current.veil.isWaiting()).toBe(false)
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  it('warns nothing when its row leaves the window after it landed', async () => {
+    const ctx = await seedBranch()
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    await act(() => result.current.jump('entry_10'))
+    act(() => result.current.landed('entry_10'))
+
+    entriesStore.hydrate(
+      BRANCH,
+      Array.from({ length: 50 }, (_, i) => row(71 + i)),
+    )
+    expect(warn).not.toHaveBeenCalled()
+  })
+
   it("keeps a replaced target's bound off the newer jump's veil", async () => {
     const ctx = await seedBranch()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
