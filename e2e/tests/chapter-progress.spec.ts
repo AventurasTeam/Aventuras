@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
+import { ENTRIES_WINDOW_SIZE } from '@/lib/actions'
+
 import { goToPlot, goToStorySettings, goToWorld, openStory } from '../flows/navigation'
 import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
@@ -13,11 +15,10 @@ import { reader } from '../locators/reader'
 import { storySettings } from '../locators/story-settings'
 import { world } from '../locators/world'
 
-// The seeded branch is past the reader's 50-entry window: a strip reading the working set would
+// The seeded branch is past the reader's entry window: a strip reading the working set would
 // under-report. Serial: each test continues the last one's screen. docs/testing.md → Tier 1.
 const STORY_ID = 'story_rich'
 const STORY_TITLE = 'The Gallery of Impossible Rooms'
-const ENTRIES_WINDOW = 50
 // Several times the seeded reply's count, so the percent has to rise.
 const EDITED_REPLY = 'E2E-STRIP-EDIT the curator rewrites the catalogue card by hand. '.repeat(30)
 
@@ -85,7 +86,7 @@ test.describe.serial('chapter progress strip', () => {
 
     // Short of the window a strip reading the store would match too, and an empty column reads 0
     // on both sides, so either would make the comparison below prove nothing.
-    expect(await openRegionRows(page, branchId)).toBeGreaterThan(ENTRIES_WINDOW)
+    expect(await openRegionRows(page, branchId)).toBeGreaterThan(ENTRIES_WINDOW_SIZE)
     expect(await sqlPercent(page, branchId)).toBeGreaterThan(0)
 
     await expectStripMatchesSql(page, branchId)
