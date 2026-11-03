@@ -126,11 +126,11 @@ async function main() {
     throw err
   }
 
+  const rowsByTable = new Map<string, number>()
+  for (const s of steps) rowsByTable.set(s.name, (rowsByTable.get(s.name) ?? 0) + s.rows.length)
+  for (const [name, count] of rowsByTable) console.log(`[seed]   ${name}: ${count}`)
   const total = steps.reduce((n, s) => n + s.rows.length, 0)
-  for (const s of steps) console.log(`[seed]   ${s.name}: ${s.rows.length}`)
-  console.log(
-    `[seed] done — ${total} rows across ${new Set(steps.map((s) => s.name)).size} tables.`,
-  )
+  console.log(`[seed] done — ${total} rows across ${rowsByTable.size} tables.`)
   if (cli.longBranch) {
     for (const chapters of LONG_BRANCH_SCALES) {
       console.log(`[seed] ${longBranchId(chapters)}: first entry ${entryIdAt(chapters, 1)}`)
