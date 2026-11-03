@@ -76,7 +76,10 @@ slice-planning gate forces its resolution before that slice is planned.
   `useChapterProgress` opts out for itself, as 5.3's
   `useChapterTimeRanges` and `useStoryChapterNumbers` do. One default in
   `createQueryClient` fixes the two, and the three hooks' own lines can
-  then go. Raised 2026-11-01 by Slice 5.1's planning.
+  then go. Raised 2026-11-01 by Slice 5.1's planning. The same three
+  hooks also repeat `retry: false` and `gcTime: 30_000`, so a shared set
+  of options for local reads, or client defaults, would cover all three
+  lines; added 2026-11-03 by 5.3's slice review.
 - **The mock LLM's token count has no run guard.**
   `scripts/mock-llm/respond/wire.ts:48-52` keeps its own `countO200k`,
   though its comment says it mirrors `countTokens`. On a fixture with a
