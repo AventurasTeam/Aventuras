@@ -555,7 +555,7 @@ export function ReaderSurface({
       const now = performance.now()
       const wheelChainLive = now - lastWheelHandledAtRef.current < WHEEL_CHAIN_GAP_MS
       if (wheelChainLive) wheelHoldStartedAt ??= now
-      // The row has long since landed; staying on, the halt rule would fight the user's own scroll.
+      // The row has long since landed; staying on, the wheel hold would freeze the user's scroll.
       if (wheelChainLive && now - (wheelHoldStartedAt ?? now) >= WHEEL_HOLD_MAX_MS) {
         stopLanding()
         return
@@ -650,7 +650,8 @@ export function ReaderSurface({
     (event: UIEvent<HTMLDivElement>) => {
       const metrics = computeScrollMetrics(event.currentTarget)
       lastDistanceRef.current = metrics.distanceFromBottomPx
-      // A jump disengages autoscroll until its landing ends, wherever the scroll passes meanwhile.
+      // A scroll during a running landing disengages autoscroll. A stream starting mid-landing can
+      // still engage it for one write, which that write's own scroll event takes back.
       const landing = landingRef.current
       if (landing != null && landing.running) autoscrollRef.current.userInterrupted()
       else
@@ -886,7 +887,7 @@ export function ReaderSurface({
 
   return (
     <div className="relative h-full">
-      {/* Stable gutter: a landing's halt hides overflow; a lost scrollbar reflows every row. */}
+      {/* Stable gutter: a landing's halt and wheel hold hide overflow; a lost bar reflows rows. */}
       <div
         ref={scrollRef}
         className="h-full overflow-y-auto [overflow-anchor:none] [scrollbar-gutter:stable]"

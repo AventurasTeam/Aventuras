@@ -1885,7 +1885,7 @@ function paintedPixel(...layers: string[]): number[] {
   return Array.from(ctx.getImageData(0, 0, 1, 1).data)
 }
 
-/** In a dark theme the landed tint is a 30% layer over the card's own background. */
+/** In a dark theme the landed tint is a layer at the theme's landedTintShare over the card. */
 export const JumpLandsRowInWindowDark: Story = {
   globals: { theme: 'default-dark' },
   render: (args) => <JumpHarness {...args} />,
@@ -2285,8 +2285,8 @@ export const JumpHaltsMomentum: Story = {
   },
 }
 
-// The reader reads a wheel's own time, so the chain sets it: frame spacing in a slow run can't
-// break it, and a gap is exactly as long as a story makes it.
+// A wheel's own time decides whether it continues the chain, so the story sets it: a gap between
+// two wheels is as long as the story makes it, whatever the frames' spacing.
 function wheelAt(scroller: HTMLElement, deltaY: number, timeStamp: number) {
   const event = new WheelEvent('wheel', { deltaY, bubbles: true })
   Object.defineProperty(event, 'timeStamp', { value: timeStamp })
@@ -2304,7 +2304,7 @@ function wheelChain(
   onFrame: () => void,
   startAt = performance.now(),
 ) {
-  // `dispatchedAt` is the clock the reader judges the chain by: when its last wheel was handled.
+  // `dispatchedAt` is when the last wheel was handled, the time that keeps a landing's hold live.
   const chain = { foreignWrites: 0, hidden: false, lastAt: startAt, dispatchedAt: -1 }
   const ended = new Promise<void>((resolve) => {
     let left = scroller.scrollTop
