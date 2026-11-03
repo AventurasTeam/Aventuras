@@ -1,5 +1,5 @@
 import type { SpawnSyncReturns } from 'node:child_process'
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, realpathSync, statSync } from 'node:fs'
 
 import { adb, APP_ID } from './adb'
 import { isSqliteFile } from './sqlite-file'
@@ -58,8 +58,10 @@ function main(): void {
     throw new Error('usage: pnpm device:push-db <sqlite file>')
   }
   if (!isSqliteFile(file)) throw new Error(`${file} is not a SQLite database`)
+  // SQLite keeps a symlinked database's sidecars beside the link's target.
+  const source = realpathSync(file)
   // Only the main file is pushed, so changes still in a WAL or hot journal would be lost.
-  const sidecar = ['-wal', '-journal'].map((suffix) => `${file}${suffix}`).find(existsSync)
+  const sidecar = ['-wal', '-journal'].map((suffix) => `${source}${suffix}`).find(existsSync)
   if (sidecar !== undefined) {
     throw new Error(
       `${sidecar} exists: close whatever has ${file} open, or open and close it once, then push`,
@@ -86,7 +88,7 @@ function main(): void {
   // The staged copy sits outside the app sandbox, so it goes whichever step fails; a failed step
   // stays the error reported first.
   try {
-    installStaged(serial, file)
+    installStaged(serial, source)
   } catch (err) {
     const leftover = removeStaged(serial)
     if (leftover === null) throw err
@@ -95,7 +97,7 @@ function main(): void {
   const leftover = removeStaged(serial)
   if (leftover !== null) throw new Error(`the database was copied, but ${leftover}`)
 
-  const local = statSync(file).size
+  const local = statSync(source).size
   const remote = deviceSize(serial)
   if (remote !== local) throw new Error(`size mismatch: local ${local}, device ${remote}`)
   console.log(`[push-db] ${file} -> ${serial}:${APP_ID}:${APP_DB} (${local} bytes)`)
