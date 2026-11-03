@@ -633,7 +633,7 @@ id's `checkpoint:` or `unet:` prefix does, and a UNet text encoder or VAE left b
 the first file the server lists. OpenAI Compatible has no standard model list: its filtering and
 capability reading were assembled from a handful of hosts' replies, and `/images/models` is an optional
 extra whose failure never fails the listing. Whether a provider takes an API key or a base URL is declared per
-provider in the registry (`PROVIDER_API_KEY`, `PROVIDER_BASE_URL`), and the settings form and
+provider (`PROVIDER_API_KEY` in the registry, `PROVIDER_BASE_URL` in `providers/baseUrls.ts`, which also holds each default), and the settings form and
 `hasRequiredCredentials` read those tables. The form keeps a value typed for another provider, so the
 registry builds a provider only from the fields it has an input for (`connectionFor`): a leftover base URL
 is not sent to NanoGPT, nor a leftover API key to A1111. Discovery (`listModels`, `getSamplerInfo`,

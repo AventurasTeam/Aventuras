@@ -19,17 +19,12 @@ import BasicTxt2ImgWorkflow from './comfyWorkflows/basic-txt2img-workflow.json'
 import LoraTxt2ImgWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetTxt2ImgWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
 import { formatImageSize, specToPixels } from '#lib/utils/image.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
+import { resolveBaseUrl } from './baseUrls'
 import { isNewerVersion } from '#lib/utils/version.ts'
 import { imageGetFetch } from './fetchAdapter'
 import { expectList } from './imageModelUtils'
 import { MIN_COMFYUI_VERSION, createComfyImage, type ComfyImageOptions } from './comfyImage'
 import { createImageSdkFetch, createPollImageSdkFetch, generateSdkImage } from './sdkImage'
-
-const DEFAULT_BASE_URL = 'http://localhost:8188'
-
-export const resolveComfyBaseUrl = (baseUrl: string | undefined): string =>
-  normalizeBaseUrl(baseUrl) || DEFAULT_BASE_URL
 
 // A server that does not answer is not worth the generation's own timeout.
 const PROBE_TIMEOUT_MS = 5_000
@@ -66,16 +61,20 @@ export async function fetchModelList(
   signal?: AbortSignal,
 ): Promise<string[]> {
   // Tauri HTTP, not the WebView's fetch (docs/architecture/overview.md, "Local image servers").
-  const resp = await imageGetFetch(`${resolveComfyBaseUrl(baseUrl)}/models/${type}`, undefined, {
-    serviceId: 'comfy-models',
-    timeoutMs,
-    signal,
-  })
+  const resp = await imageGetFetch(
+    `${resolveBaseUrl('comfyui', baseUrl)}/models/${type}`,
+    undefined,
+    {
+      serviceId: 'comfy-models',
+      timeoutMs,
+      signal,
+    },
+  )
   return expectList(await resp.json(), `ComfyUI /models/${type}`).filter(isString)
 }
 
 export function clearComfyCacheForUrl(baseUrl: string | undefined): void {
-  const key = resolveComfyBaseUrl(baseUrl)
+  const key = resolveBaseUrl('comfyui', baseUrl)
   autoClipCache.delete(key)
   autoVaeCache.delete(key)
   serverSystems.delete(key)
@@ -489,7 +488,7 @@ const numberOr = (value: unknown, fallback: number): number =>
   typeof value === 'number' ? value : fallback
 
 export function createComfyProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = resolveComfyBaseUrl(config.baseUrl)
+  const baseUrl = resolveBaseUrl('comfyui', config.baseUrl)
 
   // One per generation, so concurrent generations keep separate poll traces in the debug log.
   const comfyModel = (model: string) =>

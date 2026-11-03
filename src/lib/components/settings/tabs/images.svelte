@@ -19,6 +19,7 @@
     takesApiKey,
     baseUrlMode,
     connectionFor,
+    resolveBaseUrl,
     IMAGE_PROVIDER_LABELS,
     IMAGE_PROVIDER_OPTIONS,
     ComfyMode,
@@ -44,7 +45,6 @@
     detectWorkflowFields,
     fetchModelList,
     clearComfyCacheForUrl,
-    resolveComfyBaseUrl,
   } from '#lib/services/ai/image/providers/comfy.ts'
   import ImageModelSelect from '#lib/components/settings/ImageModelSelect.svelte'
   import type {
@@ -940,7 +940,7 @@
   // auto-filled names so that fetch refills them from the new server.
   $effect(() => {
     if (profileProviderType === 'comfyui') {
-      const currentUrl = resolveComfyBaseUrl(profileBaseUrl)
+      const currentUrl = resolveBaseUrl('comfyui', profileBaseUrl)
       if (prevComfyBaseUrl !== null && prevComfyBaseUrl !== currentUrl) {
         clearComfyCacheForUrl(prevComfyBaseUrl)
         availableClips = []

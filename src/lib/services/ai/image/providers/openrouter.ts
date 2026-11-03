@@ -9,7 +9,7 @@ import * as z from 'zod'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import type { ImageModelCapabilities } from '#lib/types/index.ts'
 import { pickResolution, specToAspectRatio } from '#lib/utils/image.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
+import { resolveBaseUrl } from './baseUrls'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -20,8 +20,6 @@ import type {
 import { imageGetFetch } from './fetchAdapter'
 import { parseModelList } from './parseModelList'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
-
-const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1'
 
 const optionalString = z.string().optional().catch(undefined)
 const optionalNumber = z.number().optional().catch(undefined)
@@ -121,7 +119,7 @@ const OPENROUTER_ASPECT_RATIOS = [
 ] as const
 
 export function createOpenRouterProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL
+  const baseUrl = resolveBaseUrl('openrouter', config.baseUrl)
   const openrouter = createOpenRouter({
     apiKey: config.apiKey,
     baseURL: baseUrl,

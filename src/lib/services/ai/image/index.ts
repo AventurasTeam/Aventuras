@@ -36,6 +36,8 @@ export {
   type ImageModelInfo,
 } from './providers/registry'
 
+export { resolveBaseUrl } from './providers/baseUrls'
+
 export {
   IMAGE_MODEL_SNAPSHOT_VERSION,
   canonicalModelId,

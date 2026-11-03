@@ -2,7 +2,7 @@
 
 import type { ImageModelCapabilities } from '#lib/types/index.ts'
 import { pickResolution, specToAspectRatio } from '#lib/utils/image.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
+import { resolveBaseUrl } from './baseUrls'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -15,10 +15,8 @@ import { isGoogleImageModel } from '../../sdk/providers/modelFetcher'
 import { imageGetFetch } from './fetchAdapter'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
-const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
-
 export function createGoogleProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL
+  const baseUrl = resolveBaseUrl('google', config.baseUrl)
   const googleSDK = createGoogleGenerativeAI({
     apiKey: config.apiKey,
     baseURL: baseUrl,

@@ -7,7 +7,7 @@
  */
 
 import { formatImageSize, specToPixels } from '#lib/utils/image.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
+import { resolveBaseUrl } from './baseUrls'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -21,8 +21,6 @@ import { expectList } from './imageModelUtils'
 import { createA1111Image } from './a1111Image'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
-const DEFAULT_BASE_URL = 'http://localhost:7860'
-
 /** The first release with `/sdapi/v1/schedulers`. */
 export const MIN_A1111_SCHEDULERS_VERSION = '1.9.1'
 
@@ -34,7 +32,7 @@ export const a1111ReferenceLimit = (
 ): number => (providerOptions?.takesReferences === true ? Infinity : 0)
 
 export function createA1111Provider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL
+  const baseUrl = resolveBaseUrl('a1111', config.baseUrl)
   const a1111 = createA1111Image({
     baseURL: baseUrl,
     apiKey: config.apiKey,

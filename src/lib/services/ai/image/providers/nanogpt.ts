@@ -12,9 +12,8 @@ import { createNanoGPTImage } from './nanogptImage'
 import { parseModelList } from './parseModelList'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 import { specToPixels, formatImageSize, pickSize, specToAspectRatio } from '#lib/utils/image.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
+import { resolveBaseUrl } from './baseUrls'
 
-const DEFAULT_BASE_URL = 'https://api.nano-gpt.com/api/v1'
 const DISCOVERY_SERVICE_ID = 'nanogpt-image-models'
 
 // Keeps `w:h` ratios; the catalogue also lists values like `auto` and `match_input_image`.
@@ -175,7 +174,7 @@ function toModelInfo(m: NanoGptModel): ImageModelInfo {
 }
 
 export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL
+  const baseUrl = resolveBaseUrl('nanogpt', config.baseUrl)
   const nanogpt = createNanoGPTImage({
     apiKey: config.apiKey,
     baseURL: baseUrl,

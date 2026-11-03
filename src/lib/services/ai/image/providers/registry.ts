@@ -20,6 +20,7 @@ import type {
 } from './types'
 import { createLogger } from '#lib/log.ts'
 import { fetchPublicImageBase64 } from './fetchAdapter'
+import { PROVIDER_BASE_URL } from './baseUrls'
 import { applyCapabilityOverride } from './modelSnapshot'
 import { snapshotCapabilities } from './snapshotBackfill'
 
@@ -87,19 +88,6 @@ const PROVIDER_API_KEY: Record<ImageProviderType, FieldMode> = {
   pollinations: 'required',
   comfyui: 'none',
   a1111: 'none',
-}
-
-/** Whether a provider takes a base URL: `required` when it has no endpoint of its own to default to. */
-const PROVIDER_BASE_URL: Record<ImageProviderType, FieldMode> = {
-  nanogpt: 'none',
-  openai: 'optional',
-  'openai-compatible': 'required',
-  openrouter: 'none',
-  google: 'none',
-  zhipu: 'optional',
-  pollinations: 'none',
-  comfyui: 'optional',
-  a1111: 'optional',
 }
 
 const unlimited = () => Infinity
@@ -240,7 +228,7 @@ export function takesApiKey(providerType: string): boolean {
 
 /** Whether a profile of this provider needs, may take, or has no base URL. */
 export function baseUrlMode(providerType: string): FieldMode {
-  return supportsImageGeneration(providerType) ? PROVIDER_BASE_URL[providerType] : 'none'
+  return supportsImageGeneration(providerType) ? PROVIDER_BASE_URL[providerType].mode : 'none'
 }
 
 /**

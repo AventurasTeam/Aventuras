@@ -16,7 +16,7 @@ import {
   pickSize,
   specToPixels,
 } from '#lib/utils/image.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
+import { resolveBaseUrl } from './baseUrls'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -27,8 +27,6 @@ import type {
 import { imageGetFetch } from './fetchAdapter'
 import { parseModelList } from './parseModelList'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
-
-const DEFAULT_BASE_URL = 'https://api.openai.com/v1'
 
 // Prefixes used to identify image-capable models in the /v1/models response
 const IMAGE_MODEL_PREFIXES = ['gpt-image-', 'chatgpt-image-']
@@ -73,7 +71,7 @@ export const openaiModelCapabilities = (model: string): ImageModelCapabilities |
 const MIN_PIXELS = 655_360
 
 export function createOpenAIProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL
+  const baseUrl = resolveBaseUrl('openai', config.baseUrl)
   const openai = createOpenAI({
     apiKey: config.apiKey,
     baseURL: baseUrl,

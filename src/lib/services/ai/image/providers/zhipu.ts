@@ -7,7 +7,7 @@
  */
 
 import { specToPixels, formatImageSize, type ImageSpec } from '#lib/utils/image.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
+import { resolveBaseUrl } from './baseUrls'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -16,8 +16,6 @@ import type {
   ImageModelInfo,
 } from './types'
 import { generateOpenAICompatibleImage } from './openaiCompatible'
-
-const DEFAULT_BASE_URL = 'https://api.z.ai/api/paas/v4'
 
 const BIGMODEL_HOST = 'open.bigmodel.cn'
 
@@ -68,7 +66,7 @@ function fitSize(spec: ImageSpec, limits: SizeLimits): `${number}x${number}` {
 }
 
 export function createZhipuProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL
+  const baseUrl = resolveBaseUrl('zhipu', config.baseUrl)
 
   return {
     id: 'zhipu',

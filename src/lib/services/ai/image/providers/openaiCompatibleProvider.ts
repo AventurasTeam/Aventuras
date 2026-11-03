@@ -15,7 +15,7 @@ import {
   pickSize,
   specToPixels,
 } from '#lib/utils/image.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
+import { resolveBaseUrl } from './baseUrls'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -107,7 +107,7 @@ function toModelInfo(entry: ModelEntry): ImageModelInfo {
 }
 
 export function createOpenAICompatibleProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = normalizeBaseUrl(config.baseUrl)
+  const baseUrl = resolveBaseUrl('openai-compatible', config.baseUrl)
 
   return {
     id: 'openai-compatible',
