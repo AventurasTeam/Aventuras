@@ -73,21 +73,23 @@ async function untilReadCalls(times: number) {
   }
 }
 
-function holdNextBetween() {
+function holdNextBetween(failWith?: Error) {
   const { gate, open } = deferred()
   const actual = vi.mocked(readEntriesBetween).getMockImplementation()!
   vi.mocked(readEntriesBetween).mockImplementationOnce(async (...args) => {
     await gate
+    if (failWith) throw failWith
     return actual(...args)
   })
   return open
 }
 
-function holdNextPosition() {
+function holdNextPosition(failWith?: Error) {
   const { gate, open } = deferred()
   const actual = vi.mocked(readEntryPosition).getMockImplementation()!
   vi.mocked(readEntryPosition).mockImplementationOnce(async (...args) => {
     await gate
+    if (failWith) throw failWith
     return actual(...args)
   })
   return open
@@ -590,6 +592,36 @@ describe('useEntryJump: jumping', () => {
       expect(toast.warning).not.toHaveBeenCalled()
       expect(toast.error).not.toHaveBeenCalled()
       expect(vi.getTimerCount()).toBe(0)
+    },
+  )
+
+  it.each(stalls)(
+    'logs without a toast when the $read read fails after the bound',
+    async ({ hold, rowsReads }) => {
+      const ctx = await seedBranch()
+      vi.spyOn(logger, 'warn').mockImplementation(() => {})
+      const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      const open = hold(new Error('disk gone'))
+      const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+      let pending!: Promise<void>
+      act(() => {
+        pending = result.current.jump('entry_10')
+      })
+      await untilReadCalls(rowsReads)
+      vi.advanceTimersByTime(30_000)
+
+      await act(async () => {
+        open()
+        await pending
+      })
+      expect(error).toHaveBeenCalledExactlyOnceWith('reader.entry_jump_failed', {
+        branchId: BRANCH,
+        entryId: 'entry_10',
+        error: 'disk gone',
+      })
+      expect(toast.error).not.toHaveBeenCalled()
+      expect(land).not.toHaveBeenCalled()
     },
   )
 
