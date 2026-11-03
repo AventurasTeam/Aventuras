@@ -2117,6 +2117,45 @@ export const JumpSurvivesASpaceTypedInAField: Story = {
   },
 }
 
+// Rich entries render into a shadow root, so a key from inside reaches the reader retargeted.
+const RICH_CONTROLS_HTML = [
+  '<style>@media (min-width: 1px) { p { margin: 0 } }</style>',
+  '<details><summary>Notes</summary><p>The east wing again.</p></details>',
+  '<textarea aria-label="Margin note"></textarea>',
+].join('\n')
+
+/** Space activates a summary and types into a field, inside rich content too: neither scrolls. */
+export const JumpSurvivesASpaceOnAControlInRichContent: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: {
+    rows: OVERFLOW_ROWS.map((row) =>
+      row.id === 'o5' ? { ...row, content: RICH_CONTROLS_HTML } : row,
+    ),
+  },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    const shadow = await waitFor(() => {
+      const hosts = Array.from(entryRow('o5').querySelectorAll('div'))
+      const root = hosts.find((host) => host.shadowRoot != null)?.shadowRoot
+      if (root?.querySelector('summary') == null) throw new Error('rich content not mounted')
+      return root
+    })
+    press('Jump')
+    await frames(3)
+    for (const control of ['summary', 'textarea']) {
+      const el = shadow.querySelector<HTMLElement>(control)!
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, composed: true }))
+      el.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', shiftKey: true, bubbles: true, composed: true }),
+      )
+    }
+    press('Grow above target')
+    await frames(3)
+    await landedOn(JUMP_TARGET, scroller)
+  },
+}
+
 export const JumpBrokenByJumpToBottom: Story = {
   render: (args) => <JumpHarness {...args} />,
   args: { rows: OVERFLOW_ROWS },

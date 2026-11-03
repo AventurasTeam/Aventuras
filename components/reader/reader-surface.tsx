@@ -712,16 +712,20 @@ export function ReaderSurface({
       pressedInside = event.target instanceof Node && el.contains(event.target)
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      const upward = isUpwardScrollKey(event)
+      // A rich entry's shadow root retargets the event to its host; the key acts where it began.
+      const origin = event.composedPath()[0]
+      const target = event.target
+      if (event.defaultPrevented || !(origin instanceof Element) || !(target instanceof Node))
+        return
+      const press = { key: event.key, shiftKey: event.shiftKey, targetTagName: origin.tagName }
+      const upward = isUpwardScrollKey(press)
       // A reader left mounted under another screen isn't laid out, and the key isn't its.
       if (
-        event.defaultPrevented ||
-        !(upward || isDownwardScrollKey(event)) ||
+        !(upward || isDownwardScrollKey(press)) ||
+        isEditableTarget(origin) ||
         el.getClientRects().length === 0
       )
         return
-      const target = event.target
-      if (!(target instanceof Node) || isEditableTarget(target)) return
       if (!(target === doc.body ? pressedInside : el.contains(target))) return
       // Down leaves autoscroll engaged, but a landing sits mid-document, where down still moves it.
       if (upward) interruptByGesture()
