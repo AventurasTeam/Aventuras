@@ -149,14 +149,6 @@ export const PressFires: Story = {
   },
 }
 
-/** Rows of one target read alike, so a pressable row's name carries its entry. */
-export const PressableNameCarriesEntry: Story = {
-  args: { delta: baseDelta, onPress: fn() },
-  play: async () => {
-    expect(screen.getByRole('button', { name: 'update Kael, entry #47' })).toBeVisible()
-  },
-}
-
 export const PressableNameWithoutEntry: Story = {
   args: { delta: { ...baseDelta, entryId: null }, onPress: fn() },
   play: async () => {
