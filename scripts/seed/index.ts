@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { parseArgs } from 'node:util'
 
 import { getTableName } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
@@ -14,13 +15,34 @@ import type { NewStoryEntry } from '../../lib/db/types'
 import { resolveDevSlot } from '../dev-slot/resolve'
 import { slotPorts } from '../dev-slot/slot'
 
-const args = process.argv.slice(2)
+// Strict: an ignored typo would seed something other than what was asked for.
+function parseCli(argv: string[]): { path: string | undefined; longBranch: boolean } {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: { 'long-branch': { type: 'boolean', default: false } },
+    allowPositionals: true,
+  })
+  if (positionals.length > 1) {
+    throw new Error(
+      `one database path at most, got ${positionals.length}: ${positionals.join(' ')}`,
+    )
+  }
+  return { path: positionals[0], longBranch: values['long-branch'] }
+}
+
+let cli: ReturnType<typeof parseCli>
+try {
+  cli = parseCli(process.argv.slice(2))
+} catch (err) {
+  console.error(`[seed] ${err instanceof Error ? err.message : String(err)}`)
+  console.error('[seed] usage: pnpm db:seed [db path], or pnpm db:seed:long [db path]')
+  process.exit(1)
+}
 
 // Default is the dev slot's userData DB — slot 0 is the one drizzle.studio.config.ts browses.
 // Override with AVENTURAS_DB_PATH or a positional arg. Opt-in --long-branch adds its fixture.
 function resolveTarget(): { dbPath: string; mockPort?: number } {
-  const arg = args.find((a) => !a.startsWith('-'))
-  if (arg) return { dbPath: arg }
+  if (cli.path) return { dbPath: cli.path }
   if (process.env.AVENTURAS_DB_PATH) return { dbPath: process.env.AVENTURAS_DB_PATH }
   const { slot, dataDir, ports } = resolveDevSlot()
   return { dbPath: join(dataDir, 'aventuras.db'), mockPort: slot === 0 ? undefined : ports.mock }
@@ -78,8 +100,7 @@ async function main() {
   })
 
   const steps = buildSeedSteps()
-  if (args.includes('--long-branch'))
-    steps.push(...LONG_BRANCH_SCALES.flatMap(buildLongBranchSteps))
+  if (cli.longBranch) steps.push(...LONG_BRANCH_SCALES.flatMap(buildLongBranchSteps))
   if (mockPort !== undefined) {
     repointSeedProvider(steps, mockPort)
     console.log(`[seed] provider endpoint: http://localhost:${mockPort}/v1`)
@@ -111,7 +132,7 @@ async function main() {
   console.log(
     `[seed] done — ${total} rows across ${new Set(steps.map((s) => s.name)).size} tables.`,
   )
-  if (args.includes('--long-branch')) printLongBranches(steps)
+  if (cli.longBranch) printLongBranches(steps)
 }
 
 function printLongBranches(steps: SeedStep[]): void {
