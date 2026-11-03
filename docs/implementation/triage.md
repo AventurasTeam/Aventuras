@@ -503,7 +503,9 @@ slice-planning gate forces its resolution before that slice is planned.
     Sheet unlocks, so at the unlock `showLastRow` does nothing and the
     list opens on chapter 1. Read from gorhom 5.2.14's source
     (`useScrollHandler`, `useScrollable`); added 2026-11-03 by 5.3's
-    slice review.
+    slice review. Not run on the Fold; see "The phone chapter Sheet
+    rises on chapter 1, then jumps to its last rows" in the
+    [Inbox](#inbox).
 
   Web's upward-offset rule can't move over as is to the phone Sheet,
   where gorhom's snap to the top before the unlock would read as a
@@ -514,6 +516,26 @@ slice-planning gate forces its resolution before that slice is planned.
   leave it off its last row, and that a later content-size or layout
   change doesn't pull a TalkBack-scrolled list back. Read from the
   code, not reproduced.
+
+- **The phone chapter Sheet rises on chapter 1, then jumps to its last
+  rows.** On the phone, the chapter Sheet shows chapter 1 while it rises
+  and snaps to its last rows only once it is fully open, a visible jump
+  on every open. gorhom holds the list at the top until the Sheet
+  unlocks, and `SheetUnlockWatcher`
+  (`components/reader/chapter-popover.tsx`) repeats the scroll to the
+  last row only then. Repro: on the folded Fold, open the story "Long
+  branch, 20 chapters" from `pnpm db:seed:long` and tap the chapter
+  chip. In one recording the Sheet showed chapters 1–6 at 2.95 s and
+  3.05 s, and 16–21 at 3.15 s. The developer saw it on the phone. The
+  recordings are git-ignored, so the evidence is
+  [#698's device comment](https://github.com/AventurasTeam/Aventuras/pull/698#issuecomment-6611307585).
+  "The native chapter list's pin doesn't follow the reader's own
+  scrolls" in the [Inbox](#inbox) names this snap to the top before the
+  unlock only as a constraint on its fix. That entry's rise-drag case
+  couldn't be run on the device: adb's input lag, about 0.1 s, can't
+  place a drag inside a rise of about 0.2 s, and by hand the list sits
+  at chapter 1 with nothing above it to scroll to. Raised 2026-11-03 by
+  5.3's device session (developer decision R3).
 
 - **The reader's bottom geometry is still read only at a few moments.**
   `syncJumpButton` (`components/reader/reader-surface.tsx`) raises the
