@@ -206,6 +206,36 @@ describe('useStoryChapterNumbers', () => {
     expect(generationStore.getSettleCount()).toBe(settleCount)
   })
 
+  it('reads and renders nothing while hidden, then reads once on the return', async () => {
+    const { setFocused } = renderProbe()
+    await waitFor(() => expect(latest()?.get('s1')).toBe(2))
+    const firstLanded = shown.findIndex((numbers) => numbers != null)
+    const lastFocused = latest()
+    const select = vi.spyOn(db, 'select')
+
+    setFocused(false)
+    const hiddenRenders = shown.length
+    await closeChapter(db, 'br_1', 2)
+    for (const id of ['r1', 'r2', 'r3', 'r4', 'r5']) {
+      act(() => generationStore.startRun(run(id)))
+      act(() => generationStore.finishRun(id))
+    }
+    await act(async () => {})
+    await act(async () => {})
+
+    expect(select).not.toHaveBeenCalled()
+    expect(shown.length).toBe(hiddenRenders)
+    expect(latest()).toBe(lastFocused)
+
+    setFocused(true)
+    await waitFor(() => expect(latest()?.get('s1')).toBe(3))
+    await act(async () => {})
+    await act(async () => {})
+
+    expect(select).toHaveBeenCalledTimes(1)
+    expect(shown.slice(firstLanded).map((numbers) => numbers?.get('s1'))).not.toContain(undefined)
+  })
+
   it('logs a failed read', async () => {
     const warn = vi.spyOn(logger, 'warn')
     const { setFocused } = renderProbe()
