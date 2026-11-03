@@ -168,11 +168,21 @@ describe.each([
     for (const chapter of closed) expect(chapter.tokenCount).toBe(totals.get(chapter.id))
   })
 
-  it('numbers chapters from 1 and queues no embedding work', () => {
+  it('numbers chapters from 1', () => {
     expect(closed.map((c) => c.sequenceNumber)).toEqual(
       Array.from({ length: chapters }, (_, i) => i + 1),
     )
-    expect(closed.every((c) => c.embeddingStale === 0)).toBe(true)
+  })
+
+  // No vector row comes with them, and sync embeds only stale rows.
+  it('marks every row of an embeddable table stale', () => {
+    const embeddable = steps.filter((s) => 'embeddingStale' in getTableColumns(s.table))
+    expect(embeddable.map((s) => getTableName(s.table))).toContain('chapters')
+    for (const step of embeddable) {
+      for (const row of step.rows as { embeddingStale?: number }[]) {
+        expect(row.embeddingStale).toBe(1)
+      }
+    }
   })
 
   it('comes to about 24,000 tokens a chapter', () => {

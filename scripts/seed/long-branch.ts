@@ -169,7 +169,7 @@ function chapterRow(chapters: number, k: number, t0: number, tokenCount: number)
     endEntryId: entryIdAt(chapters, chapterEnd(k)),
     tokenCount,
     closedAt,
-    embeddingStale: 0,
+    embeddingStale: 1,
     createdAt: closedAt,
     updatedAt: closedAt,
   }
