@@ -4,6 +4,8 @@ import type { DbCtx } from '@/lib/db'
 
 import { useEntryJump, type EntryJump } from './use-entry-jump'
 
+type Landing = { readonly entryId: string; readonly sent: boolean }
+
 /**
  * `useEntryJump` bound to the reader's mount. `send` reaches the surface or the document; `ready`
  * says a call would arrive (native: the document has painted since it last booted). A landing made
@@ -17,20 +19,16 @@ export function useReaderEntryJump(
   topLoaded: () => void,
 ): EntryJump {
   const readyRef = useRef(ready)
-  const heldRef = useRef<string | null>(null)
-  const sentRef = useRef<string | null>(null)
+  const landingRef = useRef<Landing | null>(null)
   useLayoutEffect(() => {
     readyRef.current = ready
   }, [ready])
 
   const land = useCallback(
     (entryId: string) => {
-      if (!readyRef.current) {
-        heldRef.current = entryId
-        return
-      }
-      sentRef.current = entryId
-      send(entryId)
+      const sent = readyRef.current
+      landingRef.current = { entryId, sent }
+      if (sent) send(entryId)
     },
     [send],
   )
@@ -39,8 +37,7 @@ export function useReaderEntryJump(
   // sent id lost to a reload could otherwise match the newer target and lift its veil mid-read.
   const jump = useCallback(
     (entryId: string) => {
-      heldRef.current = null
-      sentRef.current = null
+      landingRef.current = null
       return jumpEntry(entryId)
     },
     [jumpEntry],
@@ -50,29 +47,26 @@ export function useReaderEntryJump(
   useEffect(
     () =>
       veil.subscribe(() => {
-        if (veil.isWaiting()) return
-        heldRef.current = null
-        sentRef.current = null
+        if (!veil.isWaiting()) landingRef.current = null
       }),
     [veil],
   )
   useEffect(() => {
-    heldRef.current = null
-    sentRef.current = null
+    landingRef.current = null
   }, [branchId])
 
   useEffect(() => {
+    const landing = landingRef.current
+    if (landing === null) return
     if (!ready) {
-      const lost = sentRef.current
-      sentRef.current = null
-      if (lost != null) landed(lost)
+      if (!landing.sent) return
+      landingRef.current = null
+      landed(landing.entryId)
       return
     }
-    const held = heldRef.current
-    if (held == null) return
-    heldRef.current = null
-    sentRef.current = held
-    send(held)
+    if (landing.sent) return
+    landingRef.current = { entryId: landing.entryId, sent: true }
+    send(landing.entryId)
   }, [landed, ready, send])
 
   return { jump, veil, landed }
