@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 
 /**
  * A route's selection link (`kind`, `id`, `tab` params). `arrive` runs once per link on a ready
- * commit; `atMount` is false for a link set later on a screen useSurfaceNavigate reused. Returns
- * the link until the panes it selects have mounted, so only those open on its tab.
+ * commit; `atMount` is false for a link set later on a screen useSurfaceNavigate reused. A link
+ * cleared and set again counts as new. Returns the link until the panes it selects have mounted,
+ * so only those open on its tab.
  */
 export function useRouteLink<Link>(
   link: Link | null,

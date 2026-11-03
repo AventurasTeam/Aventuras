@@ -8,8 +8,11 @@ export type WorkingSetStore<Row extends { id: string }> = {
   getRows: () => ReadonlyMap<string, Row>
   getLoadedBranch: () => string | null
   patch: (branchId: string, patch: StorePatch) => void
+  insertMany: (branchId: string, rows: readonly Row[]) => void
   hydrate: (branchId: string, rows: Row[]) => void
   hydrateIfLoaded: (branchId: string, rows: Row[]) => boolean
+  /** Fires after every state change; returns the unsubscribe. */
+  subscribe: (listener: () => void) => () => void
   __reset: () => void
 }
 
@@ -35,6 +38,17 @@ export function createWorkingSetStore<Row extends { id: string }>(): WorkingSetS
     store.setState({ rows })
   }
 
+  const insertMany = (branchId: string, incoming: readonly Row[]) => {
+    const s = store.getState()
+    if (branchId !== s.loadedBranch) return
+    // The row already held wins: an edit may have landed while the caller's read was in flight.
+    const fresh = incoming.filter((row) => !s.rows.has(row.id))
+    if (fresh.length === 0) return
+    const rows = new Map(s.rows)
+    for (const row of fresh) rows.set(row.id, row)
+    store.setState({ rows })
+  }
+
   const hydrate = (branchId: string, rows: Row[]) =>
     store.setState({ loadedBranch: branchId, rows: new Map(rows.map((r) => [r.id, r])) })
 
@@ -44,12 +58,14 @@ export function createWorkingSetStore<Row extends { id: string }>(): WorkingSetS
     getRows: () => store.getState().rows,
     getLoadedBranch: () => store.getState().loadedBranch,
     patch,
+    insertMany,
     hydrate,
     hydrateIfLoaded: (branchId, rows) => {
       if (store.getState().loadedBranch !== branchId) return false
       hydrate(branchId, rows)
       return true
     },
+    subscribe: (listener) => store.subscribe(() => listener()),
     __reset: () => store.setState({ rows: new Map(), loadedBranch: null }),
   }
 }

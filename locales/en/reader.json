@@ -7,6 +7,9 @@
   "composerPlaceholder": "Write your next turn…",
   "send": "Send",
   "jumpToBottom": "Jump to bottom",
+  "jumpEntryGone": "That entry is no longer on this branch.",
+  "jumpLoading": "Loading entries…",
+  "jumpFailed": "Couldn't jump to that entry. Please try again.",
   "composerMode": {
     "do": "Do",
     "say": "Say",

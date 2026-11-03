@@ -1,5 +1,3 @@
-export type ThemeMode = 'light' | 'dark'
-
 export type ThemeColorSlots = {
   // Backgrounds (5)
   '--bg-base': string
@@ -49,14 +47,23 @@ export type ThemeFontOverrides = Partial<{
   '--font-mono': string
 }>
 
-export type Theme = {
+type ThemeBase = {
   id: string
   name: string
-  mode: ThemeMode
   colors: ThemeColorSlots
   fonts?: ThemeFontOverrides
   accentOverridable: boolean
 }
+
+export type LightTheme = ThemeBase & { mode: 'light' }
+
+export type DarkTheme = ThemeBase & {
+  mode: 'dark'
+  /** Share of `--selection-bg` the landed entry card's tint lays over the card, a fraction in (0, 1]. */
+  landedTintShare: number
+}
+
+export type Theme = LightTheme | DarkTheme
 
 export const COLOR_SLOT_KEYS = [
   '--bg-base',

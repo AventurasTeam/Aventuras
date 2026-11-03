@@ -45,6 +45,8 @@
     "db:check": "drizzle-kit check",
     "db:check:format": "tsx scripts/check-migrations-format.ts",
     "db:seed": "tsx scripts/seed/index.ts",
+    "db:seed:long": "tsx scripts/seed/index.ts --long-branch",
+    "device:push-db": "tsx scripts/dev-slot/push-db.ts",
     "mock": "tsx scripts/mock-llm/index.ts",
     "probe:classifier": "tsx scripts/classifier-parse-probe.ts",
     "judge:classifier": "tsx scripts/classifier-judge-dump.ts",

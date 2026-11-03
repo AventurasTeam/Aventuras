@@ -3,6 +3,7 @@ import { openSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { adb, APP_ID } from './adb'
 import {
   debugHttpHost,
   withDebugHttpHost,
@@ -14,16 +15,10 @@ import { resolveDevSlot } from './resolve'
 // `pnpm dev:android`: Metro on this slot's port, and the device pointed at it, so one debug APK
 // serves every slot. A worker slot boots its own headless emulator; slot 0 uses whatever device
 // is attached, on the default :8081.
-const APP_ID = 'com.aventuras.app'
 const PREFS = `shared_prefs/${APP_ID}_preferences.xml`
 const BOOT_TIMEOUT_MS = 180_000
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-function adb(serial: string | undefined, args: string[], input?: string) {
-  const target = serial ? ['-s', serial] : []
-  return spawnSync('adb', [...target, ...args], { encoding: 'utf8', input })
-}
 
 async function bootEmulator(avd: string, consolePort: number, serial: string): Promise<void> {
   const avds = spawnSync('emulator', ['-list-avds'], { encoding: 'utf8' }).stdout.split('\n')

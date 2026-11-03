@@ -4,6 +4,23 @@ import { themeToCssBlock, themesToFullCss } from './css-generator'
 import { themes } from './registry'
 
 describe('themeToCssBlock', () => {
+  it("emits a dark theme's landed tint share as a whole percent", () => {
+    expect(themeToCssBlock(themes[1], { selector: 'auto' })).toContain('--landed-tint-share: 22%;')
+  })
+
+  it("emits each dark theme's own landed tint share", () => {
+    for (const theme of themes) {
+      if (theme.mode !== 'dark') continue
+      expect(themeToCssBlock(theme, { selector: 'auto' }), theme.id).toContain(
+        `--landed-tint-share: ${Math.round(theme.landedTintShare * 100)}%;`,
+      )
+    }
+  })
+
+  it('emits no landed tint share for a light theme', () => {
+    expect(themeToCssBlock(themes[0], { selector: ':root' })).not.toContain('--landed-tint-share')
+  })
+
   it('emits a selector for default-light theme', () => {
     const css = themeToCssBlock(themes[0], { selector: ':root' })
     expect(css).toContain(':root {')

@@ -12,5 +12,7 @@ export const entriesStore = {
   hydrate: store.hydrate,
   hydrateIfLoaded: store.hydrateIfLoaded,
   patch: store.patch,
+  insertMany: store.insertMany,
+  subscribe: store.subscribe,
   __reset: store.__reset,
 }

@@ -1,6 +1,7 @@
 import { createInstance } from 'i18next'
 import { initReactI18next } from 'react-i18next'
 
+import chapters from '@/locales/en/chapters.json'
 import common from '@/locales/en/common.json'
 import embedder from '@/locales/en/embedder.json'
 import history from '@/locales/en/history.json'
@@ -13,7 +14,19 @@ import wizard from '@/locales/en/wizard.json'
 import world from '@/locales/en/world.json'
 
 const resources = {
-  en: { common, embedder, history, landing, plot, reader, settings, storySettings, wizard, world },
+  en: {
+    chapters,
+    common,
+    embedder,
+    history,
+    landing,
+    plot,
+    reader,
+    settings,
+    storySettings,
+    wizard,
+    world,
+  },
 } as const
 
 // Synchronous init: resources are bundled, no async backend. The instance is
@@ -25,6 +38,7 @@ void i18n.use(initReactI18next).init({
   lng: 'en',
   fallbackLng: 'en',
   ns: [
+    'chapters',
     'common',
     'embedder',
     'history',

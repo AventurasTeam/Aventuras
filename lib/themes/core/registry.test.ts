@@ -6,6 +6,34 @@ import { describe, expect, it } from 'vitest'
 import { themes } from './registry'
 import { COLOR_SLOT_KEYS } from '../types'
 
+function channels(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => c / 255) as [number, number, number]
+}
+
+function composite(top: string, under: string, share: number): [number, number, number] {
+  const a = channels(top)
+  const b = channels(under)
+  return a.map((c, i) => share * c + (1 - share) * b[i]) as [number, number, number]
+}
+
+// Björn Ottosson's OKLab, in floating point, from gamma-encoded sRGB channels in 0-1.
+function oklab(rgb: readonly number[]): [number, number, number] {
+  const [r, g, b] = rgb.map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  ]
+}
+
+function oklabDistance(a: number[], b: number[]): number {
+  return 100 * Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
+}
+
 describe('theme registry', () => {
   it('contains 10 themes', () => {
     expect(themes).toHaveLength(10)
@@ -35,6 +63,39 @@ describe('theme registry', () => {
       for (const key of COLOR_SLOT_KEYS.filter((slot) => !slot.startsWith('--tint-'))) {
         expect(block, `${theme.id} ${key}`).toContain(`${key}: ${theme.colors[key]};`)
       }
+      if (theme.mode === 'dark') {
+        expect(block, `${theme.id} landed share`).toContain(
+          `--landed-tint-share: ${Math.round(theme.landedTintShare * 100)}%;`,
+        )
+      } else {
+        expect(block, `${theme.id} has no landed share`).not.toContain('--landed-tint-share')
+      }
+    }
+  })
+
+  // The floor is how far default-light's tint stands out from its --bg-sunken; each dark theme's
+  // landedTintShare is the smallest whole percent that lifts its fainter card kind to it.
+  it("every dark theme landedTintShare is the smallest share that reaches default-light's floor", () => {
+    const light = themes.find((t) => t.id === 'default-light')
+    if (light === undefined) throw new Error('default-light is not in the registry')
+    const floor = oklabDistance(
+      oklab(channels(light.colors['--selection-bg'])),
+      oklab(channels(light.colors['--bg-sunken'])),
+    )
+    for (const theme of themes) {
+      if (theme.mode !== 'dark') continue
+      const fainterAt = (share: number) =>
+        Math.min(
+          ...(['--bg-raised', '--bg-sunken'] as const).map((card) =>
+            oklabDistance(
+              oklab(composite(theme.colors['--selection-bg'], theme.colors[card], share)),
+              oklab(channels(theme.colors[card])),
+            ),
+          ),
+        )
+      const percent = Math.round(theme.landedTintShare * 100)
+      expect(fainterAt(percent / 100), `${theme.id} at ${percent}%`).toBeGreaterThanOrEqual(floor)
+      expect(fainterAt((percent - 1) / 100), `${theme.id} at ${percent - 1}%`).toBeLessThan(floor)
     }
   })
 

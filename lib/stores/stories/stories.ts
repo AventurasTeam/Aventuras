@@ -1,8 +1,9 @@
+import { eq, sql } from 'drizzle-orm'
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core'
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
-import { stories, type Story as StoryRow, type dbSchema } from '@/lib/db'
+import { chapters, stories, type Story as StoryRow, type dbSchema } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
 export type OpenFailureKind = 'definition-corrupt' | 'settings-corrupt'
@@ -76,6 +77,16 @@ export async function rehydrateStories(db: Db): Promise<boolean> {
     })
     return false
   }
+}
+
+/** A story with no closed chapter on its current branch has no key. */
+export async function readStoryChapterNumbers(db: Db): Promise<ReadonlyMap<string, number>> {
+  const rows = await db
+    .select({ storyId: stories.id, number: sql<number>`max(${chapters.sequenceNumber}) + 1` })
+    .from(stories)
+    .innerJoin(chapters, eq(chapters.branchId, stories.currentBranchId))
+    .groupBy(stories.id)
+  return new Map(rows.map((row) => [row.storyId, row.number]))
 }
 
 const api = store.getState()
