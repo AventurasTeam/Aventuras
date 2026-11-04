@@ -40,12 +40,19 @@
   /** What the confirmation shows; kept past closing so the closing modal does not go blank. */
   let deleteShown = $state<{ name: string; storyTitles: string[] }>({ name: '', storyTitles: [] })
 
+  /** Counts delete clicks, so only the latest one's lookup opens the confirmation. */
+  let deleteRequest = 0
+
   /** Read when asked, not from the list's counts, which a story removed since loading leaves stale. */
   async function askToDelete(pack: PresetPack) {
+    const request = ++deleteRequest
     try {
-      deleteShown = { name: pack.name, storyTitles: await database.getPackStoryTitles(pack.id) }
+      const storyTitles = await database.getPackStoryTitles(pack.id)
+      if (request !== deleteRequest) return
+      deleteShown = { name: pack.name, storyTitles }
       deleteTarget = pack
     } catch (e) {
+      if (request !== deleteRequest) return
       console.error('Failed to read the stories using the pack:', e)
       ui.showToast(`Could not check the stories using this pack: ${errMessage(e)}`, 'error')
     }

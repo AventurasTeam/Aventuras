@@ -101,8 +101,11 @@ After updating Aventuras:
 ### Editing in the app and in the folder
 
 Replacing a pack from the folder replaces it entirely. An edit you made in the app and never
-exported is gone after the import. Pick one place to edit at a time: when you have edited in the
-app, export the pack onto `my-pack` and commit before you merge or import anything.
+exported is gone after the import. It works the other way too: an export writes the pack's text
+over every prompt file, including one it moves to a new folder, so an edit made in the folder and
+never imported is gone after the export. Pick one place to edit at a time, and commit before you
+switch: when you have edited in the app, export the pack onto `my-pack` and commit before you
+merge or import anything; when you have edited in the folder, commit and import before you export.
 
 ## 4. When a merge conflicts
 
