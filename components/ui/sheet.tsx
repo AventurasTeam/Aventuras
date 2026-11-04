@@ -63,6 +63,24 @@ type SheetA11yValue = {
 
 const SheetA11yContext = createContext<SheetA11yValue | null>(null)
 
+// Web Escape for bottom sheets, newest first, as Android's back stack runs. A Radix layer inside
+// one (a Select, a Popover) marks the Escape it handled with preventDefault, so it closes alone.
+const escapeHandlers: (() => void)[] = []
+function handleEscape(event: KeyboardEvent) {
+  const top = escapeHandlers.at(-1)
+  if (event.key !== 'Escape' || event.defaultPrevented || top == null) return
+  event.preventDefault()
+  top()
+}
+function pushEscapeHandler(handler: () => void): () => void {
+  if (escapeHandlers.length === 0) document.addEventListener('keydown', handleEscape)
+  escapeHandlers.push(handler)
+  return () => {
+    escapeHandlers.splice(escapeHandlers.indexOf(handler), 1)
+    if (escapeHandlers.length === 0) document.removeEventListener('keydown', handleEscape)
+  }
+}
+
 function useSheetA11y(): SheetA11yValue {
   const value = useContext(SheetA11yContext)
   if (!value) {
@@ -326,6 +344,15 @@ function BottomSheetContent({
       return true
     })
     return () => sub.remove()
+  }, [open])
+
+  useEffect(() => {
+    if (!open || Platform.OS !== 'web') return
+    return pushEscapeHandler(() => {
+      const current = latest.current
+      if (current.dismissable) current.onOpenChange(false)
+      else current.onDismissRefused?.()
+    })
   }, [open])
 
   useEffect(() => {

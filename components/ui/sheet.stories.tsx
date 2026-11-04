@@ -349,6 +349,94 @@ export const BackdropPressReportsRefusal: Story = {
   },
 }
 
+/** Escape closes a bottom Sheet on web too, where a narrow Electron window shows one. */
+export const EscapeCloses: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => <BackdropHarness />,
+  play: async () => {
+    const trigger = await openSheet()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'), BACKDROP_WAIT)
+  },
+}
+
+const escapeRefused = fn()
+
+/** A held sheet refuses Escape as it does the scrim, and reports it. */
+export const EscapeBlocked: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => <BackdropHarness initiallyPending onDismissRefused={escapeRefused} />,
+  play: async () => {
+    escapeRefused.mockClear()
+    const trigger = await openSheet()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(escapeRefused).toHaveBeenCalledTimes(1), BACKDROP_WAIT)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+  },
+}
+
+/** An Escape a layer inside the sheet already handled closes that layer alone. */
+export const EscapeHandledInsideStaysOpen: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => <BackdropHarness />,
+  play: async () => {
+    const trigger = await openSheet()
+    const inner = await screen.findByRole('button', { name: 'Start save' }, BACKDROP_WAIT)
+    inner.addEventListener('keydown', (event) => event.preventDefault(), { once: true })
+    inner.focus()
+    await userEvent.keyboard('{Escape}')
+    await new Promise((resolve) => setTimeout(resolve, SHEET_NO_CLOSE_MS))
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+  },
+}
+
+function StackedSheetsHarness() {
+  return (
+    <View className="items-start gap-4 p-4" style={{ minHeight: 640 }}>
+      <Sheet ariaLabel="Outer sheet">
+        <SheetTrigger asChild>
+          <Button>
+            <Text>Open outer</Text>
+          </Button>
+        </SheetTrigger>
+        <SheetContent anchor="bottom" size="medium">
+          <Sheet ariaLabel="Inner sheet">
+            <SheetTrigger asChild>
+              <Button variant="secondary">
+                <Text>Open inner</Text>
+              </Button>
+            </SheetTrigger>
+            <SheetContent anchor="bottom" size="short">
+              <Text>Inner body</Text>
+            </SheetContent>
+          </Sheet>
+        </SheetContent>
+      </Sheet>
+    </View>
+  )
+}
+
+/** Escape closes the newest sheet only, as Android's back does. */
+export const EscapeClosesTopSheetFirst: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => <StackedSheetsHarness />,
+  play: async () => {
+    const outer = screen.getByRole('button', { name: 'Open outer' })
+    await userEvent.click(outer)
+    await waitFor(() => expect(outer).toHaveAttribute('aria-expanded', 'true'), BACKDROP_WAIT)
+    const inner = await screen.findByRole('button', { name: 'Open inner' }, BACKDROP_WAIT)
+    await userEvent.click(inner)
+    await waitFor(() => expect(inner).toHaveAttribute('aria-expanded', 'true'), BACKDROP_WAIT)
+
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(inner).toHaveAttribute('aria-expanded', 'false'), BACKDROP_WAIT)
+    expect(outer).toHaveAttribute('aria-expanded', 'true')
+
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(outer).toHaveAttribute('aria-expanded', 'false'), BACKDROP_WAIT)
+  },
+}
+
 /** The flag can flip while the sheet is open; the scrim follows it. */
 export const BackdropBlockedMidOpen: Story = {
   parameters: { layout: 'fullscreen' },
