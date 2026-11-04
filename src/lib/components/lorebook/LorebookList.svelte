@@ -19,7 +19,7 @@
   import { Button } from '#lib/components/ui/button/index.ts'
   import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
   import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
-  import ActionModal from '#lib/components/shared/ActionModal.svelte'
+  import ConfirmModal from '#lib/components/shared/ConfirmModal.svelte'
   import { cn } from '#lib/utils/cn.ts'
   import { FEATURE_COLORS } from '#lib/components/shared/featureColors.ts'
   import {
@@ -318,7 +318,7 @@
       >
         <Trash2 class="size-4" />
       </Button>
-      <ActionModal
+      <ConfirmModal
         bind:open={deleteAllDialogOpen}
         title="Delete all lorebook entries"
         description={story.lorebookEntries.length === 1

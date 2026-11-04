@@ -18,6 +18,7 @@
     disabled = false,
     tone = 'default',
     cancelLabel = 'Cancel',
+    centered = false,
     alternative,
   }: {
     label: string
@@ -31,12 +32,16 @@
     tone?: ActionTone
     /** Only when Cancel ends more than the modal, as "Cancel import" does. */
     cancelLabel?: string
+    /** The pair centred rather than at the trailing edge, for a footer only as wide as it. */
+    centered?: boolean
     /** Another way to do the job, at the left; above the pair on a phone. */
     alternative?: Snippet
   } = $props()
 </script>
 
-<ResponsiveModal.Footer class="bg-muted/40 gap-2 border-t px-6 py-4 sm:space-x-0">
+<ResponsiveModal.Footer
+  class={cn('bg-muted/40 gap-2 border-t px-6 py-4 sm:space-x-0', centered && 'sm:justify-center')}
+>
   {#if alternative}
     <span class="flex w-full max-sm:order-1 sm:mr-auto sm:w-auto">{@render alternative()}</span>
   {/if}

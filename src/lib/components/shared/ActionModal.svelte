@@ -68,6 +68,8 @@
     requireChange?: boolean
     /** See the catalog's width scale. */
     size?: 'md' | 'lg' | '2xl'
+    /** As wide as its buttons, which sit centred; set by `ConfirmModal`, not by a caller. */
+    compact?: boolean
     /**
      * A sheet on a phone, only for a tool with no text field, nothing to lose and an action Cancel
      * can stop: `vaul` closes a sheet on a handle tap without asking. See the catalog.
@@ -96,6 +98,7 @@
     },
     requireChange = false,
     size = 'md',
+    compact = false,
     presentation = 'dialog',
   }: Props = $props()
 
@@ -384,7 +387,7 @@
   <ResponsiveModal.Content
     class={cn(
       'flex max-h-[85dvh] flex-col gap-0 p-0',
-      { md: 'max-w-md', lg: 'max-w-lg', '2xl': 'max-w-2xl' }[size],
+      compact ? 'max-w-md md:w-fit' : { md: 'max-w-md', lg: 'max-w-lg', '2xl': 'max-w-2xl' }[size],
       // Inset from a phone's edges, where the dialog would otherwise run full width.
       presentation === 'dialog' && 'w-[calc(100%-2rem)] rounded-lg',
       // Held near the top on a phone when it has a text field, so the keyboard shortening the
@@ -412,8 +415,12 @@
     >
       <!-- The title alone, centred; the description opens the body, where wrapping reads well. -->
       <!-- Tinted like the buttons' panel, so both read as a frame around the body. -->
+      <!-- A compact modal's text adds no width of its own (`w-0 min-w-full`): it wraps to the buttons'. -->
       <ResponsiveModal.Header
-        class="bg-muted/40 border-b px-6 py-4 text-center sm:text-center"
+        class={cn(
+          'bg-muted/40 border-b px-6 py-4 text-center sm:text-center',
+          compact && 'md:w-0 md:min-w-full',
+        )}
         closeButton={false}
       >
         <ResponsiveModal.Title
@@ -440,7 +447,7 @@
           onscroll={measureJump}
         >
           {#if children || description}
-            <div class="space-y-3 px-6 py-4">
+            <div class={cn('space-y-3 px-6 py-4', compact && 'md:w-0 md:min-w-full')}>
               {#if typeof description === 'string'}
                 <ResponsiveModal.Description>{description}</ResponsiveModal.Description>
               {:else if description}
@@ -486,6 +493,7 @@
           {busy}
           {cancelWhileBusy}
           {cancelLabel}
+          centered={compact}
           alternative={alternative ? leaveVia : undefined}
         />
       </div>

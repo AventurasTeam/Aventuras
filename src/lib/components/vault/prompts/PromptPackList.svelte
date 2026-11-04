@@ -12,8 +12,8 @@
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { errMessage } from '#lib/utils/error.ts'
   import { Skeleton } from '#lib/components/ui/skeleton/index.ts'
-  import { Button } from '#lib/components/ui/button/index.ts'
-  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import ConfirmModal from '#lib/components/shared/ConfirmModal.svelte'
+  import { Trash2 } from '@lucide/svelte'
   import { fade } from 'svelte/transition'
   import PromptPackCard from './PromptPackCard.svelte'
   import CreatePackDialog from './CreatePackDialog.svelte'
@@ -36,6 +36,8 @@
   // Delete confirmation state
   let deleteTarget = $state<PresetPack | null>(null)
   let deleting = $state(false)
+  /** Stories bound to the pack, which `deletePack` refuses; known before Delete is offered. */
+  let deleteBlockers = $derived(deleteTarget ? (usageCounts.get(deleteTarget.id) ?? 0) : 0)
 
   // Update-from-file state
   let updateTarget = $state<PresetPack | null>(null)
@@ -338,30 +340,21 @@
   onCancel={cancelExportIntoUsedFolder}
 />
 
-<!-- Delete confirmation -->
-<ResponsiveModal.Root
+<ConfirmModal
   open={!!deleteTarget}
-  onOpenChange={(v) => {
-    if (!v) deleteTarget = null
+  onCancel={() => (deleteTarget = null)}
+  title={`Delete the pack “${deleteTarget?.name ?? ''}”`}
+  description={deleteBlockers === 0
+    ? 'Its prompts and custom variables will be deleted.'
+    : deleteBlockers === 1
+      ? '1 story uses this pack. Reassign it before deleting the pack.'
+      : `${deleteBlockers} stories use this pack. Reassign them before deleting the pack.`}
+  action={{
+    label: 'Delete',
+    icon: Trash2,
+    tone: 'delete',
+    disabled: deleteBlockers > 0,
+    onConfirm: () => void handleConfirmDelete(),
   }}
->
-  <ResponsiveModal.Content class="p-0 sm:max-w-md">
-    <ResponsiveModal.Header class="border-b px-6 py-4">
-      <ResponsiveModal.Title>Delete Pack</ResponsiveModal.Title>
-      <ResponsiveModal.Description>
-        Are you sure you want to delete "{deleteTarget?.name}"? This cannot be undone.
-      </ResponsiveModal.Description>
-    </ResponsiveModal.Header>
-    <ResponsiveModal.Footer class="border-t px-6 py-4">
-      <Button
-        variant="outline"
-        onclick={() => {
-          deleteTarget = null
-        }}>Cancel</Button
-      >
-      <Button variant="destructive" onclick={handleConfirmDelete} disabled={deleting}>
-        {deleting ? 'Deleting...' : 'Delete'}
-      </Button>
-    </ResponsiveModal.Footer>
-  </ResponsiveModal.Content>
-</ResponsiveModal.Root>
+  busy={deleting}
+/>
