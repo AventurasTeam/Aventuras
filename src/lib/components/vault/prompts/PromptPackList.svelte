@@ -347,8 +347,8 @@
   description={deleteBlockers === 0
     ? 'Its prompts and custom variables will be deleted.'
     : deleteBlockers === 1
-      ? '1 story uses this pack. Reassign it before deleting the pack.'
-      : `${deleteBlockers} stories use this pack. Reassign them before deleting the pack.`}
+      ? '1 story uses this pack. Remove it before deleting the pack.'
+      : `${deleteBlockers} stories use this pack. Remove them before deleting the pack.`}
   action={{
     label: 'Delete',
     icon: Trash2,

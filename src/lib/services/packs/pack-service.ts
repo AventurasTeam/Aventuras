@@ -271,7 +271,7 @@ class PackService {
     if (!canDelete) {
       return {
         deleted: false,
-        reason: 'Pack is in use by one or more stories. Reassign stories first.',
+        reason: 'Pack is in use by one or more stories. Remove those stories first.',
       }
     }
 
