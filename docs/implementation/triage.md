@@ -88,13 +88,6 @@ slice-planning gate forces its resolution before that slice is planned.
   It holds for all five patches. pnpm 10.33.1 has
   `verify-deps-before-run`, which checks before any `pnpm run`. Raised
   2026-11-03 by PR #700's closing review.
-- **Two docs lag the tokenizer.**
-  [`tech-stack.md → js-tiktoken`](../tech-stack.md#6-js-tiktoken) says
-  `cl100k_base` or `o200k_base` and that tables load on demand, where
-  `lib/tokens` imports o200k's ranks statically.
-  [The token lesson](./lessons-learned/token-fixtures-need-real-prose.md)
-  says the build takes ~272 ms, and `lib/tokens/index.ts` ~285 ms.
-  Raised 2026-11-01 by Slice 5.1's review.
 - **Slice 5.1's doc needs three corrections.** Its brief kept the doc
   read-only for the closing review.
   - [Implementation notes](./milestones/05-chapters-chapter-close/slices/01-token-measure.md#implementation-notes)
