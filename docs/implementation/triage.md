@@ -102,15 +102,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `error instanceof Error ? …` log field has 40 or more sites and no
   shared helper. Each needs a new home and a sweep of files on main.
   Raised 2026-11-02 by Slice 5.1's closing review.
-- **`history-tab.test.tsx` may hold a rare timing flake.** The test at
-  `components/history/history-tab.test.tsx:307` failed once during a
-  mutation run that can't reach it, then passed 43 reruns. The
-  message wasn't captured, so this is suspected, not confirmed. A second
-  test in the file, the one on refetching for an unshown link end's
-  rename while a search is set, failed once in a loaded run on the same
-  day and passed alone and in two reruns. Raised 2026-11-02 by 5.3's
-  task reviews.
-
 - **What marks a flashback is stated two ways.**
   [`reader-composer.md`](../ui/screens/reader-composer/reader-composer.md#top-bar--in-world-time-display),
   [`entry-card.md`](../ui/patterns/entry-card.md#world-time-footer) and
