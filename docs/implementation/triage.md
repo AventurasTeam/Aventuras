@@ -214,14 +214,6 @@ slice-planning gate forces its resolution before that slice is planned.
   developer's call whether the filter stays. Raised 2026-11-02 by 5.3's
   task reviews.
 
-- **`jumpToBottom` can throw before the reader document registers.** On
-  native, the route calls `documentRef.current?.jumpToBottom()`, and
-  expo's DOM proxy returns `undefined` for a method not yet registered,
-  so the Actions entry or the hotkey during the veil throws with no
-  catch. 5.3 routes a chapter press through the `entry` param's paint
-  gate; this path has none. Read from the code, not run. Raised
-  2026-11-02 by 5.3's task reviews.
-
 - **A scrollbar drag isn't a gesture to the reader's pins.**
   `gestureActiveRef` in `components/reader/reader-surface.tsx` tracks
   touch only, and a scrollbar press interrupts only at pointerdown, so a

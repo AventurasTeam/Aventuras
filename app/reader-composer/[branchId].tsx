@@ -21,6 +21,7 @@ import {
 import { useContentEditing } from '@/components/reader/content-editing'
 import { EntryJumpVeil } from '@/components/reader/entry-jump-veil'
 import { readerPillPhase } from '@/components/reader/generation-phase'
+import { routeJumpToBottom } from '@/components/reader/jump-to-bottom'
 import {
   draftSubmission,
   readPassFailureCustody,
@@ -1396,12 +1397,17 @@ export default function ReaderComposerRoute() {
 
   // Touch-tier path to undo/redo (the shortcut is keyboard-only).
   const hasRedo = undoRedoStore.useUndoRedo((s) => s.redoStack.length > 0)
-  // Engage/settle semantics live in the surface's own jumpToBottom; the host
-  // only routes the request to whichever mount is live on this platform.
-  const jumpToBottom = useCallback(() => {
-    if (Platform.OS === 'web') surfaceRef.current?.jumpToBottom()
-    else documentRef.current?.jumpToBottom()
-  }, [])
+  // Engage/settle semantics live in the surface's own jumpToBottom; the host only routes it.
+  const jumpToBottom = useCallback(
+    () =>
+      routeJumpToBottom(
+        Platform.OS,
+        surfaceRef.current,
+        documentRef.current,
+        documentPaintedRef.current,
+      ),
+    [],
+  )
   const openChapterPopover = useCallback(() => chapterChipsRef.current?.openPopover(), [])
   const markBranchTopLoaded = useCallback(() => setHasOlder(false), [])
   const sendEntryLanding = useCallback((entryId: string) => {
