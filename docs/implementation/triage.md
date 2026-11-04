@@ -73,21 +73,6 @@ slice-planning gate forces its resolution before that slice is planned.
   It holds for all five patches. pnpm 10.33.1 has
   `verify-deps-before-run`, which checks before any `pnpm run`. Raised
   2026-11-03 by PR #700's closing review.
-- **What marks a flashback is stated two ways.**
-  [`reader-composer.md`](../ui/screens/reader-composer/reader-composer.md#top-bar--in-world-time-display),
-  [`entry-card.md`](../ui/patterns/entry-card.md#world-time-footer) and
-  `components/reader/worldtime-decoration.ts` treat a stored `worldTime`
-  of 0 as a flashback, while
-  [`data-model.md`](../data-model.md#in-world-time-tracking)'s
-  classifier contract has a flashback emit a delta of 0, and
-  `lib/piggyback/apply.ts` stores the previous time plus the delta, so
-  a classifier-written flashback keeps the running clock. 5.3's chapter
-  ranges skip a world time of 0 as canon says, so they exclude no
-  classifier-written flashback but do exclude the opening: chapter 1's
-  range and `since <time>` start at the first row past the origin. The
-  developer's call whether the filter stays. Raised 2026-11-02 by 5.3's
-  task reviews.
-
 - **A scrollbar drag isn't a gesture to the reader's pins.**
   `gestureActiveRef` in `components/reader/reader-surface.tsx` tracks
   touch only, and a scrollbar press interrupts only at pointerdown, so a
