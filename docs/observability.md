@@ -261,7 +261,11 @@ convention, and the expectation that subsystems route through
   (`lib/boot/rejection-handler.ts`) emits four kinds, all always
   recorded regardless of the master gate — see Console mirroring,
   below: `unhandled_rejection`, `rejection_handled_late`,
-  `rejection_tracker_unavailable`, `uncaught_error`. `row_signals_read_failed`
+  `rejection_tracker_unavailable`, `uncaught_error`.
+  `clipboard_copy_failed` (a copy whose write threw) and
+  `clipboard_unavailable` (warn, a copy on web with no Clipboard API),
+  both from `lib/clipboard`; the user sees the copy-failed toast after
+  either. `row_signals_read_failed`
   (`hooks/use-row-signals.ts`, a bounded-read failure),
   `entry_index_read_failed` (`hooks/use-entry-index.ts`, same shape),
   `chapter_progress_read_failed` (`hooks/use-chapter-progress.ts`, same
@@ -398,9 +402,6 @@ signal that corrects or explains one that already bypassed.
   for the same reason its accusation does — a retraction gated out
   of every configuration that recorded the accusation would read as
   a permanent false positive instead of a correction.
-- `app.clipboard_copy_failed` and `app.clipboard_unavailable` — a copy
-  whose write threw, and a copy on web with no Clipboard API, at warn
-  (`lib/clipboard`). The user sees the copy-failed toast after either.
 - `app.rejection_tracker_unavailable` — no tracker could be
   installed at all; the signal that the backstop itself isn't
   running, which matters most in exactly the configuration
