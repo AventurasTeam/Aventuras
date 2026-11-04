@@ -102,12 +102,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `error instanceof Error ? …` log field has 40 or more sites and no
   shared helper. Each needs a new home and a sweep of files on main.
   Raised 2026-11-02 by Slice 5.1's closing review.
-- **`isEditableTarget` has never had a story on the upward path.**
-  `reader-surface.tsx` guards typing in a field from the scroll-key
-  gestures. 5.3 pins the downward half with a story; nothing fails if
-  the guard goes from the upward one. Raised 2026-11-02 by 5.3's task
-  reviews.
-
 - **`history-tab.test.tsx` may hold a rare timing flake.** The test at
   `components/history/history-tab.test.tsx:307` failed once during a
   mutation run that can't reach it, then passed 43 reruns. The
