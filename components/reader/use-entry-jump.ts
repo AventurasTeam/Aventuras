@@ -12,7 +12,7 @@ import { toast } from '@/lib/toast'
 // busy one.
 export const JUMP_VEIL_TIMEOUT_MS = 30_000
 
-function oldestLoadedPosition(branchId: string): number | null {
+export function oldestLoadedPosition(branchId: string): number | null {
   let oldest: number | null = null
   for (const row of entriesStore.getEntries().values()) {
     if (row.branchId === branchId && (oldest === null || row.position < oldest)) {

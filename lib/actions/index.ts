@@ -116,6 +116,7 @@ export {
 export { bracketProseReversal, classifierWatermarkClampOps } from './story-entries/prose-reversal'
 export {
   ENTRIES_WINDOW_SIZE,
+  readEntriesBefore,
   readEntriesBetween,
   readEntryPosition,
   readRecentEntries,

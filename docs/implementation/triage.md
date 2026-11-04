@@ -163,27 +163,6 @@ slice-planning gate forces its resolution before that slice is planned.
   flat props type, where a union on `variant` would make in-story callers
   pass it. Raised 2026-11-02 by Slice 5.1's closing review.
 
-- **`loadOlderEntries` doesn't re-check after its await.** It captures
-  `minPosition`, reads, and inserts
-  (`app/reader-composer/[branchId].tsx`), so a `reload()` during the
-  read leaves a gap, against
-  [`reader-composer.md`](../ui/screens/reader-composer/reader-composer.md#loaded-set-model)'s
-  one contiguous window. A short stale read clears `hasOlder`, and a
-  read from a branch just left sets it on the new one. A gap sits above
-  `oldestLoadedPosition`, where a jump's re-check can't see it, so
-  `useEntryJump` tells a row in the DB but not held "That entry is no
-  longer on this branch". `onNearTop`
-  (`components/reader/reader-surface.tsx`) has no in-flight guard
-  either, which is how two boundary loads can start from one oldest
-  row. A boundary load started before a jump to the branch's first row
-  and finishing after it sets `hasOlder` true again (its read is a full
-  50), so the shimmer comes back, and the next load at rest drops it
-  under a reader landed at `scrollTop` 0, shifting the row up. Nothing
-  at any layer covers `loadOlderEntries`: stories stub
-  `onNearTop`, and no unit test or E2E spec reaches it. Read from the
-  code, not reproduced. Raised 2026-11-02 by 5.3's task reviews; the
-  shimmer symptom added 2026-11-03 by 5.3's Task 19a review.
-
 - **The reader path is still built by hand.** `readerHref`
   (`components/reader/reader-href.ts`) is the slice's one builder, but
   `app/wizard.tsx`, `app/index.tsx`, `app/plot/[branchId].tsx`,

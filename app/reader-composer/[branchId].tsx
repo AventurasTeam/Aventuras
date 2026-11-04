@@ -1,5 +1,4 @@
 import { useIsFocused } from '@react-navigation/native'
-import { and, desc, eq, lt } from 'drizzle-orm'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Platform, View } from 'react-native'
@@ -82,6 +81,7 @@ import {
   useSystemEntryActions,
 } from '@/components/reader/system-entry-actions'
 import { useLiveRollbackCounts } from '@/components/reader/use-live-rollback-counts'
+import { useLoadOlderEntries } from '@/components/reader/use-load-older-entries'
 import { useReaderEntryJump } from '@/components/reader/use-reader-entry-jump'
 import { useWorldTimeEditing } from '@/components/reader/world-time-editing'
 import { WorldTimeEditSheet } from '@/components/reader/worldtime-edit-sheet'
@@ -125,13 +125,7 @@ import {
 } from '@/lib/actions'
 import { copyText } from '@/lib/clipboard'
 import { wrapComposerText, wrapHasSubject, type ComposerMode } from '@/lib/composer-wrap'
-import {
-  db,
-  runInTransaction,
-  storyEntries,
-  type StoryEntry,
-  type SystemFailureMeta,
-} from '@/lib/db'
+import { db, runInTransaction, type SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { refreshEmbeddingStatus } from '@/lib/embedder-swap'
 import { t } from '@/lib/i18n'
@@ -524,23 +518,7 @@ export default function ReaderComposerRoute() {
     setHasOlder(recent.length >= ENTRIES_WINDOW_SIZE)
   }, [branchId])
 
-  const loadOlderEntries = useCallback(async () => {
-    const loadedPositions = [...entriesStore.getEntries().values()]
-      .filter((e) => e.branchId === branchId)
-      .map((e) => e.position)
-    if (loadedPositions.length === 0) return
-    const minPosition = Math.min(...loadedPositions)
-
-    const older = (await db
-      .select()
-      .from(storyEntries)
-      .where(and(eq(storyEntries.branchId, branchId), lt(storyEntries.position, minPosition)))
-      .orderBy(desc(storyEntries.position))
-      .limit(ENTRIES_WINDOW_SIZE)) as StoryEntry[]
-
-    entriesStore.insertMany(branchId, older)
-    setHasOlder(older.length >= ENTRIES_WINDOW_SIZE)
-  }, [branchId])
+  const loadOlderEntries = useLoadOlderEntries(branchId, db, setHasOlder)
 
   useEffect(() => {
     // Never rejects: internally try/caught, logs embedder.status_refresh_failed on its own.

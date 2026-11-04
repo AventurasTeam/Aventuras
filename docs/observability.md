@@ -360,7 +360,9 @@ convention, and the expectation that subsystems route through
   logged for a jump a newer one or a branch change replaced). The route
   adds `document_reloaded` (warn, `app/reader-composer/[branchId].tsx`:
   a reader document that had painted booted again, a reload or a
-  renderer kill)
+  renderer kill), and loading older entries adds `load_older_failed`
+  (warn, `components/reader/use-load-older-entries.ts`: the read above
+  the window threw, and the boundary shimmer stays for the next scroll)
 
 Kinds grow organically as subsystems land.
 
