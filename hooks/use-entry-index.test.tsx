@@ -401,6 +401,28 @@ describe('useEntryIndex', () => {
     warnSpy.mockRestore()
   })
 
+  // The reader's rail and peek stay mounted, hidden, under routes that mount their own.
+  it('logs a failed read once across mounted instances', async () => {
+    entriesStore.hydrate('br_1', [entry('e1', 1)])
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    reads.index.mockRejectedValue(new Error('boom'))
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <Probe />
+        <Probe />
+        <Probe enabled={false} />
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(warnSpy).toHaveBeenCalled())
+    await act(async () => {})
+    expect(reads.index).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+
+    warnSpy.mockRestore()
+  })
+
   it('reads again on retry and clears the failure once the read succeeds', async () => {
     entriesStore.hydrate('br_1', [entry('e1', 1)])
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})

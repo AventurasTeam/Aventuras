@@ -41,6 +41,19 @@ const readFromDb: EntryIndexRead = (branchId) => readEntryIndex(branchId, db)
 
 const EntryIndexReadContext = createContext<EntryIndexRead>(readFromDb)
 
+// Logs from the shared fetch, since every mounted observer receives the same error.
+async function readLogged(read: EntryIndexRead, branchId: string): Promise<readonly EntryRef[]> {
+  try {
+    return await read(branchId)
+  } catch (error) {
+    logger.warn('app.entry_index_read_failed', {
+      branchId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
+}
+
 /**
  * Swaps the entry read for stories, which have no app database. The read isn't in the query key,
  * so keep one read per QueryClient; a gorhom Sheet's content doesn't see a provider outside it.
@@ -91,7 +104,7 @@ export function useEntryIndex(
   const { data, error, refetch, isFetching } = useQuery({
     queryKey: ['entry-index', branchId, settleCount, tailId],
     enabled: branchId !== '' && !disabled,
-    queryFn: () => read(branchId),
+    queryFn: () => readLogged(read, branchId),
   })
 
   // data is undefined during a pending refetch and after an error; keep the last
@@ -112,14 +125,6 @@ export function useEntryIndex(
   useEffect(() => {
     if (seeds && data != null) client.setQueryData(lastReadKey(branchId), data)
   }, [seeds, data, client, branchId])
-
-  useEffect(() => {
-    if (error == null) return
-    logger.warn('app.entry_index_read_failed', {
-      branchId,
-      error: error instanceof Error ? error.message : String(error),
-    })
-  }, [error, branchId])
 
   return useMemo(() => {
     const retry = () => void refetch()

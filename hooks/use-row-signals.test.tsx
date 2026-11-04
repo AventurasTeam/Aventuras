@@ -432,7 +432,7 @@ describe('useRowSignals', () => {
     expect(latest?.recentlyClassified.rows.size).toBe(0)
 
     // A real re-render (no new fetch — error/branchId unchanged) must not re-log; a render-body
-    // log (vs. the effect) would fire here and bump the count.
+    // log (vs. the fetch) would fire here and bump the count.
     act(() => {
       entitiesStore.hydrate('br_1', [entity('char_z', 'character')])
     })
@@ -534,6 +534,27 @@ describe('useRowSignals', () => {
     })
     // Positive control: once the new read resolves, its own window lands.
     await waitFor(() => expect(latest?.recentlyClassified.rows.get('char_a')).toBe('fresh'))
+  })
+
+  // The reader's rail stays mounted, hidden, under routes that mount their own.
+  it('logs a failed read once across mounted instances', async () => {
+    seedOneReply()
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    reads.boundaries.mockRejectedValue(new Error('boom'))
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <ProbeA />
+        <ProbeB />
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(warnSpy).toHaveBeenCalled())
+    await act(async () => {})
+    expect(reads.boundaries).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+
+    warnSpy.mockRestore()
   })
 
   it('shares one read across two instances on the same branch after a settle', async () => {

@@ -235,14 +235,6 @@ slice-planning gate forces its resolution before that slice is planned.
   developer's call whether the filter stays. Raised 2026-11-02 by 5.3's
   task reviews.
 
-- **One failed read logs once per mounted `useEntryIndex`.** It logs
-  from an effect on `error` (`hooks/use-entry-index.ts`), and every
-  mounted observer receives the same error; `useChapterProgress` moved
-  its log into the fetch for this reason, and 5.3's two new hooks do the
-  same. Nothing pins `retry: false` on any of them either: a retry would
-  log three times and hold a label about 3 s. Raised 2026-11-02 by 5.3's
-  task reviews.
-
 - **`jumpToBottom` can throw before the reader document registers.** On
   native, the route calls `documentRef.current?.jumpToBottom()`, and
   expo's DOM proxy returns `undefined` for a method not yet registered,
