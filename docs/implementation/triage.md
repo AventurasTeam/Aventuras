@@ -87,16 +87,6 @@ slice-planning gate forces its resolution before that slice is planned.
   counts a touch fling as mid-gesture. Read from the code, not
   reproduced; added 2026-11-03 by 5.3's slice review.
 
-- **A `DeltaLogRow`'s name hides its content.** On a pressable row the
-  `aria-label` replaces the row's text as its name, so a screen reader
-  never hears the summary, field path, source or time, and two rows of
-  one target at one entry still sound alike. On a row that can't be
-  pressed the `aria-label` sits on a role-less element, which ARIA doesn't
-  let be named, so most screen readers ignore it.
-  [`testing.md`'s selector table](../testing.md#selector-strategy) also
-  still lists delta-log rows as having no role and no label. Raised
-  2026-11-02 by 5.3's task reviews.
-
 - **A second jump to the landed row doesn't restart its tint.** Within
   1.5 s of a landing, a jump to the same entry calls `setLandedId` with
   the id it already holds, so neither the clear timer nor the card's CSS

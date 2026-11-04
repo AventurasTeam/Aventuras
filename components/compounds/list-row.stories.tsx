@@ -104,6 +104,31 @@ export const WithDescription: Story = {
       onPress={fn()}
     />
   ),
+  play: async () => {
+    expect(
+      screen.getByRole('button', { name: "The Empress's missing courier" }),
+    ).toHaveAccessibleDescription(
+      'Long-running thread spanning chapters 3–7. The courier carried a sealed message that has not been delivered.',
+    )
+  },
+}
+
+/** No press: the row isn't a control, so it isn't named, focusable or announced as disabled. */
+export const DisplayOnlyIsNotAControl: Story = {
+  render: () => (
+    <ListRow
+      label="Aiko"
+      description="Archivist of the eastern wing"
+      leading={<EntityKindIcon kind="character" />}
+    />
+  ),
+  play: async ({ canvasElement }) => {
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(canvasElement.querySelector('[aria-disabled]')).toBeNull()
+    expect(canvasElement.querySelector('[aria-label="Aiko"]')).toBeNull()
+    expect(canvasElement.querySelector('[tabindex]')).toBeNull()
+    expect(screen.getByText('Archivist of the eastern wing')).toBeVisible()
+  },
 }
 
 /**

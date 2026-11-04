@@ -536,7 +536,7 @@ primitive. Add a `testID` only for these four cases:
 | Case                       | Why role + name fails                      | Convention                                      |
 | -------------------------- | ------------------------------------------ | ----------------------------------------------- |
 | Repeated-row scope anchor  | Need "the control _inside_ row X"          | `testID="story-card"` + `dataSet={{ storyId }}` |
-| No-role assertion target   | Delta-log rows, meters — no role, no label | `testID="delta-log-row"`                        |
+| No-role assertion target   | Display-only delta-log rows, meters        | `testID="delta-log-row"`                        |
 | Non-unique icon-only label | e.g. a shared "Collision warning" label    | `testID="collision-warning"`                    |
 | Virtualized list item      | Node may be unmounted; text selector fails | `testID` + programmatic scroll                  |
 
