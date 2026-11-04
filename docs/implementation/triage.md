@@ -184,14 +184,6 @@ slice-planning gate forces its resolution before that slice is planned.
   [`touch.md`](../ui/foundations/mobile/touch.md)'s 44 px floor, which
   holds at every density. Raised 2026-11-02 by 5.3's task reviews.
 
-- **A story after a phone-viewport story can start at the wrong tier.**
-  In `components/shells/screen-shell.stories.tsx` the next story's first
-  render logged tier `phone` at width 1200, with `window.innerWidth`
-  already back at desktop, so a tier-sensitive negative assertion there
-  can pass vacuously; the same assertion went red alone with `-t` and
-  green in a full-file run. 5.3's phone stories wait for a phone-only
-  element first. Raised 2026-11-02 by 5.3's task reviews.
-
 - **Two test fixtures model states that can't happen.**
   `ArchivedDraft` in `components/story/story-card.stories.tsx` is a
   state [`story-card.md`](../ui/patterns/story-card.md) says never

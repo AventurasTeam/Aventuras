@@ -265,9 +265,9 @@ slice plans when relevant.
   empirically and serializing the project breaks isolation, so check
   `server.fs.allow` first.
 - [Storybook viewport → `useTier` is asynchronous](./storybook-viewport-usetier-async.md)
-  — the viewport control lands before RN-Web's `Dimensions` cache
-  updates, so a tier-dependent play assertion made synchronously
-  after mount can still see the desktop tier; wrap it in `waitFor`.
+  — RN-Web's `Dimensions` lags a viewport change, so a story's first
+  commit took the previous viewport's tier; the preview now syncs it
+  before each story, and a play that resizes the window still waits.
 - [A save-session story harness must refresh its data synchronously](./save-session-harness-sync-refresh.md)
   — the provider re-reads each section's patch after `onCommit`, so a
   `useState` harness updates too late and correct code reads as

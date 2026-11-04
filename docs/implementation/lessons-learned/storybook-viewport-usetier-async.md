@@ -1,8 +1,9 @@
 # Storybook viewport → `useTier` is asynchronous
 
-A play function's first tier-dependent assertion, made synchronously
-after mount, can observe the desktop tier even when the story's
-viewport control is set to phone.
+A story's first commit can take the tier of the viewport before it,
+since RN-Web's `Dimensions` lags a viewport change. The Storybook
+preview now syncs it before each story; a play that resizes the
+window itself still has to wait.
 
 ## Why
 
@@ -20,7 +21,15 @@ saw the desktop copy instead.
 
 ## How to apply
 
-Wrap any tier-dependent assertion in a play function in `waitFor`
-rather than asserting immediately after mount or a user event —
-give the resize event a chance to land before checking tier-derived
-output.
+`.storybook/preview.tsx` now fires `visualViewport`'s resize event in
+a global `beforeEach` whenever `Dimensions` and the viewport disagree
+on the tier, so a story's first commit reads its own viewport. It
+holds in both directions: desktop to phone, and phone to desktop or
+a story run alone with `-t`, where the page starts at a size of its
+own. `FirstCommitTakesTheViewportTier` and the story before it in
+`components/shells/screen-shell.stories.tsx` pin it.
+
+A play that changes the viewport itself, as
+`chapter-popover.stories.tsx`'s `withWindowSize` does, gets no such
+sync: wait for the tier there (`waitFor`, or a tier probe) before
+asserting on tier-derived output.

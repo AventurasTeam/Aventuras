@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useState } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
@@ -7,6 +8,7 @@ import { TruncatedText } from '@/components/compounds/truncated-text'
 import { TimeChip } from '@/components/reader/time-chip'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
+import { useTier } from '@/hooks/use-tier'
 import { EARTH_GREGORIAN, type CalendarFrame } from '@/lib/calendar'
 import { chapterProgressOf, type ChapterProgress } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
@@ -777,5 +779,27 @@ export const AppVariantHasNoMemoryBanner: Story = {
   play: async () => {
     await screen.findByText('app variant — no memory-run banner, even with a pass in flight')
     expect(screen.queryByTestId('memory-run-banner')).toBeNull()
+  },
+}
+
+function FirstTierProbe() {
+  const [firstTier] = useState(useTier())
+  return <Text testID="first-tier">{firstTier}</Text>
+}
+
+/** A story's first commit takes its own viewport's tier: phone, after a desktop story. */
+export const TierProbeAtPhone: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  render: () => <FirstTierProbe />,
+  play: async () => {
+    await expect(await screen.findByTestId('first-tier')).toHaveTextContent('phone')
+  },
+}
+
+/** And desktop after a phone story, or run alone (`-t`), where the page starts elsewhere. */
+export const FirstCommitTakesTheViewportTier: Story = {
+  render: () => <FirstTierProbe />,
+  play: async () => {
+    await expect(await screen.findByTestId('first-tier')).toHaveTextContent('desktop')
   },
 }
